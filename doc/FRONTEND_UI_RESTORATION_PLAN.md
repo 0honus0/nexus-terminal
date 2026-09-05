@@ -1,6 +1,6 @@
 # Frontend UI Restoration Plan
 
-Status: **owner-approved restoration plan; implementation not started by this document change**  
+Status: **implementation in progress — P0/P1/P2 complete; P3 active**
 Primary source-code baseline: Git commit [`8ceb5840`](https://github.com/0honus0/nexus-terminal/commit/8ceb5840)  
 Supplemental visual baseline: screenshots stored at Git commit [`8ad24a03`](https://github.com/0honus0/nexus-terminal/commit/8ad24a03) before the manifestless screenshot refresh  
 Current architecture target: `packages/frontend/src/app`, `features`, `runtimes`, `foundation`, `shared`  
@@ -100,6 +100,32 @@ Package-root findings to include in restoration:
 | **P8**  | Status monitor/charts, Docker, remote desktop/VNC, suspended SSH sessions.                                                      | Auxiliary Workspace surfaces match old design and state visuals.                              |
 | **P9**  | Cross-cutting mobile pass over every restored surface, including those without screenshots.                                     | No desktop-only restoration leaves a mobile layout regression.                                |
 | **P10** | Full format/build/architecture/E2E validation; manual screenshot generation; visual review; remove temporary comparison output. | Current product UI is visually equivalent except documented owner-approved differences.       |
+
+### 6.1 Execution ledger
+
+| Phase      | Status      | Evidence                                                                      | Closed scope                                                                                                                                                                                                                                                   |
+| ---------- | ----------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P0**     | ✅ Complete | `b244a8e0`                                                                    | Full `8ceb5840` frontend tree scanned; all **98** legacy Vue UI files mapped to current owners; package/bootstrap/assets/global visual sources classified.                                                                                                     |
+| **P1**     | ✅ Complete | `43bf518d`; push E2E `33943448638` ✅; manual screenshot E2E `33943626951` ✅ | FontAwesome bootstrap, default terminal theme fallback, legacy-app header/nav geometry/icons/underline, shared input/icon/focus/disabled rules.                                                                                                                |
+| **P2**     | ✅ Complete | `213ae88e`, `e60a8bb5`; push E2E `33944147573` ✅                             | **9/9** P2 legacy files closed: Style Customizer shell + UI/terminal/background/other editors, notifications, alert/confirm dialogs, overlay surface behavior. The intermediate terminal-theme save regression from `33943887707` was corrected in `e60a8bb5`. |
+| **P3**     | 🚧 Active   | —                                                                             | Dashboard, auth/setup, connections, proxies, notifications, audit, settings/security/data management, tags/SSH keys. **33** legacy Vue files to close.                                                                                                         |
+| **P4–P10** | ⏳ Pending  | —                                                                             | Not yet closed.                                                                                                                                                                                                                                                |
+
+Completion means the legacy visual/interaction semantics have a reviewed current-owner disposition; it does **not** mean the legacy component/store architecture was restored. Each completed implementation batch must update this ledger and, when useful, the per-file closure notes below.
+
+### 6.2 Closed P2 inventory
+
+| Legacy UI file                                                 | Current owner closure                                                       | Result                                                                                                                        |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `components/StyleCustomizer.vue`                               | `features/appearance/components/AppearanceCustomizerModal.vue`              | ✅ Restored legacy desktop/mobile modal shell, header, side tabs, footer/actions, close behavior and sizing on current owner. |
+| `components/style-customizer/StyleCustomizerUiTab.vue`         | `features/appearance/components/BasicAppearancePanel.vue`                   | ✅ Restored legacy UI-theme field/editor grouping, mode controls and save/reset interaction.                                  |
+| `components/style-customizer/StyleCustomizerTerminalTab.vue`   | `features/appearance/components/TerminalThemeSettingsPanel.vue`             | ✅ Restored terminal-theme selection/editor flow and visual grouping; create/edit/apply persistence passes G5.                |
+| `components/style-customizer/StyleCustomizerBackgroundTab.vue` | `features/appearance/components/TerminalBackgroundSettingsPanel.vue`        | ✅ Restored image/HTML preset, overlay, local/remote theme and editor presentation/interaction.                               |
+| `components/style-customizer/StyleCustomizerOtherTab.vue`      | `AppearanceSettingsPanel.vue` + `BasicAppearancePanel.vue`                  | ✅ Editor font and other appearance controls restored within current feature ownership.                                       |
+| `components/UINotificationDisplay.vue`                         | `shared/feedback/components/NotificationHost.vue`                           | ✅ Legacy placement, widths, status colors/icons, close affordance and transition timing restored.                            |
+| `components/common/AlertDialog.vue`                            | `shared/feedback/components/DialogHost.vue` + `foundation/ui/BaseModal.vue` | ✅ Legacy title/body/action geometry and z-index behavior restored with current dialog store.                                 |
+| `components/common/ConfirmDialog.vue`                          | `shared/feedback/components/DialogHost.vue` + `foundation/ui/BaseModal.vue` | ✅ Legacy confirm/cancel geometry, loading/destructive styling and close semantics restored.                                  |
+| `foundation/ui/OverlayPanel.vue`                               | `foundation/ui/OverlayPanel.vue`                                            | ✅ Baseline visual shell retained; current focus/escape/pointer safety extensions do not intentionally redesign the surface.  |
 
 ## 7. Complete old-file → current-owner audit inventory
 
