@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -23,6 +24,8 @@ interface DragFileDescriptor {
   size?: number;
   fill?: number;
 }
+
+const M11_03E_EVIDENCE_DIR = process.env.M11_03E_EVIDENCE_DIR || '/tmp/nexus-m11-03e';
 
 async function openFileManager(page: Page, context: BrowserContext): Promise<void> {
   await loginAsInitialAdmin(context.request);
@@ -103,6 +106,15 @@ function visibleProgressCenter(page: Page) {
 function uploadProgressTask(page: Page, name?: string) {
   const tasks = visibleProgressCenter(page).locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
   return name ? tasks.filter({ hasText: name }).first() : tasks.first();
+}
+
+async function fileManagerMetrics(page: Page): Promise<Record<string, number>> {
+  return activeFileManagerList(page).evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
 }
 
 async function openFileManagerSearch(page: Page): Promise<Locator> {
@@ -559,5 +571,99 @@ test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconn
     await context.setOffline(false).catch(() => undefined);
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
     if (!activePage.isClosed()) await activePage.close();
+  }
+});
+
+test('file picker uploads a delayed file into a remote directory and refreshes the target', async ({
+  page,
+  context,
+}) => {
+  await mkdir(M11_03E_EVIDENCE_DIR, { recursive: true });
+  await openFileManager(page, context);
+
+  const fileManager = page.getByTestId('file-manager-modal');
+  const folder = fileManagerRow(page, 'folder-seed');
+  const folderPath = await folder.getAttribute('data-file-path');
+  expect(folderPath).toBeTruthy();
+  await folder.click();
+  await expect(fileManager.getByTestId('file-manager-path-input')).toHaveValue(folderPath!);
+
+  const filename = 'm11-03e-picker-upload.bin';
+  const payload = Buffer.alloc(768 * 1024 + 123, 0x6d);
+  const beforeMetrics = await fileManagerMetrics(page);
+  const viewport = page.viewportSize();
+  const modalBox = await fileManager.boundingBox();
+  const listBox = await activeFileManagerList(page).boundingBox();
+  expect(viewport).toBeTruthy();
+  expect(modalBox).toBeTruthy();
+  expect(listBox).toBeTruthy();
+  await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-before-upload.png') });
+
+  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=300`, { method: 'POST' });
+  expect(delayResponse.ok).toBeTruthy();
+  const observedStatuses = new Set<string>();
+  try {
+    const fileChooserPromise = page.waitForEvent('filechooser');
+    await fileManager.getByTestId('file-upload-button').click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({ name: filename, mimeType: 'application/octet-stream', buffer: payload });
+
+    const progressPopup = visibleProgressCenter(page);
+    await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+    const task = uploadProgressTask(page, filename);
+    await expect(task).toBeVisible({ timeout: 10_000 });
+    const readStatus = async (): Promise<string | null> => {
+      const text = await task.innerText();
+      const match = text.match(/\((Queued|Running|Completed|Cancelled|Failed|Partially completed)\)/);
+      const status = match?.[1]?.toLowerCase().replace(' ', '-') ?? null;
+      if (status) observedStatuses.add(status);
+      return status;
+    };
+    await expect.poll(readStatus, { timeout: 10_000 }).toBe('queued');
+    await expect.poll(readStatus, { timeout: 30_000 }).toBe('running');
+    await expect.poll(readStatus, { timeout: 60_000 }).toBe('completed');
+    expect(observedStatuses).toContain('queued');
+    expect(observedStatuses).toContain('running');
+    expect(observedStatuses).toContain('completed');
+
+    await fileManager.getByTitle('Refresh', { exact: true }).click();
+    await expect(fileManagerRow(page, filename)).toBeVisible({ timeout: 20_000 });
+    expect(await downloadRemoteFile(page, filename)).toEqual(payload);
+
+    const afterMetrics = await fileManagerMetrics(page);
+    const progressBox = await progressPopup.boundingBox();
+    await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-after-upload.png') });
+    expect(afterMetrics.scrollWidth).toBeLessThanOrEqual(afterMetrics.clientWidth + 1);
+    expect(beforeMetrics.scrollWidth).toBeLessThanOrEqual(beforeMetrics.clientWidth + 1);
+    expect(modalBox!.x).toBeGreaterThanOrEqual(0);
+    expect(modalBox!.y).toBeGreaterThanOrEqual(0);
+    expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+    expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+    expect(progressBox).toBeTruthy();
+    expect(progressBox!.x).toBeGreaterThanOrEqual(0);
+    expect(progressBox!.y).toBeGreaterThanOrEqual(0);
+    expect(progressBox!.x + progressBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+    expect(progressBox!.y + progressBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+    await writeFile(
+      path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-metrics.json'),
+      JSON.stringify(
+        {
+          viewport,
+          modal: modalBox,
+          list: listBox,
+          progress: progressBox,
+          before: beforeMetrics,
+          after: afterMetrics,
+          statuses: [...observedStatuses],
+          filename,
+          payloadBytes: payload.byteLength,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 });
