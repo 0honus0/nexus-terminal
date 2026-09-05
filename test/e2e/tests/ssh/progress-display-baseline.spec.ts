@@ -207,6 +207,12 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
         await expect(sendButton).toBeEnabled();
         await sendButton.click();
         await expect(modal).toBeHidden();
+
+        // The desktop Progress Display is intentionally rendered inline in the
+        // Workspace, matching the legacy surface. Exit the foreground popup
+        // before interacting with the central progress panel.
+        await page.getByTestId('file-manager-modal-close').click();
+        await expect(page.getByTestId('file-manager-modal')).toBeHidden();
       },
     );
 
