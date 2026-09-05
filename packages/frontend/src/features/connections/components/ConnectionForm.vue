@@ -709,6 +709,7 @@
             data-testid="connection-script-toggle"
             type="button"
             role="switch"
+            :aria-label="t('connections.form.sectionScriptMode')"
             :aria-checked="scriptMode"
             class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
             :class="scriptMode ? 'bg-primary' : 'bg-gray-300'"
