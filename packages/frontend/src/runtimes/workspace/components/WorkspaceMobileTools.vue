@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseModal } from '@/foundation/ui';
+  import { BaseButton, BaseModal, OverlayPanel } from '@/foundation/ui';
   import { VirtualKeyboard, type TerminalChannel } from '@/features/terminal/public';
   import { QuickCommandsPanel, type ExecuteCommandIntent } from '@/features/quick-commands/public';
   import { StatusMonitor, type StatusMonitorSessionController } from '@/features/status-monitor/public';
@@ -139,32 +139,30 @@
     />
   </div>
 
-  <BaseModal
+  <OverlayPanel
     :visible="quickCommandsVisible"
+    teleport
+    preset="standard-modal"
+    panel-test-id="quick-commands-dialog"
     :close-on-escape="true"
-    :title="t('layout.pane.quickCommands')"
-    overlay-class="!p-2"
-    panel-class="h-[min(82dvh,720px)] w-[min(96vw,620px)]"
-    content-class="!overflow-hidden !py-0"
+    role="dialog"
+    :aria-modal="true"
+    :aria-label="t('layout.pane.quickCommands')"
     @close="quickCommandsVisible = false"
   >
-    <template #header>
-      <h3 class="flex-1 pl-8 text-center text-lg font-semibold">{{ t('layout.pane.quickCommands') }}</h3>
-    </template>
-    <template #header-actions>
-      <button
-        type="button"
-        class="grid h-8 w-8 place-items-center text-text-secondary hover:text-foreground"
-        :title="t('common.close')"
-        :aria-label="t('common.close')"
-        @click="quickCommandsVisible = false"
-      >
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
-    </template>
-    <div class="h-full min-h-0 overflow-hidden rounded border border-border">
+    <button
+      type="button"
+      class="absolute right-2 top-2 z-10 p-1 text-text-secondary hover:text-foreground"
+      :title="t('common.close')"
+      :aria-label="t('common.close')"
+      @click="quickCommandsVisible = false"
+    >
+      <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+    <h3 class="mb-3 shrink-0 text-center text-lg font-semibold">{{ t('layout.pane.quickCommands') }}</h3>
+    <div class="min-h-0 flex-grow overflow-y-auto rounded border border-border">
       <QuickCommandsPanel
         class="h-full min-h-0"
         :collapsible-search="false"
@@ -176,7 +174,7 @@
         @execute="executeQuickCommand"
       />
     </div>
-  </BaseModal>
+  </OverlayPanel>
 
   <BaseModal
     :visible="statusVisible"
