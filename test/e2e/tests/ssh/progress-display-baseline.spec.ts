@@ -231,11 +231,11 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
         const subTasks = taskCard.locator('details');
         await expect(subTasks).toBeVisible();
         await subTasks.locator('summary').click();
-        await expect(taskCard).toContainText('Source File: seed.txt');
-        await expect(taskCard).toContainText(`Target Connection: ${targetName}`);
-        await expect(taskCard).toContainText('Method: scp', { timeout: 20_000 });
-        await expect(taskCard.getByText('Failed', { exact: true })).toBeVisible({ timeout: 20_000 });
-        await expect(taskCard).toContainText('Error:');
+        await expect(subTasks).toContainText('Source File: seed.txt');
+        await expect(subTasks).toContainText(`Target Connection: ${targetName}`);
+        await expect(subTasks).toContainText('Method: scp', { timeout: 20_000 });
+        await expect(subTasks.getByText('Failed', { exact: true })).toBeVisible({ timeout: 20_000 });
+        await expect(subTasks).toContainText('Error:');
 
         await taskCard.getByRole('button', { name: 'Remove', exact: true }).click();
         await expect(taskCard).toHaveCount(0);
