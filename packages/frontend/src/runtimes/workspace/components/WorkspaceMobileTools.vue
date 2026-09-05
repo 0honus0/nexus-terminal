@@ -48,6 +48,7 @@
     'update:terminalSearchTerm': [term: string];
     openFileManager: [];
     openEditor: [];
+    openSuspended: [];
     command: [command: string, allSessions: boolean];
     statusScale: [scale: number];
     quickCommandRowScale: [scale: number];
@@ -61,8 +62,6 @@
   const keyboardVisible = ref(false);
   const quickCommandsVisible = ref(false);
   const statusVisible = ref(false);
-  const panes: WorkspacePaneName[] = ['terminal', 'fileManager', 'editor', 'dockerManager'];
-  const paneLabel = (pane: WorkspacePaneName) => t(`layout.pane.${pane}`);
   const executeQuickCommand = (intent: ExecuteCommandIntent) => {
     emit('command', intent.command, Boolean(intent.allSessions));
     quickCommandsVisible.value = false;
@@ -81,6 +80,9 @@
       emit('clearModifiers');
     }
     emit('update:pane', pane);
+  };
+  const toggleDockerPane = () => {
+    selectPane(props.pane === 'dockerManager' ? 'terminal' : 'dockerManager');
   };
   watch(
     () => props.pane,
@@ -107,6 +109,9 @@
       :mobile="true"
       :terminal-ctrl-active="ctrlActive"
       :terminal-alt-active="altActive"
+      :virtual-keyboard-visible="keyboardVisible"
+      :docker-pane-active="pane === 'dockerManager'"
+      :non-terminal-pane-active="pane !== 'terminal'"
       @update:model-value="emit('update:commandDraft', $event)"
       @update:terminal-search-open="emit('update:terminalSearchOpen', $event)"
       @update:terminal-search-term="emit('update:terminalSearchTerm', $event)"
@@ -114,6 +119,12 @@
       @find-search-previous="terminalApi?.findPrevious?.()"
       @open-file-manager="emit('openFileManager')"
       @open-editor="emit('openEditor')"
+      @open-quick-commands="quickCommandsVisible = true"
+      @open-status-monitor="statusVisible = true"
+      @open-suspended="emit('openSuspended')"
+      @toggle-virtual-keyboard="toggleKeyboard"
+      @toggle-docker-pane="toggleDockerPane"
+      @return-to-terminal="selectPane('terminal')"
       @send="(command, all) => emit('command', command, all)"
       @clear="terminalApi?.clear?.()"
       @interaction="emit('interaction')"
@@ -126,35 +137,6 @@
       @toggle-modifier="emit('toggleModifier', $event)"
       @input="sendTerminalInput"
     />
-    <div class="flex items-center gap-1 overflow-x-auto p-1">
-      <BaseButton
-        v-for="item in panes"
-        :key="item"
-        size="sm"
-        :variant="pane === item ? 'primary' : 'ghost'"
-        @click="selectPane(item)"
-        >{{ paneLabel(item) }}</BaseButton
-      >
-      <template v-if="pane === 'terminal'">
-        <BaseButton size="sm" variant="ghost" @click="terminalApi?.copySelection?.()">{{
-          t('terminal.mobile.copy')
-        }}</BaseButton>
-        <BaseButton size="sm" variant="ghost" @click="terminalApi?.paste?.()">{{
-          t('terminal.mobile.paste')
-        }}</BaseButton>
-        <BaseButton size="sm" variant="ghost" @click="terminalApi?.selectAll?.()">{{
-          t('terminal.mobile.selectAll')
-        }}</BaseButton>
-        <BaseButton size="sm" variant="ghost" @click="terminalApi?.openSearch?.()">⌕</BaseButton>
-        <BaseButton size="sm" variant="ghost" @click="quickCommandsVisible = true">{{
-          t('layout.pane.quickCommands')
-        }}</BaseButton>
-        <BaseButton class="min-h-11" size="sm" variant="ghost" @click="statusVisible = true">{{
-          t('layout.pane.statusMonitor')
-        }}</BaseButton>
-        <BaseButton size="sm" variant="ghost" @click="toggleKeyboard">⌨</BaseButton>
-      </template>
-    </div>
   </div>
 
   <BaseModal

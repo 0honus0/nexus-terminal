@@ -806,6 +806,7 @@
         @quick-command-compact-mode="preferences.update({ quickCommandsCompactMode: $event })"
         @progress-visible="setProgressVisible(session.id, $event)"
         @interaction="session.reconnectNow()"
+        @open-suspended="suspendedVisible = true"
         @sidebar-width="saveSidebarWidth"
       />
     </div>

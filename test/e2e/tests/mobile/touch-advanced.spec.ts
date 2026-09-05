@@ -330,7 +330,7 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
 
   const commandInput = page.getByTestId('command-input');
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
-  await page.getByRole('button', { name: '⌨', exact: true }).click();
+  await page.getByTestId('toggle-virtual-keyboard').click();
   const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
   await expect(keyboard).toBeVisible();
 

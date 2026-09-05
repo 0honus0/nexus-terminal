@@ -229,6 +229,7 @@
           <i class="fas fa-tasks text-sm" aria-hidden="true"></i>
         </button>
         <button
+          v-if="!props.mobile"
           type="button"
           class="flex h-full items-center justify-center border-l border-border px-3 text-text-secondary transition-colors duration-150 hover:bg-border hover:text-foreground"
           :title="t('suspendedSshSessions.modalTitle')"

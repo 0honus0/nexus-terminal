@@ -19,6 +19,9 @@
       terminalSearchTerm?: string;
       terminalCtrlActive?: boolean;
       terminalAltActive?: boolean;
+      virtualKeyboardVisible?: boolean;
+      dockerPaneActive?: boolean;
+      nonTerminalPaneActive?: boolean;
       mobile?: boolean;
     }>(),
     {
@@ -39,6 +42,12 @@
     clear: [];
     openFileManager: [];
     openEditor: [];
+    openQuickCommands: [];
+    openStatusMonitor: [];
+    openSuspended: [];
+    toggleVirtualKeyboard: [];
+    toggleDockerPane: [];
+    returnToTerminal: [];
     findSearchNext: [];
     findSearchPrevious: [];
     interaction: [];
@@ -238,10 +247,12 @@
     ref="root"
     data-testid="command-input-bar"
     class="command-bar-root flex w-full items-center overflow-hidden bg-background"
-    :class="mobile ? 'h-auto min-h-[2.35rem]' : 'h-full min-h-0'"
+    :class="mobile ? 'command-bar-root--mobile h-auto min-h-[2.35rem]' : 'h-full min-h-0'"
     @submit.prevent="submit"
   >
-    <div class="flex w-full min-w-0 flex-1 items-center gap-[0.3rem] bg-transparent px-2 py-[0.04rem]">
+    <div
+      class="command-bar-inner flex w-full min-w-0 flex-1 items-center gap-[0.3rem] bg-transparent px-2 py-[0.04rem]"
+    >
       <input
         ref="commandInput"
         v-model="activeInput"
@@ -258,7 +269,10 @@
         @blur="resetTargetSelection"
       />
 
-      <div class="flex min-w-max shrink-0 items-center gap-[0.3rem]">
+      <div
+        class="flex items-center gap-[0.3rem]"
+        :class="mobile ? 'mobile-command-controls min-w-0 flex-1 overflow-x-auto' : 'min-w-max shrink-0'"
+      >
         <button
           type="button"
           class="command-bar-button"
@@ -268,8 +282,50 @@
         >
           <i class="fas fa-eraser" aria-hidden="true"></i>
         </button>
+        <template v-if="mobile">
+          <button
+            type="button"
+            class="command-bar-button"
+            :title="t('layout.pane.quickCommands')"
+            :aria-label="t('layout.pane.quickCommands')"
+            @click="emit('openQuickCommands')"
+          >
+            <i class="fas fa-bolt" aria-hidden="true"></i>
+          </button>
+          <button
+            data-testid="open-status-monitor-button"
+            type="button"
+            class="command-bar-button"
+            :title="t('layout.pane.statusMonitor')"
+            :aria-label="t('layout.pane.statusMonitor')"
+            @click="emit('openStatusMonitor')"
+          >
+            <i class="fas fa-tachometer-alt" aria-hidden="true"></i>
+          </button>
+          <button
+            data-testid="open-suspended-sessions-button"
+            type="button"
+            class="command-bar-button"
+            :title="t('suspendedSshSessions.modalTitle')"
+            :aria-label="t('suspendedSshSessions.modalTitle')"
+            @click="emit('openSuspended')"
+          >
+            <i class="fas fa-pause-circle" aria-hidden="true"></i>
+          </button>
+          <button
+            data-testid="toggle-virtual-keyboard"
+            type="button"
+            class="command-bar-button"
+            :class="{ 'is-active': virtualKeyboardVisible }"
+            :title="t(virtualKeyboardVisible ? 'commandInputBar.hideKeyboard' : 'commandInputBar.showKeyboard')"
+            :aria-label="t(virtualKeyboardVisible ? 'commandInputBar.hideKeyboard' : 'commandInputBar.showKeyboard')"
+            :aria-pressed="Boolean(virtualKeyboardVisible)"
+            @click="emit('toggleVirtualKeyboard')"
+          >
+            <i class="fas fa-keyboard" aria-hidden="true"></i>
+          </button>
+        </template>
         <button
-          v-if="!mobile"
           type="button"
           class="command-bar-button"
           :title="t(terminalSearchOpen ? 'commandInputBar.closeSearch' : 'commandInputBar.openSearch')"
@@ -278,7 +334,7 @@
         >
           <i :class="terminalSearchOpen ? 'fas fa-times' : 'fas fa-search'" aria-hidden="true"></i>
         </button>
-        <template v-if="terminalSearchOpen && !mobile">
+        <template v-if="terminalSearchOpen">
           <button
             type="button"
             class="command-bar-button"
@@ -296,6 +352,31 @@
             @click="emit('findSearchNext')"
           >
             <i class="fas fa-arrow-down" aria-hidden="true"></i>
+          </button>
+        </template>
+        <template v-if="mobile">
+          <button
+            data-testid="mobile-docker-pane-toggle"
+            type="button"
+            class="command-bar-button"
+            :class="{ 'is-active': dockerPaneActive }"
+            :title="t('layout.pane.dockerManager')"
+            :aria-label="t('layout.pane.dockerManager')"
+            :aria-pressed="Boolean(dockerPaneActive)"
+            @click="emit('toggleDockerPane')"
+          >
+            <i class="fab fa-docker" aria-hidden="true"></i>
+          </button>
+          <button
+            v-if="nonTerminalPaneActive && !dockerPaneActive"
+            data-testid="mobile-terminal-pane-return"
+            type="button"
+            class="command-bar-button"
+            :title="t('layout.pane.terminal')"
+            :aria-label="t('layout.pane.terminal')"
+            @click="emit('returnToTerminal')"
+          >
+            <i class="fas fa-terminal" aria-hidden="true"></i>
           </button>
         </template>
         <button
@@ -336,6 +417,29 @@
 </template>
 
 <style scoped>
+  .command-bar-root--mobile {
+    flex: 0 0 auto;
+    overflow-y: hidden;
+  }
+  .command-bar-root--mobile .command-bar-inner {
+    padding-block: 0.25rem;
+  }
+  .command-bar-root--mobile .command-bar-button {
+    width: 2rem;
+    height: 2rem;
+    min-width: 2rem;
+    min-height: 2rem;
+    flex-basis: 2rem;
+  }
+
+  .mobile-command-controls {
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+  .mobile-command-controls::-webkit-scrollbar {
+    display: none;
+  }
+
   .command-bar-button {
     display: flex;
     width: 1.85rem;
@@ -353,6 +457,11 @@
       background-color 0.2s ease,
       color 0.2s ease,
       border-color 0.2s ease;
+  }
+  .command-bar-button.is-active {
+    border-color: color-mix(in srgb, var(--primary-color) 55%, var(--border-color));
+    background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+    color: var(--primary-color);
   }
   .command-bar-button:hover:not(:disabled) {
     background: var(--border-color);

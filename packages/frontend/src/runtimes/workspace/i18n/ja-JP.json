@@ -70,7 +70,9 @@
     "findPrevious": "前を検索",
     "findNext": "次を検索",
     "configureFocusSwitch": "フォーカススイッチャーを設定",
-    "clearTerminal": "ターミナルをクリア"
+    "clearTerminal": "ターミナルをクリア",
+    "showKeyboard": "仮想キーボードを表示",
+    "hideKeyboard": "仮想キーボードを非表示"
   },
   "layout": {
     "loading": "ロード中...",

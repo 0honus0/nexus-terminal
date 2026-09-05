@@ -70,7 +70,9 @@
     "findPrevious": "Find previous",
     "findNext": "Find next",
     "configureFocusSwitch": "Configure Focus Switcher",
-    "clearTerminal": "Clear Terminal"
+    "clearTerminal": "Clear Terminal",
+    "showKeyboard": "Show virtual keyboard",
+    "hideKeyboard": "Hide virtual keyboard"
   },
   "layout": {
     "loading": "Loading...",

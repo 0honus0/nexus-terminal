@@ -70,7 +70,9 @@
     "findPrevious": "查找上一个",
     "findNext": "查找下一个",
     "configureFocusSwitch": "配置焦点切换器",
-    "clearTerminal": "清空终端"
+    "clearTerminal": "清空终端",
+    "showKeyboard": "显示虚拟键盘",
+    "hideKeyboard": "隐藏虚拟键盘"
   },
   "layout": {
     "loading": "加载中...",

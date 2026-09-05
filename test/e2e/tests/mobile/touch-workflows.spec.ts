@@ -374,7 +374,7 @@ test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', 
     await commandInput.fill('byte=$(dd bs=1 count=1 2>/dev/null | od -An -t u1); printf \'CTRL_BYTE=%s\\n\' "$byte"');
     await commandInput.press('Enter');
 
-    const keyboardButton = page.getByRole('button', { name: '⌨', exact: true });
+    const keyboardButton = page.getByTestId('toggle-virtual-keyboard');
     await expect(keyboardButton).toBeVisible();
     await keyboardButton.click();
 

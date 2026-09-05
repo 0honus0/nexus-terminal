@@ -112,6 +112,7 @@
     editorFontSize: [size: number];
     mobileEditorFontSize: [size: number];
     interaction: [];
+    openSuspended: [];
     fileManagerRowScale: [scale: number];
     fileManagerColumnWidths: [widths: Record<string, number>];
     quickCommandRowScale: [scale: number];
@@ -1022,6 +1023,7 @@
         documentMode = 'editor';
         documentPopupVisible = true;
       "
+      @open-suspended="emit('openSuspended')"
       @command="(command, all) => emit('command', command, all)"
       @interaction="emit('interaction')"
       @toggle-modifier="toggleMobileModifier"

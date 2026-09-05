@@ -1,6 +1,4 @@
 <script setup lang="ts">
-  import { BaseButton } from '@/foundation/ui';
-
   const props = withDefaults(defineProps<{ ctrlActive?: boolean; altActive?: boolean }>(), {
     ctrlActive: false,
     altActive: false,
@@ -16,9 +14,14 @@
       emit('toggleModifier', key.modifier);
       return;
     }
+    // Modifier encoding stays owned by WorkspaceSessionSurface. Only Del swaps
+    // to its standard Delete base sequence before the shared modifier encoder.
     const base = (props.ctrlActive || props.altActive) && key.modifiedSequence ? key.modifiedSequence : key.sequence;
     emit('input', base);
   };
+
+  const activeModifier = (key: KeyDefinition): boolean =>
+    'modifier' in key && ((key.modifier === 'ctrl' && props.ctrlActive) || (key.modifier === 'alt' && props.altActive));
 
   const primary: KeyDefinition[] = [
     { label: 'Ctrl', modifier: 'ctrl' },
@@ -60,37 +63,34 @@
 
 <template>
   <div class="mobile-virtual-keyboard virtual-keyboard-bar border-t border-border bg-background">
-    <div class="primary-row">
-      <BaseButton
+    <div class="primary-key-row">
+      <button
         v-for="key in primary"
         :key="key.label"
-        size="sm"
-        :variant="
-          'modifier' in key &&
-          ((key.modifier === 'ctrl' && props.ctrlActive) || (key.modifier === 'alt' && props.altActive))
-            ? 'primary'
-            : 'ghost'
-        "
-        :aria-pressed="
-          'modifier' in key
-            ? (key.modifier === 'ctrl' && props.ctrlActive) || (key.modifier === 'alt' && props.altActive)
-            : undefined
-        "
+        type="button"
+        class="virtual-key primary-key rounded border border-border bg-input text-foreground transition-colors duration-150 hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary"
+        :class="{ 'bg-primary text-primary-foreground hover:bg-primary/90': activeModifier(key) }"
+        :title="key.label"
+        :aria-pressed="'modifier' in key ? activeModifier(key) : undefined"
         @pointerdown.prevent
         @click="send(key)"
-        >{{ key.label }}</BaseButton
       >
+        {{ key.label }}
+      </button>
     </div>
-    <div v-for="(row, index) in rows" :key="index" class="secondary-row">
-      <BaseButton
+
+    <div v-for="(row, index) in rows" :key="index" class="secondary-key-row">
+      <button
         v-for="key in row"
         :key="key.label"
-        size="sm"
-        variant="ghost"
+        type="button"
+        class="virtual-key compact-key rounded border border-border bg-input text-foreground transition-colors duration-150 hover:bg-border focus:outline-none focus:ring-1 focus:ring-primary"
+        :title="key.label"
         @pointerdown.prevent
         @click="send(key)"
-        >{{ key.label }}</BaseButton
       >
+        {{ key.label }}
+      </button>
     </div>
   </div>
 </template>
@@ -99,26 +99,46 @@
   .virtual-keyboard-bar {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0.25rem;
+    overflow: hidden;
     padding: 0.25rem;
     padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
   }
-  .primary-row,
-  .secondary-row {
+
+  .primary-key-row,
+  .secondary-key-row {
     display: grid;
+    width: 100%;
     gap: 2px;
   }
-  .primary-row {
+
+  .primary-key-row {
     grid-template-columns: repeat(5, minmax(0, 1fr));
   }
-  .secondary-row {
+
+  .secondary-key-row {
     grid-template-columns: repeat(7, minmax(0, 1fr));
   }
-  :deep(button) {
-    min-width: 0;
-    min-height: 1.8rem;
-    padding-inline: 0.15rem;
-    font-size: clamp(0.55rem, 2.5vw, 0.75rem);
+
+  .virtual-key {
+    text-align: center;
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .primary-key,
+  .compact-key {
+    min-width: 0;
+    height: 1.8rem;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .primary-key {
+    font-size: 0.75rem;
+  }
+
+  .compact-key {
+    font-size: clamp(0.55rem, 2.5vw, 0.7rem);
   }
 </style>
