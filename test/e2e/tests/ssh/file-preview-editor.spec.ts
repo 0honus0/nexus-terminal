@@ -118,7 +118,7 @@ test('file previews and text editor protect historical file-opening regressions'
 
     const resizedWidth = after!.width;
     const resizedHeight = after!.height;
-    await documentPopup(page).getByTitle('Close', { exact: true }).first().click();
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
     await expect(editor).toBeHidden();
     await row(page, 'plainfile').dblclick();
     await expect(editor).toBeVisible();
@@ -161,7 +161,7 @@ test('file previews and text editor protect historical file-opening regressions'
       .poll(async () => await editor.locator('.monaco-editor .view-lines').innerText())
       .toContain('plain-updated-through-editor');
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
-    await documentPopup(page).getByTitle('Close', { exact: true }).first().click();
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
     await expect(editor).toBeHidden();
 
     await row(page, 'plainfile').dblclick();
@@ -169,7 +169,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect
       .poll(async () => await reopened.locator('.monaco-editor .view-lines').innerText())
       .toContain('plain-updated-through-editor');
-    await documentPopup(page).getByTitle('Close', { exact: true }).first().click();
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
 
   await slowStep('Refresh reloads content changed outside the Nexus editor', async () => {
@@ -187,7 +187,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect
       .poll(async () => (await viewLines.innerText()).replace(/\u00a0/g, ' '), { timeout: 15_000 })
       .toContain('created outside Nexus for refresh verification');
-    await documentPopup(page).getByTitle('Close', { exact: true }).first().click();
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
 
   await slowStep('encoding and line-ending controls decode UTF-16, switch previews, and save LF bytes', async () => {
@@ -212,13 +212,13 @@ test('file previews and text editor protect historical file-opening regressions'
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toContainText('Save successful', { timeout: 15_000 });
 
-    await documentPopup(page).getByTitle('Close', { exact: true }).first().click();
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
     await row(page, 'utf16-crlf.txt').dblclick();
     const reopened = editorView(page);
     await expect(reopened).toBeVisible();
     await expect(reopened.getByTitle('Line ending', { exact: true })).toHaveValue('lf');
     await expect.poll(async () => reopened.locator('.monaco-editor .view-lines').innerText()).toContain('SECOND_LINE');
-    await documentPopup(page).getByTitle('Close', { exact: true }).first().click();
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
 
   await slowStep('Unicode image filename streams and renders inline', async () => {
@@ -244,7 +244,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect
       .poll(async () => (await editor.locator('.monaco-editor .view-lines').innerText()).replace(/\u00a0/g, ' '))
       .toContain('Nexus Markdown E2E');
-    await documentPopup(page).getByTitle('Close', { exact: true }).first().click();
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
 
   await slowStep('PDF.js preview scrolls continuously with a narrow persistent desktop outline', async () => {

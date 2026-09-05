@@ -170,7 +170,7 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await expect(editor).toContainText('README-e2e.md');
     await expect(editor.locator('.view-lines')).toContainText('Nexus Markdown E2E', { timeout: 20_000 });
     await expect(editor).not.toContainText('Failed to');
-    await documentPopup.getByTitle('Close', { exact: true }).first().click();
+    await documentPopup.getByTitle('Close Editor', { exact: true }).first().click();
     await expect(documentPopup).toBeHidden();
     await reopenConnectedFileManager(page);
   });

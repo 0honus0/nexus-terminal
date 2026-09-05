@@ -310,7 +310,7 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toContainText('Save successful', { timeout: 15_000 });
 
-    await preview.getByTitle('Close', { exact: true }).click();
+    await preview.getByTitle('Close Editor', { exact: true }).click();
     await expect(editor).toBeHidden();
   });
 
