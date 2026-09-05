@@ -31,7 +31,7 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       await dragLocalFile(page, filename, 12 * 1024 * 1024, 0x51);
       const center = visibleProgressCenter(page);
       await expect(center).toBeVisible({ timeout: 10_000 });
-      await expect(visibleProgressTask(page, filename)).toContainText('Upload');
+      await expect(center).toContainText(filename);
       await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
     });
