@@ -40,6 +40,9 @@
       "swap": "Swap trend",
       "disk": "Disk trend",
       "network": "Network trend"
-    }
+    },
+    "online": "Online",
+    "networkInterfaceFallback": "Network interface",
+    "historyRange": "History range"
   }
 }

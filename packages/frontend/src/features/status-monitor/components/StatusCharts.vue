@@ -178,18 +178,20 @@
             data: networkRx.value.map((point) => point.value),
             borderColor: chartTheme.value.download,
             backgroundColor: chartTheme.value.download,
+            borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 3,
-            tension: 0.16,
+            tension: 0.12,
           },
           {
             label: t('statusMonitor.networkUpload'),
             data: networkRx.value.map((point) => txBySequence.get(point.sequence)?.value ?? 0),
             borderColor: chartTheme.value.upload,
             backgroundColor: chartTheme.value.upload,
+            borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 3,
-            tension: 0.16,
+            tension: 0.12,
           },
         ],
       };
@@ -202,9 +204,10 @@
           data: percentageSeries.value.map((point) => point.value),
           borderColor: chartTheme.value.primary,
           backgroundColor: chartTheme.value.primary,
+          borderWidth: 2,
           pointRadius: 0,
           pointHoverRadius: 3,
-          tension: 0.16,
+          tension: 0.12,
         },
       ],
     };
@@ -216,7 +219,17 @@
     animation: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {
-      legend: { labels: { color: chartTheme.value.text } },
+      legend: {
+        position: 'bottom',
+        align: 'start',
+        labels: {
+          color: chartTheme.value.text,
+          boxWidth: 8,
+          boxHeight: 8,
+          padding: 8,
+          font: { size: 10 },
+        },
+      },
       tooltip: {
         backgroundColor: chartTheme.value.surface,
         borderColor: chartTheme.value.border,
@@ -234,8 +247,9 @@
     },
     scales: {
       x: {
-        ticks: { color: chartTheme.value.text, maxTicksLimit: 6 },
-        grid: { color: chartTheme.value.grid },
+        ticks: { display: false, color: chartTheme.value.text, maxTicksLimit: 6 },
+        grid: { display: false },
+        border: { color: chartTheme.value.grid },
       },
       y:
         props.metric === 'network'
@@ -243,22 +257,44 @@
               beginAtZero: true,
               min: 0,
               max: networkAxisMax.value,
-              ticks: { color: chartTheme.value.text, callback: (value) => formatStatusRateAxis(Number(value)) },
-              grid: { color: chartTheme.value.grid },
+              ticks: {
+                color: chartTheme.value.text,
+                font: { size: 9 },
+                callback: (value) => formatStatusRateAxis(Number(value)),
+              },
+              grid: { color: chartTheme.value.grid, lineWidth: 0.5 },
+              border: { color: chartTheme.value.grid },
             }
           : {
               beginAtZero: true,
               min: 0,
               max: 100,
-              ticks: { color: chartTheme.value.text, callback: (value) => `${Number(value)}%` },
-              grid: { color: chartTheme.value.grid },
+              ticks: { color: chartTheme.value.text, font: { size: 9 }, callback: (value) => `${Number(value)}%` },
+              grid: { color: chartTheme.value.grid, lineWidth: 0.5 },
+              border: { color: chartTheme.value.grid },
             },
     },
   }));
 </script>
 
 <template>
-  <div class="h-64 min-h-44 rounded border border-border p-2">
+  <div class="status-history-chart">
     <Line :data="data" :options="options" />
   </div>
 </template>
+
+<style scoped>
+  .status-history-chart {
+    min-width: 0;
+    min-height: 5.5rem;
+    height: 100%;
+    flex: 1 1 auto;
+    overflow: hidden;
+  }
+
+  @media (max-width: 640px) {
+    .status-history-chart {
+      min-height: 4.75rem;
+    }
+  }
+</style>

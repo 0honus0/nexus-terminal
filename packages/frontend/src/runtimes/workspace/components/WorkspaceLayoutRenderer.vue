@@ -382,7 +382,7 @@
 
     <StatusMonitor
       v-else-if="node.component === 'statusMonitor'"
-      class="min-h-0 flex-1 overflow-auto p-2"
+      class="min-h-0 flex-1 overflow-hidden"
       :session="session.statusController"
       :interval-seconds="statusIntervalSeconds"
       :scale="statusScale"
@@ -392,7 +392,7 @@
     />
     <DockerManager
       v-else-if="node.component === 'dockerManager'"
-      class="min-h-0 flex-1 overflow-auto p-2"
+      class="min-h-0 flex-1 overflow-hidden"
       :session="session.dockerController"
       :interval-seconds="dockerIntervalSeconds"
       :default-expand="dockerDefaultExpand"

@@ -40,6 +40,9 @@
       "swap": "交换空间趋势",
       "disk": "磁盘趋势",
       "network": "网络趋势"
-    }
+    },
+    "online": "在线",
+    "networkInterfaceFallback": "网卡",
+    "historyRange": "历史时间范围"
   }
 }

@@ -40,6 +40,9 @@
       "swap": "スワップ推移",
       "disk": "ディスク推移",
       "network": "ネットワーク推移"
-    }
+    },
+    "online": "オンライン",
+    "networkInterfaceFallback": "ネットワークインターフェース",
+    "historyRange": "履歴範囲"
   }
 }
