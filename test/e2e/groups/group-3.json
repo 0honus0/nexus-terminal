@@ -16,6 +16,7 @@
     "tests/ui/system-settings.spec.ts",
     "tests/ui/theme-switching.spec.ts",
     "tests/ssh/sftp-download.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts"
+    "tests/ssh/progress-display-baseline.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts"
   ]
 }
