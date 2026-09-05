@@ -81,8 +81,8 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(contextMenu).toBeVisible();
     await contextMenu.getByText('Rename', { exact: true }).first().click();
     const renameModal = page.getByRole('dialog', { name: /Rename / });
-    await renameModal.getByLabel('Value', { exact: true }).fill('nested-renamed.txt');
-    await renameModal.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await renameModal.getByLabel('New name:', { exact: true }).fill('nested-renamed.txt');
+    await renameModal.getByRole('button', { name: 'Rename', exact: true }).click();
     await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested.txt"]')).toHaveCount(0);
     await expect(fileManager.locator('tr[data-file-path="/folder-seed/nested-renamed.txt"]')).toBeVisible();
 

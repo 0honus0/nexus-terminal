@@ -1614,6 +1614,7 @@
     <OverlayPanel
       :visible="Boolean(action)"
       :z-index="100"
+      :close-on-escape="true"
       panel-class="max-w-md flex flex-col p-5"
       data-testid="file-manager-action-modal"
       :data-action-type="action || ''"
