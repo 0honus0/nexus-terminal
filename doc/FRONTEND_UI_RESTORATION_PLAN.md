@@ -292,7 +292,7 @@
 | ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | M10.01 | ✅ 已完成〔C.1/P5〕 | xterm padding/主题fallback/背景层、SearchAddon外观、选择菜单、虚拟keycap/修饰键与mobile tools旧布局                                 |
 | M10.02 | ◐ 部分完成          | terminal/keyboard源码已审；恢复完整mobile run证据，补普通/选中/搜索/断连/重连时的布局                                               |
-| M10.03 | ⏳ 待验收           | 输出输入、resize、复制粘贴/选择、搜索导航、Ctrl/Alt编码、IME composition、虚拟键盘开关、竖横屏及字体持久化；不重复编码或换UI丢shell |
+| M10.03 | ◐ 部分完成〔C.14-k〕 | 真实SSH终端输入、terminal.input、Ctrl+wheel字体resize、命令执行与cwd持久已通过；复制/选择、搜索导航、Ctrl/Alt/IME、虚拟键盘、竖横屏与字体持久化仍待验收 |
 
 **验收/架构**：SearchAddon与terminal API归feature；修饰键编码沿既有单一owner，不恢复旧event bus。复用 `ssh/terminal-ui.spec.ts`、`ssh/terminal-tools-ui.spec.ts`、`ssh/terminal-protocol.spec.ts`、`mobile/terminal-touch.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 `ssh-terminal.png` 及移动selection/keyboard/modifiers。
 
@@ -1079,6 +1079,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M05.04-d` → `/root/luna_m05_captcha`（Luna high）：扩展既有`ui/ip-whitelist-settings.spec.ts`与`ui/ip-blacklist-settings.spec.ts`；真实白名单多行保存/清空/reload、黑名单启停/阈值校验/真实失败登录封禁/确认删除 **2/2**，桌面与320px截图/metrics、architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04d-run-20260905/final2`，主代理提交`9b885ad3`。M05仍需备份/独立导入导出及移动专项。
 - `M08.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/reconnect-ui.spec.ts`；真实三SSH session新增/切换且shell marker保留、tab滚动/长按context、Close Other Tabs、关闭至移动空Workspace **1/1**，reconnect suite **2/2**，suspend/resume邻接 **1/1**，412×915截图/metrics与test-policy/Prettier/diff通过，证据`/tmp/nexus-m08-03-final-20260905-004`，主代理提交`6b590cad`。M08仍需resize/layout锁定、焦点/sidebar滚动及叠层验收。
 - `M09.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/quick-command-management.spec.ts`并复跑`quick-command-tags-variables`、`command-history-management`；真实命令CRUD/search/execute/edit/delete、tag变量替换/rename、History copy/rerun/delete **3/3**，1280×800截图/metrics无横溢出，test-policy/Prettier/diff通过，证据`/tmp/nexus-m09-03-final-20260905-007`，主代理提交`12330364`。M09仍需多session执行、命令栏键盘与失败反馈。
+- `M10.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/terminal-ui.spec.ts`并复跑`terminal-tools-ui`；真实SSH终端输入、terminal.input、Ctrl+wheel字体resize、shell命令/cwd持久 **3/3**，1280×800截图/metrics无横溢出，test-policy/Prettier/diff通过，证据`/tmp/nexus-m10-03-final-20260905-004`，主代理提交`4f97e7be`。M10仍需复制选择、搜索、修饰键/IME、虚拟键盘及移动专项。
 - 主代理以精确路径分别提交：`0b18d747`（M05.04-a test）、`1f7ecd87`（M07.02-a product+tests）、`ab506b16`（M11.03-a test）。这些是原子批次提交，不冒充父模块完成；模块完成时仍需另一次按§5.8的模块提交。此前计划/入口提交为`ad6cc78d`，M01小切片为`c940eba7`，已有闭环增量包括M02 `708bfa2f`、M03 `d2b0979a`、M04 `36a8b052`、M06 `004c0080`、M13 `b2d3535a`、M16 `946394a1`，M14/M15历史提交分别为`192a3453`/`c67c2c70`。
 - 三个子代理均保护其它工作树文件；本轮主代理未push/dispatch。下一轮继续按依赖分发M05剩余安全状态、M07 delivery/CRUD、M11文件操作或M00/M08–M13未闭环原子任务，完成父模块后再递增闭环计数。
 
