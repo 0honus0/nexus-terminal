@@ -48,6 +48,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
     [...(searchActive.value ? searchEntries.value : entries.value)].sort((left, right) => {
       if (left.name === '..') return -1;
       if (right.name === '..') return 1;
+      if (left.metadata.isDirectory !== right.metadata.isDirectory) return left.metadata.isDirectory ? -1 : 1;
       const result = compare(left, right, sortKey.value);
       return sortDirection.value === 'asc' ? result : -result;
     }),
