@@ -154,8 +154,8 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
     const addDialog = page.getByRole('dialog', { name: 'Add New Favorite Path', exact: true });
     await expect(addDialog).toBeVisible();
-    await addDialog.getByLabel('Name (Optional)', { exact: true }).fill(FAVORITE_NAME);
-    await addDialog.getByLabel('Path', { exact: true }).fill(FAVORITE_PATH);
+    await addDialog.locator('#favPath-name').fill(FAVORITE_NAME);
+    await addDialog.locator('#favPath-path').fill(FAVORITE_PATH);
     await addDialog.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(addDialog).toBeHidden();
 
