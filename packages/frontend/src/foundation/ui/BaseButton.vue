@@ -31,15 +31,15 @@
 
   const variantClass = computed(() => {
     if (props.variant === 'primary') {
-      return 'border border-transparent bg-button text-button-text hover:bg-button-hover focus-visible:ring-primary';
+      return 'border border-transparent bg-button text-button-text shadow-sm hover:bg-button-hover focus-visible:ring-primary';
     }
     if (props.variant === 'danger') {
-      return 'border border-transparent bg-error text-error-text hover:opacity-90 focus-visible:ring-error';
+      return 'border border-transparent bg-error text-error-text shadow-sm hover:opacity-90 focus-visible:ring-error';
     }
     if (props.variant === 'ghost') {
       return 'border border-transparent bg-transparent text-text-secondary hover:bg-header hover:text-foreground focus-visible:ring-primary';
     }
-    return 'border border-border bg-background text-text-secondary hover:bg-header hover:text-foreground focus-visible:ring-primary';
+    return 'border border-border bg-background text-text-secondary shadow-sm hover:bg-border hover:text-foreground focus-visible:ring-primary';
   });
 </script>
 

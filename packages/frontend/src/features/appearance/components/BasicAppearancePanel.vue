@@ -141,6 +141,21 @@
     form.windowThemeColor = defaultWindowThemeColor;
   };
 
+  const formatLabel = (key: string): string =>
+    key
+      .replace(/^--/, '')
+      .replace(/-/g, ' ')
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/^./, (value) => value.toUpperCase());
+
+  const isColorValue = (value: string): boolean =>
+    value.startsWith('#') || value.startsWith('rgb') || value.startsWith('hsl');
+
+  const selectInputText = (event: FocusEvent): void => {
+    const target = event.target;
+    if (target instanceof HTMLInputElement) target.select();
+  };
+
   defineExpose({ saveUiTheme, resetUiTheme });
 </script>
 
@@ -209,13 +224,18 @@
       t('common.save')
     }}</BaseButton>
 
-    <section v-if="showUi" class="space-y-3">
-      <h3 v-if="props.section === 'ui'" class="mt-0 border-b border-border pb-2 text-lg font-semibold text-foreground">
+    <section v-if="showUi">
+      <h3
+        v-if="props.section === 'ui'"
+        class="mb-4 mt-0 border-b border-border pb-2 text-lg font-semibold text-foreground"
+      >
         {{ t('styleCustomizer.uiStyles') }}
       </h3>
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <span class="text-sm font-medium text-foreground">{{ t('styleCustomizer.themeModeLabel') }}</span>
-        <div class="flex items-center gap-2">
+      <div class="mb-6 grid grid-cols-1 items-start gap-2 md:grid-cols-[auto_1fr] md:items-center md:gap-3">
+        <span class="mb-1 text-left text-sm font-medium text-foreground md:mb-0">{{
+          t('styleCustomizer.themeModeLabel')
+        }}</span>
+        <div class="flex flex-wrap justify-start gap-2">
           <BaseButton data-testid="theme-default-mode" size="sm" @click="resetUiTheme">{{
             t('styleCustomizer.defaultMode')
           }}</BaseButton>
@@ -224,26 +244,70 @@
           }}</BaseButton>
         </div>
       </div>
-      <p class="text-sm leading-relaxed text-text-secondary">{{ t('styleCustomizer.uiDescription') }}</p>
-      <div class="grid gap-3 md:grid-cols-3">
-        <BaseFormField v-for="(_, key) in uiTheme" :key="key" :label="String(key)">
-          <BaseInput v-model="uiTheme[key]" />
-        </BaseFormField>
+      <p class="mb-3 text-sm leading-relaxed text-text-secondary">{{ t('styleCustomizer.uiDescription') }}</p>
+
+      <div
+        v-for="(value, key) in uiTheme"
+        :key="key"
+        class="mb-3 grid grid-cols-1 items-start gap-x-3 gap-y-1 md:grid-cols-[auto_1fr] md:items-center"
+      >
+        <label
+          :for="`ui-${key}`"
+          class="mb-1 block w-full overflow-hidden text-ellipsis text-left text-sm font-medium text-foreground md:mb-0"
+        >
+          {{ formatLabel(String(key)) }}:
+        </label>
+        <div class="flex w-full items-center gap-2">
+          <input
+            v-if="isColorValue(value)"
+            :id="`ui-${key}`"
+            v-model="uiTheme[key]"
+            type="color"
+            class="h-[34px] min-w-[40px] max-w-[50px] shrink-0 rounded border border-border p-0.5 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+          <input
+            v-if="isColorValue(value)"
+            :value="uiTheme[key]"
+            type="text"
+            class="min-w-[80px] flex-grow cursor-text rounded border border-border bg-background px-[0.7rem] py-2 text-sm text-foreground transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            @focus="selectInputText"
+            @input="uiTheme[key] = ($event.target as HTMLInputElement).value"
+          />
+          <input
+            v-else
+            :id="`ui-${key}`"
+            v-model="uiTheme[key]"
+            type="text"
+            class="w-full rounded border border-border bg-background px-[0.7rem] py-2 text-sm text-foreground transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          />
+        </div>
       </div>
-      <BaseFormField :label="t('styleCustomizer.uiThemeJsonEditorTitle')">
-        <p class="mb-2 text-xs text-text-secondary">{{ t('styleCustomizer.uiThemeJsonEditorDesc') }}</p>
+
+      <hr class="my-8 border-border" />
+      <h4 class="mb-2 mt-6 text-base font-semibold text-foreground">
+        {{ t('styleCustomizer.uiThemeJsonEditorTitle') }}
+      </h4>
+      <p class="mb-3 text-sm leading-relaxed text-text-secondary">{{ t('styleCustomizer.uiThemeJsonEditorDesc') }}</p>
+      <div class="mt-4">
         <BaseTextarea
           v-model="uiThemeJson"
-          class="min-h-64 font-mono text-xs"
+          class="min-h-[200px] resize-y whitespace-pre-wrap break-words p-3 font-mono text-sm leading-snug"
+          rows="15"
+          spellcheck="false"
           @focus="rawThemeEditing = true"
           @blur="
             rawThemeEditing = false;
             applyUiThemeJson();
           "
         />
-        <p v-if="uiThemeParseError" class="mt-2 text-sm text-error">{{ uiThemeParseError }}</p>
-      </BaseFormField>
-      <div v-if="props.showUiActions" class="flex gap-2">
+        <p
+          v-if="uiThemeParseError"
+          class="mt-2 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm text-error"
+        >
+          {{ uiThemeParseError }}
+        </p>
+      </div>
+      <div v-if="props.showUiActions" class="mt-4 flex gap-2">
         <BaseButton variant="primary" @click="saveUiTheme">{{ t('common.save') }}</BaseButton>
         <BaseButton @click="resetUiTheme">{{ t('common.restore') }}</BaseButton>
       </div>

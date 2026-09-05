@@ -1,15 +1,7 @@
 <script setup lang="ts">
   import { computed, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import {
-    BaseButton,
-    BaseFormField,
-    BaseInput,
-    BaseModal,
-    BaseSelect,
-    BaseTable,
-    BaseTextarea,
-  } from '@/foundation/ui';
+  import { BaseButton, BaseFormField, BaseInput, BaseTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { appearanceApi } from '../api/appearanceApi';
   import type { TerminalTheme } from '../model/appearance';
@@ -29,7 +21,6 @@
   const importInput = ref<HTMLInputElement | null>(null);
   const search = ref('');
 
-  const activeThemeId = computed(() => store.settings.activeTerminalThemeId ?? '');
   const activeTheme = computed(
     () => store.themes.find((theme) => theme.id === store.settings.activeTerminalThemeId) ?? null,
   );
@@ -64,9 +55,6 @@
       feedback.notifyError(t('styleCustomizer.setActiveThemeFailed', { message: String(cause) }));
     }
   };
-
-  const setActiveTheme = (event: Event): Promise<void> =>
-    applyTheme(Number((event.target as HTMLSelectElement).value) || null);
 
   const openCreate = (): void => {
     editingTheme.value = null;
@@ -181,120 +169,172 @@
 </script>
 
 <template>
-  <section data-testid="terminal-style-settings" class="space-y-4">
-    <div class="grid gap-3 md:grid-cols-[1fr_auto_auto_auto]">
-      <BaseSelect :model-value="String(activeThemeId)" @change="setActiveTheme">
-        <option value="">{{ t('styleCustomizer.defaultTheme') }}</option>
-        <option v-for="theme in sortedThemes" :key="theme.id" :value="theme.id">{{ theme.name }}</option>
-      </BaseSelect>
-      <BaseButton data-testid="terminal-theme-add" variant="primary" @click="openCreate">{{
-        t('styleCustomizer.addNewTheme')
-      }}</BaseButton>
-      <BaseButton @click="importInput?.click()">{{ t('styleCustomizer.importTheme') }}</BaseButton>
-      <BaseButton :disabled="!activeTheme" @click="exportActive">{{
-        t('styleCustomizer.exportActiveTheme')
-      }}</BaseButton>
-      <input ref="importInput" class="hidden" type="file" accept="application/json,.json" @change="importTheme" />
-    </div>
+  <section data-testid="terminal-style-settings">
+    <template v-if="!editorVisible">
+      <h4 class="mb-2 mt-6 text-base font-semibold text-foreground">
+        {{ t('styleCustomizer.terminalThemeSelection') }}
+      </h4>
 
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <BaseInput
-        v-model="search"
-        data-testid="terminal-theme-search"
-        class="max-w-sm"
-        :placeholder="t('styleCustomizer.searchThemePlaceholder')"
-      />
-      <p class="text-sm text-text-secondary">
-        {{ t('styleCustomizer.activeTheme') }}
-        <strong data-testid="terminal-active-theme-name" class="text-foreground">{{
-          activeTheme?.name || t('styleCustomizer.defaultTheme')
-        }}</strong>
-      </p>
-    </div>
+      <div
+        class="mb-4 flex flex-col items-start gap-1 py-2 text-sm md:flex-row md:items-center md:gap-3 md:text-[0.95rem]"
+      >
+        <span class="text-text-secondary">{{ t('styleCustomizer.activeTheme') }}:</span>
+        <strong data-testid="terminal-active-theme-name" class="font-semibold text-foreground">
+          {{ activeTheme?.name || t('styleCustomizer.defaultTheme') }}
+        </strong>
+      </div>
 
-    <BaseTable :empty="filteredThemes.length === 0" :empty-text="t('styleCustomizer.noThemesFound')">
-      <template #head>
-        <tr>
-          <th class="px-3 py-2">{{ t('styleCustomizer.themeName') }}</th>
-          <th class="px-3 py-2"></th>
-        </tr>
-      </template>
-      <tr v-for="theme in filteredThemes" :key="theme.id" :data-testid="`terminal-theme-row-${theme.id}`">
-        <td class="px-3 py-2">{{ theme.name }}</td>
-        <td class="px-3 py-2 text-right">
-          <div class="flex justify-end gap-1">
-            <BaseButton
+      <div class="mb-6 mt-4 flex flex-wrap items-center gap-2 border-b border-dashed border-border pb-4">
+        <BaseButton data-testid="terminal-theme-add" size="sm" @click="openCreate">{{
+          t('styleCustomizer.addNewTheme')
+        }}</BaseButton>
+        <BaseButton size="sm" @click="importInput?.click()">{{ t('styleCustomizer.importTheme') }}</BaseButton>
+        <BaseButton size="sm" :disabled="!activeTheme" @click="exportActive">{{
+          t('styleCustomizer.exportActiveTheme')
+        }}</BaseButton>
+        <input ref="importInput" class="hidden" type="file" accept="application/json,.json" @change="importTheme" />
+      </div>
+
+      <div class="mb-4">
+        <BaseInput
+          v-model="search"
+          data-testid="terminal-theme-search"
+          :placeholder="t('styleCustomizer.searchThemePlaceholder')"
+        />
+      </div>
+
+      <ul
+        class="mt-4 max-h-[200px] list-none overflow-y-auto rounded border border-border bg-background p-0 md:max-h-[280px]"
+      >
+        <li v-if="filteredThemes.length === 0" class="p-4 text-center italic text-text-secondary">
+          {{ t('styleCustomizer.noThemesFound') }}
+        </li>
+        <li
+          v-for="(theme, index) in filteredThemes"
+          v-else
+          :key="theme.id"
+          :data-testid="`terminal-theme-row-${theme.id}`"
+          :class="[
+            'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 ease-in-out md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
+            index < filteredThemes.length - 1 ? 'border-b border-border' : '',
+            theme.id === store.settings.activeTerminalThemeId ? 'bg-button text-button-text' : 'hover:bg-header',
+          ]"
+        >
+          <span
+            class="mb-2 block overflow-hidden text-ellipsis whitespace-nowrap md:mb-0"
+            :class="
+              theme.id === store.settings.activeTerminalThemeId ? 'font-bold text-button-text' : 'text-foreground'
+            "
+            :title="theme.name"
+          >
+            {{ theme.name }}
+          </span>
+          <div class="flex flex-wrap justify-start gap-2 md:justify-end">
+            <button
               data-testid="terminal-theme-apply"
-              size="sm"
+              type="button"
               :disabled="theme.id === store.settings.activeTerminalThemeId"
+              :class="[
+                'whitespace-nowrap rounded border px-3 py-1.5 text-xs transition-colors duration-200 ease-in-out disabled:cursor-not-allowed disabled:opacity-60 md:text-sm',
+                theme.id === store.settings.activeTerminalThemeId
+                  ? 'border-white/30 bg-white/10 text-button-text disabled:cursor-default disabled:border-transparent disabled:bg-transparent disabled:opacity-50'
+                  : 'border-border bg-header text-foreground hover:border-text-secondary hover:bg-border',
+              ]"
               @click="applyTheme(theme.id)"
             >
               {{ t('styleCustomizer.applyButton') }}
-            </BaseButton>
-            <BaseButton data-testid="terminal-theme-edit" size="sm" @click="openEdit(theme)">{{
-              theme.preset ? t('styleCustomizer.editAsCopy') : t('common.edit')
-            }}</BaseButton>
-            <BaseButton
+            </button>
+            <button
+              data-testid="terminal-theme-edit"
+              type="button"
+              :class="[
+                'whitespace-nowrap rounded border px-3 py-1.5 text-xs transition-colors duration-200 ease-in-out md:text-sm',
+                theme.id === store.settings.activeTerminalThemeId
+                  ? 'border-white/30 bg-white/10 text-button-text hover:border-white/50 hover:bg-white/20'
+                  : 'border-border bg-header text-foreground hover:border-text-secondary hover:bg-border',
+              ]"
+              @click="openEdit(theme)"
+            >
+              {{ theme.preset ? t('styleCustomizer.editAsCopy') : t('common.edit') }}
+            </button>
+            <button
               v-if="!theme.preset"
               data-testid="terminal-theme-delete"
-              size="sm"
-              variant="danger"
+              type="button"
+              class="whitespace-nowrap rounded border border-error/30 bg-error/10 px-3 py-1.5 text-xs text-error transition-colors duration-200 ease-in-out hover:bg-error/20 md:text-sm"
               @click="removeTheme(theme)"
             >
               {{ t('common.delete') }}
-            </BaseButton>
+            </button>
           </div>
-        </td>
-      </tr>
-    </BaseTable>
+        </li>
+      </ul>
+    </template>
 
-    <BaseModal
-      :visible="editorVisible"
-      :title="editingTheme ? t('styleCustomizer.editThemeTitle') : t('styleCustomizer.newThemeTitle')"
-      panel-class="w-[min(820px,94vw)] max-h-[90vh] overflow-auto"
-      @close="editorVisible = false"
-    >
-      <div data-testid="terminal-theme-editor" class="space-y-5">
-        <BaseFormField :label="t('styleCustomizer.themeName')">
-          <BaseInput v-model="themeName" data-testid="terminal-theme-name" />
-        </BaseFormField>
+    <section v-else data-testid="terminal-theme-editor">
+      <h3 class="mb-4 mt-0 border-b border-border pb-2 text-lg font-semibold text-foreground">
+        {{ editingTheme ? t('styleCustomizer.editThemeTitle') : t('styleCustomizer.newThemeTitle') }}
+      </h3>
 
-        <section class="space-y-3">
-          <h3 class="font-semibold">{{ t('styleCustomizer.terminalThemeColorEditorTitle') }}</h3>
-          <div class="grid gap-3 md:grid-cols-2">
-            <BaseFormField v-for="key in themeFields" :key="key" :label="labelForThemeField(key)">
-              <div class="flex items-center gap-2">
-                <input
-                  v-if="themeDraft[key]?.startsWith('#')"
-                  v-model="themeDraft[key]"
-                  type="color"
-                  class="h-9 w-12 shrink-0 rounded border border-border"
-                />
-                <BaseInput v-model="themeDraft[key]" class="min-w-0 flex-1" />
-              </div>
-            </BaseFormField>
-          </div>
-        </section>
+      <div class="mb-2 grid grid-cols-1 items-start gap-2 md:grid-cols-[auto_1fr] md:items-center">
+        <label class="block w-full overflow-hidden text-ellipsis text-left text-sm font-medium text-foreground md:mb-0">
+          {{ t('styleCustomizer.themeName') }}:
+        </label>
+        <BaseInput v-model="themeName" data-testid="terminal-theme-name" />
+      </div>
 
-        <BaseFormField :label="t('styleCustomizer.terminalThemeJsonEditorTitle')">
-          <p class="mb-2 text-xs text-text-secondary">{{ t('styleCustomizer.terminalThemeJsonEditorDesc') }}</p>
-          <BaseTextarea
-            v-model="themeJson"
-            data-testid="terminal-theme-json"
-            class="min-h-72 font-mono text-xs"
-            spellcheck="false"
-            @focus="rawThemeEditing = true"
-            @blur="finishRawThemeEditing"
+      <hr class="my-4 border-border md:my-8" />
+      <h4 class="mb-2 mt-6 text-base font-semibold text-foreground">
+        {{ t('styleCustomizer.terminalThemeColorEditorTitle') }}
+      </h4>
+      <div
+        v-for="key in themeFields"
+        :key="key"
+        class="mb-2 grid grid-cols-1 items-start gap-2 md:grid-cols-[auto_1fr] md:items-center"
+      >
+        <label class="block w-full overflow-hidden text-ellipsis text-left text-sm font-medium text-foreground">
+          {{ labelForThemeField(key) }}:
+        </label>
+        <div class="flex w-full items-center gap-2">
+          <input
+            v-if="themeDraft[key]?.startsWith('#')"
+            v-model="themeDraft[key]"
+            type="color"
+            class="h-[34px] min-w-[40px] max-w-[50px] shrink-0 rounded border border-border p-0.5"
           />
-          <p v-if="themeParseError" class="mt-2 text-sm text-error">{{ themeParseError }}</p>
-        </BaseFormField>
-        <div class="flex justify-end gap-2">
-          <BaseButton @click="editorVisible = false">{{ t('common.cancel') }}</BaseButton>
-          <BaseButton data-testid="terminal-theme-save" variant="primary" @click="saveTheme">{{
-            t('common.save')
-          }}</BaseButton>
+          <BaseInput v-model="themeDraft[key]" class="min-w-[80px] flex-1" />
         </div>
       </div>
-    </BaseModal>
+
+      <hr class="my-4 border-border md:my-8" />
+      <h4 class="mb-2 mt-6 text-base font-semibold text-foreground">
+        {{ t('styleCustomizer.terminalThemeJsonEditorTitle') }}
+      </h4>
+      <p class="mb-3 text-sm leading-relaxed text-text-secondary">
+        {{ t('styleCustomizer.terminalThemeJsonEditorDesc') }}
+      </p>
+      <BaseFormField :label="t('styleCustomizer.terminalThemeJsonEditorTitle')" class="mt-4">
+        <BaseTextarea
+          v-model="themeJson"
+          data-testid="terminal-theme-json"
+          class="min-h-[150px] resize-y whitespace-pre-wrap break-words font-mono text-sm leading-snug md:min-h-[200px]"
+          spellcheck="false"
+          @focus="rawThemeEditing = true"
+          @blur="finishRawThemeEditing"
+        />
+        <p v-if="themeParseError" class="mt-2 rounded border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+          {{ themeParseError }}
+        </p>
+      </BaseFormField>
+
+      <div class="mt-4 flex justify-end gap-2 border-t border-border pt-4">
+        <BaseButton data-testid="terminal-theme-cancel" @click="editorVisible = false">{{
+          t('common.cancel')
+        }}</BaseButton>
+        <BaseButton data-testid="terminal-theme-save" variant="primary" @click="saveTheme">{{
+          t('common.save')
+        }}</BaseButton>
+      </div>
+    </section>
   </section>
 </template>
