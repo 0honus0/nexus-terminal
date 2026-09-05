@@ -35,15 +35,20 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     await expect(row).toContainText('nexus-e2e-container');
     await expect(row).toContainText('alpine:latest');
     await expect(row).toContainText('Up 10 minutes');
+    await expect(row.locator('i.fa-play')).toBeVisible();
+    await expect(row.locator('i.fa-stop')).toBeVisible();
+    await expect(row.locator('i.fa-sync-alt')).toBeVisible();
+    await expect(row.locator('i.fa-trash-alt')).toBeVisible();
+    await expect(row.locator('i.fa-terminal')).toBeVisible();
+    await expect(row.locator('i.fa-file-alt')).toBeVisible();
   });
 
-  await step('expand shows live Docker stats returned through SSH', async () => {
+  await step('the restored narrow card footer expands live Docker stats returned through SSH', async () => {
     const manager = page.getByTestId('docker-manager');
     const row = manager.getByTestId(`docker-row-${CONTAINER_ID}`);
-    // The Docker sidebar uses a card layout at its normal narrow width. The
-    // desktop expand icon remains in the DOM but is CSS-hidden, so target the
-    // currently accessible Expand action instead of that hidden element.
-    await row.getByRole('button', { name: 'Expand', exact: true }).click();
+    const expand = row.getByRole('button', { name: 'Expand', exact: true });
+    await expect(expand.locator('i.fa-chevron-down')).toBeVisible();
+    await expand.click();
     await expect(manager).toContainText('12.34%');
     await expect(manager).toContainText('32MiB / 2GiB');
     await expect(manager).toContainText('1.2MB / 800kB');

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseModal, OverlayPanel } from '@/foundation/ui';
+  import { OverlayPanel } from '@/foundation/ui';
   import { VirtualKeyboard, type TerminalChannel } from '@/features/terminal/public';
   import { QuickCommandsPanel, type ExecuteCommandIntent } from '@/features/quick-commands/public';
   import { StatusMonitor, type StatusMonitorSessionController } from '@/features/status-monitor/public';
@@ -176,25 +176,29 @@
     </div>
   </OverlayPanel>
 
-  <BaseModal
+  <OverlayPanel
+    data-testid="status-monitor-modal"
     :visible="statusVisible"
-    :title="t('layout.pane.statusMonitor')"
-    overlay-class="!p-2"
-    panel-class="h-[min(82dvh,720px)] w-[min(96vw,680px)]"
+    teleport
+    :z-index="1000"
+    overlay-class="!p-3"
+    panel-class="!max-w-2xl !h-[min(78dvh,720px)] !min-h-[360px] overflow-hidden rounded-xl shadow-2xl"
+    role="dialog"
+    :aria-modal="true"
+    :aria-label="t('layout.pane.statusMonitor')"
     @close="statusVisible = false"
   >
-    <template #header-actions>
-      <BaseButton
-        class="min-h-11 min-w-11 px-3"
-        size="sm"
-        variant="ghost"
-        :aria-label="t('common.close')"
-        @click="statusVisible = false"
-        >×</BaseButton
-      >
-    </template>
+    <button
+      type="button"
+      class="absolute right-2 top-2 z-20 grid h-8 w-8 place-items-center rounded-lg border border-border/60 bg-background/80 text-text-secondary active:scale-95"
+      :title="t('common.close')"
+      :aria-label="t('common.close')"
+      @click="statusVisible = false"
+    >
+      <i class="fas fa-times" aria-hidden="true"></i>
+    </button>
     <StatusMonitor
-      class="h-full min-h-0 overflow-auto p-2"
+      class="h-full min-h-0 overflow-hidden"
       :session="statusSession"
       :interval-seconds="statusIntervalSeconds"
       :scale="statusScale"
@@ -202,5 +206,5 @@
       :host="statusHost"
       @update:scale="emit('statusScale', $event)"
     />
-  </BaseModal>
+  </OverlayPanel>
 </template>
