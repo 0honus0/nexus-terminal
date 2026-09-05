@@ -280,6 +280,7 @@
     "confirmDelete": "Are you sure you want to delete \"{name}\"?",
     "searchPlaceholder": "Search by name or path...",
     "addNew": "Add new favorite path",
+    "sortToggle": "Toggle favorite path sorting",
     "loading": "Loading favorites...",
     "noResults": "No matching favorites found.",
     "noFavorites": "No favorite paths yet. Add one!",

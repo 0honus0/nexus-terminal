@@ -174,7 +174,7 @@
       <button
         type="button"
         class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-sm text-text-secondary shadow-sm transition-colors duration-200 hover:bg-primary/10 hover:text-primary"
-        :title="t('favoritePaths.title')"
+        :aria-label="t('favoritePaths.sortToggle')"
         @click="toggleSort"
       >
         <i :class="sortIcon" aria-hidden="true"></i>

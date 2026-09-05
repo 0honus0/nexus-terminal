@@ -280,6 +280,7 @@
     "confirmDelete": "您确定要删除 \"{name}\" 吗？",
     "searchPlaceholder": "按名称或路径搜索...",
     "addNew": "添加新收藏路径",
+    "sortToggle": "切换收藏路径排序",
     "loading": "正在加载收藏...",
     "noResults": "未找到匹配的收藏。",
     "noFavorites": "还没有收藏路径，快添加一个吧！",
