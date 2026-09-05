@@ -38,6 +38,7 @@
   const localSearch = ref('');
   const remoteSearch = ref('');
   const htmlThemeTab = ref<'local' | 'remote'>('local');
+  const pageBackgroundInput = ref<HTMLInputElement | null>(null);
   const terminalBackgroundInput = ref<HTMLInputElement | null>(null);
 
   const form = reactive({
@@ -309,12 +310,46 @@
         {{ t('styleCustomizer.backgroundSettings') }}
       </h3>
 
+      <div data-testid="page-background-settings" class="space-y-3 rounded border border-border p-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="min-w-0">
+            <h4 class="m-0 text-base font-semibold text-foreground">{{ t('styleCustomizer.pageBackground') }}</h4>
+            <p class="mt-1 break-all text-xs text-text-secondary">
+              {{ store.settings.pageBackgroundImage || t('styleCustomizer.noBackground') }}
+            </p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <BaseButton data-testid="page-background-upload-button" size="sm" @click="pageBackgroundInput?.click()">
+              {{ t('styleCustomizer.uploadPageBg') }}
+            </BaseButton>
+            <BaseButton
+              v-if="store.settings.pageBackgroundImage"
+              data-testid="page-background-remove"
+              size="sm"
+              variant="danger"
+              @click="removeBackground('page')"
+            >
+              {{ t('styleCustomizer.removePageBg') }}
+            </BaseButton>
+          </div>
+        </div>
+        <input
+          ref="pageBackgroundInput"
+          data-testid="page-background-file"
+          type="file"
+          accept="image/*"
+          class="hidden"
+          @change="uploadBackground('page', $event)"
+        />
+      </div>
+
       <hr class="my-4 border-border md:my-8" />
 
       <div class="mb-3 flex items-center justify-between">
         <h4 class="m-0 text-base font-semibold text-foreground">{{ t('styleCustomizer.terminalBackground') }}</h4>
         <button
           type="button"
+          data-testid="terminal-background-toggle"
           :class="[
             'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
             form.terminalBackgroundEnabled ? 'bg-primary' : 'bg-gray-300',
@@ -359,6 +394,7 @@
             t('styleCustomizer.uploadTerminalBg')
           }}</BaseButton>
           <BaseButton
+            data-testid="terminal-background-remove"
             size="sm"
             variant="danger"
             :disabled="!store.settings.terminalBackgroundImage"
@@ -368,6 +404,7 @@
           </BaseButton>
           <input
             ref="terminalBackgroundInput"
+            data-testid="terminal-background-file"
             type="file"
             accept="image/*"
             class="hidden"
@@ -382,6 +419,7 @@
           <div class="flex items-center gap-3">
             <input
               v-model.number="form.terminalBackgroundOverlayOpacity"
+              data-testid="terminal-background-overlay"
               type="range"
               min="0"
               max="1"
@@ -391,7 +429,12 @@
             <span class="min-w-[3em] text-right text-sm text-foreground">{{
               form.terminalBackgroundOverlayOpacity.toFixed(2)
             }}</span>
-            <BaseButton size="sm" @click="saveBackgroundOverlayOpacity">{{ t('common.save') }}</BaseButton>
+            <BaseButton
+              data-testid="terminal-background-overlay-save"
+              size="sm"
+              @click="saveBackgroundOverlayOpacity"
+              >{{ t('common.save') }}</BaseButton
+            >
           </div>
         </div>
 
@@ -411,6 +454,7 @@
         <div class="mb-4 flex border-b border-border">
           <button
             type="button"
+            data-testid="html-theme-local-tab"
             :class="[
               '-mb-px border-b-2 px-4 py-2 transition-colors duration-150',
               htmlThemeTab === 'local'
@@ -423,6 +467,7 @@
           </button>
           <button
             type="button"
+            data-testid="html-theme-remote-tab"
             :class="[
               '-mb-px border-b-2 px-4 py-2 transition-colors duration-150',
               htmlThemeTab === 'remote'
@@ -436,13 +481,14 @@
         </div>
 
         <div v-if="htmlThemeTab === 'local'">
-          <div class="mb-4 flex items-center gap-4">
+          <div class="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <BaseInput
               v-model="localSearch"
-              class="flex-grow"
+              data-testid="html-theme-local-search"
+              class="min-w-0 flex-grow"
               :placeholder="t('styleCustomizer.searchLocalThemesPlaceholder')"
             />
-            <BaseButton size="sm" class="shrink-0" @click="openNewPreset">{{
+            <BaseButton data-testid="html-theme-add" size="sm" class="shrink-0" @click="openNewPreset">{{
               t('styleCustomizer.addNewTheme')
             }}</BaseButton>
           </div>
@@ -454,6 +500,7 @@
             <li
               v-for="(theme, index) in filteredLocalThemes"
               :key="theme.name"
+              :data-testid="`html-theme-local-row-${theme.name}`"
               :class="[
                 'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 hover:bg-header md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
                 index < filteredLocalThemes.length - 1 ? 'border-b border-border' : '',
@@ -473,11 +520,19 @@
                 </span>
               </div>
               <div class="flex flex-wrap justify-start gap-2 md:justify-end">
-                <BaseButton size="sm" @click="applyLocalPreset(theme)">{{
+                <BaseButton data-testid="html-theme-apply" size="sm" @click="applyLocalPreset(theme)">{{
                   t('styleCustomizer.applyButton')
                 }}</BaseButton>
-                <BaseButton size="sm" @click="openLocalPreset(theme)">{{ t('common.edit') }}</BaseButton>
-                <BaseButton v-if="theme.type === 'custom'" size="sm" variant="danger" @click="deleteLocalPreset(theme)">
+                <BaseButton data-testid="html-theme-edit" size="sm" @click="openLocalPreset(theme)">{{
+                  t('common.edit')
+                }}</BaseButton>
+                <BaseButton
+                  v-if="theme.type === 'custom'"
+                  data-testid="html-theme-delete"
+                  size="sm"
+                  variant="danger"
+                  @click="deleteLocalPreset(theme)"
+                >
                   {{ t('common.delete') }}
                 </BaseButton>
               </div>
@@ -492,20 +547,28 @@
 
         <div v-else>
           <BaseFormField :label="t('styleCustomizer.remoteHtmlPresetsRepositoryUrl')">
-            <div class="flex items-center gap-2">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
               <BaseInput
                 v-model="remoteRepositoryUrl"
-                class="flex-grow"
+                data-testid="html-theme-remote-repository"
+                class="min-w-0 flex-grow"
                 :placeholder="t('styleCustomizer.remoteRepoUrlPlaceholder')"
               />
-              <BaseButton size="sm" @click="saveRemoteRepository">{{ t('common.save') }}</BaseButton>
-              <BaseButton size="sm" :disabled="!remoteRepositoryUrl || loadingRemote" @click="loadRemoteThemes">{{
-                loadingRemote ? t('common.loading') : t('styleCustomizer.loadRemoteThemes')
+              <BaseButton data-testid="html-theme-remote-save" size="sm" @click="saveRemoteRepository">{{
+                t('common.save')
               }}</BaseButton>
+              <BaseButton
+                data-testid="html-theme-remote-load"
+                size="sm"
+                :disabled="!remoteRepositoryUrl || loadingRemote"
+                @click="loadRemoteThemes"
+                >{{ loadingRemote ? t('common.loading') : t('styleCustomizer.loadRemoteThemes') }}</BaseButton
+              >
             </div>
           </BaseFormField>
           <BaseInput
             v-model="remoteSearch"
+            data-testid="html-theme-remote-search"
             class="my-4"
             :placeholder="t('styleCustomizer.searchRemoteThemesPlaceholder')"
           />
@@ -516,6 +579,7 @@
             <li
               v-for="(theme, index) in filteredRemoteThemes"
               :key="theme.name"
+              :data-testid="`html-theme-remote-row-${theme.name}`"
               :class="[
                 'block items-center gap-2 px-3 py-2.5 text-sm transition-colors duration-200 hover:bg-header md:grid md:grid-cols-[1fr_auto] md:text-[0.95rem]',
                 index < filteredRemoteThemes.length - 1 ? 'border-b border-border' : '',
@@ -525,9 +589,13 @@
                 theme.name.replace(/\.html$/i, '')
               }}</span>
               <div class="flex justify-start md:justify-end">
-                <BaseButton size="sm" :disabled="!theme.downloadUrl" @click="applyRemotePreset(theme)">{{
-                  t('styleCustomizer.applyButton')
-                }}</BaseButton>
+                <BaseButton
+                  data-testid="html-theme-remote-apply"
+                  size="sm"
+                  :disabled="!theme.downloadUrl"
+                  @click="applyRemotePreset(theme)"
+                  >{{ t('styleCustomizer.applyButton') }}</BaseButton
+                >
               </div>
             </li>
           </ul>
@@ -547,19 +615,30 @@
       <BaseModal
         :visible="presetEditorVisible"
         :title="editingLocalName ? t('styleCustomizer.editLocalPreset') : t('styleCustomizer.newLocalPreset')"
+        :z-index="1100"
         panel-class="w-[min(820px,94vw)]"
         @close="presetEditorVisible = false"
       >
         <div class="space-y-4">
           <BaseFormField :label="t('styleCustomizer.presetName')">
-            <BaseInput v-model="presetName" :placeholder="t('styleCustomizer.presetNamePlaceholder')" />
+            <BaseInput
+              v-model="presetName"
+              data-testid="html-theme-preset-name"
+              :placeholder="t('styleCustomizer.presetNamePlaceholder')"
+            />
           </BaseFormField>
           <BaseFormField :label="t('styleCustomizer.presetContent')">
-            <BaseTextarea v-model="presetContent" class="min-h-80 font-mono text-xs" />
+            <BaseTextarea
+              v-model="presetContent"
+              data-testid="html-theme-preset-content"
+              class="min-h-80 font-mono text-xs"
+            />
           </BaseFormField>
           <div class="flex justify-end gap-2">
             <BaseButton @click="presetEditorVisible = false">{{ t('common.cancel') }}</BaseButton>
-            <BaseButton variant="primary" @click="saveLocalPreset">{{ t('common.save') }}</BaseButton>
+            <BaseButton data-testid="html-theme-preset-save" variant="primary" @click="saveLocalPreset">{{
+              t('common.save')
+            }}</BaseButton>
           </div>
         </div>
       </BaseModal>
@@ -622,40 +701,46 @@
         <div class="space-y-3 rounded border border-border p-4">
           <h3 class="font-semibold">{{ t('styleCustomizer.textStrokeSettings') }}</h3>
           <label class="flex items-center gap-2">
-            <BaseCheckbox v-model="form.terminalTextStrokeEnabled" />
+            <BaseCheckbox v-model="form.terminalTextStrokeEnabled" data-testid="terminal-text-stroke-enabled" />
             {{ t('styleCustomizer.enableTextStroke') }}
           </label>
           <BaseFormField :label="t('styleCustomizer.textStrokeWidth')">
-            <BaseInput v-model="form.terminalTextStrokeWidth" type="number" />
+            <BaseInput v-model="form.terminalTextStrokeWidth" data-testid="terminal-text-stroke-width" type="number" />
           </BaseFormField>
           <BaseFormField :label="t('styleCustomizer.textStrokeColor')">
-            <BaseInput v-model="form.terminalTextStrokeColor" />
+            <BaseInput v-model="form.terminalTextStrokeColor" data-testid="terminal-text-stroke-color" />
           </BaseFormField>
         </div>
 
         <div class="space-y-3 rounded border border-border p-4">
           <h3 class="font-semibold">{{ t('styleCustomizer.textShadowSettings') }}</h3>
           <label class="flex items-center gap-2">
-            <BaseCheckbox v-model="form.terminalTextShadowEnabled" />
+            <BaseCheckbox v-model="form.terminalTextShadowEnabled" data-testid="terminal-text-shadow-enabled" />
             {{ t('styleCustomizer.enableTextShadow') }}
           </label>
           <div class="grid grid-cols-3 gap-2">
             <BaseFormField :label="t('styleCustomizer.textShadowOffsetX')">
-              <BaseInput v-model="form.terminalTextShadowOffsetX" type="number" />
+              <BaseInput v-model="form.terminalTextShadowOffsetX" data-testid="terminal-text-shadow-x" type="number" />
             </BaseFormField>
             <BaseFormField :label="t('styleCustomizer.textShadowOffsetY')">
-              <BaseInput v-model="form.terminalTextShadowOffsetY" type="number" />
+              <BaseInput v-model="form.terminalTextShadowOffsetY" data-testid="terminal-text-shadow-y" type="number" />
             </BaseFormField>
             <BaseFormField :label="t('styleCustomizer.textShadowBlur')">
-              <BaseInput v-model="form.terminalTextShadowBlur" type="number" />
+              <BaseInput v-model="form.terminalTextShadowBlur" data-testid="terminal-text-shadow-blur" type="number" />
             </BaseFormField>
           </div>
           <BaseFormField :label="t('styleCustomizer.textShadowColor')">
-            <BaseInput v-model="form.terminalTextShadowColor" />
+            <BaseInput v-model="form.terminalTextShadowColor" data-testid="terminal-text-shadow-color" />
           </BaseFormField>
         </div>
       </div>
-      <BaseButton v-if="showTextEffects" variant="primary" @click="saveVisuals">{{ t('common.save') }}</BaseButton>
+      <BaseButton
+        v-if="showTextEffects"
+        data-testid="terminal-text-effects-save"
+        variant="primary"
+        @click="saveVisuals"
+        >{{ t('common.save') }}</BaseButton
+      >
 
       <div v-if="showBackground" class="grid gap-6 xl:grid-cols-2">
         <div class="space-y-3 rounded border border-border p-4">
@@ -731,14 +816,24 @@
       >
         <div class="space-y-4">
           <BaseFormField :label="t('styleCustomizer.presetName')">
-            <BaseInput v-model="presetName" :placeholder="t('styleCustomizer.presetNamePlaceholder')" />
+            <BaseInput
+              v-model="presetName"
+              data-testid="html-theme-preset-name"
+              :placeholder="t('styleCustomizer.presetNamePlaceholder')"
+            />
           </BaseFormField>
           <BaseFormField :label="t('styleCustomizer.presetContent')">
-            <BaseTextarea v-model="presetContent" class="min-h-80 font-mono text-xs" />
+            <BaseTextarea
+              v-model="presetContent"
+              data-testid="html-theme-preset-content"
+              class="min-h-80 font-mono text-xs"
+            />
           </BaseFormField>
           <div class="flex justify-end gap-2">
             <BaseButton @click="presetEditorVisible = false">{{ t('common.cancel') }}</BaseButton>
-            <BaseButton variant="primary" @click="saveLocalPreset">{{ t('common.save') }}</BaseButton>
+            <BaseButton data-testid="html-theme-preset-save" variant="primary" @click="saveLocalPreset">{{
+              t('common.save')
+            }}</BaseButton>
           </div>
         </div>
       </BaseModal>

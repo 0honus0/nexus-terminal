@@ -125,7 +125,9 @@ export class AppearanceSettingsService {
         defaults.terminalBackgroundOverlayOpacity,
       ),
       terminalCustomHtml: values.get('terminal_custom_html') ?? defaults.terminalCustomHtml,
-      remoteHtmlPresetsUrl: values.get('remote_html_presets_url') || defaults.remoteHtmlPresetsUrl,
+      remoteHtmlPresetsUrl: values.has('remote_html_presets_url')
+        ? values.get('remote_html_presets_url') || null
+        : defaults.remoteHtmlPresetsUrl,
       windowThemeColor: values.get('windowThemeColor') ?? defaults.windowThemeColor,
       terminalTextStrokeEnabled: values.has('terminalTextStrokeEnabled')
         ? values.get('terminalTextStrokeEnabled') === 'true'

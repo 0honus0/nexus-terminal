@@ -72,6 +72,7 @@
     >
       <div
         ref="dialog"
+        data-testid="style-customizer-dialog"
         class="absolute flex h-full w-full flex-col overflow-hidden rounded-lg bg-background text-foreground shadow-[0px_0px_15px_rgb(0_0_0_/_0.15)] md:h-[85vh] md:max-h-[700px] md:w-[90%] md:max-w-[800px]"
       >
         <header
@@ -96,6 +97,7 @@
           >
             <button
               type="button"
+              data-testid="style-customizer-ui-tab"
               :class="[
                 'mx-1 mb-0 block w-auto cursor-pointer rounded border border-transparent bg-transparent px-3 py-2 text-center text-sm text-foreground transition-colors duration-200 ease-in-out hover:bg-black/5 md:mx-0 md:mb-2 md:w-full md:py-[0.7rem] md:text-left md:text-[0.95rem]',
                 activeTab === 'ui' ? '!bg-button !font-bold !text-button-text' : '',
@@ -117,6 +119,7 @@
             </button>
             <button
               type="button"
+              data-testid="style-customizer-background-tab"
               :class="[
                 'mx-1 mb-0 block w-auto cursor-pointer rounded border border-transparent bg-transparent px-3 py-2 text-center text-sm text-foreground transition-colors duration-200 ease-in-out hover:bg-black/5 md:mx-0 md:mb-2 md:w-full md:py-[0.7rem] md:text-left md:text-[0.95rem]',
                 activeTab === 'background' ? '!bg-button !font-bold !text-button-text' : '',
@@ -127,6 +130,7 @@
             </button>
             <button
               type="button"
+              data-testid="style-customizer-other-tab"
               :class="[
                 'mx-1 mb-0 block w-auto cursor-pointer rounded border border-transparent bg-transparent px-3 py-2 text-center text-sm text-foreground transition-colors duration-200 ease-in-out hover:bg-black/5 md:mx-0 md:mb-2 md:w-full md:py-[0.7rem] md:text-left md:text-[0.95rem]',
                 activeTab === 'other' ? '!bg-button !font-bold !text-button-text' : '',
@@ -153,6 +157,7 @@
           <button
             v-if="activeTab === 'ui'"
             type="button"
+            data-testid="ui-theme-reset"
             class="ml-2 rounded border border-border bg-header px-4 py-2 text-sm font-bold text-foreground hover:bg-border md:px-5 md:text-base"
             @click="uiPanel?.resetUiTheme()"
           >
@@ -161,6 +166,7 @@
           <button
             v-if="activeTab === 'ui'"
             type="button"
+            data-testid="ui-theme-save"
             class="ml-2 rounded border border-button bg-button px-4 py-2 text-sm font-bold text-button-text hover:border-button-hover hover:bg-button-hover md:px-5 md:text-base"
             @click="uiPanel?.saveUiTheme()"
           >

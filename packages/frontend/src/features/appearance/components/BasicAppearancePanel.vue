@@ -187,16 +187,18 @@
       </h3>
       <div class="grid gap-4 md:grid-cols-3">
         <BaseFormField :label="t('styleCustomizer.terminalFontFamily')">
-          <BaseInput v-model="form.terminalFontFamily" />
+          <BaseInput v-model="form.terminalFontFamily" data-testid="terminal-font-family" />
         </BaseFormField>
         <BaseFormField :label="t('styleCustomizer.terminalFontSize')">
-          <BaseInput v-model="form.terminalFontSize" type="number" />
+          <BaseInput v-model="form.terminalFontSize" data-testid="terminal-font-size-desktop" type="number" />
         </BaseFormField>
         <BaseFormField :label="t('styleCustomizer.terminalFontSizeMobile')">
-          <BaseInput v-model="form.terminalFontSizeMobile" type="number" />
+          <BaseInput v-model="form.terminalFontSizeMobile" data-testid="terminal-font-size-mobile" type="number" />
         </BaseFormField>
       </div>
-      <BaseButton v-if="props.section !== 'all'" @click="saveTerminal">{{ t('common.save') }}</BaseButton>
+      <BaseButton v-if="props.section !== 'all'" data-testid="terminal-font-save" @click="saveTerminal">{{
+        t('common.save')
+      }}</BaseButton>
     </section>
 
     <section v-if="showEditor" class="space-y-4">
@@ -208,16 +210,18 @@
       </h3>
       <div class="grid gap-4 md:grid-cols-3">
         <BaseFormField :label="t('styleCustomizer.editorFontFamily')">
-          <BaseInput v-model="form.editorFontFamily" />
+          <BaseInput v-model="form.editorFontFamily" data-testid="editor-font-family" />
         </BaseFormField>
         <BaseFormField :label="t('styleCustomizer.editorFontSize')">
-          <BaseInput v-model="form.editorFontSize" type="number" />
+          <BaseInput v-model="form.editorFontSize" data-testid="editor-font-size-desktop" type="number" />
         </BaseFormField>
         <BaseFormField :label="t('styleCustomizer.editorFontSizeMobile')">
-          <BaseInput v-model="form.mobileEditorFontSize" type="number" />
+          <BaseInput v-model="form.mobileEditorFontSize" data-testid="editor-font-size-mobile" type="number" />
         </BaseFormField>
       </div>
-      <BaseButton v-if="props.section !== 'all'" @click="saveEditor">{{ t('common.save') }}</BaseButton>
+      <BaseButton v-if="props.section !== 'all'" data-testid="editor-font-save" @click="saveEditor">{{
+        t('common.save')
+      }}</BaseButton>
     </section>
 
     <BaseButton v-if="props.section === 'all'" variant="primary" @click="saveGeneral">{{
@@ -291,6 +295,7 @@
       <div class="mt-4">
         <BaseTextarea
           v-model="uiThemeJson"
+          data-testid="ui-theme-json"
           class="min-h-[200px] resize-y whitespace-pre-wrap break-words p-3 font-mono text-sm leading-snug"
           rows="15"
           spellcheck="false"
