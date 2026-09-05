@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,
@@ -16,6 +17,10 @@ import { step, slowStep } from '../../support/steps';
 
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
+const CRUD_FOLDER = 'm11-03b-created-folder';
+const CRUD_SOURCE = 'm11-03b-source.txt';
+const CRUD_RENAMED = 'm11-03b-renamed.txt';
+const M11_03B_EVIDENCE_DIR = process.env.M11_03B_EVIDENCE_DIR || '/tmp/nexus-m11-03b';
 
 async function rightClickRow(page: Page, filename: string): Promise<void> {
   const target = row(page, filename);
@@ -29,9 +34,15 @@ async function clickMenuItem(page: Page, label: string): Promise<void> {
 }
 
 async function openCurrentDirectoryContextMenu(page: Page): Promise<void> {
-  await activeFileManagerList(page).dispatchEvent('contextmenu', {
-    clientX: 120,
-    clientY: 120,
+  await activeFileManagerList(page).evaluate((element) => {
+    element.dispatchEvent(
+      new MouseEvent('contextmenu', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 120,
+        clientY: 120,
+      }),
+    );
   });
   await expect(menu(page)).toBeVisible();
 }
@@ -93,6 +104,33 @@ async function compressFromMenu(page: Page, source: string, submenuLabel: string
   await expect(submenu).toBeVisible();
   await submenu.getByRole('button', { name: submenuLabel, exact: true }).click();
   await expect(row(page, archiveName)).toBeVisible({ timeout: 30_000 });
+}
+
+async function fileManagerMetrics(page: Page): Promise<Record<string, number>> {
+  return activeFileManagerList(page).evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+}
+
+async function actionModalMetrics(page: Page): Promise<Record<string, number | string | null>> {
+  const modal = page.getByTestId('file-manager-action-modal');
+  return modal.evaluate((element) => {
+    const panel = element.firstElementChild instanceof HTMLElement ? element.firstElementChild : element;
+    const input = element.querySelector<HTMLInputElement>('#fileManagerActionValue');
+    const box = panel.getBoundingClientRect();
+    return {
+      x: box.x,
+      y: box.y,
+      width: box.width,
+      height: box.height,
+      inputValue: input?.value ?? null,
+      inputClientWidth: input?.clientWidth ?? null,
+      inputScrollWidth: input?.scrollWidth ?? null,
+    };
+  });
 }
 
 test('keeps the compress submenu inside the viewport in a narrow right sidebar', async ({ page, context }) => {
@@ -490,4 +528,110 @@ test('verifies file manager right-click actions over real SFTP', async ({ page, 
     await sendFilesModal.getByRole('button', { name: 'Cancel', exact: true }).click();
     await expect(sendFilesModal).toBeHidden();
   });
+});
+
+test('recovers a failed rename while completing real file-manager create and delete actions', async ({
+  page,
+  context,
+}) => {
+  await mkdir(M11_03B_EVIDENCE_DIR, { recursive: true });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  const fileManager = page.getByTestId('file-manager-modal');
+  await page.screenshot({ path: path.join(M11_03B_EVIDENCE_DIR, 'm11-03b-before-actions.png') });
+  const beforeMetrics = await fileManagerMetrics(page);
+
+  await step('create a real remote folder and file through the current-directory menu', async () => {
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'New Folder');
+    await confirmAction(page, 'mkdir', CRUD_FOLDER);
+    await expect(row(page, CRUD_FOLDER)).toBeVisible();
+
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'New File');
+    await confirmAction(page, 'file', CRUD_SOURCE);
+    await expect(row(page, CRUD_SOURCE)).toBeVisible();
+  });
+
+  const failedRenameMetrics = await step('keep the rename input after the remote source disappears', async () => {
+    await rightClickRow(page, CRUD_SOURCE);
+    await clickMenuItem(page, 'Rename');
+    const renameModal = page.getByTestId('file-manager-action-modal');
+    await expect(renameModal).toHaveAttribute('data-action-type', 'rename');
+    const renameInput = renameModal.getByLabel('New name:', { exact: true });
+    await expect(renameInput).toHaveValue(CRUD_SOURCE);
+    await renameInput.fill(CRUD_RENAMED);
+
+    const removeResponse = await fetch(
+      `${E2E_SSH.controlUrl}/remove-path?path=${encodeURIComponent(`/${CRUD_SOURCE}`)}`,
+      {
+        method: 'POST',
+      },
+    );
+    expect(removeResponse.ok).toBeTruthy();
+
+    await renameModal.getByRole('button', { name: 'Rename', exact: true }).click();
+    await expect(renameModal).toBeVisible();
+    await expect(renameInput).toHaveValue(CRUD_RENAMED);
+    const metrics = await actionModalMetrics(page);
+    await page.screenshot({ path: path.join(M11_03B_EVIDENCE_DIR, 'm11-03b-after-rename-failure.png') });
+    await renameModal.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(renameModal).toBeHidden();
+    await fileManager.getByTitle('Refresh', { exact: true }).click();
+    await expect(row(page, CRUD_SOURCE)).toHaveCount(0);
+    return metrics;
+  });
+
+  await step('recreate, rename, and delete the real remote file after recovery', async () => {
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'New File');
+    await confirmAction(page, 'file', CRUD_SOURCE);
+    await expect(row(page, CRUD_SOURCE)).toBeVisible();
+
+    await rightClickRow(page, CRUD_SOURCE);
+    await clickMenuItem(page, 'Rename');
+    await confirmAction(page, 'rename', CRUD_RENAMED);
+    await expect(row(page, CRUD_RENAMED)).toBeVisible();
+    await expect(row(page, CRUD_SOURCE)).toHaveCount(0);
+
+    await rightClickRow(page, CRUD_RENAMED);
+    await clickMenuItem(page, 'Delete');
+    await confirmDelete(page);
+    await expect(row(page, CRUD_RENAMED)).toHaveCount(0);
+
+    await rightClickRow(page, CRUD_FOLDER);
+    await clickMenuItem(page, 'Delete');
+    await confirmDelete(page);
+    await expect(row(page, CRUD_FOLDER)).toHaveCount(0);
+  });
+
+  const afterMetrics = await fileManagerMetrics(page);
+  const viewport = page.viewportSize();
+  expect(viewport).toBeTruthy();
+  expect(beforeMetrics.scrollWidth).toBeLessThanOrEqual(beforeMetrics.clientWidth + 1);
+  expect(afterMetrics.scrollWidth).toBeLessThanOrEqual(afterMetrics.clientWidth + 1);
+  expect(failedRenameMetrics.inputValue).toBe(CRUD_RENAMED);
+  expect(failedRenameMetrics.inputClientWidth).toBeGreaterThan(0);
+  const notificationClose = page.locator('[aria-live="polite"] button').last();
+  await expect(notificationClose).toBeVisible();
+  await notificationClose.click();
+  await expect(page.locator('[aria-live="polite"] button')).toHaveCount(0);
+  await page.screenshot({ path: path.join(M11_03B_EVIDENCE_DIR, 'm11-03b-after-delete.png') });
+  await writeFile(
+    path.join(M11_03B_EVIDENCE_DIR, 'm11-03b-metrics.json'),
+    JSON.stringify(
+      { before: beforeMetrics, failedRename: failedRenameMetrics, after: afterMetrics, viewport },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+  expect(viewport.width).toBeGreaterThanOrEqual(320);
+  expect(viewport.height).toBeGreaterThanOrEqual(600);
+  expect(fileManager).toBeVisible();
 });
