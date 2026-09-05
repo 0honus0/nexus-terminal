@@ -8,7 +8,7 @@
     releaseRepository,
     releaseRepositoryUrl,
     releaseUrl,
-  } from './aboutRelease';
+  } from '../../config/release';
 
   const { t } = useI18n();
   const currentVersion = packageJson.version;

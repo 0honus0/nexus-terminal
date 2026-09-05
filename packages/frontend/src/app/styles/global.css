@@ -55,3 +55,62 @@ textarea::placeholder {
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--text-color-secondary);
 }
+
+i,
+.fas,
+.far,
+.fab {
+  color: var(--icon-color);
+  transition: color 0.2s ease;
+}
+
+a:hover i,
+a:hover .fas,
+a:hover .far,
+a:hover .fab,
+button:hover i,
+button:hover .fas,
+button:hover .far,
+button:hover .fab,
+.icon-interactive:hover i,
+.icon-interactive:hover .fas,
+.icon-interactive:hover .far,
+.icon-interactive:hover .fab {
+  color: var(--icon-hover-color);
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+textarea,
+select {
+  background-color: var(--input-bg-color);
+  color: var(--input-text-color);
+}
+
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):disabled,
+textarea:disabled,
+select:disabled {
+  background-color: var(--input-disabled-bg-color) !important;
+  color: var(--input-disabled-text-color) !important;
+  -webkit-text-fill-color: var(--input-disabled-text-color);
+  border-color: var(--input-disabled-border-color) !important;
+  opacity: 1 !important;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--input-focus-border-color) !important;
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--input-focus-glow) !important;
+}
+
+button.bg-button i,
+button.bg-button .fas,
+button.bg-button .far,
+button.bg-button .fab,
+button.bg-error i,
+button.bg-error .fas,
+button.bg-error .far,
+button.bg-error .fab {
+  color: currentColor !important;
+}

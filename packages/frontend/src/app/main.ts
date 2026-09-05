@@ -5,6 +5,7 @@ import { createAppRouter } from './router';
 import i18n from './i18n';
 import { registerAppServiceWorker } from './bootstrap/pwa';
 import './styles/global.css';
+import '@fortawesome/fontawesome-free/css/all.min.css';
 
 const app = createApp(App);
 const pinia = createPinia();

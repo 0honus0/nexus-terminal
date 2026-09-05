@@ -9,7 +9,7 @@
   import { focusRegistry, normalizeShortcut, shortcutFromKeyboardEvent } from '@/shared/focus/public';
   import { connectionService, type Connection } from '@/features/connections/public';
   import { terminalScrollbackForRuntime, usePreferences } from '@/features/preferences/public';
-  import { useAppearanceStore } from '@/features/appearance/public';
+  import { defaultTerminalTheme, useAppearanceStore } from '@/features/appearance/public';
   import { useCommandHistoryStore } from '@/features/command-history/public';
   import { RemoteDesktopModal, type RemoteDesktopConnection } from '@/features/remote-desktop/public';
   import {
@@ -303,7 +303,7 @@
 
   const terminalTheme = computed(() => {
     const id = appearance.settings.activeTerminalThemeId;
-    return appearance.themes.find((theme) => theme.id === id)?.themeData;
+    return appearance.themes.find((theme) => theme.id === id)?.themeData ?? defaultTerminalTheme;
   });
 
   const terminalVisual = computed(() => ({
