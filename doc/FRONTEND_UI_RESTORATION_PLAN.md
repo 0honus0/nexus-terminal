@@ -254,8 +254,8 @@
 | ID     | 状态                 | 子任务及具体完成条件                                                                                             |
 | ------ | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | M07.01 | ✅ 已完成〔C.1/P3〕  | notification 单列卡片/inline配置/provider字段和事件网格；audit过滤、显式查询、表格/详情/分页恢复                 |
-| M07.02 | ◐ 部分完成〔C.14-b〕 | 320px真实通知长provider/event、编辑展开/滚动、空/错误状态及Audit长详情内部滚动已通过；分页和其他日志状态仍待验收 |
-| M07.03 | ◐ 部分完成〔C.14-d〕 | notification真实增改删、启停、测试发送成功/错误、事件选择持久化已通过；audit过滤/详情通过，分页和其他日志状态仍待验收 |
+| M07.02 | ◐ 部分完成〔C.14-b/f〕 | 320px通知长内容/编辑滚动/空错误及Audit长详情、真实分页与筛选后回到第1页/跨页保留过滤已通过；未知action与畸形details仍为fixture能力缺口 |
+| M07.03 | ◐ 部分完成〔C.14-d/f〕 | notification真实增改删、启停、测试发送成功/错误、事件选择持久化及Audit过滤/分页/详情已通过；未知action与畸形details仍待可用真实入口验收 |
 
 **验收/架构**：provider配置/查询状态留在各 owner，不为双向联动增加跨feature私有import。复用 `ui/notification-settings.spec.ts`、`ui/notification-delivery.spec.ts`、`ui/audit-log-filtering.spec.ts`；无历史截图的状态同样给可复核证据。
 
@@ -1070,6 +1070,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M07.02-a` → `/root/luna_m07_notifications`（Luna high）：`NotificationsView.vue`仅修窄屏卡片布局（动作下移、长名称/事件断词、桌面保留横排），既有notification/audit spec增加真实长内容、编辑/滚动、空/错误状态；before `scrollWidth=347`→after `320`，最终通知+Audit **5/5 passed**，test-policy/Prettier通过。报告`/tmp/nexus-m07-02a-report.md`；后续分页及M07.03 CRUD/delivery/error仍待验收。
 - `M11.03-a` → `/root/luna_m11_filesystem`（Luna max）：仅扩展`test/e2e/tests/ssh/file-manager-navigation.spec.ts`；真实SSH导航、外部刷新260+长列表、Name排序、内部滚动、行右键菜单 **1/1**，导航全量 **3/3**，context邻接 **1/1**；architecture/frontend build/test-policy/diff通过，报告`/tmp/nexus-m11-03a-report.md`。后续建删改/权限/下载/copy-cut-paste/multi-select/upload/archive及M11.04移动待验收。
 - `M07.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`test/e2e/tests/ui/notification-delivery.spec.ts`；真实创建启用、事件选择持久化、reload、saved webhook成功、真实失败400反馈、停用/reload、确认删除 **1/1**，通知回归 **5/5**，原有精确基线 **4/4**，Audit邻接 **2/2**；before/after 证据在`/tmp/nexus-m07-03a-final-20260905-004`，test-policy/Prettier/diff通过，主代理提交`a2ffeb21`。M07仍需分页和其他日志状态。
+- `M07.02/03-f` → `/root/luna_m07_delivery`（Luna high）：扩展既有`test/e2e/tests/ui/audit-log-filtering.spec.ts`；真实创建51条proxy审计记录，分页50+1、筛选重置第1页、跨页保留action/search过滤 **1/1**，完整Audit回归 **3/3**，截图/metrics在`/tmp/nexus-m07-audit-final-20260905-004`，test-policy/Prettier/diff通过，主代理提交`5f3a2b90`。未知action和畸形details无法通过当前公开fixture生成，按规则保留为能力缺口。
 - `M11.03-c` → `/root/luna_m11_filesystem`（Luna max）：扩展既有`test/e2e/tests/ssh/file-manager-context-menu.spec.ts`；真实桌面拖放`move-source.txt`到`folder-seed`、任务完成后刷新并验证源目录消失/目标目录出现 **1/1**，1280×720 modal/list 无横溢出，Prettier/test-policy/architecture/diff通过，证据`/tmp/nexus-m11-03c/`，主代理提交`f5749f8e`。M11仍需权限/下载/剪贴板/多选/上传/archive及移动端边界。
 - 主代理以精确路径分别提交：`0b18d747`（M05.04-a test）、`1f7ecd87`（M07.02-a product+tests）、`ab506b16`（M11.03-a test）。这些是原子批次提交，不冒充父模块完成；模块完成时仍需另一次按§5.8的模块提交。此前计划/入口提交为`ad6cc78d`，M01小切片为`c940eba7`，已有闭环增量包括M02 `708bfa2f`、M03 `d2b0979a`、M04 `36a8b052`、M06 `004c0080`、M13 `b2d3535a`、M16 `946394a1`，M14/M15历史提交分别为`192a3453`/`c67c2c70`。
 - 三个子代理均保护其它工作树文件；本轮主代理未push/dispatch。下一轮继续按依赖分发M05剩余安全状态、M07 delivery/CRUD、M11文件操作或M00/M08–M13未闭环原子任务，完成父模块后再递增闭环计数。
