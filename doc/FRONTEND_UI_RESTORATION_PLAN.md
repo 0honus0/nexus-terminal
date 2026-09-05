@@ -230,7 +230,7 @@
 | M05.01 | ✅ 已完成〔C.1/P3〕  | 七 tab：Workspace/System/Security/IP Control/Data Management/Appearance/About，默认 Workspace；旧分组/密度/卡片和 About 布局                                                            |
 | M05.02 | ✅ 已完成〔C.1/P3〕  | password/passkey/2FA/CAPTCHA、IP白黑名单、备份导入导出及轻量 Appearance 入口的旧展示                                                                                                    |
 | M05.03 | ◐ 部分完成           | 移动源码已审；逐 tab 检查加载、dirty/save/error、开关禁用、长描述/表格/二维码、tab横滚与内容纵滚；System 与 Workspace 设置互不串值                                                      |
-| M05.04 | ◐ 部分完成〔C.14-a〕 | `change-password.spec.ts` 已覆盖空/不匹配本地校验、错误当前密码400、成功改密、logout→新密码登录、reload与默认密码恢复；passkey命名/删除、2FA/CAPTCHA、IP策略、备份/独立导入导出仍待验收 |
+| M05.04 | ◐ 部分完成〔C.14-a/b/c〕 | 密码、passkey真实注册/命名/reload/删除、2FA UI setup/错误/停用、hCaptcha/reCAPTCHA保存切换/reload/secret保护已通过；IP策略、备份及独立导入导出仍待验收 |
 
 **验收/架构**：SettingsPage 只组合；各 feature 保持唯一设置 owner，不汇总成旧 settings mega-store。复用 `ui/system-settings.spec.ts`、`ui/change-password.spec.ts`、`ui/captcha-settings.spec.ts`、`ui/ip-whitelist-settings.spec.ts`、`ui/ip-blacklist-settings.spec.ts`、`ui/backup-ui.spec.ts` 及相关 HTTP E2E；复核 `system-settings.png`、`security-settings.png`。
 
@@ -1064,7 +1064,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 
 ### C.14 Luna 原子批次持续执行（2026-09-05）
 
-在C.13试验通过后，主代理按§5.8继续分发真实任务；子代理仍只使用Luna，主代理独立验收，未使用Sol。该轮不改变`7 / 18`正式模块闭环计数，因为三个任务都是父模块的部分完成。
+在C.13试验通过后，主代理按§5.8继续分发真实任务；子代理仍只使用Luna，主代理独立验收，未使用Sol。该轮新增批次均为父模块部分完成，不改变`7 / 18`正式模块闭环计数。
 
 - `M05.04-a` → `/root/luna_m05_password`（Luna high）：只修改既有`test/e2e/tests/ui/change-password.spec.ts`，无产品改动；真实空/不匹配校验、错误当前密码400、成功改密、logout→新密码登录、reload与恢复默认密码 **1/1 passed (9.5s)**。报告与1440×900图、metrics在`/tmp/nexus-m05-04a-report.md`及对应final目录。主代理确认无跨owner改动；后续M05.04仍需passkey/2FA/CAPTCHA/IP/backup/独立导入导出。
 - `M07.02-a` → `/root/luna_m07_notifications`（Luna high）：`NotificationsView.vue`仅修窄屏卡片布局（动作下移、长名称/事件断词、桌面保留横排），既有notification/audit spec增加真实长内容、编辑/滚动、空/错误状态；before `scrollWidth=347`→after `320`，最终通知+Audit **5/5 passed**，test-policy/Prettier通过。报告`/tmp/nexus-m07-02a-report.md`；后续分页及M07.03 CRUD/delivery/error仍待验收。
@@ -1072,6 +1072,8 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M07.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`test/e2e/tests/ui/notification-delivery.spec.ts`；真实创建启用、事件选择持久化、reload、saved webhook成功、真实失败400反馈、停用/reload、确认删除 **1/1**，通知回归 **5/5**，原有精确基线 **4/4**，Audit邻接 **2/2**；before/after 证据在`/tmp/nexus-m07-03a-final-20260905-004`，test-policy/Prettier/diff通过，主代理提交`a2ffeb21`。M07仍需分页和其他日志状态。
 - `M07.02/03-f` → `/root/luna_m07_delivery`（Luna high）：扩展既有`test/e2e/tests/ui/audit-log-filtering.spec.ts`；真实创建51条proxy审计记录，分页50+1、筛选重置第1页、跨页保留action/search过滤 **1/1**，完整Audit回归 **3/3**，截图/metrics在`/tmp/nexus-m07-audit-final-20260905-004`，test-policy/Prettier/diff通过，主代理提交`5f3a2b90`。未知action和畸形details无法通过当前公开fixture生成，按规则保留为能力缺口。
 - `M11.03-c` → `/root/luna_m11_filesystem`（Luna max）：扩展既有`test/e2e/tests/ssh/file-manager-context-menu.spec.ts`；真实桌面拖放`move-source.txt`到`folder-seed`、任务完成后刷新并验证源目录消失/目标目录出现 **1/1**，1280×720 modal/list 无横溢出，Prettier/test-policy/architecture/diff通过，证据`/tmp/nexus-m11-03c/`，主代理提交`f5749f8e`。M11仍需权限/下载/剪贴板/多选/上传/archive及移动端边界。
+- `M05.04-b` → `/root/luna_m05_captcha`（Luna max）：`CaptchaPanel.vue`与既有`captcha-settings.spec.ts`完成真实hCaptcha/reCAPTCHA保存、切换、reload、secret不回显及禁用恢复`none` **1/1**；报告`/tmp/nexus-m05-04b-report.md`，主代理提交`7f9e103e`。M05仍需IP策略、备份及独立导入导出。
+- `M05.04-c` → `/root/luna_m05_captcha`（Luna max）：扩展既有`change-password.spec.ts`与`http/auth-2fa.spec.ts`；虚拟Authenticator真实passkey注册/命名/reload/删除 **1/1**，2FA API+Security UI **2/2**，桌面截图/metrics与architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04c-run-20260905`，主代理提交`40c8f468`。IP策略、备份及passkey登录/移动专项仍待验收。
 - 主代理以精确路径分别提交：`0b18d747`（M05.04-a test）、`1f7ecd87`（M07.02-a product+tests）、`ab506b16`（M11.03-a test）。这些是原子批次提交，不冒充父模块完成；模块完成时仍需另一次按§5.8的模块提交。此前计划/入口提交为`ad6cc78d`，M01小切片为`c940eba7`，已有闭环增量包括M02 `708bfa2f`、M03 `d2b0979a`、M04 `36a8b052`、M06 `004c0080`、M13 `b2d3535a`、M16 `946394a1`，M14/M15历史提交分别为`192a3453`/`c67c2c70`。
 - 三个子代理均保护其它工作树文件；本轮主代理未push/dispatch。下一轮继续按依赖分发M05剩余安全状态、M07 delivery/CRUD、M11文件操作或M00/M08–M13未闭环原子任务，完成父模块后再递增闭环计数。
 
