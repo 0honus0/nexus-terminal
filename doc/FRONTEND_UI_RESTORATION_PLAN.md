@@ -139,7 +139,7 @@
 | M16  | Remote Desktop/VNC、SSH suspend           | ✅ P8               | ✅ 本地模块闭环；仅待 M17 最终 canonical |
 | M17  | 跨模块验收、截图、canonical               | ◐ 历史/局部通过     | 当前产品最终验证与全部 28 图             |
 
-**建议接续顺序**：先用 M01.03 的“普通密码登录失败提示→正确密码重试”原子切片完成 §5.5 两项试验（不等于关闭 M01）；再恢复 M17.01 mobile 证据，接续 M00/M01/M05/M07–M13 的未闭环子任务；最后 M17 全量关闭。M02/M03/M04/M06/M14/M15/M16 已本地闭环，不沿用旧的 M03.04 调查或“剩余 25 行”清单重复开发；仅具体回归证据可重开。
+**建议接续顺序**：继续收口 M05/M07/M11 当前原子批次的剩余安全与交互状态，再接续 M00/M01/M08–M13 未闭环子任务；并行恢复 M17.01 mobile 证据，最后由 M17 全量关闭。M02/M03/M04/M06/M14/M15/M16 已本地闭环，不沿用旧的 M03.04 调查或“剩余 25 行”清单重复开发；仅具体回归证据可重开。
 
 可并行分工：管理模块 M01–M07、Workspace/terminal M08–M10、文件链 M11–M14、辅助模块 M15–M16。`WorkspaceSessionSurface.vue`、Foundation、全局样式和本进度文档分别指定唯一编辑者；跨组变更先协调，不能两个模型同时重写同一文件。
 
@@ -225,12 +225,12 @@
 
 **Owner**：`app/pages/settings/` 组合 `features/preferences/`、`security/`、`backup/` 与 appearance 入口。需求：[preferences-settings](software-requirements/requirements/preferences-settings.md)、[identity-security](software-requirements/requirements/identity-security.md)、[backup](software-requirements/requirements/backup.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                     |
-| ------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| M05.01 | ✅ 已完成〔C.1/P3〕 | 七 tab：Workspace/System/Security/IP Control/Data Management/Appearance/About，默认 Workspace；旧分组/密度/卡片和 About 布局             |
-| M05.02 | ✅ 已完成〔C.1/P3〕 | password/passkey/2FA/CAPTCHA、IP白黑名单、备份导入导出及轻量 Appearance 入口的旧展示                                                     |
-| M05.03 | ◐ 部分完成          | 移动源码已审；逐 tab 检查加载、dirty/save/error、开关禁用、长描述/表格/二维码、tab横滚与内容纵滚；System 与 Workspace 设置互不串值       |
-| M05.04 | ⏳ 待验收           | 密码更改、passkey命名/删除、2FA启停、CAPTCHA provider切换、IP策略保存/解除、备份/连接独立导出/导入；通过真实接口确认，保护现有secret语义 |
+| ID     | 状态                 | 子任务及具体完成条件                                                                                                                                                                    |
+| ------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M05.01 | ✅ 已完成〔C.1/P3〕  | 七 tab：Workspace/System/Security/IP Control/Data Management/Appearance/About，默认 Workspace；旧分组/密度/卡片和 About 布局                                                            |
+| M05.02 | ✅ 已完成〔C.1/P3〕  | password/passkey/2FA/CAPTCHA、IP白黑名单、备份导入导出及轻量 Appearance 入口的旧展示                                                                                                    |
+| M05.03 | ◐ 部分完成           | 移动源码已审；逐 tab 检查加载、dirty/save/error、开关禁用、长描述/表格/二维码、tab横滚与内容纵滚；System 与 Workspace 设置互不串值                                                      |
+| M05.04 | ◐ 部分完成〔C.14-a〕 | `change-password.spec.ts` 已覆盖空/不匹配本地校验、错误当前密码400、成功改密、logout→新密码登录、reload与默认密码恢复；passkey命名/删除、2FA/CAPTCHA、IP策略、备份/独立导入导出仍待验收 |
 
 **验收/架构**：SettingsPage 只组合；各 feature 保持唯一设置 owner，不汇总成旧 settings mega-store。复用 `ui/system-settings.spec.ts`、`ui/change-password.spec.ts`、`ui/captcha-settings.spec.ts`、`ui/ip-whitelist-settings.spec.ts`、`ui/ip-blacklist-settings.spec.ts`、`ui/backup-ui.spec.ts` 及相关 HTTP E2E；复核 `system-settings.png`、`security-settings.png`。
 
@@ -251,11 +251,11 @@
 
 **Owner**：`features/notifications/`、`features/audit/`；通用 toast/dialog 归 M00。需求：[notifications](software-requirements/requirements/notifications.md)、[audit-feedback](software-requirements/requirements/audit-feedback.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                      |
-| ------ | ------------------- | --------------------------------------------------------------------------------------------------------- |
-| M07.01 | ✅ 已完成〔C.1/P3〕 | notification 单列卡片/inline配置/provider字段和事件网格；audit过滤、显式查询、表格/详情/分页恢复          |
-| M07.02 | ◐ 部分完成          | 页面源码审计已记录；窄屏长provider/event/日志字段、编辑展开、错误/空列表与分页状态补浏览器对照            |
-| M07.03 | ⏳ 待验收           | notification增改删、启停、测试发送/错误、事件选择持久化；audit过滤/分页/详情正确，不以mock数据代替真实API |
+| ID     | 状态                 | 子任务及具体完成条件                                                                                             |
+| ------ | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| M07.01 | ✅ 已完成〔C.1/P3〕  | notification 单列卡片/inline配置/provider字段和事件网格；audit过滤、显式查询、表格/详情/分页恢复                 |
+| M07.02 | ◐ 部分完成〔C.14-b〕 | 320px真实通知长provider/event、编辑展开/滚动、空/错误状态及Audit长详情内部滚动已通过；分页和其他日志状态仍待验收 |
+| M07.03 | ⏳ 待验收            | notification增改删、启停、测试发送/错误、事件选择持久化；audit过滤/分页/详情正确，不以mock数据代替真实API        |
 
 **验收/架构**：provider配置/查询状态留在各 owner，不为双向联动增加跨feature私有import。复用 `ui/notification-settings.spec.ts`、`ui/notification-delivery.spec.ts`、`ui/audit-log-filtering.spec.ts`；无历史截图的状态同样给可复核证据。
 
@@ -300,12 +300,12 @@
 
 **Owner**：`features/filesystem/`，Workspace提供adapter和popup组合。需求：[filesystem](software-requirements/requirements/filesystem.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                             |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M11.01 | ✅ 已完成〔C.1/P6〕 | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                               |
-| M11.02 | ◐ 部分完成          | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                              |
-| M11.03 | ⏳ 待验收           | 导航/刷新/排序、隐藏项、建目录/文件、重命名/删除/权限、下载、copy/cut/paste、multi-select、上传入口、压缩入口；失败/权限/长文件名/大列表时可恢复 |
-| M11.04 | ⏳ 待验收           | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口  |
+| ID     | 状态                 | 子任务及具体完成条件                                                                                                                             |
+| ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M11.01 | ✅ 已完成〔C.1/P6〕  | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                               |
+| M11.02 | ◐ 部分完成           | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                              |
+| M11.03 | ◐ 部分完成〔C.14-c〕 | 真实SSH导航→外部刷新260+长列表→Name排序→内部滚动→行右键菜单已通过；建删改/权限/下载/copy-cut-paste/multi-select/upload/archive及失败状态仍待验收 |
+| M11.04 | ⏳ 待验收            | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口  |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
 
@@ -1061,6 +1061,16 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 静态：Luna交付frontend build（包含architecture/i18n/vue-tsc/Vite）、test-policy、groups（63 specs/8 groups）、git diff --check均exit0；其format:check当时仅plan格式失败，主代理随后委派`/root/luna_doc_final_check`（Luna low）限定plan格式化及检查通过。主代理SHA256对比确认27个非plan既有dirty文件全部未变；本轮仅新增允许的两个auth相关改动，不覆盖其他模块。
 - 通用主代理冷读模拟：`/root/luna_lead_protocol_review`（Luna max，无历史）从§5.6/5.7选择非M01的M07候选，只做planning。首轮发现台账/资源记录缺口，且low承担实现、V缺旧属性、fixture不支持误作不适用；已写回正式规则并重审报告`/tmp/nexus-luna-lead-protocol-review.md`。修订后能按规则分发、区分剩余取证与计划缺口；这是协议模拟，不是M07实现通过。
 - 本试验适用用户结果仅M01.03-a，局部闭环1/1；不能推断全项目或Luna团队已完成90%以上。§5.7给出可复制Luna max主代理提示词、仅Luna各等级分工、冻结分母的统计方法及剩余风险交接。下一步由新主代理按协议选择其余未闭环结果；M01.03仍部分完成，模块计数保持7/18，M17最终canonical仍待完成。
+
+### C.14 Luna 原子批次持续执行（2026-09-05）
+
+在C.13试验通过后，主代理按§5.8继续分发真实任务；子代理仍只使用Luna，主代理独立验收，未使用Sol。该轮不改变`7 / 18`正式模块闭环计数，因为三个任务都是父模块的部分完成。
+
+- `M05.04-a` → `/root/luna_m05_password`（Luna high）：只修改既有`test/e2e/tests/ui/change-password.spec.ts`，无产品改动；真实空/不匹配校验、错误当前密码400、成功改密、logout→新密码登录、reload与恢复默认密码 **1/1 passed (9.5s)**。报告与1440×900图、metrics在`/tmp/nexus-m05-04a-report.md`及对应final目录。主代理确认无跨owner改动；后续M05.04仍需passkey/2FA/CAPTCHA/IP/backup/独立导入导出。
+- `M07.02-a` → `/root/luna_m07_notifications`（Luna high）：`NotificationsView.vue`仅修窄屏卡片布局（动作下移、长名称/事件断词、桌面保留横排），既有notification/audit spec增加真实长内容、编辑/滚动、空/错误状态；before `scrollWidth=347`→after `320`，最终通知+Audit **5/5 passed**，test-policy/Prettier通过。报告`/tmp/nexus-m07-02a-report.md`；后续分页及M07.03 CRUD/delivery/error仍待验收。
+- `M11.03-a` → `/root/luna_m11_filesystem`（Luna max）：仅扩展`test/e2e/tests/ssh/file-manager-navigation.spec.ts`；真实SSH导航、外部刷新260+长列表、Name排序、内部滚动、行右键菜单 **1/1**，导航全量 **3/3**，context邻接 **1/1**；architecture/frontend build/test-policy/diff通过，报告`/tmp/nexus-m11-03a-report.md`。后续建删改/权限/下载/copy-cut-paste/multi-select/upload/archive及M11.04移动待验收。
+- 主代理以精确路径分别提交：`0b18d747`（M05.04-a test）、`1f7ecd87`（M07.02-a product+tests）、`ab506b16`（M11.03-a test）。这些是原子批次提交，不冒充父模块完成；模块完成时仍需另一次按§5.8的模块提交。此前计划/入口提交为`ad6cc78d`，M01小切片为`c940eba7`，已有闭环增量包括M02 `708bfa2f`、M03 `d2b0979a`、M04 `36a8b052`、M06 `004c0080`、M13 `b2d3535a`、M16 `946394a1`，M14/M15历史提交分别为`192a3453`/`c67c2c70`。
+- 三个子代理均保护其它工作树文件；本轮主代理未push/dispatch。下一轮继续按依赖分发M05剩余安全状态、M07 delivery/CRUD、M11文件操作或M00/M08–M13未闭环原子任务，完成父模块后再递增闭环计数。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
