@@ -97,12 +97,7 @@
   const saveDisabled = computed(() => {
     const active = session.active.value;
     if (!active) return true;
-    return (
-      session.loading.value ||
-      active.saveState === 'saving' ||
-      Boolean(active.error) ||
-      (!props.showCloseButton && !active.dirty)
-    );
+    return session.loading.value || active.saveState === 'saving' || (!props.showCloseButton && !active.dirty);
   });
   const contextIndex = computed(() =>
     context.value ? session.tabs.value.findIndex((tab) => tab.id === context.value!.id) : -1,
