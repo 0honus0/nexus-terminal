@@ -280,7 +280,7 @@
 | ------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | M09.01 | ✅ 已完成〔C.1/P4/P5〕 | 旧compact/grouped列表、search/tag/edit/execute、history操作、移动quick modal和command/search模式                         |
 | M09.02 | ◐ 部分完成             | 源码滚动/截断/弹层审计已做；变量表单、分组上下文、hover动作在touch可达性按旧基线核对，不能凭统一44px规则改版             |
-| M09.03 | ⏳ 待验收              | 新增/编辑/删除命令、tag/变量替换、当前/多session执行、history copy/delete、命令输入同步/搜索、键盘Enter/Escape及失败反馈 |
+| M09.03 | ◐ 部分完成〔C.14-i〕 | 真实命令新增/搜索/执行/编辑/删除、tag/变量替换/重命名及History搜索/copy/rerun/delete已通过；多session执行、键盘Enter/Escape与失败反馈仍待验收 |
 
 **验收/架构**：业务持久化归feature，runtime仅将execute送入现有session capability；菜单与按钮走同一执行语义。复用 `ssh/quick-command-management.spec.ts`、`ssh/quick-command-tags-variables.spec.ts`、`ssh/quick-command-collapsible-search.spec.ts`、`ssh/command-history-management.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 `mobile-quick-commands.png`。
 
@@ -1077,6 +1077,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M05.04-c` → `/root/luna_m05_captcha`（Luna max）：扩展既有`change-password.spec.ts`与`http/auth-2fa.spec.ts`；虚拟Authenticator真实passkey注册/命名/reload/删除 **1/1**，2FA API+Security UI **2/2**，桌面截图/metrics与architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04c-run-20260905`，主代理提交`40c8f468`。IP策略、备份及passkey登录/移动专项仍待验收。
 - `M05.04-d` → `/root/luna_m05_captcha`（Luna high）：扩展既有`ui/ip-whitelist-settings.spec.ts`与`ui/ip-blacklist-settings.spec.ts`；真实白名单多行保存/清空/reload、黑名单启停/阈值校验/真实失败登录封禁/确认删除 **2/2**，桌面与320px截图/metrics、architecture/test-policy/Prettier/diff通过，证据`/tmp/nexus-m05-04d-run-20260905/final2`，主代理提交`9b885ad3`。M05仍需备份/独立导入导出及移动专项。
 - `M08.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/reconnect-ui.spec.ts`；真实三SSH session新增/切换且shell marker保留、tab滚动/长按context、Close Other Tabs、关闭至移动空Workspace **1/1**，reconnect suite **2/2**，suspend/resume邻接 **1/1**，412×915截图/metrics与test-policy/Prettier/diff通过，证据`/tmp/nexus-m08-03-final-20260905-004`，主代理提交`6b590cad`。M08仍需resize/layout锁定、焦点/sidebar滚动及叠层验收。
+- `M09.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/quick-command-management.spec.ts`并复跑`quick-command-tags-variables`、`command-history-management`；真实命令CRUD/search/execute/edit/delete、tag变量替换/rename、History copy/rerun/delete **3/3**，1280×800截图/metrics无横溢出，test-policy/Prettier/diff通过，证据`/tmp/nexus-m09-03-final-20260905-007`，主代理提交`12330364`。M09仍需多session执行、命令栏键盘与失败反馈。
 - 主代理以精确路径分别提交：`0b18d747`（M05.04-a test）、`1f7ecd87`（M07.02-a product+tests）、`ab506b16`（M11.03-a test）。这些是原子批次提交，不冒充父模块完成；模块完成时仍需另一次按§5.8的模块提交。此前计划/入口提交为`ad6cc78d`，M01小切片为`c940eba7`，已有闭环增量包括M02 `708bfa2f`、M03 `d2b0979a`、M04 `36a8b052`、M06 `004c0080`、M13 `b2d3535a`、M16 `946394a1`，M14/M15历史提交分别为`192a3453`/`c67c2c70`。
 - 三个子代理均保护其它工作树文件；本轮主代理未push/dispatch。下一轮继续按依赖分发M05剩余安全状态、M07 delivery/CRUD、M11文件操作或M00/M08–M13未闭环原子任务，完成父模块后再递增闭环计数。
 
