@@ -1,3 +1,5 @@
+import { writeFile } from 'node:fs/promises';
+import type { Page, TestInfo } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -8,7 +10,75 @@ import {
 } from '../../support/ssh';
 import { step } from '../../support/steps';
 
-test('connected SSH terminal accepts commands and keeps the rendered terminal alive', async ({ page, context }) => {
+async function captureTerminalEvidence(page: Page, testInfo: TestInfo, name: 'before' | 'after'): Promise<void> {
+  const metrics = await page.evaluate(() => {
+    const terminal = document.querySelector<HTMLElement>('[data-testid="terminal"]');
+    const inner = terminal?.querySelector<HTMLElement>('[data-testid="terminal-inner"]');
+    const commandBar = document.querySelector<HTMLElement>('[data-testid="command-input-bar"]');
+    const commandInput = commandBar?.querySelector<HTMLElement>('[data-testid="command-input"]');
+    const rect = (element: Element | null) => {
+      if (!element) return null;
+      const box = element.getBoundingClientRect();
+      return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
+    };
+    const innerStyle = inner ? getComputedStyle(inner) : null;
+    const terminalStyle = terminal ? getComputedStyle(terminal) : null;
+    return {
+      language: document.documentElement.lang,
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+      pageScrollWidth: document.documentElement.scrollWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      terminal: rect(terminal),
+      terminalFontSize: terminal?.getAttribute('data-font-size') ?? '',
+      terminalBackground: terminalStyle?.backgroundColor ?? '',
+      inner: rect(inner),
+      innerPadding: {
+        top: innerStyle?.paddingTop ?? '',
+        right: innerStyle?.paddingRight ?? '',
+        bottom: innerStyle?.paddingBottom ?? '',
+        left: innerStyle?.paddingLeft ?? '',
+      },
+      commandBar: rect(commandBar),
+      commandInput: rect(commandInput),
+      commandInputHeight: commandInput?.getBoundingClientRect().height ?? 0,
+    };
+  });
+  const screenshotPath = testInfo.outputPath(`terminal-input-resize-${name}.png`);
+  const metricsPath = testInfo.outputPath(`terminal-input-resize-${name}.metrics.json`);
+  await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled', caret: 'hide' });
+  await writeFile(metricsPath, `${JSON.stringify(metrics, null, 2)}\n`, 'utf8');
+  await testInfo.attach(`M10.03-a terminal ${name} screenshot`, {
+    path: screenshotPath,
+    contentType: 'image/png',
+  });
+  await testInfo.attach(`M10.03-a terminal ${name} metrics`, {
+    path: metricsPath,
+    contentType: 'application/json',
+  });
+  console.log(
+    `[M10.03-a terminal ${name} metrics] language=${metrics.language} viewport=${metrics.viewport.width}x${metrics.viewport.height} pageScrollWidth=${metrics.pageScrollWidth} bodyScrollWidth=${metrics.bodyScrollWidth} terminalFontSize=${metrics.terminalFontSize} innerPadding=${metrics.innerPadding.top}/${metrics.innerPadding.right}/${metrics.innerPadding.bottom}/${metrics.innerPadding.left} commandInputHeight=${metrics.commandInputHeight}`,
+  );
+  expect(metrics.language).toMatch(/^en(?:-US)?$/);
+  expect(metrics.viewport).toEqual({ width: 1280, height: 800 });
+  expect(metrics.pageScrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
+  expect(metrics.bodyScrollWidth).toBeLessThanOrEqual(metrics.viewport.width);
+  expect(metrics.terminal?.x).toBeGreaterThanOrEqual(0);
+  expect(metrics.terminal?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
+  expect(metrics.terminal?.width).toBeGreaterThan(0);
+  expect(metrics.terminal?.height).toBeGreaterThan(100);
+  expect(metrics.inner?.width).toBeGreaterThan(0);
+  expect(metrics.inner?.height).toBeGreaterThan(0);
+  expect(metrics.innerPadding).toEqual({ top: '4px', right: '5px', bottom: '3px', left: '5px' });
+  expect(Number(metrics.terminalFontSize)).toBeGreaterThan(0);
+  expect(metrics.commandBar?.x).toBeGreaterThanOrEqual(0);
+  expect(metrics.commandBar?.right).toBeLessThanOrEqual(metrics.viewport.width + 1);
+  expect(metrics.commandInputHeight).toBeGreaterThan(0);
+}
+
+test('connected SSH terminal accepts commands and keeps the rendered terminal alive', async ({
+  page,
+  context,
+}, testInfo) => {
   const sentTextFrames: string[] = [];
   page.on('websocket', (socket) => {
     socket.on('framesent', (event) => {
@@ -28,6 +98,8 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
   await step('terminal remains mounted after workspace connection', async () => {
     await expect(terminal).toBeVisible({ timeout: 20_000 });
     await expect(terminal.locator('.xterm-screen')).toBeVisible();
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await captureTerminalEvidence(page, testInfo, 'before');
     const box = await terminal.boundingBox();
     expect(box).toBeTruthy();
     expect(box!.height).toBeGreaterThan(100);
@@ -130,6 +202,7 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     await expect
       .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
       .toContain('folder-seed');
+    await captureTerminalEvidence(page, testInfo, 'after');
   });
 });
 
