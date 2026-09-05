@@ -52,8 +52,17 @@ export const useAppearanceStore = defineStore('appearance', {
     settings: {} as AppearanceSettings,
     themes: [] as TerminalTheme[],
     loaded: false,
+    customizerVisible: false,
   }),
   actions: {
+    openCustomizer() {
+      this.customizerVisible = true;
+    },
+
+    closeCustomizer() {
+      this.customizerVisible = false;
+    },
+
     async load(force = false) {
       if (this.loaded && !force) return;
       const [settings, themes] = await Promise.all([appearanceApi.load(), appearanceApi.listThemes()]);

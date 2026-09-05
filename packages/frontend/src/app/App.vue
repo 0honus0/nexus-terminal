@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, watch } from 'vue';
+  import { watch } from 'vue';
   import { RouterView } from 'vue-router';
   import AppHeader from './shell/AppHeader.vue';
   import { useAuthSession } from '@/features/auth/public';
@@ -9,7 +9,6 @@
 
   const auth = useAuthSession();
   const appearance = useAppearanceStore();
-  const appearanceVisible = ref(false);
 
   watch(
     auth.isAuthenticated,
@@ -30,11 +29,11 @@
 
 <template>
   <div class="flex min-h-dvh flex-col text-foreground">
-    <AppHeader @customize-appearance="appearanceVisible = true" />
+    <AppHeader @customize-appearance="appearance.openCustomizer()" />
     <div class="min-h-0 flex-1">
       <RouterView />
     </div>
-    <AppearanceCustomizerModal :visible="appearanceVisible" @close="appearanceVisible = false" />
+    <AppearanceCustomizerModal :visible="appearance.customizerVisible" @close="appearance.closeCustomizer()" />
     <NotificationHost />
     <DialogHost />
   </div>

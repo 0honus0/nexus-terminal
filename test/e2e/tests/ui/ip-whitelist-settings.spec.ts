@@ -15,7 +15,7 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 
   try {
     await page.goto('/settings');
-    await page.getByRole('tab', { name: 'Security', exact: true }).click();
+    await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
     const whitelist = page.getByTestId('ip-whitelist-settings');
     await expect(whitelist).toBeVisible();
 
@@ -38,7 +38,7 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
 
     await step('reload keeps the saved whitelist visible', async () => {
       await page.reload();
-      await page.getByRole('tab', { name: 'Security', exact: true }).click();
+      await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
       await expect(page.getByTestId('ip-whitelist-input')).toHaveValue(WHITELIST);
     });
   } finally {

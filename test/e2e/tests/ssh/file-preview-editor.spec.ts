@@ -880,7 +880,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
   try {
     await step('workspace settings persists spreadsheet rows per page and column limit', async () => {
       await page.goto('/settings');
-      await page.getByRole('tab', { name: 'System', exact: true }).click();
+      await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
       const rowsPerPage = page.locator('#spreadsheetPreviewRowsPerPage');
       const columnLimit = page.locator('#spreadsheetPreviewMaxColumns');
       await expect(rowsPerPage).toBeVisible();

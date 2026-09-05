@@ -114,91 +114,129 @@
 </script>
 
 <template>
-  <div class="space-y-8">
-    <section data-testid="ip-whitelist-settings" class="space-y-4">
-      <h3 class="text-base font-semibold">{{ t('settings.ipWhitelist.title') }}</h3>
-      <form class="max-w-2xl space-y-3" @submit.prevent="saveWhitelist">
-        <BaseFormField :label="t('settings.ipWhitelist.label')" for-id="ipWhitelist"
-          ><BaseTextarea
-            id="ipWhitelist"
-            v-model="policy.whitelist"
-            data-testid="ip-whitelist-input"
-            rows="4"
-            :disabled="loading"
-        /></BaseFormField>
-        <BaseButton data-testid="ip-whitelist-save" type="submit" variant="primary" :loading="loading">{{
-          t('common.save')
-        }}</BaseButton>
-      </form>
+  <div class="space-y-6">
+    <section
+      data-testid="ip-whitelist-settings"
+      class="overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+    >
+      <h2 class="border-b border-border bg-header/50 px-6 py-4 text-lg font-semibold text-foreground">
+        {{ t('settings.ipWhitelist.title') }}
+      </h2>
+      <div class="p-6">
+        <p class="mb-4 text-sm text-text-secondary">{{ t('settings.ipWhitelist.description') }}</p>
+        <form class="space-y-4" @submit.prevent="saveWhitelist">
+          <BaseFormField :label="t('settings.ipWhitelist.label')" for-id="ipWhitelist">
+            <BaseTextarea
+              id="ipWhitelist"
+              v-model="policy.whitelist"
+              data-testid="ip-whitelist-input"
+              rows="4"
+              :disabled="loading"
+            />
+            <p class="mt-1 text-xs text-text-secondary">{{ t('settings.ipWhitelist.hint') }}</p>
+          </BaseFormField>
+          <div class="flex items-center justify-between gap-4">
+            <BaseButton data-testid="ip-whitelist-save" type="submit" variant="primary" :loading="loading">{{
+              t('common.save')
+            }}</BaseButton>
+            <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
+          </div>
+        </form>
+      </div>
     </section>
 
-    <section data-testid="ip-blacklist-settings" class="space-y-4">
-      <div class="flex items-center justify-between">
-        <h3 class="text-base font-semibold">{{ t('settings.ipBlacklist.title') }}</h3>
-        <label class="flex items-center gap-2 text-sm"
-          ><BaseCheckbox
+    <section
+      data-testid="ip-blacklist-settings"
+      class="overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+    >
+      <div class="flex items-center justify-between border-b border-border bg-header/50 px-6 py-4">
+        <h2 class="text-lg font-semibold text-foreground">{{ t('settings.ipBlacklist.title') }}</h2>
+        <label class="flex items-center gap-2 text-sm">
+          <BaseCheckbox
             :model-value="policy.blacklistEnabled"
             data-testid="ip-blacklist-toggle"
             :disabled="loading"
             role="switch"
             :aria-checked="String(policy.blacklistEnabled)"
             @update:model-value="toggleBlacklist"
-          /><span>{{ policy.blacklistEnabled ? t('common.enabled') : t('common.disabled') }}</span></label
-        >
+          />
+          <span>{{ policy.blacklistEnabled ? t('common.enabled') : t('common.disabled') }}</span>
+        </label>
       </div>
-      <div v-if="policy.blacklistEnabled" class="space-y-4">
-        <form class="flex flex-wrap items-end gap-4" @submit.prevent="saveBlacklist">
-          <BaseFormField :label="t('settings.ipBlacklist.maxAttemptsLabel')" for-id="maxLoginAttempts"
-            ><BaseInput
-              id="maxLoginAttempts"
-              v-model="policy.maxLoginAttempts"
-              data-testid="ip-blacklist-max-attempts"
-              type="number"
-              min="1"
-              :disabled="loading"
-          /></BaseFormField>
-          <BaseFormField :label="t('settings.ipBlacklist.banDurationLabel')" for-id="loginBanDuration"
-            ><BaseInput
-              id="loginBanDuration"
-              v-model="policy.loginBanDuration"
-              data-testid="ip-blacklist-ban-duration"
-              type="number"
-              min="1"
-              :disabled="loading"
-          /></BaseFormField>
-          <BaseButton data-testid="ip-blacklist-save" type="submit" variant="primary" :loading="loading">{{
-            t('common.save')
-          }}</BaseButton>
-        </form>
-        <h4 class="font-medium">
-          {{ t('settings.ipBlacklist.currentBannedTitle') }} <span class="text-text-secondary">({{ total }})</span>
-        </h4>
-        <BaseTable :empty="entries.length === 0" :empty-text="t('settings.ipBlacklist.noBannedIps')"
-          ><template #head
-            ><tr>
-              <th class="px-3 py-2">IP</th>
-              <th class="px-3 py-2">{{ t('settings.ipBlacklist.table.attempts') }}</th>
-              <th class="px-3 py-2">{{ t('settings.ipBlacklist.table.lastAttempt') }}</th>
-              <th class="px-3 py-2">{{ t('settings.ipBlacklist.table.bannedUntil') }}</th>
-              <th></th></tr
-          ></template>
-          <tr v-for="entry in entries" :key="entry.ip">
-            <td class="px-3 py-2 font-mono">{{ entry.ip }}</td>
-            <td class="px-3 py-2">{{ entry.attempts }}</td>
-            <td class="px-3 py-2">{{ new Date(entry.lastAttemptAt * 1000).toLocaleString() }}</td>
-            <td class="px-3 py-2">
-              {{ entry.blockedUntil ? new Date(entry.blockedUntil * 1000).toLocaleString() : '—' }}
-            </td>
-            <td class="px-3 py-2 text-right">
-              <BaseButton size="sm" variant="danger" @click="remove(entry.ip)">{{ t('common.remove') }}</BaseButton>
-            </td>
-          </tr></BaseTable
-        >
+      <div class="space-y-6 p-6">
+        <template v-if="policy.blacklistEnabled">
+          <p class="text-sm text-text-secondary">{{ t('settings.ipBlacklist.description') }}</p>
+          <form class="flex flex-wrap items-end gap-4" @submit.prevent="saveBlacklist">
+            <BaseFormField
+              :label="t('settings.ipBlacklist.maxAttemptsLabel')"
+              for-id="maxLoginAttempts"
+              class="min-w-[150px] flex-1"
+            >
+              <BaseInput
+                id="maxLoginAttempts"
+                v-model="policy.maxLoginAttempts"
+                data-testid="ip-blacklist-max-attempts"
+                type="number"
+                min="1"
+                :disabled="loading"
+              />
+            </BaseFormField>
+            <BaseFormField
+              :label="t('settings.ipBlacklist.banDurationLabel')"
+              for-id="loginBanDuration"
+              class="min-w-[150px] flex-1"
+            >
+              <BaseInput
+                id="loginBanDuration"
+                v-model="policy.loginBanDuration"
+                data-testid="ip-blacklist-ban-duration"
+                type="number"
+                min="1"
+                :disabled="loading"
+              />
+            </BaseFormField>
+            <BaseButton data-testid="ip-blacklist-save" type="submit" variant="primary" :loading="loading">{{
+              t('common.save')
+            }}</BaseButton>
+          </form>
+          <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
+          <hr class="border-border/50" />
+          <h3 class="text-base font-semibold text-foreground">{{ t('settings.ipBlacklist.currentBannedTitle') }}</h3>
+          <BaseTable :empty="entries.length === 0" :empty-text="t('settings.ipBlacklist.noBannedIps')">
+            <template #head>
+              <tr>
+                <th class="px-4 py-2 text-left font-medium text-text-secondary">IP</th>
+                <th class="px-4 py-2 text-left font-medium text-text-secondary">
+                  {{ t('settings.ipBlacklist.table.attempts') }}
+                </th>
+                <th class="px-4 py-2 text-left font-medium text-text-secondary">
+                  {{ t('settings.ipBlacklist.table.lastAttempt') }}
+                </th>
+                <th class="px-4 py-2 text-left font-medium text-text-secondary">
+                  {{ t('settings.ipBlacklist.table.bannedUntil') }}
+                </th>
+                <th class="px-4 py-2 text-left font-medium text-text-secondary">
+                  {{ t('settings.ipBlacklist.table.actions') }}
+                </th>
+              </tr>
+            </template>
+            <tr v-for="entry in entries" :key="entry.ip" class="hover:bg-header/50">
+              <td class="px-4 py-2 font-mono">{{ entry.ip }}</td>
+              <td class="px-4 py-2">{{ entry.attempts }}</td>
+              <td class="px-4 py-2">{{ new Date(entry.lastAttemptAt * 1000).toLocaleString() }}</td>
+              <td class="px-4 py-2">
+                {{ entry.blockedUntil ? new Date(entry.blockedUntil * 1000).toLocaleString() : '—' }}
+              </td>
+              <td class="px-4 py-2">
+                <BaseButton size="sm" variant="danger" @click="remove(entry.ip)">{{ t('common.remove') }}</BaseButton>
+              </td>
+            </tr>
+          </BaseTable>
+        </template>
+        <div v-else class="rounded-md border border-dashed border-border/50 p-4 text-center text-text-secondary italic">
+          {{ t('common.disabled') }}
+        </div>
       </div>
-      <p v-else class="rounded border border-dashed border-border/70 p-4 text-center text-sm text-text-secondary">
-        {{ t('common.disabled') }}
-      </p>
     </section>
-    <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm">{{ message }}</p>
   </div>
 </template>

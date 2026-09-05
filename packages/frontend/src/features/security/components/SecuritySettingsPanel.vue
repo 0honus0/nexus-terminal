@@ -4,16 +4,30 @@
   import PasskeyPanel from './PasskeyPanel.vue';
   import CaptchaPanel from './CaptchaPanel.vue';
   import IpAccessPanel from './IpAccessPanel.vue';
-  const props = defineProps<{ twoFactorEnabled?: boolean }>();
+
+  const props = withDefaults(defineProps<{ twoFactorEnabled?: boolean; section?: 'security' | 'ipControl' }>(), {
+    section: 'security',
+  });
   const emit = defineEmits<{ authChanged: [] }>();
 </script>
 
 <template>
-  <div class="divide-y divide-border rounded-lg border border-border bg-background">
-    <div class="p-6"><ChangePasswordPanel /></div>
-    <div class="p-6"><TwoFactorPanel :enabled="props.twoFactorEnabled ?? false" @changed="emit('authChanged')" /></div>
-    <div class="p-6"><PasskeyPanel /></div>
-    <div class="p-6"><CaptchaPanel /></div>
-    <div class="p-6"><IpAccessPanel /></div>
+  <div
+    v-if="props.section === 'security'"
+    class="overflow-hidden rounded-lg border border-border bg-background shadow-sm"
+  >
+    <h2 class="border-b border-border bg-header/50 px-6 py-4 text-lg font-semibold text-foreground">
+      {{ $t('settings.category.security') }}
+    </h2>
+    <div class="space-y-6 p-6">
+      <ChangePasswordPanel />
+      <hr class="border-border/50" />
+      <PasskeyPanel />
+      <hr class="border-border/50" />
+      <TwoFactorPanel :enabled="props.twoFactorEnabled ?? false" @changed="emit('authChanged')" />
+      <hr class="border-border/50" />
+      <CaptchaPanel />
+    </div>
   </div>
+  <IpAccessPanel v-else />
 </template>

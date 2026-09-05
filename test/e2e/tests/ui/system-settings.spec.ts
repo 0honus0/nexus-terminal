@@ -22,6 +22,7 @@ test('system settings persist timezone and language changes through the UI', asy
 
   try {
     await page.goto('/settings');
+    await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
     await expect(page.getByTestId('preferences-settings')).toBeVisible();
     await expect(page.locator('#languageSelect')).toBeVisible();
     await expect(page.locator('#timezoneSelect')).toBeVisible();
@@ -62,6 +63,7 @@ test('system settings persist timezone and language changes through the UI', asy
 
     await step('both values survive a full settings page reload', async () => {
       await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
       await expect(page.getByTestId('preferences-settings')).toBeVisible();
       await expect(page.locator('#timezoneSelect')).toHaveValue(TARGET_TIMEZONE);
       await expect(page.locator('#languageSelect')).toHaveValue(TARGET_LANGUAGE);
@@ -102,7 +104,7 @@ test('dashboard local and remote resource cards can be configured independently'
 
   try {
     await page.goto('/settings');
-    await page.getByRole('tab', { name: 'System', exact: true }).click();
+    await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
 
     const localToggle = page.getByRole('checkbox', { name: 'Show local resources', exact: true });
     const remoteToggle = page.getByRole('checkbox', { name: 'Show remote resources', exact: true });
@@ -139,7 +141,7 @@ test('dashboard local and remote resource cards can be configured independently'
       await page.goto('/');
       await expect(page.getByTestId('dashboard-system-resources')).toBeVisible();
       await page.goto('/settings');
-      await page.getByRole('tab', { name: 'System', exact: true }).click();
+      await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
       await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
     });
 
@@ -171,7 +173,7 @@ test('dashboard local and remote resource cards can be configured independently'
       expect((await responsePromise).ok()).toBeTruthy();
 
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.getByRole('tab', { name: 'System', exact: true }).click();
+      await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
       await expect(page.getByRole('checkbox', { name: 'Show local resources', exact: true })).toBeChecked();
       await expect(page.getByRole('checkbox', { name: 'Show remote resources', exact: true })).not.toBeChecked();
       await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
@@ -207,7 +209,7 @@ test('workspace popup editor setting is the only editor and preview close contro
 
   try {
     await page.goto('/settings');
-    await page.getByRole('tab', { name: 'System', exact: true }).click();
+    await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
 
     const unifiedToggle = page.locator('#showPopupFileEditor');
     const unifiedForm = page.locator('form').filter({ has: unifiedToggle });

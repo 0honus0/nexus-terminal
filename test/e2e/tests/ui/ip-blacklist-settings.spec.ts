@@ -23,7 +23,7 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
 
   try {
     await page.goto('/settings');
-    await page.getByRole('tab', { name: 'Security', exact: true }).click();
+    await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
     const blacklist = page.getByTestId('ip-blacklist-settings');
     const toggle = blacklist.getByTestId('ip-blacklist-toggle');
     await expect(blacklist).toBeVisible();
@@ -64,7 +64,7 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
 
     await step('reload keeps the saved blacklist thresholds visible', async () => {
       await page.reload();
-      await page.getByRole('tab', { name: 'Security', exact: true }).click();
+      await page.getByRole('tab', { name: 'IP Control', exact: true }).click();
       const reloaded = page.getByTestId('ip-blacklist-settings');
       await expect(reloaded.getByTestId('ip-blacklist-max-attempts')).toHaveValue('7');
       await expect(reloaded.getByTestId('ip-blacklist-ban-duration')).toHaveValue('420');
