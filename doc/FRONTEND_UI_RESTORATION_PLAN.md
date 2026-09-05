@@ -317,7 +317,7 @@
 | ------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | M12.01 | ✅ 已完成〔C.1/P6〕 | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                   |
 | M12.02 | ◐ 部分完成          | 全部editor相关移动源码已审；旧overlay/container/tabs由当前owner组合，不恢复旧FileEditor store                                            |
-| M12.03 | ⏳ 待验收           | 多文件切换、dirty/save/失败/关闭确认、编码换行/语言、search/replace、preview转编辑；相同文档tab状态在嵌入/弹出切换、隐藏/重开不重复/丢失 |
+| M12.03 | ◐ 部分完成〔C.15〕 | 源码对照确认旧版保存失败后仍可重试，已移除新架构对 `active.error` 的永久禁用；多文件切换、dirty/save/关闭确认、编码换行/语言、search/replace、preview转编辑及嵌入/弹出状态仍待浏览器验收 |
 | M12.04 | ⏳ 待验收           | desktop弹层resize持久化；mobile全屏/软键盘/长toolbar可达且不写回desktop尺寸；跨session scope保持正确                                     |
 
 **验收/架构**：同一 FileEditorSessionController + FileDocumentPort；popup与embedded不分别维护document副本。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 desktop editor/mobile editor/search。
@@ -1081,6 +1081,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M05.04-e` → `/root/luna_m05_captcha`（Luna high）：扩展既有`ui/backup-ui.spec.ts`与`http/backup.spec.ts`；真实加密备份下载/文件选择器导入、恢复/认证保持、错误密码 **2/2**，桌面与320/375px截图/metrics无横溢出；发现并修复新架构`AppHeader.vue`窄屏全局溢出（待M00单独归档），证据`/tmp/nexus-m05-04e-run-20260905/final10`，主代理提交`9ad434fe`。M05仍需移动专项、passkey登录与连接导出。
 - `M05 UI diff-audit` → `/root/luna_m05_captcha`（Luna max）：对照旧`IpWhitelistSettings.vue`确认当前`IpAccessPanel.vue`白名单 textarea 缺失 `font-mono`，在新 security owner 内最小补齐；主代理提交`5580189b`。其余未闭环项继续按C.15产品优先处理。
 - `M00.04-a` → `/root/luna_m07_delivery`（Luna max）：对照旧`8ceb5840` App.vue/header，修复新架构`AppHeader.vue`窄屏 primary-nav shrink/auto-scroll 与 active underline 裁切；320/375/1280 header 及既有页面邻接差异验收通过，主代理提交`a96c7545`。M00仍需输入、dialog/footer、嵌套overlay与focus恢复差异。
+- `M12 UI diff-audit` → `/root/luna_m07_delivery`（Luna max）：对照旧`FileEditorContainer.vue:344`与当前`useFileEditorSession`，确认保存失败后 dirty 文档必须可重试；移除`FileEditor.vue`对`active.error`的禁用条件，保留loading/saving/clean规则，主代理提交`edf513ec`。浏览器失败→重试流程仍待后续补证。
 - `M08.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/reconnect-ui.spec.ts`；真实三SSH session新增/切换且shell marker保留、tab滚动/长按context、Close Other Tabs、关闭至移动空Workspace **1/1**，reconnect suite **2/2**，suspend/resume邻接 **1/1**，412×915截图/metrics与test-policy/Prettier/diff通过，证据`/tmp/nexus-m08-03-final-20260905-004`，主代理提交`6b590cad`。M08仍需resize/layout锁定、焦点/sidebar滚动及叠层验收。
 - `M09.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/quick-command-management.spec.ts`并复跑`quick-command-tags-variables`、`command-history-management`；真实命令CRUD/search/execute/edit/delete、tag变量替换/rename、History copy/rerun/delete **3/3**，1280×800截图/metrics无横溢出，test-policy/Prettier/diff通过，证据`/tmp/nexus-m09-03-final-20260905-007`，主代理提交`12330364`。M09仍需多session执行、命令栏键盘与失败反馈。
 - `M10.03-a` → `/root/luna_m07_delivery`（Luna max）：扩展既有`ssh/terminal-ui.spec.ts`并复跑`terminal-tools-ui`；真实SSH终端输入、terminal.input、Ctrl+wheel字体resize、shell命令/cwd持久 **3/3**，1280×800截图/metrics无横溢出，test-policy/Prettier/diff通过，证据`/tmp/nexus-m10-03-final-20260905-004`，主代理提交`4f97e7be`。M10仍需复制选择、搜索、修饰键/IME、虚拟键盘及移动专项。
