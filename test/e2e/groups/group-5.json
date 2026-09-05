@@ -3,7 +3,6 @@
   "group": 5,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/backup-ui.spec.ts",
     "tests/ui/batch-connection-edit.spec.ts",
@@ -12,6 +11,9 @@
     "tests/ui/custom-terminal-theme.spec.ts",
     "tests/ui/dashboard-workflows.spec.ts",
     "tests/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts"
+    "tests/websocket/authenticated-session.spec.ts",
+    "tests/ssh/sftp-download.spec.ts",
+    "tests/ssh/progress-display-upload-copy.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts"
   ]
 }
