@@ -71,10 +71,13 @@
 </script>
 
 <template>
-  <section class="space-y-4">
-    <h3 class="text-base font-semibold text-foreground">{{ t('settings.twoFactor.title') }}</h3>
-    <template v-if="props.enabled">
-      <form class="max-w-xl space-y-3" @submit.prevent="disable">
+  <section>
+    <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.twoFactor.title') }}</h3>
+    <div v-if="props.enabled">
+      <p class="mb-3 rounded border-l-4 border-success bg-success/10 p-3 text-sm text-success">
+        {{ t('settings.twoFactor.status.enabled') }}
+      </p>
+      <form class="space-y-4" @submit.prevent="disable">
         <BaseFormField :label="t('settings.twoFactor.disable.passwordPrompt')" for-id="disablePassword">
           <BaseInput id="disablePassword" v-model="disablePassword" type="password" autocomplete="current-password" />
         </BaseFormField>
@@ -82,12 +85,26 @@
           t('settings.twoFactor.disable.button')
         }}</BaseButton>
       </form>
-    </template>
-    <template v-else-if="setup">
-      <div class="max-w-xl space-y-4 rounded-lg border border-border p-4">
-        <img :src="setup.qrCodeUrl" :alt="t('settings.twoFactor.qrCodeAlt')" class="h-48 w-48 bg-white p-2" />
-        <code class="block break-all rounded bg-header p-2 text-sm">{{ setup.secret }}</code>
-        <form class="space-y-3" @submit.prevent="activate">
+    </div>
+    <div v-else>
+      <p class="mb-4 text-sm text-text-secondary">{{ t('settings.twoFactor.status.disabled') }}</p>
+      <BaseButton v-if="!setup" variant="primary" :loading="loading" @click="begin">{{
+        t('settings.twoFactor.enable.button')
+      }}</BaseButton>
+      <div v-else class="mt-4 space-y-4 rounded-md border border-border bg-header/30 p-4">
+        <p class="text-sm text-text-secondary">{{ t('settings.twoFactor.setup.scanQrCode') }}</p>
+        <img
+          :src="setup.qrCodeUrl"
+          :alt="t('settings.twoFactor.qrCodeAlt')"
+          class="mx-auto block max-w-[180px] rounded border border-border bg-white p-1"
+        />
+        <p class="text-sm text-text-secondary">
+          {{ t('settings.twoFactor.setup.orEnterSecret') }}
+          <code class="rounded border border-border/50 bg-header/50 px-2 py-1 font-mono text-sm">{{
+            setup.secret
+          }}</code>
+        </p>
+        <form class="space-y-4" @submit.prevent="activate">
           <BaseFormField :label="t('settings.twoFactor.setup.enterCode')" for-id="verificationCode">
             <BaseInput
               id="verificationCode"
@@ -97,18 +114,17 @@
               autocomplete="one-time-code"
             />
           </BaseFormField>
-          <div class="flex gap-2">
+          <div class="flex items-center gap-3">
             <BaseButton type="submit" variant="primary" :loading="loading">{{
               t('settings.twoFactor.setup.verifyButton')
             }}</BaseButton>
-            <BaseButton @click="setup = null">{{ t('common.cancel') }}</BaseButton>
+            <BaseButton type="button" :disabled="loading" @click="setup = null">{{ t('common.cancel') }}</BaseButton>
           </div>
         </form>
       </div>
-    </template>
-    <BaseButton v-else variant="primary" :loading="loading" @click="begin">{{
-      t('settings.twoFactor.enable.button')
-    }}</BaseButton>
-    <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm" role="status">{{ message }}</p>
+    </div>
+    <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="mt-3 text-sm" role="status">
+      {{ message }}
+    </p>
   </section>
 </template>

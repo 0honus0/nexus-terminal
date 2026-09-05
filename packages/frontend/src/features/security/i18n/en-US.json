@@ -141,7 +141,9 @@
         "recaptchaKeysRequired": "reCAPTCHA Site Key and Secret Key are required for verification.",
         "verificationFailed": "CAPTCHA credential verification failed. Please check your Site Key and Secret Key.",
         "loadFailed": "Failed to load CAPTCHA settings."
-      }
+      },
+      "hcaptchaProviderName": "hCaptcha",
+      "recaptchaProviderName": "Google reCAPTCHA"
     }
   }
 }

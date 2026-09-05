@@ -41,9 +41,9 @@
 </script>
 
 <template>
-  <section data-testid="change-password-settings" class="space-y-4">
-    <h3 class="text-base font-semibold text-foreground">{{ t('settings.changePassword.title') }}</h3>
-    <form class="max-w-xl space-y-4" @submit.prevent="submit">
+  <section data-testid="change-password-settings">
+    <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.changePassword.title') }}</h3>
+    <form class="space-y-4" @submit.prevent="submit">
       <BaseFormField :label="t('settings.changePassword.currentPassword')" for-id="currentPassword">
         <BaseInput
           id="currentPassword"
@@ -71,10 +71,14 @@
           autocomplete="new-password"
         />
       </BaseFormField>
-      <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm" role="status">{{ message }}</p>
-      <BaseButton data-testid="change-password-submit" type="submit" variant="primary" :loading="loading">
-        {{ t('settings.changePassword.submit') }}
-      </BaseButton>
+      <div class="flex items-center justify-between gap-4">
+        <BaseButton data-testid="change-password-submit" type="submit" variant="primary" :loading="loading">{{
+          t('settings.changePassword.submit')
+        }}</BaseButton>
+        <p v-if="message" :class="success ? 'text-success' : 'text-error'" class="text-sm" role="status">
+          {{ message }}
+        </p>
+      </div>
     </form>
   </section>
 </template>

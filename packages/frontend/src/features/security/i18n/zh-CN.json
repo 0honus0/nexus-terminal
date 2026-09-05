@@ -141,7 +141,9 @@
         "recaptchaKeysRequired": "reCAPTCHA Site Key 和 Secret Key 是必填项，以便进行验证。",
         "verificationFailed": "CAPTCHA 凭据验证失败。请检查您输入的 Site Key 和 Secret Key 是否正确。",
         "loadFailed": "加载 CAPTCHA 设置失败。"
-      }
+      },
+      "hcaptchaProviderName": "hCaptcha",
+      "recaptchaProviderName": "Google reCAPTCHA"
     }
   }
 }

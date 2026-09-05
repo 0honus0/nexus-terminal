@@ -141,7 +141,9 @@
         "recaptchaKeysRequired": "reCAPTCHA サイトキーとシークレットキーは検証に必要です。",
         "verificationFailed": "CAPTCHA 認証情報検証に失敗しました。サイトキーとシークレットキーを確認してください。",
         "loadFailed": "CAPTCHA 設定の読み込みに失敗しました。"
-      }
+      },
+      "hcaptchaProviderName": "hCaptcha",
+      "recaptchaProviderName": "Google reCAPTCHA"
     }
   }
 }
