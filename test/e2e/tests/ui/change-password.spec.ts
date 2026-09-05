@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { expect, test, type APIRequestContext } from '../../support/fixtures';
+import { expect, test, type APIRequestContext, type BrowserContext } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
@@ -25,6 +25,22 @@ async function restoreDefaultPassword(request: APIRequestContext): Promise<void>
   if (!(await login(request, E2E_ADMIN.password))) {
     throw new Error('failed to restore the default E2E administrator password');
   }
+}
+
+async function addVirtualAuthenticator(context: BrowserContext, page: import('@playwright/test').Page) {
+  const cdp = await context.newCDPSession(page);
+  await cdp.send('WebAuthn.enable');
+  const result = await cdp.send('WebAuthn.addVirtualAuthenticator', {
+    options: {
+      protocol: 'ctap2',
+      transport: 'internal',
+      hasResidentKey: true,
+      hasUserVerification: true,
+      isUserVerified: true,
+      automaticPresenceSimulation: true,
+    },
+  });
+  return { cdp, authenticatorId: result.authenticatorId };
 }
 
 test('password change UI updates the real login credential and can restore the test account', async ({
@@ -176,5 +192,120 @@ test('password change UI updates the real login credential and can restore the t
     });
   } finally {
     if (passwordChanged) await restoreDefaultPassword(context.request);
+  }
+});
+
+test('passkey settings UI registers, renames, reloads, and deletes a real credential', async ({
+  page,
+  context,
+}, testInfo) => {
+  await loginAsInitialAdmin(context.request);
+  const { cdp, authenticatorId } = await addVirtualAuthenticator(context, page);
+
+  try {
+    await page.goto('http://localhost:4173/login');
+    await page.locator('#username').fill(E2E_ADMIN.username);
+    await page.locator('#password').fill(E2E_ADMIN.password);
+    await page.getByRole('button', { name: 'Login', exact: true }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await page.goto('http://localhost:4173/settings');
+    await page.getByRole('tab', { name: 'Security', exact: true }).click();
+    const panel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText('No Passkeys registered yet.');
+    await panel.scrollIntoViewIfNeeded();
+    const collectPasskeyMetrics = async (name: string) => {
+      const metrics = await panel.evaluate((panelElement) => {
+        const listItem = panelElement.querySelector<HTMLElement>('li');
+        const rect = (element: HTMLElement | null) => {
+          if (!element) return null;
+          const box = element.getBoundingClientRect();
+          return { x: box.x, y: box.y, width: box.width, height: box.height, right: box.right, bottom: box.bottom };
+        };
+        return {
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          page: {
+            clientWidth: document.documentElement.clientWidth,
+            scrollWidth: document.documentElement.scrollWidth,
+          },
+          panel: rect(panelElement),
+          listItem: rect(listItem),
+        };
+      });
+      await writeFile(testInfo.outputPath(`passkey-${name}.metrics.json`), JSON.stringify(metrics, null, 2));
+    };
+    await collectPasskeyMetrics('before');
+    await captureFunctionalScreenshot(page, 'm05-04c-passkey-before.png', {
+      viewport: { width: 1440, height: 900 },
+    });
+
+    await step('register a passkey through the real Security UI', async () => {
+      const optionsPromise = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/v1/auth/passkey/registration-options') &&
+          response.request().method() === 'POST',
+      );
+      const registerPromise = page.waitForResponse(
+        (response) =>
+          response.url().endsWith('/api/v1/auth/passkey/register') && response.request().method() === 'POST',
+      );
+      await panel.getByRole('button', { name: 'Register New Passkey', exact: true }).click();
+      expect((await optionsPromise).ok()).toBeTruthy();
+      expect((await registerPromise).status()).toBe(201);
+      await expect(panel.locator('li').first()).toContainText('Unnamed Passkey');
+    });
+
+    const row = panel.locator('li').first();
+    const passkeys = await context.request.get('/api/v1/auth/user/passkeys');
+    expect(passkeys.ok()).toBeTruthy();
+    const passkeyList = (await passkeys.json()) as Array<{ credentialId: string; name?: string }>;
+    expect(passkeyList).toHaveLength(1);
+    const credentialId = passkeyList[0]?.credentialId;
+    expect(credentialId).toBeTruthy();
+
+    await step('rename the registered passkey and persist the name', async () => {
+      await row.getByTitle('Edit').click();
+      const nameInput = row.locator('input');
+      await nameInput.fill('E2E Security Key');
+      const renamePromise = page.waitForResponse(
+        (response) =>
+          response.url().endsWith(`/api/v1/auth/user/passkeys/${credentialId}/name`) &&
+          response.request().method() === 'PUT',
+      );
+      await row.getByRole('button', { name: 'Save', exact: true }).click();
+      expect((await renamePromise).ok()).toBeTruthy();
+      await expect(row).toContainText('E2E Security Key');
+      const renamed = await context.request.get('/api/v1/auth/user/passkeys');
+      await expect(renamed.json()).resolves.toMatchObject([{ credentialId, name: 'E2E Security Key' }]);
+    });
+
+    await step('reload keeps the renamed passkey visible', async () => {
+      await page.reload();
+      await page.getByRole('tab', { name: 'Security', exact: true }).click();
+      const reloadedPanel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
+      await expect(reloadedPanel.locator('li').first()).toContainText('E2E Security Key');
+      await reloadedPanel.scrollIntoViewIfNeeded();
+      await collectPasskeyMetrics('after');
+      await captureFunctionalScreenshot(page, 'm05-04c-passkey-after.png', {
+        viewport: { width: 1440, height: 900 },
+      });
+    });
+
+    await step('delete the registered passkey and persist the empty state', async () => {
+      const reloadedPanel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
+      const deletePromise = page.waitForResponse(
+        (response) =>
+          response.url().endsWith(`/api/v1/auth/user/passkeys/${credentialId}`) &&
+          response.request().method() === 'DELETE',
+      );
+      await reloadedPanel.locator('li').first().getByRole('button', { name: 'Delete', exact: true }).click();
+      expect((await deletePromise).ok()).toBeTruthy();
+      await expect(reloadedPanel).toContainText('No Passkeys registered yet.');
+      const deleted = await context.request.get('/api/v1/auth/user/passkeys');
+      await expect(deleted.json()).resolves.toEqual([]);
+    });
+  } finally {
+    await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId }).catch(() => undefined);
+    await cdp.send('WebAuthn.disable').catch(() => undefined);
   }
 });
