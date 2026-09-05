@@ -11,7 +11,7 @@ Governing constraints: [EC-FE-001](software-requirements/engineering-constraints
 This section is the **authoritative restart point** for the next contributor. Do not redo P0–P7 or restart the P8 audit from scratch.
 
 - Branch: `test/agent-runtime-foundation`.
-- Current branch handoff commit: `07147e8f` (`docs: record p8 handoff state`). Current product implementation checkpoint immediately below it: `4e93b1ad` (`fix(ui): keep mobile remote controls tappable`).
+- Product implementation checkpoint: `4e93b1ad` (`fix(ui): keep mobile remote controls tappable`). Any newer commits above it may be docs-only handoff updates; use `4e93b1ad` as the P8 product-code restart anchor.
 - P8 implementation/fix commits:
   - `5d257097` — Status Monitor / Status Charts presentation plus shared Workspace wrapper geometry.
   - `056a142c` — Docker presentation and the mobile Status Monitor modal shell.
