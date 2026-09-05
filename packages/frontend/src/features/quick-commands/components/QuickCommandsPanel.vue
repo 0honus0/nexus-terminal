@@ -2,7 +2,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { storeToRefs } from 'pinia';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseContextMenu, BaseInput, BaseSelect, BaseSpinner } from '@/foundation/ui';
+  import { BaseContextMenu, BaseInput } from '@/foundation/ui';
   import { writeClipboardText } from '@/foundation/browser';
   import { useFeedback } from '@/shared/feedback/public';
   import { focusRegistry } from '@/shared/focus/public';
@@ -55,7 +55,6 @@
     stopImmediatePropagation: true,
   });
   const rowStyle = computed(() => ({ '--quick-row-scale': localScale.value }));
-  const rowClass = computed(() => (props.compact ? 'py-1.5' : 'py-3'));
 
   watch(
     () => props.rowScale,
@@ -99,6 +98,25 @@
       // Display preference may remain in memory when storage is unavailable.
     }
   };
+  const cycleSort = () => {
+    sort.value = sort.value === 'name' ? 'usageCount' : sort.value === 'usageCount' ? 'lastUsed' : 'name';
+  };
+  const sortButtonIcon = computed(() =>
+    sort.value === 'name'
+      ? 'fas fa-sort-alpha-down'
+      : sort.value === 'usageCount'
+        ? 'fas fa-sort-amount-down'
+        : 'fas fa-clock',
+  );
+  const sortButtonTitle = computed(() =>
+    t(
+      sort.value === 'name'
+        ? 'quickCommands.sortByName'
+        : sort.value === 'usageCount'
+          ? 'quickCommands.sortByUsage'
+          : 'quickCommands.sortByLastUsed',
+    ),
+  );
   const revealSelected = () => {
     const id = selectedId.value;
     if (id === null) return;
@@ -188,9 +206,9 @@
     await store.save(input, editing.value?.id);
     visible.value = false;
   };
-  const processCommand = (commandDefinition: QuickCommand) => {
-    let command = commandDefinition.command;
-    for (const [name, value] of Object.entries(commandDefinition.variables)) {
+  const processTemplate = (template: string, variables: Record<string, string>) => {
+    let command = template;
+    for (const [name, value] of Object.entries(variables)) {
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       command = command.replace(new RegExp(`\\$\\{${escaped}\\}`, 'g'), value);
     }
@@ -201,6 +219,12 @@
       );
     }
     return command;
+  };
+  const processCommand = (commandDefinition: QuickCommand) =>
+    processTemplate(commandDefinition.command, commandDefinition.variables);
+  const executeDraft = (input: QuickCommandInput) => {
+    emit('execute', { command: processTemplate(input.command, input.variables) });
+    visible.value = false;
   };
   const run = (command: QuickCommand, all = false) => {
     context.value = null;
@@ -234,65 +258,133 @@
 </script>
 
 <template>
-  <section ref="root" data-testid="quick-commands-view" class="flex min-h-0 flex-1 flex-col">
-    <div class="flex flex-wrap gap-2 border-b border-border p-3">
-      <BaseButton
+  <section
+    ref="root"
+    data-testid="quick-commands-view"
+    class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+  >
+    <div class="flex shrink-0 items-center gap-2 bg-background p-2">
+      <button
         v-if="collapsibleSearch && !searchExpanded"
         data-testid="quick-command-search-toggle"
-        size="sm"
+        type="button"
+        class="quick-control"
+        :title="t('quickCommands.expandSearch')"
+        :aria-label="t('quickCommands.expandSearch')"
         @click="openSearch"
-        >⌕</BaseButton
       >
-      <BaseInput
+        <i class="fas fa-search" aria-hidden="true"></i>
+      </button>
+      <input
         v-if="searchExpanded"
         ref="searchInput"
         v-model="search"
         data-testid="quick-command-search"
-        class="min-w-36 flex-1"
+        data-focus-id="quickCommandsSearch"
+        type="text"
         :placeholder="t('quickCommands.searchPlaceholder')"
+        class="min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
         @keydown="handleSearchKeydown"
         @blur="handleSearchBlur"
       />
-      <BaseSelect v-model="sort" class="min-w-32">
-        <option value="name">{{ t('quickCommands.sortByName') }}</option>
-        <option value="usageCount">{{ t('quickCommands.sortByUsage') }}</option>
-        <option value="lastUsed">{{ t('quickCommands.sortByLastUsed') }}</option>
-      </BaseSelect>
-      <BaseButton
-        size="sm"
-        :title="t(displayMode === 'name' ? 'quickCommands.switchToCommand' : 'quickCommands.switchToName')"
-        @click="toggleDisplayMode"
-        >{{ displayMode === 'name' ? t('quickCommands.displayName') : t('quickCommands.displayCommand') }}</BaseButton
+      <button
+        type="button"
+        class="quick-control"
+        :title="sortButtonTitle"
+        :aria-label="sortButtonTitle"
+        @click="cycleSort"
       >
-      <BaseButton size="sm" :variant="compact ? 'primary' : 'ghost'" @click="emit('compactMode', !compact)">{{
-        t('quickCommands.compactMode')
-      }}</BaseButton>
-      <BaseButton data-testid="quick-command-add" variant="primary" @click="add">{{
-        t('quickCommands.add')
-      }}</BaseButton>
+        <i :class="sortButtonIcon" aria-hidden="true"></i>
+      </button>
+      <button
+        type="button"
+        class="quick-control"
+        :class="{ 'bg-primary/20 text-primary': compact }"
+        :title="t('quickCommands.compactMode')"
+        :aria-label="t('quickCommands.compactMode')"
+        @click="emit('compactMode', !compact)"
+      >
+        <i :class="['fas', compact ? 'fa-compress-alt' : 'fa-expand-alt']" aria-hidden="true"></i>
+      </button>
+      <button
+        type="button"
+        class="quick-control"
+        :title="t(displayMode === 'name' ? 'quickCommands.switchToCommand' : 'quickCommands.switchToName')"
+        :aria-label="t(displayMode === 'name' ? 'quickCommands.switchToCommand' : 'quickCommands.switchToName')"
+        @click="toggleDisplayMode"
+      >
+        <i :class="['fas', displayMode === 'name' ? 'fa-tag' : 'fa-terminal']" aria-hidden="true"></i>
+      </button>
+      <button
+        data-testid="quick-command-add"
+        type="button"
+        class="quick-control quick-control--primary"
+        :title="t('quickCommands.add')"
+        :aria-label="t('quickCommands.add')"
+        @click="add"
+      >
+        <i class="fas fa-plus" aria-hidden="true"></i>
+      </button>
     </div>
 
-    <BaseSpinner v-if="loading" class="m-6" />
     <div
-      v-else
       data-testid="quick-command-list"
-      class="min-h-0 flex-1 overflow-auto p-3"
+      class="min-h-0 flex-1 overflow-y-auto p-2"
       :style="rowStyle"
       :data-row-scale="localScale.toFixed(2)"
       @wheel="scaleRows"
     >
-      <p v-if="!(showTags ? groups.length : flat.length)" class="p-6 text-center text-text-secondary">
-        {{ t('quickCommands.empty') }}
-      </p>
+      <div
+        v-if="loading"
+        class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
+      >
+        <i class="fas fa-spinner fa-spin mb-2 text-xl" aria-hidden="true"></i>
+        <p>{{ t('common.loading') }}</p>
+      </div>
+      <div
+        v-else-if="!(showTags ? groups.length : flat.length) && search"
+        class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
+      >
+        <i class="fas fa-search mb-2 text-xl" aria-hidden="true"></i>
+        <p>{{ t('quickCommands.empty') }}</p>
+      </div>
+      <div
+        v-else-if="!(showTags ? groups.length : flat.length)"
+        class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
+      >
+        <i class="fas fa-bolt mb-2 text-xl" aria-hidden="true"></i>
+        <p class="mb-3">{{ t('quickCommands.empty') }}</p>
+        <button
+          type="button"
+          class="rounded-lg bg-primary px-4 py-2 font-semibold text-white shadow-md hover:bg-primary-dark"
+          @click="add"
+        >
+          {{ t('quickCommands.addFirst') }}
+        </button>
+      </div>
 
-      <template v-if="showTags">
+      <template v-else-if="showTags">
         <section
           v-for="group in groups"
           :key="group.id ?? 'untagged'"
           :data-testid="`quick-command-group-${group.id ?? 'untagged'}`"
-          class="mb-3 rounded border border-border"
+          class="mb-1 last:mb-0"
         >
-          <div class="flex items-center gap-2 bg-header/50 px-3 py-2 font-medium">
+          <div
+            class="group flex items-center rounded-md font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
+            :class="compact ? 'px-2 py-1' : 'px-3 py-2'"
+          >
+            <button
+              type="button"
+              class="mr-2 flex w-4 shrink-0 items-center justify-center text-text-secondary group-hover:text-foreground"
+              :aria-expanded="expanded[group.name] !== false"
+              @click="store.toggle(group.name)"
+            >
+              <i
+                :class="['fas', expanded[group.name] === false ? 'fa-chevron-right' : 'fa-chevron-down']"
+                aria-hidden="true"
+              ></i>
+            </button>
             <BaseInput
               v-if="editingTagId === (group.id ?? 'untagged')"
               v-model="tagDraft"
@@ -310,87 +402,118 @@
               v-else
               type="button"
               data-testid="quick-command-group-name"
-              class="min-w-0 flex-1 truncate text-left hover:text-primary"
-              :title="
-                group.id === null ? t('quickCommands.tags.createFromUntagged') : t('quickCommands.tags.clickToEditTag')
-              "
+              class="min-w-0 flex-1 truncate text-left text-sm hover:underline"
+              :title="t('quickCommands.tags.clickToEditTag')"
               @click.stop="startTagEdit(group)"
             >
               {{ group.id === null ? t('quickCommands.untagged') : group.name }}
             </button>
-            <button
-              type="button"
-              class="shrink-0 rounded px-2 py-1 hover:bg-primary/10"
-              :aria-expanded="expanded[group.name] !== false"
-              @click="store.toggle(group.name)"
-            >
-              {{ expanded[group.name] === false ? '▸' : '▾' }}
-            </button>
           </div>
-          <ul v-if="expanded[group.name] !== false" class="divide-y divide-border">
+          <ul v-show="expanded[group.name] !== false" class="m-0 list-none p-0 pl-3">
             <li
               v-for="command in group.commands"
               :key="command.id"
               :data-command-id="command.id"
-              :class="[
-                'quick-command-row flex flex-wrap items-center gap-2 px-3',
-                rowClass,
-                selectedId === command.id ? 'bg-primary/10' : '',
-              ]"
+              class="quick-command-row group mb-1 flex cursor-pointer items-center rounded-md px-3 transition-colors duration-150 hover:bg-primary/10"
+              :class="[compact ? 'py-1' : 'py-2.5', selectedId === command.id ? 'bg-primary/20 font-medium' : '']"
+              @click="run(command)"
               @contextmenu.prevent="openContext($event, command)"
             >
-              <button data-testid="quick-command-execute" class="min-w-32 flex-1 text-left" @click="run(command)">
-                <span class="block truncate font-medium">{{ displayText(command) }}</span>
-                <code v-if="!compact && secondaryText(command)" class="block truncate text-xs text-text-secondary">{{
-                  secondaryText(command)
-                }}</code>
-              </button>
-              <span v-if="!compact" class="text-xs text-text-secondary">{{ command.usageCount }}</span>
-              <BaseButton size="sm" variant="ghost" @click="copy(command)">{{
-                t('quickCommands.actions.copy')
-              }}</BaseButton>
-              <BaseButton size="sm" @click="run(command, true)">{{ t('common.all') }}</BaseButton>
-              <BaseButton size="sm" @click="edit(command)">{{ t('common.edit') }}</BaseButton>
-              <BaseButton size="sm" variant="danger" @click="remove(command)">{{ t('common.delete') }}</BaseButton>
+              <span
+                data-testid="quick-command-execute"
+                class="min-w-0 flex-1 truncate text-sm"
+                :class="displayMode === 'command' ? 'font-mono' : ''"
+                :title="displayText(command)"
+                >{{ displayText(command) }}</span
+              >
+              <div
+                class="ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
+              >
+                <button
+                  type="button"
+                  class="row-action hover:text-primary"
+                  :title="t('quickCommands.actions.copy')"
+                  @click.stop="copy(command)"
+                >
+                  <i class="fas fa-copy" aria-hidden="true"></i>
+                </button>
+                <button
+                  type="button"
+                  class="row-action hover:text-primary"
+                  :title="t('common.edit')"
+                  @click.stop="edit(command)"
+                >
+                  <i class="fas fa-edit" aria-hidden="true"></i>
+                </button>
+                <button
+                  type="button"
+                  class="row-action hover:text-error"
+                  :title="t('common.delete')"
+                  @click.stop="remove(command)"
+                >
+                  <i class="fas fa-trash-alt" aria-hidden="true"></i>
+                </button>
+              </div>
             </li>
           </ul>
         </section>
       </template>
 
-      <ul v-else class="divide-y divide-border rounded border border-border">
+      <ul v-else class="m-0 list-none p-0">
         <li
           v-for="command in flat"
           :key="command.id"
           :data-command-id="command.id"
-          :class="[
-            'quick-command-row flex flex-wrap items-center gap-2 px-3',
-            rowClass,
-            selectedId === command.id ? 'bg-primary/10' : '',
-          ]"
+          class="quick-command-row group mb-1 flex cursor-pointer items-center rounded-md px-3 transition-colors duration-150 hover:bg-primary/10"
+          :class="[compact ? 'py-1' : 'py-2.5', selectedId === command.id ? 'bg-primary/20 font-medium' : '']"
+          @click="run(command)"
           @contextmenu.prevent="openContext($event, command)"
         >
-          <button data-testid="quick-command-execute" class="min-w-32 flex-1 text-left" @click="run(command)">
-            <span class="block truncate font-medium">{{ displayText(command) }}</span>
-            <code v-if="!compact && secondaryText(command)" class="block truncate text-xs text-text-secondary">{{
-              secondaryText(command)
-            }}</code>
-          </button>
-          <span v-if="!compact" class="text-xs text-text-secondary">{{ command.usageCount }}</span>
-          <BaseButton size="sm" variant="ghost" @click="copy(command)">{{
-            t('quickCommands.actions.copy')
-          }}</BaseButton>
-          <BaseButton size="sm" @click="run(command, true)">{{ t('common.all') }}</BaseButton>
-          <BaseButton size="sm" @click="edit(command)">{{ t('common.edit') }}</BaseButton>
-          <BaseButton size="sm" variant="danger" @click="remove(command)">{{ t('common.delete') }}</BaseButton>
+          <span
+            data-testid="quick-command-execute"
+            class="min-w-0 flex-1 truncate text-sm"
+            :class="displayMode === 'command' ? 'font-mono' : ''"
+            :title="displayText(command)"
+            >{{ displayText(command) }}</span
+          >
+          <div
+            class="ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
+          >
+            <button
+              type="button"
+              class="row-action hover:text-primary"
+              :title="t('quickCommands.actions.copy')"
+              @click.stop="copy(command)"
+            >
+              <i class="fas fa-copy" aria-hidden="true"></i>
+            </button>
+            <button
+              type="button"
+              class="row-action hover:text-primary"
+              :title="t('common.edit')"
+              @click.stop="edit(command)"
+            >
+              <i class="fas fa-edit" aria-hidden="true"></i>
+            </button>
+            <button
+              type="button"
+              class="row-action hover:text-error"
+              :title="t('common.delete')"
+              @click.stop="remove(command)"
+            >
+              <i class="fas fa-trash-alt" aria-hidden="true"></i>
+            </button>
+          </div>
         </li>
       </ul>
     </div>
 
-    <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="210" @close="context = null">
-      <button class="context-item" @click="copy(context.command)">{{ t('quickCommands.actions.copy') }}</button>
-      <button class="context-item" @click="run(context.command)">{{ t('quickCommands.form.execute') }}</button>
-      <button class="context-item" @click="run(context.command, true)">
-        {{ t('quickCommands.actions.sendToAllSessions') }}
+    <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="200" @close="context = null">
+      <button class="context-item" @click="copy(context.command)">
+        <i class="fas fa-copy" aria-hidden="true"></i><span>{{ t('quickCommands.actions.copy') }}</span>
+      </button>
+      <button class="context-item" @click="run(context.command)">
+        <i class="fas fa-play" aria-hidden="true"></i><span>{{ t('quickCommands.form.execute') }}</span>
       </button>
       <button
         class="context-item"
@@ -399,12 +522,26 @@
           context = null;
         "
       >
-        {{ t('common.edit') }}
+        <i class="fas fa-edit" aria-hidden="true"></i><span>{{ t('common.edit') }}</span>
       </button>
-      <button class="context-item text-error" @click="remove(context.command)">{{ t('common.delete') }}</button>
+      <button class="context-item text-error" @click="remove(context.command)">
+        <i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('common.delete') }}</span>
+      </button>
+      <div class="my-1 border-t border-border" role="separator"></div>
+      <button class="context-item" @click="run(context.command, true)">
+        <i class="fas fa-paper-plane" aria-hidden="true"></i
+        ><span>{{ t('quickCommands.actions.sendToAllSessions') }}</span>
+      </button>
     </BaseContextMenu>
 
-    <QuickCommandForm :visible="visible" :command="editing" :tags="tags" @close="visible = false" @save="save" />
+    <QuickCommandForm
+      :visible="visible"
+      :command="editing"
+      :tags="tags"
+      @close="visible = false"
+      @save="save"
+      @execute="executeDraft"
+    />
   </section>
 </template>
 
@@ -413,14 +550,65 @@
     padding-top: calc(var(--quick-row-scale) * 0.5rem);
     padding-bottom: calc(var(--quick-row-scale) * 0.5rem);
   }
-  .context-item {
-    display: block;
-    width: 100%;
+  .quick-control {
+    display: flex;
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 2rem;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
+    border-radius: 0.5rem;
+    color: var(--text-secondary-color);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .quick-control:hover {
+    background: var(--border-color);
+    color: var(--text-color);
+  }
+  .quick-control--primary {
+    border-color: transparent;
+    background: var(--primary-color);
+    color: white;
+  }
+  .quick-control--primary:hover {
+    background: var(--button-hover-bg-color);
+    color: white;
+  }
+  .row-action {
+    display: inline-flex;
+    width: 1.75rem;
+    height: 1.75rem;
+    align-items: center;
+    justify-content: center;
     border-radius: 0.25rem;
-    padding: 0.4rem 0.55rem;
+    color: var(--text-secondary-color);
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .row-action:hover {
+    background: color-mix(in srgb, black 10%, transparent);
+  }
+  .context-item {
+    display: flex;
+    width: calc(100% - 0.5rem);
+    margin-inline: 0.25rem;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.75rem;
     text-align: left;
+    font-size: 0.875rem;
   }
   .context-item:hover {
-    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    color: var(--primary-color);
+  }
+  .context-item i {
+    width: 1rem;
+    text-align: center;
   }
 </style>
