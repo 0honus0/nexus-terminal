@@ -205,7 +205,7 @@
           <span class="archive-icon"><i class="fas fa-box-archive" aria-hidden="true"></i></span>
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm font-semibold">
-              {{ sorted[0] ? archiveLabel(sorted[0]) : t('progressCenter.title') }}
+              {{ sorted[0] ? `${archiveLabel(sorted[0])} ${sorted[0].label}` : t('progressCenter.title') }}
             </div>
             <div class="text-[11px] text-text-secondary">{{ t('progressCenter.running') }}</div>
           </div>
@@ -324,6 +324,9 @@
         :data-task-status="task.status"
         class="archive-progress-body"
       >
+        <div class="min-w-0 truncate text-xs font-semibold" :title="task.label">
+          {{ archiveLabel(task) }} {{ task.label }}
+        </div>
         <div class="space-y-1.5">
           <div class="flex items-center justify-between gap-4 text-xs">
             <span>{{ t('fileManager.archiveProgress.filesProcessed', { count: task.completedFiles }) }}</span>
