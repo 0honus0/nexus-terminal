@@ -22,6 +22,7 @@ const CRUD_SOURCE = 'm11-03b-source.txt';
 const CRUD_RENAMED = 'm11-03b-renamed.txt';
 const M11_03B_EVIDENCE_DIR = process.env.M11_03B_EVIDENCE_DIR || '/tmp/nexus-m11-03b';
 const M11_03C_EVIDENCE_DIR = process.env.M11_03C_EVIDENCE_DIR || '/tmp/nexus-m11-03c';
+const M11_03D_EVIDENCE_DIR = process.env.M11_03D_EVIDENCE_DIR || '/tmp/nexus-m11-03d';
 
 async function rightClickRow(page: Page, filename: string): Promise<void> {
   const target = row(page, filename);
@@ -690,6 +691,95 @@ test('moves a real remote file into a directory with desktop drag and drop', asy
         list: listBox,
         source: sourceBox,
         destination: destinationBox,
+        before: beforeMetrics,
+        after: afterMetrics,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
+});
+
+test('copies and moves multi-selected remote files through clipboard paste', async ({ page, context }) => {
+  await mkdir(M11_03D_EVIDENCE_DIR, { recursive: true });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  const fileManager = page.getByTestId('file-manager-modal');
+  const viewport = page.viewportSize();
+  const modalBox = await fileManager.boundingBox();
+  const listBox = await activeFileManagerList(page).boundingBox();
+  expect(viewport).toBeTruthy();
+  expect(modalBox).toBeTruthy();
+  expect(listBox).toBeTruthy();
+  const beforeMetrics = await fileManagerMetrics(page);
+  await page.screenshot({ path: path.join(M11_03D_EVIDENCE_DIR, 'm11-03d-before-clipboard.png') });
+  const selectionModifier = process.platform === 'darwin' ? 'Meta' : 'Control';
+
+  await step('Copy preserves a two-file desktop selection and pastes both remote files', async () => {
+    const copySource = row(page, 'copy-source.txt');
+    const moveSource = row(page, 'move-source.txt');
+    await copySource.click();
+    await moveSource.click({ modifiers: [selectionModifier] });
+    await expect(copySource).toHaveClass(/bg-primary/);
+    await expect(moveSource).toHaveClass(/bg-primary/);
+
+    await rightClickRow(page, 'copy-source.txt');
+    await clickMenuItem(page, 'Copy');
+    await goIntoFolder(page, 'folder-seed');
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'Paste');
+    await expect(row(page, 'copy-source.txt')).toBeVisible({ timeout: 20_000 });
+    await expect(row(page, 'move-source.txt')).toBeVisible({ timeout: 20_000 });
+    await fileManager.getByTitle('Refresh', { exact: true }).click();
+    await expect(row(page, 'copy-source.txt')).toBeVisible({ timeout: 20_000 });
+    await expect(row(page, 'move-source.txt')).toBeVisible({ timeout: 20_000 });
+    await goToParent(page);
+  });
+
+  await step('Cut preserves a two-file desktop selection and moves both remote files after paste', async () => {
+    const copySource = row(page, 'cross-copy.txt');
+    const moveSource = row(page, 'cross-move.txt');
+    await copySource.click();
+    await moveSource.click({ modifiers: [selectionModifier] });
+    await expect(copySource).toHaveClass(/bg-primary/);
+    await expect(moveSource).toHaveClass(/bg-primary/);
+
+    await rightClickRow(page, 'cross-copy.txt');
+    await clickMenuItem(page, 'Cut');
+    await goIntoFolder(page, 'cross-target');
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'Paste');
+    await expect(row(page, 'cross-copy.txt')).toBeVisible({ timeout: 20_000 });
+    await expect(row(page, 'cross-move.txt')).toBeVisible({ timeout: 20_000 });
+    await fileManager.getByTitle('Refresh', { exact: true }).click();
+    await expect(row(page, 'cross-copy.txt')).toBeVisible({ timeout: 20_000 });
+    await expect(row(page, 'cross-move.txt')).toBeVisible({ timeout: 20_000 });
+    await goToParent(page);
+    await expect(row(page, 'cross-copy.txt')).toHaveCount(0);
+    await expect(row(page, 'cross-move.txt')).toHaveCount(0);
+  });
+
+  const afterMetrics = await fileManagerMetrics(page);
+  await page.screenshot({ path: path.join(M11_03D_EVIDENCE_DIR, 'm11-03d-after-clipboard.png') });
+  expect(beforeMetrics.scrollWidth).toBeLessThanOrEqual(beforeMetrics.clientWidth + 1);
+  expect(afterMetrics.scrollWidth).toBeLessThanOrEqual(afterMetrics.clientWidth + 1);
+  expect(modalBox!.x).toBeGreaterThanOrEqual(0);
+  expect(modalBox!.y).toBeGreaterThanOrEqual(0);
+  expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+  expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+  await writeFile(
+    path.join(M11_03D_EVIDENCE_DIR, 'm11-03d-metrics.json'),
+    JSON.stringify(
+      {
+        viewport,
+        modal: modalBox,
+        list: listBox,
         before: beforeMetrics,
         after: afterMetrics,
       },
