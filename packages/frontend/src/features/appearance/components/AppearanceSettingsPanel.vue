@@ -27,7 +27,7 @@
 </script>
 
 <template>
-  <section data-testid="style-customizer" class="space-y-6 rounded-lg border border-border bg-background p-6">
+  <section data-testid="appearance-settings-panel" class="space-y-6 rounded-lg border border-border bg-background p-6">
     <BaseSpinner v-if="loading" />
     <template v-else>
       <BaseTabs v-model="activeTab" :items="tabs" :aria-label="t('settings.appearance.title')" />

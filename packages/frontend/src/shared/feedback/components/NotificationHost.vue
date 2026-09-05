@@ -19,10 +19,10 @@
   <div class="fixed right-4 top-4 z-[1100] flex flex-col items-end" aria-live="polite">
     <TransitionGroup
       tag="div"
-      enter-active-class="transition duration-300 ease-out"
+      enter-active-class="transition duration-500 ease-out"
       enter-from-class="translate-x-8 opacity-0"
       enter-to-class="translate-x-0 opacity-95"
-      leave-active-class="transition duration-300 ease-in"
+      leave-active-class="transition duration-500 ease-in"
       leave-from-class="translate-x-0 opacity-95"
       leave-to-class="translate-x-8 opacity-0"
     >
@@ -31,13 +31,13 @@
         :key="notification.id"
         class="mb-2 flex min-w-[250px] max-w-[400px] items-center rounded p-3 text-white opacity-95 shadow-md"
         :class="{
-          'bg-success text-success-text': notification.kind === 'success',
-          'bg-error text-error-text': notification.kind === 'error',
-          'bg-primary': notification.kind === 'info',
-          'bg-warning text-warning-text': notification.kind === 'warning',
+          'bg-green-600': notification.kind === 'success',
+          'bg-red-600': notification.kind === 'error',
+          'bg-blue-600': notification.kind === 'info',
+          'bg-yellow-500 text-gray-800': notification.kind === 'warning',
         }"
       >
-        <i :class="[iconClass(notification.kind), 'mr-3 text-lg']" aria-hidden="true" />
+        <i :class="[iconClass(notification.kind), 'relative top-px mr-3 text-lg !text-white']" aria-hidden="true" />
         <span class="flex-grow break-words text-sm">{{ notification.message }}</span>
         <button
           type="button"

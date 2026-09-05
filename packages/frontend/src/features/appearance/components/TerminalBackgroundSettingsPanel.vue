@@ -16,6 +16,13 @@
   import type { LocalHtmlTheme, RemoteHtmlTheme } from '../model/appearance';
   import { useAppearanceStore } from '../store/appearance.store';
 
+  type BackgroundSection = 'all' | 'background' | 'text-effects';
+  const props = withDefaults(defineProps<{ section?: BackgroundSection }>(), { section: 'all' });
+
+  const showPageBackground = computed(() => props.section === 'all');
+  const showBackground = computed(() => props.section === 'all' || props.section === 'background');
+  const showTextEffects = computed(() => props.section === 'all' || props.section === 'text-effects');
+
   const { t } = useI18n();
   const feedback = useFeedback();
   const store = useAppearanceStore();
@@ -110,6 +117,7 @@
 
   onMounted(async () => {
     sync();
+    if (!showBackground.value) return;
     await loadLocalThemes();
     try {
       remoteRepositoryUrl.value = (await appearanceApi.getRemoteHtmlRepositoryUrl()) ?? '';
@@ -274,8 +282,14 @@
 
 <template>
   <section class="space-y-8">
-    <div class="grid gap-4 md:grid-cols-2">
-      <div class="space-y-2 rounded border border-border p-4">
+    <h3
+      v-if="props.section === 'background'"
+      class="mt-0 border-b border-border pb-2 text-lg font-semibold text-foreground"
+    >
+      {{ t('styleCustomizer.backgroundSettings') }}
+    </h3>
+    <div v-if="showPageBackground || showBackground" class="grid gap-4 md:grid-cols-2">
+      <div v-if="showPageBackground" class="space-y-2 rounded border border-border p-4">
         <h3 class="font-semibold">{{ t('styleCustomizer.pageBackground') }}</h3>
         <p class="break-all text-xs text-text-secondary">
           {{ store.settings.pageBackgroundImage || t('styleCustomizer.noBackground') }}
@@ -286,7 +300,7 @@
         </BaseButton>
       </div>
 
-      <div class="space-y-2 rounded border border-border p-4">
+      <div v-if="showBackground" class="space-y-2 rounded border border-border p-4">
         <h3 class="font-semibold">{{ t('styleCustomizer.terminalBackground') }}</h3>
         <p class="break-all text-xs text-text-secondary">
           {{ store.settings.terminalBackgroundImage || t('styleCustomizer.noBackground') }}
@@ -298,7 +312,7 @@
       </div>
     </div>
 
-    <div class="space-y-4 rounded border border-border p-4">
+    <div v-if="showBackground" class="space-y-4 rounded border border-border p-4">
       <label class="flex items-center gap-2">
         <BaseCheckbox v-model="form.terminalBackgroundEnabled" />
         {{ t('styleCustomizer.terminalBackgroundEnabled') }}
@@ -326,7 +340,7 @@
       </div>
     </div>
 
-    <div class="grid gap-4 lg:grid-cols-2">
+    <div v-if="showTextEffects" class="grid gap-4 lg:grid-cols-2">
       <div class="space-y-3 rounded border border-border p-4">
         <h3 class="font-semibold">{{ t('styleCustomizer.textStrokeSettings') }}</h3>
         <label class="flex items-center gap-2">
@@ -363,9 +377,9 @@
         </BaseFormField>
       </div>
     </div>
-    <BaseButton variant="primary" @click="saveVisuals">{{ t('common.save') }}</BaseButton>
+    <BaseButton v-if="showTextEffects" variant="primary" @click="saveVisuals">{{ t('common.save') }}</BaseButton>
 
-    <div class="grid gap-6 xl:grid-cols-2">
+    <div v-if="showBackground" class="grid gap-6 xl:grid-cols-2">
       <div class="space-y-3 rounded border border-border p-4">
         <div class="flex flex-wrap items-center justify-between gap-2">
           <h3 class="font-semibold">{{ t('styleCustomizer.localThemes') }}</h3>
@@ -429,6 +443,7 @@
     </div>
 
     <BaseModal
+      v-if="showBackground"
       :visible="presetEditorVisible"
       :title="editingLocalName ? t('styleCustomizer.editLocalPreset') : t('styleCustomizer.newLocalPreset')"
       panel-class="w-[min(820px,94vw)]"
