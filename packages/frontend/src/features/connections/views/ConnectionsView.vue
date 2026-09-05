@@ -2,7 +2,8 @@
   import { computed, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { BaseBadge, BaseButton, BaseInput, BaseSelect } from '@/foundation/ui';
+  import { formatDistanceToNow } from 'date-fns';
+  import { enUS, ja, zhCN } from 'date-fns/locale';
   import { useFeedback } from '@/shared/feedback/public';
   import { useConnectionTags } from '@/features/tags/public';
   import { useConnections } from '../composables/useConnections';
@@ -10,7 +11,7 @@
   import ConnectionEditorModal from '../components/ConnectionEditorModal.vue';
   import BatchEditConnectionModal from '../components/BatchEditConnectionModal.vue';
   import type { Connection, ConnectionInput, ConnectionUpdate } from '../model/connection';
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const router = useRouter();
   const feedback = useFeedback();
   const data = useConnections();
@@ -56,6 +57,14 @@
   watch(sort, (value) => localStorage.setItem(SORT_KEY, value));
   watch(sortOrder, (value) => localStorage.setItem(ORDER_KEY, value));
   watch(tagId, (value) => localStorage.setItem(TAG_KEY, value === '' ? '' : String(value)));
+
+  const formatRelativeTime = (timestamp: number | null): string => {
+    if (!timestamp) return t('connections.status.never');
+    const language = locale.value.split('-')[0];
+    const dateLocale = language === 'zh' ? zhCN : language === 'ja' ? ja : enUS;
+    return formatDistanceToNow(new Date(timestamp * 1000), { addSuffix: true, locale: dateLocale });
+  };
+
   const openAdd = () => {
     editing.value = null;
     formVisible.value = true;
@@ -168,117 +177,272 @@
   const connect = (c: Connection) => router.push({ name: 'Workspace', query: { connectionId: String(c.id) } });
 </script>
 <template>
-  <main class="mx-auto max-w-7xl space-y-5 p-6">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <h1 class="text-2xl font-semibold">{{ t('nav.connections') }}</h1>
-      <div class="flex gap-2">
-        <BaseButton data-testid="connections-add-button" variant="primary" @click="openAdd">{{
-          t('connections.addConnection')
-        }}</BaseButton
-        ><button
-          data-testid="batch-edit-toggle"
-          role="switch"
-          :aria-checked="batch"
-          class="rounded border border-border px-3 py-2 text-sm"
-          @click="
-            batch = !batch;
-            selected = new Set();
-          "
+  <main class="bg-background p-4 text-foreground md:p-6 lg:p-8">
+    <div class="mx-auto max-w-screen-lg">
+      <h1 class="mb-6 text-2xl font-semibold">{{ t('nav.connections') }}</h1>
+
+      <section class="min-h-[400px] overflow-hidden rounded-lg border border-border bg-background shadow">
+        <header
+          class="flex flex-col items-start justify-between gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center"
         >
-          {{ t('connections.batchEdit.toggleLabel') }}
-        </button>
-      </div>
-    </div>
-    <div class="grid gap-2 md:grid-cols-[minmax(0,1fr)_180px_180px_auto_auto_auto]">
-      <BaseInput v-model="search" data-testid="connections-search" :placeholder="t('common.search')" />
-      <BaseSelect v-model="tagId" :aria-label="t('dashboard.filterByTag')">
-        <option value="">{{ t('dashboard.filterTags.all') }}</option>
-        <option v-for="tag in tags.tags.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-      </BaseSelect>
-      <BaseSelect v-model="sort" :aria-label="t('dashboard.sortBy')">
-        <option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
-        <option value="name">{{ t('dashboard.sortOptions.name') }}</option>
-        <option value="type">{{ t('dashboard.sortOptions.type') }}</option>
-        <option value="updated">{{ t('dashboard.sortOptions.updated') }}</option>
-        <option value="created">{{ t('dashboard.sortOptions.created') }}</option>
-      </BaseSelect>
-      <BaseButton
-        :title="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
-        @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'"
-      >
-        {{ sortOrder === 'asc' ? '↑' : '↓' }}
-      </BaseButton>
-      <BaseButton :disabled="!filtered.some((connection) => connection.type === 'SSH')" @click="testAllFiltered">
-        {{ t('connections.actions.testAllFiltered') }}
-      </BaseButton>
-      <BaseButton :disabled="!filtered.some((connection) => connection.type === 'SSH')" @click="connectAllFiltered">
-        {{ t('connections.actions.connectAllFiltered') }}
-      </BaseButton>
-      <template v-if="batch"
-        ><BaseButton data-testid="batch-select-all" @click="selectAll">{{
-          t('connections.batchEdit.selectAll')
-        }}</BaseButton
-        ><BaseButton data-testid="batch-deselect-all" @click="deselectAll">{{
-          t('connections.batchEdit.deselectAll')
-        }}</BaseButton
-        ><BaseButton data-testid="batch-invert-selection" @click="invert">{{
-          t('connections.batchEdit.invertSelection')
-        }}</BaseButton
-        ><BaseButton data-testid="batch-edit-selected" :disabled="selected.size === 0" @click="batchModal = true">{{
-          t('connections.batchEdit.editSelected')
-        }}</BaseButton
-        ><BaseButton
-          data-testid="batch-delete-selected"
-          variant="danger"
-          :disabled="selected.size === 0"
-          @click="deleteSelected"
-          >{{ t('connections.batchEdit.deleteSelectedButton') }}</BaseButton
-        ></template
-      >
-    </div>
-    <ul class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      <li
-        v-for="c in filtered"
-        :key="c.id"
-        :data-testid="`connection-row-${c.id}`"
-        class="rounded-lg border border-border bg-background p-4 shadow-sm"
-        :class="selected.has(c.id) ? 'ring-2 ring-primary' : ''"
-        @click="batch && toggleSelected(c.id)"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <h2 class="font-semibold">{{ c.name || c.host }}</h2>
-            <p class="text-sm text-text-secondary">{{ c.type }} · {{ c.username }}@{{ c.host }}:{{ c.port }}</p>
-            <p v-if="c.notes" class="mt-2 text-sm">{{ c.notes }}</p>
-            <div v-if="tagNames(c).length" class="mt-2 flex flex-wrap gap-1">
-              <BaseBadge v-for="name in tagNames(c)" :key="name">{{ name }}</BaseBadge>
+          <h2 class="shrink-0 text-lg font-medium">{{ t('dashboard.connectionList') }} ({{ filtered.length }})</h2>
+          <div class="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:flex-nowrap sm:items-center">
+            <div class="mr-1 flex items-center">
+              <label for="batch-edit-toggle" class="mr-2 text-sm font-medium text-text-secondary">{{
+                t('connections.batchEdit.toggleLabel')
+              }}</label>
+              <button
+                id="batch-edit-toggle"
+                data-testid="batch-edit-toggle"
+                type="button"
+                role="switch"
+                :aria-checked="batch"
+                class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+                :class="batch ? 'bg-primary' : 'bg-gray-300'"
+                @click="
+                  batch = !batch;
+                  selected = new Set();
+                "
+              >
+                <span
+                  aria-hidden="true"
+                  class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200"
+                  :class="batch ? 'translate-x-5' : 'translate-x-0'"
+                />
+              </button>
             </div>
-            <p
-              v-if="testResults.get(c.id)"
-              class="mt-2 text-xs"
-              :class="testResults.get(c.id)?.success ? 'text-success' : 'text-error'"
+
+            <input
+              v-model="search"
+              data-testid="connections-search"
+              type="text"
+              :placeholder="t('dashboard.searchConnectionsPlaceholder')"
+              class="h-8 w-full rounded border border-border bg-background px-3 py-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:w-48"
+            />
+            <select
+              v-model="tagId"
+              class="h-8 rounded border border-border bg-background px-2 py-1 pr-7 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              :aria-label="t('dashboard.filterByTag')"
             >
-              {{ testResults.get(c.id)?.message
-              }}<span v-if="testResults.get(c.id)?.latency != null"> · {{ testResults.get(c.id)?.latency }} ms</span>
-            </p>
+              <option value="">{{ t('dashboard.filterTags.all') }}</option>
+              <option v-for="tag in tags.tags.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
+            </select>
+            <select
+              v-model="sort"
+              class="h-8 rounded border border-border bg-background px-2 py-1 pr-7 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              :aria-label="t('dashboard.sortBy')"
+            >
+              <option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
+              <option value="name">{{ t('dashboard.sortOptions.name') }}</option>
+              <option value="type">{{ t('dashboard.sortOptions.type') }}</option>
+              <option value="updated">{{ t('dashboard.sortOptions.updated') }}</option>
+              <option value="created">{{ t('dashboard.sortOptions.created') }}</option>
+            </select>
+            <button
+              type="button"
+              class="flex h-8 items-center justify-center rounded border border-border px-1.5 hover:bg-header focus:outline-none focus:ring-1 focus:ring-primary"
+              :aria-label="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
+              :title="t(sortOrder === 'asc' ? 'common.sortAscending' : 'common.sortDescending')"
+              @click="sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'"
+            >
+              <i
+                :class="['fas', sortOrder === 'asc' ? 'fa-arrow-up-a-z' : 'fa-arrow-down-z-a', 'w-4 text-center']"
+                aria-hidden="true"
+              />
+            </button>
+            <button
+              data-testid="connections-add-button"
+              type="button"
+              class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-button text-button-text shadow-sm hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              :title="t('connections.addConnection')"
+              @click="openAdd"
+            >
+              <i class="fas fa-plus !text-white" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              :disabled="!filtered.some((connection) => connection.type === 'SSH')"
+              class="flex h-8 shrink-0 items-center justify-center rounded-md bg-button px-3 py-1.5 text-sm text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
+              :title="t('connections.actions.testAllFiltered')"
+              @click="testAllFiltered"
+            >
+              <i class="fas fa-check-double mr-1 !text-white sm:mr-2" aria-hidden="true" /><span
+                class="hidden sm:inline"
+                >{{ t('connections.actions.testAllFiltered') }}</span
+              >
+            </button>
+            <button
+              type="button"
+              :disabled="!filtered.some((connection) => connection.type === 'SSH')"
+              class="flex h-8 shrink-0 items-center justify-center rounded-md bg-button px-3 py-1.5 text-sm text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
+              @click="connectAllFiltered"
+            >
+              <i class="fas fa-network-wired mr-1 !text-white sm:mr-2" aria-hidden="true" /><span
+                class="hidden sm:inline"
+                >{{ t('connections.actions.connectAllFiltered') }}</span
+              >
+            </button>
           </div>
-          <span class="rounded bg-header px-2 py-1 text-xs">{{ c.authMethod }}</span>
+        </header>
+
+        <div v-if="batch" class="flex flex-wrap items-center gap-2 border-b border-border bg-background px-4 py-2">
+          <button
+            data-testid="batch-select-all"
+            type="button"
+            class="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm text-text-secondary shadow-sm hover:bg-border hover:text-foreground"
+            @click="selectAll"
+          >
+            {{ t('connections.batchEdit.selectAll') }} ({{ selected.size }})
+          </button>
+          <button
+            data-testid="batch-deselect-all"
+            type="button"
+            class="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm text-text-secondary shadow-sm hover:bg-border hover:text-foreground"
+            @click="deselectAll"
+          >
+            {{ t('connections.batchEdit.deselectAll') }}
+          </button>
+          <button
+            data-testid="batch-invert-selection"
+            type="button"
+            class="rounded-md border border-border bg-transparent px-3 py-1.5 text-sm text-text-secondary shadow-sm hover:bg-border hover:text-foreground"
+            @click="invert"
+          >
+            {{ t('connections.batchEdit.invertSelection') }}
+          </button>
+          <button
+            data-testid="batch-edit-selected"
+            type="button"
+            :disabled="selected.size === 0"
+            class="rounded-md bg-button px-4 py-1.5 text-sm text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
+            @click="batchModal = true"
+          >
+            <i class="fas fa-edit mr-1 !text-white" aria-hidden="true" />{{ t('connections.batchEdit.editSelected') }}
+          </button>
+          <button
+            data-testid="batch-delete-selected"
+            type="button"
+            :disabled="selected.size === 0"
+            class="rounded-md bg-red-600 px-4 py-1.5 text-sm text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            @click="deleteSelected"
+          >
+            <i class="fas fa-trash-alt mr-1.5 !text-white" aria-hidden="true" />{{
+              t('connections.batchEdit.deleteSelectedButton')
+            }}
+          </button>
         </div>
-        <div class="mt-4 flex flex-wrap gap-2" @click.stop>
-          <BaseButton size="sm" @click="connect(c)">{{ t('connections.actions.connect') }}</BaseButton
-          ><BaseButton data-testid="connection-row-test" size="sm" :loading="testing.has(c.id)" @click="test(c)">{{
-            t('connections.actions.test')
-          }}</BaseButton
-          ><BaseButton data-testid="connection-row-edit" size="sm" @click="openEdit(c)">{{
-            t('connections.actions.edit')
-          }}</BaseButton
-          ><BaseButton size="sm" @click="clone(c)">{{ t('connections.actions.clone') }}</BaseButton>
+
+        <div class="p-4">
+          <ul v-if="filtered.length" class="space-y-3">
+            <li
+              v-for="c in filtered"
+              :key="c.id"
+              :data-testid="`connection-row-${c.id}`"
+              class="flex items-center rounded border border-border/50 bg-header/50 p-3 transition duration-150"
+              :class="[
+                selected.has(c.id) ? 'ring-2 ring-primary ring-offset-1 ring-offset-background' : '',
+                batch ? 'cursor-pointer hover:bg-border/70' : 'hover:bg-border/30',
+              ]"
+              @click="batch && toggleSelected(c.id)"
+            >
+              <div class="mr-3 min-w-0 flex-1">
+                <span class="flex items-center truncate font-medium" :title="c.name || c.host">
+                  <i
+                    :class="[
+                      'fas',
+                      c.type === 'VNC' ? 'fa-plug' : c.type === 'RDP' ? 'fa-desktop' : 'fa-server',
+                      'mr-2 w-4 text-center text-text-secondary',
+                    ]"
+                    aria-hidden="true"
+                  />
+                  <span class="truncate">{{ c.name || c.host }}</span>
+                </span>
+                <span class="block truncate text-sm text-text-secondary" :title="`${c.username}@${c.host}:${c.port}`"
+                  >{{ c.username }}@{{ c.host }}:{{ c.port }}</span
+                >
+                <span class="block text-xs text-text-secondary"
+                  >{{ t('dashboard.lastConnected') }} {{ formatRelativeTime(c.lastConnectedAt) }}</span
+                >
+                <div v-if="c.notes" class="mt-1 text-xs text-text-secondary">
+                  <span class="font-medium">{{ t('connections.form.notes') }}:</span>
+                  <span class="break-words">{{ c.notes }}</span>
+                </div>
+                <div v-if="tagNames(c).length" class="mt-1.5 flex flex-wrap gap-1">
+                  <span
+                    v-for="name in tagNames(c)"
+                    :key="name"
+                    class="rounded border border-border bg-background px-1.5 py-0.5 text-xs text-text-secondary"
+                    >{{ name }}</span
+                  >
+                </div>
+                <div
+                  v-if="c.type === 'SSH' && testResults.get(c.id)"
+                  class="mt-1.5 border-t border-border/30 pt-1 text-xs"
+                >
+                  <span v-if="testing.has(c.id)" class="text-text-secondary"
+                    ><i class="fas fa-spinner fa-spin mr-1.5" />{{ t('connections.actions.testing') }}</span
+                  >
+                  <span v-else :class="testResults.get(c.id)?.success ? 'text-success' : 'text-error'"
+                    ><i
+                      :class="['fas', testResults.get(c.id)?.success ? 'fa-check-circle' : 'fa-times-circle', 'mr-1.5']"
+                    />{{ testResults.get(c.id)?.message
+                    }}<template v-if="testResults.get(c.id)?.latency != null">
+                      · {{ testResults.get(c.id)?.latency }} ms</template
+                    ></span
+                  >
+                </div>
+              </div>
+              <div class="flex shrink-0 items-center space-x-2" @click.stop>
+                <button
+                  v-if="c.type === 'SSH'"
+                  data-testid="connection-row-test"
+                  type="button"
+                  :disabled="batch || testing.has(c.id)"
+                  class="flex h-9 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
+                  @click="test(c)"
+                >
+                  <i
+                    :class="[
+                      'fas',
+                      testing.has(c.id) ? 'fa-spinner fa-spin' : 'fa-vial',
+                      testing.has(c.id) ? '' : 'mr-1',
+                    ]"
+                    aria-hidden="true"
+                  /><span v-if="!testing.has(c.id)">{{ t('connections.actions.test') }}</span>
+                </button>
+                <button
+                  data-testid="connection-row-edit"
+                  type="button"
+                  :disabled="batch"
+                  class="flex h-9 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
+                  @click="openEdit(c)"
+                >
+                  <i class="fas fa-pencil-alt mr-1" aria-hidden="true" />{{ t('connections.actions.edit') }}
+                </button>
+                <button
+                  type="button"
+                  :disabled="batch"
+                  class="flex h-9 items-center justify-center rounded-md border border-border bg-transparent px-3 py-1.5 text-sm font-medium text-foreground shadow-sm hover:bg-border disabled:cursor-not-allowed disabled:opacity-50"
+                  @click="clone(c)"
+                >
+                  <i class="fas fa-clone mr-1" aria-hidden="true" />{{ t('connections.actions.clone') }}
+                </button>
+                <button
+                  type="button"
+                  :disabled="batch"
+                  class="flex h-9 items-center justify-center rounded-md bg-button px-4 py-2 text-sm font-medium text-button-text shadow-sm hover:bg-button-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  @click="connect(c)"
+                >
+                  {{ t('connections.actions.connect') }}
+                </button>
+              </div>
+            </li>
+          </ul>
+          <p v-else class="py-12 text-center text-text-secondary">{{ t('connections.noConnections') }}</p>
         </div>
-      </li>
-    </ul>
-    <p v-if="filtered.length === 0" class="py-12 text-center text-text-secondary">
-      {{ t('connections.noConnections') }}
-    </p>
+      </section>
+    </div>
+
     <ConnectionEditorModal
       :visible="formVisible"
       :connection="editing"
@@ -286,7 +450,8 @@
         formVisible = false;
         editing = null;
       "
-    /><BatchEditConnectionModal
+    />
+    <BatchEditConnectionModal
       :visible="batchModal"
       :count="selected.size"
       @close="batchModal = false"

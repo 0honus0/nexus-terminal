@@ -126,84 +126,106 @@
   <BaseModal
     :visible="visible"
     data-testid="batch-edit-modal"
-    :title="t('connections.batchEdit.title')"
+    panel-class="max-w-xl max-h-[90vh]"
+    content-class="!overflow-hidden !py-0"
     @close="emit('close')"
   >
-    <div class="space-y-5">
-      <p>{{ t('connections.batchEdit.selectedItems', { count }) }}</p>
+    <div class="flex max-h-[78vh] min-h-0 flex-col">
+      <h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
+        {{ t('connections.batchEdit.title') }} ({{ t('connections.batchEdit.selectedItems', { count }) }})
+      </h3>
+      <div class="flex-grow space-y-4 overflow-y-auto pr-2">
+        <section class="rounded-md border border-border bg-background p-4">
+          <div class="mb-2 flex items-center justify-between">
+            <h4 class="text-base font-semibold">{{ t('connections.table.port') }}</h4>
+            <BaseCheckbox v-model="editPort" />
+          </div>
+          <BaseFormField v-if="editPort" :label="t('connections.form.port')"
+            ><BaseInput v-model="form.port" type="number" min="1" max="65535"
+          /></BaseFormField>
+        </section>
 
-      <section class="space-y-3 rounded border border-border p-4">
-        <label class="flex items-center gap-2">
-          <BaseCheckbox v-model="editPort" />{{ t('connections.batchEdit.changePort') }}
-        </label>
-        <BaseFormField v-if="editPort" :label="t('connections.form.port')">
-          <BaseInput v-model="form.port" type="number" min="1" max="65535" />
-        </BaseFormField>
-      </section>
+        <section class="rounded-md border border-border bg-background p-4">
+          <div class="mb-2 flex items-center justify-between">
+            <h4 class="text-base font-semibold">{{ t('connections.form.sectionAuth') }}</h4>
+            <BaseCheckbox v-model="editAuth" />
+          </div>
+          <div v-if="editAuth" class="space-y-3">
+            <BaseFormField :label="t('connections.form.username')"
+              ><BaseInput v-model="form.username" :placeholder="t('connections.batchEdit.leaveBlankNoChange')"
+            /></BaseFormField>
+            <BaseFormField :label="t('connections.form.authMethod')">
+              <BaseSelect v-model="form.authChoice"
+                ><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
+                <option value="password">{{ t('connections.form.authMethodPassword') }}</option>
+                <option value="key">{{ t('connections.form.authMethodKey') }}</option></BaseSelect
+              >
+            </BaseFormField>
+            <BaseFormField v-if="form.authChoice === 'password'" :label="t('connections.form.password')"
+              ><BaseInput v-model="form.password" type="password" autocomplete="new-password"
+            /></BaseFormField>
+            <BaseFormField v-else-if="form.authChoice === 'key'" :label="t('connections.form.sshKey')">
+              <BaseSelect v-model="form.sshKeyChoice"
+                ><option value="">{{ t('connections.form.noSshKey') }}</option>
+                <option v-for="key in sshKeys.keys.value" :key="key.id" :value="String(key.id)">
+                  {{ key.name }}
+                </option></BaseSelect
+              >
+            </BaseFormField>
+          </div>
+        </section>
 
-      <section class="space-y-3 rounded border border-border p-4">
-        <label class="flex items-center gap-2">
-          <BaseCheckbox v-model="editAuth" />{{ t('connections.batchEdit.changeAuth') }}
-        </label>
-        <template v-if="editAuth">
-          <BaseFormField :label="t('connections.form.username')">
-            <BaseInput v-model="form.username" :placeholder="t('connections.batchEdit.leaveBlankNoChange')" />
-          </BaseFormField>
-          <BaseFormField :label="t('connections.form.authMethod')">
-            <BaseSelect v-model="form.authChoice">
-              <option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
-              <option value="password">{{ t('connections.form.authMethodPassword') }}</option>
-              <option value="key">{{ t('connections.form.authMethodKey') }}</option>
-            </BaseSelect>
-          </BaseFormField>
-          <BaseFormField v-if="form.authChoice === 'password'" :label="t('connections.form.password')">
-            <BaseInput v-model="form.password" type="password" autocomplete="new-password" />
-          </BaseFormField>
-          <BaseFormField v-else-if="form.authChoice === 'key'" :label="t('connections.form.sshKey')">
-            <BaseSelect v-model="form.sshKeyChoice">
-              <option value="">{{ t('connections.form.noSshKey') }}</option>
-              <option v-for="key in sshKeys.keys.value" :key="key.id" :value="String(key.id)">{{ key.name }}</option>
-            </BaseSelect>
-          </BaseFormField>
-        </template>
-      </section>
-
-      <section class="space-y-3 rounded border border-border p-4">
-        <label class="flex items-center gap-2">
-          <BaseCheckbox v-model="editAdvanced" data-testid="batch-edit-advanced-toggle" />{{
-            t('connections.form.sectionAdvanced')
-          }}
-        </label>
-        <template v-if="editAdvanced">
-          <BaseFormField :label="t('connections.form.proxy')">
-            <BaseSelect v-model="form.proxyChoice">
-              <option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
-              <option value="__none__">{{ t('connections.form.noProxy') }}</option>
-              <option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="String(proxy.id)">
-                {{ proxy.name }} ({{ proxy.type }})
-              </option>
-            </BaseSelect>
-          </BaseFormField>
-          <label class="flex items-center gap-2">
-            <BaseCheckbox v-model="editTags" />{{ t('connections.batchEdit.changeTags') }}
-          </label>
-          <ConnectionTagPicker v-if="editTags" v-model="form.tagIds" />
-          <label class="flex items-center gap-2">
-            <BaseCheckbox v-model="editNotes" data-testid="batch-edit-notes-toggle" />{{
-              t('connections.batchEdit.changeNotes')
-            }}
-          </label>
-          <BaseFormField v-if="editNotes" :label="t('connections.form.notes')">
-            <BaseTextarea id="batch-notes" v-model="form.notes" rows="4" />
-          </BaseFormField>
-        </template>
-      </section>
-
-      <p v-if="error" class="text-sm text-error" role="alert">{{ error }}</p>
-      <div class="flex justify-end gap-2">
-        <BaseButton @click="emit('close')">{{ t('common.cancel') }}</BaseButton>
-        <BaseButton data-testid="batch-edit-save" variant="primary" @click="save">{{ t('common.save') }}</BaseButton>
+        <section class="rounded-md border border-border bg-background p-4">
+          <div class="mb-2 flex items-center justify-between">
+            <h4 class="text-base font-semibold">{{ t('connections.form.sectionAdvanced') }}</h4>
+            <BaseCheckbox v-model="editAdvanced" data-testid="batch-edit-advanced-toggle" />
+          </div>
+          <div v-if="editAdvanced" class="space-y-3">
+            <BaseFormField :label="t('connections.form.proxy')">
+              <BaseSelect v-model="form.proxyChoice"
+                ><option value="__nochange__">{{ t('connections.batchEdit.noChange') }}</option>
+                <option value="__none__">{{ t('connections.form.noProxy') }}</option>
+                <option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="String(proxy.id)">
+                  {{ proxy.name }} ({{ proxy.type }})
+                </option></BaseSelect
+              >
+            </BaseFormField>
+            <div>
+              <label class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
+                ><span>{{ t('connections.table.tags') }}</span
+                ><span class="flex items-center gap-2 text-xs font-normal"
+                  ><BaseCheckbox v-model="editTags" />{{ t('connections.batchEdit.changeTags') }}</span
+                ></label
+              >
+              <ConnectionTagPicker v-if="editTags" v-model="form.tagIds" />
+            </div>
+            <div class="pt-2">
+              <label class="mb-1 flex items-center justify-between text-sm font-medium text-text-secondary"
+                ><span>{{ t('connections.form.notes') }}</span
+                ><span class="flex items-center gap-2 text-xs font-normal"
+                  ><BaseCheckbox v-model="editNotes" data-testid="batch-edit-notes-toggle" />{{
+                    t('connections.batchEdit.changeNotes')
+                  }}</span
+                ></label
+              >
+              <BaseTextarea v-if="editNotes" id="batch-notes" v-model="form.notes" rows="3" />
+            </div>
+          </div>
+        </section>
+        <p
+          v-if="error"
+          class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm text-error"
+          role="alert"
+        >
+          {{ error }}
+        </p>
       </div>
+      <footer class="mt-4 flex shrink-0 justify-end space-x-3 border-t border-border/50 pt-5">
+        <BaseButton @click="emit('close')">{{ t('common.cancel') }}</BaseButton>
+        <BaseButton data-testid="batch-edit-save" variant="primary" @click="save"
+          ><template #leading><i class="fas fa-save" aria-hidden="true" /></template>{{ t('common.save') }}</BaseButton
+        >
+      </footer>
     </div>
   </BaseModal>
 </template>

@@ -96,7 +96,12 @@
 </script>
 
 <template>
-  <BaseModal :visible="visible" panel-class="w-[min(96vw,900px)]" @close="emit('close')">
+  <BaseModal
+    :visible="visible"
+    panel-class="max-w-2xl max-h-[90vh]"
+    content-class="!overflow-hidden !py-0"
+    @close="emit('close')"
+  >
     <ConnectionForm
       :connection="connection ?? null"
       :loading="loading"

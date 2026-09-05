@@ -389,246 +389,398 @@
 </script>
 
 <template>
-  <form data-testid="connection-form" class="space-y-5" @submit.prevent="submit">
-    <div class="flex items-center justify-between gap-4">
-      <h2 class="text-xl font-semibold">
-        {{ connection ? t('connections.form.titleEdit') : t('connections.form.title') }}
-      </h2>
-      <button
-        v-if="!connection"
-        type="button"
-        role="switch"
-        data-testid="connection-script-toggle"
-        :aria-checked="scriptMode"
-        class="rounded border border-border px-3 py-1.5 text-sm"
-        @click="scriptMode = !scriptMode"
-      >
-        {{ t('connections.form.sectionScriptMode') }}
-      </button>
-    </div>
-    <template v-if="scriptMode"
-      ><BaseFormField :label="t('connections.form.scriptModeInputLabel')"
-        ><BaseTextarea
-          id="conn-script-input"
-          v-model="script"
-          rows="10"
-          :placeholder="t('connections.form.scriptModePlaceholder')"
-      /></BaseFormField>
-      <pre class="whitespace-pre-wrap rounded bg-header p-3 text-xs text-text-secondary">{{
-        t('connections.form.scriptModeFormatInfo')
-      }}</pre>
-    </template>
-    <template v-else>
-      <div class="flex gap-2">
-        <BaseButton
-          type="button"
-          :variant="form.type === 'SSH' ? 'primary' : 'secondary'"
-          data-testid="connection-type-ssh"
-          @click="form.type = 'SSH'"
-          >SSH</BaseButton
-        ><BaseButton
-          type="button"
-          :variant="form.type === 'RDP' ? 'primary' : 'secondary'"
-          data-testid="connection-type-rdp"
-          @click="form.type = 'RDP'"
-          >RDP</BaseButton
-        ><BaseButton
-          type="button"
-          :variant="form.type === 'VNC' ? 'primary' : 'secondary'"
-          data-testid="connection-type-vnc"
-          @click="form.type = 'VNC'"
-          >VNC</BaseButton
-        >
-      </div>
-      <div class="grid gap-4 md:grid-cols-2">
-        <BaseFormField :label="t('connections.form.name')"
-          ><BaseInput id="conn-name" v-model="form.name" /></BaseFormField
-        ><BaseFormField :label="t('connections.form.host')"
-          ><BaseInput id="conn-host" v-model="form.host" required /></BaseFormField
-        ><BaseFormField :label="t('connections.form.port')"
-          ><BaseInput id="conn-port" v-model="form.port" type="number" min="1" max="65535" required /></BaseFormField
-        ><BaseFormField :label="t('connections.form.username')"
-          ><BaseInput id="conn-username" v-model="form.username" required
-        /></BaseFormField>
-      </div>
-      <section class="space-y-3 rounded border border-border p-4">
-        <h3 class="font-medium">{{ t('connections.form.sectionAuth') }}</h3>
-        <template v-if="form.type === 'SSH'"
-          ><div class="flex gap-2">
-            <BaseButton
-              type="button"
-              :variant="form.authMethod === 'password' ? 'primary' : 'secondary'"
-              @click="form.authMethod = 'password'"
-              >{{ t('connections.form.authMethodPassword') }}</BaseButton
-            ><BaseButton
-              type="button"
-              :variant="form.authMethod === 'key' ? 'primary' : 'secondary'"
-              @click="form.authMethod = 'key'"
-              >{{ t('connections.form.authMethodKey') }}</BaseButton
-            >
-          </div>
-          <BaseFormField v-if="form.authMethod === 'password'" :label="t('connections.form.password')"
-            ><BaseInput id="conn-password" v-model="form.password" type="password"
-          /></BaseFormField>
-          <div v-else class="space-y-3">
-            <div class="flex gap-2">
-              <BaseButton
+  <form data-testid="connection-form" class="flex max-h-[78vh] min-h-0 flex-col" @submit.prevent="submit">
+    <h3 class="mb-6 shrink-0 text-center text-xl font-semibold">
+      {{ connection ? t('connections.form.titleEdit') : t('connections.form.title') }}
+    </h3>
+
+    <div class="flex-grow space-y-6 overflow-y-auto pr-2">
+      <template v-if="!scriptMode">
+        <section class="space-y-4 rounded-md border border-border bg-header/30 p-4">
+          <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
+            {{ t('connections.form.sectionBasic') }}
+          </h4>
+          <BaseFormField :label="`${t('connections.form.name')} (${t('connections.form.optional')})`">
+            <BaseInput id="conn-name" v-model="form.name" />
+          </BaseFormField>
+          <div>
+            <label class="mb-1 block text-sm font-medium text-text-secondary">{{
+              t('connections.form.connectionType')
+            }}</label>
+            <div class="flex rounded-md shadow-sm">
+              <button
+                data-testid="connection-type-ssh"
                 type="button"
-                size="sm"
-                :variant="form.keySource === 'saved' ? 'primary' : 'secondary'"
-                @click="form.keySource = 'saved'"
-                >{{ t('connections.form.keySourceSaved') }}</BaseButton
+                class="flex-1 rounded-l-md border border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                :class="form.type === 'SSH' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
+                @click="form.type = 'SSH'"
               >
-              <BaseButton
+                SSH
+              </button>
+              <button
+                data-testid="connection-type-rdp"
                 type="button"
-                size="sm"
-                :variant="form.keySource === 'direct' ? 'primary' : 'secondary'"
-                @click="form.keySource = 'direct'"
-                >{{ t('connections.form.keySourceDirect') }}</BaseButton
+                class="-ml-px flex-1 border-y border-r border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                :class="form.type === 'RDP' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
+                @click="form.type = 'RDP'"
               >
+                RDP
+              </button>
+              <button
+                data-testid="connection-type-vnc"
+                type="button"
+                class="-ml-px flex-1 rounded-r-md border border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                :class="form.type === 'VNC' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'"
+                @click="form.type = 'VNC'"
+              >
+                VNC
+              </button>
             </div>
-            <template v-if="form.keySource === 'saved'">
-              <SshKeySelector v-model="form.sshKeyId" />
-              <p v-if="connection && connection.authMethod === 'key'" class="text-xs text-text-secondary">
-                {{ t('connections.form.keyUpdateNoteSelected') }}
+          </div>
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <BaseFormField :label="t('connections.form.host')" class="md:col-span-2">
+              <BaseInput id="conn-host" v-model="form.host" required />
+              <p v-if="!connection" class="mt-1 text-xs text-text-secondary">
+                <i class="fas fa-exclamation-circle mr-1" aria-hidden="true" />{{ t('connections.form.hostTooltip') }}
               </p>
-            </template>
-            <template v-else>
-              <BaseFormField :label="t('connections.form.privateKeyDirect')">
-                <BaseTextarea v-model="form.privateKey" rows="6" autocomplete="off" />
-              </BaseFormField>
-              <BaseFormField :label="t('connections.form.passphrase')">
-                <BaseInput v-model="form.passphrase" type="password" autocomplete="new-password" />
-              </BaseFormField>
-              <p
-                v-if="connection && connection.authMethod === 'key' && connection.sshKeyId === null"
-                class="text-xs text-text-secondary"
-              >
-                {{ t('connections.form.keyUpdateNoteDirect') }}
-              </p>
-            </template>
-          </div></template
-        ><BaseFormField
-          v-else
-          :label="form.type === 'RDP' ? t('connections.form.password') : t('connections.form.vncPassword')"
-          ><BaseInput
-            :id="form.type === 'RDP' ? 'conn-password-rdp' : 'conn-password-vnc'"
-            v-model="form.password"
-            type="password"
-        /></BaseFormField>
-      </section>
-      <section class="space-y-4 rounded border border-border p-4">
-        <h3 class="font-medium">{{ t('connections.form.sectionAdvanced') }}</h3>
-        <template v-if="form.type === 'SSH'">
-          <BaseFormField :label="t('connections.form.connectionMode')">
-            <BaseSelect v-model="form.route">
-              <option :value="null">{{ t('connections.form.connectionModeDirect') }}</option>
-              <option value="proxy">{{ t('connections.form.connectionModeProxy') }}</option>
-              <option value="jump">{{ t('connections.form.connectionModeJumpHost') }}</option>
-            </BaseSelect>
+            </BaseFormField>
+            <BaseFormField :label="t('connections.form.port')">
+              <BaseInput id="conn-port" v-model="form.port" type="number" min="1" max="65535" required />
+            </BaseFormField>
+          </div>
+        </section>
+
+        <section class="space-y-4 rounded-md border border-border bg-header/30 p-4">
+          <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
+            {{ t('connections.form.sectionAuth') }}
+          </h4>
+          <BaseFormField :label="t('connections.form.username')">
+            <BaseInput id="conn-username" v-model="form.username" required />
           </BaseFormField>
-          <BaseFormField v-if="form.route === 'proxy'" :label="t('connections.form.proxy')">
-            <BaseSelect v-model="form.proxyId">
-              <option :value="null">{{ t('connections.form.noProxy') }}</option>
-              <option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="proxy.id">
-                {{ proxy.name }}
-              </option>
-            </BaseSelect>
+
+          <template v-if="form.type === 'SSH'">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-text-secondary">{{
+                t('connections.form.authMethod')
+              }}</label>
+              <div class="flex rounded-md shadow-sm">
+                <button
+                  type="button"
+                  class="flex-1 rounded-l-md border border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                  :class="
+                    form.authMethod === 'password'
+                      ? 'bg-primary text-white'
+                      : 'bg-background text-foreground hover:bg-border'
+                  "
+                  @click="form.authMethod = 'password'"
+                >
+                  {{ t('connections.form.authMethodPassword') }}
+                </button>
+                <button
+                  type="button"
+                  class="-ml-px flex-1 rounded-r-md border border-border px-3 py-2 text-sm font-medium focus:outline-none"
+                  :class="
+                    form.authMethod === 'key'
+                      ? 'bg-primary text-white'
+                      : 'bg-background text-foreground hover:bg-border'
+                  "
+                  @click="form.authMethod = 'key'"
+                >
+                  {{ t('connections.form.authMethodKey') }}
+                </button>
+              </div>
+            </div>
+            <BaseFormField v-if="form.authMethod === 'password'" :label="t('connections.form.password')">
+              <BaseInput id="conn-password" v-model="form.password" type="password" autocomplete="new-password" />
+            </BaseFormField>
+            <div v-else class="space-y-4">
+              <div>
+                <label class="mb-1 block text-sm font-medium text-text-secondary">{{
+                  t('connections.form.sshKey')
+                }}</label>
+                <div class="mb-3 flex rounded-md shadow-sm">
+                  <button
+                    type="button"
+                    class="flex-1 rounded-l-md border border-border px-3 py-2 text-sm font-medium"
+                    :class="
+                      form.keySource === 'saved'
+                        ? 'bg-primary text-white'
+                        : 'bg-background text-foreground hover:bg-border'
+                    "
+                    @click="form.keySource = 'saved'"
+                  >
+                    {{ t('connections.form.keySourceSaved') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="-ml-px flex-1 rounded-r-md border border-border px-3 py-2 text-sm font-medium"
+                    :class="
+                      form.keySource === 'direct'
+                        ? 'bg-primary text-white'
+                        : 'bg-background text-foreground hover:bg-border'
+                    "
+                    @click="form.keySource = 'direct'"
+                  >
+                    {{ t('connections.form.keySourceDirect') }}
+                  </button>
+                </div>
+                <template v-if="form.keySource === 'saved'">
+                  <SshKeySelector v-model="form.sshKeyId" />
+                  <p v-if="connection && connection.authMethod === 'key'" class="mt-1 text-xs text-text-secondary">
+                    {{ t('connections.form.keyUpdateNoteSelected') }}
+                  </p>
+                </template>
+                <template v-else>
+                  <BaseFormField :label="t('connections.form.privateKeyDirect')">
+                    <BaseTextarea v-model="form.privateKey" rows="6" autocomplete="off" class="font-mono text-sm" />
+                  </BaseFormField>
+                  <BaseFormField :label="t('connections.form.passphrase')" class="mt-3">
+                    <BaseInput v-model="form.passphrase" type="password" autocomplete="new-password" />
+                  </BaseFormField>
+                  <p
+                    v-if="connection && connection.authMethod === 'key' && connection.sshKeyId === null"
+                    class="mt-1 text-xs text-text-secondary"
+                  >
+                    {{ t('connections.form.keyUpdateNoteDirect') }}
+                  </p>
+                </template>
+              </div>
+            </div>
+          </template>
+          <BaseFormField
+            v-else
+            :label="form.type === 'RDP' ? t('connections.form.password') : t('connections.form.vncPassword')"
+          >
+            <BaseInput
+              :id="form.type === 'RDP' ? 'conn-password-rdp' : 'conn-password-vnc'"
+              v-model="form.password"
+              type="password"
+              autocomplete="new-password"
+            />
           </BaseFormField>
-          <div v-if="form.route === 'jump'" class="space-y-2">
-            <h4 class="text-sm font-medium">{{ t('connections.form.jumpHostsTitle') }}</h4>
-            <div
-              v-for="(jumpHostId, index) in form.jumpChain"
-              :key="index"
-              class="flex items-center gap-2 rounded border border-border p-2"
+        </section>
+
+        <section class="space-y-4 rounded-md border border-border bg-header/30 p-4">
+          <h4 class="mb-3 border-b border-border/50 pb-2 text-base font-semibold">
+            {{ t('connections.form.sectionAdvanced') }}
+          </h4>
+          <template v-if="form.type === 'SSH'">
+            <div>
+              <label class="mb-1 block text-sm font-medium text-text-secondary">{{
+                t('connections.form.connectionMode')
+              }}</label>
+              <div class="mb-4 flex rounded-md shadow-sm">
+                <button
+                  type="button"
+                  class="flex-1 rounded-l-md border border-border px-3 py-2 text-sm font-medium"
+                  :class="
+                    form.route === null ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'
+                  "
+                  @click="form.route = null"
+                >
+                  {{ t('connections.form.connectionModeDirect') }}
+                </button>
+                <button
+                  type="button"
+                  class="-ml-px flex-1 border border-border px-3 py-2 text-sm font-medium"
+                  :class="
+                    form.route === 'proxy' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'
+                  "
+                  @click="form.route = 'proxy'"
+                >
+                  {{ t('connections.form.connectionModeProxy') }}
+                </button>
+                <button
+                  type="button"
+                  class="-ml-px flex-1 rounded-r-md border border-border px-3 py-2 text-sm font-medium"
+                  :class="
+                    form.route === 'jump' ? 'bg-primary text-white' : 'bg-background text-foreground hover:bg-border'
+                  "
+                  @click="form.route = 'jump'"
+                >
+                  {{ t('connections.form.connectionModeJumpHost') }}
+                </button>
+              </div>
+            </div>
+            <BaseFormField
+              v-if="form.route === 'proxy'"
+              :label="`${t('connections.form.proxy')} (${t('connections.form.optional')})`"
             >
-              <span class="shrink-0 text-sm text-text-secondary"
-                >{{ t('connections.form.jumpHostLabel') }} {{ index + 1 }}</span
-              >
-              <BaseSelect v-model="form.jumpChain[index]" class="min-w-0 flex-1">
-                <option v-for="host in jumpHostsForIndex(index)" :key="host.id" :value="host.id">
-                  {{ host.name || host.host }}
+              <BaseSelect v-model="form.proxyId">
+                <option :value="null">{{ t('connections.form.noProxy') }}</option>
+                <option v-for="proxy in proxies.proxies.value" :key="proxy.id" :value="proxy.id">
+                  {{ proxy.name }} ({{ proxy.type }} - {{ proxy.host }}:{{ proxy.port }})
                 </option>
               </BaseSelect>
-              <BaseButton
-                type="button"
-                size="sm"
-                variant="ghost"
-                :title="t('connections.form.removeJumpHostTitle')"
-                @click="removeJumpHost(index)"
-                >×</BaseButton
+            </BaseFormField>
+            <div v-if="form.route === 'jump'" class="space-y-3">
+              <label class="mb-1 block text-sm font-medium text-text-secondary">{{
+                t('connections.form.jumpHostsTitle')
+              }}</label>
+              <div
+                v-for="(jumpHostId, index) in form.jumpChain"
+                :key="index"
+                class="flex items-center space-x-2 rounded-md border border-border bg-background/50 p-2"
               >
+                <span class="whitespace-nowrap text-sm font-medium text-text-secondary"
+                  >{{ t('connections.form.jumpHostLabel') }} {{ index + 1 }}:</span
+                >
+                <BaseSelect v-model="form.jumpChain[index]" class="min-w-0 flex-1">
+                  <option v-for="host in jumpHostsForIndex(index)" :key="host.id" :value="host.id">
+                    {{ host.name || host.host }}
+                  </option>
+                </BaseSelect>
+                <button
+                  type="button"
+                  class="rounded-md p-1.5 text-error hover:opacity-80"
+                  :title="t('connections.form.removeJumpHostTitle')"
+                  @click="removeJumpHost(index)"
+                >
+                  <i class="fas fa-times" aria-hidden="true" />
+                </button>
+              </div>
+              <button
+                type="button"
+                class="flex w-full items-center justify-center space-x-2 rounded-md border border-dashed border-primary px-3 py-2 text-primary hover:bg-primary/10 disabled:opacity-50"
+                :disabled="form.jumpChain.length >= availableJumpHosts.length"
+                @click="addJumpHost"
+              >
+                <i class="fas fa-plus" aria-hidden="true" /><span>{{ t('connections.form.addJumpHost') }}</span>
+              </button>
+              <p v-if="availableJumpHosts.length === 0" class="rounded-md bg-warning/20 p-2 text-xs text-warning">
+                {{ t('connections.form.noAvailableSshConnectionsForJump') }}
+              </p>
             </div>
-            <BaseButton
+          </template>
+
+          <div
+            v-if="form.type === 'RDP'"
+            data-testid="rdp-advanced-options"
+            class="space-y-3 rounded-md border border-border/70 bg-background/50 p-3"
+          >
+            <button
               type="button"
-              size="sm"
-              :disabled="form.jumpChain.length >= availableJumpHosts.length"
-              @click="addJumpHost"
+              role="switch"
+              data-testid="rdp-remote-app-toggle"
+              :aria-checked="remoteAppEnabled"
+              class="flex w-full items-center justify-between gap-3 rounded-md px-1 py-1 text-left text-sm font-medium"
+              @click="remoteAppEnabled = !remoteAppEnabled"
             >
-              {{ t('connections.form.addJumpHost') }}
-            </BaseButton>
-            <p v-if="availableJumpHosts.length === 0" class="text-xs text-warning">
-              {{ t('connections.form.noAvailableSshConnectionsForJump') }}
-            </p>
+              <span>{{ t('connections.form.remoteAppEnabled') }}</span>
+              <span
+                aria-hidden="true"
+                class="relative h-5 w-9 shrink-0 rounded-full border border-border transition-colors"
+                :class="remoteAppEnabled ? 'bg-primary' : 'bg-border/60'"
+                ><span
+                  class="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white shadow transition-transform"
+                  :class="remoteAppEnabled ? 'translate-x-[18px]' : 'translate-x-0.5'"
+              /></span>
+            </button>
+            <div v-if="remoteAppEnabled" data-testid="rdp-remote-app-fields" class="space-y-3">
+              <BaseFormField :label="t('connections.form.remoteAppAlias')"
+                ><BaseInput v-model="form.remoteApp" data-testid="rdp-remote-app-alias"
+              /></BaseFormField>
+              <BaseFormField :label="`${t('connections.form.remoteAppDir')} (${t('connections.form.optional')})`"
+                ><BaseInput v-model="form.remoteAppDirectory" data-testid="rdp-remote-app-dir"
+              /></BaseFormField>
+              <BaseFormField :label="`${t('connections.form.remoteAppArgs')} (${t('connections.form.optional')})`"
+                ><BaseInput v-model="form.remoteAppArguments" data-testid="rdp-remote-app-args"
+              /></BaseFormField>
+            </div>
           </div>
-        </template>
-        <BaseFormField :label="t('connections.form.tags')"><ConnectionTagPicker v-model="form.tagIds" /></BaseFormField
-        ><BaseFormField :label="t('connections.form.notes')"
-          ><BaseTextarea
-            id="conn-notes"
-            v-model="form.notes"
-            rows="3"
-            :placeholder="t('connections.form.notesPlaceholder')"
-        /></BaseFormField>
-      </section>
-      <section
-        v-if="form.type === 'RDP'"
-        data-testid="rdp-advanced-options"
-        class="space-y-3 rounded border border-border p-4"
-      >
-        <button
-          type="button"
-          role="switch"
-          data-testid="rdp-remote-app-toggle"
-          :aria-checked="remoteAppEnabled"
-          class="rounded border border-border px-3 py-2 text-sm"
-          @click="remoteAppEnabled = !remoteAppEnabled"
-        >
-          {{ t('connections.form.remoteAppEnabled') }}
-        </button>
-        <div v-if="remoteAppEnabled" data-testid="rdp-remote-app-fields" class="grid gap-3 md:grid-cols-2">
-          <BaseFormField :label="t('connections.form.remoteAppAlias')"
-            ><BaseInput v-model="form.remoteApp" data-testid="rdp-remote-app-alias" /></BaseFormField
-          ><BaseFormField :label="t('connections.form.remoteAppDir')"
-            ><BaseInput v-model="form.remoteAppDirectory" data-testid="rdp-remote-app-dir" /></BaseFormField
-          ><BaseFormField :label="t('connections.form.remoteAppArgs')"
-            ><BaseInput v-model="form.remoteAppArguments" data-testid="rdp-remote-app-args"
+
+          <BaseFormField :label="`${t('connections.form.tags')} (${t('connections.form.optional')})`"
+            ><ConnectionTagPicker v-model="form.tagIds"
           /></BaseFormField>
+          <BaseFormField :label="t('connections.form.notes')"
+            ><BaseTextarea
+              id="conn-notes"
+              v-model="form.notes"
+              rows="3"
+              :placeholder="t('connections.form.notesPlaceholder')"
+          /></BaseFormField>
+        </section>
+      </template>
+
+      <section v-if="!connection" class="mt-6 space-y-4 rounded-md border border-border bg-header/30 p-4">
+        <div class="flex items-center justify-between">
+          <h4 class="text-base font-semibold">{{ t('connections.form.sectionScriptMode') }}</h4>
+          <button
+            data-testid="connection-script-toggle"
+            type="button"
+            role="switch"
+            :aria-checked="scriptMode"
+            class="relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            :class="scriptMode ? 'bg-primary' : 'bg-gray-300'"
+            @click="scriptMode = !scriptMode"
+          >
+            <span
+              aria-hidden="true"
+              class="pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200"
+              :class="scriptMode ? 'translate-x-5' : 'translate-x-0'"
+            />
+          </button>
+        </div>
+        <div v-if="scriptMode" class="mt-4">
+          <BaseTextarea
+            id="conn-script-input"
+            v-model="script"
+            rows="10"
+            class="font-mono"
+            :placeholder="t('connections.form.scriptModePlaceholder')"
+          />
+          <p class="mt-1 whitespace-pre-line text-xs text-text-secondary">
+            {{ t('connections.form.scriptModeFormatInfo') }}
+          </p>
         </div>
       </section>
-      <p v-if="testMessage" class="text-sm text-text-secondary">{{ testMessage }}</p>
-    </template>
-    <p v-if="submitError" class="text-sm text-error">{{ submitError }}</p>
-    <div class="flex flex-wrap gap-2">
-      <BaseButton
-        v-if="!scriptMode && form.type === 'SSH'"
-        data-testid="connection-test-button"
-        type="button"
-        :loading="testing"
-        @click="test"
-        >{{ t('connections.form.testConnection') }}</BaseButton
-      ><BaseButton data-testid="connection-submit-button" type="submit" variant="primary" :loading="loading">{{
-        connection ? t('connections.form.confirmEdit') : t('connections.form.confirm')
-      }}</BaseButton
-      ><BaseButton type="button" @click="emit('cancel')">{{ t('connections.form.cancel') }}</BaseButton
-      ><BaseButton
-        v-if="connection"
-        data-testid="connection-delete-button"
-        type="button"
-        variant="danger"
-        @click="emit('delete')"
-        >{{ t('common.delete') }}</BaseButton
+
+      <p
+        v-if="submitError"
+        class="rounded-md border border-error/30 bg-error/10 p-3 text-center text-sm font-medium text-error"
       >
+        {{ submitError }}
+      </p>
     </div>
+
+    <footer class="mt-6 flex shrink-0 items-center justify-between border-t border-border/50 pt-5">
+      <div v-if="!scriptMode && form.type === 'SSH'" class="flex flex-col items-start gap-1">
+        <div class="flex items-center gap-2">
+          <BaseButton data-testid="connection-test-button" type="button" size="sm" :loading="testing" @click="test">{{
+            t('connections.form.testConnection')
+          }}</BaseButton>
+          <span class="group relative"
+            ><i class="fas fa-info-circle cursor-help text-text-secondary" aria-hidden="true" /><span
+              class="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 w-max max-w-xs -translate-x-1/2 rounded bg-gray-800 p-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+              >{{ t('connections.test.latencyTooltip') }}</span
+            ></span
+          >
+        </div>
+        <p v-if="testMessage" class="min-h-[1.2em] pl-1 text-xs text-text-secondary">{{ testMessage }}</p>
+      </div>
+      <div v-else class="flex-1" />
+      <div class="flex space-x-3">
+        <BaseButton
+          v-if="connection && !scriptMode"
+          data-testid="connection-delete-button"
+          type="button"
+          variant="danger"
+          :disabled="loading || testing"
+          @click="emit('delete')"
+          >{{ t('connections.actions.delete') }}</BaseButton
+        >
+        <BaseButton
+          data-testid="connection-submit-button"
+          type="submit"
+          variant="primary"
+          :loading="loading"
+          :disabled="testing"
+          >{{ connection ? t('connections.form.confirmEdit') : t('connections.form.confirm') }}</BaseButton
+        >
+        <BaseButton type="button" :disabled="loading || testing" @click="emit('cancel')">{{
+          t('connections.form.cancel')
+        }}</BaseButton>
+      </div>
+    </footer>
   </form>
 </template>

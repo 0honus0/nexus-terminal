@@ -8,19 +8,38 @@
   const model = defineModel<number | null>({ default: null });
   const keys = useSshKeys();
   const manage = ref(false);
-  onMounted(() => keys.load());
+  const loading = ref(false);
+  onMounted(async () => {
+    loading.value = true;
+    try {
+      await keys.load();
+    } finally {
+      loading.value = false;
+    }
+  });
   watch(keys.keys, (available) => {
     if (model.value !== null && !available.some((key) => key.id === model.value)) model.value = null;
   });
 </script>
 <template>
-  <div class="flex gap-2">
-    <BaseSelect v-model="model"
-      ><option :value="null">{{ t('sshKeys.selector.noKey') }}</option>
-      <option v-for="key in keys.keys.value" :key="key.id" :value="key.id">{{ key.name }}</option></BaseSelect
-    ><BaseButton data-testid="ssh-key-manage-button" @click="manage = true">{{
-      t('sshKeys.selector.manage')
-    }}</BaseButton
-    ><SshKeyManagementModal v-model="manage" />
+  <div class="space-y-2">
+    <div class="flex items-center space-x-3">
+      <BaseSelect id="ssh-key-select" v-model="model" class="flex-grow" :disabled="loading">
+        <option :value="null">{{ t('sshKeys.selector.selectPlaceholder') }}</option>
+        <option v-for="key in keys.keys.value" :key="key.id" :value="key.id">{{ key.name }}</option>
+      </BaseSelect>
+      <button
+        data-testid="ssh-key-manage-button"
+        type="button"
+        class="rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-text-secondary hover:bg-border disabled:opacity-50"
+        :disabled="loading"
+        :title="t('sshKeys.selector.manageKeysTitle')"
+        @click="manage = true"
+      >
+        <i class="fas fa-cog" aria-hidden="true" />
+      </button>
+    </div>
+    <div v-if="loading" class="text-xs text-text-secondary">{{ t('sshKeys.selector.loadingKeys') }}</div>
+    <SshKeyManagementModal v-model="manage" />
   </div>
 </template>
