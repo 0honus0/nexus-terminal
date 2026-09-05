@@ -1,13 +1,16 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseContextMenu, BaseInput, BaseSpinner } from '@/foundation/ui';
+  import { BaseContextMenu, BaseSpinner } from '@/foundation/ui';
   import { ConnectionEditorModal, useConnections, type Connection } from '@/features/connections/public';
   import { useConnectionTags, type ConnectionTag } from '@/features/tags/public';
   import { useFeedback } from '@/shared/feedback/public';
   import WorkspaceTagGroupManager from './WorkspaceTagGroupManager.vue';
   import { focusRegistry } from '@/shared/focus/public';
-  const props = withDefaults(defineProps<{ showTags?: boolean }>(), { showTags: true });
+  const props = withDefaults(defineProps<{ showTags?: boolean; activeConnectionId?: number | null }>(), {
+    showTags: true,
+    activeConnectionId: null,
+  });
   const emit = defineEmits<{ open: [connection: Connection]; openMany: [connections: Connection[]] }>();
   const { t } = useI18n();
   const feedback = useFeedback();
@@ -221,117 +224,174 @@
   };
 </script>
 <template>
-  <section ref="root" data-testid="workspace-connection-list" class="flex h-full min-h-0 flex-col bg-background">
-    <div class="flex gap-2 border-b border-border p-2">
-      <BaseInput
+  <section
+    ref="root"
+    data-testid="workspace-connection-list"
+    class="flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
+  >
+    <div class="flex border-b border-border/50 p-2">
+      <input
         ref="searchInput"
         v-model="search"
         data-focus-id="connectionListSearch"
-        class="min-w-0 flex-1"
+        type="text"
         :placeholder="t('workspaceConnectionList.searchPlaceholder')"
+        class="min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
         @keydown="handleSearchKeydown"
       />
-      <BaseButton size="sm" variant="primary" :title="t('connections.addConnection')" @click="addConnection"
-        >+</BaseButton
+      <button
+        type="button"
+        class="ml-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border-0 bg-primary text-sm font-semibold text-white shadow-md transition-colors duration-200 hover:bg-button-hover focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+        :title="t('connections.addConnection')"
+        :aria-label="t('connections.addConnection')"
+        @click="addConnection"
       >
+        <i class="fas fa-plus" aria-hidden="true"></i>
+      </button>
     </div>
-    <BaseSpinner v-if="loading" class="m-4" />
-    <p v-else-if="loadError" class="p-4 text-sm text-error">{{ loadError }}</p>
-    <p v-else-if="!data.connections.value.length" class="p-4 text-sm text-text-secondary">
-      {{ t('connections.noConnections') }}
-    </p>
-    <p v-else-if="!filtered.length" class="p-4 text-sm text-text-secondary">
-      {{ t('workspaceConnectionList.noResults', { searchTerm: search }) }}
-    </p>
-    <div v-else class="min-h-0 flex-1 overflow-auto">
-      <template v-if="showTags"
-        ><section v-for="group in groups" :key="group.key" class="border-b border-border">
-          <header class="flex items-center gap-1 bg-header/50 px-2 py-1 text-xs font-semibold text-text-secondary">
-            <button type="button" class="min-w-0 flex-1 truncate text-left" @click="toggleGroup(group.key)">
-              {{ isExpanded(group.key) ? '▾' : '▸' }} {{ group.name }} ({{ group.connections.length }})
-            </button>
-            <BaseButton
+
+    <div v-if="loading" class="flex h-full items-center justify-center text-text-secondary">
+      <i class="fas fa-spinner fa-spin mr-2" aria-hidden="true"></i>{{ t('common.loading') }}
+    </div>
+    <div v-else-if="loadError" class="flex h-full items-center justify-center px-4 text-center text-error">
+      <i class="fas fa-exclamation-triangle mr-2" aria-hidden="true"></i>{{ loadError }}
+    </div>
+
+    <div v-else class="min-h-0 flex-1 overflow-y-auto p-2">
+      <div
+        v-if="data.connections.value.length && !filtered.length && search"
+        class="p-6 text-center text-text-secondary"
+      >
+        <i class="fas fa-search mb-2 text-xl" aria-hidden="true"></i>
+        <p>{{ t('workspaceConnectionList.noResults', { searchTerm: search }) }}</p>
+      </div>
+      <div v-else-if="!data.connections.value.length" class="p-6 text-center text-text-secondary">
+        <i class="fas fa-plug mb-2 text-xl" aria-hidden="true"></i>
+        <p>{{ t('connections.noConnections') }}</p>
+        <button
+          type="button"
+          class="mt-4 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md transition-colors duration-200 hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+          @click="addConnection"
+        >
+          {{ t('connections.addFirstConnection') }}
+        </button>
+      </div>
+
+      <template v-else-if="showTags">
+        <section v-for="group in groups" :key="group.key" class="mb-1 last:mb-0">
+          <header
+            class="group flex cursor-pointer items-center rounded-md px-3 py-2 font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
+            @click="toggleGroup(group.key)"
+          >
+            <i
+              :class="['fas', isExpanded(group.key) ? 'fa-chevron-down' : 'fa-chevron-right']"
+              class="mr-2 w-4 shrink-0 cursor-pointer text-center text-text-secondary transition-transform duration-200 ease-in-out group-hover:text-foreground"
+              aria-hidden="true"
+            ></i>
+            <span class="inline-block min-w-0 truncate text-sm" :title="group.name">{{ group.name }}</span>
+            <span class="ml-1 text-xs font-normal text-text-secondary">({{ group.connections.length }})</span>
+            <div class="min-w-0 flex-1"></div>
+            <button
               v-if="group.connections.some((connection) => connection.type === 'SSH')"
-              size="sm"
-              variant="ghost"
+              type="button"
+              class="ml-1 flex h-6 items-center justify-center rounded px-1 text-text-secondary opacity-0 transition-all duration-150 hover:bg-black/10 hover:text-primary group-hover:opacity-100 focus:opacity-100 focus:outline-none"
               :title="t('workspaceConnectionList.connectAllSshInGroupMenu')"
-              @click="connectGroup(group.connections)"
-              >⇉</BaseButton
+              @click.stop="connectGroup(group.connections)"
             >
-            <BaseButton
+              <i class="fas fa-network-wired fa-xs" aria-hidden="true"></i>
+            </button>
+            <button
               v-if="group.tagId !== null"
-              size="sm"
-              variant="ghost"
+              type="button"
+              class="ml-1 flex h-6 items-center justify-center rounded px-1 text-text-secondary opacity-0 transition-all duration-150 hover:bg-black/10 hover:text-primary group-hover:opacity-100 focus:opacity-100 focus:outline-none"
               :title="t('workspaceConnectionList.manageTags.menuItem')"
-              @click="manageGroup(group.tagId)"
-              >✎</BaseButton
+              @click.stop="manageGroup(group.tagId)"
             >
-            <BaseButton
+              <i class="fas fa-edit fa-xs" aria-hidden="true"></i>
+            </button>
+            <button
               v-if="group.tagId !== null && group.connections.length"
-              size="sm"
-              variant="ghost"
+              type="button"
+              class="ml-1 flex h-6 items-center justify-center rounded px-1 text-error/80 opacity-0 transition-all duration-150 hover:bg-error/10 hover:text-error group-hover:opacity-100 focus:opacity-100 focus:outline-none"
               :title="t('workspaceConnectionList.deleteAllConnectionsInGroupMenu')"
-              @click="deleteGroupConnections(group)"
-              >×</BaseButton
+              @click.stop="deleteGroupConnections(group)"
             >
+              <i class="fas fa-trash-alt fa-xs" aria-hidden="true"></i>
+            </button>
           </header>
-          <ul v-show="isExpanded(group.key)" class="divide-y divide-border">
+
+          <ul v-show="isExpanded(group.key)" class="m-0 list-none p-0 pl-3">
             <li
               v-for="connection in group.connections"
               :key="connection.id"
               :data-connection-id="connection.id"
-              class="flex items-center gap-2 p-2"
-              :class="highlightedId === connection.id ? 'bg-primary/10' : ''"
+              class="group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-md py-2 pl-4 pr-3 text-ellipsis text-foreground transition-colors duration-150 hover:bg-primary/10"
+              :class="{
+                'bg-primary/20 font-medium': connection.id === props.activeConnectionId,
+                'ring-1 ring-inset ring-primary/40': connection.id === highlightedId,
+              }"
+              @click.left="emit('open', connection)"
               @contextmenu.prevent="openContext($event, connection)"
             >
-              <button class="min-w-0 flex-1 text-left" type="button" @click="emit('open', connection)">
-                <span class="block truncate text-sm font-medium">{{ connection.name || connection.host }}</span
-                ><span class="block truncate text-xs text-text-secondary"
-                  >{{ connection.type }} · {{ connection.username }}@{{ connection.host }}</span
-                ></button
-              ><BaseButton size="sm" @click="emit('open', connection)">{{ t('common.open') }}</BaseButton>
+              <i
+                :class="[
+                  'fas',
+                  connection.type === 'RDP' ? 'fa-desktop' : connection.type === 'VNC' ? 'fa-chalkboard' : 'fa-server',
+                ]"
+                class="mr-2.5 w-4 shrink-0 text-center text-text-secondary group-hover:text-primary"
+                aria-hidden="true"
+              ></i>
+              <span class="min-w-0 flex-1 truncate text-sm" :title="connection.name || connection.host">
+                {{ connection.name || connection.host }}
+              </span>
             </li>
           </ul>
-        </section></template
-      >
-      <ul v-else class="divide-y divide-border">
+        </section>
+      </template>
+
+      <ul v-else class="m-0 list-none p-0">
         <li
           v-for="connection in filtered"
           :key="connection.id"
           :data-connection-id="connection.id"
-          class="flex items-center gap-2 p-2"
-          :class="highlightedId === connection.id ? 'bg-primary/10' : ''"
+          class="group my-0.5 flex cursor-pointer items-center overflow-hidden whitespace-nowrap rounded-md py-2 pl-4 pr-3 text-ellipsis text-foreground transition-colors duration-150 hover:bg-primary/10"
+          :class="{
+            'bg-primary/20 font-medium': connection.id === props.activeConnectionId,
+            'ring-1 ring-inset ring-primary/40': connection.id === highlightedId,
+          }"
+          @click.left="emit('open', connection)"
           @contextmenu.prevent="openContext($event, connection)"
         >
-          <button class="min-w-0 flex-1 text-left" type="button" @click="emit('open', connection)">
-            <span class="block truncate text-sm font-medium">{{ connection.name || connection.host }}</span
-            ><span class="block truncate text-xs text-text-secondary"
-              >{{ connection.type }} · {{ connection.username }}@{{ connection.host }}</span
-            ></button
-          ><BaseButton size="sm" @click="emit('open', connection)">{{ t('common.open') }}</BaseButton>
+          <i
+            :class="[
+              'fas',
+              connection.type === 'RDP' ? 'fa-desktop' : connection.type === 'VNC' ? 'fa-chalkboard' : 'fa-server',
+            ]"
+            class="mr-2.5 w-4 shrink-0 text-center text-text-secondary group-hover:text-primary"
+            aria-hidden="true"
+          ></i>
+          <span class="min-w-0 flex-1 truncate text-sm" :title="connection.name || connection.host">
+            {{ connection.name || connection.host }}
+          </span>
         </li>
       </ul>
     </div>
-    <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="200" @close="context = null">
-      <button
-        class="context-item"
-        @click="
-          emit('open', context.connection);
-          context = null;
-        "
-      >
-        {{ t('common.open') }}
+
+    <BaseContextMenu v-if="context" :visible="true" :x="context.x" :y="context.y" :width="190" @close="context = null">
+      <button class="context-item" @click="addConnection">
+        <i class="fas fa-plus" aria-hidden="true"></i><span>{{ t('connections.addConnection') }}</span>
       </button>
       <button class="context-item" @click="editConnection(context.connection)">
-        {{ t('connections.actions.edit') }}
+        <i class="fas fa-edit" aria-hidden="true"></i><span>{{ t('connections.actions.edit') }}</span>
       </button>
       <button class="context-item" @click="cloneConnection(context.connection)">
-        {{ t('connections.actions.clone') }}
+        <i class="fas fa-clone" aria-hidden="true"></i><span>{{ t('connections.actions.clone') }}</span>
       </button>
       <button class="context-item text-error" @click="deleteConnection(context.connection)">
-        {{ t('connections.actions.delete') }}
+        <i class="fas fa-trash-alt" aria-hidden="true"></i><span>{{ t('connections.actions.delete') }}</span>
       </button>
     </BaseContextMenu>
+
     <ConnectionEditorModal
       :visible="editorVisible"
       :connection="editorConnection"
@@ -352,13 +412,31 @@
 
 <style scoped>
   .context-item {
-    display: block;
-    width: 100%;
-    border-radius: 0.25rem;
-    padding: 0.4rem 0.55rem;
+    display: flex;
+    width: calc(100% - 0.5rem);
+    margin-inline: 0.25rem;
+    align-items: center;
+    gap: 0.75rem;
+    border-radius: 0.375rem;
+    padding: 0.4rem 0.75rem;
     text-align: left;
+    font-size: 0.875rem;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
   }
-  .context-item:hover {
-    background: color-mix(in srgb, var(--primary-color) 12%, transparent);
+  .context-item i {
+    width: 1rem;
+    text-align: center;
+    color: var(--text-secondary-color);
+  }
+  .context-item:hover,
+  .context-item:focus-visible {
+    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+    color: var(--primary-color);
+    outline: none;
+  }
+  .context-item.text-error i {
+    color: currentColor;
   }
 </style>

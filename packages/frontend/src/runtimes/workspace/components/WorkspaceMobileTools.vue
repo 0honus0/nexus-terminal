@@ -96,6 +96,7 @@
       :show-file-manager-button="true"
       :show-editor-button="true"
       :ready="commandReady"
+      :mobile="true"
       :terminal-ctrl-active="ctrlActive"
       :terminal-alt-active="altActive"
       @update:model-value="emit('update:commandDraft', $event)"

@@ -33,6 +33,7 @@
     fit?: () => void;
     clear?: () => void;
     serialize?: () => string;
+    openSearch?: () => void;
   }
   interface EditorApi {
     open?: (path: string) => Promise<unknown> | unknown;
@@ -243,6 +244,7 @@
     <WorkspaceConnectionList
       v-if="node.component === 'connections'"
       :show-tags="showConnectionTags"
+      :active-connection-id="session.connection.id"
       @open="emit('openConnection', $event)"
     />
 
@@ -273,6 +275,7 @@
       @update:model-value="session.commandDraft.value = $event"
       @open-file-manager="emit('openFileManager')"
       @open-editor="emit('openEditor')"
+      @open-search="terminalRef?.openSearch?.()"
       @send="(command, all) => emit('command', command, all)"
       @clear="emit('clearTerminal')"
       @interaction="emit('interaction')"

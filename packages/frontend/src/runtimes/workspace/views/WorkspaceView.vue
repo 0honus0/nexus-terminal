@@ -2,7 +2,7 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { BaseButton, BaseSpinner } from '@/foundation/ui';
+  import { OverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { createLatestValueSaver } from '@/foundation/async';
   import { useFeedback } from '@/shared/feedback/public';
@@ -66,6 +66,7 @@
   const surfaces = new Map<string, SurfaceApi>();
   const opening = ref(false);
   const suspendedVisible = ref(false);
+  const connectionPickerVisible = ref(false);
   const remoteVisible = ref(false);
   const remoteConnection = ref<RemoteDesktopConnection | null>(null);
   const layoutConfiguratorVisible = ref(false);
@@ -356,6 +357,14 @@
 
   const openConnections = async (connections: Connection[]) => {
     for (const connection of connections) await openConnection(connection);
+  };
+  const openConnectionFromPicker = async (connection: Connection): Promise<void> => {
+    connectionPickerVisible.value = false;
+    await openConnection(connection);
+  };
+  const openConnectionsFromPicker = async (connections: Connection[]): Promise<void> => {
+    connectionPickerVisible.value = false;
+    await openConnections(connections);
   };
 
   const sendCommand = async (source: WorkspaceRuntimeSession, command: string, allSessions: boolean) => {
@@ -651,38 +660,12 @@
     class="flex min-h-0 flex-col overflow-hidden bg-background"
     :class="preferences.values.value.navBarVisible ? 'h-[calc(100dvh-3.5rem)]' : 'h-dvh'"
   >
-    <div class="flex items-center justify-between gap-2 border-b border-border bg-header/30 px-2 py-1">
-      <div class="flex items-center gap-2 text-sm text-text-secondary">
-        <strong class="text-foreground">{{ t('workspace.title') }}</strong>
-        <span>{{ t('workspace.sessions', { count: registry.orderedSessions.value.length }) }}</span>
-        <BaseSpinner v-if="opening || workspaceLayout.loading.value" class="h-4 w-4" />
-      </div>
-      <div class="flex gap-2">
-        <BaseButton size="sm" variant="ghost" @click="toggleHeader">{{
-          t(preferences.values.value.navBarVisible ? 'header.hide' : 'header.show')
-        }}</BaseButton>
-        <BaseButton
-          v-if="progressDisplayTaskCount"
-          data-testid="transfer-progress-toggle"
-          size="sm"
-          variant="ghost"
-          @click="progressDisplayVisible = true"
-          >{{ t('progressCenter.title') }} ({{ progressDisplayTaskCount }})</BaseButton
-        >
-        <BaseButton size="sm" @click="suspendedVisible = true">{{ t('suspendedSshSessions.modalTitle') }}</BaseButton>
-        <BaseButton size="sm" variant="ghost" @click="focusConfiguratorVisible = true">{{
-          t('commandInputBar.configureFocusSwitch')
-        }}</BaseButton>
-        <BaseButton size="sm" variant="ghost" @click="layoutConfiguratorVisible = true">{{
-          t('layout.configure')
-        }}</BaseButton>
-      </div>
-    </div>
-
     <WorkspaceTabBar
       :sessions="registry.orderedSessions.value"
       :active-id="registry.activeId.value"
       :mobile="device.isMobile.value"
+      :nav-bar-visible="preferences.values.value.navBarVisible"
+      :progress-task-count="progressDisplayTaskCount"
       @activate="activateSession"
       @close="closeSession"
       @close-others="closeOtherSessions"
@@ -690,7 +673,42 @@
       @close-left="closeSessionsToLeft"
       @toggle-suspend="toggleSuspendMark"
       @reorder="registry.move"
+      @new-session="connectionPickerVisible = true"
+      @toggle-header="toggleHeader"
+      @open-progress="progressDisplayVisible = true"
+      @open-suspended="suspendedVisible = true"
+      @open-focus-configurator="focusConfiguratorVisible = true"
+      @open-layout-configurator="layoutConfiguratorVisible = true"
     />
+
+    <OverlayPanel
+      :visible="connectionPickerVisible"
+      :close-on-escape="true"
+      panel-class="max-h-[80dvh] max-w-md p-6"
+      @close="connectionPickerVisible = false"
+    >
+      <button
+        type="button"
+        class="absolute right-2 top-2 p-1 text-text-secondary hover:text-foreground"
+        :aria-label="t('common.close')"
+        @click="connectionPickerVisible = false"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          class="h-5 w-5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+      <h3 class="mb-4 text-center text-lg font-semibold">{{ t('terminalTabBar.selectServerTitle') }}</h3>
+      <div class="max-h-[calc(80dvh-7rem)] overflow-y-auto rounded border border-border">
+        <WorkspaceConnectionList @open="openConnectionFromPicker" @open-many="openConnectionsFromPicker" />
+      </div>
+    </OverlayPanel>
 
     <div v-if="!registry.orderedSessions.value.length" class="grid min-h-0 flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-2">
       <section class="min-h-0 overflow-hidden rounded-lg border border-border">
