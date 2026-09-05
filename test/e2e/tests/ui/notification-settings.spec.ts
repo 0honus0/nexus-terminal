@@ -40,14 +40,14 @@ test('notification settings create, edit, persist, and delete a webhook channel 
       .getByRole('button', { name: 'Save', exact: true })
       .click();
 
-    const card = settings.locator('.grid.gap-4 > div').filter({ hasText: CHANNEL_NAME });
+    const card = settings.locator('article').filter({ hasText: CHANNEL_NAME });
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(card).toContainText('Webhook');
     await expect(card).toContainText('Enabled');
   });
 
   await step('edit the channel and persist the disabled state', async () => {
-    const card = settings.locator('.grid.gap-4 > div').filter({ hasText: CHANNEL_NAME });
+    const card = settings.locator('article').filter({ hasText: CHANNEL_NAME });
     await card.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.locator('#setting-name')).toHaveValue(CHANNEL_NAME);
     await page.locator('#setting-enabled').uncheck();
@@ -67,7 +67,7 @@ test('notification settings create, edit, persist, and delete a webhook channel 
   });
 
   await step('delete the channel and remove it from persistent settings', async () => {
-    const card = settings.locator('.grid.gap-4 > div').filter({ hasText: CHANNEL_NAME });
+    const card = settings.locator('article').filter({ hasText: CHANNEL_NAME });
     await card.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirm = page.getByRole('dialog').filter({ hasText: CHANNEL_NAME });
     await expect(confirm).toBeVisible();
