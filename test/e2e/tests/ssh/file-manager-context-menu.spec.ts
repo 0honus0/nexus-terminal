@@ -21,6 +21,7 @@ const CRUD_FOLDER = 'm11-03b-created-folder';
 const CRUD_SOURCE = 'm11-03b-source.txt';
 const CRUD_RENAMED = 'm11-03b-renamed.txt';
 const M11_03B_EVIDENCE_DIR = process.env.M11_03B_EVIDENCE_DIR || '/tmp/nexus-m11-03b';
+const M11_03C_EVIDENCE_DIR = process.env.M11_03C_EVIDENCE_DIR || '/tmp/nexus-m11-03c';
 
 async function rightClickRow(page: Page, filename: string): Promise<void> {
   const target = row(page, filename);
@@ -634,4 +635,67 @@ test('recovers a failed rename while completing real file-manager create and del
   expect(viewport.width).toBeGreaterThanOrEqual(320);
   expect(viewport.height).toBeGreaterThanOrEqual(600);
   expect(fileManager).toBeVisible();
+});
+
+test('moves a real remote file into a directory with desktop drag and drop', async ({ page, context }) => {
+  await mkdir(M11_03C_EVIDENCE_DIR, { recursive: true });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+  await openConnectedFileManager(page);
+
+  const fileManager = page.getByTestId('file-manager-modal');
+  const source = row(page, 'move-source.txt');
+  const destination = row(page, 'folder-seed');
+  await expect(source).toBeVisible();
+  await expect(destination).toBeVisible();
+  const viewport = page.viewportSize();
+  const modalBox = await fileManager.boundingBox();
+  const listBox = await activeFileManagerList(page).boundingBox();
+  const sourceBox = await source.boundingBox();
+  const destinationBox = await destination.boundingBox();
+  expect(viewport).toBeTruthy();
+  expect(modalBox).toBeTruthy();
+  expect(listBox).toBeTruthy();
+  expect(sourceBox).toBeTruthy();
+  expect(destinationBox).toBeTruthy();
+  const beforeMetrics = await fileManagerMetrics(page);
+  await page.screenshot({ path: path.join(M11_03C_EVIDENCE_DIR, 'm11-03c-before-drag.png') });
+
+  await source.dragTo(destination);
+  const moveTask = page.getByTestId('transfer-progress-task').filter({ hasText: 'move-source.txt' }).first();
+  await expect(moveTask).toHaveAttribute('data-task-status', 'completed', { timeout: 30_000 });
+
+  await fileManager.getByTitle('Refresh', { exact: true }).click();
+  await expect(row(page, 'move-source.txt')).toHaveCount(0);
+  await goIntoFolder(page, 'folder-seed');
+  await expect(row(page, 'move-source.txt')).toBeVisible({ timeout: 20_000 });
+  const afterMetrics = await fileManagerMetrics(page);
+  await page.screenshot({ path: path.join(M11_03C_EVIDENCE_DIR, 'm11-03c-after-drag.png') });
+
+  expect(beforeMetrics.scrollWidth).toBeLessThanOrEqual(beforeMetrics.clientWidth + 1);
+  expect(afterMetrics.scrollWidth).toBeLessThanOrEqual(afterMetrics.clientWidth + 1);
+  expect(modalBox!.x).toBeGreaterThanOrEqual(0);
+  expect(modalBox!.y).toBeGreaterThanOrEqual(0);
+  expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+  expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+  await writeFile(
+    path.join(M11_03C_EVIDENCE_DIR, 'm11-03c-metrics.json'),
+    JSON.stringify(
+      {
+        viewport,
+        modal: modalBox,
+        list: listBox,
+        source: sourceBox,
+        destination: destinationBox,
+        before: beforeMetrics,
+        after: afterMetrics,
+      },
+      null,
+      2,
+    ),
+    'utf8',
+  );
 });
