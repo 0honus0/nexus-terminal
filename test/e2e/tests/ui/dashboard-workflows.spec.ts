@@ -324,15 +324,15 @@ test('dashboard filters connections and persists tag and sort preferences across
       expect(recentActivityBox).not.toBeNull();
       expect(resourcesBox).not.toBeNull();
       expect(resourceListBox).not.toBeNull();
-      expect(Math.abs((quickConnectBox?.y ?? 0) - (recentActivityBox?.y ?? 0))).toBeLessThanOrEqual(2);
-      expect(recentActivityBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
-      expect(resourcesBox?.y ?? 0).toBeGreaterThan(
+      expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
+      expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
+      expect(recentActivityBox?.y ?? 0).toBeGreaterThan(
         Math.max(
           (quickConnectBox?.y ?? 0) + (quickConnectBox?.height ?? 0),
-          (recentActivityBox?.y ?? 0) + (recentActivityBox?.height ?? 0),
-        ),
+          (resourcesBox?.y ?? 0) + (resourcesBox?.height ?? 0),
+        ) - 2,
       );
-      expect(Math.abs((resourcesBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);
+      expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);
 
       const remoteResourceBoxes = await remoteCards.evaluateAll((cards) =>
         cards.map((card) => {
