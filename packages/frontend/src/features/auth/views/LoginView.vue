@@ -127,7 +127,7 @@
 
           <slot v-if="!auth.pendingSecondFactor.value" name="security" />
 
-          <p v-if="error" class="text-error text-center text-sm" role="alert">{{ error }}</p>
+          <p v-if="error" class="text-error text-center text-sm -mt-2 mb-2" role="alert">{{ error }}</p>
 
           <BaseButton type="submit" variant="primary" size="lg" block :loading="isLoading">
             {{
