@@ -14,6 +14,7 @@
   const showForm = ref(false);
   const form = reactive({ name: '', privateKey: '', passphrase: '' });
   const error = ref('');
+  const listError = ref('');
   const loading = ref(false);
   const reset = () => {
     editing.value = null;
@@ -53,16 +54,23 @@
     if (loading.value) return;
     if (!(await feedback.confirm({ message: `${t('common.delete')} ${key.name}?`, destructive: true }))) return;
     loading.value = true;
+    listError.value = '';
     try {
       await keys.remove(key.id);
+    } catch (cause) {
+      listError.value = apiErrorMessage(cause, t('common.errorOccurred'));
+      feedback.notifyError(listError.value);
     } finally {
       loading.value = false;
     }
   };
   onMounted(async () => {
     loading.value = true;
+    listError.value = '';
     try {
       await keys.load();
+    } catch (cause) {
+      listError.value = apiErrorMessage(cause, t('common.errorOccurred'));
     } finally {
       loading.value = false;
     }
@@ -71,7 +79,7 @@
 <template>
   <BaseModal
     :visible="visible"
-    panel-class="max-w-3xl max-h-[80vh]"
+    panel-class="w-[calc(100vw-2rem)] max-w-3xl max-h-[90dvh] sm:w-full"
     content-class="!overflow-hidden !py-0"
     @close="visible = false"
   >
@@ -84,14 +92,23 @@
             >{{ t('sshKeys.modal.addKey') }}</BaseButton
           >
         </div>
+        <p
+          v-if="listError"
+          data-testid="ssh-key-list-error"
+          class="mb-3 shrink-0 break-words rounded-md border border-error/30 bg-error/10 p-3 text-sm font-medium text-error"
+        >
+          {{ listError }}
+        </p>
         <div class="max-h-[50vh] flex-grow overflow-y-auto rounded-md border border-border">
-          <table class="min-w-full divide-y divide-border">
+          <table class="w-full table-fixed divide-y divide-border">
             <thead class="sticky top-0 bg-header">
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-text-secondary">
                   {{ t('sshKeys.modal.keyName') }}
                 </th>
-                <th class="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-text-secondary">
+                <th
+                  class="w-20 px-3 py-3 text-right text-xs font-medium uppercase tracking-wider text-text-secondary sm:px-6"
+                >
                   {{ t('sshKeys.modal.actions') }}
                 </th>
               </tr>
@@ -108,8 +125,10 @@
                 </td>
               </tr>
               <tr v-for="key in keys.keys.value" :key="key.id" :data-key-id="key.id">
-                <td class="px-6 py-4 text-sm font-medium text-foreground">{{ key.name }}</td>
-                <td class="space-x-2 px-6 py-4 text-right text-sm font-medium">
+                <td class="break-all px-3 py-4 text-sm font-medium text-foreground sm:break-words sm:px-6">
+                  {{ key.name }}
+                </td>
+                <td class="space-x-2 px-3 py-4 text-right text-sm font-medium sm:px-6">
                   <button
                     data-testid="ssh-key-edit"
                     type="button"

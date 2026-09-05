@@ -46,8 +46,15 @@
     }
   };
   const remove = async (p: Proxy) => {
-    if (await feedback.confirm({ message: t('proxies.prompts.confirmDelete', { name: p.name }), destructive: true }))
+    if (!(await feedback.confirm({ message: t('proxies.prompts.confirmDelete', { name: p.name }), destructive: true })))
+      return;
+    try {
       await data.remove(p.id);
+    } catch (cause) {
+      feedback.notifyError(
+        t('proxies.errors.deleteFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
+      );
+    }
   };
 </script>
 <template>
@@ -85,20 +92,20 @@
             v-for="proxy in data.proxies.value"
             :key="proxy.id"
             :data-testid="`proxy-row-${proxy.id}`"
-            class="flex items-start justify-between gap-4 rounded-lg border border-border bg-background p-4 shadow-sm transition-shadow duration-200 hover:shadow-md"
+            class="flex flex-col items-stretch justify-between gap-3 rounded-lg border border-border bg-background p-4 shadow-sm transition-shadow duration-200 hover:shadow-md sm:flex-row sm:items-start sm:gap-4"
           >
-            <div class="flex-grow space-y-1">
-              <strong class="block text-base font-semibold text-foreground">{{ proxy.name }}</strong>
+            <div class="min-w-0 flex-grow space-y-1">
+              <strong class="block break-words text-base font-semibold text-foreground">{{ proxy.name }}</strong>
               <div class="flex items-center space-x-2">
                 <span
                   class="rounded-full border border-border bg-header px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-text-secondary"
                   >{{ proxy.type }}</span
                 >
               </div>
-              <div class="text-sm text-text-secondary">
+              <div class="break-all text-sm text-text-secondary sm:break-normal">
                 <i class="fas fa-server mr-1 text-xs opacity-70" aria-hidden="true" /> {{ proxy.host }}:{{ proxy.port }}
               </div>
-              <div v-if="proxy.username" class="text-sm text-text-secondary">
+              <div v-if="proxy.username" class="break-all text-sm text-text-secondary sm:break-normal">
                 <i class="fas fa-user mr-1 text-xs opacity-70" aria-hidden="true" /> {{ proxy.username }}
               </div>
               <div class="pt-1 text-xs text-text-secondary">
@@ -106,7 +113,9 @@
                 {{ new Date(proxy.updatedAt * 1000).toLocaleString() }}
               </div>
             </div>
-            <div class="flex shrink-0 items-center space-x-3 pt-1">
+            <div
+              class="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 pt-1 sm:flex-nowrap sm:justify-start"
+            >
               <button
                 data-testid="proxy-edit"
                 type="button"
@@ -134,7 +143,7 @@
       <BaseModal
         :visible="modal"
         :close-on-backdrop="false"
-        panel-class="min-w-[350px] max-w-lg"
+        panel-class="w-[calc(100vw-2rem)] max-w-lg sm:min-w-[350px]"
         content-class="!py-0"
         @close="modal = false"
       >

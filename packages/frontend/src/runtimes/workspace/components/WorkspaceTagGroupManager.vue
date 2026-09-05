@@ -117,29 +117,37 @@
     content-class="!py-0"
     @close="emit('close')"
   >
-    <div v-if="tag" class="flex min-h-0 flex-col py-4">
+    <div v-if="tag" data-testid="workspace-tag-group-manager" class="flex min-h-0 flex-col py-4">
       <div class="space-y-3 border-b border-border/50 px-4 pb-4">
         <label class="grid gap-1.5 text-sm text-text-secondary">
           <span>{{ t('workspaceConnectionList.manageTags.tagName') }}</span>
           <BaseInput v-model="name" :aria-label="t('workspaceConnectionList.manageTags.tagName')" />
         </label>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
             v-model="search"
             type="text"
             :placeholder="t('workspaceConnectionList.manageTags.searchPlaceholder')"
-            class="min-w-0 flex-1 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            data-testid="tag-group-search"
+            class="min-w-0 w-full flex-1 rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
-          <button type="button" class="selection-action" @click="selectVisible">
-            {{ t('workspaceConnectionList.manageTags.selectAll') }}
-          </button>
-          <button type="button" class="selection-action" @click="deselectVisible">
-            {{ t('workspaceConnectionList.manageTags.deselectAll') }}
-          </button>
-          <button type="button" class="selection-action" @click="invertVisible">
-            {{ t('workspaceConnectionList.manageTags.invertSelection') }}
-          </button>
+          <div class="grid min-w-0 grid-cols-3 gap-2 sm:flex sm:shrink-0">
+            <button data-testid="tag-group-select-all" type="button" class="selection-action" @click="selectVisible">
+              {{ t('workspaceConnectionList.manageTags.selectAll') }}
+            </button>
+            <button
+              data-testid="tag-group-deselect-all"
+              type="button"
+              class="selection-action"
+              @click="deselectVisible"
+            >
+              {{ t('workspaceConnectionList.manageTags.deselectAll') }}
+            </button>
+            <button data-testid="tag-group-invert" type="button" class="selection-action" @click="invertVisible">
+              {{ t('workspaceConnectionList.manageTags.invertSelection') }}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -180,12 +188,23 @@
     </div>
 
     <template #footer>
-      <div v-if="tag" class="flex justify-end gap-3">
-        <button type="button" class="footer-action footer-action--danger" @click="removeTag">
+      <div v-if="tag" class="flex flex-wrap justify-end gap-2 sm:gap-3">
+        <button
+          data-testid="tag-group-delete"
+          type="button"
+          class="footer-action footer-action--danger"
+          @click="removeTag"
+        >
           {{ t('common.delete') }}
         </button>
         <button type="button" class="footer-action" @click="emit('close')">{{ t('common.cancel') }}</button>
-        <button type="button" class="footer-action footer-action--primary" :disabled="saving" @click="save">
+        <button
+          data-testid="tag-group-save"
+          type="button"
+          class="footer-action footer-action--primary"
+          :disabled="saving"
+          @click="save"
+        >
           <i v-if="saving" class="fas fa-spinner fa-spin mr-1" aria-hidden="true"></i>{{ t('common.save') }}
         </button>
       </div>
@@ -206,6 +225,17 @@
       background-color 0.15s ease,
       color 0.15s ease,
       border-color 0.15s ease;
+  }
+  .selection-action {
+    min-width: 0;
+    padding-inline: 0.5rem;
+    font-size: 0.75rem;
+  }
+  @media (min-width: 640px) {
+    .selection-action {
+      padding-inline: 1rem;
+      font-size: 0.875rem;
+    }
   }
   .selection-action:hover,
   .footer-action:hover:not(:disabled) {
