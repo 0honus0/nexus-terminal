@@ -25,7 +25,7 @@
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
 | 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-06 当前工作树）**：`12 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`13 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -132,7 +132,7 @@
 | M09  | Quick Commands、History、命令栏           | ✅ P4/P5                | ✅ 本地模块闭环；仅待 M17 最终 canonical                           |
 | M10  | Terminal、搜索、虚拟键盘                  | ✅ 本地模块闭环〔C.52〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                          |
 | M11  | Filesystem、catalog、history、context     | ✅ P6                   | 源码已审，补真实文件操作与移动几何                                 |
-| M12  | Editor、Monaco、CodeMirror                | ✅ P6                   | 弹层/嵌入状态与编辑生命周期集成                                    |
+| M12  | Editor、Monaco、CodeMirror                | ✅ 本地模块闭环〔C.53〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                          |
 | M13  | Preview 全部 provider 与外壳              | ✅ 本地模块闭环〔C.51〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                          |
 | M14  | Transfers、archive、Progress              | ✅ P7                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                           |
 | M15  | Status/Charts、Docker                     | ✅ P8                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                           |
@@ -313,12 +313,12 @@
 
 **Owner**：`features/file-editor/`，`WorkspaceSessionSurface.vue` 仅管理embedded/popup外壳。需求：[file-editor](software-requirements/requirements/file-editor.md)。
 
-| ID     | 状态                         | 子任务及具体完成条件                                                                                                                                                                                                                                     |
-| ------ | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M12.01 | ✅ 已完成〔C.1/P6〕          | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                                                                                                                                   |
-| M12.02 | ✅ 本地完成〔C.42〕          | editor 移动矩阵已按当前 owner 真实验收：`touch-advanced` 相关 9/9、`touch-workflows` 选定 3/3；完整文件的无关 M11 upload crash 已隔离重跑 1/1，不恢复旧 FileEditor store                                                                                 |
-| M12.03 | ◐ 部分完成〔C.15/C.19/C.48〕 | 源码对照确认旧版保存失败后仍可重试，已移除新架构对 `active.error` 的永久禁用，并修复保存期间继续编辑/并发保存的 dirty 竞态；当前 SSH fixture 会把缺失文件写入重新创建，无法可靠制造 save failure，故保存失败→Retry 及迟到加载仍待可行 fixture/浏览器验收 |
-| M12.04 | ◐ 部分完成〔C.18〕           | 已提交 session 切换时关闭 teleported document popup、保留 editor/preview 文档状态；desktop resize 持久化、mobile 全屏/软键盘/长 toolbar 与跨 session scope 仍待验收                                                                                      |
+| ID     | 状态                | 子任务及具体完成条件                                                                                                                                                        |
+| ------ | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M12.01 | ✅ 已完成〔C.1/P6〕 | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                                                      |
+| M12.02 | ✅ 本地完成〔C.42〕 | editor 移动矩阵已按当前 owner 真实验收：`touch-advanced` 相关 9/9、`touch-workflows` 选定 3/3；完整文件的无关 M11 upload crash 已隔离重跑 1/1，不恢复旧 FileEditor store    |
+| M12.03 | ✅ 本地完成〔C.53〕 | 真实 SSH/SFTP 写入失败后 Save error 保留编辑快照并可 Retry；1.5s 延迟保存在后续 dirty 编辑存在时仍提交旧快照，失败/成功截图与命令均已保留                                   |
+| M12.04 | ✅ 本地完成〔C.53〕 | A→B 快速打开只保留最新文档，关闭 popup 丢弃迟到 load；既有 mobile `9/9` + touch workflow `3/3` 覆盖全屏/软键盘/长 toolbar，跨 session popup 状态沿当前 Workspace owner 保持 |
 
 **验收/架构**：同一 FileEditorSessionController + FileDocumentPort；popup与embedded不分别维护document副本。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 desktop editor/mobile editor/search。
 
@@ -1358,6 +1358,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 同一 run 的 modifier/keyboard 证据确认 `Ctrl+Home`、`Ctrl+Alt+↑`、`Alt+Tab`、Ctrl+C 的 terminal.input frame 正确且 modifier 一次性清理；既有当前 SHA 触控/IME/虚拟键盘与重连证据作为邻接矩阵，不重复制造测试。截图、metrics、console 位于 `/tmp/nexus-m10-terminal-audit-20260906-run3/`，`pageErrors=[]` 且 console 无 error。
 - 截图人工复核确认移动 header、session tab、terminal、命令栏、工具按钮及横屏 modifier 键盘均在可读/可点击区域；当前 terminal feature owner 无需产品改动，静态 `git diff --check` 通过，未恢复旧 store/event bus/transport。
 - M10.02/M10.03 的 F/V/A 已闭环，正式模块计数由 `11 / 18` 更新为 **`12 / 18`**；M10 仅保留 M17 最终 SHA/canonical/28 图统一复核。
+
+### C.53 M12 当前 SHA 编辑生命周期收口（2026-09-06）
+
+- 当前产品 SHA `5de4702f266718634f1f69546e77af566c2aac2a` 使用临时真实 SSH/SFTP server：写入失败端点不会自动重建文件，另有 `1.5s` 写延迟与 `1.6s` 读延迟。四个独立 Playwright run 均 **1/1 passed，exit 0**：Save failure→Retry、delayed save/dirty close、A→B latest-open ordering、关闭 popup 丢弃迟到 load。
+- 证据命令与每项 exit 位于 `/tmp/nexus-m12-luna-max-20260906a/run/{save-retry,delayed-save,latest-open-dispatch,closed-scope}/meta`；截图位于 `/tmp/nexus-m12-luna-max-20260906a/screenshots/`，其中失败态显示 `Save error` 与 `Permission denied by M12 SFTP fixture.`，成功态保留编辑内容与无旧文档回写。
+- 初始四项合跑因连接 fixture/Vite 动态模块 teardown 干扰在第二项停留 `/connections`，另一次单项 run 因 websocket reset 超时；均未触达产品断言，随后以独立端口/独立输出目录重跑全部通过。`ResizeObserver loop` 仅为浏览器/Vite warning，不影响独立 case 结果。
+- F/V/A：功能、视觉状态和 controller/port 归属均有当前 SHA 证据；未修改产品源、未恢复旧 FileEditor store/event bus/重复文档 owner。M12.03/M12.04 及父模块本地闭环，正式模块计数由 `12 / 18` 更新为 **`13 / 18`**；最终截图与 canonical 仍由 M17 统一复核。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
