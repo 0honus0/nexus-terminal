@@ -384,8 +384,8 @@
 | M17.01 | ✅ 本地完成〔C.38/C.41〕 | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品 |
 | M17.02 | ✅ 本地完成〔C.35〕      | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责           |
 | M17.03 | ◐ 部分完成〔C.34/C.38/C.57〕  | 当前 SHA 的 architecture/i18n/vue-tsc/Vite/git diff-check 已通过；test-policy/groups:check 仅被受保护未跟踪移动审计文件阻断，format 需在清理生成物后单独复核 |
-| M17.04 | ✅ 本地完成〔C.61〕       | 最终 SHA 的 Docker smoke、ingress、WebSocket 与 G1–G8 均已执行；`150/153` 通过，3 项独立归因为受保护 harness/selector，不归因产品；最终项目关闭仍需 M17.06 disposition                                                               |
-| M17.05 | ◐ 需新 SHA 刷新〔C.63/C.65〕 | `b59438c4` 已生成并审计 28/28 canonical 图（26 主图+2 分页），但 M14 层叠修复后当前产品 SHA 为 `6f52f8e9`，须在新 SHA 重刷并复核 28 图；仍需 owner 接受真实视觉差异后由 M17.06 关闭 |
+| M17.04 | ◐ 远程矩阵需归因〔C.61/C.68〕 | 当前 SHA `92e25e16` 的远程 Docker smoke/prepare 成功；workflow run `34044050372` 中 G1/G7 通过，G2–G6/G8 因受保护 harness、selector、fixture/资源级首轮失败而未形成全绿矩阵，不能归因产品或关闭 M17.04 |
+| M17.05 | ◐ 需当前 SHA 刷新〔C.63/C.65/C.68〕 | 历史 `b59438c4` 的 28/28 canonical 图不能代表当前 `92e25e16`；本次远程 E2E 只产生功能截图 artifacts，仍需在当前 SHA 生成并逐图复核附录 B 的 28 图 |
 | M17.06 | ⏳ 待完成                | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引                                                    |
 
 **项目完成条件**：M00–M16适用子任务及F/V/A验收全部有结论，M17.01–06完成；无“源码审计=视觉完成”“旧run=新代码通过”“图片存在=已复核”的替代判断。项目整体完成前保留每个已实现子任务的✅，但模块最终状态不得提前关闭。
@@ -1456,6 +1456,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 以 `ed5d6860` 后工作树为基线，确认移动长按菜单首次呈现在 `(0,0)`，与旧菜单的触点定位不一致。修复仅在 `packages/frontend/src/foundation/ui/BaseContextMenu.vue` 的 `onMounted` 主动调用既有 `place()`，提交为 `6aa5b9f0`；未引入新状态、transport、event bus 或旧架构。
 - 真实 `touch-advanced.spec.ts` 定向流程 **2/2 passed，exit 0**；320×667、375×812、412×915 菜单均在 viewport 内（宽 `255px`，无横溢出），`Compress to zip` 实际点击成功。architecture、i18n、`vue-tsc`、Prettier、`git diff --check` 均通过。
 - 当前菜单仍保留与新 SRS/owner 一致的 action 归属（entry 菜单不重复 New/Upload/Refresh，当前新增 Open）；该顺序差异记录为非阻断 owner-scoped disposition，不继续扩大修改。M11 维持本地闭环，最终 canonical 需在当前最终 SHA 重刷。
+
+### C.68 远程 Actions 8 组验收与剩余缺口复核（2026-09-06）
+
+- 按用户要求本轮**未启动本地测试进程**。在 `test/ui-restoration-groups`、产品 SHA `92e25e163faa2e9efe47d1be06c746c4787f6dfd` 上通过 GitHub Actions `workflow_dispatch`（run `34044050372`，workers=8）执行远程矩阵；环境更新、prepare、Docker deployment smoke 均成功，G1/G7 成功。
+- G2–G6/G8 job 仍为 failure，但失败必须拆分处理：G2 的 archive-cancel 在 `open-file-manager-button` 等待超时；G3 的 Progress Display/FileManager 关闭流程超时，同时 passkey 仍命中既有 `localhost`/`127.0.0.1` cookie/CDP harness 边界；G4 的 archive progress 首轮/重试超时；G5 的 authenticated WebSocket、SFTP/suspend/progress 首轮失败后重试链未形成全绿；G6 的 moderate-latency multi-file upload 在打开 FileManager 阶段超时；G8 是受保护 `file-preview-editor.spec.ts:889` 的未限定 `Save` locator 命中 17 个按钮。当前证据更符合 fixture/资源时序、受保护 selector/harness 或 flaky，不能直接修改产品 owner，也不能把 job failure 当作新 UI 回归。
+- 远程 run 的功能截图 artifacts 只证明该次执行产生了部分截图，不等于附录 B 的 28 张 canonical 图已在当前 SHA 完成；历史 `b59438c4`/`6f52f8e9` 图像不能替代 `92e25e16`。M17.05 仍需远程环境中冻结同一 SHA、清理资源后生成并逐图复核 28 图。
+- 当前正式模块计数仍为 **`16 / 18 = 88.9%`**。剩余正式模块只有 `M01` 与 `M17`：M01 还缺移动 setup、Login surface 的 2FA challenge/过期、CAPTCHA gate、passkey 登录/取消、真实软键盘和完整失败态视觉；M17 还缺远程矩阵最终 disposition、当前 SHA 28 图和最终 owner-scoped 差异交接。后续验收继续只使用远程 Actions；在没有稳定正向证据前不重开已闭环模块、不为通过测试恢复旧架构。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
