@@ -383,7 +383,7 @@
 | ------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M17.01 | ✅ 本地完成〔C.38/C.41〕 | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品 |
 | M17.02 | ✅ 本地完成〔C.35〕      | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责           |
-| M17.03 | ◐ 部分完成〔C.34/C.38〕  | 两个已确认 selector 已修复并通过受影响 E2E；最终 SHA 的 format、test-policy、architecture/i18n/vue-tsc/Vite、groups:check 与受保护移动审计脚本 disposition 仍待最终门禁  |
+| M17.03 | ◐ 部分完成〔C.34/C.38/C.57〕  | 当前 SHA 的 architecture/i18n/vue-tsc/Vite/git diff-check 已通过；test-policy/groups:check 仅被受保护未跟踪移动审计文件阻断，format 需在清理生成物后单独复核 |
 | M17.04 | ⏳ 待完成                | 对最终产品SHA的 canonical Docker smoke + G1–G8 及必要ingress验证；CI等待交证据代理，主代理做失败归因与验收                                                               |
 | M17.05 | ⏳ 待完成                | 从真实场景生成28图，附录B逐图记录视口/主题/数据/差异结论/产品版本；补无截图UI的浏览器/源码证据，不建立新全局manifest                                                     |
 | M17.06 | ⏳ 待完成                | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引                                                    |
@@ -1386,6 +1386,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - M11 导航/路径 history/terminal path sync 的既有修复证据 `/tmp/nexus-m11-nav-fix-20260906/` 仍有效；在当前工作树独立串行重跑 `progress-display-archive.spec.ts` 的 archive sidebar unmount **1/1 passed，exit 0（8.9s）**，以及 `panel-wheel-scaling.spec.ts` 的 immediate-close wheel **1/1 passed，exit 0（8.5s）**。完整日志位于 `/dev/shm/nexus-m11-2b971184-20260906-rerun/{archive-sidebar-unmount,panel-wheel-scaling}/run.log`。
 - 两项复跑均真实打开 `/workspace?connectionId=1`、执行侧栏打开/关闭和 archive/wheel 断言；无 `ENOSPC`、page error 或残留 E2E 服务。此前 `/tmp` 满导致的 `0/1` 仅作为环境失败保留，不再当作产品结论。
 - F/V/A：F 覆盖文件导航、路径同步、上下文侧栏、archive 入口卸载和 wheel 缩放；archive 任务生命周期仍归 M14。V 覆盖 rail/panel 层级、侧栏可达性及文件管理器边界；A 保持 filesystem controller/Workspace public capability 单一归属。M11 关闭，最终 canonical 仍由 M17 统一刷新。
+
+### C.57 M17.03 当前 SHA 静态门禁复核（2026-09-06）
+
+- 当前产品 SHA 为 `127f8dfc0eeb8d78da53d05a7a242a06c4a91a8e`。`npm --prefix packages/frontend run check:architecture`、`check:i18n`、`cd packages/frontend && npx vue-tsc --noEmit`、`npm --prefix packages/frontend run build` 与 `git diff --check` 均 exit `0`；日志保留在 `/dev/shm/m17.03-127f8dfc-*.log`。
+- `npm run check:test-policy` 与 `npm --prefix test/e2e run groups:check --` 均 exit `1`，唯一原因是受保护的未跟踪 `test/e2e/tests/mobile/m10-mobile-audit.spec.ts`：其动态截图文件名不满足 policy，且尚未列入任何 group。该文件及其他 root-preserved dirty 文件不得修改、暂存或删除；此结果不能归因于当前产品 SHA。
+- 本轮未以包含大量 root-preserved/dist 生成物的 `format:check` 结果作结论；清理或隔离生成物后必须对最终受保护工作树执行精确 format gate。M17.03 继续部分完成，不能把局部门禁通过扩大为项目完成。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
