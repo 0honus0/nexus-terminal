@@ -15,15 +15,15 @@
 
 ### 0.2 当前代码与证据
 
-| 项目                      | 已确认状态                                                                        | 接手注意                                                         |
-| ------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| P0–P8 历史实现            | ✅ 已完成；对应模块的已实现子任务继承此结论，详见附录 C.1                         | 不因为本版重新分类就重做；只有新的具体回归证据才重开相关子任务   |
-| P9-A 移动预览壳、连接弹窗 | ✅ 本地实现与指定流程验证完成，详见附录 C.2                                       | 工作树改动已纳入 M17 当前 SHA canonical 复核                              |
-| P9-B 移动批量选择         | ✅ 本地修复与持久 E2E 完成，详见附录 C.3                                          | 保留四按钮事件边界、批量模式点击穿透及新增窄屏 case              |
-| Markdown 横屏尺寸争议     | ✅ 已诊断：旧新均为 32px，独立编辑保存流程通过                                    | 不再为临时复用的竖屏 40px 断言修改旧视觉；原断言也未被弱化       |
-| 98 行移动追溯             | 历史分布为 70 项源码审计、8 项浏览器验证、20 项待审；后续证据见附录 A 与 C.7–C.12 | 历史分布不是当前完成数或 UI 还原率；以模块任务和逐行证据为准     |
-| 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 与远程 M17.05 artifact 均已核对                 | 逐图尺寸/hash/owner disposition 已记录；不以 PNG 存在替代行为验收 |
-| 全部 28 图及最终全量验收  | ✅ M17.03/M17.05/M17.06 远程收口〔C.81/C.82/C.83〕                                | 28 图与跨模块 owner disposition 已完成；M01 登录专项证据仍未闭环 |
+| 项目                      | 已确认状态                                                                        | 接手注意                                                          |
+| ------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| P0–P8 历史实现            | ✅ 已完成；对应模块的已实现子任务继承此结论，详见附录 C.1                         | 不因为本版重新分类就重做；只有新的具体回归证据才重开相关子任务    |
+| P9-A 移动预览壳、连接弹窗 | ✅ 本地实现与指定流程验证完成，详见附录 C.2                                       | 工作树改动已纳入 M17 当前 SHA canonical 复核                      |
+| P9-B 移动批量选择         | ✅ 本地修复与持久 E2E 完成，详见附录 C.3                                          | 保留四按钮事件边界、批量模式点击穿透及新增窄屏 case               |
+| Markdown 横屏尺寸争议     | ✅ 已诊断：旧新均为 32px，独立编辑保存流程通过                                    | 不再为临时复用的竖屏 40px 断言修改旧视觉；原断言也未被弱化        |
+| 98 行移动追溯             | 历史分布为 70 项源码审计、8 项浏览器验证、20 项待审；后续证据见附录 A 与 C.7–C.12 | 历史分布不是当前完成数或 UI 还原率；以模块任务和逐行证据为准      |
+| 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 与远程 M17.05 artifact 均已核对                   | 逐图尺寸/hash/owner disposition 已记录；不以 PNG 存在替代行为验收 |
+| 全部 28 图及最终全量验收  | ✅ M17.03/M17.05/M17.06 远程收口〔C.81/C.82/C.83〕                                | 28 图与跨模块 owner disposition 已完成；M01 登录专项证据仍未闭环  |
 
 **逐模块执行进度（2026-09-06 当前工作树）**：`17 / 18` 个正式模块已完成本地/远程 F/V/A 闭环：**M00 App shell / Foundation / feedback、M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M08 Workspace / pane / layout / session orchestration、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M11 Filesystem / catalog / history / context、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend、M17 集成/证据/交接**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍只剩 M01 的真实 Login surface 证据，不能用源码审计或 Settings/API case 替代。下一步只收口 **M01**，不重开已验收模块，也不触碰受保护测试与旧架构。
 
@@ -118,26 +118,26 @@
 
 模块是当前用户表面/能力组合；附录 A 的旧文件只是追溯，不是实施目录。新 owner 一对多或多对一时，只指定一个主任务修改共享原因。
 
-| 模块 | 范围                                      | 已实现证据                    | 当前未完成重点                                                                                                              |
-| ---- | ----------------------------------------- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| M00  | 应用 shell、全局视觉、Foundation/feedback | ✅ 本地闭环〔C.55〕           | ✅ M17 canonical 已复核                                                                                                     |
-| M01  | 登录、初始化、认证入口                    | ◐ 部分完成〔C.64/C.66/C.75〕  | 普通登录/setup/多语言表面已闭环；Login surface 的移动 setup、2FA、CAPTCHA、passkey、真实软键盘与完整失败视觉仍待            |
-| M02  | Dashboard                                 | ✅ P3                         | ✅ 本地模块闭环；M17 canonical 已复核                                                                                       |
-| M03  | Connections                               | ✅ P3 + 本地 P9-A/B           | ✅ 本地模块闭环；M17 canonical 已复核                                                                                       |
-| M04  | SSH keys、Tags、Proxies                   | ✅ P3/P4                      | ✅ 本地模块闭环；M17 canonical 已复核                                                                                       |
-| M05  | Settings、安全设置、备份、About           | ✅ P3                         | 七 tab 全状态/滚动/保存验证                                                                                                 |
-| M06  | Appearance、主题、背景、PWA               | ✅ P2/P3                      | ✅ 本地模块闭环；M17 canonical 已复核                                                                                       |
-| M07  | Notifications、Audit                      | ✅ P3                         | provider/日志状态的移动视觉验收                                                                                             |
+| 模块 | 范围                                      | 已实现证据                    | 当前未完成重点                                                                                                           |
+| ---- | ----------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| M00  | 应用 shell、全局视觉、Foundation/feedback | ✅ 本地闭环〔C.55〕           | ✅ M17 canonical 已复核                                                                                                  |
+| M01  | 登录、初始化、认证入口                    | ◐ 部分完成〔C.64/C.66/C.75〕  | 普通登录/setup/多语言表面已闭环；Login surface 的移动 setup、2FA、CAPTCHA、passkey、真实软键盘与完整失败视觉仍待         |
+| M02  | Dashboard                                 | ✅ P3                         | ✅ 本地模块闭环；M17 canonical 已复核                                                                                    |
+| M03  | Connections                               | ✅ P3 + 本地 P9-A/B           | ✅ 本地模块闭环；M17 canonical 已复核                                                                                    |
+| M04  | SSH keys、Tags、Proxies                   | ✅ P3/P4                      | ✅ 本地模块闭环；M17 canonical 已复核                                                                                    |
+| M05  | Settings、安全设置、备份、About           | ✅ P3                         | 七 tab 全状态/滚动/保存验证                                                                                              |
+| M06  | Appearance、主题、背景、PWA               | ✅ P2/P3                      | ✅ 本地模块闭环；M17 canonical 已复核                                                                                    |
+| M07  | Notifications、Audit                      | ✅ P3                         | provider/日志状态的移动视觉验收                                                                                          |
 | M08  | Workspace 编排、pane、tab、布局           | ✅ 本地闭环〔C.58〕           | layout/locked/focus、sidebar/archive/wheel、窗口高度/虚拟键盘与 mobile Workspace 均有当前 SHA 证据；M17 canonical 已复核 |
-| M09  | Quick Commands、History、命令栏           | ✅ P4/P5                      | ✅ 本地模块闭环；M17 canonical 已复核                                                                                       |
-| M10  | Terminal、搜索、虚拟键盘                  | ✅ 本地模块闭环〔C.52〕       | M17 最终 SHA/canonical/28 图已统一复核                                                                                        |
-| M11  | Filesystem、catalog、history、context     | ✅ 本地闭环〔C.56〕           | M17 canonical 已复核                                                                                                       |
-| M12  | Editor、Monaco、CodeMirror                | ✅ 本地模块闭环〔C.53〕       | M17 最终 SHA/canonical/28 图已统一复核                                                                                        |
-| M13  | Preview 全部 provider 与外壳              | ✅ 本地模块闭环〔C.51〕       | M17 最终 SHA/canonical/28 图已统一复核                                                                                        |
-| M14  | Transfers、archive、Progress              | ✅ P7                         | ✅ 本地模块闭环；M17 canonical 已复核                                                                                       |
-| M15  | Status/Charts、Docker                     | ✅ P8                         | ✅ 本地模块闭环；M17 canonical 已复核                                                                                       |
-| M16  | Remote Desktop/VNC、SSH suspend           | ✅ P8                         | ✅ 本地模块闭环；M17 canonical 已复核                                                                                       |
-| M17  | 跨模块验收、截图、canonical               | ✅ 远程完成〔C.81/C.82/C.83〕 | 静态门禁、当前 SHA 28 图、owner-scoped 差异与交接均已归档；G8 受保护 selector 失败为测试维护项                              |
+| M09  | Quick Commands、History、命令栏           | ✅ P4/P5                      | ✅ 本地模块闭环；M17 canonical 已复核                                                                                    |
+| M10  | Terminal、搜索、虚拟键盘                  | ✅ 本地模块闭环〔C.52〕       | M17 最终 SHA/canonical/28 图已统一复核                                                                                   |
+| M11  | Filesystem、catalog、history、context     | ✅ 本地闭环〔C.56〕           | M17 canonical 已复核                                                                                                     |
+| M12  | Editor、Monaco、CodeMirror                | ✅ 本地模块闭环〔C.53〕       | M17 最终 SHA/canonical/28 图已统一复核                                                                                   |
+| M13  | Preview 全部 provider 与外壳              | ✅ 本地模块闭环〔C.51〕       | M17 最终 SHA/canonical/28 图已统一复核                                                                                   |
+| M14  | Transfers、archive、Progress              | ✅ P7                         | ✅ 本地模块闭环；M17 canonical 已复核                                                                                    |
+| M15  | Status/Charts、Docker                     | ✅ P8                         | ✅ 本地模块闭环；M17 canonical 已复核                                                                                    |
+| M16  | Remote Desktop/VNC、SSH suspend           | ✅ P8                         | ✅ 本地模块闭环；M17 canonical 已复核                                                                                    |
+| M17  | 跨模块验收、截图、canonical               | ✅ 远程完成〔C.81/C.82/C.83〕 | 静态门禁、当前 SHA 28 图、owner-scoped 差异与交接均已归档；G8 受保护 selector 失败为测试维护项                           |
 
 **建议接续顺序**：仅收口 M01 的真实 Login surface 证据。M00/M02–M17 已完成各自适用 F/V/A 与最终 canonical/owner disposition，不沿用旧调查或“剩余行数”清单重复开发；只有新的具体回归证据才允许重开对应任务。
 
