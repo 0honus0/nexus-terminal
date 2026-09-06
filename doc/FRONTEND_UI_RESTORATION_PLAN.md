@@ -121,7 +121,7 @@
 | 模块 | 范围                                      | 已实现证据              | 当前未完成重点                                                                                   |
 | ---- | ----------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
 | M00  | 应用 shell、全局视觉、Foundation/feedback | ✅ 本地闭环〔C.55〕      | 仅待 M17 最终 canonical                                                               |
-| M01  | 登录、初始化、认证入口                    | ✅ P3                   | 各认证状态的窄屏可达性与视觉                                                                     |
+| M01  | 登录、初始化、认证入口                    | ◐ 部分完成〔C.64/C.66/C.75〕 | 普通登录/setup/多语言表面已闭环；Login surface 的移动 setup、2FA、CAPTCHA、passkey、真实软键盘与完整失败视觉仍待 |
 | M02  | Dashboard                                 | ✅ P3                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
 | M03  | Connections                               | ✅ P3 + 本地 P9-A/B     | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
 | M04  | SSH keys、Tags、Proxies                   | ✅ P3/P4                | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
@@ -385,7 +385,7 @@
 | M17.02 | ✅ 本地完成〔C.35〕      | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责           |
 | M17.03 | ◐ 部分完成〔C.34/C.38/C.57〕  | 当前 SHA 的 architecture/i18n/vue-tsc/Vite/git diff-check 已通过；test-policy/groups:check 仅被受保护未跟踪移动审计文件阻断，format 需在清理生成物后单独复核 |
 | M17.04 | ✅ 远程完成〔C.73〕 | 当前测试分支 `2ec5bb82` 的 runner 镜像构建、Docker smoke、prepare、G1–G7 均通过；G8 的 1 个失败已独立归因于受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector，不归因产品，矩阵证据与 disposition 已记录 |
-| M17.05 | ◐ 需当前 SHA 刷新〔C.63/C.65/C.68〕 | 历史 `b59438c4` 的 28/28 canonical 图不能代表当前 `92e25e16`；本次远程 E2E 只产生功能截图 artifacts，仍需在当前 SHA 生成并逐图复核附录 B 的 28 图 |
+| M17.05 | ◐ 需当前 SHA 刷新〔C.63/C.65/C.68/C.74/C.75〕 | 历史 `b59438c4` 的 28/28 canonical 图不能代表当前产品 SHA `b8d5f31e`；远程 E2E 仍未形成当前 SHA 的完整 canonical 28 图，需补齐并逐图复核 |
 | M17.06 | ⏳ 待完成                | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引                                                    |
 
 **项目完成条件**：M00–M16适用子任务及F/V/A验收全部有结论，M17.01–06完成；无“源码审计=视觉完成”“旧run=新代码通过”“图片存在=已复核”的替代判断。项目整体完成前保留每个已实现子任务的✅，但模块最终状态不得提前关闭。
@@ -1511,6 +1511,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 当前产品提交 `a6827020`、`b8d5f31e` 在新架构 auth owner 内恢复旧 UI 的卡片边框透明度、表单字段分组间距、输入/按钮圆角与高度，并将登录/初始化容器切换为动态 viewport 加自然滚动；保留输入原生 `required` 语义，不再渲染旧 UI 未有的必填星号。
 - 远程 Actions push run `34054925334`（`a6827020`）与 `34055848963`（`b8d5f31e`）的环境同步、prepare、Docker smoke、G1–G7 均成功；最新 run 的 G6 首次失败项仅为已有 upload 流程 flaky（重试通过），G8 仍仅为受保护 `file-preview-editor.spec.ts:889` selector 维护项。未发现 auth 产品/架构回归，本轮没有启动本地测试进程。
 - 该修复只推进 M01 的展示与移动可达性；M01 的 6 类真实 Login surface 证据、M17 的最终 28 图/静态 disposition/交接仍未关闭，正式模块计数保持 **`16/18（88.9%）`**。
+
+### C.76 当前远程 Actions 状态与未闭环总表校准（2026-09-06）
+
+- 本次仅查询远程状态，未启动本地测试进程。远程 `test/ui-restoration-groups` 分支头为 `06f0289f`；最新产品验证 SHA 为 `b8d5f31e`，Actions run `34055848963` 已完成环境同步、prepare、Docker deployment smoke 及 G1–G7，G8 唯一失败仍是受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的未限定 `Save` selector strict-mode，不归因产品 UI，也不修改受保护文件。
+- 计划总表已与 C.64/C.66/C.75 对齐：M01 保持部分完成而不是误标完成；M17.05 明确要求在 `b8d5f31e` 等最终产品 SHA 上重新取得并人工复核完整 28 张 canonical 图，已有历史图片或部分 artifact 不得替代。
+- 当前正式进度仍为 **`16/18 = 88.9%`**。剩余大项仍为 M01 的 6 类 Login surface 证据，以及 M17.03 最终静态/格式 disposition、M17.05 当前 SHA 28 图、M17.06 owner-scoped 差异与最终交接；后续验证继续只使用远程 Actions。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
