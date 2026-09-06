@@ -151,12 +151,12 @@
 
 **Owner**：`app/App.vue`、`app/main.ts`、`app/shell/AppHeader.vue`、`app/styles/`、`foundation/ui/`、`shared/feedback/`。基线：App/main/style、OverlayPanel、Alert/Confirm、UINotificationDisplay。需求：[architecture](software-requirements/requirements/architecture.md)、[audit-feedback](software-requirements/requirements/audit-feedback.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                       |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| M00.01 | ✅ 已完成〔C.1/P1〕 | 恢复全局 FontAwesome、header/nav/logo、背景/边框/输入焦点禁用态、基础页面几何和 terminal fallback；保留 app bootstrap                      |
-| M00.02 | ✅ 已完成〔C.1/P2〕 | 恢复 alert/confirm/toast 位置、尺寸、图标、时序和 overlay；feedback 状态留在 shared owner                                                  |
-| M00.03 | ◐ 部分完成          | 复核 tokens/default theme、CSS 加载、图片 intrinsic size、favicon/PWA 与旧基线；附录 D 非 Vue 表逐项给最终结论，不能仅沿用初始“应修复”文字 |
-| M00.04 | ◐ 部分完成〔C.15〕 | 320/375/桌面 header/nav 内滚动、active indicator 与右侧 actions 已按旧UI恢复；输入、菜单、dialog/footer、长消息、嵌套 overlay、Escape/backdrop/focus恢复仍待逐项差异验收 |
+| ID     | 状态                | 子任务及具体完成条件                                                                                                                                                     |
+| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M00.01 | ✅ 已完成〔C.1/P1〕 | 恢复全局 FontAwesome、header/nav/logo、背景/边框/输入焦点禁用态、基础页面几何和 terminal fallback；保留 app bootstrap                                                    |
+| M00.02 | ✅ 已完成〔C.1/P2〕 | 恢复 alert/confirm/toast 位置、尺寸、图标、时序和 overlay；feedback 状态留在 shared owner                                                                                |
+| M00.03 | ◐ 部分完成          | 复核 tokens/default theme、CSS 加载、图片 intrinsic size、favicon/PWA 与旧基线；附录 D 非 Vue 表逐项给最终结论，不能仅沿用初始“应修复”文字                               |
+| M00.04 | ◐ 部分完成〔C.15〕  | 320/375/桌面 header/nav 内滚动、active indicator 与右侧 actions 已按旧UI恢复；输入、菜单、dialog/footer、长消息、嵌套 overlay、Escape/backdrop/focus恢复仍待逐项差异验收 |
 
 **验收/架构**：公共原语仍无产品状态；共用改动验证所有受影响模块，不只打开单个弹窗。复用 `ui/protected-navigation.spec.ts`、`ui/dashboard-workflows.spec.ts`、`mobile/dashboard-mobile.spec.ts` 和自然 dialog/feedback 场景；截图归 `dashboard-home.png` 等现有检查点。
 
@@ -225,12 +225,12 @@
 
 **Owner**：`app/pages/settings/` 组合 `features/preferences/`、`security/`、`backup/` 与 appearance 入口。需求：[preferences-settings](software-requirements/requirements/preferences-settings.md)、[identity-security](software-requirements/requirements/identity-security.md)、[backup](software-requirements/requirements/backup.md)。
 
-| ID     | 状态                 | 子任务及具体完成条件                                                                                                                                                                    |
-| ------ | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M05.01 | ✅ 已完成〔C.1/P3〕  | 七 tab：Workspace/System/Security/IP Control/Data Management/Appearance/About，默认 Workspace；旧分组/密度/卡片和 About 布局                                                            |
-| M05.02 | ✅ 已完成〔C.1/P3〕  | password/passkey/2FA/CAPTCHA、IP白黑名单、备份导入导出及轻量 Appearance 入口的旧展示                                                                                                    |
+| ID     | 状态                | 子任务及具体完成条件                                                                                                                                                                                                                                                                                                                      |
+| ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M05.01 | ✅ 已完成〔C.1/P3〕 | 七 tab：Workspace/System/Security/IP Control/Data Management/Appearance/About，默认 Workspace；旧分组/密度/卡片和 About 布局                                                                                                                                                                                                              |
+| M05.02 | ✅ 已完成〔C.1/P3〕 | password/passkey/2FA/CAPTCHA、IP白黑名单、备份导入导出及轻量 Appearance 入口的旧展示                                                                                                                                                                                                                                                      |
 | M05.03 | ✅ 本地完成〔C.16〕 | 完成 Workspace/System 对旧逐项 section、标题/说明/分隔、独立保存/反馈、loading/disabled 的真实还原；System/Workspace 精确 key patch 不串值。七 tab 继续横向独立滚动；320/375px 下 Workspace/Security/IP Control/Data Management/About 均无页面横溢出，Security 与 Data 长页实际截图复核通过；About 源码与旧卡片/版本状态/仓库链接拓扑一致 |
-| M05.04 | ✅ 本地完成〔C.16〕 | 既有密码、2FA、CAPTCHA、IP 与加密备份证据继续有效；本轮真实重跑 System 3/3、backup/CAPTCHA/password/IP 5/5，passkey 注册/命名/reload/删除 1/1；真实 passkey 登录已走通。连接导出通过 UI 真实下载 `nexus_connections_export.zip`；dirty 登录 test 的后半段凭据丢失模拟因当前 Chromium CDP 参数不兼容而停在测试层，不计产品失败 |
+| M05.04 | ✅ 本地完成〔C.16〕 | 既有密码、2FA、CAPTCHA、IP 与加密备份证据继续有效；本轮真实重跑 System 3/3、backup/CAPTCHA/password/IP 5/5，passkey 注册/命名/reload/删除 1/1；真实 passkey 登录已走通。连接导出通过 UI 真实下载 `nexus_connections_export.zip`；dirty 登录 test 的后半段凭据丢失模拟因当前 Chromium CDP 参数不兼容而停在测试层，不计产品失败             |
 
 **验收/架构**：SettingsPage 只组合；各 feature 保持唯一设置 owner，不汇总成旧 settings mega-store。复用 `ui/system-settings.spec.ts`、`ui/change-password.spec.ts`、`ui/captcha-settings.spec.ts`、`ui/ip-whitelist-settings.spec.ts`、`ui/ip-blacklist-settings.spec.ts`、`ui/backup-ui.spec.ts` 及相关 HTTP E2E；复核 `system-settings.png`、`security-settings.png`。
 
@@ -251,11 +251,11 @@
 
 **Owner**：`features/notifications/`、`features/audit/`；通用 toast/dialog 归 M00。需求：[notifications](software-requirements/requirements/notifications.md)、[audit-feedback](software-requirements/requirements/audit-feedback.md)。
 
-| ID     | 状态                 | 子任务及具体完成条件                                                                                             |
-| ------ | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| M07.01 | ✅ 已完成〔C.1/P3〕  | notification 单列卡片/inline配置/provider字段和事件网格；audit过滤、显式查询、表格/详情/分页恢复                 |
+| ID     | 状态                | 子任务及具体完成条件                                                                                                                                                                                                                              |
+| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M07.01 | ✅ 已完成〔C.1/P3〕 | notification 单列卡片/inline配置/provider字段和事件网格；audit过滤、显式查询、表格/详情/分页恢复                                                                                                                                                  |
 | M07.02 | ✅ 本地完成〔C.16〕 | 320px通知长内容/编辑滚动/空错误及Audit长详情、真实分页与筛选后回到第1页/跨页保留过滤均通过；本轮 `.tmp/manual` 契约验收确认未知 action 直接回退 backend identifier，`{raw, parseError:true}` 畸形 details 仍以 raw 文本可检查，320px 无页面横溢出 |
-| M07.03 | ✅ 本地完成〔C.16〕 | notification 真实增改删、启停、测试发送成功/错误、事件选择持久化及 Audit 过滤/分页/详情均通过；本轮三份既有 UI spec 合计 8/8，未知 action / 畸形 details 通过 backend→frontend 契约形态的临时浏览器验收补齐，不为该边界新增仓库测试代码 |
+| M07.03 | ✅ 本地完成〔C.16〕 | notification 真实增改删、启停、测试发送成功/错误、事件选择持久化及 Audit 过滤/分页/详情均通过；本轮三份既有 UI spec 合计 8/8，未知 action / 畸形 details 通过 backend→frontend 契约形态的临时浏览器验收补齐，不为该边界新增仓库测试代码           |
 
 **验收/架构**：provider配置/查询状态留在各 owner，不为双向联动增加跨feature私有import。复用 `ui/notification-settings.spec.ts`、`ui/notification-delivery.spec.ts`、`ui/audit-log-filtering.spec.ts`；无历史截图的状态同样给可复核证据。
 
@@ -263,12 +263,12 @@
 
 **Owner**：`runtimes/workspace/views/`、`components/`、`layout/`、`session/`，消费各 feature public capabilities。需求：[workspace](software-requirements/requirements/workspace.md)、[mobile](software-requirements/requirements/mobile.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                             |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M08.01 | ✅ 已完成〔C.1/P4〕 | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建               |
-| M08.02 | ◐ 部分完成          | P4 16行源码审计全部有记录；mobile单pane、100dvh、非收缩工具栏、隐藏desktop sidebars与旧设计对应，浏览器只覆盖具体流程                            |
-| M08.03 | ◐ 部分完成〔C.14-h/C.20〕 | 真实三session新增/切换/终端状态保留、移动tab横滚/长按context、Close Other/关闭至空壳已通过；已恢复旧固定侧栏 overlay 与焦点循环起点识别，resize/layout锁定及完整侧栏浏览器证据仍待验收 |
-| M08.04 | ◐ 部分完成〔C.20〕  | 已恢复桌面 active sidebar 的 fixed/z-[110]/max-w-[80vw]/内部滚动与关闭按钮；modal/editor/preview/progress/remote叠层、窗口高度变化和虚拟键盘下不遮关键操作仍待验收；桌面配置器在mobile无入口事实保留 |
+| ID     | 状态                      | 子任务及具体完成条件                                                                                                                                                                                 |
+| ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M08.01 | ✅ 已完成〔C.1/P4〕       | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建                                                                   |
+| M08.02 | ◐ 部分完成                | P4 16行源码审计全部有记录；mobile单pane、100dvh、非收缩工具栏、隐藏desktop sidebars与旧设计对应，浏览器只覆盖具体流程                                                                                |
+| M08.03 | ◐ 部分完成〔C.14-h/C.20〕 | 真实三session新增/切换/终端状态保留、移动tab横滚/长按context、Close Other/关闭至空壳已通过；已恢复旧固定侧栏 overlay 与焦点循环起点识别，resize/layout锁定及完整侧栏浏览器证据仍待验收               |
+| M08.04 | ◐ 部分完成〔C.20〕        | 已恢复桌面 active sidebar 的 fixed/z-[110]/max-w-[80vw]/内部滚动与关闭按钮；modal/editor/preview/progress/remote叠层、窗口高度变化和虚拟键盘下不遮关键操作仍待验收；桌面配置器在mobile无入口事实保留 |
 
 **验收/架构**：Workspace/Agent live state隔离；runtime不复制file/editor/transfer controller。`WorkspaceSessionSurface.vue` 是M10–M14共用组合文件，由一个指定模型修改。复用 `ui/session-lifecycle.spec.ts`、`ssh/reconnect-ui.spec.ts`、`mobile/ssh-workspace.spec.ts`、`mobile/suspend-resume-ui.spec.ts`；复核 `mobile-workspace.png`。
 
@@ -276,10 +276,10 @@
 
 **Owner**：`features/quick-commands/`、`features/command-history/` 和 Workspace command/mobile tool组合。需求：[quick-commands-history](software-requirements/requirements/quick-commands-history.md)。
 
-| ID     | 状态                   | 子任务及具体完成条件                                                                                                     |
-| ------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| M09.01 | ✅ 已完成〔C.1/P4/P5〕 | 旧compact/grouped列表、search/tag/edit/execute、history操作、移动quick modal和command/search模式                         |
-| M09.02 | ◐ 部分完成             | 源码滚动/截断/弹层审计已做；变量表单、分组上下文、hover动作在touch可达性按旧基线核对，不能凭统一44px规则改版             |
+| ID     | 状态                      | 子任务及具体完成条件                                                                                                                                                                                               |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M09.01 | ✅ 已完成〔C.1/P4/P5〕    | 旧compact/grouped列表、search/tag/edit/execute、history操作、移动quick modal和command/search模式                                                                                                                   |
+| M09.02 | ◐ 部分完成                | 源码滚动/截断/弹层审计已做；变量表单、分组上下文、hover动作在touch可达性按旧基线核对，不能凭统一44px规则改版                                                                                                       |
 | M09.03 | ◐ 部分完成〔C.14-i/C.20〕 | 真实命令新增/搜索/执行/编辑/删除、tag/变量替换/重命名及History搜索/copy/rerun/delete已通过；已恢复 Enter/Escape、空查询失焦折叠、变量值多行、特殊替换值及无hover设备 action 可达，浏览器多session/失败反馈仍待验收 |
 
 **验收/架构**：业务持久化归feature，runtime仅将execute送入现有session capability；菜单与按钮走同一执行语义。复用 `ssh/quick-command-management.spec.ts`、`ssh/quick-command-tags-variables.spec.ts`、`ssh/quick-command-collapsible-search.spec.ts`、`ssh/command-history-management.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 `mobile-quick-commands.png`。
@@ -288,10 +288,10 @@
 
 **Owner**：`features/terminal/`；Workspace绑定TerminalChannel、修饰键与command/search展示。需求：[terminal](software-requirements/requirements/terminal.md)、[mobile](software-requirements/requirements/mobile.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                |
-| ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| M10.01 | ✅ 已完成〔C.1/P5〕 | xterm padding/主题fallback/背景层、SearchAddon外观、选择菜单、虚拟keycap/修饰键与mobile tools旧布局                                 |
-| M10.02 | ◐ 部分完成          | terminal/keyboard源码已审；已提交移动选区滚动后句柄同步与剪贴板菜单宽度修复（C.18/C.19），仍需完整mobile run及普通/选中/搜索/断连/重连布局证据 |
+| ID     | 状态                 | 子任务及具体完成条件                                                                                                                                    |
+| ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M10.01 | ✅ 已完成〔C.1/P5〕  | xterm padding/主题fallback/背景层、SearchAddon外观、选择菜单、虚拟keycap/修饰键与mobile tools旧布局                                                     |
+| M10.02 | ◐ 部分完成           | terminal/keyboard源码已审；已提交移动选区滚动后句柄同步与剪贴板菜单宽度修复（C.18/C.19），仍需完整mobile run及普通/选中/搜索/断连/重连布局证据          |
 | M10.03 | ◐ 部分完成〔C.14-k〕 | 真实SSH终端输入、terminal.input、Ctrl+wheel字体resize、命令执行与cwd持久已通过；复制/选择、搜索导航、Ctrl/Alt/IME、虚拟键盘、竖横屏与字体持久化仍待验收 |
 
 **验收/架构**：SearchAddon与terminal API归feature；修饰键编码沿既有单一owner，不恢复旧event bus。复用 `ssh/terminal-ui.spec.ts`、`ssh/terminal-tools-ui.spec.ts`、`ssh/terminal-protocol.spec.ts`、`mobile/terminal-touch.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 `ssh-terminal.png` 及移动selection/keyboard/modifiers。
@@ -300,12 +300,12 @@
 
 **Owner**：`features/filesystem/`，Workspace提供adapter和popup组合。需求：[filesystem](software-requirements/requirements/filesystem.md)。
 
-| ID     | 状态                 | 子任务及具体完成条件                                                                                                                             |
-| ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M11.01 | ✅ 已完成〔C.1/P6〕  | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                               |
-| M11.02 | ◐ 部分完成           | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                              |
+| ID     | 状态                            | 子任务及具体完成条件                                                                                                                                                                                       |
+| ------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M11.01 | ✅ 已完成〔C.1/P6〕             | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                                                                                         |
+| M11.02 | ◐ 部分完成                      | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                                                                                        |
 | M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复、桌面拖放移动、多选Copy/Cut→Paste及文件选择器上传进度/刷新/下载已通过；已提交逐项失败隔离并保留旧版并发下载（C.18/C.19），权限/archive及移动专项仍待验收 |
-| M11.04 | ⏳ 待验收            | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口  |
+| M11.04 | ⏳ 待验收                       | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口                                                            |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
 
@@ -313,12 +313,12 @@
 
 **Owner**：`features/file-editor/`，`WorkspaceSessionSurface.vue` 仅管理embedded/popup外壳。需求：[file-editor](software-requirements/requirements/file-editor.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                     |
-| ------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| M12.01 | ✅ 已完成〔C.1/P6〕 | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                   |
-| M12.02 | ◐ 部分完成          | 全部editor相关移动源码已审；旧overlay/container/tabs由当前owner组合，不恢复旧FileEditor store                                            |
+| ID     | 状态                    | 子任务及具体完成条件                                                                                                                                                                                                                   |
+| ------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M12.01 | ✅ 已完成〔C.1/P6〕     | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                                                                                                                 |
+| M12.02 | ◐ 部分完成              | 全部editor相关移动源码已审；旧overlay/container/tabs由当前owner组合，不恢复旧FileEditor store                                                                                                                                          |
 | M12.03 | ◐ 部分完成〔C.15/C.19〕 | 源码对照确认旧版保存失败后仍可重试，已移除新架构对 `active.error` 的永久禁用，并修复保存期间继续编辑/并发保存的 dirty 竞态；多文件切换、dirty/save/关闭确认、编码换行/语言、search/replace、preview转编辑及嵌入/弹出状态仍待浏览器验收 |
-| M12.04 | ◐ 部分完成〔C.18〕  | 已提交 session 切换时关闭 teleported document popup、保留 editor/preview 文档状态；desktop resize 持久化、mobile 全屏/软键盘/长 toolbar 与跨 session scope 仍待验收 |
+| M12.04 | ◐ 部分完成〔C.18〕      | 已提交 session 切换时关闭 teleported document popup、保留 editor/preview 文档状态；desktop resize 持久化、mobile 全屏/软键盘/长 toolbar 与跨 session scope 仍待验收                                                                    |
 
 **验收/架构**：同一 FileEditorSessionController + FileDocumentPort；popup与embedded不分别维护document副本。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 desktop editor/mobile editor/search。
 
@@ -326,14 +326,14 @@
 
 **Owner**：`features/file-preview/` 的session/source/provider/chrome；Workspace组合document popup。需求：[file-preview](software-requirements/requirements/file-preview.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                                                                |
-| ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M13.01 | ✅ 已完成〔C.1/P6〕 | 恢复tabs/header/refresh/close/search、各provider外观、PDF outline/page/scroll、spreadsheet pagination/sheet tabs和横滚                                                              |
-| M13.02 | ✅ 本地完成〔C.2〕  | mobile preview恢复94dvh、四向 `max(.75rem, env(safe-area-inset-*))`；editor保持fullscreen；两个portrait预览流程2/2通过                                                              |
-| M13.03 | ✅ 本地完成〔C.3〕  | Markdown横屏32px旧视觉保留，独立编辑保存重开1/1；不做无需求依据的coarse44改版                                                                                                       |
-| M13.04 | ◐ 部分完成          | 所有provider移动源码已审；mobile Markdown/Spreadsheet局部旧新图复核已有，完整mobile新图尚待确认结论                                                                                 |
-| M13.05 | ◐ 部分完成〔C.20〕  | 已修复关闭最后 preview tab 后隐藏 popup；各provider loading/error/unsupported/refresh、PDF连续页/outline/zoom/pan、XLSX多sheet/search/末页、DOCX宽内容、image zoom、Markdown edit/save及 close/cache 源文档状态仍待真实验收 |
-| M13.06 | ⏳ 待验收           | desktop/mobile/相关landscape视口的overlay、toolbar、tabs、内容/横滚层级；notch安全区源码正确与实体设备验证范围分别记录                                                              |
+| ID     | 状态                    | 子任务及具体完成条件                                                                                                                                                                                                                                                                                                                                                         |
+| ------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M13.01 | ✅ 已完成〔C.1/P6〕     | 恢复tabs/header/refresh/close/search、各provider外观、PDF outline/page/scroll、spreadsheet pagination/sheet tabs和横滚                                                                                                                                                                                                                                                       |
+| M13.02 | ✅ 本地完成〔C.2〕      | mobile preview恢复94dvh、四向 `max(.75rem, env(safe-area-inset-*))`；editor保持fullscreen；两个portrait预览流程2/2通过                                                                                                                                                                                                                                                       |
+| M13.03 | ✅ 本地完成〔C.3〕      | Markdown横屏32px旧视觉保留，独立编辑保存重开1/1；不做无需求依据的coarse44改版                                                                                                                                                                                                                                                                                                |
+| M13.04 | ◐ 部分完成              | 所有provider移动源码已审；mobile Markdown/Spreadsheet局部旧新图复核已有，完整mobile新图尚待确认结论                                                                                                                                                                                                                                                                          |
+| M13.05 | ◐ 部分完成〔C.20/C.21〕 | 已修复关闭最后 preview tab 后隐藏 popup；loading 读取可取消且遮罩/Escape 隐藏时保留已有 tabs、显式关闭按旧设置清理；Spreadsheet 解析失败/无 worksheet 显示可见错误态并保留可重试 session；各provider loading/error/unsupported/refresh、PDF连续页/outline/zoom/pan、XLSX多sheet/search/末页、DOCX宽内容、image zoom、Markdown edit/save及 close/cache 源文档状态仍待真实验收 |
+| M13.06 | ⏳ 待验收               | desktop/mobile/相关landscape视口的overlay、toolbar、tabs、内容/横滚层级；notch安全区源码正确与实体设备验证范围分别记录                                                                                                                                                                                                                                                       |
 
 **验收/架构**：FilePreviewSessionController保持单一文档状态，provider不引入Workspace/private editor store；PDF worker/SheetJS等现有能力保留。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`ingress/pdf-worker-assets.spec.ts`；复核附录B全部preview图，不仅两张mobile图。
 
@@ -1140,7 +1140,14 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M08.03/M08.04 sidebar overlay + focus cycle` → `/root/luna_m08_sidebar`（Luna max）：旧 `8ceb5840:packages/frontend/src/components/LayoutRenderer.vue:710-778` 将 active 左右侧栏固定为 `top/bottom + z-[110] + max-w-[80vw]` overlay，主布局宽度不被压缩；当前新架构曾渲染为 `relative shrink-0` inline pane。恢复 fixed overlay、边框/内部滚动/关闭按钮，并在 `shared/focus/focusRegistry.ts` 读取当前 `data-focus-id` 作为 `focusNext` 起点，保持状态仍由 Workspace/shared focus owner 管理。Prettier、architecture、i18n、`vue-tsc --noEmit`、Vite build、`git diff --check` 通过；侧栏 E2E 断言未失败，但 finally 恢复 `/api/v1/settings/sidebar` 时超时，故不计完整浏览器 F/V；主代理提交 `8102088e`。resize/layout-lock、移动/桌面完整侧栏几何及 overlay 动画仍待验收。
 - `M09.02/M09.03 quick/history keyboard and touch parity` → `/root/luna_m09_keyboard2`（Luna max）：对照旧 `QuickCommandsView.vue:493-538`、`AddEditQuickCommandForm.vue:3-5,25-39`、`QuickCommandsModal.vue:26-39`、`CommandHistoryView.vue:179-213,52-61`，恢复空查询失焦折叠、input/list 焦点边界、变量值 textarea、变量名 Enter 阻止提交、Escape/backdrop 语义、特殊替换值 `$&` 不被 JS replacement 误解释，并在 `@media (hover:none)` 显示 row actions 保持触控可达。静态检查 5/5（architecture/i18n/Prettier/vue-tsc/diff-check）通过，当前无服务未运行浏览器（case 0），F/V 待真实流程；主代理提交 `e417ba52`。WorkspaceCommandBar 既有 Enter/sync/Escape 未改，M09 多 session/失败反馈仍待验收。
 - `M13.05 preview last-tab close` → `/root/luna_m13_provider2`（Luna max）：对照旧 preview tab context 的 closeWorkspace 语义，确认当前关闭最后 tab 只清空 session、teleported popup 仍可见；在 `features/file-preview/components/FilePreviewDialog.vue` 关闭 tab 后检查 session 已无 tabs，沿现有 `close` emit 让 Workspace 隐藏 popup，不复制 Workspace 状态。architecture、i18n、`vue-tsc --noEmit`、`git diff --check` 通过；浏览器 F/V 未运行，主代理提交 `4d9aa32d`。loading abort、Spreadsheet 空 workbook/parse error 仍为待处理的已确认差异。
-- 接续 HEAD 为 `8102088e`（随后原子 docs/feature commits 已推进至当前 HEAD）；保护未提交的两份 E2E 和 root-preserved/core 产物未混入。下一批应优先处理 M13 loading/Spreadsheet provider error、M00/M01 状态矩阵或 M10/M11/M12 真实失败/移动证据；每个正式模块完成后再按 §5.8 单独提交模块闭环记录。
+- 该批次记录时接续 HEAD 为 `8102088e`（随后原子 docs/feature commits 已推进）；保护未提交的两份 E2E 和 root-preserved/core 产物未混入。下一批应优先处理 M13 loading/Spreadsheet provider error、M00/M01 状态矩阵或 M10/M11/M12 真实失败/移动证据；每个正式模块完成后再按 §5.8 单独提交模块闭环记录。
+
+### C.21 产品优先差异收口（2026-09-06，M13 provider错误与取消语义）
+
+- 本轮继续遵循 C.15：子代理仅使用 Luna，主代理独立审查旧基线、产品 diff 与架构边界；新增浏览器证据因当前环境条件后置，正式闭环计数保持 `9 / 18`。
+- `M13.05 Spreadsheet parse/empty workbook` → `/root/luna_m13_spreadsheet`（Luna max）：对照旧 `8ceb5840:packages/frontend/src/composables/file-preview/xlsxPreviewParser.ts:171-192`，恢复无 worksheet 时显式抛错，并在当前 `features/file-preview` owner 捕获解析异常，显示 `role="alert"` 错误态；刷新解析失败不丢失既有表格/session。合法 XLSX、ZIP/HTML 错误输入的解析 smoke 通过；architecture、i18n、`vue-tsc --noEmit`、Prettier、`git diff --check` 通过。主代理提交 `5766797c`。真实浏览器错误态截图和生命周期仍待验收，故不关闭 M13。
+- `M13.05 loading cancel` → `/root/luna_m13_loading`（Luna max）：对照旧 `FileManager.vue` loading overlay 的 abort、遮罩/Escape 隐藏与显式 X 清理差异，在 `features/file-preview/components/FilePreview.vue` 增加可取消 loading overlay；主代理发现并修正子代理初稿把两条路径合并导致 popup 模式误清理已有 tabs，拆为 `dismiss`（关闭 pending、隐藏外壳、保留 tabs）与 `hide`（按当前 popup 设置清理）的事件，接线至 `WorkspaceSessionSurface` 与 `WorkspaceLayoutRenderer`。controller slow-source abort smoke、现有 close-cache smoke、architecture、i18n、`vue-tsc --noEmit`、Prettier、`git diff --check` 通过；主代理提交 `ca46d402`。真实 delayed-read 浏览器 loading 矩阵仍待验收。
+- 本轮产品变更未恢复旧 store、preview context/event bus 或重复 session 状态；`FilePreviewSessionController` 仍是唯一 tabs/operation owner。两个原子提交均不代表 M13 父模块完成，M13.04/M13.06 及各 provider 的真实 F/V 仍由后续批次和 M17 统一复核。受保护的 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts` 与 root-preserved/core 产物未被暂存。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
