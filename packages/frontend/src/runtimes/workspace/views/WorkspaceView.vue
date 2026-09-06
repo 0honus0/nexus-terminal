@@ -374,6 +374,13 @@
     const results = await Promise.allSettled(
       activeTargets.map((session) => session.adapters.terminal.sendInput(payload)),
     );
+    if (allSessions) {
+      if (activeTargets.length > 0) {
+        feedback.notifySuccess(t('quickCommands.notifications.sentToAllSessions', { count: activeTargets.length }));
+      } else {
+        feedback.notifyInfo(t('quickCommands.notifications.noActiveSshSessions'));
+      }
+    }
     const sentToSource = !allSessions && activeTargets[0]?.id === source.id && results[0]?.status === 'fulfilled';
     if (value !== '\x03' && sentToSource) {
       try {
