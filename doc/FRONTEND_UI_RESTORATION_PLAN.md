@@ -167,8 +167,8 @@
 | ID     | 状态                | 子任务及具体完成条件                                                                                                  |
 | ------ | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | M01.01 | ✅ 已完成〔C.1/P3〕 | 双栏品牌/表单、setup/login card、移动品牌隐藏断点和加载/错误外观                                                      |
-| M01.02 | ◐ 部分完成          | 真实初始设置→登录→受保护页面→退出/失效流程，覆盖密码、2FA、CAPTCHA、passkey 可用/失败分支；当前功能不因隐藏控件而丢失 |
-| M01.03 | ◐ 部分完成〔C.13〕  | ✅ M01.03-a普通密码失败→同页重试、三个viewport错误间距已本地验收；真实软键盘、其他认证状态、完整表单/语言对照仍待验   |
+| M01.02 | ◐ 部分完成〔C.64/C.66〕 | 真实初始设置→登录→受保护页面→退出/失效流程，已补 setup `400→201→200` 失败重试证据与三语言表面矩阵；2FA、CAPTCHA、passkey 可用/失败分支仍待 Login surface 级证据 |
+| M01.03 | ◐ 部分完成〔C.13/C.64/C.66〕 | ✅ 普通密码失败→同页重试、setup失败→重试、en-US/zh-CN/ja-JP × 1280/375 登录表面无溢出均已验收；真实软键盘、2FA/CAPTCHA/passkey状态与完整失败视觉仍待 |
 
 **验收/架构**：认证 session 仍由 auth 管理，client 不新增 router/toast/store 依赖。复用 `auth/setup-login.spec.ts`、`ui/session-lifecycle.spec.ts`、`http/auth-api.spec.ts`、`http/auth-2fa.spec.ts`、`ui/protected-navigation.spec.ts`；无旧截图的状态用旧源码和真实浏览器证据，不强行添加截图专用测试。
 
@@ -305,7 +305,7 @@
 | M11.01 | ✅ 已完成〔C.1/P6〕                       | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                                                                                                                                           |
 | M11.02 | ✅ 本地完成〔C.56〕                        | 当前 SHA 导航/排序/长列表/路径 history、terminal path sync、context/sidebar 均有真实证据；sidebar rail 层级修复后 `sidebar-pane-fileManager` 可稳定打开/关闭                                                     |
 | M11.03 | ✅ 本地完成〔C.56〕                        | 真实 SSH 导航、权限/压缩/解压/拖放/剪贴板/多选/上传/下载失败恢复与 archive progress 均有证据；共享 sidebar unmount 与 immediate-close wheel 在当前工作树最终复跑通过 |
-| M11.04 | ✅ 本地完成〔C.56〕                        | mobile single-tap/long-press/multi-select 防误打开、workspace/history overlay、XLSX/DOCX 横向滚动、desktop preview scrollbar 与当前 SHA PDF 均有证据；最终 canonical 截图归 M17       |
+| M11.04 | ✅ 本地完成〔C.56/C.67〕                   | mobile single-tap/long-press/multi-select 防误打开、workspace/history overlay、XLSX/DOCX 横向滚动、desktop preview scrollbar 与当前 SHA PDF 均有证据；补齐 BaseContextMenu 首帧定位，最终 canonical 截图归 M17 |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
 
@@ -316,7 +316,7 @@
 | ID     | 状态                | 子任务及具体完成条件                                                                                                                                                        |
 | ------ | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M12.01 | ✅ 已完成〔C.1/P6〕 | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                                                      |
-| M12.02 | ✅ 本地完成〔C.42〕 | editor 移动矩阵已按当前 owner 真实验收：`touch-advanced` 相关 9/9、`touch-workflows` 选定 3/3；完整文件的无关 M11 upload crash 已隔离重跑 1/1，不恢复旧 FileEditor store    |
+| M12.02 | ✅ 本地完成〔C.42/C.65〕 | editor 移动矩阵已按当前 owner 真实验收：`touch-advanced` 相关 9/9、`touch-workflows` 选定 3/3；本轮修复 CodeMirror 搜索面板置顶与编码下拉动态宽度，focused search/editor 各 1/1，完整文件的无关 M11 upload crash 已隔离重跑 1/1，不恢复旧 FileEditor store |
 | M12.03 | ✅ 本地完成〔C.53〕 | 真实 SSH/SFTP 写入失败后 Save error 保留编辑快照并可 Retry；1.5s 延迟保存在后续 dirty 编辑存在时仍提交旧快照，失败/成功截图与命令均已保留                                   |
 | M12.04 | ✅ 本地完成〔C.53〕 | A→B 快速打开只保留最新文档，关闭 popup 丢弃迟到 load；既有 mobile `9/9` + touch workflow `3/3` 覆盖全屏/软键盘/长 toolbar，跨 session popup 状态沿当前 Workspace owner 保持 |
 
@@ -1443,7 +1443,19 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 
 - M14 的 `WorkspaceSessionSurface.vue` transfer layer 修复已按唯一产品路径提交为 `6f52f8e9`（`fix(ui): layer transfer progress above workspace modals`）：外层使用 `pointer-events-none fixed inset-0 z-[60]`，内部 `ProgressCenter` 保持可交互，既覆盖 Workspace modal 又不改变右下定位；未触碰受保护 E2E、旧架构或其他 owner。M14 focused upload、architecture、`vue-tsc`、`git diff --check` 证据继续通过。
 - M15 compact status cards/chart 复核以 `6f52f8e9` 为基线完成，报告 `/dev/shm/nexus-m15-visual-parity-438426b8-PfePmu/REPORT.md`：旧源码同样包含 compact cards、Network card、`.has-history` 双列和 history chart；canonical 差异来自旧图未选 metric、当前图切换 CPU/30m 的不同前置，不构成迁移缺失。浏览器 `1/1`、architecture、i18n、`vue-tsc` 均通过，M15 无产品改动。
-- 因产品 SHA 已从 `b59438c4` 变为 `6f52f8e9`，M17.05 的 28 图必须在新 SHA 重新生成并复核；当前仍需收口 M12 mobile editor/search wrapping、M11 touch context-menu presentation、M01 剩余认证证据及 M17.06 最终 disposition。正式模块计数保持 **`16 / 18 = 88.9%`**，不以 M15 的单项通过替代最终 canonical。
+- 因产品 SHA 已从 `b59438c4` 变为 `6aa5b9f0`，M17.05 的 28 图必须在新 SHA 重新生成并复核；M12 mobile editor/search wrapping 与 M11 touch context-menu presentation 的已确认迁移差异已分别提交为 `ed5d6860` 与 `6aa5b9f0`，当前仍需收口 M01 剩余认证证据及 M17.06 最终 disposition。正式模块计数保持 **`16 / 18 = 88.9%`**，不以单项通过替代最终 canonical。
+
+### C.66 M01 setup 重试与登录语言矩阵（2026-09-06）
+
+- 当前请求基线为 `6f52f8e9`；报告 `/dev/shm/nexus-m01-setup-locale-20260906T151316Z/REPORT.md`。既有 `auth/setup-login.spec.ts` **2/2** 通过，临时探针最终 **2/2** 通过：真实 setup 短密码 `400` 后同页修正，setup `201`，真实登录 `200`，同源 auth/status `200`；未修改产品代码。
+- 登录表面矩阵覆盖 `en-US`、`zh-CN`、`ja-JP` × `1280×800`、`375×812` 共 6 状态；每状态均有 PNG/metrics，控件可编辑、文案正确、无横向溢出。首次跨 `localhost`/`127.0.0.1` cookie 断言失败已通过同源 fetch 复跑排除为 fixture 限制。
+- 本批只关闭 setup/语言表面缺口，不扩大到移动 setup、2FA challenge/过期、CAPTCHA 登录 gate、passkey 登录/取消、真实软键盘或完整认证失败视觉；M01 继续 partial，正式模块计数保持 **`16 / 18 = 88.9%`**。
+
+### C.67 M11 移动 context-menu 首帧定位修复（2026-09-06）
+
+- 以 `ed5d6860` 后工作树为基线，确认移动长按菜单首次呈现在 `(0,0)`，与旧菜单的触点定位不一致。修复仅在 `packages/frontend/src/foundation/ui/BaseContextMenu.vue` 的 `onMounted` 主动调用既有 `place()`，提交为 `6aa5b9f0`；未引入新状态、transport、event bus 或旧架构。
+- 真实 `touch-advanced.spec.ts` 定向流程 **2/2 passed，exit 0**；320×667、375×812、412×915 菜单均在 viewport 内（宽 `255px`，无横溢出），`Compress to zip` 实际点击成功。architecture、i18n、`vue-tsc`、Prettier、`git diff --check` 均通过。
+- 当前菜单仍保留与新 SRS/owner 一致的 action 归属（entry 菜单不重复 New/Upload/Refresh，当前新增 Open）；该顺序差异记录为非阻断 owner-scoped disposition，不继续扩大修改。M11 维持本地闭环，最终 canonical 需在当前最终 SHA 重刷。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
