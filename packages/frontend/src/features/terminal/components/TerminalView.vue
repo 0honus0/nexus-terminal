@@ -620,6 +620,9 @@
       terminal.onSelectionChange(() => {
         if (mobileTouchSelectionActive) syncMobileSelectionHandles();
       }).dispose,
+      terminal.onScroll(() => {
+        window.requestAnimationFrame(syncMobileSelectionHandles);
+      }).dispose,
     );
     root.value?.addEventListener('contextmenu', handleContextMenu);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
