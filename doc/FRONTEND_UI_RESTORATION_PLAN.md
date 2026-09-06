@@ -1476,6 +1476,14 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 该失败不是 fixture：当前 `ProgressDisplayModal.vue` 桌面虽然标记 `data-progress-display-placement="inline"`，却始终传 `overlay=true`、`teleport=true`，因此生成 z-1100 全屏遮罩；旧 UI/旧组件语义是桌面 inline、移动才 overlay/teleport。现恢复为 `:overlay="mobile"`、`:teleport="mobile"`，保留移动模态焦点/遮罩和桌面 Workspace 内联布局，不恢复旧 store/event bus。
 - 同一 run 的 G3 其他失败仍分别归因于受保护 passkey host/CDP harness；G8 为受保护 `file-preview-editor.spec.ts:889` 未限定 Save selector；G5 authenticated WebSocket 与 G3/G5 少量 flaky 项待远程重跑/独立 disposition。正式模块计数暂保持 **`16 / 18 = 88.9%`**。
 
+### C.71 最终 SHA `789188d0` 远程复核与剩余失败归因（2026-09-06）
+
+- 新提交 SHA `789188d0e0c944a9ffba58876d5e1ad0bfad8358` 的 Actions run `34048176778`（8 workers）已完成：G1、G2、G4、G6、G7 **通过**；G3、G5、G8 **失败**。Docker deployment smoke、prepare、环境同步均通过；本轮未启动本地测试进程。
+- M14 真实回归已被远程验证关闭：G2 archive cancel、G4 archive progress、G6 moderate-latency multi-file upload 均不再被 `open-file-manager-button` 命中层拦截；G3 的 Send Files 流程也已越过桌面 overlay，进入真实 transfer assertion。当前 `ProgressCenter` 左下 `z-40` 与桌面 `ProgressDisplay` inline 语义保持新架构且与旧 UI 对齐。
+- G3 当前唯一产品邻接失败是远程 source fixture 缺少 `rsync`，任务两条子任务均返回 `Rsync is not available on the source`，未进入预期 `Method: rsync`/partial-completed 断言；这属于 Actions fixture/toolchain，不修改 transfer owner。G3 的 passkey case 仍是受保护 `localhost`/`127.0.0.1` host/CDP 限制。
+- G5 仅有 authenticated WebSocket case 在远程 host/origin harness 中无法打开，未显示产品 UI/Workspace 回归；同组其他 suspend/SFTP/progress/connection cases 通过。G8 仍是受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector 命中 17 个按钮；受保护文件不得修改。
+- 因此当前剩余正式模块仍为 **M01、M17 两项（16/18 = 88.9%）**。M01 只剩移动 setup、Login surface 的 2FA challenge/expiry、CAPTCHA 登录 gate、passkey 登录成功/取消、真实软键盘与完整非密码失败视觉；已完成的 setup 重试及 en/zh/ja 三视口普通登录表面不再列为缺口。M17 只剩上述非产品失败的最终 disposition、最终 SHA 的静态/远程证据汇总、以及在 SHA `789188d0` 之后刷新并人工复核附录 B 的 28 张 canonical 图和 owner-scoped 差异交接。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
