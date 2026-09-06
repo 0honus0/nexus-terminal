@@ -164,7 +164,7 @@
     @resized="handleLayoutResize"
     @keydown.capture="stopLockedSplitterKeydown"
   >
-    <Pane v-for="child in node.children ?? []" :key="child.id" :size="child.size">
+    <Pane v-for="child in node.children ?? []" :key="child.id" :size="child.size" :min-size="5">
       <WorkspaceLayoutRenderer
         :node="child"
         :session="session"
