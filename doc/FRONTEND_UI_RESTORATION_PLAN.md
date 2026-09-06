@@ -291,7 +291,7 @@
 | ID     | 状态                | 子任务及具体完成条件                                                                                                                |
 | ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | M10.01 | ✅ 已完成〔C.1/P5〕 | xterm padding/主题fallback/背景层、SearchAddon外观、选择菜单、虚拟keycap/修饰键与mobile tools旧布局                                 |
-| M10.02 | ◐ 部分完成          | terminal/keyboard源码已审；恢复完整mobile run证据，补普通/选中/搜索/断连/重连时的布局                                               |
+| M10.02 | ◐ 部分完成          | terminal/keyboard源码已审；已提交移动选区滚动后句柄同步修复（C.18），仍需完整mobile run及普通/选中/搜索/断连/重连布局证据 |
 | M10.03 | ◐ 部分完成〔C.14-k〕 | 真实SSH终端输入、terminal.input、Ctrl+wheel字体resize、命令执行与cwd持久已通过；复制/选择、搜索导航、Ctrl/Alt/IME、虚拟键盘、竖横屏与字体持久化仍待验收 |
 
 **验收/架构**：SearchAddon与terminal API归feature；修饰键编码沿既有单一owner，不恢复旧event bus。复用 `ssh/terminal-ui.spec.ts`、`ssh/terminal-tools-ui.spec.ts`、`ssh/terminal-protocol.spec.ts`、`mobile/terminal-touch.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 `ssh-terminal.png` 及移动selection/keyboard/modifiers。
@@ -304,7 +304,7 @@
 | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M11.01 | ✅ 已完成〔C.1/P6〕  | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                               |
 | M11.02 | ◐ 部分完成           | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                              |
-| M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复、桌面拖放移动、多选Copy/Cut→Paste及文件选择器上传进度/刷新/下载已通过；旧版目录置顶行为已恢复，权限/下载失败/archive及移动专项仍待验收 |
+| M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复、桌面拖放移动、多选Copy/Cut→Paste及文件选择器上传进度/刷新/下载已通过；已提交逐项下载失败不阻断后续项修复（C.18），权限/archive及移动专项仍待验收 |
 | M11.04 | ⏳ 待验收            | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口  |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
@@ -318,7 +318,7 @@
 | M12.01 | ✅ 已完成〔C.1/P6〕 | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                   |
 | M12.02 | ◐ 部分完成          | 全部editor相关移动源码已审；旧overlay/container/tabs由当前owner组合，不恢复旧FileEditor store                                            |
 | M12.03 | ◐ 部分完成〔C.15〕 | 源码对照确认旧版保存失败后仍可重试，已移除新架构对 `active.error` 的永久禁用；多文件切换、dirty/save/关闭确认、编码换行/语言、search/replace、preview转编辑及嵌入/弹出状态仍待浏览器验收 |
-| M12.04 | ⏳ 待验收           | desktop弹层resize持久化；mobile全屏/软键盘/长toolbar可达且不写回desktop尺寸；跨session scope保持正确                                     |
+| M12.04 | ◐ 部分完成〔C.18〕  | 已提交 session 切换时关闭 teleported document popup、保留 editor/preview 文档状态；desktop resize 持久化、mobile 全屏/软键盘/长 toolbar 与跨 session scope 仍待验收 |
 
 **验收/架构**：同一 FileEditorSessionController + FileDocumentPort；popup与embedded不分别维护document副本。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 desktop editor/mobile editor/search。
 
@@ -1118,6 +1118,14 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M01.02 passkey busy state` → `/root/luna_m01_passkey`（Luna max）：对照旧 LoginView passkey 请求期间的共享 loading/禁用/文案，确认新安全 composable 已有 loading 但未传给 auth view；通过 `LoginPage` prop 与 LoginView `isBusy` 恢复密码/2FA/remember/两个按钮的禁用和 `loggingIn` 文案，失败 finally 后可重试，未恢复旧 store/fetch。`vue-tsc --noEmit`、architecture、i18n、`git diff --check` 通过，主代理提交 `7d9fdcd3`；M01 其他认证状态/移动软键盘仍待。
 - 上述三个原子批次均未新增仓库测试，符合 C.15 产品优先级；相关 dirty E2E 草稿和 root-preserved 产物未混入。M00/M01/M09 仍是部分完成，不能因单个行为修复提前关闭；下一批继续选择 M08 叠层/焦点、M10 移动终端、M11 文件失败边界或 M12 编辑生命周期。
 - 当前 HEAD 为 `d6a2a96c`；仍保护未提交 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts` 及 `*.root-preserved-20260906-takeover` / core 产物，未随 M08 提交混入。正式模块闭环计数仍为 `9 / 18`；M08/M13 尚未因单个原子批次提前关闭。
+
+### C.18 产品优先差异收口（2026-09-06，当前接续）
+
+- 本轮继续遵循 C.15：先处理可确认的旧 UI/行为迁移差异，新增测试与完整截图证据后置；子代理仅使用 Luna，未修改 plan、未 commit/push，主代理独立检查后精确提交。三个批次均是原子修复，未关闭父模块，正式闭环计数保持 `9 / 18`。
+- `M10.02/M10.03 terminal selection scroll sync` → `/root/luna_m10_terminal`（Luna max）：对照旧 `8ceb5840:packages/frontend/src/components/Terminal.vue:1021-1023`，确认移动选区后 xterm 滚动不会更新句柄位置；在当前 `features/terminal/components/TerminalView.vue` 增加 `terminal.onScroll` + `requestAnimationFrame(syncMobileSelectionHandles)`，沿用 terminal feature owner 与既有 cleanup。frontend architecture、i18n、`vue-tsc --noEmit`、Vite build（2664 modules）、`git diff --check` 通过；主代理提交 `b2f2ecc6`。V 仍待真实移动视口/竖横屏截图与选区滚动流程，复制/搜索/修饰键/IME/虚拟键盘仍待后续验收。
+- `M11.03 download failure isolation` → `/root/luna_m11_files`（Luna max）：对照旧 `FileManager.vue` 中逐条异步下载捕获，确认新 `features/filesystem/components/FileManager.vue` 将整个批次置于单一 `try`，首个失败会阻断后续下载；将异常边界下沉到每个 entry，继续使用 `FilesystemDownloadPort`，不恢复旧 SFTP manager/store/event bus。architecture、i18n、`vue-tsc --noEmit`、Prettier、Vite build（2664 modules）、`git diff --check` 通过；主代理提交 `4ff0730d`。F 真实多文件失败→后续成功流程仍待浏览器证据，V 无产品视觉改动，A 通过。
+- `M12.04 popup/session visibility` → `/root/luna_m12_editor`（Luna max）：对照当前 `WorkspaceView.vue` 对 `WorkspaceSessionSurface` 的 `v-show` 与 `WorkspaceSessionSurface.vue` 的 teleported `document-popup`，确认切换 session 隐藏 surface 时旧 popup 仍可能留在 body、拦截新 session；在 workspace 组合 owner 观察 root `style` 的 `display:none` 并关闭 `documentPopupVisible`，保留 editor/preview controller、tab/document 状态。`git diff --check`、architecture、i18n、`vue-tsc --noEmit` 通过；主代理提交 `464ed0b8`。F/V 仍待真实切换与弹层几何流程，A 通过；不恢复旧 FileEditor store/event bus/重复文档副本。
+- 接续 HEAD 为 `464ed0b8`；保护未提交的 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts` 及 `*.root-preserved-20260906-takeover` / core 产物未混入。当前并行继续委派三个单一结果：M10 搜索/选择交互、M11 权限或 archive 失败反馈、M12 dirty/save/refresh/close 生命周期；子代理不得修改本节，主代理在交付后独立验收并继续更新。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
