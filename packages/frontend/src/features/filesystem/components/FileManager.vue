@@ -943,8 +943,8 @@
   const download = async (entries: RemoteFileEntry[]) => {
     context.value = null;
     if (!props.download || !entries.length) return;
-    try {
-      for (const entry of entries) {
+    for (const entry of entries) {
+      try {
         let path = entry.path;
         let kind: 'file' | 'directory' = entry.metadata.isDirectory ? 'directory' : 'file';
         if (entry.metadata.isSymbolicLink) {
@@ -960,9 +960,9 @@
         document.body.append(anchor);
         anchor.click();
         anchor.remove();
+      } catch (cause) {
+        feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
       }
-    } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
     }
   };
   const copyPath = async (entry: RemoteFileEntry) => {
