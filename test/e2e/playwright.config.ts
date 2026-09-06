@@ -42,7 +42,7 @@ export default defineConfig({
   use: {
     actionTimeout: isCI ? 15_000 : 0,
     navigationTimeout: isCI ? 30_000 : 0,
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: 'http://localhost:4173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
