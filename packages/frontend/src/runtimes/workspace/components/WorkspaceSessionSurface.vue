@@ -593,6 +593,15 @@
     if (code === 'INVALID_PASSWORD_FORMAT') return t('fileManager.archivePassword.invalidCharacters');
     return code === 'PASSWORD_REQUIRED' ? '' : fallback;
   };
+  type ArchivePasswordErrorCode = Extract<
+    ArchiveTransferErrorCode,
+    'PASSWORD_REQUIRED' | 'INVALID_PASSWORD' | 'PASSWORD_TOO_LONG' | 'INVALID_PASSWORD_FORMAT'
+  >;
+  const isArchivePasswordErrorCode = (code: ArchiveTransferErrorCode | undefined): code is ArchivePasswordErrorCode =>
+    code === 'PASSWORD_REQUIRED' ||
+    code === 'INVALID_PASSWORD' ||
+    code === 'PASSWORD_TOO_LONG' ||
+    code === 'INVALID_PASSWORD_FORMAT';
   const openArchivePasswordPrompt = (
     requestContext: ArchiveRequestContext,
     code: ArchiveTransferErrorCode = 'PASSWORD_REQUIRED',
@@ -615,18 +624,23 @@
         await props.session.filesystemState.browser.refresh();
         return;
       }
+      if (task.status !== 'error') return;
       if (
-        task.status !== 'error' ||
-        !task.errorCode ||
-        !['PASSWORD_REQUIRED', 'INVALID_PASSWORD', 'PASSWORD_TOO_LONG', 'INVALID_PASSWORD_FORMAT'].includes(
-          task.errorCode,
-        ) ||
-        submissionGeneration !== archivePromptGeneration ||
-        archiveDialog.value
+        isArchivePasswordErrorCode(task.errorCode) &&
+        submissionGeneration === archivePromptGeneration &&
+        !archiveDialog.value
       ) {
+        openArchivePasswordPrompt(requestContext, task.errorCode, task.error ?? '');
         return;
       }
-      openArchivePasswordPrompt(requestContext, task.errorCode, task.error ?? '');
+      if (task.status === 'error') {
+        const detail = task.error || t('fileManager.errors.generic');
+        const messageKey =
+          requestContext.kind === 'compress'
+            ? 'fileManager.errors.compressErrorDetailed'
+            : 'fileManager.errors.decompressErrorDetailed';
+        feedback.notifyError(t(messageKey, { error: detail }));
+      }
     });
   };
   const startArchiveTask = async (

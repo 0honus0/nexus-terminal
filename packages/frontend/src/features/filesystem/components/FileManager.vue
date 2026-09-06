@@ -798,7 +798,8 @@
       action.value = null;
       await browser.load();
     } catch (cause) {
-      feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
+      const detail = cause instanceof Error ? cause.message : String(cause);
+      feedback.notifyError(action.value === 'chmod' ? `${t('fileManager.errors.chmodFailed')}: ${detail}` : detail);
     }
   };
   const remove = async (entries: RemoteFileEntry[]) => {
