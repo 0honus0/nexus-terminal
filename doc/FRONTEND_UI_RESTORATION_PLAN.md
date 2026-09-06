@@ -25,7 +25,7 @@
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
 | 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-06 当前工作树）**：`13 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`14 / 18` 个正式模块已完成本地 F/V/A 闭环：**M00 App shell / Foundation / feedback、M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -120,7 +120,7 @@
 
 | 模块 | 范围                                      | 已实现证据              | 当前未完成重点                                                                                   |
 | ---- | ----------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
-| M00  | 应用 shell、全局视觉、Foundation/feedback | ✅ P1/P2                | 全局非 Vue 证据复核、窄屏/多弹层集成                                                             |
+| M00  | 应用 shell、全局视觉、Foundation/feedback | ✅ 本地闭环〔C.55〕      | 仅待 M17 最终 canonical                                                               |
 | M01  | 登录、初始化、认证入口                    | ✅ P3                   | 各认证状态的窄屏可达性与视觉                                                                     |
 | M02  | Dashboard                                 | ✅ P3                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
 | M03  | Connections                               | ✅ P3 + 本地 P9-A/B     | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
@@ -155,8 +155,8 @@
 | ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M00.01 | ✅ 已完成〔C.1/P1〕 | 恢复全局 FontAwesome、header/nav/logo、背景/边框/输入焦点禁用态、基础页面几何和 terminal fallback；保留 app bootstrap                                                    |
 | M00.02 | ✅ 已完成〔C.1/P2〕 | 恢复 alert/confirm/toast 位置、尺寸、图标、时序和 overlay；feedback 状态留在 shared owner                                                                                |
-| M00.03 | ◐ 部分完成          | 复核 tokens/default theme、CSS 加载、图片 intrinsic size、favicon/PWA 与旧基线；附录 D 非 Vue 表逐项给最终结论，不能仅沿用初始“应修复”文字                               |
-| M00.04 | ◐ 部分完成〔C.15〕  | 320/375/桌面 header/nav 内滚动、active indicator 与右侧 actions 已按旧UI恢复；输入、菜单、dialog/footer、长消息、嵌套 overlay、Escape/backdrop/focus恢复仍待逐项差异验收 |
+| M00.03 | ✅ 本地完成〔C.55〕  | tokens/default theme、CSS/资产加载、图片 intrinsic size、favicon/PWA 与附录 D 非 Vue 入口均已按当前 owner 复核；无待修复产品差异                               |
+| M00.04 | ✅ 本地完成〔C.55〕  | 320/375/桌面 header/nav、输入/菜单/dialog/footer、长消息、嵌套 overlay、Escape/backdrop/focus 恢复均有当前工作树浏览器证据；最终 canonical 归 M17 |
 
 **验收/架构**：公共原语仍无产品状态；共用改动验证所有受影响模块，不只打开单个弹窗。复用 `ui/protected-navigation.spec.ts`、`ui/dashboard-workflows.spec.ts`、`mobile/dashboard-mobile.spec.ts` 和自然 dialog/feedback 场景；截图归 `dashboard-home.png` 等现有检查点。
 
@@ -1372,6 +1372,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - Focus 配置器首次真实运行暴露 `structuredClone` 读取 Vue reactive proxy 的 `DataCloneError`。在当前 Workspace owner 内改用递归 `toRaw` clone，保留同一 focus capability、保存 API 与快捷键状态；修复后 focus/shortcut run **1/1 passed，exit 0**，metrics 为 before/after sequence 与 `focused=commandInput`，截图位于 `/dev/shm/nexus-m08-focus-5de4702f-v2/`。architecture、i18n、vue-tsc、Prettier、diff-check 均由该 run 通过。
 - archive sidebar unmount 与 immediate-close wheel 两个 run 均未取得产品结论：页面/cleanup 期间出现 `/tmp` `ENOSPC`，分别为 `0/1` 和 `0/1`；sidebar/context/layout 断言未显示稳定产品反例，不能标为通过或失败。需清理可丢弃证据后在独立空间重跑，不修改产品迎合 selector。
 - 本节对应产品改动仅为 `packages/frontend/src/runtimes/workspace/components/WorkspaceFocusConfigurator.vue` 的 reactive-safe clone，未恢复旧 store/event bus/transport；M08 继续部分完成，正式计数保持 **`13 / 18`**。
+
+### C.55 M00 全局 shell/feedback 当前工作树收口（2026-09-06）
+
+- 当前工作树基于产品 `HEAD=2b971184`；M00 仅做证据与计划收口，未修改产品源、测试或旧架构。附录 D 的 tokens/default theme、CSS/字体与图片 intrinsic size、favicon/PWA/manifest 等非 Vue 入口已按当前 owner 逐项复核，没有可确认的产品差异。
+- 共享 overlay probe 在 `/tmp/nexus-m00-overlay-probe-20260906/` 的最终独立 run **1/1 passed，exit 0**：alert 在 `360×800` 与 `412×915` 均 viewport 内无横溢出；confirm 的 focus trap、Tab/Shift+Tab、Escape、backdrop 关闭及焦点恢复均有 `overlay-probe.json` 与截图证据。首次失败 run 仅保留为 locator/等待迭代，不与最终结果混用。
+- 嵌套 overlay/focus boundary 在 `/tmp/nexus-m00-nested-boundary-20260906/` 最终 run **2/2 passed，exit 0**：内层 dialog Escape/backdrop 只关闭顶层并恢复 `connection-delete-button` 焦点，外层 Escape 再关闭父层；长确认消息在 `360×800`、`412×915` 均包裹且页面 `scrollWidth === clientWidth`。既有 TokenInput `1/1` 证据保留在 `/tmp/nexus-m00-token-input-20260906/`。
+- F/V/A：功能覆盖共享 alert/confirm/toast、嵌套关闭和焦点语义；视觉覆盖窄屏尺寸、长消息、无横溢出与旧 UI overlay 结构；架构确认状态仍在 shared feedback/foundation owner，无旧 store/event bus/重复 controller。M00 关闭，最终 canonical 仍由 M17 统一刷新。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
