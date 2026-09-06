@@ -25,7 +25,7 @@
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
 | 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-06 当前工作树）**：`14 / 18` 个正式模块已完成本地 F/V/A 闭环：**M00 App shell / Foundation / feedback、M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`15 / 18` 个正式模块已完成本地 F/V/A 闭环：**M00 App shell / Foundation / feedback、M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M11 Filesystem / catalog / history / context、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -131,7 +131,7 @@
 | M08  | Workspace 编排、pane、tab、布局           | ◐ 部分完成〔C.54〕      | layout/locked/focus/窄 sidebar 已有当前 SHA 证据；archive/wheel、窗口高度/虚拟键盘和最终截图仍待 |
 | M09  | Quick Commands、History、命令栏           | ✅ P4/P5                | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
 | M10  | Terminal、搜索、虚拟键盘                  | ✅ 本地模块闭环〔C.52〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                        |
-| M11  | Filesystem、catalog、history、context     | ✅ P6                   | 源码已审，补真实文件操作与移动几何                                                               |
+| M11  | Filesystem、catalog、history、context     | ✅ 本地闭环〔C.56〕      | 仅待 M17 最终 canonical                                                               |
 | M12  | Editor、Monaco、CodeMirror                | ✅ 本地模块闭环〔C.53〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                        |
 | M13  | Preview 全部 provider 与外壳              | ✅ 本地模块闭环〔C.51〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                        |
 | M14  | Transfers、archive、Progress              | ✅ P7                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
@@ -303,9 +303,9 @@
 | ID     | 状态                                      | 子任务及具体完成条件                                                                                                                                                                                                                                         |
 | ------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M11.01 | ✅ 已完成〔C.1/P6〕                       | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                                                                                                                                           |
-| M11.02 | ◐ 部分完成〔C.42〕                        | 当前 SHA 导航/排序/长列表/路径 history 与 terminal path sync 已真实 3/3；context/sidebar 仍受 Workspace layout owner 的 `sidebar-pane-fileManager` 缺口影响，不能把 filesystem 证据扩大为 Workspace 闭环                                                     |
-| M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15/C.42/C.48〕 | 真实 SSH 导航、长列表/排序、权限成功与直接权限失败→可重试、压缩/解压/密码重试、拖放、剪贴板、多选、上传、下载失败恢复已通过；context 4/6、archive progress 3/5，剩余为 sidebar 产品依赖、通知 selector/timing 或 page-crash/fixture，需在 M08 修复后定向复跑 |
-| M11.04 | ◐ 部分完成〔C.42/C.48〕                   | mobile single-tap/long-press/multi-select 防误打开 4/4，workspace/history overlay、XLSX/DOCX 横向滚动与 desktop preview scrollbar 均有证据；当前 SHA 的 PDF case 已绕过 `/workspace?connectionId=` helper 误判并 1/1 通过，最终 canonical 截图仍归 M17       |
+| M11.02 | ✅ 本地完成〔C.56〕                        | 当前 SHA 导航/排序/长列表/路径 history、terminal path sync、context/sidebar 均有真实证据；sidebar rail 层级修复后 `sidebar-pane-fileManager` 可稳定打开/关闭                                                     |
+| M11.03 | ✅ 本地完成〔C.56〕                        | 真实 SSH 导航、权限/压缩/解压/拖放/剪贴板/多选/上传/下载失败恢复与 archive progress 均有证据；共享 sidebar unmount 与 immediate-close wheel 在当前工作树最终复跑通过 |
+| M11.04 | ✅ 本地完成〔C.56〕                        | mobile single-tap/long-press/multi-select 防误打开、workspace/history overlay、XLSX/DOCX 横向滚动、desktop preview scrollbar 与当前 SHA PDF 均有证据；最终 canonical 截图归 M17       |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
 
@@ -1379,6 +1379,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 共享 overlay probe 在 `/tmp/nexus-m00-overlay-probe-20260906/` 的最终独立 run **1/1 passed，exit 0**：alert 在 `360×800` 与 `412×915` 均 viewport 内无横溢出；confirm 的 focus trap、Tab/Shift+Tab、Escape、backdrop 关闭及焦点恢复均有 `overlay-probe.json` 与截图证据。首次失败 run 仅保留为 locator/等待迭代，不与最终结果混用。
 - 嵌套 overlay/focus boundary 在 `/tmp/nexus-m00-nested-boundary-20260906/` 最终 run **2/2 passed，exit 0**：内层 dialog Escape/backdrop 只关闭顶层并恢复 `connection-delete-button` 焦点，外层 Escape 再关闭父层；长确认消息在 `360×800`、`412×915` 均包裹且页面 `scrollWidth === clientWidth`。既有 TokenInput `1/1` 证据保留在 `/tmp/nexus-m00-token-input-20260906/`。
 - F/V/A：功能覆盖共享 alert/confirm/toast、嵌套关闭和焦点语义；视觉覆盖窄屏尺寸、长消息、无横溢出与旧 UI overlay 结构；架构确认状态仍在 shared feedback/foundation owner，无旧 store/event bus/重复 controller。M00 关闭，最终 canonical 仍由 M17 统一刷新。
+
+### C.56 M11 文件管理器与 sidebar 交互收口（2026-09-06）
+
+- 当前验证工作树基于 `HEAD=2b971184`，唯一产品 diff 为 `packages/frontend/src/runtimes/workspace/components/WorkspaceSessionSurface.vue` 左右 sidebar rail 增加 `relative z-[120]`。固定 sidebar panel 使用 `z-[110]`，原 rail 被其覆盖后 `sidebar-pane-fileManager` 点击无法到达，导致关闭/teardown 假失败；该改动只修正现有 Workspace 组合层级，不新增状态 owner、transport 或旧架构 facade。
+- M11 导航/路径 history/terminal path sync 的既有修复证据 `/tmp/nexus-m11-nav-fix-20260906/` 仍有效；在当前工作树独立串行重跑 `progress-display-archive.spec.ts` 的 archive sidebar unmount **1/1 passed，exit 0（8.9s）**，以及 `panel-wheel-scaling.spec.ts` 的 immediate-close wheel **1/1 passed，exit 0（8.5s）**。完整日志位于 `/dev/shm/nexus-m11-2b971184-20260906-rerun/{archive-sidebar-unmount,panel-wheel-scaling}/run.log`。
+- 两项复跑均真实打开 `/workspace?connectionId=1`、执行侧栏打开/关闭和 archive/wheel 断言；无 `ENOSPC`、page error 或残留 E2E 服务。此前 `/tmp` 满导致的 `0/1` 仅作为环境失败保留，不再当作产品结论。
+- F/V/A：F 覆盖文件导航、路径同步、上下文侧栏、archive 生命周期和 wheel 缩放；V 覆盖 rail/panel 层级、侧栏可达性及文件管理器边界；A 保持 filesystem controller/Workspace public capability 单一归属。M11 关闭，最终 canonical 仍由 M17 统一刷新。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
