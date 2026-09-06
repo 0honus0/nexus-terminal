@@ -270,36 +270,48 @@
     if (searchIndexDocument === targetDocument && searchPageTextItems.length === targetDocument.numPages) return;
     if (searchIndexPromise && searchIndexDocument === targetDocument) return searchIndexPromise;
 
+    const targetGeneration = documentGeneration;
+    const indexedTextItems = Array.from({ length: targetDocument.numPages }, () => [] as string[]);
     searchIndexDocument = targetDocument;
-    searchPageTextItems = Array.from({ length: targetDocument.numPages }, () => []);
-    searchIndexPromise = (async () => {
+    const indexPromise = (async () => {
       let pageIndex = 0;
       const workers = Math.min(4, targetDocument.numPages);
       await Promise.all(
         Array.from({ length: workers }, async () => {
           while (pageIndex < targetDocument.numPages) {
+            if (targetGeneration !== documentGeneration || targetDocument !== document.value) return;
             const index = pageIndex;
             pageIndex += 1;
             const page = await targetDocument.getPage(index + 1);
             const content = await page.getTextContent();
-            searchPageTextItems[index] = content.items.flatMap((item) =>
+            if (targetGeneration !== documentGeneration || targetDocument !== document.value) {
+              page.cleanup();
+              return;
+            }
+            indexedTextItems[index] = content.items.flatMap((item) =>
               'str' in item && typeof item.str === 'string' ? [item.str] : [],
             );
             page.cleanup();
           }
         }),
       );
+      if (targetGeneration === documentGeneration && targetDocument === document.value) {
+        searchPageTextItems = indexedTextItems;
+      }
     })();
+    searchIndexPromise = indexPromise;
     try {
-      await searchIndexPromise;
+      await indexPromise;
     } finally {
-      if (searchIndexDocument === targetDocument) searchIndexPromise = null;
+      if (searchIndexDocument === targetDocument && searchIndexPromise === indexPromise) searchIndexPromise = null;
     }
   };
 
   const runSearch = async (value: string): Promise<void> => {
     const query = value.trim().toLocaleLowerCase();
     const generation = ++searchGeneration;
+    const targetDocument = document.value;
+    const targetDocumentGeneration = documentGeneration;
     if (!query) {
       searchAppliedQuery.value = '';
       searchMatches.value = [];
@@ -309,29 +321,43 @@
     }
 
     searchBusy.value = true;
-    await ensureSearchIndex();
-    if (generation !== searchGeneration) return;
-
-    const matches: PdfSearchMatch[] = [];
-    searchPageTextItems.forEach((items, pageIndex) => {
-      let occurrence = 0;
-      for (const item of items) {
-        const lower = item.toLocaleLowerCase();
-        let offset = 0;
-        let index = lower.indexOf(query, offset);
-        while (index >= 0) {
-          matches.push({ page: pageIndex + 1, occurrence });
-          occurrence += 1;
-          offset = index + query.length;
-          index = lower.indexOf(query, offset);
-        }
+    try {
+      await ensureSearchIndex();
+      if (
+        generation !== searchGeneration ||
+        targetDocumentGeneration !== documentGeneration ||
+        targetDocument !== document.value
+      ) {
+        return;
       }
-    });
-    searchAppliedQuery.value = value.trim();
-    searchMatches.value = matches;
-    activeSearchIndex.value = matches.length ? 0 : -1;
-    searchBusy.value = false;
-    if (matches[0]) scrollToPage(matches[0].page, 'auto');
+
+      const matches: PdfSearchMatch[] = [];
+      searchPageTextItems.forEach((items, pageIndex) => {
+        let occurrence = 0;
+        for (const item of items) {
+          const lower = item.toLocaleLowerCase();
+          let offset = 0;
+          let index = lower.indexOf(query, offset);
+          while (index >= 0) {
+            matches.push({ page: pageIndex + 1, occurrence });
+            occurrence += 1;
+            offset = index + query.length;
+            index = lower.indexOf(query, offset);
+          }
+        }
+      });
+      searchAppliedQuery.value = value.trim();
+      searchMatches.value = matches;
+      activeSearchIndex.value = matches.length ? 0 : -1;
+      if (matches[0]) scrollToPage(matches[0].page, 'auto');
+    } catch {
+      if (generation !== searchGeneration) return;
+      searchAppliedQuery.value = '';
+      searchMatches.value = [];
+      activeSearchIndex.value = -1;
+    } finally {
+      if (generation === searchGeneration) searchBusy.value = false;
+    }
   };
 
   const moveSearch = (delta: number): void => {
