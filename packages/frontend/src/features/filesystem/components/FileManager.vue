@@ -942,28 +942,31 @@
   };
   const download = async (entries: RemoteFileEntry[]) => {
     context.value = null;
-    if (!props.download || !entries.length) return;
-    for (const entry of entries) {
-      try {
-        let path = entry.path;
-        let kind: 'file' | 'directory' = entry.metadata.isDirectory ? 'directory' : 'file';
-        if (entry.metadata.isSymbolicLink) {
-          const resolved = await props.channel.realpath(entry.path);
-          path = resolved.path;
-          kind = resolved.targetType === 'directory' ? 'directory' : 'file';
+    const downloadPort = props.download;
+    if (!downloadPort || !entries.length) return;
+    await Promise.all(
+      entries.map(async (entry) => {
+        try {
+          let path = entry.path;
+          let kind: 'file' | 'directory' = entry.metadata.isDirectory ? 'directory' : 'file';
+          if (entry.metadata.isSymbolicLink) {
+            const resolved = await props.channel.realpath(entry.path);
+            path = resolved.path;
+            kind = resolved.targetType === 'directory' ? 'directory' : 'file';
+          }
+          const { url } = await downloadPort.createDownload(path, kind);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = '';
+          anchor.rel = 'noopener';
+          document.body.append(anchor);
+          anchor.click();
+          anchor.remove();
+        } catch (cause) {
+          feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
         }
-        const { url } = await props.download.createDownload(path, kind);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = '';
-        anchor.rel = 'noopener';
-        document.body.append(anchor);
-        anchor.click();
-        anchor.remove();
-      } catch (cause) {
-        feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
-      }
-    }
+      }),
+    );
   };
   const copyPath = async (entry: RemoteFileEntry) => {
     context.value = null;
