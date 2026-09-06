@@ -131,9 +131,14 @@
         await task.destroy();
         return;
       }
+      const nextOutline = (await nextDocument.getOutline()) ?? [];
+      if (generation !== documentGeneration) {
+        await task.destroy();
+        return;
+      }
       document.value = nextDocument;
       currentPage.value = Math.min(Math.max(currentPage.value, 1), Math.max(1, nextDocument.numPages));
-      outline.value = mapOutline((await nextDocument.getOutline()) ?? []);
+      outline.value = mapOutline(nextOutline);
       loading.value = false;
       await nextTick();
       updateAvailableWidth();
