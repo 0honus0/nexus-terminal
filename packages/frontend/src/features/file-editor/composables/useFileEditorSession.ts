@@ -86,9 +86,21 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   const loading = ref(false);
   const ports = new Map<string, FileDocumentPort>();
   const savingDocuments = new Set<string>();
+  let loadingOperations = 0;
+  let openGeneration = 0;
   const active = computed(() => tabs.value.find((item) => item.id === activeId.value) ?? null);
 
+  const beginLoading = (): void => {
+    loadingOperations += 1;
+    loading.value = true;
+  };
+  const endLoading = (): void => {
+    loadingOperations = Math.max(0, loadingOperations - 1);
+    loading.value = loadingOperations > 0;
+  };
+
   async function open(path: string, context?: FileEditorOpenContext): Promise<EditorDocument> {
+    const generation = ++openGeneration;
     const scopeId = context?.scopeId;
     const existing = tabs.value.find((item) => item.path === path && item.scopeId === scopeId);
     if (existing) {
@@ -97,9 +109,14 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     }
     const port = context?.port ?? defaultPort;
     if (!port) throw new Error('No document port is available for this file.');
-    loading.value = true;
+    beginLoading();
     try {
       const loaded = await port.load(path);
+      const loadedExisting = tabs.value.find((item) => item.path === path && item.scopeId === scopeId);
+      if (loadedExisting) {
+        if (generation === openGeneration || !activeId.value) activeId.value = loadedExisting.id;
+        return loadedExisting;
+      }
       const doc: EditorDocument = {
         id: crypto.randomUUID(),
         scopeId,
@@ -118,10 +135,10 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
       };
       ports.set(doc.id, port);
       tabs.value.push(doc);
-      activeId.value = doc.id;
+      if (generation === openGeneration || !activeId.value) activeId.value = doc.id;
       return doc;
     } finally {
-      loading.value = false;
+      endLoading();
     }
   }
 
@@ -172,7 +189,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     if (savingDocuments.has(doc.id)) return;
     const port = ports.get(doc.id) ?? defaultPort;
     if (!port) throw new Error('The source session for this file is no longer available.');
-    loading.value = true;
+    beginLoading();
     doc.error = undefined;
     try {
       const loaded = await port.load(doc.path);
@@ -186,7 +203,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
       doc.error = cause instanceof Error ? cause.message : String(cause);
       throw cause;
     } finally {
-      loading.value = false;
+      endLoading();
     }
   }
 
@@ -194,7 +211,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     const doc = tabs.value.find((item) => item.id === id);
     if (!doc || !encoding || doc.encoding === encoding) return;
     if (savingDocuments.has(doc.id)) return;
-    loading.value = true;
+    beginLoading();
     doc.error = undefined;
     try {
       doc.content = decodeEditorRawContent(doc.rawContentBase64, encoding);
@@ -206,7 +223,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
       doc.error = cause instanceof Error ? cause.message : String(cause);
       throw cause;
     } finally {
-      loading.value = false;
+      endLoading();
     }
   }
 
