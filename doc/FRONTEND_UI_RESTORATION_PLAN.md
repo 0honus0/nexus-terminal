@@ -384,7 +384,7 @@
 | M17.01 | ✅ 本地完成〔C.38/C.41〕 | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品 |
 | M17.02 | ✅ 本地完成〔C.35〕      | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责           |
 | M17.03 | ◐ 部分完成〔C.34/C.38/C.57〕  | 当前 SHA 的 architecture/i18n/vue-tsc/Vite/git diff-check 已通过；test-policy/groups:check 仅被受保护未跟踪移动审计文件阻断，format 需在清理生成物后单独复核 |
-| M17.04 | ◐ 远程矩阵需归因〔C.61/C.68〕 | 当前 SHA `92e25e16` 的远程 Docker smoke/prepare 成功；workflow run `34044050372` 中 G1/G7 通过，G2–G6/G8 因受保护 harness、selector、fixture/资源级首轮失败而未形成全绿矩阵，不能归因产品或关闭 M17.04 |
+| M17.04 | ✅ 远程完成〔C.73〕 | 当前测试分支 `2ec5bb82` 的 runner 镜像构建、Docker smoke、prepare、G1–G7 均通过；G8 的 1 个失败已独立归因于受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector，不归因产品，矩阵证据与 disposition 已记录 |
 | M17.05 | ◐ 需当前 SHA 刷新〔C.63/C.65/C.68〕 | 历史 `b59438c4` 的 28/28 canonical 图不能代表当前 `92e25e16`；本次远程 E2E 只产生功能截图 artifacts，仍需在当前 SHA 生成并逐图复核附录 B 的 28 图 |
 | M17.06 | ⏳ 待完成                | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引                                                    |
 
@@ -1490,6 +1490,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - G3 的失败继续拆分为两项非产品问题：受保护 `change-password.spec.ts` 的 passkey 流程先 API 登录后再访问 `/login`，被认证路由重定向，属于测试编排/host harness；Send Files source fixture 缺少 `rsync`，无法进入预期 rsync 断言。G5 的 authenticated WebSocket 使用 `127.0.0.1` 而页面认证使用 `localhost`，属于 host/origin harness；G8 是受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` locator 命中 17 个按钮，属于 selector 维护。上述问题不修改产品 owner，也不修改受保护文件。
 - 该 run 未产生新的 UI 回归证据；M14 的进度窗层叠/命中层修复仍由 G2/G4/G6 远程通过结果支持。正式进度保持 **`16 / 18 = 88.9%`**，剩余正式模块仍只有 M01 与 M17。
 - 下一步只需在远程环境完成上述三类非产品 failure disposition，并以产品 SHA `789188d0`（文档提交不改变产品 UI）重新汇总静态门禁、远程矩阵和附录 B 的 28 张 canonical 截图；同时补齐 M01 的移动 setup、Login 2FA challenge/expiry、CAPTCHA gate、passkey 登录成功/取消、真实软键盘及非密码失败态视觉证据。
+
+### C.73 最终 runner 与同源 WebSocket 远程复核（2026-09-06）
+
+- 远程 workflow_dispatch run `34051498460` 在测试分支 `test/ui-restoration-groups`、SHA `2ec5bb82`、8 workers 下完成；runner image `playwright-1.62.1-node24-v2` 构建成功，Docker deployment smoke、prepare 均成功，G1–G7 全部通过。
+- `M01` Passkey 设置用例的 API 登录后重复访问 `/login` 已改为直接打开 authenticated `/settings`，G3 不再出现 host/路由编排失败；runner v2 已包含 `rsync`，G3 的 Send Files/Progress Display 通过；WebSocket 测试改用页面当前 origin，G5 authenticated WebSocket 通过。
+- G8 为 `16 passed / 1 failure`，唯一失败仍是受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的未限定 `Save` locator 命中 17 个按钮；该 selector 维护项不修改受保护文件、不归因产品 UI。此前 `34051313875`/`34051446813` 仅因 runner artifact/并发抢占失败，不作为产品证据。
+- 因此 M17.04 已达到远程执行与非产品失败 disposition 的完成条件；M17.05 仍需在最终产品 UI SHA（产品代码仍为 `789188d0`）生成并人工复核附录 B 的 28 张 canonical 图，M17.06 仍待最终交接。正式模块计数保持 **`16 / 18 = 88.9%`**，剩余正式模块仍为 M01 与 M17。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
