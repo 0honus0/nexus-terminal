@@ -25,7 +25,7 @@
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
 | 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-06 当前工作树）**：`11 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`12 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -130,7 +130,7 @@
 | M07  | Notifications、Audit                      | ✅ P3                   | provider/日志状态的移动视觉验收                                    |
 | M08  | Workspace 编排、pane、tab、布局           | ◐ 部分完成〔C.43〕      | resize/layout-lock、focus/overlay、窗口高度/虚拟键盘及最终截图仍待 |
 | M09  | Quick Commands、History、命令栏           | ✅ P4/P5                | ✅ 本地模块闭环；仅待 M17 最终 canonical                           |
-| M10  | Terminal、搜索、虚拟键盘                  | ✅ P5                   | 完整触控/选择/重连与截图复核                                       |
+| M10  | Terminal、搜索、虚拟键盘                  | ✅ 本地模块闭环〔C.52〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                          |
 | M11  | Filesystem、catalog、history、context     | ✅ P6                   | 源码已审，补真实文件操作与移动几何                                 |
 | M12  | Editor、Monaco、CodeMirror                | ✅ P6                   | 弹层/嵌入状态与编辑生命周期集成                                    |
 | M13  | Preview 全部 provider 与外壳              | ✅ 本地模块闭环〔C.51〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                          |
@@ -288,11 +288,11 @@
 
 **Owner**：`features/terminal/`；Workspace绑定TerminalChannel、修饰键与command/search展示。需求：[terminal](software-requirements/requirements/terminal.md)、[mobile](software-requirements/requirements/mobile.md)。
 
-| ID     | 状态                 | 子任务及具体完成条件                                                                                                                                    |
-| ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M10.01 | ✅ 已完成〔C.1/P5〕  | xterm padding/主题fallback/背景层、SearchAddon外观、选择菜单、虚拟keycap/修饰键与mobile tools旧布局                                                     |
-| M10.02 | ◐ 部分完成           | terminal/keyboard源码已审；已提交移动选区滚动后句柄同步与剪贴板菜单宽度修复（C.18/C.19），仍需完整mobile run及普通/选中/搜索/断连/重连布局证据          |
-| M10.03 | ◐ 部分完成〔C.14-k〕 | 真实SSH终端输入、terminal.input、Ctrl+wheel字体resize、命令执行与cwd持久已通过；复制/选择、搜索导航、Ctrl/Alt/IME、虚拟键盘、竖横屏与字体持久化仍待验收 |
+| ID     | 状态                | 子任务及具体完成条件                                                                                                                         |
+| ------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| M10.01 | ✅ 已完成〔C.1/P5〕 | xterm padding/主题fallback/背景层、SearchAddon外观、选择菜单、虚拟keycap/修饰键与mobile tools旧布局                                          |
+| M10.02 | ✅ 本地完成〔C.52〕 | 当前 SHA 移动普通/选中/搜索/重挂载、竖横屏与工具栏几何均有截图和 metrics；断连/重连邻接流程沿用既有真实证据，未发现 owner 回归               |
+| M10.03 | ✅ 本地完成〔C.52〕 | 当前 SHA 终端输入、Ctrl+wheel `14→15` 持久化、Ctrl/Alt/Tab/Ctrl+C 编码、搜索高亮、虚拟键盘/IME 与无横溢出均有真实证据；最终 canonical 归 M17 |
 
 **验收/架构**：SearchAddon与terminal API归feature；修饰键编码沿既有单一owner，不恢复旧event bus。复用 `ssh/terminal-ui.spec.ts`、`ssh/terminal-tools-ui.spec.ts`、`ssh/terminal-protocol.spec.ts`、`mobile/terminal-touch.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 `ssh-terminal.png` 及移动selection/keyboard/modifiers。
 
@@ -1351,6 +1351,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 同一 SHA 的 mobile provider lifecycle run **1/1 passed，exit 0**：invalid PDF/DOCX/image 错误态、empty XLSX `no worksheets`、unsupported editor fallback、延迟 PDF loading，以及 Escape/X 取消语义均通过；`412×839` 截图、metrics、console、worker 请求位于 `/tmp/nexus-m13-current-5de4702f/provider/`，PDF worker 返回 200，未出现 page error。
 - 此前同一 SHA 的 PDF race2 run **1/1 passed**，刷新、快速关闭/重开和双 tab 切回后 outline、页码与 loading 状态保持当前文档；证据位于 `/tmp/nexus-m13-pdf-race2-20260906/`。本轮未发现需要补 generation guard 的稳定产品差异。
 - M13.05/M13.06 的 F/V/A 现已有当前 SHA 结论，模块正式计数由 `10 / 18` 更新为 **`11 / 18`**；M13 仍需 M17 在最终冻结 SHA 上统一刷新/人工复核附录 B 的 canonical 28 图，实体 notch 继续标记为 source-verified 而非硬件实测。产品 owner 未改动，未恢复旧 store/event bus/重复状态。
+
+### C.52 M10 当前 SHA 终端边界收口（2026-09-06）
+
+- 当前产品 SHA `5de4702f` 的隔离 Playwright run **2/2 passed，exit 0**（Pixel 7、单 worker），覆盖 `375×812` portrait 与 `812×375` landscape：terminal/command bar 无横向溢出，切 pane 重挂载后搜索词与 `.xterm-selection` 保留，Ctrl+wheel 字号从 `14` 变为 `15` 并在关闭/重开后通过 appearance API 持久化。
+- 同一 run 的 modifier/keyboard 证据确认 `Ctrl+Home`、`Ctrl+Alt+↑`、`Alt+Tab`、Ctrl+C 的 terminal.input frame 正确且 modifier 一次性清理；既有当前 SHA 触控/IME/虚拟键盘与重连证据作为邻接矩阵，不重复制造测试。截图、metrics、console 位于 `/tmp/nexus-m10-terminal-audit-20260906-run3/`，`pageErrors=[]` 且 console 无 error。
+- 截图人工复核确认移动 header、session tab、terminal、命令栏、工具按钮及横屏 modifier 键盘均在可读/可点击区域；当前 terminal feature owner 无需产品改动，静态 `git diff --check` 通过，未恢复旧 store/event bus/transport。
+- M10.02/M10.03 的 F/V/A 已闭环，正式模块计数由 `11 / 18` 更新为 **`12 / 18`**；M10 仅保留 M17 最终 SHA/canonical/28 图统一复核。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
