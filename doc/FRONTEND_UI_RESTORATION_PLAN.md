@@ -1385,7 +1385,7 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 当前验证工作树基于 `HEAD=2b971184`，唯一产品 diff 为 `packages/frontend/src/runtimes/workspace/components/WorkspaceSessionSurface.vue` 左右 sidebar rail 增加 `relative z-[120]`。固定 sidebar panel 使用 `z-[110]`，原 rail 被其覆盖后 `sidebar-pane-fileManager` 点击无法到达，导致关闭/teardown 假失败；该改动只修正现有 Workspace 组合层级，不新增状态 owner、transport 或旧架构 facade。
 - M11 导航/路径 history/terminal path sync 的既有修复证据 `/tmp/nexus-m11-nav-fix-20260906/` 仍有效；在当前工作树独立串行重跑 `progress-display-archive.spec.ts` 的 archive sidebar unmount **1/1 passed，exit 0（8.9s）**，以及 `panel-wheel-scaling.spec.ts` 的 immediate-close wheel **1/1 passed，exit 0（8.5s）**。完整日志位于 `/dev/shm/nexus-m11-2b971184-20260906-rerun/{archive-sidebar-unmount,panel-wheel-scaling}/run.log`。
 - 两项复跑均真实打开 `/workspace?connectionId=1`、执行侧栏打开/关闭和 archive/wheel 断言；无 `ENOSPC`、page error 或残留 E2E 服务。此前 `/tmp` 满导致的 `0/1` 仅作为环境失败保留，不再当作产品结论。
-- F/V/A：F 覆盖文件导航、路径同步、上下文侧栏、archive 生命周期和 wheel 缩放；V 覆盖 rail/panel 层级、侧栏可达性及文件管理器边界；A 保持 filesystem controller/Workspace public capability 单一归属。M11 关闭，最终 canonical 仍由 M17 统一刷新。
+- F/V/A：F 覆盖文件导航、路径同步、上下文侧栏、archive 入口卸载和 wheel 缩放；archive 任务生命周期仍归 M14。V 覆盖 rail/panel 层级、侧栏可达性及文件管理器边界；A 保持 filesystem controller/Workspace public capability 单一归属。M11 关闭，最终 canonical 仍由 M17 统一刷新。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
