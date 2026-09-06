@@ -535,13 +535,15 @@
     if (event.touches.length < 2) pinchStartDistance = 0;
   };
 
-  watch(searchTerm, (value) => {
+  const syncSearchDecorations = (): void => {
     if (!searchOpen.value || !searchAddon) return;
-    if (!value) searchAddon.clearDecorations();
-    else searchAddon.findNext(value, { incremental: true });
-  });
+    if (!searchTerm.value) searchAddon.clearDecorations();
+    else searchAddon.findNext(searchTerm.value, { incremental: true });
+  };
+  watch(searchTerm, syncSearchDecorations);
   watch(searchOpen, (open) => {
     if (!open) searchAddon?.clearDecorations();
+    else syncSearchDecorations();
   });
 
   onMounted(() => {
@@ -573,7 +575,8 @@
       () => backgroundOsc.dispose(),
       () => backgroundResetOsc.dispose(),
     );
-    if (terminalState.snapshot.value) terminal.write(terminalState.snapshot.value);
+    if (terminalState.snapshot.value) terminal.write(terminalState.snapshot.value, syncSearchDecorations);
+    else syncSearchDecorations();
     root.value!.addEventListener('wheel', handleWheelScale, { capture: true, passive: false });
     root.value!.addEventListener('touchstart', handleTouchStart, { passive: true });
     root.value!.addEventListener('touchmove', handleTouchMove, { passive: false });
