@@ -29,9 +29,10 @@
   const localScale = ref(props.rowScale);
   const visible = ref(false);
   const editing = ref<QuickCommand | null>(null);
-  const searchInput = ref<{ focus?: () => void } | null>(null);
+  const searchInput = ref<HTMLInputElement | null>(null);
   const searchExpanded = ref(!props.collapsibleSearch);
   const root = ref<HTMLElement | null>(null);
+  const list = ref<HTMLElement | null>(null);
   const context = ref<{ command: QuickCommand; x: number; y: number } | null>(null);
   const editingTagId = ref<number | 'untagged' | null>(null);
   const tagDraft = ref('');
@@ -65,7 +66,7 @@
   watch(
     () => props.collapsibleSearch,
     (enabled) => {
-      if (!enabled) searchExpanded.value = true;
+      searchExpanded.value = !enabled || Boolean(search.value);
     },
   );
 
@@ -152,7 +153,10 @@
   };
   const handleSearchBlur = () => {
     window.setTimeout(() => {
-      if (!root.value?.contains(document.activeElement)) store.resetSelection();
+      if (document.activeElement !== searchInput.value && !list.value?.contains(document.activeElement)) {
+        store.resetSelection();
+        if (props.collapsibleSearch && !search.value) searchExpanded.value = false;
+      }
     }, 0);
   };
   const startTagEdit = (group: { id: number | null; name: string }) => {
@@ -210,7 +214,7 @@
     let command = template;
     for (const [name, value] of Object.entries(variables)) {
       const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      command = command.replace(new RegExp(`\\$\\{${escaped}\\}`, 'g'), value);
+      command = command.replace(new RegExp(`\\$\\{${escaped}\\}`, 'g'), () => value);
     }
     const unresolved = [...command.matchAll(/\$\{([^}]+)\}/g)].map((match) => match[1]).filter(Boolean);
     if (unresolved.length) {
@@ -329,6 +333,7 @@
 
     <div
       data-testid="quick-command-list"
+      ref="list"
       class="min-h-0 flex-1 overflow-y-auto p-2"
       :style="rowStyle"
       :data-row-scale="localScale.toFixed(2)"
@@ -427,7 +432,7 @@
                 >{{ displayText(command) }}</span
               >
               <div
-                class="ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
+                class="quick-command-row-actions ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
               >
                 <button
                   type="button"
@@ -477,7 +482,7 @@
             >{{ displayText(command) }}</span
           >
           <div
-            class="ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
+            class="quick-command-row-actions ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
           >
             <button
               type="button"
@@ -591,6 +596,14 @@
   }
   .row-action:hover {
     background: color-mix(in srgb, black 10%, transparent);
+  }
+  @media (hover: none) {
+    .quick-command-row-actions {
+      opacity: 1;
+    }
+    .row-action {
+      touch-action: manipulation;
+    }
   }
   .context-item {
     display: flex;

@@ -16,6 +16,7 @@
   const { search, loading, error, filtered, selectedIndex } = storeToRefs(store);
   const searchInput = ref<HTMLInputElement | null>(null);
   const root = ref<HTMLElement | null>(null);
+  const list = ref<HTMLElement | null>(null);
   const context = ref<{ entry: CommandHistoryEntry; x: number; y: number } | null>(null);
   let unregisterFocus: (() => void) | undefined;
 
@@ -96,7 +97,9 @@
   };
   const handleSearchBlur = () => {
     window.setTimeout(() => {
-      if (!root.value?.contains(document.activeElement)) store.resetSelection();
+      if (document.activeElement !== searchInput.value && !list.value?.contains(document.activeElement)) {
+        store.resetSelection();
+      }
     }, 0);
   };
 </script>
@@ -145,7 +148,7 @@
       <i class="fas fa-history mb-2 text-xl" aria-hidden="true"></i>
       <p>{{ t('commandHistory.empty') }}</p>
     </div>
-    <ul v-else class="m-0 min-h-0 flex-1 list-none overflow-y-auto p-2">
+    <ul ref="list" v-else class="m-0 min-h-0 flex-1 list-none overflow-y-auto p-2">
       <li
         v-for="(entry, index) in filtered"
         :key="entry.id"
@@ -165,7 +168,7 @@
           {{ entry.command }}
         </button>
         <div
-          class="ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
+          class="history-row-actions ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
         >
           <button
             data-testid="command-history-copy"
@@ -233,6 +236,14 @@
   }
   .history-row-action:hover {
     background: color-mix(in srgb, black 10%, transparent);
+  }
+  @media (hover: none) {
+    .history-row-actions {
+      opacity: 1;
+    }
+    .history-row-action {
+      touch-action: manipulation;
+    }
   }
   .context-item {
     display: flex;

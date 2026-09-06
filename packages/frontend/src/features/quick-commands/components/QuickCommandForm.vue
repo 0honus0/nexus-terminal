@@ -83,7 +83,11 @@
       form.variables.filter((item) => item.key.trim()).map((item) => [item.key.trim(), item.value]),
     ),
   });
-  const save = () => emit('save', toInput());
+  const save = () => {
+    const input = toInput();
+    if (!input.command) return;
+    emit('save', input);
+  };
   const execute = () => {
     const input = toInput();
     if (!input.command) return;
@@ -97,6 +101,8 @@
     :title="t(command ? 'quickCommands.form.titleEdit' : 'quickCommands.form.titleAdd')"
     panel-class="w-[min(720px,94vw)] max-h-[90dvh]"
     content-class="!py-0"
+    :close-on-backdrop="false"
+    :close-on-escape="true"
     @close="emit('close')"
   >
     <form data-testid="quick-command-form" class="space-y-5 py-5" @submit.prevent="save">
@@ -154,10 +160,13 @@
               v-model="variable.key"
               :data-testid="`quick-command-variable-name-${index}`"
               :placeholder="t('quickCommands.form.variableNamePlaceholder')"
+              @keydown.enter.prevent.stop
             />
-            <BaseInput
+            <BaseTextarea
               v-model="variable.value"
               :data-testid="`quick-command-variable-value-${index}`"
+              rows="2"
+              class="min-h-[40px] resize-y"
               :placeholder="t('quickCommands.form.variableValuePlaceholder')"
             />
             <button
