@@ -1,10 +1,11 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, ref, toRaw, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
   import {
+    appendWorkspaceLayoutChild,
     createDefaultWorkspaceLayout,
     workspaceLayout,
     type WorkspaceLayoutNode,
@@ -22,7 +23,16 @@
   const originalSidebar = ref<WorkspaceSidebarConfig>({ left: [], right: [] });
   const saving = ref(false);
 
-  const clone = <T,>(value: T): T => structuredClone(value);
+  const clone = <T,>(value: T): T => {
+    const unproxy = (candidate: unknown): unknown => {
+      const raw = toRaw(candidate);
+      if (Array.isArray(raw)) return raw.map(unproxy);
+      if (raw && typeof raw === 'object')
+        return Object.fromEntries(Object.entries(raw).map(([key, nested]) => [key, unproxy(nested)]));
+      return raw;
+    };
+    return unproxy(value) as T;
+  };
   watch(
     () => props.visible,
     (visible) => {
@@ -50,10 +60,17 @@
       JSON.stringify(sidebar.value) !== JSON.stringify(originalSidebar.value),
   );
 
-  const usedPanes = computed(
-    () => new Set<WorkspacePaneName>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),
+  const sidebarPanes = computed(() => new Set<WorkspacePaneName>([...sidebar.value.left, ...sidebar.value.right]));
+  const availablePanes = computed(() =>
+    workspaceLayout.paneNames.filter(
+      (pane) => pane !== 'terminal' || (!mainPanes.value.includes('terminal') && !sidebarPanes.value.has('terminal')),
+    ),
   );
-  const availablePanes = computed(() => workspaceLayout.paneNames.filter((pane) => !usedPanes.value.has(pane)));
+  const mainAvailablePanes = computed(() =>
+    workspaceLayout.paneNames.filter(
+      (pane) => !mainPanes.value.includes(pane) && (pane !== 'terminal' || !sidebarPanes.value.has('terminal')),
+    ),
+  );
   const paneLabel = (pane: WorkspacePaneName): string => t(`layout.pane.${pane}`);
   const paneIcon = (pane: WorkspacePaneName): string => {
     if (pane === 'connections') return 'fas fa-network-wired';
@@ -69,16 +86,21 @@
     return 'fas fa-window-maximize';
   };
   const addToMain = (pane: WorkspacePaneName): void => {
+    if (!mainAvailablePanes.value.includes(pane)) return;
     const child: WorkspaceLayoutNode = { id: crypto.randomUUID(), type: 'pane', component: pane, size: 25 };
     if (draft.value.type === 'container') {
-      draft.value = { ...draft.value, children: [...(draft.value.children ?? []), child] };
+      const currentChildren = draft.value.children ?? [];
+      const children = appendWorkspaceLayoutChild(currentChildren, child);
+      if (children.length === currentChildren.length) return;
+      draft.value = { ...draft.value, children };
       return;
     }
+    const children = appendWorkspaceLayoutChild([{ ...draft.value, size: 100 }], child);
     draft.value = {
       id: crypto.randomUUID(),
       type: 'container',
       direction: 'horizontal',
-      children: [{ ...draft.value, size: 75 }, child],
+      children,
     };
   };
   const moveSidebar = (side: 'left' | 'right', index: number, delta: number): void => {
@@ -92,7 +114,7 @@
   const setSidebar = (side: 'left' | 'right', name: WorkspacePaneName, enabled: boolean) => {
     const other = side === 'left' ? 'right' : 'left';
     if (enabled) {
-      if (mainPanes.value.includes(name) || sidebar.value[other].includes(name)) return;
+      if ((name === 'terminal' && mainPanes.value.includes(name)) || sidebar.value[other].includes(name)) return;
       sidebar.value = { ...sidebar.value, [side]: [...new Set([...sidebar.value[side], name])] };
       return;
     }
@@ -147,6 +169,7 @@
               type="button"
               class="available-action"
               :title="t('layoutConfigurator.layoutPreview')"
+              :disabled="!mainAvailablePanes.includes(pane)"
               @click="addToMain(pane)"
             >
               <i class="fas fa-plus" aria-hidden="true"></i>
@@ -211,7 +234,7 @@
           <div
             class="flex min-h-[250px] flex-1 flex-col overflow-auto rounded border-2 border-dashed border-border bg-header/20 p-4"
           >
-            <WorkspaceLayoutNodeEditor v-model="draft" :panes="availablePanes" :root="true" />
+            <WorkspaceLayoutNodeEditor v-model="draft" :panes="mainAvailablePanes" :root="true" />
           </div>
           <div class="mt-4">
             <button type="button" class="secondary-action" @click="reset">

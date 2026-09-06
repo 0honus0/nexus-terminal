@@ -2,7 +2,14 @@
   import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseInput, BaseSelect } from '@/foundation/ui';
-  import type { WorkspaceLayoutNode, WorkspacePaneName } from '../layout/workspaceLayout';
+  import {
+    appendWorkspaceLayoutChild,
+    normalizeWorkspaceLayout,
+    rebalanceWorkspaceLayoutChildren,
+    WORKSPACE_LAYOUT_MIN_SIZE,
+    type WorkspaceLayoutNode,
+    type WorkspacePaneName,
+  } from '../layout/workspaceLayout';
 
   const { t } = useI18n();
   const props = defineProps<{ modelValue: WorkspaceLayoutNode; panes: readonly WorkspacePaneName[]; root?: boolean }>();
@@ -12,34 +19,43 @@
     return current && !props.panes.includes(current) ? [current, ...props.panes] : props.panes;
   });
 
-  const patch = (value: Partial<WorkspaceLayoutNode>) => emit('update:modelValue', { ...props.modelValue, ...value });
+  const patch = (value: Partial<WorkspaceLayoutNode>) =>
+    emit('update:modelValue', normalizeWorkspaceLayout({ ...props.modelValue, ...value }));
   const updateChild = (index: number, child: WorkspaceLayoutNode) => {
     const children = [...(props.modelValue.children ?? [])];
     children[index] = child;
-    patch({ children });
+    patch({ children: rebalanceWorkspaceLayoutChildren(children, index) });
   };
   const removeChild = (index: number) => {
     const children = [...(props.modelValue.children ?? [])];
     children.splice(index, 1);
-    patch({ children });
+    patch({ children: rebalanceWorkspaceLayoutChildren(children) });
   };
   const addPane = () => {
     const pane = props.panes[0];
     if (!pane) return;
-    patch({
-      children: [
-        ...(props.modelValue.children ?? []),
-        { id: crypto.randomUUID(), type: 'pane', component: pane, size: 25 },
-      ],
+    const currentChildren = props.modelValue.children ?? [];
+    const children = appendWorkspaceLayoutChild(currentChildren, {
+      id: crypto.randomUUID(),
+      type: 'pane',
+      component: pane,
+      size: 25,
     });
+    if (children.length === currentChildren.length) return;
+    patch({ children });
   };
-  const addContainer = (direction: 'horizontal' | 'vertical') =>
-    patch({
-      children: [
-        ...(props.modelValue.children ?? []),
-        { id: crypto.randomUUID(), type: 'container', direction, children: [], size: 25 },
-      ],
+  const addContainer = (direction: 'horizontal' | 'vertical') => {
+    const currentChildren = props.modelValue.children ?? [];
+    const children = appendWorkspaceLayoutChild(currentChildren, {
+      id: crypto.randomUUID(),
+      type: 'container',
+      direction,
+      children: [],
+      size: 25,
     });
+    if (children.length === currentChildren.length) return;
+    patch({ children });
+  };
   const paneLabel = (pane: WorkspacePaneName | undefined): string =>
     pane ? t(`layout.pane.${pane}`) : t('layoutNodeEditor.pane');
   const move = (index: number, delta: number) => {
@@ -109,9 +125,11 @@
           :model-value="String(modelValue.size ?? 25)"
           class="w-20"
           type="number"
-          min="1"
+          :min="WORKSPACE_LAYOUT_MIN_SIZE"
           max="100"
-          @update:model-value="patch({ size: Number($event) || 1 })"
+          @update:model-value="
+            patch({ size: Math.max(WORKSPACE_LAYOUT_MIN_SIZE, Number($event) || WORKSPACE_LAYOUT_MIN_SIZE) })
+          "
         />
       </label>
       <button
