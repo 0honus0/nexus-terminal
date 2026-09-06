@@ -203,12 +203,7 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
   const { cdp, authenticatorId } = await addVirtualAuthenticator(context, page);
 
   try {
-    await page.goto('http://localhost:4173/login');
-    await page.locator('#username').fill(E2E_ADMIN.username);
-    await page.locator('#password').fill(E2E_ADMIN.password);
-    await page.getByRole('button', { name: 'Login', exact: true }).click();
-    await expect(page).toHaveURL(/\/$/);
-    await page.goto('http://localhost:4173/settings');
+    await page.goto('/settings');
     await page.getByRole('tab', { name: 'Security', exact: true }).click();
     const panel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
     await expect(panel).toBeVisible();
