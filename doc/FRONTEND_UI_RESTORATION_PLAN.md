@@ -384,8 +384,8 @@
 | M17.01 | ✅ 本地完成〔C.38/C.41〕 | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品 |
 | M17.02 | ✅ 本地完成〔C.35〕      | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责           |
 | M17.03 | ◐ 部分完成〔C.34/C.38/C.57〕  | 当前 SHA 的 architecture/i18n/vue-tsc/Vite/git diff-check 已通过；test-policy/groups:check 仅被受保护未跟踪移动审计文件阻断，format 需在清理生成物后单独复核 |
-| M17.04 | ⏳ 待完成                | 对最终产品SHA的 canonical Docker smoke + G1–G8 及必要ingress验证；CI等待交证据代理，主代理做失败归因与验收                                                               |
-| M17.05 | ⏳ 待完成                | 从真实场景生成28图，附录B逐图记录视口/主题/数据/差异结论/产品版本；补无截图UI的浏览器/源码证据，不建立新全局manifest                                                     |
+| M17.04 | ✅ 本地完成〔C.61〕       | 最终 SHA 的 Docker smoke、ingress、WebSocket 与 G1–G8 均已执行；`150/153` 通过，3 项独立归因为受保护 harness/selector，不归因产品；最终项目关闭仍需 M17.06 disposition                                                               |
+| M17.05 | ◐ 需新 SHA 刷新〔C.63/C.65〕 | `b59438c4` 已生成并审计 28/28 canonical 图（26 主图+2 分页），但 M14 层叠修复后当前产品 SHA 为 `6f52f8e9`，须在新 SHA 重刷并复核 28 图；仍需 owner 接受真实视觉差异后由 M17.06 关闭 |
 | M17.06 | ⏳ 待完成                | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引                                                    |
 
 **项目完成条件**：M00–M16适用子任务及F/V/A验收全部有结论，M17.01–06完成；无“源码审计=视觉完成”“旧run=新代码通过”“图片存在=已复核”的替代判断。项目整体完成前保留每个已实现子任务的✅，但模块最终状态不得提前关闭。
@@ -1425,6 +1425,25 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 审计未发现新的结构、几何、密度、字体、图标、滚动或响应式回归；动态指标、时间、审计记录、终端输出、文件排序和任务进度均按运行时数据处理，不作为像素回归。已确认的 owner-scoped 可见差异仍需明确决策：M14 Progress Display 的桌面呈现、M11 目录优先排序、M13 移动 `94dvh`/safe-area inset preview 壳、M15 compact cards/chart，以及 Dashboard 的语言/refresh badge/实时数据。
 - M14 后续 focused run 在工作树 dirty 的 transfers owner 修复上 **1/1 passed**，architecture、`vue-tsc --noEmit` 与 `git diff --check` 均 exit `0`：`ProgressDisplayModal.vue` 的 hidden progress 恢复居中 overlay/teleport，`ProgressCenter.vue` 的 active upload 默认位置恢复旧基线右下角；resize、drag、hide/restore、scroll、cancel-all 均保持通过，M14 此切片 F/V/A **pass**。修复已由主代理作为独立 M14 follow-up commit 提交；因产品 SHA 变化，canonical 截图仍需在该新 SHA 上刷新后才能作为最终证据。
 - M17.04 可在主代理记录 C.61 独立归因后关闭；M17.05 的 28 图取证已完成但须先处理上述 dirty SHA/owner 差异；M17.06 继续保持未关闭。正式模块完成率仍为 **`16 / 18 = 88.9%`**，不得用 `150/153` case 通过率替代。
+
+### C.63 M17.05 当前提交 SHA canonical 28 图最终审计（2026-09-06）
+
+- 当前产品提交 SHA 为 `b59438c457b2d4e32f483c93526d594109faf86c`。物理依赖隔离后的 14 个 focused command groups 全部 exit `0`，分页补证为 `1/1 passed`；证据目录 `/dev/shm/nexus-m17-canonical-b59438c457b2-20260906T142321Z/`，报告为其 `REPORT.md`。
+- 28/28 PNG 均存在且尺寸正确：桌面 `1440x900`、横向预览 `760x860`、Pixel 7 `1082x2202`；`SHA256SUMS.tsv` 28 行与 fresh 文件重算 `0` mismatch。symlink/allow-list 失败尝试未计入最终证据。
+- 审计未发现未解释的结构、密度、字体、图标、滚动或 viewport overflow 回归；但确认需 owner 决策的可见差异：M14 ProgressCenter 叠层/位置、M15 compact status cards/chart、M12 mobile editor/search wrapping、M11 touch context-menu action presentation，以及运行时数据/本地化差异。
+- 因当前截图已覆盖最新 M14 commit，M17.05 的证据生成与人工审计可标记本地完成；M17.06 仍保持 pending，直到上述 owner-scoped 差异被修复或明确接受，且 M01 未闭环项有最终 disposition。
+
+### C.64 M01 剩余认证证据审计（2026-09-06）
+
+- 只读审计报告：`/dev/shm/nexus-m01-remaining-audit-20260906T143518Z/REPORT.md`，基线 `b59438c4`，未修改仓库。
+- M01.03-a 三视口普通密码失败→同页重试→成功已覆盖 F/V/A；剩余未闭环为 setup 失败重试、2FA 登录 challenge/过期、CAPTCHA 登录 gate、passkey 登录成功/取消、真实软键盘、en-US/zh-CN/ja-JP auth 矩阵及完整失败视觉。现有 passkey 阻断归因受保护 harness/CDP 编码边界，未证明产品缺陷。
+- 后续必须按真实 fixture 补浏览器证据；不能用 Settings CAPTCHA/passkey 或 API 2FA case 替代 Login surface，也不能把窄 viewport 冒充软键盘验收。M01 继续 partial，项目完成率仍为 **`16 / 18 = 88.9%`**。
+
+### C.65 M14 新 SHA 层叠修复与 M15 compact 视觉复核（2026-09-06）
+
+- M14 的 `WorkspaceSessionSurface.vue` transfer layer 修复已按唯一产品路径提交为 `6f52f8e9`（`fix(ui): layer transfer progress above workspace modals`）：外层使用 `pointer-events-none fixed inset-0 z-[60]`，内部 `ProgressCenter` 保持可交互，既覆盖 Workspace modal 又不改变右下定位；未触碰受保护 E2E、旧架构或其他 owner。M14 focused upload、architecture、`vue-tsc`、`git diff --check` 证据继续通过。
+- M15 compact status cards/chart 复核以 `6f52f8e9` 为基线完成，报告 `/dev/shm/nexus-m15-visual-parity-438426b8-PfePmu/REPORT.md`：旧源码同样包含 compact cards、Network card、`.has-history` 双列和 history chart；canonical 差异来自旧图未选 metric、当前图切换 CPU/30m 的不同前置，不构成迁移缺失。浏览器 `1/1`、architecture、i18n、`vue-tsc` 均通过，M15 无产品改动。
+- 因产品 SHA 已从 `b59438c4` 变为 `6f52f8e9`，M17.05 的 28 图必须在新 SHA 重新生成并复核；当前仍需收口 M12 mobile editor/search wrapping、M11 touch context-menu presentation、M01 剩余认证证据及 M17.06 最终 disposition。正式模块计数保持 **`16 / 18 = 88.9%`**，不以 M15 的单项通过替代最终 canonical。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
