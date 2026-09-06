@@ -1532,6 +1532,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 该 run 的 24 个 artifact 均完成尺寸与 SHA-256 校验；附录 B 当前 SHA 可确认 **26/28**，仍缺 `file-manager-spreadsheet-pagination.png` 与 `file-manager-spreadsheet-compact-last-page.png`，截图提交 job 因 G8 失败跳过。M17.05 不能关闭；M17.03 的完整当前 SHA 静态/格式 disposition 也仍未满足（报告 `/tmp/nexus-m17-static-disposition-20260906T202811Z/REPORT.md`）。
 - M17.06 owner 审计报告 `/tmp/nexus-m17-owner-handoff-20260906T202932Z/REPORT.md` 对 M14/M15/M12/M11/Dashboard 的差异给出 accept/fixed、无新增产品 owner 修复；最终交接仍依赖 M01 证据、M17.03 和当前 SHA 28/28 canonical。正式模块进度保持 **`16 / 18 = 88.9%`**，本节点不关闭任何父模块。
 
+### C.79 CAPTCHA readiness 修复与远程 Actions 复核（2026-09-06）
+
+- 依据 C.78 的确定源码缺口，产品修复提交 `78a24c75` 仅在新架构 auth/security owner 内完成：`useLoginSecurity` 暴露 `loading/ready/error/invalid` CAPTCHA 状态；`LoginPage` 传递状态与区域反馈；`LoginView` 在非 ready 时对第一因子 fail-closed、在 token 缺失时保留 CAPTCHA 区域错误；`LoginCaptchaChallenge` 对加载失败和无效 provider/site-key 显示本地化状态。2FA 分支仍先于 CAPTCHA gate，token reset 和 passkey 入口不改变。未恢复旧 store、event bus、transport 或重复 controller。
+- 修复前后未启动本地测试进程；通过推送测试分支触发远程 Actions run `34059546744`（产品 SHA `78a24c75`，`test/ui-restoration-groups`）：环境同步、prepare、Docker smoke、G1–G7 均成功；G8 仍只失败于受保护 `file-preview-editor.spec.ts:889` 的未限定 `Save` selector，截图提交 job 跳过，不归因 auth 产品。远程结果证明没有已知矩阵回归，但没有新增 Login CAPTCHA/2FA/passkey 浏览器 case，不能替代 M01 真实 Login surface 证据。
+- 主代理独立 diff/架构审查确认变更范围为上述 7 个 auth/security 文件，三语言新增文案 JSON 可解析，`git diff --check` 通过；当前仍缺 Login 2FA/CAPTCHA/passkey 的真实浏览器状态、移动 setup/真实 IME 与完整失败视觉证据。`M01` 继续 partial，正式模块计数不变为 **`16 / 18 = 88.9%`**。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
