@@ -1213,6 +1213,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `ssh/file-manager-navigation.spec.ts` 的 3 个 case 中 1 个通过，2 个失败：path history 导航未显示 `/folder-seed` 历史项；shell metacharacter 路径同步后 path input 仍为 `/`。失败发生在当前 filesystem 导航行为断言，尚不能归类为纯选择器/环境；`/tmp/nexus-m11-ff4077fb-20260906/logs/navigation.log` 和 trace 是待修复证据。
 - 已派 `/root/luna_m11_nav_fix`（Luna max）只读核查并在有确定证据时修复当前 filesystem owner；在其结论前不关闭 M11.02/M11.03/M11.04，正式计数保持 `9 / 18`。其余文件操作、失败下载恢复、移动长按/多选和菜单几何当前 SHA 证据有效。
 
+### C.30 M08 当前 SHA Workspace 真实取证（2026-09-06）
+
+- 当前产品 SHA 为 `5fc8a530`。主代理在端口独占条件下运行 `tests/ssh/reconnect-ui.spec.ts --project=ssh --workers=1`，**2/2 passed，exit 0**；覆盖断连重连、任意键立即重连、三 session 新增/切换、tab 横滚/长按 context、Close Other 和关闭至空 Workspace。截图/metrics 由 Playwright 输出保留在 `/tmp/nexus-m08-ssh-screenshots/` 与 `/tmp/nexus-m08-ssh-results/`。
+- 随后运行 `tests/mobile/ssh-workspace.spec.ts tests/mobile/suspend-resume-ui.spec.ts --project=mobile --workers=1`，**2/2 passed，exit 0**；覆盖 mobile terminal 空间与 touch-only tools、文件长按、status monitor 邻接、suspend/resume reload、hanging shell 复用和窄屏 modal。截图/metrics 保留在 `/tmp/nexus-m08-mobile-screenshots/` 与 `/tmp/nexus-m08-mobile-results/`。
+- 本轮无产品断言、选择器或环境失败；仍不能关闭 M08.02–04：resize/layout-lock 键盘/拖动、完整 sidebar overlay/focus、窗口高度/虚拟键盘遮挡和最终 `mobile-workspace.png`/`M17` canonical 仍需独立证据，正式计数保持 `9 / 18`。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
