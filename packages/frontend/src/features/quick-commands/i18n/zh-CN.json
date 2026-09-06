@@ -42,6 +42,7 @@
       "createFromUntagged": "为当前未标记分组创建标签",
       "renameFailed": "重命名标签失败：{error}",
       "createFailed": "创建并分配标签失败：{error}",
+      "createTagFailed": "创建标签失败：{error}",
       "assignFailedAfterCreate": "标签“{name}”已创建，但分配指令失败：{error}"
     },
     "actions": {
@@ -52,7 +53,10 @@
       "sentToAllSessions": "指令已发送到 {count} 个会话。",
       "noActiveSshSessions": "没有活动的 SSH 会话可发送指令。",
       "copied": "指令已复制。",
-      "copyFailed": "无法复制指令。"
+      "copyFailed": "无法复制指令。",
+      "loadFailed": "加载快捷指令失败：{error}",
+      "saveFailed": "保存快捷指令失败：{error}",
+      "deleteFailed": "删除快捷指令失败：{error}"
     },
     "sortByLastUsed": "最近使用",
     "displayName": "名称",

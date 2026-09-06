@@ -9,6 +9,7 @@
   import { createWheelScaleResolver } from '@/foundation/interaction';
   import QuickCommandForm from './QuickCommandForm.vue';
   import { useQuickCommandsStore } from '../store/quickCommands.store';
+  import { expandQuickCommand } from '../model/quickCommand';
   import type { ExecuteCommandIntent, QuickCommand, QuickCommandInput } from '../model/quickCommand';
 
   type DisplayMode = 'name' | 'command';
@@ -25,7 +26,7 @@
   const { t } = useI18n();
   const feedback = useFeedback();
   const store = useQuickCommandsStore();
-  const { groups, flat, tags, search, sort, loading, expanded, selectedId } = storeToRefs(store);
+  const { groups, flat, tags, search, sort, loading, error, expanded, selectedId } = storeToRefs(store);
   const localScale = ref(props.rowScale);
   const visible = ref(false);
   const editing = ref<QuickCommand | null>(null);
@@ -78,7 +79,7 @@
   };
 
   onMounted(() => {
-    void store.load();
+    void store.load().catch(() => undefined);
     unregisterFocus = focusRegistry.register('quickCommandsSearch', openSearch, () =>
       Boolean(root.value?.getClientRects().length),
     );
@@ -207,22 +208,27 @@
     visible.value = true;
   };
   const save = async (input: QuickCommandInput) => {
-    await store.save(input, editing.value?.id);
-    visible.value = false;
-  };
-  const processTemplate = (template: string, variables: Record<string, string>) => {
-    let command = template;
-    for (const [name, value] of Object.entries(variables)) {
-      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      command = command.replace(new RegExp(`\\$\\{${escaped}\\}`, 'g'), () => value);
-    }
-    const unresolved = [...command.matchAll(/\$\{([^}]+)\}/g)].map((match) => match[1]).filter(Boolean);
-    if (unresolved.length) {
-      feedback.notifyWarning(
-        t('quickCommands.form.warningUndefinedVariables', { variables: [...new Set(unresolved)].join(', ') }),
+    try {
+      await store.save(input, editing.value?.id);
+      visible.value = false;
+    } catch (cause) {
+      feedback.notifyError(
+        t('quickCommands.notifications.saveFailed', {
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
       );
     }
-    return command;
+  };
+  const processTemplate = (template: string, variables: Record<string, string>) => {
+    const expansion = expandQuickCommand(template, variables);
+    if (expansion.unresolvedVariables.length) {
+      feedback.notifyWarning(
+        t('quickCommands.form.warningUndefinedVariables', {
+          variables: expansion.unresolvedVariables.join(', '),
+        }),
+      );
+    }
+    return expansion.command;
   };
   const processCommand = (commandDefinition: QuickCommand) =>
     processTemplate(commandDefinition.command, commandDefinition.variables);
@@ -252,7 +258,15 @@
         destructive: true,
       })
     ) {
-      await store.remove(command.id);
+      try {
+        await store.remove(command.id);
+      } catch (cause) {
+        feedback.notifyError(
+          t('quickCommands.notifications.deleteFailed', {
+            error: cause instanceof Error ? cause.message : String(cause),
+          }),
+        );
+      }
     }
   };
   const openContext = (event: MouseEvent, command: QuickCommand) => {
@@ -265,9 +279,9 @@
   <section
     ref="root"
     data-testid="quick-commands-view"
-    class="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+    class="quick-commands-root flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
   >
-    <div class="flex shrink-0 items-center gap-2 bg-background p-2">
+    <div class="quick-commands-controls flex shrink-0 items-center gap-2 bg-background p-2">
       <button
         v-if="collapsibleSearch && !searchExpanded"
         data-testid="quick-command-search-toggle"
@@ -287,7 +301,7 @@
         data-focus-id="quickCommandsSearch"
         type="text"
         :placeholder="t('quickCommands.searchPlaceholder')"
-        class="min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+        class="quick-commands-search min-w-0 flex-1 rounded-lg border border-border/50 bg-input px-4 py-1.5 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
         @keydown="handleSearchKeydown"
         @blur="handleSearchBlur"
       />
@@ -334,7 +348,7 @@
     <div
       data-testid="quick-command-list"
       ref="list"
-      class="min-h-0 flex-1 overflow-y-auto p-2"
+      class="quick-command-list-area min-h-0 flex-1 overflow-y-auto p-2"
       :style="rowStyle"
       :data-row-scale="localScale.toFixed(2)"
       @wheel="scaleRows"
@@ -345,6 +359,13 @@
       >
         <i class="fas fa-spinner fa-spin mb-2 text-xl" aria-hidden="true"></i>
         <p>{{ t('common.loading') }}</p>
+      </div>
+      <div
+        v-else-if="error && !store.items.length"
+        class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-error"
+      >
+        <i class="fas fa-exclamation-triangle mb-2 text-xl" aria-hidden="true"></i>
+        <p>{{ t('quickCommands.notifications.loadFailed', { error }) }}</p>
       </div>
       <div
         v-else-if="!(showTags ? groups.length : flat.length) && search"
@@ -376,8 +397,8 @@
           class="mb-1 last:mb-0"
         >
           <div
-            class="group flex items-center rounded-md font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
-            :class="compact ? 'px-2 py-1' : 'px-3 py-2'"
+            class="quick-command-group-header group flex items-center rounded-md font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
+            :class="compact ? 'quick-command-group-header--compact' : ''"
           >
             <button
               type="button"
@@ -414,19 +435,22 @@
               {{ group.id === null ? t('quickCommands.untagged') : group.name }}
             </button>
           </div>
-          <ul v-show="expanded[group.name] !== false" class="m-0 list-none p-0 pl-3">
+          <ul v-show="expanded[group.name] !== false" class="quick-command-group-list m-0 list-none p-0 pl-3">
             <li
               v-for="command in group.commands"
               :key="command.id"
               :data-command-id="command.id"
-              class="quick-command-row group mb-1 flex cursor-pointer items-center rounded-md px-3 transition-colors duration-150 hover:bg-primary/10"
-              :class="[compact ? 'py-1' : 'py-2.5', selectedId === command.id ? 'bg-primary/20 font-medium' : '']"
+              class="quick-command-row group mb-1 flex cursor-pointer items-center rounded-md transition-colors duration-150 hover:bg-primary/10"
+              :class="[
+                compact ? 'quick-command-row--compact' : '',
+                selectedId === command.id ? 'bg-primary/20 font-medium' : '',
+              ]"
               @click="run(command)"
               @contextmenu.prevent="openContext($event, command)"
             >
               <span
                 data-testid="quick-command-execute"
-                class="min-w-0 flex-1 truncate text-sm"
+                class="quick-command-display-text min-w-0 flex-1 truncate text-sm"
                 :class="displayMode === 'command' ? 'font-mono' : ''"
                 :title="displayText(command)"
                 >{{ displayText(command) }}</span
@@ -469,14 +493,17 @@
           v-for="command in flat"
           :key="command.id"
           :data-command-id="command.id"
-          class="quick-command-row group mb-1 flex cursor-pointer items-center rounded-md px-3 transition-colors duration-150 hover:bg-primary/10"
-          :class="[compact ? 'py-1' : 'py-2.5', selectedId === command.id ? 'bg-primary/20 font-medium' : '']"
+          class="quick-command-row group mb-1 flex cursor-pointer items-center rounded-md transition-colors duration-150 hover:bg-primary/10"
+          :class="[
+            compact ? 'quick-command-row--compact' : '',
+            selectedId === command.id ? 'bg-primary/20 font-medium' : '',
+          ]"
           @click="run(command)"
           @contextmenu.prevent="openContext($event, command)"
         >
           <span
             data-testid="quick-command-execute"
-            class="min-w-0 flex-1 truncate text-sm"
+            class="quick-command-display-text min-w-0 flex-1 truncate text-sm"
             :class="displayMode === 'command' ? 'font-mono' : ''"
             :title="displayText(command)"
             >{{ displayText(command) }}</span
@@ -551,9 +578,87 @@
 </template>
 
 <style scoped>
+  .quick-commands-root {
+    container-type: inline-size;
+    container-name: quick-commands-pane;
+    min-width: 0;
+  }
+  .quick-commands-controls,
+  .quick-command-list-area,
+  .quick-command-row,
+  .quick-command-info {
+    min-width: 0;
+  }
+  .quick-command-group-header {
+    min-width: 0;
+    padding: calc(var(--quick-row-scale) * 0.46rem) 0.2rem;
+    font-size: calc(0.9rem * max(0.85, var(--quick-row-scale) * 0.6 + 0.4));
+    line-height: 1.25;
+  }
+  .quick-command-group-header--compact {
+    padding-block: calc(var(--quick-row-scale) * 0.22rem);
+  }
   .quick-command-row {
-    padding-top: calc(var(--quick-row-scale) * 0.5rem);
-    padding-bottom: calc(var(--quick-row-scale) * 0.5rem);
+    padding: calc(var(--quick-row-scale) * 0.625rem) calc(var(--quick-row-scale) * 0.75rem);
+  }
+  .quick-command-row--compact {
+    padding-block: calc(var(--quick-row-scale) * 0.1rem);
+  }
+  .quick-command-display-text {
+    min-width: 0;
+  }
+  @container quick-commands-pane (max-width: 340px) {
+    .quick-commands-controls {
+      gap: 0.3rem;
+      padding: 0.4rem;
+    }
+    .quick-commands-search {
+      padding-inline: 0.55rem;
+    }
+    .quick-control {
+      width: 1.8rem;
+      height: 1.8rem;
+      flex-basis: 1.8rem;
+    }
+    .quick-commands-list-area {
+      padding: 0.3rem;
+    }
+    .quick-command-group-list {
+      padding-left: 0.2rem;
+    }
+    .quick-command-group-header {
+      padding-inline: 0.1rem;
+      font-size: 0.86rem;
+    }
+    .quick-command-row {
+      padding-left: 0.45rem;
+      padding-right: 0.35rem;
+    }
+    .quick-command-display-text {
+      font-size: 0.7rem;
+    }
+  }
+  @container quick-commands-pane (max-width: 240px) {
+    .quick-commands-controls {
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .quick-commands-search {
+      flex: 1 1 100%;
+      width: 100%;
+    }
+    .quick-command-row {
+      flex-wrap: nowrap;
+      align-items: center;
+    }
+    .quick-command-display-text {
+      width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 0.68rem;
+      line-height: 1.35;
+    }
   }
   .quick-control {
     display: flex;

@@ -2,10 +2,11 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { focusRegistry } from '@/shared/focus/public';
-  import { useQuickCommandsStore } from '@/features/quick-commands/public';
+  import { expandQuickCommand, useQuickCommandsStore } from '@/features/quick-commands/public';
   import { useCommandHistoryStore } from '@/features/command-history/public';
   import type { Preferences } from '@/features/preferences/public';
   import { applyTerminalModifiers } from '@/features/terminal/public';
+  import { useFeedback } from '@/shared/feedback/public';
 
   const props = withDefaults(
     defineProps<{
@@ -55,6 +56,7 @@
     terminalInput: [data: string];
   }>();
   const { t } = useI18n();
+  const feedback = useFeedback();
   const quickCommands = useQuickCommandsStore();
   const commandHistory = useCommandHistoryStore();
   // Keep an immediate local presentation value so Enter in the same input tick
@@ -92,20 +94,31 @@
     if (props.terminalSearchOpen) emit('findSearchNext');
     else send();
   };
-  const send = (allSessions = false, value = command.value) => {
-    if (props.terminalSearchOpen || !props.ready || (allSessions && !value)) return;
+  const send = (allSessions = false, value = command.value): boolean => {
+    if (props.terminalSearchOpen || !props.ready || (allSessions && !value)) return false;
     emit('send', value, allSessions);
     command.value = '';
     resetTargetSelection();
+    return true;
   };
   const sendSelected = (): boolean => {
-    if (props.commandInputSyncTarget === 'quickCommands' && quickCommands.selected) {
-      send(false, quickCommands.selected.command);
+    const quickCommand = props.commandInputSyncTarget === 'quickCommands' ? quickCommands.selected : null;
+    if (quickCommand) {
+      const expansion = expandQuickCommand(quickCommand.command, quickCommand.variables);
+      if (!send(false, expansion.command)) return false;
+      if (expansion.unresolvedVariables.length) {
+        feedback.notifyWarning(
+          t('quickCommands.form.warningUndefinedVariables', {
+            variables: expansion.unresolvedVariables.join(', '),
+          }),
+        );
+      }
+      void quickCommands.recordUsage(quickCommand.id);
       return true;
     }
-    if (props.commandInputSyncTarget === 'commandHistory' && commandHistory.selected) {
-      send(false, commandHistory.selected.command);
-      return true;
+    const historyEntry = props.commandInputSyncTarget === 'commandHistory' ? commandHistory.selected : null;
+    if (historyEntry) {
+      return send(false, historyEntry.command);
     }
     return false;
   };

@@ -48,8 +48,16 @@
     const normalized = name.trim();
     if (!normalized) return;
     const existing = props.tags.find((tag) => tag.name.toLowerCase() === normalized.toLowerCase());
-    const tag = existing ?? (await store.addTag(normalized));
-    if (!form.tagIds.includes(tag.id)) form.tagIds = [...form.tagIds, tag.id];
+    try {
+      const tag = existing ?? (await store.addTag(normalized));
+      if (!form.tagIds.includes(tag.id)) form.tagIds = [...form.tagIds, tag.id];
+    } catch (cause) {
+      feedback.notifyError(
+        t('quickCommands.tags.createTagFailed', {
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
+      );
+    }
   };
   const deleteTag = async (option: TokenOption) => {
     const id = Number(option.value);
@@ -99,7 +107,7 @@
   <BaseModal
     :visible="visible"
     :title="t(command ? 'quickCommands.form.titleEdit' : 'quickCommands.form.titleAdd')"
-    panel-class="w-[min(720px,94vw)] max-h-[90dvh]"
+    panel-class="!w-[min(1152px,90vw,calc(100vw-2rem))] !max-w-[min(1152px,90vw,calc(100vw-2rem))] max-h-[90dvh]"
     content-class="!py-0"
     :close-on-backdrop="false"
     :close-on-escape="true"

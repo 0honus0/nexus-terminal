@@ -15,6 +15,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     search = ref(''),
     sort = ref<QuickCommandSort>('name'),
     loading = ref(false),
+    error = ref<string | null>(null),
     selectedId = ref<number | null>(null);
   const expanded = ref<Record<string, boolean>>({});
   try {
@@ -64,8 +65,12 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
 
   async function load() {
     loading.value = true;
+    error.value = null;
     try {
       [items.value, tags.value] = await Promise.all([quickCommandsApi.list(), quickCommandsApi.listTags()]);
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : String(cause);
+      throw cause;
     } finally {
       loading.value = false;
     }
@@ -75,11 +80,13 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     const i = items.value.findIndex((x) => x.id === item.id);
     if (i >= 0) items.value[i] = item;
     else items.value.push(item);
+    error.value = null;
     return item;
   }
   async function remove(id: number) {
     await quickCommandsApi.remove(id);
     items.value = items.value.filter((x) => x.id !== id);
+    error.value = null;
     if (selectedId.value === id) selectedId.value = null;
   }
   async function recordUsage(id: number) {
@@ -175,6 +182,7 @@ export const useQuickCommandsStore = defineStore('quick-commands', () => {
     search,
     sort,
     loading,
+    error,
     expanded,
     flat,
     groups,

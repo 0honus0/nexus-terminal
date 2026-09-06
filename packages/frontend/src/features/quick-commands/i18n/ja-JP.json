@@ -42,6 +42,7 @@
       "createFromUntagged": "このタグなしグループにタグを作成",
       "renameFailed": "タグ名の変更に失敗しました: {error}",
       "createFailed": "タグの作成と割り当てに失敗しました: {error}",
+      "createTagFailed": "タグの作成に失敗しました: {error}",
       "assignFailedAfterCreate": "タグ「{name}」は作成されましたが、コマンドの割り当てに失敗しました: {error}"
     },
     "actions": {
@@ -52,7 +53,10 @@
       "sentToAllSessions": "コマンドは {count} 個のセッションに送信されました。",
       "noActiveSshSessions": "コマンドを送信するアクティブな SSH セッションはありません。",
       "copied": "コマンドをコピーしました。",
-      "copyFailed": "コマンドをコピーできません。"
+      "copyFailed": "コマンドをコピーできません。",
+      "loadFailed": "クイックコマンドの読み込みに失敗しました: {error}",
+      "saveFailed": "クイックコマンドの保存に失敗しました: {error}",
+      "deleteFailed": "クイックコマンドの削除に失敗しました: {error}"
     },
     "sortByLastUsed": "最終使用",
     "displayName": "名前",

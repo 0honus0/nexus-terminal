@@ -42,6 +42,7 @@
       "createFromUntagged": "Create a tag for this Untagged group",
       "renameFailed": "Failed to rename tag: {error}",
       "createFailed": "Failed to create and assign tag: {error}",
+      "createTagFailed": "Failed to create tag: {error}",
       "assignFailedAfterCreate": "Tag \"{name}\" was created, but assigning the commands failed: {error}"
     },
     "actions": {
@@ -52,7 +53,10 @@
       "sentToAllSessions": "Command sent to {count} sessions.",
       "noActiveSshSessions": "No active SSH sessions to send command to.",
       "copied": "Command copied.",
-      "copyFailed": "Unable to copy command."
+      "copyFailed": "Unable to copy command.",
+      "loadFailed": "Failed to load quick commands: {error}",
+      "saveFailed": "Failed to save quick command: {error}",
+      "deleteFailed": "Failed to delete quick command: {error}"
     },
     "sortByLastUsed": "Last used",
     "displayName": "Name",
