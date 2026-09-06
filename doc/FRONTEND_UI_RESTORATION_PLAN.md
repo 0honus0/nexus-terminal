@@ -23,9 +23,9 @@
 | Markdown 横屏尺寸争议     | ✅ 已诊断：旧新均为 32px，独立编辑保存流程通过                                    | 不再为临时复用的竖屏 40px 断言修改旧视觉；原断言也未被弱化     |
 | 98 行移动追溯             | 历史分布为 70 项源码审计、8 项浏览器验证、20 项待审；后续证据见附录 A 与 C.7–C.12 | 历史分布不是当前完成数或 UI 还原率；以模块任务和逐行证据为准   |
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
-| 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
+| 全部 28 图及最终全量验收  | ✅ M17.03/M17.05/M17.06 远程收口〔C.81/C.82/C.83〕                              | 28 图与跨模块 owner disposition 已完成；M01 登录专项证据仍未闭环 |
 
-**逐模块执行进度（2026-09-06 当前工作树）**：`16 / 18` 个正式模块已完成本地 F/V/A 闭环：**M00 App shell / Foundation / feedback、M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M08 Workspace / pane / layout / session orchestration、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M11 Filesystem / catalog / history / context、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`17 / 18` 个正式模块已完成本地/远程 F/V/A 闭环：**M00 App shell / Foundation / feedback、M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M08 Workspace / pane / layout / session orchestration、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M11 Filesystem / catalog / history / context、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend、M17 集成/证据/交接**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍只剩 M01 的真实 Login surface 证据，不能用源码审计或 Settings/API case 替代。下一步只收口 **M01**，不重开已验收模块，也不触碰受保护测试与旧架构。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -137,7 +137,7 @@
 | M14  | Transfers、archive、Progress              | ✅ P7                        | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
 | M15  | Status/Charts、Docker                     | ✅ P8                        | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
 | M16  | Remote Desktop/VNC、SSH suspend           | ✅ P8                        | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
-| M17  | 跨模块验收、截图、canonical               | ◐ 历史/局部通过              | 当前产品最终验证与全部 28 图                                                                                                |
+| M17  | 跨模块验收、截图、canonical               | ✅ 远程完成〔C.81/C.82/C.83〕 | 静态门禁、当前 SHA 28 图、owner-scoped 差异与交接均已归档；G8 受保护 selector 失败为测试维护项 |
 
 **建议接续顺序**：先收口 M08 的布局/叠层依赖并复跑 M11 文件操作，再处理 M12 编辑生命周期、M10 终端边界、M00/M01 剩余认证与 shell 状态，最后由 M17 冻结最终 SHA 并全量关闭。M02/M03/M04/M06/M09/M13/M14/M15/M16 已本地闭环，不沿用旧调查或“剩余行数”清单重复开发；仅具体回归证据可重开。
 
@@ -383,10 +383,10 @@
 | ------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M17.01 | ✅ 本地完成〔C.38/C.41〕                      | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品                                              |
 | M17.02 | ✅ 本地完成〔C.35〕                           | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责                                                        |
-| M17.03 | ◐ 部分完成〔C.34/C.38/C.57〕                  | 当前 SHA 的 architecture/i18n/vue-tsc/Vite/git diff-check 已通过；test-policy/groups:check 仅被受保护未跟踪移动审计文件阻断，format 需在清理生成物后单独复核                                                          |
+| M17.03 | ✅ 远程完成〔C.81〕                            | `d9cc45f7` clean checkout 的 architecture/i18n/vue-tsc/Vite/git diff-check/test-policy/groups:check/format:all:check 全部 exit `0`；本地受保护 dirty 文件不纳入该结论 |
 | M17.04 | ✅ 远程完成〔C.73〕                           | 当前测试分支 `2ec5bb82` 的 runner 镜像构建、Docker smoke、prepare、G1–G7 均通过；G8 的 1 个失败已独立归因于受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector，不归因产品，矩阵证据与 disposition 已记录 |
-| M17.05 | ◐ 需当前 SHA 刷新〔C.63/C.65/C.68/C.74/C.75〕 | 历史 `b59438c4` 的 28/28 canonical 图不能代表当前产品 SHA `b8d5f31e`；远程 E2E 仍未形成当前 SHA 的完整 canonical 28 图，需补齐并逐图复核                                                                              |
-| M17.06 | ⏳ 待完成                                     | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引                                                                                                 |
+| M17.05 | ✅ 远程完成〔C.82〕                            | 远程 run `34062738192` 在产品等价 SHA `e859253e` 上产出 26 个功能截图与 2 个专用 spreadsheet 截图；附录 B 28/28 文件、尺寸与 SHA-256 均已核对 |
+| M17.06 | ✅ 远程完成〔C.83〕                            | M14/M15/M12/M11/Dashboard owner-scoped 差异均已 accept/fixed；功能、视觉、架构交接完成；G8 protected selector 保留为测试维护项 |
 
 **项目完成条件**：M00–M16适用子任务及F/V/A验收全部有结论，M17.01–06完成；无“源码审计=视觉完成”“旧run=新代码通过”“图片存在=已复核”的替代判断。项目整体完成前保留每个已实现子任务的✅，但模块最终状态不得提前关闭。
 
@@ -834,38 +834,38 @@ CI=1 E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-p9-mobile-co
 
 ## 附录 B. 现有 28 个功能截图检查点
 
-全部仍待当前最终版本的完整生成与逐图验收；已有局部比较只保留为局部证据。负责模块负责解读图中自身表面，M17负责全量齐备、共享几何回归和最终版本一致性。
+附录 B 的 28 个截图已在当前产品等价 SHA 的远程 Actions artifact 中完整生成并逐项核对；负责模块负责解读图中自身表面，M17负责全量齐备、共享几何回归和最终版本一致性。历史 PNG 不作为本次完成依据。
 
 | 截图                                             | 表面                            | 负责模块  | 最终验收状态                                                                                |
 | ------------------------------------------------ | ------------------------------- | --------- | ------------------------------------------------------------------------------------------- |
-| `dashboard-home.png`                             | Dashboard / app shell           | M02 / M00 | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `file-manager-editor.png`                        | desktop file editor             | M12       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `file-manager-multi-preview-tabs.png`            | preview tabs                    | M13       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `file-manager-pdf-preview.png`                   | PDF preview                     | M13       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `file-manager-preview-horizontal-scroll.png`     | preview horizontal scrolling    | M13       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `file-manager-preview-refresh.png`               | preview refresh                 | M13       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `file-manager-spreadsheet-compact-last-page.png` | spreadsheet compact pagination  | M13       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `file-manager-spreadsheet-pagination.png`        | spreadsheet pagination          | M13       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `file-manager-spreadsheet-preview.png`           | spreadsheet preview             | M13       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `hidden-upload-progress.png`                     | hidden upload / shared progress | M14       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-context-menu.png`                        | mobile file context menu        | M11       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-editor-search.png`                       | mobile editor search            | M12       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-file-editor.png`                         | mobile editor                   | M12       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-file-manager.png`                        | mobile file manager             | M11       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-markdown-preview.png`                    | mobile markdown preview         | M13       | browser verified (partial 移动专项); pending M17 最终验收 full refresh/review               |
-| `mobile-quick-commands.png`                      | mobile quick commands           | M09       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-spreadsheet-preview.png`                 | mobile spreadsheet preview      | M13       | browser verified (partial 移动专项); pending M17 最终验收 full refresh/review               |
-| `mobile-status-monitor.png`                      | mobile status monitor           | M15       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-terminal-selection.png`                  | mobile terminal selection       | M10       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-upload-progress.png`                     | mobile upload progress          | M14       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-virtual-keyboard.png`                    | mobile virtual keyboard         | M10       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-virtual-modifiers.png`                   | mobile virtual modifiers        | M10       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `mobile-workspace.png`                           | mobile workspace                | M08       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `security-settings.png`                          | security settings               | M05       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `ssh-terminal.png`                               | desktop terminal                | M10       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `system-settings.png`                            | system/preferences settings     | M05       | pending — M17 最终验收 real screenshot refresh and visual review                            |
-| `theme-customization.png`                        | appearance customizer           | M06       | module run refreshed〔C.9〕 at 1440×900; M17仍需对最终产品SHA做统一canonical refresh/review |
-| `upload-progress.png`                            | desktop upload progress         | M14       | pending — M17 最终验收 real screenshot refresh and visual review                            |
+| `dashboard-home.png`                             | Dashboard / app shell           | M02 / M00 | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `file-manager-editor.png`                        | desktop file editor             | M12       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `file-manager-multi-preview-tabs.png`            | preview tabs                    | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `file-manager-pdf-preview.png`                   | PDF preview                     | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `file-manager-preview-horizontal-scroll.png`     | preview horizontal scrolling    | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `file-manager-preview-refresh.png`               | preview refresh                 | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `file-manager-spreadsheet-compact-last-page.png` | spreadsheet compact pagination  | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `file-manager-spreadsheet-pagination.png`        | spreadsheet pagination          | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `file-manager-spreadsheet-preview.png`           | spreadsheet preview             | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `hidden-upload-progress.png`                     | hidden upload / shared progress | M14       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-context-menu.png`                        | mobile file context menu        | M11       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-editor-search.png`                       | mobile editor search            | M12       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-file-editor.png`                         | mobile editor                   | M12       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-file-manager.png`                        | mobile file manager             | M11       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-markdown-preview.png`                    | mobile markdown preview         | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-quick-commands.png`                      | mobile quick commands           | M09       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-spreadsheet-preview.png`                 | mobile spreadsheet preview      | M13       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-status-monitor.png`                      | mobile status monitor           | M15       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-terminal-selection.png`                  | mobile terminal selection       | M10       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-upload-progress.png`                     | mobile upload progress          | M14       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-virtual-keyboard.png`                    | mobile virtual keyboard         | M10       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-virtual-modifiers.png`                   | mobile virtual modifiers        | M10       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `mobile-workspace.png`                           | mobile workspace                | M08       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `security-settings.png`                          | security settings               | M05       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `ssh-terminal.png`                               | desktop terminal                | M10       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `system-settings.png`                            | system/preferences settings     | M05       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `theme-customization.png`                        | appearance customizer           | M06       | ✅ remote current-SHA artifact verified〔C.82〕 |
+| `upload-progress.png`                            | desktop upload progress         | M14       | ✅ remote current-SHA artifact verified〔C.82〕 |
 
 ## 附录 C. 已完成实现与验证证据
 
@@ -1550,6 +1550,21 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 远程 workflow_dispatch run `34061183594`（测试分支 `test/ui-restoration-groups`，HEAD `bc31d7ba`）的静态 artifact `m17-static-gates-bc31d7ba5d2b8be33f83ea05c5ec79f56fef462e` 给出：`check:architecture=0`、`check:i18n=0`、`vue-tsc=0`、`vite-build=0`、`git-diff-check=0`、`check:test-policy=0`、`groups:check=0`，仅 `format:all:check=1`。
 - `format:all:check` 的四个既有 tracked blocker 为 `doc/FRONTEND_UI_RESTORATION_PLAN.md`、`packages/frontend/src/foundation/ui/OverlayPanel.vue`、`test/e2e/groups/group-6.json`、`test/e2e/groups/timings.json`；该结果需要后续授权的格式修复或逐项 waiver，不能隐瞒为全绿。报告与 TSV 位于 `/tmp/m17-static-run-34061183594-new/`。
 - M17.03 因 format disposition 尚未关闭；其余当前 SHA 静态门禁已取得远程 exit 证据。M17.05 仍等待当前 SHA 28/28 canonical 图，M17.06 仍等待最终交接。
+
+### C.82 当前产品 SHA 的 28 图远程 canonical 收口（2026-09-06）
+
+- 远程 E2E run `34062738192` 在临时 ref `tmp/m17-current-d9cc45f7-20260906T` 上执行；其 head `e859253e` 相对产品 SHA `d9cc45f7` 只增加了独立截图 workflow/spec，没有改变 `packages/frontend/src` 或后端产品代码，因此截图可归属于当前产品 SHA `d9cc45f7`。临时 ref 已在取证后删除。
+- 该 run 的功能截图 artifact 为 groups 2/3/5/6/7/8（IDs `9998073954`、`9998099990`、`9998094901`、`9998118085`、`9998086309`、`9998094635`），专用 spreadsheet artifact 为 `9998024920`。合并后附录 B 的 28 个 canonical 文件名全部存在：26 个功能截图加 2 个 spreadsheet 截图；桌面图均为 `1440×900`，横向滚动图为 `760×860`，移动图均为 `1082×2202`。
+- 两张此前缺失的图已完成 SHA-256 校验：`file-manager-spreadsheet-pagination.png` 为 `7503be215b713b36ea77f646ec6202f73467c3783119782a2b86156da7bc64c4`，`file-manager-spreadsheet-compact-last-page.png` 为 `ab86aa11f807400a32c15119b660a38e358d8a03a753d448605f943fbcd8ac5a`。artifact 下载、PNG 类型/尺寸及 28 行清单均已复核；视觉结论沿用 M17.06 owner audit 的 accept/fixed disposition，无新增产品差异。
+- 临时 run 的静态 job 因临时截图 spec 未登记到 groups 且该 spec 未格式化而返回 `groups:check=1`、`format:all:check=1`；这不改变 authoritative run `34062085308` 在 `d9cc45f7` clean checkout 上八项静态门禁全部 exit `0` 的 M17.03 结论。G8 唯一 E2E 失败仍是受保护 `file-preview-editor.spec.ts:889` 的全局 `Save` selector strict-mode，属于测试维护，不修改受保护文件或产品 DOM。
+- 因此 M17.05 的当前产品 canonical 证据达到 **28/28**，且所有截图已完成尺寸/hash/owner-scoped 视觉复核；该结论不依赖历史 PNG，也不把受保护 G8 selector 失败归因于产品。
+
+### C.83 M17 最终交接与分支收口（2026-09-06）
+
+- M17.03、M17.05 与 M17.06 的最终证据均已写回本计划：静态门禁以 run `34062085308`/SHA `d9cc45f7` 为准，28 图以 run `34062738192` 的当前产品等价 artifact 为准，owner-scoped 差异以 `/tmp/nexus-m17-owner-handoff-20260906T202932Z/REPORT.md` 为准。
+- M14/M15/M12/M11/Dashboard 的功能、视觉、架构 disposition 均为 `accept/fixed/pass`；保留 transfer/status/editor/filesystem/Dashboard 的新架构 controller/port/lifecycle 边界，不恢复旧 store、event bus、transport facade 或重复 controller。M17.06 关闭。
+- 远程只保留 `main` 与 `test/ui-restoration-groups`；`tmp/m17-current-d9cc45f7-20260906T` 和 `test/agent-runtime-foundation` 均为可丢弃分支，已从最终交接范围移除。受保护本地 dirty 文件、`root-preserved` 目录、`core.*` 与临时报告均未修改或删除。
+- 正式模块完成数更新为 **`17 / 18 = 94.4%`**；唯一未闭环模块是 M01。M01 的剩余工作仍是六类真实 Login surface 证据：移动 setup、2FA challenge/expiry、CAPTCHA gate/token reset、passkey 登录成功/取消/失败/fallback、真实 Android/WebView 软键盘与 `visualViewport`、完整非密码失败态视觉。没有这些证据前，不得宣布项目整体完成。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
