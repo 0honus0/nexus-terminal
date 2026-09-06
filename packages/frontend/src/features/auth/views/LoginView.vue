@@ -15,7 +15,11 @@
     }>(),
     { captchaRequired: false, captchaToken: null, passkeyAvailable: false, passkeyLoading: false },
   );
-  const emit = defineEmits<{ passkey: [username: string]; securityChallengeConsumed: [] }>();
+  const emit = defineEmits<{
+    passkey: [username: string];
+    loginAttempted: [];
+    securityChallengeConsumed: [];
+  }>();
 
   const router = useRouter();
   const { t } = useI18n();
@@ -29,7 +33,9 @@
   const isBusy = computed(() => isLoading.value || props.passkeyLoading);
 
   const submit = async (): Promise<void> => {
+    if (isBusy.value) return;
     error.value = null;
+    if (!auth.pendingSecondFactor.value) emit('loginAttempted');
     isLoading.value = true;
 
     try {
@@ -63,6 +69,11 @@
     } finally {
       isLoading.value = false;
     }
+  };
+
+  const startPasskey = (): void => {
+    error.value = null;
+    emit('passkey', credentials.username);
   };
 </script>
 
@@ -151,7 +162,7 @@
             size="lg"
             block
             :loading="isBusy"
-            @click="emit('passkey', credentials.username)"
+            @click="startPasskey"
           >
             <template #leading><i class="fas fa-key" aria-hidden="true"></i></template>
             {{ isBusy ? t('auth.login.loggingIn') : t('auth.login.loginWithPasskey') }}

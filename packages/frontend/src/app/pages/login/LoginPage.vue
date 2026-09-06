@@ -1,12 +1,14 @@
 <script setup lang="ts">
   import { onMounted, ref } from 'vue';
   import { useRouter } from 'vue-router';
+  import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
   import LoginView from '@/features/auth/views/LoginView.vue';
   import { useAuthSession } from '@/features/auth/public';
   import { LoginCaptchaChallenge, useLoginSecurity } from '@/features/security/public';
 
   const router = useRouter();
+  const { t } = useI18n();
   const auth = useAuthSession();
   const security = useLoginSecurity();
   const captchaToken = ref<string | null>(null);
@@ -20,7 +22,7 @@
       await auth.refreshSession();
       await router.push({ name: 'Dashboard' });
     } catch (cause) {
-      passkeyError.value = apiErrorMessage(cause, 'Passkey authentication failed.');
+      passkeyError.value = apiErrorMessage(cause, t('auth.login.error.passkeyAuthFailed'));
     }
   };
 </script>
@@ -31,6 +33,7 @@
     :passkey-available="security.hasPasskeys.value"
     :passkey-loading="security.loading.value"
     @passkey="loginWithPasskey"
+    @login-attempted="passkeyError = ''"
     @security-challenge-consumed="captchaChallenge?.reset()"
   >
     <template #security>
@@ -39,7 +42,7 @@
         :config="security.captchaConfig.value"
         @token="captchaToken = $event"
       />
-      <p v-if="passkeyError" class="mt-2 text-center text-sm text-error">{{ passkeyError }}</p>
+      <p v-if="passkeyError" class="mt-2 text-center text-sm text-error" role="alert">{{ passkeyError }}</p>
     </template>
   </LoginView>
 </template>
