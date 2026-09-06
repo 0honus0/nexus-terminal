@@ -1506,6 +1506,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - M01 尚缺 6 类 Login surface 证据：移动 setup、2FA challenge/expiry、CAPTCHA gate、passkey 登录成功/取消、真实软键盘状态、完整非密码失败态视觉；普通密码失败重试、setup 重试及 en-US/zh-CN/ja-JP 登录矩阵已完成。
 - M17 尚缺 3 类收口：M17.03 在隔离受保护文件后的最终静态/格式门禁 disposition；M17.05 在最终产品 SHA 上补齐并人工复核附录 B 28/28；M17.06 对 owner-scoped 视觉差异、功能/视觉/架构交接作最终决定。后续证据继续只通过远程 Actions 取得，不恢复旧架构、不触碰受保护文件。
 
+### C.75 M01 认证表单 parity 修复后的远程复核（2026-09-06）
+
+- 当前产品提交 `a6827020`、`b8d5f31e` 在新架构 auth owner 内恢复旧 UI 的卡片边框透明度、表单字段分组间距、输入/按钮圆角与高度，并将登录/初始化容器切换为动态 viewport 加自然滚动；保留输入原生 `required` 语义，不再渲染旧 UI 未有的必填星号。
+- 远程 Actions push run `34054925334`（`a6827020`）与 `34055848963`（`b8d5f31e`）的环境同步、prepare、Docker smoke、G1–G7 均成功；最新 run 的 G6 首次失败项仅为已有 upload 流程 flaky（重试通过），G8 仍仅为受保护 `file-preview-editor.spec.ts:889` selector 维护项。未发现 auth 产品/架构回归，本轮没有启动本地测试进程。
+- 该修复只推进 M01 的展示与移动可达性；M01 的 6 类真实 Login surface 证据、M17 的最终 28 图/静态 disposition/交接仍未关闭，正式模块计数保持 **`16/18（88.9%）`**。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
