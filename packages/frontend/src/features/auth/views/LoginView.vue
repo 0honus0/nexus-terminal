@@ -6,18 +6,28 @@
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput } from '@/foundation/ui';
   import { useAuthSession } from '../public';
 
+  type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
+
   const props = withDefaults(
     defineProps<{
       captchaRequired?: boolean;
       captchaToken?: string | null;
+      captchaStatus?: CaptchaStatus;
       passkeyAvailable?: boolean;
       passkeyLoading?: boolean;
     }>(),
-    { captchaRequired: false, captchaToken: null, passkeyAvailable: false, passkeyLoading: false },
+    {
+      captchaRequired: false,
+      captchaToken: null,
+      captchaStatus: 'ready',
+      passkeyAvailable: false,
+      passkeyLoading: false,
+    },
   );
   const emit = defineEmits<{
     passkey: [username: string];
     loginAttempted: [];
+    securityChallengeFeedback: [message: string | null];
     securityChallengeConsumed: [];
   }>();
 
@@ -31,12 +41,16 @@
   const isLoading = ref(false);
   const error = ref<string | null>(null);
   const isBusy = computed(() => isLoading.value || props.passkeyLoading);
+  const captchaBlocked = computed(() => !auth.pendingSecondFactor.value && props.captchaStatus !== 'ready');
 
   const submit = async (): Promise<void> => {
     if (isBusy.value) return;
     const submittingSecondFactor = auth.pendingSecondFactor.value;
     error.value = null;
-    if (!submittingSecondFactor) emit('loginAttempted');
+    if (!submittingSecondFactor) {
+      emit('loginAttempted');
+      emit('securityChallengeFeedback', null);
+    }
     isLoading.value = true;
 
     try {
@@ -46,8 +60,11 @@
         return;
       }
 
+      if (props.captchaStatus !== 'ready') {
+        return;
+      }
       if (props.captchaRequired && !props.captchaToken) {
-        error.value = t('auth.login.error.captchaRequired');
+        emit('securityChallengeFeedback', t('auth.login.error.captchaRequired'));
         return;
       }
       try {
@@ -150,7 +167,15 @@
 
           <p v-if="error" class="text-error text-center text-sm -mt-2 mb-2" role="alert">{{ error }}</p>
 
-          <BaseButton type="submit" variant="primary" size="lg" block class="rounded-lg px-4 py-3" :loading="isBusy">
+          <BaseButton
+            type="submit"
+            variant="primary"
+            size="lg"
+            block
+            class="rounded-lg px-4 py-3"
+            :disabled="captchaBlocked"
+            :loading="isBusy"
+          >
             {{
               isBusy
                 ? t('auth.login.loggingIn')

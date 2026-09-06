@@ -12,7 +12,9 @@
       "loginWithPasskey": "Login with Passkey",
       "captchaPrompt": "Please complete the verification below:",
       "error": {
+        "captchaLoading": "Loading CAPTCHA verification...",
         "captchaLoadFailed": "Failed to load CAPTCHA. Please try refreshing.",
+        "captchaConfigInvalid": "CAPTCHA configuration is incomplete. Please contact an administrator.",
         "captchaRequired": "Please complete the CAPTCHA verification.",
         "usernameRequiredForPasskey": "Username is required to use a passkey.",
         "passkeyAuthOptionsFailed": "Failed to get passkey authentication options from the server.",

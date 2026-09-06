@@ -12,7 +12,9 @@
       "loginWithPasskey": "使用 Passkey 登录",
       "captchaPrompt": "请完成下方的验证：",
       "error": {
+        "captchaLoading": "正在加载 CAPTCHA 验证...",
         "captchaLoadFailed": "加载 CAPTCHA 失败，请尝试刷新页面。",
+        "captchaConfigInvalid": "CAPTCHA 配置不完整，请联系管理员。",
         "captchaRequired": "请完成 CAPTCHA 验证。",
         "usernameRequiredForPasskey": "使用 Passkey 需要输入用户名。",
         "passkeyAuthOptionsFailed": "从服务器获取 Passkey 认证选项失败。",

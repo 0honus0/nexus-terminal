@@ -12,7 +12,9 @@
       "loginWithPasskey": "Passkeyでログイン",
       "captchaPrompt": "以下の認証を完了してください：",
       "error": {
+        "captchaLoading": "CAPTCHA 認証を読み込んでいます...",
         "captchaLoadFailed": "CAPTCHA の読み込みに失敗しました。ページをリロードしてください。",
+        "captchaConfigInvalid": "CAPTCHA 設定が不完全です。管理者に連絡してください。",
         "captchaRequired": "CAPTCHA を完了してください。",
         "usernameRequiredForPasskey": "Passkey を使用するにはユーザー名が必要です。",
         "passkeyAuthOptionsFailed": "サーバーから Passkey 認証オプションを取得できませんでした。",

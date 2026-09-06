@@ -12,11 +12,21 @@
   const auth = useAuthSession();
   const security = useLoginSecurity();
   const captchaToken = ref<string | null>(null);
+  const captchaFeedback = ref<string | null>(null);
   const captchaChallenge = ref<{ reset: () => void } | null>(null);
   const passkeyError = ref('');
   onMounted(() => security.refresh());
+  const handleLoginAttempted = () => {
+    passkeyError.value = '';
+    captchaFeedback.value = null;
+  };
+  const handleCaptchaToken = (token: string | null) => {
+    captchaToken.value = token;
+    if (token) captchaFeedback.value = null;
+  };
   const loginWithPasskey = async (username: string) => {
     passkeyError.value = '';
+    captchaFeedback.value = null;
     try {
       await security.loginWithPasskey(username || undefined);
       await auth.refreshSession();
@@ -30,17 +40,21 @@
   <LoginView
     :captcha-required="security.captchaConfig.value.enabled"
     :captcha-token="captchaToken"
+    :captcha-status="security.captchaStatus.value"
     :passkey-available="security.hasPasskeys.value"
     :passkey-loading="security.loading.value"
     @passkey="loginWithPasskey"
-    @login-attempted="passkeyError = ''"
+    @login-attempted="handleLoginAttempted"
+    @security-challenge-feedback="captchaFeedback = $event"
     @security-challenge-consumed="captchaChallenge?.reset()"
   >
     <template #security>
       <LoginCaptchaChallenge
         ref="captchaChallenge"
         :config="security.captchaConfig.value"
-        @token="captchaToken = $event"
+        :status="security.captchaStatus.value"
+        :feedback="captchaFeedback"
+        @token="handleCaptchaToken"
       />
       <p v-if="passkeyError" class="mt-2 text-center text-sm text-error" role="alert">{{ passkeyError }}</p>
     </template>
