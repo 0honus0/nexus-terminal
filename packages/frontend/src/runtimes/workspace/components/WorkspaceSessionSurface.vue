@@ -129,6 +129,7 @@
   const editorScopeLabel = computed(() => props.session.connection.name || props.session.connection.host);
   const showEditorScopeLabel = computed(() => Boolean(props.sharedEditorSession));
   const previewSession = props.session.previewController;
+  const surfaceRoot = ref<HTMLElement | null>(null);
   const documentPopupVisible = ref(false);
   const fileManagerPopupVisible = ref(false);
   const EDITOR_POPUP_SIZE_KEY = 'nexus.file-editor.desktop-popup-size';
@@ -318,8 +319,23 @@
       ? 'flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none !border-0 !bg-[#2d2d2d] !text-[#f0f0f0]'
       : 'flex min-h-0 flex-col overflow-hidden !max-h-none !max-w-none',
   );
-  onMounted(() => window.addEventListener('resize', clampEditorPopupSize));
-  onBeforeUnmount(() => window.removeEventListener('resize', clampEditorPopupSize));
+  let surfaceVisibilityObserver: MutationObserver | undefined;
+  const hideDocumentPopupWhenSurfaceHidden = () => {
+    if (surfaceRoot.value?.style.display === 'none') documentPopupVisible.value = false;
+  };
+  onMounted(() => {
+    window.addEventListener('resize', clampEditorPopupSize);
+    hideDocumentPopupWhenSurfaceHidden();
+    if (surfaceRoot.value) {
+      surfaceVisibilityObserver = new MutationObserver(hideDocumentPopupWhenSurfaceHidden);
+      surfaceVisibilityObserver.observe(surfaceRoot.value, { attributes: true, attributeFilter: ['style'] });
+    }
+  });
+  onBeforeUnmount(() => {
+    window.removeEventListener('resize', clampEditorPopupSize);
+    surfaceVisibilityObserver?.disconnect();
+    surfaceVisibilityObserver = undefined;
+  });
   watch(
     () => [documentPopupVisible.value, props.mobile] as const,
     ([visible, mobile]) => {
@@ -694,6 +710,7 @@
 
 <template>
   <div
+    ref="surfaceRoot"
     class="relative flex h-full min-h-0 overflow-hidden bg-background"
     :class="mobile ? 'flex-col' : 'flex-row'"
     @pointerdown.capture="handleSurfacePointerDown"
