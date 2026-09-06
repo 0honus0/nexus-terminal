@@ -1464,6 +1464,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 远程 run 的功能截图 artifacts 只证明该次执行产生了部分截图，不等于附录 B 的 28 张 canonical 图已在当前 SHA 完成；历史 `b59438c4`/`6f52f8e9` 图像不能替代 `92e25e16`。M17.05 仍需远程环境中冻结同一 SHA、清理资源后生成并逐图复核 28 图。
 - 当前正式模块计数仍为 **`16 / 18 = 88.9%`**。剩余正式模块只有 `M01` 与 `M17`：M01 还缺移动 setup、Login surface 的 2FA challenge/过期、CAPTCHA gate、passkey 登录/取消、真实软键盘和完整失败态视觉；M17 还缺远程矩阵最终 disposition、当前 SHA 28 图和最终 owner-scoped 差异交接。后续验收继续只使用远程 Actions；在没有稳定正向证据前不重开已闭环模块、不为通过测试恢复旧架构。
 
+### C.69 M14 远程失败确认与进度窗层叠/定位修复（2026-09-06）
+
+- 最新远程 Actions run `34044923970`（HEAD `8b4a1635`，8 workers，未启动本地测试）把 G2/G3/G4/G6 的共同失败定位为真实产品回归：进度窗默认位于右下并被 `WorkspaceSessionSurface.vue` 的 `pointer-events-none fixed z-[60]` 包装层抬高，遮挡命令栏 `open-file-manager-button`；日志反复记录 transfer task 节点拦截点击。该结论与旧 UI `doc/imgs/e2e/upload-progress.png` 的左下进度窗、应用 modal 覆盖顺序一致。
+- 当前修复仅保留新架构 owner：`ProgressCenter.vue` 恢复旧 UI 的默认 `x=16` 左下定位；`WorkspaceSessionSurface.vue` 移除全屏 `z-[60]` 包装，直接渲染自身 `z-40` 的进度窗，使应用 modal（`z>=50`）可覆盖它且不制造全屏命中层。未恢复旧 store、event bus、transport 或重复 controller；活动任务、隐藏/恢复、取消和持久拖拽状态仍由现有 transfer controller/Progress Display 管线负责。
+- 本修复待远程 Actions 在新提交 SHA 上验证，重点复跑 G2/G3/G4/G6 的 archive/upload/progress-display 流程；在远程出现 `open-file-manager-button` 可点击、popup z-index `<50`、hide/restore/cancel 与文件刷新均通过前，不关闭 M14 或 M17。正式模块计数暂保持 **`16 / 18 = 88.9%`**；M01 与 M17 的其余缺口不因本修复改变。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
