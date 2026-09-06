@@ -1108,19 +1108,24 @@
 
     <input ref="uploadInput" class="hidden" type="file" multiple @change="uploadFiles" />
 
-    <ProgressCenter
+    <div
       v-if="transfers.tasks.value.length && progressVisible"
-      :tasks="transfers.tasks.value"
-      @cancel="transfers.cancel"
-      @cancel-all="transfers.cancelAll"
-      @hide="progressVisible = false"
-      @remove="
-        (id) => {
-          const index = transfers.tasks.value.findIndex((task) => task.id === id);
-          if (index >= 0) transfers.tasks.value.splice(index, 1);
-        }
-      "
-    />
+      class="pointer-events-none fixed inset-0 z-[60]"
+    >
+      <ProgressCenter
+        class="pointer-events-auto"
+        :tasks="transfers.tasks.value"
+        @cancel="transfers.cancel"
+        @cancel-all="transfers.cancelAll"
+        @hide="progressVisible = false"
+        @remove="
+          (id) => {
+            const index = transfers.tasks.value.findIndex((task) => task.id === id);
+            if (index >= 0) transfers.tasks.value.splice(index, 1);
+          }
+        "
+      />
+    </div>
     <BaseButton
       v-else-if="transfers.tasks.value.length"
       class="absolute bottom-3 right-12 z-30 shadow-lg"
