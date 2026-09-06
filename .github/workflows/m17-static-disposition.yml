@@ -8,6 +8,12 @@ on:
         required: true
         default: b8d5f31e53e8c5d59088238838456f8628238f7b
         type: string
+  workflow_call:
+    inputs:
+      target_sha:
+        description: Exact product commit to audit
+        required: true
+        type: string
 
 permissions:
   contents: read

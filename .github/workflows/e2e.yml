@@ -286,6 +286,13 @@ jobs:
       - name: Run Docker deployment smoke
         run: scripts/e2e/docker-deployment-smoke.sh nexus-terminal:e2e-smoke
 
+  m17-static-disposition:
+    name: M17 static disposition
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    uses: ./.github/workflows/m17-static-disposition.yml
+    with:
+      target_sha: ${{ github.sha }}
+
   playwright-groups:
     needs: [environment, runner-image, prepare]
     if: ${{ always() && needs.environment.result == 'success' && needs.prepare.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
