@@ -29,6 +29,8 @@
     teleport
     :z-index="9999"
     :close-on-escape="true"
+    :focus-on-open="true"
+    :restore-focus="true"
     backdrop-trigger="mousedown"
     panel-class="max-w-md flex flex-col p-5"
     role="dialog"
