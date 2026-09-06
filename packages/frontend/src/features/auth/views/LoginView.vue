@@ -34,12 +34,13 @@
 
   const submit = async (): Promise<void> => {
     if (isBusy.value) return;
+    const submittingSecondFactor = auth.pendingSecondFactor.value;
     error.value = null;
-    if (!auth.pendingSecondFactor.value) emit('loginAttempted');
+    if (!submittingSecondFactor) emit('loginAttempted');
     isLoading.value = true;
 
     try {
-      if (auth.pendingSecondFactor.value) {
+      if (submittingSecondFactor) {
         await auth.verifyTwoFactor(twoFactorToken.value);
         await router.push({ name: 'Dashboard' });
         return;
@@ -64,7 +65,7 @@
     } catch (cause) {
       error.value = apiErrorMessage(
         cause,
-        t(auth.pendingSecondFactor.value ? 'auth.login.error.twoFactorGeneric' : 'auth.login.error.generic'),
+        t(submittingSecondFactor ? 'auth.login.error.twoFactorGeneric' : 'auth.login.error.generic'),
       );
     } finally {
       isLoading.value = false;

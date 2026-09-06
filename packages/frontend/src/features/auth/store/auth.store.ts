@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { apiErrorStatus } from '@/client/http';
 import { authApi } from '../api/authApi';
 import type {
   AuthSessionState,
@@ -70,11 +71,16 @@ export const useAuthStore = defineStore('auth', {
 
     async verifyTwoFactor(token: string): Promise<AuthUser> {
       if (!this.pendingSecondFactor) throw new Error('No two-factor login challenge is active.');
-      const user = await authApi.verifyTwoFactor(token);
-      this.sessionState = 'authenticated';
-      this.user = user;
-      this.pendingSecondFactor = false;
-      return user;
+      try {
+        const user = await authApi.verifyTwoFactor(token);
+        this.sessionState = 'authenticated';
+        this.user = user;
+        this.pendingSecondFactor = false;
+        return user;
+      } catch (error) {
+        if (apiErrorStatus(error) === 400) this.pendingSecondFactor = false;
+        throw error;
+      }
     },
 
     async logout(): Promise<void> {
