@@ -1149,6 +1149,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M13.05 loading cancel` → `/root/luna_m13_loading`（Luna max）：对照旧 `FileManager.vue` loading overlay 的 abort、遮罩/Escape 隐藏与显式 X 清理差异，在 `features/file-preview/components/FilePreview.vue` 增加可取消 loading overlay；主代理发现并修正子代理初稿把两条路径合并导致 popup 模式误清理已有 tabs，拆为 `dismiss`（关闭 pending、隐藏外壳、保留 tabs）与 `hide`（按当前 popup 设置清理）的事件，接线至 `WorkspaceSessionSurface` 与 `WorkspaceLayoutRenderer`。controller slow-source abort smoke、现有 close-cache smoke、architecture、i18n、`vue-tsc --noEmit`、Prettier、`git diff --check` 通过；主代理提交 `ca46d402`。真实 delayed-read 浏览器 loading 矩阵仍待验收。
 - 本轮产品变更未恢复旧 store、preview context/event bus 或重复 session 状态；`FilePreviewSessionController` 仍是唯一 tabs/operation owner。两个原子提交均不代表 M13 父模块完成，M13.04/M13.06 及各 provider 的真实 F/V 仍由后续批次和 M17 统一复核。受保护的 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts` 与 root-preserved/core 产物未被暂存。
 
+### C.22 产品优先差异收口（2026-09-06，第四批接续）
+
+- 本轮继续遵循 C.15：先修复可确认的旧 UI/行为差异，主代理独立审 diff 与静态结果后精确提交；新增完整浏览器矩阵仍后置，正式模块闭环计数保持 `9 / 18`。
+- `M10.02/M10.03 terminal search remount` → `/root/luna_m10_mobile`（Luna max）：复核旧 SearchAddon 使用与当前 `TerminalView` 生命周期，确认 terminal→file/editor→terminal 重建时 session 搜索词保留但装饰丢失；在 terminal feature owner 增加统一 `syncSearchDecorations`，并由主代理补正为 xterm `write` 回调后再同步 snapshot，避免异步回放竞态。既有 `mobile/terminal-touch.spec.ts` 3/3 通过，Prettier、architecture、i18n、`vue-tsc --noEmit`、Vite build（2664 modules）、`git diff --check` 通过；主代理提交 `cb64b474`。虚拟键盘/IME、切换 pane 后高亮截图和完整移动矩阵仍待真实 F/V，M10 不关闭。
+- `M11.03 chmod/archive failure feedback` → `/root/luna_m11_failure2`（Luna high）：对照旧 `FileManager.vue` 的权限与压缩/解压失败路径，恢复 chmod 本地化前缀+详情、普通 archive 失败即时 toast，同时保留 transfer task error 状态；密码错误码仍回开密码对话框以支持重试。修改仅在 filesystem/workspace 当前 owner，未恢复旧 manager/store/event bus。Prettier、architecture、i18n、`vue-tsc --noEmit`、Vite build（2664 modules）、`git diff --check` 通过；主代理提交 `4522c3ba`。真实 chmod/archive 失败与后续任务浏览器 F/V 尚未取得，M11 不关闭。
+- 主代理在验收中发现并修正 M10 初稿的 snapshot 同步时序；该类“静态通过但异步行为仍可能丢状态”的检查继续作为后续验收硬规则。受保护的 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts`、所有 `*.root-preserved-20260906-takeover` 及 core 产物仍未暂存。下一批优先分发 M10 移动搜索/IME 真实证据、M11 失败反馈浏览器证据、M12 编辑失败→重试/刷新生命周期，槽位释放后再处理 M00/M01/M08/M09/M13；达到模块自身 F/V/A 闭环后才单独提交模块收口。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
