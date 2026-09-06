@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, ref, toRaw, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BaseInput, BaseModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
@@ -20,12 +20,21 @@
   const draggingTarget = ref<string | null>(null);
   const hasChanges = computed(() => JSON.stringify(draft.value) !== JSON.stringify(original.value));
 
+  const clone = <T,>(value: T): T => {
+    const raw = toRaw(value);
+    if (Array.isArray(raw)) return raw.map(clone) as T;
+    if (raw && typeof raw === 'object') {
+      return Object.fromEntries(Object.entries(raw).map(([key, nested]) => [key, clone(nested)])) as T;
+    }
+    return raw;
+  };
+
   watch(
     () => props.visible,
     (visible) => {
       if (!visible) return;
-      draft.value = structuredClone(workspaceFocus.config.value);
-      original.value = structuredClone(workspaceFocus.config.value);
+      draft.value = clone(workspaceFocus.config.value);
+      original.value = clone(workspaceFocus.config.value);
     },
     { immediate: true },
   );
@@ -93,8 +102,8 @@
   const save = async () => {
     saving.value = true;
     try {
-      await workspaceFocus.save(structuredClone(draft.value));
-      original.value = structuredClone(draft.value);
+      await workspaceFocus.save(clone(draft.value));
+      original.value = clone(draft.value);
       emit('close');
     } catch (cause) {
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
