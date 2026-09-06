@@ -85,6 +85,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   const activeId = ref<string | null>(null);
   const loading = ref(false);
   const ports = new Map<string, FileDocumentPort>();
+  const savingDocuments = new Set<string>();
   const active = computed(() => tabs.value.find((item) => item.id === activeId.value) ?? null);
 
   async function open(path: string, context?: FileEditorOpenContext): Promise<EditorDocument> {
@@ -133,20 +134,31 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 
   async function save(doc = active.value): Promise<void> {
     if (!doc) return;
+    if (savingDocuments.has(doc.id)) return;
     const port = ports.get(doc.id) ?? defaultPort;
-    if (!port) throw new Error('The source session for this file is no longer available.');
+    if (!port) {
+      const error = new Error('The source session for this file is no longer available.');
+      doc.saveState = 'error';
+      doc.error = error.message;
+      throw error;
+    }
+    const contentToSave = doc.content;
+    const encodingToSave = doc.encoding;
+    savingDocuments.add(doc.id);
     doc.saveState = 'saving';
     doc.error = undefined;
     try {
-      await port.save(doc.path, doc.content, doc.encoding);
-      doc.rawContentBase64 = encodeEditorContentBase64(doc.content, doc.encoding);
-      doc.originalContent = doc.content;
-      doc.dirty = false;
+      await port.save(doc.path, contentToSave, encodingToSave);
+      doc.rawContentBase64 = encodeEditorContentBase64(contentToSave, encodingToSave);
+      doc.originalContent = contentToSave;
+      doc.dirty = doc.content !== contentToSave;
       doc.saveState = 'saved';
     } catch (cause) {
       doc.saveState = 'error';
       doc.error = cause instanceof Error ? cause.message : String(cause);
       throw cause;
+    } finally {
+      savingDocuments.delete(doc.id);
     }
   }
 
