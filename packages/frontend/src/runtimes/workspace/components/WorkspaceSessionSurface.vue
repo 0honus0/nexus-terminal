@@ -450,6 +450,10 @@
     }
   };
   const hideDocumentPopup = () => {
+    if (documentMode.value === 'preview') {
+      const pendingPreview = previewSession.active.value;
+      if (pendingPreview?.loading) previewSession.close(pendingPreview.id);
+    }
     documentPopupVisible.value = false;
   };
   const closeDocumentPopup = () => {
