@@ -33,6 +33,7 @@
   const emit = defineEmits<{ create: [label: string]; deleteOption: [option: TokenOption] }>();
   const query = ref('');
   const focused = ref(false);
+  const suggestionsOpen = ref(false);
   const tokenInput = ref<HTMLInputElement | null>(null);
 
   const optionFor = (value: string | number) => props.options.find((option) => option.value === value);
@@ -43,11 +44,13 @@
       (option) => !model.value.includes(option.value) && (!needle || option.label.toLowerCase().includes(needle)),
     );
   });
-  const suggestionsVisible = computed(() => focused.value && filteredOptions.value.length > 0);
+  const suggestionsVisible = computed(() => focused.value && suggestionsOpen.value && filteredOptions.value.length > 0);
 
   const add = (value: string | number) => {
     if (!model.value.includes(value)) model.value = [...model.value, value];
     query.value = '';
+    suggestionsOpen.value = false;
+    tokenInput.value?.focus();
   };
   const remove = (value: string | number) => {
     model.value = model.value.filter((item) => item !== value);
@@ -57,6 +60,18 @@
     if (!label) return;
     emit('create', label);
     query.value = '';
+    suggestionsOpen.value = false;
+  };
+  const handleFocus = () => {
+    focused.value = true;
+    suggestionsOpen.value = true;
+  };
+  const handleBlur = () => {
+    focused.value = false;
+    suggestionsOpen.value = false;
+  };
+  const handleInput = () => {
+    suggestionsOpen.value = true;
   };
   const handleKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Enter') {
@@ -75,7 +90,7 @@
       remove(model.value.at(-1)!);
       return;
     }
-    if (event.key === 'Escape') focused.value = false;
+    if (event.key === 'Escape') suggestionsOpen.value = false;
   };
 </script>
 
@@ -123,8 +138,9 @@
         :placeholder="placeholder"
         :disabled="disabled"
         autocomplete="off"
-        @focus="focused = true"
-        @blur="focused = false"
+        @focus="handleFocus"
+        @blur="handleBlur"
+        @input="handleInput"
         @keydown="handleKeydown"
       />
     </div>
