@@ -109,6 +109,9 @@
   const contextCanCloseLeft = computed(() => contextIndex.value > 0);
 
   const save = () => session.save();
+  const triggerSave = (): void => {
+    void save().catch(() => undefined);
+  };
 
   const confirmDiscardIfDirty = async (): Promise<boolean> => {
     if (!session.active.value?.dirty) return true;
@@ -116,23 +119,46 @@
   };
   const reload = async (): Promise<void> => {
     const active = session.active.value;
-    if (!active || !(await confirmDiscardIfDirty())) return;
-    await session.reload(active.id);
+    if (!active || active.saveState === 'saving' || !(await confirmDiscardIfDirty())) return;
+    const current = session.active.value;
+    if (!current || current.id !== active.id || current.saveState === 'saving') return;
+    try {
+      await session.reload(active.id);
+    } catch {
+      return;
+    }
   };
   const changeEncoding = async (event: Event): Promise<void> => {
     const active = session.active.value;
-    const encoding = (event.target as HTMLSelectElement).value;
-    if (!active || !encoding || encoding === active.encoding) return;
-    if (!(await confirmDiscardIfDirty())) {
-      (event.target as HTMLSelectElement).value = active.encoding;
+    const target = event.target as HTMLSelectElement;
+    const encoding = target.value;
+    if (!active || !encoding || encoding === active.encoding || active.saveState === 'saving') {
+      if (active) target.value = active.encoding;
       return;
     }
-    await session.changeEncoding(active.id, encoding);
+    if (!(await confirmDiscardIfDirty())) {
+      target.value = active.encoding;
+      return;
+    }
+    const current = session.active.value;
+    if (!current || current.id !== active.id || current.saveState === 'saving') {
+      target.value = current?.encoding ?? active.encoding;
+      return;
+    }
+    try {
+      await session.changeEncoding(active.id, encoding);
+    } catch {
+      target.value = session.active.value?.encoding ?? active.encoding;
+    }
   };
   const changeLineEnding = (event: Event): void => {
     const active = session.active.value;
-    if (!active) return;
-    session.changeLineEnding(active.id, (event.target as HTMLSelectElement).value as EditorLineEnding);
+    const target = event.target as HTMLSelectElement;
+    if (!active || active.saveState === 'saving') {
+      if (active) target.value = currentLineEnding.value;
+      return;
+    }
+    session.changeLineEnding(active.id, target.value as EditorLineEnding);
   };
   const updateScrollPosition = (position: { scrollTop: number; scrollLeft: number }): void => {
     const active = session.active.value;
@@ -234,7 +260,7 @@
           :value="selectedEncoding"
           class="encoding-select"
           :title="t('fileManager.changeEncodingTooltip')"
-          :disabled="session.loading.value"
+          :disabled="session.loading.value || session.active.value.saveState === 'saving'"
           @change="changeEncoding"
         >
           <option v-for="option in encodingOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
@@ -244,7 +270,7 @@
           :value="currentLineEnding"
           class="encoding-select line-ending-select"
           :title="t('fileEditor.lineEnding')"
-          :disabled="session.loading.value"
+          :disabled="session.loading.value || session.active.value.saveState === 'saving'"
           @change="changeLineEnding"
         >
           <option value="lf">{{ t('fileEditor.lineEndingLf') }}</option>
@@ -281,7 +307,7 @@
         >
           <i class="fas fa-search" aria-hidden="true"></i>
         </button>
-        <button type="button" class="save-btn" :disabled="saveDisabled" @click="save">
+        <button type="button" class="save-btn" :disabled="saveDisabled" @click="triggerSave">
           {{ t('fileManager.actions.save') }}
         </button>
         <button
@@ -335,7 +361,7 @@
           :font-family="fontFamily"
           :scroll-top="session.active.value.scrollTop"
           :scroll-left="session.active.value.scrollLeft"
-          @request-save="save"
+          @request-save="triggerSave"
           @font-size-change="emit('mobileFontSize', $event)"
           @update-scroll-position="updateScrollPosition"
         />
@@ -349,7 +375,7 @@
           :font-family="fontFamily"
           :scroll-top="session.active.value.scrollTop"
           :scroll-left="session.active.value.scrollLeft"
-          @request-save="save"
+          @request-save="triggerSave"
           @font-size="emit('fontSize', $event)"
           @update-scroll-position="updateScrollPosition"
         />

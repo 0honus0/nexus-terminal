@@ -44,6 +44,7 @@
   const presentationCompartment = new Compartment();
   const editableCompartment = new Compartment();
   let view: EditorView | undefined;
+  let mounted = false;
   let syncing = false;
   let syncingScroll = false;
   let languageGeneration = 0;
@@ -156,6 +157,13 @@
         return [];
     }
   };
+  const loadLanguageExtension = async (language: string): Promise<Extension> => {
+    try {
+      return await languageExtension(language);
+    } catch {
+      return [];
+    }
+  };
 
   const handleScroll = () => {
     if (!view || syncingScroll) return;
@@ -189,7 +197,10 @@
   };
 
   onMounted(async () => {
-    const initialLanguage = await languageExtension(props.language);
+    mounted = true;
+    const initialLanguageName = props.language;
+    const initialLanguage = await loadLanguageExtension(initialLanguageName);
+    if (!mounted || !root.value) return;
     view = new EditorView({
       state: EditorState.create({
         doc: props.modelValue,
@@ -239,6 +250,13 @@
     root.value?.addEventListener('touchmove', handleTouchMove, { passive: false });
     root.value?.addEventListener('touchend', handleTouchEnd, { passive: true });
     root.value?.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+
+    if (props.language !== initialLanguageName) {
+      const generation = ++languageGeneration;
+      const extension = await loadLanguageExtension(props.language);
+      if (!view || generation !== languageGeneration) return;
+      view.dispatch({ effects: languageCompartment.reconfigure(extension) });
+    }
   });
 
   watch(
@@ -255,7 +273,7 @@
     async (language) => {
       if (!view) return;
       const generation = ++languageGeneration;
-      const extension = await languageExtension(language);
+      const extension = await loadLanguageExtension(language);
       if (!view || generation !== languageGeneration) return;
       view.dispatch({ effects: languageCompartment.reconfigure(extension) });
     },
@@ -282,12 +300,15 @@
   );
 
   onBeforeUnmount(() => {
+    mounted = false;
+    languageGeneration += 1;
     view?.scrollDOM.removeEventListener('scroll', handleScroll);
     root.value?.removeEventListener('touchstart', handleTouchStart);
     root.value?.removeEventListener('touchmove', handleTouchMove);
     root.value?.removeEventListener('touchend', handleTouchEnd);
     root.value?.removeEventListener('touchcancel', handleTouchEnd);
     view?.destroy();
+    view = undefined;
   });
 
   defineExpose({

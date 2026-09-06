@@ -127,9 +127,13 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
 
   function update(content: string): void {
     if (!active.value) return;
-    active.value.content = content;
-    active.value.dirty = content !== active.value.originalContent;
-    active.value.saveState = 'idle';
+    const doc = active.value;
+    doc.content = content;
+    doc.dirty = content !== doc.originalContent;
+    if (!savingDocuments.has(doc.id)) {
+      doc.saveState = 'idle';
+      doc.error = undefined;
+    }
   }
 
   async function save(doc = active.value): Promise<void> {
@@ -152,7 +156,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
       doc.rawContentBase64 = encodeEditorContentBase64(contentToSave, encodingToSave);
       doc.originalContent = contentToSave;
       doc.dirty = doc.content !== contentToSave;
-      doc.saveState = 'saved';
+      doc.saveState = doc.dirty ? 'idle' : 'saved';
     } catch (cause) {
       doc.saveState = 'error';
       doc.error = cause instanceof Error ? cause.message : String(cause);
@@ -165,6 +169,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   async function reload(id: string): Promise<void> {
     const doc = tabs.value.find((item) => item.id === id);
     if (!doc) return;
+    if (savingDocuments.has(doc.id)) return;
     const port = ports.get(doc.id) ?? defaultPort;
     if (!port) throw new Error('The source session for this file is no longer available.');
     loading.value = true;
@@ -188,6 +193,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   async function changeEncoding(id: string, encoding: string): Promise<void> {
     const doc = tabs.value.find((item) => item.id === id);
     if (!doc || !encoding || doc.encoding === encoding) return;
+    if (savingDocuments.has(doc.id)) return;
     loading.value = true;
     doc.error = undefined;
     try {
@@ -207,6 +213,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
   function changeLineEnding(id: string, lineEnding: EditorLineEnding): void {
     const doc = tabs.value.find((item) => item.id === id);
     if (!doc) return;
+    if (savingDocuments.has(doc.id)) return;
     const delimiter = lineEnding === 'crlf' ? '\r\n' : lineEnding === 'cr' ? '\r' : '\n';
     const normalized = doc.content.replace(/\r\n|\r|\n/g, '\n');
     const next = normalized.replace(/\n/g, delimiter);
@@ -214,6 +221,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     doc.content = next;
     doc.dirty = next !== doc.originalContent;
     doc.saveState = 'idle';
+    doc.error = undefined;
   }
 
   function updateScrollPosition(id: string, scrollTop: number, scrollLeft: number): void {
