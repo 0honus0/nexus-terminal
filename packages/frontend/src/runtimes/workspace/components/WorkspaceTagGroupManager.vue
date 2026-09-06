@@ -113,6 +113,7 @@
   <BaseModal
     :visible="visible"
     :title="modalTitle"
+    :z-index="150"
     panel-class="w-[min(672px,94vw)] max-h-[90dvh]"
     content-class="!py-0"
     @close="emit('close')"

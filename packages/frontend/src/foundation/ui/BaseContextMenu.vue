@@ -14,7 +14,7 @@
       panelTestId?: string;
       blockingLayer?: boolean;
     }>(),
-    { width: 220, autoWidth: false, margin: 8, zIndex: 80, blockingLayer: true },
+    { width: 220, autoWidth: false, margin: 8, zIndex: 130, blockingLayer: true },
   );
   const emit = defineEmits<{ close: [] }>();
   const root = ref<HTMLElement | null>(null);
@@ -63,8 +63,14 @@
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
   });
 
-  watch(() => props.visible, (visible) => overlayRegistration?.setVisible(visible));
-  watch(() => props.zIndex, (zIndex) => overlayRegistration?.setZIndex(zIndex));
+  watch(
+    () => props.visible,
+    (visible) => overlayRegistration?.setVisible(visible),
+  );
+  watch(
+    () => props.zIndex,
+    (zIndex) => overlayRegistration?.setZIndex(zIndex),
+  );
 </script>
 
 <template>

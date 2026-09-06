@@ -1637,7 +1637,7 @@
       :x="compressSubmenu.x"
       :y="compressSubmenu.y"
       :width="220"
-      :z-index="90"
+      :z-index="140"
       :blocking-layer="false"
       @close="compressSubmenu = null"
     >
