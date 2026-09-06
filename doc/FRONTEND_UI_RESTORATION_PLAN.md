@@ -1484,6 +1484,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - G5 仅有 authenticated WebSocket case 在远程 host/origin harness 中无法打开，未显示产品 UI/Workspace 回归；同组其他 suspend/SFTP/progress/connection cases 通过。G8 仍是受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector 命中 17 个按钮；受保护文件不得修改。
 - 因此当前剩余正式模块仍为 **M01、M17 两项（16/18 = 88.9%）**。M01 只剩移动 setup、Login surface 的 2FA challenge/expiry、CAPTCHA 登录 gate、passkey 登录成功/取消、真实软键盘与完整非密码失败视觉；已完成的 setup 重试及 en/zh/ja 三视口普通登录表面不再列为缺口。M17 只剩上述非产品失败的最终 disposition、最终 SHA 的静态/远程证据汇总、以及在 SHA `789188d0` 之后刷新并人工复核附录 B 的 28 张 canonical 图和 owner-scoped 差异交接。
 
+### C.72 远程 Actions run `34049149706` 最新状态（2026-09-06）
+
+- 在远程分支 `test/ui-restoration-groups`、SHA `889f82ab` 上重新查询到最新 E2E run `34049149706`（8 workers）；环境同步、prepare、Docker deployment smoke、G1/G2/G4/G6/G7 均成功，G3/G5/G8 仍失败。本轮没有启动本地测试进程。
+- G3 的失败继续拆分为两项非产品问题：受保护 `change-password.spec.ts` 的 passkey 流程先 API 登录后再访问 `/login`，被认证路由重定向，属于测试编排/host harness；Send Files source fixture 缺少 `rsync`，无法进入预期 rsync 断言。G5 的 authenticated WebSocket 使用 `127.0.0.1` 而页面认证使用 `localhost`，属于 host/origin harness；G8 是受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` locator 命中 17 个按钮，属于 selector 维护。上述问题不修改产品 owner，也不修改受保护文件。
+- 该 run 未产生新的 UI 回归证据；M14 的进度窗层叠/命中层修复仍由 G2/G4/G6 远程通过结果支持。正式进度保持 **`16 / 18 = 88.9%`**，剩余正式模块仍只有 M01 与 M17。
+- 下一步只需在远程环境完成上述三类非产品 failure disposition，并以产品 SHA `789188d0`（文档提交不改变产品 UI）重新汇总静态门禁、远程矩阵和附录 B 的 28 张 canonical 截图；同时补齐 M01 的移动 setup、Login 2FA challenge/expiry、CAPTCHA gate、passkey 登录成功/取消、真实软键盘及非密码失败态视觉证据。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
