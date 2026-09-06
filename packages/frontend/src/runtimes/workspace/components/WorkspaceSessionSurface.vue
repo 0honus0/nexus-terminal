@@ -1237,6 +1237,7 @@
           :spreadsheet-max-columns="spreadsheetMaxColumns"
           @edit="editPreview"
           @hide="hidePreview"
+          @dismiss="hideDocumentPopup"
         />
       </div>
     </OverlayPanel>

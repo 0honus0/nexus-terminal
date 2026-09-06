@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { defineAsyncComponent } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseSpinner } from '@/foundation/ui';
   import ImagePreview from './ImagePreview.vue';
@@ -35,9 +35,11 @@
     spreadsheetRowsPerPage?: number;
     spreadsheetMaxColumns?: number;
   }>();
-  const emit = defineEmits<{ edit: [path: string]; hide: [] }>();
+  const emit = defineEmits<{ edit: [path: string]; hide: []; dismiss: [] }>();
   const { t } = useI18n();
   const preview = props.session ?? createFilePreviewSession(props.source);
+  const root = ref<HTMLElement | null>(null);
+  const loadingTab = computed(() => (preview.active.value?.loading ? preview.active.value : null));
 
   const formatBytes = (bytes: number): string => {
     if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -52,12 +54,28 @@
     return tab.error.message;
   };
   const open = (path: string) => preview.open(path, { scopeId: props.scopeId, source: props.source });
+  const cancelLoading = (closeWorkspace: boolean): void => {
+    const tab = loadingTab.value;
+    if (!tab) return;
+    preview.close(tab.id);
+    if (closeWorkspace) emit('hide');
+    else emit('dismiss');
+  };
+  const handleLoadingKeydown = (event: KeyboardEvent): void => {
+    if (!loadingTab.value || !root.value?.getClientRects().length || event.defaultPrevented || event.key !== 'Escape')
+      return;
+    event.preventDefault();
+    cancelLoading(false);
+  };
+
+  onMounted(() => document.addEventListener('keydown', handleLoadingKeydown));
+  onBeforeUnmount(() => document.removeEventListener('keydown', handleLoadingKeydown));
 
   defineExpose({ open, close: preview.close, clear: preview.clear, refresh: preview.refresh });
 </script>
 
 <template>
-  <section data-testid="file-preview-view" class="relative flex h-full min-h-0 flex-col bg-background">
+  <section ref="root" data-testid="file-preview-view" class="relative flex h-full min-h-0 flex-col bg-background">
     <template v-for="tab in preview.tabs.value" :key="tab.id">
       <div v-show="preview.activeId.value === tab.id" class="absolute inset-0 min-h-0">
         <BaseSpinner v-if="tab.loading" class="m-6" />
@@ -107,6 +125,31 @@
         </template>
       </div>
     </template>
+    <div
+      v-if="loadingTab"
+      data-testid="file-preview-loading"
+      class="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="t('fileManager.preview.loading')"
+      @click.self="cancelLoading(false)"
+    >
+      <div
+        class="flex items-center gap-3 rounded-md border border-white/20 bg-[#141414] px-4 py-3 text-white shadow-xl"
+      >
+        <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+        <span>{{ t('fileManager.preview.loading') }}</span>
+        <button
+          type="button"
+          class="ml-1 flex h-11 w-11 items-center justify-center text-2xl leading-none hover:text-white/70 focus:outline-none focus:ring-1 focus:ring-white/70"
+          :aria-label="t('fileManager.preview.close')"
+          :title="t('fileManager.preview.close')"
+          @click="cancelLoading(true)"
+        >
+          ×
+        </button>
+      </div>
+    </div>
     <div v-if="!preview.tabs.value.length" class="grid h-full place-items-center text-text-secondary">
       {{ t('fileManager.preview.openFiles') }}
     </div>

@@ -376,6 +376,7 @@
           :quick-command-row-scale="quickCommandRowScale"
           @edit="emit('editPreview', $event)"
           @hide="emit('hidePreview')"
+          @dismiss="emit('hidePreview')"
         />
       </template>
     </template>
