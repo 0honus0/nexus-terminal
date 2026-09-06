@@ -79,6 +79,7 @@
 <template>
   <BaseModal
     :visible="visible"
+    :z-index="160"
     panel-class="w-[calc(100vw-2rem)] max-w-3xl max-h-[90dvh] sm:w-full"
     content-class="!overflow-hidden !py-0"
     @close="visible = false"
