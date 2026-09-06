@@ -1498,6 +1498,14 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - G8 为 `16 passed / 1 failure`，唯一失败仍是受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的未限定 `Save` locator 命中 17 个按钮；该 selector 维护项不修改受保护文件、不归因产品 UI。此前 `34051313875`/`34051446813` 仅因 runner artifact/并发抢占失败，不作为产品证据。
 - 因此 M17.04 已达到远程执行与非产品失败 disposition 的完成条件；M17.05 仍需在最终产品 UI SHA（产品代码仍为 `789188d0`）生成并人工复核附录 B 的 28 张 canonical 图，M17.06 仍待最终交接。正式模块计数保持 **`16 / 18 = 88.9%`**，剩余正式模块仍为 M01 与 M17。
 
+### C.74 最新远程 Actions 进度与剩余收口（2026-09-06）
+
+- 按用户要求本轮未启动任何本地测试进程。远程分支 `test/ui-restoration-groups` 的产品/测试 SHA 为 `3aca287de58d9aa65a7df26356f53032fb505808`；Actions run `34053027819`（push）与 `34053368727`（workflow_dispatch，8 workers）均完成环境同步、Docker smoke、prepare 及 G1–G7，G8 仅因受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的未限定 `Save` selector strict-mode 失败。
+- `34053368727` 的截图 artifact 共 39 张；附录 B 当前可确认的 canonical 图为 **26/28**，缺少 `file-manager-spreadsheet-pagination.png` 与 `file-manager-spreadsheet-compact-last-page.png`。该缺口是远程 selector/取证路径问题，不得修改产品 UI 或受保护测试来凑图。
+- 正式模块进度仍为 **16/18（88.9%）**，剩余只有 M01 与 M17；不能用 G1–G7 全绿、G8 的非产品失败或 case 通过率替代模块完成率。
+- M01 尚缺 6 类 Login surface 证据：移动 setup、2FA challenge/expiry、CAPTCHA gate、passkey 登录成功/取消、真实软键盘状态、完整非密码失败态视觉；普通密码失败重试、setup 重试及 en-US/zh-CN/ja-JP 登录矩阵已完成。
+- M17 尚缺 3 类收口：M17.03 在隔离受保护文件后的最终静态/格式门禁 disposition；M17.05 在最终产品 SHA 上补齐并人工复核附录 B 28/28；M17.06 对 owner-scoped 视觉差异、功能/视觉/架构交接作最终决定。后续证据继续只通过远程 Actions 取得，不恢复旧架构、不触碰受保护文件。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
