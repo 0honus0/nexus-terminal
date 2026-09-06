@@ -105,8 +105,8 @@
 <template>
   <OverlayPanel
     :visible="visible"
-    :overlay="true"
-    :teleport="true"
+    :overlay="mobile"
+    :teleport="mobile"
     :z-index="1100"
     preset="standard-modal"
     panel-test-id="progress-display-dialog"

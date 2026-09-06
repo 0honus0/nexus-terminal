@@ -1470,6 +1470,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 当前修复仅保留新架构 owner：`ProgressCenter.vue` 恢复旧 UI 的默认 `x=16` 左下定位；`WorkspaceSessionSurface.vue` 移除全屏 `z-[60]` 包装，直接渲染自身 `z-40` 的进度窗，使应用 modal（`z>=50`）可覆盖它且不制造全屏命中层。未恢复旧 store、event bus、transport 或重复 controller；活动任务、隐藏/恢复、取消和持久拖拽状态仍由现有 transfer controller/Progress Display 管线负责。
 - 本修复待远程 Actions 在新提交 SHA 上验证，重点复跑 G2/G3/G4/G6 的 archive/upload/progress-display 流程；在远程出现 `open-file-manager-button` 可点击、popup z-index `<50`、hide/restore/cancel 与文件刷新均通过前，不关闭 M14 或 M17。正式模块计数暂保持 **`16 / 18 = 88.9%`**；M01 与 M17 的其余缺口不因本修复改变。
 
+### C.70 M14 桌面 Progress Display overlay 归因与新架构修复（2026-09-06）
+
+- 修复 SHA `03f9d902` 的远程 run `34047084786` 中，G2/G4/G6 已通过，证明进度窗左下定位与 z-40 hit-area 修复有效；G3 的 Send Files case 仍在点击 `file-manager-modal-close` 时被 `progress-display-overlay` 拦截。
+- 该失败不是 fixture：当前 `ProgressDisplayModal.vue` 桌面虽然标记 `data-progress-display-placement="inline"`，却始终传 `overlay=true`、`teleport=true`，因此生成 z-1100 全屏遮罩；旧 UI/旧组件语义是桌面 inline、移动才 overlay/teleport。现恢复为 `:overlay="mobile"`、`:teleport="mobile"`，保留移动模态焦点/遮罩和桌面 Workspace 内联布局，不恢复旧 store/event bus。
+- 同一 run 的 G3 其他失败仍分别归因于受保护 passkey host/CDP harness；G8 为受保护 `file-preview-editor.spec.ts:889` 未限定 Save selector；G5 authenticated WebSocket 与 G3/G5 少量 flaky 项待远程重跑/独立 disposition。正式模块计数暂保持 **`16 / 18 = 88.9%`**。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
