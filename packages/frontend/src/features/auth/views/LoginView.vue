@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { reactive, ref } from 'vue';
+  import { computed, reactive, ref } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
@@ -7,8 +7,13 @@
   import { useAuthSession } from '../public';
 
   const props = withDefaults(
-    defineProps<{ captchaRequired?: boolean; captchaToken?: string | null; passkeyAvailable?: boolean }>(),
-    { captchaRequired: false, captchaToken: null, passkeyAvailable: false },
+    defineProps<{
+      captchaRequired?: boolean;
+      captchaToken?: string | null;
+      passkeyAvailable?: boolean;
+      passkeyLoading?: boolean;
+    }>(),
+    { captchaRequired: false, captchaToken: null, passkeyAvailable: false, passkeyLoading: false },
   );
   const emit = defineEmits<{ passkey: [username: string]; securityChallengeConsumed: [] }>();
 
@@ -21,6 +26,7 @@
   const twoFactorToken = ref('');
   const isLoading = ref(false);
   const error = ref<string | null>(null);
+  const isBusy = computed(() => isLoading.value || props.passkeyLoading);
 
   const submit = async (): Promise<void> => {
     error.value = null;
@@ -88,7 +94,7 @@
                 autocomplete="username"
                 required
                 size="lg"
-                :disabled="isLoading"
+                :disabled="isBusy"
               />
             </BaseFormField>
 
@@ -101,12 +107,12 @@
                 autocomplete="current-password"
                 required
                 size="lg"
-                :disabled="isLoading"
+                :disabled="isBusy"
               />
             </BaseFormField>
 
             <label class="flex cursor-pointer items-center gap-2 text-sm text-text-secondary" for="rememberMe">
-              <BaseCheckbox id="rememberMe" v-model="rememberMe" :disabled="isLoading" />
+              <BaseCheckbox id="rememberMe" v-model="rememberMe" :disabled="isBusy" />
               <span>{{ t('auth.login.rememberMe') }}</span>
             </label>
           </template>
@@ -121,7 +127,7 @@
               pattern="[0-9]{6}"
               required
               size="lg"
-              :disabled="isLoading"
+              :disabled="isBusy"
             />
           </BaseFormField>
 
@@ -129,9 +135,9 @@
 
           <p v-if="error" class="text-error text-center text-sm -mt-2 mb-2" role="alert">{{ error }}</p>
 
-          <BaseButton type="submit" variant="primary" size="lg" block :loading="isLoading">
+          <BaseButton type="submit" variant="primary" size="lg" block :loading="isBusy">
             {{
-              isLoading
+              isBusy
                 ? t('auth.login.loggingIn')
                 : auth.pendingSecondFactor.value
                   ? t('auth.login.verifyButton')
@@ -144,10 +150,11 @@
             type="button"
             size="lg"
             block
+            :loading="isBusy"
             @click="emit('passkey', credentials.username)"
           >
             <template #leading><i class="fas fa-key" aria-hidden="true"></i></template>
-            {{ t('auth.login.loginWithPasskey') }}
+            {{ isBusy ? t('auth.login.loggingIn') : t('auth.login.loginWithPasskey') }}
           </BaseButton>
         </form>
       </section>

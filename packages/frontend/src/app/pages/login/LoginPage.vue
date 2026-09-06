@@ -29,6 +29,7 @@
     :captcha-required="security.captchaConfig.value.enabled"
     :captcha-token="captchaToken"
     :passkey-available="security.hasPasskeys.value"
+    :passkey-loading="security.loading.value"
     @passkey="loginWithPasskey"
     @security-challenge-consumed="captchaChallenge?.reset()"
   >
