@@ -383,7 +383,7 @@
 | ------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M17.01 | ✅ 本地完成〔C.38/C.41〕 | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品                                              |
 | M17.02 | ✅ 本地完成〔C.35〕      | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责                                                        |
-| M17.03 | ✅ 远程完成〔C.81/C.85〕 | `d9cc45f7` 与最终计划 SHA 的 clean checkout 均已取得 architecture/i18n/vue-tsc/Vite/git diff-check/test-policy/groups:check/format:all:check exit `0`；本地受保护 dirty 文件不纳入该结论 |
+| M17.03 | ✅ 远程完成〔C.81/C.85〕 | `d9cc45f7` 与最终计划 SHA 的 clean checkout 均已取得 architecture/i18n/vue-tsc/Vite/git diff-check/test-policy/groups:check/format:all:check exit `0`；本地受保护 dirty 文件不纳入该结论                              |
 | M17.04 | ✅ 远程完成〔C.73〕      | 当前测试分支 `2ec5bb82` 的 runner 镜像构建、Docker smoke、prepare、G1–G7 均通过；G8 的 1 个失败已独立归因于受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector，不归因产品，矩阵证据与 disposition 已记录 |
 | M17.05 | ✅ 远程完成〔C.82〕      | 远程 run `34062738192` 在产品等价 SHA `e859253e` 上产出 26 个功能截图与 2 个专用 spreadsheet 截图；附录 B 28/28 文件、尺寸与 SHA-256 均已核对                                                                         |
 | M17.06 | ✅ 远程完成〔C.83/C.85〕 | M14/M15/M12/M11/Dashboard owner-scoped 差异均已 accept/fixed；功能、视觉、架构交接完成；G8 protected selector 保留为测试维护项                                                                                        |
