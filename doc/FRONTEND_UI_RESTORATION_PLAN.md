@@ -1400,6 +1400,32 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - M08 当前 SHA F/V/A 证据已齐：layout/focus owner probe **2/2 passed**（`/dev/shm/nexus-m08-current-015531fb-20260906T112200Z/`）；archive sidebar unmount **1/1 passed**（`/dev/shm/nexus-m08-archive-015531fb-20260906T112100Z/`）；immediate-close wheel **1/1 passed**（`/dev/shm/nexus-m08-wheel-015531fb-20260906T111500Z/`）；Pixel 7 mobile Workspace/status/file-manager **1/1 passed**（`/dev/shm/nexus-m08-mobile-015531fb-20260906/`）；virtual keyboard/modifiers **1/1 passed**（`/dev/shm/nexus-m08-virtual-keyboard-015531fb-20260906/`）。
 - M08.02–M08.04 的功能、视觉状态与架构边界均达到本地闭环，正式模块计数更新为 **`16 / 18`**；最终 canonical SHA、28 张图和跨模块 disposition 仍由 M17.04–06 统一验收。
 
+### C.59 M17.03/M17.04 当前最终 SHA 收口复核（2026-09-06）
+
+- 本轮最终验收基线冻结为 `HEAD=438426b8`；工作树中的两份受保护 dirty E2E、未跟踪移动审计、`root-preserved` 产物与 `core.*` 均未修改、暂存或删除。M17.03 的 clean archive 静态门禁中 architecture、i18n、`vue-tsc --noEmit`、frontend build、test-policy、groups check 均有 exit `0` 证据；`format:all:check` 仍只被四个既有 tracked 格式文件阻断（plan、`OverlayPanel.vue`、`group-6.json`、`timings.json`），不能扩大解释为产品失败或项目完成。
+- M17.04 报告位于 `/dev/shm/nexus-m17-docker-ce555215-20260906T113348Z/REPORT.md`：最终 SHA 的 unified Docker build、Docker smoke、ingress `2/2`、WebSocket `101 Switching Protocols` 与 runner/toolchain 检查均通过；最终 SHA 的 G1 首次端口冲突后重跑仍在 `config.webServer` 预检阶段因 `packages/backend/support/prepare-test-data.mjs` 路径缺失而 `0 tests/exit 1`，G2–G8 未执行。故 M17.04 仍为部分完成，不能用旧 `ae3caf1d` 的 G1/G2 结果替代最终 SHA。
+- 必须保留的架构结论：上述 Docker/静态门禁未引入旧 store、event bus、transport 或重复 controller；后续只修复 runner/archive 的启动路径与资源编排，不为通过 G1–G8 修改产品 owner。
+
+### C.60 M17.05 canonical/截图运行结果与资源阻断（2026-09-06）
+
+- 当前 SHA canonical run 证据位于 `/dev/shm/nexus-m17-canonical-438426b8-20260906T120056Z/`，因 `/dev/shm` 达到约 97% 使用率而在 903 秒超时：`22 passed`、`5 failed`、`26 did not run`，不能作为 M17.05 或项目完成证明。PDF 的 `page-count=0/scrollHeight` 与上传文件缺失发生在同一资源退化期间；两次早期独立复跑也分别在 `/connections` 前置、端口漂移或 `connection-row-1` fixture 阶段失败，未进入 PDF 断言，因此不得据此修改 `PdfPreview.vue` 或传输产品代码。
+- 资源清理后的最终串行复跑 `/dev/shm/nexus-m17-pdf-final-438426b8` 使用精确 SHA `438426b854cf29f695e2204eb55db6ee8ed44812`、`baseURL=http://localhost:4173`、单 worker，先确认 `connection-row-1` 后进入 PDF 断言并 **exit 0**：page count `3`、三页节点、首 canvas 宽度大于 0、连续 scroller `scrollHeight > clientHeight`。该证据证明 PDF 产品当前无稳定回归，但只覆盖该 spec 切片，不能替代 M17.05 的 28 图或全量 canonical。
+- 5 个可归因项必须分开记录：`file-preview-editor.spec.ts:889` 是受保护测试的未限定 `Save` selector strict-mode（17 个按钮），不是产品断言；PDF 与 file-upload 超时是资源/fixture/cascade 失败，最后的 upload-popup 用例未进入产品断言。受保护测试不得修改，selector 维护留待独立 M17.03 owner 决策。
+- M17.05 仍待在清理后的单一环境中串行完成：冻结同一 SHA，先验证 `/connections`、`connection-row-1`、端口和可用空间，再按 spec 逐组运行；生成并人工复核附录 B 的 28 张当前 SHA 截图，记录每图视口/主题/数据/差异结论。未完成前 M17.05、M17.06 不关闭，正式模块计数保持 **`16 / 18`**，不得把本轮 6 张 partial screenshot 或历史 PNG 当作 28 图完成证据。
+
+### C.61 M17.04 最终 SHA G1–G8 串行矩阵（2026-09-06）
+
+- 在最终产品 SHA `438426b854cf29f695e2204eb55db6ee8ed44812`、固定 runner、`--shm-size=2g`、单 worker、独占端口环境中，G1–G8 均已实际启动并完成：G1 **16/16 passed**（`/dev/shm/nexus-m17-g1-438426b8-20260906T122902Z-jvMDhR/REPORT.md`）；G2 **9/9 passed**（`/dev/shm/nexus-m17-g2-final-438426b8-20260906T123200Z/`）；G3 **29 passed / 1 harness failure**（`/dev/shm/nexus-m17-g3-final-438426b8-20260906T123500Z/`）；G4 **24/24 passed**（`/dev/shm/nexus-m17-g4-final-438426b8-20260906T124300Z/`）；G5 **22 passed / 1 authenticated-WebSocket failure**（`/dev/shm/nexus-m17-g5-final-438426b8-20260906T125000Z/`）；G6 **8/8 passed**（`/dev/shm/nexus-m17-g6-final-438426b8-20260906T132000Z/`）；G7 **26/26 passed**（`/dev/shm/nexus-m17-g7-final-438426b8-20260906T140000Z/`）；G8 **16 passed / 1 selector failure**（`/dev/shm/nexus-m17-g8-final-438426b8-20260906T143000Z/`）。矩阵合计 **150/153 case 通过**；该 case 比例不折算项目完成百分比。
+- G3 失败固定为受保护 `change-password.spec.ts` passkey 流程在 `http://localhost:4173/login` 找不到 `#username`，与既有 `localhost`/`127.0.0.1` host-only cookie/CDP harness 限制一致；G5 失败为受保护 WebSocket case 使用 `ws://127.0.0.1:4173` 而页面/认证在 `localhost`，需独立报告确认，均不得直接归因产品 owner。G8 失败固定为受保护 `file-preview-editor.spec.ts:889` 的未限定 `getByRole('button', { name: 'Save', exact: true })` 命中 17 个按钮，属于 selector 维护，不修改受保护文件或产品代码。
+- G1–G8 的 Docker unified build、Docker smoke、ingress `2/2`、WebSocket `101` 及 runner/toolchain 均已有最终 SHA 证据；本节只证明矩阵已执行并完成归因，M17.04 仍需主代理确认上述非产品失败的独立证据后再关闭。M17.05 的 canonical 28 图和 M17.06 的最终 disposition 仍未关闭，正式模块计数继续为 **`16 / 18`**。
+
+### C.62 M17.05 28 图当前 SHA 审计与 M14 视觉差异收口（2026-09-06）
+
+- 最终 SHA `438426b854cf29f695e2204eb55db6ee8ed44812` 的 canonical 证据已齐：26 张主图位于 `/dev/shm/nexus-m17-canonical-slice-438426b8-20260906T130502Z/screenshots/`，2 张分页图位于 `/dev/shm/nexus-m17-canonical-pagination-438426b8-20260906T163000Z/screenshots/`；清单 **28/28**、尺寸/PNG/hash 校验通过，逐图人工审计报告为 `/dev/shm/nexus-m17-canonical-visual-audit-438426b8-20260906T135249Z/REPORT.md`。
+- 审计未发现新的结构、几何、密度、字体、图标、滚动或响应式回归；动态指标、时间、审计记录、终端输出、文件排序和任务进度均按运行时数据处理，不作为像素回归。已确认的 owner-scoped 可见差异仍需明确决策：M14 Progress Display 的桌面呈现、M11 目录优先排序、M13 移动 `94dvh`/safe-area inset preview 壳、M15 compact cards/chart，以及 Dashboard 的语言/refresh badge/实时数据。
+- M14 后续 focused run 在工作树 dirty 的 transfers owner 修复上 **1/1 passed**，architecture、`vue-tsc --noEmit` 与 `git diff --check` 均 exit `0`：`ProgressDisplayModal.vue` 的 hidden progress 恢复居中 overlay/teleport，`ProgressCenter.vue` 的 active upload 默认位置恢复旧基线右下角；resize、drag、hide/restore、scroll、cancel-all 均保持通过，M14 此切片 F/V/A **pass**。修复已由主代理作为独立 M14 follow-up commit 提交；因产品 SHA 变化，canonical 截图仍需在该新 SHA 上刷新后才能作为最终证据。
+- M17.04 可在主代理记录 C.61 独立归因后关闭；M17.05 的 28 图取证已完成但须先处理上述 dirty SHA/owner 差异；M17.06 继续保持未关闭。正式模块完成率仍为 **`16 / 18 = 88.9%`**，不得用 `150/153` case 通过率替代。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。

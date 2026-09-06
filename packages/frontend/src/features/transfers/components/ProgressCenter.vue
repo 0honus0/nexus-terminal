@@ -112,7 +112,7 @@
       width.value = Math.min(440, availableWidth());
       height.value = Math.min(300, availableHeight());
       position.value = {
-        x: 16,
+        x: Math.max(8, window.innerWidth - width.value - 16),
         y: Math.max(8, window.innerHeight - height.value - 16),
       };
     }
