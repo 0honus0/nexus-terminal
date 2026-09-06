@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, ref, shallowRef } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu } from '@/foundation/ui';
   import { useLongPressGesture } from '@/foundation/interaction';
@@ -30,7 +30,7 @@
     openLayoutConfigurator: [];
   }>();
 
-  const context = ref<{ session: WorkspaceRuntimeSession; x: number; y: number } | null>(null);
+  const context = shallowRef<{ session: WorkspaceRuntimeSession; x: number; y: number } | null>(null);
   const draggingId = ref<string | null>(null);
   const dropTarget = ref<{ id: string; placement: 'before' | 'after' } | null>(null);
   const contextIndex = computed(() =>
@@ -40,9 +40,9 @@
   const canCloseRight = computed(() => contextIndex.value >= 0 && contextIndex.value < props.sessions.length - 1);
   const canCloseLeft = computed(() => contextIndex.value > 0);
   const contextCanToggleSuspend = computed(
-    () => context.value?.session.connection.type === 'SSH' && context.value.session.state === 'connected',
+    () => context.value?.session.connection.type === 'SSH' && context.value.session.state.value === 'connected',
   );
-  const contextMarkedForSuspend = computed(() => Boolean(context.value?.session.markedForSuspend));
+  const contextMarkedForSuspend = computed(() => Boolean(context.value?.session.markedForSuspend.value));
 
   const openContextAt = (session: WorkspaceRuntimeSession, x: number, y: number): void => {
     context.value = { session, x, y };

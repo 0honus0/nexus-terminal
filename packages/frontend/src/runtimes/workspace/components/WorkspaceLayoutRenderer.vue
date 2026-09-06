@@ -160,6 +160,7 @@
     class="workspace-split"
     :class="{ 'workspace-split--locked': layoutLocked }"
     :horizontal="node.direction === 'vertical'"
+    :push-other-panes="false"
     :maximize-panes="!layoutLocked"
     @resized="handleLayoutResize"
     @keydown.capture="stopLockedSplitterKeydown"

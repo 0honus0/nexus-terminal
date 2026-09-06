@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { computed } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseInput, BaseSelect } from '@/foundation/ui';
   import type { WorkspaceLayoutNode, WorkspacePaneName } from '../layout/workspaceLayout';
@@ -6,6 +7,10 @@
   const { t } = useI18n();
   const props = defineProps<{ modelValue: WorkspaceLayoutNode; panes: readonly WorkspacePaneName[]; root?: boolean }>();
   const emit = defineEmits<{ 'update:modelValue': [node: WorkspaceLayoutNode]; remove: [] }>();
+  const paneOptions = computed(() => {
+    const current = props.modelValue.type === 'pane' ? props.modelValue.component : undefined;
+    return current && !props.panes.includes(current) ? [current, ...props.panes] : props.panes;
+  });
 
   const patch = (value: Partial<WorkspaceLayoutNode>) => emit('update:modelValue', { ...props.modelValue, ...value });
   const updateChild = (index: number, child: WorkspaceLayoutNode) => {
@@ -57,7 +62,7 @@
           class="min-w-44"
           @update:model-value="patch({ component: $event as WorkspacePaneName })"
         >
-          <option v-for="pane in panes" :key="pane" :value="pane">{{ paneLabel(pane) }}</option>
+          <option v-for="pane in paneOptions" :key="pane" :value="pane">{{ paneLabel(pane) }}</option>
         </BaseSelect>
       </template>
 

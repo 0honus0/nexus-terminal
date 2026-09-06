@@ -91,10 +91,12 @@
   const toggleLayoutLock = (): void => emit('layoutLocked', !Boolean(props.layoutLocked));
   const setSidebar = (side: 'left' | 'right', name: WorkspacePaneName, enabled: boolean) => {
     const other = side === 'left' ? 'right' : 'left';
-    sidebar.value[side] = enabled
-      ? [...new Set([...sidebar.value[side], name])]
-      : sidebar.value[side].filter((item) => item !== name);
-    if (enabled && name === 'terminal') sidebar.value[other] = sidebar.value[other].filter((item) => item !== name);
+    if (enabled) {
+      if (mainPanes.value.includes(name) || sidebar.value[other].includes(name)) return;
+      sidebar.value = { ...sidebar.value, [side]: [...new Set([...sidebar.value[side], name])] };
+      return;
+    }
+    sidebar.value = { ...sidebar.value, [side]: sidebar.value[side].filter((item) => item !== name) };
   };
   const attemptClose = async () => {
     if (hasChanges.value) {
@@ -209,7 +211,7 @@
           <div
             class="flex min-h-[250px] flex-1 flex-col overflow-auto rounded border-2 border-dashed border-border bg-header/20 p-4"
           >
-            <WorkspaceLayoutNodeEditor v-model="draft" :panes="workspaceLayout.paneNames" :root="true" />
+            <WorkspaceLayoutNodeEditor v-model="draft" :panes="availablePanes" :root="true" />
           </div>
           <div class="mt-4">
             <button type="button" class="secondary-action" @click="reset">

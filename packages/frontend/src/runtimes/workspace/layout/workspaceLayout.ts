@@ -84,7 +84,7 @@ const defaultSidebars = (): WorkspaceSidebarConfig => ({ left: ['connections', '
 
 const validateLayout = (value: unknown): value is WorkspaceLayoutNode => {
   const nodeIds = new Set<string>();
-  let terminalCount = 0;
+  const components = new Set<WorkspacePaneName>();
   const visit = (candidate: unknown, depth = 0): candidate is WorkspaceLayoutNode => {
     if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate) || depth > 12) return false;
     const node = candidate as Partial<WorkspaceLayoutNode>;
@@ -92,7 +92,8 @@ const validateLayout = (value: unknown): value is WorkspaceLayoutNode => {
     nodeIds.add(node.id);
     if (node.type === 'pane') {
       if (typeof node.component !== 'string' || !paneNames.has(node.component as WorkspacePaneName)) return false;
-      if (node.component === 'terminal' && ++terminalCount > 1) return false;
+      if (components.has(node.component as WorkspacePaneName)) return false;
+      components.add(node.component as WorkspacePaneName);
       return true;
     }
     if (node.type !== 'container' || (node.direction !== 'horizontal' && node.direction !== 'vertical')) return false;
@@ -120,15 +121,15 @@ const validSidebar = (value: unknown, layout: WorkspaceLayoutNode): value is Wor
   if (new Set(config.left).size !== config.left.length || new Set(config.right).size !== config.right.length)
     return false;
   const mainPanes = layoutPaneNames(layout);
-  return Number(mainPanes.has('terminal')) + all.filter((name) => name === 'terminal').length <= 1;
+  return all.length === new Set(all).size && all.every((name) => !mainPanes.has(name));
 };
 
 const defaultSidebarsFor = (layout: WorkspaceLayoutNode): WorkspaceSidebarConfig => {
-  const terminalUsed = layoutPaneNames(layout).has('terminal');
+  const mainPanes = layoutPaneNames(layout);
   const defaults = defaultSidebars();
   return {
-    left: defaults.left.filter((pane) => pane !== 'terminal' || !terminalUsed),
-    right: defaults.right.filter((pane) => pane !== 'terminal' || !terminalUsed),
+    left: defaults.left.filter((pane) => !mainPanes.has(pane)),
+    right: defaults.right.filter((pane) => !mainPanes.has(pane)),
   };
 };
 
