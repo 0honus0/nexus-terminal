@@ -300,7 +300,7 @@
   const openMobileClipboardMenu = (clientX: number, clientY: number): void => {
     if (!wrapper.value || !terminal) return;
     const rect = wrapper.value.getBoundingClientRect();
-    const width = 210;
+    const width = 190;
     mobileClipboardMenu.value = {
       visible: true,
       x: Math.max(8, Math.min(rect.width - width - 8, clientX - rect.left - width / 2)),
