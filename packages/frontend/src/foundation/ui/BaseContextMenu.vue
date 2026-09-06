@@ -51,6 +51,7 @@
     overlayRegistration = overlayStack.register(props.visible, props.zIndex);
   });
   onMounted(() => {
+    void place();
     window.addEventListener('keydown', handleKeydown);
     window.addEventListener('resize', handleResize);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
