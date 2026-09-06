@@ -80,7 +80,7 @@
 
 <template>
   <div class="flex min-h-screen items-center justify-center bg-background p-4">
-    <div class="flex w-full max-w-4xl overflow-hidden rounded-xl border border-border/40 bg-background shadow-2xl">
+    <div class="flex w-full max-w-4xl overflow-hidden rounded-xl border border-border/20 bg-background shadow-2xl">
       <section
         class="hidden w-2/5 flex-col items-center justify-center bg-gradient-to-br from-primary to-link p-10 text-white md:flex"
       >
@@ -97,8 +97,8 @@
         <h2 class="mb-6 text-center text-2xl font-semibold text-foreground">{{ t('auth.login.title') }}</h2>
 
         <form class="space-y-5" @submit.prevent="submit">
-          <template v-if="!auth.pendingSecondFactor.value">
-            <BaseFormField :label="t('auth.login.username')" for-id="username" required>
+          <div v-if="!auth.pendingSecondFactor.value" class="space-y-6">
+            <BaseFormField :label="t('auth.login.username')" for-id="username">
               <BaseInput
                 id="username"
                 v-model="credentials.username"
@@ -106,11 +106,12 @@
                 autocomplete="username"
                 required
                 size="lg"
+                class="rounded-lg py-3"
                 :disabled="isBusy"
               />
             </BaseFormField>
 
-            <BaseFormField :label="t('auth.login.password')" for-id="password" required>
+            <BaseFormField :label="t('auth.login.password')" for-id="password">
               <BaseInput
                 id="password"
                 v-model="credentials.password"
@@ -119,6 +120,7 @@
                 autocomplete="current-password"
                 required
                 size="lg"
+                class="rounded-lg py-3"
                 :disabled="isBusy"
               />
             </BaseFormField>
@@ -127,9 +129,9 @@
               <BaseCheckbox id="rememberMe" v-model="rememberMe" :disabled="isBusy" />
               <span>{{ t('auth.login.rememberMe') }}</span>
             </label>
-          </template>
+          </div>
 
-          <BaseFormField v-else :label="t('auth.login.twoFactorPrompt')" for-id="twoFactorToken" required>
+          <BaseFormField v-else :label="t('auth.login.twoFactorPrompt')" for-id="twoFactorToken">
             <BaseInput
               id="twoFactorToken"
               v-model="twoFactorToken"
@@ -139,6 +141,7 @@
               pattern="[0-9]{6}"
               required
               size="lg"
+              class="rounded-lg py-3"
               :disabled="isBusy"
             />
           </BaseFormField>
@@ -147,7 +150,7 @@
 
           <p v-if="error" class="text-error text-center text-sm -mt-2 mb-2" role="alert">{{ error }}</p>
 
-          <BaseButton type="submit" variant="primary" size="lg" block :loading="isBusy">
+          <BaseButton type="submit" variant="primary" size="lg" block class="rounded-lg px-4 py-3" :loading="isBusy">
             {{
               isBusy
                 ? t('auth.login.loggingIn')
@@ -162,6 +165,7 @@
             type="button"
             size="lg"
             block
+            class="rounded-lg px-4 py-3"
             :loading="isBusy"
             @click="startPasskey"
           >

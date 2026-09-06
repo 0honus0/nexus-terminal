@@ -51,7 +51,7 @@
   <div
     class="flex min-h-screen items-center justify-center bg-background bg-[radial-gradient(var(--border-color)_1px,transparent_1px)] bg-[size:16px_16px] p-4"
   >
-    <div class="flex w-full max-w-4xl overflow-hidden rounded-xl border border-border/40 bg-background shadow-2xl">
+    <div class="flex w-full max-w-4xl overflow-hidden rounded-xl border border-border/20 bg-background shadow-2xl">
       <section
         class="hidden w-2/5 flex-col items-center justify-center bg-gradient-to-br from-primary to-link p-10 text-white md:flex"
       >
@@ -71,7 +71,7 @@
         </h2>
 
         <form class="space-y-5" @submit.prevent="submit">
-          <BaseFormField :label="t('auth.setup.username')" for-id="username" required>
+          <BaseFormField :label="t('auth.setup.username')" for-id="username">
             <BaseInput
               id="username"
               v-model="username"
@@ -79,12 +79,13 @@
               autocomplete="username"
               required
               size="lg"
+              class="rounded-lg py-3"
               :placeholder="t('auth.setup.usernamePlaceholder')"
               :disabled="isLoading"
             />
           </BaseFormField>
 
-          <BaseFormField :label="t('auth.setup.password')" for-id="password" required>
+          <BaseFormField :label="t('auth.setup.password')" for-id="password">
             <BaseInput
               id="password"
               v-model="password"
@@ -93,12 +94,13 @@
               autocomplete="new-password"
               required
               size="lg"
+              class="rounded-lg py-3"
               :placeholder="t('auth.setup.passwordPlaceholder')"
               :disabled="isLoading"
             />
           </BaseFormField>
 
-          <BaseFormField :label="t('auth.setup.confirmPassword')" for-id="confirmPassword" required>
+          <BaseFormField :label="t('auth.setup.confirmPassword')" for-id="confirmPassword">
             <BaseInput
               id="confirmPassword"
               v-model="confirmPassword"
@@ -107,6 +109,7 @@
               autocomplete="new-password"
               required
               size="lg"
+              class="rounded-lg py-3"
               :placeholder="t('auth.setup.confirmPasswordPlaceholder')"
               :disabled="isLoading"
             />
@@ -127,7 +130,7 @@
             {{ successMessage }}
           </p>
 
-          <BaseButton type="submit" variant="primary" size="lg" block :loading="isLoading">
+          <BaseButton type="submit" variant="primary" size="lg" block class="rounded-lg px-4 py-3" :loading="isLoading">
             {{ isLoading ? t('auth.setup.settingUp') : t('auth.setup.submitButton') }}
           </BaseButton>
         </form>
