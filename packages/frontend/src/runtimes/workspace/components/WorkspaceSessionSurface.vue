@@ -378,6 +378,10 @@
       if (activeRightSidebar.value) activeLeftSidebar.value = null;
     }
   };
+  const closeSidebars = () => {
+    activeLeftSidebar.value = null;
+    activeRightSidebar.value = null;
+  };
 
   const revealEmbeddedEditor = (): void => {
     if (props.showPopupFileManager) fileManagerPopupVisible.value = false;
@@ -739,11 +743,21 @@
       v-if="!mobile && activeLeftSidebar"
       data-workspace-sidebar
       data-testid="left-sidebar-panel"
-      class="relative shrink-0 border-r border-border"
+      class="fixed top-0 bottom-0 left-0 z-[110] flex max-w-[80vw] flex-col overflow-hidden border-r border-border bg-background transition-transform duration-300 ease-in-out"
       :style="{ width: `${leftSidebarWidth}px` }"
     >
       <div class="absolute inset-y-0 right-0 z-20 w-1 cursor-col-resize" @pointerdown="leftResize.startResize"></div>
+      <button
+        type="button"
+        class="absolute right-2 top-1 z-10 p-1 text-2xl leading-none text-text-secondary hover:text-foreground"
+        :title="t('common.close')"
+        :aria-label="t('common.close')"
+        @click="closeSidebars"
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
       <WorkspaceLayoutRenderer
+        class="box-border h-full min-h-0 pt-10"
         :node="sidebarNode(activeLeftSidebar, 'left')"
         :session="session"
         :document-mode="documentMode"
@@ -916,11 +930,21 @@
       v-if="!mobile && activeRightSidebar"
       data-workspace-sidebar
       data-testid="right-sidebar-panel"
-      class="relative shrink-0 border-l border-border"
+      class="fixed top-0 bottom-0 right-0 z-[110] flex max-w-[80vw] flex-col overflow-hidden border-l border-border bg-background transition-transform duration-300 ease-in-out"
       :style="{ width: `${rightSidebarWidth}px` }"
     >
       <div class="absolute inset-y-0 left-0 z-20 w-1 cursor-col-resize" @pointerdown="rightResize.startResize"></div>
+      <button
+        type="button"
+        class="absolute right-2 top-1 z-10 p-1 text-2xl leading-none text-text-secondary hover:text-foreground"
+        :title="t('common.close')"
+        :aria-label="t('common.close')"
+        @click="closeSidebars"
+      >
+        <span aria-hidden="true">&times;</span>
+      </button>
       <WorkspaceLayoutRenderer
+        class="box-border h-full min-h-0 pt-10"
         :node="sidebarNode(activeRightSidebar, 'right')"
         :session="session"
         :document-mode="documentMode"

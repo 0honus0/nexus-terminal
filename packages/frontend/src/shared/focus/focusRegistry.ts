@@ -39,7 +39,10 @@ export const focusRegistry = {
 
   async focusNext(sequence: readonly string[]): Promise<boolean> {
     if (!sequence.length) return false;
-    const start = activeId ? sequence.indexOf(activeId) : -1;
+    const focusedElementId =
+      typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null)?.dataset.focusId : undefined;
+    const currentId = focusedElementId && sequence.includes(focusedElementId) ? focusedElementId : activeId;
+    const start = currentId ? sequence.indexOf(currentId) : -1;
     for (let offset = 1; offset <= sequence.length; offset += 1) {
       const id = sequence[(start + offset + sequence.length) % sequence.length]!;
       if (await this.focus(id)) return true;
