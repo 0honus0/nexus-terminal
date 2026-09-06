@@ -267,7 +267,7 @@
 | ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M08.01 | ✅ 已完成〔C.1/P4〕       | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建                                                                   |
 | M08.02 | ◐ 部分完成〔C.43〕       | P4 16行源码审计、mobile单pane/100dvh/非收缩工具栏/隐藏desktop sidebars与旧设计及部分真实 mobile Workspace 矩阵已有结论；窗口高度/虚拟键盘与最终 mobile 截图仍待 |
-| M08.03 | ◐ 部分完成〔C.14-h/C.20/C.43〕 | 真实三 session、新增/切换/终端状态保留、移动 tab 横滚/长按 context、Close Other/空壳及配置器/投影已有证据；resize、layout lock 与焦点循环仍需完整当前 SHA 矩阵 |
+| M08.03 | ◐ 部分完成〔C.14-h/C.20/C.43/C.49〕 | 真实三 session、新增/切换/终端状态保留、移动 tab 横滚/长按 context、Close Other/空壳及配置器/投影已有证据；当前 SHA 的 `H` 添加/5 节点数量通过，但 save/reload 后 locked splitter probe 因无活动 session 的 fixture/selector 前置失败，resize、layout lock 与焦点循环仍需完整矩阵 |
 | M08.04 | ◐ 部分完成〔C.20/C.43〕 | active sidebar fixed/z-[110]/max-w-[80vw]/内部滚动/关闭按钮及窄右侧栏 submenu 已有目标 case；完整 overlay/focus、跨模块 popup composition 与最终 28 图仍待 |
 
 **验收/架构**：Workspace/Agent live state隔离；runtime不复制file/editor/transfer controller。`WorkspaceSessionSurface.vue` 是M10–M14共用组合文件，由一个指定模型修改。复用 `ui/session-lifecycle.spec.ts`、`ssh/reconnect-ui.spec.ts`、`mobile/ssh-workspace.spec.ts`、`mobile/suspend-resume-ui.spec.ts`；复核 `mobile-workspace.png`。
@@ -1332,6 +1332,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - **M11 状态**：上述两项失败边界已关闭为产品疑点，但 context/sidebar 的剩余 case 仍依赖 M08 layout owner，且当前模块尚未取得全部适用的独立 V 证据；正式模块计数保持 `10 / 18`，不得提前关闭 M11。
 - **M08 SRS-WS-006 最小修复**：`workspaceLayout.ts` 现在只在 load/save 候选管线允许缺失/空 node id，按树路径生成稳定 id，再严格复验非法类型、重复显式 id、未知 pane、重复 component 与错误容器；已有 id 不 churn。Prettier、architecture、i18n、`vue-tsc --noEmit -p packages/frontend/tsconfig.json`、`git diff --check` 均通过；浏览器 F/V 仍待，不据静态门禁关闭 M08。
 - **M12 fixture 边界**：`file-editor.md` 明确 legacy dirty tab close 不阻止关闭；当前 SSH adapter 以 `open(remotePath, 'w')` 写入，删除目标后保存会重新创建文件，故现有 save-failure probe 不能证明产品成功/失败。M12.03/M12.04 继续保持部分完成，需提供可稳定制造远端写入失败的 fixture 后再取正向 F/V 证据。
+
+### C.49 当前 SHA M08 配置器 probe 失败归因（2026-09-06）
+
+- 当前产品 SHA 为 `bfeb6692`。隔离 temporary Workspace probe 首轮使用已过时的 `Add Horizontal Container` 文案，在真实页面只存在 `H`/`V` 控件，90 秒等待未进入产品断言；修正为当前 `H` 后，布局添加与 `Remove this node` **5 个节点计数**通过。
+- 修正后的单 case 随后在 save/reload 后断于 `.workspace-split--locked:visible`：截图显示 reload 后没有活动 session，属于 probe fixture/selector 前置未满足，不能判定 locked splitter 产品失败或通过。命令/exit/trace保留在 `/tmp/nexus-m08-current-sha-20260906/layout-bounded-command.txt`、`layout-bounded-exit.txt`、`layout-bounded-run.log` 及对应 test-results。
+- 因此 M08 继续部分完成；下一次只允许先修正 probe 的活动 session 前置并重跑 locked/save 矩阵，不修改产品来迎合过时 selector，也不把该失败计入产品缺陷。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
