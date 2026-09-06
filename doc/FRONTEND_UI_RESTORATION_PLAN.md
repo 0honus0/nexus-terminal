@@ -332,7 +332,7 @@
 | M13.02 | ✅ 本地完成〔C.2〕      | mobile preview恢复94dvh、四向 `max(.75rem, env(safe-area-inset-*))`；editor保持fullscreen；两个portrait预览流程2/2通过                                                                                                                                                                                                                                                       |
 | M13.03 | ✅ 本地完成〔C.3〕      | Markdown横屏32px旧视觉保留，独立编辑保存重开1/1；不做无需求依据的coarse44改版                                                                                                                                                                                                                                                                                                |
 | M13.04 | ✅ 本地完成〔C.42〕     | 当前 SHA provider SSH 9/9、mobile 10/10；覆盖 PDF/XLSX/DOCX/image/Markdown、refresh、close/cache、outline/zoom/pan、sheet/search/pagination 与 mobile overlay，最终图仍由 M17.05 复核 |
-| M13.05 | ◐ 部分完成〔C.20/C.21/C.42〕 | 最后 tab、loading cancel、Spreadsheet parse/empty worksheet 错误态已真实确认；快速 PDF stale-worker/outline race、XLSX 末页及最终 canonical 截图仍待，不把 harness fixture 失败算产品通过/失败 |
+| M13.05 | ◐ 部分完成〔C.20/C.21/C.42/C.50〕 | 最后 tab、loading cancel、Spreadsheet parse/empty worksheet 错误态已有局部证据；原 provider 错误 probe 含 exit=1 的 malformed-XLSX 断言失败，快速 PDF stale-worker/outline race、XLSX 末页、干净 error/loading/unsupported 隔离复跑及最终 canonical 截图仍待 |
 | M13.06 | ◐ 部分完成〔C.42〕       | `915×412` overlay panel `891×387.27`、document/body 无横溢出；四向 safe-area 为 source-verified，实体 notch 未由当前 Playwright harness 模拟，最终 toolbar/tabs 图审仍待 |
 
 **验收/架构**：FilePreviewSessionController保持单一文档状态，provider不引入Workspace/private editor store；PDF worker/SheetJS等现有能力保留。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`ingress/pdf-worker-assets.spec.ts`；复核附录B全部preview图，不仅两张mobile图。
@@ -1279,9 +1279,9 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 
 ### C.40 M13 provider 错误/取消/横屏补证（2026-09-06）
 
-- 当前产品 SHA `0e40b3cb` 的隔离 provider probe **1/1 passed，exit 0**，报告 `/tmp/nexus-m13-provider-full-20260906/temp/REPORT.md`；使用独立 `127.0.0.2`/backend `3002`/frontend `4174`，因 canonical 端口被有效 E2E 占用而隔离运行。
-- 覆盖 unsupported editor fallback、malformed/empty XLSX、invalid PDF/DOCX/image error、延迟 PDF loading/cancel、20 MiB oversize Retry、`915×412` landscape popup/document geometry；SSH **7/7**、mobile **5/5** 既有证据仍有效。
-- 仍未关闭 M13：快速 PDF stale-worker/outline race、XLSX 最后一页 pagination 与最终 canonical 截图刷新仍待；SheetJS 对 malformed XLSX 的单元格容忍行为已记录为当前产品/SRS 兼容结果，不误判为失败。
+- 原隔离 provider probe 的报告摘要曾写作 **1/1 passed**，但原始 `/tmp/nexus-m13-provider-full-20260906/temp/status.log` 实际为 `exit=1`，失败停在 malformed XLSX 的 `spreadsheet-preview-error` 断言；`/tmp/nexus-m13-error-matrix-20260906/probe/results/.last-run.json` 也记录 4 个失败。因此该 run 只能证明部分 provider/geometry 行为，不能作为完整 error/loading/unsupported 全矩阵通过。
+- 可靠证据仍覆盖 unsupported editor fallback、invalid PDF/DOCX/image、延迟 PDF loading/cancel、20 MiB oversize Retry、`915×412` landscape popup/document geometry；SSH **7/7**、mobile **5/5** 的正常 provider/preview 流程继续保留。SheetJS 对 malformed XLSX 的容忍行为记录为兼容性观察，不把它直接归因成产品失败。
+- 仍未关闭 M13：快速 PDF stale-worker/outline race、XLSX 最后一页 pagination、empty/invalid provider 的干净隔离复跑与最终 canonical 截图刷新仍待。
 
 ### C.41 M17.01 dashboard 隔离复跑（2026-09-06）
 
@@ -1338,6 +1338,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 当前产品 SHA 为 `bfeb6692`。隔离 temporary Workspace probe 首轮使用已过时的 `Add Horizontal Container` 文案，在真实页面只存在 `H`/`V` 控件，90 秒等待未进入产品断言；修正为当前 `H` 后，布局添加与 `Remove this node` **5 个节点计数**通过。
 - 修正后的单 case 随后在 save/reload 后断于 `.workspace-split--locked:visible`：截图显示 reload 后没有活动 session，属于 probe fixture/selector 前置未满足，不能判定 locked splitter 产品失败或通过。命令/exit/trace保留在 `/tmp/nexus-m08-current-sha-20260906/layout-bounded-command.txt`、`layout-bounded-exit.txt`、`layout-bounded-run.log` 及对应 test-results。
 - 因此 M08 继续部分完成；下一次只允许先修正 probe 的活动 session 前置并重跑 locked/save 矩阵，不修改产品来迎合过时 selector，也不把该失败计入产品缺陷。
+
+### C.50 M13 证据纠偏与下一项最小取证（2026-09-06）
+
+- 当前 Workspace/filesystem/docs 提交只改变 M08/M11 owner 与计划，`0e40b3cb..bd924c9e` 没有 M13 owner 路径变化；既有正常 provider 证据可作为邻接参考，但必须在最终产品 SHA 重新标识，不把旧 SHA 截图升级为当前 canonical。
+- 静态复核发现 `PdfPreview.vue` 的 `resolveOutlineDestination()` 在异步 `getDestination/getPageIndex` 返回后仍缺一次 document-generation identity guard；这是待证实风险，不直接当作产品失败或已修复。
+- XLSX 末页实现/断言源码存在，但历史两例均卡在 connection/settings helper；至少要在隔离端口完成 empty-XLSX、invalid provider、mobile loading 和末页分页的干净 F/V run。下一项优先做 **PDF 快速 refresh/切 tab race evidence-only probe**：只取真实截图、页码、outline、worker/console 结果；若出现旧文档回写，才允许在 `features/file-preview/components/PdfPreview.vue` 内修复 generation guard。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
