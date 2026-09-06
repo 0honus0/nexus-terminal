@@ -383,10 +383,10 @@
 | ------ | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M17.01 | ✅ 本地完成〔C.38/C.41〕 | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品                                              |
 | M17.02 | ✅ 本地完成〔C.35〕      | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责                                                        |
-| M17.03 | ✅ 远程完成〔C.81〕      | `d9cc45f7` clean checkout 的 architecture/i18n/vue-tsc/Vite/git diff-check/test-policy/groups:check/format:all:check 全部 exit `0`；本地受保护 dirty 文件不纳入该结论                                                 |
+| M17.03 | ✅ 远程完成〔C.81/C.85〕 | `d9cc45f7` 与最终计划 SHA 的 clean checkout 均已取得 architecture/i18n/vue-tsc/Vite/git diff-check/test-policy/groups:check/format:all:check exit `0`；本地受保护 dirty 文件不纳入该结论 |
 | M17.04 | ✅ 远程完成〔C.73〕      | 当前测试分支 `2ec5bb82` 的 runner 镜像构建、Docker smoke、prepare、G1–G7 均通过；G8 的 1 个失败已独立归因于受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector，不归因产品，矩阵证据与 disposition 已记录 |
 | M17.05 | ✅ 远程完成〔C.82〕      | 远程 run `34062738192` 在产品等价 SHA `e859253e` 上产出 26 个功能截图与 2 个专用 spreadsheet 截图；附录 B 28/28 文件、尺寸与 SHA-256 均已核对                                                                         |
-| M17.06 | ✅ 远程完成〔C.83〕      | M14/M15/M12/M11/Dashboard owner-scoped 差异均已 accept/fixed；功能、视觉、架构交接完成；G8 protected selector 保留为测试维护项                                                                                        |
+| M17.06 | ✅ 远程完成〔C.83/C.85〕 | M14/M15/M12/M11/Dashboard owner-scoped 差异均已 accept/fixed；功能、视觉、架构交接完成；G8 protected selector 保留为测试维护项                                                                                        |
 
 **项目完成条件**：M00–M16适用子任务及F/V/A验收全部有结论，M17.01–06完成；无“源码审计=视觉完成”“旧run=新代码通过”“图片存在=已复核”的替代判断。项目整体完成前保留每个已实现子任务的✅，但模块最终状态不得提前关闭。
 
@@ -1571,6 +1571,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 计划提交 `e7ed431a962b26cbadb3bc73ef0346ec6a655f4a` 的远程 Actions run `34064125470` 已完成；环境同步、runner image、prepare、Docker deployment smoke 与 G1/G2/G4/G5/G6/G7 全部成功。静态 job `101569956850` 的 `check:architecture`、`check:i18n`、`vue-tsc`、Vite build、`git diff --check`、`check:test-policy`、`groups:check`、`format:all:check` 全部 exit `0`，格式 patch 为空。
 - G3 仅有一次 `theme-switching.spec.ts` 外观断言波动（首次期望字体效果 `true/1.5`，收到 `false/1`，retry 通过，最终报告为 `1 flaky`）；没有稳定产品回归证据，不修改 appearance owner 或测试。G8 仍为受保护 `file-preview-editor.spec.ts:889` 的全局 `Save` selector strict-mode，属于测试维护；截图提交与 rebalance 按策略跳过。
 - 该复核确认 M17 的静态门禁与非产品失败 disposition 没有因计划文档更新而回归；后续只处理 M01 的六类 Login surface 证据，继续禁止本地测试进程、旧架构迁回和受保护文件改动。
+
+### C.85 最终计划 SHA 的远程 E2E 复核（2026-09-06）
+
+- 计划提交 `d5d4ac412bb2` 的远程 Actions run `34065006199` 已完成；静态 job `101572414627` 的八项门禁全部 exit `0`，环境同步、runner image、prepare、Docker deployment smoke 与 `playwright-groups (1–7)` 全部成功。该 run 未启动任何本地测试进程。
+- `playwright-groups (8)` 仍只失败于受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的未限定 `Save` locator（17 个匹配），截图提交/rebalance 按策略跳过；没有新的产品 UI/架构回归。与 C.82 的 28/28 canonical artifact 结合后，M17.03/M17.05/M17.06 结论保持有效。
+- 远程分支最终只保留 `main` 与 `test/ui-restoration-groups`；后续不再为 M17 重跑全量矩阵，除非 M01 真实 Login surface 证据或新的产品差异改变完成定义。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
