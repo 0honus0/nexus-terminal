@@ -1518,6 +1518,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 计划总表已与 C.64/C.66/C.75 对齐：M01 保持部分完成而不是误标完成；M17.05 明确要求在 `b8d5f31e` 等最终产品 SHA 上重新取得并人工复核完整 28 张 canonical 图，已有历史图片或部分 artifact 不得替代。
 - 当前正式进度仍为 **`16/18 = 88.9%`**。剩余大项仍为 M01 的 6 类 Login surface 证据，以及 M17.03 最终静态/格式 disposition、M17.05 当前 SHA 28 图、M17.06 owner-scoped 差异与最终交接；后续验证继续只使用远程 Actions。
 
+### C.77 远程 Actions 全量矩阵复核（2026-09-06）
+
+- 仅通过 GitHub Actions `workflow_dispatch`、`workers=8` 验证远程分支 `test/ui-restoration-groups` 的计划提交 `796bc4ea`；run `34056911725` 的环境同步、runner image、prepare、Docker deployment smoke 及 `playwright-groups (1–7)` 全部成功，未启动本地测试进程。
+- `playwright-groups (8)` 的唯一失败仍为受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的全局 `getByRole('button', { name: 'Save', exact: true })` strict-mode（17 个匹配），失败发生在 spreadsheet pagination 截图前的 Settings 前置步骤；该项属于受保护 selector 维护，不归因产品 UI，禁止修改受保护测试或以产品 DOM workaround 凑通过。
+- G8 其余 preview/editor 流程与截图均正常产生；本次远程 run 未形成完整 canonical 提交，附录 B 仍按 M17.05 记录为当前 SHA 尚未完成 28/28，正式模块进度保持 **`16/18 = 88.9%`**。后续只继续 M01 六类 Login surface 证据及 M17.03/M17.05/M17.06 收口。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
