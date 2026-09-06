@@ -1538,6 +1538,19 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 修复前后未启动本地测试进程；通过推送测试分支触发远程 Actions run `34059546744`（产品 SHA `78a24c75`，`test/ui-restoration-groups`）：环境同步、prepare、Docker smoke、G1–G7 均成功；G8 仍只失败于受保护 `file-preview-editor.spec.ts:889` 的未限定 `Save` selector，截图提交 job 跳过，不归因 auth 产品。远程结果证明没有已知矩阵回归，但没有新增 Login CAPTCHA/2FA/passkey 浏览器 case，不能替代 M01 真实 Login surface 证据。
 - 主代理独立 diff/架构审查确认变更范围为上述 7 个 auth/security 文件，三语言新增文案 JSON 可解析，`git diff --check` 通过；当前仍缺 Login 2FA/CAPTCHA/passkey 的真实浏览器状态、移动 setup/真实 IME 与完整失败视觉证据。`M01` 继续 partial，正式模块计数不变为 **`16 / 18 = 88.9%`**。
 
+### C.80 M01 Login surface 远程证据复核（2026-09-06）
+
+- 当前产品 SHA `78a24c75` 的远程 Actions run `34059546744` 已复核：认证相关 group 1/2/3 均通过，但现有测试只覆盖普通登录、setup/API、Settings CAPTCHA/passkey；没有 Login surface 的 2FA challenge/expiry、CAPTCHA gate/token reset、passkey 成功/取消/失败/fallback 专项用例。
+- 因此不能把绿色 HTTP/Settings case 或源码审查升级为 Login F/V 证据；M01 的真实移动 setup、Android/WebView IME/`visualViewport` 和完整非密码失败视觉同样仍无当前 SHA 证据。审计报告见 `/tmp/nexus-m01-2fa-login-audit-20260906T203236Z/REPORT.md`、`/tmp/nexus-m01-captcha-readiness-remote-20260906T211559Z/REPORT.md`、`/tmp/nexus-m01-passkey-login-audit-20260906T202856Z/REPORT.md`、`/tmp/nexus-m01-auth-failure-visual-20260906T211904Z/REPORT.md` 与 `/tmp/nexus-m01-mobile-setup-keyboard-20260906T203132Z/REPORT.md`。
+- 结论：`M01 F/V=partial/pending，A=source pass`；缺口是专项 Login fixture/runner 证据，不是已确认的产品 UI 回归。继续禁止恢复旧 store/event bus/transport 或用窄 viewport 冒充真实 IME。
+
+### C.81 M17.03 远程静态门禁执行（2026-09-06）
+
+- 为满足“只用远程 Actions”约束，新增 `.github/workflows/m17-static-disposition.yml` 的 reusable 入口并由已注册 `E2E` workflow 调用，CI 提交为 `93edfad4`/`bc31d7ba`；未修改产品代码、受保护测试或旧架构。
+- 远程 workflow_dispatch run `34061183594`（测试分支 `test/ui-restoration-groups`，HEAD `bc31d7ba`）的静态 artifact `m17-static-gates-bc31d7ba5d2b8be33f83ea05c5ec79f56fef462e` 给出：`check:architecture=0`、`check:i18n=0`、`vue-tsc=0`、`vite-build=0`、`git-diff-check=0`、`check:test-policy=0`、`groups:check=0`，仅 `format:all:check=1`。
+- `format:all:check` 的四个既有 tracked blocker 为 `doc/FRONTEND_UI_RESTORATION_PLAN.md`、`packages/frontend/src/foundation/ui/OverlayPanel.vue`、`test/e2e/groups/group-6.json`、`test/e2e/groups/timings.json`；该结果需要后续授权的格式修复或逐项 waiver，不能隐瞒为全绿。报告与 TSV 位于 `/tmp/m17-static-run-34061183594-new/`。
+- M17.03 因 format disposition 尚未关闭；其余当前 SHA 静态门禁已取得远程 exit 证据。M17.05 仍等待当前 SHA 28/28 canonical 图，M17.06 仍等待最终交接。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
