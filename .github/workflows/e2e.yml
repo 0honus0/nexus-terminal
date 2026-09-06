@@ -153,7 +153,7 @@ jobs:
   runner-image:
     name: Build E2E runner image
     needs: environment
-    if: ${{ needs.environment.outputs.changed == 'true' }}
+    if: ${{ needs.environment.outputs.changed == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
