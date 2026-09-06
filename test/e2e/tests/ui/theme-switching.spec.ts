@@ -250,7 +250,11 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
       await customizer.getByTestId('terminal-font-family').fill('E2E Terminal Mono, monospace');
       await customizer.getByTestId('terminal-font-size-desktop').fill('17');
       await customizer.getByTestId('terminal-font-size-mobile').fill('23');
+      const terminalFontSave = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+      );
       await customizer.getByTestId('terminal-font-save').click();
+      expect((await terminalFontSave).ok()).toBeTruthy();
 
       await customizer.getByTestId('terminal-text-stroke-enabled').check();
       await customizer.getByTestId('terminal-text-stroke-width').fill('1.5');
@@ -260,7 +264,11 @@ test('style customizer keeps mobile geometry stable and persists custom UI, inde
       await customizer.getByTestId('terminal-text-shadow-y').fill('2');
       await customizer.getByTestId('terminal-text-shadow-blur').fill('3');
       await customizer.getByTestId('terminal-text-shadow-color').fill('rgba(4,5,6,0.7)');
+      const textEffectsSave = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+      );
       await customizer.getByTestId('terminal-text-effects-save').click();
+      expect((await textEffectsSave).ok()).toBeTruthy();
 
       await expect
         .poll(async () => {
