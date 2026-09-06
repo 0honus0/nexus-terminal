@@ -43,6 +43,7 @@ export default defineConfig({
     actionTimeout: isCI ? 15_000 : 0,
     navigationTimeout: isCI ? 30_000 : 0,
     baseURL: 'http://localhost:4173',
+    permissions: ['clipboard-read', 'clipboard-write'],
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
