@@ -1162,6 +1162,16 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 为加快收口，本批同时分发互不重叠的 Luna 任务：M01 认证状态、M08 Workspace layout（不改 `WorkspaceSessionSurface.vue`）、M09 Quick/History、M10 Terminal、M11 filesystem、M12 file-editor、M13 provider 只读审计；每个子代理仅修改所属 owner，不改 plan/commit/push。现有未跟踪 `test/e2e/tests/mobile/m10-mobile-audit.spec.ts` 与两份 dirty E2E、root-preserved/core 产物均受保护，正式模块闭环计数仍为 `9 / 18`。
 - 本批继承规则：先给旧源码/computed style 与行为证据，再决定最小产品 diff；测试后置但不得以静态检查替代真实 F/V；共享 owner 冲突只报告并交主代理协调。下一步按代理交付逐项独立审查、精确提交，并将 M13 已确认的“失败态缺 Retry/Close chrome”和 PDF stale worker 风险交给专门修复批次。
 
+### C.24 产品优先差异收口（2026-09-06，第六批接续）
+
+- 本轮仍遵循 C.15：子代理仅使用 Luna，主代理独立检查旧新差异、owner 边界和提交路径；静态检查用于架构安全网，不能替代真实 F/V。以下均为原子产品修复提交，未提前关闭父模块，正式闭环计数保持 `9 / 18`。
+- `M01.02/M01.03 auth retry and passkey feedback` → `/root/luna_m01_auth`（Luna max）：在当前 `LoginPage`/`LoginView` owner 恢复忙状态防重入、密码尝试清除旧 passkey 错误、passkey 失败本地化和可访问错误提示；不改 auth store/backend/router。定向登录/退出/受保护路由及 1280×800、320×667、375×812 通过；passkey 既有用例在注册后受 `localhost` 页面与 `127.0.0.1` API cookie host 不一致阻断，2FA invalid-session 仍待验收。主代理精确提交 `75c689cb`；M01 仍未闭环。
+- `M08.02/M08.03 layout validation and pane parity` → `/root/luna_m08_workspace`（Luna max）：在新 workspace owner 恢复 split pane `push-other-panes=false`、重复 pane 防护、sidebar fallback 过滤、挂起菜单 ref 状态和当前节点选项保留；不改共用 `WorkspaceSessionSurface.vue`，不复制旧状态架构。Prettier、architecture、i18n、`vue-tsc`、Vite build、`git diff --check` 均通过，完整 resize/sidebar/overlay 浏览器证据仍待。主代理精确提交 `59d402e5`；M08 仍未闭环。
+- `M11.02/M11.03 filesystem geometry and async ordering` → `/root/luna_m11_files2`（Luna max）：恢复目录优先及数值排序稳定 tie-break、load request generation 防旧响应覆盖、行缩放上限 `2.0`、初始化列宽最小值 clamp、拖放目标校验/方向切换/离开清理和缩放滚动锚点；继续使用当前 filesystem port。Prettier、architecture、i18n、`vue-tsc`、Vite build、`git diff --check` 通过；权限/archive 失败、移动文件管理器和完整文件操作矩阵仍待真实 F/V。主代理精确提交 `170f77de`；M11 仍未闭环。
+- `M12.03/M12.04 editor save and language lifecycle` → `/root/luna_m12_editor2`（Luna max）：按文档增加保存 guard/内容快照，保存失败可见且可重试，阻止保存期间 reload/编码/换行竞态；CodeMirror 语言加载失败回退可编辑 plaintext，并防止卸载/旧 tab 异步回写。Prettier、architecture、i18n、`vue-tsc`、Vite build、`git diff --check` 通过；多文件切换、dirty/save/close、移动全屏/软键盘和跨 session 弹层仍待浏览器 F/V。主代理精确提交 `f42397de`；M12 仍未闭环。
+- `M13.05 PDF/provider error lifecycle` → `/root/luna_m13_fix`（Luna high）：读取失败态复用当前 `FilePreviewDialog` shell，提供 Retry/Refresh/Close chrome；PDF 搜索索引改用局部代际快照，旧 worker 不能回写新文档，search busy/stale 异常安全收尾。未恢复旧 preview store/context/event bus。Prettier、architecture、i18n、`vue-tsc`、Vite build、`git diff --check` 通过；各 provider loading/error/unsupported、PDF/XLSX/DOCX/image/Markdown 和 desktop/mobile overlay 仍待真实 F/V。主代理精确提交 `2f320cfa`；M13 仍未闭环。
+- 受保护的 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts`、未跟踪移动审计与 `root-preserved`/core 产物未随上述提交暂存。M09 quick/history 改动仍由其代理收口，待交付后单独审查；下一批优先完成 M09 提交、M00/M01/M08–M13 的真实失败/移动证据，再进入 M17.01–06。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
