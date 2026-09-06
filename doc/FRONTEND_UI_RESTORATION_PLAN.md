@@ -25,7 +25,7 @@
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
 | 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-06 当前工作树）**：`15 / 18` 个正式模块已完成本地 F/V/A 闭环：**M00 App shell / Foundation / feedback、M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M11 Filesystem / catalog / history / context、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`16 / 18` 个正式模块已完成本地 F/V/A 闭环：**M00 App shell / Foundation / feedback、M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M08 Workspace / pane / layout / session orchestration、M09 Quick Commands / History / Command Bar、M10 Terminal / Search / Mobile keyboard、M11 Filesystem / catalog / history / context、M12 Editor / Monaco / CodeMirror、M13 Preview providers / shell、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -128,7 +128,7 @@
 | M05  | Settings、安全设置、备份、About           | ✅ P3                   | 七 tab 全状态/滚动/保存验证                                                                      |
 | M06  | Appearance、主题、背景、PWA               | ✅ P2/P3                | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
 | M07  | Notifications、Audit                      | ✅ P3                   | provider/日志状态的移动视觉验收                                                                  |
-| M08  | Workspace 编排、pane、tab、布局           | ◐ 部分完成〔C.54〕      | layout/locked/focus/窄 sidebar 已有当前 SHA 证据；archive/wheel、窗口高度/虚拟键盘和最终截图仍待 |
+| M08  | Workspace 编排、pane、tab、布局           | ✅ 本地闭环〔C.58〕      | layout/locked/focus、sidebar/archive/wheel、窗口高度/虚拟键盘与 mobile Workspace 均有当前 SHA 证据；最终 canonical 仍归 M17 |
 | M09  | Quick Commands、History、命令栏           | ✅ P4/P5                | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
 | M10  | Terminal、搜索、虚拟键盘                  | ✅ 本地模块闭环〔C.52〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                        |
 | M11  | Filesystem、catalog、history、context     | ✅ 本地闭环〔C.56〕      | 仅待 M17 最终 canonical                                                               |
@@ -266,9 +266,9 @@
 | ID     | 状态                                     | 子任务及具体完成条件                                                                                                                                                                               |
 | ------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M08.01 | ✅ 已完成〔C.1/P4〕                      | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建                                                                 |
-| M08.02 | ◐ 部分完成〔C.43〕                       | P4 16行源码审计、mobile单pane/100dvh/非收缩工具栏/隐藏desktop sidebars与旧设计及部分真实 mobile Workspace 矩阵已有结论；窗口高度/虚拟键盘与最终 mobile 截图仍待                                    |
-| M08.03 | ◐ 部分完成〔C.14-h/C.20/C.43/C.49/C.54〕 | 活动 session 前置修正后 `H` 添加、5 节点、save/reload、locked splitter、min-size/resize 与 focus 配置 `1/1` 通过；archive/wheel 依赖的共享 cleanup 仍被 ENOSPC 阻断，最终移动矩阵与 canonical 仍待 |
-| M08.04 | ◐ 部分完成〔C.20/C.43/C.54〕             | fixed/z-[110]/max-w-[80vw] sidebar、submenu 与 focus/shortcut 当前证据通过；archive unmount 与 immediate-close wheel 未取得可信产品结论，跨模块 popup composition 与最终 28 图仍待                 |
+| M08.02 | ✅ 本地完成〔C.58〕                       | 当前 SHA mobile Workspace、状态监控、文件管理器、窗口高度与虚拟键盘/修饰键均通过真实 Pixel 7 流程；`mobile-workspace.png` 等截图证据已生成，最终 canonical 归 M17 |
+| M08.03 | ✅ 本地完成〔C.58〕                       | 当前 SHA 的 `H` 添加、5 节点、save/reload、locked splitter、min-size/resize、focus/shortcut、archive unmount 与 immediate-close wheel 均通过独立串行 run |
+| M08.04 | ✅ 本地完成〔C.58〕                       | fixed/z-[110]/max-w-[80vw] sidebar、submenu、连接编辑/标签管理 modal 叠层与 focus/shortcut 均有当前 SHA 证据；不恢复旧 store/event bus/transport |
 
 **验收/架构**：Workspace/Agent live state隔离；runtime不复制file/editor/transfer controller。`WorkspaceSessionSurface.vue` 是M10–M14共用组合文件，由一个指定模型修改。复用 `ui/session-lifecycle.spec.ts`、`ssh/reconnect-ui.spec.ts`、`mobile/ssh-workspace.spec.ts`、`mobile/suspend-resume-ui.spec.ts`；复核 `mobile-workspace.png`。
 
@@ -1392,6 +1392,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 当前产品 SHA 为 `127f8dfc0eeb8d78da53d05a7a242a06c4a91a8e`。`npm --prefix packages/frontend run check:architecture`、`check:i18n`、`cd packages/frontend && npx vue-tsc --noEmit`、`npm --prefix packages/frontend run build` 与 `git diff --check` 均 exit `0`；日志保留在 `/dev/shm/m17.03-127f8dfc-*.log`。
 - `npm run check:test-policy` 与 `npm --prefix test/e2e run groups:check --` 均 exit `1`，唯一原因是受保护的未跟踪 `test/e2e/tests/mobile/m10-mobile-audit.spec.ts`：其动态截图文件名不满足 policy，且尚未列入任何 group。该文件及其他 root-preserved dirty 文件不得修改、暂存或删除；此结果不能归因于当前产品 SHA。
 - 本轮未以包含大量 root-preserved/dist 生成物的 `format:check` 结果作结论；清理或隔离生成物后必须对最终受保护工作树执行精确 format gate。M17.03 继续部分完成，不能把局部门禁通过扩大为项目完成。
+
+### C.58 M08 当前 SHA Workspace 全量收口与侧栏叠层修复（2026-09-06）
+
+- 当前产品 SHA 为 `015531fbf689e097c0f9fef3f707bf745c20fc8e`。Workspace 组合层此前使用 `z-[110]` 固定侧栏，而从侧栏打开的连接编辑/标签管理 modal 仍使用默认 `z-index: 50`；窄屏真实流程中侧栏内容会拦截 modal 控件。当前修复严格留在新架构 owner：`BaseContextMenu` 默认 `130`、filesystem 压缩 submenu `140`、`ConnectionEditorModal` 与 `WorkspaceTagGroupManager` `150`，未恢复旧 store/event bus/transport。
+- 叠层与邻接功能在当前工作树独立串行验证：`tests/ssh/connection-list-search.spec.ts` **2/2 passed，exit 0**；首次右键编辑拦截和随后标签管理 `Select All` 拦截均消失。产品改动已提交为 `015531fb`，受保护 dirty E2E 文件和 root-preserved 产物未触碰。
+- M08 当前 SHA F/V/A 证据已齐：layout/focus owner probe **2/2 passed**（`/dev/shm/nexus-m08-current-015531fb-20260906T112200Z/`）；archive sidebar unmount **1/1 passed**（`/dev/shm/nexus-m08-archive-015531fb-20260906T112100Z/`）；immediate-close wheel **1/1 passed**（`/dev/shm/nexus-m08-wheel-015531fb-20260906T111500Z/`）；Pixel 7 mobile Workspace/status/file-manager **1/1 passed**（`/dev/shm/nexus-m08-mobile-015531fb-20260906/`）；virtual keyboard/modifiers **1/1 passed**（`/dev/shm/nexus-m08-virtual-keyboard-015531fb-20260906/`）。
+- M08.02–M08.04 的功能、视觉状态与架构边界均达到本地闭环，正式模块计数更新为 **`16 / 18`**；最终 canonical SHA、28 张图和跨模块 disposition 仍由 M17.04–06 统一验收。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
