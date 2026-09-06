@@ -1397,7 +1397,7 @@
             :key="entry.path"
             :data-filename="entry.name"
             :data-file-path="entry.path"
-            class="file-row select-none transition-colors duration-150"
+            class="file-row select-none touch-pan-y transition-colors duration-150"
             :class="[
               browser.selected.value.has(entry.path) ? 'bg-primary text-white' : 'hover:bg-header/50',
               remoteDragTarget === entry.path ? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary' : '',
