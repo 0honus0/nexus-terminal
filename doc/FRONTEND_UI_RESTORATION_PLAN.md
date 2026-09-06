@@ -267,8 +267,8 @@
 | ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M08.01 | ✅ 已完成〔C.1/P4〕 | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建               |
 | M08.02 | ◐ 部分完成          | P4 16行源码审计全部有记录；mobile单pane、100dvh、非收缩工具栏、隐藏desktop sidebars与旧设计对应，浏览器只覆盖具体流程                            |
-| M08.03 | ◐ 部分完成〔C.14-h〕 | 真实三session新增/切换/终端状态保留、移动tab横滚/长按context、Close Other/关闭至空壳已通过；恢复/断连邻接通过，resize/layout锁定/焦点/sidebar滚动仍待验收 |
-| M08.04 | ⏳ 待验收           | modal/editor/preview/progress/remote叠层、窗口高度变化和虚拟键盘下不遮关键操作；桌面配置器在mobile无入口的事实保留为不适用证据                   |
+| M08.03 | ◐ 部分完成〔C.14-h/C.20〕 | 真实三session新增/切换/终端状态保留、移动tab横滚/长按context、Close Other/关闭至空壳已通过；已恢复旧固定侧栏 overlay 与焦点循环起点识别，resize/layout锁定及完整侧栏浏览器证据仍待验收 |
+| M08.04 | ◐ 部分完成〔C.20〕  | 已恢复桌面 active sidebar 的 fixed/z-[110]/max-w-[80vw]/内部滚动与关闭按钮；modal/editor/preview/progress/remote叠层、窗口高度变化和虚拟键盘下不遮关键操作仍待验收；桌面配置器在mobile无入口事实保留 |
 
 **验收/架构**：Workspace/Agent live state隔离；runtime不复制file/editor/transfer controller。`WorkspaceSessionSurface.vue` 是M10–M14共用组合文件，由一个指定模型修改。复用 `ui/session-lifecycle.spec.ts`、`ssh/reconnect-ui.spec.ts`、`mobile/ssh-workspace.spec.ts`、`mobile/suspend-resume-ui.spec.ts`；复核 `mobile-workspace.png`。
 
@@ -280,7 +280,7 @@
 | ------ | ---------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | M09.01 | ✅ 已完成〔C.1/P4/P5〕 | 旧compact/grouped列表、search/tag/edit/execute、history操作、移动quick modal和command/search模式                         |
 | M09.02 | ◐ 部分完成             | 源码滚动/截断/弹层审计已做；变量表单、分组上下文、hover动作在touch可达性按旧基线核对，不能凭统一44px规则改版             |
-| M09.03 | ◐ 部分完成〔C.14-i〕 | 真实命令新增/搜索/执行/编辑/删除、tag/变量替换/重命名及History搜索/copy/rerun/delete已通过；多session执行、键盘Enter/Escape与失败反馈仍待验收 |
+| M09.03 | ◐ 部分完成〔C.14-i/C.20〕 | 真实命令新增/搜索/执行/编辑/删除、tag/变量替换/重命名及History搜索/copy/rerun/delete已通过；已恢复 Enter/Escape、空查询失焦折叠、变量值多行、特殊替换值及无hover设备 action 可达，浏览器多session/失败反馈仍待验收 |
 
 **验收/架构**：业务持久化归feature，runtime仅将execute送入现有session capability；菜单与按钮走同一执行语义。复用 `ssh/quick-command-management.spec.ts`、`ssh/quick-command-tags-variables.spec.ts`、`ssh/quick-command-collapsible-search.spec.ts`、`ssh/command-history-management.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 `mobile-quick-commands.png`。
 
@@ -332,7 +332,7 @@
 | M13.02 | ✅ 本地完成〔C.2〕  | mobile preview恢复94dvh、四向 `max(.75rem, env(safe-area-inset-*))`；editor保持fullscreen；两个portrait预览流程2/2通过                                                              |
 | M13.03 | ✅ 本地完成〔C.3〕  | Markdown横屏32px旧视觉保留，独立编辑保存重开1/1；不做无需求依据的coarse44改版                                                                                                       |
 | M13.04 | ◐ 部分完成          | 所有provider移动源码已审；mobile Markdown/Spreadsheet局部旧新图复核已有，完整mobile新图尚待确认结论                                                                                 |
-| M13.05 | ⏳ 待验收           | 各provider loading/error/unsupported/refresh/tabclose；PDF连续页/outline/zoom/pan、XLSX多sheet/search/末页、DOCX宽内容、image zoom、Markdown edit/save；close/cache与源文档状态正确 |
+| M13.05 | ◐ 部分完成〔C.20〕  | 已修复关闭最后 preview tab 后隐藏 popup；各provider loading/error/unsupported/refresh、PDF连续页/outline/zoom/pan、XLSX多sheet/search/末页、DOCX宽内容、image zoom、Markdown edit/save及 close/cache 源文档状态仍待真实验收 |
 | M13.06 | ⏳ 待验收           | desktop/mobile/相关landscape视口的overlay、toolbar、tabs、内容/横滚层级；notch安全区源码正确与实体设备验证范围分别记录                                                              |
 
 **验收/架构**：FilePreviewSessionController保持单一文档状态，provider不引入Workspace/private editor store；PDF worker/SheetJS等现有能力保留。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`ingress/pdf-worker-assets.spec.ts`；复核附录B全部preview图，不仅两张mobile图。
@@ -1133,6 +1133,14 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M11.03 download concurrency correction` → `/root/luna_m11_archive`（Luna max）：复查 C.18 后发现逐项 `await` 虽隔离失败，却改变旧版 `void async` 并发触发语义；对照旧 `8ceb5840:packages/frontend/src/components/FileManager.vue:1296-1346`，在当前 filesystem owner 恢复 `Promise.all(entries.map(...))`，每项保留独立 `catch`/错误通知并使用当前 `FilesystemDownloadPort`。architecture、i18n、`vue-tsc --noEmit`、Prettier、Vite build（2664 modules）、`git diff --check` 通过；主代理提交 `b648e8f5`。F/V 真实多文件失败与后续下载流程仍待浏览器证据，A 通过；该纠错说明主代理验收必须检查行为时序，不只检查异常是否捕获。
 - `M12.03 save race / retry state` → `/root/luna_m12_lifecycle`（Luna max）：对照旧 `8ceb5840:packages/frontend/src/stores/fileEditor.store.ts:411-438` 与 SRS-EDIT-003/006，确认新 session controller 保存期间直接读取可变 `doc.content`，并发 Ctrl/Cmd+S 可覆盖状态；在 `features/file-editor/composables/useFileEditorSession.ts` 增加按文档的 `savingDocuments` guard，捕获保存内容/编码快照，完成后仅在内容未继续变化时清除 dirty，失败/缺 port 设置可见 error 以支持重试，不新增 dirty 关闭确认。既有编辑器流程 `8/9` 通过，唯一失败为无关的 settings strict-mode selector；architecture、i18n、`vue-tsc --noEmit`、Vite build、`git diff --check` 通过；主代理提交 `5cea7b0f`。真实保存失败→重试与移动生命周期仍待独立浏览器证据，V/A 需最终矩阵复核。
 - 接续 HEAD 为 `5cea7b0f`；本轮仍保护未提交 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts` 及所有 `*.root-preserved-20260906-takeover` / core 产物，正式模块闭环计数保持 `9 / 18`。下一批在并行槽位释放后继续 M00/M01/M08/M09/M10–M13 的剩余具体用户结果；达到单模块 F/V/A 闭环后才按 §5.8 进行模块提交，不以原子修复代替父模块完成。
+
+### C.20 产品优先差异收口（2026-09-06，第三批接续）
+
+- 本轮仍遵循 C.15：产品 UI/行为差异优先，子代理仅使用 Luna，主代理独立审 diff 后提交；静态证据不能替代真实 F/V，原子修复不能关闭父模块，正式闭环计数保持 `9 / 18`。
+- `M08.03/M08.04 sidebar overlay + focus cycle` → `/root/luna_m08_sidebar`（Luna max）：旧 `8ceb5840:packages/frontend/src/components/LayoutRenderer.vue:710-778` 将 active 左右侧栏固定为 `top/bottom + z-[110] + max-w-[80vw]` overlay，主布局宽度不被压缩；当前新架构曾渲染为 `relative shrink-0` inline pane。恢复 fixed overlay、边框/内部滚动/关闭按钮，并在 `shared/focus/focusRegistry.ts` 读取当前 `data-focus-id` 作为 `focusNext` 起点，保持状态仍由 Workspace/shared focus owner 管理。Prettier、architecture、i18n、`vue-tsc --noEmit`、Vite build、`git diff --check` 通过；侧栏 E2E 断言未失败，但 finally 恢复 `/api/v1/settings/sidebar` 时超时，故不计完整浏览器 F/V；主代理提交 `8102088e`。resize/layout-lock、移动/桌面完整侧栏几何及 overlay 动画仍待验收。
+- `M09.02/M09.03 quick/history keyboard and touch parity` → `/root/luna_m09_keyboard2`（Luna max）：对照旧 `QuickCommandsView.vue:493-538`、`AddEditQuickCommandForm.vue:3-5,25-39`、`QuickCommandsModal.vue:26-39`、`CommandHistoryView.vue:179-213,52-61`，恢复空查询失焦折叠、input/list 焦点边界、变量值 textarea、变量名 Enter 阻止提交、Escape/backdrop 语义、特殊替换值 `$&` 不被 JS replacement 误解释，并在 `@media (hover:none)` 显示 row actions 保持触控可达。静态检查 5/5（architecture/i18n/Prettier/vue-tsc/diff-check）通过，当前无服务未运行浏览器（case 0），F/V 待真实流程；主代理提交 `e417ba52`。WorkspaceCommandBar 既有 Enter/sync/Escape 未改，M09 多 session/失败反馈仍待验收。
+- `M13.05 preview last-tab close` → `/root/luna_m13_provider2`（Luna max）：对照旧 preview tab context 的 closeWorkspace 语义，确认当前关闭最后 tab 只清空 session、teleported popup 仍可见；在 `features/file-preview/components/FilePreviewDialog.vue` 关闭 tab 后检查 session 已无 tabs，沿现有 `close` emit 让 Workspace 隐藏 popup，不复制 Workspace 状态。architecture、i18n、`vue-tsc --noEmit`、`git diff --check` 通过；浏览器 F/V 未运行，主代理提交 `4d9aa32d`。loading abort、Spreadsheet 空 workbook/parse error 仍为待处理的已确认差异。
+- 接续 HEAD 为 `8102088e`（随后原子 docs/feature commits 已推进至当前 HEAD）；保护未提交的两份 E2E 和 root-preserved/core 产物未混入。下一批应优先处理 M13 loading/Spreadsheet provider error、M00/M01 状态矩阵或 M10/M11/M12 真实失败/移动证据；每个正式模块完成后再按 §5.8 单独提交模块闭环记录。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
