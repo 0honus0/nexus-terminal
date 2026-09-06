@@ -291,7 +291,7 @@
 | ID     | 状态                | 子任务及具体完成条件                                                                                                                |
 | ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | M10.01 | ✅ 已完成〔C.1/P5〕 | xterm padding/主题fallback/背景层、SearchAddon外观、选择菜单、虚拟keycap/修饰键与mobile tools旧布局                                 |
-| M10.02 | ◐ 部分完成          | terminal/keyboard源码已审；已提交移动选区滚动后句柄同步修复（C.18），仍需完整mobile run及普通/选中/搜索/断连/重连布局证据 |
+| M10.02 | ◐ 部分完成          | terminal/keyboard源码已审；已提交移动选区滚动后句柄同步与剪贴板菜单宽度修复（C.18/C.19），仍需完整mobile run及普通/选中/搜索/断连/重连布局证据 |
 | M10.03 | ◐ 部分完成〔C.14-k〕 | 真实SSH终端输入、terminal.input、Ctrl+wheel字体resize、命令执行与cwd持久已通过；复制/选择、搜索导航、Ctrl/Alt/IME、虚拟键盘、竖横屏与字体持久化仍待验收 |
 
 **验收/架构**：SearchAddon与terminal API归feature；修饰键编码沿既有单一owner，不恢复旧event bus。复用 `ssh/terminal-ui.spec.ts`、`ssh/terminal-tools-ui.spec.ts`、`ssh/terminal-protocol.spec.ts`、`mobile/terminal-touch.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 `ssh-terminal.png` 及移动selection/keyboard/modifiers。
@@ -304,7 +304,7 @@
 | ------ | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M11.01 | ✅ 已完成〔C.1/P6〕  | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                               |
 | M11.02 | ◐ 部分完成           | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                              |
-| M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复、桌面拖放移动、多选Copy/Cut→Paste及文件选择器上传进度/刷新/下载已通过；已提交逐项下载失败不阻断后续项修复（C.18），权限/archive及移动专项仍待验收 |
+| M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复、桌面拖放移动、多选Copy/Cut→Paste及文件选择器上传进度/刷新/下载已通过；已提交逐项失败隔离并保留旧版并发下载（C.18/C.19），权限/archive及移动专项仍待验收 |
 | M11.04 | ⏳ 待验收            | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口  |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
@@ -317,7 +317,7 @@
 | ------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | M12.01 | ✅ 已完成〔C.1/P6〕 | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                   |
 | M12.02 | ◐ 部分完成          | 全部editor相关移动源码已审；旧overlay/container/tabs由当前owner组合，不恢复旧FileEditor store                                            |
-| M12.03 | ◐ 部分完成〔C.15〕 | 源码对照确认旧版保存失败后仍可重试，已移除新架构对 `active.error` 的永久禁用；多文件切换、dirty/save/关闭确认、编码换行/语言、search/replace、preview转编辑及嵌入/弹出状态仍待浏览器验收 |
+| M12.03 | ◐ 部分完成〔C.15/C.19〕 | 源码对照确认旧版保存失败后仍可重试，已移除新架构对 `active.error` 的永久禁用，并修复保存期间继续编辑/并发保存的 dirty 竞态；多文件切换、dirty/save/关闭确认、编码换行/语言、search/replace、preview转编辑及嵌入/弹出状态仍待浏览器验收 |
 | M12.04 | ◐ 部分完成〔C.18〕  | 已提交 session 切换时关闭 teleported document popup、保留 editor/preview 文档状态；desktop resize 持久化、mobile 全屏/软键盘/长 toolbar 与跨 session scope 仍待验收 |
 
 **验收/架构**：同一 FileEditorSessionController + FileDocumentPort；popup与embedded不分别维护document副本。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 desktop editor/mobile editor/search。
@@ -1126,6 +1126,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M11.03 download failure isolation` → `/root/luna_m11_files`（Luna max）：对照旧 `FileManager.vue` 中逐条异步下载捕获，确认新 `features/filesystem/components/FileManager.vue` 将整个批次置于单一 `try`，首个失败会阻断后续下载；将异常边界下沉到每个 entry，继续使用 `FilesystemDownloadPort`，不恢复旧 SFTP manager/store/event bus。architecture、i18n、`vue-tsc --noEmit`、Prettier、Vite build（2664 modules）、`git diff --check` 通过；主代理提交 `4ff0730d`。F 真实多文件失败→后续成功流程仍待浏览器证据，V 无产品视觉改动，A 通过。
 - `M12.04 popup/session visibility` → `/root/luna_m12_editor`（Luna max）：对照当前 `WorkspaceView.vue` 对 `WorkspaceSessionSurface` 的 `v-show` 与 `WorkspaceSessionSurface.vue` 的 teleported `document-popup`，确认切换 session 隐藏 surface 时旧 popup 仍可能留在 body、拦截新 session；在 workspace 组合 owner 观察 root `style` 的 `display:none` 并关闭 `documentPopupVisible`，保留 editor/preview controller、tab/document 状态。`git diff --check`、architecture、i18n、`vue-tsc --noEmit` 通过；主代理提交 `464ed0b8`。F/V 仍待真实切换与弹层几何流程，A 通过；不恢复旧 FileEditor store/event bus/重复文档副本。
 - 接续 HEAD 为 `464ed0b8`；保护未提交的 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts` 及 `*.root-preserved-20260906-takeover` / core 产物未混入。当前并行继续委派三个单一结果：M10 搜索/选择交互、M11 权限或 archive 失败反馈、M12 dirty/save/refresh/close 生命周期；子代理不得修改本节，主代理在交付后独立验收并继续更新。
+
+### C.19 产品优先差异收口（2026-09-06，第二批接续）
+
+- `M10.02/M10.03 mobile clipboard menu geometry` → `/root/luna_m10_search`（Luna max）：对照旧 `8ceb5840:packages/frontend/src/components/Terminal.vue:504-512`，确认旧移动剪贴板菜单估算宽度为 `190px`，新架构误为 `210px`；在 `features/terminal/components/TerminalView.vue` 恢复 `190`，不改变 selection/search owner。既有移动选区与 SSH terminal tools/search 流程各 `1/1` 通过，Prettier、`git diff --check` 通过；主代理提交 `e1df83b0`。截图 `/tmp/nexus-m10-search-after-20260906/mobile-terminal-selection.png` 支持 V，A 由 feature 路径与静态 diff复核；M10 其他搜索/修饰键/IME/虚拟键盘及完整移动矩阵仍待验收。
+- `M11.03 download concurrency correction` → `/root/luna_m11_archive`（Luna max）：复查 C.18 后发现逐项 `await` 虽隔离失败，却改变旧版 `void async` 并发触发语义；对照旧 `8ceb5840:packages/frontend/src/components/FileManager.vue:1296-1346`，在当前 filesystem owner 恢复 `Promise.all(entries.map(...))`，每项保留独立 `catch`/错误通知并使用当前 `FilesystemDownloadPort`。architecture、i18n、`vue-tsc --noEmit`、Prettier、Vite build（2664 modules）、`git diff --check` 通过；主代理提交 `b648e8f5`。F/V 真实多文件失败与后续下载流程仍待浏览器证据，A 通过；该纠错说明主代理验收必须检查行为时序，不只检查异常是否捕获。
+- `M12.03 save race / retry state` → `/root/luna_m12_lifecycle`（Luna max）：对照旧 `8ceb5840:packages/frontend/src/stores/fileEditor.store.ts:411-438` 与 SRS-EDIT-003/006，确认新 session controller 保存期间直接读取可变 `doc.content`，并发 Ctrl/Cmd+S 可覆盖状态；在 `features/file-editor/composables/useFileEditorSession.ts` 增加按文档的 `savingDocuments` guard，捕获保存内容/编码快照，完成后仅在内容未继续变化时清除 dirty，失败/缺 port 设置可见 error 以支持重试，不新增 dirty 关闭确认。既有编辑器流程 `8/9` 通过，唯一失败为无关的 settings strict-mode selector；architecture、i18n、`vue-tsc --noEmit`、Vite build、`git diff --check` 通过；主代理提交 `5cea7b0f`。真实保存失败→重试与移动生命周期仍待独立浏览器证据，V/A 需最终矩阵复核。
+- 接续 HEAD 为 `5cea7b0f`；本轮仍保护未提交 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts` 及所有 `*.root-preserved-20260906-takeover` / core 产物，正式模块闭环计数保持 `9 / 18`。下一批在并行槽位释放后继续 M00/M01/M08/M09/M10–M13 的剩余具体用户结果；达到单模块 F/V/A 闭环后才按 §5.8 进行模块提交，不以原子修复代替父模块完成。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
