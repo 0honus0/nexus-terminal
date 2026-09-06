@@ -129,7 +129,7 @@
 | M06  | Appearance、主题、背景、PWA               | ✅ P2/P3            | ✅ 本地模块闭环；仅待 M17 最终 canonical |
 | M07  | Notifications、Audit                      | ✅ P3               | provider/日志状态的移动视觉验收          |
 | M08  | Workspace 编排、pane、tab、布局           | ✅ P4               | 多 tab/context/空状态/恢复集成           |
-| M09  | Quick Commands、History、命令栏           | ✅ P4/P5            | 变量/编辑/上下文/移动弹层状态            |
+| M09  | Quick Commands、History、命令栏           | ✅ P4/P5            | ✅ 本地模块闭环；仅待 M17 最终 canonical    |
 | M10  | Terminal、搜索、虚拟键盘                  | ✅ P5               | 完整触控/选择/重连与截图复核             |
 | M11  | Filesystem、catalog、history、context     | ✅ P6               | 源码已审，补真实文件操作与移动几何       |
 | M12  | Editor、Monaco、CodeMirror                | ✅ P6               | 弹层/嵌入状态与编辑生命周期集成          |
@@ -279,8 +279,8 @@
 | ID     | 状态                      | 子任务及具体完成条件                                                                                                                                                                                               |
 | ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | M09.01 | ✅ 已完成〔C.1/P4/P5〕    | 旧compact/grouped列表、search/tag/edit/execute、history操作、移动quick modal和command/search模式                                                                                                                   |
-| M09.02 | ◐ 部分完成                | 源码滚动/截断/弹层审计已做；变量表单、分组上下文、hover动作在touch可达性按旧基线核对，不能凭统一44px规则改版                                                                                                       |
-| M09.03 | ◐ 部分完成〔C.14-i/C.20〕 | 真实命令新增/搜索/执行/编辑/删除、tag/变量替换/重命名及History搜索/copy/rerun/delete已通过；已恢复 Enter/Escape、空查询失焦折叠、变量值多行、特殊替换值及无hover设备 action 可达，浏览器多session/失败反馈仍待验收 |
+| M09.02 | ✅ 本地完成〔C.37/C.39〕  | 源码滚动/截断/弹层、变量表单、多行值、分组上下文、hover动作与触控可达性均有当前 SHA 真实证据；移动变量/Enter/无hover/搜索流程通过，保留旧紧凑密度与滚动归属                                                               |
+| M09.03 | ✅ 本地完成〔C.14-i/C.20/C.37/C.39〕 | 真实命令新增/搜索/执行/编辑/删除、tag/变量替换/重命名、History操作、双session Send All/无活动反馈及加载/保存/删除/建标签失败反馈均通过；Enter/Escape、空查询失焦折叠和特殊替换值保持 |
 
 **验收/架构**：业务持久化归feature，runtime仅将execute送入现有session capability；菜单与按钮走同一执行语义。复用 `ssh/quick-command-management.spec.ts`、`ssh/quick-command-tags-variables.spec.ts`、`ssh/quick-command-collapsible-search.spec.ts`、`ssh/command-history-management.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 `mobile-quick-commands.png`。
 
@@ -1218,6 +1218,64 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 当前产品 SHA 为 `5fc8a530`。主代理在端口独占条件下运行 `tests/ssh/reconnect-ui.spec.ts --project=ssh --workers=1`，**2/2 passed，exit 0**；覆盖断连重连、任意键立即重连、三 session 新增/切换、tab 横滚/长按 context、Close Other 和关闭至空 Workspace。截图/metrics 由 Playwright 输出保留在 `/tmp/nexus-m08-ssh-screenshots/` 与 `/tmp/nexus-m08-ssh-results/`。
 - 随后运行 `tests/mobile/ssh-workspace.spec.ts tests/mobile/suspend-resume-ui.spec.ts --project=mobile --workers=1`，**2/2 passed，exit 0**；覆盖 mobile terminal 空间与 touch-only tools、文件长按、status monitor 邻接、suspend/resume reload、hanging shell 复用和窄屏 modal。截图/metrics 保留在 `/tmp/nexus-m08-mobile-screenshots/` 与 `/tmp/nexus-m08-mobile-results/`。
 - 本轮无产品断言、选择器或环境失败；仍不能关闭 M08.02–04：resize/layout-lock 键盘/拖动、完整 sidebar overlay/focus、窗口高度/虚拟键盘遮挡和最终 `mobile-workspace.png`/`M17` canonical 仍需独立证据，正式计数保持 `9 / 18`。
+
+### C.31 M09/M11 当前 SHA 真实取证与导航回归复现（2026-09-06）
+
+- `M09.02/M09.03 mobile quick-command evidence` 由 `/root/luna_m08_browser2` 使用串行 Playwright 完成，当前 SHA 为 `b8f5c9d7`；汇总、完整命令、exit、截图、metrics 和报告保留在 `/tmp/nexus-m09-mobile-20260906-RcbdyA/REPORT.md`。`mobile/touch-workflows.spec.ts` 的移动 Quick Commands 打开/列表/add/search 控件/Escape 关闭 **1/1 passed**，截图为 `/tmp/nexus-m09-mobile-20260906-RcbdyA/touch-workflows-report/functional-screenshots/mobile-quick-commands.png`。三个 SSH 功能 case（`quick-command-management`、`quick-command-tags-variables`、`command-history-management`）各 **1/1**；另一个 `quick-command-collapsible-search` 为 **0/1** 选择器失败，因此本批实际 **4/5 passed**，不能按 4/4 关闭。
+- `ssh/quick-command-collapsible-search.spec.ts` **0/1**：在 M05 当前逐 section Settings UI 下，全局 `getByRole('button', { name: 'Save', exact: true })` 命中 17 个按钮，停在测试选择器 strict-mode，未到产品断言；不得改产品以规避，也不能把该 case 后续折叠/Escape 结论推断为通过。`touch-advanced` quick-command grep `--list` 为 0 tests（N/A）。移动变量 textarea、多行值、变量名 Enter 阻止提交、无 hover row actions、移动 Enter 执行、双 session Send to All/无活动 session 反馈仍未验证。M09 继续保持部分完成，正式计数不变。
+- M09 首次启动曾因 M11 占用 `127.0.0.1:29090` 产生一次环境 exit 1；M11 自然结束后同命令串行重跑通过，未杀服务。该次环境失败不计产品失败；后续浏览器任务必须继续独占 E2E webServer。
+- M11 导航复核使用当前 SHA `b8f5c9d7` 和健康 webServer，输出在 `/tmp/nexus-m11-nav-recheck-20260906/`：path-history 定向 run `common file-manager navigation tools work over real SFTP` **1 case / exit 1**，失败于 `file-manager-navigation.spec.ts:179`，下拉列表只有 `/`，没有刚访问的 `/folder-seed`；shell-metacharacters 定向 run **1 case / exit 1**，失败于 `file-manager-navigation.spec.ts:321`，从特殊路径向终端同步后 path input 仍为 `/`。两项均在有效 fixture/服务下稳定复现，归类为当前 filesystem/runtime 产品回归，不是选择器或环境失败。`useFilesystemCatalog.ts` 的队列草稿尚未修复 path-history，不能提交或关闭 M11；特殊路径必须先取得 terminal current-directory 的真实响应链证据再改，禁止猜测 quoting。
+- 本节两项父模块均仍为部分完成；下一步由专属 filesystem owner 代理修复并重跑 M11 两个 case，主代理独立审查 diff/F/V/A 后再精确提交。受保护 dirty E2E、root-preserved/core 产物与未跟踪移动审计继续不触碰。
+
+### C.32 M11 导航修复后的真实复核（2026-09-06）
+
+- `/root/luna_m11_nav_fix` 在当前 filesystem/runtime owner 内完成最小修复，未修改测试、plan 或旧架构：`FileManager.vue` 将 path draft、terminal sync、favorite/navigation 和 Refresh 统一串行，成功加载后显式同步 `pathDraft`；`useFilesystemCatalog.ts` 仅以 trim 判空但保留合法路径原文，读写继续共用 history operation queue。该改动不新增 store/event bus/transport，也不改变 filesystem port 所有权。
+- 修复前两个稳定产品失败分别为 path-history 下拉缺 `/folder-seed`、特殊路径同步后仍停在 `/`；修复后使用健康 webServer 串行验证：`tests/ssh/file-manager-navigation.spec.ts --project=ssh --grep common-file-manager-navigation --workers=1` **3/3 passed，exit 0**（`/tmp/nexus-m11-nav-fix-20260906/full-navigation/run.log`）；path-history 定向 **1/1 passed，exit 0**（`/tmp/nexus-m11-nav-fix-20260906/path-history-final/run.log`）；shell-metacharacters + refresh queue 定向 **1/1 passed，exit 0**（`/tmp/nexus-m11-nav-fix-20260906/shell-metacharacters-refresh-queue/run.log`）。此前中间一次 shell-metacharacters run 在删除 cwd 的后续刷新断言仍失败，保留为失败迭代证据，不与最终通过产物混用。
+- 适用静态门禁：`check:architecture`、`check:i18n`、`vue-tsc --noEmit`、`git diff --check` 均 exit 0；证据分别保留 `/tmp/nexus-m11-nav-fix-20260906/architecture.log`、`i18n.log`、`vue-tsc-final.log`。主代理审查 diff 与真实失败/修复时序后确认该原子批次可作为 M11 的有效 F/A 进展；V 仅覆盖本次导航/同步页面状态，权限/archive/移动文件管理器/全部文件操作矩阵仍待验收。
+- 因此 M11.02/M11.03 的导航原子回归已修复并有真实证据，但 M11.02–04 父模块仍保持部分完成，正式模块计数继续为 `9 / 18`。后续提交必须按模块剩余 F/V/A 收口，不能把该原子修复单独宣称为 M11 完成。
+
+### C.33 M17.02 附录与最终收口盘点（2026-09-06）
+
+- `/root/luna_m17_appendix_audit` 只读核对当前 `HEAD=b8f5c9d7`、工作树保护项、模块表、附录 A/B/C/D。正式模块计数与 C.31/C.32 一致：`9 / 18`；M00/M01/M08–M13 仍部分，M17.01–06 未关闭。plan、6 个产品源文件、两份受保护 E2E 及 root-preserved/core/未跟踪移动审计均不能被误当作最终产品证据或随模块提交。
+- 附录 A 的 98 行是追溯索引，不是完成分母；仍有大量 `source reviewed`/`mobile browser verification pending`，需逐行归类为当前 SHA 的 F/V/A、产品差异、selector 维护、environment/canonical 依赖或明确 N/A，并保留对应证据路径。源码审计不得替代真实浏览器视觉验收。
+- 附录 B 的 28 图中 **27 行**仍为 `pending — M17 最终验收 real screenshot refresh and visual review`；`theme-customization.png` 只有较早局部刷新，`mobile-markdown-preview.png`/`mobile-spreadsheet-preview.png` 仅 partial browser evidence，均需最终产品 SHA 重新生成并人工复核。`/tmp/nexus-p9-mobile-complete` 缺少可确认的完整 run/exit/report/逐图结论，不能因 PNG 存在而采信。
+- M17 收口顺序固定为：先 M17.01 补完整 mobile 命令/case/exit/report 与 13 图结论；再 M17.02 为附录 A 逐行建立 disposition；M17.03 单独维护 `file-preview-editor.spec.ts:889` 与 quick-command collapsible-search 的精确 selector 后跑静态门禁/受影响 E2E；M17.04 执行最终 SHA canonical Docker smoke、G1–G8 与 ingress；M17.05 生成并复核全部 28 图；M17.06 只在每项真实差异已修复或有明确 owner 决策、新架构边界通过后关闭项目。
+- 当前有效临时证据索引：M09 `/tmp/nexus-m09-mobile-20260906-RcbdyA/REPORT.md`，M11 修复 `/tmp/nexus-m11-nav-fix-20260906/`；后续 M17 必须在同一 run 记录命令、SHA、exit、case、截图/日志，不拼接不同 run 的产物。
+
+### C.34 M17.03 测试选择器维护验收（2026-09-06）
+
+- 两个已确认的非产品 strict-mode 失败已在测试 owner 内最小修复，未修改产品代码、plan 或受保护文件：`file-preview-editor.spec.ts:889` 改用 `getByTestId('spreadsheet-preview-pagination-save')`；`quick-command-collapsible-search.spec.ts:92` 改用 settings scope 下的 `getByTestId('quick-command-collapsible-search-save')`。
+- 当前 SHA `b8f5c9d7b6f6d24072b64f2d3f31a00766f91a36` 的串行验证：文件预览 spec **9/9 passed，exit 0**，报告 `/tmp/nexus-m17-03-file-preview-20260906`；Quick Commands 定向 case **1/1 passed，exit 0**，报告 `/tmp/nexus-m17-03-quick-command-20260906`。
+- 文件预览首次 run 因共享 `127.0.0.1:29090` 被占用退出 `1`，释放端口后同命令重跑通过；该次归类为环境冲突，不得当作产品或测试失败。M17.03 的 selector 维护项可从待处理列表移除，但尚未代表 M12/M09 父模块闭环。
+
+### C.35 M17.02 附录逐行 disposition（2026-09-06）
+
+- 只读报告 `/tmp/nexus-m17-02-disposition-20260906/REPORT.md` 已按当前 SHA `b8f5c9d7` 覆盖附录 A **98/98 行**及附录 B **28/28 图**，逐项区分有效 F/V/A、browser partial、需当前浏览器、产品差异、selector 维护、canonical/environment 依赖和 N/A。
+- 统计为附录 A：30 项已有 F/V/A 证据、3 项 browser partial、62 项需当前浏览器、3 项明确 N/A；附录 B：28 项均需最终 SHA screenshot refresh/review（历史 PNG 不作完成证明）。该报告是 M17 执行台账，不改变正式模块计数 `9 / 18`。
+
+### C.36 当前 SHA 认证、TokenInput、编辑器与预览补证（2026-09-06）
+
+- `M00.03/M00.04 TokenInput`：当前 SHA `b8f5c9d7`，360×800，独立 Playwright case **1/1 passed，exit 0**；覆盖初始/过滤建议、选择后重新聚焦、失焦与 Escape 收起、自定义创建和无横溢出。证据 `/tmp/nexus-m00-token-input-20260906/`。M00 的集成 shell/feedback 与 TokenInput F/V 证据已齐，但仍需主代理核对附录 D 全局非 Vue 项后再关闭。
+- `M01`：认证 ledger `/tmp/nexus-m01-auth-full-20260906/` 列出 10 cases、9 通过；普通登录、退出/保护路由、三 viewport、2FA API/UI 通过。passkey canonical 仍受 `localhost`/`127.0.0.1` host-only cookie 与 CDP fixture 限制，CAPTCHA、软键盘、跨语言及部分失败视觉仍待；M01 不关闭。
+- `M12.03`：隔离 network namespace、无 HMR 的完整 editor lifecycle case **1/1 passed，exit 0**，包含 Ctrl+wheel；证据 `/tmp/nexus-m12-lifecycle-full-20260906/run/ctrl-wheel-isolated/`。之前的 `NaN` 归类为共享工作树 HMR 噪声，不是稳定产品回归；保存失败/重试、多文件迟到加载、跨 session 和移动长 toolbar 仍待。
+- `M13.04–06`：当前 SHA provider SSH **7/7 passed**、mobile **5/5 passed**，证据 `/tmp/nexus-m13-provider-full-20260906/{ssh,mobile}/`；额外 probe 因 `127.0.0.1:29090` 已占用 **0 tests**，归环境冲突。PDF/XLSX/DOCX/Markdown/image refresh 与移动/桌面 tab 外壳已取证，但 error/loading/unsupported 全矩阵、快速 PDF worker stale、最终截图仍待，M13 不关闭。
+
+### C.37 M09 缺口流程真实复核（2026-09-06）
+
+- 当前 SHA `b8f5c9d7` 的 M09 缺口流程在独立、串行 Playwright 中补齐：移动变量多行/变量名 Enter/无 hover actions/搜索 Enter **2/2 passed**；双 session Send to All 与无活动 session 反馈 **1/1 passed**；Quick/History 既有 SSH suite（management、tags/variables、history、collapsible search）**4/4 passed**。完整报告 `/tmp/nexus-m09-missing-20260906/REPORT.md`。
+- 早期失败均已分类为临时 harness 脱离或端口占用，修正 harness 后重跑通过；当前仍需确认 M09.03 计划中“加载/保存/删除/建标签失败反馈”是否有独立真实错误态证据，未据此提前关闭 M09。
+
+### C.38 M17.01 移动全量 fresh run（2026-09-06）
+
+- 当前 SHA `b8f5c9d7` 的 `test:mobile` fresh run 先 `--list` **26 tests / 7 files，exit 0**，再以 `--workers=1` 串行执行，结果 **24 passed / 2 failed，exit 1**；报告 `/tmp/nexus-m17-mobile-20260906-0754/REPORT.md`，HTML `/tmp/nexus-m17-mobile-20260906-0754/html/index.html`。
+- 13 个 Appendix B 移动检查点 PNG 均已生成并完成明显裁切/溢出人工检查，保存在 `/tmp/nexus-m17-mobile-20260906-0754/screenshots/`；这只能证明产物齐备和初步视觉检查，不能替代逐图最终 parity。
+- 两项失败已分类：`dashboard-mobile.spec.ts:57` 为 `/settings` 加载期间 `net::ERR_NETWORK_CHANGED` 导致空页的环境问题，`m10-mobile-audit.spec.ts:24` 为未跟踪受保护审计脚本的 `file-editor-view` strict selector 维护问题；均未修改仓库文件。M17.01 仍待 dashboard 隔离重跑与最终图审查，不能关闭。
+
+### C.39 M09 本地模块 F/V/A 闭环（2026-09-06）
+
+- M09 的功能矩阵已由当前 SHA `b8f5c9d7` 真实取证覆盖：移动变量/触控/搜索 **2/2**，双 session Send All/no-active **1/1**，Quick/History SSH suite **4/4**，四类 HTTP 503 失败反馈 **4/4**；均为串行、有效浏览器流程，报告 `/tmp/nexus-m09-missing-20260906/REPORT.md`。
+- V：移动状态截图、无 hover 行操作、窄容器变量表单、双 session feedback 及既有桌面 Quick/History 证据齐备；失败态保留表单/行的视觉状态。A：实现仍由 quick-command/history feature 与 Workspace command capability 持有，未恢复旧 store/event bus，历史静态 architecture/i18n/typecheck/build/diff 门禁通过。
+- M09.02/M09.03 及模块自身 F/V/A 均已满足；正式模块计数由 `9 / 18` 更新为 **`10 / 18`**。M09 仍需随最终产品 SHA 经 M17.04–06 canonical/截图复核，不能据此宣布项目完成。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 

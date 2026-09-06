@@ -89,7 +89,7 @@ test('quick command search stays visible by default and can be collapsed behind 
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
-      await settings.getByRole('button', { name: 'Save', exact: true }).click();
+      await settings.getByTestId('quick-command-collapsible-search-save').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');
