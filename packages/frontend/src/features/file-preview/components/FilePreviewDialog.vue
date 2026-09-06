@@ -29,6 +29,7 @@
   const closeTab = (event: MouseEvent, tabId: string): void => {
     event.stopPropagation();
     props.session.close(tabId);
+    if (!props.session.tabs.value.length) emit('close');
   };
   const handleTabKeydown = (event: KeyboardEvent, tabId: string): void => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
