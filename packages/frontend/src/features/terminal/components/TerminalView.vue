@@ -94,10 +94,12 @@
   const fitAndResize = () => {
     if (!terminal || !fit) return;
     fit.fit();
-    if (terminal.cols === lastColumns && terminal.rows === lastRows) return;
-    lastColumns = terminal.cols;
-    lastRows = terminal.rows;
-    void props.channel.resize({ columns: terminal.cols, rows: terminal.rows });
+    if (terminal.cols !== lastColumns || terminal.rows !== lastRows) {
+      lastColumns = terminal.cols;
+      lastRows = terminal.rows;
+      void props.channel.resize({ columns: terminal.cols, rows: terminal.rows });
+    }
+    syncMobileSelectionHandles();
   };
   const openSearch = () => {
     searchOpen.value = true;
