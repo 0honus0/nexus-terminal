@@ -17,11 +17,16 @@ const entryName = (entry: RemoteFileEntry): string =>
     ? (entry as FileSearchEntry).relativePath
     : entry.name;
 
+const compareEntryNames = (left: RemoteFileEntry, right: RemoteFileEntry): number =>
+  entryName(left).localeCompare(entryName(right), undefined, { numeric: true, sensitivity: 'base' });
+
 const compare = (left: RemoteFileEntry, right: RemoteFileEntry, key: FilesystemSortKey): number => {
-  if (key === 'size') return left.metadata.size - right.metadata.size;
-  if (key === 'permissions') return left.metadata.mode - right.metadata.mode;
-  if (key === 'modified') return left.metadata.modifiedAt - right.metadata.modifiedAt;
-  return entryName(left).localeCompare(entryName(right), undefined, { numeric: true, sensitivity: 'base' });
+  let result: number;
+  if (key === 'size') result = left.metadata.size - right.metadata.size;
+  else if (key === 'permissions') result = left.metadata.mode - right.metadata.mode;
+  else if (key === 'modified') result = left.metadata.modifiedAt - right.metadata.modifiedAt;
+  else result = compareEntryNames(left, right);
+  return result;
 };
 
 export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '/') {
@@ -41,6 +46,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
   const sortDirection = ref<FilesystemSortDirection>('asc');
   let searchTimer: number | undefined;
   let searchToken = 0;
+  let loadToken = 0;
 
   const searchActive = computed(() => Boolean(searchQuery.value.trim()));
 
@@ -50,7 +56,8 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
       if (right.name === '..') return 1;
       if (left.metadata.isDirectory !== right.metadata.isDirectory) return left.metadata.isDirectory ? -1 : 1;
       const result = compare(left, right, sortKey.value);
-      return sortDirection.value === 'asc' ? result : -result;
+      if (result !== 0) return sortDirection.value === 'asc' ? result : -result;
+      return compareEntryNames(left, right);
     }),
   );
 
@@ -99,28 +106,33 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
     }, delayMs);
   };
 
-  const load = async (target = path.value) => {
+  const load = async (target = path.value): Promise<boolean | undefined> => {
+    const token = ++loadToken;
     loading.value = true;
     error.value = null;
     try {
       const listing = await channel.listDirectory(target);
+      if (token !== loadToken) return undefined;
       path.value = listing.path;
       entries.value = listing.entries;
       loaded.value = true;
       selected.value = new Set();
       selectionAnchor.value = null;
       if (searchActive.value) scheduleSearch();
+      return true;
     } catch (cause) {
+      if (token !== loadToken) return undefined;
       error.value = cause instanceof Error ? cause.message : String(cause);
+      return false;
     } finally {
-      loading.value = false;
+      if (token === loadToken) loading.value = false;
     }
   };
   const refresh = async () => {
     let candidate = path.value;
     while (true) {
-      await load(candidate);
-      if (!error.value || candidate === '/') return;
+      const result = await load(candidate);
+      if (result !== false || candidate === '/') return;
       candidate = parentPath(candidate);
     }
   };
@@ -196,6 +208,7 @@ export function useFilesystemBrowser(channel: FilesystemChannel, initialPath = '
     stopSearchWatch();
     clearSearchTimer();
     searchToken += 1;
+    loadToken += 1;
   };
   return {
     path,

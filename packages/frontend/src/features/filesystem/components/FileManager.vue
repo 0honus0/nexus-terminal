@@ -84,6 +84,7 @@
   const draggedRemoteEntries = ref<RemoteFileEntry[]>([]);
   const remoteDragTarget = ref<string | null>(null);
   let remoteDragScrollTimer: number | undefined;
+  let remoteDragScrollDirection = 0;
   type FileManagerContext =
     | { scope: 'entry'; entry: RemoteFileEntry; x: number; y: number }
     | { scope: 'current-directory' | 'parent-directory'; destination: string; x: number; y: number };
@@ -133,7 +134,13 @@
   watch(context, (value) => {
     if (!value) compressSubmenu.value = null;
   });
-  const renderedRowScale = ref(props.rowScale);
+  const FILE_MANAGER_SCALE_MIN = 0.5;
+  const FILE_MANAGER_SCALE_MAX = 2;
+  const normalizeRowScale = (value: number): number =>
+    Math.min(FILE_MANAGER_SCALE_MAX, Math.max(FILE_MANAGER_SCALE_MIN, value));
+  const renderedRowScale = ref(
+    Number.isFinite(props.rowScale) ? normalizeRowScale(props.rowScale) : FILE_MANAGER_SCALE_MIN,
+  );
   const changingTerminalPath = ref(false);
   const syncingTerminalPath = ref(false);
   const listScrollTop = ref(0);
@@ -149,12 +156,25 @@
     permissions: 100,
     modified: 140,
   };
+  const defaultColumnWidths: Record<ColumnKey, number> = {
+    type: 50,
+    name: 300,
+    size: 100,
+    permissions: 120,
+    modified: 180,
+  };
+  const initialColumnWidth = (key: ColumnKey): number => {
+    const width = props.columnWidths?.[key];
+    return typeof width === 'number' && Number.isFinite(width)
+      ? Math.max(minimumColumnWidths[key], width)
+      : defaultColumnWidths[key];
+  };
   const renderedColumnWidths = ref<Record<ColumnKey, number>>({
-    type: props.columnWidths?.type ?? 50,
-    name: props.columnWidths?.name ?? 300,
-    size: props.columnWidths?.size ?? 100,
-    permissions: props.columnWidths?.permissions ?? 120,
-    modified: props.columnWidths?.modified ?? 180,
+    type: initialColumnWidth('type'),
+    name: initialColumnWidth('name'),
+    size: initialColumnWidth('size'),
+    permissions: initialColumnWidth('permissions'),
+    modified: initialColumnWidth('modified'),
   });
   const totalColumnWidth = computed(() =>
     Object.values(renderedColumnWidths.value).reduce((sum, width) => sum + width, 0),
@@ -164,8 +184,8 @@
   let unregisterPathFocus: (() => void) | undefined;
 
   const resolveWheelScale = createWheelScaleResolver({
-    min: 0.5,
-    max: 1.6,
+    min: FILE_MANAGER_SCALE_MIN,
+    max: FILE_MANAGER_SCALE_MAX,
     step: 0.08,
     thresholdPx: 72,
     maxStepsPerEvent: 3,
@@ -472,7 +492,7 @@
   watch(
     () => props.rowScale,
     (value) => {
-      if (Number.isFinite(value)) renderedRowScale.value = value;
+      if (Number.isFinite(value)) renderedRowScale.value = normalizeRowScale(value);
     },
   );
 
@@ -688,13 +708,17 @@
   };
 
   const stopRemoteDragScroll = () => {
+    remoteDragScrollDirection = 0;
     if (remoteDragScrollTimer === undefined) return;
     window.clearInterval(remoteDragScrollTimer);
     remoteDragScrollTimer = undefined;
   };
   const updateRemoteDragScroll = (event: DragEvent) => {
     const scroller = listScroller.value;
-    if (!scroller || !draggedRemoteEntries.value.length) return;
+    if (!scroller || !draggedRemoteEntries.value.length || !remoteDragTarget.value) {
+      stopRemoteDragScroll();
+      return;
+    }
     const rect = scroller.getBoundingClientRect();
     const edge = 48;
     const direction = event.clientY < rect.top + edge ? -1 : event.clientY > rect.bottom - edge ? 1 : 0;
@@ -702,9 +726,15 @@
       stopRemoteDragScroll();
       return;
     }
+    remoteDragScrollDirection = direction;
     if (remoteDragScrollTimer !== undefined) return;
     remoteDragScrollTimer = window.setInterval(() => {
-      scroller.scrollTop += direction * 12;
+      const currentScroller = listScroller.value;
+      if (!currentScroller || !draggedRemoteEntries.value.length || !remoteDragTarget.value) {
+        stopRemoteDragScroll();
+        return;
+      }
+      currentScroller.scrollTop += remoteDragScrollDirection * 12;
     }, 30);
   };
   const remoteDropAllowed = (destination: string) =>
@@ -730,12 +760,21 @@
     remoteDragTarget.value = null;
   };
   const handleRemoteTargetDragOver = (event: DragEvent, destination: string) => {
-    if (!remoteDropAllowed(destination)) return;
+    if (!remoteDropAllowed(destination)) {
+      remoteDragTarget.value = null;
+      stopRemoteDragScroll();
+      return;
+    }
     event.preventDefault();
     event.stopPropagation();
     if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
     remoteDragTarget.value = destination;
     updateRemoteDragScroll(event);
+  };
+  const clearRemoteDragTarget = (destination: string) => {
+    if (remoteDragTarget.value !== destination) return;
+    remoteDragTarget.value = null;
+    stopRemoteDragScroll();
   };
   const dropRemote = (event: DragEvent, destination: string) => {
     if (!remoteDropAllowed(destination)) return;
@@ -1046,8 +1085,18 @@
   const scaleRows = (event: WheelEvent) => {
     const change = resolveWheelScale(event, renderedRowScale.value);
     if (!change) return;
+    const oldEstimatedRowHeight = estimatedRowHeight.value;
+    const scroller = listScroller.value;
+    const anchoredRow = shouldVirtualize.value && scroller ? scroller.scrollTop / oldEstimatedRowHeight : null;
     renderedRowScale.value = change.next;
     emit('rowScale', change.next);
+    if (anchoredRow !== null && scroller) {
+      void nextTick(() => {
+        const nextScrollTop = anchoredRow * estimatedRowHeight.value;
+        scroller.scrollTop = nextScrollTop;
+        listScrollTop.value = nextScrollTop;
+      });
+    }
   };
 </script>
 
@@ -1102,6 +1151,7 @@
             browser.goParent();
           "
           @dragover="handleRemoteTargetDragOver($event, parentOf(browser.path.value))"
+          @dragleave="clearRemoteDragTarget(parentOf(browser.path.value))"
           @drop="dropRemote($event, parentOf(browser.path.value))"
           @contextmenu="openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))"
         >
@@ -1322,6 +1372,7 @@
               browser.goParent();
             "
             @dragover="handleRemoteTargetDragOver($event, parentOf(browser.path.value))"
+            @dragleave="clearRemoteDragTarget(parentOf(browser.path.value))"
             @drop="dropRemote($event, parentOf(browser.path.value))"
             @contextmenu.stop="openDirectoryContext($event, 'parent-directory', parentOf(browser.path.value))"
           >
@@ -1358,7 +1409,7 @@
             @dragstart="startRemoteDrag($event, entry)"
             @dragend="endRemoteDrag"
             @dragover="entry.metadata.isDirectory && handleRemoteTargetDragOver($event, entry.path)"
-            @dragleave="remoteDragTarget === entry.path && (remoteDragTarget = null)"
+            @dragleave="clearRemoteDragTarget(entry.path)"
             @drop="entry.metadata.isDirectory && dropRemote($event, entry.path)"
             @contextmenu.stop="openContext($event, entry)"
             @mousedown="preserveListFocusOnMouseOpen"
