@@ -7,7 +7,9 @@ test.describe('authenticated WebSocket', () => {
 
     const outcome = await page.evaluate(async () => {
       return await new Promise<'opened' | 'rejected' | 'timeout'>((resolve) => {
-        const socket = new WebSocket('ws://127.0.0.1:4173/ws/workspace');
+        const socketUrl = new URL('/ws/workspace', window.location.origin);
+        socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(socketUrl.toString());
         const timeout = window.setTimeout(() => {
           socket.close();
           resolve('timeout');
@@ -52,7 +54,9 @@ test.describe('authenticated WebSocket', () => {
         requestId?: string;
         payload?: { ok?: boolean; error?: string };
       }>((resolve, reject) => {
-        const socket = new WebSocket('ws://127.0.0.1:4173/ws/workspace');
+        const socketUrl = new URL('/ws/workspace', window.location.origin);
+        socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(socketUrl.toString());
         const timeout = window.setTimeout(() => {
           socket.close();
           reject(new Error('Timed out waiting for WebSocket response'));

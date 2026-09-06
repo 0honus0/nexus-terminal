@@ -1,7 +1,7 @@
 {
   "node": "24",
   "playwright": "1.62.1",
-  "runnerRevision": 1,
+  "runnerRevision": 2,
   "actions": {
     "checkout": "v7",
     "setupNode": "v7",
