@@ -1172,6 +1172,18 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M13.05 PDF/provider error lifecycle` → `/root/luna_m13_fix`（Luna high）：读取失败态复用当前 `FilePreviewDialog` shell，提供 Retry/Refresh/Close chrome；PDF 搜索索引改用局部代际快照，旧 worker 不能回写新文档，search busy/stale 异常安全收尾。未恢复旧 preview store/context/event bus。Prettier、architecture、i18n、`vue-tsc`、Vite build、`git diff --check` 通过；各 provider loading/error/unsupported、PDF/XLSX/DOCX/image/Markdown 和 desktop/mobile overlay 仍待真实 F/V。主代理精确提交 `2f320cfa`；M13 仍未闭环。
 - 受保护的 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts`、未跟踪移动审计与 `root-preserved`/core 产物未随上述提交暂存。M09 quick/history 改动仍由其代理收口，待交付后单独审查；下一批优先完成 M09 提交、M00/M01/M08–M13 的真实失败/移动证据，再进入 M17.01–06。
 
+### C.25 产品优先差异收口（2026-09-06，第七批补充）
+
+- 本批继续只在新架构 owner 内修复，主代理按精确路径审查并提交；以下仍是原子修复，不改变 `9 / 18` 正式模块闭环计数，未验证的浏览器 F/V 不得被静态检查替代。
+- `M09.02/M09.03 quick/history/command bar` → `/root/luna_m09_commands`（Luna max）：统一新架构 Quick Command 变量展开，恢复选中命令的变量替换与 usage 记录；补齐加载/保存/删除/建标签失败反馈、多语言文案、容器查询和窄 pane 行密度/表单宽度约束。architecture、i18n、`vue-tsc`、Vite build、`git diff --check` 通过；多 session 发送与失败反馈仍待真实流程。主代理提交 `e39dfc30`。
+- `M10.02/M10.03 terminal resize/selection geometry` → `/root/luna_m10_mobile3`（Luna max）：旧版每次 `fitAddon.fit()` 后都会刷新移动选区句柄；当前架构补回 `fitAndResize()` 的无条件几何同步，覆盖字号、窗口 resize、横竖屏且不改变 terminal owner。architecture、i18n、`vue-tsc`、Vite build、Prettier、`git diff --check` 通过；真实手机横竖屏/拖选仍待。主代理提交 `6d645617`。
+- `M00.03/M00.04 TokenInput behavior` → `/root/luna_m00_shell2`（Luna max）：对照旧 `TagInput`，恢复 TokenInput 创建/选中/失焦/Escape 后收起建议、选中后重新聚焦；新增显式 suggestions-open 状态，仍为 foundation-only。architecture、i18n、`vue-tsc`、Prettier、`git diff --check` 通过；浏览器 F/V 待矩阵。主代理提交 `131fc6f9`。
+- `M01.02 two-factor expiry` → `/root/luna_m01_2fa`（Luna max）：按后端 `400` 失效会话与 `401` 错误验证码语义，过期时清除 pending challenge、错误验证码仍可重试，并锁定提交时 2FA 状态避免错误 fallback 文案。architecture、i18n、`vue-tsc`、`git diff --check` 通过；浏览器未跑，passkey host mismatch 仍按 C.24 记录。主代理提交 `f98ed7a2`。
+- `M11.04 mobile touch parity` → `/root/luna_m11_mobile2`（Luna max）：文件行恢复 `touch-pan-y`，避免移动列表滚动与长按拖放手势竞争；仅改 filesystem owner。`git diff --check` 通过；320/375/412 真实长按、多选、菜单 viewport 尚待。主代理提交 `da7faf9f`。
+- `M12.03 open ordering` → `/root/luna_m12_lifecycle2`（Luna max）：为当前 editor session 增加 open generation 和并发 loading-operation 计数，A→B 快速打开时只允许最新请求切换 active，重复路径去重；不恢复旧 FileEditor store/event bus。architecture、i18n、`vue-tsc`、Prettier、`git diff --check` 通过；真实快速打开、关闭 scope 后迟到 load、移动 popup 仍待。主代理提交 `0a694969`。
+- `M13.05 PDF document generation` → `/root/luna_m13_provider3`（Luna max）：在 `getOutline()` 完成后补 document-generation guard，过时代 PDF task 立即销毁，防止 refresh/切 tab 时 outline、loading、scroll 串文档。architecture、i18n、`vue-tsc`、Prettier、`git diff --check` 通过；PDF refresh/快速切 tab 浏览器证据仍待。主代理提交 `651be16b`。
+- 当前仅保留两份受保护 dirty E2E、未跟踪移动审计和 root-preserved/core 产物，均未被上述提交暂存。下一步由单独验收代理串行补 M12 浏览器证据；随后按相同规则补 M00/M01/M08–M13 的适用真实矩阵，最后启动 M17.01–06。无确证差异的模块只记录“无需产品改动”，不为提高计数强行改代码。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
