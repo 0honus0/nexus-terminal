@@ -49,7 +49,7 @@
 
 <template>
   <div
-    class="flex min-h-screen items-center justify-center bg-background bg-[radial-gradient(var(--border-color)_1px,transparent_1px)] bg-[size:16px_16px] p-4"
+    class="flex min-h-dvh items-center justify-center overflow-y-auto bg-background bg-[radial-gradient(var(--border-color)_1px,transparent_1px)] bg-[size:16px_16px] p-4"
   >
     <div class="flex w-full max-w-4xl overflow-hidden rounded-xl border border-border/20 bg-background shadow-2xl">
       <section
