@@ -1156,6 +1156,12 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M11.03 chmod/archive failure feedback` → `/root/luna_m11_failure2`（Luna high）：对照旧 `FileManager.vue` 的权限与压缩/解压失败路径，恢复 chmod 本地化前缀+详情、普通 archive 失败即时 toast，同时保留 transfer task error 状态；密码错误码仍回开密码对话框以支持重试。修改仅在 filesystem/workspace 当前 owner，未恢复旧 manager/store/event bus。Prettier、architecture、i18n、`vue-tsc --noEmit`、Vite build（2664 modules）、`git diff --check` 通过；主代理提交 `4522c3ba`。真实 chmod/archive 失败与后续任务浏览器 F/V 尚未取得，M11 不关闭。
 - 主代理在验收中发现并修正 M10 初稿的 snapshot 同步时序；该类“静态通过但异步行为仍可能丢状态”的检查继续作为后续验收硬规则。受保护的 `test/e2e/tests/ssh/file-manager-context-menu.spec.ts`、`test/e2e/tests/ui/session-lifecycle.spec.ts`、所有 `*.root-preserved-20260906-takeover` 及 core 产物仍未暂存。下一批优先分发 M10 移动搜索/IME 真实证据、M11 失败反馈浏览器证据、M12 编辑失败→重试/刷新生命周期，槽位释放后再处理 M00/M01/M08/M09/M13；达到模块自身 F/V/A 闭环后才单独提交模块收口。
 
+### C.23 产品优先差异收口（2026-09-06，第五批并行）
+
+- `M00.03/M00.04 shared dialog focus` → `/root/luna_m00_shell`（Luna high）：复核 `OverlayPanel` 已具备的 focus trap/restore 能力未被共享 `DialogHost` 传入，恢复 `focus-on-open` 与 `restore-focus`；旧 Escape/backdrop/loading 语义和尺寸未改变。architecture、i18n、`vue-tsc --noEmit`、独立 Vite build、`git diff --check` 通过；主代理提交 `ed2a26ea`。M00 仍待跨模块真实 overlay/嵌套/窄屏矩阵。
+- 为加快收口，本批同时分发互不重叠的 Luna 任务：M01 认证状态、M08 Workspace layout（不改 `WorkspaceSessionSurface.vue`）、M09 Quick/History、M10 Terminal、M11 filesystem、M12 file-editor、M13 provider 只读审计；每个子代理仅修改所属 owner，不改 plan/commit/push。现有未跟踪 `test/e2e/tests/mobile/m10-mobile-audit.spec.ts` 与两份 dirty E2E、root-preserved/core 产物均受保护，正式模块闭环计数仍为 `9 / 18`。
+- 本批继承规则：先给旧源码/computed style 与行为证据，再决定最小产品 diff；测试后置但不得以静态检查替代真实 F/V；共享 owner 冲突只报告并交主代理协调。下一步按代理交付逐项独立审查、精确提交，并将 M13 已确认的“失败态缺 Retry/Close chrome”和 PDF stale worker 风险交给专门修复批次。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
