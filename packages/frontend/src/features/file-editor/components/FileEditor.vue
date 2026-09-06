@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu, BaseSpinner } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
@@ -81,6 +81,7 @@
     },
   });
   const root = ref<HTMLElement | null>(null);
+  const encodingSelect = ref<HTMLSelectElement | null>(null);
   const mobileEditor = ref<{ focus?: () => void; openSearch?: () => void } | null>(null);
   const desktopEditor = ref<{ focus?: () => void } | null>(null);
   const context = ref<{ id: string; x: number; y: number } | null>(null);
@@ -165,6 +166,30 @@
     if (active) session.updateScrollPosition(active.id, position.scrollTop, position.scrollLeft);
   };
 
+  const updateEncodingWidth = (): void => {
+    void nextTick(() => {
+      const select = encodingSelect.value;
+      const selectedOption = select?.options[select.selectedIndex];
+      if (!select || !selectedOption) return;
+
+      const measurement = document.createElement('span');
+      const styles = window.getComputedStyle(select);
+      measurement.style.fontFamily = styles.fontFamily;
+      measurement.style.fontSize = styles.fontSize;
+      measurement.style.fontWeight = styles.fontWeight;
+      measurement.style.letterSpacing = styles.letterSpacing;
+      measurement.style.paddingLeft = styles.paddingLeft;
+      measurement.style.paddingRight = styles.paddingRight;
+      measurement.style.position = 'absolute';
+      measurement.style.visibility = 'hidden';
+      measurement.style.whiteSpace = 'nowrap';
+      measurement.textContent = selectedOption.text;
+      document.body.appendChild(measurement);
+      select.style.width = `${measurement.offsetWidth + 25}px`;
+      measurement.remove();
+    });
+  };
+
   const open = (path: string) =>
     session.open(path, { scopeId: props.scopeId, scopeLabel: props.scopeLabel, port: props.port });
   const openContext = (event: MouseEvent, id: string) => {
@@ -202,6 +227,7 @@
     );
     window.addEventListener('keydown', handleEditorKeydown, true);
   });
+  watch(() => [selectedEncoding.value, session.active.value?.id] as const, updateEncodingWidth, { immediate: true });
   onBeforeUnmount(() => {
     unregisterFocus?.();
     window.removeEventListener('keydown', handleEditorKeydown, true);
@@ -256,6 +282,7 @@
 
       <div class="editor-actions">
         <select
+          ref="encodingSelect"
           data-testid="file-editor-encoding"
           :value="selectedEncoding"
           class="encoding-select"

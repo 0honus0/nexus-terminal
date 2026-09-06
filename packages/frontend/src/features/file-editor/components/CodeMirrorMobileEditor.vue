@@ -13,7 +13,7 @@
     syntaxHighlighting,
   } from '@codemirror/language';
   import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
-  import { highlightSelectionMatches, openSearchPanel, searchKeymap } from '@codemirror/search';
+  import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search';
   import { vscodeDark } from '@uiw/codemirror-theme-vscode';
 
   const props = withDefaults(
@@ -220,6 +220,7 @@
           highlightActiveLine(),
           closeBrackets(),
           autocompletion(),
+          search({ top: true }),
           highlightSelectionMatches(),
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           keymap.of([
