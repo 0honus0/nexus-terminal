@@ -1524,6 +1524,14 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `playwright-groups (8)` 的唯一失败仍为受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的全局 `getByRole('button', { name: 'Save', exact: true })` strict-mode（17 个匹配），失败发生在 spreadsheet pagination 截图前的 Settings 前置步骤；该项属于受保护 selector 维护，不归因产品 UI，禁止修改受保护测试或以产品 DOM workaround 凑通过。
 - G8 其余 preview/editor 流程与截图均正常产生；本次远程 run 未形成完整 canonical 提交，附录 B 仍按 M17.05 记录为当前 SHA 尚未完成 28/28，正式模块进度保持 **`16/18 = 88.9%`**。后续只继续 M01 六类 Login surface 证据及 M17.03/M17.05/M17.06 收口。
 
+### C.78 当前分支远程复核与剩余认证审计（2026-09-06）
+
+- 按“禁止本地测试进程、只使用远程 Actions”约束，Luna 代理完成 M01 的 2FA、CAPTCHA、passkey、移动 setup/真实软键盘及失败视觉只读审计；报告分别保存在 `/tmp/nexus-m01-2fa-login-audit-20260906T203236Z/REPORT.md`、`/tmp/nexus-m01-captcha-login-audit-20260906T202929Z/REPORT.md`、`/tmp/nexus-m01-passkey-login-audit-20260906T202856Z/REPORT.md`、`/tmp/nexus-m01-mobile-setup-keyboard-20260906T203132Z/REPORT.md`、`/tmp/nexus-m01-auth-failure-visual-20260906T203924Z/REPORT.md`。没有报告能把 HTTP/Settings、Desktop viewport 或源码推断升级为 Login surface 的真实 2FA/CAPTCHA/passkey/IME 通过；`LoginView.vue` 未发现可确认的独立视觉回归。
+- 审计确认两类后续处理：`useLoginSecurity` 配置请求初始 fail-open、`enabled` 与无 provider/site-key 的无效 CAPTCHA 配置会形成不可完成的 Login gate；这些是新架构 security/auth owner 的状态建模缺口，先由唯一 owner 做最小 fail-closed/可见错误修复，再通过远程 Actions 验证，不恢复旧 store、event bus 或 transport。真实 Android/WebView `visualViewport`/IME 仍保持 `PENDING`，不能用窄 viewport 模拟替代。
+- Luna 代理在当前分支 `test/ui-restoration-groups` 的 `HEAD=3d1caed1`（产品代码等同 `b8d5f31e`，其余为 docs-only）上发起远程 workflow_dispatch，run `34058190084` 完成：环境、runner、prepare、Docker smoke、G1–G7 全部成功；G8 唯一失败为受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的全局 `Save` selector strict-mode，不能归因产品或修改受保护文件。
+- 该 run 的 24 个 artifact 均完成尺寸与 SHA-256 校验；附录 B 当前 SHA 可确认 **26/28**，仍缺 `file-manager-spreadsheet-pagination.png` 与 `file-manager-spreadsheet-compact-last-page.png`，截图提交 job 因 G8 失败跳过。M17.05 不能关闭；M17.03 的完整当前 SHA 静态/格式 disposition 也仍未满足（报告 `/tmp/nexus-m17-static-disposition-20260906T202811Z/REPORT.md`）。
+- M17.06 owner 审计报告 `/tmp/nexus-m17-owner-handoff-20260906T202932Z/REPORT.md` 对 M14/M15/M12/M11/Dashboard 的差异给出 accept/fixed、无新增产品 owner 修复；最终交接仍依赖 M01 证据、M17.03 和当前 SHA 28/28 canonical。正式模块进度保持 **`16 / 18 = 88.9%`**，本节点不关闭任何父模块。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
