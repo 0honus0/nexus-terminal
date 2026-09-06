@@ -110,6 +110,31 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Generate scoped format patch
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install prettier --write \
+            doc/FRONTEND_UI_RESTORATION_PLAN.md \
+            packages/frontend/src/foundation/ui/OverlayPanel.vue \
+            test/e2e/groups/group-6.json \
+            test/e2e/groups/timings.json
+          git diff --binary -- \
+            doc/FRONTEND_UI_RESTORATION_PLAN.md \
+            packages/frontend/src/foundation/ui/OverlayPanel.vue \
+            test/e2e/groups/group-6.json \
+            test/e2e/groups/timings.json > "$RUNNER_TEMP/m17-format.patch"
+
+      - name: Upload scoped format patch
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: m17-format-patch-${{ inputs.target_sha }}
+          path: ${{ runner.temp }}/m17-format.patch
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Fail if any static gate failed
         if: always() && steps.gates.outcome == 'failure'
         run: exit 1
