@@ -111,7 +111,10 @@
     () => props.overlay,
     (overlay) => overlayRegistration?.setVisible(props.visible && overlay),
   );
-  watch(() => props.zIndex, (zIndex) => overlayRegistration?.setZIndex(zIndex));
+  watch(
+    () => props.zIndex,
+    (zIndex) => overlayRegistration?.setZIndex(zIndex),
+  );
 
   onBeforeMount(() => {
     overlayRegistration = overlayStack.register(props.visible && props.overlay, props.zIndex);

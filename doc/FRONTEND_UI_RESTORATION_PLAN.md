@@ -118,26 +118,26 @@
 
 模块是当前用户表面/能力组合；附录 A 的旧文件只是追溯，不是实施目录。新 owner 一对多或多对一时，只指定一个主任务修改共享原因。
 
-| 模块 | 范围                                      | 已实现证据              | 当前未完成重点                                                                                   |
-| ---- | ----------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------ |
-| M00  | 应用 shell、全局视觉、Foundation/feedback | ✅ 本地闭环〔C.55〕      | 仅待 M17 最终 canonical                                                               |
-| M01  | 登录、初始化、认证入口                    | ◐ 部分完成〔C.64/C.66/C.75〕 | 普通登录/setup/多语言表面已闭环；Login surface 的移动 setup、2FA、CAPTCHA、passkey、真实软键盘与完整失败视觉仍待 |
-| M02  | Dashboard                                 | ✅ P3                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
-| M03  | Connections                               | ✅ P3 + 本地 P9-A/B     | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
-| M04  | SSH keys、Tags、Proxies                   | ✅ P3/P4                | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
-| M05  | Settings、安全设置、备份、About           | ✅ P3                   | 七 tab 全状态/滚动/保存验证                                                                      |
-| M06  | Appearance、主题、背景、PWA               | ✅ P2/P3                | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
-| M07  | Notifications、Audit                      | ✅ P3                   | provider/日志状态的移动视觉验收                                                                  |
-| M08  | Workspace 编排、pane、tab、布局           | ✅ 本地闭环〔C.58〕      | layout/locked/focus、sidebar/archive/wheel、窗口高度/虚拟键盘与 mobile Workspace 均有当前 SHA 证据；最终 canonical 仍归 M17 |
-| M09  | Quick Commands、History、命令栏           | ✅ P4/P5                | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
-| M10  | Terminal、搜索、虚拟键盘                  | ✅ 本地模块闭环〔C.52〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                        |
-| M11  | Filesystem、catalog、history、context     | ✅ 本地闭环〔C.56〕      | 仅待 M17 最终 canonical                                                               |
-| M12  | Editor、Monaco、CodeMirror                | ✅ 本地模块闭环〔C.53〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                        |
-| M13  | Preview 全部 provider 与外壳              | ✅ 本地模块闭环〔C.51〕 | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                        |
-| M14  | Transfers、archive、Progress              | ✅ P7                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
-| M15  | Status/Charts、Docker                     | ✅ P8                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
-| M16  | Remote Desktop/VNC、SSH suspend           | ✅ P8                   | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                         |
-| M17  | 跨模块验收、截图、canonical               | ◐ 历史/局部通过         | 当前产品最终验证与全部 28 图                                                                     |
+| 模块 | 范围                                      | 已实现证据                   | 当前未完成重点                                                                                                              |
+| ---- | ----------------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| M00  | 应用 shell、全局视觉、Foundation/feedback | ✅ 本地闭环〔C.55〕          | 仅待 M17 最终 canonical                                                                                                     |
+| M01  | 登录、初始化、认证入口                    | ◐ 部分完成〔C.64/C.66/C.75〕 | 普通登录/setup/多语言表面已闭环；Login surface 的移动 setup、2FA、CAPTCHA、passkey、真实软键盘与完整失败视觉仍待            |
+| M02  | Dashboard                                 | ✅ P3                        | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
+| M03  | Connections                               | ✅ P3 + 本地 P9-A/B          | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
+| M04  | SSH keys、Tags、Proxies                   | ✅ P3/P4                     | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
+| M05  | Settings、安全设置、备份、About           | ✅ P3                        | 七 tab 全状态/滚动/保存验证                                                                                                 |
+| M06  | Appearance、主题、背景、PWA               | ✅ P2/P3                     | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
+| M07  | Notifications、Audit                      | ✅ P3                        | provider/日志状态的移动视觉验收                                                                                             |
+| M08  | Workspace 编排、pane、tab、布局           | ✅ 本地闭环〔C.58〕          | layout/locked/focus、sidebar/archive/wheel、窗口高度/虚拟键盘与 mobile Workspace 均有当前 SHA 证据；最终 canonical 仍归 M17 |
+| M09  | Quick Commands、History、命令栏           | ✅ P4/P5                     | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
+| M10  | Terminal、搜索、虚拟键盘                  | ✅ 本地模块闭环〔C.52〕      | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                                                   |
+| M11  | Filesystem、catalog、history、context     | ✅ 本地闭环〔C.56〕          | 仅待 M17 最终 canonical                                                                                                     |
+| M12  | Editor、Monaco、CodeMirror                | ✅ 本地模块闭环〔C.53〕      | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                                                   |
+| M13  | Preview 全部 provider 与外壳              | ✅ 本地模块闭环〔C.51〕      | 仅待 M17 最终 SHA/canonical/28 图统一复核                                                                                   |
+| M14  | Transfers、archive、Progress              | ✅ P7                        | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
+| M15  | Status/Charts、Docker                     | ✅ P8                        | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
+| M16  | Remote Desktop/VNC、SSH suspend           | ✅ P8                        | ✅ 本地模块闭环；仅待 M17 最终 canonical                                                                                    |
+| M17  | 跨模块验收、截图、canonical               | ◐ 历史/局部通过              | 当前产品最终验证与全部 28 图                                                                                                |
 
 **建议接续顺序**：先收口 M08 的布局/叠层依赖并复跑 M11 文件操作，再处理 M12 编辑生命周期、M10 终端边界、M00/M01 剩余认证与 shell 状态，最后由 M17 冻结最终 SHA 并全量关闭。M02/M03/M04/M06/M09/M13/M14/M15/M16 已本地闭环，不沿用旧调查或“剩余行数”清单重复开发；仅具体回归证据可重开。
 
@@ -151,12 +151,12 @@
 
 **Owner**：`app/App.vue`、`app/main.ts`、`app/shell/AppHeader.vue`、`app/styles/`、`foundation/ui/`、`shared/feedback/`。基线：App/main/style、OverlayPanel、Alert/Confirm、UINotificationDisplay。需求：[architecture](software-requirements/requirements/architecture.md)、[audit-feedback](software-requirements/requirements/audit-feedback.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                                                     |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M00.01 | ✅ 已完成〔C.1/P1〕 | 恢复全局 FontAwesome、header/nav/logo、背景/边框/输入焦点禁用态、基础页面几何和 terminal fallback；保留 app bootstrap                                                    |
-| M00.02 | ✅ 已完成〔C.1/P2〕 | 恢复 alert/confirm/toast 位置、尺寸、图标、时序和 overlay；feedback 状态留在 shared owner                                                                                |
-| M00.03 | ✅ 本地完成〔C.55〕  | tokens/default theme、CSS/资产加载、图片 intrinsic size、favicon/PWA 与附录 D 非 Vue 入口均已按当前 owner 复核；无待修复产品差异                               |
-| M00.04 | ✅ 本地完成〔C.55〕  | 320/375/桌面 header/nav、输入/菜单/dialog/footer、长消息、嵌套 overlay、Escape/backdrop/focus 恢复均有当前工作树浏览器证据；最终 canonical 归 M17 |
+| ID     | 状态                | 子任务及具体完成条件                                                                                                                              |
+| ------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M00.01 | ✅ 已完成〔C.1/P1〕 | 恢复全局 FontAwesome、header/nav/logo、背景/边框/输入焦点禁用态、基础页面几何和 terminal fallback；保留 app bootstrap                             |
+| M00.02 | ✅ 已完成〔C.1/P2〕 | 恢复 alert/confirm/toast 位置、尺寸、图标、时序和 overlay；feedback 状态留在 shared owner                                                         |
+| M00.03 | ✅ 本地完成〔C.55〕 | tokens/default theme、CSS/资产加载、图片 intrinsic size、favicon/PWA 与附录 D 非 Vue 入口均已按当前 owner 复核；无待修复产品差异                  |
+| M00.04 | ✅ 本地完成〔C.55〕 | 320/375/桌面 header/nav、输入/菜单/dialog/footer、长消息、嵌套 overlay、Escape/backdrop/focus 恢复均有当前工作树浏览器证据；最终 canonical 归 M17 |
 
 **验收/架构**：公共原语仍无产品状态；共用改动验证所有受影响模块，不只打开单个弹窗。复用 `ui/protected-navigation.spec.ts`、`ui/dashboard-workflows.spec.ts`、`mobile/dashboard-mobile.spec.ts` 和自然 dialog/feedback 场景；截图归 `dashboard-home.png` 等现有检查点。
 
@@ -164,11 +164,11 @@
 
 **Owner**：`features/auth/`、`app/pages/login/` 和 app 路由组合。基线 Login/Setup。需求：[identity-security](software-requirements/requirements/identity-security.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                  |
-| ------ | ------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| M01.01 | ✅ 已完成〔C.1/P3〕 | 双栏品牌/表单、setup/login card、移动品牌隐藏断点和加载/错误外观                                                      |
-| M01.02 | ◐ 部分完成〔C.64/C.66〕 | 真实初始设置→登录→受保护页面→退出/失效流程，已补 setup `400→201→200` 失败重试证据与三语言表面矩阵；2FA、CAPTCHA、passkey 可用/失败分支仍待 Login surface 级证据 |
-| M01.03 | ◐ 部分完成〔C.13/C.64/C.66〕 | ✅ 普通密码失败→同页重试、setup失败→重试、en-US/zh-CN/ja-JP × 1280/375 登录表面无溢出均已验收；真实软键盘、2FA/CAPTCHA/passkey状态与完整失败视觉仍待 |
+| ID     | 状态                         | 子任务及具体完成条件                                                                                                                                            |
+| ------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M01.01 | ✅ 已完成〔C.1/P3〕          | 双栏品牌/表单、setup/login card、移动品牌隐藏断点和加载/错误外观                                                                                                |
+| M01.02 | ◐ 部分完成〔C.64/C.66〕      | 真实初始设置→登录→受保护页面→退出/失效流程，已补 setup `400→201→200` 失败重试证据与三语言表面矩阵；2FA、CAPTCHA、passkey 可用/失败分支仍待 Login surface 级证据 |
+| M01.03 | ◐ 部分完成〔C.13/C.64/C.66〕 | ✅ 普通密码失败→同页重试、setup失败→重试、en-US/zh-CN/ja-JP × 1280/375 登录表面无溢出均已验收；真实软键盘、2FA/CAPTCHA/passkey状态与完整失败视觉仍待            |
 
 **验收/架构**：认证 session 仍由 auth 管理，client 不新增 router/toast/store 依赖。复用 `auth/setup-login.spec.ts`、`ui/session-lifecycle.spec.ts`、`http/auth-api.spec.ts`、`http/auth-2fa.spec.ts`、`ui/protected-navigation.spec.ts`；无旧截图的状态用旧源码和真实浏览器证据，不强行添加截图专用测试。
 
@@ -263,12 +263,12 @@
 
 **Owner**：`runtimes/workspace/views/`、`components/`、`layout/`、`session/`，消费各 feature public capabilities。需求：[workspace](software-requirements/requirements/workspace.md)、[mobile](software-requirements/requirements/mobile.md)。
 
-| ID     | 状态                                     | 子任务及具体完成条件                                                                                                                                                                               |
-| ------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M08.01 | ✅ 已完成〔C.1/P4〕                      | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建                                                                 |
-| M08.02 | ✅ 本地完成〔C.58〕                       | 当前 SHA mobile Workspace、状态监控、文件管理器、窗口高度与虚拟键盘/修饰键均通过真实 Pixel 7 流程；`mobile-workspace.png` 等截图证据已生成，最终 canonical 归 M17 |
-| M08.03 | ✅ 本地完成〔C.58〕                       | 当前 SHA 的 `H` 添加、5 节点、save/reload、locked splitter、min-size/resize、focus/shortcut、archive unmount 与 immediate-close wheel 均通过独立串行 run |
-| M08.04 | ✅ 本地完成〔C.58〕                       | fixed/z-[110]/max-w-[80vw] sidebar、submenu、连接编辑/标签管理 modal 叠层与 focus/shortcut 均有当前 SHA 证据；不恢复旧 store/event bus/transport |
+| ID     | 状态                | 子任务及具体完成条件                                                                                                                                              |
+| ------ | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M08.01 | ✅ 已完成〔C.1/P4〕 | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建                                |
+| M08.02 | ✅ 本地完成〔C.58〕 | 当前 SHA mobile Workspace、状态监控、文件管理器、窗口高度与虚拟键盘/修饰键均通过真实 Pixel 7 流程；`mobile-workspace.png` 等截图证据已生成，最终 canonical 归 M17 |
+| M08.03 | ✅ 本地完成〔C.58〕 | 当前 SHA 的 `H` 添加、5 节点、save/reload、locked splitter、min-size/resize、focus/shortcut、archive unmount 与 immediate-close wheel 均通过独立串行 run          |
+| M08.04 | ✅ 本地完成〔C.58〕 | fixed/z-[110]/max-w-[80vw] sidebar、submenu、连接编辑/标签管理 modal 叠层与 focus/shortcut 均有当前 SHA 证据；不恢复旧 store/event bus/transport                  |
 
 **验收/架构**：Workspace/Agent live state隔离；runtime不复制file/editor/transfer controller。`WorkspaceSessionSurface.vue` 是M10–M14共用组合文件，由一个指定模型修改。复用 `ui/session-lifecycle.spec.ts`、`ssh/reconnect-ui.spec.ts`、`mobile/ssh-workspace.spec.ts`、`mobile/suspend-resume-ui.spec.ts`；复核 `mobile-workspace.png`。
 
@@ -300,12 +300,12 @@
 
 **Owner**：`features/filesystem/`，Workspace提供adapter和popup组合。需求：[filesystem](software-requirements/requirements/filesystem.md)。
 
-| ID     | 状态                                      | 子任务及具体完成条件                                                                                                                                                                                                                                         |
-| ------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M11.01 | ✅ 已完成〔C.1/P6〕                       | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                                                                                                                                           |
-| M11.02 | ✅ 本地完成〔C.56〕                        | 当前 SHA 导航/排序/长列表/路径 history、terminal path sync、context/sidebar 均有真实证据；sidebar rail 层级修复后 `sidebar-pane-fileManager` 可稳定打开/关闭                                                     |
-| M11.03 | ✅ 本地完成〔C.56〕                        | 真实 SSH 导航、权限/压缩/解压/拖放/剪贴板/多选/上传/下载失败恢复与 archive progress 均有证据；共享 sidebar unmount 与 immediate-close wheel 在当前工作树最终复跑通过 |
-| M11.04 | ✅ 本地完成〔C.56/C.67〕                   | mobile single-tap/long-press/multi-select 防误打开、workspace/history overlay、XLSX/DOCX 横向滚动、desktop preview scrollbar 与当前 SHA PDF 均有证据；补齐 BaseContextMenu 首帧定位，最终 canonical 截图归 M17 |
+| ID     | 状态                     | 子任务及具体完成条件                                                                                                                                                                                           |
+| ------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M11.01 | ✅ 已完成〔C.1/P6〕      | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                                                                                             |
+| M11.02 | ✅ 本地完成〔C.56〕      | 当前 SHA 导航/排序/长列表/路径 history、terminal path sync、context/sidebar 均有真实证据；sidebar rail 层级修复后 `sidebar-pane-fileManager` 可稳定打开/关闭                                                   |
+| M11.03 | ✅ 本地完成〔C.56〕      | 真实 SSH 导航、权限/压缩/解压/拖放/剪贴板/多选/上传/下载失败恢复与 archive progress 均有证据；共享 sidebar unmount 与 immediate-close wheel 在当前工作树最终复跑通过                                           |
+| M11.04 | ✅ 本地完成〔C.56/C.67〕 | mobile single-tap/long-press/multi-select 防误打开、workspace/history overlay、XLSX/DOCX 横向滚动、desktop preview scrollbar 与当前 SHA PDF 均有证据；补齐 BaseContextMenu 首帧定位，最终 canonical 截图归 M17 |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
 
@@ -313,12 +313,12 @@
 
 **Owner**：`features/file-editor/`，`WorkspaceSessionSurface.vue` 仅管理embedded/popup外壳。需求：[file-editor](software-requirements/requirements/file-editor.md)。
 
-| ID     | 状态                | 子任务及具体完成条件                                                                                                                                                        |
-| ------ | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M12.01 | ✅ 已完成〔C.1/P6〕 | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                                                      |
+| ID     | 状态                     | 子任务及具体完成条件                                                                                                                                                                                                                                       |
+| ------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M12.01 | ✅ 已完成〔C.1/P6〕      | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                                                                                                                                     |
 | M12.02 | ✅ 本地完成〔C.42/C.65〕 | editor 移动矩阵已按当前 owner 真实验收：`touch-advanced` 相关 9/9、`touch-workflows` 选定 3/3；本轮修复 CodeMirror 搜索面板置顶与编码下拉动态宽度，focused search/editor 各 1/1，完整文件的无关 M11 upload crash 已隔离重跑 1/1，不恢复旧 FileEditor store |
-| M12.03 | ✅ 本地完成〔C.53〕 | 真实 SSH/SFTP 写入失败后 Save error 保留编辑快照并可 Retry；1.5s 延迟保存在后续 dirty 编辑存在时仍提交旧快照，失败/成功截图与命令均已保留                                   |
-| M12.04 | ✅ 本地完成〔C.53〕 | A→B 快速打开只保留最新文档，关闭 popup 丢弃迟到 load；既有 mobile `9/9` + touch workflow `3/3` 覆盖全屏/软键盘/长 toolbar，跨 session popup 状态沿当前 Workspace owner 保持 |
+| M12.03 | ✅ 本地完成〔C.53〕      | 真实 SSH/SFTP 写入失败后 Save error 保留编辑快照并可 Retry；1.5s 延迟保存在后续 dirty 编辑存在时仍提交旧快照，失败/成功截图与命令均已保留                                                                                                                  |
+| M12.04 | ✅ 本地完成〔C.53〕      | A→B 快速打开只保留最新文档，关闭 popup 丢弃迟到 load；既有 mobile `9/9` + touch workflow `3/3` 覆盖全屏/软键盘/长 toolbar，跨 session popup 状态沿当前 Workspace owner 保持                                                                                |
 
 **验收/架构**：同一 FileEditorSessionController + FileDocumentPort；popup与embedded不分别维护document副本。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 desktop editor/mobile editor/search。
 
@@ -379,14 +379,14 @@
 
 ### M17 — 集成、证据归档与最终关闭
 
-| ID     | 状态                     | 子任务及具体完成条件                                                                                                                                                     |
-| ------ | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| M17.01 | ✅ 本地完成〔C.38/C.41〕 | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品 |
-| M17.02 | ✅ 本地完成〔C.35〕      | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责           |
-| M17.03 | ◐ 部分完成〔C.34/C.38/C.57〕  | 当前 SHA 的 architecture/i18n/vue-tsc/Vite/git diff-check 已通过；test-policy/groups:check 仅被受保护未跟踪移动审计文件阻断，format 需在清理生成物后单独复核 |
-| M17.04 | ✅ 远程完成〔C.73〕 | 当前测试分支 `2ec5bb82` 的 runner 镜像构建、Docker smoke、prepare、G1–G7 均通过；G8 的 1 个失败已独立归因于受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector，不归因产品，矩阵证据与 disposition 已记录 |
-| M17.05 | ◐ 需当前 SHA 刷新〔C.63/C.65/C.68/C.74/C.75〕 | 历史 `b59438c4` 的 28/28 canonical 图不能代表当前产品 SHA `b8d5f31e`；远程 E2E 仍未形成当前 SHA 的完整 canonical 28 图，需补齐并逐图复核 |
-| M17.06 | ⏳ 待完成                | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引                                                    |
+| ID     | 状态                                          | 子任务及具体完成条件                                                                                                                                                                                                  |
+| ------ | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M17.01 | ✅ 本地完成〔C.38/C.41〕                      | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品                                              |
+| M17.02 | ✅ 本地完成〔C.35〕                           | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责                                                        |
+| M17.03 | ◐ 部分完成〔C.34/C.38/C.57〕                  | 当前 SHA 的 architecture/i18n/vue-tsc/Vite/git diff-check 已通过；test-policy/groups:check 仅被受保护未跟踪移动审计文件阻断，format 需在清理生成物后单独复核                                                          |
+| M17.04 | ✅ 远程完成〔C.73〕                           | 当前测试分支 `2ec5bb82` 的 runner 镜像构建、Docker smoke、prepare、G1–G7 均通过；G8 的 1 个失败已独立归因于受保护 `file-preview-editor.spec.ts:889` 未限定 `Save` selector，不归因产品，矩阵证据与 disposition 已记录 |
+| M17.05 | ◐ 需当前 SHA 刷新〔C.63/C.65/C.68/C.74/C.75〕 | 历史 `b59438c4` 的 28/28 canonical 图不能代表当前产品 SHA `b8d5f31e`；远程 E2E 仍未形成当前 SHA 的完整 canonical 28 图，需补齐并逐图复核                                                                              |
+| M17.06 | ⏳ 待完成                                     | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引                                                                                                 |
 
 **项目完成条件**：M00–M16适用子任务及F/V/A验收全部有结论，M17.01–06完成；无“源码审计=视觉完成”“旧run=新代码通过”“图片存在=已复核”的替代判断。项目整体完成前保留每个已实现子任务的✅，但模块最终状态不得提前关闭。
 
