@@ -1206,6 +1206,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - Mobile 命令：`cd test/e2e && E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-m10-mobile-screenshots npx playwright test tests/mobile/terminal-touch.spec.ts tests/mobile/touch-workflows.spec.ts tests/mobile/touch-advanced.spec.ts --project=mobile --workers=1 --grep='pinch zoom persists|long press selects a word|clipboard Paste normalizes|CodeMirror search opens|virtual keyboard sends modified|keyboard sink preserves IME|virtual keyboard Ctrl modifier' --reporter=json --output=/tmp/nexus-m10-mobile-results`；exit `0`，**7/7 passed**，报告 `/tmp/nexus-m10-mobile-run.json`，截图保留 `/tmp/nexus-m10-mobile-screenshots/`，覆盖复制/选择、搜索、Ctrl/Alt/Del、IME、虚拟键盘、pinch/remount。
 - 该批无产品断言、测试选择器或环境失败；仍不能关闭 M10：完整横竖屏/字体持久化、切 pane 后高亮、所有 modifier/keyboard 边界及 M17 最终截图仍需补齐，正式闭环计数不变。
 
+### C.29 M11 当前 SHA 文件管理器真实取证（2026-09-06）
+
+- 当前产品 SHA 为 `ff4077fb`。`/root/luna_m11_browser2` 使用独立 `/tmp/nexus-m11-ff4077fb-20260906/` 串行运行 SSH/mobile 流程，未修改产品或测试。
+- 通过证据：`ssh/sftp-download.spec.ts` 1/1；`ssh/file-upload.spec.ts` picker/progress 各 1/1；受保护 `ssh/file-manager-context-menu.spec.ts` 的 right-click、multi-select、download-failure 各 1/1；`mobile/touch-workflows.spec.ts` 文件管理器流程 2/2；`mobile/touch-advanced.spec.ts` 长按/窄菜单 2/2。合计 **11 个 case 通过**，截图、timings、日志和 `status.log` 均保留在上述目录。
+- `ssh/file-manager-navigation.spec.ts` 的 3 个 case 中 1 个通过，2 个失败：path history 导航未显示 `/folder-seed` 历史项；shell metacharacter 路径同步后 path input 仍为 `/`。失败发生在当前 filesystem 导航行为断言，尚不能归类为纯选择器/环境；`/tmp/nexus-m11-ff4077fb-20260906/logs/navigation.log` 和 trace 是待修复证据。
+- 已派 `/root/luna_m11_nav_fix`（Luna max）只读核查并在有确定证据时修复当前 filesystem owner；在其结论前不关闭 M11.02/M11.03/M11.04，正式计数保持 `9 / 18`。其余文件操作、失败下载恢复、移动长按/多选和菜单几何当前 SHA 证据有效。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
