@@ -25,7 +25,7 @@
 | 13 个移动截图检查点       | `/tmp/nexus-p9-mobile-complete` 有产物，但完整 run 结论及逐图复核尚未交付         | 先恢复证据，无法确认再重跑；不能从 PNG 存在推断测试全绿        |
 | 全部 28 图及最终全量验收  | ⏳ 待完成                                                                         | 由 M17 汇总，不能由历史阶段或局部截图代替                      |
 
-**逐模块执行进度（2026-09-06 当前工作树）**：`9 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
+**逐模块执行进度（2026-09-06 当前工作树）**：`10 / 18` 个正式模块已完成本地 F/V/A 闭环：**M02 Dashboard、M03 Connections、M04 SSH keys / Tags / Proxies、M05 Settings / Security / Backup / About、M06 Appearance / Themes / Background / PWA、M07 Notifications / Audit、M09 Quick Commands / History / Command Bar、M14 Transfers / Archive / Progress、M15 Status / Charts / Docker、M16 Remote Desktop / VNC / SSH suspend**。这里的“模块完成”表示该模块自身适用子任务均已闭环；项目最终完成仍必须经过 M17 的最终产品 SHA/canonical/28 图验收。下一步进入其余未闭合模块的逐项收口，最终由 **M17** 对最终产品 SHA/canonical/28 图统一复核。
 
 当前工作分支历史接续点为 `test/agent-runtime-foundation`，P8 产品锚点 `4e93b1ad`，此前本地 HEAD 为 `d0c4cdb1`。实际接手时先执行 `git status --short`、`git log -5 --oneline`，以当前仓库为准。以下是本版编写时的未提交改动，不得覆盖：
 
@@ -128,7 +128,7 @@
 | M05  | Settings、安全设置、备份、About           | ✅ P3               | 七 tab 全状态/滚动/保存验证              |
 | M06  | Appearance、主题、背景、PWA               | ✅ P2/P3            | ✅ 本地模块闭环；仅待 M17 最终 canonical |
 | M07  | Notifications、Audit                      | ✅ P3               | provider/日志状态的移动视觉验收          |
-| M08  | Workspace 编排、pane、tab、布局           | ✅ P4               | 多 tab/context/空状态/恢复集成           |
+| M08  | Workspace 编排、pane、tab、布局           | ◐ 部分完成〔C.43〕 | resize/layout-lock、focus/overlay、窗口高度/虚拟键盘及最终截图仍待 |
 | M09  | Quick Commands、History、命令栏           | ✅ P4/P5            | ✅ 本地模块闭环；仅待 M17 最终 canonical    |
 | M10  | Terminal、搜索、虚拟键盘                  | ✅ P5               | 完整触控/选择/重连与截图复核             |
 | M11  | Filesystem、catalog、history、context     | ✅ P6               | 源码已审，补真实文件操作与移动几何       |
@@ -266,9 +266,9 @@
 | ID     | 状态                      | 子任务及具体完成条件                                                                                                                                                                                 |
 | ------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M08.01 | ✅ 已完成〔C.1/P4〕       | desktop sidebar/pane/tab/title/context、layout/focus配置器、no-session composition、tag assignment wrapper；死 PaneTitleBar 不新建                                                                   |
-| M08.02 | ◐ 部分完成                | P4 16行源码审计全部有记录；mobile单pane、100dvh、非收缩工具栏、隐藏desktop sidebars与旧设计对应，浏览器只覆盖具体流程                                                                                |
-| M08.03 | ◐ 部分完成〔C.14-h/C.20〕 | 真实三session新增/切换/终端状态保留、移动tab横滚/长按context、Close Other/关闭至空壳已通过；已恢复旧固定侧栏 overlay 与焦点循环起点识别，resize/layout锁定及完整侧栏浏览器证据仍待验收               |
-| M08.04 | ◐ 部分完成〔C.20〕        | 已恢复桌面 active sidebar 的 fixed/z-[110]/max-w-[80vw]/内部滚动与关闭按钮；modal/editor/preview/progress/remote叠层、窗口高度变化和虚拟键盘下不遮关键操作仍待验收；桌面配置器在mobile无入口事实保留 |
+| M08.02 | ◐ 部分完成〔C.43〕       | P4 16行源码审计、mobile单pane/100dvh/非收缩工具栏/隐藏desktop sidebars与旧设计及部分真实 mobile Workspace 矩阵已有结论；窗口高度/虚拟键盘与最终 mobile 截图仍待 |
+| M08.03 | ◐ 部分完成〔C.14-h/C.20/C.43〕 | 真实三 session、新增/切换/终端状态保留、移动 tab 横滚/长按 context、Close Other/空壳及配置器/投影已有证据；resize、layout lock 与焦点循环仍需完整当前 SHA 矩阵 |
+| M08.04 | ◐ 部分完成〔C.20/C.43〕 | active sidebar fixed/z-[110]/max-w-[80vw]/内部滚动/关闭按钮及窄右侧栏 submenu 已有目标 case；完整 overlay/focus、跨模块 popup composition 与最终 28 图仍待 |
 
 **验收/架构**：Workspace/Agent live state隔离；runtime不复制file/editor/transfer controller。`WorkspaceSessionSurface.vue` 是M10–M14共用组合文件，由一个指定模型修改。复用 `ui/session-lifecycle.spec.ts`、`ssh/reconnect-ui.spec.ts`、`mobile/ssh-workspace.spec.ts`、`mobile/suspend-resume-ui.spec.ts`；复核 `mobile-workspace.png`。
 
@@ -303,9 +303,9 @@
 | ID     | 状态                            | 子任务及具体完成条件                                                                                                                                                                                       |
 | ------ | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M11.01 | ✅ 已完成〔C.1/P6〕             | file manager toolbar/table/row、favorite/history、context/action/popup恢复；状态仍由当前filesystem/runtime能力提供                                                                                         |
-| M11.02 | ◐ 部分完成                      | P6对应源码移动断点/滚动已审；历史源码review不得代替新run的文件操作及context菜单验证                                                                                                                        |
-| M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15〕 | 真实SSH导航、长列表/排序/右键菜单、建删改失败恢复、桌面拖放移动、多选Copy/Cut→Paste及文件选择器上传进度/刷新/下载已通过；已提交逐项失败隔离并保留旧版并发下载（C.18/C.19），权限/archive及移动专项仍待验收 |
-| M11.04 | ⏳ 待验收                       | mobile单tap/long-press、多选不误打开、menu/submenu viewport、路径/history/favorite弹层、列宽/横向滚动；操作影响editor/preview的语义通过现有接口                                                            |
+| M11.02 | ◐ 部分完成〔C.42〕             | 当前 SHA 导航/排序/长列表/路径 history 与 terminal path sync 已真实 3/3；context/sidebar 仍受 Workspace layout owner 的 `sidebar-pane-fileManager` 缺口影响，不能把 filesystem 证据扩大为 Workspace 闭环 |
+| M11.03 | ◐ 部分完成〔C.14-c/e/g/j/C.15/C.42/C.48〕 | 真实 SSH 导航、长列表/排序、权限成功与直接权限失败→可重试、压缩/解压/密码重试、拖放、剪贴板、多选、上传、下载失败恢复已通过；context 4/6、archive progress 3/5，剩余为 sidebar 产品依赖、通知 selector/timing 或 page-crash/fixture，需在 M08 修复后定向复跑 |
+| M11.04 | ◐ 部分完成〔C.42/C.48〕         | mobile single-tap/long-press/multi-select 防误打开 4/4，workspace/history overlay、XLSX/DOCX 横向滚动与 desktop preview scrollbar 均有证据；当前 SHA 的 PDF case 已绕过 `/workspace?connectionId=` helper 误判并 1/1 通过，最终 canonical 截图仍归 M17 |
 
 **验收/架构**：不在UI直接调用旧SFTP transport；archive任务生命周期归M14，文件选择归M11。复用 `ssh/file-manager-navigation.spec.ts`、`ssh/file-manager-context-menu.spec.ts`、`ssh/sftp-download.spec.ts`、`mobile/touch-workflows.spec.ts`、`mobile/touch-advanced.spec.ts`；复核 mobile file-manager/context-menu。
 
@@ -316,8 +316,8 @@
 | ID     | 状态                    | 子任务及具体完成条件                                                                                                                                                                                                                   |
 | ------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | M12.01 | ✅ 已完成〔C.1/P6〕     | editor header/tabs、Monaco/CodeMirror内容/搜索/selection/gutter、desktop resize与mobile fullscreen外观                                                                                                                                 |
-| M12.02 | ◐ 部分完成              | 全部editor相关移动源码已审；旧overlay/container/tabs由当前owner组合，不恢复旧FileEditor store                                                                                                                                          |
-| M12.03 | ◐ 部分完成〔C.15/C.19〕 | 源码对照确认旧版保存失败后仍可重试，已移除新架构对 `active.error` 的永久禁用，并修复保存期间继续编辑/并发保存的 dirty 竞态；多文件切换、dirty/save/关闭确认、编码换行/语言、search/replace、preview转编辑及嵌入/弹出状态仍待浏览器验收 |
+| M12.02 | ✅ 本地完成〔C.42〕     | editor 移动矩阵已按当前 owner 真实验收：`touch-advanced` 相关 9/9、`touch-workflows` 选定 3/3；完整文件的无关 M11 upload crash 已隔离重跑 1/1，不恢复旧 FileEditor store |
+| M12.03 | ◐ 部分完成〔C.15/C.19/C.48〕 | 源码对照确认旧版保存失败后仍可重试，已移除新架构对 `active.error` 的永久禁用，并修复保存期间继续编辑/并发保存的 dirty 竞态；当前 SSH fixture 会把缺失文件写入重新创建，无法可靠制造 save failure，故保存失败→Retry 及迟到加载仍待可行 fixture/浏览器验收 |
 | M12.04 | ◐ 部分完成〔C.18〕      | 已提交 session 切换时关闭 teleported document popup、保留 editor/preview 文档状态；desktop resize 持久化、mobile 全屏/软键盘/长 toolbar 与跨 session scope 仍待验收                                                                    |
 
 **验收/架构**：同一 FileEditorSessionController + FileDocumentPort；popup与embedded不分别维护document副本。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`mobile/touch-workflows.spec.ts`；复核 desktop editor/mobile editor/search。
@@ -331,9 +331,9 @@
 | M13.01 | ✅ 已完成〔C.1/P6〕     | 恢复tabs/header/refresh/close/search、各provider外观、PDF outline/page/scroll、spreadsheet pagination/sheet tabs和横滚                                                                                                                                                                                                                                                       |
 | M13.02 | ✅ 本地完成〔C.2〕      | mobile preview恢复94dvh、四向 `max(.75rem, env(safe-area-inset-*))`；editor保持fullscreen；两个portrait预览流程2/2通过                                                                                                                                                                                                                                                       |
 | M13.03 | ✅ 本地完成〔C.3〕      | Markdown横屏32px旧视觉保留，独立编辑保存重开1/1；不做无需求依据的coarse44改版                                                                                                                                                                                                                                                                                                |
-| M13.04 | ◐ 部分完成              | 所有provider移动源码已审；mobile Markdown/Spreadsheet局部旧新图复核已有，完整mobile新图尚待确认结论                                                                                                                                                                                                                                                                          |
-| M13.05 | ◐ 部分完成〔C.20/C.21〕 | 已修复关闭最后 preview tab 后隐藏 popup；loading 读取可取消且遮罩/Escape 隐藏时保留已有 tabs、显式关闭按旧设置清理；Spreadsheet 解析失败/无 worksheet 显示可见错误态并保留可重试 session；各provider loading/error/unsupported/refresh、PDF连续页/outline/zoom/pan、XLSX多sheet/search/末页、DOCX宽内容、image zoom、Markdown edit/save及 close/cache 源文档状态仍待真实验收 |
-| M13.06 | ⏳ 待验收               | desktop/mobile/相关landscape视口的overlay、toolbar、tabs、内容/横滚层级；notch安全区源码正确与实体设备验证范围分别记录                                                                                                                                                                                                                                                       |
+| M13.04 | ✅ 本地完成〔C.42〕     | 当前 SHA provider SSH 9/9、mobile 10/10；覆盖 PDF/XLSX/DOCX/image/Markdown、refresh、close/cache、outline/zoom/pan、sheet/search/pagination 与 mobile overlay，最终图仍由 M17.05 复核 |
+| M13.05 | ◐ 部分完成〔C.20/C.21/C.42〕 | 最后 tab、loading cancel、Spreadsheet parse/empty worksheet 错误态已真实确认；快速 PDF stale-worker/outline race、XLSX 末页及最终 canonical 截图仍待，不把 harness fixture 失败算产品通过/失败 |
+| M13.06 | ◐ 部分完成〔C.42〕       | `915×412` overlay panel `891×387.27`、document/body 无横溢出；四向 safe-area 为 source-verified，实体 notch 未由当前 Playwright harness 模拟，最终 toolbar/tabs 图审仍待 |
 
 **验收/架构**：FilePreviewSessionController保持单一文档状态，provider不引入Workspace/private editor store；PDF worker/SheetJS等现有能力保留。复用 `ssh/file-preview-editor.spec.ts`、`mobile/touch-advanced.spec.ts`、`ingress/pdf-worker-assets.spec.ts`；复核附录B全部preview图，不仅两张mobile图。
 
@@ -381,9 +381,9 @@
 
 | ID     | 状态              | 子任务及具体完成条件                                                                                                        |
 | ------ | ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| M17.01 | ◐ 部分完成        | 恢复完整mobile项目的命令/case count/exit/report和13图逐项结论；无可确认结果才重跑，不能以PNG存在推断全绿                    |
-| M17.02 | ⏳ 待完成         | 汇总各模块F/V/A与附录A：98行均有来源和disposition，无活跃入口的明确不适用；源码已审的剩余浏览器状态按模块补齐               |
-| M17.03 | ⏳ 待最终版本验证 | format、test-policy、frontend architecture/i18n/vue-tsc/Vite、groups:check；新变更影响的真实E2E通过，保留失败→根因→修复证据 |
+| M17.01 | ✅ 本地完成〔C.38/C.41〕 | 完整 mobile 命令、26 case count、exit、报告、13 图与逐项失败归因已记录；25 个产品/适用 case 通过，剩余 1 个受保护未跟踪审计脚本 selector 维护项转入 M17.03，不归因于产品 |
+| M17.02 | ✅ 本地完成〔C.35〕 | 附录A 98行与附录B 28图均已逐项建立 disposition；需当前 SHA 浏览器、产品差异、selector、environment/canonical 依赖和 N/A 均有报告索引，最终图审仍由 M17.05 负责 |
+| M17.03 | ◐ 部分完成〔C.34/C.38〕 | 两个已确认 selector 已修复并通过受影响 E2E；最终 SHA 的 format、test-policy、architecture/i18n/vue-tsc/Vite、groups:check 与受保护移动审计脚本 disposition 仍待最终门禁 |
 | M17.04 | ⏳ 待完成         | 对最终产品SHA的 canonical Docker smoke + G1–G8 及必要ingress验证；CI等待交证据代理，主代理做失败归因与验收                  |
 | M17.05 | ⏳ 待完成         | 从真实场景生成28图，附录B逐图记录视口/主题/数据/差异结论/产品版本；补无截图UI的浏览器/源码证据，不建立新全局manifest        |
 | M17.06 | ⏳ 待完成         | 所有真实差异已修复或有owner决定；当前功能保持、新架构边界通过；记录最终交接结果，清理可丢弃/tmp材料前保留必要证据索引       |
@@ -1276,6 +1276,62 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - M09 的功能矩阵已由当前 SHA `b8f5c9d7` 真实取证覆盖：移动变量/触控/搜索 **2/2**，双 session Send All/no-active **1/1**，Quick/History SSH suite **4/4**，四类 HTTP 503 失败反馈 **4/4**；均为串行、有效浏览器流程，报告 `/tmp/nexus-m09-missing-20260906/REPORT.md`。
 - V：移动状态截图、无 hover 行操作、窄容器变量表单、双 session feedback 及既有桌面 Quick/History 证据齐备；失败态保留表单/行的视觉状态。A：实现仍由 quick-command/history feature 与 Workspace command capability 持有，未恢复旧 store/event bus，历史静态 architecture/i18n/typecheck/build/diff 门禁通过。
 - M09.02/M09.03 及模块自身 F/V/A 均已满足；正式模块计数由 `9 / 18` 更新为 **`10 / 18`**。M09 仍需随最终产品 SHA 经 M17.04–06 canonical/截图复核，不能据此宣布项目完成。
+
+### C.40 M13 provider 错误/取消/横屏补证（2026-09-06）
+
+- 当前产品 SHA `0e40b3cb` 的隔离 provider probe **1/1 passed，exit 0**，报告 `/tmp/nexus-m13-provider-full-20260906/temp/REPORT.md`；使用独立 `127.0.0.2`/backend `3002`/frontend `4174`，因 canonical 端口被有效 E2E 占用而隔离运行。
+- 覆盖 unsupported editor fallback、malformed/empty XLSX、invalid PDF/DOCX/image error、延迟 PDF loading/cancel、20 MiB oversize Retry、`915×412` landscape popup/document geometry；SSH **7/7**、mobile **5/5** 既有证据仍有效。
+- 仍未关闭 M13：快速 PDF stale-worker/outline race、XLSX 最后一页 pagination 与最终 canonical 截图刷新仍待；SheetJS 对 malformed XLSX 的单元格容忍行为已记录为当前产品/SRS 兼容结果，不误判为失败。
+
+### C.41 M17.01 dashboard 隔离复跑（2026-09-06）
+
+- 原始 mobile dashboard 失败已在 `unshare --net`、独立 backend DB/Vite cache、无宿主端口竞争条件下定向重跑：`1 test / 1 file`，**1 passed，exit 0**；`/settings`、模块和 API 均 HTTP 200，报告与 trace 位于 `/tmp/nexus-m17-mobile-dashboard-rerun-20260906-080855/`，总报告已更新 `/tmp/nexus-m17-mobile-20260906-0754/REPORT.md`。
+- 因此 M17.01 产品移动矩阵为 **25/26 可采信通过**；剩余 1 case 是受保护、未跟踪的 `m10-mobile-audit.spec.ts` selector strict-mode 维护项，不修改该文件、不将其失败归为产品。13 个 checkpoint PNG 已齐备，但仍需 M17.05 逐图最终 review，M17.01 不单独关闭项目。
+
+### C.42 当前 SHA M08–M13 最终矩阵复核（2026-09-06）
+
+- **M08**：多 Workspace 2/2、SSH/mobile resize 均通过，architecture/i18n/Prettier/`vue-tsc`/diff-check 均通过；Configurator run 的 `.last-run.json` 为 `failed` 但 `failedTests=[]`，sidebar wheel 在后端 `PUT` 超时，必须在独立环境定向复跑，暂不关闭 M08。
+- **M11**：navigation 3/3、mobile core 4/4、workspace/history 1/1、XLSX/DOCX 横向各 1/1、desktop preview scrollbar 1/1；context 4/6、archive progress 3/5。`sidebar-pane-fileManager` 缺失属于当前 Workspace layout 产品依赖；其余失败已分别归类为通知 selector/timing、page crash/fixture 或 route helper，不能直接计入 M11 产品失败，但也不足以关闭 M11。
+- **M12**：`ssh/file-preview-editor.spec.ts` 9/9；M12 相关 mobile `touch-advanced` 9/9、`touch-workflows` 3/3；无关 M11 upload case 在 `--shm-size=2g` 隔离重跑 1/1。临时 save/late-load probe 3 cases 失败均为 fixture/helper/Monaco 尾换行或异步编排问题，不能作为产品失败证据；save-retry、delayed-save/dirty-close、late-load ordering 仍没有可靠正向 probe，M12 继续部分完成。
+- **M13**：provider SSH 9/9、mobile 10/10；clean empty XLSX 显示 `Invalid XLSX file: no worksheets were found.`；`915×412` overlay `x=12,y=12.36,w=891,h=387.27` 且无横溢出，四向 notch safe-area 为 source-verified。快速 PDF stale-worker/outline、XLSX 末页及最终 canonical/28 图仍待。
+- **M17**：现有 Docker/G1–G8 证据基于旧 SHA `b8f5c9d7`，不是当前 `0e40b3cb`；必须冻结当前产品/selector 改动后在同一 SHA 重建并重跑 smoke、ingress、G1–G8，再进行 28 图最终人工复核。不得把旧 SHA 证据提升为 M17.04 完成。
+
+### C.43 M08 Workspace 当前工作树证据更新（2026-09-06）
+
+- 当前产品基线为 `HEAD=0e40b3cb` 加未提交的三个 Workspace owner 文件：`WorkspaceLayoutConfigurator.vue`、`WorkspaceLayoutNodeEditor.vue`、`workspaceLayout.ts`。改动只恢复旧布局投影与尺寸语义：非 `terminal` pane 可同时出现在主布局和 sidebar，`terminal` 保持单一 owner；主布局重复 pane、最小 pane 尺寸、clone 与 resize rebalance 均在当前布局模型内处理，未恢复旧 store/event bus/transport。
+- 配置器定向浏览器 run 使用隔离 seeded backend，`/tmp/nexus-m08-configurator-rerun-live-20260906/run.log`：**1/1 passed，exit 0**，覆盖桌面配置器可打开、布局控制可见且不越出 viewport。
+- 窄右侧栏目标 run 使用同一类隔离环境，`/tmp/nexus-m08-sidebar-rerun-live-20260906/run.log`：`file-manager-context-menu.spec.ts:139` **1/1 passed**，覆盖 `fileManager` sidebar 投影及 submenu viewport；同 run 的 wheel case 在连接 helper 未进入 `/workspace` 前失败，未触达产品断言，归测试环境/fixture，不作为 M08 产品失败。
+- 适用静态门禁均通过：`check:architecture`（255 source files）、`check:i18n`（1706 keys/3 locales/81 fragments）、`vue-tsc --noEmit`、三个 Workspace 文件 Prettier、`git diff --check`。本轮补强了配置器与 sidebar projection 证据，但 C.30/C.42 所列 resize/layout-lock、focus/overlay、窗口高度/虚拟键盘和最终 `mobile-workspace.png` 仍未全部取得当前 SHA 的独立 F/V 结论；因此 M08 继续保持部分完成，正式计数为 **10 / 18**。
+
+### C.44 M01 认证入口当前证据更新（2026-09-06）
+
+- 当前受保护 E2E 产物中的普通密码失败→同页重试矩阵已可采信：`1280×800`、`320×667`、`375×812` 各 **1/1**，均验证第一次真实 `401`、页面仍在 `/login` 且未认证，修正密码后第二次真实 `200` 并进入受保护首页；失败/成功状态的 metrics 与截图保留在 `test/e2e/test-results.root-preserved-20260906-takeover/`。
+- 相关定向 UI、logout/protected-route 与 auth API runs 均 exit `0`；三视口 document/body `scrollWidth` 等于 viewport，字段、alert、Remember Me、submit 的 bbox 和 computed style 均有记录。该证据覆盖 M01.03-a 的 F/V，不扩大到全部认证状态。
+- passkey 仍被既有 harness 的 `localhost` 页面与 `127.0.0.1` API cookie host 不一致阻断，不能归因于认证入口产品；M01.02/M01.03 继续保持部分完成。历史 `f98ed7a2` 的 auth store 过期 2FA 清理应作为 M01.02 范围单独审查，不把它混入本切片的 LoginView-only 约束。
+
+### C.45 M00 Shell/资产当前证据更新（2026-09-06）
+
+- 当前 `HEAD=0e40b3cb` 的 M00 只读审计未发现新的确定产品差异，未修改产品文件；DialogHost focus trap/restore、OverlayPanel Escape/backdrop/stack、tokens、FontAwesome、logo、manifest/favicon 与 service worker 均与旧基线及已有修复一致。
+- PWA/manifest/favicon/service-worker 定向 run **1/1 passed**，移动 Dashboard 360/412 窄屏邻接 **1/1 passed** 且无页面横溢出；architecture、i18n、`vue-tsc`、独立 Vite build、`git diff --check` 均通过。nested overlay 仍主要依赖源码证据，故 M00 不提前关闭；`check:test-policy` 的唯一失败来自受保护未跟踪 `m10-mobile-audit.spec.ts`，不归因于 M00。
+
+### C.46 M12 Editor 生命周期当前证据更新（2026-09-06）
+
+- 当前 SHA 的隔离 save-failure probe 未到达保存动作：setup 后 `command-input` 持续 disabled 并在 20 秒超时，exit `1`；报告 `/tmp/nexus-m12-final-matrix-20260906/report/m12-gap-save-offline/index.html`，属于 fixture/前置状态阻断，不能判定产品 save/retry 通过或失败。
+- 因此 M12.03/M12.04 的保存失败→Retry、delayed save/dirty close、A→B 快速打开及迟到 load ordering 仍无可靠正向浏览器证据；已验证的 M12.02 移动矩阵和文件预览矩阵继续保留，M12 父模块保持部分完成。
+
+### C.47 M10/M11 当前失败边界证据更新（2026-09-06）
+
+- M10 当前 terminal owner 只读审计未发现新的稳定浏览器回归，既有 SSH/mobile 触控、IME、虚拟键盘、搜索、重连证据继续有效；未修改 terminal 产品文件。完整移动截图与更宽边界矩阵仍归 M10/M17 待验。
+- M11 当前 SHA `0e40b3cb` 的隔离证据位于 `/tmp/nexus-m11-failure2-20260906/`：context-menu SFTP workflow **1/1 passed**（含 chmod 成功与密码 ZIP 错误重试）、password ZIP protocol **1/1 passed**、preflight-held archive cancellation **1/1 passed**；初次 ENOSPC 后清理环境重跑通过，非产品失败。
+- 当前仍缺直接 chmod failure 的浏览器 F/V 证据；归档正向/取消不等于失败反馈，不能据此关闭 M11.03。M11 继续部分完成，filesystem 当前导航队列修复保留，未恢复旧 transport/store/event bus。
+
+### C.48 当前 SHA M08/M11/M12 边界收口（2026-09-06）
+
+- **M11.03 direct chmod failure**：在当前产品 SHA `0e40b3cb` 使用隔离真实 SSH/SFTP 链路和远端删除控制端点制造 `ENOENT`，`m11-chmod-failure-probe.spec.ts` **1/1 passed，exit 0，约 7.5s**。证据 `/tmp/nexus-m11-chmod-audit-20260906/result.json` 与 `chmod-failure-recoverable.png`：错误详情 `Failed to change permissions: ENOENT...` 可见，权限对话框保留、输入值 `600` 保持，目标重建后 Retry 成功且 mode 为 `600`；临时 probe 已删除，端口已释放。
+- **M11.04 mobile PDF**：原失败停在 `test/e2e/support/ssh.ts:73` 的 `/workspace$` helper，当前合法入口为 `/workspace?connectionId=1`，产品 owner 在 `ConnectionsView`/`WorkspaceView`，不是 filesystem/preview 回归。仅在临时副本放宽 helper 后，当前 SHA 的 `mobile/touch-advanced.spec.ts --project=mobile --grep=PDF --workers=1` **1/1 passed，exit 0，9.2s**；`PdfPreview.vue`、该 spec 与 helper 在 `b8f5c9d7..0e40b3cb` 无差异。该 run 没有 PDF 专项截图，最终 canonical 仍归 M17，不将旧 SHA 截图冒充当前视觉证据。
+- **M11 状态**：上述两项失败边界已关闭为产品疑点，但 context/sidebar 的剩余 case 仍依赖 M08 layout owner，且当前模块尚未取得全部适用的独立 V 证据；正式模块计数保持 `10 / 18`，不得提前关闭 M11。
+- **M08 SRS-WS-006 最小修复**：`workspaceLayout.ts` 现在只在 load/save 候选管线允许缺失/空 node id，按树路径生成稳定 id，再严格复验非法类型、重复显式 id、未知 pane、重复 component 与错误容器；已有 id 不 churn。Prettier、architecture、i18n、`vue-tsc --noEmit -p packages/frontend/tsconfig.json`、`git diff --check` 均通过；浏览器 F/V 仍待，不据静态门禁关闭 M08。
+- **M12 fixture 边界**：`file-editor.md` 明确 legacy dirty tab close 不阻止关闭；当前 SSH adapter 以 `open(remotePath, 'w')` 写入，删除目标后保存会重新创建文件，故现有 save-failure probe 不能证明产品成功/失败。M12.03/M12.04 继续保持部分完成，需提供可稳定制造远端写入失败的 fixture 后再取正向 F/V 证据。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
