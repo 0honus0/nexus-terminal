@@ -13,7 +13,7 @@ let favoritesLoad: Promise<void> | undefined;
 let historyLoad: Promise<void> | undefined;
 let historyMutation: Promise<void> = Promise.resolve();
 
-const enqueueHistoryMutation = (operation: () => Promise<void>): Promise<void> => {
+const enqueueHistoryOperation = (operation: () => Promise<void>): Promise<void> => {
   const next = historyMutation.then(operation, operation);
   historyMutation = next.catch(() => undefined);
   return next;
@@ -92,42 +92,37 @@ export function useFilesystemCatalog() {
   }
 
   async function loadHistory(force = false): Promise<void> {
-    await historyMutation;
-    if (historyLoaded.value && !force) return;
     if (historyLoad && !force) return historyLoad;
     loadingHistory.value = true;
-    historyLoad = filesystemCatalogApi
-      .listHistory()
-      .then((items) => {
-        history.value = items;
-        historyLoaded.value = true;
-      })
-      .finally(() => {
-        loadingHistory.value = false;
-        historyLoad = undefined;
-      });
+    historyLoad = enqueueHistoryOperation(async () => {
+      if (historyLoaded.value && !force) return;
+      history.value = await filesystemCatalogApi.listHistory();
+      historyLoaded.value = true;
+    }).finally(() => {
+      loadingHistory.value = false;
+      historyLoad = undefined;
+    });
     return historyLoad;
   }
 
   async function recordPath(path: string): Promise<void> {
-    const value = path.trim();
-    if (!value) return;
-    return enqueueHistoryMutation(async () => {
-      await filesystemCatalogApi.addHistory(value);
+    if (!path.trim()) return;
+    return enqueueHistoryOperation(async () => {
+      await filesystemCatalogApi.addHistory(path);
       history.value = await filesystemCatalogApi.listHistory();
       historyLoaded.value = true;
     });
   }
 
   async function removeHistory(id: number): Promise<void> {
-    return enqueueHistoryMutation(async () => {
+    return enqueueHistoryOperation(async () => {
       await filesystemCatalogApi.removeHistory(id);
       history.value = history.value.filter((item) => item.id !== id);
     });
   }
 
   async function clearHistory(): Promise<void> {
-    return enqueueHistoryMutation(async () => {
+    return enqueueHistoryOperation(async () => {
       await filesystemCatalogApi.clearHistory();
       history.value = [];
       historyLoaded.value = true;

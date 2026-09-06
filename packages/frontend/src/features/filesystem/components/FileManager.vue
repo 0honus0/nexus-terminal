@@ -182,6 +182,23 @@
   let activeColumnResize: { key: ColumnKey; pointerId: number; startX: number; startWidth: number } | undefined;
   let unregisterSearchFocus: (() => void) | undefined;
   let unregisterPathFocus: (() => void) | undefined;
+  let navigationQueue: Promise<void> = Promise.resolve();
+
+  const enqueueNavigation = (operation: () => Promise<void>): Promise<void> => {
+    const next = navigationQueue.then(operation, operation);
+    navigationQueue = next.catch(() => undefined);
+    return next;
+  };
+  const loadPath = async (path: string): Promise<void> => {
+    const loaded = await browser.load(path);
+    if (loaded) pathDraft.value = browser.path.value;
+  };
+  const refresh = async (): Promise<void> => {
+    await enqueueNavigation(async () => {
+      await browser.refresh();
+      if (!browser.error.value) pathDraft.value = browser.path.value;
+    });
+  };
 
   const resolveWheelScale = createWheelScaleResolver({
     min: FILE_MANAGER_SCALE_MIN,
@@ -668,7 +685,7 @@
     }
     if (event.key === 'F5') {
       event.preventDefault();
-      void browser.refresh();
+      void refresh();
       return;
     }
     if (event.altKey && event.key === 'ArrowUp' && browser.path.value !== '/') {
@@ -908,7 +925,7 @@
   const navigatePathDraft = async (path = pathDraft.value) => {
     if (!path.trim()) return;
     closePathHistory();
-    await browser.load(path);
+    await enqueueNavigation(() => loadPath(path));
   };
   const handlePathInputKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -954,8 +971,11 @@
     if (!props.terminalDirectory || syncingTerminalPath.value) return;
     syncingTerminalPath.value = true;
     try {
-      const path = await props.terminalDirectory.readCurrentDirectory();
-      if (path) await browser.load(path);
+      const terminalDirectory = props.terminalDirectory;
+      await enqueueNavigation(async () => {
+        const path = await terminalDirectory.readCurrentDirectory();
+        if (path) await loadPath(path);
+      });
     } catch (cause) {
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -963,7 +983,7 @@
     }
   };
   const navigate = async (path: string) => {
-    await browser.load(path);
+    await enqueueNavigation(() => loadPath(path));
   };
   const sendPathToTerminal = async (path: string) => {
     if (!props.terminalDirectory || changingTerminalPath.value) return;
@@ -1135,7 +1155,7 @@
           type="button"
           class="file-manager-path-button file-manager-action-button"
           :title="t('fileManager.actions.refresh')"
-          @click.stop="browser.refresh()"
+          @click.stop="refresh"
         >
           <i class="fas fa-sync-alt text-sm"></i>
         </button>
@@ -1602,7 +1622,7 @@
         <button
           class="context-item"
           @click="
-            browser.refresh();
+            refresh();
             context = null;
           "
         >
