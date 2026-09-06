@@ -1184,6 +1184,14 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `M13.05 PDF document generation` → `/root/luna_m13_provider3`（Luna max）：在 `getOutline()` 完成后补 document-generation guard，过时代 PDF task 立即销毁，防止 refresh/切 tab 时 outline、loading、scroll 串文档。architecture、i18n、`vue-tsc`、Prettier、`git diff --check` 通过；PDF refresh/快速切 tab 浏览器证据仍待。主代理提交 `651be16b`。
 - 当前仅保留两份受保护 dirty E2E、未跟踪移动审计和 root-preserved/core 产物，均未被上述提交暂存。下一步由单独验收代理串行补 M12 浏览器证据；随后按相同规则补 M00/M01/M08–M13 的适用真实矩阵，最后启动 M17.01–06。无确证差异的模块只记录“无需产品改动”，不为提高计数强行改代码。
 
+### C.26 当前 SHA 真实验收与门禁（2026-09-06）
+
+- 当前产品 SHA 为 `2a9c069c`（分支 `test/agent-runtime-foundation`）。主代理在确认 `29090/22223/3001/4173` 端口空闲后，串行运行 `cd test/e2e && npm exec playwright test tests/ssh/file-preview-editor.spec.ts --project=ssh --grep "file previews and text editor protect historical file-opening regressions" --output=/tmp/nexus-m12-current-20260906`；Playwright 实际执行该 describe 下 9 个用例，**8/9 通过（约 1.1m）**。通过项覆盖 extensionless editor、popup/tab/cache、PDF/XLSX/DOCX 多 tab、滚动/刷新等当前 M12/M13 关键行为。
+- 唯一失败为 `tests/ssh/file-preview-editor.spec.ts:889` 的既有测试定位器：M05 设置改造后页面存在 17 个同名 `Save` 按钮，`getByRole('button', { name: 'Save', exact: true })` 触发 strict-mode；失败发生在设置前置步骤，非 preview/editor 产品断言，也未修改该测试。该问题列为 M17.03 测试维护项，不能把 8/9 直接提升为 M12/M13 模块闭环。
+- 同一当前 SHA 的静态门禁由 `/root/luna_m17_static` 完成：architecture、i18n（1706 keys/3 locales/81 fragments）、`vue-tsc --noEmit`、Vite build、`git diff --check` 均 exit 0。`check:test-policy` 与 `groups:check` 仅因受保护未跟踪 `test/e2e/tests/mobile/m10-mobile-audit.spec.ts` 未列入 group 而 exit 1；不得修改/暂存该受保护草稿，留到 M17 重新整理。
+- 首次独立浏览器探测发现无现成产品服务，但 Playwright `webServer` 可正常拉起 remote gateway、SSH、backend、frontend；后续所有本地 E2E 必须继续串行运行。当前 M12/M13 仍缺移动全矩阵、快速异步生命周期和 provider 逐项截图，正式闭环计数仍为 `9 / 18`。
+- 下一步顺序：先保留本轮 8/9 报告与失败根因；串行补 M13 provider/refresh、M12 移动生命周期，再补 M10/M11/M08/M09/M00/M01 的真实 F/V，最后处理 M17.01–06。任何测试选择器修复须单独限定非受保护测试文件，不得为规避失败改产品代码。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
