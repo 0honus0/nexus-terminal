@@ -1,5 +1,6 @@
 <script setup lang="ts">
-  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { nextTick, onBeforeMount, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { overlayStack, type OverlayStackRegistration } from './overlayStack';
 
   const props = withDefaults(
     defineProps<{
@@ -17,6 +18,7 @@
   );
   const emit = defineEmits<{ close: [] }>();
   const root = ref<HTMLElement | null>(null);
+  let overlayRegistration: OverlayStackRegistration | null = null;
   const left = ref(0);
   const top = ref(0);
 
@@ -32,7 +34,10 @@
   };
 
   const handleKeydown = (event: KeyboardEvent): void => {
-    if (props.visible && event.key === 'Escape') emit('close');
+    if (props.visible && overlayRegistration?.isTop() && !event.defaultPrevented && event.key === 'Escape') {
+      event.preventDefault();
+      emit('close');
+    }
   };
   const handleDocumentPointerDown = (event: PointerEvent): void => {
     if (!props.visible || props.blockingLayer || !root.value) return;
@@ -42,16 +47,24 @@
   const handleResize = (): void => void place();
 
   watch(() => [props.visible, props.x, props.y] as const, place);
+  onBeforeMount(() => {
+    overlayRegistration = overlayStack.register(props.visible, props.zIndex);
+  });
   onMounted(() => {
     window.addEventListener('keydown', handleKeydown);
     window.addEventListener('resize', handleResize);
     document.addEventListener('pointerdown', handleDocumentPointerDown, true);
   });
   onBeforeUnmount(() => {
+    overlayRegistration?.unregister();
+    overlayRegistration = null;
     window.removeEventListener('keydown', handleKeydown);
     window.removeEventListener('resize', handleResize);
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
   });
+
+  watch(() => props.visible, (visible) => overlayRegistration?.setVisible(visible));
+  watch(() => props.zIndex, (zIndex) => overlayRegistration?.setZIndex(zIndex));
 </script>
 
 <template>

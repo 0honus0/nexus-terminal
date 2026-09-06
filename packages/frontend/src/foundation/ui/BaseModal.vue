@@ -70,7 +70,7 @@
       <slot />
     </div>
 
-    <footer v-if="$slots.footer" class="border-t border-border pt-3">
+    <footer v-if="$slots.footer" class="shrink-0 border-t border-border pt-3">
       <slot name="footer" />
     </footer>
   </OverlayPanel>

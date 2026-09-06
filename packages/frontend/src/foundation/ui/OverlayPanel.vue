@@ -1,5 +1,6 @@
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch, type StyleValue } from 'vue';
+  import { computed, nextTick, onBeforeMount, onBeforeUnmount, onMounted, ref, watch, type StyleValue } from 'vue';
+  import { overlayStack, type OverlayStackRegistration } from './overlayStack';
 
   defineOptions({ inheritAttrs: false });
 
@@ -49,6 +50,7 @@
 
   const emit = defineEmits<{ (event: 'close'): void }>();
   const panelRef = ref<HTMLElement | null>(null);
+  let overlayRegistration: OverlayStackRegistration | null = null;
   let previouslyFocused: HTMLElement | null = null;
   let backdropPointerStarted = false;
   const panelPresetClass = computed(() =>
@@ -72,29 +74,59 @@
     if (props.restoreFocus && target?.isConnected) void nextTick(() => target.focus({ preventScroll: true }));
   };
   const handleDocumentKeydown = (event: KeyboardEvent) => {
-    if (!props.visible || !props.closeOnEscape || event.defaultPrevented || event.key !== 'Escape') return;
+    if (
+      !props.visible ||
+      !props.closeOnEscape ||
+      !overlayRegistration?.isTop() ||
+      event.defaultPrevented ||
+      event.key !== 'Escape'
+    )
+      return;
     event.preventDefault();
     emit('close');
+  };
+
+  const capturePreviousFocus = () => {
+    if (!props.restoreFocus) return;
+    const active = document.activeElement;
+    previouslyFocused = active instanceof HTMLElement && !panelRef.value?.contains(active) ? active : null;
+  };
+  const focusPanel = () => {
+    if (props.focusOnOpen) void nextTick(() => panelRef.value?.focus({ preventScroll: true }));
   };
 
   watch(
     () => props.visible,
     (visible, wasVisible) => {
+      overlayRegistration?.setVisible(visible && props.overlay);
       if (visible && !wasVisible) {
-        if (props.restoreFocus) {
-          const active = document.activeElement;
-          previouslyFocused = active instanceof HTMLElement && !panelRef.value?.contains(active) ? active : null;
-        }
-        if (props.focusOnOpen) void nextTick(() => panelRef.value?.focus({ preventScroll: true }));
+        capturePreviousFocus();
+        focusPanel();
       } else if (!visible && wasVisible) {
         restorePreviousFocus();
       }
     },
   );
+  watch(
+    () => props.overlay,
+    (overlay) => overlayRegistration?.setVisible(props.visible && overlay),
+  );
+  watch(() => props.zIndex, (zIndex) => overlayRegistration?.setZIndex(zIndex));
 
-  onMounted(() => document.addEventListener('keydown', handleDocumentKeydown));
+  onBeforeMount(() => {
+    overlayRegistration = overlayStack.register(props.visible && props.overlay, props.zIndex);
+  });
+  onMounted(() => {
+    if (props.visible && props.overlay) {
+      capturePreviousFocus();
+      focusPanel();
+    }
+    document.addEventListener('keydown', handleDocumentKeydown);
+  });
   onBeforeUnmount(() => {
     document.removeEventListener('keydown', handleDocumentKeydown);
+    overlayRegistration?.unregister();
+    overlayRegistration = null;
     if (props.visible) restorePreviousFocus();
   });
 </script>

@@ -28,6 +28,7 @@
     :visible="store.state.visible"
     teleport
     :z-index="9999"
+    :close-on-escape="true"
     backdrop-trigger="mousedown"
     panel-class="max-w-md flex flex-col p-5"
     role="dialog"
@@ -38,8 +39,8 @@
     <h3 :id="titleId" class="mb-4 shrink-0 text-center text-xl font-semibold">
       {{ title }}
     </h3>
-    <div class="mb-6 flex-grow text-sm">
-      <p class="whitespace-pre-wrap text-center text-text-secondary">{{ store.state.message }}</p>
+    <div class="mb-6 min-w-0 flex-grow text-sm">
+      <p class="break-words whitespace-pre-wrap text-center text-text-secondary">{{ store.state.message }}</p>
     </div>
     <div class="flex shrink-0 justify-end gap-3">
       <button
