@@ -149,8 +149,10 @@ export const parseSpreadsheetPreview = (bytes: ArrayBuffer, maxColumns: number):
     cellText: true,
   });
   const boundedColumns = clamp(Math.trunc(maxColumns) || 100, 5, 200);
-  return workbook.SheetNames.flatMap((name) => {
+  const sheets = workbook.SheetNames.flatMap((name) => {
     const sheet = workbook.Sheets[name];
     return sheet ? [parseSheet(name, sheet, boundedColumns)] : [];
   });
+  if (sheets.length === 0) throw new Error('Invalid XLSX file: no worksheets were found.');
+  return sheets;
 };
