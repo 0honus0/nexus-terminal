@@ -1199,6 +1199,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - SSH 命令：`cd test/e2e && env E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-m13-ssh-screenshots E2E_TIMINGS_OUTPUT=/tmp/nexus-m13-ssh-timings.json PLAYWRIGHT_HTML_OUTPUT_DIR=/tmp/nexus-m13-ssh-report ./node_modules/.bin/playwright test tests/ssh/file-preview-editor.spec.ts --project=ssh --grep='preview workspace backdrop|preview close button|preview tabs keep|preview tabs force refresh' --workers=1 --output=/tmp/nexus-m13-ssh-results`；exit `0`，**5 passed**。截图、metrics、HTML report 分别保留在 `/tmp/nexus-m13-mobile-screenshots/`、`/tmp/nexus-m13-ssh-screenshots/`、对应 `*-timings.json` 与 `*-report/index.html`。失败分类均为 `0`；日志中的一次 `RenderingCancelledException` 未影响结果。
 - 该批当前 SHA 已覆盖 Markdown/Spreadsheet/PDF/DOCX 多 provider、移动窄屏/触控、preview close/cache、tab 保留、外部 refresh；仍不能关闭 M13：各 provider 显式 error/loading/unsupported、PDF 快速 refresh/outline/worker stale、XLSX 空 workbook/末页、landscape/notch 和最终 13 图仍归 M13.04–06/M17。
 
+### C.28 M10 当前 SHA terminal 真实取证（2026-09-06）
+
+- 当前产品 SHA 为 `9e21ebd5`。`/root/luna_m10_browser` 串行使用现有 Playwright webServer，未修改产品、测试或计划。
+- SSH 命令：`cd test/e2e && E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-m10-ssh-screenshots npx playwright test tests/ssh/terminal-ui.spec.ts tests/ssh/terminal-tools-ui.spec.ts --project=ssh --workers=1 --reporter=json --output=/tmp/nexus-m10-ssh-results`；exit `0`，**3/3 passed**，报告 `/tmp/nexus-m10-ssh-run.json`，1280×800 截图/metrics 齐全，字号 `14→15` 且无页面/终端横溢出。
+- Mobile 命令：`cd test/e2e && E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-m10-mobile-screenshots npx playwright test tests/mobile/terminal-touch.spec.ts tests/mobile/touch-workflows.spec.ts tests/mobile/touch-advanced.spec.ts --project=mobile --workers=1 --grep='pinch zoom persists|long press selects a word|clipboard Paste normalizes|CodeMirror search opens|virtual keyboard sends modified|keyboard sink preserves IME|virtual keyboard Ctrl modifier' --reporter=json --output=/tmp/nexus-m10-mobile-results`；exit `0`，**7/7 passed**，报告 `/tmp/nexus-m10-mobile-run.json`，截图保留 `/tmp/nexus-m10-mobile-screenshots/`，覆盖复制/选择、搜索、Ctrl/Alt/Del、IME、虚拟键盘、pinch/remount。
+- 该批无产品断言、测试选择器或环境失败；仍不能关闭 M10：完整横竖屏/字体持久化、切 pane 后高亮、所有 modifier/keyboard 边界及 M17 最终截图仍需补齐，正式闭环计数不变。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
