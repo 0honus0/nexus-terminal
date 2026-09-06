@@ -493,6 +493,7 @@
     }
     mobileLongPressStart = null;
     if (event.touches.length !== 2) return;
+    event.preventDefault();
     pinchStartDistance = touchDistance(event.touches);
     pinchStartFontSize = renderedFontSize.value;
   };
@@ -578,7 +579,7 @@
     if (terminalState.snapshot.value) terminal.write(terminalState.snapshot.value, syncSearchDecorations);
     else syncSearchDecorations();
     root.value!.addEventListener('wheel', handleWheelScale, { capture: true, passive: false });
-    root.value!.addEventListener('touchstart', handleTouchStart, { passive: true });
+    root.value!.addEventListener('touchstart', handleTouchStart, { passive: false });
     root.value!.addEventListener('touchmove', handleTouchMove, { passive: false });
     root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
     root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
