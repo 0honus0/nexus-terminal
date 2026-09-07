@@ -79,7 +79,7 @@
       class="relative flex min-w-0 w-full items-center gap-1 overflow-x-clip"
       :aria-label="t('common.primaryNavigation')"
     >
-      <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+      <div class="app-nav-scroll flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         <img src="@/assets/logo.png" :alt="t('projectName')" class="h-10 w-auto shrink-0" />
         <RouterLink class="nav-link inline-flex" to="/">{{ t('nav.dashboard') }}</RouterLink>
         <RouterLink class="nav-link inline-flex" to="/workspace">{{ t('nav.terminal') }}</RouterLink>
@@ -135,6 +135,17 @@
 </template>
 
 <style scoped>
+  .app-nav-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .app-nav-scroll::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
   .nav-link,
   .icon-link {
     align-items: center;

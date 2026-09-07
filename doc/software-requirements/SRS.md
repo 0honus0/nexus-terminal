@@ -1,6 +1,6 @@
 # Nexus Terminal 软件需求规格说明书（SRS）
 
-版本：v1.5
+版本：v1.6
 
 状态：Current post-refactor baseline
 

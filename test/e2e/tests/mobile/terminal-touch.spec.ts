@@ -111,7 +111,29 @@ async function terminalTextPoint(page: Page, text: string): Promise<{ x: number;
   return point!;
 }
 
-async function longPressTerminal(page: Page, point: { x: number; y: number }): Promise<void> {
+async function terminalTextareaState(page: Page): Promise<{
+  active: boolean;
+  inputMode: string | null;
+  readOnly: boolean;
+}> {
+  return page
+    .getByTestId('terminal')
+    .locator('.xterm-helper-textarea')
+    .evaluate((element) => {
+      const textarea = element as HTMLTextAreaElement;
+      return {
+        active: document.activeElement === textarea,
+        inputMode: textarea.getAttribute('inputmode'),
+        readOnly: textarea.readOnly,
+      };
+    });
+}
+
+async function longPressTerminal(
+  page: Page,
+  point: { x: number; y: number },
+  duringHold?: () => Promise<void>,
+): Promise<void> {
   const terminal = page.getByTestId('terminal').getByTestId('terminal-inner');
   await terminal.evaluate((element, position) => {
     const target = element as HTMLElement;
@@ -139,7 +161,9 @@ async function longPressTerminal(page: Page, point: { x: number; y: number }): P
       }),
     );
   }, point);
-  await page.waitForTimeout(620);
+  await page.waitForTimeout(120);
+  if (duringHold) await duringHold();
+  await page.waitForTimeout(500);
   await terminal.evaluate((element, position) => {
     const target = element as HTMLElement;
     const touch = new Touch({
@@ -206,14 +230,24 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
   const marker = 'MOBILE_TOUCH_COPY_MARKER';
   const commandInput = page.getByTestId('command-input');
   const rows = page.getByTestId('terminal').locator('.xterm-rows');
+  let originalTextareaState: Awaited<ReturnType<typeof terminalTextareaState>> | null = null;
 
-  await step('render a deterministic word and long-press directly on its xterm cells', async () => {
-    await commandInput.fill(`printf '\\033[2J\\033[H\\n\\n\\n${marker}\\n'`);
-    await commandInput.press('Enter');
-    await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
-    const point = await terminalTextPoint(page, marker);
-    await longPressTerminal(page, point);
-  });
+  await step(
+    'render a deterministic word and long-press without allowing the xterm textarea to raise the soft keyboard',
+    async () => {
+      await commandInput.fill(`printf '\\033[2J\\033[H\\n\\n\\n${marker}\\n'`);
+      await commandInput.press('Enter');
+      await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(marker);
+      originalTextareaState = await terminalTextareaState(page);
+      expect(originalTextareaState.readOnly).toBe(false);
+      const point = await terminalTextPoint(page, marker);
+      await longPressTerminal(page, point, async () => {
+        const duringHold = await terminalTextareaState(page);
+        expect(duringHold.readOnly).toBe(true);
+        expect(duringHold.inputMode).toBe('none');
+      });
+    },
+  );
 
   await step('touch selection shows the mobile clipboard menu and both draggable handles', async () => {
     const menu = page.locator('.mobile-terminal-clipboard-menu');
@@ -223,15 +257,35 @@ test('mobile terminal long press selects a word, exposes selection handles, and 
     await expect(menu.getByRole('button', { name: 'Select All', exact: true })).toBeEnabled();
     await expect(page.getByRole('button', { name: 'Adjust selection start', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Adjust selection end', exact: true })).toBeVisible();
+    const textareaState = await terminalTextareaState(page);
+    expect(textareaState.readOnly).toBe(true);
+    expect(textareaState.inputMode).toBe('none');
     await captureFunctionalScreenshot(page, 'mobile-terminal-selection.png');
   });
 
-  await step('Copy writes the exact selected terminal word and clears the touch-selection chrome', async () => {
+  await step('Copy writes the exact selected terminal word without refocusing the soft-keyboard textarea', async () => {
     const menu = page.locator('.mobile-terminal-clipboard-menu');
     await menu.getByRole('button', { name: 'Copy', exact: true }).click();
     await expect(menu).toBeHidden();
     await expect(page.locator('.mobile-terminal-selection-handle')).toHaveCount(0);
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(marker);
+    expect(originalTextareaState).not.toBeNull();
+    await page.waitForTimeout(200);
+    const restored = await terminalTextareaState(page);
+    expect(restored.readOnly).toBe(originalTextareaState!.readOnly);
+    expect(restored.inputMode).toBe(originalTextareaState!.inputMode);
+    expect(restored.active).toBe(false);
+  });
+
+  await step('a later short tap restores normal terminal keyboard focus once selection mode is over', async () => {
+    const inner = page.getByTestId('terminal').getByTestId('terminal-inner');
+    const box = await inner.boundingBox();
+    expect(box).toBeTruthy();
+    await page.touchscreen.tap(box!.x + Math.min(48, box!.width / 4), box!.y + Math.min(90, box!.height / 4));
+    await expect.poll(async () => (await terminalTextareaState(page)).active).toBe(true);
+    const focused = await terminalTextareaState(page);
+    expect(focused.readOnly).toBe(false);
+    expect(focused.inputMode).toBe(originalTextareaState!.inputMode);
   });
 });
 
