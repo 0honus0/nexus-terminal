@@ -1,17 +1,17 @@
 import { defineStore } from 'pinia';
 import { appearanceApi } from '../api/appearanceApi';
-import { defaultUiTheme, defaultWindowThemeColor } from '../config/default-theme';
+import { defaultWindowThemeColor, normalizeUiTheme } from '../config/default-theme';
 import type { AppearanceSettings, TerminalTheme } from '../model/appearance';
 
 const parseTheme = (value?: string): Record<string, string> => {
-  if (!value) return { ...defaultUiTheme };
+  if (!value) return normalizeUiTheme({});
   try {
-    const parsed = JSON.parse(value);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? { ...defaultUiTheme, ...parsed }
-      : { ...defaultUiTheme };
+    const parsed: unknown = JSON.parse(value);
+    return normalizeUiTheme(
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, string>) : {},
+    );
   } catch {
-    return { ...defaultUiTheme };
+    return normalizeUiTheme({});
   }
 };
 
