@@ -1,4 +1,3 @@
-import path from 'node:path';
 import type { RuntimeConfig } from '../config/runtime-config';
 import { NexusBackupCodecAdapter } from '../infrastructure/backup/backup-codec.adapter';
 import { SqliteBackupSnapshotAdapter } from '../infrastructure/backup/sqlite-backup-snapshot.adapter';
@@ -277,7 +276,7 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
   const appearance = new AppearanceSettingsService(appearanceRepository, terminalThemes, backgroundStore);
   const backgroundAssets = new BackgroundAssetService(backgroundStore, appearance);
   const htmlStore = new LocalHtmlThemeStoreAdapter({
-    presetDirectory: path.resolve(__dirname, '../../html-presets'),
+    presetDirectory: config.htmlThemeAssetDirectory,
     dataDirectory: config.dataDirectory,
   });
   const htmlThemes = new HtmlThemeService(htmlStore, new GitHubHtmlThemeCatalogAdapter(), appearance);

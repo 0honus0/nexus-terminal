@@ -16,10 +16,10 @@ const HTML_THEME_NAME = 'E2E Appearance Local HTML Theme.html';
 const HTML_THEME_RENAMED = 'E2E Appearance Local HTML Theme Renamed.html';
 const HTML_THEME_CONTENT = '<div class="e2e-appearance-theme">M06 local HTML theme</div>';
 const DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY =
-  'https://github.com/0honus0/nexus-terminal/tree/main/examples/html-themes';
+  'https://github.com/0honus0/nexus-terminal/tree/main/assets/html-themes/remote';
 const TESTED_GIT_REF =
   process.env.GITHUB_SHA?.trim() || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-const TESTED_OFFICIAL_HTML_THEME_REPOSITORY = `https://github.com/0honus0/nexus-terminal/tree/${TESTED_GIT_REF}/examples/html-themes`;
+const TESTED_OFFICIAL_HTML_THEME_REPOSITORY = `https://github.com/0honus0/nexus-terminal/tree/${TESTED_GIT_REF}/assets/html-themes/remote`;
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZpmIAAAAASUVORK5CYII=',
   'base64',
@@ -47,7 +47,7 @@ async function cleanupHtmlThemes(request: APIRequestContext): Promise<void> {
 test.describe('fresh installation appearance defaults', () => {
   test.use({ e2eDatabaseMode: 'empty' });
 
-  test('official remote HTML theme repository defaults to the shipped examples path', async ({ request }) => {
+  test('official remote HTML theme repository defaults to the shipped remote asset path', async ({ request }) => {
     await ensureInitialAdmin(request);
     await loginAsInitialAdmin(request);
     await expect
@@ -66,8 +66,34 @@ test('PWA window title bar color updates immediately and persists across reload'
   const original = (await originalResponse.json()) as { windowThemeColor?: string };
   const targetColor = '#1F2937';
 
+  let releaseStaleLoads: (() => void) | undefined;
+  const staleLoadsReleased = new Promise<void>((resolve) => {
+    releaseStaleLoads = resolve;
+  });
+  let markStaleLoadStarted: (() => void) | undefined;
+  const staleLoadStarted = new Promise<void>((resolve) => {
+    markStaleLoadStarted = resolve;
+  });
+  let holdAppearanceLoads = true;
+  let heldLoadCount = 0;
+  let fulfilledHeldLoadCount = 0;
+
+  await page.route('**/api/v1/appearance', async (route) => {
+    if (route.request().method() !== 'GET' || !holdAppearanceLoads) {
+      await route.continue();
+      return;
+    }
+    const backendResponse = await route.fetch();
+    heldLoadCount += 1;
+    markStaleLoadStarted?.();
+    await staleLoadsReleased;
+    await route.fulfill({ response: backendResponse });
+    fulfilledHeldLoadCount += 1;
+  });
+
   try {
     await page.goto('/settings');
+    await staleLoadStarted;
     await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
 
     const input = page.getByTestId('window-theme-color-input');
@@ -79,18 +105,30 @@ test('PWA window title bar color updates immediately and persists across reload'
     );
     await page.getByTestId('window-theme-color-save').click();
     expect((await savePromise).ok()).toBeTruthy();
+    await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 
+    holdAppearanceLoads = false;
+    releaseStaleLoads?.();
+    await expect.poll(() => fulfilledHeldLoadCount).toBe(heldLoadCount);
+    await page.evaluate(
+      () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+    );
+    await expect(input).toHaveValue(targetColor);
     await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
 
     const persisted = await context.request.get('/api/v1/appearance');
     expect(persisted.ok()).toBeTruthy();
     expect(((await persisted.json()) as { windowThemeColor?: string }).windowThemeColor).toBe(targetColor);
 
+    await page.unrouteAll({ behavior: 'wait' });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
     await expect(page.getByTestId('window-theme-color-input')).toHaveValue(targetColor);
     await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
   } finally {
+    holdAppearanceLoads = false;
+    releaseStaleLoads?.();
+    await page.unrouteAll({ behavior: 'wait' });
     const restore = await context.request.put('/api/v1/appearance', {
       data: { windowThemeColor: original.windowThemeColor ?? '#343A40' },
     });

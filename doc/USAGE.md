@@ -67,7 +67,7 @@ SSH 标签页支持挂起会话。挂起后即使浏览器断开，后端仍可�
 
 ## 外观与 HTML Theme
 
-Style Customizer 支持本地 HTML theme 和 GitHub 目录形式的远程 HTML theme catalog。默认官方示例仓库指向 `examples/html-themes/`；升级时旧官方 `doc/custom_html_theme` URL 会由 settings migration 自动迁移，不影响用户自行配置的第三方仓库。
+Style Customizer 支持本地 HTML theme 和 GitHub 目录形式的远程 HTML theme catalog。默认官方示例仓库指向 `assets/html-themes/remote/`；升级时旧官方 `doc/custom_html_theme` URL 会由 settings migration 自动迁移，不影响用户自行配置的第三方仓库。
 
 ## 安全与认证
 

@@ -58,6 +58,20 @@ export const SETTINGS_MIGRATIONS: readonly SettingsMigration[] = [
         : {};
     },
   },
+  {
+    version: 7,
+    name: 'Move official HTML theme catalog into repository assets',
+    up(values) {
+      const current = values.remote_html_presets_url?.trim().replace(/\/+$/, '');
+      return current === 'https://github.com/0honus0/nexus-terminal/tree/main/examples/html-themes'
+        ? {
+            set: {
+              remote_html_presets_url: 'https://github.com/0honus0/nexus-terminal/tree/main/assets/html-themes/remote',
+            },
+          }
+        : {};
+    },
+  },
 ];
 
 const validateMigrations = (migrations: readonly SettingsMigration[]): void => {

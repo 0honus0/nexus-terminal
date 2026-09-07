@@ -51,7 +51,7 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和
 - 响应式移动端界面。
 - PWA 支持。
 - 明暗主题、终端配色和工作区样式定制。
-- 页面/终端背景、终端文字效果、本地 HTML theme 与可配置 GitHub 远程 HTML theme catalog。官方示例位于 `examples/html-themes/`。
+- 页面/终端背景、终端文字效果、本地 HTML theme 与可配置 GitHub 远程 HTML theme catalog。官方示例位于 `assets/html-themes/remote/`。
 - 独立桌面端发布版本。
 
 桌面端安装包见 [GitHub Releases](https://github.com/0honus0/nexus-terminal/releases/latest)。Web 端专属的部分认证与会话能力在桌面端可能有所不同。

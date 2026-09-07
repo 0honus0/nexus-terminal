@@ -52,6 +52,7 @@ export const useAppearanceStore = defineStore('appearance', {
     settings: {} as AppearanceSettings,
     themes: [] as TerminalTheme[],
     loaded: false,
+    settingsRevision: 0,
     customizerVisible: false,
   }),
   actions: {
@@ -65,16 +66,20 @@ export const useAppearanceStore = defineStore('appearance', {
 
     async load(force = false) {
       if (this.loaded && !force) return;
+      const settingsRevision = this.settingsRevision;
       const [settings, themes] = await Promise.all([appearanceApi.load(), appearanceApi.listThemes()]);
-      this.settings = settings;
       this.themes = themes;
       this.loaded = true;
+      if (settingsRevision !== this.settingsRevision) return;
+      this.settings = settings;
       applySettings(settings);
     },
 
     async update(patch: Partial<AppearanceSettings>) {
-      this.settings = await appearanceApi.update(patch);
-      applySettings(this.settings);
+      const settings = await appearanceApi.update(patch);
+      this.settingsRevision += 1;
+      this.settings = settings;
+      applySettings(settings);
     },
 
     async saveUiTheme(theme: Record<string, string>) {

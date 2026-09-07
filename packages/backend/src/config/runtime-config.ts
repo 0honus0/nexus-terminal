@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 export interface PasskeyRelyingPartyConfig {
   rpId: string;
   origin: string;
@@ -10,6 +12,7 @@ export interface RuntimeConfig {
   port: number;
   nodeEnv: string;
   dataDirectory: string;
+  htmlThemeAssetDirectory: string;
   encryptionKeyHex: string;
   sessionSecret: string;
   sessionCookieName: string;
@@ -83,6 +86,8 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
   port: parsePositiveInteger(env.PORT, 3001, 'PORT'),
   nodeEnv: env.NODE_ENV?.trim() || 'development',
   dataDirectory,
+  htmlThemeAssetDirectory:
+    env.NEXUS_HTML_THEME_ASSET_DIR?.trim() || path.resolve(__dirname, '../../../../assets/html-themes/local'),
   encryptionKeyHex: requireValue(env, 'ENCRYPTION_KEY'),
   sessionSecret: requireValue(env, 'SESSION_SECRET'),
   sessionCookieName: env.SESSION_COOKIE_NAME?.trim() || 'nexus.sid',
