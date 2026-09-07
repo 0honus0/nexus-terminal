@@ -114,10 +114,30 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
   await captureQuickCommandsEvidence(page, testInfo, 'before');
 
   let commandId = 0;
+  let defaultDialogSize: { width: number; height: number } | null = null;
   await step('create the command through the workspace UI', async () => {
     await quickView.getByTestId('quick-command-add').click();
     const form = page.getByTestId('quick-command-form');
     await expect(form).toBeVisible();
+    const dialog = page.getByRole('dialog', { name: 'Add Quick Command', exact: true });
+    const beforeResize = await dialog.boundingBox();
+    const resizeHandle = dialog.getByTestId('quick-command-resize-bottom-right');
+    const handleBox = await resizeHandle.boundingBox();
+    expect(beforeResize).toBeTruthy();
+    expect(handleBox).toBeTruthy();
+    defaultDialogSize = { width: beforeResize!.width, height: beforeResize!.height };
+    await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox!.x + 70, handleBox!.y + 50, { steps: 6 });
+    await page.mouse.up();
+    const afterResize = await dialog.boundingBox();
+    expect(afterResize).toBeTruthy();
+    expect(afterResize!.width).toBeGreaterThan(beforeResize!.width + 40);
+    expect(afterResize!.height).toBeGreaterThan(beforeResize!.height + 30);
+    expect(afterResize!.x).toBeGreaterThanOrEqual(0);
+    expect(afterResize!.y).toBeGreaterThanOrEqual(0);
+    expect(afterResize!.x + afterResize!.width).toBeLessThanOrEqual(1280);
+    expect(afterResize!.y + afterResize!.height).toBeLessThanOrEqual(800);
     await form.getByTestId('quick-command-name').fill(ORIGINAL_NAME);
     await form.getByTestId('quick-command-command').fill("printf 'QUICK_MANAGED_V1\\n'");
     await form.getByTestId('quick-command-submit').click();
@@ -153,6 +173,12 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
 
     const form = page.getByTestId('quick-command-form');
     await expect(form.getByTestId('quick-command-name')).toHaveValue(ORIGINAL_NAME);
+    const reopenedDialog = page.getByRole('dialog', { name: 'Edit Quick Command', exact: true });
+    const reopenedBox = await reopenedDialog.boundingBox();
+    expect(reopenedBox).toBeTruthy();
+    expect(defaultDialogSize).toBeTruthy();
+    expect(Math.abs(reopenedBox!.width - defaultDialogSize!.width)).toBeLessThan(2);
+    expect(Math.abs(reopenedBox!.height - defaultDialogSize!.height)).toBeLessThan(2);
     await form.getByTestId('quick-command-name').fill(EDITED_NAME);
     await form.getByTestId('quick-command-command').fill("printf 'QUICK_MANAGED_V2\\n'");
     await form.getByTestId('quick-command-submit').click();

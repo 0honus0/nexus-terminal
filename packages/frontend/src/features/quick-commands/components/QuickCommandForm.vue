@@ -1,7 +1,8 @@
 <script setup lang="ts">
-  import { reactive, watch } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useFeedback } from '@/shared/feedback/public';
+  import { useResizeHandle } from '@/foundation/interaction';
   import {
     BaseButton,
     BaseFormField,
@@ -24,6 +25,66 @@
   const feedback = useFeedback();
   const store = useQuickCommandsStore();
 
+  const LEGACY_MIN_WIDTH = 800;
+  const LEGACY_MIN_HEIGHT = 700;
+  const VIEWPORT_GAP = 32;
+  const availableWidth = () => Math.max(1, window.innerWidth - VIEWPORT_GAP);
+  const availableHeight = () => Math.max(1, window.innerHeight - VIEWPORT_GAP);
+  const minWidth = () => Math.min(LEGACY_MIN_WIDTH, availableWidth());
+  const minHeight = () => Math.min(LEGACY_MIN_HEIGHT, availableHeight());
+  const defaultWidth = () => Math.min(1152, window.innerWidth * 0.9, availableWidth());
+  const defaultHeight = () => Math.min(window.innerHeight * 0.85, availableHeight());
+  const desktopResizable = ref(typeof window !== 'undefined' && window.innerWidth >= 768);
+  const dialogWidth = ref(typeof window === 'undefined' ? 1152 : defaultWidth());
+  const dialogHeight = ref(typeof window === 'undefined' ? LEGACY_MIN_HEIGHT : Math.max(minHeight(), defaultHeight()));
+  const resetDialogSize = () => {
+    dialogWidth.value = Math.max(minWidth(), defaultWidth());
+    dialogHeight.value = Math.max(minHeight(), defaultHeight());
+  };
+  const clampDialogSize = () => {
+    desktopResizable.value = window.innerWidth >= 768;
+    dialogWidth.value = Math.min(availableWidth(), Math.max(minWidth(), dialogWidth.value));
+    dialogHeight.value = Math.min(availableHeight(), Math.max(minHeight(), dialogHeight.value));
+  };
+  const dialogStyle = computed(() =>
+    desktopResizable.value
+      ? {
+          width: `${dialogWidth.value}px`,
+          height: `${dialogHeight.value}px`,
+          maxWidth: `${availableWidth()}px`,
+          maxHeight: `${availableHeight()}px`,
+        }
+      : {
+          width: 'min(1152px, 90vw, calc(100vw - 2rem))',
+          maxWidth: 'min(1152px, 90vw, calc(100vw - 2rem))',
+          maxHeight: '90dvh',
+        },
+  );
+  const resizeOptions = (widthDirection: 1 | -1 | 0, heightDirection: 1 | -1 | 0) =>
+    useResizeHandle({
+      width: dialogWidth,
+      height: dialogHeight,
+      minWidth,
+      minHeight,
+      maxWidth: availableWidth,
+      maxHeight: availableHeight,
+      widthDirection: widthDirection === 0 ? 1 : widthDirection,
+      heightDirection: heightDirection === 0 ? 1 : heightDirection,
+      widthMultiplier: widthDirection === 0 ? 0 : 1,
+      heightMultiplier: heightDirection === 0 ? 0 : 1,
+      canStart: () => desktopResizable.value,
+    });
+  const resizeTop = resizeOptions(0, -1);
+  const resizeRight = resizeOptions(1, 0);
+  const resizeBottom = resizeOptions(0, 1);
+  const resizeLeft = resizeOptions(-1, 0);
+  const resizeTopLeft = resizeOptions(-1, -1);
+  const resizeTopRight = resizeOptions(1, -1);
+  const resizeBottomRight = resizeOptions(1, 1);
+  const resizeBottomLeft = resizeOptions(-1, 1);
+  onMounted(() => window.addEventListener('resize', clampDialogSize));
+  onBeforeUnmount(() => window.removeEventListener('resize', clampDialogSize));
+
   const form = reactive({
     name: '',
     command: '',
@@ -33,7 +94,8 @@
 
   watch(
     () => [props.visible, props.command] as const,
-    () => {
+    ([visible]) => {
+      if (visible) resetDialogSize();
       const command = props.command;
       form.name = command?.name ?? '';
       form.command = command?.command ?? '';
@@ -107,12 +169,55 @@
   <BaseModal
     :visible="visible"
     :title="t(command ? 'quickCommands.form.titleEdit' : 'quickCommands.form.titleAdd')"
-    panel-class="!w-[min(1152px,90vw,calc(100vw-2rem))] !max-w-[min(1152px,90vw,calc(100vw-2rem))] max-h-[90dvh]"
+    panel-class="!max-h-none !max-w-none"
+    :panel-style="dialogStyle"
     content-class="!py-0"
     :close-on-backdrop="false"
     :close-on-escape="true"
     @close="emit('close')"
   >
+    <template v-if="visible">
+      <div
+        data-testid="quick-command-resize-top"
+        class="quick-resize quick-resize--top"
+        @pointerdown="resizeTop.startResize"
+      ></div>
+      <div
+        data-testid="quick-command-resize-right"
+        class="quick-resize quick-resize--right"
+        @pointerdown="resizeRight.startResize"
+      ></div>
+      <div
+        data-testid="quick-command-resize-bottom"
+        class="quick-resize quick-resize--bottom"
+        @pointerdown="resizeBottom.startResize"
+      ></div>
+      <div
+        data-testid="quick-command-resize-left"
+        class="quick-resize quick-resize--left"
+        @pointerdown="resizeLeft.startResize"
+      ></div>
+      <div
+        data-testid="quick-command-resize-top-left"
+        class="quick-resize quick-resize--top-left"
+        @pointerdown="resizeTopLeft.startResize"
+      ></div>
+      <div
+        data-testid="quick-command-resize-top-right"
+        class="quick-resize quick-resize--top-right"
+        @pointerdown="resizeTopRight.startResize"
+      ></div>
+      <div
+        data-testid="quick-command-resize-bottom-right"
+        class="quick-resize quick-resize--bottom-right"
+        @pointerdown="resizeBottomRight.startResize"
+      ></div>
+      <div
+        data-testid="quick-command-resize-bottom-left"
+        class="quick-resize quick-resize--bottom-left"
+        @pointerdown="resizeBottomLeft.startResize"
+      ></div>
+    </template>
     <form data-testid="quick-command-form" class="space-y-5 py-5" @submit.prevent="save">
       <BaseFormField :label="t('quickCommands.form.name')">
         <BaseInput
@@ -235,5 +340,67 @@
   .execute-action:disabled {
     cursor: not-allowed;
     opacity: 0.45;
+  }
+  .quick-resize {
+    position: absolute;
+    z-index: 20;
+  }
+  .quick-resize--top,
+  .quick-resize--bottom {
+    left: 10px;
+    right: 10px;
+    height: 10px;
+    cursor: ns-resize;
+  }
+  .quick-resize--top {
+    top: -5px;
+  }
+  .quick-resize--bottom {
+    bottom: -5px;
+  }
+  .quick-resize--left,
+  .quick-resize--right {
+    top: 10px;
+    bottom: 10px;
+    width: 10px;
+    cursor: ew-resize;
+  }
+  .quick-resize--left {
+    left: -5px;
+  }
+  .quick-resize--right {
+    right: -5px;
+  }
+  .quick-resize--top-left,
+  .quick-resize--top-right,
+  .quick-resize--bottom-right,
+  .quick-resize--bottom-left {
+    width: 14px;
+    height: 14px;
+  }
+  .quick-resize--top-left {
+    top: -7px;
+    left: -7px;
+    cursor: nwse-resize;
+  }
+  .quick-resize--top-right {
+    top: -7px;
+    right: -7px;
+    cursor: nesw-resize;
+  }
+  .quick-resize--bottom-right {
+    right: -7px;
+    bottom: -7px;
+    cursor: nwse-resize;
+  }
+  .quick-resize--bottom-left {
+    bottom: -7px;
+    left: -7px;
+    cursor: nesw-resize;
+  }
+  @media (max-width: 767px) {
+    .quick-resize {
+      display: none;
+    }
   }
 </style>
