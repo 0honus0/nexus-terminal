@@ -3,14 +3,14 @@
   "group": 4,
   "workers": 8,
   "specs": [
-    "tests/mobile/dashboard-mobile.spec.ts",
-    "tests/mobile/ssh-workspace.spec.ts",
-    "tests/mobile/suspend-resume-ui.spec.ts",
-    "tests/mobile/terminal-touch.spec.ts",
-    "tests/mobile/touch-advanced.spec.ts",
-    "tests/mobile/touch-workflows.spec.ts",
+    "tests/auth/setup-login.spec.ts",
     "tests/ui/batch-connection-edit.spec.ts",
     "tests/ui/login-passkey-surface.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts"
+    "tests/ui/notification-delivery.spec.ts",
+    "tests/ui/notification-settings.spec.ts",
+    "tests/ui/proxy-management.spec.ts",
+    "tests/ui/system-settings.spec.ts",
+    "tests/ui/theme-switching.spec.ts",
+    "tests/ssh/progress-display-archive.spec.ts"
   ]
 }
