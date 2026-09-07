@@ -41,6 +41,14 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
 
   await connectTestSshFromConnectionsPage(page, connectionId);
 
+  await step('the default sidebar behavior auto-collapses when the workspace is clicked', async () => {
+    await page.getByTestId('sidebar-pane-connections').click();
+    const sidebar = page.getByTestId('left-sidebar-panel');
+    await expect(sidebar).toBeVisible();
+    await page.getByTestId('terminal').click();
+    await expect(sidebar).toBeHidden();
+  });
+
   await slowStep('open Docker manager and render the deterministic remote container', async () => {
     await page.getByTestId('sidebar-pane-dockerManager').click();
     const manager = page.getByTestId('docker-manager');

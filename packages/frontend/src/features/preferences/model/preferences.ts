@@ -51,7 +51,7 @@ export const defaultPreferences: Preferences = {
   statusMonitorScale: 1,
   dashboardShowLocalResources: true,
   dashboardShowRemoteResources: true,
-  workspaceSidebarPersistent: true,
+  workspaceSidebarPersistent: false,
   terminalScrollbackLimit: 5000,
   showStatusMonitorIpAddress: false,
   commandInputSyncTarget: 'none',
