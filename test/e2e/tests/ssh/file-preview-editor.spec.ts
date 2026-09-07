@@ -58,6 +58,22 @@ const previewSearchInput = (dialog: Locator): Locator =>
 const previewSearchControls = (dialog: Locator): Locator => previewSearchInput(dialog).locator('..');
 const previewSearchCount = (dialog: Locator, value: string): Locator =>
   previewSearchControls(dialog).getByText(value, { exact: true });
+const expectOverlayToCoverWorkspaceRail = async (
+  page: Page,
+  testId: 'file-manager-modal' | 'document-popup',
+  expectedZIndex: number,
+): Promise<void> => {
+  const overlay = page.getByTestId(testId);
+  await expect(overlay).toHaveCSS('z-index', String(expectedZIndex));
+  await expect
+    .poll(() =>
+      page.evaluate((id) => {
+        const topmost = document.elementFromPoint(18, 160);
+        return Boolean(topmost?.closest(`[data-testid="${id}"]`));
+      }, testId),
+    )
+    .toBe(true);
+};
 
 async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {
   await target.dispatchEvent('wheel', { ctrlKey: true, deltaY, deltaMode: 0 });
@@ -90,6 +106,7 @@ test('file previews and text editor protect historical file-opening regressions'
     await expect(editor).toContainText('plainfile');
     const viewLines = editor.locator('.monaco-editor .view-lines');
     await expect.poll(async () => await viewLines.innerText()).toContain('plain-no-extension');
+    await expectOverlayToCoverWorkspaceRail(page, 'document-popup', 1000);
     await captureFunctionalScreenshot(page, 'file-manager-editor.png', { viewport: { width: 1440, height: 900 } });
   });
 
@@ -773,6 +790,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
+  await expectOverlayToCoverWorkspaceRail(page, 'file-manager-modal', 50);
 
   const replaceFixture = async (filename: string) => {
     const response = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(filename)}&variant=refresh`, {
@@ -847,6 +865,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
     await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible();
     await dialog.getByRole('button', { name: 'Refresh preview', exact: true }).click();
     await expect(dialog.getByText('Nexus DOCX Refreshed', { exact: true })).toBeVisible({ timeout: 20_000 });
+    await expectOverlayToCoverWorkspaceRail(page, 'document-popup', 1100);
     await captureFunctionalScreenshot(page, 'file-manager-preview-refresh.png', {
       viewport: { width: 1440, height: 900 },
     });

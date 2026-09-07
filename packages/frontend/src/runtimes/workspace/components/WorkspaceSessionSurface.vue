@@ -745,7 +745,7 @@
     <nav
       v-if="!mobile && sidebars.left.length"
       data-workspace-sidebar
-      class="relative z-[120] flex w-10 shrink-0 flex-col border-r border-border bg-header/60 py-1"
+      class="relative z-10 flex w-10 shrink-0 flex-col border-r border-border bg-header/60 py-1"
     >
       <button
         v-for="pane in sidebars.left"
@@ -1058,7 +1058,7 @@
     <nav
       v-if="!mobile && sidebars.right.length"
       data-workspace-sidebar
-      class="relative z-[120] flex w-10 shrink-0 flex-col border-l border-border bg-header/60 py-1"
+      class="relative z-10 flex w-10 shrink-0 flex-col border-l border-border bg-header/60 py-1"
     >
       <button
         v-for="pane in sidebars.right"
@@ -1220,7 +1220,7 @@
       :visible="documentPopupVisible"
       :keep-mounted="true"
       teleport
-      :z-index="50"
+      :z-index="documentMode === 'preview' ? 1100 : 1000"
       :close-on-backdrop="true"
       :close-on-escape="true"
       :focus-on-open="true"
