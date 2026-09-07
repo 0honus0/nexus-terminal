@@ -70,6 +70,8 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     const monitor = modal.getByTestId('status-monitor');
     await expect(monitor).toContainText('Nexus Virtual CPU', { timeout: 15_000 });
     await expect(monitor).toContainText('CPU');
+    await expect(monitor.getByText('Online', { exact: true })).toBeVisible();
+    await expect(monitor.getByText('127.0.0.1', { exact: true })).toHaveCount(0);
 
     const viewport = page.viewportSize();
     const modalBox = await modal.boundingBox();

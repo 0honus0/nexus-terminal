@@ -53,7 +53,7 @@ export const defaultPreferences: Preferences = {
   dashboardShowRemoteResources: true,
   workspaceSidebarPersistent: true,
   terminalScrollbackLimit: 5000,
-  showStatusMonitorIpAddress: true,
+  showStatusMonitorIpAddress: false,
   commandInputSyncTarget: 'none',
   quickCommandsCollapsibleSearch: false,
   quickCommandsCompactMode: false,

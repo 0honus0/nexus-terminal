@@ -134,7 +134,7 @@ export class SettingsService {
       [KEYS.terminalRightClickCopyPaste]: 'true',
       [KEYS.showConnectionTags]: 'true',
       [KEYS.showQuickCommandTags]: 'true',
-      [KEYS.showStatusIp]: 'true',
+      [KEYS.showStatusIp]: 'false',
     };
     const existing = await runSettingsMigrations(this.repository, this.migrations);
     const missing = Object.fromEntries(Object.entries(defaults).filter(([key]) => existing[key] === undefined));
