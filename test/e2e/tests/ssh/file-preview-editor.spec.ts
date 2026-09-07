@@ -17,6 +17,12 @@ const row = (page: Page, filename: string) => fileManagerRow(page, filename);
 const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus.file-editor.desktop-popup-size';
 
 const documentPopup = (page: Page): Locator => page.getByTestId('document-popup');
+const closeFileManagerPopup = async (page: Page): Promise<void> => {
+  const modal = page.getByTestId('file-manager-modal');
+  if (!(await modal.isVisible().catch(() => false))) return;
+  await modal.getByTestId('file-manager-modal-close').click();
+  await expect(modal).toBeHidden();
+};
 const editorView = (page: Page): Locator => documentPopup(page).getByTestId('file-editor-view');
 const previewView = (page: Page): Locator => documentPopup(page).getByTestId('file-preview-view');
 
@@ -155,6 +161,7 @@ for (const shared of [true, false] as const) {
         if (shared) await expect(editorTabs().first()).toHaveAttribute('title', `${E2E_SSH.name}: /plainfile`);
         await page.keyboard.press('Escape');
         await expect(documentPopup(page)).toBeHidden();
+        await closeFileManagerPopup(page);
       });
 
       await step('open the same path from a second live SSH workspace', async () => {
@@ -168,6 +175,7 @@ for (const shared of [true, false] as const) {
         }
         await page.keyboard.press('Escape');
         await expect(documentPopup(page)).toBeHidden();
+        await closeFileManagerPopup(page);
       });
 
       await step('switch back and preserve the expected shared or session-local tab set', async () => {
