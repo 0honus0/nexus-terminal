@@ -3,7 +3,6 @@
   import { useI18n } from 'vue-i18n';
   import { Splitpanes, Pane } from 'splitpanes';
   import 'splitpanes/dist/splitpanes.css';
-  import { BaseButton } from '@/foundation/ui';
   import { TerminalView, type TerminalChannel, type TerminalVisualOptions } from '@/features/terminal/public';
   import {
     FileManager,
@@ -297,14 +296,7 @@
     />
 
     <template v-else-if="node.component === 'fileManager'">
-      <div v-if="popupFileManager" class="grid min-h-0 flex-1 place-items-center gap-2 p-4 text-sm text-text-secondary">
-        <span>{{ t('settings.popupFileManager.title') }}</span>
-        <BaseButton size="sm" variant="primary" @click="emit('openFileManager')">{{
-          t('fileManager.modalTitle')
-        }}</BaseButton>
-      </div>
       <FileManager
-        v-else
         :channel="session.adapters.filesystem"
         :download="session.adapters.download"
         :terminal-directory="session.adapters.terminalDirectory"
@@ -332,54 +324,35 @@
     </template>
 
     <template v-else-if="node.component === 'editor'">
-      <div class="flex items-center gap-1 border-b border-border bg-header/50 px-2 py-1">
-        <BaseButton
-          size="sm"
-          :variant="documentMode === 'editor' ? 'primary' : 'ghost'"
-          @click="emit('documentMode', 'editor')"
-          >{{ t('workspace.documents.editor') }}</BaseButton
-        >
-        <BaseButton
-          size="sm"
-          :variant="documentMode === 'preview' ? 'primary' : 'ghost'"
-          @click="emit('documentMode', 'preview')"
-          >{{ t('workspace.documents.preview') }}</BaseButton
-        >
-      </div>
-      <div v-if="popupDocuments" class="grid min-h-0 flex-1 place-items-center text-sm text-text-secondary">
-        {{ t('settings.popupEditor.title') }}
-      </div>
-      <template v-else>
-        <FileEditor
-          ref="editorRef"
-          v-show="documentMode === 'editor'"
-          class="min-h-0 flex-1"
-          :port="session.adapters.documents"
-          :scope-id="session.id"
-          :scope-label="editorScopeLabel"
-          :show-scope-label="showEditorScopeLabel"
-          :session="editorSession"
-          :font-family="editorFontFamily"
-          :font-size="editorFontSize"
-          :mobile-font-size="mobileEditorFontSize"
-          @font-size="emit('editorFontSize', $event)"
-          @mobile-font-size="emit('mobileEditorFontSize', $event)"
-        />
-        <FilePreview
-          ref="previewRef"
-          v-show="documentMode === 'preview'"
-          class="min-h-0 flex-1"
-          :source="session.adapters.preview"
-          :scope-id="session.id"
-          :session="previewSession"
-          :spreadsheet-rows-per-page="spreadsheetRowsPerPage"
-          :spreadsheet-max-columns="spreadsheetMaxColumns"
-          :quick-command-row-scale="quickCommandRowScale"
-          @edit="emit('editPreview', $event)"
-          @hide="emit('hidePreview')"
-          @dismiss="emit('hidePreview')"
-        />
-      </template>
+      <FileEditor
+        ref="editorRef"
+        v-show="documentMode === 'editor'"
+        class="min-h-0 flex-1"
+        :port="session.adapters.documents"
+        :scope-id="session.id"
+        :scope-label="editorScopeLabel"
+        :show-scope-label="showEditorScopeLabel"
+        :session="editorSession"
+        :font-family="editorFontFamily"
+        :font-size="editorFontSize"
+        :mobile-font-size="mobileEditorFontSize"
+        @font-size="emit('editorFontSize', $event)"
+        @mobile-font-size="emit('mobileEditorFontSize', $event)"
+      />
+      <FilePreview
+        ref="previewRef"
+        v-show="documentMode === 'preview'"
+        class="min-h-0 flex-1"
+        :source="session.adapters.preview"
+        :scope-id="session.id"
+        :session="previewSession"
+        :spreadsheet-rows-per-page="spreadsheetRowsPerPage"
+        :spreadsheet-max-columns="spreadsheetMaxColumns"
+        :quick-command-row-scale="quickCommandRowScale"
+        @edit="emit('editPreview', $event)"
+        @hide="emit('hidePreview')"
+        @dismiss="emit('hidePreview')"
+      />
     </template>
 
     <StatusMonitor

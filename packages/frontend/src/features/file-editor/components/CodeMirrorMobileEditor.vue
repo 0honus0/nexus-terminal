@@ -220,7 +220,7 @@
           highlightActiveLine(),
           closeBrackets(),
           autocompletion(),
-          search(),
+          search({ top: true }),
           highlightSelectionMatches(),
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           keymap.of([
