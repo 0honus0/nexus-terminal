@@ -268,9 +268,11 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
       await expect(hiddenTask.getByRole('progressbar')).toBeVisible();
       await hiddenSource.getByTestId('hidden-progress-restore').click();
       await expect(progressModal).toBeHidden();
-      await reopenConnectedFileManager(page);
       await expect(progressPopup).toBeVisible();
       await expect(progressBody).toBeVisible();
+      await progressPopup.getByTestId('transfer-progress-hide').click();
+      await expect(progressPopup).toBeHidden();
+      await reopenConnectedFileManager(page);
     });
 
     await slowStep('all uploaded files arrive with their declared byte sizes', async () => {

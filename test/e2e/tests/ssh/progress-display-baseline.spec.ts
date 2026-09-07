@@ -66,8 +66,9 @@ async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, ta
   await expect(task.getByRole('progressbar')).toBeVisible();
   await source.getByTestId('hidden-progress-restore').click();
   await expect(modal).toBeHidden();
-  await reopenConnectedFileManager(page);
   await expect(popup).toBeVisible();
+  await hideVisibleProgressCenter(page);
+  await reopenConnectedFileManager(page);
 }
 
 async function expectPopupBelowApplicationModals(popup: Locator): Promise<void> {

@@ -49,10 +49,10 @@ test('registered archive progress supports hide, restore, and real cancel for co
       await expect(task).toContainText('Compress');
       await hiddenSource(modal, 'archive-source.zip').getByTestId('hidden-progress-restore').click();
       await expect(modal).toBeHidden();
-      await reopenConnectedFileManager(page);
       await expect(popup).toBeVisible();
-      await closeConnectedFileManager(page);
       await hideVisibleProgressCenter(page);
+      await reopenConnectedFileManager(page);
+      await closeConnectedFileManager(page);
       const reopenedModal = await openProgressDisplay(page);
       task = hiddenTask(reopenedModal, 'archive-source.zip');
       await expect(task).toBeVisible();
@@ -172,10 +172,10 @@ test('closing and reopening the file manager preserves an in-flight archive task
 
     const fileManagerModal = page.getByTestId('file-manager-modal');
     await closeConnectedFileManager(page);
+    await expect(popup).toBeVisible();
+    await hideVisibleProgressCenter(page);
     await reopenConnectedFileManager(page);
     await expect(fileManagerModal).toBeVisible();
-    await expect(popup).toBeVisible();
-    await expect(task).toContainText('archive-source.zip');
     await expect(task).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
     await refreshFileManager(page);
     await expect(row(page, 'archive-source.zip')).toBeVisible();

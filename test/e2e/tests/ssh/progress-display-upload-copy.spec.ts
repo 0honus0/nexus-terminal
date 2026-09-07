@@ -53,11 +53,11 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
 
         await source.getByTestId('hidden-progress-restore').click();
         await expect(modal).toBeHidden();
-        await reopenConnectedFileManager(page);
         await expect(visibleProgressCenter(page)).toBeVisible();
+        await hideVisibleProgressCenter(page);
+        await reopenConnectedFileManager(page);
 
         await closeConnectedFileManager(page);
-        await hideVisibleProgressCenter(page);
         const reopenedModal = await openProgressDisplay(page);
         await expect(hiddenTask(reopenedModal, filename)).toBeVisible();
       },

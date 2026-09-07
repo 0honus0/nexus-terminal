@@ -326,7 +326,7 @@
     <template v-else-if="node.component === 'editor'">
       <FileEditor
         ref="editorRef"
-        v-show="documentMode === 'editor'"
+        v-show="popupDocuments || documentMode === 'editor'"
         class="min-h-0 flex-1"
         :port="session.adapters.documents"
         :scope-id="session.id"
@@ -341,7 +341,7 @@
       />
       <FilePreview
         ref="previewRef"
-        v-show="documentMode === 'preview'"
+        v-show="!popupDocuments && documentMode === 'preview'"
         class="min-h-0 flex-1"
         :source="session.adapters.preview"
         :scope-id="session.id"

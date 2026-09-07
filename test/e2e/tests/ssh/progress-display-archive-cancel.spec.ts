@@ -1,6 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { closeConnectedFileManager, reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
 import {
+  hideVisibleProgressCenter,
   openFileManager,
   refreshFileManager,
   row,
@@ -30,6 +31,7 @@ test('archive remains cancelled while remote command preparation is stalled', as
     await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
     await page.waitForTimeout(4_000);
 
+    await hideVisibleProgressCenter(page);
     await reopenConnectedFileManager(page);
     await refreshFileManager(page);
     await expect(row(page, 'archive-source.zip')).toHaveCount(0);
