@@ -500,7 +500,7 @@ jobs:
 
   rebalance:
     needs: [environment, runner-image, prepare, playwright-groups, screenshots-commit]
-    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
+    if: ${{ always() && github.event_name != 'pull_request' && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
     permissions:
       actions: read
       contents: write
