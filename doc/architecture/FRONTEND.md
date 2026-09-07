@@ -385,16 +385,13 @@ BaseTextarea
 BaseSelect
 BaseCheckbox
 BaseFormField
-BasePanel
 BaseModal
 OverlayPanel
 BaseSpinner
+BaseBadge
+BaseTable
+BaseContextMenu
 TokenInput
-ContextMenu
-Tabs
-Toolbar
-ProgressBar
-ResizableWindow
 ```
 
 只提供 props / events / slots / native attrs。
