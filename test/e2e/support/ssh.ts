@@ -79,8 +79,13 @@ export async function connectTestSshFromConnectionsPage(page: Page, connectionId
   await expect(page.getByTestId('command-input')).toBeEnabled({ timeout: 20_000 });
 }
 
+const visibleFileManagerModal = (page: Page): Locator =>
+  page.locator('[data-testid="file-manager-modal"]:visible').first();
+const visibleFileManagerOpenButton = (page: Page): Locator =>
+  page.locator('[data-testid="open-file-manager-button"]:visible').first();
+
 export function activeFileManagerList(page: Page): Locator {
-  return page.getByTestId('file-manager-modal').locator('[data-testid="file-manager-list"]');
+  return visibleFileManagerModal(page).getByTestId('file-manager-list');
 }
 
 export function fileManagerRow(page: Page, filename: string): Locator {
@@ -88,7 +93,7 @@ export function fileManagerRow(page: Page, filename: string): Locator {
 }
 
 export async function openConnectedFileManager(page: Page): Promise<void> {
-  const openButton = page.getByTestId('open-file-manager-button');
+  const openButton = visibleFileManagerOpenButton(page);
   await expect(openButton).toBeVisible({ timeout: 20_000 });
   await openButton.click();
   await expect(page.getByText('File Manager', { exact: false }).first()).toBeVisible();
@@ -96,18 +101,19 @@ export async function openConnectedFileManager(page: Page): Promise<void> {
 }
 
 export async function closeConnectedFileManager(page: Page): Promise<void> {
-  const modal = page.getByTestId('file-manager-modal');
+  const modal = visibleFileManagerModal(page);
   await expect(modal).toBeVisible();
   await modal.getByTestId('file-manager-modal-close').click();
   await expect(modal).toBeHidden();
 }
 
 export async function reopenConnectedFileManager(page: Page): Promise<void> {
-  const modal = page.getByTestId('file-manager-modal');
-  if (!(await modal.isVisible())) {
-    const openButton = page.getByTestId('open-file-manager-button');
+  let modal = visibleFileManagerModal(page);
+  if (!(await modal.isVisible().catch(() => false))) {
+    const openButton = visibleFileManagerOpenButton(page);
     await expect(openButton).toBeVisible({ timeout: 20_000 });
     await openButton.click();
+    modal = visibleFileManagerModal(page);
   }
   await expect(modal).toBeVisible();
   await expect(activeFileManagerList(page)).toBeVisible({ timeout: 20_000 });

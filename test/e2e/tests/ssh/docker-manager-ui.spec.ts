@@ -299,10 +299,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       await expect
         .poll(async () => {
           const response = await context.request.get('/api/v1/settings');
-          const settings = (await response.json()) as Record<string, string>;
+          const settings = (await response.json()) as Record<string, unknown>;
           return settings.layoutLocked;
         })
-        .toBe('true');
+        .toBe(true);
       await page.keyboard.press('Escape');
 
       const before = await firstPane.boundingBox();
