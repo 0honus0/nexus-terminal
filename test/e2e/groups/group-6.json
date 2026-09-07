@@ -3,15 +3,17 @@
   "group": 6,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
     "tests/ui/connection-create.spec.ts",
     "tests/ui/custom-terminal-theme.spec.ts",
-    "tests/ui/workspace-no-session.spec.ts",
-    "tests/ui/notification-delivery.spec.ts",
-    "tests/ui/notification-settings.spec.ts",
-    "tests/ui/proxy-management.spec.ts",
-    "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts",
-    "tests/ssh/progress-display-archive.spec.ts"
+    "tests/ssh/connection-edit-delete.spec.ts",
+    "tests/ssh/connection-list-search.spec.ts",
+    "tests/ssh/connection.spec.ts",
+    "tests/ssh/reconnect-ui.spec.ts",
+    "tests/ssh/sftp-download.spec.ts",
+    "tests/ssh/progress-display-archive-cancel.spec.ts",
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/upload-protocol.spec.ts"
   ]
 }
