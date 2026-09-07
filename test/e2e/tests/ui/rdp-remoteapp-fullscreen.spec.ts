@@ -244,6 +244,52 @@ async function openRemoteConnection(page: Page, name: string, modalTestId: strin
   await expect(page.getByTestId(modalTestId)).toBeVisible();
 }
 
+test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await page.setViewportSize({ width: 2400, height: 1200 });
+  expect(
+    (
+      await context.request.put('/api/v1/settings', {
+        data: {
+          language: 'en-US',
+          rdpModalWidth: 2200,
+          rdpModalHeight: 900,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  const name = 'E2E RDP Wide DPI';
+  const connectionId = await createRemoteConnection(context.request, 'RDP', name, '192.0.2.93', 3389);
+  try {
+    await page.goto('/workspace');
+    const connectionList = page.getByTestId('workspace-connection-list');
+    await expect(connectionList).toBeVisible();
+
+    const sessionRequestPromise = page.waitForRequest(
+      (request) =>
+        request.method() === 'POST' && request.url().includes(`/api/v1/connections/${connectionId}/rdp-session`),
+    );
+    const tunnelPromise = page.waitForEvent('websocket', {
+      predicate: (socket) => socket.url().includes('/ws/remote-desktop'),
+    });
+    await connectionList.getByText(name, { exact: true }).first().click();
+
+    const sessionRequest = await sessionRequestPromise;
+    const sessionUrl = new URL(sessionRequest.url());
+    expect(Number(sessionUrl.searchParams.get('width'))).toBeGreaterThan(1920);
+    expect(sessionUrl.searchParams.get('dpi')).toBe('120');
+
+    const tunnel = await tunnelPromise;
+    const tunnelUrl = new URL(tunnel.url());
+    expect(Number(tunnelUrl.searchParams.get('width'))).toBeGreaterThan(1920);
+    expect(tunnelUrl.searchParams.get('dpi')).toBe('120');
+    await expect(page.getByTestId('remote-desktop-modal')).toContainText('Connected', { timeout: 15_000 });
+  } finally {
+    await context.request.delete(`/api/v1/connections/${connectionId}`);
+  }
+});
+
 async function dragBy(page: Page, testId: string, deltaX: number, deltaY: number): Promise<void> {
   const target = page.getByTestId(testId);
   const box = await target.boundingBox();

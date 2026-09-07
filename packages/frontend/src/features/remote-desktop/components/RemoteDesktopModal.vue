@@ -31,7 +31,7 @@
       height?: number;
       dpi?: number;
     }>(),
-    { sessionPort: () => remoteDesktopApi, width: 1064, height: 858, dpi: 96 },
+    { sessionPort: () => remoteDesktopApi, width: 1064, height: 858 },
   );
   const emit = defineEmits<{ close: []; sizeChange: [size: { width: number; height: number }] }>();
   const { t } = useI18n();
@@ -92,11 +92,14 @@
       : { width: `${modalWidth.value}px`, height: `${modalHeight.value}px` },
   );
 
-  const currentDisplay = (): RemoteDesktopDisplay => ({
-    width: Math.max(100, Math.round(display.value?.clientWidth || modalWidth.value)),
-    height: Math.max(100, Math.round(display.value?.clientHeight || modalHeight.value)),
-    dpi: props.dpi,
-  });
+  const currentDisplay = (): RemoteDesktopDisplay => {
+    const width = Math.max(100, Math.round(display.value?.clientWidth || modalWidth.value));
+    return {
+      width,
+      height: Math.max(100, Math.round(display.value?.clientHeight || modalHeight.value)),
+      dpi: props.dpi ?? (props.connection?.type === 'RDP' && width > 1920 ? 120 : 96),
+    };
+  };
   const cancelScheduledSize = () => {
     if (resizeAnimationFrame === undefined) return;
     window.cancelAnimationFrame(resizeAnimationFrame);
