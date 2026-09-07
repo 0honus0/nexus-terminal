@@ -159,7 +159,6 @@ export class PasskeyService {
   async rename(userId: number, credentialId: string, name: string, username?: string): Promise<void> {
     const trimmed = name?.trim();
     if (!trimmed) throw new Error('Passkey 名称不能为空。');
-    if (trimmed.length > 128) throw new Error('Passkey 名称不能超过 128 个字符。');
     await this.requireOwned(userId, credentialId, 'rename');
     if (!(await this.repository.updateName(credentialId, trimmed))) throw new Error('Passkey name update failed.');
     await this.audit.logAction('PASSKEY_NAME_UPDATED', { userId, username, credentialId, newName: trimmed });

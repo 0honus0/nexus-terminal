@@ -257,11 +257,13 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
     expect(passkeyList).toHaveLength(1);
     const credentialId = passkeyList[0]?.credentialId;
     expect(credentialId).toBeTruthy();
+    const renamedPasskeyName = `E2E Security Key ${'long-name-'.repeat(14)}`;
+    expect(renamedPasskeyName.length).toBeGreaterThan(128);
 
-    await step('rename the registered passkey and persist the name', async () => {
+    await step('rename the registered passkey beyond 128 characters and persist the name', async () => {
       await row.getByTitle('Edit').click();
       const nameInput = row.locator('input');
-      await nameInput.fill('E2E Security Key');
+      await nameInput.fill(renamedPasskeyName);
       const renamePromise = page.waitForResponse(
         (response) =>
           response.url().endsWith(`/api/v1/auth/user/passkeys/${credentialId}/name`) &&
@@ -269,16 +271,16 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
       );
       await row.getByRole('button', { name: 'Save', exact: true }).click();
       expect((await renamePromise).ok()).toBeTruthy();
-      await expect(row).toContainText('E2E Security Key');
+      await expect(row).toContainText(renamedPasskeyName);
       const renamed = await context.request.get('/api/v1/auth/user/passkeys');
-      await expect(renamed.json()).resolves.toMatchObject([{ credentialId, name: 'E2E Security Key' }]);
+      await expect(renamed.json()).resolves.toMatchObject([{ credentialId, name: renamedPasskeyName }]);
     });
 
     await step('reload keeps the renamed passkey visible', async () => {
       await page.reload();
       await page.getByRole('tab', { name: 'Security', exact: true }).click();
       const reloadedPanel = page.getByRole('heading', { name: 'Passkey Management', exact: true }).locator('..');
-      await expect(reloadedPanel.locator('li').first()).toContainText('E2E Security Key');
+      await expect(reloadedPanel.locator('li').first()).toContainText(renamedPasskeyName);
       await reloadedPanel.scrollIntoViewIfNeeded();
       await collectPasskeyMetrics('after');
       await captureFunctionalScreenshot(page, 'security-passkey-registration-registered.png', {
