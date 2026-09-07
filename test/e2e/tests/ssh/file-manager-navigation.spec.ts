@@ -173,13 +173,22 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 
-  await step('Path history records a visited directory and navigates back to it', async () => {
+  await step('Path history records, copies, deletes, and navigates through visited directories', async () => {
     await pathInput(page).click();
-    const folderHistory = manager(page).getByTitle(FAVORITE_PATH, { exact: true });
+    let folderHistory = manager(page).getByTitle(FAVORITE_PATH, { exact: true });
     await expect(folderHistory).toBeVisible();
     await folderHistory.click();
     await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
     await expect(manager(page).getByTitle('Parent Directory', { exact: true })).toBeVisible();
+
+    await pathInput(page).click();
+    folderHistory = manager(page).getByTitle(FAVORITE_PATH, { exact: true });
+    await expect(folderHistory).toBeVisible();
+    await folderHistory.getByRole('button', { name: 'Copy path', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(FAVORITE_PATH);
+
+    await folderHistory.getByRole('button', { name: 'Delete this history entry', exact: true }).click();
+    await expect(folderHistory).toHaveCount(0);
   });
 
   await step('Favorite paths can be added, used for navigation, and deleted', async () => {
