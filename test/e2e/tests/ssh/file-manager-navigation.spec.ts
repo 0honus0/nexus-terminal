@@ -150,6 +150,33 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(row(page, 'seed.txt')).toBeVisible();
   });
 
+  await step('New File rejects an existing name without truncating the remote file', async () => {
+    const fileManager = manager(page);
+    await fileManager.getByTitle('New File', { exact: true }).click();
+    const createDialog = page.getByRole('dialog', { name: 'Create New File', exact: true });
+    await expect(createDialog).toBeVisible();
+    const input = createDialog.getByLabel('File name:', { exact: true });
+    await input.fill('seed.txt');
+    await expect(createDialog.getByTestId('file-manager-create-conflict')).toHaveText(
+      'Entry "seed.txt" already exists.',
+    );
+    await expect(createDialog.getByRole('button', { name: 'Create', exact: true })).toBeDisabled();
+
+    await input.press('Enter');
+    await expect(createDialog).toBeVisible();
+    await createDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(createDialog).toBeHidden();
+
+    await row(page, 'seed.txt').dblclick();
+    const editor = page.getByTestId('document-popup').getByTestId('file-editor-view');
+    await expect(editor).toBeVisible({ timeout: 20_000 });
+    await expect
+      .poll(async () => await editor.locator('.monaco-editor .view-lines').innerText())
+      .toContain('nexus-e2e-seed');
+    await page.getByTestId('document-popup').getByTitle('Close Editor', { exact: true }).first().click();
+    await expect(editor).toBeHidden();
+  });
+
   await step('Name sorting toggles between ascending and descending order', async () => {
     const nameHeader = manager(page).getByRole('columnheader').filter({ hasText: 'Name' }).first();
     const nameSortButton = nameHeader.locator('button');

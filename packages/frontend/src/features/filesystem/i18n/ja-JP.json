@@ -156,6 +156,7 @@
       "fileDecodeError": "ファイルのデコードに失敗しました (UTF-8 エンコーディングではない可能性があります)",
       "saveFailed": "ファイルの保存に失敗しました",
       "saveTimeout": "保存がタイムアウトしました",
+      "entryExists": "項目「{name}」はすでに存在します。",
       "fileExists": "ファイル \"{name}\" はすでに存在します。",
       "loadDirectoryFailed": "ディレクトリの読み込みに失敗しました",
       "loadDirectoryTimeout": "ディレクトリの読み込みがタイムアウトしました。",

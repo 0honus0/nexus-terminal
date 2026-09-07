@@ -132,9 +132,15 @@
     if (action.value === 'chmod') return t('fileManager.modals.buttons.changePermissions');
     return t('fileManager.modals.buttons.confirm');
   });
+  const createNameConflict = computed(() => {
+    if (action.value !== 'mkdir' && action.value !== 'file') return false;
+    const name = value.value.trim();
+    return Boolean(name && browser.entries.value.some((entry) => entry.name === name));
+  });
   const actionConfirmDisabled = computed(() => {
     const text = value.value.trim();
     if (!text) return true;
+    if (createNameConflict.value) return true;
     if (action.value === 'rename' && text === target.value?.name) return true;
     if (action.value === 'chmod' && !/^[0-7]{3,4}$/.test(text)) return true;
     return false;
@@ -850,7 +856,7 @@
   });
   const submit = async () => {
     const text = value.value.trim();
-    if (!text) return;
+    if (!text || createNameConflict.value) return;
     try {
       if (action.value === 'mkdir') await props.channel.createDirectory(join(text));
       else if (action.value === 'file') await props.channel.createFile(join(text), '');
@@ -1787,8 +1793,11 @@
           class="w-full rounded-md border border-border bg-input px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary"
           :placeholder="actionPlaceholder"
         />
+        <p v-if="createNameConflict" class="mt-1 text-xs text-error" data-testid="file-manager-create-conflict">
+          {{ t('fileManager.errors.entryExists', { name: value.trim() }) }}
+        </p>
         <p
-          v-if="action === 'chmod' && value.trim() && !/^[0-7]{3,4}$/.test(value.trim())"
+          v-else-if="action === 'chmod' && value.trim() && !/^[0-7]{3,4}$/.test(value.trim())"
           class="mt-1 text-xs text-error"
         >
           {{ t('fileManager.errors.invalidPermissionsFormat') }}

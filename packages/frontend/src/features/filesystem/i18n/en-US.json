@@ -156,6 +156,7 @@
       "fileDecodeError": "File decoding failed (likely not UTF-8)",
       "saveFailed": "Failed to save file",
       "saveTimeout": "Save timed out",
+      "entryExists": "Entry \"{name}\" already exists.",
       "fileExists": "File \"{name}\" already exists.",
       "loadDirectoryFailed": "Failed to load directory",
       "loadDirectoryTimeout": "Timed out while loading directory.",
