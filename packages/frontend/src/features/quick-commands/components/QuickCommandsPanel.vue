@@ -669,7 +669,7 @@
     justify-content: center;
     border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
     border-radius: 0.5rem;
-    color: var(--text-secondary-color);
+    color: var(--text-color-secondary);
     transition:
       background-color 0.15s ease,
       color 0.15s ease;
@@ -680,7 +680,7 @@
   }
   .quick-control--primary {
     border-color: transparent;
-    background: var(--primary-color);
+    background: var(--link-active-color);
     color: white;
   }
   .quick-control--primary:hover {
@@ -694,7 +694,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 0.25rem;
-    color: var(--text-secondary-color);
+    color: var(--text-color-secondary);
     transition:
       background-color 0.15s ease,
       color 0.15s ease;
@@ -722,8 +722,8 @@
     font-size: 0.875rem;
   }
   .context-item:hover {
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    color: var(--primary-color);
+    background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+    color: var(--link-active-color);
   }
   .context-item i {
     width: 1rem;

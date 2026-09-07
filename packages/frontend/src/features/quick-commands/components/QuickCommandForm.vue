@@ -219,7 +219,7 @@
 <style scoped>
   .execute-action {
     border-radius: 0.5rem;
-    background: var(--success-color, #28a745);
+    background: var(--status-success-color, #28a745);
     padding: 0.5rem 1.25rem;
     color: white;
     font-size: 0.875rem;

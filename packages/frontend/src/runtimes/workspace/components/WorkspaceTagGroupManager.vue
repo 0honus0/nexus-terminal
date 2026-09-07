@@ -219,7 +219,7 @@
     border: 1px solid var(--border-color);
     border-radius: 0.375rem;
     padding: 0.5rem 1rem;
-    color: var(--text-secondary-color);
+    color: var(--text-color-secondary);
     font-size: 0.875rem;
     box-shadow: 0 1px 2px rgb(0 0 0 / 0.05);
     transition:
@@ -244,12 +244,12 @@
     color: var(--text-color);
   }
   .footer-action--danger {
-    border-color: color-mix(in srgb, var(--error-color) 70%, transparent);
-    color: var(--error-color);
+    border-color: color-mix(in srgb, var(--status-error-color) 70%, transparent);
+    color: var(--status-error-color);
   }
   .footer-action--danger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--error-color) 10%, transparent);
-    color: var(--error-color);
+    background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
+    color: var(--status-error-color);
   }
   .footer-action--primary {
     border-color: transparent;

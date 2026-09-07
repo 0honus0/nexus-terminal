@@ -428,12 +428,12 @@
   .context-item i {
     width: 1rem;
     text-align: center;
-    color: var(--text-secondary-color);
+    color: var(--text-color-secondary);
   }
   .context-item:hover,
   .context-item:focus-visible {
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    color: var(--primary-color);
+    background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+    color: var(--link-active-color);
     outline: none;
   }
   .context-item.text-error i {

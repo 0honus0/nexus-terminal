@@ -255,7 +255,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 0.25rem;
-    color: var(--text-secondary-color);
+    color: var(--text-color-secondary);
     transition:
       background-color 0.15s ease,
       color 0.15s ease;
@@ -269,7 +269,7 @@
     opacity: 0.3;
   }
   .focus-action--danger:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--error-color) 12%, transparent);
-    color: var(--error-color);
+    background: color-mix(in srgb, var(--status-error-color) 12%, transparent);
+    color: var(--status-error-color);
   }
 </style>

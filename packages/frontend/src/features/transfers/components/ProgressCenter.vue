@@ -619,7 +619,7 @@
     bottom: 3px;
     width: 8px;
     height: 1px;
-    background: var(--text-secondary-color, currentColor);
+    background: var(--text-color-secondary, currentColor);
     transform: rotate(-45deg);
     transform-origin: right center;
   }

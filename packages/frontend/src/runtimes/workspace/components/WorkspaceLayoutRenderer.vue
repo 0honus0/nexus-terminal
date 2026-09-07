@@ -402,7 +402,7 @@
   .workspace-split {
     height: 100%;
     min-height: 0;
-    background: var(--background-color);
+    background: var(--app-bg-color);
   }
   :deep(.splitpanes__pane) {
     min-width: 0;

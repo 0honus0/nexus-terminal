@@ -271,8 +271,8 @@
   }
   .context-item:hover,
   .context-item:focus-visible {
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    color: var(--primary-color);
+    background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+    color: var(--link-active-color);
     outline: none;
   }
 </style>

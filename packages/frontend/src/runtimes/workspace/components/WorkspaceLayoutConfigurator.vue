@@ -354,7 +354,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 0.25rem;
-    color: var(--text-alt-color, var(--text-secondary-color));
+    color: var(--text-alt-color, var(--text-color-secondary));
     transition:
       background-color 0.15s ease,
       color 0.15s ease;
@@ -388,11 +388,11 @@
   }
   .primary-action {
     border-color: transparent;
-    background: var(--primary-color);
+    background: var(--link-active-color);
     color: white;
   }
   .primary-action:hover:not(:disabled) {
-    background: var(--primary-dark-color, var(--primary-color));
+    background: var(--button-hover-bg-color);
   }
   .primary-action:disabled {
     cursor: not-allowed;

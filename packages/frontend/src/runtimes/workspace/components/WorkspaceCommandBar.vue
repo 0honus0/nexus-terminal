@@ -525,7 +525,7 @@
 
     .command-bar-root--mobile .command-bar-button:hover:not(:active) {
       background-color: transparent;
-      color: var(--text-secondary-color);
+      color: var(--text-color-secondary);
     }
   }
 
@@ -569,7 +569,7 @@
     justify-content: center;
     border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
     border-radius: 0.5rem;
-    color: var(--text-secondary-color);
+    color: var(--text-color-secondary);
     transition:
       transform 0.12s ease,
       background-color 0.2s ease,
@@ -584,7 +584,7 @@
 
   .command-bar-button:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary-color) 50%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--link-active-color) 50%, transparent);
   }
 
   .command-bar-button:active:not(:disabled) {
@@ -603,13 +603,13 @@
   }
 
   .command-bar-button.is-active {
-    border-color: color-mix(in srgb, var(--primary-color) 55%, var(--border-color));
-    background: color-mix(in srgb, var(--primary-color) 20%, transparent);
-    color: var(--primary-color);
+    border-color: color-mix(in srgb, var(--link-active-color) 55%, var(--border-color));
+    background: color-mix(in srgb, var(--link-active-color) 20%, transparent);
+    color: var(--link-active-color);
   }
 
   .command-bar-command-input:focus {
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary-color) 18%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--link-active-color) 18%, transparent);
   }
 
   @container command-bar-pane (max-height: 52px) {

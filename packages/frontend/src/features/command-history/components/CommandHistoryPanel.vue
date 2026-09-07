@@ -211,16 +211,16 @@
     justify-content: center;
     border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
     border-radius: 0.5rem;
-    color: var(--text-secondary-color);
+    color: var(--text-color-secondary);
     transition:
       background-color 0.15s ease,
       border-color 0.15s ease,
       color 0.15s ease;
   }
   .history-control--danger:hover {
-    border-color: color-mix(in srgb, var(--error-color) 50%, transparent);
-    background: color-mix(in srgb, var(--error-color) 10%, transparent);
-    color: var(--error-color);
+    border-color: color-mix(in srgb, var(--status-error-color) 50%, transparent);
+    background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
+    color: var(--status-error-color);
   }
   .history-row-action {
     display: inline-flex;
@@ -229,7 +229,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 0.25rem;
-    color: var(--text-secondary-color);
+    color: var(--text-color-secondary);
     transition:
       background-color 0.15s ease,
       color 0.15s ease;
@@ -258,8 +258,8 @@
   }
   .context-item:hover,
   .context-item:focus-visible {
-    background: color-mix(in srgb, var(--primary-color) 10%, transparent);
-    color: var(--primary-color);
+    background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+    color: var(--link-active-color);
     outline: none;
   }
   .context-item i {
