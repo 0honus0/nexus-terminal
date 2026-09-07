@@ -135,6 +135,7 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
       fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
       quickCommandRowSizeMultiplier: 1,
       statusMonitorScale: 1,
+      showStatusMonitorIpAddress: true,
     },
   });
   expect(settings.ok()).toBeTruthy();
