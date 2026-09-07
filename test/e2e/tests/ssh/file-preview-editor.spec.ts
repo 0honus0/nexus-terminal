@@ -7,6 +7,7 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
+  reopenConnectedFileManager,
   resetTestSshFilesystem,
 } from '../../support/ssh';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
@@ -75,6 +76,17 @@ const expectOverlayToCoverWorkspaceRail = async (
     .toBe(true);
 };
 
+async function openConnectionFromWorkspacePicker(page: Page, connectionId: number): Promise<void> {
+  await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
+  const picker = page.getByRole('heading', { name: 'Select server to connect', exact: true });
+  await expect(picker).toBeVisible();
+  const connection = page.locator(`[data-testid="workspace-connection-list"] [data-connection-id="${connectionId}"]`);
+  await expect(connection).toBeVisible();
+  await connection.click();
+  await expect(picker).toBeHidden();
+  await expect(page.locator('[data-testid="command-input"]:visible')).toBeEnabled({ timeout: 20_000 });
+}
+
 async function ctrlWheel(target: Locator, deltaY: number): Promise<void> {
   await target.dispatchEvent('wheel', { ctrlKey: true, deltaY, deltaMode: 0 });
 }
@@ -89,6 +101,89 @@ async function hidePreview(page: Page, _filename: string): Promise<void> {
   const popup = documentPopup(page);
   await popup.click({ position: { x: 2, y: 2 } });
   await expect(popup).toBeHidden();
+}
+
+for (const shared of [true, false] as const) {
+  test(`file editor ${shared ? 'shares tabs across' : 'isolates tabs between'} real SSH workspaces`, async ({
+    page,
+    context,
+  }) => {
+    test.setTimeout(90_000);
+    await loginAsInitialAdmin(context.request);
+    await configureSshE2eSettings(context.request);
+    const setting = await context.request.put('/api/v1/settings', { data: { shareFileEditorTabs: shared } });
+    expect(setting.ok()).toBeTruthy();
+    await resetTestSshFilesystem();
+    const primaryId = await ensureTestSshConnection(context.request);
+    const peerName = `E2E Editor ${shared ? 'Shared' : 'Scoped'} Peer`;
+
+    const removePeer = async (): Promise<void> => {
+      const list = await context.request.get('/api/v1/connections');
+      expect(list.ok()).toBeTruthy();
+      const connections = (await list.json()) as Array<{ id: number; name?: string }>;
+      for (const connection of connections.filter((item) => item.name === peerName)) {
+        const removed = await context.request.delete(`/api/v1/connections/${connection.id}`);
+        expect(removed.ok()).toBeTruthy();
+      }
+    };
+
+    await removePeer();
+    const created = await context.request.post('/api/v1/connections', {
+      data: {
+        name: peerName,
+        type: 'SSH',
+        host: E2E_SSH.host,
+        port: E2E_SSH.port,
+        username: E2E_SSH.username,
+        authMethod: 'password',
+        password: E2E_SSH.password,
+      },
+    });
+    expect(created.status()).toBe(201);
+    const peerId = ((await created.json()) as { connection: { id: number } }).connection.id;
+
+    const terminalTabs = page.getByTestId('terminal-tab-bar').getByRole('tab');
+    const editorTabs = () => editorView(page).locator('.file-editor-tabs').getByRole('tab');
+
+    try {
+      await step('open the same real remote file in the first workspace', async () => {
+        await connectTestSshFromConnectionsPage(page, primaryId);
+        await reopenConnectedFileManager(page);
+        await row(page, 'plainfile').dblclick();
+        await expect(editorView(page)).toBeVisible();
+        await expect(editorTabs()).toHaveCount(1);
+        if (shared) await expect(editorTabs().first()).toHaveAttribute('title', `${E2E_SSH.name}: /plainfile`);
+        await page.keyboard.press('Escape');
+        await expect(documentPopup(page)).toBeHidden();
+      });
+
+      await step('open the same path from a second live SSH workspace', async () => {
+        await openConnectionFromWorkspacePicker(page, peerId);
+        await reopenConnectedFileManager(page);
+        await row(page, 'plainfile').dblclick();
+        await expect(editorView(page)).toBeVisible();
+        await expect(editorTabs()).toHaveCount(shared ? 2 : 1);
+        if (shared) {
+          await expect(editorTabs().last()).toHaveAttribute('title', `${peerName}: /plainfile`);
+        }
+        await page.keyboard.press('Escape');
+        await expect(documentPopup(page)).toBeHidden();
+      });
+
+      await step('switch back and preserve the expected shared or session-local tab set', async () => {
+        await terminalTabs.filter({ hasText: E2E_SSH.name }).first().click();
+        await reopenConnectedFileManager(page);
+        await row(page, 'plainfile').dblclick();
+        await expect(editorView(page)).toBeVisible();
+        await expect(editorTabs()).toHaveCount(shared ? 2 : 1);
+      });
+    } finally {
+      await page.goto('/connections').catch(() => undefined);
+      await removePeer();
+      const restore = await context.request.put('/api/v1/settings', { data: { shareFileEditorTabs: true } });
+      expect(restore.ok()).toBeTruthy();
+    }
+  });
 }
 
 test('file previews and text editor protect historical file-opening regressions', async ({ page, context }) => {
