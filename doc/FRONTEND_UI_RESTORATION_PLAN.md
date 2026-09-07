@@ -725,6 +725,19 @@ CI=1 E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-p9-mobile-co
 
 `.github/workflows/e2e.yml` 的manual dispatch仅有可选`workers`输入，默认会开启截图生成；各group上传`functional-screenshots-group-<group>`，成功的截图job会用新图替换tracked截图并自动commit/push。手动dispatch不是只读验证，先确认已有远程写入授权。push可能触发rebalance自动提交；记录run的产品SHA与后续bot提交，docs-only或旧产品run不能代替当前改动的验证。
 
+### 6.1 最终合并 `main` 前 workflow 测试步骤恢复门禁
+
+在 `test/agent-runtime-foundation` 合并 `main` 之前，必须把开发期间为取证、分支验证或临时资源规避而改变的 workflow 测试步骤恢复为正式流程；不得以一次成功的手动 run 或文档记录替代恢复。先将当前 `.github/workflows/e2e.yml` 与合并目标 `main` 及其历史逐段对照，把每个差异标为“正式保留”或“临时改动”，再实施恢复；不能盲目整文件回滚而丢失新架构所需的静态门禁。
+
+恢复/验收清单：
+
+1. `environment` 必须完成版本解析、环境一致性检查、脚本语法/分组检查和必要 patch 传递；`runner-image` 必须按正式条件构建并 smoke-check runner，不得为了分支方便永久跳过。
+2. `prepare` 必须安装所需依赖、执行 `check:test-policy`、生成并校验全部分组；`build-image` 必须执行 Docker deployment smoke。
+3. `m17-static-disposition`（若被判定为正式门禁）与 `playwright-groups` 必须按正式矩阵运行全部 8 组；失败必须使 workflow 失败，不得使用隐藏 `skip`、`continue-on-error`、只跑命名用例或缩小分母规避失败。
+4. 每组必须上传日志、timings、失败 report 和所需截图；截图提交前恢复 canonical screenshot 校验（包括文件名、尺寸、数量和可追溯 SHA），只有全组通过且校验成功才允许替换 tracked 截图。`rebalance` 只能在完整矩阵成功后更新 timing/group 文件。
+5. 通过远程 `workflow_dispatch` 在待合并分支以 `workers=8` 验收：记录目标 SHA、每个 job/step 的 exit/conclusion、case 数、artifact 和失败归因。当前受保护的 `file-preview-editor.spec.ts:889` selector 失败必须在合并前完成授权的测试维护或形成明确 waiver；不能修改受保护产品/测试文件或添加 DOM workaround。
+6. 合并前最终报告必须同时证明功能测试链、静态门禁、截图链和失败传播链均已恢复；只保留有明确理由的新架构门禁，删除临时 bypass/分支专用条件。全过程只使用远程 Actions，不在本地启动测试、Vite、后端或浏览器进程。
+
 无历史截图的UI仍是范围：先查旧template/style、usage/路由、当前SRS，再进入真实浏览器检查。只在自然E2E状态确有长期文档价值时增加截图声明；附录B沿用现有28图，不建立新的全局截图manifest。生成新图与旧图分开保存，禁止用基线PNG覆盖产品输出。
 
 ## 附录 A. 98 个旧 Vue 文件 → 当前 owner 与模块追溯
@@ -1607,6 +1620,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - 已删除本地和远程 `test/ui-restoration-groups`；远程保留 `main` 与 `test/agent-runtime-foundation`，后者当前包含全部 UI 还原与重构历史。后续远程 Actions、提交和模块验收均以 `test/agent-runtime-foundation` 为目标分支。
 - 本次仅修改计划与 Git 分支引用，未启动本地测试/服务，未暂存或删除受保护 dirty 文件、root-preserved 目录、`core.*` 或临时产物。
 - 后续执行顺序固定为：①补真实 CAPTCHA token 验证、token expiry/reset、invalid token 与成功登录；②在具备确定性原生交互的远程 runner/device 上补 passkey cancel；③新增带 ADB/WebView 的远程 device job，取得 setup、软键盘/IME、`visualViewport`、遮挡和滚动 metrics；④补齐 1280×800、320×667、375×812 及适用语言的非密码失败态截图/几何/样式对照；⑤再次只用远程 Actions 复核，达到 M01 F/V/A 闭环后再进行唯一一次模块提交。全过程不得恢复旧 store、event bus、transport 或重复状态 owner，不触碰受保护 dirty 文件。
+
+### C.90 `main` 合并前恢复 workflow 测试步骤（2026-09-07）
+
+- 根据用户要求，workflow 恢复被列为合并 `main` 前的强制任务，当前状态为 **`PENDING`**；本轮只更新计划，未直接改 `.github/workflows/e2e.yml`，也未启动本地测试进程。
+- 当前分支相对 `origin/main` 的 workflow 差异必须逐项复核，重点包括：manual dispatch 下 runner/patch 条件、截图请求判定、`check:test-policy` 与 M17 静态 job、截图校验/替换步骤、timing/rebalance 提交条件。每项先判断是否为正式新架构门禁，再恢复被临时删减或弱化的测试步骤，禁止整文件盲回滚。
+- 执行顺序固定为：①审计并列出 workflow 差异及保留理由；②恢复完整 environment→runner→prepare→Docker smoke→static→G1–G8→artifact→canonical screenshot verify→rebalance 链；③在 `test/agent-runtime-foundation` 以 `workers=8` 通过远程 Actions；④独立复核失败传播、artifact 完整性和截图清单；⑤将结果写回本计划并由主代理确认后，才允许合并 `main`。
+- 验收条件是正式 workflow 在 clean checkout 上完整执行、所有必需 job/step 均未被临时条件跳过、失败能阻断合并、成功产物可追溯到同一产品 SHA；任何未恢复步骤或未解释的 bypass 都阻止 `main` 合并。M01 六类 Login surface 缺口仍按 C.88/C.89 处理，不能因 workflow 恢复而提前关闭。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
