@@ -34,7 +34,8 @@
 <template>
   <div
     v-if="visible"
-    class="absolute inset-x-0 top-full z-40 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-border/50 bg-background text-sm shadow-lg"
+    data-testid="path-history-dropdown"
+    class="path-history-dropdown absolute right-0 top-full z-40 mt-1 max-h-72 overflow-y-auto rounded-lg border border-border/50 bg-background text-sm shadow-lg"
     @mousedown.prevent
   >
     <div v-if="loading && !items.length" class="p-3 text-center text-text-secondary">
@@ -50,12 +51,12 @@
         v-for="(item, index) in items"
         :key="item.id"
         :ref="(element) => element && (itemRefs[index] = element as HTMLElement)"
-        class="group flex cursor-pointer items-center justify-between rounded-md px-3 py-1 transition-colors duration-150 hover:bg-primary/10"
+        class="group flex cursor-pointer items-start justify-between rounded-md px-3 py-1.5 transition-colors duration-150 hover:bg-primary/10"
         :class="index === selectedIndex ? 'bg-primary/20 font-medium' : ''"
         :title="item.path"
         @click="emit('select', item.path)"
       >
-        <span class="mr-2 min-w-0 flex-grow truncate font-mono text-sm text-foreground">{{ item.path }}</span>
+        <span class="path-history-path mr-2 min-w-0 flex-grow font-mono text-sm text-foreground">{{ item.path }}</span>
         <div
           class="flex shrink-0 items-center transition-opacity duration-150"
           :class="
@@ -85,3 +86,16 @@
     </ul>
   </div>
 </template>
+
+<style scoped>
+  .path-history-dropdown {
+    width: min(34rem, calc(100cqw - 0.75rem));
+    max-width: calc(100cqw - 0.75rem);
+  }
+
+  .path-history-path {
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+    white-space: normal;
+  }
+</style>

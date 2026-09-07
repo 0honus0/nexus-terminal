@@ -289,6 +289,7 @@
         </div>
 
         <div
+          v-if="pageCount > 1"
           data-testid="spreadsheet-pagination"
           class="flex shrink-0 items-center justify-between gap-2 border-t border-border bg-header px-2 py-1.5 text-xs sm:gap-3 sm:px-3"
         >

@@ -92,7 +92,7 @@
     v-if="!props.open"
     type="button"
     data-testid="preview-search-toggle"
-    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border text-sm text-text-secondary transition hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8 sm:w-8"
+    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border text-sm text-text-secondary transition hover:bg-border hover:text-foreground focus:outline-none focus:ring-1 focus:ring-primary sm:h-8 sm:w-8"
     :aria-label="t('fileManager.preview.search', 'Search in document')"
     :title="t('fileManager.preview.search', 'Search in document')"
     @click="emit('open')"
@@ -103,7 +103,7 @@
   <div
     v-else
     data-testid="preview-search-bar"
-    class="flex h-9 min-w-0 max-w-[min(72vw,22rem)] items-center gap-1 rounded-md border border-border bg-background px-1.5 shadow-sm sm:h-8"
+    class="flex h-9 min-w-0 max-w-[min(72vw,22rem)] items-center gap-1 rounded-lg border border-border bg-background px-1 shadow-sm sm:h-8"
   >
     <i class="fas fa-search shrink-0 px-1 text-xs text-text-alt" aria-hidden="true"></i>
     <input
@@ -112,7 +112,7 @@
       type="search"
       :value="props.query"
       :placeholder="t('fileManager.preview.searchPlaceholder', 'Search document...')"
-      class="h-full min-w-20 flex-1 bg-transparent px-1 text-sm text-foreground outline-none"
+      class="h-[calc(100%-0.25rem)] min-w-20 flex-1 rounded-md bg-input px-2 text-sm text-foreground outline-none transition focus:ring-1 focus:ring-primary/60"
       @input="emit('update:query', ($event.currentTarget as HTMLInputElement).value)"
       @keydown="handleInputKeydown"
     />

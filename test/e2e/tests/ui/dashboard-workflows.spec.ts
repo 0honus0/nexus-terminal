@@ -423,6 +423,7 @@ test('dashboard filters connections and persists tag and sort preferences across
         ) - 2,
       );
       expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);
+      expect((recentActivityBox?.y ?? 0) + Math.min(recentActivityBox?.height ?? 0, 120)).toBeLessThanOrEqual(900);
 
       const remoteResourceBoxes = await remoteCards.evaluateAll((cards) =>
         cards.map((card) => {

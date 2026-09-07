@@ -160,7 +160,7 @@
     role="dialog"
     :aria-label="t('favoritePaths.title')"
     :style="panelStyle"
-    class="fixed z-50 flex max-h-80 w-72 flex-col overflow-hidden rounded-md border border-border/50 bg-background shadow-lg md:w-80"
+    class="favorite-paths-popover fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border/50 bg-background shadow-lg"
   >
     <div class="flex shrink-0 items-center gap-2 p-2">
       <div class="relative flex-grow">
@@ -206,7 +206,7 @@
         <li
           v-for="item in catalog.filteredFavorites.value"
           :key="item.id"
-          class="group flex cursor-pointer items-center justify-between rounded-md p-2 transition-colors duration-150 hover:bg-primary/10"
+          class="group flex cursor-pointer items-start justify-between rounded-lg p-2 transition-colors duration-150 hover:bg-primary/10"
           :title="item.path"
         >
           <button
@@ -215,8 +215,10 @@
             :aria-label="item.name || item.path"
             @click="navigateFavorite(item)"
           >
-            <span class="block truncate font-medium text-foreground">{{ item.name || item.path }}</span>
-            <span v-if="item.name" class="block truncate text-xs text-text-secondary">{{ item.path }}</span>
+            <span class="favorite-path-text block font-medium text-foreground">{{ item.name || item.path }}</span>
+            <span v-if="item.name" class="favorite-path-text mt-0.5 block text-xs text-text-secondary">{{
+              item.path
+            }}</span>
           </button>
           <div
             class="flex shrink-0 items-center gap-1 transition-opacity duration-150"
@@ -321,3 +323,17 @@
     </div>
   </OverlayPanel>
 </template>
+
+<style scoped>
+  .favorite-paths-popover {
+    width: clamp(18rem, 32vw, 34rem);
+    max-width: calc(100vw - 1rem);
+    max-height: min(28rem, calc(100dvh - 1rem));
+  }
+
+  .favorite-path-text {
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+    white-space: normal;
+  }
+</style>

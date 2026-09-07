@@ -217,7 +217,28 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
   });
 
   await step('Path history records, copies, deletes, and navigates through visited directories', async () => {
+    await navigateViaPathInput(page, SPECIAL_PATH);
     await pathInput(page).click();
+    const historyDropdown = manager(page).getByTestId('path-history-dropdown');
+    await expect(historyDropdown).toBeVisible();
+    const historyMetrics = await historyDropdown.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        width: element.getBoundingClientRect().width,
+        borderRadius: Number.parseFloat(style.borderTopLeftRadius),
+      };
+    });
+    expect(historyMetrics.width).toBeGreaterThanOrEqual(280);
+    expect(historyMetrics.borderRadius).toBeGreaterThan(0);
+
+    const specialHistory = manager(page).getByTitle(SPECIAL_PATH, { exact: true });
+    await expect(specialHistory).toBeVisible();
+    const specialPathMetrics = await specialHistory.locator('.path-history-path').evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+    }));
+    expect(specialPathMetrics.scrollWidth).toBeLessThanOrEqual(specialPathMetrics.clientWidth + 1);
+
     let folderHistory = manager(page).getByTitle(FAVORITE_PATH, { exact: true });
     await expect(folderHistory).toBeVisible();
     await folderHistory.click();
@@ -243,6 +264,25 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     };
 
     let favorites = await openFavorites();
+    const wideFavoriteBox = await favorites.boundingBox();
+    expect(wideFavoriteBox).toBeTruthy();
+    expect(wideFavoriteBox!.width).toBeGreaterThanOrEqual(288);
+    const favoriteRadius = await favorites.evaluate((element) =>
+      Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+    );
+    expect(favoriteRadius).toBeGreaterThan(0);
+
+    await page.setViewportSize({ width: 960, height: 760 });
+    await expect
+      .poll(async () => (await favorites.boundingBox())?.width ?? Number.POSITIVE_INFINITY)
+      .toBeLessThan(wideFavoriteBox!.width);
+    const compactFavoriteBox = await favorites.boundingBox();
+    expect(compactFavoriteBox).toBeTruthy();
+    expect(compactFavoriteBox!.x).toBeGreaterThanOrEqual(8);
+    expect(compactFavoriteBox!.x + compactFavoriteBox!.width).toBeLessThanOrEqual(952);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(favorites).toBeVisible();
+
     await favorites.getByRole('button', { name: 'Add new favorite path', exact: true }).click();
 
     const addDialog = page.getByRole('dialog', { name: 'Add New Favorite Path', exact: true });
