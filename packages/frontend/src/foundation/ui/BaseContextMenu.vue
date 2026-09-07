@@ -19,8 +19,8 @@
   const emit = defineEmits<{ close: [] }>();
   const root = ref<HTMLElement | null>(null);
   let overlayRegistration: OverlayStackRegistration | null = null;
-  const left = ref(0);
-  const top = ref(0);
+  const left = ref(props.x);
+  const top = ref(props.y);
 
   const place = async (): Promise<void> => {
     if (!props.visible) return;
@@ -89,7 +89,7 @@
         :data-testid="props.panelTestId"
         class="pointer-events-auto fixed max-h-[calc(100dvh-1rem)] max-w-[calc(100dvw-1rem)] overflow-y-auto rounded border border-border bg-background p-1 text-sm text-foreground shadow-xl"
         :class="props.autoWidth ? 'min-w-[150px]' : ''"
-        :style="{ left: `${left}px`, top: `${top}px`, width: props.autoWidth ? 'max-content' : `${width}px` }"
+        :style="{ left: `${left}px`, top: `${top}px`, width: props.autoWidth ? 'auto' : `${width}px` }"
         role="menu"
         @pointerdown.stop
         @click.stop

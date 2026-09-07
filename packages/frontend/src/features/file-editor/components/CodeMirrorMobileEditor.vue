@@ -54,7 +54,6 @@
   const presentationExtension = (): Extension =>
     EditorView.theme({
       '&': {
-        height: '100%',
         fontSize: `${props.fontSize}px`,
         ...(props.fontFamily ? { fontFamily: props.fontFamily } : {}),
       },
@@ -220,7 +219,7 @@
           highlightActiveLine(),
           closeBrackets(),
           autocompletion(),
-          search({ top: true }),
+          search(),
           highlightSelectionMatches(),
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           keymap.of([

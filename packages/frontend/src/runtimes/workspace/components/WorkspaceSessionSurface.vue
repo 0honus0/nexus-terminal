@@ -310,13 +310,14 @@
       ? { width: '100vw', height: '100dvh', maxWidth: '100vw', maxHeight: '100dvh', borderRadius: '0' }
       : { width: `${editorPopupWidth.value}px`, height: `${editorPopupHeight.value}px` },
   );
-  const previewPopupStyle = computed(() =>
-    props.mobile
-      ? { width: '100%', height: '94dvh', maxWidth: '1400px', maxHeight: '94dvh' }
-      : { width: 'min(1400px, calc(100vw - 3rem))', height: '94dvh', maxWidth: '1400px', maxHeight: '94dvh' },
-  );
+  const previewPopupStyle = computed(() => ({
+    width: '100%',
+    height: '94dvh',
+    maxWidth: '1400px',
+    maxHeight: '94dvh',
+  }));
   const documentPopupOverlayClass = computed(() =>
-    props.mobile && documentMode.value === 'editor' ? '!p-0' : props.mobile ? 'workspace-mobile-preview-overlay' : '',
+    documentMode.value === 'preview' ? 'workspace-preview-overlay' : props.mobile ? '!p-0' : '',
   );
   const documentPopupPanelClass = computed(() =>
     documentMode.value === 'editor'
@@ -1489,10 +1490,19 @@
 </template>
 
 <style scoped>
-  :global(.workspace-mobile-preview-overlay) {
+  :global(.workspace-preview-overlay) {
     padding-top: max(0.75rem, env(safe-area-inset-top)) !important;
     padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;
     padding-left: max(0.75rem, env(safe-area-inset-left)) !important;
+  }
+
+  @media (min-width: 768px) {
+    :global(.workspace-preview-overlay) {
+      padding-top: max(1.5rem, env(safe-area-inset-top)) !important;
+      padding-right: max(1.5rem, env(safe-area-inset-right)) !important;
+      padding-bottom: max(1.5rem, env(safe-area-inset-bottom)) !important;
+      padding-left: max(1.5rem, env(safe-area-inset-left)) !important;
+    }
   }
 </style>
