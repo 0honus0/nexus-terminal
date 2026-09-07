@@ -41,7 +41,7 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
 
   await connectTestSshFromConnectionsPage(page, connectionId);
 
-  await step('the default sidebar behavior auto-collapses when the workspace is clicked', async () => {
+  await step('the baseline sidebar behavior auto-collapses when the workspace is clicked', async () => {
     await page.getByTestId('sidebar-pane-connections').click();
     const sidebar = page.getByTestId('left-sidebar-panel');
     await expect(sidebar).toBeVisible();
