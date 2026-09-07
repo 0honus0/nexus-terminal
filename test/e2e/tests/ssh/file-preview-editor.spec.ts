@@ -16,7 +16,7 @@ import { step, slowStep } from '../../support/steps';
 const row = (page: Page, filename: string) => fileManagerRow(page, filename);
 const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus.file-editor.desktop-popup-size';
 
-const documentPopup = (page: Page): Locator => page.getByTestId('document-popup');
+const documentPopup = (page: Page): Locator => page.locator('[data-testid="document-popup"]:visible').first();
 const closeFileManagerPopup = async (page: Page): Promise<void> => {
   const modal = page.getByTestId('file-manager-modal');
   if (!(await modal.isVisible().catch(() => false))) return;

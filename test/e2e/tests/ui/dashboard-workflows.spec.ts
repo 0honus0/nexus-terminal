@@ -354,6 +354,7 @@ test('dashboard filters connections and persists tag and sort preferences across
       const visibleFixtureRows = finalDashboard
         .locator('[data-testid^="dashboard-connection-row-"]')
         .filter({ hasText: /E2E Dashboard (Alpha|Beta)/ });
+      await expect(visibleFixtureRows).toHaveCount(2);
       const texts = await visibleFixtureRows.allTextContents();
       expect(texts.map((text) => (text.includes(ALPHA_NAME) ? ALPHA_NAME : BETA_NAME))).toEqual([
         ALPHA_NAME,

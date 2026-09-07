@@ -321,7 +321,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 
     await step('the tab-bar eye action hides and restores the persisted top navigation', async () => {
       const tabBar = page.getByTestId('terminal-tab-bar');
-      const header = page.locator('body > #app > header');
+      const header = page.locator('#app > div > header');
       await expect(header).toBeVisible();
       await tabBar.getByRole('button', { name: 'Hide', exact: true }).click();
       await expect(header).toHaveCount(0);
