@@ -87,6 +87,26 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
 
       const dashboard = page.getByTestId('dashboard-view');
       await expect(dashboard).toBeVisible();
+      const navScroller = page.locator('header .app-nav-scroll').first();
+      await expect(navScroller).toBeVisible();
+      const navMetrics = await navScroller.evaluate((element) => ({
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        scrollbarWidth: getComputedStyle(element).scrollbarWidth,
+        webkitScrollbarDisplay: getComputedStyle(element, '::-webkit-scrollbar').display,
+      }));
+      expect(navMetrics.scrollbarWidth).toBe('none');
+      expect(navMetrics.webkitScrollbarDisplay).toBe('none');
+      if (viewport.width === 360) {
+        expect(navMetrics.scrollWidth).toBeGreaterThan(navMetrics.clientWidth);
+        await navScroller.evaluate((element) => {
+          element.scrollLeft = element.scrollWidth;
+        });
+        await expect.poll(() => navScroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
+        await navScroller.evaluate((element) => {
+          element.scrollLeft = 0;
+        });
+      }
       await expect(dashboard.getByTestId('dashboard-local-resources')).toBeVisible();
       await expect(dashboard.getByTestId('dashboard-system-resources')).toBeVisible();
       await expect(dashboard.getByTestId('dashboard-connection-list')).toBeVisible();

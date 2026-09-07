@@ -125,6 +125,8 @@ The suite intentionally keeps regression tests for previously fixed production i
 - multi-megabyte SFTP uploads completing every block before success;
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;
+- mobile global navigation remains horizontally swipeable when constrained while its native scrollbar track/thumb stays hidden;
+- mobile terminal long-press selection suppresses the xterm helper textarea's soft-keyboard focus during hold/menu/copy, restores its input attributes after Copy without refocusing, and restores normal focus on a later short tap;
 - Workspace layout configurator direction rendering, including horizontal sibling alignment and vertical child stacking in the editor preview;
 - narrow File Manager presentation collapsing secondary metadata columns, keeping the type icon close to the filename without horizontal overflow, and centering a deliberately delayed directory-loading spinner in the remaining list area;
 - Quick Commands keeping Copy/Edit/Delete in the row context menu with the duplicate inline three-button strip absent;

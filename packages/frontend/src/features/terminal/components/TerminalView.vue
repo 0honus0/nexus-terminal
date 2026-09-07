@@ -135,8 +135,11 @@
   let mobileLongPressTimer: number | null = null;
   let mobileLongPressStart: { x: number; y: number } | null = null;
   let mobileLongPressTriggered = false;
+  let mobileTouchMoved = false;
+  let mobileGestureHadMultipleTouches = false;
   let mobileSelectionLastPoint: { x: number; y: number } | null = null;
   let mobileTouchSelectionActive = false;
+  let mobileKeyboardRestoreState: { readOnly: boolean; inputMode: string | null } | null = null;
   let suppressMobileContextMenuUntil = 0;
   let mobileSelectionBaseRange: { startColumn: number; startRow: number; endColumn: number; endRow: number } | null =
     null;
@@ -151,6 +154,35 @@
     if (mobileLongPressTimer === null) return;
     window.clearTimeout(mobileLongPressTimer);
     mobileLongPressTimer = null;
+  };
+
+  const suppressMobileSoftKeyboard = (): void => {
+    if (!device.isMobile.value || !terminal?.textarea) return;
+    const textarea = terminal.textarea;
+    if (!mobileKeyboardRestoreState) {
+      mobileKeyboardRestoreState = {
+        readOnly: textarea.readOnly,
+        inputMode: textarea.getAttribute('inputmode'),
+      };
+    }
+    textarea.readOnly = true;
+    textarea.setAttribute('inputmode', 'none');
+    terminal.blur();
+    textarea.blur();
+  };
+
+  const restoreMobileSoftKeyboard = (focus = false): void => {
+    const textarea = terminal?.textarea;
+    const restore = mobileKeyboardRestoreState;
+    if (textarea && restore) {
+      terminal?.blur();
+      textarea.blur();
+      textarea.readOnly = restore.readOnly;
+      if (restore.inputMode === null) textarea.removeAttribute('inputmode');
+      else textarea.setAttribute('inputmode', restore.inputMode);
+    }
+    mobileKeyboardRestoreState = null;
+    if (focus) terminal?.focus();
   };
 
   const hideMobileSelectionHandles = (): void => {
@@ -316,8 +348,7 @@
     mobileLongPressTriggered = true;
     mobileTouchSelectionActive = true;
     suppressMobileContextMenuUntil = Date.now() + 1200;
-    terminal.blur();
-    terminal.textarea?.blur();
+    suppressMobileSoftKeyboard();
     selectTerminalWordAtPoint(clientX, clientY);
     captureMobileSelectionBaseRange();
     syncMobileSelectionHandles();
@@ -334,7 +365,7 @@
     event.stopPropagation();
     suppressMobileContextMenuUntil = Date.now() + 1200;
     mobileClipboardMenu.value.visible = false;
-    terminal.blur();
+    suppressMobileSoftKeyboard();
     const columns = terminal.cols;
     mobileSelectionHandleDrag = {
       pointerId: event.pointerId,
@@ -385,6 +416,7 @@
     mobileTouchSelectionActive = false;
     hideMobileSelectionHandles();
     mobileClipboardMenu.value.visible = false;
+    restoreMobileSoftKeyboard(false);
   };
 
   const pasteMobileClipboard = async (): Promise<void> => {
@@ -393,7 +425,7 @@
     mobileTouchSelectionActive = false;
     hideMobileSelectionHandles();
     mobileClipboardMenu.value.visible = false;
-    terminal?.focus();
+    restoreMobileSoftKeyboard(true);
   };
 
   const selectAllMobile = (): void => {
@@ -413,6 +445,7 @@
     )
       return;
     closeMobileClipboardMenu(true);
+    restoreMobileSoftKeyboard(false);
   };
 
   const handleContextMenu = async (event: MouseEvent): Promise<void> => {
@@ -421,7 +454,7 @@
       event.stopPropagation();
       if (Date.now() < suppressMobileContextMenuUntil || mobileClipboardMenu.value.visible) return;
       mobileTouchSelectionActive = true;
-      terminal?.blur();
+      suppressMobileSoftKeyboard();
       selectTerminalWordAtPoint(event.clientX, event.clientY);
       captureMobileSelectionBaseRange();
       syncMobileSelectionHandles();
@@ -482,8 +515,11 @@
     clearMobileLongPressTimer();
     if (event.touches.length === 1 && device.isMobile.value) {
       const touch = event.touches[0]!;
+      suppressMobileSoftKeyboard();
       closeMobileClipboardMenu(true);
       mobileLongPressTriggered = false;
+      mobileTouchMoved = false;
+      mobileGestureHadMultipleTouches = false;
       mobileSelectionBaseRange = null;
       mobileSelectionLastPoint = { x: touch.clientX, y: touch.clientY };
       mobileLongPressStart = { x: touch.clientX, y: touch.clientY };
@@ -495,6 +531,10 @@
     }
     mobileLongPressStart = null;
     if (event.touches.length !== 2) return;
+    if (device.isMobile.value) {
+      mobileGestureHadMultipleTouches = true;
+      suppressMobileSoftKeyboard();
+    }
     event.preventDefault();
     pinchStartDistance = touchDistance(event.touches);
     pinchStartFontSize = renderedFontSize.value;
@@ -503,17 +543,19 @@
     if (event.touches.length === 1 && mobileLongPressStart) {
       const touch = event.touches[0]!;
       const moved = Math.hypot(touch.clientX - mobileLongPressStart.x, touch.clientY - mobileLongPressStart.y);
+      if (moved > MOBILE_LONG_PRESS_MOVE_TOLERANCE) mobileTouchMoved = true;
       if (mobileLongPressTriggered) {
         event.preventDefault();
         updateMobileSelectionToPoint(touch.clientX, touch.clientY);
         mobileSelectionLastPoint = { x: touch.clientX, y: touch.clientY };
-      } else if (moved > MOBILE_LONG_PRESS_MOVE_TOLERANCE) {
+      } else if (mobileTouchMoved) {
         clearMobileLongPressTimer();
         mobileLongPressStart = null;
       }
       return;
     }
     if (event.touches.length !== 2 || pinchStartDistance <= 0) return;
+    mobileGestureHadMultipleTouches = true;
     const distance = touchDistance(event.touches);
     if (!distance) return;
     event.preventDefault();
@@ -526,6 +568,7 @@
       event.preventDefault();
       if (event.type === 'touchcancel') {
         closeMobileClipboardMenu(true);
+        restoreMobileSoftKeyboard(false);
       } else {
         const touch = event.changedTouches[0];
         const point = touch ? { x: touch.clientX, y: touch.clientY } : mobileSelectionLastPoint;
@@ -533,9 +576,16 @@
         syncMobileSelectionHandles();
       }
       mobileLongPressTriggered = false;
+    } else if (device.isMobile.value && event.touches.length === 0) {
+      const shouldFocus = event.type !== 'touchcancel' && !mobileTouchMoved && !mobileGestureHadMultipleTouches;
+      restoreMobileSoftKeyboard(shouldFocus);
     }
     mobileSelectionLastPoint = null;
     if (event.touches.length < 2) pinchStartDistance = 0;
+    if (event.touches.length === 0) {
+      mobileTouchMoved = false;
+      mobileGestureHadMultipleTouches = false;
+    }
   };
 
   const syncSearchDecorations = (): void => {
@@ -581,7 +631,7 @@
     if (terminalState.snapshot.value) terminal.write(terminalState.snapshot.value, syncSearchDecorations);
     else syncSearchDecorations();
     root.value!.addEventListener('wheel', handleWheelScale, { capture: true, passive: false });
-    root.value!.addEventListener('touchstart', handleTouchStart, { passive: false });
+    root.value!.addEventListener('touchstart', handleTouchStart, { capture: true, passive: false });
     root.value!.addEventListener('touchmove', handleTouchMove, { passive: false });
     root.value!.addEventListener('touchend', handleTouchEnd, { passive: false });
     root.value!.addEventListener('touchcancel', handleTouchEnd, { passive: false });
@@ -655,7 +705,7 @@
     if (terminal && serializeAddon) terminalState.replaceSnapshot(serializeTerminalSnapshot(terminal, serializeAddon));
     if (root.value) {
       root.value.removeEventListener('wheel', handleWheelScale, true);
-      root.value.removeEventListener('touchstart', handleTouchStart);
+      root.value.removeEventListener('touchstart', handleTouchStart, true);
       root.value.removeEventListener('touchmove', handleTouchMove);
       root.value.removeEventListener('touchend', handleTouchEnd);
       root.value.removeEventListener('touchcancel', handleTouchEnd);
@@ -664,6 +714,7 @@
     document.removeEventListener('pointerdown', handleDocumentPointerDown, true);
     clearMobileLongPressTimer();
     hideMobileSelectionHandles();
+    restoreMobileSoftKeyboard(false);
     resizeObserver?.disconnect();
     for (const stop of cleanup) stop();
     terminal?.dispose();
