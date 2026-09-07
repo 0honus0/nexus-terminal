@@ -180,7 +180,7 @@ test('closing and reopening the file manager preserves an in-flight archive task
     await closeConnectedFileManager(page);
     const modal = await openProgressDisplay(page);
     const hidden = hiddenTask(modal, 'archive-source.zip');
-    await expect(hidden).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
+    await expect(hidden).toContainText('Completed', { timeout: 15_000 });
     await closeProgressDisplay(modal);
 
     await reopenConnectedFileManager(page);

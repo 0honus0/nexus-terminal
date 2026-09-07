@@ -827,6 +827,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       expect(displayBox).toBeTruthy();
       expect(viewport).toBeTruthy();
       expectBoxInsideViewport(displayBox!, viewport!);
+      await captureFunctionalScreenshot(page, 'mobile-progress-display.png');
 
       await source.getByTestId('hidden-progress-restore').click();
       await expect(progressDisplay).toBeHidden();
