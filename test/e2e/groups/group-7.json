@@ -3,6 +3,7 @@
   "group": 7,
   "workers": 8,
   "specs": [
+    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
@@ -11,8 +12,6 @@
     "tests/ssh/connection-list-search.spec.ts",
     "tests/ssh/connection.spec.ts",
     "tests/ssh/reconnect-ui.spec.ts",
-    "tests/ssh/sftp-download.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/ssh/progress-display-copy-cancel.spec.ts"
   ]
 }
