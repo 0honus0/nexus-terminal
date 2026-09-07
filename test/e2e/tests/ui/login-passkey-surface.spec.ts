@@ -68,9 +68,11 @@ async function addVirtualAuthenticator(
 
 async function removeVirtualAuthenticator(authenticator: AuthenticatorHandle | undefined): Promise<void> {
   if (!authenticator) return;
-  await authenticator.command('WebAuthn.removeVirtualAuthenticator', {
-    authenticatorId: authenticator.authenticatorId,
-  }).catch(() => undefined);
+  await authenticator
+    .command('WebAuthn.removeVirtualAuthenticator', {
+      authenticatorId: authenticator.authenticatorId,
+    })
+    .catch(() => undefined);
   await authenticator.command('WebAuthn.disable').catch(() => undefined);
 }
 
@@ -152,7 +154,11 @@ async function recordCookieMetadata(
   const currentCookies = await context.cookies(BASE_URL);
   for (const cookie of currentCookies) {
     const metadata = { context: contextName, name: cookie.name, domain: cookie.domain };
-    if (!cookies.some((item) => item.context === metadata.context && item.name === metadata.name && item.domain === metadata.domain)) {
+    if (
+      !cookies.some(
+        (item) => item.context === metadata.context && item.name === metadata.name && item.domain === metadata.domain,
+      )
+    ) {
       cookies.push(metadata);
     }
   }
@@ -210,7 +216,8 @@ test('M01 Login passkey succeeds, reports credential failure, and falls back to 
           response.request().method() === 'POST',
       );
       const registerResponse = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/auth/passkey/register') && response.request().method() === 'POST',
+        (response) =>
+          response.url().endsWith('/api/v1/auth/passkey/register') && response.request().method() === 'POST',
       );
       await panel.getByRole('button', { name: 'Register New Passkey', exact: true }).click();
       expect((await optionsResponse).status()).toBe(200);
@@ -247,7 +254,8 @@ test('M01 Login passkey succeeds, reports credential failure, and falls back to 
           response.request().method() === 'POST',
       );
       const authenticateResponse = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/auth/passkey/authenticate') && response.request().method() === 'POST',
+        (response) =>
+          response.url().endsWith('/api/v1/auth/passkey/authenticate') && response.request().method() === 'POST',
       );
       await passkeyButton.click();
       expect((await optionsResponse).status()).toBe(200);
@@ -349,7 +357,9 @@ test('M01 Login passkey succeeds, reports credential failure, and falls back to 
     }
     if (credentialId) {
       await loginAsInitialAdmin(context.request).catch(() => undefined);
-      await context.request.delete(`/api/v1/auth/user/passkeys/${encodeURIComponent(credentialId)}`).catch(() => undefined);
+      await context.request
+        .delete(`/api/v1/auth/user/passkeys/${encodeURIComponent(credentialId)}`)
+        .catch(() => undefined);
       await context.request.post('/api/v1/auth/logout').catch(() => undefined);
     }
     await removeVirtualAuthenticator(authenticatorA);
@@ -365,7 +375,8 @@ test('M01 Login passkey succeeds, reports credential failure, and falls back to 
             success: successObserved,
             credentialFailure: credentialFailureObserved,
             passwordFallback: passwordFallbackObserved,
-            cancellation: 'not-exercised; CDP runner exposes presence suppression but no deterministic native cancel action',
+            cancellation:
+              'not-exercised; CDP runner exposes presence suppression but no deterministic native cancel action',
           },
           cdp: cdpAudits,
           network: networkEvents,

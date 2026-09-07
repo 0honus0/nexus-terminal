@@ -62,11 +62,11 @@ async function recordLoginEvidence(
       const style = element ? getComputedStyle(element) : null;
       const visible = Boolean(
         element &&
-          box &&
-          box.width > 0 &&
-          box.height > 0 &&
-          style?.display !== 'none' &&
-          style?.visibility !== 'hidden',
+        box &&
+        box.width > 0 &&
+        box.height > 0 &&
+        style?.display !== 'none' &&
+        style?.visibility !== 'hidden',
       );
       return {
         selector,
@@ -315,10 +315,10 @@ test('2FA settings UI completes setup, reports errors, reloads, and disables the
   }
 });
 
-test('Login 2FA challenge supports invalid-token retry and expired-session recovery [M01.02]', async (
-  { page, context },
-  testInfo,
-) => {
+test('Login 2FA challenge supports invalid-token retry and expired-session recovery [M01.02]', async ({
+  page,
+  context,
+}, testInfo) => {
   const secret = await prepareTwoFactorLogin(context);
   const flow: Array<Record<string, unknown>> = [];
 

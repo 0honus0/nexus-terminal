@@ -126,12 +126,14 @@ test('login CAPTCHA fails closed for invalid configuration', async ({ page, requ
       await page.locator('#username').fill(E2E_ADMIN.username);
       await page.locator('#password').fill(E2E_ADMIN.password);
       const loginRequest = page
-        .waitForRequest(
-          (request) => request.url().endsWith('/api/v1/auth/login') && request.method() === 'POST',
-          { timeout: 2_000 },
-        )
+        .waitForRequest((request) => request.url().endsWith('/api/v1/auth/login') && request.method() === 'POST', {
+          timeout: 2_000,
+        })
         .catch(() => undefined);
-      await page.getByRole('button', { name: 'Login', exact: true }).click({ force: true }).catch(() => undefined);
+      await page
+        .getByRole('button', { name: 'Login', exact: true })
+        .click({ force: true })
+        .catch(() => undefined);
       expect(await loginRequest).toBeUndefined();
       await expect(page.getByText(CAPTCHA_INVALID_MESSAGE, { exact: true })).toHaveCount(1);
       await captureFunctionalScreenshot(page, 'm01-login-captcha-invalid-config.png', {
@@ -159,10 +161,9 @@ test('login CAPTCHA requires a token before sending first-factor credentials', a
       await page.locator('#username').fill(E2E_ADMIN.username);
       await page.locator('#password').fill(E2E_ADMIN.password);
       const loginRequest = page
-        .waitForRequest(
-          (request) => request.url().endsWith('/api/v1/auth/login') && request.method() === 'POST',
-          { timeout: 2_000 },
-        )
+        .waitForRequest((request) => request.url().endsWith('/api/v1/auth/login') && request.method() === 'POST', {
+          timeout: 2_000,
+        })
         .catch(() => undefined);
       await page.getByRole('button', { name: 'Login', exact: true }).click();
       expect(await loginRequest).toBeUndefined();
