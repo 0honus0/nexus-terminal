@@ -1,0 +1,29 @@
+{
+  "settings": {
+    "exportConnections": {
+      "title": "导出连接数据",
+      "decryptKeyInfo": "解压密码是您 data/.env 文件中的 ENCRYPTION_KEY。请妥善保管此文件。",
+      "buttonText": "开始导出",
+      "success": "连接数据导出已开始下载。",
+      "error": "导出连接数据失败。"
+    },
+    "backup": {
+      "title": "完整备份",
+      "currentPassword": "当前密码",
+      "export": "导出备份",
+      "import": "导入备份",
+      "backupPassword": "备份密码",
+      "exported": "备份已导出。",
+      "exportFailed": "备份导出失败。",
+      "selectFile": "请选择备份文件。",
+      "imported": "备份已导入。",
+      "importFailed": "备份导入失败。",
+      "exportConnections": "导出连接",
+      "importedWithCounts": "备份导入成功：恢复 {rows} 条数据、{files} 个文件。正在重新加载应用。",
+      "description": "导出连接、代理、SSH 密钥、标签、快捷指令、主题、外观与工作区设置、背景文件及自定义 HTML 主题。账户凭据、Passkey、审计日志和 IP 封禁记录不会写入备份。",
+      "importDescription": "同一实例导出的备份可在登录后不填写备份密码直接导入；来自其他实例的备份需要输入导出时使用的登录密码。导入会替换备份范围内的业务数据和自定义主题文件。",
+      "backupFile": "备份文件",
+      "backupPasswordHelp": "同一实例导出的备份可留空；跨实例恢复时请输入导出备份时使用的密码。"
+    }
+  }
+}

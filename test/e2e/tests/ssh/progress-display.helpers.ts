@@ -9,11 +9,21 @@ import {
   openConnectedFileManager,
   openInlineProgressDisplay,
   resetTestSshFilesystem,
-  E2E_SSH,
 } from '../../support/ssh';
 
 export const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 export const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
+export const visibleProgressCenter = (page: Page): Locator =>
+  page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+export const visibleProgressTask = (page: Page, text: string): Locator =>
+  visibleProgressCenter(page).getByTestId('transfer-progress-task').filter({ hasText: text }).first();
+
+export async function hideVisibleProgressCenter(page: Page): Promise<void> {
+  const center = visibleProgressCenter(page);
+  await expect(center).toBeVisible();
+  await center.getByRole('button', { name: 'Hide progress', exact: true }).click();
+  await expect(center).toBeHidden();
+}
 
 export async function openFileManager(page: Page, context: BrowserContext): Promise<void> {
   await loginAsInitialAdmin(context.request);
@@ -31,6 +41,17 @@ export async function rightClickRow(page: Page, filename: string): Promise<void>
   await expect(menu(page)).toBeVisible();
 }
 
+export async function startZipCompression(page: Page, filename: string): Promise<void> {
+  await rightClickRow(page, filename);
+  const compress = menu(page).getByRole('button', { name: 'Compress', exact: true });
+  await expect(compress).toBeVisible();
+  await compress.hover();
+  await page
+    .getByTestId('file-manager-context-submenu')
+    .getByRole('button', { name: 'Compress to zip', exact: true })
+    .click();
+}
+
 export async function clickMenuItem(page: Page, label: string): Promise<void> {
   await menu(page).getByText(label, { exact: true }).first().click();
 }
@@ -41,28 +62,38 @@ export async function openCurrentDirectoryContextMenu(page: Page): Promise<void>
 }
 
 export async function goIntoFolder(page: Page, folder: string): Promise<void> {
-  await row(page, folder).click();
-  await expect(row(page, '..')).toBeVisible();
+  const target = row(page, folder);
+  const targetPath = await target.getAttribute('data-file-path');
+  expect(targetPath).toBeTruthy();
+  await target.click();
+  await expect(page.getByTestId('file-manager-modal').getByTestId('file-manager-path-input')).toHaveValue(targetPath!);
 }
 
 export async function goToParent(page: Page): Promise<void> {
-  await row(page, '..').click();
+  await page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true }).click();
   await expect(row(page, 'seed.txt')).toBeVisible();
 }
 
 export async function refreshFileManager(page: Page): Promise<void> {
-  await rightClickRow(page, 'seed.txt');
-  await clickMenuItem(page, 'Refresh');
+  const modal = page.getByTestId('file-manager-modal');
+  await expect(modal).toBeVisible();
+  await modal.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(activeFileManagerList(page)).toBeVisible();
 }
 
 export async function dragLocalFile(page: Page, name: string, size: number, fill: number): Promise<void> {
-  const dataTransfer = await page.evaluateHandle(({ fileName, fileSize, fillByte }) => {
-    const transfer = new DataTransfer();
-    transfer.items.add(new File([new Uint8Array(fileSize).fill(fillByte)], fileName, {
-      type: 'application/octet-stream',
-    }));
-    return transfer;
-  }, { fileName: name, fileSize: size, fillByte: fill });
+  const dataTransfer = await page.evaluateHandle(
+    ({ fileName, fileSize, fillByte }) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        new File([new Uint8Array(fileSize).fill(fillByte)], fileName, {
+          type: 'application/octet-stream',
+        }),
+      );
+      return transfer;
+    },
+    { fileName: name, fileSize: size, fillByte: fill },
+  );
 
   try {
     const list = activeFileManagerList(page);
@@ -91,11 +122,4 @@ export function hiddenTask(modal: Locator, text: string): Locator {
 export async function closeProgressDisplay(modal: Locator): Promise<void> {
   await modal.getByTestId('progress-display-close').click();
   await expect(modal).toBeHidden();
-}
-
-export async function remoteFileExists(name: string): Promise<boolean> {
-  const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-  if (!response.ok) return false;
-  const body = await response.json() as { files: string[] };
-  return body.files.includes(name);
 }

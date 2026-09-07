@@ -25,6 +25,44 @@
     "SSH_SHELL_FAILURE": "SSH Shell 打开失败",
     "DATABASE_MIGRATION": "数据库迁移",
     "ADMIN_SETUP_COMPLETE": "初始管理员设置完成",
-    "testNotification": "测试通知"
+    "testNotification": "测试通知",
+    "PASSKEY_REGISTERED": "Passkey 已注册",
+    "PASSKEY_AUTH_SUCCESS": "Passkey 认证成功",
+    "PASSKEY_AUTH_FAILURE": "Passkey 认证失败",
+    "PASSKEY_DELETED": "Passkey 已删除",
+    "IP_BLOCKED": "IP 地址已封禁"
+  },
+  "testNotification": {
+    "subject": "Nexus Terminal 测试通知（{event}）",
+    "email": {
+      "body": "这是 Nexus Terminal 针对事件“{event}”发送的测试邮件。\n\n如果你收到此邮件，说明 SMTP 配置工作正常。\n\n时间：{timestamp}",
+      "detailsMessage": "这是来自 Nexus Terminal 的测试通知（Email），事件为“{event}”。",
+      "bodyHtml": "<p>这是 <b>Nexus Terminal</b> 针对事件“{event}”发送的测试邮件。</p><p>如果你收到此邮件，说明 SMTP 配置工作正常。</p><p>时间：{timestamp}</p>"
+    },
+    "webhook": {
+      "detailsMessage": "这是来自 Nexus Terminal 的测试通知（Webhook），事件为“{event}”。"
+    },
+    "telegram": {
+      "detailsMessage": "这是来自 Nexus Terminal 的测试通知（Telegram），事件为“{event}”。",
+      "bodyTemplate": "*Nexus Terminal 测试通知*\n事件：`{event}`\n时间：{timestamp}\n详情：\n```\n{details}\n```"
+    }
+  },
+  "notification": {
+    "email": {
+      "defaultBody": "<p>事件：{eventDisplay}</p><p>时间：{timestamp}</p><p>详情：</p><pre>{details}</pre>"
+    },
+    "telegram": {
+      "defaultBody": "*{eventDisplay}*\n时间：{timestamp}\n详情：\n```\n{details}\n```"
+    },
+    "test": {
+      "success": "测试通知发送成功。",
+      "failure": "测试通知发送失败：{error}"
+    },
+    "details": {
+      "connectionTestSuccess": "连接“{name}”测试成功！",
+      "connectionTestFailed": "连接“{name}”测试失败：{error}",
+      "ipWhitelistUpdated": "IP 白名单更新成功。",
+      "settingsUpdated": "设置更新成功。"
+    }
   }
 }

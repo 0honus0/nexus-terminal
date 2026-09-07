@@ -1,6 +1,7 @@
 export interface WheelStepAccumulatorOptions {
   thresholdPx?: number;
   resetAfterMs?: number;
+  maxStepsPerEvent?: number;
 }
 
 export interface WheelScaleResolverOptions extends WheelStepAccumulatorOptions {
@@ -19,78 +20,66 @@ export interface WheelScaleChange {
   wheelSteps: number;
 }
 
-const wheelDeltaToPixels = (event: WheelEvent): number => {
+const deltaToPixels = (event: WheelEvent): number => {
   if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return event.deltaY * 16;
   if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return event.deltaY * Math.max(320, window.innerHeight);
   return event.deltaY;
 };
 
-/**
- * Converts noisy mouse/trackpad wheel deltas into stable discrete zoom steps.
- * Tiny trackpad deltas accumulate; a normal mouse-wheel notch produces about one step.
- */
-export const createWheelStepAccumulator = ({
+/** Convert noisy mouse/trackpad deltas into bounded discrete steps without leaking large-delta backlog. */
+export function createWheelStepAccumulator({
   thresholdPx = 72,
   resetAfterMs = 220,
-}: WheelStepAccumulatorOptions = {}) => {
-  let accumulated = 0;
+  maxStepsPerEvent = 3,
+}: WheelStepAccumulatorOptions = {}) {
+  let accumulatedPx = 0;
   let lastEventAt = 0;
 
   return (event: WheelEvent): number => {
+    const deltaPx = deltaToPixels(event);
+    if (!Number.isFinite(deltaPx) || deltaPx === 0) return 0;
+
     const now = performance.now();
-    const delta = wheelDeltaToPixels(event);
-    if (!Number.isFinite(delta) || delta === 0) return 0;
+    const directionChanged = accumulatedPx !== 0 && Math.sign(accumulatedPx) !== Math.sign(deltaPx);
+    if (now - lastEventAt > resetAfterMs || directionChanged) accumulatedPx = 0;
 
-    if (now - lastEventAt > resetAfterMs || (accumulated !== 0 && Math.sign(accumulated) !== Math.sign(delta))) {
-      accumulated = 0;
-    }
     lastEventAt = now;
-    accumulated += delta;
+    accumulatedPx += deltaPx;
 
-    const direction = Math.sign(accumulated);
-    const steps = Math.floor(Math.abs(accumulated) / thresholdPx);
-    if (steps === 0) return 0;
+    const completeSteps = Math.floor(Math.abs(accumulatedPx) / thresholdPx);
+    if (completeSteps === 0) return 0;
 
-    const boundedSteps = Math.min(3, steps);
-    // Cap the visual change produced by one event, but consume every complete step
-    // represented by that event. Otherwise a large wheel/page delta leaves a backlog
-    // that leaks into later tiny events and causes surprise follow-up zoom jumps.
-    accumulated -= direction * steps * thresholdPx;
-    return direction * boundedSteps;
+    const direction = Math.sign(accumulatedPx);
+    accumulatedPx -= direction * completeSteps * thresholdPx;
+    return direction * Math.min(Math.max(1, maxStepsPerEvent), completeSteps);
   };
-};
+}
 
 export const clampScale = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-/**
- * Shared Ctrl+wheel scaling policy used by terminals, editors and scalable panels.
- * It owns modifier filtering, native-scroll suppression, noisy-delta accumulation,
- * direction, bounds and rounding. Callers only apply the returned value and run
- * component-specific side effects such as fitting, persistence or scroll anchoring.
- */
-export const createWheelScaleResolver = ({
+/** Shared Ctrl+wheel scaling policy for terminals, editors and scalable panels. */
+export function createWheelScaleResolver({
   min,
   max,
   step,
   precision = 2,
   thresholdPx = 72,
   resetAfterMs = 220,
+  maxStepsPerEvent = 3,
   requireCtrlKey = true,
   stopPropagation = false,
   stopImmediatePropagation = false,
-}: WheelScaleResolverOptions) => {
-  const consumeWheelSteps = createWheelStepAccumulator({ thresholdPx, resetAfterMs });
+}: WheelScaleResolverOptions) {
+  const consumeSteps = createWheelStepAccumulator({ thresholdPx, resetAfterMs, maxStepsPerEvent });
 
   return (event: WheelEvent, current: number): WheelScaleChange | null => {
     if (requireCtrlKey && !event.ctrlKey) return null;
 
-    // Suppress browser/page zoom or scrolling for every handled Ctrl+wheel event,
-    // including tiny deltas that have not accumulated into a full scale step yet.
     event.preventDefault();
     if (stopImmediatePropagation) event.stopImmediatePropagation();
     else if (stopPropagation) event.stopPropagation();
 
-    const wheelSteps = consumeWheelSteps(event);
+    const wheelSteps = consumeSteps(event);
     if (wheelSteps === 0) return null;
 
     const bounded = clampScale(current - wheelSteps * step, min, max);
@@ -99,4 +88,4 @@ export const createWheelScaleResolver = ({
 
     return { previous: current, next, wheelSteps };
   };
-};
+}

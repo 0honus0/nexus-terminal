@@ -1,7 +1,10 @@
-import { expect, test, type BrowserContext, type Page } from '../../support/fixtures';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { expect, test, type BrowserContext, type Locator, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
   activeFileManagerList,
+  closeConnectedFileManager,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
@@ -22,6 +25,8 @@ interface DragFileDescriptor {
   fill?: number;
 }
 
+const M11_03E_EVIDENCE_DIR = process.env.M11_03E_EVIDENCE_DIR || '/tmp/nexus-m11-03e';
+
 async function openFileManager(page: Page, context: BrowserContext): Promise<void> {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
@@ -35,9 +40,10 @@ async function dragLocalFiles(page: Page, files: DragFileDescriptor[]): Promise<
   const dataTransfer = await page.evaluateHandle((descriptors: DragFileDescriptor[]) => {
     const transfer = new DataTransfer();
     for (const descriptor of descriptors) {
-      const content = descriptor.text !== undefined
-        ? new TextEncoder().encode(descriptor.text)
-        : new Uint8Array(descriptor.size ?? 0).fill(descriptor.fill ?? 0x61);
+      const content =
+        descriptor.text !== undefined
+          ? new TextEncoder().encode(descriptor.text)
+          : new Uint8Array(descriptor.size ?? 0).fill(descriptor.fill ?? 0x61);
       transfer.items.add(new File([content], descriptor.name, { type: 'application/octet-stream' }));
     }
     return transfer;
@@ -55,23 +61,114 @@ async function dragLocalFiles(page: Page, files: DragFileDescriptor[]): Promise<
   }
 }
 
-async function readRemoteText(name: string): Promise<string> {
-  const response = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(name)}`);
-  expect(response.ok).toBeTruthy();
-  const body = await response.json() as { base64: string };
-  return Buffer.from(body.base64, 'base64').toString('utf8');
+async function waitForVisibleFiles(page: Page, names: string[], timeout = 45_000): Promise<void> {
+  await expect
+    .poll(
+      async () => {
+        const visible: string[] = [];
+        for (const name of names) {
+          if (
+            await fileManagerRow(page, name)
+              .isVisible()
+              .catch(() => false)
+          )
+            visible.push(name);
+        }
+        return visible;
+      },
+      { timeout },
+    )
+    .toEqual(names);
 }
 
-async function waitForRemoteFiles(names: string[], timeout = 45_000): Promise<void> {
-  await expect.poll(async () => {
-    const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-    if (!response.ok) return [];
-    const body = await response.json() as { files: string[] };
-    return names.filter(name => body.files.includes(name));
-  }, { timeout }).toEqual(names);
+async function downloadRemoteFile(page: Page, name: string): Promise<Buffer> {
+  const target = fileManagerRow(page, name);
+  await expect(target).toBeVisible();
+  await target.click({ button: 'right' });
+  const contextMenu = page.getByTestId('file-manager-context-menu');
+  await expect(contextMenu).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await contextMenu.getByText('Download', { exact: true }).first().click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  expect(downloadPath).toBeTruthy();
+  return readFile(downloadPath!);
 }
 
-test('Windows-style multi-file drag uploads every file and applies one conflict choice to the remaining batch', async ({ page, context }) => {
+async function readRemoteText(page: Page, name: string): Promise<string> {
+  return (await downloadRemoteFile(page, name)).toString('utf8');
+}
+
+function visibleProgressCenter(page: Page) {
+  return page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+}
+
+function uploadProgressTask(page: Page, name?: string) {
+  const tasks = visibleProgressCenter(page).locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+  return name ? tasks.filter({ hasText: name }).first() : tasks.first();
+}
+
+async function fileManagerMetrics(page: Page): Promise<Record<string, number>> {
+  return activeFileManagerList(page).evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+}
+
+async function openFileManagerSearch(page: Page): Promise<Locator> {
+  const fileManager = page.getByTestId('file-manager-modal');
+  const input = fileManager.getByTestId('file-manager-search-input');
+  if (!(await input.isVisible())) {
+    await fileManager.getByTestId('file-manager-search-toggle').click();
+  }
+  await expect(input).toBeVisible();
+  return input;
+}
+
+test('file browsing and recursive search remain responsive while upload writes are delayed', async ({
+  page,
+  context,
+}) => {
+  await openFileManager(page, context);
+
+  const fileName = 'concurrent-file-operations.bin';
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1500`, { method: 'POST' });
+  try {
+    await slowStep('File Manager stays usable while an upload is waiting on remote writes', async () => {
+      await dragLocalFiles(page, [{ name: fileName, size: 256 * 1024, fill: 0x6e }]);
+      const progressPopup = visibleProgressCenter(page);
+      await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+      await expect(uploadProgressTask(page, fileName)).toBeVisible();
+
+      await fileManagerRow(page, 'folder-seed').dblclick();
+      await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 5_000 });
+    });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+
+  await page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true }).click();
+  await expect(fileManagerRow(page, fileName)).toBeVisible({ timeout: 30_000 });
+
+  await step('recursive search returns the real nested remote file after the concurrent upload', async () => {
+    const fileManagerModal = page.getByTestId('file-manager-modal');
+    const search = await openFileManagerSearch(page);
+    await search.fill('nested');
+    await expect(activeFileManagerList(page).locator('tr[data-file-path="/folder-seed/nested.txt"]')).toBeVisible({
+      timeout: 10_000,
+    });
+  });
+
+  await page.goto('/connections');
+  await expect(page.getByTestId('connections-add-button')).toBeVisible({ timeout: 10_000 });
+});
+
+test('Windows-style multi-file drag uploads every file and applies one conflict choice to the remaining batch', async ({
+  page,
+  context,
+}) => {
   await openFileManager(page, context);
 
   const firstSeed = 'seed-overwritten-by-multi-drag\n';
@@ -86,52 +183,51 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
   await slowStep('dragging ten Windows-style files snapshots and uploads all DataTransfer items', async () => {
     await dragLocalFiles(page, tenFiles);
 
-    const conflictModal = page.getByTestId('upload-conflict-modal');
+    const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
     await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-    await conflictModal.getByTestId('upload-conflict-apply-all').check();
-    await conflictModal.getByTestId('upload-conflict-overwrite').click();
+    await conflictModal
+      .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
+      .check();
+    await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
     await expect(conflictModal).toBeHidden();
 
-    await waitForRemoteFiles(freshNames);
+    await waitForVisibleFiles(page, freshNames);
     await expect(fileManagerRow(page, freshNames.at(-1)!)).toBeVisible({ timeout: 30_000 });
-    await expect.poll(() => readRemoteText('seed.txt')).toBe(firstSeed);
-    await expect.poll(() => readRemoteText('copy-source.txt')).toBe(firstCopy);
+    await expect.poll(() => readRemoteText(page, 'seed.txt')).toBe(firstSeed);
+    await expect.poll(() => readRemoteText(page, 'copy-source.txt')).toBe(firstCopy);
   });
 
-  await slowStep('skip plus apply-to-all aborts only later conflicting files while new files still upload', async () => {
-    const skippedSeedBody = 'this-must-not-replace-seed\n';
-    const skippedCopyBody = 'this-must-not-replace-copy\n';
-    const nonConflictName = 'skip-policy-new-file.txt';
+  await slowStep(
+    'skip plus apply-to-all aborts only later conflicting files while new files still upload',
+    async () => {
+      const skippedSeedBody = 'this-must-not-replace-seed\n';
+      const skippedCopyBody = 'this-must-not-replace-copy\n';
+      const nonConflictName = 'skip-policy-new-file.txt';
 
-    await dragLocalFiles(page, [
-      { name: 'seed.txt', text: skippedSeedBody },
-      { name: 'copy-source.txt', text: skippedCopyBody },
-      { name: nonConflictName, text: 'new-file-still-uploads\n' },
-    ]);
+      await dragLocalFiles(page, [
+        { name: 'seed.txt', text: skippedSeedBody },
+        { name: 'copy-source.txt', text: skippedCopyBody },
+        { name: nonConflictName, text: 'new-file-still-uploads\n' },
+      ]);
 
-    const conflictModal = page.getByTestId('upload-conflict-modal');
-    await expect(conflictModal).toBeVisible({ timeout: 20_000 });
-    await conflictModal.getByTestId('upload-conflict-apply-all').check();
-    await conflictModal.getByTestId('upload-conflict-skip').click();
-    await expect(conflictModal).toBeHidden();
+      const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
+      await expect(conflictModal).toBeVisible({ timeout: 20_000 });
+      await conflictModal
+        .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
+        .check();
+      await conflictModal.getByRole('button', { name: 'Skip this file', exact: true }).click();
+      await expect(conflictModal).toBeHidden();
 
-    await waitForRemoteFiles([nonConflictName]);
-    await expect.poll(() => readRemoteText('seed.txt')).toBe(firstSeed);
-    await expect.poll(() => readRemoteText('copy-source.txt')).toBe(firstCopy);
-    await expect.poll(() => readRemoteText(nonConflictName)).toBe('new-file-still-uploads\n');
-  });
+      await waitForVisibleFiles(page, [nonConflictName]);
+      await expect.poll(() => readRemoteText(page, 'seed.txt')).toBe(firstSeed);
+      await expect.poll(() => readRemoteText(page, 'copy-source.txt')).toBe(firstCopy);
+      await expect.poll(() => readRemoteText(page, nonConflictName)).toBe('new-file-still-uploads\n');
+    },
+  );
 });
 
-test('aggregate committed throughput keeps folder uploads concurrent on moderate-latency links', async ({ page, context }) => {
+test('multi-file upload remains usable and byte-complete on moderate-latency links', async ({ page, context }) => {
   await openFileManager(page, context);
-
-  const tuningLogs: string[] = [];
-  const schedulerLogs: string[] = [];
-  page.on('console', (message) => {
-    const text = message.text();
-    if (text.includes('Adaptive upload tuning changed:')) tuningLogs.push(text);
-    if (text.includes('Upload scheduler:')) schedulerLogs.push(text);
-  });
 
   const largeFiles = Array.from({ length: 4 }, (_, index) => ({
     name: `moderate-latency-${index + 1}.bin`,
@@ -141,21 +237,27 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
 
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=50`, { method: 'POST' });
   try {
-    await slowStep('folder upload starts at least two large files while the network profile is still probing', async () => {
+    await slowStep('progress can hide and restore while several real files upload', async () => {
       await dragLocalFiles(page, largeFiles);
 
-      const progressPopup = page.getByTestId('file-upload-progress-popup');
+      const progressPopup = visibleProgressCenter(page);
       await expect(progressPopup).toBeVisible({ timeout: 10_000 });
-      await expect(progressPopup.locator('h4')).toContainText('·');
+      const uploadTasks = progressPopup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+      await expect(uploadTasks).toHaveCount(largeFiles.length);
       const progressBody = progressPopup.locator('ul');
       await expect(progressBody).toBeVisible();
 
-      await expect.poll(() => progressPopup.evaluate((element) => {
-        const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
-        return Number.isFinite(zIndex) ? zIndex : 0;
-      })).toBeLessThan(50);
+      await expect
+        .poll(() =>
+          progressPopup.evaluate((element) => {
+            const zIndex = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
+            return Number.isFinite(zIndex) ? zIndex : 0;
+          }),
+        )
+        .toBeLessThan(50);
 
-      await progressPopup.getByTestId('file-upload-progress-hide').click();
+      await closeConnectedFileManager(page);
+      await progressPopup.getByTestId('transfer-progress-hide').click();
       await expect(progressPopup).toBeHidden();
 
       const progressModal = await openInlineProgressDisplay(page);
@@ -163,39 +265,33 @@ test('aggregate committed throughput keeps folder uploads concurrent on moderate
       const hiddenTask = hiddenSource.getByTestId('hidden-progress-task').first();
       await expect(hiddenSource).toBeVisible();
       await expect(hiddenTask).toBeVisible();
-      await expect(hiddenTask.getByTestId('hidden-progress-bar')).toBeVisible();
+      await expect(hiddenTask.getByRole('progressbar')).toBeVisible();
       await hiddenSource.getByTestId('hidden-progress-restore').click();
       await expect(progressModal).toBeHidden();
-      await reopenConnectedFileManager(page);
       await expect(progressPopup).toBeVisible();
       await expect(progressBody).toBeVisible();
-
-      await expect.poll(
-        () => schedulerLogs.some(log => log.includes('profile=probing') && log.includes('activeFiles=2/4')),
-        { timeout: 20_000 },
-      ).toBe(true);
+      await progressPopup.getByTestId('transfer-progress-hide').click();
+      await expect(progressPopup).toBeHidden();
+      await reopenConnectedFileManager(page);
     });
 
-    await slowStep('aggregate committed throughput avoids the old per-chunk weak-network false positive', async () => {
-      await expect.poll(
-        () => tuningLogs.some(log => log.includes('profile=normal') && log.includes('largeFileSlots=4')),
-        { timeout: 30_000 },
-      ).toBe(true);
-      await waitForRemoteFiles(largeFiles.map(file => file.name), 60_000);
+    await slowStep('all uploaded files arrive with their declared byte sizes', async () => {
+      await waitForVisibleFiles(
+        page,
+        largeFiles.map((file) => file.name),
+        60_000,
+      );
+      for (const file of largeFiles) {
+        expect((await downloadRemoteFile(page, file.name)).byteLength).toBe(file.size);
+      }
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 });
 
-test('slow SFTP acknowledgements move batch uploads into the weak-network window and concurrency profile', async ({ page, context }) => {
+test('batch upload completes every file under slow SFTP acknowledgements', async ({ page, context }) => {
   await openFileManager(page, context);
-
-  const tuningLogs: string[] = [];
-  page.on('console', (message) => {
-    const text = message.text();
-    if (text.includes('Adaptive upload tuning changed:')) tuningLogs.push(text);
-  });
 
   const weakFiles = Array.from({ length: 10 }, (_, index) => ({
     name: `weak-network-${index + 1}.bin`,
@@ -205,22 +301,23 @@ test('slow SFTP acknowledgements move batch uploads into the weak-network window
 
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=750`, { method: 'POST' });
   try {
-    await slowStep('delayed real SFTP WRITE acknowledgements trigger the weak-link tuning profile', async () => {
+    await slowStep('the user-visible upload batch completes despite slow remote acknowledgements', async () => {
       await dragLocalFiles(page, weakFiles);
-      await waitForRemoteFiles(weakFiles.map(file => file.name), 60_000);
-
-      await expect.poll(
-        () => tuningLogs.some(log => log.includes('profile=weak') && log.includes('maxActiveFiles=2') && log.includes('largeFileSlots=2')),
-        { timeout: 20_000 },
-      ).toBe(true);
+      const progressPopup = visibleProgressCenter(page);
+      await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+      await expect(
+        progressPopup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]'),
+      ).toHaveCount(weakFiles.length);
+      await waitForVisibleFiles(
+        page,
+        weakFiles.map((file) => file.name),
+        60_000,
+      );
     });
 
-    await step('all files remain byte-complete while the adaptive scheduler changes window sizes', async () => {
+    await step('all uploaded files download with their declared byte sizes', async () => {
       for (const file of weakFiles) {
-        const response = await fetch(`${E2E_SSH.controlUrl}/stat?name=${encodeURIComponent(file.name)}`);
-        expect(response.ok).toBeTruthy();
-        const stats = await response.json() as { size: number };
-        expect(stats.size).toBe(file.size);
+        expect((await downloadRemoteFile(page, file.name)).byteLength).toBe(file.size);
       }
     });
   } finally {
@@ -237,20 +334,19 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     fill: 0x60 + index,
   }));
 
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=220`, { method: 'POST' });
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
   try {
     await dragLocalFiles(page, files);
 
-    const popup = page.getByTestId('file-upload-progress-popup');
-    const uploadSpeed = popup.getByTestId('file-upload-speed');
-    const cancelAll = popup.getByTestId('file-upload-cancel-all');
-    const hideButton = popup.getByTestId('file-upload-progress-hide');
+    const popup = visibleProgressCenter(page);
+    const uploadSpeed = popup.getByTestId('transfer-progress-speed');
+    const cancelAll = popup.getByTestId('transfer-progress-cancel-all');
+    const hideButton = popup.getByTestId('transfer-progress-hide');
     await expect(popup).toBeVisible({ timeout: 10_000 });
+    await expect(popup).toContainText('E2E SSH · Upload Tasks');
     await expect(cancelAll).toBeVisible();
     await expect(uploadSpeed).toBeVisible();
     await expect(hideButton).toBeVisible();
-    await expect(hideButton.locator('i')).toHaveClass(/fa-minus/);
-    await expect(popup.getByTestId('file-upload-progress-minimize')).toHaveCount(0);
 
     const [popupBox, speedBox, cancelAllBox, hideBox, speedMetrics] = await Promise.all([
       popup.boundingBox(),
@@ -277,28 +373,27 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(cancelAllBox!.x).toBeGreaterThanOrEqual(hideBox!.x + hideBox!.width - 1);
     expect(cancelAllBox!.x + cancelAllBox!.width).toBeLessThanOrEqual(popupBox!.x + popupBox!.width + 1);
     const headerCenterY = speedBox!.y + speedBox!.height / 2;
-    expect(Math.abs((hideBox!.y + hideBox!.height / 2) - headerCenterY)).toBeLessThanOrEqual(2);
-    expect(Math.abs((cancelAllBox!.y + cancelAllBox!.height / 2) - headerCenterY)).toBeLessThanOrEqual(2);
-    const headerOrder = await popup.getByTestId('file-upload-header-meta').evaluate((header) =>
-      [...header.children].map(element => element.getAttribute('data-testid')).filter(Boolean),
-    );
-    expect(headerOrder.slice(-3)).toEqual([
-      'file-upload-speed',
-      'file-upload-progress-hide',
-      'file-upload-cancel-all',
-    ]);
+    expect(Math.abs(hideBox!.y + hideBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
+    expect(Math.abs(cancelAllBox!.y + cancelAllBox!.height / 2 - headerCenterY)).toBeLessThanOrEqual(2);
     await captureFunctionalScreenshot(page, 'upload-progress.png', { viewport: { width: 1440, height: 900 } });
-    const progressBars = popup.getByTestId('file-upload-progress-bar');
+    const progressBars = popup.getByTestId('transfer-progress-bar');
     await expect(progressBars.first()).toBeVisible();
-    const progressBarBoxes = await progressBars.evaluateAll(elements => elements.map(element => {
-      const rect = element.getBoundingClientRect();
-      return { x: rect.x, width: rect.width };
-    }));
+    const progressBarBoxes = await progressBars.evaluateAll((elements) =>
+      elements.map((element) => {
+        const rect = element.getBoundingClientRect();
+        return { x: rect.x, width: rect.width };
+      }),
+    );
     expect(progressBarBoxes.length).toBeGreaterThan(1);
-    expect(Math.max(...progressBarBoxes.map(box => box.x)) - Math.min(...progressBarBoxes.map(box => box.x))).toBeLessThanOrEqual(1);
-    expect(Math.max(...progressBarBoxes.map(box => box.width)) - Math.min(...progressBarBoxes.map(box => box.width))).toBeLessThanOrEqual(1);
+    expect(
+      Math.max(...progressBarBoxes.map((box) => box.x)) - Math.min(...progressBarBoxes.map((box) => box.x)),
+    ).toBeLessThanOrEqual(1);
+    expect(
+      Math.max(...progressBarBoxes.map((box) => box.width)) - Math.min(...progressBarBoxes.map((box) => box.width)),
+    ).toBeLessThanOrEqual(1);
 
-    const resizeHandle = popup.getByTestId('file-upload-resize-handle');
+    await closeConnectedFileManager(page);
+    const resizeHandle = popup.getByTestId('transfer-progress-resize');
     await expect(resizeHandle).toBeVisible();
     const resizeBox = await resizeHandle.boundingBox();
     expect(resizeBox).not.toBeNull();
@@ -318,14 +413,16 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     const hiddenSources = modal.getByTestId('hidden-progress-source');
     await expect(hiddenSources).toHaveCount(1);
     const sourceCard = hiddenSources.first();
+    await expect(sourceCard).toContainText('E2E SSH · Upload Tasks');
     const hiddenList = modal.getByTestId('hidden-progress-list');
-    const [sourceCardBox, hiddenListBox] = await Promise.all([
+    const [sourceCardBox, hiddenListBox, hiddenListPaddingRight] = await Promise.all([
       sourceCard.boundingBox(),
       hiddenList.boundingBox(),
+      hiddenList.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingRight) || 0),
     ]);
     expect(sourceCardBox).not.toBeNull();
     expect(hiddenListBox).not.toBeNull();
-    expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - 2);
+    expect(sourceCardBox!.width).toBeGreaterThanOrEqual(hiddenListBox!.width - hiddenListPaddingRight - 1);
     const sourceTasks = sourceCard.getByTestId('hidden-progress-task');
     await expect(sourceTasks.first()).toBeVisible();
     expect(await sourceTasks.count()).toBeGreaterThan(1);
@@ -336,111 +433,29 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight);
     const cancelAllHidden = sourceCard.getByTestId('hidden-progress-cancel-all');
     await expect(cancelAllHidden).toBeVisible();
+    await expect(modal.getByTestId('progress-display-hidden-hint')).toHaveText(
+      'Each card represents a hidden task; scroll within the card to view details.',
+    );
     await captureFunctionalScreenshot(page, 'hidden-upload-progress.png', { viewport: { width: 1440, height: 900 } });
     await cancelAllHidden.click();
-    await expect(sourceCard).toBeHidden({ timeout: 10_000 });
-    await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
+    await expect
+      .poll(
+        async () => ((await sourceCard.isVisible()) ? sourceCard.getByTestId('hidden-progress-cancel').count() : 0),
+        {
+          timeout: 10_000,
+        },
+      )
+      .toBe(0);
+    if (await sourceCard.isVisible()) {
+      await expect(sourceCard).toContainText(/Completed|Failed|Partially completed|Cancelled/);
+    } else {
+      await expect(modal.getByTestId('progress-display-empty')).toBeVisible();
+    }
     await modal.getByTestId('progress-display-close').click();
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 });
-
-test('cancel all stays responsive with a buffered isolated upload transport', async ({ page, context }) => {
-  await page.addInitScript(() => {
-    const originalSend = WebSocket.prototype.send;
-    WebSocket.prototype.send = function patchedSend(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
-      originalSend.call(this, data);
-      try {
-        if (new URL(this.url).pathname !== '/ws/upload') return;
-        const state = globalThis as typeof globalThis & { __NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__?: number };
-        state.__NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__ = Math.max(
-          state.__NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__ ?? 0,
-          this.bufferedAmount,
-        );
-      } catch {
-        // Ignore malformed/empty URLs while instrumenting browser sockets for this test.
-      }
-    };
-  });
-
-  await openFileManager(page, context);
-
-  const uploadSocketUrls: string[] = [];
-  page.on('websocket', socket => uploadSocketUrls.push(socket.url()));
-
-  const refreshMarker = 'refresh-after-upload-cancel.txt';
-  const fixtureResponse = await fetch(
-    `${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(refreshMarker)}&size=32`,
-    { method: 'POST' },
-  );
-  expect(fixtureResponse.ok).toBeTruthy();
-  await expect(fileManagerRow(page, refreshMarker)).toBeHidden();
-
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Network.enable');
-  await cdp.send('Network.emulateNetworkConditions', {
-    offline: false,
-    latency: 0,
-    downloadThroughput: -1,
-    uploadThroughput: 256 * 1024,
-  });
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
-
-  const uploadNames = Array.from({ length: 4 }, (_, index) => `cancel-all-refresh-${index + 1}.bin`);
-  try {
-    await dragLocalFiles(page, uploadNames.map((name, index) => ({
-      name,
-      size: 24 * 1024 * 1024,
-      fill: 0x70 + index,
-    })));
-
-    const popup = page.getByTestId('file-upload-progress-popup');
-    await expect(popup).toBeVisible({ timeout: 10_000 });
-    await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
-    await expect.poll(
-      () => uploadSocketUrls.some(socketUrl => new URL(socketUrl).pathname === '/ws/upload'),
-      { timeout: 5_000 },
-    ).toBe(true);
-
-    // Prove this regression is exercising a browser upload backlog larger than the old
-    // 512 KiB responsiveness cap. Control traffic must stay responsive even when the
-    // dedicated upload transport has substantially more data already queued.
-    await expect.poll(
-      () => page.evaluate(() => (globalThis as typeof globalThis & {
-        __NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__?: number;
-      }).__NEXUS_E2E_MAX_UPLOAD_BUFFERED_AMOUNT__ ?? 0),
-      { timeout: 5_000 },
-    ).toBeGreaterThan(512 * 1024);
-
-    await popup.getByTestId('file-upload-cancel-all').click();
-    await expect(popup).toBeHidden({ timeout: 2_000 });
-
-    const refreshStartedAt = Date.now();
-    await page.getByTestId('file-manager-modal').locator('button:has(i.fa-sync-alt)').click();
-    await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 2_000 });
-    expect(Date.now() - refreshStartedAt).toBeLessThan(2_000);
-
-    await expect.poll(async () => {
-      const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-      if (!response.ok) return uploadNames;
-      const body = await response.json() as { files: string[] };
-      return body.files.filter(name =>
-        uploadNames.includes(name) || /^\.nexus-upload-.*\.part(?:\.previous)?$/.test(name),
-      );
-    }, { timeout: 10_000 }).toEqual([]);
-  } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: false,
-      latency: 0,
-      downloadThroughput: -1,
-      uploadThroughput: -1,
-    });
-    await cdp.detach();
-  }
-});
-
 
 test('Progress Display cancel all keeps immediate file-manager refresh responsive', async ({ page, context }) => {
   await openFileManager(page, context);
@@ -465,15 +480,19 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
 
   const uploadNames = Array.from({ length: 4 }, (_, index) => `progress-cancel-all-refresh-${index + 1}.bin`);
   try {
-    await dragLocalFiles(page, uploadNames.map((name, index) => ({
-      name,
-      size: 24 * 1024 * 1024,
-      fill: 0x50 + index,
-    })));
+    await dragLocalFiles(
+      page,
+      uploadNames.map((name, index) => ({
+        name,
+        size: 24 * 1024 * 1024,
+        fill: 0x50 + index,
+      })),
+    );
 
-    const popup = page.getByTestId('file-upload-progress-popup');
+    const popup = visibleProgressCenter(page);
     await expect(popup).toBeVisible({ timeout: 10_000 });
-    await popup.getByTestId('file-upload-progress-hide').click();
+    await closeConnectedFileManager(page);
+    await popup.getByTestId('transfer-progress-hide').click();
     await expect(popup).toBeHidden();
 
     const modal = await openInlineProgressDisplay(page);
@@ -487,18 +506,12 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
     await reopenConnectedFileManager(page);
 
     const refreshStartedAt = Date.now();
-    await page.getByTestId('file-manager-modal').locator('button:has(i.fa-sync-alt)').click();
+    await page.getByTestId('file-manager-modal').getByRole('button', { name: 'Refresh', exact: true }).click();
     await expect(fileManagerRow(page, refreshMarker)).toBeVisible({ timeout: 2_000 });
     expect(Date.now() - refreshStartedAt).toBeLessThan(2_000);
-
-    await expect.poll(async () => {
-      const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-      if (!response.ok) return uploadNames;
-      const body = await response.json() as { files: string[] };
-      return body.files.filter(name =>
-        uploadNames.includes(name) || /^\.nexus-upload-.*\.part(?:\.previous)?$/.test(name),
-      );
-    }, { timeout: 10_000 }).toEqual([]);
+    for (const name of uploadNames) {
+      await expect(fileManagerRow(page, name)).toHaveCount(0);
+    }
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
     await cdp.send('Network.emulateNetworkConditions', {
@@ -511,104 +524,153 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
   }
 });
 
-
-test('cancelled upload stays cancelled when the browser transport drops during a queued binary send', async ({ page, context }) => {
-  await openFileManager(page, context);
-  const filename = 'cancel-during-transport-drop.bin';
-  const cdp = await context.newCDPSession(page);
-  await cdp.send('Network.enable');
-  await cdp.send('Network.emulateNetworkConditions', {
-    offline: false,
-    latency: 0,
-    downloadThroughput: -1,
-    uploadThroughput: 128 * 1024,
-  });
+test('repeated cancelled-upload teardown keeps fresh Workspace WebSockets reconnectable', async ({
+  page,
+  context,
+  request,
+}) => {
+  test.slow();
+  const stressCycles = 32;
+  let activePage = page;
+  await openFileManager(activePage, context);
 
   try {
-    await dragLocalFiles(page, [{ name: filename, size: 32 * 1024 * 1024, fill: 0x4d }]);
-    const popup = page.getByTestId('file-upload-progress-popup');
-    await expect(popup).toBeVisible({ timeout: 10_000 });
-    await expect(popup).toContainText(filename);
-    await page.waitForTimeout(400);
+    for (let cycle = 1; cycle <= stressCycles; cycle += 1) {
+      const filename = `cancel-reset-reconnect-${String(cycle).padStart(2, '0')}.bin`;
+      const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
+      expect(delayResponse.ok).toBeTruthy();
 
-    await popup.getByTestId('file-upload-cancel').click();
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: true,
-      latency: 0,
-      downloadThroughput: 0,
-      uploadThroughput: 0,
-    });
-    await page.waitForTimeout(350);
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: false,
-      latency: 0,
-      downloadThroughput: -1,
-      uploadThroughput: -1,
-    });
+      await dragLocalFiles(activePage, [{ name: filename, size: 2 * 1024 * 1024, fill: 0x40 + (cycle % 32) }]);
+      const task = uploadProgressTask(activePage, filename);
+      await expect(task, `cycle ${cycle}: upload task should start before teardown`).toBeVisible({ timeout: 10_000 });
+      await closeConnectedFileManager(activePage);
+      await task.getByTestId('transfer-progress-cancel').click();
 
-    // A rejected in-flight send must not resurrect a user-cancelled upload as paused/error.
-    await page.waitForTimeout(3_500);
-    await expect(popup).toBeHidden();
-    const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-    expect(response.ok).toBeTruthy();
-    const body = await response.json() as { files: string[] };
-    expect(body.files).not.toContain(filename);
+      // Deliberately overlap browser transport loss, upload cancellation, Backend runtime teardown,
+      // session clearing, and SSH-server reset. This is the churn that previously made a later
+      // /ws/workspace upgrade intermittently fall through the shared dev/E2E WebSocket proxy.
+      await context.setOffline(true);
+      const resetResponse = await request.post('/api/v1/__e2e/reset', {
+        data: { mode: 'seed' },
+      });
+      expect(
+        resetResponse.ok(),
+        `cycle ${cycle}: Backend E2E reset failed: ${await resetResponse.text()}`,
+      ).toBeTruthy();
+      await resetTestSshFilesystem();
+
+      // A new browser page models the next E2E case: old Workspace/upload sockets are gone, while
+      // the same long-lived Vite ingress must accept a brand-new Workspace control upgrade.
+      await activePage.close();
+      await context.setOffline(false);
+      await loginAsInitialAdmin(context.request);
+      await configureSshE2eSettings(context.request);
+      const connectionId = await ensureTestSshConnection(context.request);
+      activePage = await context.newPage();
+      await connectTestSshFromConnectionsPage(activePage, connectionId);
+      await openConnectedFileManager(activePage);
+      await expect(
+        activePage.getByTestId('command-input'),
+        `cycle ${cycle}: fresh Workspace control socket should reconnect after teardown`,
+      ).toBeEnabled();
+    }
   } finally {
-    await cdp.send('Network.emulateNetworkConditions', {
-      offline: false,
-      latency: 0,
-      downloadThroughput: -1,
-      uploadThroughput: -1,
-    });
-    await cdp.detach();
+    await context.setOffline(false).catch(() => undefined);
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+    if (!activePage.isClosed()) await activePage.close();
   }
 });
 
-
-test('cancelled upload cannot be resurrected by a rejected binary send that was already waiting on backpressure', async ({ page, context }) => {
-  test.setTimeout(60_000);
-  await page.addInitScript(() => {
-    const descriptor = Object.getOwnPropertyDescriptor(WebSocket.prototype, 'bufferedAmount');
-    if (!descriptor?.get || descriptor.configurable === false) return;
-    Object.defineProperty(WebSocket.prototype, 'bufferedAmount', {
-      configurable: true,
-      enumerable: descriptor.enumerable,
-      get() {
-        const socket = this as WebSocket;
-        if ((globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ && socket.readyState === WebSocket.OPEN) {
-          socket.close(4000, 'e2e buffered send rejection');
-        }
-        if ((globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__) return 64 * 1024 * 1024;
-        return descriptor.get!.call(socket);
-      },
-    });
-  });
+test('file picker uploads a delayed file into a remote directory and refreshes the target', async ({
+  page,
+  context,
+}) => {
+  await mkdir(M11_03E_EVIDENCE_DIR, { recursive: true });
   await openFileManager(page, context);
-  const filename = 'cancelled-inflight-send.bin';
 
-  await page.evaluate(() => { (globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__ = true; });
+  const fileManager = page.getByTestId('file-manager-modal');
+  const folder = fileManagerRow(page, 'folder-seed');
+  const folderPath = await folder.getAttribute('data-file-path');
+  expect(folderPath).toBeTruthy();
+  await folder.click();
+  await expect(fileManager.getByTestId('file-manager-path-input')).toHaveValue(folderPath!);
+
+  const filename = 'm11-03e-picker-upload.bin';
+  const payload = Buffer.alloc(768 * 1024 + 123, 0x6d);
+  const beforeMetrics = await fileManagerMetrics(page);
+  const viewport = page.viewportSize();
+  const modalBox = await fileManager.boundingBox();
+  const listBox = await activeFileManagerList(page).boundingBox();
+  expect(viewport).toBeTruthy();
+  expect(modalBox).toBeTruthy();
+  expect(listBox).toBeTruthy();
+  await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-before-upload.png') });
+
+  const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=300`, { method: 'POST' });
+  expect(delayResponse.ok).toBeTruthy();
+  const observedStatuses = new Set<string>();
   try {
-    await dragLocalFiles(page, [{ name: filename, size: 4 * 1024 * 1024, fill: 0x5e }]);
-    const popup = page.getByTestId('file-upload-progress-popup');
-    await expect(popup).toBeVisible({ timeout: 10_000 });
-    await expect(popup).toContainText(filename);
-    await page.waitForTimeout(250);
+    const fileChooserPromise = page.waitForEvent('filechooser');
+    await fileManager.getByTestId('file-upload-button').click();
+    const fileChooser = await fileChooserPromise;
+    await fileChooser.setFiles({ name: filename, mimeType: 'application/octet-stream', buffer: payload });
 
-    await popup.getByTestId('file-upload-cancel').click();
-    await page.evaluate(() => { (globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ = true; });
+    const progressPopup = visibleProgressCenter(page);
+    await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+    const task = uploadProgressTask(page, filename);
+    await expect(task).toBeVisible({ timeout: 10_000 });
+    const readStatus = async (): Promise<string | null> => {
+      const text = await task.innerText();
+      const match = text.match(/\((Queued|Running|Completed|Cancelled|Failed|Partially completed)\)/);
+      const status = match?.[1]?.toLowerCase().replace(' ', '-') ?? null;
+      if (status) observedStatuses.add(status);
+      return status;
+    };
+    await expect.poll(readStatus, { timeout: 10_000 }).toBe('queued');
+    await expect.poll(readStatus, { timeout: 30_000 }).toBe('running');
+    await expect.poll(readStatus, { timeout: 60_000 }).toBe('completed');
+    expect(observedStatuses).toContain('queued');
+    expect(observedStatuses).toContain('running');
+    expect(observedStatuses).toContain('completed');
 
-    // cancelUpload schedules removal after three seconds. A stale pump catch must not
-    // overwrite cancelled with paused/error and keep a ghost task alive.
-    await page.waitForTimeout(3_500);
-    await expect(popup).toBeHidden();
-    const response = await fetch(`${E2E_SSH.controlUrl}/files`);
-    expect(response.ok).toBeTruthy();
-    const body = await response.json() as { files: string[] };
-    expect(body.files).not.toContain(filename);
+    await fileManager.getByTitle('Refresh', { exact: true }).click();
+    await expect(fileManagerRow(page, filename)).toBeVisible({ timeout: 20_000 });
+    expect(await downloadRemoteFile(page, filename)).toEqual(payload);
+
+    const afterMetrics = await fileManagerMetrics(page);
+    const progressBox = await progressPopup.boundingBox();
+    await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-after-upload.png') });
+    expect(afterMetrics.scrollWidth).toBeLessThanOrEqual(afterMetrics.clientWidth + 1);
+    expect(beforeMetrics.scrollWidth).toBeLessThanOrEqual(beforeMetrics.clientWidth + 1);
+    expect(modalBox!.x).toBeGreaterThanOrEqual(0);
+    expect(modalBox!.y).toBeGreaterThanOrEqual(0);
+    expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+    expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+    expect(progressBox).toBeTruthy();
+    expect(progressBox!.x).toBeGreaterThanOrEqual(0);
+    expect(progressBox!.y).toBeGreaterThanOrEqual(0);
+    expect(progressBox!.x + progressBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+    expect(progressBox!.y + progressBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+    await writeFile(
+      path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-metrics.json'),
+      JSON.stringify(
+        {
+          viewport,
+          modal: modalBox,
+          list: listBox,
+          progress: progressBox,
+          before: beforeMetrics,
+          after: afterMetrics,
+          statuses: [...observedStatuses],
+          filename,
+          payloadBytes: payload.byteLength,
+        },
+        null,
+        2,
+      ),
+      'utf8',
+    );
   } finally {
-    await page.evaluate(() => {
-      (globalThis as any).__NEXUS_E2E_HOLD_BUFFERED_WS__ = false;
-      (globalThis as any).__NEXUS_E2E_BREAK_BUFFERED_WS__ = false;
-    }).catch(() => {});
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 });

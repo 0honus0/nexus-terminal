@@ -1,0 +1,19 @@
+{
+  "fileEditor": {
+    "title": "文件编辑器",
+    "encoding": "编码",
+    "contextMenu": {
+      "close": "关闭标签页",
+      "closeOthers": "关闭其他标签页",
+      "closeRight": "关闭右侧标签页",
+      "closeLeft": "关闭左侧标签页"
+    },
+    "lineEnding": "换行符",
+    "refreshRemote": "重新加载远程文件",
+    "confirmDiscardChanges": "放弃未保存的修改并重新加载远程文件吗？",
+    "lineEndingLf": "LF",
+    "lineEndingCrlf": "CRLF",
+    "lineEndingCr": "CR",
+    "resizePopup": "调整编辑器窗口大小"
+  }
+}

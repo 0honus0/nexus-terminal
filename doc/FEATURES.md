@@ -15,6 +15,8 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和
 - 基于 SFTP 的远程文件浏览与管理。
 - Monaco Editor 在线编辑文本文件。
 - 文件预览、搜索、多选、拖放上传和移动。
+- Markdown、图片、PDF、XLS/XLSX/CSV 与 DOCX 预览，支持多标签、刷新、搜索和宽内容横向滚动。
+- 上传、复制/移动、压缩和跨会话传输统一进入可隐藏/恢复的 Progress Display。
 - 复制、剪切、粘贴、删除、重命名和权限修改等常用操作。
 
 ## 远程桌面
@@ -49,10 +51,11 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和
 - 响应式移动端界面。
 - PWA 支持。
 - 明暗主题、终端配色和工作区样式定制。
+- 页面/终端背景、终端文字效果、本地 HTML theme 与可配置 GitHub 远程 HTML theme catalog。官方示例位于 `assets/html-themes/remote/`。
 - 独立桌面端发布版本。
 
 桌面端安装包见 [GitHub Releases](https://github.com/0honus0/nexus-terminal/releases/latest)。Web 端专属的部分认证与会话能力在桌面端可能有所不同。
 
 ## 构建与平台
 
-Frontend、Backend 与 Remote Gateway 使用统一镜像发布，并支持 AMD64 / ARM64。镜像结构、Docker Compose、更新和源码构建方式见 [部署与更新](./DEPLOYMENT.md)。
+Frontend、Backend 与 Remote Gateway 使用统一镜像发布，并支持 AMD64 / ARM64。稳定发布跟随 `:latest`，手动开发发布默认更新 `:dev`；镜像结构、Docker Compose、更新和源码构建方式见 [部署与更新](./DEPLOYMENT.md)。

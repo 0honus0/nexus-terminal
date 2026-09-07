@@ -1,0 +1,20 @@
+{
+  "terminal": {
+    "search": {
+      "open": "Search terminal",
+      "placeholder": "Search terminal...",
+      "previous": "Find previous",
+      "next": "Find next",
+      "close": "Close search"
+    },
+    "label": "Terminal",
+    "ariaLabel": "Terminal",
+    "mobile": {
+      "copy": "Copy",
+      "paste": "Paste",
+      "selectAll": "Select All",
+      "adjustSelectionStart": "Adjust selection start",
+      "adjustSelectionEnd": "Adjust selection end"
+    }
+  }
+}

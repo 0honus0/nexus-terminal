@@ -25,14 +25,16 @@ done
 
 node_version="$(node -p "require('$versions_file').node")"
 playwright_version="$(node -p "require('$versions_file').playwright")"
-runner_revision="$(node -p "require('$versions_file').runnerRevision")"
-tag="playwright-${playwright_version}-node${node_version}-v${runner_revision}"
+tag="$(node "$repo_root/scripts/e2e/runner-image-info.mjs" tag)"
+runner_fingerprint="$(node "$repo_root/scripts/e2e/runner-image-info.mjs" fingerprint)"
 full_image="$image:$tag"
+fingerprint_image="$image:fingerprint-$runner_fingerprint"
 
 echo "[E2E runner] building $full_image"
 docker build \
   --pull \
   --build-arg "PLAYWRIGHT_VERSION=$playwright_version" \
+  --build-arg "E2E_RUNNER_FINGERPRINT=$runner_fingerprint" \
   -f "$repo_root/test/e2e/Dockerfile.runner" \
   -t "$full_image" \
   "$repo_root"
@@ -44,6 +46,9 @@ docker run --rm "$full_image" sh -lc "npx -y playwright@${playwright_version} --
 if [[ "$push" == "true" ]]; then
   echo "[E2E runner] pushing $full_image"
   docker push "$full_image"
+  docker tag "$full_image" "$fingerprint_image"
+  echo "[E2E runner] publishing fingerprint marker $fingerprint_image"
+  docker push "$fingerprint_image"
 fi
 
 echo "$full_image"

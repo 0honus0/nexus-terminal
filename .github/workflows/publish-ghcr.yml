@@ -5,6 +5,14 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
+      channel:
+        description: Image channel to publish
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - release
       architecture:
         description: Image architecture to build
         required: true
@@ -33,6 +41,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image_tag: ${{ steps.image_tag.outputs.value }}
+      channel: ${{ steps.channel.outputs.value }}
+      channel_tag: ${{ steps.channel.outputs.tag }}
       architecture: ${{ steps.architecture.outputs.value }}
       platforms: ${{ steps.architecture.outputs.platforms }}
 
@@ -60,6 +70,35 @@ jobs:
             exit 1
           fi
           echo "value=$image_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Select image channel
+        id: channel
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            channel="release"
+          else
+            channel="${REQUESTED_CHANNEL:-dev}"
+          fi
+
+          case "$channel" in
+            dev)
+              channel_tag="dev"
+              ;;
+            release)
+              channel_tag="latest"
+              ;;
+            *)
+              echo "Unsupported image channel: $channel" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "value=$channel" >> "$GITHUB_OUTPUT"
+          echo "tag=$channel_tag" >> "$GITHUB_OUTPUT"
 
       - name: Select image architecture
         id: architecture
@@ -116,7 +155,7 @@ jobs:
           done
 
   publish:
-    name: Publish unified image (${{ needs.prepare.outputs.architecture }})
+    name: Publish unified image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
     needs: prepare
     runs-on: ubuntu-latest
 
@@ -153,7 +192,7 @@ jobs:
           platforms: ${{ needs.prepare.outputs.platforms }}
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ needs.prepare.outputs.channel_tag }}
             ${{ steps.image.outputs.name }}:${{ needs.prepare.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}

@@ -1,0 +1,42 @@
+{
+  "proxies": {
+    "title": "Proxy Management",
+    "addProxy": "Add New Proxy",
+    "loading": "Loading proxies...",
+    "error": "Failed to load proxies: {error}",
+    "noProxies": "No proxies yet. Click 'Add New Proxy' to create one!",
+    "actions": {
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "form": {
+      "title": "Add New Proxy",
+      "titleEdit": "Edit Proxy",
+      "name": "Name:",
+      "type": "Type:",
+      "host": "Host/IP:",
+      "port": "Port:",
+      "username": "Username:",
+      "password": "Password:",
+      "optional": "Optional",
+      "confirm": "Confirm Add",
+      "confirmEdit": "Confirm Edit",
+      "adding": "Adding...",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "errorRequiredFields": "Please fill in all required fields.",
+      "errorPort": "Port must be between 1 and 65535.",
+      "errorAdd": "Failed to add proxy: {error}",
+      "errorUpdate": "Failed to update proxy: {error}",
+      "passwordUpdateNote": "Leave password blank to keep the existing password.",
+      "clearStoredPassword": "Clear saved password"
+    },
+    "prompts": {
+      "confirmDelete": "Are you sure you want to delete the proxy \"{name}\"? This cannot be undone."
+    },
+    "errors": {
+      "deleteFailed": "Failed to delete proxy: {error}"
+    },
+    "updatedAt": "Last Updated"
+  }
+}

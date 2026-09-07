@@ -10,7 +10,6 @@ COPY packages/backend/package.json packages/backend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY packages/backend/src ./src
 COPY packages/backend/tsconfig.json ./tsconfig.json
-COPY packages/backend/html-presets ./html-presets
 RUN npm run build \
     && npm prune --omit=dev \
     && npm cache clean --force
@@ -23,6 +22,7 @@ COPY packages/frontend/package.json packages/frontend/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY packages/frontend/src ./src
 COPY packages/frontend/public ./public
+COPY packages/frontend/scripts ./scripts
 COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./
 RUN npm run build
 
@@ -44,9 +44,10 @@ RUN apk add --no-cache nodejs nginx tini \
     && rm -rf /usr/share/nginx/html/* /var/cache/apk/*
 
 WORKDIR /app
+ENV NEXUS_HTML_THEME_ASSET_DIR=/app/assets/html-themes/local
 
 COPY --from=backend-builder /build/backend/dist ./dist
-COPY --from=backend-builder /build/backend/html-presets ./html-presets
+COPY assets/html-themes/local ./assets/html-themes/local
 COPY --from=backend-builder /build/backend/node_modules ./node_modules
 COPY --from=backend-builder /build/backend/package.json ./package.json
 
@@ -56,7 +57,7 @@ COPY --from=remote-gateway-builder /build/remote-gateway/package.json ./remote-g
 
 COPY --from=frontend-builder /build/frontend/dist /usr/share/nginx/html
 COPY packages/frontend/nginx.conf /etc/nginx/http.d/default.conf
-COPY docker/entrypoint.sh /usr/local/bin/nexus-terminal
+COPY scripts/docker/entrypoint.sh /usr/local/bin/nexus-terminal
 
 RUN chmod 0755 /usr/local/bin/nexus-terminal \
     && mkdir -p /app/data /run/nginx

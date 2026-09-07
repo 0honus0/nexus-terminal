@@ -11,7 +11,10 @@ import {
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
-async function connectMobileSsh(page: Parameters<typeof connectTestSshFromConnectionsPage>[0], request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {
+async function connectMobileSsh(
+  page: Parameters<typeof connectTestSshFromConnectionsPage>[0],
+  request: Parameters<typeof loginAsInitialAdmin>[0],
+): Promise<void> {
   await loginAsInitialAdmin(request);
   await configureSshE2eSettings(request);
   await resetTestSshFilesystem();
@@ -20,11 +23,20 @@ async function connectMobileSsh(page: Parameters<typeof connectTestSshFromConnec
   await expect(page.getByTestId('terminal')).toBeVisible({ timeout: 20_000 });
 }
 
+async function tapFileManagerRow(
+  page: Parameters<typeof connectTestSshFromConnectionsPage>[0],
+  filename: string,
+): Promise<void> {
+  const row = fileManagerRow(page, filename);
+  await expect(row).toBeVisible();
+  await row.locator('button[data-file-path]').click();
+}
+
 test('remote touch supports switchable direct and touchpad Guacamole input', async ({ page }) => {
   await page.goto('/login');
 
   const result = await page.evaluate(async () => {
-    const modulePath = '/src/foundation/interaction/remoteTouchInput.ts';
+    const modulePath = '/src/features/remote-desktop/composables/remoteTouchInput.ts';
     const { attachRemoteTouchInput } = await import(/* @vite-ignore */ modulePath);
     const calls: Array<{
       x: number;
@@ -74,32 +86,35 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
         });
       },
     };
-    const input = attachRemoteTouchInput(target, fakeClient, 'direct', { onTap: focusKeyboard });
+    const input = attachRemoteTouchInput(target, fakeClient, 'direct', focusKeyboard);
 
-    const touch = (identifier: number, clientX: number, clientY: number, force: number) => new Touch({
-      identifier,
-      target,
-      clientX,
-      clientY,
-      pageX: clientX,
-      pageY: clientY,
-      screenX: clientX,
-      screenY: clientY,
-      radiusX: 8,
-      radiusY: 8,
-      rotationAngle: 0,
-      force,
-    });
+    const touch = (identifier: number, clientX: number, clientY: number, force: number) =>
+      new Touch({
+        identifier,
+        target,
+        clientX,
+        clientY,
+        pageX: clientX,
+        pageY: clientY,
+        screenX: clientX,
+        screenY: clientY,
+        radiusX: 8,
+        radiusY: 8,
+        rotationAngle: 0,
+        force,
+      });
     const dispatch = (type: 'touchstart' | 'touchmove' | 'touchend', active: Touch[], changed: Touch[]) => {
-      target.dispatchEvent(new TouchEvent(type, {
-        bubbles: true,
-        cancelable: true,
-        touches: active,
-        targetTouches: active,
-        changedTouches: changed,
-      }));
+      target.dispatchEvent(
+        new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          touches: active,
+          targetTouches: active,
+          changedTouches: changed,
+        }),
+      );
     };
-    const wait = (milliseconds: number) => new Promise(resolve => window.setTimeout(resolve, milliseconds));
+    const wait = (milliseconds: number) => new Promise((resolve) => window.setTimeout(resolve, milliseconds));
 
     const tapTouch = touch(1, 80, 90, 0.5);
     dispatch('touchstart', [tapTouch], [tapTouch]);
@@ -142,12 +157,7 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     const keyboardStoppedAfterDestroy = keyboardTapCount === 2;
 
     const touchpadCallStart = calls.length;
-    const touchpadInput = attachRemoteTouchInput(
-      target,
-      fakeClient,
-      'touchpad',
-      { onTap: focusKeyboard },
-    );
+    const touchpadInput = attachRemoteTouchInput(target, fakeClient, 'touchpad', focusKeyboard);
 
     const moveStart = touch(6, 70, 70, 0.5);
     dispatch('touchstart', [moveStart], [moveStart]);
@@ -160,67 +170,47 @@ test('remote touch supports switchable direct and touchpad Guacamole input', asy
     dispatch('touchend', [], [touch(11, 100, 90, 0)]);
     const touchpadTapFocusedKeyboard = document.activeElement === keyboardSink && keyboardTapCount === 3;
 
-    const rightTouches = [
-      touch(7, 80, 80, 0.5),
-      touch(8, 120, 80, 0.5),
-    ];
+    const rightTouches = [touch(7, 80, 80, 0.5), touch(8, 120, 80, 0.5)];
     dispatch('touchstart', rightTouches, rightTouches);
-    dispatch('touchend', [], [
-      touch(7, 80, 80, 0),
-      touch(8, 120, 80, 0),
-    ]);
+    dispatch('touchend', [], [touch(7, 80, 80, 0), touch(8, 120, 80, 0)]);
     await wait(300);
 
-    const scrollStart = [
-      touch(9, 85, 80, 0.5),
-      touch(10, 125, 80, 0.5),
-    ];
+    const scrollStart = [touch(9, 85, 80, 0.5), touch(10, 125, 80, 0.5)];
     dispatch('touchstart', scrollStart, scrollStart);
-    const scrollEnd = [
-      touch(9, 85, 180, 0.5),
-      touch(10, 125, 180, 0.5),
-    ];
+    const scrollEnd = [touch(9, 85, 180, 0.5), touch(10, 125, 180, 0.5)];
     dispatch('touchmove', scrollEnd, scrollEnd);
-    dispatch('touchend', [], [
-      touch(9, 85, 180, 0),
-      touch(10, 125, 180, 0),
-    ]);
+    dispatch('touchend', [], [touch(9, 85, 180, 0), touch(10, 125, 180, 0)]);
     const touchpadCalls = calls.slice(touchpadCallStart);
     const multiTouchSkippedKeyboard = keyboardTapCount === 3;
-    const touchpadMode = touchpadInput.mode;
     touchpadInput.destroy();
     target.remove();
     keyboardSink.remove();
 
     return {
-      directMode: input.mode,
-      touchpadMode,
       touchActionWhileAttached,
       touchActionAfterDestroy: target.style.touchAction,
       cursorShowCount,
-      allScaled: [...allCalls, ...touchpadCalls].every(call => call.applyDisplayScale),
-      tapPressedLeft: tapCalls.some(call => call.left),
-      tapReleasedLeft: tapCalls.some(call => !call.left),
+      allScaled: [...allCalls, ...touchpadCalls].every((call) => call.applyDisplayScale),
+      tapPressedLeft: tapCalls.some((call) => call.left),
+      tapReleasedLeft: tapCalls.some((call) => !call.left),
       directTapFocusedKeyboard,
       holdSkippedKeyboard,
       dragMoveDidNotAddExtraKeyboard,
       keyboardStoppedAfterDestroy,
       touchpadTapFocusedKeyboard,
       multiTouchSkippedKeyboard,
-      holdPressedRight: holdCalls.some(call => call.right),
+      holdPressedRight: holdCalls.some((call) => call.right),
       holdReleasedRight: holdCalls.some((call, index) => index > 0 && !call.right),
-      dragMovedWhilePressed: dragCalls.some(call => call.left && call.x >= 120),
+      dragMovedWhilePressed: dragCalls.some((call) => call.left && call.x >= 120),
       dragReleasedLeft: dragCalls.some((call, index) => index > 0 && !call.left),
       stoppedAfterDestroy,
-      touchpadMovedPointer: touchpadCalls.some(call => call.x > 0 && !call.left && !call.right),
-      touchpadPressedRight: touchpadCalls.some(call => call.right),
-      touchpadScrolled: touchpadCalls.some(call => call.up || call.down),
+      touchpadMovedPointer: touchpadCalls.some((call) => call.x > 0 && !call.left && !call.right),
+      touchpadPressedRight: touchpadCalls.some((call) => call.right),
+      touchpadScrolled: touchpadCalls.some((call) => call.up || call.down),
     };
   });
 
   expect(result).toEqual({
-    directMode: 'direct',
-    touchpadMode: 'touchpad',
     touchActionWhileAttached: 'none',
     touchActionAfterDestroy: '',
     cursorShowCount: expect.any(Number),
@@ -255,7 +245,9 @@ test('mobile keyboard sink preserves IME composition before clearing input', asy
     const clearValue = () => {
       if (!composing) input.value = '';
     };
-    input.addEventListener('compositionstart', () => { composing = true; });
+    input.addEventListener('compositionstart', () => {
+      composing = true;
+    });
     input.addEventListener('compositionend', () => {
       composing = false;
       clearValue();
@@ -277,15 +269,18 @@ test('mobile keyboard sink preserves IME composition before clearing input', asy
 
 test('mobile RDP touch mode toggle persists without reconnecting the session', async ({ page, context }) => {
   const connectionName = 'E2E Mobile RDP Touch Modes';
-  const storageKey = 'nexus.rdp.touch-mode';
+  let sessionCreateRequests = 0;
+  page.on('request', (request) => {
+    if (/\/api\/v1\/connections\/\d+\/rdp-session(?:\?|$)/.test(request.url())) sessionCreateRequests += 1;
+  });
 
   await loginAsInitialAdmin(context.request);
   expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
 
   const existingResponse = await context.request.get('/api/v1/connections');
   expect(existingResponse.ok()).toBeTruthy();
-  const existingConnections = await existingResponse.json() as Array<{ id: number; name?: string }>;
-  for (const connection of existingConnections.filter(item => item.name === connectionName)) {
+  const existingConnections = (await existingResponse.json()) as Array<{ id: number; name?: string }>;
+  for (const connection of existingConnections.filter((item) => item.name === connectionName)) {
     expect((await context.request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
   }
 
@@ -300,11 +295,10 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
     },
   });
   expect(createResponse.status(), await createResponse.text()).toBe(201);
-  const connectionId = (await createResponse.json() as { connection: { id: number } }).connection.id;
+  const connectionId = ((await createResponse.json()) as { connection: { id: number } }).connection.id;
 
   const openConnection = async () => {
     await page.goto('/workspace');
-    await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
     const connectionList = page.getByTestId('workspace-connection-list');
     await expect(connectionList).toBeVisible();
     await connectionList.getByText(connectionName, { exact: true }).first().click();
@@ -313,31 +307,36 @@ test('mobile RDP touch mode toggle persists without reconnecting the session', a
 
   try {
     await page.goto('/login');
-    await page.evaluate(key => window.localStorage.removeItem(key), storageKey);
     await openConnection();
+    await expect.poll(() => sessionCreateRequests).toBe(1);
 
-    const directMode = page.getByTestId('rdp-touch-mode-direct');
-    const touchpadMode = page.getByTestId('rdp-touch-mode-touchpad');
-    const hint = page.getByTestId('rdp-touch-hint');
+    const directMode = page.getByRole('button', { name: 'Direct', exact: true });
+    const touchpadMode = page.getByRole('button', { name: 'Touchpad', exact: true });
 
     await expect(directMode).toBeVisible();
     await expect(directMode).toHaveAttribute('aria-pressed', 'true');
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'false');
-    await expect(hint).toContainText('Tap: click + keyboard');
+    await expect(directMode).toHaveAttribute('title', /Tap: click \+ keyboard/);
 
     await touchpadMode.click();
     await expect(touchpadMode).toHaveAttribute('aria-pressed', 'true');
     await expect(directMode).toHaveAttribute('aria-pressed', 'false');
-    await expect(hint).toContainText('One finger: move');
-    await expect.poll(() => page.evaluate(key => window.localStorage.getItem(key), storageKey)).toBe('touchpad');
+    await expect(touchpadMode).toHaveAttribute('title', /One finger: move/);
+    expect(sessionCreateRequests).toBe(1);
 
     await page.getByTestId('rdp-window-close').click();
-    await expect(page.getByTestId('remote-desktop-modal')).toHaveCount(0);
+    await expect(page.getByTestId('remote-desktop-modal')).toBeHidden();
     await openConnection();
+    await expect.poll(() => sessionCreateRequests).toBe(2);
 
-    await expect(page.getByTestId('rdp-touch-mode-touchpad')).toHaveAttribute('aria-pressed', 'true');
-    await page.getByTestId('rdp-touch-mode-direct').click();
-    await expect.poll(() => page.evaluate(key => window.localStorage.getItem(key), storageKey)).toBe('direct');
+    await expect(page.getByRole('button', { name: 'Touchpad', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Direct', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    expect(sessionCreateRequests).toBe(2);
+    await page.getByTestId('rdp-window-close').click();
+    await openConnection();
+    await expect.poll(() => sessionCreateRequests).toBe(3);
+    await expect(page.getByRole('button', { name: 'Direct', exact: true })).toHaveAttribute('aria-pressed', 'true');
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);
   }
@@ -347,17 +346,35 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
   await connectMobileSsh(page, context.request);
 
   await step('mobile-only quick commands button opens the embedded command list', async () => {
-    const commandBar = page.getByTestId('command-input-bar');
-    const quickCommandsButton = commandBar.locator('button:has(i.fa-bolt)');
+    const quickCommandsButton = page.getByRole('button', { name: 'Quick Commands', exact: true });
     await expect(quickCommandsButton).toBeVisible();
     await quickCommandsButton.click();
 
-    const quickCommands = page.getByTestId('quick-commands-view');
-    const quickDialog = page.getByTestId('quick-commands-dialog');
+    const quickDialog = page.getByRole('dialog', { name: 'Quick Commands', exact: true });
+    const quickCommands = quickDialog.getByTestId('quick-commands-view');
     await expect(quickCommands).toBeVisible();
-    await expect(quickDialog).toHaveAttribute('data-overlay-panel-preset', 'standard-modal');
-    await expect(quickCommands.getByTestId('quick-command-add')).toBeVisible();
-    await expect(quickCommands.locator('[data-testid="quick-command-search-toggle"], [data-testid="quick-command-search"]').first()).toBeVisible();
+    const quickCommandAdd = quickCommands.getByTestId('quick-command-add');
+    await expect(quickCommandAdd).toBeVisible();
+    const quickCommandAddUsesThemeAccent = await quickCommandAdd.evaluate((element) => {
+      const probe = document.createElement('span');
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--link-active-color').trim();
+      document.body.append(probe);
+      const expectedBackground = getComputedStyle(probe).color;
+      probe.style.color = 'white';
+      const expectedIconColor = getComputedStyle(probe).color;
+      probe.remove();
+      const icon = element.querySelector('i');
+      return {
+        background: getComputedStyle(element).backgroundColor === expectedBackground,
+        icon: icon instanceof HTMLElement && getComputedStyle(icon).color === expectedIconColor,
+      };
+    });
+    expect(quickCommandAddUsesThemeAccent).toEqual({ background: true, icon: true });
+    await expect(
+      quickCommands
+        .locator('[data-testid="quick-command-search-toggle"], [data-testid="quick-command-search"]')
+        .first(),
+    ).toBeVisible();
     await captureFunctionalScreenshot(page, 'mobile-quick-commands.png');
 
     await page.keyboard.press('Escape');
@@ -365,108 +382,24 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
   });
 });
 
-test('mobile progress display floats above the workspace and closes from its overlay controls', async ({ page, context }) => {
+test('mobile shared Progress Display stays dormant until transfer work is hidden', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
-
-  const toggle = page.getByTestId('transfer-progress-toggle');
-  const overlay = page.getByTestId('progress-display-overlay');
-  const display = page.getByTestId('progress-display-modal');
-  const dialog = page.getByTestId('progress-display-dialog');
-
-  await step('progress display uses the same standard modal shell as quick commands', async () => {
-    const commandBar = page.getByTestId('command-input-bar');
-    const quickCommandsButton = commandBar.locator('button:has(i.fa-bolt)');
-    await quickCommandsButton.click();
-    const quickDialog = page.getByTestId('quick-commands-dialog');
-    await expect(quickDialog).toBeVisible();
-    const quickShell = await quickDialog.evaluate(element => {
-      const style = window.getComputedStyle(element);
-      return {
-        maxWidth: style.maxWidth,
-        maxHeight: style.maxHeight,
-        padding: style.padding,
-        borderRadius: style.borderRadius,
-        boxShadow: style.boxShadow,
-      };
-    });
-    await page.keyboard.press('Escape');
-    await expect(quickDialog).toBeHidden();
-
-    await expect(toggle).toBeVisible();
-    await toggle.click();
-    await expect(dialog).toBeVisible();
-    const progressShell = await dialog.evaluate(element => {
-      const style = window.getComputedStyle(element);
-      return {
-        maxWidth: style.maxWidth,
-        maxHeight: style.maxHeight,
-        padding: style.padding,
-        borderRadius: style.borderRadius,
-        boxShadow: style.boxShadow,
-      };
-    });
-    expect(progressShell).toEqual(quickShell);
-    await display.getByTestId('progress-display-close').click();
-    await expect(display).toBeHidden();
-  });
-
-  await step('progress display opens as a bounded top-level overlay instead of resizing the terminal', async () => {
-    await expect(toggle).toBeVisible();
-    await toggle.click();
-
-    await expect(display).toBeVisible();
-    await expect(display).toHaveAttribute('data-progress-display-placement', 'overlay');
-    await expect(dialog).toHaveAttribute('data-overlay-panel-preset', 'standard-modal');
-    await expect.poll(() => overlay.evaluate((element) => ({
-      position: window.getComputedStyle(element).position,
-      zIndex: window.getComputedStyle(element).zIndex,
-    }))).toEqual({ position: 'fixed', zIndex: '1100' });
-
-    const viewport = page.viewportSize();
-    const dialogBox = await dialog.boundingBox();
-    expect(viewport).toBeTruthy();
-    expect(dialogBox).toBeTruthy();
-    expect(dialogBox!.x).toBeGreaterThanOrEqual(8);
-    expect(dialogBox!.y).toBeGreaterThanOrEqual(8);
-    expect(dialogBox!.width).toBeLessThanOrEqual(viewport!.width - 16);
-    expect(dialogBox!.height).toBeLessThanOrEqual(viewport!.height - 16);
-    await expect(page.getByTestId('terminal')).toBeVisible();
-    await expect(page.getByTestId('command-input-bar')).toBeVisible();
-    await captureFunctionalScreenshot(page, 'mobile-progress-display.png');
-  });
-
-  await step('tapping the dimmed blank area closes the progress overlay', async () => {
-    await overlay.click({ position: { x: 3, y: 3 } });
-    await expect(display).toBeHidden();
-  });
-
-  await step('the explicit hide button remains available', async () => {
-    await toggle.click();
-    await expect(display).toBeVisible();
-    await display.getByTestId('transfer-progress-minimize').click();
-    await expect(display).toBeHidden();
-  });
-
-  await step('the footer close button still closes the overlay', async () => {
-    await toggle.click();
-    await expect(display).toBeVisible();
-    await display.getByTestId('progress-display-close').click();
-    await expect(display).toBeHidden();
-  });
+  await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0);
+  await expect(page.getByTestId('terminal')).toBeVisible();
+  await expect(page.getByTestId('command-input-bar')).toBeVisible();
 });
 
 test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
 
-  const commandBar = page.getByTestId('command-input-bar');
   const commandInput = page.getByTestId('command-input');
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
 
   await step('start a one-byte remote reader, then open the compact mobile keyboard and arm Ctrl', async () => {
-    await commandInput.fill("byte=$(dd bs=1 count=1 2>/dev/null | od -An -t u1); printf 'CTRL_BYTE=%s\\n' \"$byte\"");
+    await commandInput.fill('byte=$(dd bs=1 count=1 2>/dev/null | od -An -t u1); printf \'CTRL_BYTE=%s\\n\' "$byte"');
     await commandInput.press('Enter');
 
-    const keyboardButton = commandBar.locator('button:has(i.fa-keyboard)');
+    const keyboardButton = page.getByTestId('toggle-virtual-keyboard');
     await expect(keyboardButton).toBeVisible();
     await keyboardButton.click();
 
@@ -474,14 +407,16 @@ test('mobile virtual keyboard Ctrl modifier reaches the live SSH input stream', 
     await expect(keyboard).toBeVisible();
     const ctrl = keyboard.getByRole('button', { name: 'Ctrl', exact: true });
     await ctrl.click();
-    await expect(ctrl).toHaveClass(/bg-primary/);
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'true');
   });
 
   await slowStep('Ctrl+C delivers ASCII ETX and consumes the one-shot modifier', async () => {
     await commandInput.press('c');
 
-    const ctrl = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar').getByRole('button', { name: 'Ctrl', exact: true });
-    await expect(ctrl).not.toHaveClass(/bg-primary/);
+    const ctrl = page
+      .locator('.mobile-virtual-keyboard.virtual-keyboard-bar')
+      .getByRole('button', { name: 'Ctrl', exact: true });
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'false');
     await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toMatch(/CTRL_BYTE=\s*3/);
   });
 });
@@ -491,18 +426,21 @@ test('mobile file manager navigates directories with a single tap', async ({ pag
   await openConnectedFileManager(page);
 
   await slowStep('single tap enters a folder without requiring a desktop double click', async () => {
-    await fileManagerRow(page, 'folder-seed').click();
+    await tapFileManagerRow(page, 'folder-seed');
     await expect(fileManagerRow(page, 'nested.txt')).toBeVisible({ timeout: 15_000 });
-    await expect(fileManagerRow(page, '..')).toBeVisible();
+    await expect(page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true })).toBeVisible();
   });
 
-  await step('parent row returns to the original directory on a single tap', async () => {
-    await fileManagerRow(page, '..').click();
+  await step('parent button returns to the original directory on a single tap', async () => {
+    await page.getByTestId('file-manager-modal').getByTitle('Parent Directory', { exact: true }).click();
     await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 15_000 });
   });
 });
 
-test('mobile file manager multi-select prevents accidental opens and single tap uses CodeMirror editor', async ({ page, context }) => {
+test('mobile file manager multi-select prevents accidental opens and single tap uses CodeMirror editor', async ({
+  page,
+  context,
+}) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
@@ -511,17 +449,17 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
   const archive = fileManagerRow(page, 'archive-source.txt');
 
   await step('multi-select turns file taps into selections', async () => {
-    const enterMultiSelect = fileManagerModal.getByTitle('Enter Multi-Select Mode');
+    const enterMultiSelect = fileManagerModal.getByRole('button', { name: 'Enter Multi-Select Mode', exact: true });
     await expect(enterMultiSelect).toBeVisible();
     await enterMultiSelect.click();
 
-    await seed.click();
-    await archive.click();
+    await seed.locator('button[data-file-path]').click();
+    await archive.locator('button[data-file-path]').click();
     await expect(seed).toHaveClass(/bg-primary/);
     await expect(archive).toHaveClass(/bg-primary/);
-    await expect(page.getByTestId('file-editor-overlay')).toHaveCount(0);
+    await expect(page.getByTestId('document-popup').getByTestId('file-editor-view')).toBeHidden();
 
-    const exitMultiSelect = fileManagerModal.getByTitle('Exit Multi-Select Mode');
+    const exitMultiSelect = fileManagerModal.getByRole('button', { name: 'Exit Multi-Select Mode', exact: true });
     await expect(exitMultiSelect).toBeVisible();
     await exitMultiSelect.click();
     await expect(seed).not.toHaveClass(/bg-primary/);
@@ -529,17 +467,20 @@ test('mobile file manager multi-select prevents accidental opens and single tap 
   });
 
   await slowStep('single tap opens the full-screen mobile CodeMirror editor rather than Monaco', async () => {
-    await fileManagerRow(page, 'plainfile').click();
-    const editor = page.getByTestId('file-editor-overlay');
+    await tapFileManagerRow(page, 'plainfile');
+    const documentPopup = page.getByTestId('document-popup');
+    const editor = documentPopup.getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
     await expect(editor.locator('.monaco-editor')).toHaveCount(0);
     await expect(editor.getByTitle('Search')).toBeVisible();
-    await expect.poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 }).toContain('plain-no-extension');
+    await expect
+      .poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
+      .toContain('plain-no-extension');
     await captureFunctionalScreenshot(page, 'mobile-file-editor.png');
 
     const viewport = page.viewportSize();
-    const popupBox = await editor.locator('.editor-popup').boundingBox();
+    const popupBox = await documentPopup.getByRole('dialog').boundingBox();
     expect(viewport).toBeTruthy();
     expect(popupBox).toBeTruthy();
     expect(popupBox!.width).toBeGreaterThanOrEqual(viewport!.width - 2);

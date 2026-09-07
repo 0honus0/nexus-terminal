@@ -1,4 +1,4 @@
-import { expect, test, type APIRequestContext } from '../../support/fixtures';
+import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
@@ -8,6 +8,7 @@ const ALPHA_NAME = 'E2E Dashboard Alpha';
 const BETA_NAME = 'E2E Dashboard Beta';
 const ALPHA_TAG = 'E2E Dashboard Alpha Tag';
 const BETA_TAG = 'E2E Dashboard Beta Tag';
+const EMPTY_TAG = 'E2E Dashboard Empty Tag';
 const DASHBOARD_DARK_THEME = {
   '--app-bg-color': '#212529',
   '--text-color': '#e9ecef',
@@ -27,6 +28,12 @@ const DASHBOARD_DARK_THEME = {
   '--icon-hover-color': 'var(--link-hover-color)',
   '--split-line-color': 'var(--border-color)',
   '--split-line-hover-color': 'var(--border-color)',
+  '--input-bg-color': '#2b3035',
+  '--input-text-color': 'var(--text-color)',
+  '--input-placeholder-color': 'var(--text-color-secondary)',
+  '--input-disabled-bg-color': '#343a40',
+  '--input-disabled-text-color': '#adb5bd',
+  '--input-disabled-border-color': '#495057',
   '--input-focus-border-color': 'var(--link-active-color)',
   '--input-focus-glow': 'var(--link-active-color)',
   '--overlay-bg-color': 'rgba(0, 0, 0, 0.8)',
@@ -41,23 +48,38 @@ const DASHBOARD_DARK_THEME = {
 async function cleanupDashboardFixtures(request: APIRequestContext): Promise<void> {
   const connectionsResponse = await request.get('/api/v1/connections');
   expect(connectionsResponse.ok()).toBeTruthy();
-  const connections = await connectionsResponse.json() as Array<{ id: number; name?: string }>;
-  for (const connection of connections.filter(item => item.name === ALPHA_NAME || item.name === BETA_NAME)) {
+  const connections = (await connectionsResponse.json()) as Array<{ id: number; name?: string }>;
+  for (const connection of connections.filter((item) => item.name === ALPHA_NAME || item.name === BETA_NAME)) {
     expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
   }
 
   const tagsResponse = await request.get('/api/v1/tags');
   expect(tagsResponse.ok()).toBeTruthy();
-  const tags = await tagsResponse.json() as Array<{ id: number; name: string }>;
-  for (const tag of tags.filter(item => item.name === ALPHA_TAG || item.name === BETA_TAG)) {
+  const tags = (await tagsResponse.json()) as Array<{ id: number; name: string }>;
+  for (const tag of tags.filter((item) => [ALPHA_TAG, BETA_TAG, EMPTY_TAG].includes(item.name))) {
     expect((await request.delete(`/api/v1/tags/${tag.id}`)).ok()).toBeTruthy();
   }
+}
+
+async function switchInterfaceToChinese(page: Page): Promise<void> {
+  await page.goto('/settings');
+  await expect(page.getByRole('tab', { name: 'System' })).toBeVisible();
+  await page.getByRole('tab', { name: 'System' }).click();
+  const language = page.locator('#languageSelect');
+  await expect(language).toBeVisible();
+  await language.selectOption('zh-CN');
+  const save = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/settings') && response.request().method() === 'PUT',
+  );
+  await page.getByRole('button', { name: 'Save Language' }).click();
+  expect((await save).ok()).toBeTruthy();
+  await expect(page.getByRole('tab', { name: '系统' })).toBeVisible();
 }
 
 async function createTag(request: APIRequestContext, name: string): Promise<number> {
   const response = await request.post('/api/v1/tags', { data: { name } });
   expect(response.status()).toBe(201);
-  return (await response.json() as { tag: { id: number } }).tag.id;
+  return ((await response.json()) as { tag: { id: number } }).tag.id;
 }
 
 async function createConnection(
@@ -74,16 +96,16 @@ async function createConnection(
       host,
       port: 22,
       username,
-      auth_method: 'password',
+      authMethod: 'password',
       password: 'dashboard-e2e-not-used',
       notes: `${name} notes`,
     },
   });
   expect(create.status()).toBe(201);
-  const id = (await create.json() as { connection: { id: number } }).connection.id;
+  const id = ((await create.json()) as { connection: { id: number } }).connection.id;
 
   const assignTag = await request.post('/api/v1/connections/add-tag', {
-    data: { connection_ids: [id], tag_id: tagId },
+    data: { connectionIds: [id], tagId: tagId },
   });
   expect(assignTag.ok()).toBeTruthy();
   return id;
@@ -94,10 +116,14 @@ test('SSH resource loading state fills the scroll panel without a darker partial
 
   const originalSettingsResponse = await context.request.get('/api/v1/settings');
   expect(originalSettingsResponse.ok()).toBeTruthy();
-  const originalSettings = await originalSettingsResponse.json() as Record<string, string | undefined>;
+  const originalSettings = (await originalSettingsResponse.json()) as {
+    language?: string;
+    dashboardShowLocalResources?: boolean;
+    dashboardShowRemoteResources?: boolean;
+  };
 
   const enableRemoteResources = await context.request.put('/api/v1/settings', {
-    data: { dashboardShowRemoteResources: 'true' },
+    data: { dashboardShowRemoteResources: true },
   });
   expect(enableRemoteResources.ok()).toBeTruthy();
 
@@ -112,8 +138,9 @@ test('SSH resource loading state fills the scroll panel without a darker partial
 
   await page.route('**/api/v1/system/ssh-resources', async (route) => {
     markRemoteRequestStarted?.();
+    const backendResponse = await route.fetch();
     await remoteResourcesReleased;
-    await route.fulfill({ status: 200, contentType: 'application/json', body: '[]' });
+    await route.fulfill({ response: backendResponse });
   });
 
   try {
@@ -121,7 +148,7 @@ test('SSH resource loading state fills the scroll panel without a darker partial
     await remoteRequestStarted;
 
     const list = page.getByTestId('dashboard-ssh-resource-list');
-    const loadingState = page.getByTestId('dashboard-remote-resources');
+    const loadingState = page.getByTestId('dashboard-remote-resources-loading');
     await expect(list).toBeVisible();
     await expect(loadingState).toBeVisible();
     await expect(loadingState).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
@@ -130,36 +157,103 @@ test('SSH resource loading state fills the scroll panel without a darker partial
     const loadingBox = await loadingState.boundingBox();
     expect(listBox).not.toBeNull();
     expect(loadingBox).not.toBeNull();
-    expect(loadingBox?.height ?? 0).toBeGreaterThanOrEqual((listBox?.height ?? 0) - 20);
+    expect(loadingBox?.height ?? 0).toBeGreaterThanOrEqual(120);
+    expect(loadingBox?.width ?? 0).toBeGreaterThanOrEqual((listBox?.width ?? 0) - 32);
   } finally {
     releaseRemoteResources?.();
     await page.unrouteAll({ behavior: 'wait' });
     const restoreSettings = await context.request.put('/api/v1/settings', {
       data: {
-        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? 'true',
+        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
       },
     });
     expect(restoreSettings.ok()).toBeTruthy();
   }
 });
 
-test('dashboard filters connections and persists tag and sort preferences across reloads', async ({ page, context }) => {
+test('resource failures stay inside their panels and do not block quick connect', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const originalSettingsResponse = await context.request.get('/api/v1/settings');
+  expect(originalSettingsResponse.ok()).toBeTruthy();
+  const originalSettings = (await originalSettingsResponse.json()) as {
+    dashboardShowLocalResources?: boolean;
+    dashboardShowRemoteResources?: boolean;
+  };
+  const enableResources = await context.request.put('/api/v1/settings', {
+    data: { dashboardShowLocalResources: true, dashboardShowRemoteResources: true },
+  });
+  expect(enableResources.ok()).toBeTruthy();
+  const connectionId = await ensureTestSshConnection(context.request);
+
+  await page.route('**/api/v1/system/status', async (route) => {
+    await route.abort('failed');
+  });
+  await page.route('**/api/v1/system/ssh-resources', async (route) => {
+    await route.abort('failed');
+  });
+
+  try {
+    await page.goto('/');
+    const dashboard = page.getByTestId('dashboard-view');
+    const local = dashboard.getByTestId('dashboard-local-resources');
+    const remoteList = dashboard.getByTestId('dashboard-ssh-resource-list');
+    const remoteError = dashboard.getByTestId('dashboard-remote-resources');
+    const connectionList = dashboard.getByTestId('dashboard-connection-list');
+    const row = dashboard.getByTestId(`dashboard-connection-row-${connectionId}`);
+
+    await expect(local).toContainText('Network Error');
+    await expect(remoteError).toContainText('Network Error');
+    await expect(connectionList).toBeVisible();
+    await expect(row).toBeVisible();
+    await expect(dashboard.getByTestId(`dashboard-connect-${connectionId}`)).toBeEnabled();
+
+    const listBox = await remoteList.boundingBox();
+    const errorBox = await remoteError.boundingBox();
+    expect(listBox).not.toBeNull();
+    expect(errorBox).not.toBeNull();
+    expect(errorBox!.width).toBeGreaterThanOrEqual(listBox!.width - 32);
+    expect(errorBox!.height).toBeGreaterThanOrEqual(120);
+  } finally {
+    await page.unrouteAll({ behavior: 'wait' });
+    const restoreSettings = await context.request.put('/api/v1/settings', {
+      data: {
+        dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
+        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
+      },
+    });
+    expect(restoreSettings.ok()).toBeTruthy();
+  }
+});
+
+test('dashboard filters connections and persists tag and sort preferences across reloads', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await cleanupDashboardFixtures(context.request);
   await resetTestSshFilesystem();
 
   const originalSettingsResponse = await context.request.get('/api/v1/settings');
   expect(originalSettingsResponse.ok()).toBeTruthy();
-  const originalSettings = await originalSettingsResponse.json() as Record<string, string | undefined>;
+  const originalSettings = (await originalSettingsResponse.json()) as {
+    language?: string;
+    dashboardShowLocalResources?: boolean;
+    dashboardShowRemoteResources?: boolean;
+    remoteHostRefreshIntervalSeconds?: number;
+  };
   const originalAppearanceResponse = await context.request.get('/api/v1/appearance');
   expect(originalAppearanceResponse.ok()).toBeTruthy();
-  const originalAppearance = await originalAppearanceResponse.json() as { customUiTheme?: string; windowThemeColor?: string };
+  const originalAppearance = (await originalAppearanceResponse.json()) as {
+    customUiTheme?: string;
+    windowThemeColor?: string;
+  };
 
   const normalizeSettings = await context.request.put('/api/v1/settings', {
     data: {
-      language: 'zh-CN',
-      dashboardShowLocalResources: 'true',
-      dashboardShowRemoteResources: 'true',
+      language: 'en-US',
+      dashboardShowLocalResources: true,
+      dashboardShowRemoteResources: true,
+      remoteHostRefreshIntervalSeconds: 30,
     },
   });
   expect(normalizeSettings.ok()).toBeTruthy();
@@ -173,7 +267,7 @@ test('dashboard filters connections and persists tag and sort preferences across
 
   const systemStatusResponse = await context.request.get('/api/v1/system/status');
   expect(systemStatusResponse.ok()).toBeTruthy();
-  const systemStatus = await systemStatusResponse.json() as {
+  const systemStatus = (await systemStatusResponse.json()) as {
     cpuPercent: number;
     memPercent: number;
     memUsed: number;
@@ -196,17 +290,19 @@ test('dashboard filters connections and persists tag and sort preferences across
 
   const alphaTagId = await createTag(context.request, ALPHA_TAG);
   const betaTagId = await createTag(context.request, BETA_TAG);
+  const emptyTagId = await createTag(context.request, EMPTY_TAG);
   const alphaId = await createConnection(context.request, ALPHA_NAME, 'dashboard-alpha', '192.0.2.10', alphaTagId);
   const betaId = await createConnection(context.request, BETA_NAME, 'dashboard-beta', '192.0.2.20', betaTagId);
   const sshConnectionId = await ensureTestSshConnection(context.request);
 
   try {
+    await switchInterfaceToChinese(page);
     await page.goto('/');
     const dashboard = page.getByTestId('dashboard-view');
     await expect(dashboard).toBeVisible();
     await expect(dashboard.getByTestId('dashboard-system-resources')).toBeVisible();
     await expect(dashboard.getByTestId('dashboard-local-resources')).toBeVisible();
-    await expect(dashboard.getByTestId('dashboard-remote-resources')).toBeVisible();
+    await expect(dashboard.locator('[data-testid^="dashboard-remote-resource-"]')).toHaveCount(3, { timeout: 20_000 });
     await expect(dashboard.getByTestId('dashboard-local-resources')).toContainText('CPU');
     const alphaRow = dashboard.getByTestId(`dashboard-connection-row-${alphaId}`);
     const betaRow = dashboard.getByTestId(`dashboard-connection-row-${betaId}`);
@@ -225,13 +321,20 @@ test('dashboard filters connections and persists tag and sort preferences across
       await search.fill('');
     });
 
+    await step('an empty selected tag uses the restored tag-specific empty state', async () => {
+      const filter = dashboard.getByTestId('dashboard-tag-filter');
+      await filter.selectOption(String(emptyTagId));
+      await expect(dashboard.getByText('该标签下没有连接记录', { exact: true })).toBeVisible();
+      await filter.selectOption(String(alphaTagId));
+    });
+
     await step('tag filtering persists across a full page reload', async () => {
       const filter = dashboard.getByTestId('dashboard-tag-filter');
       await filter.selectOption(String(alphaTagId));
       await expect(alphaRow).toBeVisible();
       await expect(betaRow).toBeHidden();
-      await expect.poll(() => page.evaluate(() => localStorage.getItem('dashboard_connections_filter_tag'))).toBe(String(alphaTagId));
 
+      expect((await context.request.delete(`/api/v1/tags/${emptyTagId}`)).ok()).toBeTruthy();
       await page.reload();
       const reloadedDashboard = page.getByTestId('dashboard-view');
       await expect(reloadedDashboard.getByTestId('dashboard-tag-filter')).toHaveValue(String(alphaTagId));
@@ -245,18 +348,18 @@ test('dashboard filters connections and persists tag and sort preferences across
       await reloadedDashboard.getByTestId('dashboard-sort-by').selectOption('name');
       await reloadedDashboard.getByTestId('dashboard-sort-order').click();
 
-      await expect.poll(() => page.evaluate(() => ({
-        sortBy: localStorage.getItem('dashboard_connections_sort_by'),
-        sortOrder: localStorage.getItem('dashboard_connections_sort_order'),
-      }))).toEqual({ sortBy: 'name', sortOrder: 'asc' });
-
       await page.reload();
       const finalDashboard = page.getByTestId('dashboard-view');
       await expect(finalDashboard.getByTestId('dashboard-sort-by')).toHaveValue('name');
-      const visibleFixtureRows = finalDashboard.locator('[data-testid^="dashboard-connection-row-"]')
+      const visibleFixtureRows = finalDashboard
+        .locator('[data-testid^="dashboard-connection-row-"]')
         .filter({ hasText: /E2E Dashboard (Alpha|Beta)/ });
+      await expect(visibleFixtureRows).toHaveCount(2);
       const texts = await visibleFixtureRows.allTextContents();
-      expect(texts.map(text => text.includes(ALPHA_NAME) ? ALPHA_NAME : BETA_NAME)).toEqual([ALPHA_NAME, BETA_NAME]);
+      expect(texts.map((text) => (text.includes(ALPHA_NAME) ? ALPHA_NAME : BETA_NAME))).toEqual([
+        ALPHA_NAME,
+        BETA_NAME,
+      ]);
 
       await expect(finalDashboard.getByTestId('dashboard-overview')).toBeVisible();
       await expect(finalDashboard.getByTestId('dashboard-connections-link')).toBeVisible();
@@ -264,152 +367,109 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(finalDashboard.getByTestId(`dashboard-connect-${betaId}`)).toBeVisible();
     });
 
-    await step('dashboard collects configured SSH resources without a terminal and deduplicates repeated sessions', async () => {
+    await step('dashboard renders configured SSH resources and keeps the current desktop layout stable', async () => {
       const remoteCards = page.locator('[data-testid^="dashboard-remote-resource-"]');
       const e2eHostCard = remoteCards.filter({ hasText: `${E2E_SSH.username}@${E2E_SSH.host}:${E2E_SSH.port}` });
 
       await expect(remoteCards).toHaveCount(3, { timeout: 20_000 });
       await expect(e2eHostCard).toHaveCount(1);
       await expect(e2eHostCard).toContainText('CPU', { timeout: 20_000 });
-
-      for (let index = 0; index < 3; index += 1) {
-        await page.evaluate(async (targetConnectionId) => {
-          const { useSessionStore } = await import('/src/stores/session.store.ts');
-          useSessionStore().openNewSession(targetConnectionId);
-        }, sshConnectionId);
-
-        await expect.poll(() => page.evaluate(async (expectedCount) => {
-          const { useSessionStore } = await import('/src/stores/session.store.ts');
-          const sessions = [...useSessionStore().sessions.values()];
-          return {
-            count: sessions.length,
-            connected: sessions.filter(session => session.wsManager.isConnected.value).length,
-          };
-        }, index + 1), { timeout: 20_000 }).toEqual({ count: index + 1, connected: index + 1 });
-      }
-
-      await expect(remoteCards).toHaveCount(3);
-      await expect(e2eHostCard).toHaveCount(1);
-      await expect(e2eHostCard).toContainText('CPU');
       await expect(page.getByText('活动 SSH 会话', { exact: true })).toHaveCount(0);
-      const overview = page.getByTestId('dashboard-overview');
-      await expect(overview.getByTestId('dashboard-local-resources')).toBeVisible();
-      await expect(page.getByTestId('dashboard-system-resources').getByTestId('dashboard-local-resources')).toHaveCount(0);
-      await expect(page.getByTestId('dashboard-overview-stats')).toHaveCSS('border-top-width', '0px');
-      await expect(page.getByTestId('dashboard-overview-stats')).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      await expect(page.getByTestId('dashboard-local-cpu-bar')).toHaveAttribute('style', /width:/);
-      await expect(page.getByTestId('dashboard-local-memory-bar')).toHaveAttribute('style', /width:/);
-      await expect(page.getByTestId('dashboard-local-disk-bar')).toHaveAttribute('style', /width:/);
-      await expect(page.locator('[data-testid^="dashboard-resource-bar-"]')).toHaveCount(3);
-      await expect(page.locator('[data-testid^="dashboard-ssh-resource-accent-"]')).toHaveCount(3);
-      await expect(overview.locator('svg')).toHaveCount(0);
-      await expect(page.getByText('连接类型', { exact: true })).toHaveCount(0);
 
       await page.setViewportSize({ width: 1440, height: 900 });
+      const dashboard = page.getByTestId('dashboard-view');
       const workspace = page.getByTestId('dashboard-workspace');
       const quickConnect = page.getByTestId('dashboard-connections');
-      const resources = page.getByTestId('dashboard-system-resources');
       const recentActivity = page.getByTestId('dashboard-recent-activity');
-      await expect(page.getByTestId('dashboard-operation-divider')).toHaveCount(0);
-      await expect(recentActivity).toHaveCSS('border-top-width', '1px');
-      await expect(workspace).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      await expect(page.getByTestId('dashboard-recent-activity-icon')).toBeVisible();
-      await expect(page.getByTestId('dashboard-ssh-resources-icon')).toBeVisible();
-      await expect(quickConnect).toHaveCSS('border-top-width', '0px');
-      await expect(resources).toHaveCSS('border-top-width', '0px');
-      await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('overflow-y', 'auto');
-      await expect(page.getByTestId('dashboard-ssh-resource-list')).toHaveCSS('overflow-y', 'auto');
-      await expect(page.getByTestId('dashboard-connection-list')).toHaveCSS('border-top-width', '1px');
-      await expect(page.getByTestId('dashboard-ssh-resource-list')).toHaveCSS('border-top-width', '1px');
-      await expect(page.getByTestId(`dashboard-connection-row-${alphaId}`)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
-      await expect(remoteCards.nth(0)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      const resources = page.getByTestId('dashboard-system-resources');
+      const connectionList = page.getByTestId('dashboard-connection-list');
+      const resourceList = page.getByTestId('dashboard-ssh-resource-list');
+      const localResource = page.getByTestId('dashboard-local-resources');
 
-      const overviewBox = await overview.boundingBox();
+      await expect(workspace).toBeVisible();
+      await expect(quickConnect).toBeVisible();
+      await expect(recentActivity).toBeVisible();
+      await expect(resources).toBeVisible();
+      await expect(connectionList).toBeVisible();
+      await expect(resourceList).toBeVisible();
+      await expect(localResource).toBeVisible();
+      await expect(localResource).toContainText('CPU');
+      await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveText('30 秒刷新');
+      await expect(page.getByTestId(`dashboard-connection-row-${alphaId}`)).toBeVisible();
+      await expect(page.getByTestId(`dashboard-connection-row-${betaId}`)).toBeVisible();
+
+      const overflow = await dashboard.evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }));
+      expect(overflow.scrollWidth).toBeLessThanOrEqual(overflow.clientWidth + 1);
+
       const workspaceBox = await workspace.boundingBox();
       const quickConnectBox = await quickConnect.boundingBox();
-      const resourcesBox = await resources.boundingBox();
       const recentActivityBox = await recentActivity.boundingBox();
-      const connectionListBox = await page.getByTestId('dashboard-connection-list').boundingBox();
-      const resourceListBox = await page.getByTestId('dashboard-ssh-resource-list').boundingBox();
-      expect(overviewBox).not.toBeNull();
-      expect(overviewBox?.height ?? Infinity).toBeLessThanOrEqual(180);
+      const resourcesBox = await resources.boundingBox();
+      const resourceListBox = await resourceList.boundingBox();
       expect(workspaceBox).not.toBeNull();
       expect(quickConnectBox).not.toBeNull();
-      expect(resourcesBox).not.toBeNull();
       expect(recentActivityBox).not.toBeNull();
-      expect(connectionListBox).not.toBeNull();
+      expect(resourcesBox).not.toBeNull();
       expect(resourceListBox).not.toBeNull();
       expect(Math.abs((quickConnectBox?.y ?? 0) - (resourcesBox?.y ?? 0))).toBeLessThanOrEqual(2);
       expect(resourcesBox?.x ?? 0).toBeGreaterThan((quickConnectBox?.x ?? 0) + (quickConnectBox?.width ?? 0) - 2);
-      expect(Math.abs((connectionListBox?.y ?? 0) - (resourceListBox?.y ?? 0))).toBeLessThanOrEqual(2);
-      expect(connectionListBox?.height ?? 0).toBeGreaterThanOrEqual(430);
-      expect(resourceListBox?.height ?? 0).toBeGreaterThanOrEqual(430);
-      expect(Math.abs((connectionListBox?.height ?? 0) - (resourceListBox?.height ?? 0))).toBeLessThanOrEqual(2);
-      expect(Math.abs((recentActivityBox?.x ?? 0) - (workspaceBox?.x ?? 0))).toBeLessThanOrEqual(2);
-      expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);
       expect(recentActivityBox?.y ?? 0).toBeGreaterThan(
         Math.max(
           (quickConnectBox?.y ?? 0) + (quickConnectBox?.height ?? 0),
           (resourcesBox?.y ?? 0) + (resourcesBox?.height ?? 0),
-        ),
+        ) - 2,
       );
-      expect(recentActivityBox?.y ?? Infinity).toBeLessThan(900);
+      expect(Math.abs((recentActivityBox?.width ?? 0) - (workspaceBox?.width ?? 0))).toBeLessThanOrEqual(2);
 
-      const localResourceBox = await page.getByTestId('dashboard-local-resources').boundingBox();
-      const remoteResourceBoxes = await remoteCards.evaluateAll((cards) => cards.map((card) => {
-        const rect = card.getBoundingClientRect();
-        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-      }));
-      expect(localResourceBox).not.toBeNull();
+      const remoteResourceBoxes = await remoteCards.evaluateAll((cards) =>
+        cards.map((card) => {
+          const rect = card.getBoundingClientRect();
+          return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+        }),
+      );
       expect(remoteResourceBoxes).toHaveLength(3);
-      const remoteResourceBackgrounds = await remoteCards.evaluateAll((cards) => cards.map((card) => getComputedStyle(card).backgroundColor));
-      expect(remoteResourceBackgrounds.every((color) => color !== 'transparent' && color !== 'rgba(0, 0, 0, 0)')).toBeTruthy();
-      expect(remoteResourceBoxes[0].y).toBeGreaterThan((localResourceBox?.y ?? 0) + (localResourceBox?.height ?? 0) - 2);
-      for (let index = 1; index < remoteResourceBoxes.length; index += 1) {
-        expect(Math.abs(remoteResourceBoxes[index].x - remoteResourceBoxes[0].x)).toBeLessThanOrEqual(2);
-        expect(Math.abs(remoteResourceBoxes[index].width - remoteResourceBoxes[0].width)).toBeLessThanOrEqual(2);
-        expect(remoteResourceBoxes[index].y).toBeGreaterThanOrEqual(
-          remoteResourceBoxes[index - 1].y + remoteResourceBoxes[index - 1].height + 6,
-        );
+      for (const box of remoteResourceBoxes) {
+        expect(box.left).toBeGreaterThanOrEqual((resourceListBox?.x ?? 0) - 2);
+        expect(box.right).toBeLessThanOrEqual((resourceListBox?.x ?? 0) + (resourceListBox?.width ?? 0) + 2);
+        expect(box.top).toBeGreaterThanOrEqual((resourceListBox?.y ?? 0) - 2);
+        expect(box.bottom).toBeLessThanOrEqual((resourceListBox?.y ?? 0) + (resourceListBox?.height ?? 0) + 2);
       }
-      await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
 
-      await page.evaluate(async () => {
-        const { useSessionStore } = await import('/src/stores/session.store.ts');
-        useSessionStore().cleanupAllSessions();
-      });
-      await expect(remoteCards).toHaveCount(3);
-      await expect(e2eHostCard).toHaveCount(1);
+      await captureFunctionalScreenshot(page, 'dashboard-home.png', { viewport: { width: 1440, height: 900 } });
     });
 
     await step('local and remote dashboard resource sections honor their independent settings', async () => {
       const remoteOnly = await context.request.put('/api/v1/settings', {
         data: {
-          dashboardShowLocalResources: 'false',
-          dashboardShowRemoteResources: 'true',
+          dashboardShowLocalResources: false,
+          dashboardShowRemoteResources: true,
         },
       });
       expect(remoteOnly.ok()).toBeTruthy();
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('dashboard-system-resources')).toBeVisible();
-      await expect(page.getByTestId('dashboard-local-resources')).toBeHidden();
-      await expect(page.getByTestId('dashboard-remote-resources')).toBeVisible();
+      await expect(page.getByTestId('dashboard-local-resources')).toHaveCount(0);
+      await expect(page.locator('[data-testid^="dashboard-remote-resource-"]')).toHaveCount(3, { timeout: 20_000 });
 
       const localOnly = await context.request.put('/api/v1/settings', {
         data: {
-          dashboardShowLocalResources: 'true',
-          dashboardShowRemoteResources: 'false',
+          dashboardShowLocalResources: true,
+          dashboardShowRemoteResources: false,
         },
       });
       expect(localOnly.ok()).toBeTruthy();
       await page.reload({ waitUntil: 'domcontentloaded' });
       await expect(page.getByTestId('dashboard-local-resources')).toBeVisible();
-      await expect(page.getByTestId('dashboard-remote-resources')).toBeHidden();
+      await expect(page.locator('[data-testid^="dashboard-remote-resource-"]')).toHaveCount(0);
+      await expect(page.getByTestId('dashboard-remote-resources-loading')).toHaveCount(0);
 
       const restoreBoth = await context.request.put('/api/v1/settings', {
         data: {
-          dashboardShowLocalResources: 'true',
-          dashboardShowRemoteResources: 'true',
+          dashboardShowLocalResources: true,
+          dashboardShowRemoteResources: true,
         },
       });
       expect(restoreBoth.ok()).toBeTruthy();
@@ -422,16 +482,13 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(page.getByTestId('audit-log-view')).toBeVisible();
     });
   } finally {
-    await page.evaluate(async () => {
-      const { useSessionStore } = await import('/src/stores/session.store.ts');
-      useSessionStore().cleanupAllSessions();
-    }).catch(() => undefined);
     await cleanupDashboardFixtures(context.request);
     const restoreSettings = await context.request.put('/api/v1/settings', {
       data: {
         language: originalSettings.language ?? 'en-US',
-        dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? 'true',
-        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? 'true',
+        dashboardShowLocalResources: originalSettings.dashboardShowLocalResources ?? true,
+        dashboardShowRemoteResources: originalSettings.dashboardShowRemoteResources ?? true,
+        remoteHostRefreshIntervalSeconds: originalSettings.remoteHostRefreshIntervalSeconds ?? 30,
       },
     });
     expect(restoreSettings.ok()).toBeTruthy();

@@ -7,21 +7,31 @@ test.describe('authenticated WebSocket', () => {
 
     const outcome = await page.evaluate(async () => {
       return await new Promise<'opened' | 'rejected' | 'timeout'>((resolve) => {
-        const socket = new WebSocket('ws://127.0.0.1:4173/ws');
+        const socketUrl = new URL('/ws/workspace', window.location.origin);
+        socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(socketUrl.toString());
         const timeout = window.setTimeout(() => {
           socket.close();
           resolve('timeout');
         }, 5_000);
 
-        socket.addEventListener('open', () => {
-          window.clearTimeout(timeout);
-          socket.close();
-          resolve('opened');
-        }, { once: true });
-        socket.addEventListener('error', () => {
-          window.clearTimeout(timeout);
-          resolve('rejected');
-        }, { once: true });
+        socket.addEventListener(
+          'open',
+          () => {
+            window.clearTimeout(timeout);
+            socket.close();
+            resolve('opened');
+          },
+          { once: true },
+        );
+        socket.addEventListener(
+          'error',
+          () => {
+            window.clearTimeout(timeout);
+            resolve('rejected');
+          },
+          { once: true },
+        );
       });
     });
 
@@ -39,28 +49,59 @@ test.describe('authenticated WebSocket', () => {
     });
 
     const response = await page.evaluate(async () => {
-      return await new Promise<{ type?: string; payload?: unknown }>((resolve, reject) => {
-        const socket = new WebSocket('ws://127.0.0.1:4173/ws');
+      return await new Promise<{
+        type?: string;
+        requestId?: string;
+        payload?: { ok?: boolean; error?: string };
+      }>((resolve, reject) => {
+        const socketUrl = new URL('/ws/workspace', window.location.origin);
+        socketUrl.protocol = socketUrl.protocol === 'https:' ? 'wss:' : 'ws:';
+        const socket = new WebSocket(socketUrl.toString());
         const timeout = window.setTimeout(() => {
           socket.close();
           reject(new Error('Timed out waiting for WebSocket response'));
         }, 5_000);
 
-        socket.addEventListener('open', () => socket.send('not-json'), { once: true });
-        socket.addEventListener('message', (event) => {
-          window.clearTimeout(timeout);
-          socket.close();
-          resolve(JSON.parse(String(event.data)) as { type?: string; payload?: unknown });
-        }, { once: true });
-        socket.addEventListener('error', () => {
-          window.clearTimeout(timeout);
-          reject(new Error('Authenticated WebSocket failed to open'));
-        }, { once: true });
+        socket.addEventListener(
+          'open',
+          () => socket.send(JSON.stringify({ type: 'e2e.unsupported', requestId: 'e2e-route-check', payload: {} })),
+          { once: true },
+        );
+        socket.addEventListener(
+          'message',
+          (event) => {
+            window.clearTimeout(timeout);
+            socket.close();
+            resolve(
+              JSON.parse(String(event.data)) as {
+                type?: string;
+                requestId?: string;
+                payload?: { ok?: boolean; error?: string };
+              },
+            );
+          },
+          { once: true },
+        );
+        socket.addEventListener(
+          'error',
+          () => {
+            window.clearTimeout(timeout);
+            reject(new Error('Authenticated WebSocket failed to open'));
+          },
+          { once: true },
+        );
       });
     });
 
-    expect(response.type).toBe('error');
-    expect(observedFrames.some((frame) => frame.direction === 'sent' && frame.payload === 'not-json')).toBeTruthy();
+    expect(response).toMatchObject({
+      type: 'response',
+      requestId: 'e2e-route-check',
+      payload: { ok: false },
+    });
+    expect(response.payload?.error).toContain('Unsupported Workspace operation');
+    expect(
+      observedFrames.some((frame) => frame.direction === 'sent' && String(frame.payload).includes('e2e.unsupported')),
+    ).toBeTruthy();
     expect(observedFrames.some((frame) => frame.direction === 'received')).toBeTruthy();
   });
 });

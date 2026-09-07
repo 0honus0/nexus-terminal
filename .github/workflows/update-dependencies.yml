@@ -3,7 +3,7 @@ name: Update dependencies
 on:
   schedule:
     # Every Monday at 02:23 UTC.
-    - cron: "23 2 * * 1"
+    - cron: '23 2 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -114,7 +114,7 @@ jobs:
         shell: bash
         env:
           NODE_ENV: test
-          PORT: "3001"
+          PORT: '3001'
           NEXUS_DATA_DIR: ${{ runner.temp }}/nexus-terminal-ingress-data
           SESSION_COOKIE_NAME: nexus.ingress.sid
           SESSION_SECRET: ingress-session-secret-do-not-use-outside-tests-0000000000000000000000

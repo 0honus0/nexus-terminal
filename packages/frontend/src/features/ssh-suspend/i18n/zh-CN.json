@@ -1,0 +1,55 @@
+{
+  "suspendedSshSessions": {
+    "modalTitle": "挂起的 SSH 会话",
+    "searchPlaceholder": "搜索会话 (名称, 连接名...)",
+    "loading": "正在加载挂起的会话...",
+    "noResults": "没有找到符合条件的挂起会话。",
+    "tooltip": {
+      "editName": "点击编辑名称"
+    },
+    "label": {
+      "originalConnection": "原始连接",
+      "suspendedAt": "挂起于",
+      "markedAt": "标记于"
+    },
+    "disconnectedAt": "已于 {time} 断开",
+    "status": {
+      "marked": "待关闭",
+      "hanging": "活跃",
+      "disconnected": "已断开"
+    },
+    "action": {
+      "resume": "恢复",
+      "remove": "移除",
+      "exportLog": "导出日志"
+    }
+  },
+  "sshSuspend": {
+    "notifications": {
+      "markedForSuspendInfo": "会话 {id} 已标记为挂起。关闭标签页时，该会话将被挂起。",
+      "wsNotConnectedError": "WebSocket 未连接。无法执行挂起/恢复操作。",
+      "sessionNotFoundError": "未找到会话或 WebSocket 管理器不可用。",
+      "notMarkedWarning": "会话未被标记为待挂起。",
+      "fetchListError": "获取挂起的会话列表失败: {error}",
+      "resumeErrorInfoNotFound": "恢复错误：在列表中未找到已挂起的会话 {id}。",
+      "resumeErrorConnectionConfigNotFound": "恢复错误：未找到 {id} 的原始连接配置。",
+      "resumeErrorGeneric": "恢复会话失败: {error}",
+      "terminatedSuccess": "已成功终止挂起的会话 \"{name}\"。",
+      "terminateError": "终止挂起的会话失败: {error}",
+      "entryRemovedSuccess": "已成功移除挂起的会话条目 \"{name}\"。",
+      "entryRemovedError": "移除挂起的会话条目失败: {error}",
+      "nameEditedSuccess": "已挂起会话名称已更新为 \"{name}\"。",
+      "nameEditedError": "编辑已挂起会话名称失败: {error}",
+      "markedForSuspendSuccess": "会话 {id} 已成功标记为待挂起。",
+      "markForSuspendError": "标记会话为待挂起失败: {error}",
+      "unmarkedSuccess": "会话 {id} 已成功取消标记挂起。",
+      "unmarkError": "取消标记会话挂起失败: {error}",
+      "defaultSessionName": "会话",
+      "resumeSuccess": "会话 \"{name}\" 已成功恢复。",
+      "resumeErrorBackend": "后端恢复会话失败: {error}",
+      "autoTerminated": "已挂起的会话 \"{name}\" 因以下原因被后端自动终止: {reason}",
+      "logExportSuccess": "已挂起会话日志 {name} 已开始下载。",
+      "logExportError": "导出已挂起会话日志失败: {error}"
+    }
+  }
+}

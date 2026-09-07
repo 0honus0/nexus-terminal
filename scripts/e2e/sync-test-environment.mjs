@@ -52,7 +52,8 @@ function replaceAllRequired(file, regex, replacement, label) {
 
 function syncActionVersions(actions) {
   const workflowsDir = path.join(repoRoot, '.github/workflows');
-  const workflowFiles = fs.readdirSync(workflowsDir)
+  const workflowFiles = fs
+    .readdirSync(workflowsDir)
     .filter((name) => name.endsWith('.yml') || name.endsWith('.yaml'))
     .map((name) => `.github/workflows/${name}`)
     .sort();
@@ -81,7 +82,10 @@ function syncActionVersions(actions) {
 
 function syncNodeVersions(nodeVersion) {
   const workflowsDir = path.join(repoRoot, '.github/workflows');
-  for (const name of fs.readdirSync(workflowsDir).filter((value) => /\.ya?ml$/.test(value)).sort()) {
+  for (const name of fs
+    .readdirSync(workflowsDir)
+    .filter((value) => /\.ya?ml$/.test(value))
+    .sort()) {
     const file = `.github/workflows/${name}`;
     const absolute = path.join(repoRoot, file);
     const content = fs.readFileSync(absolute, 'utf8');
@@ -106,13 +110,23 @@ function syncPlaywrightPackage(playwrightVersion, updateLock) {
 }
 
 function syncRunnerFiles(config) {
-  const tag = `playwright-${config.playwright}-node${config.node}-v${config.runnerRevision}`;
-
-  replaceRequired('test/e2e/Dockerfile.runner', /^FROM node:[^\n]+/m, `FROM node:${config.node}-bookworm`, 'runner Node base');
-  replaceRequired('test/e2e/Dockerfile.runner', /^ARG PLAYWRIGHT_VERSION=[^\n]+/m, `ARG PLAYWRIGHT_VERSION=${config.playwright}`, 'runner Playwright arg');
+  const tag = `playwright-${config.playwright}-node${config.node}`;
 
   replaceRequired(
-    'test/e2e/README.md',
+    'test/e2e/Dockerfile.runner',
+    /^FROM node:[^\n]+/m,
+    `FROM node:${config.node}-bookworm`,
+    'runner Node base',
+  );
+  replaceRequired(
+    'test/e2e/Dockerfile.runner',
+    /^ARG PLAYWRIGHT_VERSION=[^\n]+/m,
+    `ARG PLAYWRIGHT_VERSION=${config.playwright}`,
+    'runner Playwright arg',
+  );
+
+  replaceRequired(
+    'doc/testing/E2E.md',
     /ghcr\.io\/0honus0\/nexus-terminal-e2e-runner:playwright-[^`\s]+/,
     `ghcr.io/0honus0/nexus-terminal-e2e-runner:${tag}`,
     'documented E2E runner image',
@@ -124,7 +138,6 @@ const config = readJson(versionsPath);
 
 if (args.node) config.node = args.node;
 if (args.playwright) config.playwright = args.playwright;
-if (args['runner-revision']) config.runnerRevision = Number(args['runner-revision']);
 
 const actionArgMap = {
   checkout: 'checkout',
@@ -140,9 +153,6 @@ for (const [argName, configName] of Object.entries(actionArgMap)) {
   if (args[argName]) config.actions[configName] = args[argName];
 }
 
-if (!Number.isInteger(config.runnerRevision) || config.runnerRevision < 1) {
-  throw new Error('runnerRevision must be a positive integer');
-}
 if (!/^\d+$/.test(config.node)) throw new Error(`Invalid Node major: ${config.node}`);
 if (!/^\d+\.\d+\.\d+/.test(config.playwright)) throw new Error(`Invalid Playwright version: ${config.playwright}`);
 
@@ -154,6 +164,5 @@ syncRunnerFiles(config);
 
 console.log(`[E2E env] Node ${config.node}`);
 console.log(`[E2E env] Playwright ${config.playwright}`);
-console.log(`[E2E env] runner revision ${config.runnerRevision}`);
-console.log(`[E2E env] image tag playwright-${config.playwright}-node${config.node}-v${config.runnerRevision}`);
+console.log(`[E2E env] image tag playwright-${config.playwright}-node${config.node}`);
 console.log('[E2E env] CI action versions synchronized');

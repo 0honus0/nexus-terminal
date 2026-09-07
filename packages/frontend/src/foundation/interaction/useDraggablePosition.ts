@@ -8,68 +8,87 @@ export interface DragPosition {
 export interface DraggablePositionOptions {
   position: Ref<DragPosition>;
   getElement: () => HTMLElement | null;
-  constrain?: (position: DragPosition, element: HTMLElement, event: PointerEvent) => DragPosition;
   canStart?: (event: PointerEvent) => boolean;
+  constrain?: (position: DragPosition, element: HTMLElement, event: PointerEvent) => DragPosition;
+  onStart?: (position: DragPosition) => void;
+  onMove?: (position: DragPosition) => void;
   onEnd?: (position: DragPosition) => void;
 }
 
-/**
- * Shared pointer-drag mechanics for floating UI. Consumers own markup, persistence,
- * click-vs-drag behavior and the bounds policy through callbacks.
- */
+/** Pointer-drag mechanics for floating UI. Markup, persistence and bounds remain consumer-owned. */
 export function useDraggablePosition(options: DraggablePositionOptions) {
   const dragging = ref(false);
   const didDrag = ref(false);
+
   let activePointerId: number | null = null;
   let offsetX = 0;
   let offsetY = 0;
+  let previousBodyUserSelect = '';
 
-  const handlePointerMove = (event: PointerEvent) => {
-    if (!dragging.value || (activePointerId !== null && event.pointerId !== activePointerId)) return;
-    const element = options.getElement();
-    if (!element) return;
-    didDrag.value = true;
-    const next = { x: event.clientX - offsetX, y: event.clientY - offsetY };
-    options.position.value = options.constrain?.(next, element, event) ?? next;
-  };
-
-  const stopDragging = (event?: PointerEvent) => {
-    if (!dragging.value || (event && activePointerId !== null && event.pointerId !== activePointerId)) return;
-    dragging.value = false;
-    activePointerId = null;
-    document.body.style.userSelect = '';
+  const removeWindowListeners = (): void => {
     window.removeEventListener('pointermove', handlePointerMove);
     window.removeEventListener('pointerup', stopDragging);
     window.removeEventListener('pointercancel', stopDragging);
-    options.onEnd?.(options.position.value);
   };
 
-  const startDragging = (event: PointerEvent) => {
-    if (!event.isPrimary || options.canStart?.(event) === false) return;
+  const restoreBodySelection = (): void => {
+    document.body.style.userSelect = previousBodyUserSelect;
+  };
+
+  const handlePointerMove = (event: PointerEvent): void => {
+    if (!dragging.value || event.pointerId !== activePointerId) return;
+
     const element = options.getElement();
     if (!element) return;
+
+    const proposed = { x: event.clientX - offsetX, y: event.clientY - offsetY };
+    const next = options.constrain?.(proposed, element, event) ?? proposed;
+    didDrag.value = true;
+    options.position.value = next;
+    options.onMove?.(next);
+  };
+
+  function stopDragging(event?: PointerEvent): void {
+    if (!dragging.value) return;
+    if (event && event.pointerId !== activePointerId) return;
+
+    dragging.value = false;
+    activePointerId = null;
+    removeWindowListeners();
+    restoreBodySelection();
+    options.onEnd?.(options.position.value);
+  }
+
+  const startDragging = (event: PointerEvent): void => {
+    if (!event.isPrimary || dragging.value || options.canStart?.(event) === false) return;
+
+    const element = options.getElement();
+    if (!element) return;
+
     const rect = element.getBoundingClientRect();
-    dragging.value = true;
-    didDrag.value = false;
     activePointerId = event.pointerId;
     offsetX = event.clientX - rect.left;
     offsetY = event.clientY - rect.top;
-    event.preventDefault();
+    didDrag.value = false;
+    dragging.value = true;
+
+    previousBodyUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = 'none';
+    event.preventDefault();
+
     window.addEventListener('pointermove', handlePointerMove);
     window.addEventListener('pointerup', stopDragging);
     window.addEventListener('pointercancel', stopDragging);
+    options.onStart?.(options.position.value);
   };
 
   onBeforeUnmount(() => {
-    const wasDragging = dragging.value;
+    const shouldNotifyEnd = dragging.value;
     dragging.value = false;
     activePointerId = null;
-    document.body.style.userSelect = '';
-    window.removeEventListener('pointermove', handlePointerMove);
-    window.removeEventListener('pointerup', stopDragging);
-    window.removeEventListener('pointercancel', stopDragging);
-    if (wasDragging) options.onEnd?.(options.position.value);
+    removeWindowListeners();
+    restoreBodySelection();
+    if (shouldNotifyEnd) options.onEnd?.(options.position.value);
   });
 
   return { dragging, didDrag, startDragging, stopDragging };

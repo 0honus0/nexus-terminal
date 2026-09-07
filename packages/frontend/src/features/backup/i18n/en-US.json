@@ -1,0 +1,29 @@
+{
+  "settings": {
+    "exportConnections": {
+      "title": "Export Connection Data",
+      "decryptKeyInfo": "The decryption password is the ENCRYPTION_KEY in your data/.env file. Please keep this file secure.",
+      "buttonText": "Start Export",
+      "success": "Connection export started downloading.",
+      "error": "Failed to export connection data."
+    },
+    "backup": {
+      "title": "Full backup",
+      "currentPassword": "Current password",
+      "export": "Export backup",
+      "import": "Import backup",
+      "backupPassword": "Backup password",
+      "exported": "Backup exported.",
+      "exportFailed": "Backup export failed.",
+      "selectFile": "Select a backup file.",
+      "imported": "Backup imported.",
+      "importFailed": "Backup import failed.",
+      "exportConnections": "Export connections",
+      "importedWithCounts": "Backup imported: restored {rows} data rows and {files} files. Reloading the application.",
+      "description": "Export connections, proxies, SSH keys, tags, Quick Commands, themes, appearance and Workspace settings, background files and custom HTML themes. Account credentials, Passkeys, audit logs and IP ban records are excluded.",
+      "importDescription": "Backups from this instance can be imported while signed in without a backup password. Backups from another instance require the login password used when that backup was exported. Import replaces the backed-up business data and custom theme files.",
+      "backupFile": "Backup file",
+      "backupPasswordHelp": "Leave blank for a backup created by this instance. For a cross-instance restore, enter the password used when the backup was exported."
+    }
+  }
+}

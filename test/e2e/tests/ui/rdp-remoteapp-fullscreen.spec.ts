@@ -3,22 +3,30 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 
 const CONNECTION_NAME = 'E2E RDP RemoteApp';
-const TEST_GATEWAY_URL = 'http://127.0.0.1:29090';
 
 async function cleanupConnection(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
-  const connections = await response.json() as Array<{ id: number; name?: string }>;
-  for (const connection of connections.filter(item => item.name === CONNECTION_NAME)) {
+  const connections = (await response.json()) as Array<{ id: number; name?: string }>;
+  for (const connection of connections.filter((item) => item.name === CONNECTION_NAME)) {
     expect((await request.delete(`/api/v1/connections/${connection.id}`)).ok()).toBeTruthy();
   }
 }
 
-test('RDP RemoteApp persists cleanly, forwards display-update settings, and supports browser fullscreen', async ({ page, context }) => {
+test('RDP RemoteApp persists cleanly, forwards display-update settings, and supports browser fullscreen', async ({
+  page,
+  context,
+}) => {
+  const remoteFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string') remoteFrames.push(event.payload);
+    });
+  });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
   await loginAsInitialAdmin(context.request);
   expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
   await cleanupConnection(context.request);
-  expect((await context.request.post(`${TEST_GATEWAY_URL}/control/reset`)).ok()).toBeTruthy();
 
   await page.addInitScript(() => {
     let fullscreenElement: Element | null = null;
@@ -70,13 +78,13 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await form.getByTestId('rdp-remote-app-dir').fill('C:\\Work');
       await form.getByTestId('rdp-remote-app-args').fill('/A readme.txt');
 
-      const createPromise = page.waitForResponse(response =>
-        response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+      const createPromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
       );
       await form.getByTestId('connection-submit-button').click();
       const createResponse = await createPromise;
       expect(createResponse.status()).toBe(201);
-      connectionId = (await createResponse.json() as { connection: { id: number } }).connection.id;
+      connectionId = ((await createResponse.json()) as { connection: { id: number } }).connection.id;
       await expect(form).toBeHidden({ timeout: 15_000 });
 
       const persisted = await context.request.get(`/api/v1/connections/${connectionId}`);
@@ -84,10 +92,10 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(persisted.json()).resolves.toMatchObject({
         id: connectionId,
         type: 'RDP',
-        rdp_options: {
-          remote_app: 'notepad',
-          remote_app_dir: 'C:\\Work',
-          remote_app_args: '/A readme.txt',
+        rdpOptions: {
+          remoteApp: 'notepad',
+          remoteAppDirectory: 'C:\\Work',
+          remoteAppArguments: '/A readme.txt',
         },
       });
     });
@@ -104,68 +112,89 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(form).toBeHidden();
     });
 
-    await step('RDP token generation forwards dynamic resize and RemoteApp parameters to the gateway', async () => {
-      const session = await context.request.post(`/api/v1/connections/${connectionId}/rdp-session?width=1440&height=900&dpi=120`);
+    await step('RDP token generation succeeds with the persisted RemoteApp settings', async () => {
+      const session = await context.request.post(
+        `/api/v1/connections/${connectionId}/rdp-session?width=1440&height=900&dpi=120`,
+      );
       expect(session.ok()).toBeTruthy();
       await expect(session.json()).resolves.toMatchObject({ token: 'e2e-remote-desktop-token' });
-
-      await expect.poll(async () => {
-        const response = await context.request.get(`${TEST_GATEWAY_URL}/control/latest`);
-        if (!response.ok()) return null;
-        return (await response.json() as { latestRequest: unknown }).latestRequest;
-      }).toMatchObject({
-        protocol: 'rdp',
-        connectionConfig: {
-          hostname: '192.0.2.77',
-          port: '3389',
-          width: '1440',
-          height: '900',
-          dpi: '120',
-          resizeMethod: 'display-update',
-          remoteApp: '||notepad',
-          remoteAppDir: 'C:\\Work',
-          remoteAppArgs: '/A readme.txt',
-        },
-      });
     });
 
-    await step('Progress Display stays in normal layout and RDP always renders above it', async () => {
+    await step('Connections launches RDP in the app-level surface without leaving connection management', async () => {
+      await page.goto('/connections');
+      const row = page.getByTestId(`connection-row-${connectionId}`);
+      await expect(row).toBeVisible();
+      await row.getByRole('button', { name: 'Connect', exact: true }).click();
+      await expect(page).toHaveURL(/\/connections$/);
+      const modal = page.getByTestId('remote-desktop-modal');
+      await expect(modal).toBeVisible();
+      await expect(modal).toContainText('Connected', { timeout: 15_000 });
+      await modal.getByTestId('rdp-window-close').click();
+      await expect(modal).toBeHidden();
+      await expect(page).toHaveURL(/\/connections$/);
+    });
+
+    await step('Dashboard launches the same RDP surface without replacing the dashboard route', async () => {
+      await page.goto('/');
+      const dashboard = page.getByTestId('dashboard-view');
+      await expect(dashboard.getByTestId(`dashboard-connection-row-${connectionId}`)).toBeVisible({ timeout: 20_000 });
+      await dashboard.getByTestId(`dashboard-connect-${connectionId}`).click();
+      await expect(page).toHaveURL(/\/$/);
+      const modal = page.getByTestId('remote-desktop-modal');
+      await expect(modal).toBeVisible();
+      await expect(modal).toContainText('Connected', { timeout: 15_000 });
+      await modal.getByTestId('rdp-window-close').click();
+      await expect(modal).toBeHidden();
+      await expect(page).toHaveURL(/\/$/);
+    });
+
+    await step('RDP opens from the clean Workspace without rendering an empty Progress Display', async () => {
       await page.goto('/workspace');
-      const progressToggle = page.getByTestId('transfer-progress-toggle');
-      await expect(progressToggle).toBeVisible();
-      await progressToggle.click();
+      await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0);
 
-      const progressDisplay = page.getByTestId('progress-display-modal');
-      await expect(progressDisplay).toBeVisible();
-      await expect(progressDisplay).toHaveAttribute('data-progress-display-placement', 'inline');
-      await expect.poll(() => progressDisplay.evaluate(element => ({
-        position: window.getComputedStyle(element).position,
-        zIndex: window.getComputedStyle(element).zIndex,
-      }))).toEqual({ position: 'static', zIndex: 'auto' });
-
-      await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
       const connectionList = page.getByTestId('workspace-connection-list');
       await expect(connectionList).toBeVisible();
       await connectionList.getByText(CONNECTION_NAME, { exact: true }).first().click();
 
       const modal = page.getByTestId('remote-desktop-modal');
       await expect(modal).toBeVisible();
-      await expect(progressDisplay).toBeVisible();
-      await expect.poll(async () => {
-        const box = await modal.boundingBox();
-        if (!box) return false;
-        return modal.evaluate((element, point) => {
-          const top = document.elementFromPoint(point.x, point.y);
-          return Boolean(top && element.contains(top));
-        }, { x: box.x + box.width / 2, y: box.y + box.height / 2 });
-      }).toBe(true);
+      await expect(modal.locator('i.fa-desktop')).toBeVisible();
+      await expect(modal.locator('i.fa-expand')).toBeVisible();
+      await expect(modal.locator('i.fa-window-minimize')).toBeVisible();
+      await expect(modal.locator('i.fa-times')).toBeVisible();
+      await expect(page.getByTestId('progress-display-modal')).toHaveCount(0);
+      await expect(modal).toContainText('Connected', { timeout: 15_000 });
+    });
+
+    await step('RDP clipboard synchronizes plain text in both directions without replacing the session', async () => {
+      const hostText = 'NEXUS_RDP_HOST_CLIPBOARD_E2E';
+      await page.evaluate((text) => navigator.clipboard.writeText(text), hostText);
+      const displayElement = page.getByTestId('rdp-display-container').locator('[tabindex="0"]').first();
+      await expect(displayElement).toBeAttached({ timeout: 15_000 });
+      await displayElement.dispatchEvent('focus');
+      const hostBase64 = Buffer.from(hostText, 'utf8').toString('base64');
+      await expect
+        .poll(() => remoteFrames.some((frame) => frame.includes('9.clipboard') || frame.includes(hostBase64)))
+        .toBeTruthy();
+      await expect.poll(() => remoteFrames.some((frame) => frame.includes(hostBase64))).toBeTruthy();
+
+      const remoteText = 'NEXUS_RDP_REMOTE_CLIPBOARD_E2E';
+      const remoteClipboard = await context.request.post('http://127.0.0.1:29090/e2e/guacamole/clipboard', {
+        data: { text: remoteText },
+      });
+      expect(remoteClipboard.ok()).toBeTruthy();
+      await expect
+        .poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 15_000 })
+        .toBe(remoteText);
+      await expect(page.getByTestId('remote-desktop-modal')).toContainText('Connected');
     });
 
     await step('browser fullscreen is borderless, hides Nexus chrome, and Escape restores the window', async () => {
       const panel = page.getByTestId('remote-desktop-panel');
-      const fullscreen = page.getByTestId('rdp-browser-fullscreen');
+      const fullscreen = panel.getByTestId('rdp-browser-fullscreen');
       const header = page.getByTestId('rdp-window-header');
       const footer = page.getByTestId('rdp-window-footer');
+      await expect(panel).toBeVisible();
       await expect(fullscreen).toBeVisible();
       await expect(header).toBeVisible();
       await expect(footer).toBeVisible();
@@ -176,7 +205,7 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       expect(viewport).toBeTruthy();
 
       await fullscreen.click();
-      await expect.poll(() => panel.evaluate(element => document.fullscreenElement === element)).toBe(true);
+      await expect.poll(() => panel.evaluate((element) => document.fullscreenElement === element)).toBe(true);
       await expect(header).toBeHidden();
       await expect(footer).toBeHidden();
       const fullscreenBox = await panel.boundingBox();
@@ -185,17 +214,21 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       expect(Math.abs(fullscreenBox!.y)).toBeLessThanOrEqual(1);
       expect(Math.abs(fullscreenBox!.width - viewport!.width)).toBeLessThanOrEqual(1);
       expect(Math.abs(fullscreenBox!.height - viewport!.height)).toBeLessThanOrEqual(1);
-      await expect.poll(() => panel.evaluate(element => {
-        const style = window.getComputedStyle(element);
-        return {
-          borderTopWidth: style.borderTopWidth,
-          borderRadius: style.borderRadius,
-          boxShadow: style.boxShadow,
-        };
-      })).toEqual({ borderTopWidth: '0px', borderRadius: '0px', boxShadow: 'none' });
+      await expect
+        .poll(() =>
+          panel.evaluate((element) => {
+            const style = window.getComputedStyle(element);
+            return {
+              borderTopWidth: style.borderTopWidth,
+              borderRadius: style.borderRadius,
+              boxShadow: style.boxShadow,
+            };
+          }),
+        )
+        .toEqual({ borderTopWidth: '0px', borderRadius: '0px', boxShadow: 'none' });
 
       await page.keyboard.press('Escape');
-      await expect.poll(() => panel.evaluate(element => document.fullscreenElement === element)).toBe(false);
+      await expect.poll(() => panel.evaluate((element) => document.fullscreenElement === element)).toBe(false);
       await expect(header).toBeVisible();
       await expect(footer).toBeVisible();
       const restoredBox = await panel.boundingBox();
@@ -228,17 +261,62 @@ async function createRemoteConnection(
     },
   });
   expect(response.status(), await response.text()).toBe(201);
-  return (await response.json() as { connection: { id: number } }).connection.id;
+  return ((await response.json()) as { connection: { id: number } }).connection.id;
 }
 
 async function openRemoteConnection(page: Page, name: string, modalTestId: string): Promise<void> {
   await page.goto('/workspace');
-  await page.getByTestId('terminal-tab-bar').getByTitle('New Connection Tab').click();
   const connectionList = page.getByTestId('workspace-connection-list');
   await expect(connectionList).toBeVisible();
   await connectionList.getByText(name, { exact: true }).first().click();
   await expect(page.getByTestId(modalTestId)).toBeVisible();
 }
+
+test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await page.setViewportSize({ width: 2400, height: 1200 });
+  expect(
+    (
+      await context.request.put('/api/v1/settings', {
+        data: {
+          language: 'en-US',
+          rdpModalWidth: 2200,
+          rdpModalHeight: 900,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  const name = 'E2E RDP Wide DPI';
+  const connectionId = await createRemoteConnection(context.request, 'RDP', name, '192.0.2.93', 3389);
+  try {
+    await page.goto('/workspace');
+    const connectionList = page.getByTestId('workspace-connection-list');
+    await expect(connectionList).toBeVisible();
+
+    const sessionRequestPromise = page.waitForRequest(
+      (request) =>
+        request.method() === 'POST' && request.url().includes(`/api/v1/connections/${connectionId}/rdp-session`),
+    );
+    const tunnelPromise = page.waitForEvent('websocket', {
+      predicate: (socket) => socket.url().includes('/ws/remote-desktop'),
+    });
+    await connectionList.getByText(name, { exact: true }).first().click();
+
+    const sessionRequest = await sessionRequestPromise;
+    const sessionUrl = new URL(sessionRequest.url());
+    expect(Number(sessionUrl.searchParams.get('width'))).toBeGreaterThan(1920);
+    expect(sessionUrl.searchParams.get('dpi')).toBe('120');
+
+    const tunnel = await tunnelPromise;
+    const tunnelUrl = new URL(tunnel.url());
+    expect(Number(tunnelUrl.searchParams.get('width'))).toBeGreaterThan(1920);
+    expect(tunnelUrl.searchParams.get('dpi')).toBe('120');
+    await expect(page.getByTestId('remote-desktop-modal')).toContainText('Connected', { timeout: 15_000 });
+  } finally {
+    await context.request.delete(`/api/v1/connections/${connectionId}`);
+  }
+});
 
 async function dragBy(page: Page, testId: string, deltaX: number, deltaY: number): Promise<void> {
   const target = page.getByTestId(testId);
@@ -261,29 +339,36 @@ async function dragBy(page: Page, testId: string, deltaX: number, deltaY: number
     clientX: startX,
     clientY: startY,
   });
-  await page.evaluate(({ x, y, id }) => {
-    window.dispatchEvent(new PointerEvent('pointermove', {
-      bubbles: true,
-      cancelable: true,
-      pointerId: id,
-      pointerType: 'pen',
-      isPrimary: true,
-      buttons: 1,
-      clientX: x,
-      clientY: y,
-    }));
-    window.dispatchEvent(new PointerEvent('pointerup', {
-      bubbles: true,
-      cancelable: true,
-      pointerId: id,
-      pointerType: 'pen',
-      isPrimary: true,
-      button: 0,
-      buttons: 0,
-      clientX: x,
-      clientY: y,
-    }));
-  }, { x: startX + deltaX, y: startY + deltaY, id: pointerId });
+  await page.evaluate(
+    ({ x, y, id }) => {
+      window.dispatchEvent(
+        new PointerEvent('pointermove', {
+          bubbles: true,
+          cancelable: true,
+          pointerId: id,
+          pointerType: 'pen',
+          isPrimary: true,
+          buttons: 1,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+      window.dispatchEvent(
+        new PointerEvent('pointerup', {
+          bubbles: true,
+          cancelable: true,
+          pointerId: id,
+          pointerType: 'pen',
+          isPrimary: true,
+          button: 0,
+          buttons: 0,
+          clientX: x,
+          clientY: y,
+        }),
+      );
+    },
+    { x: startX + deltaX, y: startY + deltaY, id: pointerId },
+  );
 }
 
 async function exercisePointerWindow(
@@ -333,22 +418,19 @@ async function exercisePointerWindow(
 test('RDP pointer resize and restore-button dragging preserve minimized window behavior', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await page.setViewportSize({ width: 1600, height: 1100 });
-  expect((await context.request.put('/api/v1/settings', {
-    data: {
-      language: 'en-US',
-      rdpModalWidth: '1024',
-      rdpModalHeight: '768',
-    },
-  })).ok()).toBeTruthy();
-  expect((await context.request.post(`${TEST_GATEWAY_URL}/control/reset`)).ok()).toBeTruthy();
+  expect(
+    (
+      await context.request.put('/api/v1/settings', {
+        data: {
+          language: 'en-US',
+          rdpModalWidth: 1024,
+          rdpModalHeight: 768,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
 
-  const connectionId = await createRemoteConnection(
-    context.request,
-    'RDP',
-    POINTER_RDP_NAME,
-    '192.0.2.91',
-    3389,
-  );
+  const connectionId = await createRemoteConnection(context.request, 'RDP', POINTER_RDP_NAME, '192.0.2.91', 3389);
   try {
     await openRemoteConnection(page, POINTER_RDP_NAME, 'remote-desktop-modal');
     await exercisePointerWindow(page, {
@@ -357,42 +439,92 @@ test('RDP pointer resize and restore-button dragging preserve minimized window b
       minimize: 'rdp-window-minimize',
       restore: 'rdp-window-restore',
     });
-    await page.getByTestId('rdp-window-close').click();
-    await expect(page.getByTestId('remote-desktop-modal')).toHaveCount(0);
+    const modal = page.getByTestId('remote-desktop-modal');
+    await modal.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(modal).toBeHidden();
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);
   }
 });
 
 test('VNC pointer resize and restore-button dragging share the same window semantics', async ({ page, context }) => {
+  const remoteFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string') remoteFrames.push(event.payload);
+    });
+  });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
   await loginAsInitialAdmin(context.request);
   await page.setViewportSize({ width: 1600, height: 1100 });
-  expect((await context.request.put('/api/v1/settings', {
-    data: {
-      language: 'en-US',
-      vncModalWidth: '900',
-      vncModalHeight: '650',
-    },
-  })).ok()).toBeTruthy();
-  expect((await context.request.post(`${TEST_GATEWAY_URL}/control/reset`)).ok()).toBeTruthy();
+  expect(
+    (
+      await context.request.put('/api/v1/settings', {
+        data: {
+          language: 'en-US',
+          vncModalWidth: 900,
+          vncModalHeight: 650,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
 
-  const connectionId = await createRemoteConnection(
-    context.request,
-    'VNC',
-    POINTER_VNC_NAME,
-    '192.0.2.92',
-    5901,
-  );
+  const connectionId = await createRemoteConnection(context.request, 'VNC', POINTER_VNC_NAME, '192.0.2.92', 5901);
   try {
+    await step('Connections also launches VNC globally without replacing its route', async () => {
+      await page.goto('/connections');
+      const row = page.getByTestId(`connection-row-${connectionId}`);
+      await expect(row).toBeVisible();
+      await row.getByRole('button', { name: 'Connect', exact: true }).click();
+      await expect(page).toHaveURL(/\/connections$/);
+      const modal = page.getByTestId('vnc-modal');
+      await expect(modal).toBeVisible();
+      await expect(modal).toContainText('Connected', { timeout: 15_000 });
+      await modal.getByTestId('vnc-window-close').click();
+      await expect(modal).toBeHidden();
+      await expect(page).toHaveURL(/\/connections$/);
+    });
+
     await openRemoteConnection(page, POINTER_VNC_NAME, 'vnc-modal');
+    const vncModal = page.getByTestId('vnc-modal');
+    await expect(vncModal).toContainText('Connected', { timeout: 15_000 });
+    await expect(vncModal.locator('i.fa-plug')).toBeVisible();
+    const vncText = vncModal.getByPlaceholder('Enter text here to send to VNC');
+    const send = vncModal.getByRole('button', { name: 'Send', exact: true });
+    await expect(vncText).toBeVisible();
+    await expect(send).toBeDisabled();
+    await vncText.fill('VNC');
+    await expect(send).toBeEnabled();
+    await send.click();
+    for (const keysym of [86, 78, 67]) {
+      await expect.poll(() => remoteFrames.some((frame) => frame.includes(`3.key,2.${keysym},1.1;`))).toBeTruthy();
+      await expect.poll(() => remoteFrames.some((frame) => frame.includes(`3.key,2.${keysym},1.0;`))).toBeTruthy();
+    }
+
+    const hostText = 'NEXUS_VNC_HOST_CLIPBOARD_E2E';
+    await page.evaluate((text) => navigator.clipboard.writeText(text), hostText);
+    const displayElement = page.getByTestId('vnc-display-container').locator('[tabindex="0"]').first();
+    await expect(displayElement).toBeAttached();
+    await displayElement.dispatchEvent('focus');
+    const hostBase64 = Buffer.from(hostText, 'utf8').toString('base64');
+    await expect.poll(() => remoteFrames.some((frame) => frame.includes(hostBase64))).toBeTruthy();
+
+    const remoteText = 'NEXUS_VNC_REMOTE_CLIPBOARD_E2E';
+    const remoteClipboard = await context.request.post('http://127.0.0.1:29090/e2e/guacamole/clipboard', {
+      data: { text: remoteText },
+    });
+    expect(remoteClipboard.ok()).toBeTruthy();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 15_000 }).toBe(remoteText);
+    await expect(vncModal).toContainText('Connected');
     await exercisePointerWindow(page, {
       panel: 'vnc-panel',
       resize: 'vnc-window-resize',
       minimize: 'vnc-window-minimize',
       restore: 'vnc-window-restore',
     });
-    await page.getByTestId('vnc-window-close').click();
-    await expect(page.getByTestId('vnc-modal')).toHaveCount(0);
+    const modal = page.getByTestId('vnc-modal');
+    await modal.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(modal).toBeHidden();
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);
   }

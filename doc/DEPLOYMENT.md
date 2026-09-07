@@ -22,11 +22,14 @@ docker compose up -d
 
 ## 容器与镜像结构
 
-Frontend、Backend 与 Remote Gateway 共用同一个镜像：
+Frontend、Backend 与 Remote Gateway 共用同一个镜像。发布仓库提供两个滚动通道：
 
 ```text
-ghcr.io/0honus0/nexus-terminal:latest
+ghcr.io/0honus0/nexus-terminal:latest  # 稳定 / Release
+ghcr.io/0honus0/nexus-terminal:dev     # 最近一次手动 Dev 发布
 ```
+
+`docker-compose.yml` / `.env` 默认仍使用 `:latest`。需要跟随开发镜像时，将 `.env` 中 `NEXUS_IMAGE_TAG=dev` 后再执行 `docker compose pull && docker compose up -d`。
 
 Compose 仍以三个独立服务运行不同角色：
 
@@ -37,7 +40,7 @@ Compose 仍以三个独立服务运行不同角色：
 
 同一镜像的层会由 Docker 复用，不会保存三份完整镜像。
 
-当前发布 workflow 构建 `linux/amd64` 与 `linux/arm64`。
+当前发布 workflow 构建 `linux/amd64` 与 `linux/arm64`。GitHub Release 事件固定发布 `latest + release tag`；手动 `workflow_dispatch` 可选择 `dev` 或 `release` channel，默认 `dev`，并同时保留自定义 tag 或 `sha-<commit>` tag。
 
 ## `.env` 与持久化配置
 
@@ -108,12 +111,14 @@ sudo systemctl restart docker
 
 ## 更新
 
-Compose 部署不需要拉取源码：
+Compose 部署不需要拉取源码。稳定通道：
 
 ```bash
 docker compose pull
 docker compose up -d --remove-orphans
 ```
+
+开发通道可在 `.env` 设置 `NEXUS_IMAGE_TAG=dev` 后执行相同命令。`docker pull ghcr.io/0honus0/nexus-terminal` 等价于拉取 `:latest`，不会隐式拉取 `:dev`。
 
 更新前建议备份 `./data`。
 
@@ -139,4 +144,4 @@ NEXUS_IMAGE_TAG=dev \
 ./build.sh docker
 ```
 
-随后在 `.env` 中设置相同的 `NEXUS_IMAGE_REPOSITORY` 与 `NEXUS_IMAGE_TAG`，再运行 `docker compose up -d`。
+随后在 `.env` 中设置相同的 `NEXUS_IMAGE_REPOSITORY` 与 `NEXUS_IMAGE_TAG`，再运行 `docker compose up -d`。统一镜像的运行角色入口脚本位于 `scripts/docker/entrypoint.sh`；Docker 相关运行脚本统一归 `scripts/docker/`，见 [EC-REPO-001](./software-requirements/engineering-constraints.md#ec-repo-001)。
