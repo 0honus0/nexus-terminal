@@ -251,3 +251,99 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     await expect(manager).toContainText('No running or stopped containers found on remote host.', { timeout: 15_000 });
   });
 });
+
+test('Workspace layout lock and top-navigation toggle affect the live shell and persist', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  expect((await context.request.put('/api/v1/settings', { data: { layoutLocked: false } })).ok()).toBeTruthy();
+  expect(
+    (
+      await context.request.put('/api/v1/settings/nav-bar-visibility', {
+        data: { visible: true },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionId);
+
+    const rootSplit = page.locator('.workspace-split.splitpanes--vertical').first();
+    const firstPane = rootSplit.locator(':scope > .splitpanes__pane').first();
+    const firstSplitter = rootSplit.locator(':scope > .splitpanes__splitter').first();
+    await expect(rootSplit).toBeVisible();
+    await expect(firstSplitter).toBeVisible();
+
+    await step('an unlocked layout splitter remains draggable', async () => {
+      const before = await firstPane.boundingBox();
+      const splitterBox = await firstSplitter.boundingBox();
+      expect(before).toBeTruthy();
+      expect(splitterBox).toBeTruthy();
+      await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, splitterBox!.y + splitterBox!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(splitterBox!.x + 80, splitterBox!.y + splitterBox!.height / 2, { steps: 8 });
+      await page.mouse.up();
+      await expect
+        .poll(async () => Math.abs(((await firstPane.boundingBox())?.width ?? 0) - before!.width))
+        .toBeGreaterThan(20);
+    });
+
+    await step('locking from the real layout configurator prevents splitter edits', async () => {
+      await page.getByTestId('terminal-tab-bar').getByRole('button', { name: 'Configure Layout', exact: true }).click();
+      const lockSwitch = page.getByRole('switch', { name: 'Lock Layout', exact: true });
+      await expect(lockSwitch).toHaveAttribute('aria-checked', 'false');
+      await lockSwitch.click();
+      await expect(lockSwitch).toHaveAttribute('aria-checked', 'true');
+      await expect
+        .poll(async () => {
+          const response = await context.request.get('/api/v1/settings');
+          const settings = (await response.json()) as Record<string, string>;
+          return settings.layoutLocked;
+        })
+        .toBe('true');
+      await page.keyboard.press('Escape');
+
+      const before = await firstPane.boundingBox();
+      const splitterBox = await firstSplitter.boundingBox();
+      expect(before).toBeTruthy();
+      expect(splitterBox).toBeTruthy();
+      await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, splitterBox!.y + splitterBox!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(splitterBox!.x + 80, splitterBox!.y + splitterBox!.height / 2, { steps: 8 });
+      await page.mouse.up();
+      await page.waitForTimeout(200);
+      const after = await firstPane.boundingBox();
+      expect(after).toBeTruthy();
+      expect(Math.abs(after!.width - before!.width)).toBeLessThan(2);
+    });
+
+    await step('the tab-bar eye action hides and restores the persisted top navigation', async () => {
+      const tabBar = page.getByTestId('terminal-tab-bar');
+      const header = page.locator('body > #app > header');
+      await expect(header).toBeVisible();
+      await tabBar.getByRole('button', { name: 'Hide', exact: true }).click();
+      await expect(header).toHaveCount(0);
+      await expect(tabBar.getByRole('button', { name: 'Show Top Navigation', exact: true })).toBeVisible();
+      await expect
+        .poll(async () => {
+          const response = await context.request.get('/api/v1/settings/nav-bar-visibility');
+          return ((await response.json()) as { visible: boolean }).visible;
+        })
+        .toBe(false);
+
+      await tabBar.getByRole('button', { name: 'Show Top Navigation', exact: true }).click();
+      await expect(header).toBeVisible();
+      await expect
+        .poll(async () => {
+          const response = await context.request.get('/api/v1/settings/nav-bar-visibility');
+          return ((await response.json()) as { visible: boolean }).visible;
+        })
+        .toBe(true);
+    });
+  } finally {
+    await context.request.put('/api/v1/settings', { data: { layoutLocked: false } });
+    await context.request.put('/api/v1/settings/nav-bar-visibility', { data: { visible: true } });
+  }
+});
