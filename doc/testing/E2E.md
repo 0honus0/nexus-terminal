@@ -134,6 +134,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - raw binary upload ready/progress/completion and remote-content verification through the clean Workspace/upload protocols;
 - real Login CAPTCHA fail-closed/token lifecycle and browser WebAuthn passkey success/credential-failure/password-fallback surfaces.
 - TOTP 2FA setup, login gating, verification, and disable lifecycle;
+- historical database startup applying connection migrations, including migration 20 normalizing legacy proxy-route rows without `proxy_id` while preserving real proxy references;
 - connection update/clone/delete with preserved encrypted credentials and tag associations;
 
 For optional focused local browser debugging, install Chromium when the host already has (or can install) the required system libraries:

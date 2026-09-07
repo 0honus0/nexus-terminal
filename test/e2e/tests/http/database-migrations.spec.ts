@@ -64,6 +64,22 @@ const waitForBackend = async (
 };
 
 const HISTORICAL_DATABASE_SQL = `
+  CREATE TABLE proxies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('SOCKS5', 'HTTP')),
+    host TEXT NOT NULL,
+    port INTEGER NOT NULL,
+    username TEXT NULL,
+    auth_method TEXT NOT NULL DEFAULT 'none' CHECK(auth_method IN ('none', 'password', 'key')),
+    encrypted_password TEXT NULL,
+    encrypted_private_key TEXT NULL,
+    encrypted_passphrase TEXT NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    UNIQUE(name, type, host, port)
+  );
+
   CREATE TABLE connections (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NULL,
@@ -101,8 +117,16 @@ const HISTORICAL_DATABASE_SQL = `
     (11, 'Add force_keyboard_interactive column to connections table'),
     (18, 'Fix Telnet CHECK constraint and add missing FK indexes');
 
+  INSERT INTO proxies (id, name, type, host, port)
+  VALUES (1, 'Historical Proxy', 'SOCKS5', '198.51.100.10', 1080);
+
   INSERT INTO connections (name, type, host, port, username, auth_method, notes, jump_chain)
   VALUES ('Historical RDP', 'RDP', '192.0.2.88', 3389, 'legacy-user', 'password', 'legacy row', NULL);
+
+  INSERT INTO connections (name, type, host, port, username, auth_method, proxy_id, proxy_type, notes, jump_chain)
+  VALUES
+    ('Legacy Proxyless SSH', 'SSH', '192.0.2.89', 22, 'legacy-user', 'password', NULL, 'proxy', 'legacy fallback direct row', NULL),
+    ('Historical Proxied SSH', 'SSH', '192.0.2.90', 22, 'legacy-user', 'password', 1, 'proxy', 'valid proxy row', NULL);
 `;
 
 const createHistoricalDatabase = (databasePath: string): void => {
@@ -120,16 +144,22 @@ const createHistoricalDatabase = (databasePath: string): void => {
 
 const readUpgradeEvidence = (
   databasePath: string,
-): { hasRdpOptions: boolean; migration: { id: number; name: string } | null } => {
+): {
+  hasRdpOptions: boolean;
+  migrations: Array<{ id: number; name: string }>;
+  routes: Array<{ name: string; proxy_id: number | null; proxy_type: string | null }>;
+} => {
   const script = String.raw`
     const { DatabaseSync } = require('node:sqlite');
     const db = new DatabaseSync(process.argv[1], { readOnly: true });
     try {
       const columns = db.prepare('PRAGMA table_info(connections)').all();
-      const migration = db.prepare('SELECT id, name FROM migrations WHERE id = 19').get() ?? null;
+      const migrations = db.prepare('SELECT id, name FROM migrations WHERE id IN (19, 20) ORDER BY id').all();
+      const routes = db.prepare("SELECT name, proxy_id, proxy_type FROM connections WHERE name IN ('Legacy Proxyless SSH', 'Historical Proxied SSH') ORDER BY id").all();
       process.stdout.write(JSON.stringify({
         hasRdpOptions: columns.some((column) => column.name === 'rdp_options'),
-        migration,
+        migrations,
+        routes,
       }));
     } finally {
       db.close();
@@ -138,8 +168,8 @@ const readUpgradeEvidence = (
   return JSON.parse(execFileSync(process.execPath, ['-e', script, databasePath], { cwd: repoRoot, encoding: 'utf8' }));
 };
 
-test('historical migration ids still apply the RDP options upgrade through normal backend startup', async () => {
-  const dataDir = await mkdtemp(path.join(tmpdir(), 'nexus-rdp-migration-e2e-'));
+test('historical databases apply current connection migrations through normal backend startup', async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'nexus-connection-migration-e2e-'));
   const databasePath = path.join(dataDir, 'nexus-terminal.db');
   createHistoricalDatabase(databasePath);
   const port = await reservePort();
@@ -188,6 +218,8 @@ test('historical migration ids still apply the RDP options upgrade through norma
         name: string | null;
         type: string;
         host: string;
+        proxyId?: number | null;
+        route?: string | null;
         rdpOptions?: unknown;
       }>;
       expect(connections).toContainEqual(
@@ -198,6 +230,20 @@ test('historical migration ids still apply the RDP options upgrade through norma
           rdpOptions: null,
         }),
       );
+      expect(connections).toContainEqual(
+        expect.objectContaining({
+          name: 'Legacy Proxyless SSH',
+          proxyId: null,
+          route: null,
+        }),
+      );
+      expect(connections).toContainEqual(
+        expect.objectContaining({
+          name: 'Historical Proxied SSH',
+          proxyId: 1,
+          route: 'proxy',
+        }),
+      );
     } finally {
       await request.dispose();
       await stopProcess(child);
@@ -205,7 +251,14 @@ test('historical migration ids still apply the RDP options upgrade through norma
 
     const upgrade = readUpgradeEvidence(databasePath);
     expect(upgrade.hasRdpOptions).toBeTruthy();
-    expect(upgrade.migration).toEqual({ id: 19, name: 'Add RDP options column to connections table' });
+    expect(upgrade.migrations).toEqual([
+      { id: 19, name: 'Add RDP options column to connections table' },
+      { id: 20, name: 'Normalize legacy proxy routes without proxy references' },
+    ]);
+    expect(upgrade.routes).toEqual([
+      { name: 'Legacy Proxyless SSH', proxy_id: null, proxy_type: null },
+      { name: 'Historical Proxied SSH', proxy_id: 1, proxy_type: 'proxy' },
+    ]);
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

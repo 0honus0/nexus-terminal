@@ -312,6 +312,16 @@ const definedMigrations: Migration[] = [
             ALTER TABLE connections ADD COLUMN rdp_options TEXT NULL;
         `,
   },
+  {
+    id: 20,
+    name: 'Normalize legacy proxy routes without proxy references',
+    sql: `
+            UPDATE connections
+            SET proxy_type = NULL
+            WHERE proxy_type = 'proxy'
+              AND proxy_id IS NULL;
+        `,
+  },
 ];
 
 /**
