@@ -1317,7 +1317,13 @@
       </div>
     </header>
 
-    <BaseSpinner v-if="browser.loading.value || browser.searching.value" class="m-6" />
+    <div
+      v-if="browser.loading.value || browser.searching.value"
+      data-testid="file-manager-loading-state"
+      class="file-manager-loading-state min-h-0 flex-1"
+    >
+      <BaseSpinner />
+    </div>
     <p v-else-if="browser.error.value" class="p-4 text-error">{{ browser.error.value }}</p>
     <div
       v-else
@@ -1845,6 +1851,10 @@
     container-name: file-manager-pane;
     font-family: var(--font-family-sans-serif, sans-serif);
   }
+  .file-manager-loading-state {
+    display: grid;
+    place-items: center;
+  }
   .file-manager-toolbar,
   .file-manager-actions {
     min-width: 0;
@@ -2027,6 +2037,57 @@
       padding-left: 0.35rem;
     }
   }
+  @container file-manager-pane (max-width: 360px) {
+    .file-table {
+      width: 100%;
+      min-width: 100% !important;
+    }
+    .file-table col:nth-child(1) {
+      width: 2rem !important;
+      min-width: 2rem !important;
+    }
+    .file-table col:nth-child(2) {
+      width: auto !important;
+      min-width: 0 !important;
+    }
+    .file-table col:nth-child(n + 3) {
+      width: 0 !important;
+      min-width: 0 !important;
+    }
+    .file-table-header:nth-child(n + 3),
+    .file-row-cell:nth-child(n + 3),
+    .file-table-header > span {
+      display: none;
+    }
+    .file-table-header:first-child {
+      width: 2rem !important;
+      min-width: 2rem !important;
+      padding-right: 0.15rem;
+      padding-left: 0.25rem;
+      overflow: hidden;
+      color: transparent;
+      letter-spacing: 0;
+    }
+    .file-table-header:nth-child(2) {
+      width: auto !important;
+      min-width: 0 !important;
+      padding-right: 0.4rem;
+      padding-left: 0.2rem;
+    }
+    .file-row-type {
+      width: 2rem !important;
+      min-width: 2rem !important;
+      padding-right: 0.15rem;
+      padding-left: 0.25rem;
+    }
+    .file-row-name {
+      width: auto !important;
+      min-width: 0 !important;
+      padding-right: 0.4rem;
+      padding-left: 0.2rem;
+    }
+  }
+
   @container file-manager-pane (max-width: 320px) {
     .file-manager-toolbar {
       gap: 0.25rem;

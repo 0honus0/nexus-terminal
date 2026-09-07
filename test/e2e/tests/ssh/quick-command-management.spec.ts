@@ -154,6 +154,15 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await search.fill('Managed Quick Command');
     const row = quickView.locator(`[data-command-id="${commandId}"]`);
     await expect(row).toBeVisible();
+    await expect(row.locator('.quick-command-row-actions, .row-action')).toHaveCount(0);
+    await row.click({ button: 'right' });
+    const contextMenu = page.getByRole('menu').filter({ visible: true }).first();
+    await expect(contextMenu).toBeVisible();
+    await expect(contextMenu.getByText('Copy', { exact: true })).toBeVisible();
+    await expect(contextMenu.getByText('Edit', { exact: true })).toBeVisible();
+    await expect(contextMenu.getByText('Delete', { exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(contextMenu).toBeHidden();
     const before = markerCount(await terminalRows.innerText(), 'QUICK_MANAGED_V1');
     await row.getByTestId('quick-command-execute').click();
     await expect
