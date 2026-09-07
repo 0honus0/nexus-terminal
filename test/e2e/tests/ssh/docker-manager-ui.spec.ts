@@ -277,33 +277,31 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         await expect(fileManager).toBeVisible();
         const fileSplit = page.locator('.workspace-split.splitpanes--horizontal').filter({ has: fileManager }).first();
         const filePane = fileSplit.locator(':scope > .splitpanes__pane').filter({ has: fileManager }).first();
-        const fileSplitter = fileSplit.locator(':scope > .splitpanes__splitter').last();
         const firstAction = fileManager.locator('.file-manager-action-button').first();
-        await expect(fileSplitter).toBeVisible();
 
-        const resizeFilePaneTo = async (targetHeight: number): Promise<void> => {
-          const splitBox = await fileSplit.boundingBox();
-          const splitterBox = await fileSplitter.boundingBox();
-          expect(splitBox).toBeTruthy();
-          expect(splitterBox).toBeTruthy();
-          const targetY = splitBox!.y + splitBox!.height - targetHeight;
-          await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, splitterBox!.y + splitterBox!.height / 2);
-          await page.mouse.down();
-          await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, targetY, { steps: 8 });
-          await page.mouse.up();
-        };
-
-        await resizeFilePaneTo(390);
+        await page.setViewportSize({ width: 1440, height: 1200 });
         await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeGreaterThan(340);
         await expect.poll(async () => (await firstAction.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(27);
+        const expandedSplitBox = await fileSplit.boundingBox();
+        const expandedPaneBox = await filePane.boundingBox();
+        expect(expandedSplitBox).toBeTruthy();
+        expect(expandedPaneBox).toBeTruthy();
+        const expandedRatio = expandedPaneBox!.height / expandedSplitBox!.height;
 
-        await resizeFilePaneTo(220);
+        await page.setViewportSize({ width: 1440, height: 650 });
         await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeLessThan(340);
         await expect.poll(async () => (await firstAction.boundingBox())?.height ?? 99).toBeLessThanOrEqual(25);
         await expect
           .poll(async () => (await fileManager.getByTestId('file-manager-path-input').boundingBox())?.height ?? 99)
           .toBeLessThanOrEqual(26);
+        const compactSplitBox = await fileSplit.boundingBox();
+        const compactPaneBox = await filePane.boundingBox();
+        expect(compactSplitBox).toBeTruthy();
+        expect(compactPaneBox).toBeTruthy();
+        const compactRatio = compactPaneBox!.height / compactSplitBox!.height;
+        expect(Math.abs(compactRatio - expandedRatio)).toBeLessThan(0.03);
 
+        await page.setViewportSize({ width: 1440, height: 900 });
         const openSuspended = page.getByTestId('open-suspended-sessions-button').filter({ visible: true }).first();
         await expect(openSuspended).toBeVisible();
         await openSuspended.click();
