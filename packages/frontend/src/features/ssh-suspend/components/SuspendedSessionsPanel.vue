@@ -138,18 +138,21 @@
           v-model="data.search.value"
           type="search"
           :placeholder="t('suspendedSshSessions.searchPlaceholder')"
-          class="w-full rounded-lg border border-border/50 bg-input py-1.5 pl-10 pr-4 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          class="suspended-session-search w-full rounded-lg border border-border/50 bg-input py-1.5 pl-10 pr-4 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
         />
       </div>
     </div>
 
     <div class="session-list-container min-h-0 flex-1 overflow-y-auto">
-      <div v-if="data.loading.value && !filteredMarked.length" class="p-4 text-center text-text-secondary">
+      <div
+        v-if="data.loading.value && !filteredMarked.length"
+        class="suspended-session-loading p-4 text-center text-text-secondary"
+      >
         <i class="fas fa-spinner fa-spin text-2xl" aria-hidden="true"></i>
         <p class="mt-2">{{ t('suspendedSshSessions.loading') }}</p>
       </div>
       <p v-else-if="data.error.value" class="px-3 py-2 text-sm text-error">{{ data.error.value }}</p>
-      <p v-else-if="!hasResults" class="p-4 text-center text-text-secondary">
+      <p v-else-if="!hasResults" class="suspended-session-empty p-4 text-center text-text-secondary">
         {{ t('suspendedSshSessions.noResults') }}
       </p>
 
@@ -301,7 +304,7 @@
 
 <style scoped>
   .suspended-sessions-panel {
-    container-type: inline-size;
+    container-type: size;
     container-name: suspended-sessions-view-pane;
     font-family:
       -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji',
@@ -406,6 +409,53 @@
       min-width: 2.75rem;
       min-height: 2.75rem;
       padding-inline: 0.5rem;
+    }
+  }
+
+  @container suspended-sessions-view-pane (max-height: 280px) {
+    .view-header {
+      margin-bottom: 0.35rem;
+    }
+    .suspended-session-search {
+      padding-top: 0.25rem;
+      padding-bottom: 0.25rem;
+      padding-left: 2rem;
+      font-size: 0.75rem;
+      line-height: 1rem;
+    }
+    .view-header span {
+      padding-left: 0.65rem;
+    }
+    .suspended-session-loading,
+    .suspended-session-empty {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.75rem;
+      line-height: 1.25rem;
+    }
+    .suspended-session-loading i {
+      font-size: 1rem;
+    }
+    .suspended-session-loading p {
+      margin-top: 0.25rem;
+    }
+    .session-item {
+      margin-bottom: 0.35rem;
+      padding: 0.5rem;
+    }
+    .session-title {
+      font-size: 0.875rem;
+      line-height: 1.2;
+    }
+    .status-badge {
+      margin-left: 0.35rem;
+      padding: 0.0625rem 0.35rem;
+      font-size: 0.65rem;
+    }
+    .session-action {
+      min-height: 1.75rem;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      line-height: 1rem;
     }
   }
 </style>

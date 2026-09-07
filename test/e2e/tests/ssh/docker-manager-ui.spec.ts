@@ -270,6 +270,61 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
   try {
     await connectTestSshFromConnectionsPage(page, connectionId);
 
+    await step(
+      'constrained utility panes switch to a compact presentation without content-driven layout jumps',
+      async () => {
+        const fileManager = page.locator('.file-manager-root:visible').first();
+        await expect(fileManager).toBeVisible();
+        const fileSplit = page.locator('.workspace-split.splitpanes--horizontal').filter({ has: fileManager }).first();
+        const filePane = fileSplit.locator(':scope > .splitpanes__pane').filter({ has: fileManager }).first();
+        const fileSplitter = fileSplit.locator(':scope > .splitpanes__splitter').last();
+        const firstAction = fileManager.locator('.file-manager-action-button').first();
+        await expect(fileSplitter).toBeVisible();
+
+        const resizeFilePaneTo = async (targetHeight: number): Promise<void> => {
+          const splitBox = await fileSplit.boundingBox();
+          const splitterBox = await fileSplitter.boundingBox();
+          expect(splitBox).toBeTruthy();
+          expect(splitterBox).toBeTruthy();
+          const targetY = splitBox!.y + splitBox!.height - targetHeight;
+          await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, splitterBox!.y + splitterBox!.height / 2);
+          await page.mouse.down();
+          await page.mouse.move(splitterBox!.x + splitterBox!.width / 2, targetY, { steps: 8 });
+          await page.mouse.up();
+        };
+
+        await resizeFilePaneTo(390);
+        await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeGreaterThan(340);
+        await expect.poll(async () => (await firstAction.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(27);
+
+        await resizeFilePaneTo(220);
+        await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeLessThan(340);
+        await expect.poll(async () => (await firstAction.boundingBox())?.height ?? 99).toBeLessThanOrEqual(25);
+        await expect
+          .poll(async () => (await fileManager.getByTestId('file-manager-path-input').boundingBox())?.height ?? 99)
+          .toBeLessThanOrEqual(26);
+
+        const openSuspended = page.getByTestId('open-suspended-sessions-button').filter({ visible: true }).first();
+        await expect(openSuspended).toBeVisible();
+        await openSuspended.click();
+        const suspendedModal = page.getByTestId('suspended-sessions-modal');
+        const suspendedSearch = suspendedModal.locator('.suspended-session-search');
+        await expect(suspendedModal).toBeVisible();
+        await expect(suspendedSearch).toBeVisible();
+        await expect.poll(async () => (await suspendedSearch.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(29);
+
+        await page.setViewportSize({ width: 1440, height: 320 });
+        await expect.poll(async () => (await suspendedSearch.boundingBox())?.height ?? 99).toBeLessThanOrEqual(27);
+        const emptyState = suspendedModal.locator('.suspended-session-empty');
+        await expect(emptyState).toBeVisible();
+        await expect.poll(() => emptyState.evaluate((element) => getComputedStyle(element).fontSize)).toBe('12px');
+
+        await suspendedModal.getByRole('button', { name: 'Close', exact: true }).click();
+        await expect(suspendedModal).toBeHidden();
+        await page.setViewportSize({ width: 1440, height: 900 });
+      },
+    );
+
     const rootSplit = page.locator('.workspace-split.splitpanes--vertical').first();
     const firstPane = rootSplit.locator(':scope > .splitpanes__pane').first();
     const firstSplitter = rootSplit.locator(':scope > .splitpanes__splitter').first();
