@@ -232,7 +232,7 @@ test('a sidebar FileManager can unmount without orphaning its hidden archive tas
     await expect(task).toHaveAttribute('data-task-kind', 'compress');
 
     // FileManager presentation may unmount, but the session-owned transfer task remains in the shared ProgressCenter.
-    await sidebarToggle.click();
+    await sidebar.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(sidebarList).toBeHidden();
     await expect(popup).toBeVisible();
     await expect(task).toBeVisible();
