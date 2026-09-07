@@ -298,9 +298,9 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
         await page.setViewportSize({ width: viewport.width, height: viewport.height });
         await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
         await recordCaptchaMetrics(page, testInfo, `login-captcha-rejected-reset-${viewport.name}.metrics.json`);
-        const screenshotPath = testInfo.outputPath(`m01-login-captcha-rejected-reset-${viewport.name}.png`);
+        const screenshotPath = testInfo.outputPath(`auth-captcha-rejected-reset-${viewport.name}.png`);
         await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled', caret: 'hide' });
-        await testInfo.attach(`M01 CAPTCHA rejected/reset ${viewport.name}`, {
+        await testInfo.attach(`CAPTCHA rejected/reset ${viewport.name}`, {
           path: screenshotPath,
           contentType: 'image/png',
         });
@@ -326,9 +326,9 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
       evidence.push({ phase: 'fresh-token-success', status: successLogin.status() });
     });
 
-    const evidencePath = testInfo.outputPath('m01-login-captcha-token-evidence.json');
+    const evidencePath = testInfo.outputPath('auth-captcha-token-evidence.json');
     await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
-    await testInfo.attach('M01 CAPTCHA token lifecycle evidence', {
+    await testInfo.attach('CAPTCHA token lifecycle evidence', {
       path: evidencePath,
       contentType: 'application/json',
     });

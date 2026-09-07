@@ -3,7 +3,7 @@ import type { AppearanceSettingsRepository } from './appearance-settings.reposit
 import type { AppearanceSettings, UpdateAppearanceInput } from './appearance.types';
 import { defaultUiTheme } from './default-ui-theme';
 
-const DEFAULT_REMOTE_HTML_PRESETS_URL = 'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme';
+const DEFAULT_REMOTE_HTML_PRESETS_URL = 'https://github.com/0honus0/nexus-terminal/tree/main/examples/html-themes';
 export interface TerminalThemeLookup {
   get(id: number): Promise<unknown | null>;
   findDefaultThemeId(): Promise<number | null>;

@@ -1,11 +1,12 @@
 # Nexus Terminal 软件需求规格说明书（SRS）
 
-版本：v1.0  
-状态：Current refactor baseline
+版本：v1.1
+
+状态：Current post-refactor baseline (PR #9 review)
 
 ## 1. 文档目的
 
-本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
+本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，并已按重构 PR #9 的最终文件/行为差异重新核对。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
 
 ## 2. 需求解释规则
 

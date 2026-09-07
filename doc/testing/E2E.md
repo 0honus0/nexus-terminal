@@ -29,8 +29,8 @@ Functional/documentation screenshots are declared directly at real E2E checkpoin
 Every test receives its own text log. The archive layout mirrors the test source layout, for example:
 
 ```text
-tests/ssh/file-manager-context-menu.spec.ts
-logs/ssh/file-manager-context-menu/verifies file manager right-click actions over real SFTP.log
+tests/ssh/file-manager-navigation.spec.ts
+logs/ssh/file-manager-navigation/navigates remote directories over real SFTP.log
 ```
 
 The log records Playwright steps, API/browser actions, stdout/stderr, final status, failure stacks, and attachment paths. Grouped GitHub Actions runs upload one log artifact per group (`playwright-e2e-logs-group-N`).
@@ -73,17 +73,17 @@ npm run test:e2e:groups:check -- --workers 3
 
 The generator discovers all main specs under `auth`, `http`, `websocket`, `ui`, `ssh`, and `mobile`, keeps a whole spec as the smallest scheduling unit, and uses stable semantic families such as SSH file-manager, transfer, progress, terminal, connection, and UI security/settings/data. Related specs are kept together when doing so does not create an excessive load imbalance.
 
-`test/e2e/groups/timings.json` stores a rolling timing history. The mirrored reporter writes one machine-readable duration per spec, group jobs upload those timing files, and a successful push run merges them back into the history. The effective duration is the median of the most recent samples, so one unusually slow runner does not immediately reshuffle the groups.
+`test/e2e/groups/timings.json` stores a rolling timing history. The mirrored reporter writes one machine-readable duration per spec, group jobs upload those timing files, and a successful non-PR run merges them back into the history before the default grouping is reconsidered. The effective duration is the median of the most recent samples, so one unusually slow runner does not immediately reshuffle the groups.
 
 Rebalancing is intentionally sticky. Existing assignments are retained unless the predicted longest-group improvement reaches the configured percentage threshold or the current longest/shortest gap exceeds the configured duration threshold. With identical specs and timing history, generation is deterministic and produces byte-for-byte stable group files.
 
-The `E2E` workflow accepts an optional `workers` value when manually dispatched. A manual override is ephemeral: each matrix job deterministically generates the requested number of groups from the committed timing history without changing the repository's default. To permanently change the default, update `groups/settings.json`, regenerate the groups, and commit them.
+The `E2E` workflow accepts an optional `workers` value when manually dispatched. The override changes only that run’s matrix width; it does not rewrite `groups/settings.json`. After a successful non-PR run, timing history is still consumed by the rebalance job and the repository’s **default** grouping may be updated. To permanently change the default worker count, update `groups/settings.json`, regenerate the groups, and commit it.
 
 The group generator accepts up to one worker per discovered spec. GitHub-hosted runner concurrency is account-plan scoped, so requesting more workers than the account can run concurrently causes excess group jobs to queue rather than increasing effective parallelism. Keep the repository default conservative unless measured CI results justify a higher value.
 
-Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62.1-node24-v1`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `package-lock.json` before executing tests.
+Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62.1-node24-v2`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `package-lock.json` before executing tests.
 
-On successful `push` runs, the workflow collects all group timing artifacts, refreshes the rolling history, reruns the default grouping algorithm, and commits the updated `test/e2e/groups/` state back to the triggering branch when it changed. Pull requests and manual worker overrides never write grouping state back to the branch.
+On successful non-PR runs (`push`, scheduled, or `workflow_dispatch`), the workflow collects all group timing artifacts, refreshes the rolling history, reruns the **default** grouping algorithm, and commits changed `test/e2e/groups/` assignments back to the triggering branch. A manual `workers` override controls only that run’s matrix; rebalance still regenerates the repository default grouping from the collected timings. Pull requests skip the rebalance job and never write grouping state.
 
 ## Test environment maintenance
 
@@ -126,7 +126,10 @@ The suite intentionally keeps regression tests for previously fixed production i
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;
 - status-monitor network samples and Docker status over the live SSH transport;
-- full encrypted backup export/import restoring settings and encrypted connection credentials.
+- full encrypted backup export/import restoring settings and encrypted connection credentials;
+- HTTP SFTP download-ticket/Range/inline/directory-ZIP behavior bound to an active Workspace session;
+- raw binary upload ready/progress/completion and remote-content verification through the clean Workspace/upload protocols;
+- real Login CAPTCHA fail-closed/token lifecycle and browser WebAuthn passkey success/credential-failure/password-fallback surfaces.
 - TOTP 2FA setup, login gating, verification, and disable lifecycle;
 - connection update/clone/delete with preserved encrypted credentials and tag associations;
 

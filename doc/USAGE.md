@@ -40,8 +40,10 @@ SSH 标签页支持挂起会话。挂起后即使浏览器断开，后端仍可�
 - 在文件管理器内部拖动文件或目录完成移动。
 - 使用 `Ctrl` / `Shift` 多选。
 - 通过右键菜单执行复制、粘贴、剪切、删除、重命名、权限修改等操作。
+- 桌面表格列使用 `Type / Name / Size / Permissions / Modified` 标题；列宽和行缩放可在设置中持久化。
 - 使用 Monaco Editor 在线编辑文本文件。
-- 预览 Markdown、图片、电子表格等受支持文件。
+- 预览 Markdown、图片、PDF、电子表格和 DOCX 等受支持文件。
+- 上传、复制/移动、压缩和跨会话传输会进入共享进度模型；浮动进度窗可隐藏，隐藏任务可从 Progress Display 恢复或取消。
 
 大量文件或深层目录上传时，建议先压缩后上传，减少浏览器一次性处理的文件数量。
 
@@ -52,9 +54,20 @@ SSH 标签页支持挂起会话。挂起后即使浏览器断开，后端仍可�
 ## 布局与通用操作
 
 - 终端、文件管理器、文本编辑器和快捷指令视图支持 `Ctrl + 鼠标滚轮` 缩放。
-- 展开的侧栏可以拖动调整宽度。
+- 展开的侧栏可以拖动调整宽度；默认点击 Workspace 其它区域会收回侧栏，开启“保持侧栏”偏好后才持续展开。
+- File Manager / File Editor 的 popup 设置提供额外弹层入口，不复制文件系统或编辑器业务状态；embedded/sidebar presentation 仍使用同一 feature controller。
 - SSH 标签栏和文件管理器标签栏支持右键菜单，包括关闭当前、关闭左侧、关闭其他、关闭右侧等操作。
 - 标签分组中的名称可以直接点击修改。
+
+## 状态监控与 Docker
+
+- Status Monitor 默认显示在线状态而不是直接展示 IP；可在 Settings 中开启 IP 显示与复制。
+- 状态采样间隔、缩放和 Docker 刷新间隔均由 Settings 持久化；默认 Docker 刷新间隔为 5 秒。
+- Docker manager 在桌面宽 pane 使用表格，在窄 sidebar 使用卡片布局；Start/Stop/Restart/Remove 走 Docker capability，Enter/Logs 发送到当前 Workspace terminal。
+
+## 外观与 HTML Theme
+
+Style Customizer 支持本地 HTML theme 和 GitHub 目录形式的远程 HTML theme catalog。默认官方示例仓库指向 `examples/html-themes/`；升级时旧官方 `doc/custom_html_theme` URL 会由 settings migration 自动迁移，不影响用户自行配置的第三方仓库。
 
 ## 安全与认证
 

@@ -44,6 +44,8 @@ jspm_packages/
 scripts/*
 !scripts/e2e/
 !scripts/e2e/**
+!scripts/docker/
+!scripts/docker/**
 !scripts/check-test-policy.mjs
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/

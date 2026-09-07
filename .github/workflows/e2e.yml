@@ -5,7 +5,7 @@ on:
     paths:
       - 'Dockerfile'
       - '.dockerignore'
-      - 'docker/**'
+      - 'scripts/docker/**'
       - 'packages/backend/**'
       - 'packages/frontend/**'
       - 'packages/remote-gateway/**'
@@ -19,7 +19,7 @@ on:
     paths:
       - 'Dockerfile'
       - '.dockerignore'
-      - 'docker/**'
+      - 'scripts/docker/**'
       - 'packages/backend/**'
       - 'packages/frontend/**'
       - 'packages/remote-gateway/**'

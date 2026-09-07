@@ -33,7 +33,7 @@ The gateway loads environment data from the configured Nexus data environment pa
 
 ## Deployment relationship
 
-The unified image exposes independent runtime roles through `docker/entrypoint.sh`:
+The unified image exposes independent runtime roles through `scripts/docker/entrypoint.sh`:
 
 ```text
 backend

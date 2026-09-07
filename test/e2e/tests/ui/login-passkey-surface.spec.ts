@@ -164,7 +164,7 @@ async function recordCookieMetadata(
   }
 }
 
-test('M01 Login passkey succeeds, reports credential failure, and falls back to password', async ({
+test('Login passkey succeeds, reports credential failure, and falls back to password', async ({
   page,
   context,
   browser,

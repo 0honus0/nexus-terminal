@@ -57,7 +57,7 @@ COPY --from=remote-gateway-builder /build/remote-gateway/package.json ./remote-g
 
 COPY --from=frontend-builder /build/frontend/dist /usr/share/nginx/html
 COPY packages/frontend/nginx.conf /etc/nginx/http.d/default.conf
-COPY docker/entrypoint.sh /usr/local/bin/nexus-terminal
+COPY scripts/docker/entrypoint.sh /usr/local/bin/nexus-terminal
 
 RUN chmod 0755 /usr/local/bin/nexus-terminal \
     && mkdir -p /app/data /run/nginx

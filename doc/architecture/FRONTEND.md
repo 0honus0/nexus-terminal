@@ -123,7 +123,7 @@ Frontend architecture 按真实用户能力而不是旧文件类型划分。
 
 ## 4. Final source layout
 
-Target structure:
+Current source structure:
 
 ```text
 packages/frontend/src/
@@ -131,6 +131,7 @@ packages/frontend/src/
 │   ├── main.ts
 │   ├── App.vue
 │   ├── bootstrap/
+│   ├── config/
 │   ├── router/
 │   ├── pages/
 │   ├── shell/
@@ -147,8 +148,7 @@ packages/frontend/src/
 │   └── ui/
 ├── shared/
 │   ├── feedback/
-│   ├── focus/
-│   └── components/
+│   └── focus/
 ├── features/
 │   ├── auth/
 │   ├── security/
@@ -183,13 +183,6 @@ packages/frontend/src/
 │   │   ├── settings/
 │   │   ├── components/
 │   │   └── views/
-│   └── agent/
-│       ├── model/
-│       ├── session/
-│       ├── protocol/
-│       ├── adapters/
-│       ├── components/
-│       └── views/
 └── env.d.ts
 ```
 
@@ -590,12 +583,7 @@ Raw WebSocket transport 只属于：
 client/websocket/
 ```
 
-Workspace/Agent protocol ownership属于对应 runtime：
-
-```text
-runtimes/workspace/protocol/
-runtimes/agent/protocol/
-```
+Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. There is **no current `runtimes/agent/` source tree**: future Agent boundaries are architectural constraints only until an owner-approved public/runtime contract exists. If an Agent runtime is implemented later, it must own a separate protocol/runtime state rather than reusing Workspace sockets or sessions.
 
 Terminal/Filesystem/Transfer 等 feature 不应该直接发送 string message name。
 
@@ -756,19 +744,18 @@ Settings screen 不再拥有一个万能 `settings.store.ts`。
 
 Source directories do not carry their own README policy files. Durable placement guidance is recorded here; mandatory rules continue to come from the [engineering constraint table](../software-requirements/engineering-constraints.md).
 
-| Area                      | Permanent ownership guidance                                                                                                                                                                                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/bootstrap/`          | Owns application startup ordering and public-feature bootstrap sequencing. It is not a product service locator and must not replace feature/runtime ownership.                                                                                             |
-| `app/pages/dashboard/`    | Application composition surface for public capabilities such as Connections, Tags, Audit, and System Overview; it does not own those domains.                                                                                                              |
-| `app/pages/settings/`     | Application composition surface for Security, Preferences, Appearance, Backup, and runtime-specific settings; domain settings remain with their feature owner.                                                                                             |
-| `foundation/async/`       | Business-neutral async coordination primitives, including latest-value persistence mechanics used by debounced UI settings.                                                                                                                                |
-| `foundation/browser/`     | Business-neutral browser/device capability primitives; product behavior stays in features/runtimes.                                                                                                                                                        |
-| `foundation/interaction/` | Business-neutral pointer/touch/drag/resize/wheel mechanics. Guacamole/remote-desktop input remains owned by the Remote Desktop feature.                                                                                                                    |
-| `runtimes/workspace/`     | Owns Workspace lifecycle, connection/session binding, protocol adapters, layout composition, reconnect orchestration, and suspend handoff. It is a composition owner, not a reusable capability owner.                                                     |
-| `runtimes/agent/`         | Reserved for a future independent Agent runtime. It may consume public capability ports but must not reuse Workspace raw sockets/session/runtime state. No Agent product behavior is treated as implemented until the public contract is formally defined. |
-| `shared/components/`      | Cross-feature composite UI only when no stronger feature owner exists; it is not a dumping ground for product components.                                                                                                                                  |
-| `shared/feedback/`        | Cross-feature feedback primitives such as toast/confirm/alert with no domain policy.                                                                                                                                                                       |
-| `shared/focus/`           | Cross-feature focus/shortcut infrastructure with no feature-owned business behavior.                                                                                                                                                                       |
+| Area                      | Permanent ownership guidance                                                                                                                                                                                                                             |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `app/bootstrap/`          | Owns application startup ordering and public-feature bootstrap sequencing. It is not a product service locator and must not replace feature/runtime ownership.                                                                                           |
+| `app/pages/dashboard/`    | Application composition surface for public capabilities such as Connections, Tags, Audit, and System Overview; it does not own those domains.                                                                                                            |
+| `app/pages/settings/`     | Application composition surface for Security, Preferences, Appearance, Backup, and runtime-specific settings; domain settings remain with their feature owner.                                                                                           |
+| `foundation/async/`       | Business-neutral async coordination primitives, including latest-value persistence mechanics used by debounced UI settings.                                                                                                                              |
+| `foundation/browser/`     | Business-neutral browser/device capability primitives; product behavior stays in features/runtimes.                                                                                                                                                      |
+| `foundation/interaction/` | Business-neutral pointer/touch/drag/resize/wheel mechanics. Guacamole/remote-desktop input remains owned by the Remote Desktop feature.                                                                                                                  |
+| `runtimes/workspace/`     | Owns Workspace lifecycle, connection/session binding, protocol adapters, layout composition, reconnect orchestration, and suspend handoff. It is a composition owner, not a reusable capability owner.                                                   |
+| future Agent runtime      | No source directory exists today. A future independent Agent may consume public capability ports but must not reuse Workspace raw sockets/session/runtime state; no Agent product behavior is implemented until the public contract is formally defined. |
+| `shared/feedback/`        | Cross-feature feedback primitives such as toast/confirm/alert with no domain policy.                                                                                                                                                                     |
+| `shared/focus/`           | Cross-feature focus/shortcut infrastructure with no feature-owned business behavior.                                                                                                                                                                     |
 
 The mandatory frontend ownership and Agent boundaries are referenced by [EC-FE-001](../software-requirements/engineering-constraints.md#ec-fe-001), [EC-GEN-003](../software-requirements/engineering-constraints.md#ec-gen-003), [EC-RUNTIME-003](../software-requirements/engineering-constraints.md#ec-runtime-003), [EC-RUNTIME-004](../software-requirements/engineering-constraints.md#ec-runtime-004), and [EC-RUNTIME-005](../software-requirements/engineering-constraints.md#ec-runtime-005).
 

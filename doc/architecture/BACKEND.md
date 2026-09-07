@@ -45,8 +45,7 @@ src/
 ├── modules/         Nexus product/application services and ports
 ├── platform/        reusable machine capabilities and ports
 ├── shared/          cross-cutting errors/events/security/types
-├── locales/
-├── i18n.ts
+├── locales/         backend message catalogs
 └── index.ts          minimal process entrypoint
 ```
 

@@ -44,6 +44,20 @@ export const SETTINGS_MIGRATIONS: readonly SettingsMigration[] = [
         : {};
     },
   },
+  {
+    version: 6,
+    name: 'Move official HTML theme examples out of documentation',
+    up(values) {
+      const current = values.remote_html_presets_url?.trim().replace(/\/+$/, '');
+      return current === 'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme'
+        ? {
+            set: {
+              remote_html_presets_url: 'https://github.com/0honus0/nexus-terminal/tree/main/examples/html-themes',
+            },
+          }
+        : {};
+    },
+  },
 ];
 
 const validateMigrations = (migrations: readonly SettingsMigration[]): void => {

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
@@ -14,6 +15,11 @@ async function documentThemeColor(page: Page): Promise<string | null> {
 const HTML_THEME_NAME = 'E2E Appearance Local HTML Theme.html';
 const HTML_THEME_RENAMED = 'E2E Appearance Local HTML Theme Renamed.html';
 const HTML_THEME_CONTENT = '<div class="e2e-appearance-theme">M06 local HTML theme</div>';
+const DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY =
+  'https://github.com/0honus0/nexus-terminal/tree/main/examples/html-themes';
+const TESTED_GIT_REF =
+  process.env.GITHUB_SHA?.trim() || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const TESTED_OFFICIAL_HTML_THEME_REPOSITORY = `https://github.com/0honus0/nexus-terminal/tree/${TESTED_GIT_REF}/examples/html-themes`;
 const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZpmIAAAAASUVORK5CYII=',
   'base64',
@@ -470,7 +476,10 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
     await step(
       'real GitHub remote preset list, search, download, and apply persist through the Appearance owner',
       async () => {
-        const repository = 'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme';
+        await expect
+          .poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
+          .toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
+        const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
         await customizer.getByTestId('html-theme-remote-tab').click();
         await customizer.getByTestId('html-theme-remote-repository').fill(repository);
         const saveRepository = page.waitForResponse(
@@ -514,7 +523,7 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
     await step(
       'invalid remote repository loading fails without changing the applied HTML and clearing the URL disables the list',
       async () => {
-        const repository = 'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme';
+        const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
         const before = (await appearance(context.request)).terminalCustomHtml;
         await customizer
           .getByTestId('html-theme-remote-repository')
