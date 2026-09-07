@@ -8,6 +8,7 @@
     "tests/http/backup.spec.ts",
     "tests/http/connection-import.spec.ts",
     "tests/http/connections-tags.spec.ts",
+    "tests/http/database-migrations.spec.ts",
     "tests/http/quick-commands-audit.spec.ts",
     "tests/http/rdp-remoteapp.spec.ts",
     "tests/http/terminal-themes.spec.ts",
