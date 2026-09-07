@@ -455,34 +455,6 @@
                 :title="displayText(command)"
                 >{{ displayText(command) }}</span
               >
-              <div
-                class="quick-command-row-actions ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
-              >
-                <button
-                  type="button"
-                  class="row-action hover:text-primary"
-                  :title="t('quickCommands.actions.copy')"
-                  @click.stop="copy(command)"
-                >
-                  <i class="fas fa-copy" aria-hidden="true"></i>
-                </button>
-                <button
-                  type="button"
-                  class="row-action hover:text-primary"
-                  :title="t('common.edit')"
-                  @click.stop="edit(command)"
-                >
-                  <i class="fas fa-edit" aria-hidden="true"></i>
-                </button>
-                <button
-                  type="button"
-                  class="row-action hover:text-error"
-                  :title="t('common.delete')"
-                  @click.stop="remove(command)"
-                >
-                  <i class="fas fa-trash-alt" aria-hidden="true"></i>
-                </button>
-              </div>
             </li>
           </ul>
         </section>
@@ -508,34 +480,6 @@
             :title="displayText(command)"
             >{{ displayText(command) }}</span
           >
-          <div
-            class="quick-command-row-actions ml-2 flex shrink-0 items-center opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100"
-          >
-            <button
-              type="button"
-              class="row-action hover:text-primary"
-              :title="t('quickCommands.actions.copy')"
-              @click.stop="copy(command)"
-            >
-              <i class="fas fa-copy" aria-hidden="true"></i>
-            </button>
-            <button
-              type="button"
-              class="row-action hover:text-primary"
-              :title="t('common.edit')"
-              @click.stop="edit(command)"
-            >
-              <i class="fas fa-edit" aria-hidden="true"></i>
-            </button>
-            <button
-              type="button"
-              class="row-action hover:text-error"
-              :title="t('common.delete')"
-              @click.stop="remove(command)"
-            >
-              <i class="fas fa-trash-alt" aria-hidden="true"></i>
-            </button>
-          </div>
         </li>
       </ul>
     </div>
@@ -689,29 +633,6 @@
   .quick-control--primary:hover {
     background: var(--button-hover-bg-color);
     color: white;
-  }
-  .row-action {
-    display: inline-flex;
-    width: 1.75rem;
-    height: 1.75rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.25rem;
-    color: var(--text-color-secondary);
-    transition:
-      background-color 0.15s ease,
-      color 0.15s ease;
-  }
-  .row-action:hover {
-    background: color-mix(in srgb, black 10%, transparent);
-  }
-  @media (hover: none) {
-    .quick-command-row-actions {
-      opacity: 1;
-    }
-    .row-action {
-      touch-action: manipulation;
-    }
   }
   .context-item {
     display: flex;

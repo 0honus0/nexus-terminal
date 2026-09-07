@@ -34,6 +34,7 @@ const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef012
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
 let sftpStatDelayMs = 0;
+let sftpReadDirDelayMs = 0;
 let archiveExecDelayMs = 0;
 let dockerContainerPresent = true;
 let dockerContainerState = 'running';
@@ -537,6 +538,7 @@ async function resetRoot() {
   statusSample = 0;
   sftpWriteDelayMs = 0;
   sftpStatDelayMs = 0;
+  sftpReadDirDelayMs = 0;
   archiveExecDelayMs = 0;
 }
 
@@ -628,6 +630,9 @@ function attachSftp(session, accept) {
 
   sftp.on('OPENDIR', async (reqid, remotePath) => {
     try {
+      if (sftpReadDirDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, sftpReadDirDelayMs));
+      }
       const fullPath = resolveRemotePath(remotePath);
       const entries = await fsp.readdir(fullPath, { withFileTypes: true });
       const names = [];
@@ -1132,6 +1137,7 @@ const controlServer = http.createServer(async (req, res) => {
       await stopSshServer();
       sftpWriteDelayMs = 0;
       sftpStatDelayMs = 0;
+      sftpReadDirDelayMs = 0;
       archiveExecDelayMs = 0;
       activeSftpChannels.clear();
       openedSftpChannels = 0;
@@ -1169,6 +1175,15 @@ const controlServer = http.createServer(async (req, res) => {
       sftpStatDelayMs = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(10_000, Math.round(requestedDelay))) : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpStatDelayMs }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/sftp/readdir-delay') {
+      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+      sftpReadDirDelayMs = Number.isFinite(requestedDelay)
+        ? Math.max(0, Math.min(10_000, Math.round(requestedDelay)))
+        : 0;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ sftpReadDirDelayMs }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {

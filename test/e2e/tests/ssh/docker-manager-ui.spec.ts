@@ -4,6 +4,7 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import {
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
+  E2E_SSH,
   ensureTestSshConnection,
   resetTestSshFilesystem,
 } from '../../support/ssh';
@@ -347,6 +348,85 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         await page.setViewportSize({ width: 1440, height: 900 });
       },
     );
+
+    await step('a narrow File Manager collapses metadata columns and centers the loading state', async () => {
+      const fileManager = page.locator('.file-manager-root:visible').first();
+      const rootSplit = page.locator('.workspace-split.splitpanes--vertical').first();
+      const centerPane = rootSplit.locator(':scope > .splitpanes__pane').filter({ has: fileManager }).first();
+      const centerRightSplitter = rootSplit.locator(':scope > .splitpanes__splitter').nth(1);
+      const beforePane = await centerPane.boundingBox();
+      const beforeSplitter = await centerRightSplitter.boundingBox();
+      expect(beforePane).toBeTruthy();
+      expect(beforeSplitter).toBeTruthy();
+      const originalRight = beforePane!.x + beforePane!.width;
+      const resizeY = beforeSplitter!.y + beforeSplitter!.height / 2;
+
+      await page.mouse.move(beforeSplitter!.x + beforeSplitter!.width / 2, resizeY);
+      await page.mouse.down();
+      await page.mouse.move(beforePane!.x + 320, resizeY, { steps: 10 });
+      await page.mouse.up();
+      await expect.poll(async () => (await centerPane.boundingBox())?.width ?? 999).toBeLessThanOrEqual(360);
+
+      const list = fileManager.getByTestId('file-manager-list');
+      await expect(list).toBeVisible();
+      const narrowMetrics = await fileManager.evaluate((element) => {
+        const list = element.querySelector<HTMLElement>('[data-testid="file-manager-list"]');
+        const row = element.querySelector<HTMLTableRowElement>(
+          'tr[data-filename]:not([data-filename=".."]):not([data-filename=""])',
+        );
+        const typeCell = row?.querySelector<HTMLElement>('.file-row-type');
+        const icon = typeCell?.querySelector<HTMLElement>('i');
+        const name = row?.querySelector<HTMLElement>('.file-row-name button');
+        const sizeCell = row?.querySelector<HTMLElement>('.file-row-meta');
+        const iconBox = icon?.getBoundingClientRect();
+        const nameBox = name?.getBoundingClientRect();
+        return {
+          rootWidth: element.getBoundingClientRect().width,
+          listClientWidth: list?.clientWidth ?? 0,
+          listScrollWidth: list?.scrollWidth ?? 0,
+          iconNameGap: iconBox && nameBox ? nameBox.left - iconBox.right : null,
+          typeWidth: typeCell?.getBoundingClientRect().width ?? 0,
+          metadataDisplay: sizeCell ? getComputedStyle(sizeCell).display : null,
+        };
+      });
+      expect(narrowMetrics.rootWidth).toBeLessThanOrEqual(360);
+      expect(narrowMetrics.listScrollWidth).toBeLessThanOrEqual(narrowMetrics.listClientWidth + 1);
+      expect(narrowMetrics.iconNameGap).not.toBeNull();
+      expect(narrowMetrics.iconNameGap as number).toBeLessThanOrEqual(12);
+      expect(narrowMetrics.typeWidth).toBeLessThanOrEqual(34);
+      expect(narrowMetrics.metadataDisplay).toBe('none');
+
+      const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=1200`, { method: 'POST' });
+      expect(delayResponse.ok).toBeTruthy();
+      try {
+        await fileManager.getByTitle('Refresh', { exact: true }).click();
+        const loading = fileManager.getByTestId('file-manager-loading-state');
+        await expect(loading).toBeVisible();
+        const loadingBox = await loading.boundingBox();
+        const spinnerBox = await loading.locator(':scope > *').first().boundingBox();
+        expect(loadingBox).toBeTruthy();
+        expect(spinnerBox).toBeTruthy();
+        expect(Math.abs(spinnerBox!.x + spinnerBox!.width / 2 - (loadingBox!.x + loadingBox!.width / 2))).toBeLessThan(
+          4,
+        );
+        expect(
+          Math.abs(spinnerBox!.y + spinnerBox!.height / 2 - (loadingBox!.y + loadingBox!.height / 2)),
+        ).toBeLessThan(4);
+      } finally {
+        await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=0`, { method: 'POST' });
+      }
+      await expect(list).toBeVisible({ timeout: 15_000 });
+
+      const currentSplitter = await centerRightSplitter.boundingBox();
+      expect(currentSplitter).toBeTruthy();
+      await page.mouse.move(currentSplitter!.x + currentSplitter!.width / 2, resizeY);
+      await page.mouse.down();
+      await page.mouse.move(originalRight, resizeY, { steps: 10 });
+      await page.mouse.up();
+      await expect
+        .poll(async () => Math.abs(((await centerPane.boundingBox())?.width ?? 0) - beforePane!.width))
+        .toBeLessThan(16);
+    });
 
     const rootSplit = page.locator('.workspace-split.splitpanes--vertical').first();
     const firstPane = rootSplit.locator(':scope > .splitpanes__pane').first();
