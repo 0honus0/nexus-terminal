@@ -117,6 +117,25 @@ test.describe('initial setup', () => {
   });
 });
 
+test('invalid password login stays anonymous and surfaces the real form error', async ({ page, context }) => {
+  await page.goto('/login');
+  await expect(page).toHaveURL(/\/login$/);
+  await page.locator('#username').fill(E2E_ADMIN.username);
+  await page.locator('#password').fill('Definitely-Wrong-E2E-Password!');
+
+  const loginResponse = page.waitForResponse(
+    (response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+  );
+  await page.locator('form button[type="submit"]').click();
+  expect((await loginResponse).status()).toBe(401);
+
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText(/\S+/);
+  const status = await context.request.get('/api/v1/auth/status');
+  expect(status.status()).toBe(401);
+});
+
 test('logs in, establishes a server session, and opens the dashboard', async ({ page, context }) => {
   await page.goto('/login');
   await expect(page).toHaveURL(/\/login$/);
