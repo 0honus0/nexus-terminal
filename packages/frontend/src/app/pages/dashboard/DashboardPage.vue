@@ -202,9 +202,9 @@
 </script>
 
 <template>
-  <main data-testid="dashboard-view" class="min-h-full bg-background px-4 py-5 text-foreground sm:px-6 lg:px-8 lg:py-7">
-    <div class="mx-auto w-full max-w-[1680px] space-y-5">
-      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-4">
+  <main data-testid="dashboard-view" class="min-h-full bg-background px-4 py-4 text-foreground sm:px-6 lg:px-8 lg:py-5">
+    <div class="mx-auto w-full max-w-[1680px] space-y-4">
+      <section data-testid="dashboard-overview" class="border-b border-border/70 pb-3">
         <div class="grid gap-4 px-1 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
           <div class="min-w-0">
             <div class="flex min-w-0 items-center gap-3">
@@ -338,7 +338,7 @@
         "
       >
         <section data-testid="dashboard-connections" class="order-1 min-w-0 xl:pr-7">
-          <header class="pb-4">
+          <header class="pb-3">
             <div class="flex items-center justify-between gap-3">
               <div class="flex min-w-0 items-center gap-2.5">
                 <span
@@ -359,7 +359,7 @@
 
           <div
             data-testid="dashboard-connection-list"
-            class="h-[clamp(300px,42vh,440px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
+            class="h-[clamp(280px,38vh,400px)] overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 shadow-inner xl:h-[clamp(310px,42vh,430px)]"
             style="scrollbar-gutter: stable"
           >
             <div
@@ -486,7 +486,7 @@
           data-testid="dashboard-system-resources"
           class="order-2 min-w-0 xl:border-l xl:border-border/70 xl:pl-7"
         >
-          <header class="flex flex-col gap-2 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <header class="flex flex-col gap-2 pb-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="flex min-w-0 items-center gap-2.5">
               <span
                 class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
@@ -515,7 +515,7 @@
           </header>
           <div
             data-testid="dashboard-ssh-resource-list"
-            class="h-[clamp(300px,42vh,440px)] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner xl:h-[clamp(360px,50vh,520px)]"
+            class="h-[clamp(280px,38vh,400px)] space-y-2 overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-header/10 p-1.5 shadow-inner xl:h-[clamp(310px,42vh,430px)]"
             style="scrollbar-gutter: stable"
           >
             <div
@@ -623,7 +623,7 @@
         </section>
       </div>
 
-      <aside data-testid="dashboard-recent-activity" class="border-t border-border/70 pt-5">
+      <aside data-testid="dashboard-recent-activity" class="border-t border-border/70 pt-4">
         <header class="flex flex-col gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
           <div class="flex min-w-0 items-center gap-2.5">
             <span

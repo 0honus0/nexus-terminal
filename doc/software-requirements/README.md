@@ -1,6 +1,6 @@
 # Nexus Terminal 软件需求
 
-本目录是 Nexus Terminal 当前软件需求规格与历史追溯入口。当前内容以重构 PR #9 的最终目录、协议、UI 行为和 E2E 约束为基线，并持续纳入之后经回归验证确认的需求；重构计划文档完成使命后不再作为需求来源。
+本目录是 Nexus Terminal 当前软件需求规格与历史追溯入口。当前内容以重构 PR #9 的最终目录、协议、UI 行为和 E2E 约束为基线，并持续纳入之后经回归验证确认的需求；当前 SRS v1.5 已收录 Dashboard 首屏、Quick Commands 分组交互/缩放、File Manager 路径与收藏弹层、Preview 搜索及 Spreadsheet 分页等响应式 UI 回归约束。重构计划文档完成使命后不再作为需求来源。
 
 ## 阅读顺序
 

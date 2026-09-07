@@ -6,7 +6,7 @@
 
 ## 1. 文档目的
 
-本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
+本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。v1.5 进一步纳入 Dashboard 首屏可达性、Quick Commands 分组点击语义与窄 pane 缩放、File Manager 路径/收藏弹层响应式展示，以及 Preview 搜索/Spreadsheet 单页分页展示等 UI 回归约束。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
 
 ## 2. 需求解释规则
 
@@ -60,3 +60,12 @@
 ## 6. 当前范围说明
 
 本需求基线覆盖当前 Nexus Terminal 用户可达能力与已经确认的 clean architecture 行为。Future Agent 目前只有架构边界，没有正式 App route、Frontend Agent runtime implementation 或 Backend Agent public HTTP/WebSocket contract，因此不虚构 Agent 产品功能；只保留未来实现必须遵守的 runtime 隔离约束。
+
+## 7. v1.5 UI 回归需求索引
+
+本次 UI 修复没有新增平行需求编号，而是收紧现有模块需求的验收条件：
+
+- [SRS-DASH-001](requirements/dashboard.md#srs-dash-001)：常见桌面首屏内保持 Recent Activity 可达，长列表在各自面板内部滚动。
+- [SRS-QC-003](requirements/quick-commands-history.md#srs-qc-003) / [SRS-QC-005](requirements/quick-commands-history.md#srs-qc-005)：分组名称文字负责编辑，标题空白/箭头负责展开收起；工具栏随 pane 宽度缩放。
+- [SRS-FS-005](requirements/filesystem.md#srs-fs-005)：路径输入、路径历史与收藏弹层保持圆角主题、长路径可读并适配视口。
+- [SRS-PREV-006](requirements/file-preview.md#srs-prev-006) / [SRS-PREV-008](requirements/file-preview.md#srs-prev-008)：统一搜索控件保持圆角主题；Spreadsheet 仅在存在多页时显示分页栏。

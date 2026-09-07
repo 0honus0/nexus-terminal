@@ -393,6 +393,15 @@ test('file previews and text editor protect historical file-opening regressions'
     await page.keyboard.press('Control+f');
     const pdfSearch = previewSearchInput(dialog);
     await expect(pdfSearch).toBeFocused();
+    const searchCornerMetrics = await dialog.getByTestId('preview-search-bar').evaluate((element) => ({
+      barRadius: Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
+      inputRadius: Number.parseFloat(
+        getComputedStyle(element.querySelector<HTMLInputElement>('[data-testid="preview-search-input"]')!)
+          .borderTopLeftRadius,
+      ),
+    }));
+    expect(searchCornerMetrics.barRadius).toBeGreaterThan(0);
+    expect(searchCornerMetrics.inputRadius).toBeGreaterThan(0);
     await pdfSearch.fill('target');
     await expect(previewSearchCount(dialog, '1/2')).toHaveText('1/2');
     await expect(pdfCurrentPage(dialog)).toHaveValue('2');
@@ -718,6 +727,7 @@ test('preview tabs keep image PDF XLSX and DOCX files open together and preserve
     const filename = 'preview.xlsx';
     await row(page, filename).dblclick();
     const dialog = documentPopup(page);
+    await expect(dialog.getByTestId('spreadsheet-pagination')).toHaveCount(0);
     await worksheetTab(dialog, 'Second').click();
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
     await hidePreview(page, filename);

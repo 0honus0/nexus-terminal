@@ -397,14 +397,16 @@
           class="mb-1 last:mb-0"
         >
           <div
+            data-testid="quick-command-group-header"
             class="quick-command-group-header group flex items-center rounded-md font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
             :class="compact ? 'quick-command-group-header--compact' : ''"
+            @click="store.toggle(group.name)"
           >
             <button
               type="button"
               class="mr-2 flex w-4 shrink-0 items-center justify-center text-text-secondary group-hover:text-foreground"
               :aria-expanded="expanded[group.name] !== false"
-              @click="store.toggle(group.name)"
+              @click.stop="store.toggle(group.name)"
             >
               <i
                 :class="['fas', expanded[group.name] === false ? 'fa-chevron-right' : 'fa-chevron-down']"
@@ -420,6 +422,7 @@
               :placeholder="
                 group.id === null ? t('quickCommands.tags.createFromUntagged') : t('quickCommands.tags.renameHint')
               "
+              @click.stop
               @keyup.enter.stop="finishTagEdit(group)"
               @keyup.esc.stop="cancelTagEdit"
               @blur="finishTagEdit(group)"
@@ -428,7 +431,7 @@
               v-else
               type="button"
               data-testid="quick-command-group-name"
-              class="min-w-0 flex-1 truncate text-left text-sm hover:underline"
+              class="max-w-[calc(100%-3rem)] min-w-0 shrink truncate text-left text-sm hover:underline"
               :title="t('quickCommands.tags.clickToEditTag')"
               @click.stop="startTagEdit(group)"
             >
@@ -527,6 +530,10 @@
     container-name: quick-commands-pane;
     min-width: 0;
   }
+  .quick-commands-controls {
+    gap: clamp(0.2rem, 1.25cqi, 0.5rem);
+    padding: clamp(0.35rem, 1.8cqi, 0.5rem);
+  }
   .quick-commands-controls,
   .quick-command-list-area,
   .quick-command-row,
@@ -553,16 +560,11 @@
   }
   @container quick-commands-pane (max-width: 340px) {
     .quick-commands-controls {
-      gap: 0.3rem;
+      gap: clamp(0.18rem, 1cqi, 0.3rem);
       padding: 0.4rem;
     }
     .quick-commands-search {
       padding-inline: 0.55rem;
-    }
-    .quick-control {
-      width: 1.8rem;
-      height: 1.8rem;
-      flex-basis: 1.8rem;
     }
     .quick-commands-list-area {
       padding: 0.3rem;
@@ -606,9 +608,9 @@
   }
   .quick-control {
     display: flex;
-    width: 2rem;
-    height: 2rem;
-    flex: 0 0 2rem;
+    width: clamp(1.45rem, 8.5cqi, 2rem);
+    height: clamp(1.45rem, 8.5cqi, 2rem);
+    flex: 0 1 clamp(1.45rem, 8.5cqi, 2rem);
     align-items: center;
     justify-content: center;
     border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
@@ -617,6 +619,9 @@
     transition:
       background-color 0.15s ease,
       color 0.15s ease;
+  }
+  .quick-control i {
+    font-size: clamp(0.72rem, 3.6cqi, 0.9rem);
   }
   .quick-control:hover {
     background: var(--border-color);

@@ -63,6 +63,29 @@ test('quick command tags and saved variables survive persistence, grouping, rena
     const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
     await expect(quickView).toBeVisible({ timeout: 20_000 });
 
+    await step(
+      'quick command toolbar controls shrink with a narrow workspace pane without horizontal overflow',
+      async () => {
+        const controls = quickView.locator('.quick-commands-controls');
+        const buttons = controls.locator('.quick-control');
+        const wideButtonWidth = (await buttons.first().boundingBox())?.width ?? 0;
+        expect(wideButtonWidth).toBeGreaterThan(0);
+
+        await page.setViewportSize({ width: 900, height: 700 });
+        await expect(quickView).toBeVisible();
+        const narrowMetrics = await controls.evaluate((element) => ({
+          clientWidth: element.clientWidth,
+          scrollWidth: element.scrollWidth,
+        }));
+        const narrowButtonWidth = (await buttons.first().boundingBox())?.width ?? 0;
+        expect(narrowMetrics.scrollWidth).toBeLessThanOrEqual(narrowMetrics.clientWidth + 1);
+        expect(narrowButtonWidth).toBeLessThanOrEqual(wideButtonWidth);
+
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await expect(quickView).toBeVisible();
+      },
+    );
+
     await step('create a tagged command with a persisted substitution variable', async () => {
       await quickView.getByTestId('quick-command-add').click();
       const form = page.getByTestId('quick-command-form');
@@ -110,6 +133,33 @@ test('quick command tags and saved variables survive persistence, grouping, rena
       commandId = ((await commands.json()) as Array<{ id: number; name?: string }>).find(
         (item) => item.name === COMMAND_NAME,
       )!.id;
+    });
+
+    await step('only the tag text enters edit mode while the empty header area toggles the group', async () => {
+      const group = quickView.getByTestId(`quick-command-group-${tagId}`);
+      const header = group.getByTestId('quick-command-group-header');
+      const name = group.getByTestId('quick-command-group-name');
+      const toggle = group.locator('button[aria-expanded]').first();
+      await expect(header).toBeVisible();
+      await expect(name).toBeVisible();
+
+      const headerBox = await header.boundingBox();
+      const nameBox = await name.boundingBox();
+      expect(headerBox).toBeTruthy();
+      expect(nameBox).toBeTruthy();
+      expect(nameBox!.x + nameBox!.width).toBeLessThan(headerBox!.x + headerBox!.width - 2);
+
+      if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+      await header.click({ position: { x: headerBox!.width - 3, y: headerBox!.height / 2 } });
+      await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      await header.click({ position: { x: headerBox!.width - 3, y: headerBox!.height / 2 } });
+      await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+
+      await name.click();
+      const input = group.getByTestId('quick-command-group-rename-input');
+      await expect(input).toBeVisible();
+      await input.press('Escape');
+      await expect(input).toHaveCount(0);
     });
 
     await slowStep(

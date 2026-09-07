@@ -1289,7 +1289,7 @@
       </div>
 
       <div
-        class="file-manager-path-input relative flex min-w-0 items-center rounded border border-border bg-background px-1.5 py-0.5"
+        class="file-manager-path-input relative flex min-w-0 items-center rounded-lg border border-border bg-background px-1.5 py-0.5"
       >
         <input
           ref="pathInput"

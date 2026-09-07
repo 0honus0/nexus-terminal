@@ -118,6 +118,10 @@ NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 npm --prefix test/e2e run test:
 
 The suite intentionally keeps regression tests for previously fixed production issues, including:
 
+- desktop Dashboard keeps the Recent Activity section reachable in the initial common viewport while connection/resource panels own their scrolling;
+- Quick Commands preserve text-only group rename, header-area expand/collapse, and narrow-pane toolbar scaling without horizontal overflow;
+- File Manager path history and favorite-path popovers keep rounded themed chrome, wrap long paths, resize with the viewport, and remain inside viewport bounds;
+- unified document search keeps rounded themed controls, while spreadsheet pagination is absent when the active sheet fits on one page;
 - first SSH directory change waiting for the initial real shell prompt;
 - extensionless text files opening and saving through the editor;
 - streamed previews for Unicode image names, Markdown, and XLSX files, plus stale symlink failure isolation;
