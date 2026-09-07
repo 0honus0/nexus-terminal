@@ -340,8 +340,9 @@
         @mobile-font-size="emit('mobileEditorFontSize', $event)"
       />
       <FilePreview
+        v-if="!popupDocuments"
         ref="previewRef"
-        v-show="!popupDocuments && documentMode === 'preview'"
+        v-show="documentMode === 'preview'"
         class="min-h-0 flex-1"
         :source="session.adapters.preview"
         :scope-id="session.id"

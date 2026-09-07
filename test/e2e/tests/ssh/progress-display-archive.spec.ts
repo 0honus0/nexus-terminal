@@ -176,7 +176,14 @@ test('closing and reopening the file manager preserves an in-flight archive task
     await hideVisibleProgressCenter(page);
     await reopenConnectedFileManager(page);
     await expect(fileManagerModal).toBeVisible();
-    await expect(task).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
+
+    await closeConnectedFileManager(page);
+    const modal = await openProgressDisplay(page);
+    const hidden = hiddenTask(modal, 'archive-source.zip');
+    await expect(hidden).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
+    await closeProgressDisplay(modal);
+
+    await reopenConnectedFileManager(page);
     await refreshFileManager(page);
     await expect(row(page, 'archive-source.zip')).toBeVisible();
   } finally {
