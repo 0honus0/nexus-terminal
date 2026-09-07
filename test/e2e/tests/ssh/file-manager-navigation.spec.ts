@@ -239,6 +239,10 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     }));
     expect(specialPathMetrics.scrollWidth).toBeLessThanOrEqual(specialPathMetrics.clientWidth + 1);
 
+    // The dropdown filters history by the current path-input text. Return to `/` so
+    // the previously visited favorite path is part of the visible history set.
+    await navigateViaPathInput(page, '/');
+    await pathInput(page).click();
     let folderHistory = manager(page).getByTitle(FAVORITE_PATH, { exact: true });
     await expect(folderHistory).toBeVisible();
     await folderHistory.click();
