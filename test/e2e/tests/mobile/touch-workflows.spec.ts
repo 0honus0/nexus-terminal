@@ -353,7 +353,23 @@ test('mobile command bar opens the touch-only quick commands surface', async ({ 
     const quickDialog = page.getByRole('dialog', { name: 'Quick Commands', exact: true });
     const quickCommands = quickDialog.getByTestId('quick-commands-view');
     await expect(quickCommands).toBeVisible();
-    await expect(quickCommands.getByTestId('quick-command-add')).toBeVisible();
+    const quickCommandAdd = quickCommands.getByTestId('quick-command-add');
+    await expect(quickCommandAdd).toBeVisible();
+    const quickCommandAddUsesThemeAccent = await quickCommandAdd.evaluate((element) => {
+      const probe = document.createElement('span');
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--link-active-color').trim();
+      document.body.append(probe);
+      const expectedBackground = getComputedStyle(probe).color;
+      probe.style.color = 'white';
+      const expectedIconColor = getComputedStyle(probe).color;
+      probe.remove();
+      const icon = element.querySelector('i');
+      return {
+        background: getComputedStyle(element).backgroundColor === expectedBackground,
+        icon: icon instanceof HTMLElement && getComputedStyle(icon).color === expectedIconColor,
+      };
+    });
+    expect(quickCommandAddUsesThemeAccent).toEqual({ background: true, icon: true });
     await expect(
       quickCommands
         .locator('[data-testid="quick-command-search-toggle"], [data-testid="quick-command-search"]')

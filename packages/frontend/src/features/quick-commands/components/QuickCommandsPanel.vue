@@ -683,6 +683,9 @@
     background: var(--link-active-color);
     color: white;
   }
+  .quick-control--primary i {
+    color: currentColor !important;
+  }
   .quick-control--primary:hover {
     background: var(--button-hover-bg-color);
     color: white;
