@@ -176,47 +176,49 @@
     :close-on-escape="true"
     @close="emit('close')"
   >
-    <template v-if="visible">
-      <div
-        data-testid="quick-command-resize-top"
-        class="quick-resize quick-resize--top"
-        @pointerdown="resizeTop.startResize"
-      ></div>
-      <div
-        data-testid="quick-command-resize-right"
-        class="quick-resize quick-resize--right"
-        @pointerdown="resizeRight.startResize"
-      ></div>
-      <div
-        data-testid="quick-command-resize-bottom"
-        class="quick-resize quick-resize--bottom"
-        @pointerdown="resizeBottom.startResize"
-      ></div>
-      <div
-        data-testid="quick-command-resize-left"
-        class="quick-resize quick-resize--left"
-        @pointerdown="resizeLeft.startResize"
-      ></div>
-      <div
-        data-testid="quick-command-resize-top-left"
-        class="quick-resize quick-resize--top-left"
-        @pointerdown="resizeTopLeft.startResize"
-      ></div>
-      <div
-        data-testid="quick-command-resize-top-right"
-        class="quick-resize quick-resize--top-right"
-        @pointerdown="resizeTopRight.startResize"
-      ></div>
-      <div
-        data-testid="quick-command-resize-bottom-right"
-        class="quick-resize quick-resize--bottom-right"
-        @pointerdown="resizeBottomRight.startResize"
-      ></div>
-      <div
-        data-testid="quick-command-resize-bottom-left"
-        class="quick-resize quick-resize--bottom-left"
-        @pointerdown="resizeBottomLeft.startResize"
-      ></div>
+    <template #panel-overlay>
+      <template v-if="visible">
+        <div
+          data-testid="quick-command-resize-top"
+          class="quick-resize quick-resize--top"
+          @pointerdown.stop="resizeTop.startResize"
+        ></div>
+        <div
+          data-testid="quick-command-resize-right"
+          class="quick-resize quick-resize--right"
+          @pointerdown.stop="resizeRight.startResize"
+        ></div>
+        <div
+          data-testid="quick-command-resize-bottom"
+          class="quick-resize quick-resize--bottom"
+          @pointerdown.stop="resizeBottom.startResize"
+        ></div>
+        <div
+          data-testid="quick-command-resize-left"
+          class="quick-resize quick-resize--left"
+          @pointerdown.stop="resizeLeft.startResize"
+        ></div>
+        <div
+          data-testid="quick-command-resize-top-left"
+          class="quick-resize quick-resize--top-left"
+          @pointerdown.stop="resizeTopLeft.startResize"
+        ></div>
+        <div
+          data-testid="quick-command-resize-top-right"
+          class="quick-resize quick-resize--top-right"
+          @pointerdown.stop="resizeTopRight.startResize"
+        ></div>
+        <div
+          data-testid="quick-command-resize-bottom-right"
+          class="quick-resize quick-resize--bottom-right"
+          @pointerdown.stop="resizeBottomRight.startResize"
+        ></div>
+        <div
+          data-testid="quick-command-resize-bottom-left"
+          class="quick-resize quick-resize--bottom-left"
+          @pointerdown.stop="resizeBottomLeft.startResize"
+        ></div>
+      </template>
     </template>
     <form data-testid="quick-command-form" class="space-y-5 py-5" @submit.prevent="save">
       <BaseFormField :label="t('quickCommands.form.name')">

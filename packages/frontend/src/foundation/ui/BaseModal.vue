@@ -56,6 +56,7 @@
     :aria-label="props.ariaLabel || props.title || undefined"
     @close="emit('close')"
   >
+    <slot name="panel-overlay" />
     <header
       v-if="props.title || $slots.header"
       class="flex items-center justify-between gap-4 border-b border-border pb-3"
