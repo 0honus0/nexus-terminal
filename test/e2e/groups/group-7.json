@@ -5,11 +5,15 @@
   "specs": [
     "tests/ui/backup-ui.spec.ts",
     "tests/ui/connection-non-ssh-bulk.spec.ts",
-    "tests/ui/custom-terminal-theme.spec.ts",
-    "tests/ssh/progress-display-archive-cancel.spec.ts",
-    "tests/ssh/progress-display-archive.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/progress-display-copy-cancel.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts"
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/upload-protocol.spec.ts",
+    "tests/ssh/panel-wheel-scaling.spec.ts",
+    "tests/ssh/terminal-protocol.spec.ts",
+    "tests/ssh/terminal-tools-ui.spec.ts",
+    "tests/ssh/terminal-ui.spec.ts"
   ]
 }
