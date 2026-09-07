@@ -89,6 +89,7 @@ test('connection JSON import preserves legacy snake_case and current camelCase f
         name?: string;
         tagIds?: number[];
         proxyId?: number | null;
+        route?: 'proxy' | 'jump' | null;
       }>;
       const legacy = connections.find((connection) => connection.name === legacyName);
       const current = connections.find((connection) => connection.name === currentName);
@@ -96,6 +97,7 @@ test('connection JSON import preserves legacy snake_case and current camelCase f
       expect(current).toBeTruthy();
       expect(legacy?.tagIds).toContain(tagId);
       expect(legacy?.proxyId).toEqual(expect.any(Number));
+      expect(legacy?.route ?? null).toBeNull();
       createdConnectionIds.push(legacy!.id, current!.id);
 
       for (const connection of [legacy!, current!]) {

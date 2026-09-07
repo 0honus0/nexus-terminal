@@ -64,7 +64,6 @@ export class ConnectionImportService {
         await this.connections.create({
           ...normalized.connection,
           proxyId,
-          ...(proxyId && normalized.connection.route === undefined ? { route: 'proxy' as const } : {}),
         });
         successCount += 1;
       } catch (error) {
