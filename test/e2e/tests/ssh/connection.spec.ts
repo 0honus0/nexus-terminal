@@ -1,12 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
-import {
-  E2E_SSH,
-  configureSshE2eSettings,
-  fileManagerRow,
-  removeNamedSshConnections,
-  resetTestSshFilesystem,
-} from '../../support/ssh';
+import { E2E_SSH, configureSshE2eSettings, removeNamedSshConnections, resetTestSshFilesystem } from '../../support/ssh';
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { step, slowStep } from '../../support/steps';
 
@@ -64,6 +58,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
       const terminal = page.getByTestId('terminal');
       const commandInput = page.getByTestId('command-input');
       await expect(terminal).toBeVisible({ timeout: 20_000 });
+      await expect(commandInput).toBeEnabled({ timeout: 20_000 });
       const embeddedFileManager = page.locator('[data-testid="file-manager-list"]').filter({ visible: true });
       await expect(embeddedFileManager).toHaveCount(1);
       await expect(embeddedFileManager.locator('tr[data-filename="seed.txt"]')).toBeVisible({ timeout: 20_000 });
@@ -78,9 +73,7 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
       await captureFunctionalScreenshot(page, 'ssh-terminal.png', { viewport: { width: 1440, height: 900 } });
     }
 
-    const fileManagerButton = page.getByTestId('open-file-manager-button');
-    await expect(fileManagerButton).toBeVisible({ timeout: 20_000 });
-    await fileManagerButton.click();
-    await expect(fileManagerRow(page, 'seed.txt')).toBeVisible({ timeout: 20_000 });
+    const embeddedFileManager = page.locator('[data-testid="file-manager-list"]').filter({ visible: true });
+    await expect(embeddedFileManager.locator('tr[data-filename="seed.txt"]')).toBeVisible({ timeout: 20_000 });
   });
 });
