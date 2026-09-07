@@ -8,6 +8,7 @@
   import { auditApi, type AuditLogEntry } from '@/features/audit/public';
   import { useSystemOverview } from '@/features/system-overview/public';
   import { usePreferences } from '@/features/preferences/public';
+  import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
 
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -65,7 +66,13 @@
         .filter((item) => item.lastConnectedAt !== null)
         .sort((a, b) => (b.lastConnectedAt ?? 0) - (a.lastConnectedAt ?? 0))[0] ?? null,
   );
-  const connect = (item: Connection) => router.push({ name: 'Workspace', query: { connectionId: String(item.id) } });
+  const connect = (item: Connection) => {
+    if (item.type === 'RDP' || item.type === 'VNC') {
+      remoteDesktopLauncher.open({ id: item.id, name: item.name || item.host, type: item.type });
+      return;
+    }
+    return router.push({ name: 'Workspace', query: { connectionId: String(item.id) } });
+  };
 
   const formatRelativeTime = (timestamp: number | null | undefined): string => {
     if (!timestamp) return t('connections.status.never');

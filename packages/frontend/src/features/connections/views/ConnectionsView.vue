@@ -5,6 +5,7 @@
   import { formatDistanceToNow } from 'date-fns';
   import { enUS, ja, zhCN } from 'date-fns/locale';
   import { useFeedback } from '@/shared/feedback/public';
+  import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { useConnectionTags } from '@/features/tags/public';
   import { useConnections } from '../composables/useConnections';
   import { connectionsApi } from '../api/connectionsApi';
@@ -174,7 +175,13 @@
     if (successCount > 0) feedback.notifyWarning(message);
     else feedback.notifyError(message);
   };
-  const connect = (c: Connection) => router.push({ name: 'Workspace', query: { connectionId: String(c.id) } });
+  const connect = (c: Connection) => {
+    if (c.type === 'RDP' || c.type === 'VNC') {
+      remoteDesktopLauncher.open({ id: c.id, name: c.name || c.host, type: c.type });
+      return;
+    }
+    return router.push({ name: 'Workspace', query: { connectionId: String(c.id) } });
+  };
 </script>
 <template>
   <main class="bg-background p-4 text-foreground md:p-6 lg:p-8">

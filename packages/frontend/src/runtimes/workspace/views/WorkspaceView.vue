@@ -11,7 +11,7 @@
   import { terminalScrollbackForRuntime, usePreferences } from '@/features/preferences/public';
   import { defaultTerminalTheme, useAppearanceStore } from '@/features/appearance/public';
   import { useCommandHistoryStore } from '@/features/command-history/public';
-  import { RemoteDesktopModal, type RemoteDesktopConnection } from '@/features/remote-desktop/public';
+  import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import {
     ProgressDisplayModal,
     useServerTransfersStore,
@@ -67,8 +67,6 @@
   const opening = ref(false);
   const suspendedVisible = ref(false);
   const connectionPickerVisible = ref(false);
-  const remoteVisible = ref(false);
-  const remoteConnection = ref<RemoteDesktopConnection | null>(null);
   const layoutConfiguratorVisible = ref(false);
   const progressDisplayVisible = ref(false);
   const markedSuspendedSessions = computed(() =>
@@ -114,15 +112,7 @@
     delayMs: 240,
     save: (scale) => preferences.update({ quickCommandRowSizeMultiplier: scale }),
   });
-  const remoteDesktopSizeSaver = createLatestValueSaver<{ type: 'RDP' | 'VNC'; width: number; height: number }>({
-    delayMs: 240,
-    save: ({ type, width, height }) =>
-      preferences.update(
-        type === 'RDP'
-          ? { rdpModalWidth: width, rdpModalHeight: height }
-          : { vncModalWidth: width, vncModalHeight: height },
-      ),
-  });
+
   const terminalFontSaver = createLatestValueSaver<{ mobile: boolean; size: number }>({
     delayMs: 240,
     save: ({ mobile, size }) =>
@@ -157,21 +147,6 @@
   const focusConfiguratorVisible = ref(false);
   let altCycleCandidate = false;
   let stopServerTransferPolling: (() => void) | undefined;
-
-  const remoteDesktopWidth = computed(() =>
-    remoteConnection.value?.type === 'VNC'
-      ? preferences.values.value.vncModalWidth
-      : preferences.values.value.rdpModalWidth,
-  );
-  const remoteDesktopHeight = computed(() =>
-    remoteConnection.value?.type === 'VNC'
-      ? preferences.values.value.vncModalHeight
-      : preferences.values.value.rdpModalHeight,
-  );
-  const saveRemoteDesktopSize = (size: { width: number; height: number }) => {
-    if (!remoteConnection.value) return;
-    remoteDesktopSizeSaver.schedule({ type: remoteConnection.value.type, ...size });
-  };
 
   const clipboardCount = computed(() => registry.fileClipboard.count.value);
   const hiddenProgressSources = computed<ProgressSource[]>(() =>
@@ -332,8 +307,11 @@
 
   const openConnection = async (connection: Connection): Promise<void> => {
     if (connection.type === 'RDP' || connection.type === 'VNC') {
-      remoteConnection.value = { id: connection.id, name: connection.name || connection.host, type: connection.type };
-      remoteVisible.value = true;
+      remoteDesktopLauncher.open({
+        id: connection.id,
+        name: connection.name || connection.host,
+        type: connection.type,
+      });
       return;
     }
     opening.value = true;
@@ -647,7 +625,6 @@
     document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
     stopServerTransferPolling?.();
     void statusScaleSaver.dispose({ flush: true });
-    void remoteDesktopSizeSaver.dispose({ flush: true });
     void editorFontSaver.dispose({ flush: true });
     void mobileEditorFontSaver.dispose({ flush: true });
   });
@@ -837,14 +814,6 @@
       @resume="resumeSuspended"
       @resume-marked="resumeMarkedSession"
       @unmark="toggleSuspendMark"
-    />
-    <RemoteDesktopModal
-      :visible="remoteVisible"
-      :connection="remoteConnection"
-      :width="remoteDesktopWidth"
-      :height="remoteDesktopHeight"
-      @size-change="saveRemoteDesktopSize"
-      @close="remoteVisible = false"
     />
   </main>
 </template>

@@ -120,6 +120,34 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(session.json()).resolves.toMatchObject({ token: 'e2e-remote-desktop-token' });
     });
 
+    await step('Connections launches RDP in the app-level surface without leaving connection management', async () => {
+      await page.goto('/connections');
+      const row = page.getByTestId(`connection-row-${connectionId}`);
+      await expect(row).toBeVisible();
+      await row.getByRole('button', { name: 'Connect', exact: true }).click();
+      await expect(page).toHaveURL(/\/connections$/);
+      const modal = page.getByTestId('remote-desktop-modal');
+      await expect(modal).toBeVisible();
+      await expect(modal).toContainText('Connected', { timeout: 15_000 });
+      await modal.getByTestId('rdp-window-close').click();
+      await expect(modal).toBeHidden();
+      await expect(page).toHaveURL(/\/connections$/);
+    });
+
+    await step('Dashboard launches the same RDP surface without replacing the dashboard route', async () => {
+      await page.goto('/');
+      const dashboard = page.getByTestId('dashboard-view');
+      await expect(dashboard.getByTestId(`dashboard-connection-row-${connectionId}`)).toBeVisible({ timeout: 20_000 });
+      await dashboard.getByTestId(`dashboard-connect-${connectionId}`).click();
+      await expect(page).toHaveURL(/\/$/);
+      const modal = page.getByTestId('remote-desktop-modal');
+      await expect(modal).toBeVisible();
+      await expect(modal).toContainText('Connected', { timeout: 15_000 });
+      await modal.getByTestId('rdp-window-close').click();
+      await expect(modal).toBeHidden();
+      await expect(page).toHaveURL(/\/$/);
+    });
+
     await step('RDP opens from the clean Workspace without rendering an empty Progress Display', async () => {
       await page.goto('/workspace');
       await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0);
@@ -443,6 +471,20 @@ test('VNC pointer resize and restore-button dragging share the same window seman
 
   const connectionId = await createRemoteConnection(context.request, 'VNC', POINTER_VNC_NAME, '192.0.2.92', 5901);
   try {
+    await step('Connections also launches VNC globally without replacing its route', async () => {
+      await page.goto('/connections');
+      const row = page.getByTestId(`connection-row-${connectionId}`);
+      await expect(row).toBeVisible();
+      await row.getByRole('button', { name: 'Connect', exact: true }).click();
+      await expect(page).toHaveURL(/\/connections$/);
+      const modal = page.getByTestId('vnc-modal');
+      await expect(modal).toBeVisible();
+      await expect(modal).toContainText('Connected', { timeout: 15_000 });
+      await modal.getByTestId('vnc-window-close').click();
+      await expect(modal).toBeHidden();
+      await expect(page).toHaveURL(/\/connections$/);
+    });
+
     await openRemoteConnection(page, POINTER_VNC_NAME, 'vnc-modal');
     const vncModal = page.getByTestId('vnc-modal');
     await expect(vncModal).toContainText('Connected', { timeout: 15_000 });
