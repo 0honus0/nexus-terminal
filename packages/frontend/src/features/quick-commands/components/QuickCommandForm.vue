@@ -346,6 +346,8 @@
   .quick-resize {
     position: absolute;
     z-index: 20;
+    touch-action: none;
+    user-select: none;
   }
   .quick-resize--top,
   .quick-resize--bottom {
@@ -355,10 +357,10 @@
     cursor: ns-resize;
   }
   .quick-resize--top {
-    top: -5px;
+    top: 0;
   }
   .quick-resize--bottom {
-    bottom: -5px;
+    bottom: 0;
   }
   .quick-resize--left,
   .quick-resize--right {
@@ -368,10 +370,10 @@
     cursor: ew-resize;
   }
   .quick-resize--left {
-    left: -5px;
+    left: 0;
   }
   .quick-resize--right {
-    right: -5px;
+    right: 0;
   }
   .quick-resize--top-left,
   .quick-resize--top-right,
@@ -381,23 +383,23 @@
     height: 14px;
   }
   .quick-resize--top-left {
-    top: -7px;
-    left: -7px;
+    top: 0;
+    left: 0;
     cursor: nwse-resize;
   }
   .quick-resize--top-right {
-    top: -7px;
-    right: -7px;
+    top: 0;
+    right: 0;
     cursor: nesw-resize;
   }
   .quick-resize--bottom-right {
-    right: -7px;
-    bottom: -7px;
+    right: 0;
+    bottom: 0;
     cursor: nwse-resize;
   }
   .quick-resize--bottom-left {
-    bottom: -7px;
-    left: -7px;
+    bottom: 0;
+    left: 0;
     cursor: nesw-resize;
   }
   @media (max-width: 767px) {
