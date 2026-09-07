@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, reactive, ref } from 'vue';
+  import { computed, reactive, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
@@ -42,6 +42,13 @@
   const error = ref<string | null>(null);
   const isBusy = computed(() => isLoading.value || props.passkeyLoading);
   const captchaBlocked = computed(() => !auth.pendingSecondFactor.value && props.captchaStatus !== 'ready');
+
+  watch(
+    () => auth.pendingSecondFactor.value,
+    (pending) => {
+      if (!pending) twoFactorToken.value = '';
+    },
+  );
 
   const submit = async (): Promise<void> => {
     if (isBusy.value) return;

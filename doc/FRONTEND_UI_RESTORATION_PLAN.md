@@ -1578,6 +1578,21 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - `playwright-groups (8)` 仍只失败于受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的未限定 `Save` locator（17 个匹配），截图提交/rebalance 按策略跳过；没有新的产品 UI/架构回归。与 C.82 的 28/28 canonical artifact 结合后，M17.03/M17.05/M17.06 结论保持有效。
 - 远程分支最终只保留 `main` 与 `test/ui-restoration-groups`；后续不再为 M17 重跑全量矩阵，除非 M01 真实 Login surface 证据或新的产品差异改变完成定义。
 
+### C.86 最新远程 Actions 收口状态（2026-09-06）
+
+- 仅查询 GitHub Actions，未启动本地测试进程。远程 `test/ui-restoration-groups` 当前头为 `c20e884a663d6062f1361b1296d21ad0978c38c3`；workflow_dispatch run `34065752311` 已完成环境同步、M17 静态门禁、runner image、Docker deployment smoke、prepare 及 `playwright-groups (1–7)`，上述 job 全部成功。
+- `playwright-groups (8)` 唯一失败仍是受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的全局 `getByRole('button', { name: 'Save', exact: true })` strict-mode，17 个匹配；失败发生在 spreadsheet rows/pagination 的 Settings 前置步骤。该问题属于受保护测试选择器维护，不归因产品 UI，不修改受保护文件，也不添加 DOM workaround。G8 其余 preview/editor case 通过。
+- 本次 run 没有产生新的产品回归；M17.03/M17.05/M17.06 继续保持已关闭，正式进度仍为 **`17 / 18 = 94.4%`**。唯一未闭环模块为 M01，仍缺六类真实 Login surface 证据：移动 setup、2FA challenge/expiry、CAPTCHA gate/token reset、passkey 成功/取消/失败/fallback、Android/WebView 软键盘与 `visualViewport`、完整非密码失败态视觉与行为。
+- 后续继续只使用远程 Actions；在上述六类证据取得前不关闭 M01、不宣布项目整体完成，不恢复旧 store/event bus/transport，不触碰受保护测试与保留的 dirty 文件。
+
+### C.87 M01 Login surface 远程验证前置批次（2026-09-07）
+
+- Luna 代理在不启动本地测试/服务的前提下补齐三组独占远程证据用例：`test/e2e/tests/http/auth-2fa.spec.ts` 覆盖 Login 2FA challenge、401 错码重试、logout 后失效会话 400 恢复、新 challenge token 清理与有效 TOTP；`test/e2e/tests/ui/login-captcha-surface.spec.ts` 覆盖真实无效 CAPTCHA 配置 fail-closed 与有效配置无 token 阻断；`test/e2e/tests/ui/login-passkey-surface.spec.ts` 覆盖真实注册、Login passkey 成功、无 credential 失败、密码 fallback 及 1280/320/375 几何/截图/网络证据。API 只用于准备/清理，认证动作仍由 Login UI 发起；未恢复旧 store、event bus、transport 或测试专用 DOM。
+- 新 passkey/CAPTCHA spec 已加入 `test/e2e/groups/group-3.json`；本批尚未取得远程 Actions 结果，M01.02/M01.03 的 F/V 仍为 `PENDING`，只能在目标 SHA 的命名用例、响应码、附件截图/metrics/trace 和 exit code 均复核后更新。Passkey 原生“用户取消”在现有 headless WebAuthn runner 无确定交互通道，暂记 `UNVERIFIED`，不得用注入 rejection 代替。
+- `LoginView.vue` 的最小新架构修复保留：2FA challenge 从 pending 转为失效/完成时清空本地 token，避免旧验证码残留；未引入跨 owner 状态。该修复需随远程 2FA 用例验证。
+- Luna 移动能力审计确认当前 `.github/workflows/e2e.yml`/`Dockerfile.runner` 只有 Desktop Chromium 与 `isMobile` 模拟，没有 ADB、Android/WebView、模拟器或 device-farm；现有窄 viewport/DOM textarea 不能证明真实 IME/`visualViewport`。真实移动 setup 与软键盘两项继续 `PENDING`，所需最小外部条件是带 ADB/WebView 的远程设备 job 和可达应用 endpoint（报告：`/tmp/nexus-m01-mobile-setup-keyboard-20260906T232253Z/REPORT.md`）。
+- 本批只进入远程验证准备，不关闭 M01；正式模块计数保持 **`17 / 18 = 94.4%`**。受保护 dirty 文件、root-preserved 目录和 `core.*` 均未纳入提交。
+
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
 
 旧库扫描覆盖224个frontend tracked files，其中212个src文件；98 Vue只是用户表面追溯子集。该数字是历史快照，不作为当前文件数守恒目标。旧composable/store读取仅恢复可见默认值、状态和操作顺序，不复活所有权结构。
