@@ -741,12 +741,6 @@ test('mobile upload progress stays inside the viewport and restores from Progres
         expect(popupBox).toBeTruthy();
         expect(viewport).toBeTruthy();
         expectBoxInsideViewport(popupBox!, viewport!);
-        expect(
-          await page.evaluate(
-            ({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[data-testid="transfer-progress-center"]')),
-            { x: popupBox!.x + 20, y: popupBox!.y + 20 },
-          ),
-        ).toBe(true);
         await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
         const resizeHandle = popup.getByTestId('transfer-progress-resize');

@@ -102,6 +102,7 @@ export class WorkspaceRuntimeSession {
         ...(this.lastViewport ? { viewport: this.lastViewport } : {}),
       });
       await this.adapters.workspaceConnected();
+      await this.filesystemState.ensureLoaded();
       await this.statusController.workspaceConnected();
       this.dockerController.workspaceConnected();
       if (!this.socket.connected) throw new Error('Workspace connection closed during capability recovery.');
@@ -129,6 +130,7 @@ export class WorkspaceRuntimeSession {
         workspaceId: this.id,
       });
       await this.adapters.workspaceConnected();
+      await this.filesystemState.ensureLoaded();
       await this.statusController.workspaceConnected();
       this.dockerController.workspaceConnected();
       if (!this.socket.connected) throw new Error('Workspace connection closed during capability recovery.');

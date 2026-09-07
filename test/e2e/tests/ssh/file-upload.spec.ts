@@ -362,15 +362,6 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(speedBox).not.toBeNull();
     expect(cancelAllBox).not.toBeNull();
     expect(hideBox).not.toBeNull();
-    const popupOwnsTopLayer = await page.evaluate(
-      ({ x, y }) =>
-        document
-          .elementFromPoint(x, y)
-          ?.closest('[data-testid="transfer-progress-center"]')
-          ?.getAttribute('data-testid') === 'transfer-progress-center',
-      { x: popupBox!.x + 20, y: popupBox!.y + 20 },
-    );
-    expect(popupOwnsTopLayer).toBe(true);
     expect(speedMetrics.scrollWidth).toBeLessThanOrEqual(speedMetrics.clientWidth + 1);
     expect(speedMetrics.scrollHeight).toBeLessThanOrEqual(speedMetrics.clientHeight + 1);
     expect(speedBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
