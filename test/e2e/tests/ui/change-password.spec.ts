@@ -96,7 +96,7 @@ test('password change UI updates the real login credential and can restore the t
     const beforeMetrics = await collectMetrics('before');
     expect(beforeMetrics.page.scrollWidth).toBe(beforeMetrics.page.clientWidth);
     expect(beforeMetrics.page.bodyScrollWidth).toBe(beforeMetrics.page.bodyClientWidth);
-    await captureFunctionalScreenshot(page, 'm05-04a-change-password-before.png', {
+    await captureFunctionalScreenshot(page, 'security-change-password-form.png', {
       viewport: { width: 1440, height: 900 },
     });
 
@@ -164,7 +164,7 @@ test('password change UI updates the real login credential and can restore the t
       const afterMetrics = await collectMetrics('after');
       expect(afterMetrics.page.scrollWidth).toBe(afterMetrics.page.clientWidth);
       expect(afterMetrics.page.bodyScrollWidth).toBe(afterMetrics.page.bodyClientWidth);
-      await captureFunctionalScreenshot(page, 'm05-04a-change-password-after.png', {
+      await captureFunctionalScreenshot(page, 'security-change-password-success.png', {
         viewport: { width: 1440, height: 900 },
       });
     });
@@ -230,7 +230,7 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
       await writeFile(testInfo.outputPath(`passkey-${name}.metrics.json`), JSON.stringify(metrics, null, 2));
     };
     await collectPasskeyMetrics('before');
-    await captureFunctionalScreenshot(page, 'm05-04c-passkey-before.png', {
+    await captureFunctionalScreenshot(page, 'security-passkey-registration-empty.png', {
       viewport: { width: 1440, height: 900 },
     });
 
@@ -281,7 +281,7 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
       await expect(reloadedPanel.locator('li').first()).toContainText('E2E Security Key');
       await reloadedPanel.scrollIntoViewIfNeeded();
       await collectPasskeyMetrics('after');
-      await captureFunctionalScreenshot(page, 'm05-04c-passkey-after.png', {
+      await captureFunctionalScreenshot(page, 'security-passkey-registration-registered.png', {
         viewport: { width: 1440, height: 900 },
       });
     });

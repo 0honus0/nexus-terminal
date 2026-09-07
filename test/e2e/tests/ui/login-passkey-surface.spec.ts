@@ -244,7 +244,7 @@ test('M01 Login passkey succeeds, reports credential failure, and falls back to 
       await page.locator('#username').fill(E2E_ADMIN.username);
       const passkeyButton = page.getByRole('button', { name: 'Login with Passkey', exact: true });
       await expect(passkeyButton).toBeVisible();
-      await captureFunctionalScreenshot(page, 'm01-passkey-login-ready-1280x800.png', {
+      await captureFunctionalScreenshot(page, 'auth-passkey-login-ready-1280x800.png', {
         viewport: { width: LOGIN_VIEWPORTS[0].width, height: LOGIN_VIEWPORTS[0].height },
       });
 
@@ -270,7 +270,7 @@ test('M01 Login passkey succeeds, reports credential failure, and falls back to 
       });
       successObserved = true;
       await recordCookieMetadata(context, 'contextA', cookieMetadata);
-      await captureFunctionalScreenshot(page, 'm01-passkey-login-success-1280x800.png', {
+      await captureFunctionalScreenshot(page, 'auth-passkey-login-success-1280x800.png', {
         viewport: { width: LOGIN_VIEWPORTS[0].width, height: LOGIN_VIEWPORTS[0].height },
       });
     });
@@ -322,15 +322,15 @@ test('M01 Login passkey succeeds, reports credential failure, and falls back to 
       credentialFailureObserved = true;
 
       await collectLoginMetrics(failurePage, testInfo, 'failure-1280x800');
-      await captureFunctionalScreenshot(failurePage, 'm01-passkey-login-failure-1280x800.png');
+      await captureFunctionalScreenshot(failurePage, 'auth-passkey-login-credential-failure-1280x800.png');
 
       await failurePage.setViewportSize({ width: LOGIN_VIEWPORTS[1].width, height: LOGIN_VIEWPORTS[1].height });
       await collectLoginMetrics(failurePage, testInfo, 'failure-320x667');
-      await captureFunctionalScreenshot(failurePage, 'm01-passkey-login-failure-320x667.png');
+      await captureFunctionalScreenshot(failurePage, 'auth-passkey-login-credential-failure-320x667.png');
 
       await failurePage.setViewportSize({ width: LOGIN_VIEWPORTS[2].width, height: LOGIN_VIEWPORTS[2].height });
       await collectLoginMetrics(failurePage, testInfo, 'failure-375x812');
-      await captureFunctionalScreenshot(failurePage, 'm01-passkey-login-failure-375x812.png');
+      await captureFunctionalScreenshot(failurePage, 'auth-passkey-login-credential-failure-375x812.png');
 
       await failurePage.locator('#password').fill(E2E_ADMIN.password);
       const fallbackLoginResponse = failurePage.waitForResponse(

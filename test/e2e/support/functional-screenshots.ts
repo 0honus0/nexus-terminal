@@ -24,6 +24,9 @@ export async function captureFunctionalScreenshot(
   if (path.basename(filename) !== filename || !/^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/.test(filename)) {
     throw new Error(`Functional screenshot filename must be a plain .png basename: ${filename}`);
   }
+  if (/^m\d{2}(?:[-_.]|$)/i.test(filename)) {
+    throw new Error(`Functional screenshot filename must describe the feature, not a module id: ${filename}`);
+  }
 
   const outputDir = screenshotOutputDir();
   await mkdir(outputDir, { recursive: true });

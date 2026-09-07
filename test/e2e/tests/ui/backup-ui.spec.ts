@@ -79,17 +79,17 @@ test('data management UI exports a real backup file and imports it through the f
   await expect(section).toBeVisible();
   await section.scrollIntoViewIfNeeded();
   await captureEvidence(page, testInfo, 'before');
-  await captureFunctionalScreenshot(page, 'm05-04e-backup-before.png', { viewport: { width: 1280, height: 800 } });
+  await captureFunctionalScreenshot(page, 'data-backup-settings.png', { viewport: { width: 1280, height: 800 } });
 
   await page.setViewportSize({ width: 320, height: 667 });
   await section.scrollIntoViewIfNeeded();
   await captureEvidence(page, testInfo, 'narrow-320');
-  await captureFunctionalScreenshot(page, 'm05-04e-backup-narrow-320.png');
+  await captureFunctionalScreenshot(page, 'data-backup-settings-narrow-320.png');
 
   await page.setViewportSize({ width: 375, height: 812 });
   await section.scrollIntoViewIfNeeded();
   await captureEvidence(page, testInfo, 'narrow-375');
-  await captureFunctionalScreenshot(page, 'm05-04e-backup-narrow-375.png');
+  await captureFunctionalScreenshot(page, 'data-backup-settings-narrow-375.png');
 
   await page.setViewportSize({ width: 1280, height: 800 });
   await section.scrollIntoViewIfNeeded();
@@ -150,7 +150,7 @@ test('data management UI exports a real backup file and imports it through the f
     await expect(reloadedSection).toBeVisible();
     await reloadedSection.scrollIntoViewIfNeeded();
     await captureEvidence(page, testInfo, 'after');
-    await captureFunctionalScreenshot(page, 'm05-04e-backup-after.png', {
+    await captureFunctionalScreenshot(page, 'data-backup-restored.png', {
       viewport: { width: 1280, height: 800 },
     });
   });

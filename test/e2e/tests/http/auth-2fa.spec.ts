@@ -148,26 +148,26 @@ async function recordLoginEvidence(
   console.log(JSON.stringify(metrics));
 
   if (viewport.name === 'desktop' && stage === 'challenge') {
-    await captureFunctionalScreenshot(page, 'm01-02-login-2fa-desktop-challenge.png');
+    await captureFunctionalScreenshot(page, 'auth-2fa-desktop-challenge.png');
     return;
   }
   if (viewport.name === 'desktop' && stage === 'invalid-token') {
-    await captureFunctionalScreenshot(page, 'm01-02-login-2fa-desktop-invalid-token.png');
+    await captureFunctionalScreenshot(page, 'auth-2fa-desktop-invalid-token.png');
     return;
   }
   if (viewport.name === 'desktop' && stage === 'expired-recovery') {
-    await captureFunctionalScreenshot(page, 'm01-02-login-2fa-desktop-expired-recovery.png');
+    await captureFunctionalScreenshot(page, 'auth-2fa-desktop-expired-recovery.png');
     return;
   }
   if (viewport.name === 'narrow' && stage === 'challenge') {
-    await captureFunctionalScreenshot(page, 'm01-02-login-2fa-narrow-challenge.png');
+    await captureFunctionalScreenshot(page, 'auth-2fa-narrow-challenge.png');
     return;
   }
   if (viewport.name === 'narrow' && stage === 'invalid-token') {
-    await captureFunctionalScreenshot(page, 'm01-02-login-2fa-narrow-invalid-token.png');
+    await captureFunctionalScreenshot(page, 'auth-2fa-narrow-invalid-token.png');
     return;
   }
-  await captureFunctionalScreenshot(page, 'm01-02-login-2fa-narrow-expired-recovery.png');
+  await captureFunctionalScreenshot(page, 'auth-2fa-narrow-expired-recovery.png');
 }
 
 test('2FA can be enabled, required at login, verified, and disabled', async ({ request }) => {

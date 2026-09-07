@@ -176,7 +176,7 @@ test('login CAPTCHA fails closed for invalid configuration', async ({ page, requ
         .catch(() => undefined);
       expect(await loginRequest).toBeUndefined();
       await expect(page.getByText(CAPTCHA_INVALID_MESSAGE, { exact: true })).toHaveCount(1);
-      await captureFunctionalScreenshot(page, 'm01-login-captcha-invalid-config.png', {
+      await captureFunctionalScreenshot(page, 'auth-captcha-invalid-configuration.png', {
         viewport: { width: 1440, height: 900 },
       });
       await recordCaptchaMetrics(page, testInfo, 'login-captcha-invalid-config.metrics.json');
@@ -210,7 +210,7 @@ test('login CAPTCHA requires a token before sending first-factor credentials', a
       await expect(page.getByRole('alert')).toHaveCount(1);
       await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
       await expect(page.getByText('Login failed. Please try again.', { exact: true })).toHaveCount(0);
-      await captureFunctionalScreenshot(page, 'm01-login-captcha-required.png', {
+      await captureFunctionalScreenshot(page, 'auth-captcha-required.png', {
         viewport: { width: 1440, height: 900 },
       });
       await recordCaptchaMetrics(page, testInfo, 'login-captcha-required.metrics.json');

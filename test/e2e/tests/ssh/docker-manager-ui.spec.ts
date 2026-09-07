@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import {
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
@@ -25,6 +26,7 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
 }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
+  await page.setViewportSize({ width: 1440, height: 900 });
   const settings = await context.request.put('/api/v1/settings', {
     data: { dockerStatusIntervalSeconds: 1, dockerDefaultExpand: true },
   });
@@ -55,6 +57,55 @@ test('Docker manager UI renders remote containers, stats, and executes a contain
     await expect(row.locator('i.fa-terminal')).toBeVisible();
     await expect(row.locator('i.fa-file-alt')).toBeVisible();
     await expect(row.getByTestId('docker-expand')).toHaveAttribute('aria-label', 'Collapse');
+
+    const sidebar = page.getByTestId('left-sidebar-panel');
+    await expect(sidebar).toBeVisible();
+    await expect.poll(async () => (await sidebar.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(349);
+    const sidebarBox = await sidebar.boundingBox();
+    expect(sidebarBox).not.toBeNull();
+    if (!sidebarBox) throw new Error('Docker sidebar has no geometry');
+    expect(
+      await manager.evaluate((element) => getComputedStyle(element.parentElement as HTMLElement).borderTopWidth),
+    ).toBe('0px');
+    await captureFunctionalScreenshot(page, 'docker-manager-sidebar-running.png');
+
+    const handle = page.getByTestId('left-sidebar-resize-handle');
+    const handleBox = await handle.boundingBox();
+    expect(handleBox).not.toBeNull();
+    if (!handleBox) throw new Error('Docker sidebar resize handle has no geometry');
+    const resizeStartX = handleBox.x + handleBox.width / 2;
+    const resizeY = handleBox.y + Math.min(100, handleBox.height / 2);
+    await page.mouse.move(resizeStartX, resizeY);
+    await page.mouse.down();
+    await page.mouse.move(resizeStartX + (300 - sidebarBox.width), resizeY, { steps: 5 });
+    await page.mouse.up();
+    await expect.poll(async () => Math.round((await sidebar.boundingBox())?.width ?? 0)).toBe(300);
+
+    const narrowLayout = await row.evaluate((element) => {
+      const cell = element.querySelector<HTMLElement>('.docker-cell');
+      const actions = element.querySelector<HTMLElement>('.docker-actions');
+      const cardFooter = element.querySelector<HTMLElement>('.docker-card-expand-cell');
+      if (!cell || !actions || !cardFooter) return null;
+      const label = getComputedStyle(cell, '::before');
+      return {
+        rowPaddingTop: getComputedStyle(element).paddingTop,
+        textAlign: getComputedStyle(cell).textAlign,
+        labelPosition: label.position,
+        actionsJustify: getComputedStyle(actions).justifyContent,
+        cardFooterMarginTop: getComputedStyle(cardFooter).marginTop,
+      };
+    });
+    expect(narrowLayout).toEqual({
+      rowPaddingTop: '12px',
+      textAlign: 'right',
+      labelPosition: 'absolute',
+      actionsJustify: 'flex-end',
+      cardFooterMarginTop: '12px',
+    });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+    await captureFunctionalScreenshot(page, 'docker-manager-sidebar-narrow.png');
 
     const countStatusFrames = () =>
       sentFrames.reduce((count, frame) => {

@@ -41,14 +41,14 @@ test('IP whitelist UI saves and reloads the configured allow-list without enabli
       };
     });
     await writeFile(testInfo.outputPath('ip-whitelist-before.metrics.json'), JSON.stringify(beforeMetrics, null, 2));
-    await captureFunctionalScreenshot(page, 'm05-04d-ip-whitelist-before.png', {
+    await captureFunctionalScreenshot(page, 'security-ip-whitelist-settings.png', {
       viewport: { width: 1440, height: 900 },
     });
     await page.setViewportSize({ width: 320, height: 667 });
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
       .toBe(true);
-    await captureFunctionalScreenshot(page, 'm05-04d-ip-whitelist-before-narrow.png');
+    await captureFunctionalScreenshot(page, 'security-ip-whitelist-settings-narrow.png');
     await page.setViewportSize({ width: 1280, height: 720 });
 
     await step('save a multi-line whitelist through the IP control UI', async () => {

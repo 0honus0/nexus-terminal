@@ -211,7 +211,7 @@
   const parseSidebarWidth = (name: WorkspacePaneName | null): number => {
     const raw = name ? props.sidebarPaneWidths?.[name] : undefined;
     const parsed = raw ? Number.parseFloat(raw) : 350;
-    return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 240), Math.max(240, window.innerWidth * 0.6)) : 350;
+    return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 200), 800) : 350;
   };
   const leftSidebarWidth = ref(350);
   const rightSidebarWidth = ref(350);
@@ -225,9 +225,9 @@
   const leftResize = useResizeHandle({
     width: leftSidebarWidth,
     height: leftResizeHeight,
-    minWidth: 240,
+    minWidth: 200,
     minHeight: 0,
-    maxWidth: () => Math.max(240, window.innerWidth * 0.6),
+    maxWidth: () => Math.min(800, window.innerWidth * 0.8),
     onEnd: ({ width }) => {
       if (activeLeftSidebar.value) emit('sidebarWidth', activeLeftSidebar.value, `${Math.round(width)}px`);
     },
@@ -235,9 +235,9 @@
   const rightResize = useResizeHandle({
     width: rightSidebarWidth,
     height: rightResizeHeight,
-    minWidth: 240,
+    minWidth: 200,
     minHeight: 0,
-    maxWidth: () => Math.max(240, window.innerWidth * 0.6),
+    maxWidth: () => Math.min(800, window.innerWidth * 0.8),
     widthDirection: -1,
     onEnd: ({ width }) => {
       if (activeRightSidebar.value) emit('sidebarWidth', activeRightSidebar.value, `${Math.round(width)}px`);
@@ -764,7 +764,11 @@
       class="fixed top-0 bottom-0 left-0 z-[110] flex max-w-[80vw] flex-col overflow-hidden border-r border-border bg-background transition-transform duration-300 ease-in-out"
       :style="{ width: `${leftSidebarWidth}px` }"
     >
-      <div class="absolute inset-y-0 right-0 z-20 w-1 cursor-col-resize" @pointerdown="leftResize.startResize"></div>
+      <div
+        data-testid="left-sidebar-resize-handle"
+        class="absolute inset-y-0 right-0 z-20 w-1 cursor-col-resize"
+        @pointerdown="leftResize.startResize"
+      ></div>
       <button
         type="button"
         class="absolute right-2 top-1 z-10 p-1 text-2xl leading-none text-text-secondary hover:text-foreground"
@@ -775,7 +779,7 @@
         <span aria-hidden="true">&times;</span>
       </button>
       <WorkspaceLayoutRenderer
-        class="box-border h-full min-h-0 pt-10"
+        class="box-border h-full min-h-0 !border-0 pt-10"
         :node="sidebarNode(activeLeftSidebar, 'left')"
         :session="session"
         :document-mode="documentMode"
@@ -962,7 +966,7 @@
         <span aria-hidden="true">&times;</span>
       </button>
       <WorkspaceLayoutRenderer
-        class="box-border h-full min-h-0 pt-10"
+        class="box-border h-full min-h-0 !border-0 pt-10"
         :node="sidebarNode(activeRightSidebar, 'right')"
         :session="session"
         :document-mode="documentMode"

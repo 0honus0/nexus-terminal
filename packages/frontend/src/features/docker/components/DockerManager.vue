@@ -77,33 +77,33 @@
     class="docker-manager flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
   >
     <div v-if="connecting" class="docker-state">
-      <i class="fas fa-spinner fa-spin text-4xl" aria-hidden="true"></i>
-      <strong>{{ t('dockerManager.waitingForSsh') }}</strong>
-      <small v-if="connectionMessage">{{ connectionMessage }}</small>
+      <i class="fas fa-spinner fa-spin mb-3 text-4xl" aria-hidden="true"></i>
+      <p class="mb-1 mt-2 font-medium">{{ t('dockerManager.waitingForSsh') }}</p>
+      <small v-if="connectionMessage" class="text-xs text-text-disabled">{{ connectionMessage }}</small>
     </div>
     <div v-else-if="connectionState === 'disconnected'" class="docker-state">
-      <i class="fas fa-unlink text-4xl" aria-hidden="true"></i>
-      <strong>{{ t('dockerManager.error.sshDisconnected') }}</strong>
-      <small v-if="connectionMessage">{{ connectionMessage }}</small>
+      <i class="fas fa-unlink mb-3 text-4xl" aria-hidden="true"></i>
+      <p class="mb-1 mt-2 font-medium">{{ t('dockerManager.error.sshDisconnected') }}</p>
+      <small v-if="connectionMessage" class="text-xs text-text-disabled">{{ connectionMessage }}</small>
     </div>
-    <div v-else-if="connectionState === 'error'" class="docker-state text-error">
-      <i class="fas fa-exclamation-circle text-3xl" aria-hidden="true"></i>
-      <strong>{{ t('dockerManager.error.sshError') }}</strong>
-      <small v-if="connectionMessage">{{ connectionMessage }}</small>
+    <div v-else-if="connectionState === 'error'" class="docker-state">
+      <i class="fas fa-exclamation-circle mb-2 text-3xl text-red-500" aria-hidden="true"></i>
+      <p class="mb-1 mt-2 font-medium">{{ t('dockerManager.error.sshError') }}</p>
+      <small v-if="connectionMessage" class="text-xs">{{ connectionMessage }}</small>
     </div>
     <div v-else-if="docker.loading.value && !docker.containers.value.length" class="docker-state">
-      <i class="fas fa-spinner fa-spin text-4xl" aria-hidden="true"></i>
-      <strong>{{ t('dockerManager.loading') }}</strong>
-    </div>
-    <div v-else-if="docker.error.value" class="docker-state text-error">
-      <i class="fas fa-exclamation-triangle text-3xl" aria-hidden="true"></i>
-      <strong>{{ t('dockerManager.error.fetchFailed') }}</strong>
-      <small>{{ docker.error.value }}</small>
+      <i class="fas fa-spinner fa-spin mb-3 text-4xl" aria-hidden="true"></i>
+      <span>{{ t('dockerManager.loading') }}</span>
     </div>
     <div v-else-if="!docker.available.value" class="docker-state">
-      <i class="fab fa-docker text-4xl" aria-hidden="true"></i>
-      <strong>{{ t('dockerManager.notAvailable') }}</strong>
-      <small>{{ t('dockerManager.installHintRemote') }}</small>
+      <i class="fab fa-docker mb-3 text-4xl" aria-hidden="true"></i>
+      <p class="mb-1 mt-2 font-medium">{{ t('dockerManager.notAvailable') }}</p>
+      <small class="text-xs text-text-disabled">{{ t('dockerManager.installHintRemote') }}</small>
+    </div>
+    <div v-else-if="docker.error.value" class="docker-state">
+      <i class="fas fa-exclamation-triangle mb-2 text-3xl text-red-500" aria-hidden="true"></i>
+      <p class="mb-1 mt-2 font-medium">{{ t('dockerManager.error.fetchFailed') }}</p>
+      <small class="text-xs">{{ docker.error.value }}</small>
     </div>
     <div v-else-if="!docker.containers.value.length" class="docker-state">
       <span>{{ t('dockerManager.noContainers') }}</span>
@@ -145,7 +145,7 @@
           <template v-for="container in docker.containers.value" :key="container.id">
             <tr
               :data-testid="`docker-row-${container.id}`"
-              class="docker-row relative border border-border bg-background shadow-sm transition-colors duration-150 hover:bg-header/30"
+              class="docker-row relative mb-4 rounded border border-border bg-background p-3 shadow-sm transition-colors duration-150 hover:bg-header/30"
               :class="{ expanded: docker.expandedContainerIds.value.has(container.id) }"
             >
               <td class="docker-expand-cell w-8 border-b border-border px-2 py-2 text-center align-middle">
@@ -172,19 +172,19 @@
               </td>
 
               <td
-                class="docker-cell border-b border-border px-3 py-2 align-middle"
+                class="docker-cell border-b border-border px-3 py-2 text-right align-middle"
                 :data-label="t('dockerManager.header.name')"
               >
                 <span class="break-all font-medium">{{ container.names.join(', ') || container.id.slice(0, 12) }}</span>
               </td>
               <td
-                class="docker-cell break-all border-b border-border px-3 py-2 align-middle"
+                class="docker-cell break-all border-b border-border px-3 py-2 text-right align-middle"
                 :data-label="t('dockerManager.header.image')"
               >
                 {{ container.image }}
               </td>
               <td
-                class="docker-cell border-b border-border px-3 py-2 align-middle"
+                class="docker-cell border-b border-border px-3 py-2 text-right align-middle"
                 :data-label="t('dockerManager.header.status')"
               >
                 <span
@@ -195,16 +195,16 @@
                 </span>
               </td>
               <td
-                class="docker-cell break-all border-b border-border px-3 py-2 text-xs align-middle"
+                class="docker-cell break-all border-b border-border px-3 py-2 text-right text-xs align-middle"
                 :data-label="t('dockerManager.header.ports')"
               >
                 {{ ports(container) || 'N/A' }}
               </td>
               <td
-                class="docker-cell docker-actions-cell border-b border-border px-3 py-2 align-middle"
+                class="docker-cell docker-actions-cell border-b border-border px-3 py-2 text-right align-middle"
                 :data-label="t('dockerManager.header.actions')"
               >
-                <div class="docker-actions flex flex-wrap gap-2">
+                <div class="docker-actions flex flex-wrap gap-2 pt-2">
                   <button
                     type="button"
                     class="docker-action docker-touch-target hover:text-green-500"
@@ -278,7 +278,7 @@
                     <span>{{ t('common.expand') }}</span>
                   </button>
                 </div>
-                <div v-else class="docker-card-details bg-header/30">
+                <div v-else class="docker-card-details rounded-b bg-header/30">
                   <div class="p-4">
                     <dl
                       v-if="container.stats"
@@ -355,7 +355,6 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 0.55rem;
     padding: 1rem;
     color: var(--text-color-secondary);
     text-align: center;
@@ -363,7 +362,6 @@
 
   .docker-state small {
     max-width: 80%;
-    color: var(--text-color-disabled, var(--text-color-secondary));
   }
 
   .docker-actions {
@@ -442,6 +440,7 @@
 
     .docker-actions-cell {
       padding-left: 0.75rem !important;
+      border-bottom: 0;
     }
 
     .docker-actions-cell::before {
@@ -450,13 +449,14 @@
 
     .docker-actions {
       justify-content: flex-end;
-      padding-top: 0.35rem;
+      padding-top: 0.5rem;
     }
 
     .docker-card-expand-cell {
       display: block;
       width: 100%;
       padding: 0;
+      margin-top: 0.75rem;
       border-top: 1px solid var(--border-color);
     }
 
@@ -484,34 +484,6 @@
 
     .docker-detail-row {
       display: none;
-    }
-  }
-
-  @container docker-manager-pane (max-width: 320px) {
-    .docker-content-area {
-      padding: 0.65rem;
-    }
-
-    .docker-row > .docker-cell {
-      padding-left: 0.75rem;
-      text-align: left;
-    }
-
-    .docker-row > .docker-cell::before {
-      position: static;
-      display: block;
-      width: auto;
-      margin-bottom: 0.2rem;
-      padding-right: 0;
-    }
-
-    .docker-actions {
-      justify-content: flex-start;
-    }
-
-    .docker-stats-grid {
-      grid-template-columns: minmax(0, 1fr);
-      gap: 0.2rem;
     }
   }
 

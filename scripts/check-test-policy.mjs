@@ -87,6 +87,7 @@ const screenshotDeclarations = new Map();
 const screenshotCallPattern = /\bcaptureFunctionalScreenshot\s*\(/g;
 const screenshotDeclarationPattern = /\bcaptureFunctionalScreenshot\s*\(\s*[^,\n]+,\s*(["'])([^"'\n]+)\1/g;
 const screenshotFilenamePattern = /^[A-Za-z0-9][A-Za-z0-9._-]*\.png$/;
+const moduleScreenshotPrefixPattern = /^m\d{2}(?:[-_.]|$)/i;
 for (const file of specFiles) {
   const text = fs.readFileSync(path.join(repoRoot, file), 'utf8');
   const calls = [...text.matchAll(screenshotCallPattern)].length;
@@ -101,6 +102,10 @@ for (const file of specFiles) {
     const filename = match[2];
     if (!screenshotFilenamePattern.test(filename)) {
       failures.push(`${file}: invalid functional screenshot filename ${filename}`);
+      continue;
+    }
+    if (moduleScreenshotPrefixPattern.test(filename)) {
+      failures.push(`${file}: functional screenshot filename ${filename} must describe the feature, not a module id`);
       continue;
     }
     const previous = screenshotDeclarations.get(filename);

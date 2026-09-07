@@ -64,14 +64,14 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
       };
     });
     await writeFile(testInfo.outputPath('ip-blacklist-before.metrics.json'), JSON.stringify(beforeMetrics, null, 2));
-    await captureFunctionalScreenshot(page, 'm05-04d-ip-blacklist-before.png', {
+    await captureFunctionalScreenshot(page, 'security-ip-blacklist-settings.png', {
       viewport: { width: 1440, height: 900 },
     });
     await page.setViewportSize({ width: 320, height: 667 });
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
       .toBe(true);
-    await captureFunctionalScreenshot(page, 'm05-04d-ip-blacklist-before-narrow.png');
+    await captureFunctionalScreenshot(page, 'security-ip-blacklist-settings-narrow.png');
     await page.setViewportSize({ width: 1280, height: 720 });
 
     await step('disable and re-enable the blacklist switch through the UI', async () => {
@@ -174,7 +174,7 @@ test('IP blacklist UI toggles protection and persists login-ban thresholds', asy
       await expect(reloaded.getByTestId('ip-blacklist-max-attempts')).toHaveValue('2');
       await expect(reloaded.getByTestId('ip-blacklist-ban-duration')).toHaveValue('420');
       await reloaded.scrollIntoViewIfNeeded();
-      await captureFunctionalScreenshot(page, 'm05-04d-ip-blacklist-after.png', {
+      await captureFunctionalScreenshot(page, 'security-ip-blacklist-updated.png', {
         viewport: { width: 1440, height: 900 },
       });
     });
