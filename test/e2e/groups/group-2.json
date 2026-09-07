@@ -11,7 +11,7 @@
     "tests/http/quick-commands-audit.spec.ts",
     "tests/http/rdp-remoteapp.spec.ts",
     "tests/http/terminal-themes.spec.ts",
-    "tests/ui/dashboard-workflows.spec.ts",
+    "tests/ui/audit-log-filtering.spec.ts",
     "tests/ssh/connection-edit-delete.spec.ts",
     "tests/ssh/connection-list-search.spec.ts",
     "tests/ssh/connection.spec.ts",
