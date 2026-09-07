@@ -303,7 +303,9 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           return settings.layoutLocked;
         })
         .toBe(true);
-      await page.keyboard.press('Escape');
+      const configurator = page.getByRole('dialog', { name: 'Layout Configurator', exact: true });
+      await configurator.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(configurator).toBeHidden();
 
       const before = await firstPane.boundingBox();
       const splitterBox = await firstSplitter.boundingBox();

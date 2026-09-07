@@ -35,6 +35,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 
   const terminal = page.getByTestId('terminal');
   const rows = terminal.locator('.xterm-rows');
+  const terminalText = async () => (await rows.locator(':scope > div').allTextContents()).join('');
   const commandInput = page.getByTestId('command-input');
   await expect(terminal).toBeVisible({ timeout: 20_000 });
 
@@ -43,7 +44,8 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await commandInput.press('Enter');
     await commandInput.fill('printf \'BEFORE_SUSPEND=%s\\n\' "$PWD"');
     await commandInput.press('Enter');
-    await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('folder-seed');
+    await expect.poll(terminalText, { timeout: 15_000 }).toContain('BEFORE_SUSPEND=');
+    await expect.poll(terminalText, { timeout: 15_000 }).toContain('folder-seed');
   });
 
   let originalSessionId = '';

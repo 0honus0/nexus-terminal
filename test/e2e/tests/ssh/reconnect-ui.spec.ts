@@ -243,10 +243,12 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
     const activeTab = () => page.getByTestId('terminal-tab-bar').locator('[role="tab"][aria-selected="true"]');
     const visibleCommandInput = () => page.locator('[data-testid="command-input"]:visible').first();
     const visibleTerminalRows = () => page.locator('[data-testid="terminal"]:visible .xterm-rows').first();
+    const visibleTerminalText = async () =>
+      (await visibleTerminalRows().locator(':scope > div').allTextContents()).join('');
     const sendMarker = async (marker: string) => {
       await visibleCommandInput().fill(`printf '${marker}\\n'`);
       await visibleCommandInput().press('Enter');
-      await expect.poll(async () => visibleTerminalRows().innerText(), { timeout: 15_000 }).toContain(marker);
+      await expect.poll(visibleTerminalText, { timeout: 15_000 }).toContain(marker);
     };
 
     try {
@@ -274,15 +276,11 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
       await step('switch active tabs without recreating hidden live session state', async () => {
         await tabForName(MULTI_SESSION_NAMES[0]).click();
         await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[0]));
-        await expect
-          .poll(async () => visibleTerminalRows().innerText(), { timeout: 10_000 })
-          .toContain('M08_ALPHA_SESSION_STATE');
+        await expect.poll(visibleTerminalText, { timeout: 10_000 }).toContain('M08_ALPHA_SESSION_STATE');
 
         await tabForName(MULTI_SESSION_NAMES[1]).click();
         await expect(activeTab()).toHaveText(new RegExp(MULTI_SESSION_NAMES[1]));
-        await expect
-          .poll(async () => visibleTerminalRows().innerText(), { timeout: 10_000 })
-          .toContain('M08_BRAVO_SESSION_STATE');
+        await expect.poll(visibleTerminalText, { timeout: 10_000 }).toContain('M08_BRAVO_SESSION_STATE');
         expect(workspaceConnectIds).toHaveLength(3);
       });
 
