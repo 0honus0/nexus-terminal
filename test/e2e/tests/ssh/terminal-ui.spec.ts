@@ -10,6 +10,30 @@ import {
 } from '../../support/ssh';
 import { step } from '../../support/steps';
 
+async function terminalTextPoint(page: Page, text: string): Promise<{ x: number; y: number }> {
+  let point: { x: number; y: number } | null = null;
+  await expect
+    .poll(
+      async () => {
+        point = await page.getByTestId('terminal').evaluate((terminal, expected) => {
+          const rows = [...terminal.querySelectorAll<HTMLElement>('.xterm-rows > div')];
+          const row = rows.find((candidate) => candidate.textContent?.trim() === expected);
+          if (!row) return null;
+          const textNode = row.querySelector<HTMLElement>('span') ?? row;
+          const rect = textNode.getBoundingClientRect();
+          return {
+            x: rect.left + Math.max(2, Math.min(rect.width - 2, rect.width / 2)),
+            y: rect.top + rect.height / 2,
+          };
+        }, text);
+        return point !== null;
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
+  return point!;
+}
+
 async function captureTerminalEvidence(page: Page, testInfo: TestInfo, name: 'before' | 'after'): Promise<void> {
   const metrics = await page.evaluate(() => {
     const terminal = document.querySelector<HTMLElement>('[data-testid="terminal"]');
@@ -203,6 +227,49 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
       .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 15_000 })
       .toContain('folder-seed');
     await captureTerminalEvidence(page, testInfo, 'after');
+  });
+});
+
+test('desktop terminal right-click copies a selection then pastes when no selection remains', async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const preferences = await context.request.put('/api/v1/settings', {
+    data: { terminalRightClickCopyPaste: true },
+  });
+  expect(preferences.ok()).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const terminal = page.getByTestId('terminal');
+  const commandInput = page.getByTestId('command-input');
+  const rows = terminal.locator('.xterm-rows');
+  const copyMarker = 'DESKTOP_RIGHT_CLICK_COPY_MARKER';
+
+  await step('right-click on an xterm selection copies the selected word', async () => {
+    await commandInput.fill(`printf '\\033[2J\\033[H\\n\\n\\n${copyMarker}\\n'`);
+    await commandInput.press('Enter');
+    await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain(copyMarker);
+    const point = await terminalTextPoint(page, copyMarker);
+    await page.mouse.dblclick(point.x, point.y);
+    await page.mouse.click(point.x, point.y, { button: 'right' });
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(copyMarker);
+  });
+
+  await step('the same right-click path pastes after the copied selection was cleared', async () => {
+    const pasteCommand = "printf 'DESKTOP_RIGHT_CLICK_PASTE_OK\\n'\r";
+    await page.evaluate((text) => navigator.clipboard.writeText(text), pasteCommand);
+    const inner = terminal.getByTestId('terminal-inner');
+    const box = await inner.boundingBox();
+    expect(box).toBeTruthy();
+    await page.mouse.click(box!.x + Math.min(40, box!.width / 4), box!.y + Math.min(100, box!.height / 3), {
+      button: 'right',
+    });
+    await expect.poll(async () => rows.innerText(), { timeout: 15_000 }).toContain('DESKTOP_RIGHT_CLICK_PASTE_OK');
   });
 });
 
