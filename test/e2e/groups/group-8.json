@@ -3,6 +3,8 @@
   "group": 8,
   "workers": 8,
   "specs": [
+    "tests/ui/backup-ui.spec.ts",
+    "tests/ui/connection-non-ssh-bulk.spec.ts",
     "tests/ssh/file-upload.spec.ts"
   ]
 }
