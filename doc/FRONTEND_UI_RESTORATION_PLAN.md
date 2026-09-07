@@ -1599,7 +1599,13 @@ M16模块F/V/A结论：**F ✅** — RemoteApp、display-update resize、fullscr
 - M01 新增远程用例已取得覆盖范围内的通过证据：`tests/http/auth-2fa.spec.ts` 在 group 1 通过 Login 2FA challenge、401 错码重试、logout 后失效会话 400 恢复、新 challenge token 清空和有效 TOTP；`tests/ui/login-captcha-surface.spec.ts` 与 `tests/ui/login-passkey-surface.spec.ts` 在 group 5 通过无效 CAPTCHA 配置 fail-closed、有效配置无 token 阻断，以及 passkey 注册、Login 成功、无 credential 失败和密码 fallback。相关截图、metrics、network/响应码和 trace artifact 已由远程 job 上传。
 - 这些结果只关闭相应的已覆盖 case，不关闭 M01：CAPTCHA 真实 token/过期-reset/invalid-token/成功登录仍缺确定性证据；passkey 原生用户取消在当前 headless WebAuthn runner 仍 `UNVERIFIED`；真实 Android/WebView setup、IME、`visualViewport`、遮挡与滚动证据仍 `PENDING`；完整非密码失败态的旧 UI 几何/样式人工复核仍 `PENDING`。因此正式模块计数保持 **`17 / 18 = 94.4%`**，项目不得宣布整体完成。
 - `playwright-groups (8)` 仍唯一失败于受保护 `test/e2e/tests/ssh/file-preview-editor.spec.ts:889` 的全局 `Save` strict-mode selector（17 个匹配），该失败属于测试维护，不能修改受保护文件、不能添加产品 DOM workaround，也不归因 M01 或其他产品 UI；截图提交/rebalance 按策略跳过。G8 其余 preview/editor case 通过。
-- 分支收口采用快进而非制造无意义 merge commit：本地 `test/agent-runtime-foundation` 已包含 `test/ui-restoration-groups` 的全部历史，两者当前同指本轮最新提交；本轮将同一提交推送到远程 `test/agent-runtime-foundation`，并保留远程 `test/ui-restoration-groups` 作为已合入的 UI 还原基线。后续可从 `test/agent-runtime-foundation` 继续推进，验收时必须确认其包含 `test/ui-restoration-groups` 的祖先历史。
+- 分支收口采用快进而非制造无意义 merge commit：本地 `test/agent-runtime-foundation` 已包含 `test/ui-restoration-groups` 的全部历史，两者当前同指本轮最新提交；同一提交已推送到远程 `test/agent-runtime-foundation`，`test/ui-restoration-groups` 仅作为已合入的 UI 还原来源，完成确认后删除。后续只从 `test/agent-runtime-foundation` 继续推进，验收时必须确认其保留 UI 分支的祖先历史。
+
+### C.89 已合入 UI 分支清理（2026-09-07）
+
+- 已确认 `test/ui-restoration-groups` 与 `test/agent-runtime-foundation` 在删除前同指提交 `f5a64155`，且 UI 分支是重构分支的祖先；因此采用快进合并语义，不创建额外 merge commit，也不丢失任何提交。
+- 已删除本地和远程 `test/ui-restoration-groups`；远程保留 `main` 与 `test/agent-runtime-foundation`，后者当前包含全部 UI 还原与重构历史。后续远程 Actions、提交和模块验收均以 `test/agent-runtime-foundation` 为目标分支。
+- 本次仅修改计划与 Git 分支引用，未启动本地测试/服务，未暂存或删除受保护 dirty 文件、root-preserved 目录、`core.*` 或临时产物。
 - 后续执行顺序固定为：①补真实 CAPTCHA token 验证、token expiry/reset、invalid token 与成功登录；②在具备确定性原生交互的远程 runner/device 上补 passkey cancel；③新增带 ADB/WebView 的远程 device job，取得 setup、软键盘/IME、`visualViewport`、遮挡和滚动 metrics；④补齐 1280×800、320×667、375×812 及适用语言的非密码失败态截图/几何/样式对照；⑤再次只用远程 Actions 复核，达到 M01 F/V/A 闭环后再进行唯一一次模块提交。全过程不得恢复旧 store、event bus、transport 或重复状态 owner，不触碰受保护 dirty 文件。
 
 ## 附录 D. 非 Vue 源、资产与构建的覆盖
