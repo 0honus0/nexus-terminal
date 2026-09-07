@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { ensureInitialAdmin, loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 
@@ -43,6 +43,18 @@ async function cleanupHtmlThemes(request: APIRequestContext): Promise<void> {
     ).toBeTruthy();
   }
 }
+
+test.describe('fresh installation appearance defaults', () => {
+  test.use({ e2eDatabaseMode: 'empty' });
+
+  test('official remote HTML theme repository defaults to the shipped examples path', async ({ request }) => {
+    await ensureInitialAdmin(request);
+    await loginAsInitialAdmin(request);
+    await expect
+      .poll(async () => (await appearance(request)).remoteHtmlPresetsUrl)
+      .toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
+  });
+});
 
 test('PWA window title bar color updates immediately and persists across reload', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
@@ -476,9 +488,6 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
     await step(
       'real GitHub remote preset list, search, download, and apply persist through the Appearance owner',
       async () => {
-        await expect
-          .poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
-          .toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
         const repository = TESTED_OFFICIAL_HTML_THEME_REPOSITORY;
         await customizer.getByTestId('html-theme-remote-tab').click();
         await customizer.getByTestId('html-theme-remote-repository').fill(repository);
