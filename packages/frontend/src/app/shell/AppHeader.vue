@@ -6,6 +6,7 @@
   import { useAuthSession } from '@/features/auth/public';
   import { usePreferences } from '@/features/preferences/public';
   import { releaseRepository, releaseRepositoryUrl } from '@/app/config/release';
+  import { disposeWorkspaceRuntime } from '@/app/workspaceLifecycle';
 
   const emit = defineEmits<{ customizeAppearance: [] }>();
   const router = useRouter();
@@ -57,6 +58,7 @@
     loggingOut.value = true;
     logoutError.value = null;
     try {
+      await disposeWorkspaceRuntime();
       await auth.logout();
       await router.push({ name: 'Login' });
     } catch (cause) {

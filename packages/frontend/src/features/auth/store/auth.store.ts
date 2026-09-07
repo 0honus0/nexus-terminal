@@ -28,7 +28,13 @@ export const useAuthStore = defineStore('auth', {
   actions: {
     async resolveSetupState(force = false): Promise<SetupState> {
       if (!force && this.setupState !== 'unknown') return this.setupState;
-      this.setupState = (await authApi.needsSetup()) ? 'required' : 'complete';
+      try {
+        this.setupState = (await authApi.needsSetup()) ? 'required' : 'complete';
+      } catch {
+        // Legacy bootstrap kept the application navigable when the setup probe
+        // itself was unavailable. Backend route/auth policy remains authoritative.
+        this.setupState = 'complete';
+      }
       if (this.setupState === 'required') {
         this.sessionState = 'anonymous';
         this.user = null;
@@ -39,10 +45,16 @@ export const useAuthStore = defineStore('auth', {
 
     async resolveSession(force = false): Promise<AuthSessionState> {
       if (!force && this.sessionState !== 'unknown') return this.sessionState;
-      const user = await authApi.readSession();
-      this.user = user;
-      this.sessionState = user ? 'authenticated' : 'anonymous';
-      if (!user) this.pendingSecondFactor = false;
+      try {
+        const user = await authApi.readSession();
+        this.user = user;
+        this.sessionState = user ? 'authenticated' : 'anonymous';
+        if (!user) this.pendingSecondFactor = false;
+      } catch {
+        this.user = null;
+        this.sessionState = 'anonymous';
+        this.pendingSecondFactor = false;
+      }
       return this.sessionState;
     },
 

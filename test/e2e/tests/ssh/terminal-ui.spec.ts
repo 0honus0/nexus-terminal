@@ -347,3 +347,29 @@ test('desktop touch hardware keeps the legacy desktop Workspace classification',
   await expect(tabBar.getByRole('button', { name: 'Configure Layout', exact: true })).toBeVisible();
   await expect(page.getByTestId('command-input')).toBeVisible();
 });
+
+test('a failed logout still releases live Workspace sessions before reporting the error', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect(
+    (await context.request.put('/api/v1/settings/nav-bar-visibility', { data: { visible: true } })).ok(),
+  ).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const tabBar = page.getByTestId('terminal-tab-bar');
+  await expect(tabBar.getByRole('tab')).toHaveCount(1);
+  await page.route('**/api/v1/auth/logout', async (route) => route.abort('failed'));
+
+  await page.getByRole('link', { name: 'Logout', exact: true }).click();
+  await expect(page.getByRole('alert')).not.toHaveText('');
+  await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
+  await expect(tabBar.getByRole('tab')).toHaveCount(0);
+  await expect(page.getByText('No Active Session', { exact: true })).toBeVisible();
+
+  const status = await context.request.get('/api/v1/auth/status');
+  expect(status.ok()).toBeTruthy();
+  await expect(status.json()).resolves.toMatchObject({ isAuthenticated: true });
+  await page.unroute('**/api/v1/auth/logout');
+});

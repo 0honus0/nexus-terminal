@@ -6,6 +6,7 @@
   import { AppearanceCustomizerModal, useAppearanceStore } from '@/features/appearance/public';
   import DialogHost from '@/shared/feedback/components/DialogHost.vue';
   import NotificationHost from '@/shared/feedback/components/NotificationHost.vue';
+  import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
   const auth = useAuthSession();
   const appearance = useAppearanceStore();
@@ -17,11 +18,7 @@
         void appearance.load();
         return;
       }
-      if (wasAuthenticated) {
-        void import('@/runtimes/workspace/public').then(({ workspaceRuntimeRegistry }) =>
-          workspaceRuntimeRegistry.disposeAll(),
-        );
-      }
+      if (wasAuthenticated) void disposeWorkspaceRuntime();
     },
     { immediate: true },
   );
