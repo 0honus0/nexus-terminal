@@ -253,7 +253,6 @@
       <div
         v-for="(value, key) in uiTheme"
         :key="key"
-        :data-ui-theme-key="String(key)"
         class="mb-3 grid grid-cols-1 items-start gap-x-3 gap-y-1 md:grid-cols-[auto_1fr] md:items-center"
       >
         <label
