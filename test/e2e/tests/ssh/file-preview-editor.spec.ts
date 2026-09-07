@@ -886,7 +886,7 @@ test('spreadsheet preview rows per page are configurable and pagination exposes 
       const responsePromise = page.waitForResponse(
         (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
-      await page.getByRole('button', { name: 'Save', exact: true }).click();
+      await page.getByTestId('spreadsheet-preview-pagination-save').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       await expect
