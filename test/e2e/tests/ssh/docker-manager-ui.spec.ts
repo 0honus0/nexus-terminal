@@ -276,6 +276,45 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
     await expect(rootSplit).toBeVisible();
     await expect(firstSplitter).toBeVisible();
 
+    await step('the layout configurator previews horizontal and vertical container directions', async () => {
+      await page.getByTestId('terminal-tab-bar').getByRole('button', { name: 'Configure Layout', exact: true }).click();
+      const configurator = page.getByRole('dialog', { name: 'Layout Configurator', exact: true });
+      await expect(configurator).toBeVisible();
+
+      const horizontal = configurator.getByTestId('workspace-layout-children-workspace-layout-root');
+      await expect(horizontal).toHaveAttribute('data-layout-direction', 'horizontal');
+      const horizontalChildren = horizontal.locator(':scope > [data-layout-child-id]');
+      await expect(horizontalChildren).toHaveCount(3);
+      const horizontalBoxes = await Promise.all([
+        horizontalChildren.nth(0).boundingBox(),
+        horizontalChildren.nth(1).boundingBox(),
+        horizontalChildren.nth(2).boundingBox(),
+      ]);
+      expect(horizontalBoxes.every(Boolean)).toBeTruthy();
+      expect(Math.abs(horizontalBoxes[1]!.y - horizontalBoxes[0]!.y)).toBeLessThan(8);
+      expect(Math.abs(horizontalBoxes[2]!.y - horizontalBoxes[0]!.y)).toBeLessThan(8);
+      expect(horizontalBoxes[1]!.x).toBeGreaterThan(horizontalBoxes[0]!.x);
+      expect(horizontalBoxes[2]!.x).toBeGreaterThan(horizontalBoxes[1]!.x);
+
+      const vertical = configurator.getByTestId('workspace-layout-children-left');
+      await expect(vertical).toHaveAttribute('data-layout-direction', 'vertical');
+      const verticalChildren = vertical.locator(':scope > [data-layout-child-id]');
+      await expect(verticalChildren).toHaveCount(3);
+      const verticalBoxes = await Promise.all([
+        verticalChildren.nth(0).boundingBox(),
+        verticalChildren.nth(1).boundingBox(),
+        verticalChildren.nth(2).boundingBox(),
+      ]);
+      expect(verticalBoxes.every(Boolean)).toBeTruthy();
+      expect(Math.abs(verticalBoxes[1]!.x - verticalBoxes[0]!.x)).toBeLessThan(8);
+      expect(Math.abs(verticalBoxes[2]!.x - verticalBoxes[0]!.x)).toBeLessThan(8);
+      expect(verticalBoxes[1]!.y).toBeGreaterThan(verticalBoxes[0]!.y);
+      expect(verticalBoxes[2]!.y).toBeGreaterThan(verticalBoxes[1]!.y);
+
+      await configurator.getByRole('button', { name: 'Cancel', exact: true }).click();
+      await expect(configurator).toBeHidden();
+    });
+
     await step('an unlocked layout splitter remains draggable', async () => {
       const before = await firstPane.boundingBox();
       const splitterBox = await firstSplitter.boundingBox();

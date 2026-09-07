@@ -125,6 +125,7 @@ The suite intentionally keeps regression tests for previously fixed production i
 - multi-megabyte SFTP uploads completing every block before success;
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;
+- Workspace layout configurator direction rendering, including horizontal sibling alignment and vertical child stacking in the editor preview;
 - status-monitor network samples and Docker status over the live SSH transport;
 - full encrypted backup export/import restoring settings and encrypted connection credentials;
 - HTTP SFTP download-ticket/Range/inline/directory-ZIP behavior bound to an active Workspace session;
