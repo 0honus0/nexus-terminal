@@ -1,2 +1,2 @@
-export { apiErrorMessage, apiErrorStatus, httpClient } from './httpClient';
-export type { ApiErrorBody } from './httpClient';
+export { apiErrorMessage, apiErrorStatus, httpClient, setUnauthorizedHandler } from './httpClient';
+export type { ApiErrorBody, UnauthorizedHandler } from './httpClient';

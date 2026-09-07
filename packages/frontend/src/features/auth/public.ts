@@ -12,6 +12,7 @@ export const createAuthNavigationFacade = (pinia: Pinia) => {
   return {
     resolveSetupState: (force = false) => store.resolveSetupState(force),
     resolveSession: (force = false) => store.resolveSession(force),
+    invalidateSession: () => store.invalidateSession(),
     get setupRequired() {
       return store.setupState === 'required';
     },

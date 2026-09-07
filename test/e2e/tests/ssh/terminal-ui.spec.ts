@@ -373,3 +373,43 @@ test('a failed logout still releases live Workspace sessions before reporting th
   await expect(status.json()).resolves.toMatchObject({ isAuthenticated: true });
   await page.unroute('**/api/v1/auth/logout');
 });
+
+test('a protected API 401 invalidates the local session and releases the live Workspace', async ({ page, context }) => {
+  let workspaceSocketClosed = false;
+  page.on('websocket', (socket) => {
+    if (!socket.url().includes('/ws/workspace')) return;
+    socket.on('close', () => {
+      workspaceSocketClosed = true;
+    });
+  });
+
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect(
+    (await context.request.put('/api/v1/settings/nav-bar-visibility', { data: { visible: true } })).ok(),
+  ).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const tabBar = page.getByTestId('terminal-tab-bar');
+  await expect(tabBar.getByRole('tab')).toHaveCount(1);
+  await expect(tabBar.getByRole('button', { name: 'Hide', exact: true })).toBeVisible();
+
+  const serverLogout = await context.request.post('/api/v1/auth/logout');
+  expect(serverLogout.ok()).toBeTruthy();
+  await expect(page).toHaveURL(/\/workspace(?:\?|$)/);
+
+  const unauthorized = page.waitForResponse(
+    (response) =>
+      response.url().includes('/api/v1/settings/nav-bar-visibility') &&
+      response.request().method() === 'PUT' &&
+      response.status() === 401,
+  );
+  await tabBar.getByRole('button', { name: 'Hide', exact: true }).click();
+  await unauthorized;
+
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByRole('heading', { name: 'User Login', exact: true })).toBeVisible();
+  await expect.poll(() => workspaceSocketClosed, { timeout: 15_000 }).toBe(true);
+});

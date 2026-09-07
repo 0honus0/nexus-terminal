@@ -95,11 +95,15 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    async logout(): Promise<void> {
-      await authApi.logout();
+    invalidateSession(): void {
       this.sessionState = 'anonymous';
       this.user = null;
       this.pendingSecondFactor = false;
+    },
+
+    async logout(): Promise<void> {
+      await authApi.logout();
+      this.invalidateSession();
     },
   },
 });
