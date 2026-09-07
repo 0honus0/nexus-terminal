@@ -734,11 +734,11 @@ CI=1 E2E_CAPTURE_SCREENSHOTS=1 E2E_SCREENSHOT_OUTPUT_DIR=/tmp/nexus-p9-mobile-co
 1. `environment` 必须完成版本解析、环境一致性检查、脚本语法/分组检查和必要 patch 传递；`runner-image` 必须按正式条件构建并 smoke-check runner，不得为了分支方便永久跳过。
 2. `prepare` 必须安装所需依赖、执行 `check:test-policy`、生成并校验全部分组；`build-image` 必须执行 Docker deployment smoke。
 3. `m17-static-disposition`（若被判定为正式门禁）与 `playwright-groups` 必须按正式矩阵运行全部 8 组；失败必须使 workflow 失败，不得使用隐藏 `skip`、`continue-on-error`、只跑命名用例或缩小分母规避失败。
-4. 每组必须上传日志、timings、失败 report 和所需截图；截图提交前恢复 canonical screenshot 校验（包括文件名、尺寸、数量和可追溯 SHA），只有全组通过且校验成功才允许替换 tracked 截图。`rebalance` 只能在完整矩阵成功后更新 timing/group 文件。
+4. 每组必须上传日志、timings、失败 report 和所需截图；最终截图直接输出到 `doc/imgs/e2e/`。写入对应 canonical 文件前恢复截图校验（包括文件名、尺寸、数量和可追溯 SHA），只有全组通过且校验成功才允许覆盖；不再要求另设新旧图目录。`rebalance` 只能在完整矩阵成功后更新 timing/group 文件。
 5. 通过远程 `workflow_dispatch` 在待合并分支以 `workers=8` 验收：记录目标 SHA、每个 job/step 的 exit/conclusion、case 数、artifact 和失败归因。当前受保护的 `file-preview-editor.spec.ts:889` selector 失败必须在合并前完成授权的测试维护或形成明确 waiver；不能修改受保护产品/测试文件或添加 DOM workaround。
 6. 合并前最终报告必须同时证明功能测试链、静态门禁、截图链和失败传播链均已恢复；只保留有明确理由的新架构门禁，删除临时 bypass/分支专用条件。全过程只使用远程 Actions，不在本地启动测试、Vite、后端或浏览器进程。
 
-无历史截图的UI仍是范围：先查旧template/style、usage/路由、当前SRS，再进入真实浏览器检查。只在自然E2E状态确有长期文档价值时增加截图声明；附录B沿用现有28图，不建立新的全局截图manifest。生成新图与旧图分开保存，禁止用基线PNG覆盖产品输出。
+无历史截图的UI仍是范围：先查旧template/style、usage/路由、当前SRS，再进入真实浏览器检查。只在自然E2E状态确有长期文档价值时增加截图声明；附录B沿用现有28图，不建立新的全局截图manifest。新生成图直接输出到 `doc/imgs/e2e/`，不再要求新旧图分开保存；写入或覆盖对应 canonical 文件前，仍须完成旧图对照、文件名/尺寸/数量及来源 SHA 校验，禁止未经验证的基线覆盖。
 
 ## 附录 A. 98 个旧 Vue 文件 → 当前 owner 与模块追溯
 
