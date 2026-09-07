@@ -92,6 +92,15 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
     await expect(customizer).toBeVisible();
     await customizer.getByTestId('theme-dark-mode').click();
     await expect.poll(() => appBackground(page)).toBe('#212529');
+
+    const lastVisibleThemeRow = customizer.locator('[data-ui-theme-key="--link-active-bg-color"]');
+    const footer = customizer.locator('footer');
+    await expect(lastVisibleThemeRow).toBeVisible();
+    const [rowBox, footerBox] = await Promise.all([lastVisibleThemeRow.boundingBox(), footer.boundingBox()]);
+    expect(rowBox).toBeTruthy();
+    expect(footerBox).toBeTruthy();
+    expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(footerBox!.y + 1);
+
     await captureFunctionalScreenshot(page, 'theme-customization.png', { viewport: { width: 1440, height: 900 } });
 
     const response = await context.request.get('/api/v1/appearance');

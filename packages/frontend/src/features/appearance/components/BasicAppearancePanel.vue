@@ -253,6 +253,7 @@
       <div
         v-for="(value, key) in uiTheme"
         :key="key"
+        :data-ui-theme-key="String(key)"
         class="mb-3 grid grid-cols-1 items-start gap-x-3 gap-y-1 md:grid-cols-[auto_1fr] md:items-center"
       >
         <label
@@ -273,7 +274,7 @@
             v-if="isColorValue(value)"
             :value="uiTheme[key]"
             type="text"
-            class="min-w-[80px] flex-grow cursor-text rounded border border-border bg-background px-[0.7rem] py-2 text-sm text-foreground transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            class="h-[34px] min-w-[80px] flex-grow cursor-text rounded border border-border bg-background px-[0.7rem] py-1.5 text-sm text-foreground transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
             @focus="selectInputText"
             @input="uiTheme[key] = ($event.target as HTMLInputElement).value"
           />
@@ -282,7 +283,7 @@
             :id="`ui-${key}`"
             v-model="uiTheme[key]"
             type="text"
-            class="w-full rounded border border-border bg-background px-[0.7rem] py-2 text-sm text-foreground transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+            class="h-[34px] w-full rounded border border-border bg-background px-[0.7rem] py-1.5 text-sm text-foreground transition duration-200 ease-in-out focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
           />
         </div>
       </div>
