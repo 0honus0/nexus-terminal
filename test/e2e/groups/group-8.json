@@ -12,7 +12,7 @@
     "tests/http/quick-commands-audit.spec.ts",
     "tests/http/rdp-remoteapp.spec.ts",
     "tests/http/terminal-themes.spec.ts",
-    "tests/ssh/progress-display-copy-cancel.spec.ts",
+    "tests/ssh/progress-display-baseline.spec.ts",
     "tests/ssh/panel-wheel-scaling.spec.ts",
     "tests/ssh/terminal-protocol.spec.ts",
     "tests/ssh/terminal-tools-ui.spec.ts",
