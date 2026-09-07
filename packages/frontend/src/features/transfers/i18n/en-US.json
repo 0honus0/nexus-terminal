@@ -2,6 +2,7 @@
   "progressCenter": {
     "title": "Progress Display",
     "hiddenTitle": "Hidden progress",
+    "hiddenSourceHint": "Each card represents a hidden task; scroll within the card to view details.",
     "empty": "There are no hidden progress tasks.",
     "hide": "Hide progress",
     "running": "Running",

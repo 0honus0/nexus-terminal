@@ -157,6 +157,13 @@
             <div class="flex items-center justify-between gap-3">
               <div>
                 <h4 class="m-0 text-sm font-semibold">{{ t('progressCenter.hiddenTitle') }}</h4>
+                <p
+                  v-if="sources.length"
+                  data-testid="progress-display-hidden-hint"
+                  class="mb-0 mt-0.5 text-[11px] text-text-muted"
+                >
+                  {{ t('progressCenter.hiddenSourceHint') }}
+                </p>
               </div>
               <span class="shrink-0 rounded-full bg-border/60 px-2 py-0.5 text-xs tabular-nums text-text-secondary">
                 {{ sources.length }}

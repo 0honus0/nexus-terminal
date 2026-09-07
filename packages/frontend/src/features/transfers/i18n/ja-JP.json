@@ -2,6 +2,7 @@
   "progressCenter": {
     "title": "進捗表示",
     "hiddenTitle": "非表示の進捗",
+    "hiddenSourceHint": "各カードは非表示のタスクを表し、カード内をスクロールして詳細を確認できます。",
     "empty": "非表示の進捗タスクはありません。",
     "hide": "進捗を非表示",
     "running": "実行中",

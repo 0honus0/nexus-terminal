@@ -433,6 +433,9 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight);
     const cancelAllHidden = sourceCard.getByTestId('hidden-progress-cancel-all');
     await expect(cancelAllHidden).toBeVisible();
+    await expect(modal.getByTestId('progress-display-hidden-hint')).toHaveText(
+      'Each card represents a hidden task; scroll within the card to view details.',
+    );
     await captureFunctionalScreenshot(page, 'hidden-upload-progress.png', { viewport: { width: 1440, height: 900 } });
     await cancelAllHidden.click();
     await expect
