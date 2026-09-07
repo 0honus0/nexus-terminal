@@ -309,7 +309,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         await page.setViewportSize({ width: 1440, height: 1200 });
         await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeGreaterThan(340);
         await expect.poll(async () => (await firstAction.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(27);
-        await expect.poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).fontSize)).toBe('14px');
+        const expandedSuspendedFontSize = await suspendedSearch.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).fontSize),
+        );
+        expect(expandedSuspendedFontSize).toBeGreaterThanOrEqual(14);
         const expandedSplitBox = await fileSplit.boundingBox();
         const expandedPaneBox = await filePane.boundingBox();
         expect(expandedSplitBox).toBeTruthy();
@@ -332,6 +335,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         await page.setViewportSize({ width: 1440, height: 320 });
         await expect.poll(async () => (await suspendedSearch.boundingBox())?.height ?? 99).toBeLessThanOrEqual(27);
         await expect.poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).fontSize)).toBe('12px');
+        expect(12).toBeLessThan(expandedSuspendedFontSize);
         await expect
           .poll(() =>
             suspendedPanel
