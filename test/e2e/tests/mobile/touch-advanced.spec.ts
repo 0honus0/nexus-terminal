@@ -216,15 +216,25 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
 
   await step('archive submenu items are flattened into the touch menu', async () => {
     const menu = await longPressFile(page, 'archive-source.txt');
-    for (const label of [
+    const menuItems = (await menu.locator('button').allTextContents()).map((text) => text.replace(/\s+/g, ' ').trim());
+    expect(menuItems).toEqual([
+      'Download',
+      'Cut Ctrl+X',
+      'Copy Ctrl+C',
+      'Copy Path',
+      'Delete Delete',
+      'Rename F2',
       'Compress to zip',
+      'Compress to zip with password...',
       'Compress to tar.gz',
       'Compress to tar.bz2',
-      'Compress to zip with password...',
-      'Send to servers',
-    ]) {
-      await expect(menu.getByText(label, { exact: true })).toBeVisible();
-    }
+      'Send to...',
+      'New Folder Ctrl+Shift+N',
+      'New File',
+      'Upload',
+      'Change Permissions',
+      'Refresh F5',
+    ]);
     await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
     await captureFunctionalScreenshot(page, 'mobile-context-menu.png');
   });
@@ -719,6 +729,7 @@ test('mobile upload progress stays inside the viewport and restores from Progres
 
         const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
         await expect(popup).toBeVisible({ timeout: 10_000 });
+        await expect(popup).toContainText('E2E SSH · Upload Tasks');
         await expect(popup).toContainText(filenames[0]);
         await expect(popup).toContainText(filenames[1]);
         await expect(popup.getByTestId('transfer-progress-speed')).toBeVisible();
@@ -730,6 +741,12 @@ test('mobile upload progress stays inside the viewport and restores from Progres
         expect(popupBox).toBeTruthy();
         expect(viewport).toBeTruthy();
         expectBoxInsideViewport(popupBox!, viewport!);
+        expect(
+          await page.evaluate(
+            ({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[data-testid="transfer-progress-center"]')),
+            { x: popupBox!.x + 20, y: popupBox!.y + 20 },
+          ),
+        ).toBe(true);
         await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
         const resizeHandle = popup.getByTestId('transfer-progress-resize');

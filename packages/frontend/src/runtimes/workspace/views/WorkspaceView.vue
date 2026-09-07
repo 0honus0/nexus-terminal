@@ -677,6 +677,20 @@
       @open-layout-configurator="layoutConfiguratorVisible = true"
     />
 
+    <ProgressDisplayModal
+      :visible="progressDisplayVisible"
+      :sources="progressDisplaySources"
+      :server-transfers="serverTransfers.items"
+      :server-transfers-loading="serverTransfers.loading"
+      :server-transfers-error="serverTransfers.error"
+      :mobile="device.isMobile.value"
+      @close="progressDisplayVisible = false"
+      @restore="restoreProgressSource"
+      @cancel="cancelProgressTask"
+      @cancel-all="cancelProgressSource"
+      @remove="removeProgressTask"
+    />
+
     <OverlayPanel
       :visible="connectionPickerVisible"
       :close-on-escape="true"
@@ -808,19 +822,6 @@
       />
     </div>
 
-    <ProgressDisplayModal
-      :visible="progressDisplayVisible"
-      :sources="progressDisplaySources"
-      :server-transfers="serverTransfers.items"
-      :server-transfers-loading="serverTransfers.loading"
-      :server-transfers-error="serverTransfers.error"
-      :mobile="device.isMobile.value"
-      @close="progressDisplayVisible = false"
-      @restore="restoreProgressSource"
-      @cancel="cancelProgressTask"
-      @cancel-all="cancelProgressSource"
-      @remove="removeProgressTask"
-    />
     <WorkspaceLayoutConfigurator
       :visible="layoutConfiguratorVisible"
       :layout-locked="preferences.values.value.layoutLocked"

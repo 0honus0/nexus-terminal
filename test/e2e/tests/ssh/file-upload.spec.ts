@@ -341,6 +341,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     const cancelAll = popup.getByTestId('transfer-progress-cancel-all');
     const hideButton = popup.getByTestId('transfer-progress-hide');
     await expect(popup).toBeVisible({ timeout: 10_000 });
+    await expect(popup).toContainText('E2E SSH · Upload Tasks');
     await expect(cancelAll).toBeVisible();
     await expect(uploadSpeed).toBeVisible();
     await expect(hideButton).toBeVisible();
@@ -361,6 +362,15 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     expect(speedBox).not.toBeNull();
     expect(cancelAllBox).not.toBeNull();
     expect(hideBox).not.toBeNull();
+    const popupOwnsTopLayer = await page.evaluate(
+      ({ x, y }) =>
+        document
+          .elementFromPoint(x, y)
+          ?.closest('[data-testid="transfer-progress-center"]')
+          ?.getAttribute('data-testid') === 'transfer-progress-center',
+      { x: popupBox!.x + 20, y: popupBox!.y + 20 },
+    );
+    expect(popupOwnsTopLayer).toBe(true);
     expect(speedMetrics.scrollWidth).toBeLessThanOrEqual(speedMetrics.clientWidth + 1);
     expect(speedMetrics.scrollHeight).toBeLessThanOrEqual(speedMetrics.clientHeight + 1);
     expect(speedBox!.x).toBeGreaterThanOrEqual(popupBox!.x - 1);
@@ -410,6 +420,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     const hiddenSources = modal.getByTestId('hidden-progress-source');
     await expect(hiddenSources).toHaveCount(1);
     const sourceCard = hiddenSources.first();
+    await expect(sourceCard).toContainText('E2E SSH · Upload Tasks');
     const hiddenList = modal.getByTestId('hidden-progress-list');
     const [sourceCardBox, hiddenListBox, hiddenListPaddingRight] = await Promise.all([
       sourceCard.boundingBox(),

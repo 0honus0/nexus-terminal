@@ -60,6 +60,10 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
       const terminal = page.getByTestId('terminal');
       const commandInput = page.getByTestId('command-input');
       await expect(terminal).toBeVisible({ timeout: 20_000 });
+      const embeddedFileManager = page.locator('[data-testid="file-manager-list"]').filter({ visible: true });
+      await expect(embeddedFileManager).toHaveCount(1);
+      await expect(embeddedFileManager.locator('tr[data-filename="seed.txt"]')).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId('file-editor-view').filter({ visible: true })).toBeVisible();
       await commandInput.fill('clear');
       await commandInput.press('Enter');
       await commandInput.fill("printf 'Nexus Terminal documentation screenshot\\n'");

@@ -243,21 +243,28 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
   await slowStep('file manager keeps the Type column stable while repeatedly shrinking rows', async () => {
     await openConnectedFileManager(page);
     const list = activeFileManagerList(page);
-    const typeHeader = page.getByTestId('file-manager-modal').getByTestId('file-manager-type-header');
+    const fileManagerModal = page.getByTestId('file-manager-modal');
+    const typeHeader = fileManagerModal.getByTestId('file-manager-type-header');
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
     await expect(typeHeader).toBeVisible();
+    const headerTitles = (await fileManagerModal.locator('thead th').allTextContents()).map((text) =>
+      text.replace(/[▲▼]/g, '').trim(),
+    );
+    expect(headerTitles).toEqual(['Type', 'Name', 'Size', 'Permissions', 'Modified']);
 
     const typeHeaderLayout = await typeHeader.evaluate((element) => {
       const html = element as HTMLElement;
       const style = getComputedStyle(html);
       return {
         whiteSpace: style.whiteSpace,
+        textTransform: style.textTransform,
         width: html.getBoundingClientRect().width,
         clientHeight: html.clientHeight,
         scrollHeight: html.scrollHeight,
       };
     });
     expect(typeHeaderLayout.whiteSpace).toBe('nowrap');
+    expect(typeHeaderLayout.textTransform).toBe('none');
     expect(typeHeaderLayout.scrollHeight).toBeLessThanOrEqual(typeHeaderLayout.clientHeight + 1);
 
     const widths = [typeHeaderLayout.width];

@@ -40,6 +40,15 @@
     ['completed', 'cancelled', 'skipped', 'partial', 'error'].includes(status);
   const activeCount = (source: ProgressSource) => source.tasks.filter((task) => !done(task.status)).length;
   const normalizedProgress = (task: TransferTask) => Math.max(0, Math.min(100, task.progress));
+  const sourceTitle = (source: ProgressSource): string => {
+    const kinds = new Set(source.tasks.map((task) => task.kind));
+    let taskLabel = '';
+    if (kinds.size === 1 && kinds.has('upload')) taskLabel = t('fileManager.uploadTasks');
+    else if (kinds.size > 0 && [...kinds].every((kind) => ['copy', 'move', 'transfer'].includes(kind)))
+      taskLabel = t('fileManager.transferTasks');
+    else if (kinds.size === 1) taskLabel = t(`progressCenter.kind.${source.tasks[0]!.kind}`);
+    return taskLabel ? `${source.label} · ${taskLabel}` : source.label;
+  };
 
   const displayedServerTransfers = computed(() =>
     [...props.serverTransfers]
@@ -172,7 +181,9 @@
                 <div class="hidden-progress-source-header">
                   <div class="min-w-0 flex-1">
                     <div class="flex min-w-0 items-center gap-2">
-                      <strong class="min-w-0 flex-1 truncate text-sm" :title="source.label">{{ source.label }}</strong>
+                      <strong class="min-w-0 flex-1 truncate text-sm" :title="sourceTitle(source)">{{
+                        sourceTitle(source)
+                      }}</strong>
                       <span
                         class="shrink-0 rounded bg-border/60 px-1.5 py-0.5 text-[10px] tabular-nums text-text-secondary"
                       >

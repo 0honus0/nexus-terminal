@@ -79,6 +79,7 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     expect(modalBox!.y).toBeGreaterThanOrEqual(0);
     expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
     expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
+    await captureFunctionalScreenshot(page, 'mobile-status-monitor.png');
 
     await monitor.locator('.metric-cpu').click();
     const history = monitor.locator('.history-card');
@@ -94,7 +95,6 @@ test('mobile SSH workspace keeps terminal space and exposes touch-only tools', a
     expect(historyBox!.x + historyBox!.width).toBeLessThanOrEqual(modalBox!.x + modalBox!.width + 1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport!.width);
 
-    await captureFunctionalScreenshot(page, 'mobile-status-monitor.png');
     await modal.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(modal).toBeHidden();
     await expect.poll(() => countStatusControls('status.stop'), { timeout: 15_000 }).toBeGreaterThan(stopsBeforeOpen);

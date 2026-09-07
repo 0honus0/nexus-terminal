@@ -96,6 +96,15 @@
       ? t('fileManager.actions.downloadFolder')
       : t('fileManager.actions.download');
   });
+  const shortcutHints = {
+    cut: 'Ctrl+X',
+    copy: 'Ctrl+C',
+    paste: 'Ctrl+V',
+    delete: 'Delete',
+    rename: 'F2',
+    newFolder: 'Ctrl+Shift+N',
+    refresh: 'F5',
+  } as const;
   const actionTitle = computed(() => {
     if (action.value === 'mkdir') return t('fileManager.modals.titles.newFolder');
     if (action.value === 'file') return t('fileManager.modals.titles.newFile');
@@ -1514,45 +1523,44 @@
       @close="context = null"
     >
       <template v-if="context.scope === 'entry'">
-        <button class="context-item" @click="contextAction('open')">
-          {{ t('common.open') }}
-        </button>
-        <button
-          v-if="canOpenAsText(context.entry)"
-          class="context-item"
-          @click="
-            emit('openAsText', context.entry);
-            context = null;
-          "
-        >
-          {{ t('fileManager.actions.openAsText') }}
-        </button>
-        <button v-if="download" class="context-item" @click="download(contextEntries())">
-          {{ contextDownloadLabel }}
-        </button>
-        <button class="context-item" @click="copyPath(context.entry)">{{ t('fileManager.actions.copyPath') }}</button>
-        <button
-          v-if="props.clipboardCount && context.entry.metadata.isDirectory"
-          class="context-item"
-          @click="
-            emit('paste', context.entry.path);
-            context = null;
-          "
-        >
-          {{ t('fileManager.actions.paste') }}
-        </button>
-        <button class="context-item" @click="contextAction('copy')">{{ t('fileManager.actions.copy') }}</button>
-        <button class="context-item" @click="contextAction('move')">{{ t('fileManager.actions.cut') }}</button>
-        <button
-          class="context-item"
-          @click="
-            emit('sendFiles', contextEntries());
-            context = null;
-          "
-        >
-          {{ t('fileManager.actions.sendFiles') }}
-        </button>
         <template v-if="device.isMobile.value || device.hasTouch.value">
+          <button v-if="download" class="context-item" @click="download(contextEntries())">
+            {{ contextDownloadLabel }}
+          </button>
+          <button class="context-item flex items-center justify-between gap-4" @click="contextAction('move')">
+            <span>{{ t('fileManager.actions.cut') }}</span
+            ><span class="text-xs text-text-secondary">{{ shortcutHints.cut }}</span>
+          </button>
+          <button class="context-item flex items-center justify-between gap-4" @click="contextAction('copy')">
+            <span>{{ t('fileManager.actions.copy') }}</span
+            ><span class="text-xs text-text-secondary">{{ shortcutHints.copy }}</span>
+          </button>
+          <button
+            v-if="props.clipboardCount && context.entry.metadata.isDirectory"
+            class="context-item flex items-center justify-between gap-4"
+            @click="
+              emit('paste', context.entry.path);
+              context = null;
+            "
+          >
+            <span>{{ t('fileManager.actions.paste') }}</span
+            ><span class="text-xs text-text-secondary">{{ shortcutHints.paste }}</span>
+          </button>
+          <button class="context-item" @click="copyPath(context.entry)">{{ t('fileManager.actions.copyPath') }}</button>
+
+          <div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
+
+          <button class="context-item flex items-center justify-between gap-4" @click="remove(contextEntries())">
+            <span>{{ t('fileManager.actions.delete') }}</span
+            ><span class="text-xs text-text-secondary">{{ shortcutHints.delete }}</span>
+          </button>
+          <button class="context-item flex items-center justify-between gap-4" @click="begin('rename', context.entry)">
+            <span>{{ t('fileManager.actions.rename') }}</span
+            ><span class="text-xs text-text-secondary">{{ shortcutHints.rename }}</span>
+          </button>
+
+          <div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
+
           <button class="context-item" @click="compressWithPreset('zip')">
             {{ t('fileManager.contextMenu.compressZip') }}
           </button>
@@ -1565,35 +1573,121 @@
           <button class="context-item" @click="compressWithPreset('tar.bz2')">
             {{ t('fileManager.contextMenu.compressTarBz2') }}
           </button>
+          <button
+            v-if="!context.entry.metadata.isDirectory && isArchive(context.entry)"
+            class="context-item"
+            @click="contextAction('decompress')"
+          >
+            {{ t('fileManager.contextMenu.decompress') }}
+          </button>
+          <button
+            class="context-item"
+            @click="
+              emit('sendFiles', contextEntries());
+              context = null;
+            "
+          >
+            {{ t('fileManager.contextMenu.sendTo') }}
+          </button>
+
+          <div class="mx-1 my-1 border-t border-border/50" role="separator"></div>
+
+          <button class="context-item flex items-center justify-between gap-4" @click="begin('mkdir')">
+            <span>{{ t('fileManager.actions.newFolder') }}</span
+            ><span class="text-xs text-text-secondary">{{ shortcutHints.newFolder }}</span>
+          </button>
+          <button class="context-item" @click="begin('file')">{{ t('fileManager.actions.newFile') }}</button>
+          <button
+            class="context-item"
+            @click="
+              emit('upload', browser.path.value);
+              context = null;
+            "
+          >
+            {{ t('fileManager.actions.upload') }}
+          </button>
+          <button class="context-item" @click="begin('chmod', context.entry)">
+            {{ t('fileManager.actions.changePermissions') }}
+          </button>
+          <button
+            class="context-item flex items-center justify-between gap-4"
+            @click="
+              refresh();
+              context = null;
+            "
+          >
+            <span>{{ t('fileManager.actions.refresh') }}</span
+            ><span class="text-xs text-text-secondary">{{ shortcutHints.refresh }}</span>
+          </button>
         </template>
-        <button
-          v-else
-          data-testid="file-manager-compress-menu"
-          class="context-item flex items-center justify-between"
-          aria-haspopup="menu"
-          :aria-expanded="Boolean(compressSubmenu)"
-          @mouseenter="openCompressSubmenu"
-          @focus="openCompressSubmenu"
-        >
-          <span>{{ t('fileManager.contextMenu.compress') }}</span
-          ><span aria-hidden="true">›</span>
-        </button>
-        <button
-          v-if="!context.entry.metadata.isDirectory && isArchive(context.entry)"
-          class="context-item"
-          @click="contextAction('decompress')"
-        >
-          {{ t('fileManager.contextMenu.decompress') }}
-        </button>
-        <button class="context-item" @click="begin('rename', context.entry)">
-          {{ t('fileManager.actions.rename') }}
-        </button>
-        <button class="context-item" @click="begin('chmod', context.entry)">
-          {{ t('fileManager.actions.changePermissions') }}
-        </button>
-        <button class="context-item text-error" @click="remove(contextEntries())">
-          {{ t('fileManager.actions.delete') }}
-        </button>
+
+        <template v-else>
+          <button class="context-item" @click="contextAction('open')">
+            {{ t('common.open') }}
+          </button>
+          <button
+            v-if="canOpenAsText(context.entry)"
+            class="context-item"
+            @click="
+              emit('openAsText', context.entry);
+              context = null;
+            "
+          >
+            {{ t('fileManager.actions.openAsText') }}
+          </button>
+          <button v-if="download" class="context-item" @click="download(contextEntries())">
+            {{ contextDownloadLabel }}
+          </button>
+          <button class="context-item" @click="copyPath(context.entry)">{{ t('fileManager.actions.copyPath') }}</button>
+          <button
+            v-if="props.clipboardCount && context.entry.metadata.isDirectory"
+            class="context-item"
+            @click="
+              emit('paste', context.entry.path);
+              context = null;
+            "
+          >
+            {{ t('fileManager.actions.paste') }}
+          </button>
+          <button class="context-item" @click="contextAction('copy')">{{ t('fileManager.actions.copy') }}</button>
+          <button class="context-item" @click="contextAction('move')">{{ t('fileManager.actions.cut') }}</button>
+          <button
+            class="context-item"
+            @click="
+              emit('sendFiles', contextEntries());
+              context = null;
+            "
+          >
+            {{ t('fileManager.actions.sendFiles') }}
+          </button>
+          <button
+            data-testid="file-manager-compress-menu"
+            class="context-item flex items-center justify-between"
+            aria-haspopup="menu"
+            :aria-expanded="Boolean(compressSubmenu)"
+            @mouseenter="openCompressSubmenu"
+            @focus="openCompressSubmenu"
+          >
+            <span>{{ t('fileManager.contextMenu.compress') }}</span
+            ><span aria-hidden="true">›</span>
+          </button>
+          <button
+            v-if="!context.entry.metadata.isDirectory && isArchive(context.entry)"
+            class="context-item"
+            @click="contextAction('decompress')"
+          >
+            {{ t('fileManager.contextMenu.decompress') }}
+          </button>
+          <button class="context-item" @click="begin('rename', context.entry)">
+            {{ t('fileManager.actions.rename') }}
+          </button>
+          <button class="context-item" @click="begin('chmod', context.entry)">
+            {{ t('fileManager.actions.changePermissions') }}
+          </button>
+          <button class="context-item text-error" @click="remove(contextEntries())">
+            {{ t('fileManager.actions.delete') }}
+          </button>
+        </template>
       </template>
       <template v-else>
         <button
@@ -1820,7 +1914,6 @@
     font-weight: 500;
     letter-spacing: 0.05em;
     text-align: left;
-    text-transform: uppercase;
     user-select: none;
   }
   .file-table-header:first-child {

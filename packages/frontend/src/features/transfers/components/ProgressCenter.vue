@@ -8,7 +8,7 @@
   const MIN_WIDTH = 340;
   const MIN_HEIGHT = 190;
 
-  const props = defineProps<{ tasks: TransferTask[] }>();
+  const props = defineProps<{ tasks: TransferTask[]; sourceLabel?: string }>();
   const emit = defineEmits<{ cancel: [id: string]; cancelAll: []; remove: [id: string]; hide: [] }>();
   const { t } = useI18n();
   const panel = ref<HTMLElement | null>(null);
@@ -159,7 +159,7 @@
     v-show="initialized"
     ref="panel"
     data-testid="transfer-progress-center"
-    class="transfer-progress-window fixed z-40 flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
+    class="transfer-progress-window fixed z-[70] flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
     :class="[
       `transfer-progress-window--${presentationMode}`,
       drag.dragging.value ? 'dragging select-none' : '',
@@ -170,7 +170,9 @@
     <header class="transfer-progress-header shrink-0" @pointerdown="drag.startDragging">
       <template v-if="presentationMode === 'upload'">
         <div class="flex min-w-0 flex-1 items-center gap-2">
-          <h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">{{ t('fileManager.uploadTasks') }}</h4>
+          <h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
+            <span v-if="sourceLabel">{{ sourceLabel }} · </span>{{ t('fileManager.uploadTasks') }}
+          </h4>
           <span
             v-if="activeTasks.length"
             data-testid="transfer-progress-speed"
@@ -205,7 +207,8 @@
           <span class="archive-icon"><i class="fas fa-box-archive" aria-hidden="true"></i></span>
           <div class="min-w-0 flex-1">
             <div class="truncate text-sm font-semibold">
-              {{ sorted[0] ? `${archiveLabel(sorted[0])} ${sorted[0].label}` : t('progressCenter.title') }}
+              <span v-if="sourceLabel">{{ sourceLabel }} · </span
+              >{{ sorted[0] ? `${archiveLabel(sorted[0])} ${sorted[0].label}` : t('progressCenter.title') }}
             </div>
             <div class="text-[11px] text-text-secondary">{{ t('progressCenter.running') }}</div>
           </div>
@@ -225,7 +228,8 @@
 
       <template v-else>
         <h4 class="m-0 min-w-0 flex-1 truncate text-sm font-semibold">
-          {{ presentationMode === 'transfer' ? t('fileManager.transferTasks') : t('progressCenter.title') }}
+          <span v-if="sourceLabel">{{ sourceLabel }} · </span
+          >{{ presentationMode === 'transfer' ? t('fileManager.transferTasks') : t('progressCenter.title') }}
         </h4>
         <div class="flex items-center gap-2">
           <span

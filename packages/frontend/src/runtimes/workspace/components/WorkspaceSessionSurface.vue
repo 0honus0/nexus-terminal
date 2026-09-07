@@ -1115,6 +1115,7 @@
     <ProgressCenter
       v-if="transfers.tasks.value.length && progressVisible"
       :tasks="transfers.tasks.value"
+      :source-label="session.connection.name || session.connection.host"
       @cancel="transfers.cancel"
       @cancel-all="transfers.cancelAll"
       @hide="progressVisible = false"
