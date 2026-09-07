@@ -192,6 +192,10 @@
     get: () => props.progressVisible !== false,
     set: (visible: boolean) => emit('progressVisible', visible),
   });
+  const removeTransferTask = (id: string): void => {
+    const index = transfers.tasks.value.findIndex((task) => task.id === id);
+    if (index >= 0) transfers.tasks.value.splice(index, 1);
+  };
   const terminalApi = ref<TerminalApi | null>(null);
   const editorApi = ref<EditorApi | null>(null);
   const previewApi = ref<PreviewApi | null>(null);
@@ -1113,21 +1117,16 @@
     <input ref="uploadInput" class="hidden" type="file" multiple @change="uploadFiles" />
 
     <ProgressCenter
-      v-if="transfers.tasks.value.length && progressVisible"
+      v-if="transfers.tasks.value.length && progressVisible && !fileManagerPopupVisible"
       :tasks="transfers.tasks.value"
       :source-label="session.connection.name || session.connection.host"
       @cancel="transfers.cancel"
       @cancel-all="transfers.cancelAll"
       @hide="progressVisible = false"
-      @remove="
-        (id) => {
-          const index = transfers.tasks.value.findIndex((task) => task.id === id);
-          if (index >= 0) transfers.tasks.value.splice(index, 1);
-        }
-      "
+      @remove="removeTransferTask"
     />
     <BaseButton
-      v-else-if="transfers.tasks.value.length"
+      v-else-if="transfers.tasks.value.length && !fileManagerPopupVisible"
       class="absolute bottom-3 right-12 z-30 shadow-lg"
       size="sm"
       @click="progressVisible = true"
@@ -1203,6 +1202,15 @@
           @column-widths="emit('fileManagerColumnWidths', $event)"
         />
       </div>
+      <ProgressCenter
+        v-if="transfers.tasks.value.length && progressVisible"
+        :tasks="transfers.tasks.value"
+        :source-label="session.connection.name || session.connection.host"
+        @cancel="transfers.cancel"
+        @cancel-all="transfers.cancelAll"
+        @hide="progressVisible = false"
+        @remove="removeTransferTask"
+      />
     </OverlayPanel>
 
     <OverlayPanel

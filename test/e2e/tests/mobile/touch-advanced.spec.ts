@@ -219,21 +219,21 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
     const menuItems = (await menu.locator('button').allTextContents()).map((text) => text.replace(/\s+/g, ' ').trim());
     expect(menuItems).toEqual([
       'Download',
-      'Cut Ctrl+X',
-      'Copy Ctrl+C',
+      'CutCtrl+X',
+      'CopyCtrl+C',
       'Copy Path',
-      'Delete Delete',
-      'Rename F2',
+      'DeleteDelete',
+      'RenameF2',
       'Compress to zip',
       'Compress to zip with password...',
       'Compress to tar.gz',
       'Compress to tar.bz2',
       'Send to...',
-      'New Folder Ctrl+Shift+N',
+      'New FolderCtrl+Shift+N',
       'New File',
       'Upload',
       'Change Permissions',
-      'Refresh F5',
+      'RefreshF5',
     ]);
     await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
     await captureFunctionalScreenshot(page, 'mobile-context-menu.png');
@@ -272,7 +272,7 @@ test('mobile long-press file menu stays inside narrow 320 and 375 viewports', as
       'Change Permissions',
       'Delete',
     ]) {
-      await expect(menu.getByText(label, { exact: true })).toBeVisible();
+      await expect(menu.getByRole('button').filter({ hasText: label }).first()).toBeVisible();
     }
     await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
 

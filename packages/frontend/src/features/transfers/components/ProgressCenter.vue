@@ -159,7 +159,7 @@
     v-show="initialized"
     ref="panel"
     data-testid="transfer-progress-center"
-    class="transfer-progress-window fixed z-[70] flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
+    class="transfer-progress-window fixed z-40 flex min-h-0 flex-col overflow-hidden border border-border bg-background text-sm shadow-xl"
     :class="[
       `transfer-progress-window--${presentationMode}`,
       drag.dragging.value ? 'dragging select-none' : '',

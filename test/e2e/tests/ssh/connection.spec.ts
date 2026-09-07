@@ -13,6 +13,10 @@ import { step, slowStep } from '../../support/steps';
 test('adds, tests, and connects to a real SSH server', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
+  const embeddedWorkspaceSettings = await context.request.put('/api/v1/settings', {
+    data: { showPopupFileManager: false, showPopupFileEditor: false },
+  });
+  expect(embeddedWorkspaceSettings.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   await removeNamedSshConnections(context.request);
 

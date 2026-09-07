@@ -297,7 +297,14 @@
     />
 
     <template v-else-if="node.component === 'fileManager'">
+      <div v-if="popupFileManager" class="grid min-h-0 flex-1 place-items-center gap-2 p-4 text-sm text-text-secondary">
+        <span>{{ t('settings.popupFileManager.title') }}</span>
+        <BaseButton size="sm" variant="primary" @click="emit('openFileManager')">{{
+          t('fileManager.modalTitle')
+        }}</BaseButton>
+      </div>
       <FileManager
+        v-else
         :channel="session.adapters.filesystem"
         :download="session.adapters.download"
         :terminal-directory="session.adapters.terminalDirectory"
@@ -339,35 +346,40 @@
           >{{ t('workspace.documents.preview') }}</BaseButton
         >
       </div>
-      <FileEditor
-        ref="editorRef"
-        v-show="documentMode === 'editor'"
-        class="min-h-0 flex-1"
-        :port="session.adapters.documents"
-        :scope-id="session.id"
-        :scope-label="editorScopeLabel"
-        :show-scope-label="showEditorScopeLabel"
-        :session="editorSession"
-        :font-family="editorFontFamily"
-        :font-size="editorFontSize"
-        :mobile-font-size="mobileEditorFontSize"
-        @font-size="emit('editorFontSize', $event)"
-        @mobile-font-size="emit('mobileEditorFontSize', $event)"
-      />
-      <FilePreview
-        ref="previewRef"
-        v-show="documentMode === 'preview'"
-        class="min-h-0 flex-1"
-        :source="session.adapters.preview"
-        :scope-id="session.id"
-        :session="previewSession"
-        :spreadsheet-rows-per-page="spreadsheetRowsPerPage"
-        :spreadsheet-max-columns="spreadsheetMaxColumns"
-        :quick-command-row-scale="quickCommandRowScale"
-        @edit="emit('editPreview', $event)"
-        @hide="emit('hidePreview')"
-        @dismiss="emit('hidePreview')"
-      />
+      <div v-if="popupDocuments" class="grid min-h-0 flex-1 place-items-center text-sm text-text-secondary">
+        {{ t('settings.popupEditor.title') }}
+      </div>
+      <template v-else>
+        <FileEditor
+          ref="editorRef"
+          v-show="documentMode === 'editor'"
+          class="min-h-0 flex-1"
+          :port="session.adapters.documents"
+          :scope-id="session.id"
+          :scope-label="editorScopeLabel"
+          :show-scope-label="showEditorScopeLabel"
+          :session="editorSession"
+          :font-family="editorFontFamily"
+          :font-size="editorFontSize"
+          :mobile-font-size="mobileEditorFontSize"
+          @font-size="emit('editorFontSize', $event)"
+          @mobile-font-size="emit('mobileEditorFontSize', $event)"
+        />
+        <FilePreview
+          ref="previewRef"
+          v-show="documentMode === 'preview'"
+          class="min-h-0 flex-1"
+          :source="session.adapters.preview"
+          :scope-id="session.id"
+          :session="previewSession"
+          :spreadsheet-rows-per-page="spreadsheetRowsPerPage"
+          :spreadsheet-max-columns="spreadsheetMaxColumns"
+          :quick-command-row-scale="quickCommandRowScale"
+          @edit="emit('editPreview', $event)"
+          @hide="emit('hidePreview')"
+          @dismiss="emit('hidePreview')"
+        />
+      </template>
     </template>
 
     <StatusMonitor
