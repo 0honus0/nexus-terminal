@@ -446,6 +446,10 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       await expect.poll(async () => Boolean((await appearance(context.request)).pageBackgroundImage)).toBeTruthy();
       await expect.poll(() => page.evaluate(() => document.body.style.backgroundImage)).not.toBe('none');
 
+      const overlay = customizer.getByTestId('terminal-background-overlay');
+      await overlay.fill('0.37');
+      await expect(overlay).toHaveValue('0.37');
+
       const terminalUpload = page.waitForResponse(
         (response) =>
           response.url().endsWith('/api/v1/appearance/background/terminal') && response.request().method() === 'POST',
@@ -457,8 +461,8 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
       });
       expect((await terminalUpload).ok()).toBeTruthy();
       await expect.poll(async () => Boolean((await appearance(context.request)).terminalBackgroundImage)).toBeTruthy();
+      await expect(overlay).toHaveValue('0.37');
 
-      await customizer.getByTestId('terminal-background-overlay').fill('0.37');
       await customizer.getByTestId('terminal-background-overlay-save').click();
       await expect.poll(async () => (await appearance(context.request)).terminalBackgroundOverlayOpacity).toBe(0.37);
       await expect

@@ -72,7 +72,78 @@
     remoteRepositoryUrl.value = store.settings.remoteHtmlPresetsUrl ?? remoteRepositoryUrl.value;
   };
 
-  watch(() => store.settings, sync, { deep: true });
+  watch(
+    () => store.settings.terminalBackgroundEnabled,
+    (value) => {
+      form.terminalBackgroundEnabled = value ?? true;
+    },
+  );
+  watch(
+    () => store.settings.terminalBackgroundOverlayOpacity,
+    (value) => {
+      form.terminalBackgroundOverlayOpacity = value ?? 0.5;
+    },
+  );
+  watch(
+    () => store.settings.terminalCustomHtml,
+    (value) => {
+      form.terminalCustomHtml = value ?? '';
+    },
+  );
+  watch(
+    () => store.settings.terminalTextStrokeEnabled,
+    (value) => {
+      form.terminalTextStrokeEnabled = value ?? false;
+    },
+  );
+  watch(
+    () => store.settings.terminalTextStrokeWidth,
+    (value) => {
+      form.terminalTextStrokeWidth = value ?? 1;
+    },
+  );
+  watch(
+    () => store.settings.terminalTextStrokeColor,
+    (value) => {
+      form.terminalTextStrokeColor = value ?? '#000000';
+    },
+  );
+  watch(
+    () => store.settings.terminalTextShadowEnabled,
+    (value) => {
+      form.terminalTextShadowEnabled = value ?? false;
+    },
+  );
+  watch(
+    () => store.settings.terminalTextShadowOffsetX,
+    (value) => {
+      form.terminalTextShadowOffsetX = value ?? 0;
+    },
+  );
+  watch(
+    () => store.settings.terminalTextShadowOffsetY,
+    (value) => {
+      form.terminalTextShadowOffsetY = value ?? 0;
+    },
+  );
+  watch(
+    () => store.settings.terminalTextShadowBlur,
+    (value) => {
+      form.terminalTextShadowBlur = value ?? 0;
+    },
+  );
+  watch(
+    () => store.settings.terminalTextShadowColor,
+    (value) => {
+      form.terminalTextShadowColor = value ?? 'rgba(0,0,0,0.5)';
+    },
+  );
+  watch(
+    () => store.settings.remoteHtmlPresetsUrl,
+    (value) => {
+      remoteRepositoryUrl.value = value ?? '';
+    },
+  );
 
   const filteredLocalThemes = computed(() => {
     const query = localSearch.value.trim().toLowerCase();
@@ -144,8 +215,8 @@
     const file = input.files?.[0];
     if (!file) return;
     try {
-      await appearanceApi.uploadBackground(kind, file);
-      await store.load(true);
+      const filePath = await appearanceApi.uploadBackground(kind, file);
+      store.applyBackgroundReference(kind, filePath);
       feedback.notifySuccess(
         t(kind === 'page' ? 'styleCustomizer.pageBgUploadSuccess' : 'styleCustomizer.terminalBgUploadSuccess'),
       );
@@ -159,7 +230,7 @@
   const removeBackground = async (kind: 'page' | 'terminal'): Promise<void> => {
     try {
       await appearanceApi.removeBackground(kind);
-      await store.load(true);
+      store.applyBackgroundReference(kind, '');
       feedback.notifySuccess(
         t(kind === 'page' ? 'styleCustomizer.pageBgRemoved' : 'styleCustomizer.terminalBgRemoved'),
       );

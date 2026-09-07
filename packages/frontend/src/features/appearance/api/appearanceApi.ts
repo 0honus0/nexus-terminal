@@ -50,10 +50,11 @@ export const appearanceApi = {
     triggerBlobDownload(response.data, fileName);
   },
 
-  async uploadBackground(kind: 'page' | 'terminal', file: File): Promise<void> {
+  async uploadBackground(kind: 'page' | 'terminal', file: File): Promise<string> {
     const form = new FormData();
     form.append(kind === 'page' ? 'pageBackgroundFile' : 'terminalBackgroundFile', file);
-    await httpClient.post(`/appearance/background/${kind}`, form);
+    const response = await httpClient.post<{ filePath: string }>(`/appearance/background/${kind}`, form);
+    return response.data.filePath;
   },
 
   async removeBackground(kind: 'page' | 'terminal'): Promise<void> {

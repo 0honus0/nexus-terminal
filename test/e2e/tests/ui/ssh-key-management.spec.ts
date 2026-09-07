@@ -3,8 +3,9 @@ import { loginAsInitialAdmin } from '../../support/auth';
 import { configureSshE2eSettings, E2E_SSH } from '../../support/ssh';
 import { step } from '../../support/steps';
 
-const ORIGINAL_NAME = 'E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobile';
-const EDITED_NAME = 'E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobileEdited';
+const ORIGINAL_NAME = 'Z-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobile';
+const EDITED_NAME = 'A-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobileEdited';
+const SORT_PEER_NAME = 'M-E2EManagedSSHKeySortPeer';
 const CONNECTION_NAME = 'E2E SSH Auth Switch';
 const PRIVATE_KEY = '-----BEGIN OPENSSH PRIVATE KEY-----\nE2E-PRIVATE-KEY-CONTENT\n-----END OPENSSH PRIVATE KEY-----';
 
@@ -16,7 +17,7 @@ async function listKeys(request: APIRequestContext): Promise<Array<{ id: number;
 
 async function cleanupKeys(request: APIRequestContext): Promise<void> {
   for (const key of (await listKeys(request)).filter(
-    (item) => item.name === ORIGINAL_NAME || item.name === EDITED_NAME,
+    (item) => item.name === ORIGINAL_NAME || item.name === EDITED_NAME || item.name === SORT_PEER_NAME,
   )) {
     const remove = await request.delete(`/api/v1/ssh-keys/${key.id}`);
     expect(remove.ok()).toBeTruthy();
@@ -40,6 +41,10 @@ test('SSH key management UI adds, renames without replacing private key, and del
   await configureSshE2eSettings(context.request);
   await cleanupKeys(context.request);
   await cleanupConnection(context.request);
+  const peer = await context.request.post('/api/v1/ssh-keys', {
+    data: { name: SORT_PEER_NAME, privateKey: PRIVATE_KEY, passphrase: null },
+  });
+  expect(peer.status()).toBe(201);
   await page.setViewportSize({ width: 320, height: 667 });
 
   await step('open SSH key manager from the connection authentication form', async () => {
@@ -84,6 +89,9 @@ test('SSH key management UI adds, renames without replacing private key, and del
       .toBeGreaterThan(0);
     keyId = (await listKeys(context.request)).find((item) => item.name === ORIGINAL_NAME)!.id;
     await expect(modal.locator(`tr[data-key-id="${keyId}"]`)).toContainText(ORIGINAL_NAME);
+    const namesAfterCreate = await modal.locator('tbody tr[data-key-id] td:first-child').allTextContents();
+    expect(namesAfterCreate.indexOf(SORT_PEER_NAME)).toBeGreaterThanOrEqual(0);
+    expect(namesAfterCreate.indexOf(ORIGINAL_NAME)).toBeGreaterThan(namesAfterCreate.indexOf(SORT_PEER_NAME));
     await expect
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
       .toBeLessThanOrEqual(1);
@@ -111,6 +119,9 @@ test('SSH key management UI adds, renames without replacing private key, and del
     const details = await context.request.get(`/api/v1/ssh-keys/${keyId}/details`);
     expect(details.ok()).toBeTruthy();
     await expect(details.json()).resolves.toMatchObject({ name: EDITED_NAME, privateKey: PRIVATE_KEY });
+    const namesAfterRename = await modal.locator('tbody tr[data-key-id] td:first-child').allTextContents();
+    expect(namesAfterRename.indexOf(EDITED_NAME)).toBeGreaterThanOrEqual(0);
+    expect(namesAfterRename.indexOf(EDITED_NAME)).toBeLessThan(namesAfterRename.indexOf(SORT_PEER_NAME));
   });
 
   let connectionId = 0;
@@ -203,6 +214,7 @@ test('SSH key management UI adds, renames without replacing private key, and del
   });
 
   await cleanupConnection(context.request);
+  await cleanupKeys(context.request);
 });
 
 test('SSH key selector and manager surface key-list loading failures without overflowing narrow screens', async ({

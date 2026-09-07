@@ -82,6 +82,16 @@ export const useAppearanceStore = defineStore('appearance', {
       applySettings(settings);
     },
 
+    applyBackgroundReference(kind: 'page' | 'terminal', filePath: string) {
+      this.settingsRevision += 1;
+      if (kind === 'page') {
+        this.settings = { ...this.settings, pageBackgroundImage: filePath };
+        applyPageBackground(filePath);
+      } else {
+        this.settings = { ...this.settings, terminalBackgroundImage: filePath };
+      }
+    },
+
     async saveUiTheme(theme: Record<string, string>) {
       await this.update({ customUiTheme: JSON.stringify(theme) });
     },
