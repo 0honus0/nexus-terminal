@@ -4,6 +4,10 @@ import path from 'node:path';
 
 const mode = process.argv.includes('--check') ? '--check' : '--write';
 const supported = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.css', '.md', '.vue', '.yml', '.yaml']);
+const generatedDirectories = new Set(['dist', 'build', 'coverage', 'playwright-report', 'test-results', '.tmp']);
+
+const isGeneratedArtifact = (file) =>
+  file.split('/').some((segment) => generatedDirectories.has(segment) || segment.includes('.root-preserved-'));
 
 function gitFiles(args) {
   const result = spawnSync('git', args, { encoding: 'utf8' });
@@ -20,7 +24,7 @@ const files = new Set([
 ]);
 
 const formattable = [...files]
-  .filter((file) => existsSync(file) && supported.has(path.extname(file).toLowerCase()))
+  .filter((file) => existsSync(file) && !isGeneratedArtifact(file) && supported.has(path.extname(file).toLowerCase()))
   .sort();
 
 if (formattable.length === 0) {
