@@ -32,9 +32,6 @@ export const auditActionTypes = [
   'SSH_SHELL_FAILURE',
   'DATABASE_MIGRATION',
   'ADMIN_SETUP_COMPLETE',
-  'REMOTE_DESKTOP_CONNECTING',
-  'REMOTE_DESKTOP_CONNECTED',
-  'REMOTE_DESKTOP_DISCONNECTED',
 ] as const;
 
 export type AuditActionType = (typeof auditActionTypes)[number];
