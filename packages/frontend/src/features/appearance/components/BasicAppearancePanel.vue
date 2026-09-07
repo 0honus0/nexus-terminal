@@ -3,7 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BaseFormField, BaseInput, BaseTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
-  import { darkUiTheme, defaultUiTheme, defaultWindowThemeColor } from '../config/default-theme';
+  import { darkUiTheme, defaultUiTheme, defaultWindowThemeColor, normalizeUiTheme } from '../config/default-theme';
   import { useAppearanceStore } from '../store/appearance.store';
   import { formatThemeObject, parseThemeObject } from '../model/themeEditor';
 
@@ -47,7 +47,7 @@
     });
 
     try {
-      Object.assign(uiTheme, defaultUiTheme, JSON.parse(store.settings.customUiTheme ?? '{}'));
+      Object.assign(uiTheme, normalizeUiTheme(JSON.parse(store.settings.customUiTheme ?? '{}')));
     } catch {
       Object.assign(uiTheme, defaultUiTheme);
     }
@@ -101,7 +101,7 @@
       return false;
     }
     for (const key of Object.keys(uiTheme)) delete uiTheme[key];
-    Object.assign(uiTheme, defaultUiTheme, parsed.value);
+    Object.assign(uiTheme, normalizeUiTheme(parsed.value));
     uiThemeParseError.value = '';
     uiThemeJson.value = formatThemeObject(uiTheme);
     return true;

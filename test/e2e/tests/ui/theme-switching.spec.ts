@@ -24,6 +24,32 @@ const ONE_PIXEL_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZpmIAAAAASUVORK5CYII=',
   'base64',
 );
+const LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS: Record<string, string> = {
+  '--app-bg-color': '#212529',
+  '--text-color': '#e9ecef',
+  '--text-color-secondary': '#adb5bd',
+  '--border-color': '#495057',
+  '--link-color': '#BB86FC',
+  '--link-hover-color': '#D1A9FF',
+  '--link-active-color': '#A06CD5',
+  '--link-active-bg-color': 'rgba(160, 108, 213, 0.2)',
+  '--nav-item-active-bg-color': 'var(--link-active-bg-color)',
+  '--header-bg-color': '#343a40',
+  '--footer-bg-color': '#343a40',
+  '--button-bg-color': 'var(--link-active-color)',
+  '--button-text-color': '#ffffff',
+  '--button-hover-bg-color': '#8E44AD',
+  '--icon-color': 'var(--text-color-secondary)',
+  '--icon-hover-color': 'var(--link-hover-color)',
+  '--split-line-color': 'var(--border-color)',
+  '--split-line-hover-color': 'var(--border-color)',
+  '--input-focus-border-color': 'var(--link-active-color)',
+  '--input-focus-glow': 'var(--link-active-color)',
+  '--overlay-bg-color': 'rgba(0, 0, 0, 0.8)',
+  '--font-family-sans-serif': 'sans-serif',
+  '--base-padding': '1rem',
+  '--base-margin': '0.5rem',
+};
 
 async function appearance(request: APIRequestContext): Promise<Record<string, unknown>> {
   const response = await request.get('/api/v1/appearance');
@@ -190,6 +216,91 @@ test('UI theme switches to dark mode, persists across reload, and resets to defa
     const body = (await response.json()) as { customUiTheme?: string };
     expect(JSON.parse(body.customUiTheme || '{}')['--app-bg-color']).toBe('#ffffff');
   });
+});
+
+test('legacy dark UI themes without input tokens keep Dashboard controls readable and normalize on save', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+  expect(language.ok()).toBeTruthy();
+  const original = await appearance(context.request);
+
+  try {
+    const legacyTheme = await context.request.put('/api/v1/appearance', {
+      data: { customUiTheme: JSON.stringify(LEGACY_DARK_UI_THEME_WITHOUT_INPUT_TOKENS) },
+    });
+    expect(legacyTheme.ok()).toBeTruthy();
+
+    await page.goto('/');
+    await expect.poll(() => appBackground(page)).toBe('#212529');
+
+    const search = page.getByTestId('dashboard-connection-search');
+    const tag = page.getByTestId('dashboard-tag-filter');
+    const sort = page.getByTestId('dashboard-sort-by');
+    await expect(search).toBeVisible();
+    await expect(tag).toBeVisible();
+    await expect(sort).toBeVisible();
+
+    const searchColors = await search.evaluate((node) => ({
+      background: getComputedStyle(node).backgroundColor,
+      text: getComputedStyle(node).color,
+      placeholder: getComputedStyle(node, '::placeholder').color,
+    }));
+    expect(searchColors).toEqual({
+      background: 'rgb(30, 41, 59)',
+      text: 'rgb(248, 250, 252)',
+      placeholder: 'rgb(148, 163, 184)',
+    });
+
+    for (const control of [tag, sort]) {
+      await expect
+        .poll(() =>
+          control.evaluate((node) => {
+            const style = getComputedStyle(node);
+            return [style.backgroundColor, style.color];
+          }),
+        )
+        .toEqual(['rgb(30, 41, 59)', 'rgb(248, 250, 252)']);
+    }
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect.poll(() => appBackground(page)).toBe('#212529');
+    await expect
+      .poll(() =>
+        page.getByTestId('dashboard-connection-search').evaluate((node) => {
+          const style = getComputedStyle(node);
+          return [style.backgroundColor, style.color];
+        }),
+      )
+      .toEqual(['rgb(30, 41, 59)', 'rgb(248, 250, 252)']);
+
+    await page.getByTitle('Customize Style').click();
+    const customizer = page.getByTestId('style-customizer');
+    const jsonEditor = customizer.getByTestId('ui-theme-json');
+    await expect(jsonEditor).toBeVisible();
+    const normalizedDraft = JSON.parse(await jsonEditor.inputValue()) as Record<string, string>;
+    expect(normalizedDraft['--input-bg-color']).toBe('#1e293b');
+    expect(normalizedDraft['--input-text-color']).toBe('#f8fafc');
+    expect(normalizedDraft['--input-placeholder-color']).toBe('#94a3b8');
+
+    const save = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/appearance') && response.request().method() === 'PUT',
+    );
+    await customizer.getByTestId('ui-theme-save').click();
+    expect((await save).ok()).toBeTruthy();
+    const persisted = await appearance(context.request);
+    const persistedTheme = JSON.parse(String(persisted.customUiTheme ?? '{}')) as Record<string, string>;
+    expect(persistedTheme['--input-bg-color']).toBe('#1e293b');
+    expect(persistedTheme['--input-text-color']).toBe('#f8fafc');
+    expect(persistedTheme['--input-placeholder-color']).toBe('#94a3b8');
+  } finally {
+    const restore = await context.request.put('/api/v1/appearance', {
+      data: { customUiTheme: original.customUiTheme },
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
 });
 
 test('terminal preset themes load from the API, switch through the UI, and persist across reload', async ({
