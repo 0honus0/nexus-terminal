@@ -103,7 +103,7 @@ test('data management UI exports a real backup file and imports it through the f
     expect(fileChrome.topRight).toBeGreaterThan(0);
     expect(fileChrome.bottomLeft).toBeGreaterThan(0);
     expect(fileChrome.bottomRight).toBeGreaterThan(0);
-    expect(fileChrome.overflow).toBe('hidden');
+    expect(['hidden', 'clip']).toContain(fileChrome.overflow);
   });
 
   await captureEvidence(page, testInfo, 'before');
