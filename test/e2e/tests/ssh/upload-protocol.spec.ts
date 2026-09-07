@@ -94,7 +94,7 @@ test('upload cancelled during pending start never becomes active after delayed r
   const remotePath = '/pending-start-cancel.bin';
   const temporaryPath = `/.nexus-upload-${uploadId}.part`;
 
-  await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=1500`, { method: 'POST' });
+  await fetch(`${E2E_SSH.controlUrl}/sftp/stat-delay?ms=1500`, { method: 'POST' });
   try {
     await waitForFilesystemReady(workspace.socket);
     const cancelledEvent = waitForJson(
@@ -127,12 +127,12 @@ test('upload cancelled during pending start never becomes active after delayed r
 
     await expect(requestWorkspace<boolean>(workspace.socket, 'upload.cancel', { uploadId })).resolves.toBe(true);
     await expect(cancelledEvent).resolves.toMatchObject({ payload: { uploadId, type: 'cancelled' } });
-    await expect(startPromise).resolves.toBeUndefined();
+    await expect(startPromise).resolves.toEqual({ started: true });
     await expect(forbiddenTerminalEvent).resolves.toBe(false);
     await expect(requestWorkspace(workspace.socket, 'filesystem.stat', { path: remotePath })).rejects.toThrow();
     await expect(requestWorkspace(workspace.socket, 'filesystem.stat', { path: temporaryPath })).rejects.toThrow();
   } finally {
-    await fetch(`${E2E_SSH.controlUrl}/sftp/open-delay?ms=0`, { method: 'POST' });
+    await fetch(`${E2E_SSH.controlUrl}/sftp/stat-delay?ms=0`, { method: 'POST' });
     await closeWebSocket(workspace.socket);
   }
 });

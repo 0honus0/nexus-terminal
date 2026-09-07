@@ -33,7 +33,7 @@ const PASSWORD = 'e2e-password';
 const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
-let sftpOpenDelayMs = 0;
+let sftpStatDelayMs = 0;
 let archiveExecDelayMs = 0;
 let dockerContainerPresent = true;
 let dockerContainerState = 'running';
@@ -536,7 +536,7 @@ async function resetRoot() {
   await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
   statusSample = 0;
   sftpWriteDelayMs = 0;
-  sftpOpenDelayMs = 0;
+  sftpStatDelayMs = 0;
   archiveExecDelayMs = 0;
 }
 
@@ -602,6 +602,9 @@ function attachSftp(session, accept) {
 
   const statRequest = async (reqid, remotePath, useLstat = false) => {
     try {
+      if (sftpStatDelayMs > 0 && remotePath === '/pending-start-cancel.bin') {
+        await new Promise((resolve) => setTimeout(resolve, sftpStatDelayMs));
+      }
       const fullPath = resolveRemotePath(remotePath);
       const stats = useLstat ? await fsp.lstat(fullPath) : await fsp.stat(fullPath);
       sftp.attrs(reqid, attrsFromStats(stats));
@@ -661,7 +664,6 @@ function attachSftp(session, accept) {
 
   sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
     try {
-      if (sftpOpenDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, sftpOpenDelayMs));
       const fullPath = resolveRemotePath(remotePath);
       await fsp.mkdir(path.dirname(fullPath), { recursive: true });
       const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? attrs.mode & 0o7777 : 0o644);
@@ -1129,7 +1131,7 @@ const controlServer = http.createServer(async (req, res) => {
     if (req.method === 'POST' && requestUrl.pathname === '/reset') {
       await stopSshServer();
       sftpWriteDelayMs = 0;
-      sftpOpenDelayMs = 0;
+      sftpStatDelayMs = 0;
       archiveExecDelayMs = 0;
       activeSftpChannels.clear();
       openedSftpChannels = 0;
@@ -1162,11 +1164,11 @@ const controlServer = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ sftpWriteDelayMs }));
       return;
     }
-    if (req.method === 'POST' && requestUrl.pathname === '/sftp/open-delay') {
+    if (req.method === 'POST' && requestUrl.pathname === '/sftp/stat-delay') {
       const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
-      sftpOpenDelayMs = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(10_000, Math.round(requestedDelay))) : 0;
+      sftpStatDelayMs = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(10_000, Math.round(requestedDelay))) : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify({ sftpOpenDelayMs }));
+      res.end(JSON.stringify({ sftpStatDelayMs }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {
