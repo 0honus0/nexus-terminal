@@ -5,6 +5,7 @@ import { captureFunctionalScreenshot } from '../../support/functional-screenshot
 import { step } from '../../support/steps';
 
 const HCAPTCHA_SITE_KEY = '10000000-ffff-ffff-ffff-000000000001';
+const HCAPTCHA_TEST_SECRET = `0x${'0'.repeat(40)}`;
 const CAPTCHA_REQUIRED_MESSAGE = 'Please complete the CAPTCHA verification.';
 const CAPTCHA_INVALID_MESSAGE = 'CAPTCHA configuration is incomplete. Please contact an administrator.';
 
@@ -36,7 +37,7 @@ const VALID_HCAPTCHA: CaptchaConfigUpdate = {
   enabled: true,
   provider: 'hcaptcha',
   hcaptchaSiteKey: HCAPTCHA_SITE_KEY,
-  hcaptchaSecretKey: 'e2e-hcaptcha-secret',
+  hcaptchaSecretKey: HCAPTCHA_TEST_SECRET,
 };
 
 async function setCaptchaConfig(
@@ -76,12 +77,45 @@ async function loadLoginWithCaptcha(
   await expect(captchaResponse.json()).resolves.toMatchObject(expectedConfig);
 }
 
+async function completeHcaptchaTestWidget(page: import('@playwright/test').Page): Promise<void> {
+  const checkboxFrame = page.frameLocator('iframe[title*="hCaptcha security challenge"]');
+  await checkboxFrame.locator('#checkbox').click();
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const api = (window as Window & { hcaptcha?: { getResponse: () => string } }).hcaptcha;
+          return api?.getResponse?.() ?? '';
+        }),
+      { timeout: 20_000 },
+    )
+    .not.toBe('');
+}
+
 async function recordCaptchaMetrics(
   page: import('@playwright/test').Page,
   testInfo: import('@playwright/test').TestInfo,
   filename: string,
 ): Promise<void> {
   const metrics = await page.evaluate(() => {
+    const describe = (element: Element | null) => {
+      if (!(element instanceof HTMLElement)) return null;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height, right: rect.right, bottom: rect.bottom },
+        style: {
+          display: style.display,
+          fontSize: style.fontSize,
+          lineHeight: style.lineHeight,
+          color: style.color,
+          backgroundColor: style.backgroundColor,
+          marginTop: style.marginTop,
+          marginBottom: style.marginBottom,
+        },
+        text: element.textContent?.trim() ?? '',
+      };
+    };
     const submit = document.querySelector<HTMLButtonElement>('form button[type="submit"]');
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -90,6 +124,12 @@ async function recordCaptchaMetrics(
         scrollWidth: document.documentElement.scrollWidth,
         clientHeight: document.documentElement.clientHeight,
         scrollHeight: document.documentElement.scrollHeight,
+      },
+      elements: {
+        username: describe(document.querySelector('#username')),
+        password: describe(document.querySelector('#password')),
+        alert: describe(document.querySelector('[role="alert"]')),
+        submit: describe(submit),
       },
       submit: submit
         ? {
@@ -174,6 +214,119 @@ test('login CAPTCHA requires a token before sending first-factor credentials', a
         viewport: { width: 1440, height: 900 },
       });
       await recordCaptchaMetrics(page, testInfo, 'login-captcha-required.metrics.json');
+    });
+  } finally {
+    await restoreCaptcha(request);
+  }
+});
+
+test('login CAPTCHA clears expired/rejected verification and succeeds after a fresh real token', async ({
+  page,
+  request,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  await prepareCaptchaLogin(request, VALID_HCAPTCHA);
+
+  const evidence: Array<Record<string, unknown>> = [];
+  try {
+    await step('obtain a real hCaptcha test token and let the provider expire it', async () => {
+      await loadLoginWithCaptcha(page, { enabled: true, provider: 'hcaptcha' });
+      await page.locator('#username').fill(E2E_ADMIN.username);
+      await page.locator('#password').fill(E2E_ADMIN.password);
+      await completeHcaptchaTestWidget(page);
+
+      // hCaptcha documents a 120 second default token expiry. Wait for the real
+      // provider callback instead of shortening time or mutating application state.
+      await page.waitForTimeout(125_000);
+
+      const loginRequest = page
+        .waitForRequest(
+          (candidate) => candidate.url().endsWith('/api/v1/auth/login') && candidate.method() === 'POST',
+          {
+            timeout: 2_000,
+          },
+        )
+        .catch(() => undefined);
+      await page.getByRole('button', { name: 'Login', exact: true }).click();
+      expect(await loginRequest).toBeUndefined();
+      await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
+      evidence.push({ phase: 'provider-expired', loginRequestSent: false, alert: CAPTCHA_REQUIRED_MESSAGE });
+    });
+
+    await step('a real provider rejection resets the Login CAPTCHA token', async () => {
+      await completeHcaptchaTestWidget(page);
+
+      // Change only the server-side fixture secret after the browser received a
+      // valid token. The Login submission still comes from the real UI and the
+      // backend still calls hCaptcha siteverify; the provider rejects the pair.
+      await setCaptchaConfig(request, {
+        ...VALID_HCAPTCHA,
+        hcaptchaSecretKey: `0x${'f'.repeat(40)}`,
+      });
+      const rejectedLoginPromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+      );
+      await page.getByRole('button', { name: 'Login', exact: true }).click();
+      const rejectedLogin = await rejectedLoginPromise;
+      expect(rejectedLogin.status()).toBe(401);
+      await expect(page.getByRole('alert')).toContainText('CAPTCHA');
+      evidence.push({ phase: 'provider-rejected', status: rejectedLogin.status(), body: await rejectedLogin.json() });
+
+      await setCaptchaConfig(request, VALID_HCAPTCHA);
+      const repeatedLoginRequest = page
+        .waitForRequest(
+          (candidate) => candidate.url().endsWith('/api/v1/auth/login') && candidate.method() === 'POST',
+          {
+            timeout: 2_000,
+          },
+        )
+        .catch(() => undefined);
+      await page.getByRole('button', { name: 'Login', exact: true }).click();
+      expect(await repeatedLoginRequest).toBeUndefined();
+      await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
+      evidence.push({ phase: 'post-rejection-reset', loginRequestSent: false, alert: CAPTCHA_REQUIRED_MESSAGE });
+
+      for (const viewport of [
+        { name: '1280x800', width: 1280, height: 800 },
+        { name: '320x667', width: 320, height: 667 },
+        { name: '375x812', width: 375, height: 812 },
+      ]) {
+        await page.setViewportSize({ width: viewport.width, height: viewport.height });
+        await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
+        await recordCaptchaMetrics(page, testInfo, `login-captcha-rejected-reset-${viewport.name}.metrics.json`);
+        const screenshotPath = testInfo.outputPath(`m01-login-captcha-rejected-reset-${viewport.name}.png`);
+        await page.screenshot({ path: screenshotPath, fullPage: false, animations: 'disabled', caret: 'hide' });
+        await testInfo.attach(`M01 CAPTCHA rejected/reset ${viewport.name}`, {
+          path: screenshotPath,
+          contentType: 'image/png',
+        });
+      }
+    });
+
+    await step('a fresh real test token completes Login successfully', async () => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await completeHcaptchaTestWidget(page);
+      const successLoginPromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/auth/login') && response.request().method() === 'POST',
+      );
+      await page.getByRole('button', { name: 'Login', exact: true }).click();
+      const successLogin = await successLoginPromise;
+      expect(successLogin.status()).toBe(200);
+      await expect(page).toHaveURL(/\/$/);
+      const authStatus = await page.context().request.get('/api/v1/auth/status');
+      expect(authStatus.status()).toBe(200);
+      await expect(authStatus.json()).resolves.toMatchObject({
+        isAuthenticated: true,
+        user: { username: E2E_ADMIN.username },
+      });
+      evidence.push({ phase: 'fresh-token-success', status: successLogin.status() });
+    });
+
+    const evidencePath = testInfo.outputPath('m01-login-captcha-token-evidence.json');
+    await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`);
+    await testInfo.attach('M01 CAPTCHA token lifecycle evidence', {
+      path: evidencePath,
+      contentType: 'application/json',
     });
   } finally {
     await restoreCaptcha(request);
