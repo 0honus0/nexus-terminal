@@ -13,7 +13,7 @@ export interface FilesystemChannel {
   writeText(path: string, content: string, encoding?: string): Promise<void>;
   createDirectory(path: string): Promise<void>;
   createFile(path: string, content?: string): Promise<void>;
-  remove(paths: string[]): Promise<void>;
+  remove(paths: string[], options?: { forceDirectoryPaths?: string[] }): Promise<void>;
   rename(from: string, to: string): Promise<void>;
   chmod(path: string, mode: number): Promise<void>;
   realpath(path: string): Promise<ResolvedRemotePath>;

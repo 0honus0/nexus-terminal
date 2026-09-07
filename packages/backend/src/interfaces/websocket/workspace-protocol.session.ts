@@ -366,7 +366,10 @@ export class WorkspaceProtocolSession {
   private async filesystemRemove(payload: JsonRecord) {
     const paths = stringArray(payload.paths);
     if (!paths) throw new Error('Filesystem remove paths must be an array of strings.');
-    await this.dependencies.filesystem.removePaths(this.requireWorkspace(), paths);
+    const forceDirectoryPaths =
+      payload.forceDirectoryPaths === undefined ? [] : stringArray(payload.forceDirectoryPaths);
+    if (!forceDirectoryPaths) throw new Error('Filesystem forced directory paths must be an array of strings.');
+    await this.dependencies.filesystem.removePaths(this.requireWorkspace(), paths, { forceDirectoryPaths });
     return null;
   }
 

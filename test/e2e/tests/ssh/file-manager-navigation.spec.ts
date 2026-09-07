@@ -177,6 +177,22 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await expect(editor).toBeHidden();
   });
 
+  await step('directory delete preserves rm -rf with sudo fallback instead of SFTP-only removal', async () => {
+    const target = row(page, 'force-delete-e2e');
+    await expect(target).toBeVisible();
+    await target.click({ button: 'right' });
+    const contextMenu = page.getByTestId('file-manager-context-menu');
+    await expect(contextMenu).toBeVisible();
+    await contextMenu.getByText('Delete', { exact: true }).click();
+    const confirm = page.getByRole('dialog', { name: 'Please confirm', exact: true });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole('button', { name: 'Confirm', exact: true }).click();
+    await expect(target).toHaveCount(0, { timeout: 20_000 });
+
+    await manager(page).getByTitle('Refresh', { exact: true }).click();
+    await expect(row(page, 'force-delete-e2e')).toHaveCount(0);
+  });
+
   await step('Name sorting toggles between ascending and descending order', async () => {
     const nameHeader = manager(page).getByRole('columnheader').filter({ hasText: 'Name' }).first();
     const nameSortButton = nameHeader.locator('button');

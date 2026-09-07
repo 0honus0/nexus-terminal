@@ -100,12 +100,26 @@ export class WorkspaceFilesystemService {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
     await fs.removeFile(this.absolute(remotePath));
   }
-  async removePaths(workspaceId: string, remotePaths: readonly string[]): Promise<void> {
-    const fs = await this.filesystem(this.sessions.require(workspaceId));
-    await this.removal.removeMany(
-      fs,
-      remotePaths.map((p) => this.absolute(p)),
+  async removePaths(
+    workspaceId: string,
+    remotePaths: readonly string[],
+    options: { forceDirectoryPaths?: readonly string[] } = {},
+  ): Promise<void> {
+    const session = this.sessions.require(workspaceId);
+    const fs = await this.filesystem(session);
+    const normalizedPaths = remotePaths.map((remotePath) => this.absolute(remotePath));
+    const forceDirectories = new Set(
+      (options.forceDirectoryPaths ?? []).map((remotePath) => this.absolute(remotePath)),
     );
+    for (const remotePath of forceDirectories) {
+      if (!normalizedPaths.includes(remotePath))
+        throw new Error('Forced directory removal path must be part of the removal request.');
+    }
+    const execution = this.executions.require(session.executionSessionId);
+    for (const remotePath of normalizedPaths) {
+      if (forceDirectories.has(remotePath)) await this.removal.removeDirectoryForce(execution, remotePath);
+      else await this.removal.remove(fs, remotePath);
+    }
   }
   async rename(workspaceId: string, sourcePath: string, destinationPath: string): Promise<void> {
     const fs = await this.filesystem(this.sessions.require(workspaceId));

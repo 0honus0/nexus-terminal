@@ -885,7 +885,10 @@
     const params = entries.length > 1 ? { count: entries.length } : { name: entries[0]!.name };
     if (props.confirmDelete && !(await feedback.confirm({ message: t(key, params), destructive: true }))) return;
     try {
-      await props.channel.remove(entries.map((entry) => entry.path));
+      await props.channel.remove(
+        entries.map((entry) => entry.path),
+        { forceDirectoryPaths: entries.filter((entry) => entry.metadata.isDirectory).map((entry) => entry.path) },
+      );
       await browser.load();
     } catch (cause) {
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));

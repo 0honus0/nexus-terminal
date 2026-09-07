@@ -110,6 +110,19 @@ function virtualPath(remotePath = '.') {
   return relativePath ? `/${relativePath.split(path.sep).join('/')}` : '/';
 }
 
+function isForceDeleteFixturePath(remotePath) {
+  const normalized = path.posix.normalize(String(remotePath || '').replace(/\\/g, '/'));
+  return normalized === '/force-delete-e2e' || normalized.startsWith('/force-delete-e2e/');
+}
+
+function remapRemovalExecPath(command) {
+  return command.replace(/^(sudo\s+)?rm\s+-rf\s+--\s+'([^']+)'/, (_match, sudoPrefix = '', remotePath) => {
+    if (!isForceDeleteFixturePath(remotePath)) return _match;
+    if (!sudoPrefix) return `printf 'permission denied\n' >&2; false`;
+    return `rm -rf -- ${JSON.stringify(resolveRemotePath(remotePath))}`;
+  });
+}
+
 function remapArchiveExecWorkingDirectory(command) {
   if (!command.includes('__NEXUS_ARCHIVE_TOTAL__:')) return command;
 
@@ -478,6 +491,8 @@ async function resetRoot() {
   await fsp.rm(archiveExecHoldPath, { force: true });
   await fsp.rm(rootDir, { recursive: true, force: true });
   await fsp.mkdir(path.join(rootDir, 'folder-seed'), { recursive: true });
+  await fsp.mkdir(path.join(rootDir, 'force-delete-e2e', 'nested'), { recursive: true });
+  await fsp.writeFile(path.join(rootDir, 'force-delete-e2e', 'nested', 'blocked.txt'), 'force-delete-e2e\n', 'utf8');
   await fsp.writeFile(shellRcPath, `${virtualShellPrelude}\nPS1='nexus-e2e$ '\nPROMPT_COMMAND=''\n`, 'utf8');
   await fsp.writeFile(path.join(rootDir, 'seed.txt'), 'nexus-e2e-seed\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'plainfile'), 'plain-no-extension\n', 'utf8');
@@ -742,6 +757,10 @@ function attachSftp(session, accept) {
   });
 
   sftp.on('RMDIR', async (reqid, remotePath) => {
+    if (isForceDeleteFixturePath(remotePath)) {
+      sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED, 'Force-delete fixture requires SSH command fallback');
+      return;
+    }
     try {
       await fsp.rmdir(resolveRemotePath(remotePath));
       sftp.status(reqid, STATUS_CODE.OK);
@@ -751,6 +770,10 @@ function attachSftp(session, accept) {
   });
 
   sftp.on('REMOVE', async (reqid, remotePath) => {
+    if (isForceDeleteFixturePath(remotePath)) {
+      sftp.status(reqid, STATUS_CODE.PERMISSION_DENIED, 'Force-delete fixture requires SSH command fallback');
+      return;
+    }
     try {
       await fsp.unlink(resolveRemotePath(remotePath));
       sftp.status(reqid, STATUS_CODE.OK);
@@ -895,7 +918,7 @@ function runRemoteCommand(command, stream) {
     return;
   }
 
-  const executableCommand = remapTransferExecPaths(remapArchiveExecWorkingDirectory(command));
+  const executableCommand = remapTransferExecPaths(remapArchiveExecWorkingDirectory(remapRemovalExecPath(command)));
   const isArchiveCommand = command.includes('__NEXUS_ARCHIVE_TOTAL__:');
   const normalizedArchivePreflight = String(command)
     .trim()

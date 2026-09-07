@@ -187,8 +187,11 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
   async createFile(path, content = '') {
     await socket.request('filesystem.createFile', { path, content });
   },
-  async remove(paths) {
-    await socket.request('filesystem.remove', { paths });
+  async remove(paths, options) {
+    await socket.request('filesystem.remove', {
+      paths,
+      ...(options?.forceDirectoryPaths?.length ? { forceDirectoryPaths: options.forceDirectoryPaths } : {}),
+    });
   },
   async rename(from, to) {
     await socket.request('filesystem.rename', { from, to });
