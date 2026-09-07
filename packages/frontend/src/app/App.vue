@@ -18,7 +18,7 @@
         return;
       }
       if (wasAuthenticated) {
-        void import('@/runtimes/workspace/session').then(({ workspaceRuntimeRegistry }) =>
+        void import('@/runtimes/workspace/public').then(({ workspaceRuntimeRegistry }) =>
           workspaceRuntimeRegistry.disposeAll(),
         );
       }

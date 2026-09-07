@@ -109,6 +109,35 @@ test('notification test localizes user-facing content while preserving the raw e
   await expect(page.locator('small').filter({ hasText: '测试通知发送成功。' })).toBeVisible();
 });
 
+test('email notification test preserves legacy HTML body-template rendering', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
+  expect(language.ok()).toBeTruthy();
+
+  await page.goto('/notifications');
+  const settings = page.getByTestId('notification-settings');
+  await settings.getByTestId('notification-add-channel').click();
+  await page.locator('#setting-name').fill('E2E HTML Email Delivery');
+  await page.locator('#setting-channel-type').selectOption('email');
+  const field = (label: string) => page.locator('label').filter({ hasText: label }).locator('..');
+  await field('Recipient Email(s):').locator('input').fill('recipient@example.test');
+  await field('Body Template (Optional)').locator('textarea').fill('<strong>NEXUS-E2E-HTML</strong> {eventDisplay}');
+  await field('SMTP Host:').locator('input').fill('127.0.0.1');
+  await field('SMTP Port:').locator('input').fill('22224');
+  const secure = page.locator('label').filter({ hasText: 'Use TLS/SSL' }).locator('input[type=checkbox]');
+  if (await secure.isChecked()) await secure.uncheck();
+  await field('Sender Email:').locator('input').fill('nexus@example.test');
+
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/v1/notifications/test-unsaved') && response.request().method() === 'POST',
+  );
+  await page.getByTestId('notification-test').click();
+  const response = await responsePromise;
+  expect(response.ok()).toBeTruthy();
+  expect(await response.json()).toMatchObject({ success: true });
+});
+
 test('notification settings complete a real CRUD, event persistence, and delivery error loop', async ({
   page,
   context,

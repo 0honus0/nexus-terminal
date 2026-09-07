@@ -51,7 +51,7 @@
   },
   "notification": {
     "email": {
-      "defaultBody": "Event: {eventDisplay}\nTimestamp: {timestamp}\nDetails:\n{details}"
+      "defaultBody": "<p>Event: {eventDisplay}</p><p>Timestamp: {timestamp}</p><p>Details:</p><pre>{details}</pre>"
     },
     "telegram": {
       "defaultBody": "*{eventDisplay}*\nTimestamp: {timestamp}\nDetails:\n```\n{details}\n```"

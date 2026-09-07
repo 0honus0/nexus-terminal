@@ -27,6 +27,7 @@ const { ZipArchive } = requireFromBackend('archiver');
 const SSH_HOST = '127.0.0.1';
 const SSH_PORT = 22222;
 const CONTROL_PORT = 22223;
+const SMTP_PORT = 22224;
 const USERNAME = 'e2e';
 const PASSWORD = 'e2e-password';
 const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -1032,6 +1033,64 @@ async function stopSshServer() {
   sshServerOnline = false;
 }
 
+const smtpServer = net.createServer((socket) => {
+  socket.setEncoding('utf8');
+  socket.write('220 nexus-e2e SMTP ready\r\n');
+  let buffer = '';
+  let dataMode = false;
+  let data = '';
+
+  const reply = (line) => socket.write(`${line}\r\n`);
+  socket.on('data', (chunk) => {
+    buffer += chunk;
+    while (true) {
+      if (dataMode) {
+        const end = buffer.indexOf('\r\n.\r\n');
+        if (end < 0) {
+          data += buffer;
+          buffer = '';
+          return;
+        }
+        data += buffer.slice(0, end);
+        buffer = buffer.slice(end + 5);
+        const valid = /content-type:\s*text\/html\b/i.test(data) && data.includes('NEXUS-E2E-HTML');
+        reply(valid ? '250 2.0.0 accepted' : '550 5.6.0 expected HTML notification body');
+        data = '';
+        dataMode = false;
+        continue;
+      }
+
+      const end = buffer.indexOf('\r\n');
+      if (end < 0) return;
+      const line = buffer.slice(0, end);
+      buffer = buffer.slice(end + 2);
+      const command = line.trim();
+      if (/^(?:EHLO|HELO)\b/i.test(command)) {
+        socket.write('250-nexus-e2e\r\n250 PIPELINING\r\n');
+      } else if (/^(?:MAIL FROM|RCPT TO):/i.test(command) || /^RSET$/i.test(command)) {
+        reply('250 2.1.0 ok');
+      } else if (/^DATA$/i.test(command)) {
+        dataMode = true;
+        reply('354 End data with <CR><LF>.<CR><LF>');
+      } else if (/^QUIT$/i.test(command)) {
+        reply('221 2.0.0 bye');
+        socket.end();
+        return;
+      } else if (/^NOOP$/i.test(command)) {
+        reply('250 2.0.0 ok');
+      } else {
+        reply('502 5.5.2 command not implemented');
+      }
+    }
+  });
+  socket.on('error', () => undefined);
+});
+
+smtpServer.on('error', (error) => {
+  console.error('[E2E SMTP] server error:', error);
+  process.exitCode = 1;
+});
+
 const controlServer = http.createServer(async (req, res) => {
   try {
     const requestUrl = new URL(req.url || '/', `http://${SSH_HOST}:${CONTROL_PORT}`);
@@ -1230,10 +1289,14 @@ controlServer.on('connect', (req, clientSocket, head) => {
 
 await startSshServer();
 await new Promise((resolve) => controlServer.listen(CONTROL_PORT, SSH_HOST, resolve));
-console.log(`[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, control ${CONTROL_PORT}, root ${rootDir}`);
+await new Promise((resolve) => smtpServer.listen(SMTP_PORT, SSH_HOST, resolve));
+console.log(
+  `[E2E SSH] listening on ${SSH_HOST}:${SSH_PORT}, control ${CONTROL_PORT}, smtp ${SMTP_PORT}, root ${rootDir}`,
+);
 
 const shutdown = () => {
   controlServer.close();
+  smtpServer.close();
   sshServer.close();
 };
 process.on('SIGTERM', shutdown);

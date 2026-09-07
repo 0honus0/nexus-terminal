@@ -21,7 +21,7 @@ export class NetworkNotificationChannelAdapter implements NotificationChannelPor
       url: c.url,
       headers: { 'Content-Type': 'application/json', ...(c.headers ?? {}) },
       data: body,
-      timeout: 10_000,
+      timeout: 15_000,
     });
   }
   private async sendEmail(c: EmailConfig, subject: string, body: string) {
@@ -30,21 +30,25 @@ export class NetworkNotificationChannelAdapter implements NotificationChannelPor
       host: c.smtpHost,
       port: c.smtpPort,
       secure: c.smtpSecure ?? true,
-      auth: c.smtpUser || c.smtpPass ? { user: c.smtpUser, pass: c.smtpPass } : undefined,
+      auth: c.smtpUser && c.smtpPass ? { user: c.smtpUser, pass: c.smtpPass } : undefined,
     });
-    await transport.sendMail({ from: c.from, to: c.to, subject, text: body });
+    await transport.sendMail({ from: `"${c.from.split('@')[0]}" <${c.from}>`, to: c.to, subject, html: body });
   }
   private async sendTelegram(c: TelegramConfig, body: string) {
     if (!c.botToken || !c.chatId) throw new Error('Telegram 配置缺少 botToken/chatId。');
     let base = 'https://api.telegram.org';
     if (c.customDomain) {
-      const u = new URL(c.customDomain);
-      if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('无效的 Telegram customDomain。');
-      base = `${u.protocol}//${u.host}`;
+      try {
+        const u = new URL(c.customDomain);
+        if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('unsupported protocol');
+        base = `${u.protocol}//${u.host}`;
+      } catch {
+        base = 'https://api.telegram.org';
+      }
     }
     const response = await axios.post(
       `${base}/bot${c.botToken}/sendMessage`,
-      { chat_id: c.chatId, text: body, parse_mode: 'Markdown' },
+      { chat_id: c.chatId, text: body, parse_mode: 'Markdown', disable_web_page_preview: true },
       { timeout: 10_000 },
     );
     if (response.data?.ok === false) throw new Error(response.data?.description || 'Telegram API failed.');

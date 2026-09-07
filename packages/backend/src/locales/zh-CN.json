@@ -36,7 +36,8 @@
     "subject": "Nexus Terminal 测试通知（{event}）",
     "email": {
       "body": "这是 Nexus Terminal 针对事件“{event}”发送的测试邮件。\n\n如果你收到此邮件，说明 SMTP 配置工作正常。\n\n时间：{timestamp}",
-      "detailsMessage": "这是来自 Nexus Terminal 的测试通知（Email），事件为“{event}”。"
+      "detailsMessage": "这是来自 Nexus Terminal 的测试通知（Email），事件为“{event}”。",
+      "bodyHtml": "<p>这是 <b>Nexus Terminal</b> 针对事件“{event}”发送的测试邮件。</p><p>如果你收到此邮件，说明 SMTP 配置工作正常。</p><p>时间：{timestamp}</p>"
     },
     "webhook": {
       "detailsMessage": "这是来自 Nexus Terminal 的测试通知（Webhook），事件为“{event}”。"
@@ -48,7 +49,7 @@
   },
   "notification": {
     "email": {
-      "defaultBody": "事件：{eventDisplay}\n时间：{timestamp}\n详情：\n{details}"
+      "defaultBody": "<p>事件：{eventDisplay}</p><p>时间：{timestamp}</p><p>详情：</p><pre>{details}</pre>"
     },
     "telegram": {
       "defaultBody": "*{eventDisplay}*\n时间：{timestamp}\n详情：\n```\n{details}\n```"

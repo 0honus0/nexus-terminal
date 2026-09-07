@@ -110,8 +110,8 @@ export class NotificationService {
         ...email,
         bodyTemplate: this.localizer.translate(
           locale,
-          'testNotification.email.body',
-          "This is a test email from Nexus Terminal for event '{eventDisplay}'.\n\nIf you received this, your SMTP configuration is working.\n\nTimestamp: {timestamp}",
+          'testNotification.email.bodyHtml',
+          "<p>This is a test email from <b>Nexus Terminal</b> for event '{eventDisplay}'.</p><p>If you received this, your SMTP configuration is working.</p><p>Timestamp: {timestamp}</p>",
           { event: '{eventDisplay}', eventDisplay: '{eventDisplay}', timestamp: '{timestamp}' },
         ),
       };

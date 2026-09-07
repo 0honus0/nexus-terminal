@@ -51,7 +51,7 @@
   },
   "notification": {
     "email": {
-      "defaultBody": "イベント: {eventDisplay}\n時刻: {timestamp}\n詳細:\n{details}"
+      "defaultBody": "<p>イベント: {eventDisplay}</p><p>時刻: {timestamp}</p><p>詳細:</p><pre>{details}</pre>"
     },
     "telegram": {
       "defaultBody": "*{eventDisplay}*\n時刻: {timestamp}\n詳細:\n```\n{details}\n```"
