@@ -266,9 +266,87 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
   ).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
+  const layoutResponse = await context.request.get('/api/v1/settings/layout');
+  expect(layoutResponse.ok()).toBeTruthy();
+  type E2eLayoutNode = {
+    id?: string;
+    type: 'pane' | 'container';
+    component?: string;
+    direction?: 'horizontal' | 'vertical';
+    size?: number;
+    children?: E2eLayoutNode[];
+  };
+  const originalLayout = (await layoutResponse.json()) as E2eLayoutNode;
+  expect(originalLayout).toBeTruthy();
+  const utilityLayout = structuredClone(originalLayout);
+  const replaceEditorWithSuspended = (node: E2eLayoutNode): boolean => {
+    if (node.type === 'pane' && node.component === 'editor') {
+      node.component = 'suspendedSshSessions';
+      return true;
+    }
+    return node.children?.some(replaceEditorWithSuspended) ?? false;
+  };
+  expect(replaceEditorWithSuspended(utilityLayout)).toBe(true);
+  expect((await context.request.put('/api/v1/settings/layout', { data: utilityLayout })).ok()).toBeTruthy();
 
   try {
     await connectTestSshFromConnectionsPage(page, connectionId);
+
+    await step(
+      'constrained utility panes switch to a compact presentation without content-driven layout jumps',
+      async () => {
+        const fileManager = page.locator('.file-manager-root:visible').first();
+        await expect(fileManager).toBeVisible();
+        const fileSplit = page.locator('.workspace-split.splitpanes--horizontal').filter({ has: fileManager }).first();
+        const filePane = fileSplit.locator(':scope > .splitpanes__pane').filter({ has: fileManager }).first();
+        const firstAction = fileManager.locator('.file-manager-action-button').first();
+
+        const suspendedPanel = page.getByTestId('suspended-sessions-view').filter({ visible: true }).first();
+        const suspendedSearch = suspendedPanel.locator('.suspended-session-search');
+        await expect(suspendedPanel).toBeVisible();
+        await expect(suspendedSearch).toBeVisible();
+
+        await page.setViewportSize({ width: 1440, height: 1200 });
+        await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeGreaterThan(340);
+        await expect.poll(async () => (await firstAction.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(27);
+        const expandedSuspendedFontSize = await suspendedSearch.evaluate((element) =>
+          Number.parseFloat(getComputedStyle(element).fontSize),
+        );
+        expect(expandedSuspendedFontSize).toBeGreaterThanOrEqual(14);
+        const expandedSplitBox = await fileSplit.boundingBox();
+        const expandedPaneBox = await filePane.boundingBox();
+        expect(expandedSplitBox).toBeTruthy();
+        expect(expandedPaneBox).toBeTruthy();
+        const expandedRatio = expandedPaneBox!.height / expandedSplitBox!.height;
+
+        await page.setViewportSize({ width: 1440, height: 650 });
+        await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeLessThan(340);
+        await expect.poll(async () => (await firstAction.boundingBox())?.height ?? 99).toBeLessThanOrEqual(25);
+        await expect
+          .poll(async () => (await fileManager.getByTestId('file-manager-path-input').boundingBox())?.height ?? 99)
+          .toBeLessThanOrEqual(26);
+        const compactSplitBox = await fileSplit.boundingBox();
+        const compactPaneBox = await filePane.boundingBox();
+        expect(compactSplitBox).toBeTruthy();
+        expect(compactPaneBox).toBeTruthy();
+        const compactRatio = compactPaneBox!.height / compactSplitBox!.height;
+        expect(Math.abs(compactRatio - expandedRatio)).toBeLessThan(0.03);
+
+        await page.setViewportSize({ width: 1440, height: 320 });
+        await expect.poll(async () => (await suspendedSearch.boundingBox())?.height ?? 99).toBeLessThanOrEqual(27);
+        await expect.poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).fontSize)).toBe('12px');
+        expect(12).toBeLessThan(expandedSuspendedFontSize);
+        await expect
+          .poll(() =>
+            suspendedPanel
+              .locator('.view-header')
+              .evaluate((element) => Number.parseFloat(getComputedStyle(element).marginBottom)),
+          )
+          .toBeLessThanOrEqual(6);
+
+        await page.setViewportSize({ width: 1440, height: 900 });
+      },
+    );
 
     const rootSplit = page.locator('.workspace-split.splitpanes--vertical').first();
     const firstPane = rootSplit.locator(':scope > .splitpanes__pane').first();
@@ -384,6 +462,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         .toBe(true);
     });
   } finally {
+    await context.request.put('/api/v1/settings/layout', { data: originalLayout });
     await context.request.put('/api/v1/settings', { data: { layoutLocked: false } });
     await context.request.put('/api/v1/settings/nav-bar-visibility', { data: { visible: true } });
   }

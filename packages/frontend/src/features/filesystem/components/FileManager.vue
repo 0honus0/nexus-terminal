@@ -1841,7 +1841,7 @@
 
 <style scoped>
   .file-manager-root {
-    container-type: inline-size;
+    container-type: size;
     container-name: file-manager-pane;
     font-family: var(--font-family-sans-serif, sans-serif);
   }
@@ -2041,6 +2041,39 @@
     }
     .file-manager-action-button i {
       font-size: 0.8rem !important;
+    }
+  }
+
+  @container file-manager-pane (max-height: 340px) {
+    .file-manager-toolbar {
+      column-gap: 0.25rem;
+      row-gap: 0.2rem;
+      padding: 0.35rem;
+    }
+    .file-manager-actions {
+      gap: 0.2rem;
+    }
+    .file-manager-action-button,
+    .file-manager-search-slot .file-manager-action-button {
+      min-height: 1.5rem;
+      height: 1.5rem !important;
+      padding-top: 0.125rem;
+      padding-bottom: 0.125rem;
+    }
+    .file-manager-path-input {
+      min-height: 1.55rem;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+    .file-manager-path-input input {
+      padding-top: 0;
+      padding-bottom: 0;
+      font-size: 0.75rem;
+      line-height: 1rem;
+    }
+    .file-table-header {
+      padding-top: calc(0.25rem * var(--file-row-scale));
+      padding-bottom: calc(0.25rem * var(--file-row-scale));
     }
   }
 </style>
