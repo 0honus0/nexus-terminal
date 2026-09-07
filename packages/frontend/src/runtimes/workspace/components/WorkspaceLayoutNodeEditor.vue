@@ -143,8 +143,24 @@
       </button>
     </div>
 
-    <div v-if="modelValue.type === 'container'" class="mt-2 space-y-2 border-l-2 border-border pl-3">
-      <div v-for="(child, index) in modelValue.children ?? []" :key="child.id" class="relative pt-1">
+    <div
+      v-if="modelValue.type === 'container'"
+      :data-testid="`workspace-layout-children-${modelValue.id}`"
+      :data-layout-direction="modelValue.direction ?? 'horizontal'"
+      :class="[
+        'mt-2 flex gap-2 border-l-2 border-border pl-3',
+        (modelValue.direction ?? 'horizontal') === 'horizontal' ? 'flex-row items-stretch' : 'flex-col',
+      ]"
+    >
+      <div
+        v-for="(child, index) in modelValue.children ?? []"
+        :key="child.id"
+        :data-layout-child-id="child.id"
+        :class="[
+          'relative min-w-0 pt-1',
+          (modelValue.direction ?? 'horizontal') === 'horizontal' ? 'flex-1' : 'w-full',
+        ]"
+      >
         <div class="absolute right-2 top-2 z-10 flex gap-1">
           <button
             type="button"
