@@ -81,7 +81,7 @@ The `E2E` workflow accepts an optional `workers` value when manually dispatched.
 
 The group generator accepts up to one worker per discovered spec. GitHub-hosted runner concurrency is account-plan scoped, so requesting more workers than the account can run concurrently causes excess group jobs to queue rather than increasing effective parallelism. Keep the repository default conservative unless measured CI results justify a higher value.
 
-Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.62.1-node24-v2`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `package-lock.json` before executing tests.
+Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.63.0-node24-v2`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `package-lock.json` before executing tests.
 
 On successful non-PR runs (`push`, scheduled, or `workflow_dispatch`), the workflow collects all group timing artifacts, refreshes the rolling history, reruns the **default** grouping algorithm, and commits changed `test/e2e/groups/` assignments back to the triggering branch. A manual `workers` override controls only that run’s matrix; rebalance still regenerates the repository default grouping from the collected timings. Pull requests skip the rebalance job and never write grouping state.
 
