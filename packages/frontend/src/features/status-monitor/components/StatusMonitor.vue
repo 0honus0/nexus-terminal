@@ -75,7 +75,7 @@
       await writeClipboardText(props.host);
       feedback.notifySuccess(t('common.copied'));
     } catch {
-      // Clipboard permissions are browser-controlled.
+      feedback.notifyError(t('statusMonitor.copyIpError'));
     }
   };
 

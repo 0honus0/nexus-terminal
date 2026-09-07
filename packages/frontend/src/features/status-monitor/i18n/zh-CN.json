@@ -43,6 +43,7 @@
     },
     "online": "在线",
     "networkInterfaceFallback": "网卡",
-    "historyRange": "历史时间范围"
+    "historyRange": "历史时间范围",
+    "copyIpError": "复制 IP 失败"
   }
 }

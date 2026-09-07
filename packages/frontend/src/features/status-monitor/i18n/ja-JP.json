@@ -43,6 +43,7 @@
     },
     "online": "オンライン",
     "networkInterfaceFallback": "ネットワークインターフェース",
-    "historyRange": "履歴範囲"
+    "historyRange": "履歴範囲",
+    "copyIpError": "IP アドレスのコピーに失敗しました"
   }
 }

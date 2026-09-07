@@ -195,6 +195,18 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     await hostButton.click();
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('127.0.0.1');
 
+    await page.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, 'writeText', {
+        configurable: true,
+        value: async () => {
+          throw new Error('clipboard blocked for E2E');
+        },
+      });
+      Object.defineProperty(document, 'execCommand', { configurable: true, value: () => false });
+    });
+    await hostButton.click();
+    await expect(page.getByText('Failed to copy IP address', { exact: true })).toBeVisible();
+
     await monitor.locator('.network-card').click();
     await expect(monitor.locator('.history-card')).toHaveCount(0);
 
