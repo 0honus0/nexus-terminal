@@ -224,34 +224,38 @@ test('login CAPTCHA clears expired/rejected verification and succeeds after a fr
   page,
   request,
 }, testInfo) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   await prepareCaptchaLogin(request, VALID_HCAPTCHA);
 
   const evidence: Array<Record<string, unknown>> = [];
   try {
-    await step('obtain a real hCaptcha test token and let the provider expire it', async () => {
-      await loadLoginWithCaptcha(page, { enabled: true, provider: 'hcaptcha' });
-      await page.locator('#username').fill(E2E_ADMIN.username);
-      await page.locator('#password').fill(E2E_ADMIN.password);
-      await completeHcaptchaTestWidget(page);
+    await step(
+      'obtain a real hCaptcha test token and let the provider expire it',
+      async () => {
+        await loadLoginWithCaptcha(page, { enabled: true, provider: 'hcaptcha' });
+        await page.locator('#username').fill(E2E_ADMIN.username);
+        await page.locator('#password').fill(E2E_ADMIN.password);
+        await completeHcaptchaTestWidget(page);
 
-      // hCaptcha documents a 120 second default token expiry. Wait for the real
-      // provider callback instead of shortening time or mutating application state.
-      await page.waitForTimeout(125_000);
+        // hCaptcha documents a 120 second default token expiry. Wait for the real
+        // provider callback instead of shortening time or mutating application state.
+        await page.waitForTimeout(125_000);
 
-      const loginRequest = page
-        .waitForRequest(
-          (candidate) => candidate.url().endsWith('/api/v1/auth/login') && candidate.method() === 'POST',
-          {
-            timeout: 2_000,
-          },
-        )
-        .catch(() => undefined);
-      await page.getByRole('button', { name: 'Login', exact: true }).click();
-      expect(await loginRequest).toBeUndefined();
-      await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
-      evidence.push({ phase: 'provider-expired', loginRequestSent: false, alert: CAPTCHA_REQUIRED_MESSAGE });
-    });
+        const loginRequest = page
+          .waitForRequest(
+            (candidate) => candidate.url().endsWith('/api/v1/auth/login') && candidate.method() === 'POST',
+            {
+              timeout: 2_000,
+            },
+          )
+          .catch(() => undefined);
+        await page.getByRole('button', { name: 'Login', exact: true }).click();
+        expect(await loginRequest).toBeUndefined();
+        await expect(page.getByRole('alert')).toHaveText(CAPTCHA_REQUIRED_MESSAGE);
+        evidence.push({ phase: 'provider-expired', loginRequestSent: false, alert: CAPTCHA_REQUIRED_MESSAGE });
+      },
+      160_000,
+    );
 
     await step('a real provider rejection resets the Login CAPTCHA token', async () => {
       await completeHcaptchaTestWidget(page);
