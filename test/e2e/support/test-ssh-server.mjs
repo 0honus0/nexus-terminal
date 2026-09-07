@@ -33,6 +33,7 @@ const PASSWORD = 'e2e-password';
 const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 let statusSample = 0;
 let sftpWriteDelayMs = 0;
+let sftpOpenDelayMs = 0;
 let archiveExecDelayMs = 0;
 let dockerContainerPresent = true;
 let dockerContainerState = 'running';
@@ -485,6 +486,7 @@ async function resetRoot() {
     path.join(rootDir, 'utf16-crlf.txt'),
     Buffer.from('\uFEFFENCODING_E2E\r\nSECOND_LINE\r\n', 'utf16le'),
   );
+  await fsp.writeFile(path.join(rootDir, 'gb18030-low-confidence.txt'), Buffer.from('d6d0cec4b2e2cad4', 'hex'));
   await fsp.writeFile(path.join(rootDir, 'README-e2e.md'), '# Nexus Markdown E2E\n\n**preview-ok**\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'copy-source.txt'), 'copy-me\n', 'utf8');
   await fsp.writeFile(path.join(rootDir, 'move-source.txt'), 'move-me\n', 'utf8');
@@ -519,6 +521,7 @@ async function resetRoot() {
   await fsp.chmod(path.join(rootDir, 'seed.txt'), 0o644);
   statusSample = 0;
   sftpWriteDelayMs = 0;
+  sftpOpenDelayMs = 0;
   archiveExecDelayMs = 0;
 }
 
@@ -643,6 +646,7 @@ function attachSftp(session, accept) {
 
   sftp.on('OPEN', async (reqid, remotePath, flags, attrs) => {
     try {
+      if (sftpOpenDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, sftpOpenDelayMs));
       const fullPath = resolveRemotePath(remotePath);
       await fsp.mkdir(path.dirname(fullPath), { recursive: true });
       const fileHandle = await fsp.open(fullPath, openModeToFsFlags(flags), attrs?.mode ? attrs.mode & 0o7777 : 0o644);
@@ -1102,6 +1106,7 @@ const controlServer = http.createServer(async (req, res) => {
     if (req.method === 'POST' && requestUrl.pathname === '/reset') {
       await stopSshServer();
       sftpWriteDelayMs = 0;
+      sftpOpenDelayMs = 0;
       archiveExecDelayMs = 0;
       activeSftpChannels.clear();
       openedSftpChannels = 0;
@@ -1132,6 +1137,13 @@ const controlServer = http.createServer(async (req, res) => {
         : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpWriteDelayMs }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/sftp/open-delay') {
+      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+      sftpOpenDelayMs = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(10_000, Math.round(requestedDelay))) : 0;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ sftpOpenDelayMs }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {

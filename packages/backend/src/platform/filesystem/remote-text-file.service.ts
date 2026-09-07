@@ -61,6 +61,13 @@ export class RemoteTextFileService {
     if (detected === 'gb2312') detected = 'gbk';
     if (detected === 'utf8' || detected === 'ascii') return 'utf-8';
     if (['gbk', 'gb2312', 'gb18030', 'big5', 'euctw'].includes(detected)) return 'gb18030';
+    if ((detection.confidence || 0) < 0.9) {
+      try {
+        if (!iconv.decode(data, 'gb18030').includes('\uFFFD')) return 'gb18030';
+      } catch {
+        /* fall back to the detector-supported encoding or UTF-8 below */
+      }
+    }
     return iconv.encodingExists(detected) ? detected : 'utf-8';
   }
   private encodeContent(content: string, encoding: string): Buffer {

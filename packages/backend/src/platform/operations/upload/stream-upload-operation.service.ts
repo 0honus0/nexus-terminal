@@ -19,6 +19,14 @@ interface PreparedBatch {
   directories: Set<string>;
 }
 
+interface PendingUpload {
+  key: string;
+  ownerId: string;
+  uploadId: string;
+  emit: (event: UploadEvent) => void;
+  cancelled: boolean;
+}
+
 interface ActiveUpload {
   key: string;
   ownerId: string;
@@ -43,6 +51,7 @@ const PREPARE_CONCURRENCY = 8;
 
 export class StreamUploadOperationService implements UploadOperation {
   private readonly active = new Map<string, ActiveUpload>();
+  private readonly pending = new Map<string, PendingUpload>();
   private readonly prepared = new Map<string, PreparedBatch>();
 
   constructor(private readonly sessions: Pick<ExecutionSessionManager, 'require'>) {}
@@ -89,80 +98,111 @@ export class StreamUploadOperationService implements UploadOperation {
       emit({ type: 'failed', uploadId: request.uploadId, message: 'Invalid upload size.' });
       return;
     }
-    if (this.active.has(key)) {
+    if (this.active.has(key) || this.pending.has(key)) {
       emit({ type: 'failed', uploadId: request.uploadId, message: 'Upload already started.' });
       return;
     }
 
-    const filesystem = await this.sessions.require(request.sessionId).fileSystem('transfer');
-    const destinationPath = this.absolutePath(request.destinationPath, 'upload destination');
-    const destinationDirectory = path.posix.dirname(destinationPath);
-    if (request.prepareId) {
-      const batch = this.prepared.get(this.prepareKey(request.ownerId, request.prepareId));
-      if (!batch || batch.sessionId !== request.sessionId) {
-        emit({ type: 'failed', uploadId: request.uploadId, message: 'Upload directories were not prepared.' });
-        return;
-      }
-      if (!this.isWithin(batch.basePath, destinationDirectory) || !batch.directories.has(destinationDirectory)) {
-        emit({
-          type: 'failed',
-          uploadId: request.uploadId,
-          message: 'Upload destination is outside prepared directories.',
-        });
-        return;
-      }
-    } else {
-      await filesystem.ensureDirectory(destinationDirectory);
-    }
-
-    const conflictPolicy = request.conflictPolicy ?? 'ask';
-    const exists = await filesystem.exists(destinationPath);
-    if (exists && conflictPolicy === 'ask') {
-      emit({
-        type: 'conflict',
-        uploadId: request.uploadId,
-        destinationPath,
-        filename: path.posix.basename(destinationPath),
-      });
-      return;
-    }
-    if (exists && conflictPolicy === 'skip') {
-      emit({ type: 'skipped', uploadId: request.uploadId, destinationPath });
-      return;
-    }
-
-    const temporaryPath = path.posix.join(destinationDirectory, `.nexus-upload-${request.uploadId}.part`);
-    await filesystem.removeFile(temporaryPath, { ignoreMissing: true });
-    const stream = await filesystem.openWrite(temporaryPath, { highWaterMark: WRITE_HIGH_WATER_MARK });
-    const upload: ActiveUpload = {
+    const pending: PendingUpload = {
       key,
       ownerId: request.ownerId,
       uploadId: request.uploadId,
-      sessionId: request.sessionId,
-      destinationPath,
-      temporaryPath,
-      totalSize: request.size,
-      bytesAccepted: 0,
-      bytesWritten: 0,
-      nextChunkIndex: 0,
-      receivedLastChunk: false,
-      filesystem,
-      stream,
       emit,
-      queue: Promise.resolve(),
       cancelled: false,
     };
-    this.active.set(key, upload);
-    stream.once('error', (error: Error) => {
-      if (this.active.get(key) !== upload || upload.cancelled) return;
-      void this.fail(upload, `Upload stream failed: ${error.message}`);
-    });
-    if (request.size === 0) {
-      upload.receivedLastChunk = true;
-      await this.complete(upload);
-      return;
+    this.pending.set(key, pending);
+    let filesystem: RemoteFileSystem | undefined;
+    let temporaryPath: string | undefined;
+    let stream: Writable | undefined;
+    const isCancelled = () => pending.cancelled || this.pending.get(key) !== pending;
+
+    try {
+      filesystem = await this.sessions.require(request.sessionId).fileSystem('transfer');
+      if (isCancelled()) return;
+
+      const destinationPath = this.absolutePath(request.destinationPath, 'upload destination');
+      const destinationDirectory = path.posix.dirname(destinationPath);
+      if (request.prepareId) {
+        const batch = this.prepared.get(this.prepareKey(request.ownerId, request.prepareId));
+        if (!batch || batch.sessionId !== request.sessionId) {
+          emit({ type: 'failed', uploadId: request.uploadId, message: 'Upload directories were not prepared.' });
+          return;
+        }
+        if (!this.isWithin(batch.basePath, destinationDirectory) || !batch.directories.has(destinationDirectory)) {
+          emit({
+            type: 'failed',
+            uploadId: request.uploadId,
+            message: 'Upload destination is outside prepared directories.',
+          });
+          return;
+        }
+      } else {
+        await filesystem.ensureDirectory(destinationDirectory);
+        if (isCancelled()) return;
+      }
+
+      const conflictPolicy = request.conflictPolicy ?? 'ask';
+      const exists = await filesystem.exists(destinationPath);
+      if (isCancelled()) return;
+      if (exists && conflictPolicy === 'ask') {
+        emit({
+          type: 'conflict',
+          uploadId: request.uploadId,
+          destinationPath,
+          filename: path.posix.basename(destinationPath),
+        });
+        return;
+      }
+      if (exists && conflictPolicy === 'skip') {
+        emit({ type: 'skipped', uploadId: request.uploadId, destinationPath });
+        return;
+      }
+
+      temporaryPath = path.posix.join(destinationDirectory, `.nexus-upload-${request.uploadId}.part`);
+      await filesystem.removeFile(temporaryPath, { ignoreMissing: true });
+      if (isCancelled()) return;
+      stream = await filesystem.openWrite(temporaryPath, { highWaterMark: WRITE_HIGH_WATER_MARK });
+      if (isCancelled()) return;
+
+      const upload: ActiveUpload = {
+        key,
+        ownerId: request.ownerId,
+        uploadId: request.uploadId,
+        sessionId: request.sessionId,
+        destinationPath,
+        temporaryPath,
+        totalSize: request.size,
+        bytesAccepted: 0,
+        bytesWritten: 0,
+        nextChunkIndex: 0,
+        receivedLastChunk: false,
+        filesystem,
+        stream,
+        emit,
+        queue: Promise.resolve(),
+        cancelled: false,
+      };
+      this.pending.delete(key);
+      this.active.set(key, upload);
+      stream.once('error', (error: Error) => {
+        if (this.active.get(key) !== upload || upload.cancelled) return;
+        void this.fail(upload, `Upload stream failed: ${error.message}`);
+      });
+      if (request.size === 0) {
+        upload.receivedLastChunk = true;
+        await this.complete(upload);
+        return;
+      }
+      emit({ type: 'ready', uploadId: request.uploadId });
+    } finally {
+      if (this.pending.get(key) === pending) {
+        this.pending.delete(key);
+        if (stream && !stream.destroyed) stream.destroy();
+        if (filesystem && temporaryPath) {
+          await filesystem.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
+        }
+      }
     }
-    emit({ type: 'ready', uploadId: request.uploadId });
   }
 
   async append(request: UploadChunkRequest): Promise<void> {
@@ -174,13 +214,23 @@ export class StreamUploadOperationService implements UploadOperation {
   }
 
   async cancel(ownerId: string, uploadId: string): Promise<boolean> {
-    const upload = this.active.get(this.uploadKey(ownerId, uploadId));
-    if (!upload) return false;
-    upload.cancelled = true;
-    this.active.delete(upload.key);
-    upload.stream.destroy();
-    await upload.filesystem.removeFile(upload.temporaryPath, { ignoreMissing: true }).catch(() => undefined);
-    upload.emit({ type: 'cancelled', uploadId });
+    const key = this.uploadKey(ownerId, uploadId);
+    const upload = this.active.get(key);
+    if (upload) {
+      upload.cancelled = true;
+      this.active.delete(upload.key);
+      upload.stream.destroy();
+      await upload.filesystem.removeFile(upload.temporaryPath, { ignoreMissing: true }).catch(() => undefined);
+      upload.emit({ type: 'cancelled', uploadId });
+      return true;
+    }
+
+    const pending = this.pending.get(key);
+    if (!pending) return false;
+    if (!pending.cancelled) {
+      pending.cancelled = true;
+      pending.emit({ type: 'cancelled', uploadId });
+    }
     return true;
   }
 
@@ -192,10 +242,10 @@ export class StreamUploadOperationService implements UploadOperation {
   }
 
   async cancelOwner(ownerId: string): Promise<void> {
-    const ids = [...this.active.values()]
-      .filter((upload) => upload.ownerId === ownerId)
-      .map((upload) => upload.uploadId);
-    await Promise.all(ids.map((uploadId) => this.cancel(ownerId, uploadId)));
+    const ids = new Set<string>();
+    for (const upload of this.active.values()) if (upload.ownerId === ownerId) ids.add(upload.uploadId);
+    for (const upload of this.pending.values()) if (upload.ownerId === ownerId) ids.add(upload.uploadId);
+    await Promise.all([...ids].map((uploadId) => this.cancel(ownerId, uploadId)));
     for (const [key, batch] of this.prepared) if (batch.ownerId === ownerId) this.prepared.delete(key);
   }
 

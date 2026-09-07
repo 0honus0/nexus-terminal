@@ -233,6 +233,15 @@ test('file previews and text editor protect historical file-opening regressions'
     await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
   });
 
+  await slowStep('low-confidence legacy Chinese bytes keep the GB18030 fallback', async () => {
+    await row(page, 'gb18030-low-confidence.txt').dblclick();
+    const editor = editorView(page);
+    await expect(editor).toBeVisible();
+    await expect(editor.getByTestId('file-editor-encoding')).toHaveValue('gb18030');
+    await expect.poll(async () => editor.locator('.monaco-editor .view-lines').innerText()).toContain('中文测试');
+    await documentPopup(page).getByTitle('Close Editor', { exact: true }).first().click();
+  });
+
   await slowStep('Unicode image filename streams and renders inline', async () => {
     const filename = '预览-测试.png';
     await row(page, filename).dblclick();
