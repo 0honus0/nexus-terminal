@@ -16,6 +16,6 @@
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
     "tests/ssh/quick-command-tags-variables.spec.ts",
-    "tests/ssh/sftp-download.spec.ts"
+    "tests/ssh/suspend-resume.spec.ts"
   ]
 }
