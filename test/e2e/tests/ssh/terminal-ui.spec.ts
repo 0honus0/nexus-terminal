@@ -307,3 +307,43 @@ test('terminal font-size wheel change persists when the session is closed before
     )
     .toBe(15);
 });
+
+test('desktop touch hardware keeps the legacy desktop Workspace classification', async ({ page, context }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'maxTouchPoints', { configurable: true, get: () => 5 });
+    const nativeMatchMedia = window.matchMedia.bind(window);
+    window.matchMedia = ((query: string): MediaQueryList => {
+      if (query !== '(pointer: coarse)') return nativeMatchMedia(query);
+      return {
+        matches: true,
+        media: query,
+        onchange: null,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        dispatchEvent: () => true,
+      } as MediaQueryList;
+    }) as typeof window.matchMedia;
+  });
+
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const capabilities = await page.evaluate(() => ({
+    userAgent: navigator.userAgent,
+    maxTouchPoints: navigator.maxTouchPoints,
+    coarsePointer: window.matchMedia('(pointer: coarse)').matches,
+  }));
+  expect(capabilities.userAgent).not.toMatch(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i);
+  expect(capabilities.maxTouchPoints).toBe(5);
+  expect(capabilities.coarsePointer).toBe(true);
+
+  const tabBar = page.getByTestId('terminal-tab-bar');
+  await expect(tabBar.getByRole('button', { name: 'Configure Layout', exact: true })).toBeVisible();
+  await expect(page.getByTestId('command-input')).toBeVisible();
+});

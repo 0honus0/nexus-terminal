@@ -21,7 +21,7 @@ export function useDeviceCapabilities(): DeviceCapabilities {
   const hasTouch = ref(false);
   const hasCoarsePointer = ref(false);
   const isNarrowViewport = ref(false);
-  const mobileUserAgent = ref(false);
+  const mobileUserAgent = ref(typeof navigator !== 'undefined' && isMobileUserAgent(navigator.userAgent));
 
   let coarseQuery: MediaQueryList | null = null;
   let narrowQuery: MediaQueryList | null = null;
@@ -36,9 +36,9 @@ export function useDeviceCapabilities(): DeviceCapabilities {
     isNarrowViewport.value = narrowQuery?.matches ?? false;
   };
 
-  const isMobile = computed(
-    () => mobileUserAgent.value || (hasTouch.value && (hasCoarsePointer.value || isNarrowViewport.value)),
-  );
+  // Full mobile Workspace mode preserves the reachable legacy product classification.
+  // Touch/coarse/narrow capabilities remain independent signals for feature-local affordances.
+  const isMobile = computed(() => mobileUserAgent.value);
 
   onMounted(() => {
     coarseQuery = window.matchMedia('(pointer: coarse)');
