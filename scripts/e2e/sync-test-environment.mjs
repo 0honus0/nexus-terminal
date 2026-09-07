@@ -110,7 +110,7 @@ function syncPlaywrightPackage(playwrightVersion, updateLock) {
 }
 
 function syncRunnerFiles(config) {
-  const tag = `playwright-${config.playwright}-node${config.node}-v${config.runnerRevision}`;
+  const tag = `playwright-${config.playwright}-node${config.node}`;
 
   replaceRequired(
     'test/e2e/Dockerfile.runner',
@@ -138,7 +138,6 @@ const config = readJson(versionsPath);
 
 if (args.node) config.node = args.node;
 if (args.playwright) config.playwright = args.playwright;
-if (args['runner-revision']) config.runnerRevision = Number(args['runner-revision']);
 
 const actionArgMap = {
   checkout: 'checkout',
@@ -154,9 +153,6 @@ for (const [argName, configName] of Object.entries(actionArgMap)) {
   if (args[argName]) config.actions[configName] = args[argName];
 }
 
-if (!Number.isInteger(config.runnerRevision) || config.runnerRevision < 1) {
-  throw new Error('runnerRevision must be a positive integer');
-}
 if (!/^\d+$/.test(config.node)) throw new Error(`Invalid Node major: ${config.node}`);
 if (!/^\d+\.\d+\.\d+/.test(config.playwright)) throw new Error(`Invalid Playwright version: ${config.playwright}`);
 
@@ -168,6 +164,5 @@ syncRunnerFiles(config);
 
 console.log(`[E2E env] Node ${config.node}`);
 console.log(`[E2E env] Playwright ${config.playwright}`);
-console.log(`[E2E env] runner revision ${config.runnerRevision}`);
-console.log(`[E2E env] image tag playwright-${config.playwright}-node${config.node}-v${config.runnerRevision}`);
+console.log(`[E2E env] image tag playwright-${config.playwright}-node${config.node}`);
 console.log('[E2E env] CI action versions synchronized');

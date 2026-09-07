@@ -1172,11 +1172,23 @@ const controlServer = http.createServer(async (req, res) => {
       } catch {
         // Invalid JSON is handled by the strict validation below.
       }
+      const locale = requestUrl.searchParams.get('locale') || 'en-US';
+      const expected =
+        locale === 'zh-CN'
+          ? {
+              eventDisplay: '设置已更新',
+              message: '这是来自 Nexus Terminal 的测试通知（Webhook），事件为“设置已更新”。',
+            }
+          : {
+              eventDisplay: undefined,
+              message: "This is a test notification from Nexus Terminal (Webhook - i18n) for event 'Settings Updated'.",
+            };
       const valid =
         req.headers['x-e2e-webhook'] === 'delivery' &&
         parsed?.source === 'nexus-e2e' &&
         parsed?.event === 'SETTINGS_UPDATED' &&
-        parsed?.details?.message === 'This is a test notification from Nexus Terminal (webhook).' &&
+        (expected.eventDisplay === undefined || parsed?.eventDisplay === expected.eventDisplay) &&
+        parsed?.details?.message === expected.message &&
         parsed?.details?.test === true;
       res.writeHead(valid ? 204 : 422, { 'content-type': 'application/json' });
       res.end(valid ? undefined : JSON.stringify({ error: 'invalid E2E webhook request' }));

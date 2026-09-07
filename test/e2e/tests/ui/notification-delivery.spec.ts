@@ -80,6 +80,35 @@ test('notification test button performs a real webhook POST with configured head
   );
 });
 
+test('notification test localizes user-facing content while preserving the raw event id', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const language = await context.request.put('/api/v1/settings', { data: { language: 'zh-CN' } });
+  expect(language.ok()).toBeTruthy();
+
+  await page.goto('/notifications');
+  const settings = page.getByTestId('notification-settings');
+  await settings.getByTestId('notification-add-channel').click();
+  await page.locator('#setting-name').fill('E2E Localized Webhook Delivery');
+  await page.locator('#setting-channel-type').selectOption('webhook');
+  await page.locator('#webhook-url').fill(`${STRICT_WEBHOOK_URL}?locale=zh-CN`);
+  await page.locator('#webhook-method').selectOption('POST');
+  await page.locator('#webhook-headers').fill('{"Content-Type":"application/json","X-E2E-Webhook":"delivery"}');
+  await page
+    .locator('#webhook-body')
+    .fill('{"source":"nexus-e2e","event":"{event}","eventDisplay":"{eventDisplay}","details":{details}}');
+
+  const responsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith('/api/v1/notifications/test-unsaved') && response.request().method() === 'POST',
+  );
+  await page.getByTestId('notification-test').click();
+  const response = await responsePromise;
+  expect(response.ok()).toBeTruthy();
+  const result = (await response.json()) as { success: boolean; message: string };
+  expect(result).toEqual({ success: true, message: '测试通知发送成功。' });
+  await expect(page.locator('small').filter({ hasText: '测试通知发送成功。' })).toBeVisible();
+});
+
 test('notification settings complete a real CRUD, event persistence, and delivery error loop', async ({
   page,
   context,

@@ -27,7 +27,7 @@
 | [代理管理](requirements/proxies.md)                                |           1 |         1 |
 | [SSH 密钥管理](requirements/ssh-keys.md)                           |           1 |         2 |
 | [快捷命令、命令输入与历史](requirements/quick-commands-history.md) |           8 |         7 |
-| [通知管理](requirements/notifications.md)                          |           2 |         2 |
+| [通知管理](requirements/notifications.md)                          |           3 |         2 |
 | [审计与全局反馈](requirements/audit-feedback.md)                   |           2 |         2 |
 | [偏好与系统设置](requirements/preferences-settings.md)             |           4 |         4 |
 | [外观、PWA 与版本信息](requirements/appearance-pwa-about.md)       |           7 |         5 |
@@ -42,7 +42,7 @@
 | [Docker 管理](requirements/docker.md)                              |           2 |         4 |
 | [RDP / VNC 远程桌面](requirements/remote-desktop.md)               |           7 |         4 |
 | [移动端交互](requirements/mobile.md)                               |           4 |         0 |
-| [架构与跨模块需求](requirements/architecture.md)                   |           4 |         0 |
+| [架构与跨模块需求](requirements/architecture.md)                   |           5 |         0 |
 
 ## 4. 系统级特殊设计与非功能需求
 

@@ -33,6 +33,7 @@ import { DatabaseDiagnosticProbe } from '../infrastructure/diagnostics/database-
 import { ProcessDiagnosticProbe } from '../infrastructure/diagnostics/process-diagnostic.probe';
 import { GuacamoleAdapter } from '../infrastructure/guacamole/guacamole.adapter';
 import { NetworkNotificationChannelAdapter } from '../infrastructure/notifications/network-notification-channel.adapter';
+import { I18nextNotificationLocalizer } from '../infrastructure/notifications/i18next-notification-localizer.adapter';
 import { AesGcmSecretCipher } from '../infrastructure/security/aes-gcm-secret-cipher';
 import { BcryptPasswordHasher } from '../infrastructure/security/bcrypt-password-hasher';
 import { SshTransportAdapter } from '../infrastructure/ssh/ssh-transport.adapter';
@@ -213,11 +214,13 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
   const settings = new SettingsService(settingsRepository, settingsMigrationRepository);
   const audit = new AuditLogService(auditRepository);
   const notificationChannels = new NetworkNotificationChannelAdapter();
-  const notificationFormatter = new NotificationFormatter();
+  const notificationLocalizer = new I18nextNotificationLocalizer();
+  const notificationFormatter = new NotificationFormatter(notificationLocalizer);
   const notifications = new NotificationService(
     notificationRepository,
     notificationChannels,
     notificationFormatter,
+    notificationLocalizer,
     settings,
   );
   const notificationSettings = new NotificationSettingsService(notificationRepository, audit, notifications);

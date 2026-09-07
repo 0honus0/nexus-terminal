@@ -60,6 +60,7 @@ jobs:
       changed: ${{ steps.state.outputs.changed }}
       screenshots_requested: ${{ steps.state.outputs.screenshots_requested }}
       runner_image: ${{ steps.state.outputs.runner_image }}
+      runner_rebuild: ${{ steps.state.outputs.runner_rebuild }}
       node_version: ${{ steps.state.outputs.node_version }}
     steps:
       - name: Checkout repository
@@ -124,19 +125,38 @@ jobs:
           fi
 
           node_version="$(node -p "require('./scripts/e2e/versions.json').node")"
-          tag="$(node -e 'const v=require("./scripts/e2e/versions.json"); process.stdout.write(`playwright-${v.playwright}-node${v.node}-v${v.runnerRevision}`)')"
+          tag="$(node scripts/e2e/runner-image-info.mjs tag)"
+          fingerprint="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
           owner="${GITHUB_REPOSITORY_OWNER,,}"
+          runner_repository="ghcr.io/${owner}/nexus-terminal-e2e-runner"
+          runner_image="${runner_repository}:${tag}"
+          fingerprint_image="${runner_repository}:fingerprint-${fingerprint}"
+
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
+          manifest_config_digest() {
+            docker manifest inspect "$1" 2>/dev/null | jq -r '.config.digest // empty'
+          }
+
+          runner_digest="$(manifest_config_digest "$runner_image" || true)"
+          fingerprint_digest="$(manifest_config_digest "$fingerprint_image" || true)"
+          runner_rebuild=false
+          if [[ -z "$runner_digest" || -z "$fingerprint_digest" || "$runner_digest" != "$fingerprint_digest" ]]; then
+            runner_rebuild=true
+            echo "::notice::E2E runner image is missing or does not match the current runner fingerprint; it will be rebuilt before grouped E2E starts."
+          fi
 
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
           echo "screenshots_requested=$screenshots_requested" >> "$GITHUB_OUTPUT"
           echo "node_version=$node_version" >> "$GITHUB_OUTPUT"
-          echo "runner_image=ghcr.io/${owner}/nexus-terminal-e2e-runner:${tag}" >> "$GITHUB_OUTPUT"
+          echo "runner_image=$runner_image" >> "$GITHUB_OUTPUT"
+          echo "runner_rebuild=$runner_rebuild" >> "$GITHUB_OUTPUT"
 
       - name: Validate synchronized environment
         if: steps.state.outputs.changed == 'true'
         run: |
           node --check scripts/e2e/resolve-latest-test-environment.mjs
           node --check scripts/e2e/sync-test-environment.mjs
+          node --check scripts/e2e/runner-image-info.mjs
           bash -n scripts/e2e/build-runner-image.sh
           npm run test:e2e:groups:check
           git diff --check
@@ -153,7 +173,7 @@ jobs:
   runner-image:
     name: Build E2E runner image
     needs: environment
-    if: ${{ needs.environment.outputs.changed == 'true' }}
+    if: ${{ needs.environment.outputs.runner_rebuild == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:

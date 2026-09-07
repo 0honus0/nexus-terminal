@@ -8,10 +8,6 @@ export interface PasswordHasher {
   compare(password: string, hash: string): Promise<boolean>;
 }
 
-export interface SecureTokenGenerator {
-  generate(byteLength?: number): string;
-}
-
 export const bufferToBase64Url = (buffer: ArrayBuffer | Buffer): string =>
   (Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer)).toString('base64url');
 

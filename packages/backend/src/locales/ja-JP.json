@@ -3,7 +3,8 @@
     "subject": "星枢ターミナル テスト通知 ({event})",
     "email": {
       "body": "これは、星枢ターミナルからのイベント'{event}'に関するテストメールです。\n\nこのメールを受信した場合、SMTP 設定は正常に機能しています。\n\nタイムスタンプ: {timestamp}",
-      "bodyHtml": "<p>これは、<b>星枢ターミナル</b>からのイベント'{event}'に関するテストメールです。</p><p>このメールを受信した場合、SMTP 設定は正常に機能しています。</p><p>タイムスタンプ: {timestamp}</p>"
+      "bodyHtml": "<p>これは、<b>星枢ターミナル</b>からのイベント'{event}'に関するテストメールです。</p><p>このメールを受信した場合、SMTP 設定は正常に機能しています。</p><p>タイムスタンプ: {timestamp}</p>",
+      "detailsMessage": "これは Nexus Terminal からのテスト通知（Email）です。イベント: 「{event}」。"
     },
     "webhook": {
       "detailsMessage": "これは星枢ターミナルからのテスト通知 (Webhook - i18n) です。 イベント：'{event}'。"
@@ -45,6 +46,25 @@
     "PASSKEY_DELETED": "パスキー削除済み",
     "PASSKEY_DELETE_UNAUTHORIZED": "パスキー削除権限なし",
     "PASSKEY_NAME_UPDATED": "パスキー名更新済み",
-    "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "パスキー名更新権限なし"
+    "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "パスキー名更新権限なし",
+    "IP_BLOCKED": "IP アドレスをブロックしました"
+  },
+  "notification": {
+    "email": {
+      "defaultBody": "イベント: {eventDisplay}\n時刻: {timestamp}\n詳細:\n{details}"
+    },
+    "telegram": {
+      "defaultBody": "*{eventDisplay}*\n時刻: {timestamp}\n詳細:\n```\n{details}\n```"
+    },
+    "test": {
+      "success": "テスト通知を送信しました。",
+      "failure": "テスト通知の送信に失敗しました: {error}"
+    },
+    "details": {
+      "connectionTestSuccess": "接続「{name}」のテストに成功しました。",
+      "connectionTestFailed": "接続「{name}」のテストに失敗しました: {error}",
+      "ipWhitelistUpdated": "IP ホワイトリストを更新しました。",
+      "settingsUpdated": "設定を更新しました。"
+    }
   }
 }

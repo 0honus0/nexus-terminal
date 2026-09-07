@@ -174,7 +174,6 @@ Interfaces receive dependencies; they never import Bootstrap.
 `shared` is for cross-cutting primitives with no stronger domain owner, such as:
 
 - common typed errors;
-- application event primitives;
 - cryptographic interfaces;
 - genuinely shared types.
 
