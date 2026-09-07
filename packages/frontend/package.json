@@ -11,6 +11,7 @@
     "check:architecture": "node ./scripts/check-architecture.mjs"
   },
   "dependencies": {
+    "@babel/runtime": "^8.0.0",
     "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.11.0",
     "@codemirror/lang-cpp": "^6.0.3",
