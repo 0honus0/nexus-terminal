@@ -1491,6 +1491,7 @@
 
 <style scoped>
   :global(.workspace-preview-overlay) {
+    background-color: rgb(0 0 0 / 80%) !important;
     padding-top: max(0.75rem, env(safe-area-inset-top)) !important;
     padding-right: max(0.75rem, env(safe-area-inset-right)) !important;
     padding-bottom: max(0.75rem, env(safe-area-inset-bottom)) !important;

@@ -866,6 +866,7 @@ test('preview tabs force refresh externally changed Markdown image PDF XLSX and 
     await dialog.getByRole('button', { name: 'Refresh preview', exact: true }).click();
     await expect(dialog.getByText('Nexus DOCX Refreshed', { exact: true })).toBeVisible({ timeout: 20_000 });
     await expectOverlayToCoverWorkspaceRail(page, 'document-popup', 1100);
+    await expect(documentPopup(page)).toHaveCSS('background-color', 'rgba(0, 0, 0, 0.8)');
     await captureFunctionalScreenshot(page, 'file-manager-preview-refresh.png', {
       viewport: { width: 1440, height: 900 },
     });
