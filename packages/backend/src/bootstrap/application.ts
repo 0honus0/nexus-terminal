@@ -41,6 +41,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     notifications: services.modules.notifications,
     connections: services.modules.connections,
     connectionExport: services.modules.connectionExport,
+    connectionImport: services.modules.connectionImport,
     sshConnectionTest: services.modules.sshConnectionTest,
     remoteDesktop: services.modules.remoteDesktop,
     proxies: services.modules.proxies,

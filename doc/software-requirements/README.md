@@ -41,4 +41,4 @@ doc/software-requirements/
 - GREQ 中识别到的 commit hash 链接到 GitHub 对应 commit。
 - 历史行为证据由 FR/GREQ 与 Git 历史索引保留；已完成使命的重构过程文档不作为长期事实源继续维护。
 
-统计：**123 条 FR / SRS 主需求，104 条 GREQ。**
+统计：**124 条 FR / SRS 主需求，104 条 GREQ。**

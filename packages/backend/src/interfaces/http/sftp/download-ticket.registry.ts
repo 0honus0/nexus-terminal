@@ -38,6 +38,11 @@ const digest = (secret: string): Buffer => createHash('sha256').update(secret).d
 export class DownloadTicketRegistry {
   private readonly leases = new Map<string, DownloadTicketLease>();
 
+  constructor() {
+    const cleanupTimer = setInterval(() => this.cleanupExpired(), 5_000);
+    cleanupTimer.unref();
+  }
+
   issue(
     input: Omit<
       DownloadTicketLease,

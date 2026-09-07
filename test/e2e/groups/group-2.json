@@ -6,15 +6,18 @@
     "tests/http/auth-2fa.spec.ts",
     "tests/http/auth-api.spec.ts",
     "tests/http/backup.spec.ts",
+    "tests/http/connection-import.spec.ts",
     "tests/http/connections-tags.spec.ts",
     "tests/http/quick-commands-audit.spec.ts",
     "tests/http/rdp-remoteapp.spec.ts",
     "tests/http/terminal-themes.spec.ts",
     "tests/ui/dashboard-workflows.spec.ts",
-    "tests/ssh/connection-edit-delete.spec.ts",
-    "tests/ssh/connection-list-search.spec.ts",
-    "tests/ssh/connection.spec.ts",
-    "tests/ssh/reconnect-ui.spec.ts",
-    "tests/ssh/sftp-download.spec.ts"
+    "tests/ui/captcha-settings.spec.ts",
+    "tests/ui/change-password.spec.ts",
+    "tests/ui/ip-blacklist-settings.spec.ts",
+    "tests/ui/ip-whitelist-settings.spec.ts",
+    "tests/ui/protected-navigation.spec.ts",
+    "tests/ui/ssh-key-management.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts"
   ]
 }

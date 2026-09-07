@@ -12,10 +12,14 @@ export const requireAuthenticated = (request: Request, response: Response, next:
 export const createIpBlacklistCheck =
   (blacklist: IpBlacklistService) =>
   async (request: Request, response: Response, next: NextFunction): Promise<void> => {
-    const ip = request.ip || request.socket.remoteAddress || 'unknown';
+    const ip = request.ip || request.socket.remoteAddress;
+    if (!ip) {
+      response.status(403).json({ message: '禁止访问：无法识别来源 IP。' });
+      return;
+    }
     try {
       if (await blacklist.isBlocked(ip)) {
-        response.status(403).json({ message: '此 IP 地址因多次登录失败已被暂时封禁。' });
+        response.status(403).json({ message: '访问被拒绝。' });
         return;
       }
       next();

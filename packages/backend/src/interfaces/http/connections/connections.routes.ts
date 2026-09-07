@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import type { ConnectionExportService } from '../../../modules/connections/connection-export.service';
+import type { ConnectionImportService } from '../../../modules/connections/connection-import.service';
 import type {
   CreateConnectionInput,
   UnsavedSshConnectionInput,
@@ -8,7 +9,6 @@ import type {
 } from '../../../modules/connections/connection.types';
 import type { ConnectionService } from '../../../modules/connections/connection.service';
 import type { SshConnectionTestService } from '../../../modules/connections/services/ssh-connection-test.service';
-import type { ProxyService } from '../../../modules/proxies/proxy.service';
 import type { RemoteDesktopSessionService } from '../../../modules/remote-desktop/remote-desktop-session.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { importConnections } from './connection-import';
@@ -18,7 +18,7 @@ import { route } from '../shared/route-handler';
 export interface ConnectionsRouterDependencies {
   connections: ConnectionService;
   connectionExport: ConnectionExportService;
-  proxies: ProxyService;
+  connectionImport: ConnectionImportService;
   sshConnectionTest: SshConnectionTestService;
   remoteDesktop: RemoteDesktopSessionService;
 }
@@ -78,10 +78,7 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
         return;
       }
       try {
-        const result = await importConnections(request.file.buffer, {
-          connections: dependencies.connections,
-          proxies: dependencies.proxies,
-        });
+        const result = await importConnections(request.file.buffer, dependencies.connectionImport);
         response.status(result.failureCount > 0 ? 400 : 200).json({
           message:
             result.failureCount > 0

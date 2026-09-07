@@ -51,6 +51,7 @@ import { TwoFactorService } from '../modules/auth/two-factor.service';
 import { CommandHistoryService } from '../modules/command-history/command-history.service';
 import { ConnectionCredentialService } from '../modules/connections/connection-credential.service';
 import { ConnectionExportService } from '../modules/connections/connection-export.service';
+import { ConnectionImportService } from '../modules/connections/connection-import.service';
 import { ConnectionService } from '../modules/connections/connection.service';
 import { SshConnectionResolver } from '../modules/connections/services/ssh-connection-resolver.service';
 import { SshConnectionTestService } from '../modules/connections/services/ssh-connection-test.service';
@@ -140,6 +141,7 @@ export interface ModuleServices {
   proxies: ProxyService;
   connections: ConnectionService;
   connectionExport: ConnectionExportService;
+  connectionImport: ConnectionImportService;
   sshResolver: SshConnectionResolver;
   sshConnectionTest: SshConnectionTestService;
   remoteDesktop: RemoteDesktopSessionService;
@@ -265,6 +267,7 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
     sshKeys,
     new ZipConnectionExportAdapter(config.encryptionKeyHex),
   );
+  const connectionImport = new ConnectionImportService(connections, proxies, cipher);
   const quickCommandTags = new QuickCommandTagService(quickCommandTagRepository);
   const quickCommands = new QuickCommandService(quickCommandRepository, quickCommandTagRepository);
   const commandHistory = new CommandHistoryService(commandHistoryRepository);
@@ -406,6 +409,7 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
     proxies,
     connections,
     connectionExport,
+    connectionImport,
     sshResolver,
     sshConnectionTest,
     remoteDesktop,
