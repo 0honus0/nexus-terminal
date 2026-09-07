@@ -3,8 +3,8 @@
   "group": 5,
   "workers": 8,
   "specs": [
-    "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/batch-connection-edit.spec.ts",
+    "tests/ui/workspace-no-session.spec.ts",
     "tests/ssh/file-manager-navigation.spec.ts",
     "tests/ssh/file-preview-editor.spec.ts",
     "tests/ssh/cross-session-transfer.spec.ts",

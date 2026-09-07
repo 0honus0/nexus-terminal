@@ -38,11 +38,4 @@ export const backupApi = {
     const response = await httpClient.post<Record<string, unknown>>('/settings/backup/import', form);
     return response.data;
   },
-  async exportConnections(): Promise<void> {
-    const response = await httpClient.get<Blob>('/settings/export-connections', { responseType: 'blob' });
-    downloadBlob(
-      response.data,
-      contentDispositionFileName(response.headers['content-disposition'], 'nexus_connections_export.zip'),
-    );
-  },
 };

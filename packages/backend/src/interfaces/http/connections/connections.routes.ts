@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import multer from 'multer';
-import type { ConnectionExportService } from '../../../modules/connections/connection-export.service';
 import type { ConnectionImportService } from '../../../modules/connections/connection-import.service';
 import type {
   CreateConnectionInput,
@@ -17,7 +16,6 @@ import { route } from '../shared/route-handler';
 
 export interface ConnectionsRouterDependencies {
   connections: ConnectionService;
-  connectionExport: ConnectionExportService;
   connectionImport: ConnectionImportService;
   sshConnectionTest: SshConnectionTestService;
   remoteDesktop: RemoteDesktopSessionService;
@@ -58,17 +56,6 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
   router.use(requireAuthenticated);
 
   // Concrete routes must remain before /:id.
-  router.get(
-    '/export',
-    route(async (_request, response) => {
-      const bytes = await dependencies.connectionExport.export(false);
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      response.setHeader('Content-Type', 'application/zip');
-      response.setHeader('Content-Disposition', `attachment; filename="nexus-terminal-connections-${timestamp}.zip"`);
-      response.send(Buffer.from(bytes));
-    }),
-  );
-
   router.post(
     '/import',
     importUpload.single('connectionsFile'),

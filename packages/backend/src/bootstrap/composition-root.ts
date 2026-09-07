@@ -1,7 +1,6 @@
 import type { RuntimeConfig } from '../config/runtime-config';
 import { NexusBackupCodecAdapter } from '../infrastructure/backup/backup-codec.adapter';
 import { SqliteBackupSnapshotAdapter } from '../infrastructure/backup/sqlite-backup-snapshot.adapter';
-import { ZipConnectionExportAdapter } from '../infrastructure/backup/zip-connection-export.adapter';
 import { GitHubHtmlThemeCatalogAdapter } from '../infrastructure/appearance/github-html-theme-catalog.adapter';
 import { LocalBackgroundAssetAdapter } from '../infrastructure/appearance/local-background-asset.adapter';
 import { LocalHtmlThemeStoreAdapter } from '../infrastructure/appearance/local-html-theme-store.adapter';
@@ -50,7 +49,6 @@ import { IpWhitelistService } from '../modules/auth/ip-whitelist.service';
 import { TwoFactorService } from '../modules/auth/two-factor.service';
 import { CommandHistoryService } from '../modules/command-history/command-history.service';
 import { ConnectionCredentialService } from '../modules/connections/connection-credential.service';
-import { ConnectionExportService } from '../modules/connections/connection-export.service';
 import { ConnectionImportService } from '../modules/connections/connection-import.service';
 import { ConnectionService } from '../modules/connections/connection.service';
 import { SshConnectionResolver } from '../modules/connections/services/ssh-connection-resolver.service';
@@ -140,7 +138,6 @@ export interface ModuleServices {
   sshKeys: SshKeyService;
   proxies: ProxyService;
   connections: ConnectionService;
-  connectionExport: ConnectionExportService;
   connectionImport: ConnectionImportService;
   sshResolver: SshConnectionResolver;
   sshConnectionTest: SshConnectionTestService;
@@ -261,12 +258,6 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
   const passkeys = new PasskeyService(passkeyRepository, user, webauthn, audit, notifications);
 
   const tags = new TagService(tagRepository);
-  const connectionExport = new ConnectionExportService(
-    connections,
-    tags,
-    sshKeys,
-    new ZipConnectionExportAdapter(config.encryptionKeyHex),
-  );
   const connectionImport = new ConnectionImportService(connections, proxies, cipher);
   const quickCommandTags = new QuickCommandTagService(quickCommandTagRepository);
   const quickCommands = new QuickCommandService(quickCommandRepository, quickCommandTagRepository);
@@ -408,7 +399,6 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
     sshKeys,
     proxies,
     connections,
-    connectionExport,
     connectionImport,
     sshResolver,
     sshConnectionTest,

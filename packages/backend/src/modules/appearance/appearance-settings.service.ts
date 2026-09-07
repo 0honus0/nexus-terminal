@@ -4,6 +4,18 @@ import type { AppearanceSettings, UpdateAppearanceInput } from './appearance.typ
 import { defaultUiTheme } from './default-ui-theme';
 
 const DEFAULT_REMOTE_HTML_PRESETS_URL = 'https://github.com/0honus0/nexus-terminal/tree/main/assets/html-themes/remote';
+const LEGACY_OFFICIAL_REMOTE_HTML_PRESETS_URLS = new Set([
+  'https://github.com/Heavrnl/nexus-terminal/tree/main/doc/custom_html_theme',
+  'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme',
+  'https://github.com/0honus0/nexus-terminal/tree/main/examples/html-themes',
+]);
+
+export const normalizeHtmlThemeRepositoryUrl = (repoUrl: string | null | undefined): string | null => {
+  const value = repoUrl?.trim().replace(/\/+$/, '') || null;
+  if (!value) return null;
+  return LEGACY_OFFICIAL_REMOTE_HTML_PRESETS_URLS.has(value) ? DEFAULT_REMOTE_HTML_PRESETS_URL : value;
+};
+
 export interface TerminalThemeLookup {
   get(id: number): Promise<unknown | null>;
   findDefaultThemeId(): Promise<number | null>;
@@ -89,6 +101,11 @@ export class AppearanceSettingsService {
     await this.repository.ensure(values);
 
     const current = await this.get(false);
+    const normalizedRemoteRepository = normalizeHtmlThemeRepositoryUrl(current.remoteHtmlPresetsUrl);
+    if (normalizedRemoteRepository !== current.remoteHtmlPresetsUrl) {
+      await this.repository.setMany({ remote_html_presets_url: normalizedRemoteRepository ?? '' });
+      current.remoteHtmlPresetsUrl = normalizedRemoteRepository;
+    }
     if (current.activeTerminalThemeId === null) {
       const defaultThemeId = await this.themes.findDefaultThemeId();
       if (defaultThemeId !== null) await this.repository.setMany({ activeTerminalThemeId: String(defaultThemeId) });
@@ -206,7 +223,7 @@ export class AppearanceSettingsService {
       }
     }
     if (input.remoteHtmlPresetsUrl !== undefined) {
-      const value = input.remoteHtmlPresetsUrl?.trim() || null;
+      const value = normalizeHtmlThemeRepositoryUrl(input.remoteHtmlPresetsUrl);
       if (value !== null && value.length > 1024) throw new Error('远程 HTML 主题仓库链接过长，最多允许 1024 个字符。');
       if (value !== null && !parseGitHubThemeRepositoryUrl(value)) {
         throw new Error('无效的 GitHub 仓库链接。仅允许 HTTPS GitHub 仓库地址。');

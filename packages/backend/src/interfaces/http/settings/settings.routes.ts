@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import multer from 'multer';
 import type { BackupService } from '../../../modules/backup/backup.service';
-import type { ConnectionExportService } from '../../../modules/connections/connection-export.service';
 import { BackupPasswordRequiredError, InvalidBackupPasswordError } from '../../../shared/errors/backup.errors';
 import type { AuditLogService } from '../../../modules/audit/audit.service';
 import type { IpBlacklistService } from '../../../modules/auth/ip-blacklist.service';
@@ -13,7 +12,6 @@ import { route } from '../shared/route-handler';
 
 export interface SettingsRouterDependencies {
   backup: BackupService;
-  connectionExport: ConnectionExportService;
   settings: SettingsService;
   ipBlacklist: IpBlacklistService;
   audit: AuditLogService;
@@ -388,16 +386,6 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
       } catch (error) {
         response.status(400).json({ message: errorMessage(error) });
       }
-    }),
-  );
-
-  router.get(
-    '/export-connections',
-    route(async (_request, response) => {
-      const bytes = await dependencies.connectionExport.export(true);
-      response.setHeader('Content-Type', 'application/zip');
-      response.setHeader('Content-Disposition', 'attachment; filename="nexus_connections_export.zip"');
-      response.send(Buffer.from(bytes));
     }),
   );
 

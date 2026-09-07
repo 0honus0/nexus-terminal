@@ -17,6 +17,8 @@ const HTML_THEME_RENAMED = 'E2E Appearance Local HTML Theme Renamed.html';
 const HTML_THEME_CONTENT = '<div class="e2e-appearance-theme">M06 local HTML theme</div>';
 const DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY =
   'https://github.com/0honus0/nexus-terminal/tree/main/assets/html-themes/remote';
+const LEGACY_OFFICIAL_HTML_THEME_REPOSITORY =
+  'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme';
 const TESTED_GIT_REF =
   process.env.GITHUB_SHA?.trim() || execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const TESTED_OFFICIAL_HTML_THEME_REPOSITORY = `https://github.com/0honus0/nexus-terminal/tree/${TESTED_GIT_REF}/assets/html-themes/remote`;
@@ -681,6 +683,31 @@ test('background and HTML appearance flows stay reachable on mobile and preserve
         await expect.poll(async () => (await appearance(context.request)).terminalCustomHtml).toBe(downloadedHtml);
       },
     );
+
+    await step('legacy official HTML theme repository URLs normalize and still list the current catalog', async () => {
+      const legacyList = await context.request.get('/api/v1/appearance/html-presets/remote/list', {
+        params: { repoUrl: LEGACY_OFFICIAL_HTML_THEME_REPOSITORY },
+      });
+      expect(legacyList.ok()).toBeTruthy();
+      const remoteThemes = (await legacyList.json()) as Array<{ name?: string }>;
+      expect(remoteThemes.some((theme) => theme.name === '丝带.html')).toBeTruthy();
+
+      const saveLegacy = await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
+        data: { url: LEGACY_OFFICIAL_HTML_THEME_REPOSITORY },
+      });
+      expect(saveLegacy.ok()).toBeTruthy();
+      await expect
+        .poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
+        .toBe(DEFAULT_OFFICIAL_HTML_THEME_REPOSITORY);
+
+      const restoreTestedRef = await context.request.put('/api/v1/appearance/html-presets/remote/repository-url', {
+        data: { url: TESTED_OFFICIAL_HTML_THEME_REPOSITORY },
+      });
+      expect(restoreTestedRef.ok()).toBeTruthy();
+      await expect
+        .poll(async () => (await appearance(context.request)).remoteHtmlPresetsUrl)
+        .toBe(TESTED_OFFICIAL_HTML_THEME_REPOSITORY);
+    });
 
     await step(
       'invalid remote repository loading fails without changing the applied HTML and clearing the URL disables the list',

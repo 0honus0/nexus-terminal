@@ -72,6 +72,25 @@ export const SETTINGS_MIGRATIONS: readonly SettingsMigration[] = [
         : {};
     },
   },
+  {
+    version: 8,
+    name: 'Normalize restored legacy official HTML theme repository URLs',
+    up(values) {
+      const current = values.remote_html_presets_url?.trim().replace(/\/+$/, '');
+      return current &&
+        [
+          'https://github.com/Heavrnl/nexus-terminal/tree/main/doc/custom_html_theme',
+          'https://github.com/0honus0/nexus-terminal/tree/main/doc/custom_html_theme',
+          'https://github.com/0honus0/nexus-terminal/tree/main/examples/html-themes',
+        ].includes(current)
+        ? {
+            set: {
+              remote_html_presets_url: 'https://github.com/0honus0/nexus-terminal/tree/main/assets/html-themes/remote',
+            },
+          }
+        : {};
+    },
+  },
 ];
 
 const validateMigrations = (migrations: readonly SettingsMigration[]): void => {

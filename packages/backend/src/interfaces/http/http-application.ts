@@ -24,7 +24,6 @@ import type { IpBlacklistService } from '../../modules/auth/ip-blacklist.service
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
 import type { TwoFactorService } from '../../modules/auth/two-factor.service';
 import type { RemoteDesktopSessionService } from '../../modules/remote-desktop/remote-desktop-session.service';
-import type { ConnectionExportService } from '../../modules/connections/connection-export.service';
 import type { ConnectionImportService } from '../../modules/connections/connection-import.service';
 import type { ConnectionService } from '../../modules/connections/connection.service';
 import type { SshConnectionTestService } from '../../modules/connections/services/ssh-connection-test.service';
@@ -76,7 +75,6 @@ export interface HttpApplicationDependencies {
   audit: AuditLogService;
   notifications: NotificationService;
   connections: ConnectionService;
-  connectionExport: ConnectionExportService;
   connectionImport: ConnectionImportService;
   sshConnectionTest: SshConnectionTestService;
   remoteDesktop: RemoteDesktopSessionService;
@@ -189,7 +187,6 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
     '/api/v1/settings',
     createSettingsRouter({
       backup: dependencies.backup,
-      connectionExport: dependencies.connectionExport,
       settings: dependencies.settings,
       ipBlacklist: dependencies.ipBlacklist,
       audit: dependencies.audit,
@@ -200,7 +197,6 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
     '/api/v1/connections',
     createConnectionsRouter({
       connections: dependencies.connections,
-      connectionExport: dependencies.connectionExport,
       connectionImport: dependencies.connectionImport,
       sshConnectionTest: dependencies.sshConnectionTest,
       remoteDesktop: dependencies.remoteDesktop,

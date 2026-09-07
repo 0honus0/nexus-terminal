@@ -1,6 +1,6 @@
 import type { HtmlThemeStore, RemoteHtmlThemeCatalog } from './appearance-assets.port';
 import type { AppearanceSettingsService } from './appearance-settings.service';
-import { parseGitHubThemeRepositoryUrl } from './appearance-settings.service';
+import { normalizeHtmlThemeRepositoryUrl, parseGitHubThemeRepositoryUrl } from './appearance-settings.service';
 import type { HtmlThemeSummary, RemoteHtmlThemeSummary } from './appearance.types';
 
 const MAX_THEME_NAME_LENGTH = 255;
@@ -75,7 +75,7 @@ export class HtmlThemeService {
   }
 
   async listRemote(repoUrl?: string): Promise<RemoteHtmlThemeSummary[]> {
-    const url = repoUrl?.trim() || (await this.getRemoteRepositoryUrl());
+    const url = normalizeHtmlThemeRepositoryUrl(repoUrl?.trim() || (await this.getRemoteRepositoryUrl()));
     if (!url) throw new Error('未提供远程仓库链接，且未找到已保存的链接。');
     const repository = parseGitHubThemeRepositoryUrl(url);
     if (!repository) throw new Error(`无效的 GitHub 仓库链接格式: ${url}`);

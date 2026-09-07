@@ -126,8 +126,10 @@ The suite intentionally keeps regression tests for previously fixed production i
 - SSH suspend/disconnect/resume lifecycle;
 - mobile terminal height, command-bar sizing, touch long-press context menus, and the status-monitor modal;
 - Workspace layout configurator direction rendering, including horizontal sibling alignment and vertical child stacking in the editor preview;
+- desktop no-session Workspace connection-pane divider resizing and persisted width restoration;
 - status-monitor network samples and Docker status over the live SSH transport;
-- full encrypted backup export/import restoring settings and encrypted connection credentials;
+- full encrypted backup export/import restoring settings and encrypted connection credentials, with the retired standalone connection-export UI/API kept absent and the backup file picker retaining rounded themed chrome;
+- legacy official HTML-theme repository URLs resolving to the current remote catalog instead of returning a missing-directory 400;
 - HTTP SFTP download-ticket/Range/inline/directory-ZIP behavior bound to an active Workspace session;
 - raw binary upload ready/progress/completion and remote-content verification through the clean Workspace/upload protocols;
 - real Login CAPTCHA fail-closed/token lifecycle and browser WebAuthn passkey success/credential-failure/password-fallback surfaces.

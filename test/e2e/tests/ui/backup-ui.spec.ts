@@ -78,6 +78,34 @@ test('data management UI exports a real backup file and imports it through the f
   const section = page.getByTestId('data-management-settings');
   await expect(section).toBeVisible();
   await section.scrollIntoViewIfNeeded();
+
+  await step('connection-only export is removed and the backup file control keeps rounded themed chrome', async () => {
+    await expect(section.getByText('Export Connection Data', { exact: true })).toHaveCount(0);
+    const settingsExport = await context.request.get('/api/v1/settings/export-connections');
+    expect(settingsExport.ok()).toBeFalsy();
+    expect(settingsExport.headers()['content-type'] ?? '').not.toContain('application/zip');
+    const connectionsExport = await context.request.get('/api/v1/connections/export');
+    expect(connectionsExport.ok()).toBeFalsy();
+    expect(connectionsExport.headers()['content-type'] ?? '').not.toContain('application/zip');
+
+    const fileInput = section.getByTestId('backup-import-file');
+    const fileChrome = await fileInput.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return {
+        topLeft: Number.parseFloat(style.borderTopLeftRadius),
+        topRight: Number.parseFloat(style.borderTopRightRadius),
+        bottomLeft: Number.parseFloat(style.borderBottomLeftRadius),
+        bottomRight: Number.parseFloat(style.borderBottomRightRadius),
+        overflow: style.overflow,
+      };
+    });
+    expect(fileChrome.topLeft).toBeGreaterThan(0);
+    expect(fileChrome.topRight).toBeGreaterThan(0);
+    expect(fileChrome.bottomLeft).toBeGreaterThan(0);
+    expect(fileChrome.bottomRight).toBeGreaterThan(0);
+    expect(fileChrome.overflow).toBe('hidden');
+  });
+
   await captureEvidence(page, testInfo, 'before');
   await captureFunctionalScreenshot(page, 'data-backup-settings.png', { viewport: { width: 1280, height: 800 } });
 

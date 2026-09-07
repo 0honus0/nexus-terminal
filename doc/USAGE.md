@@ -55,7 +55,7 @@ SSH 标签页支持挂起会话。挂起后即使浏览器断开，后端仍可�
 
 - 终端、文件管理器、文本编辑器和快捷指令视图支持 `Ctrl + 鼠标滚轮` 缩放。
 - 布局管理器中的容器方向会直接反映在预览结构中：`水平` 容器的直接子节点横向排列，`垂直` 容器的直接子节点纵向排列；切换方向只改变该容器的子节点排列方向，不改变子节点本身的类型或内容。
-- 展开的侧栏可以拖动调整宽度；默认点击 Workspace 其它区域会收回侧栏，开启“保持侧栏”偏好后才持续展开。
+- 展开的侧栏可以拖动调整宽度；桌面端没有活动会话时，左侧连接列表与空白 Workspace 之间的分界线同样支持左右拖动，并复用/持久化 Connection pane 宽度。默认点击 Workspace 其它区域会收回侧栏，开启“保持侧栏”偏好后才持续展开。
 - File Manager / File Editor 的 popup 设置提供额外弹层入口，不复制文件系统或编辑器业务状态；embedded/sidebar presentation 仍使用同一 feature controller。
 - SSH 标签栏和文件管理器标签栏支持右键菜单，包括关闭当前、关闭左侧、关闭其他、关闭右侧等操作。
 - 标签分组中的名称可以直接点击修改。
@@ -68,7 +68,7 @@ SSH 标签页支持挂起会话。挂起后即使浏览器断开，后端仍可�
 
 ## 外观与 HTML Theme
 
-Style Customizer 支持本地 HTML theme 和 GitHub 目录形式的远程 HTML theme catalog。默认官方示例仓库指向 `assets/html-themes/remote/`；升级时旧官方 `doc/custom_html_theme` URL 会由 settings migration 自动迁移，不影响用户自行配置的第三方仓库。
+Style Customizer 支持本地 HTML theme 和 GitHub 目录形式的远程 HTML theme catalog。默认官方示例仓库指向 `assets/html-themes/remote/`；已知旧官方 `doc/custom_html_theme` / `examples/html-themes` URL 会在升级、保存、远程列表读取以及备份恢复后的初始化阶段归一到当前目录，因此恢复历史备份后不会再因旧官方目录不存在而返回 400；用户自行配置的第三方仓库不会被改写。
 
 ## 安全与认证
 

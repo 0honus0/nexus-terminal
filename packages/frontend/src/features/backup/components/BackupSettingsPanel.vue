@@ -18,10 +18,6 @@
   const importMessage = ref('');
   const importSuccess = ref(false);
 
-  const connectionsLoading = ref(false);
-  const connectionsMessage = ref('');
-  const connectionsSuccess = ref(false);
-
   const exportBackup = async () => {
     if (!exportPassword.value) return;
     exportLoading.value = true;
@@ -63,21 +59,6 @@
       importMessage.value = apiErrorMessage(cause, t('settings.backup.importFailed'));
     } finally {
       importLoading.value = false;
-    }
-  };
-
-  const exportConnections = async () => {
-    connectionsLoading.value = true;
-    connectionsMessage.value = '';
-    connectionsSuccess.value = false;
-    try {
-      await backupApi.exportConnections();
-      connectionsSuccess.value = true;
-      connectionsMessage.value = t('settings.exportConnections.success');
-    } catch (cause) {
-      connectionsMessage.value = apiErrorMessage(cause, t('settings.exportConnections.error'));
-    } finally {
-      connectionsLoading.value = false;
     }
   };
 
@@ -140,7 +121,7 @@
               type="file"
               accept=".nexus-backup,application/octet-stream"
               required
-              class="block w-full text-sm text-text-secondary file:mr-4 file:rounded-md file:border-0 file:bg-button file:px-4 file:py-2 file:text-button-text hover:file:bg-button-hover"
+              class="block w-full overflow-hidden rounded-md border border-border bg-input text-sm text-text-secondary shadow-sm file:mr-4 file:border-0 file:bg-button file:px-4 file:py-2 file:text-button-text hover:file:bg-button-hover"
               @change="selectFile"
             />
           </BaseFormField>
@@ -171,22 +152,6 @@
             </p>
           </div>
         </form>
-      </section>
-
-      <section class="border-t border-border pt-6">
-        <h3 class="mb-2 text-base font-semibold text-foreground">{{ t('settings.exportConnections.title') }}</h3>
-        <p class="mb-4 max-w-3xl text-sm text-text-secondary">{{ t('settings.exportConnections.decryptKeyInfo') }}</p>
-        <div class="flex flex-wrap items-center gap-3">
-          <BaseButton :loading="connectionsLoading" @click="exportConnections">
-            <template #leading
-              ><i :class="connectionsLoading ? 'fas fa-spinner fa-spin' : 'fas fa-file-export'" aria-hidden="true"></i
-            ></template>
-            {{ t('settings.exportConnections.buttonText') }}
-          </BaseButton>
-          <p v-if="connectionsMessage" :class="connectionsSuccess ? 'text-success' : 'text-error'" class="text-sm">
-            {{ connectionsMessage }}
-          </p>
-        </div>
       </section>
     </div>
   </section>
