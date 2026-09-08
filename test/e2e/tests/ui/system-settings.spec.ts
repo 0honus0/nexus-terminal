@@ -131,6 +131,21 @@ test('preferences load workspace values from the unified settings contract', asy
   }
 });
 
+test('preferences settings report a main settings load failure and keep the form usable', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+  await page.route('**/api/v1/settings', async (route) => {
+    if (route.request().method() === 'GET') await route.abort('failed');
+    else await route.continue();
+  });
+
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
+  await expect(page.getByTestId('preferences-settings')).toBeVisible();
+  await expect(page.getByText('Failed to load preferences: Network Error', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('#showPopupFileManager')).toBeVisible();
+});
+
 test('dashboard local and remote resource cards can be configured independently', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');

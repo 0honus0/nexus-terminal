@@ -183,6 +183,7 @@
       }
     },
     "preferences": {
+      "loadFailed": "設定の読み込みに失敗しました: {error}",
       "saved": "設定を保存しました。",
       "saveFailed": "設定の保存に失敗しました: {error}"
     }

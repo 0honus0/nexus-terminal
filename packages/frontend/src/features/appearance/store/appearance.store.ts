@@ -67,12 +67,17 @@ export const useAppearanceStore = defineStore('appearance', {
     async load(force = false) {
       if (this.loaded && !force) return;
       const settingsRevision = this.settingsRevision;
-      const [settings, themes] = await Promise.all([appearanceApi.load(), appearanceApi.listThemes()]);
-      this.themes = themes;
+      const settings = await appearanceApi.load();
       this.loaded = true;
-      if (settingsRevision !== this.settingsRevision) return;
-      this.settings = settings;
-      applySettings(settings);
+      if (settingsRevision === this.settingsRevision) {
+        this.settings = settings;
+        applySettings(settings);
+      }
+      try {
+        this.themes = await appearanceApi.listThemes();
+      } catch (cause) {
+        console.warn('[Appearance] Failed to load terminal themes; appearance settings remain available.', cause);
+      }
     },
 
     async update(patch: Partial<AppearanceSettings>) {

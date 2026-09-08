@@ -193,7 +193,9 @@
     },
     "untaggedGroup": "未标记",
     "noUntaggedConnections": "没有未标记的连接。",
-    "cloneName": "{name} 副本"
+    "cloneName": "{name} 副本",
+    "loadFailed": "加载连接失败。",
+    "tagLoadFailed": "加载连接标签失败，连接仍可正常使用。"
   },
   "workspaceConnectionList": {
     "untagged": "未标记",

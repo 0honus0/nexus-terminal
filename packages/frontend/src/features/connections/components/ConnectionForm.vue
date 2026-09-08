@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect, BaseTextarea } from '@/foundation/ui';
+  import { useFeedback } from '@/shared/feedback/public';
   import { ConnectionTagPicker, connectionTagsService } from '@/features/tags/public';
   import { SshKeySelector, useSshKeys } from '@/features/ssh-keys/public';
   import { useProxies } from '@/features/proxies/public';
@@ -18,6 +19,7 @@
     delete: [];
   }>();
   const { t } = useI18n();
+  const feedback = useFeedback();
   const proxies = useProxies();
   const sshKeys = useSshKeys();
   const connections = useConnections();
@@ -116,7 +118,17 @@
       }
     },
   );
-  onMounted(() => Promise.all([proxies.load(), sshKeys.load(), connections.load()]));
+  onMounted(async () => {
+    const [proxyResult, connectionResult] = await Promise.allSettled([proxies.load(), connections.load()]);
+    if (proxyResult.status === 'rejected') {
+      feedback.notifyError(
+        t('proxies.error', {
+          error: proxyResult.reason instanceof Error ? proxyResult.reason.message : String(proxyResult.reason),
+        }),
+      );
+    }
+    if (connectionResult.status === 'rejected') feedback.notifyError(t('connections.loadFailed'));
+  });
   const regularInput = (): ConnectionInput => ({
     name: form.name || null,
     type: form.type,

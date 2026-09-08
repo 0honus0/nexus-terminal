@@ -183,6 +183,7 @@
       }
     },
     "preferences": {
+      "loadFailed": "加载偏好设置失败：{error}",
       "saved": "偏好设置已保存。",
       "saveFailed": "保存偏好设置失败：{error}"
     }

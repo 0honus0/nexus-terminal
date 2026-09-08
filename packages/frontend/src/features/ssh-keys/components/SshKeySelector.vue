@@ -16,7 +16,9 @@
     try {
       await keys.load();
     } catch (cause) {
-      loadError.value = cause instanceof Error ? cause.message : String(cause);
+      loadError.value = t('sshKeys.selector.loadFailed', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
     } finally {
       loading.value = false;
     }

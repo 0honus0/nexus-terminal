@@ -5,6 +5,7 @@
       "useDirectInput": "Or input key content directly",
       "manageKeysTitle": "Manage SSH Keys",
       "loadingKeys": "Loading keys...",
+      "loadFailed": "Failed to load SSH keys: {error}",
       "noKey": "No SSH Key",
       "manage": "Manage"
     },

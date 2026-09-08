@@ -41,7 +41,9 @@
     auth.isAuthenticated,
     (authenticated, wasAuthenticated) => {
       if (authenticated) {
-        void appearance.load();
+        void appearance
+          .load()
+          .catch((cause) => console.error('[Appearance] Failed to load application settings:', cause));
         void preferences
           .load()
           .catch((cause) => console.error('[Preferences] Failed to load application settings:', cause));

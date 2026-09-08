@@ -37,7 +37,19 @@
   const batchModal = ref(false);
   const testing = ref(new Set<number>());
   const testResults = ref(new Map<number, { success: boolean; message: string; latency?: number }>());
-  onMounted(() => Promise.all([data.load(), tags.load()]));
+  onMounted(async () => {
+    try {
+      await data.load();
+    } catch {
+      feedback.notifyError(t('connections.loadFailed'));
+      return;
+    }
+    try {
+      await tags.load();
+    } catch {
+      feedback.notifyError(t('connections.tagLoadFailed'));
+    }
+  });
   const filtered = computed(() => {
     const q = search.value.toLowerCase().trim();
     const values = data.connections.value.filter((c) => {

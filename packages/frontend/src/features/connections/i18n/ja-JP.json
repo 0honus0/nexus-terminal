@@ -193,7 +193,9 @@
     },
     "untaggedGroup": "タグなし",
     "noUntaggedConnections": "タグなしの接続はありません。",
-    "cloneName": "{name} のコピー"
+    "cloneName": "{name} のコピー",
+    "loadFailed": "接続の読み込みに失敗しました。",
+    "tagLoadFailed": "接続タグの読み込みに失敗しました。接続は引き続き利用できます。"
   },
   "workspaceConnectionList": {
     "untagged": "タグなし",

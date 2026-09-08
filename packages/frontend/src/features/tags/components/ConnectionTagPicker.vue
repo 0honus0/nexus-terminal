@@ -10,7 +10,13 @@
   const feedback = useFeedback();
   const { t } = useI18n();
 
-  onMounted(() => tags.load());
+  onMounted(() => {
+    void tags
+      .load()
+      .catch((cause) =>
+        feedback.notifyError(t('tags.error', { error: cause instanceof Error ? cause.message : String(cause) })),
+      );
+  });
   const options = computed<TokenOption[]>(() => tags.tags.value.map((tag) => ({ value: tag.id, label: tag.name })));
   const create = async (name: string) => {
     const existing = tags.tags.value.find((tag) => tag.name.toLowerCase() === name.trim().toLowerCase());

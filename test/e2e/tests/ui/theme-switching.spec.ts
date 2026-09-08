@@ -84,6 +84,60 @@ test.describe('fresh installation appearance defaults', () => {
   });
 });
 
+test('current appearance settings still apply when the terminal theme catalog fails to load', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+  const originalResponse = await context.request.get('/api/v1/appearance');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = (await originalResponse.json()) as { windowThemeColor?: string };
+  const targetColor = '#123456';
+  expect(
+    (await context.request.put('/api/v1/appearance', { data: { windowThemeColor: targetColor } })).ok(),
+  ).toBeTruthy();
+
+  await page.route('**/api/v1/terminal-themes', async (route) => {
+    if (route.request().method() === 'GET') await route.abort('failed');
+    else await route.continue();
+  });
+  try {
+    await page.goto('/settings');
+    await expect.poll(() => documentThemeColor(page)).toBe(targetColor);
+    await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+    await expect(page.getByTestId('window-theme-color-input')).toHaveValue(targetColor);
+  } finally {
+    await page.unroute('**/api/v1/terminal-themes');
+    expect(
+      (
+        await context.request.put('/api/v1/appearance', {
+          data: { windowThemeColor: original.windowThemeColor ?? '#212529' },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+});
+
+test('appearance settings report a main appearance load failure and keep defaults usable', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+  await page.route('**/api/v1/appearance', async (route) => {
+    if (route.request().method() === 'GET') await route.abort('failed');
+    else await route.continue();
+  });
+
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Appearance', exact: true }).click();
+  await expect(
+    page.getByText('Failed to load appearance settings. Current defaults remain available.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId('window-theme-color-input')).toBeVisible();
+});
+
 test('PWA window title bar color updates immediately and persists across reload', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   const language = await context.request.put('/api/v1/settings', { data: { language: 'en-US' } });
