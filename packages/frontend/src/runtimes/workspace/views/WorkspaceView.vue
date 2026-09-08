@@ -10,12 +10,12 @@
   import { focusRegistry, normalizeShortcut, shortcutFromKeyboardEvent } from '@/shared/focus/public';
   import { connectionService, type Connection } from '@/features/connections/public';
   import { terminalScrollbackForRuntime, usePreferences } from '@/features/preferences/public';
-  import { defaultTerminalTheme, useAppearanceStore } from '@/features/appearance/public';
-  import { useCommandHistoryStore } from '@/features/command-history/public';
+  import { defaultTerminalTheme, useAppearance } from '@/features/appearance/public';
+  import { useCommandHistory } from '@/features/command-history/public';
   import { remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import {
     ProgressDisplayModal,
-    useServerTransfersStore,
+    useServerTransfers,
     type FileClipboardOperation,
     type ProgressSource,
   } from '@/features/transfers/public';
@@ -49,9 +49,11 @@
   const feedback = useFeedback();
   const device = useDeviceCapabilities();
   const preferences = usePreferences();
-  const appearance = useAppearanceStore();
-  const history = useCommandHistoryStore();
-  const serverTransfers = useServerTransfersStore();
+  const appearance = useAppearance();
+  const appearanceSettings = appearance.settings;
+  const appearanceThemes = appearance.themes;
+  const history = useCommandHistory();
+  const serverTransfers = useServerTransfers();
   const registry = workspaceRuntimeRegistry;
   const FOREGROUND_RECOVERY_ATTEMPTS = 10;
   const FOREGROUND_RECOVERY_DELAY_MS = 400;
@@ -141,16 +143,15 @@
     void preferences.update({ fileManagerColWidths: widths }).catch(reportPreferenceSaveError);
   };
   const updateTerminalFontSize = (size: number) => {
-    if (device.isMobile.value) appearance.settings.terminalFontSizeMobile = size;
-    else appearance.settings.terminalFontSize = size;
+    appearance.previewSettings(device.isMobile.value ? { terminalFontSizeMobile: size } : { terminalFontSize: size });
     terminalFontSaver.schedule({ mobile: device.isMobile.value, size });
   };
   const updateEditorFontSize = (size: number) => {
-    appearance.settings.editorFontSize = size;
+    appearance.previewSettings({ editorFontSize: size });
     editorFontSaver.schedule(size);
   };
   const updateMobileEditorFontSize = (size: number) => {
-    appearance.settings.mobileEditorFontSize = size;
+    appearance.previewSettings({ mobileEditorFontSize: size });
     mobileEditorFontSaver.schedule(size);
   };
   const focusConfiguratorVisible = ref(false);
@@ -203,7 +204,7 @@
   const progressDisplayTaskCount = computed(
     () =>
       progressDisplaySources.value.reduce((count, source) => count + source.tasks.length, 0) +
-      serverTransfers.progressTasks.length,
+      serverTransfers.progressTasks.value.length,
   );
   const setProgressVisible = (sessionId: string, visible: boolean) => {
     progressVisibility.value = { ...progressVisibility.value, [sessionId]: visible };
@@ -306,26 +307,26 @@
   };
 
   const terminalTheme = computed(() => {
-    const id = appearance.settings.activeTerminalThemeId;
-    return appearance.themes.find((theme) => theme.id === id)?.themeData ?? defaultTerminalTheme;
+    const id = appearanceSettings.value.activeTerminalThemeId;
+    return appearanceThemes.value.find((theme) => theme.id === id)?.themeData ?? defaultTerminalTheme;
   });
 
   const terminalVisual = computed(() => ({
-    backgroundEnabled: appearance.settings.terminalBackgroundEnabled,
-    backgroundImageUrl: appearance.settings.terminalBackgroundImage,
-    backgroundOverlayOpacity: appearance.settings.terminalBackgroundOverlayOpacity,
-    customHtml: appearance.settings.terminalCustomHtml,
+    backgroundEnabled: appearanceSettings.value.terminalBackgroundEnabled,
+    backgroundImageUrl: appearanceSettings.value.terminalBackgroundImage,
+    backgroundOverlayOpacity: appearanceSettings.value.terminalBackgroundOverlayOpacity,
+    customHtml: appearanceSettings.value.terminalCustomHtml,
     textStroke: {
-      enabled: Boolean(appearance.settings.terminalTextStrokeEnabled),
-      width: appearance.settings.terminalTextStrokeWidth ?? 0,
-      color: appearance.settings.terminalTextStrokeColor ?? '#000000',
+      enabled: Boolean(appearanceSettings.value.terminalTextStrokeEnabled),
+      width: appearanceSettings.value.terminalTextStrokeWidth ?? 0,
+      color: appearanceSettings.value.terminalTextStrokeColor ?? '#000000',
     },
     textShadow: {
-      enabled: Boolean(appearance.settings.terminalTextShadowEnabled),
-      offsetX: appearance.settings.terminalTextShadowOffsetX ?? 0,
-      offsetY: appearance.settings.terminalTextShadowOffsetY ?? 0,
-      blur: appearance.settings.terminalTextShadowBlur ?? 0,
-      color: appearance.settings.terminalTextShadowColor ?? '#000000',
+      enabled: Boolean(appearanceSettings.value.terminalTextShadowEnabled),
+      offsetX: appearanceSettings.value.terminalTextShadowOffsetX ?? 0,
+      offsetY: appearanceSettings.value.terminalTextShadowOffsetY ?? 0,
+      blur: appearanceSettings.value.terminalTextShadowBlur ?? 0,
+      color: appearanceSettings.value.terminalTextShadowColor ?? '#000000',
     },
   }));
   const terminalScrollback = computed(() =>
@@ -333,8 +334,8 @@
   );
   const terminalFontSize = computed(() =>
     device.isMobile.value
-      ? (appearance.settings.terminalFontSizeMobile ?? appearance.settings.terminalFontSize)
-      : appearance.settings.terminalFontSize,
+      ? (appearanceSettings.value.terminalFontSizeMobile ?? appearanceSettings.value.terminalFontSize)
+      : appearanceSettings.value.terminalFontSize,
   );
 
   const setSurface = (id: string, value: unknown) => {
@@ -707,9 +708,9 @@
     <ProgressDisplayModal
       :visible="progressDisplayVisible"
       :sources="progressDisplaySources"
-      :server-transfers="serverTransfers.items"
-      :server-transfers-loading="serverTransfers.loading"
-      :server-transfers-error="serverTransfers.error"
+      :server-transfers="serverTransfers.items.value"
+      :server-transfers-loading="serverTransfers.loading.value"
+      :server-transfers-error="serverTransfers.error.value"
       :mobile="device.isMobile.value"
       @close="progressDisplayVisible = false"
       @restore="restoreProgressSource"
@@ -798,15 +799,15 @@
         :session="session"
         :layout="workspaceLayout.tree.value"
         :sidebars="workspaceLayout.sidebars.value"
-        :terminal-font-family="appearance.settings.terminalFontFamily"
+        :terminal-font-family="appearanceSettings.terminalFontFamily"
         :terminal-font-size="terminalFontSize"
         :terminal-theme="terminalTheme"
         :terminal-visual="terminalVisual"
         :terminal-scrollback="terminalScrollback"
         :right-click-copy-paste="preferences.values.value.terminalRightClickCopyPaste"
-        :editor-font-family="appearance.settings.editorFontFamily ?? undefined"
-        :editor-font-size="appearance.settings.editorFontSize"
-        :mobile-editor-font-size="appearance.settings.mobileEditorFontSize"
+        :editor-font-family="appearanceSettings.editorFontFamily ?? undefined"
+        :editor-font-size="appearanceSettings.editorFontSize"
+        :mobile-editor-font-size="appearanceSettings.mobileEditorFontSize"
         :command-input-sync-target="preferences.values.value.commandInputSyncTarget"
         :status-interval-seconds="preferences.values.value.statusMonitorIntervalSeconds"
         :docker-interval-seconds="preferences.values.value.dockerStatusIntervalSeconds"

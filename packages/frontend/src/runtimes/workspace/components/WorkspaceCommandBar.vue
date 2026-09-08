@@ -2,8 +2,8 @@
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { focusRegistry } from '@/shared/focus/public';
-  import { expandQuickCommand, useQuickCommandsStore } from '@/features/quick-commands/public';
-  import { useCommandHistoryStore } from '@/features/command-history/public';
+  import { expandQuickCommand, useQuickCommands } from '@/features/quick-commands/public';
+  import { useCommandHistory } from '@/features/command-history/public';
   import type { Preferences } from '@/features/preferences/public';
   import { applyTerminalModifiers } from '@/features/terminal/public';
   import { useFeedback } from '@/shared/feedback/public';
@@ -57,8 +57,8 @@
   }>();
   const { t } = useI18n();
   const feedback = useFeedback();
-  const quickCommands = useQuickCommandsStore();
-  const commandHistory = useCommandHistoryStore();
+  const quickCommands = useQuickCommands();
+  const commandHistory = useCommandHistory();
   // Keep an immediate local presentation value so Enter in the same input tick
   // cannot read the previous prop before Vue has rendered the v-model update back
   // down from the session-owned commandDraft.
@@ -102,7 +102,7 @@
     return true;
   };
   const sendSelected = (): boolean => {
-    const quickCommand = props.commandInputSyncTarget === 'quickCommands' ? quickCommands.selected : null;
+    const quickCommand = props.commandInputSyncTarget === 'quickCommands' ? quickCommands.selected.value : null;
     if (quickCommand) {
       const expansion = expandQuickCommand(quickCommand.command, quickCommand.variables);
       if (!send(false, expansion.command)) return false;
@@ -116,7 +116,7 @@
       void quickCommands.recordUsage(quickCommand.id);
       return true;
     }
-    const historyEntry = props.commandInputSyncTarget === 'commandHistory' ? commandHistory.selected : null;
+    const historyEntry = props.commandInputSyncTarget === 'commandHistory' ? commandHistory.selected.value : null;
     if (historyEntry) {
       return send(false, historyEntry.command);
     }

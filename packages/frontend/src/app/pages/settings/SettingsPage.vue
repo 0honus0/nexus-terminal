@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { AppearanceSettingsPanel, useAppearanceStore } from '@/features/appearance/public';
+  import { AppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
   import { BackupSettingsPanel } from '@/features/backup/public';
   import { PreferencesSettingsPanel, type Preferences } from '@/features/preferences/public';
   import { SecuritySettingsPanel } from '@/features/security/public';
@@ -13,7 +13,7 @@
 
   const { t } = useI18n();
   const auth = useAuthSession();
-  const appearance = useAppearanceStore();
+  const appearance = useAppearance();
   const active = ref<SettingsTab>('workspace');
   const tabs = computed<readonly { value: SettingsTab; label: string }[]>(() => [
     { value: 'workspace', label: t('settings.tabs.workspace') },

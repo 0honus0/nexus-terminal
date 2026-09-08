@@ -29,12 +29,20 @@ const importPattern =
 const importsByFile = new Map();
 for (const file of sourceFiles) {
   const content = fs.readFileSync(file, 'utf8');
+  const rel = relative(file);
   const imports = [];
   for (const match of content.matchAll(importPattern)) {
     const specifier = match[1] ?? match[2];
     if (specifier) imports.push(specifier);
   }
   importsByFile.set(file, imports);
+
+  if (
+    /^features\/[^/]+\/public\.ts$/.test(rel) &&
+    /export\s+(?:type\s+)?(?:\{[^;\n]*\}|\*)\s+from\s+['"]\.\/store\//m.test(content)
+  ) {
+    failures.push(`${rel}: public feature surface must not re-export an internal Pinia store implementation`);
+  }
 }
 
 const firstSegment = (rel) => rel.split('/')[0];
