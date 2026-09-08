@@ -15,6 +15,7 @@
     "tests/ui/connection-non-ssh-bulk.spec.ts",
     "tests/ssh/cross-session-transfer.spec.ts",
     "tests/ssh/progress-display-copy-cancel.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts",
     "tests/ssh/panel-wheel-scaling.spec.ts",
     "tests/ssh/terminal-protocol.spec.ts",
     "tests/ssh/terminal-tools-ui.spec.ts",

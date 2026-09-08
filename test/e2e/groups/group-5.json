@@ -4,8 +4,7 @@
   "workers": 8,
   "specs": [
     "tests/ui/audit-log-filtering.spec.ts",
-    "tests/ui/connection-create.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts",
+    "tests/ui/batch-connection-edit.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
@@ -14,6 +13,7 @@
     "tests/ssh/connection-list-search.spec.ts",
     "tests/ssh/connection.spec.ts",
     "tests/ssh/reconnect-ui.spec.ts",
+    "tests/ssh/sftp-download.spec.ts",
     "tests/ssh/progress-display-archive-cancel.spec.ts"
   ]
 }
