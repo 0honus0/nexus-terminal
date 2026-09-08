@@ -55,6 +55,7 @@
       "copied": "指令已复制。",
       "copyFailed": "无法复制指令。",
       "loadFailed": "加载快捷指令失败：{error}",
+      "tagLoadFailed": "加载快捷指令标签失败，指令仍可使用：{error}",
       "saveFailed": "保存快捷指令失败：{error}",
       "deleteFailed": "删除快捷指令失败：{error}"
     },

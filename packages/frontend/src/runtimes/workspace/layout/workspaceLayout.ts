@@ -382,10 +382,7 @@ export const workspaceLayout = {
     const normalizedTree = candidate ? cloneWorkspaceLayout(candidate) : null;
     if (!normalizedTree || !validSidebar(nextSidebars, normalizedTree)) throw new Error('Invalid Workspace layout.');
     await resizeSaver.flush();
-    await Promise.all([
-      httpClient.put('/settings/layout', normalizedTree),
-      httpClient.put('/settings/sidebar', nextSidebars),
-    ]);
+    await httpClient.put('/settings/workspace-layout', { layout: normalizedTree, sidebar: nextSidebars });
     tree.value = normalizedTree;
     sidebars.value = nextSidebars;
     loaded.value = true;

@@ -179,6 +179,14 @@ export class SettingsService {
     JSON.parse(value);
     await this.repository.set(KEYS.layout, value);
   }
+  async setWorkspaceLayoutConfig(layout: string, config: unknown) {
+    JSON.parse(layout);
+    const sidebar = this.normalizeSidebarConfig(config);
+    await this.repository.setMany({
+      [KEYS.layout]: layout,
+      [KEYS.sidebar]: JSON.stringify(sidebar),
+    });
+  }
   async getStatusMonitorIntervalSeconds() {
     return this.readBoundedInt(KEYS.statusInterval, 3, 1, 86400);
   }
@@ -199,11 +207,7 @@ export class SettingsService {
     );
   }
   async setSidebarConfig(config: UpdateSidebarConfigDto) {
-    if (!config || !Array.isArray(config.left) || !Array.isArray(config.right))
-      throw new Error('Invalid sidebar configuration.');
-    for (const pane of [...config.left, ...config.right])
-      if (!VALID_PANES.has(pane)) throw new Error(`Invalid sidebar pane: ${pane}`);
-    await this.repository.set(KEYS.sidebar, JSON.stringify({ left: config.left, right: config.right }));
+    await this.repository.set(KEYS.sidebar, JSON.stringify(this.normalizeSidebarConfig(config)));
   }
   async getCaptchaConfig(): Promise<CaptchaSettings> {
     return this.readJson(KEYS.captcha, DEFAULT_CAPTCHA, (value) =>
@@ -237,6 +241,20 @@ export class SettingsService {
     } catch {
       return fallback;
     }
+  }
+  private normalizeSidebarConfig(config: unknown): SidebarConfig {
+    if (!config || typeof config !== 'object' || Array.isArray(config))
+      throw new Error('Invalid sidebar configuration.');
+    const candidate = config as { left?: unknown; right?: unknown };
+    if (!Array.isArray(candidate.left) || !Array.isArray(candidate.right))
+      throw new Error('Invalid sidebar configuration.');
+    const panes = [...candidate.left, ...candidate.right];
+    if (!panes.every((pane): pane is PaneName => typeof pane === 'string' && VALID_PANES.has(pane as PaneName))) {
+      const invalid = panes.find((pane) => typeof pane !== 'string' || !VALID_PANES.has(pane as PaneName));
+      throw new Error(`Invalid sidebar pane: ${String(invalid)}`);
+    }
+    if (new Set(panes).size !== panes.length) throw new Error('Duplicate sidebar panes are not allowed.');
+    return { left: [...candidate.left] as PaneName[], right: [...candidate.right] as PaneName[] };
   }
   private validFocus(value: any): value is FocusSwitcherFullConfig {
     return Boolean(

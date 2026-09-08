@@ -55,6 +55,7 @@
       "copied": "コマンドをコピーしました。",
       "copyFailed": "コマンドをコピーできません。",
       "loadFailed": "クイックコマンドの読み込みに失敗しました: {error}",
+      "tagLoadFailed": "クイックコマンドタグの読み込みに失敗しました。コマンドは引き続き利用できます: {error}",
       "saveFailed": "クイックコマンドの保存に失敗しました: {error}",
       "deleteFailed": "クイックコマンドの削除に失敗しました: {error}"
     },
