@@ -102,8 +102,21 @@ set_env RP_ID 'ssh.honus.top'
 set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
 
 compose config >/dev/null
-compose up -d --wait --wait-timeout 90
+# Production Compose intentionally depends on guacd being started, not on the image's
+# slow built-in health cadence. Start with the same semantics, then verify readiness
+# through the application ingress and an explicit Backend-to-guacd TCP probe.
+compose up -d
 compose ps
+
+frontend_ready=0
+for _ in {1..60}; do
+  if curl -fsS "http://127.0.0.1:${http_port}/" >/dev/null; then
+    frontend_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "$frontend_ready" -eq 1 ]] || { echo "Compose frontend did not become ready." >&2; exit 1; }
 
 compose exec -T backend sh -lc 'nc -z guacd 4822'
 
