@@ -1307,7 +1307,7 @@
       </div>
 
       <div
-        class="file-manager-path-input relative flex w-full min-w-0 items-center overflow-hidden rounded-lg border border-border bg-input px-1.5 py-0.5"
+        class="file-manager-path-input relative flex w-full min-w-0 items-center rounded-lg border border-border bg-input px-1.5 py-0.5"
       >
         <input
           ref="pathInput"
@@ -1879,16 +1879,23 @@
   }
   .file-manager-toolbar {
     justify-content: flex-start !important;
-    column-gap: 0.35rem;
+    column-gap: 0;
     row-gap: 0.3rem;
+    padding-right: 0;
+    padding-left: 0;
+    position: relative;
+    z-index: 30;
+    overflow: visible;
   }
   .file-manager-actions {
     order: 2;
     display: flex;
+    width: 100%;
     max-width: 100%;
-    flex: 1 1 auto;
+    flex: 1 1 100%;
     flex-wrap: wrap;
-    justify-content: flex-start;
+    justify-content: space-between;
+    gap: 0.25rem;
   }
   .file-manager-action-button {
     display: flex;
@@ -1940,6 +1947,7 @@
     width: 100%;
     min-width: 8rem;
     flex: 1 1 100%;
+    overflow: visible;
     background: var(--input-bg-color);
   }
   .file-manager-path-input:focus-within {
@@ -2018,51 +2026,28 @@
     background: color-mix(in srgb, var(--link-active-color) 12%, transparent);
   }
 
-  @container file-manager-pane (max-width: 520px) {
-    .file-manager-search-box {
-      width: min(100%, 10rem);
-      min-width: 0 !important;
-    }
-    .file-manager-actions {
-      gap: 0.25rem;
-    }
-    .file-manager-action-button {
-      padding-right: 0.45rem;
-      padding-left: 0.45rem;
-    }
+  .file-manager-actions > .file-manager-action-button,
+  .file-manager-search-slot {
+    width: 1.75rem;
+    min-width: 1.75rem;
+    flex: 0 0 1.75rem;
   }
-  @container file-manager-pane (max-width: 420px) {
-    .file-manager-actions {
-      display: flex;
-      width: 100%;
-      flex: 1 1 100%;
-      flex-wrap: wrap;
-      gap: 0.25rem;
-    }
-    .file-manager-actions > .file-manager-action-button,
-    .file-manager-search-slot {
-      width: 1.75rem;
-      min-width: 1.75rem;
-      flex: 0 0 1.75rem;
-    }
-    .file-manager-action-button,
-    .file-manager-search-slot .file-manager-action-button,
-    .file-manager-actions .file-manager-search-slot > .file-manager-path-button {
-      width: 1.75rem !important;
-      height: 1.75rem !important;
-    }
-    .file-manager-search-slot.is-active {
-      width: 100%;
-      min-width: 0;
-      flex: 1 1 100%;
-    }
-    .file-manager-search-slot.is-active .file-manager-search-box {
-      width: 100%;
-    }
-    .file-manager-action-button {
-      padding-right: 0.35rem;
-      padding-left: 0.35rem;
-    }
+  .file-manager-actions > .file-manager-action-button,
+  .file-manager-search-slot .file-manager-action-button,
+  .file-manager-actions .file-manager-search-slot > .file-manager-path-button {
+    width: 1.75rem !important;
+    height: 1.75rem !important;
+    padding-right: 0.35rem;
+    padding-left: 0.35rem;
+  }
+  .file-manager-search-slot.is-active {
+    width: 100%;
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+  .file-manager-search-slot.is-active .file-manager-search-box {
+    width: 100%;
+    min-width: 0 !important;
   }
   @container file-manager-pane (max-width: 360px) {
     .file-table {
@@ -2112,23 +2097,6 @@
       min-width: 0 !important;
       padding-right: 0.4rem;
       padding-left: 0.2rem;
-    }
-  }
-
-  @container file-manager-pane (max-width: 320px) {
-    .file-manager-toolbar {
-      gap: 0.25rem;
-      padding: 0.35rem;
-    }
-    .file-manager-actions {
-      gap: 0.25rem;
-    }
-    .file-manager-action-button {
-      width: 1.75rem !important;
-      height: 1.75rem !important;
-    }
-    .file-manager-action-button i {
-      font-size: 0.8rem !important;
     }
   }
 

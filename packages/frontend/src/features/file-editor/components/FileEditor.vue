@@ -388,14 +388,15 @@
         />
         <MonacoEditor
           v-else
+          :key="session.active.value.id"
           ref="desktopEditor"
           v-model="content"
           class="editor-instance"
           :language="session.active.value.language"
           :font-size="fontSize"
           :font-family="fontFamily"
-          :scroll-top="session.active.value.scrollTop"
-          :scroll-left="session.active.value.scrollLeft"
+          :initial-scroll-top="session.active.value.scrollTop"
+          :initial-scroll-left="session.active.value.scrollLeft"
           @request-save="triggerSave"
           @font-size="emit('fontSize', $event)"
           @update-scroll-position="updateScrollPosition"

@@ -221,15 +221,27 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     await pathInput(page).click();
     const historyDropdown = manager(page).getByTestId('path-history-dropdown');
     await expect(historyDropdown).toBeVisible();
+    const pathBox = await pathInput(page).boundingBox();
+    expect(pathBox).toBeTruthy();
     const historyMetrics = await historyDropdown.evaluate((element) => {
       const style = getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      const probeX = Math.min(rect.right - 2, rect.left + Math.max(2, rect.width / 2));
+      const probeY = Math.min(rect.bottom - 2, rect.top + Math.min(12, Math.max(2, rect.height / 2)));
       return {
-        width: element.getBoundingClientRect().width,
+        width: rect.width,
+        height: rect.height,
+        top: rect.top,
         borderRadius: Number.parseFloat(style.borderTopLeftRadius),
+        hitTestVisible:
+          document.elementFromPoint(probeX, probeY)?.closest('[data-testid="path-history-dropdown"]') === element,
       };
     });
     expect(historyMetrics.width).toBeGreaterThanOrEqual(280);
+    expect(historyMetrics.height).toBeGreaterThan(0);
+    expect(historyMetrics.top).toBeGreaterThanOrEqual(pathBox!.y + pathBox!.height - 1);
     expect(historyMetrics.borderRadius).toBeGreaterThan(0);
+    expect(historyMetrics.hitTestVisible).toBeTruthy();
 
     const specialHistory = manager(page).getByTitle(SPECIAL_PATH, { exact: true });
     await expect(specialHistory).toBeVisible();

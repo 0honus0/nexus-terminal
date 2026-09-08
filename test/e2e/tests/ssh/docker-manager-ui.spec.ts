@@ -425,27 +425,65 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       expect(narrowMetrics.metadataDisplay).toBe('none');
       const pathMetrics = await fileManager.evaluate((element) => {
         const toolbar = element.querySelector<HTMLElement>('.file-manager-toolbar')!;
+        const actions = element.querySelector<HTMLElement>('.file-manager-actions')!;
         const path = element.querySelector<HTMLElement>('.file-manager-path-input')!;
         const pathInput = path.querySelector<HTMLInputElement>('input')!;
         const action = element.querySelector<HTMLElement>('.file-manager-actions > .file-manager-action-button')!;
         const toolbarStyle = getComputedStyle(toolbar);
+        const actionsStyle = getComputedStyle(actions);
         const pathStyle = getComputedStyle(path);
         const pathInputStyle = getComputedStyle(pathInput);
+        const toolbarRect = toolbar.getBoundingClientRect();
+        const actionsRect = actions.getBoundingClientRect();
+        const visualItems = [...actions.children]
+          .map((item) => item as HTMLElement)
+          .filter((item) => getComputedStyle(item).display !== 'none' && item.getBoundingClientRect().width > 0);
+        const rows = new Map<number, DOMRect[]>();
+        for (const item of visualItems) {
+          const rect = item.getBoundingClientRect();
+          const key = Math.round(rect.top);
+          const row = rows.get(key) ?? [];
+          row.push(rect);
+          rows.set(key, row);
+        }
+        const rowEdgeGaps = [...rows.values()].map((row) => {
+          row.sort((left, right) => left.left - right.left);
+          return {
+            count: row.length,
+            left: row[0]!.left - actionsRect.left,
+            right: actionsRect.right - row[row.length - 1]!.right,
+          };
+        });
         return {
           actionWidth: action.getBoundingClientRect().width,
+          toolbarPaddingLeft: Number.parseFloat(toolbarStyle.paddingLeft),
+          toolbarPaddingRight: Number.parseFloat(toolbarStyle.paddingRight),
+          actionsWidth: actionsRect.width,
+          toolbarWidth: toolbarRect.width,
+          actionsJustify: actionsStyle.justifyContent,
+          actionsWrap: actionsStyle.flexWrap,
+          rowEdgeGaps,
           pathWidth: path.getBoundingClientRect().width,
-          contentWidth:
-            toolbar.getBoundingClientRect().width -
-            Number.parseFloat(toolbarStyle.paddingLeft) -
-            Number.parseFloat(toolbarStyle.paddingRight),
           pathBackground: pathStyle.backgroundColor,
+          pathOverflow: pathStyle.overflow,
           inputBackground: pathInputStyle.backgroundColor,
           borderWidth: pathStyle.borderTopWidth,
         };
       });
       expect(pathMetrics.actionWidth).toBeLessThanOrEqual(30);
-      expect(Math.abs(pathMetrics.pathWidth - pathMetrics.contentWidth)).toBeLessThan(2);
+      expect(pathMetrics.toolbarPaddingLeft).toBe(0);
+      expect(pathMetrics.toolbarPaddingRight).toBe(0);
+      expect(Math.abs(pathMetrics.actionsWidth - pathMetrics.toolbarWidth)).toBeLessThan(2);
+      expect(pathMetrics.actionsJustify).toBe('space-between');
+      expect(pathMetrics.actionsWrap).toBe('wrap');
+      expect(pathMetrics.rowEdgeGaps.length).toBeGreaterThan(0);
+      for (const row of pathMetrics.rowEdgeGaps.filter((entry) => entry.count > 1)) {
+        expect(Math.abs(row.left)).toBeLessThan(2);
+        expect(Math.abs(row.right)).toBeLessThan(2);
+      }
+      expect(Math.abs(pathMetrics.pathWidth - pathMetrics.toolbarWidth)).toBeLessThan(2);
       expect(pathMetrics.pathBackground).not.toBe('rgba(0, 0, 0, 0)');
+      expect(pathMetrics.pathOverflow).toBe('visible');
       expect(pathMetrics.inputBackground).toBe('rgba(0, 0, 0, 0)');
       expect(pathMetrics.borderWidth).toBe('1px');
 

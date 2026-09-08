@@ -13,8 +13,8 @@
       fontSize?: number;
       fontFamily?: string;
       readOnly?: boolean;
-      scrollTop?: number;
-      scrollLeft?: number;
+      initialScrollTop?: number;
+      initialScrollLeft?: number;
     }>(),
     { language: 'plaintext', fontSize: 14, readOnly: false },
   );
@@ -32,7 +32,6 @@
   let layoutFrame: number | undefined;
   let appliedFontSize = props.fontSize;
   let suppress = false;
-  let suppressScroll = false;
   const scheduleLayout = (): void => {
     if (!editor || !root.value) return;
     if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
@@ -62,11 +61,10 @@
     editor.onDidChangeModelContent(() => {
       if (!suppress) emit('update:modelValue', editor!.getValue());
     });
-    editor.setScrollPosition({ scrollTop: props.scrollTop ?? 0, scrollLeft: props.scrollLeft ?? 0 });
+    editor.setScrollPosition({ scrollTop: props.initialScrollTop ?? 0, scrollLeft: props.initialScrollLeft ?? 0 });
     editor.onDidScrollChange(() => {
-      if (!suppressScroll && editor) {
+      if (editor)
         emit('updateScrollPosition', { scrollTop: editor.getScrollTop(), scrollLeft: editor.getScrollLeft() });
-      }
     });
     editor.addAction({
       id: 'nexus-save-file',
@@ -120,16 +118,6 @@
     ([fontFamily, readOnly]) => editor?.updateOptions({ fontFamily, readOnly }),
   );
 
-  watch(
-    () => [props.scrollTop ?? 0, props.scrollLeft ?? 0] as const,
-    ([scrollTop, scrollLeft]) => {
-      if (!editor) return;
-      if (Math.abs(editor.getScrollTop() - scrollTop) < 1 && Math.abs(editor.getScrollLeft() - scrollLeft) < 1) return;
-      suppressScroll = true;
-      editor.setScrollPosition({ scrollTop, scrollLeft });
-      suppressScroll = false;
-    },
-  );
   onBeforeUnmount(() => {
     const domNode = editor?.getDomNode();
     if (domNode && wheelHandler) domNode.removeEventListener('wheel', wheelHandler);

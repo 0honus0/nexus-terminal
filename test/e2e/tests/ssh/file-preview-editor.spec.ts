@@ -565,6 +565,66 @@ test('file previews and text editor protect historical file-opening regressions'
   });
 });
 
+test('desktop editor rapid zoom does not replay stale scroll state while font metrics change', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const commandInput = page.getByTestId('command-input');
+  const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
+  await commandInput.fill(
+    "for ((i=1;i<=1200;i++)); do printf 'zoom-line-%d\\n' \"$i\"; done > zoom-lines.txt; printf 'ZOOM_READY\\n'",
+  );
+  await commandInput.press('Enter');
+  await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('ZOOM_READY');
+
+  await openConnectedFileManager(page);
+  await expect(row(page, 'zoom-lines.txt')).toBeVisible({ timeout: 20_000 });
+  await row(page, 'zoom-lines.txt').dblclick();
+
+  const editor = editorView(page);
+  const monaco = editor.locator('.monaco-editor');
+  const viewLines = monaco.locator('.view-lines');
+  await expect(monaco).toBeVisible({ timeout: 20_000 });
+  await expect.poll(async () => viewLines.innerText()).toContain('zoom-line-1');
+
+  const firstRenderedLine = async (): Promise<number> => {
+    const text = await viewLines.locator(':scope > .view-line').first().innerText();
+    const match = text.match(/zoom-line-(\d+)/);
+    return match ? Number.parseInt(match[1]!, 10) : 0;
+  };
+  const renderedFontSize = async (): Promise<number> =>
+    viewLines.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+
+  await monaco.hover();
+  for (let index = 0; index < 5; index += 1) await page.mouse.wheel(0, 1200);
+  await expect.poll(firstRenderedLine, { timeout: 10_000 }).toBeGreaterThan(20);
+
+  const lineSamples: number[] = [await firstRenderedLine()];
+  const fontSamples: number[] = [await renderedFontSize()];
+  for (let index = 0; index < 4; index += 1) {
+    await ctrlWheel(monaco, -80);
+    await page.waitForTimeout(20);
+    lineSamples.push(await firstRenderedLine());
+    fontSamples.push(await renderedFontSize());
+  }
+
+  for (let index = 1; index < fontSamples.length; index += 1) {
+    expect(fontSamples[index]).toBeGreaterThan(fontSamples[index - 1]!);
+    expect(lineSamples[index]).toBeLessThanOrEqual(lineSamples[index - 1]!);
+  }
+
+  await page.waitForTimeout(120);
+  const settledLine = await firstRenderedLine();
+  await page.waitForTimeout(500);
+  expect(await firstRenderedLine()).toBe(settledLine);
+});
+
 test('preview workspace backdrop hiding preserves tabs across directories when popup file editing is enabled', async ({
   page,
   context,
