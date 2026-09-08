@@ -5,8 +5,6 @@
   "specs": [
     "tests/ui/batch-connection-edit.spec.ts",
     "tests/ui/connection-create.spec.ts",
-    "tests/ssh/file-manager-navigation.spec.ts",
-    "tests/ssh/file-preview-editor.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts"
+    "tests/ssh/file-upload.spec.ts"
   ]
 }
