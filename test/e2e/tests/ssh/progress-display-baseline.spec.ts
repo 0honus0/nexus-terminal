@@ -98,6 +98,7 @@ test('desktop Progress Display floats above the workspace without resizing the t
     await clickMenuItem(page, 'Paste');
     await expect(visibleProgressCenter(page)).toBeVisible({ timeout: 10_000 });
     await closeConnectedFileManager(page);
+    await hideVisibleProgressCenter(page);
 
     const terminal = page.getByTestId('terminal');
     await expect(terminal).toBeVisible();

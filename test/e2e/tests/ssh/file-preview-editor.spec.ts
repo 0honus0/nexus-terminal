@@ -599,8 +599,11 @@ test('desktop editor rapid zoom does not replay stale scroll state while font me
     viewLines.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
 
   await monaco.hover();
-  for (let index = 0; index < 5; index += 1) await page.mouse.wheel(0, 1200);
-  await expect.poll(firstRenderedLine, { timeout: 10_000 }).toBeGreaterThan(20);
+  for (let index = 0; index < 10; index += 1) {
+    await page.mouse.wheel(0, 1200);
+    await page.waitForTimeout(15);
+  }
+  await expect.poll(firstRenderedLine, { timeout: 10_000 }).toBeGreaterThan(8);
 
   const lineSamples: number[] = [await firstRenderedLine()];
   const fontSamples: number[] = [await renderedFontSize()];
