@@ -101,6 +101,30 @@ test('duplicate workspace.connect is rejected without breaking filesystem access
   }
 });
 
+test('filesystem.createFile rejects an existing path without truncating its contents', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `create-file-${crypto.randomUUID()}`);
+
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    const before = await readRemoteText(workspace.socket, '/seed.txt');
+
+    await expect(
+      requestWorkspace(workspace.socket, 'filesystem.createFile', {
+        path: '/seed.txt',
+        content: '',
+        encoding: 'utf-8',
+      }),
+    ).rejects.toThrow();
+
+    await expect.poll(() => readRemoteText(workspace.socket, '/seed.txt')).toBe(before);
+  } finally {
+    await closeWebSocket(workspace.socket);
+  }
+});
+
 test('recursive filesystem search stays scoped to the requested path and returns nested paths', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();

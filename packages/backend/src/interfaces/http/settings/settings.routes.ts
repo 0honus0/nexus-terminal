@@ -57,9 +57,20 @@ const ALLOWED_SETTING_KEYS = new Set([
 ]);
 
 const BOUNDED_INTEGER_SETTINGS: Record<string, { min: number; max: number }> = {
+  maxLoginAttempts: { min: 1, max: 1000 },
+  loginBanDuration: { min: 1, max: 86400 * 30 },
+  dockerStatusIntervalSeconds: { min: 1, max: 86400 },
+  statusMonitorIntervalSeconds: { min: 1, max: 86400 },
   remoteHostRefreshIntervalSeconds: { min: 1, max: 86400 },
+  terminalScrollbackLimit: { min: 0, max: 100000 },
   spreadsheetPreviewRowsPerPage: { min: 10, max: 2000 },
   spreadsheetPreviewMaxColumns: { min: 5, max: 200 },
+};
+
+const BOUNDED_NUMBER_SETTINGS: Record<string, { min: number; max: number }> = {
+  statusMonitorScale: { min: 0.65, max: 1.6 },
+  fileManagerRowSizeMultiplier: { min: 0.5, max: 2 },
+  quickCommandRowSizeMultiplier: { min: 0.5, max: 2.5 },
 };
 
 const BOOLEAN_SETTING_KEYS = new Set([
@@ -203,6 +214,14 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
         const parsed = Number(filtered[key]);
         if (!Number.isInteger(parsed) || parsed < bounds.min || parsed > bounds.max) {
           response.status(400).json({ message: `设置 ${key} 必须是 ${bounds.min}–${bounds.max} 之间的整数` });
+          return;
+        }
+      }
+      for (const [key, bounds] of Object.entries(BOUNDED_NUMBER_SETTINGS)) {
+        if (!(key in filtered)) continue;
+        const parsed = Number(filtered[key]);
+        if (parsed < bounds.min || parsed > bounds.max) {
+          response.status(400).json({ message: `设置 ${key} 必须是 ${bounds.min}–${bounds.max} 之间的数字` });
           return;
         }
       }

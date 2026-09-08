@@ -45,6 +45,20 @@ export class RemoteTextFileService {
     return metadata ? toRemoteFileEntry(remotePath, metadata) : null;
   }
 
+  async create(
+    filesystem: RemoteFileSystem,
+    remotePath: string,
+    content = '',
+    encoding = 'utf-8',
+  ): Promise<RemoteFileEntry | null> {
+    const normalizedEncoding = this.resolveRequestedEncoding(encoding);
+    const stream = await filesystem.openWrite(remotePath, { flags: 'wx' });
+    stream.end(this.encodeContent(content, normalizedEncoding));
+    await finished(stream);
+    const metadata = await filesystem.metadata(remotePath).catch(() => null);
+    return metadata ? toRemoteFileEntry(remotePath, metadata) : null;
+  }
+
   private resolveRequestedEncoding(value: string): string {
     const normalized = normalizeEncoding(value);
     return iconv.encodingExists(normalized) ? normalized : 'utf-8';

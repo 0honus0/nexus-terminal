@@ -46,7 +46,8 @@
   const handleResize = (): void => void updateUnderline();
 
   onMounted(() => {
-    if (auth.isAuthenticated.value) void preferences.load();
+    if (auth.isAuthenticated.value)
+      void preferences.load().catch((cause) => console.error('[Preferences] Failed to load header settings:', cause));
     window.addEventListener('resize', handleResize);
     void updateUnderline();
   });

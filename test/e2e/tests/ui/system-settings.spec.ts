@@ -79,6 +79,33 @@ test('system settings persist timezone and language changes through the UI', asy
   }
 });
 
+test('preferences keep main settings when an auxiliary settings endpoint fails', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const originalResponse = await context.request.get('/api/v1/settings');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = (await originalResponse.json()) as { language?: string; showPopupFileManager?: boolean };
+  const normalize = await context.request.put('/api/v1/settings', {
+    data: { language: 'en-US', showPopupFileManager: true },
+  });
+  expect(normalize.ok()).toBeTruthy();
+
+  await page.route('**/api/v1/settings/nav-bar-visibility', (route) => route.abort('failed'));
+  try {
+    await page.goto('/settings');
+    await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
+    await expect(page.locator('#showPopupFileManager')).toBeChecked();
+  } finally {
+    await page.unroute('**/api/v1/settings/nav-bar-visibility');
+    const restore = await context.request.put('/api/v1/settings', {
+      data: {
+        language: original.language ?? 'en-US',
+        showPopupFileManager: original.showPopupFileManager ?? false,
+      },
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
+});
+
 test('dashboard local and remote resource cards can be configured independently', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');

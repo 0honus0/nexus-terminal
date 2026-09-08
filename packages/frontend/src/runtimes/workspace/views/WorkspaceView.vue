@@ -81,6 +81,10 @@
       })),
   );
   const progressVisibility = ref<Record<string, boolean>>({});
+  const reportPreferenceSaveError = (cause: unknown) =>
+    feedback.notifyError(
+      t('settings.preferences.saveFailed', { error: cause instanceof Error ? cause.message : String(cause) }),
+    );
   watch(
     () =>
       registry.orderedSessions.value.map((session) => ({
@@ -104,14 +108,17 @@
   const statusScaleSaver = createLatestValueSaver<number>({
     delayMs: 240,
     save: (scale) => preferences.update({ statusMonitorScale: scale }),
+    onError: reportPreferenceSaveError,
   });
   const fileManagerRowScaleSaver = createLatestValueSaver<number>({
     delayMs: 240,
     save: (scale) => preferences.update({ fileManagerRowSizeMultiplier: scale }),
+    onError: reportPreferenceSaveError,
   });
   const quickCommandRowScaleSaver = createLatestValueSaver<number>({
     delayMs: 240,
     save: (scale) => preferences.update({ quickCommandRowSizeMultiplier: scale }),
+    onError: reportPreferenceSaveError,
   });
 
   const terminalFontSaver = createLatestValueSaver<{ mobile: boolean; size: number }>({
@@ -130,8 +137,9 @@
     save: (size) => appearance.update({ mobileEditorFontSize: size }),
     onError: (cause) => feedback.notifyError(cause instanceof Error ? cause.message : String(cause)),
   });
-  const saveFileManagerColumnWidths = (widths: Record<string, number>) =>
-    preferences.update({ fileManagerColWidths: widths });
+  const saveFileManagerColumnWidths = (widths: Record<string, number>) => {
+    void preferences.update({ fileManagerColWidths: widths }).catch(reportPreferenceSaveError);
+  };
   const updateTerminalFontSize = (size: number) => {
     if (device.isMobile.value) appearance.settings.terminalFontSizeMobile = size;
     else appearance.settings.terminalFontSize = size;
@@ -166,12 +174,14 @@
     minHeight: 0,
     maxWidth: () => Math.min(800, window.innerWidth * 0.8),
     onEnd: ({ width }) => {
-      void preferences.update({
-        sidebarPaneWidths: {
-          ...preferences.values.value.sidebarPaneWidths,
-          connections: `${Math.round(width)}px`,
-        },
-      });
+      void preferences
+        .update({
+          sidebarPaneWidths: {
+            ...preferences.values.value.sidebarPaneWidths,
+            connections: `${Math.round(width)}px`,
+          },
+        })
+        .catch(reportPreferenceSaveError);
     },
   });
 
@@ -568,7 +578,12 @@
   };
 
   const saveSidebarWidth = (pane: string, width: string) => {
-    void preferences.update({ sidebarPaneWidths: { ...preferences.values.value.sidebarPaneWidths, [pane]: width } });
+    void preferences
+      .update({ sidebarPaneWidths: { ...preferences.values.value.sidebarPaneWidths, [pane]: width } })
+      .catch(reportPreferenceSaveError);
+  };
+  const updateQuickCommandCompactMode = (compact: boolean) => {
+    void preferences.update({ quickCommandsCompactMode: compact }).catch(reportPreferenceSaveError);
   };
 
   const updateLayoutLocked = async (locked: boolean) => {
@@ -634,13 +649,18 @@
     window.addEventListener('keyup', handleGlobalKeyup);
     document.addEventListener('visibilitychange', handleDocumentVisibilityChange);
     stopServerTransferPolling = serverTransfers.startPolling();
-    await Promise.allSettled([
+    const startup = await Promise.allSettled([
       workspaceLayout.load(),
       workspaceFocus.load(),
       preferences.load(),
       appearance.load(),
       history.load(),
     ]);
+    const preferenceLoad = startup[2];
+    if (preferenceLoad.status === 'rejected')
+      feedback.notifyError(
+        preferenceLoad.reason instanceof Error ? preferenceLoad.reason.message : String(preferenceLoad.reason),
+      );
     await loadQueryConnection();
     if (device.isMobile.value && document.visibilityState === 'visible') void recoverMarkedSshSessionsAfterForeground();
   });
@@ -652,6 +672,9 @@
     document.removeEventListener('visibilitychange', handleDocumentVisibilityChange);
     stopServerTransferPolling?.();
     void statusScaleSaver.dispose({ flush: true });
+    void fileManagerRowScaleSaver.dispose({ flush: true });
+    void quickCommandRowScaleSaver.dispose({ flush: true });
+    void terminalFontSaver.dispose({ flush: true });
     void editorFontSaver.dispose({ flush: true });
     void mobileEditorFontSaver.dispose({ flush: true });
   });
@@ -826,7 +849,7 @@
         @file-manager-row-scale="fileManagerRowScaleSaver.schedule"
         @file-manager-column-widths="saveFileManagerColumnWidths"
         @quick-command-row-scale="quickCommandRowScaleSaver.schedule"
-        @quick-command-compact-mode="preferences.update({ quickCommandsCompactMode: $event })"
+        @quick-command-compact-mode="updateQuickCommandCompactMode"
         @progress-visible="setProgressVisible(session.id, $event)"
         @interaction="session.reconnectNow()"
         @open-suspended="suspendedVisible = true"

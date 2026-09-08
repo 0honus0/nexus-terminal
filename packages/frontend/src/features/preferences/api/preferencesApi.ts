@@ -12,18 +12,28 @@ const mergePreferences = (raw: Partial<Preferences>): Preferences => {
 
 export const preferencesApi = {
   async load(): Promise<Preferences> {
-    const [settings, nav, connectionTags, quickCommandTags] = await Promise.all([
-      httpClient.get<Partial<Preferences>>('/settings'),
+    const settings = await httpClient.get<Partial<Preferences>>('/settings');
+    const result = mergePreferences(settings.data);
+    const [nav, connectionTags, quickCommandTags] = await Promise.allSettled([
       httpClient.get<{ visible: boolean }>('/settings/nav-bar-visibility'),
       httpClient.get<{ enabled: boolean }>('/settings/show-connection-tags'),
       httpClient.get<{ enabled: boolean }>('/settings/show-quick-command-tags'),
     ]);
-    return {
-      ...mergePreferences(settings.data),
-      navBarVisible: nav.data.visible,
-      showConnectionTags: connectionTags.data.enabled,
-      showQuickCommandTags: quickCommandTags.data.enabled,
-    };
+    if (nav.status === 'fulfilled') result.navBarVisible = nav.value.data.visible;
+    else console.warn('[Preferences] Failed to load navigation visibility; using the current default.', nav.reason);
+    if (connectionTags.status === 'fulfilled') result.showConnectionTags = connectionTags.value.data.enabled;
+    else
+      console.warn(
+        '[Preferences] Failed to load connection-tag visibility; using the current default.',
+        connectionTags.reason,
+      );
+    if (quickCommandTags.status === 'fulfilled') result.showQuickCommandTags = quickCommandTags.value.data.enabled;
+    else
+      console.warn(
+        '[Preferences] Failed to load Quick Command tag visibility; using the current default.',
+        quickCommandTags.reason,
+      );
+    return result;
   },
   async update(patch: PreferencePatch): Promise<void> {
     const { navBarVisible, showConnectionTags, showQuickCommandTags, ...settingsPatch } = patch;

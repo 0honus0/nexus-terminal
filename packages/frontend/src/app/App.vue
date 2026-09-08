@@ -42,7 +42,9 @@
     (authenticated, wasAuthenticated) => {
       if (authenticated) {
         void appearance.load();
-        void preferences.load();
+        void preferences
+          .load()
+          .catch((cause) => console.error('[Preferences] Failed to load application settings:', cause));
         return;
       }
       remoteDesktopLauncher.close();
