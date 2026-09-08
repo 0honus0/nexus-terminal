@@ -3,7 +3,7 @@
   "group": 5,
   "workers": 8,
   "specs": [
-    "tests/ui/batch-connection-edit.spec.ts",
+    "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/connection-create.spec.ts",
     "tests/ui/captcha-settings.spec.ts",
     "tests/ui/change-password.spec.ts",
@@ -11,7 +11,6 @@
     "tests/ui/ip-whitelist-settings.spec.ts",
     "tests/ui/protected-navigation.spec.ts",
     "tests/ui/ssh-key-management.spec.ts",
-    "tests/ssh/sftp-download.spec.ts",
     "tests/ssh/progress-display-archive-cancel.spec.ts",
     "tests/ssh/docker-manager-ui.spec.ts",
     "tests/ssh/protocol.spec.ts",
