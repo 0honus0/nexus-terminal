@@ -138,7 +138,7 @@
           v-model="data.search.value"
           type="text"
           :placeholder="t('suspendedSshSessions.searchPlaceholder')"
-          class="suspended-session-search w-full rounded-lg border border-border/50 bg-input py-1.5 pl-10 pr-2 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          class="suspended-session-search w-full rounded-lg border border-border/50 bg-input px-10 py-1.5 text-center text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
         />
       </div>
     </div>
@@ -166,7 +166,7 @@
           <div class="session-row flex items-center justify-between">
             <div class="session-info mr-2 min-w-0 flex-1">
               <div class="session-title flex items-center text-lg font-bold">
-                <span class="min-w-0 truncate">{{ session.connectionName }}</span>
+                <span class="session-name">{{ session.connectionName }}</span>
                 <span class="status-badge status-marked">{{ t('suspendedSshSessions.status.marked') }}</span>
               </div>
               <div class="mt-1 text-xs text-text-secondary">
@@ -225,7 +225,7 @@
                 <button
                   v-else
                   type="button"
-                  class="min-w-0 truncate text-left font-bold hover:text-primary disabled:cursor-default disabled:hover:text-inherit"
+                  class="session-name min-w-0 text-left font-bold hover:text-primary disabled:cursor-default disabled:hover:text-inherit"
                   :disabled="Boolean(renamingId)"
                   :title="t('suspendedSshSessions.tooltip.editName')"
                   @click="startRename(session)"
@@ -321,6 +321,12 @@
   .session-title {
     min-width: 0;
   }
+  .session-name {
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
 
   .status-badge {
     flex: none;
@@ -390,11 +396,39 @@
   }
 
   @container suspended-sessions-view-pane (max-width: 320px) {
-    .session-title {
-      flex-wrap: wrap;
-    }
     .session-row {
-      align-items: flex-start;
+      flex-direction: column;
+      align-items: stretch;
+    }
+    .session-info {
+      margin-right: 0;
+      text-align: center;
+    }
+    .session-title {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+    .session-name {
+      width: 100%;
+      text-align: center;
+    }
+    .status-badge {
+      margin-top: 0.25rem;
+      margin-left: 0;
+    }
+    .session-status-actions {
+      margin-top: 0.5rem;
+      align-items: center;
+    }
+    .session-status-actions .actions {
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+      gap: 0.375rem;
+    }
+    .session-status-actions .actions > * + * {
+      margin-top: 0 !important;
     }
   }
 
@@ -406,9 +440,10 @@
       margin-right: 0;
     }
     .session-action {
-      min-width: 2.75rem;
-      min-height: 2.75rem;
-      padding-inline: 0.5rem;
+      width: 1.875rem;
+      min-width: 1.875rem;
+      min-height: 1.875rem;
+      padding: 0.25rem;
     }
   }
 
@@ -419,6 +454,7 @@
     .suspended-session-search {
       padding-top: 0.25rem;
       padding-bottom: 0.25rem;
+      padding-right: 2rem;
       padding-left: 2rem;
       font-size: 0.75rem;
       line-height: 1rem;

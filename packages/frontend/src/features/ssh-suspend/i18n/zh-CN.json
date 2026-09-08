@@ -1,7 +1,7 @@
 {
   "suspendedSshSessions": {
     "modalTitle": "挂起的 SSH 会话",
-    "searchPlaceholder": "搜索会话 (名称, 连接名...)",
+    "searchPlaceholder": "搜索会话（名称、连接名称）",
     "loading": "正在加载挂起的会话...",
     "noResults": "没有找到符合条件的挂起会话。",
     "tooltip": {

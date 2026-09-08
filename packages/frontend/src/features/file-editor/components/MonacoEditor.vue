@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import * as monaco from 'monaco-editor/editor/editor.api';
   import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
   import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
@@ -28,8 +28,21 @@
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
   const focusEditor = (): void => editor?.focus();
   let wheelHandler: ((event: WheelEvent) => void) | undefined;
+  let resizeObserver: ResizeObserver | undefined;
+  let layoutFrame: number | undefined;
+  let appliedFontSize = props.fontSize;
   let suppress = false;
   let suppressScroll = false;
+  const scheduleLayout = (): void => {
+    if (!editor || !root.value) return;
+    if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = undefined;
+      const element = root.value;
+      if (!editor || !element || element.clientWidth <= 0 || element.clientHeight <= 0) return;
+      editor.layout({ width: element.clientWidth, height: element.clientHeight });
+    });
+  };
   const resolveWheelScale = createWheelScaleResolver({ min: 8, max: 40, step: 1, precision: 0, thresholdPx: 72 });
   (globalThis as typeof globalThis & { MonacoEnvironment?: unknown }).MonacoEnvironment = {
     getWorker: (_workerId: string, label: string) => (label === 'json' ? new JsonWorker() : new EditorWorker()),
@@ -38,8 +51,8 @@
     editor = monaco.editor.create(root.value!, {
       value: props.modelValue,
       language: props.language,
-      automaticLayout: true,
-      fontSize: props.fontSize,
+      automaticLayout: false,
+      fontSize: appliedFontSize,
       fontFamily: props.fontFamily,
       theme: 'vs-dark',
       readOnly: props.readOnly,
@@ -65,13 +78,17 @@
     if (domNode) {
       wheelHandler = (event: WheelEvent) => {
         if (!editor) return;
-        const change = resolveWheelScale(event, editor.getOption(monaco.editor.EditorOption.fontSize));
+        const change = resolveWheelScale(event, appliedFontSize);
         if (!change) return;
-        editor.updateOptions({ fontSize: change.next });
-        emit('fontSize', change.next);
+        appliedFontSize = change.next;
+        editor.updateOptions({ fontSize: appliedFontSize });
+        emit('fontSize', appliedFontSize);
       };
       domNode.addEventListener('wheel', wheelHandler, { passive: false });
     }
+    resizeObserver = new ResizeObserver(scheduleLayout);
+    resizeObserver.observe(root.value!);
+    void nextTick(scheduleLayout);
   });
   watch(
     () => props.modelValue,
@@ -91,8 +108,16 @@
     },
   );
   watch(
-    () => [props.fontSize, props.fontFamily, props.readOnly] as const,
-    () => editor?.updateOptions({ fontSize: props.fontSize, fontFamily: props.fontFamily, readOnly: props.readOnly }),
+    () => props.fontSize,
+    (fontSize) => {
+      if (Object.is(fontSize, appliedFontSize)) return;
+      appliedFontSize = fontSize;
+      editor?.updateOptions({ fontSize: appliedFontSize });
+    },
+  );
+  watch(
+    () => [props.fontFamily, props.readOnly] as const,
+    ([fontFamily, readOnly]) => editor?.updateOptions({ fontFamily, readOnly }),
   );
 
   watch(
@@ -109,6 +134,10 @@
     const domNode = editor?.getDomNode();
     if (domNode && wheelHandler) domNode.removeEventListener('wheel', wheelHandler);
     wheelHandler = undefined;
+    resizeObserver?.disconnect();
+    resizeObserver = undefined;
+    if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
+    layoutFrame = undefined;
     editor?.dispose();
   });
   defineExpose({ focus: focusEditor });

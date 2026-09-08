@@ -1307,7 +1307,7 @@
       </div>
 
       <div
-        class="file-manager-path-input relative flex min-w-0 items-center rounded-lg border border-border bg-background px-1.5 py-0.5"
+        class="file-manager-path-input relative flex w-full min-w-0 items-center overflow-hidden rounded-lg border border-border bg-input px-1.5 py-0.5"
       >
         <input
           ref="pathInput"
@@ -1315,7 +1315,7 @@
           data-testid="file-manager-path-input"
           data-focus-id="fileManagerPathInput"
           type="text"
-          class="min-w-[100px] flex-grow bg-transparent p-0.5 font-medium text-link outline-none"
+          class="min-w-0 flex-1 border-0 bg-transparent p-0.5 font-medium text-link outline-none"
           :title="t('fileManager.editPathTooltip')"
           @focus="openPathHistory"
           @click="openPathHistory"
@@ -1937,8 +1937,19 @@
   }
   .file-manager-path-input {
     order: 3;
+    width: 100%;
     min-width: 8rem;
-    flex: 1 1 12rem;
+    flex: 1 1 100%;
+    background: var(--input-bg-color);
+  }
+  .file-manager-path-input:focus-within {
+    border-color: var(--input-focus-border-color);
+    box-shadow: 0 0 0 2px var(--input-focus-glow);
+  }
+  .file-manager-path-input input {
+    width: 100%;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   .file-table-header {
@@ -2021,35 +2032,29 @@
     }
   }
   @container file-manager-pane (max-width: 420px) {
-    .file-manager-path-input {
-      width: 100%;
-      flex: 1 1 100%;
-    }
     .file-manager-actions {
-      display: grid;
+      display: flex;
       width: 100%;
       flex: 1 1 100%;
-      grid-template-columns: repeat(auto-fit, minmax(1.75rem, 1fr));
+      flex-wrap: wrap;
       gap: 0.25rem;
     }
     .file-manager-actions > .file-manager-action-button,
     .file-manager-search-slot {
-      width: 100%;
-      min-width: 0;
-      flex: none;
+      width: 1.75rem;
+      min-width: 1.75rem;
+      flex: 0 0 1.75rem;
     }
     .file-manager-action-button,
     .file-manager-search-slot .file-manager-action-button,
     .file-manager-actions .file-manager-search-slot > .file-manager-path-button {
-      width: 100% !important;
+      width: 1.75rem !important;
       height: 1.75rem !important;
     }
-    .file-manager-actions .file-manager-search-slot > .file-manager-path-button {
-      min-width: 0;
-      flex-basis: auto;
-    }
     .file-manager-search-slot.is-active {
-      grid-column: 1 / -1;
+      width: 100%;
+      min-width: 0;
+      flex: 1 1 100%;
     }
     .file-manager-search-slot.is-active .file-manager-search-box {
       width: 100%;
@@ -2119,7 +2124,7 @@
       gap: 0.25rem;
     }
     .file-manager-action-button {
-      width: auto !important;
+      width: 1.75rem !important;
       height: 1.75rem !important;
     }
     .file-manager-action-button i {

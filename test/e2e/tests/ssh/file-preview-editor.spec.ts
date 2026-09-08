@@ -276,6 +276,31 @@ test('file previews and text editor protect historical file-opening regressions'
     expect(await renderedFontSize()).toBe(increased);
   });
 
+  await step(
+    'rapid editor Ctrl+wheel zoom applies each step once and stays stable after preference write-back',
+    async () => {
+      const editor = editorView(page);
+      const monaco = editor.locator('.monaco-editor');
+      const viewLines = monaco.locator('.view-lines');
+      const renderedFontSize = async () =>
+        viewLines.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+
+      const before = await renderedFontSize();
+      const observed: number[] = [];
+      for (let index = 0; index < 3; index += 1) {
+        await ctrlWheel(monaco, -80);
+        observed.push(await renderedFontSize());
+      }
+      expect(observed[0]).toBeGreaterThan(before);
+      expect(observed[1]).toBeGreaterThan(observed[0]!);
+      expect(observed[2]).toBeGreaterThan(observed[1]!);
+
+      const latest = observed[2]!;
+      await page.waitForTimeout(500);
+      expect(await renderedFontSize()).toBe(latest);
+    },
+  );
+
   await slowStep('editing and saving an extensionless file persists over SFTP', async () => {
     const editor = editorView(page);
     const monaco = editor.locator('.monaco-editor');

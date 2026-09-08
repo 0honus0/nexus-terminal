@@ -307,9 +307,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         await expect(suspendedPanel).toBeVisible();
         await expect(suspendedSearch).toBeVisible();
         await expect(suspendedSearch).toHaveAttribute('type', 'text');
+        await expect(suspendedSearch).toHaveCSS('text-align', 'center');
         await expect
           .poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).paddingRight))
-          .toBe('8px');
+          .toBe('40px');
 
         await page.setViewportSize({ width: 1440, height: 1200 });
         await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeGreaterThan(340);
@@ -350,6 +351,29 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           .toBeLessThanOrEqual(6);
 
         await page.setViewportSize({ width: 1440, height: 900 });
+        const activeTab = page
+          .getByTestId('terminal-tab-bar')
+          .locator('[data-session-id]')
+          .filter({ hasText: 'E2E SSH' })
+          .first();
+        await activeTab.click({ button: 'right' });
+        await page.getByText('Suspend Session', { exact: true }).click();
+        const markedSession = suspendedPanel.locator('[data-testid^="marked-suspended-session-"]').first();
+        await expect(markedSession).toBeVisible();
+        try {
+          await page.setViewportSize({ width: 900, height: 650 });
+          await expect.poll(async () => (await suspendedPanel.boundingBox())?.width ?? 999).toBeLessThanOrEqual(300);
+          await expect(markedSession.locator('.session-name')).toHaveCSS('text-align', 'center');
+          const compactAction = markedSession.locator('.session-action').first();
+          await expect.poll(async () => (await compactAction.boundingBox())?.width ?? 99).toBeLessThanOrEqual(32);
+          await expect(markedSession.locator('.button-session-text').first()).toHaveCSS('display', 'none');
+        } finally {
+          if (await markedSession.isVisible().catch(() => false)) {
+            await markedSession.getByRole('button', { name: 'Unmark Suspend', exact: true }).click();
+            await expect(markedSession).toHaveCount(0);
+          }
+          await page.setViewportSize({ width: 1440, height: 900 });
+        }
       },
     );
 
@@ -402,16 +426,28 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       const pathMetrics = await fileManager.evaluate((element) => {
         const toolbar = element.querySelector<HTMLElement>('.file-manager-toolbar')!;
         const path = element.querySelector<HTMLElement>('.file-manager-path-input')!;
+        const pathInput = path.querySelector<HTMLInputElement>('input')!;
+        const action = element.querySelector<HTMLElement>('.file-manager-actions > .file-manager-action-button')!;
         const toolbarStyle = getComputedStyle(toolbar);
+        const pathStyle = getComputedStyle(path);
+        const pathInputStyle = getComputedStyle(pathInput);
         return {
+          actionWidth: action.getBoundingClientRect().width,
           pathWidth: path.getBoundingClientRect().width,
           contentWidth:
             toolbar.getBoundingClientRect().width -
             Number.parseFloat(toolbarStyle.paddingLeft) -
             Number.parseFloat(toolbarStyle.paddingRight),
+          pathBackground: pathStyle.backgroundColor,
+          inputBackground: pathInputStyle.backgroundColor,
+          borderWidth: pathStyle.borderTopWidth,
         };
       });
+      expect(pathMetrics.actionWidth).toBeLessThanOrEqual(30);
       expect(Math.abs(pathMetrics.pathWidth - pathMetrics.contentWidth)).toBeLessThan(2);
+      expect(pathMetrics.pathBackground).not.toBe('rgba(0, 0, 0, 0)');
+      expect(pathMetrics.inputBackground).toBe('rgba(0, 0, 0, 0)');
+      expect(pathMetrics.borderWidth).toBe('1px');
 
       const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=1200`, { method: 'POST' });
       expect(delayResponse.ok).toBeTruthy();
