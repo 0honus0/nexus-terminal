@@ -4,6 +4,13 @@ import { step } from '../../support/steps';
 
 const CONNECTION_NAME = 'E2E RDP RemoteApp';
 
+async function openWorkspaceConnectionList(page: Page) {
+  await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
+  const connectionList = page.getByTestId('workspace-connection-list');
+  await expect(connectionList).toBeVisible();
+  return connectionList;
+}
+
 async function cleanupConnection(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
@@ -152,8 +159,7 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await page.goto('/workspace');
       await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0);
 
-      const connectionList = page.getByTestId('workspace-connection-list');
-      await expect(connectionList).toBeVisible();
+      const connectionList = await openWorkspaceConnectionList(page);
       await connectionList.getByText(CONNECTION_NAME, { exact: true }).first().click();
 
       const modal = page.getByTestId('remote-desktop-modal');
@@ -266,8 +272,7 @@ async function createRemoteConnection(
 
 async function openRemoteConnection(page: Page, name: string, modalTestId: string): Promise<void> {
   await page.goto('/workspace');
-  const connectionList = page.getByTestId('workspace-connection-list');
-  await expect(connectionList).toBeVisible();
+  const connectionList = await openWorkspaceConnectionList(page);
   await connectionList.getByText(name, { exact: true }).first().click();
   await expect(page.getByTestId(modalTestId)).toBeVisible();
 }
@@ -291,8 +296,7 @@ test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, cont
   const connectionId = await createRemoteConnection(context.request, 'RDP', name, '192.0.2.93', 3389);
   try {
     await page.goto('/workspace');
-    const connectionList = page.getByTestId('workspace-connection-list');
-    await expect(connectionList).toBeVisible();
+    const connectionList = await openWorkspaceConnectionList(page);
 
     const sessionRequestPromise = page.waitForRequest(
       (request) =>

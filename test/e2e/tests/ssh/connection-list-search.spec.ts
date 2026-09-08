@@ -1,3 +1,4 @@
+import type { Page } from '@playwright/test';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -12,6 +13,13 @@ const SECONDARY_NAME = 'E2E Search Secondary';
 const SECONDARY_HOST = 'search-target.invalid';
 const WORKSPACE_TAG = 'E2E Workspace Tag With A Very Long Name For Narrow Mobile';
 const WORKSPACE_TAG_RENAMED = 'E2E Workspace Tag Renamed For Narrow Mobile';
+
+async function openWorkspaceConnectionPicker(page: Page) {
+  await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
+  const list = page.getByTestId('workspace-connection-list');
+  await expect(list).toBeVisible({ timeout: 20_000 });
+  return list;
+}
 
 async function listTags(request: APIRequestContext): Promise<Array<{ id: number; name: string }>> {
   const response = await request.get('/api/v1/tags');
@@ -110,8 +118,7 @@ test('workspace connection list remains usable when connection tags fail to load
   await page.route('**/api/v1/tags', (route) => route.abort('failed'));
 
   await page.goto('/workspace');
-  const list = page.getByTestId('workspace-connection-list');
-  await expect(list).toBeVisible({ timeout: 20_000 });
+  const list = await openWorkspaceConnectionPicker(page);
   await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
   await expect(
     page.getByText('Failed to load connection tags. Connections are still available.', { exact: true }),
@@ -128,8 +135,7 @@ test('workspace connection list remains usable when main preferences fail to loa
   });
 
   await page.goto('/workspace');
-  const list = page.getByTestId('workspace-connection-list');
-  await expect(list).toBeVisible({ timeout: 20_000 });
+  const list = await openWorkspaceConnectionPicker(page);
   await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
   await expect(page.getByText('Network Error', { exact: true }).first()).toBeVisible();
 });

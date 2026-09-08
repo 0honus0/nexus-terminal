@@ -5,7 +5,6 @@
   import { OverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { createLatestValueSaver } from '@/foundation/async';
-  import { useResizeHandle } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
   import { focusRegistry, normalizeShortcut, shortcutFromKeyboardEvent } from '@/shared/focus/public';
   import { connectionService, type Connection } from '@/features/connections/public';
@@ -157,34 +156,6 @@
   const focusConfiguratorVisible = ref(false);
   let altCycleCandidate = false;
   let stopServerTransferPolling: (() => void) | undefined;
-
-  const noSessionConnectionPaneWidth = ref(360);
-  const noSessionConnectionPaneHeight = ref(0);
-  const syncNoSessionConnectionPaneWidth = (): void => {
-    const raw = preferences.values.value.sidebarPaneWidths.connections;
-    const parsed = raw ? Number.parseFloat(raw) : 360;
-    noSessionConnectionPaneWidth.value = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 240), 800) : 360;
-  };
-  watch(() => preferences.values.value.sidebarPaneWidths.connections, syncNoSessionConnectionPaneWidth, {
-    immediate: true,
-  });
-  const noSessionConnectionPaneResize = useResizeHandle({
-    width: noSessionConnectionPaneWidth,
-    height: noSessionConnectionPaneHeight,
-    minWidth: 240,
-    minHeight: 0,
-    maxWidth: () => Math.min(800, window.innerWidth * 0.8),
-    onEnd: ({ width }) => {
-      void preferences
-        .update({
-          sidebarPaneWidths: {
-            ...preferences.values.value.sidebarPaneWidths,
-            connections: `${Math.round(width)}px`,
-          },
-        })
-        .catch(reportPreferenceSaveError);
-    },
-  });
 
   const clipboardCount = computed(() => registry.fileClipboard.count.value);
   const hiddenProgressSources = computed<ProgressSource[]>(() =>
@@ -763,30 +734,17 @@
           />
         </section>
       </div>
-      <div
+      <section
         v-else
-        class="mx-2 mb-2 flex min-h-0 flex-1 overflow-hidden rounded-b-md border border-t-0 border-border bg-background"
+        data-testid="no-session-placeholder"
+        class="mx-2 mb-2 flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-b-md border border-t-0 border-border bg-header p-4 text-center text-text-secondary"
       >
-        <aside
-          data-testid="no-session-connection-pane"
-          class="relative min-w-[240px] shrink-0 overflow-hidden border-r border-border"
-          :style="{ width: `${noSessionConnectionPaneWidth}px` }"
-        >
-          <WorkspaceConnectionList @open="openConnection" @open-many="openConnections" />
-          <div
-            data-testid="no-session-connection-resize-handle"
-            class="absolute inset-y-0 right-0 z-20 w-1 cursor-col-resize"
-            @pointerdown="noSessionConnectionPaneResize.startResize"
-          ></div>
-        </aside>
-        <section class="flex min-w-0 flex-1 items-center justify-center bg-header p-4 text-center text-text-secondary">
-          <div class="flex flex-col items-center justify-center p-8">
-            <i class="fas fa-plug mb-3 text-4xl text-text-secondary" aria-hidden="true"></i>
-            <span class="mb-2 text-lg font-medium text-text-secondary">{{ t('layout.noActiveSession.title') }}</span>
-            <p class="mt-2 text-xs text-text-secondary">{{ t('layout.noActiveSession.message') }}</p>
-          </div>
-        </section>
-      </div>
+        <div class="flex flex-col items-center justify-center p-8">
+          <i class="fas fa-plug mb-3 text-4xl text-text-secondary" aria-hidden="true"></i>
+          <span class="mb-2 text-lg font-medium text-text-secondary">{{ t('layout.noActiveSession.title') }}</span>
+          <p class="mt-2 text-xs text-text-secondary">{{ t('layout.noActiveSession.message') }}</p>
+        </div>
+      </section>
     </template>
 
     <div v-else class="relative min-h-0 flex-1">

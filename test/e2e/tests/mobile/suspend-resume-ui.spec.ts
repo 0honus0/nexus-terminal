@@ -139,7 +139,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await expect(hanging.locator('i.fa-trash-alt')).toBeVisible();
     await expect(hanging.locator('i.fa-download')).toBeVisible();
 
-    const search = manager.getByPlaceholder('Search sessions (name, connection...)');
+    const search = manager.locator('.suspended-session-search');
     await search.fill('DOES_NOT_MATCH_SUSPEND_E2E');
     await expect(hanging).toBeHidden();
     await expect(manager).toContainText('No suspended sessions found matching your criteria.');
