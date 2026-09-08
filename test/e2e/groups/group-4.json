@@ -3,10 +3,17 @@
   "group": 4,
   "workers": 8,
   "specs": [
-    "tests/ui/batch-connection-edit.spec.ts",
     "tests/ui/login-passkey-surface.spec.ts",
-    "tests/ssh/file-manager-navigation.spec.ts",
-    "tests/ssh/file-preview-editor.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts"
+    "tests/websocket/authenticated-session.spec.ts",
+    "tests/ssh/command-history-management.spec.ts",
+    "tests/ssh/quick-command-collapsible-search.spec.ts",
+    "tests/ssh/quick-command-management.spec.ts",
+    "tests/ssh/quick-command-tags-variables.spec.ts",
+    "tests/ssh/connection-edit-delete.spec.ts",
+    "tests/ssh/connection-list-search.spec.ts",
+    "tests/ssh/connection.spec.ts",
+    "tests/ssh/reconnect-ui.spec.ts",
+    "tests/ssh/progress-display-copy-cancel.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts"
   ]
 }
