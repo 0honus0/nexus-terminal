@@ -55,6 +55,7 @@
       "copied": "Command copied.",
       "copyFailed": "Unable to copy command.",
       "loadFailed": "Failed to load quick commands: {error}",
+      "tagLoadFailed": "Failed to load Quick Command tags. Commands are still available: {error}",
       "saveFailed": "Failed to save quick command: {error}",
       "deleteFailed": "Failed to delete quick command: {error}"
     },

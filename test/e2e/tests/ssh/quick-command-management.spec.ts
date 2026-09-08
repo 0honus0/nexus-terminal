@@ -12,12 +12,16 @@ import { slowStep, step } from '../../support/steps';
 
 const ORIGINAL_NAME = 'E2E Managed Quick Command';
 const EDITED_NAME = 'E2E Managed Quick Command Edited';
+const TAG_FAILURE_NAME = 'E2E Quick Command Tag Failure';
+const TAG_FAILURE_TAG = 'E2E Quick Command Failure Tag';
 
 async function cleanupCommands(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/quick-commands');
   expect(response.ok()).toBeTruthy();
   const commands = (await response.json()) as Array<{ id: number; name?: string }>;
-  for (const command of commands.filter((item) => item.name === ORIGINAL_NAME || item.name === EDITED_NAME)) {
+  for (const command of commands.filter((item) =>
+    [ORIGINAL_NAME, EDITED_NAME, TAG_FAILURE_NAME].includes(item.name ?? ''),
+  )) {
     const remove = await request.delete(`/api/v1/quick-commands/${command.id}`);
     expect(remove.ok()).toBeTruthy();
   }
@@ -216,4 +220,54 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
     await expect(row).toHaveCount(0);
     await expect.poll(async () => await findCommand(context.request, EDITED_NAME)).toBeUndefined();
   });
+});
+
+test('quick commands remain usable when the tag catalog fails to load', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect((await context.request.put('/api/v1/settings', { data: { showQuickCommandTags: true } })).ok()).toBeTruthy();
+  await cleanupCommands(context.request);
+  await resetTestSshFilesystem();
+
+  const createTag = await context.request.post('/api/v1/quick-command-tags', { data: { name: TAG_FAILURE_TAG } });
+  expect(createTag.status()).toBe(201);
+  const tagId = ((await createTag.json()) as { tag: { id: number } }).tag.id;
+  const create = await context.request.post('/api/v1/quick-commands', {
+    data: {
+      name: TAG_FAILURE_NAME,
+      command: "printf 'QUICK_TAG_FAILURE_FALLBACK\\n'",
+      tagIds: [tagId],
+      variables: {},
+    },
+  });
+  expect(create.status()).toBe(201);
+  const commandId = ((await create.json()) as { command: { id: number } }).command.id;
+  const connectionId = await ensureTestSshConnection(context.request);
+
+  await page.route('**/api/v1/quick-command-tags', async (route) => {
+    if (route.request().method() === 'GET') await route.abort('failed');
+    else await route.continue();
+  });
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+    const row = quickView.locator(`[data-command-id="${commandId}"]`);
+    await expect(quickView.getByTestId('quick-command-tag-load-warning')).toContainText(
+      'Failed to load Quick Command tags. Commands are still available: Network Error',
+    );
+    await expect(row).toBeVisible();
+    await expect(quickView.getByTestId('quick-command-group-untagged')).toHaveCount(0);
+    await expect(quickView.getByTestId(`quick-command-group-${tagId}`)).toHaveCount(0);
+
+    const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
+    const before = markerCount(await terminalRows.innerText(), 'QUICK_TAG_FAILURE_FALLBACK');
+    await row.getByTestId('quick-command-execute').click();
+    await expect
+      .poll(async () => markerCount(await terminalRows.innerText(), 'QUICK_TAG_FAILURE_FALLBACK'), { timeout: 15_000 })
+      .toBeGreaterThan(before);
+  } finally {
+    await context.request.delete(`/api/v1/quick-commands/${commandId}`);
+    await context.request.delete(`/api/v1/quick-command-tags/${tagId}`);
+  }
 });

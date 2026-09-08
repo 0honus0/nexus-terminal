@@ -26,7 +26,7 @@
   const { t } = useI18n();
   const feedback = useFeedback();
   const store = useQuickCommandsStore();
-  const { groups, flat, tags, search, sort, loading, error, expanded, selectedId } = storeToRefs(store);
+  const { groups, flat, tags, search, sort, loading, error, tagLoadError, expanded, selectedId } = storeToRefs(store);
   const localScale = ref(props.rowScale);
   const visible = ref(false);
   const editing = ref<QuickCommand | null>(null);
@@ -353,6 +353,14 @@
       :data-row-scale="localScale.toFixed(2)"
       @wheel="scaleRows"
     >
+      <p
+        v-if="tagLoadError"
+        data-testid="quick-command-tag-load-warning"
+        class="mb-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-xs text-warning"
+        role="alert"
+      >
+        {{ t('quickCommands.notifications.tagLoadFailed', { error: tagLoadError }) }}
+      </p>
       <div
         v-if="loading"
         class="flex h-full flex-col items-center justify-center p-6 text-center text-sm text-text-secondary"
@@ -389,7 +397,7 @@
         </button>
       </div>
 
-      <template v-else-if="showTags">
+      <template v-else-if="showTags && !tagLoadError">
         <section
           v-for="group in groups"
           :key="group.id ?? 'untagged'"

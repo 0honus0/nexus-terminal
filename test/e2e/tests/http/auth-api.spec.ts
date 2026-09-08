@@ -118,6 +118,46 @@ test.describe('authenticated HTTP API', () => {
     }
   });
 
+  test('workspace layout and sidebar save atomically through one HTTP contract', async ({ request }) => {
+    await loginAsInitialAdmin(request);
+    const layoutResponse = await request.get('/api/v1/settings/layout');
+    const sidebarResponse = await request.get('/api/v1/settings/sidebar');
+    expect(layoutResponse.ok()).toBeTruthy();
+    expect(sidebarResponse.ok()).toBeTruthy();
+    const originalLayout = (await layoutResponse.json()) as Record<string, unknown>;
+    const originalSidebar = (await sidebarResponse.json()) as { left: string[]; right: string[] };
+    const updatedLayout = { ...originalLayout, id: `e2e-atomic-layout-${crypto.randomUUID()}` };
+
+    try {
+      const rejected = await request.put('/api/v1/settings/workspace-layout', {
+        data: {
+          layout: updatedLayout,
+          sidebar: { left: ['connections', 'connections'], right: [] },
+        },
+      });
+      expect(rejected.status()).toBe(400);
+
+      const afterRejectedLayout = await request.get('/api/v1/settings/layout');
+      const afterRejectedSidebar = await request.get('/api/v1/settings/sidebar');
+      expect(afterRejectedLayout.ok()).toBeTruthy();
+      expect(afterRejectedSidebar.ok()).toBeTruthy();
+      expect(await afterRejectedLayout.json()).toEqual(originalLayout);
+      expect(await afterRejectedSidebar.json()).toEqual(originalSidebar);
+
+      const saved = await request.put('/api/v1/settings/workspace-layout', {
+        data: { layout: updatedLayout, sidebar: originalSidebar },
+      });
+      expect(saved.ok()).toBeTruthy();
+      await expect((await request.get('/api/v1/settings/layout')).json()).resolves.toEqual(updatedLayout);
+      await expect((await request.get('/api/v1/settings/sidebar')).json()).resolves.toEqual(originalSidebar);
+    } finally {
+      const restore = await request.put('/api/v1/settings/workspace-layout', {
+        data: { layout: originalLayout, sidebar: originalSidebar },
+      });
+      expect(restore.ok()).toBeTruthy();
+    }
+  });
+
   test('notification HTTP responses redact stored provider secrets', async ({ request }) => {
     await loginAsInitialAdmin(request);
     const suffix = crypto.randomUUID();

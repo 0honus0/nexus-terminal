@@ -290,6 +290,22 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
     }),
   );
 
+  router.put(
+    '/workspace-layout',
+    route(async (request, response) => {
+      if (!isRecord(request.body) || !isRecord(request.body.layout)) {
+        response.status(400).json({ message: '无效的 Workspace 布局配置。' });
+        return;
+      }
+      try {
+        await dependencies.settings.setWorkspaceLayoutConfig(JSON.stringify(request.body.layout), request.body.sidebar);
+        response.json({ message: 'Workspace 布局与侧栏配置已成功更新' });
+      } catch (error) {
+        response.status(400).json({ message: errorMessage(error) });
+      }
+    }),
+  );
+
   router.get(
     '/ip-blacklist',
     route(async (request, response) => {
