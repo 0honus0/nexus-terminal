@@ -10,24 +10,50 @@ image="$1"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
 suffix="${suffix//[^A-Za-z0-9_.-]/-}"
-network="nexus-e2e-smoke-${suffix}"
-backend="nexus-e2e-backend-${suffix}"
-frontend="nexus-e2e-frontend-${suffix}"
-guacd="nexus-e2e-guacd-${suffix}"
+project_name="nexus-e2e-smoke-${suffix,,}"
 http_port="${NEXUS_DOCKER_SMOKE_PORT:-18113}"
-data_dir="$(mktemp -d)"
+printf -v network_hex '%04x' "$(( $$ & 65535 ))"
+workspace="$(mktemp -d)"
+compose_file="$workspace/docker-compose.yml"
+compose_override="$workspace/docker-compose.smoke.yml"
+env_file="$workspace/.env"
+data_dir="$workspace/data"
 cookie_jar="$(mktemp)"
 session_secret='docker-smoke-session-secret-2026-00000000000000000000000000000000'
 encryption_key='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 failed=1
 
+if [[ "$image" != *:* ]]; then
+  echo "Unified image must include an explicit tag: $image" >&2
+  exit 2
+fi
+image_repository="${image%:*}"
+image_tag="${image##*:}"
+
+compose() {
+  docker compose \
+    --project-name "$project_name" \
+    --project-directory "$workspace" \
+    --env-file "$env_file" \
+    -f "$compose_file" \
+    -f "$compose_override" \
+    "$@"
+}
+
+set_env() {
+  local key="$1"
+  local value="$2"
+  local temp="$env_file.tmp"
+  grep -v "^${key}=" "$env_file" > "$temp" || true
+  printf '%s=%s\n' "$key" "$value" >> "$temp"
+  mv "$temp" "$env_file"
+}
+
 print_logs() {
-  echo "--- backend logs ---"
-  docker logs "$backend" 2>&1 || true
-  echo "--- guacd logs ---"
-  docker logs "$guacd" 2>&1 || true
-  echo "--- frontend logs ---"
-  docker logs "$frontend" 2>&1 || true
+  echo "--- compose ps ---"
+  compose ps --all 2>&1 || true
+  echo "--- compose logs ---"
+  compose logs --no-color 2>&1 || true
 }
 
 cleanup() {
@@ -35,78 +61,51 @@ cleanup() {
   if [[ "$failed" -ne 0 || "$status" -ne 0 ]]; then
     print_logs
   fi
-  docker exec "$backend" sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
-  docker rm -f "$frontend" "$backend" "$guacd" >/dev/null 2>&1 || true
-  docker network rm "$network" >/dev/null 2>&1 || true
-  rm -rf "$data_dir" "$cookie_jar" || true
+  compose exec -T backend sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
+  compose down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
+  rm -rf "$workspace" "$cookie_jar" || true
   exit "$status"
 }
 trap cleanup EXIT
 
+cp "$repo_root/docker-compose.yml" "$compose_file"
+cp "$repo_root/.env" "$env_file"
+cat > "$compose_override" <<EOF
+services:
+  frontend:
+    container_name: nexus-e2e-frontend-$suffix
+  backend:
+    container_name: nexus-e2e-backend-$suffix
+  guacd:
+    container_name: nexus-e2e-guacd-$suffix
+networks:
+  nexus-terminal-network:
+    name: nexus-e2e-network-$suffix
+EOF
+mkdir -p "$data_dir"
 cp "$repo_root/test/e2e/fixtures/seeded-data/nexus-terminal.db" "$data_dir/nexus-terminal.db"
+cat > "$data_dir/.env" <<EOF
+SESSION_SECRET=$session_secret
+ENCRYPTION_KEY=$encryption_key
+EOF
 chmod 0777 "$data_dir"
+chmod 0600 "$data_dir/.env"
 
-docker network create "$network" >/dev/null
+# Keep the repository Compose/.env contract intact while overriding only values that
+# must be isolated for this smoke run: image, host port, Docker network, and WebAuthn origin.
+set_env NEXUS_IMAGE_REPOSITORY "$image_repository"
+set_env NEXUS_IMAGE_TAG "$image_tag"
+set_env NEXUS_HTTP_PORT "$http_port"
+set_env NEXUS_IPV6_SUBNET "fd01:ee:${network_hex}::/80"
+set_env NEXUS_IPV6_GATEWAY "fd01:ee:${network_hex}::1"
+set_env RP_ID 'ssh.honus.top'
+set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
 
-docker run -d \
-  --name "$guacd" \
-  --network "$network" \
-  --network-alias guacd \
-  "${GUACD_IMAGE:-guacamole/guacd:latest}" >/dev/null
+compose config >/dev/null
+compose up -d --wait --wait-timeout 90
+compose ps
 
-docker run -d \
-  --name "$backend" \
-  --network "$network" \
-  --network-alias backend \
-  -v "$data_dir:/app/data" \
-  -e NODE_ENV=production \
-  -e PORT=3001 \
-  -e NEXUS_DATA_DIR=/app/data \
-  -e DEPLOYMENT_MODE=docker \
-  -e SESSION_SECRET="$session_secret" \
-  -e ENCRYPTION_KEY="$encryption_key" \
-  -e GUACD_HOST=guacd \
-  -e GUACD_PORT=4822 \
-  -e RP_ID=ssh.honus.top \
-  -e RP_ORIGIN='https://ssh.honus.top,https://ssh.trui.de' \
-  "$image" backend >/dev/null
-
-backend_ready=0
-for _ in {1..45}; do
-  if docker exec "$backend" sh -lc 'wget -q -O /dev/null http://127.0.0.1:3001/api/v1/status'; then
-    backend_ready=1
-    break
-  fi
-  if [[ "$(docker inspect -f '{{.State.Running}}' "$backend" 2>/dev/null || true)" != "true" ]]; then
-    echo "Backend container exited before becoming ready." >&2
-    exit 1
-  fi
-  sleep 1
-done
-[[ "$backend_ready" -eq 1 ]] || { echo "Backend did not become ready." >&2; exit 1; }
-
-docker exec "$backend" sh -lc 'nc -z guacd 4822'
-
-docker run -d \
-  --name "$frontend" \
-  --network "$network" \
-  --network-alias frontend \
-  -p "127.0.0.1:${http_port}:80" \
-  "$image" frontend >/dev/null
-
-frontend_ready=0
-for _ in {1..30}; do
-  if curl -fsS "http://127.0.0.1:${http_port}/" >/dev/null; then
-    frontend_ready=1
-    break
-  fi
-  if [[ "$(docker inspect -f '{{.State.Running}}' "$frontend" 2>/dev/null || true)" != "true" ]]; then
-    echo "Frontend container exited before becoming ready." >&2
-    exit 1
-  fi
-  sleep 1
-done
-[[ "$frontend_ready" -eq 1 ]] || { echo "Frontend did not become ready." >&2; exit 1; }
+compose exec -T backend sh -lc 'nc -z guacd 4822'
 
 curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
 curl -fsS "http://127.0.0.1:${http_port}/api/v1/status" | grep -q '"status"'
@@ -175,4 +174,4 @@ socket.on('error', (error) => {
 NODE
 
 failed=0
-echo "Docker deployment smoke passed for $image"
+echo "Docker Compose deployment smoke passed for $image"

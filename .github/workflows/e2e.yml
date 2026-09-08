@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.env'
       - '.dockerignore'
       - 'scripts/docker/**'
       - 'packages/backend/**'
@@ -17,6 +19,8 @@ on:
   pull_request:
     paths:
       - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.env'
       - '.dockerignore'
       - 'scripts/docker/**'
       - 'packages/backend/**'
