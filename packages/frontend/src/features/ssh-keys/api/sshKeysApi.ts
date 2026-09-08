@@ -1,11 +1,8 @@
 import { httpClient } from '@/client/http';
-import type { SshKeyDetails, SshKeyInput, SshKeySummary } from '../model/sshKey';
+import type { SshKeyInput, SshKeySummary } from '../model/sshKey';
 export const sshKeysApi = {
   async list(): Promise<SshKeySummary[]> {
     return (await httpClient.get<SshKeySummary[]>('/ssh-keys')).data;
-  },
-  async details(id: number): Promise<SshKeyDetails> {
-    return (await httpClient.get<SshKeyDetails>(`/ssh-keys/${id}/details`)).data;
   },
   async create(input: SshKeyInput): Promise<SshKeySummary> {
     const r = await httpClient.post<{ key: SshKeySummary }>('/ssh-keys', input);

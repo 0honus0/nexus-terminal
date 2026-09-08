@@ -43,8 +43,8 @@ test('common terminal tools work through the real SSH session', async ({ page, c
     data: { commandInputSyncTarget: 'none' },
   });
   expect(settings.ok()).toBeTruthy();
-  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
-    data: { enabled: false },
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
   });
   expect(tagVisibility.ok()).toBeTruthy();
   await resetTestSshFilesystem();

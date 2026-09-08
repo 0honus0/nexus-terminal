@@ -1,6 +1,7 @@
 import type {
   AuthenticationResponseJSON,
   PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
 } from '@simplewebauthn/browser';
 import { httpClient } from '@/client/http';
@@ -54,8 +55,11 @@ export const securityApi = {
     return response.data.hasPasskeys;
   },
 
-  async getPasskeyAuthenticationOptions(username?: string) {
-    const response = await httpClient.post('/auth/passkey/authentication-options', username ? { username } : {});
+  async getPasskeyAuthenticationOptions(username?: string): Promise<PublicKeyCredentialRequestOptionsJSON> {
+    const response = await httpClient.post<PublicKeyCredentialRequestOptionsJSON>(
+      '/auth/passkey/authentication-options',
+      username ? { username } : {},
+    );
     return response.data;
   },
 

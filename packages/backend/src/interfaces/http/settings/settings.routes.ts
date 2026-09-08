@@ -54,6 +54,9 @@ const ALLOWED_SETTING_KEYS = new Set([
   'quickCommandsCollapsibleSearch',
   'quickCommandsCompactMode',
   'quickCommandRowSizeMultiplier',
+  'navBarVisible',
+  'showConnectionTags',
+  'showQuickCommandTags',
 ]);
 
 const BOUNDED_INTEGER_SETTINGS: Record<string, { min: number; max: number }> = {
@@ -88,6 +91,9 @@ const BOOLEAN_SETTING_KEYS = new Set([
   'layoutLocked',
   'fileManagerShowDeleteConfirmation',
   'ipBlacklistEnabled',
+  'navBarVisible',
+  'showConnectionTags',
+  'showQuickCommandTags',
 ]);
 
 const NUMBER_SETTING_KEYS = new Set([
@@ -258,24 +264,6 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
   );
 
   router.get(
-    '/nav-bar-visibility',
-    route(async (_request, response) => {
-      response.json({ visible: await dependencies.settings.getNavBarVisibility() });
-    }),
-  );
-  router.put(
-    '/nav-bar-visibility',
-    route(async (request, response) => {
-      if (typeof request.body?.visible !== 'boolean') {
-        response.status(400).json({ message: '无效的请求体，"visible" 必须是一个布尔值' });
-        return;
-      }
-      await dependencies.settings.setNavBarVisibility(request.body.visible);
-      response.json({ message: '导航栏可见性已成功更新' });
-    }),
-  );
-
-  router.get(
     '/layout',
     route(async (_request, response) => {
       const raw = await dependencies.settings.getLayoutTree();
@@ -343,52 +331,6 @@ export const createSettingsRouter = (dependencies: SettingsRouterDependencies): 
         response.status(400).json({ message: errorMessage(error) });
       }
     }),
-  );
-
-  const booleanSetting = (
-    path: string,
-    getter: () => Promise<boolean>,
-    setter: (value: boolean) => Promise<unknown>,
-    key: string,
-  ) => {
-    router.get(
-      path,
-      route(async (_request, response) => {
-        response.json({ enabled: await getter() });
-      }),
-    );
-    router.put(
-      path,
-      route(async (request, response) => {
-        if (typeof request.body?.enabled !== 'boolean') {
-          response.status(400).json({ message: '无效的请求体，"enabled" 必须是一个布尔值' });
-          return;
-        }
-        await setter(request.body.enabled);
-        await dependencies.audit.logAction('SETTINGS_UPDATED', { updatedKeys: [key] });
-        await dependencies.notifications.publish('SETTINGS_UPDATED', { updatedKeys: [key] });
-        response.json({ message: `${key} 设置已成功更新` });
-      }),
-    );
-  };
-
-  booleanSetting(
-    '/show-connection-tags',
-    () => dependencies.settings.getShowConnectionTags(),
-    (value) => dependencies.settings.setShowConnectionTags(value),
-    'showConnectionTags',
-  );
-  booleanSetting(
-    '/show-quick-command-tags',
-    () => dependencies.settings.getShowQuickCommandTags(),
-    (value) => dependencies.settings.setShowQuickCommandTags(value),
-    'showQuickCommandTags',
-  );
-  booleanSetting(
-    '/show-status-monitor-ip-address',
-    () => dependencies.settings.getShowStatusMonitorIpAddress(),
-    (value) => dependencies.settings.setShowStatusMonitorIpAddress(value),
-    'showStatusMonitorIpAddress',
   );
 
   router.put(

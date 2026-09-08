@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { configureSshE2eSettings, E2E_SSH } from '../../support/ssh';
@@ -7,7 +8,10 @@ const ORIGINAL_NAME = 'Z-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarro
 const EDITED_NAME = 'A-E2EManagedSSHKeyWithAnExtremelyLongUnbrokenNameForNarrowMobileEdited';
 const SORT_PEER_NAME = 'M-E2EManagedSSHKeySortPeer';
 const CONNECTION_NAME = 'E2E SSH Auth Switch';
-const PRIVATE_KEY = '-----BEGIN OPENSSH PRIVATE KEY-----\nE2E-PRIVATE-KEY-CONTENT\n-----END OPENSSH PRIVATE KEY-----';
+const PRIVATE_KEY = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
+  type: 'pkcs1',
+  format: 'pem',
+});
 
 async function listKeys(request: APIRequestContext): Promise<Array<{ id: number; name: string }>> {
   const response = await request.get('/api/v1/ssh-keys');
@@ -96,9 +100,10 @@ test('SSH key management UI adds, renames without replacing private key, and del
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth))
       .toBeLessThanOrEqual(1);
 
-    const details = await context.request.get(`/api/v1/ssh-keys/${keyId}/details`);
-    expect(details.ok()).toBeTruthy();
-    await expect(details.json()).resolves.toMatchObject({ name: ORIGINAL_NAME, privateKey: PRIVATE_KEY });
+    const listItem = (await listKeys(context.request)).find((item) => item.id === keyId);
+    expect(listItem).toEqual({ id: keyId, name: ORIGINAL_NAME });
+    const retiredDetails = await context.request.get(`/api/v1/ssh-keys/${keyId}/details`);
+    expect(retiredDetails.status()).toBe(404);
   });
 
   await step('edit allows a name-only change while the private key field stays empty', async () => {
@@ -116,9 +121,10 @@ test('SSH key management UI adds, renames without replacing private key, and del
         timeout: 15_000,
       })
       .toBe(EDITED_NAME);
-    const details = await context.request.get(`/api/v1/ssh-keys/${keyId}/details`);
-    expect(details.ok()).toBeTruthy();
-    await expect(details.json()).resolves.toMatchObject({ name: EDITED_NAME, privateKey: PRIVATE_KEY });
+    expect((await listKeys(context.request)).find((item) => item.id === keyId)).toEqual({
+      id: keyId,
+      name: EDITED_NAME,
+    });
     const namesAfterRename = await modal.locator('tbody tr[data-key-id] td:first-child').allTextContents();
     expect(namesAfterRename.indexOf(EDITED_NAME)).toBeGreaterThanOrEqual(0);
     expect(namesAfterRename.indexOf(EDITED_NAME)).toBeLessThan(namesAfterRename.indexOf(SORT_PEER_NAME));
@@ -154,6 +160,9 @@ test('SSH key management UI adds, renames without replacing private key, and del
       authMethod: 'key',
       sshKeyId: keyId,
     });
+    const keyConnectionTest = await context.request.post(`/api/v1/connections/${connectionId}/test`);
+    expect(keyConnectionTest.ok()).toBeTruthy();
+    await expect(keyConnectionTest.json()).resolves.toMatchObject({ success: true });
 
     const row = page.getByTestId(`connection-row-${connectionId}`);
     await row.getByTestId('connection-row-edit').click();

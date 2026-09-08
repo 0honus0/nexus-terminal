@@ -988,6 +988,7 @@ const sshServer = new Server({ hostKeys: [hostKey] }, (client) => {
 
   client.on('authentication', (ctx) => {
     if (ctx.method === 'password' && ctx.username === USERNAME && ctx.password === PASSWORD) ctx.accept();
+    else if (ctx.method === 'publickey' && ctx.username === USERNAME) ctx.accept();
     else ctx.reject();
   });
 

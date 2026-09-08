@@ -17,10 +17,12 @@ export interface TwoFactorSetup {
   qrCodeUrl: string;
 }
 
+export type PasskeyTransport = 'ble' | 'cable' | 'hybrid' | 'internal' | 'nfc' | 'smart-card' | 'usb';
+
 export interface PasskeySummary {
   credentialId: string;
-  name?: string;
-  transports?: AuthenticatorTransport[];
+  name: string | null;
+  transports: PasskeyTransport[];
   createdAt: number;
   lastUsedAt: number | null;
 }

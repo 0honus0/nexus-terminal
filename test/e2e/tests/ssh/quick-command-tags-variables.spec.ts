@@ -45,8 +45,8 @@ test('quick command tags and saved variables survive persistence, grouping, rena
   ).toBeTruthy();
   expect(
     (
-      await context.request.put('/api/v1/settings/show-quick-command-tags', {
-        data: { enabled: true },
+      await context.request.put('/api/v1/settings', {
+        data: { showQuickCommandTags: true },
       })
     ).ok(),
   ).toBeTruthy();

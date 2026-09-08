@@ -172,12 +172,6 @@ export class SettingsService {
     if (!this.validFocus(value)) throw new Error('Invalid focus switcher configuration.');
     await this.repository.set(KEYS.focus, JSON.stringify(value));
   }
-  async getNavBarVisibility() {
-    return (await this.repository.get(KEYS.nav)) !== 'false';
-  }
-  setNavBarVisibility(value: boolean) {
-    return this.repository.set(KEYS.nav, String(value));
-  }
   getLayoutTree() {
     return this.repository.get(KEYS.layout);
   }
@@ -225,24 +219,6 @@ export class SettingsService {
     for (const key of ['hcaptchaSiteKey', 'hcaptchaSecretKey', 'recaptchaSiteKey', 'recaptchaSecretKey'] as const)
       if (next[key] !== undefined && typeof next[key] !== 'string') throw new Error(`${key} must be a string.`);
     await this.repository.set(KEYS.captcha, JSON.stringify(next));
-  }
-  async getShowConnectionTags() {
-    return (await this.repository.get(KEYS.showConnectionTags)) !== 'false';
-  }
-  setShowConnectionTags(v: boolean) {
-    return this.repository.set(KEYS.showConnectionTags, String(v));
-  }
-  async getShowQuickCommandTags() {
-    return (await this.repository.get(KEYS.showQuickCommandTags)) !== 'false';
-  }
-  setShowQuickCommandTags(v: boolean) {
-    return this.repository.set(KEYS.showQuickCommandTags, String(v));
-  }
-  async getShowStatusMonitorIpAddress() {
-    return (await this.repository.get(KEYS.showStatusIp)) !== 'false';
-  }
-  setShowStatusMonitorIpAddress(v: boolean) {
-    return this.repository.set(KEYS.showStatusIp, String(v));
   }
   private async readBoundedInt(key: string, fallback: number, min: number, max: number) {
     const value = Number.parseInt((await this.repository.get(key)) ?? '', 10);

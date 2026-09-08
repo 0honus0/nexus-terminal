@@ -56,7 +56,21 @@ test('proxy UI preserves, updates, and explicitly clears a stored password', asy
     await form.getByTestId('proxy-submit').click();
     const create = await createPromise;
     expect(create.status()).toBe(201);
-    proxyId = ((await create.json()) as { proxy: { id: number } }).proxy.id;
+    const createBody = (await create.json()) as { proxy: Record<string, unknown> & { id: number } };
+    proxyId = createBody.proxy.id;
+    expect(createBody.proxy).toMatchObject({
+      id: proxyId,
+      name: ORIGINAL_NAME,
+      type: 'HTTP',
+      host: LONG_HOST,
+      port: 18080,
+      username: 'proxy-user',
+      authMethod: 'password',
+      createdAt: expect.any(Number),
+      updatedAt: expect.any(Number),
+    });
+    for (const legacyName of ['auth_method', 'created_at', 'updated_at'])
+      expect(createBody.proxy).not.toHaveProperty(legacyName);
     const row = page.getByTestId(`proxy-row-${proxyId}`);
     await expect(row).toContainText(ORIGINAL_NAME);
     await expect(row).toContainText(LONG_HOST);

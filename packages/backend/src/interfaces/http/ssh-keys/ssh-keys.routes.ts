@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import type { SshKeyService } from '../../../modules/ssh-keys/ssh-key.service';
-import type { SshKeyInput } from '../../../modules/ssh-keys/ssh-key.types';
+import type { SshKeyInput, SshKeySummary } from '../../../modules/ssh-keys/ssh-key.types';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
+
+const sshKeySummaryDto = (key: SshKeySummary) => ({ id: key.id, name: key.name });
 
 const readOptionalSecret = (value: unknown, field: string): string | null | undefined => {
   if (value === undefined || value === null) return value;
@@ -44,7 +46,7 @@ export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
   router.get(
     '/',
     route(async (_request, response) => {
-      response.json(await sshKeys.list());
+      response.json((await sshKeys.list()).map(sshKeySummaryDto));
     }),
   );
   router.post(
@@ -52,27 +54,11 @@ export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
     route(async (request, response) => {
       try {
         const key = await sshKeys.create(sshKeyCreateInput(request.body));
-        response.status(201).json({ message: 'SSH 密钥创建成功。', key });
+        response.status(201).json({ message: 'SSH 密钥创建成功。', key: sshKeySummaryDto(key) });
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('已存在') || message.includes('必须提供') ? 400 : 500).json({ message });
       }
-    }),
-  );
-  router.get(
-    '/:id/details',
-    route(async (request, response) => {
-      const id = parsePositiveId(String(request.params.id));
-      if (!id) {
-        response.status(400).json({ message: '无效的密钥 ID。' });
-        return;
-      }
-      const key = await sshKeys.getDecrypted(id);
-      if (!key) {
-        response.status(404).json({ message: 'SSH 密钥未找到。' });
-        return;
-      }
-      response.json(key);
     }),
   );
   router.put(
@@ -93,7 +79,7 @@ export const createSshKeysRouter = (sshKeys: SshKeyService): Router => {
           response.status(404).json({ message: 'SSH 密钥未找到。' });
           return;
         }
-        response.json({ message: 'SSH 密钥更新成功。', key });
+        response.json({ message: 'SSH 密钥更新成功。', key: sshKeySummaryDto(key) });
       } catch (error) {
         const message = errorMessage(error);
         response.status(message.includes('已存在') || message.includes('不能为空') ? 400 : 500).json({ message });

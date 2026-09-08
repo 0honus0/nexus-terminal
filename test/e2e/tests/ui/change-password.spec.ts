@@ -253,9 +253,19 @@ test('passkey settings UI registers, renames, reloads, and deletes a real creden
     const row = panel.locator('li').first();
     const passkeys = await context.request.get('/api/v1/auth/user/passkeys');
     expect(passkeys.ok()).toBeTruthy();
-    const passkeyList = (await passkeys.json()) as Array<{ credentialId: string; name?: string }>;
+    const passkeyList = (await passkeys.json()) as Array<Record<string, unknown> & { credentialId: string }>;
     expect(passkeyList).toHaveLength(1);
-    const credentialId = passkeyList[0]?.credentialId;
+    const passkey = passkeyList[0]!;
+    expect(passkey).toMatchObject({
+      credentialId: expect.any(String),
+      name: null,
+      transports: expect.any(Array),
+      createdAt: expect.any(Number),
+      lastUsedAt: null,
+    });
+    for (const legacyName of ['credential_id', 'created_at', 'last_used_at'])
+      expect(passkey).not.toHaveProperty(legacyName);
+    const credentialId = passkey.credentialId;
     expect(credentialId).toBeTruthy();
     const renamedPasskeyName = `E2E Security Key ${'long-name-'.repeat(14)}`;
     expect(renamedPasskeyName.length).toBeGreaterThan(128);

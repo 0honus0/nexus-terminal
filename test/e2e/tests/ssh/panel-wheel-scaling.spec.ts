@@ -139,8 +139,8 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     },
   });
   expect(settings.ok()).toBeTruthy();
-  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
-    data: { enabled: false },
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
   });
   expect(tagVisibility.ok()).toBeTruthy();
 
@@ -309,8 +309,8 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
     },
   });
   expect(settings.ok()).toBeTruthy();
-  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
-    data: { enabled: false },
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
   });
   expect(tagVisibility.ok()).toBeTruthy();
   await resetTestSshFilesystem();
@@ -342,8 +342,8 @@ test('File Manager keeps the latest wheel scale when the sidebar is closed immed
     },
   });
   expect(settings.ok()).toBeTruthy();
-  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
-    data: { enabled: false },
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
   });
   expect(tagVisibility.ok()).toBeTruthy();
   const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
@@ -415,8 +415,8 @@ test('rapid panel scaling persists the newest value when save responses arrive o
     },
   });
   expect(settings.ok()).toBeTruthy();
-  const tagVisibility = await context.request.put('/api/v1/settings/show-quick-command-tags', {
-    data: { enabled: false },
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
   });
   expect(tagVisibility.ok()).toBeTruthy();
   await resetTestSshFilesystem();

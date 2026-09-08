@@ -100,7 +100,7 @@ test('quick command UI creates, searches, executes, edits, and deletes a command
 }, testInfo) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  const settings = await context.request.put('/api/v1/settings/show-quick-command-tags', { data: { enabled: false } });
+  const settings = await context.request.put('/api/v1/settings', { data: { showQuickCommandTags: false } });
   expect(settings.ok()).toBeTruthy();
   await cleanupCommands(context.request);
   await resetTestSshFilesystem();
