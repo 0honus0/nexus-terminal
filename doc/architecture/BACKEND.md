@@ -62,7 +62,7 @@ Examples:
 - `operations/archive/` — remote archive operations;
 - `docker/` — remote Docker capability;
 - `system/` — POSIX remote machine status collection;
-- `remote-desktop/` — remote desktop gateway port;
+- `remote-desktop/` — technology-neutral remote desktop session issuer port;
 - `storage/` — relational database port;
 - `diagnostics/` — generic read-only diagnostic probe contract.
 

@@ -25,6 +25,6 @@ export interface RemoteDesktopSessionRequest {
   rdp?: RdpSessionOptions;
 }
 
-export interface RemoteDesktopGateway {
+export interface RemoteDesktopSessionIssuer {
   createSession(userId: number, request: RemoteDesktopSessionRequest): Promise<{ ticket: string }>;
 }

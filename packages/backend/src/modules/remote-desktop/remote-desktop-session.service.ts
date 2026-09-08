@@ -1,7 +1,7 @@
 import type {
-  RemoteDesktopGateway,
+  RemoteDesktopSessionIssuer,
   RemoteDesktopProtocol,
-} from '../../platform/remote-desktop/remote-desktop-gateway.port';
+} from '../../platform/remote-desktop/remote-desktop-session-issuer.port';
 import type { ConnectionService } from '../connections/connection.service';
 
 export interface RemoteDesktopSessionOptions {
@@ -10,11 +10,11 @@ export interface RemoteDesktopSessionOptions {
   dpi?: number;
 }
 
-/** Owns the product use case for opening RDP/VNC sessions; HTTP and gateway details stay outside. */
+/** Owns the product use case for opening RDP/VNC sessions; HTTP and runtime details stay outside. */
 export class RemoteDesktopSessionService {
   constructor(
     private readonly connections: ConnectionService,
-    private readonly gateway: RemoteDesktopGateway,
+    private readonly sessionIssuer: RemoteDesktopSessionIssuer,
   ) {}
 
   async create(
@@ -34,7 +34,7 @@ export class RemoteDesktopSessionService {
     if (!password) throw new Error(`${protocol} 连接需要使用密码认证，或密码解密失败。`);
     this.validateDisplay(options);
     const { connection } = stored;
-    const result = await this.gateway.createSession(userId, {
+    const result = await this.sessionIssuer.createSession(userId, {
       protocol,
       host: connection.host,
       port: connection.port,

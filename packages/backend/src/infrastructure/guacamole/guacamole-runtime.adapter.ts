@@ -3,9 +3,9 @@ import type { IncomingMessage } from 'node:http';
 import type WebSocket from 'ws';
 import GuacamoleLite from 'guacamole-lite';
 import type {
-  RemoteDesktopGateway,
+  RemoteDesktopSessionIssuer,
   RemoteDesktopSessionRequest,
-} from '../../platform/remote-desktop/remote-desktop-gateway.port';
+} from '../../platform/remote-desktop/remote-desktop-session-issuer.port';
 
 const DEFAULT_TICKET_TTL_MS = 30_000;
 const MAX_PENDING_TICKETS = 1024;
@@ -22,7 +22,7 @@ interface GuacamoleConnectionSettings {
   [key: string]: unknown;
 }
 
-export interface GuacamoleAdapterOptions {
+export interface GuacamoleRuntimeAdapterOptions {
   guacdHost: string;
   guacdPort: number;
   ticketTtlMs?: number;
@@ -33,7 +33,7 @@ export interface GuacamoleAdapterOptions {
  * guacamole-lite's encrypted token is retained only as an internal compatibility shim
  * carrying a one-time bridge id and never contains Nexus connection credentials.
  */
-export class GuacamoleAdapter implements RemoteDesktopGateway {
+export class GuacamoleRuntimeAdapter implements RemoteDesktopSessionIssuer {
   private readonly tickets = new Map<string, RemoteDesktopTicketRecord>();
   private readonly pendingBridgeSettings = new Map<string, Record<string, string>>();
   private readonly internalEncryptionKey = crypto.randomBytes(32);
@@ -41,7 +41,7 @@ export class GuacamoleAdapter implements RemoteDesktopGateway {
   private readonly server: GuacamoleLite;
   private closed = false;
 
-  constructor(private readonly options: GuacamoleAdapterOptions) {
+  constructor(private readonly options: GuacamoleRuntimeAdapterOptions) {
     this.ticketTtlMs = options.ticketTtlMs ?? DEFAULT_TICKET_TTL_MS;
     this.server = new GuacamoleLite(
       { server: undefined, noServer: true },

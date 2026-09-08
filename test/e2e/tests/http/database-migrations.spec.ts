@@ -213,7 +213,6 @@ test('historical databases apply current connection and settings migrations thro
       SESSION_COOKIE_NAME: 'nexus.migration.e2e.sid',
       SESSION_SECRET: 'migration-e2e-session-secret-do-not-use-outside-tests-0000000000000000',
       ENCRYPTION_KEY,
-      DEPLOYMENT_MODE: 'local',
       RP_ID: '127.0.0.1',
       RP_ORIGIN: baseURL,
     },

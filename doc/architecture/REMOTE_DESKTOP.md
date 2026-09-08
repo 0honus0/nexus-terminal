@@ -1,13 +1,13 @@
-# Remote Desktop Gateway Architecture
+# Remote Desktop Architecture
 
-Nexus Terminal's browser RDP/VNC gateway now runs inside the main Backend process. The Backend owns the public HTTP/WebSocket boundary and embeds `guacamole-lite`; `guacd` remains a separate service reached over its native TCP protocol.
+Nexus Terminal's browser RDP/VNC runtime runs inside the main Backend process. The Backend owns the public HTTP/WebSocket boundary and embeds `guacamole-lite`; `guacd` remains a separate service reached over its native TCP protocol.
 
 ## Responsibilities
 
 The Remote Desktop capability is split across normal Backend layers:
 
 - `RemoteDesktopSessionService` resolves stored connections, decrypts credentials, validates display options and records connection attempts;
-- the Guacamole infrastructure adapter creates short-lived opaque browser tickets and stores the concrete connection request only in Backend memory;
+- `GuacamoleRuntimeAdapter` creates short-lived opaque browser tickets and stores the concrete connection request only in Backend memory;
 - `/ws/remote-desktop` stays under the Backend's single WebSocket upgrade owner, so Origin, IP policy, HTTP session and 2FA checks run before Guacamole is reached;
 - a valid ticket is consumed once, is bound to the authenticated user, and expires after a short TTL;
 - after ticket consumption, the in-process Guacamole runtime connects directly to `guacd`;
@@ -17,7 +17,7 @@ Connection credentials are never returned to the browser. The browser receives o
 
 ## Guacamole compatibility bridge
 
-`guacamole-lite` 1.2.0 expects its own encrypted connection token internally. Nexus keeps this only as an implementation shim inside the Backend process: the internal token contains a one-time bridge id, never hostname, username, password or RemoteApp credentials. The Guacamole adapter resolves that bridge id synchronously to the already-consumed in-memory ticket record before connecting to `guacd`.
+`guacamole-lite` 1.2.0 expects its own encrypted connection token internally. Nexus keeps this only as an implementation shim inside the Backend process: the internal token contains a one-time bridge id, never hostname, username, password or RemoteApp credentials. The Guacamole runtime adapter resolves that bridge id synchronously to the already-consumed in-memory ticket record before connecting to `guacd`.
 
 This compatibility detail is private to `infrastructure/guacamole` and is not part of the frontend or HTTP API contract.
 

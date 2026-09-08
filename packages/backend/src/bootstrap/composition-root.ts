@@ -91,7 +91,7 @@ import { WorkspaceStatusMonitorService } from '../modules/workspace/services/wor
 import { WorkspaceSuspendCoordinatorService } from '../modules/workspace/services/workspace-suspend-coordinator.service';
 import { WorkspaceTerminalService } from '../modules/workspace/services/workspace-terminal.service';
 import { RemoteDockerService } from '../platform/docker/remote-docker.service';
-import type { RemoteDesktopGateway } from '../platform/remote-desktop/remote-desktop-gateway.port';
+import type { RemoteDesktopSessionIssuer } from '../platform/remote-desktop/remote-desktop-session-issuer.port';
 import { ExecutionSessionDiagnosticProbe } from '../platform/execution/diagnostics/execution-session-diagnostic.probe';
 import { ExecutionSessionManager } from '../platform/execution/execution-session-manager';
 import { FileRemovalService } from '../platform/filesystem/file-removal.service';
@@ -182,7 +182,7 @@ export interface CompositionRoot {
 
 /** Explicit application graph. Concrete Infrastructure objects never escape this factory. */
 export interface CompositionRootDependencies {
-  remoteDesktopGateway: RemoteDesktopGateway;
+  remoteDesktopSessionIssuer: RemoteDesktopSessionIssuer;
 }
 
 export const createCompositionRoot = (
@@ -244,7 +244,7 @@ export const createCompositionRoot = (
   const executionSessions = new ExecutionSessionManager(sshTransport);
   const sshResolver = new SshConnectionResolver(connectionRepository, credentials, proxies);
   const sshConnectionTest = new SshConnectionTestService(sshResolver, sshTransport);
-  const remoteDesktop = new RemoteDesktopSessionService(connections, dependencies.remoteDesktopGateway);
+  const remoteDesktop = new RemoteDesktopSessionService(connections, dependencies.remoteDesktopSessionIssuer);
 
   const auth = new AuthService(user, passwordHasher, audit, notifications);
   const twoFactor = new TwoFactorService(

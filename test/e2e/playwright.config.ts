@@ -20,7 +20,6 @@ const backendEnv: Record<string, string> = {
   SESSION_COOKIE_NAME: 'nexus.e2e.sid',
   SESSION_SECRET: 'e2e-session-secret-do-not-use-outside-tests-000000000000000000000000',
   ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-  DEPLOYMENT_MODE: 'local',
   RP_ID: 'localhost',
   RP_ORIGIN: 'http://localhost:4173',
   GUACD_HOST: '127.0.0.1',

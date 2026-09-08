@@ -24,7 +24,6 @@ const backendEnv: NodeJS.ProcessEnv = {
   SESSION_COOKIE_NAME: 'nexus.seed.sid',
   SESSION_SECRET: 'e2e-seed-session-secret-do-not-use-outside-tests-000000000000000000000000',
   ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-  DEPLOYMENT_MODE: 'local',
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

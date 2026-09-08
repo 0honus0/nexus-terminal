@@ -34,7 +34,7 @@ ghcr.io/0honus0/nexus-terminal:dev     # 最近一次手动 Dev 发布
 Compose 以三个服务运行：
 
 - `frontend`：Web 静态资源与反向代理入口。
-- `backend`：认证、SSH/SFTP、设置、审计以及内置 RDP/VNC Guacamole 网关。
+- `backend`：认证、SSH/SFTP、设置、审计以及内置 RDP/VNC Guacamole runtime。
 - `guacd`：Guacamole 协议代理。
 
 `frontend` 与 `backend` 使用同一 Nexus 镜像，镜像层由 Docker 复用；`guacd` 使用独立上游镜像。
