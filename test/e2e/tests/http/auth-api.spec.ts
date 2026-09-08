@@ -117,4 +117,65 @@ test.describe('authenticated HTTP API', () => {
       expect(restore.ok()).toBeTruthy();
     }
   });
+
+  test('notification HTTP responses redact stored provider secrets', async ({ request }) => {
+    await loginAsInitialAdmin(request);
+    const suffix = crypto.randomUUID();
+    const createdIds: number[] = [];
+    const cases = [
+      {
+        channelType: 'email',
+        name: `E2E redacted email ${suffix}`,
+        config: {
+          to: 'recipient@example.test',
+          smtpHost: '127.0.0.1',
+          smtpPort: 22224,
+          smtpSecure: false,
+          smtpUser: 'e2e-user',
+          smtpPass: 'test-value-not-for-use',
+          from: 'nexus@example.test',
+        },
+        secretKey: 'smtpPass',
+      },
+      {
+        channelType: 'telegram',
+        name: `E2E redacted telegram ${suffix}`,
+        config: {
+          botToken: 'test-value-not-for-use',
+          chatId: 'e2e-chat',
+          customDomain: 'https://example.test',
+        },
+        secretKey: 'botToken',
+      },
+    ] as const;
+
+    try {
+      for (const item of cases) {
+        const create = await request.post('/api/v1/notifications', {
+          data: {
+            channelType: item.channelType,
+            name: item.name,
+            enabled: false,
+            config: item.config,
+            enabledEvents: ['LOGIN_SUCCESS'],
+          },
+        });
+        expect(create.status()).toBe(201);
+        const created = (await create.json()) as { id: number; config: Record<string, unknown> };
+        createdIds.push(created.id);
+        expect(created.config).not.toHaveProperty(item.secretKey);
+      }
+
+      const list = await request.get('/api/v1/notifications');
+      expect(list.ok()).toBeTruthy();
+      const settings = (await list.json()) as Array<{ name: string; config: Record<string, unknown> }>;
+      for (const item of cases) {
+        const setting = settings.find((candidate) => candidate.name === item.name);
+        expect(setting).toBeTruthy();
+        expect(setting!.config).not.toHaveProperty(item.secretKey);
+      }
+    } finally {
+      for (const id of createdIds) await request.delete(`/api/v1/notifications/${id}`).catch(() => undefined);
+    }
+  });
 });
