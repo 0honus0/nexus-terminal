@@ -230,6 +230,7 @@
     "allConnectionsInGroupDeletedSuccess": "グループ '{groupName}' から {count} 個の接続を正常に削除しました。",
     "cannotDeleteFromUntagged": "このオプションを使用して「未分類」グループから接続を削除することはできません。",
     "someConnectionsInGroupDeleteFailed": "グループ '{groupName}' 内の {count} 個の接続の削除に失敗しました。",
-    "loadFailed": "接続の読み込みに失敗しました。"
+    "loadFailed": "接続の読み込みに失敗しました。",
+    "tagLoadFailed": "接続タグの読み込みに失敗しました。接続は引き続き利用できます。"
   }
 }

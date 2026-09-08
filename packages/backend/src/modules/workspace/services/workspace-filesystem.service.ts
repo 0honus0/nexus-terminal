@@ -85,6 +85,10 @@ export class WorkspaceFilesystemService {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
     return this.textFiles.write(fs, this.absolute(remotePath), content, encoding);
   }
+  async createFile(workspaceId: string, remotePath: string, content = '', encoding = 'utf-8') {
+    const fs = await this.filesystem(this.sessions.require(workspaceId));
+    return this.textFiles.create(fs, this.absolute(remotePath), content, encoding);
+  }
   async createDirectory(workspaceId: string, remotePath: string): Promise<void> {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
     await fs.createDirectory(this.absolute(remotePath));

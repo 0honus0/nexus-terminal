@@ -26,7 +26,7 @@ export interface RemoteReadRange {
 export interface RemoteWriteOptions {
   mode?: number;
   highWaterMark?: number;
-  flags?: 'w' | 'a';
+  flags?: 'w' | 'wx' | 'a';
 }
 
 export interface RemotePositionedReader {

@@ -185,7 +185,7 @@ export class WorkspaceProtocolSession {
         await this.dependencies.filesystem.createDirectory(this.requireWorkspace(), this.requirePath(payload.path));
         return null;
       case 'filesystem.createFile':
-        await this.dependencies.filesystem.writeFile(
+        await this.dependencies.filesystem.createFile(
           this.requireWorkspace(),
           this.requirePath(payload.path),
           stringValue(payload.content) ?? '',

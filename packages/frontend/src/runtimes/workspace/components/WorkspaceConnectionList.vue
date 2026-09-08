@@ -34,16 +34,24 @@
   let unregisterFocus: (() => void) | undefined;
   const loading = ref(true);
   const loadError = ref('');
+  const reportTagLoadFailure = () => feedback.notifyError(t('workspaceConnectionList.tagLoadFailed'));
   const load = async (): Promise<void> => {
     loading.value = true;
     loadError.value = '';
     try {
       await data.load();
-      if (props.showTags) await tags.load();
     } catch (cause) {
       loadError.value = cause instanceof Error ? cause.message : t('workspaceConnectionList.loadFailed');
+      return;
     } finally {
       loading.value = false;
+    }
+    if (props.showTags) {
+      try {
+        await tags.load();
+      } catch {
+        reportTagLoadFailure();
+      }
     }
   };
   onMounted(() => {
@@ -61,7 +69,7 @@
   watch(
     () => props.showTags,
     (value) => {
-      if (value) void tags.load();
+      if (value) void tags.load().catch(reportTagLoadFailure);
     },
   );
   const tagMap = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name])));

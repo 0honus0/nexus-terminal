@@ -96,6 +96,44 @@ test('workspace connection search filters by name and host and restores the full
   });
 });
 
+test('workspace connection list remains usable when connection tags fail to load', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  expect(
+    (
+      await context.request.put('/api/v1/settings/show-connection-tags', {
+        data: { enabled: true },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  const primaryId = await ensureTestSshConnection(context.request);
+  await page.route('**/api/v1/tags', (route) => route.abort('failed'));
+
+  await page.goto('/workspace');
+  const list = page.getByTestId('workspace-connection-list');
+  await expect(list).toBeVisible({ timeout: 20_000 });
+  await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
+  await expect(
+    page.getByText('Failed to load connection tags. Connections are still available.', { exact: true }),
+  ).toBeVisible();
+});
+
+test('workspace connection list remains usable when main preferences fail to load', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const primaryId = await ensureTestSshConnection(context.request);
+  await page.route('**/api/v1/settings', async (route) => {
+    if (route.request().method() === 'GET') await route.abort('failed');
+    else await route.continue();
+  });
+
+  await page.goto('/workspace');
+  const list = page.getByTestId('workspace-connection-list');
+  await expect(list).toBeVisible({ timeout: 20_000 });
+  await expect(list.locator(`li[data-connection-id="${primaryId}"]`)).toBeVisible();
+  await expect(page.getByText('Network Error', { exact: true }).first()).toBeVisible();
+});
+
 test('workspace tag picker and group manager create, assign, remove, rename, and delete tags on narrow screens', async ({
   page,
   context,

@@ -4,15 +4,25 @@ import { defaultPreferences, type PreferenceKey, type PreferencePatch, type Pref
 
 let preferenceUpdateRevision = 0;
 const preferenceKeyRevisions = new Map<PreferenceKey, number>();
+let preferenceLoadPromise: Promise<Preferences> | null = null;
 
 export const usePreferencesStore = defineStore('preferences', {
   state: () => ({ values: { ...defaultPreferences } as Preferences, loaded: false }),
   actions: {
     async load(force = false) {
       if (this.loaded && !force) return this.values;
-      this.values = await preferencesApi.load();
-      this.loaded = true;
-      return this.values;
+      if (!force && preferenceLoadPromise) return preferenceLoadPromise;
+      const load = preferencesApi.load().then((values) => {
+        this.values = values;
+        this.loaded = true;
+        return this.values;
+      });
+      if (!force) preferenceLoadPromise = load;
+      try {
+        return await load;
+      } finally {
+        if (preferenceLoadPromise === load) preferenceLoadPromise = null;
+      }
     },
     async update(patch: PreferencePatch) {
       const revision = ++preferenceUpdateRevision;

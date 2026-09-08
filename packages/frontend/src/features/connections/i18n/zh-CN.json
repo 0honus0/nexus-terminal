@@ -230,6 +230,7 @@
     "allConnectionsInGroupDeletedSuccess": "已成功从分组 '{groupName}' 中删除 {count} 个连接。",
     "cannotDeleteFromUntagged": "不能使用此选项从“未标记”分组中删除连接。",
     "someConnectionsInGroupDeleteFailed": "分组 '{groupName}' 中的 {count} 个连接未能删除。",
-    "loadFailed": "加载连接失败。"
+    "loadFailed": "加载连接失败。",
+    "tagLoadFailed": "加载连接标签失败，连接仍可正常使用。"
   }
 }

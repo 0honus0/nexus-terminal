@@ -230,6 +230,7 @@
     "allConnectionsInGroupDeletedSuccess": "{count} connections successfully deleted from group '{groupName}'.",
     "cannotDeleteFromUntagged": "Cannot use this option to delete connections from the 'Untagged' group.",
     "someConnectionsInGroupDeleteFailed": "{count} connections in group '{groupName}' failed to delete.",
-    "loadFailed": "Failed to load connections."
+    "loadFailed": "Failed to load connections.",
+    "tagLoadFailed": "Failed to load connection tags. Connections are still available."
   }
 }
