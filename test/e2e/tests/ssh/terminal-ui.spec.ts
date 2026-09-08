@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Page, Route, TestInfo } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -9,6 +9,67 @@ import {
   resetTestSshFilesystem,
 } from '../../support/ssh';
 import { step } from '../../support/steps';
+
+async function holdFirstTwoTerminalFontWrites(page: Page): Promise<{
+  firstStarted: Promise<void>;
+  secondStarted: Promise<void>;
+  releaseFirst: () => void;
+  releaseSecond: () => void;
+  dispose: () => Promise<void>;
+}> {
+  let firstStartedResolve!: () => void;
+  let secondStartedResolve!: () => void;
+  let releaseFirstResolve!: () => void;
+  let releaseSecondResolve!: () => void;
+  const firstStarted = new Promise<void>((resolve) => (firstStartedResolve = resolve));
+  const secondStarted = new Promise<void>((resolve) => (secondStartedResolve = resolve));
+  const firstReleased = new Promise<void>((resolve) => (releaseFirstResolve = resolve));
+  const secondReleased = new Promise<void>((resolve) => (releaseSecondResolve = resolve));
+  let matchingRequestCount = 0;
+
+  const handler = async (route: Route) => {
+    const request = route.request();
+    if (request.method() !== 'PUT') {
+      await route.continue();
+      return;
+    }
+    let body: Record<string, unknown> = {};
+    try {
+      body = request.postDataJSON() as Record<string, unknown>;
+    } catch {
+      await route.continue();
+      return;
+    }
+    if (!('terminalFontSize' in body)) {
+      await route.continue();
+      return;
+    }
+
+    matchingRequestCount += 1;
+    const backendResponse = await route.fetch();
+    if (matchingRequestCount === 1) {
+      firstStartedResolve();
+      await firstReleased;
+    } else if (matchingRequestCount === 2) {
+      secondStartedResolve();
+      await secondReleased;
+    }
+    await route.fulfill({ response: backendResponse });
+  };
+
+  await page.route('**/api/v1/appearance', handler);
+  return {
+    firstStarted,
+    secondStarted,
+    releaseFirst: () => releaseFirstResolve(),
+    releaseSecond: () => releaseSecondResolve(),
+    dispose: async () => {
+      releaseFirstResolve();
+      releaseSecondResolve();
+      await page.unroute('**/api/v1/appearance', handler);
+    },
+  };
+}
 
 async function terminalTextPoint(page: Page, text: string): Promise<{ x: number; y: number }> {
   let point: { x: number; y: number } | null = null;
@@ -314,6 +375,53 @@ test('terminal font-size wheel change persists when the session is closed before
       { timeout: 3_000 },
     )
     .toBe(15);
+});
+
+test('rapid terminal Ctrl+wheel keeps the newest rendered size while older appearance responses settle', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  const resetAppearance = await context.request.put('/api/v1/appearance', { data: { terminalFontSize: 14 } });
+  expect(resetAppearance.ok()).toBeTruthy();
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
+
+  const terminal = page.getByTestId('terminal');
+  const inner = terminal.getByTestId('terminal-inner');
+  await expect(terminal).toHaveAttribute('data-font-size', '14');
+  const held = await holdFirstTwoTerminalFontWrites(page);
+
+  try {
+    await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: -80, deltaMode: 0 });
+    await expect(terminal).toHaveAttribute('data-font-size', '15');
+    await held.firstStarted;
+
+    await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: -80, deltaMode: 0 });
+    await expect(terminal).toHaveAttribute('data-font-size', '16');
+
+    held.releaseFirst();
+    await held.secondStarted;
+    await page.waitForTimeout(350);
+    await expect(terminal).toHaveAttribute('data-font-size', '16');
+
+    held.releaseSecond();
+    await expect
+      .poll(
+        async () => {
+          const appearance = await context.request.get('/api/v1/appearance');
+          expect(appearance.ok()).toBeTruthy();
+          return Number((await appearance.json()).terminalFontSize);
+        },
+        { timeout: 3_000 },
+      )
+      .toBe(16);
+    await expect(terminal).toHaveAttribute('data-font-size', '16');
+  } finally {
+    await held.dispose();
+  }
 });
 
 test('desktop touch hardware keeps the legacy desktop Workspace classification', async ({ page, context }) => {

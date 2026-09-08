@@ -71,6 +71,7 @@
   const connectionPickerVisible = ref(false);
   const layoutConfiguratorVisible = ref(false);
   const progressDisplayVisible = ref(false);
+  const terminalFontPreview = ref<number | null>(null);
   const markedSuspendedSessions = computed(() =>
     registry.orderedSessions.value
       .filter((session) => session.markedForSuspend.value && session.markedForSuspendAt.value)
@@ -126,6 +127,9 @@
     delayMs: 240,
     save: ({ mobile, size }) =>
       appearance.update(mobile ? { terminalFontSizeMobile: size } : { terminalFontSize: size }),
+    onPendingChange: (pending) => {
+      if (!pending) terminalFontPreview.value = null;
+    },
     onError: (cause) => feedback.notifyError(cause instanceof Error ? cause.message : String(cause)),
   });
   const editorFontSaver = createLatestValueSaver<number>({
@@ -142,6 +146,7 @@
     void preferences.update({ fileManagerColWidths: widths }).catch(reportPreferenceSaveError);
   };
   const updateTerminalFontSize = (size: number) => {
+    terminalFontPreview.value = size;
     appearance.previewSettings(device.isMobile.value ? { terminalFontSizeMobile: size } : { terminalFontSize: size });
     terminalFontSaver.schedule({ mobile: device.isMobile.value, size });
   };
@@ -201,8 +206,7 @@
     }
     const controller = registry.sessions.get(sourceId)?.transferController;
     if (!controller) return;
-    const index = controller.tasks.value.findIndex((task) => task.id === taskId);
-    if (index >= 0) controller.tasks.value.splice(index, 1);
+    controller.remove(taskId);
   };
   const parentPath = (path: string): string => {
     const normalized = path.replace(/\/+$/, '') || '/';
@@ -304,9 +308,10 @@
     terminalScrollbackForRuntime(preferences.values.value.terminalScrollbackLimit),
   );
   const terminalFontSize = computed(() =>
-    device.isMobile.value
+    terminalFontPreview.value ??
+    (device.isMobile.value
       ? (appearanceSettings.value.terminalFontSizeMobile ?? appearanceSettings.value.terminalFontSize)
-      : appearanceSettings.value.terminalFontSize,
+      : appearanceSettings.value.terminalFontSize),
   );
 
   const setSurface = (id: string, value: unknown) => {

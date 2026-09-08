@@ -39,6 +39,7 @@ export function createTransferController(channel: TransferChannel) {
   const uploadBatches = new Map<string, string>();
   const batchPolicies = new Map<string, ConflictStrategy>();
   const taskWaiters = new Map<string, Set<(task: TransferTask) => void>>();
+  const completionCleanupTimers = new Map<string, number>();
   const conflict = computed(() => conflictQueue.value[0] ?? null);
 
   const upsert = (task: TransferTask): void => {
@@ -51,6 +52,22 @@ export function createTransferController(channel: TransferChannel) {
     const waiters = taskWaiters.get(task.id);
     taskWaiters.delete(task.id);
     for (const resolve of waiters ?? []) resolve(task);
+  };
+  const remove = (id: string): void => {
+    const timer = completionCleanupTimers.get(id);
+    if (timer !== undefined) window.clearTimeout(timer);
+    completionCleanupTimers.delete(id);
+    const index = tasks.value.findIndex((task) => task.id === id);
+    if (index >= 0) tasks.value.splice(index, 1);
+  };
+  const scheduleSuccessfulCopyMoveCleanup = (task: TransferTask): void => {
+    if (task.status !== 'completed' || (task.kind !== 'copy' && task.kind !== 'move')) return;
+    const existing = completionCleanupTimers.get(task.id);
+    if (existing !== undefined) window.clearTimeout(existing);
+    completionCleanupTimers.set(
+      task.id,
+      window.setTimeout(() => remove(task.id), 800),
+    );
   };
   const failTask = (id: string, cause: unknown): void => {
     const task = tasks.value.find((current) => current.id === id);
@@ -168,6 +185,7 @@ export function createTransferController(channel: TransferChannel) {
 
     if (isDone(task.status) && task.kind === 'upload') cleanupUpload(task.id);
     settleTask(task);
+    scheduleSuccessfulCopyMoveCleanup(task);
   });
 
   const active = computed(() => tasks.value.filter((task) => !isDone(task.status)));
@@ -344,8 +362,11 @@ export function createTransferController(channel: TransferChannel) {
     resolveConflict,
     waitForTask,
     markPartial,
+    remove,
     dispose() {
       stop();
+      for (const timer of completionCleanupTimers.values()) window.clearTimeout(timer);
+      completionCleanupTimers.clear();
       for (const task of active.value) {
         task.status = 'cancelled';
         settleTask(task);

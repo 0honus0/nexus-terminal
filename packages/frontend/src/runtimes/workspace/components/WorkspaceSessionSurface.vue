@@ -192,10 +192,7 @@
     get: () => props.progressVisible !== false,
     set: (visible: boolean) => emit('progressVisible', visible),
   });
-  const removeTransferTask = (id: string): void => {
-    const index = transfers.tasks.value.findIndex((task) => task.id === id);
-    if (index >= 0) transfers.tasks.value.splice(index, 1);
-  };
+  const removeTransferTask = (id: string): void => transfers.remove(id);
   const terminalApi = ref<TerminalApi | null>(null);
   const editorApi = ref<EditorApi | null>(null);
   const previewApi = ref<PreviewApi | null>(null);

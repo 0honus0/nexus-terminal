@@ -2103,7 +2103,7 @@
     .file-manager-toolbar {
       column-gap: 0.25rem;
       row-gap: 0.2rem;
-      padding: 0.35rem;
+      padding: 0.35rem 0;
     }
     .file-manager-actions {
       gap: 0.2rem;

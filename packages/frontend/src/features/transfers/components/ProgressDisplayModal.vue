@@ -114,24 +114,24 @@
 <template>
   <OverlayPanel
     :visible="visible"
-    :overlay="mobile"
-    :teleport="mobile"
+    :overlay="true"
+    :teleport="true"
     :z-index="1100"
+    :close-on-escape="true"
     preset="standard-modal"
+    panel-class="!h-[min(80dvh,46rem)] !max-w-6xl !p-0"
     panel-test-id="progress-display-dialog"
     data-testid="progress-display-overlay"
+    role="dialog"
+    :aria-modal="true"
+    :aria-label="t('progressCenter.title')"
     @close="emit('close')"
   >
     <section
       v-if="visible"
       data-testid="progress-display-modal"
-      :data-progress-display-placement="mobile ? 'overlay' : 'inline'"
-      :class="[
-        'text-foreground',
-        mobile
-          ? 'progress-display-mobile flex min-h-0 flex-col overflow-hidden bg-background'
-          : 'progress-display-inline flex-shrink-0 border-x border-b border-border bg-background',
-      ]"
+      data-progress-display-placement="overlay"
+      class="progress-display-overlay flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
     >
       <div
         class="transfer-progress-panel mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden bg-background"
@@ -440,18 +440,8 @@
 </template>
 
 <style scoped>
-  .progress-display-inline {
-    position: static;
-    z-index: auto;
-    width: 100%;
-    max-height: min(48vh, 34rem);
-    overflow: hidden;
-  }
-  .progress-display-inline .transfer-progress-panel {
-    max-height: min(48vh, 34rem);
-  }
-  .progress-display-mobile {
-    max-height: calc(85dvh - 2rem);
+  .progress-display-overlay {
+    max-height: min(80dvh, 46rem);
   }
   .transfer-progress-header {
     border-bottom: 1px solid var(--border-color);
@@ -520,7 +510,7 @@
     scrollbar-color: rgba(128, 128, 128, 0.3) transparent;
   }
   @media (max-width: 640px) {
-    .progress-display-mobile .hidden-progress-source-header {
+    .progress-display-overlay .hidden-progress-source-header {
       align-items: flex-start;
       flex-wrap: wrap;
     }

@@ -7,7 +7,7 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
-  openInlineProgressDisplay,
+  openDesktopProgressDisplay,
   resetTestSshFilesystem,
 } from '../../support/ssh';
 
@@ -108,7 +108,7 @@ export async function dragLocalFile(page: Page, name: string, size: number, fill
 }
 
 export async function openProgressDisplay(page: Page): Promise<Locator> {
-  return openInlineProgressDisplay(page);
+  return openDesktopProgressDisplay(page);
 }
 
 export function hiddenSource(modal: Locator, text: string): Locator {

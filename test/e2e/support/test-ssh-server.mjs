@@ -1250,6 +1250,14 @@ const controlServer = http.createServer(async (req, res) => {
             'base64',
           ),
         );
+      } else if (variant === 'zoom-lines') {
+        const requestedLines = Number(requestUrl.searchParams.get('lines') || '1200');
+        const lineCount = Number.isFinite(requestedLines) ? Math.max(1, Math.min(5000, Math.round(requestedLines))) : 1200;
+        await fsp.writeFile(
+          path.join(rootDir, name),
+          `${Array.from({ length: lineCount }, (_, index) => `zoom-line-${index + 1}`).join('\n')}\n`,
+          'utf8',
+        );
       } else if (size > 0) {
         await fsp.writeFile(path.join(rootDir, name), Buffer.alloc(size, 0x5a));
       } else {

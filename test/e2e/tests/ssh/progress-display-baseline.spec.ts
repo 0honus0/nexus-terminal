@@ -8,13 +8,18 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
-  openInlineProgressDisplay,
+  openDesktopProgressDisplay,
   reopenConnectedFileManager,
   resetTestSshFilesystem,
   E2E_SSH,
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
-import { hideVisibleProgressCenter, visibleProgressCenter, visibleProgressTask } from './progress-display.helpers';
+import {
+  closeProgressDisplay,
+  hideVisibleProgressCenter,
+  visibleProgressCenter,
+  visibleProgressTask,
+} from './progress-display.helpers';
 
 const row = (page: Page, filename: string): Locator => fileManagerRow(page, filename);
 const menu = (page: Page): Locator => page.getByTestId('file-manager-context-menu');
@@ -58,7 +63,7 @@ async function refreshFileManager(page: Page): Promise<void> {
 }
 
 async function openProgressDisplayAndRestorePopup(page: Page, popup: Locator, taskText: string): Promise<void> {
-  const modal = await openInlineProgressDisplay(page);
+  const modal = await openDesktopProgressDisplay(page);
   const source = modal.getByTestId('hidden-progress-source').filter({ hasText: taskText });
   const task = source.getByTestId('hidden-progress-task').filter({ hasText: taskText });
   await expect(source).toBeVisible();
@@ -81,6 +86,28 @@ async function expectPopupBelowApplicationModals(popup: Locator): Promise<void> 
     )
     .toBeLessThan(50);
 }
+
+test('desktop Progress Display floats above the workspace without resizing the terminal', async ({ page, context }) => {
+  await openFileManager(page, context);
+  await closeConnectedFileManager(page);
+  const terminal = page.getByTestId('terminal');
+  await expect(terminal).toBeVisible();
+  const terminalRect = () =>
+    terminal.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+    });
+  const before = await terminalRect();
+
+  const display = await openDesktopProgressDisplay(page);
+  const after = await terminalRect();
+  expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+  expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+  expect(Math.abs(after.width - before.width)).toBeLessThan(1);
+  expect(Math.abs(after.height - before.height)).toBeLessThan(1);
+
+  await closeProgressDisplay(display);
+});
 
 test('existing copy progress popup hides and restores through Progress Display', async ({ page, context }) => {
   await openFileManager(page, context);
@@ -232,9 +259,8 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
         await sendButton.click();
         await expect(modal).toBeHidden();
 
-        // The desktop Progress Display is intentionally rendered inline in the
-        // Workspace, matching the legacy surface. Exit the foreground popup
-        // before interacting with the central progress panel.
+        // Progress Display now floats above the Workspace. Exit the foreground
+        // File Manager popup before interacting with the central progress panel.
         await page.getByTestId('file-manager-modal-close').click();
         await expect(page.getByTestId('file-manager-modal')).toBeHidden();
       },

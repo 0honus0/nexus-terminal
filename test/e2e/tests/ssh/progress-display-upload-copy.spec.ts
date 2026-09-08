@@ -124,3 +124,38 @@ test('registered copy progress hides and cancels through the shared Progress Dis
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
   }
 });
+
+test('successful pasted copy auto-cleans its completed task and closes the floating progress window', async ({
+  page,
+  context,
+}) => {
+  await openFileManager(page, context);
+  const sourceName = 'progress-auto-clean-copy.bin';
+  const fixture = await fetch(
+    `${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent(sourceName)}&size=${6 * 1024 * 1024}`,
+    { method: 'POST' },
+  );
+  expect(fixture.ok).toBeTruthy();
+  await refreshFileManager(page);
+  await expect(row(page, sourceName)).toBeVisible();
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=120`, { method: 'POST' });
+
+  try {
+    await rightClickRow(page, sourceName);
+    await clickMenuItem(page, 'Copy');
+    await goIntoFolder(page, 'folder-seed');
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'Paste');
+
+    const center = visibleProgressCenter(page);
+    const task = visibleProgressTask(page, sourceName);
+    await expect(center).toBeVisible({ timeout: 10_000 });
+    await expect(task).toHaveAttribute('data-task-status', 'completed', { timeout: 20_000 });
+    await expect(center).toBeHidden({ timeout: 4_000 });
+
+    await refreshFileManager(page);
+    await expect(row(page, sourceName)).toBeVisible({ timeout: 10_000 });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+});

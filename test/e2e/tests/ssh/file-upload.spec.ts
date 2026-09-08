@@ -10,7 +10,7 @@ import {
   ensureTestSshConnection,
   fileManagerRow,
   openConnectedFileManager,
-  openInlineProgressDisplay,
+  openDesktopProgressDisplay,
   reopenConnectedFileManager,
   resetTestSshFilesystem,
   E2E_SSH,
@@ -260,7 +260,7 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
       await progressPopup.getByTestId('transfer-progress-hide').click();
       await expect(progressPopup).toBeHidden();
 
-      const progressModal = await openInlineProgressDisplay(page);
+      const progressModal = await openDesktopProgressDisplay(page);
       const hiddenSource = progressModal.getByTestId('hidden-progress-source').first();
       const hiddenTask = hiddenSource.getByTestId('hidden-progress-task').first();
       await expect(hiddenSource).toBeVisible();
@@ -409,7 +409,7 @@ test('upload popup resizes and a hidden batch becomes one scrollable source card
     await hideButton.click();
     await expect(popup).toBeHidden();
 
-    const modal = await openInlineProgressDisplay(page);
+    const modal = await openDesktopProgressDisplay(page);
     const hiddenSources = modal.getByTestId('hidden-progress-source');
     await expect(hiddenSources).toHaveCount(1);
     const sourceCard = hiddenSources.first();
@@ -495,7 +495,7 @@ test('Progress Display cancel all keeps immediate file-manager refresh responsiv
     await popup.getByTestId('transfer-progress-hide').click();
     await expect(popup).toBeHidden();
 
-    const modal = await openInlineProgressDisplay(page);
+    const modal = await openDesktopProgressDisplay(page);
     const sourceCard = modal.getByTestId('hidden-progress-source').filter({ hasText: 'upload' }).first();
     await expect(sourceCard).toBeVisible();
     await expect(sourceCard.getByTestId('hidden-progress-task').first()).toBeVisible();
