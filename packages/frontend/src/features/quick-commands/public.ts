@@ -1,5 +1,5 @@
 export { default as QuickCommandsPanel } from './components/QuickCommandsPanel.vue';
-export { useQuickCommandsStore } from './store/quickCommands.store';
+export { useQuickCommands } from './composables/useQuickCommands';
 export type {
   ExecuteCommandIntent,
   QuickCommandExpansion,

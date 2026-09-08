@@ -3,7 +3,7 @@
   import { RouterView } from 'vue-router';
   import AppHeader from './shell/AppHeader.vue';
   import { useAuthSession } from '@/features/auth/public';
-  import { AppearanceCustomizerModal, useAppearanceStore } from '@/features/appearance/public';
+  import { AppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
   import { RemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { usePreferences } from '@/features/preferences/public';
   import DialogHost from '@/shared/feedback/components/DialogHost.vue';
@@ -11,7 +11,8 @@
   import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
   const auth = useAuthSession();
-  const appearance = useAppearanceStore();
+  const appearance = useAppearance();
+  const appearanceCustomizerVisible = appearance.customizerVisible;
   const preferences = usePreferences();
   const remoteDesktopConnection = remoteDesktopLauncher.connection;
   const remoteDesktopVisible = remoteDesktopLauncher.visible;
@@ -70,7 +71,7 @@
       @size-change="saveRemoteDesktopSize"
       @close="remoteDesktopLauncher.close()"
     />
-    <AppearanceCustomizerModal :visible="appearance.customizerVisible" @close="appearance.closeCustomizer()" />
+    <AppearanceCustomizerModal :visible="appearanceCustomizerVisible" @close="appearance.closeCustomizer()" />
     <NotificationHost />
     <DialogHost />
   </div>

@@ -97,6 +97,10 @@ export const useAppearanceStore = defineStore('appearance', {
       }
     },
 
+    previewSettings(patch: Partial<AppearanceSettings>) {
+      this.settings = { ...this.settings, ...patch };
+    },
+
     async saveUiTheme(theme: Record<string, string>) {
       await this.update({ customUiTheme: JSON.stringify(theme) });
     },
