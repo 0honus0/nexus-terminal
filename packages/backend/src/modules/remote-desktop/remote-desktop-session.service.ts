@@ -17,19 +17,24 @@ export class RemoteDesktopSessionService {
     private readonly gateway: RemoteDesktopGateway,
   ) {}
 
-  async create(connectionId: number, protocol: RemoteDesktopProtocol, options: RemoteDesktopSessionOptions = {}) {
+  async create(
+    userId: number,
+    connectionId: number,
+    protocol: RemoteDesktopProtocol,
+    options: RemoteDesktopSessionOptions = {},
+  ) {
     const stored = await this.connections.getWithCredentials(connectionId);
     if (!stored) throw new Error('连接未找到。');
     if (stored.connection.type !== protocol) throw new Error(`此连接类型不是 ${protocol}。`);
     // Preserve the historical user-visible "recent connection" semantics: opening RDP/VNC
     // counts as a connection attempt once the stored connection type is valid, even if
-    // credential validation or the remote gateway fails afterwards.
+    // credential validation or the Guacamole runtime fails afterwards.
     await this.connections.markConnected(connectionId).catch(() => false);
     const password = stored.credentials.password;
     if (!password) throw new Error(`${protocol} 连接需要使用密码认证，或密码解密失败。`);
     this.validateDisplay(options);
     const { connection } = stored;
-    const result = await this.gateway.createSession({
+    const result = await this.gateway.createSession(userId, {
       protocol,
       host: connection.host,
       port: connection.port,

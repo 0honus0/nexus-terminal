@@ -26,5 +26,5 @@ export interface RemoteDesktopSessionRequest {
 }
 
 export interface RemoteDesktopGateway {
-  createSession(request: RemoteDesktopSessionRequest): Promise<{ token: string }>;
+  createSession(userId: number, request: RemoteDesktopSessionRequest): Promise<{ ticket: string }>;
 }

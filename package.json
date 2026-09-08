@@ -6,7 +6,6 @@
     "build": "./build.sh local all",
     "build:backend": "./build.sh local backend",
     "build:frontend": "./build.sh local frontend",
-    "build:remote-gateway": "./build.sh local remote-gateway",
     "docker:build": "./build.sh docker",
     "docker:save": "./build.sh docker-save",
     "test:e2e:env:latest": "node scripts/e2e/update-latest-test-environment.mjs",

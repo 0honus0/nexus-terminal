@@ -4,7 +4,6 @@ import express, { type Request, type RequestHandler, type Response } from 'expre
 import ipaddr from 'ipaddr.js';
 import WebSocket, { WebSocketServer } from 'ws';
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
-import { proxyRemoteDesktop } from './remote-desktop-proxy.transport';
 import { bindUploadStream } from './upload-stream.transport';
 import { WorkspaceProtocolSession, type WorkspaceProtocolDependencies } from './workspace-protocol.session';
 
@@ -25,12 +24,16 @@ interface ClientRecord {
   missed: number;
 }
 
+export interface RemoteDesktopWebSocketAcceptor {
+  accept(socket: WebSocket, request: http.IncomingMessage, ticket: string, userId: number): boolean;
+}
+
 export interface WebSocketServerDependencies extends WorkspaceProtocolDependencies {
   ipWhitelist: IpWhitelistService;
+  remoteDesktop: RemoteDesktopWebSocketAcceptor;
 }
 
 export interface WebSocketRuntimeOptions {
-  remoteGatewayWsBaseUrl: string;
   allowOriginlessWebSockets: boolean;
   passkeyRelyingParties: readonly { origin: string }[];
 }
@@ -96,11 +99,6 @@ const rejectUpgrade = (socket: Socket, status: number, text: string): void => {
   socket.destroy();
 };
 
-const parsePositiveInteger = (value: string | null): number | null => {
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
-};
-
 const parseNonNegativeInteger = (value: string | null): number | null => {
   const parsed = Number(value);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
@@ -144,10 +142,15 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
 
   const onRemoteDesktopConnection = (
     socket: WebSocket,
-    request: { token: string; width: number; height: number; dpi: number },
+    request: http.IncomingMessage,
+    ticket: string,
+    userId: number,
   ): void => {
+    if (!dependencies.remoteDesktop.accept(socket, request, ticket, userId)) {
+      socket.close(1008, 'Remote desktop ticket invalid or expired');
+      return;
+    }
     trackClient({ socket, kind: 'remote-desktop', isAlive: true, missed: 0 });
-    proxyRemoteDesktop(socket, config.remoteGatewayWsBaseUrl, request);
   };
 
   const handleAuthenticatedUpgrade = (
@@ -173,15 +176,12 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     }
 
     if (pathname === '/ws/remote-desktop') {
-      const token = url.searchParams.get('token')?.trim() || '';
-      const width = parsePositiveInteger(url.searchParams.get('width'));
-      const height = parsePositiveInteger(url.searchParams.get('height'));
-      const dpi = parsePositiveInteger(url.searchParams.get('dpi'));
-      if (!token || width === null || height === null || dpi === null) {
+      const ticket = url.searchParams.get('ticket')?.trim() || '';
+      if (!ticket || ticket.length > 256) {
         rejectUpgrade(socket, 400, 'Bad Request');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (ws) => onRemoteDesktopConnection(ws, { token, width, height, dpi }));
+      wss.handleUpgrade(request, socket, head, (ws) => onRemoteDesktopConnection(ws, request, ticket, userId));
       return;
     }
 

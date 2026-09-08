@@ -213,12 +213,9 @@ test('historical databases apply current connection and settings migrations thro
       SESSION_COOKIE_NAME: 'nexus.migration.e2e.sid',
       SESSION_SECRET: 'migration-e2e-session-secret-do-not-use-outside-tests-0000000000000000',
       ENCRYPTION_KEY,
-      REMOTE_GATEWAY_SHARED_SECRET: 'migration-e2e-remote-gateway-secret-do-not-use-outside-tests',
       DEPLOYMENT_MODE: 'local',
       RP_ID: '127.0.0.1',
       RP_ORIGIN: baseURL,
-      REMOTE_GATEWAY_API_BASE_LOCAL: 'http://127.0.0.1:29090',
-      REMOTE_GATEWAY_WS_URL_LOCAL: 'ws://127.0.0.1:29090',
     },
     stdio: 'pipe',
   });

@@ -20,10 +20,7 @@ export const remoteDesktopApi: RemoteDesktopSessionPort = {
   },
   tunnelData(session, display) {
     return new URLSearchParams({
-      token: session.token,
-      width: String(display.width),
-      height: String(display.height),
-      dpi: String(display.dpi),
+      ticket: session.ticket,
     }).toString();
   },
 };

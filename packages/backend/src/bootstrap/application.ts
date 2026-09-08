@@ -1,5 +1,6 @@
 import http, { type Server } from 'node:http';
 import type { RuntimeConfig } from '../config/runtime-config';
+import { GuacamoleAdapter } from '../infrastructure/guacamole/guacamole.adapter';
 import { FileHttpSessionAdapter } from '../infrastructure/session/file-http-session.adapter';
 import { createHttpApplication } from '../interfaces/http/http-application';
 import { attachWebSocketServer } from '../interfaces/websocket/websocket-server';
@@ -13,7 +14,8 @@ export interface BackendApplication {
 }
 
 export const createBackendApplication = (config: RuntimeConfig): BackendApplication => {
-  const services = createCompositionRoot(config);
+  const guacamole = new GuacamoleAdapter({ guacdHost: config.guacdHost, guacdPort: config.guacdPort });
+  const services = createCompositionRoot(config, { remoteDesktopGateway: guacamole });
   const sessions = new FileHttpSessionAdapter({
     dataDirectory: config.dataDirectory,
     secret: config.sessionSecret,
@@ -67,12 +69,14 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     server,
     sessionMiddleware: sessions.middleware,
     config: {
-      remoteGatewayWsBaseUrl: config.remoteGatewayWsBaseUrl,
       allowOriginlessWebSockets: config.allowOriginlessWebSockets,
       passkeyRelyingParties: config.passkeyRelyingParties,
     },
     dependencies: {
       ipWhitelist: services.modules.ipWhitelist,
+      remoteDesktop: {
+        accept: (socket, request, ticket, userId) => guacamole.acceptSession(ticket, userId, socket, request),
+      },
       workspace: services.modules.workspace,
       events: services.modules.workspaceEvents,
       terminal: services.modules.workspaceTerminal,
@@ -107,6 +111,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
         });
       } catch (error) {
         await webSockets.close().catch(() => undefined);
+        guacamole.close();
         await services.dispose();
         throw error;
       }
@@ -122,6 +127,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
           server.close((error) => (error ? reject(error) : resolve()));
         });
       } finally {
+        guacamole.close();
         await services.dispose();
       }
     },

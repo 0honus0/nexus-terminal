@@ -16,10 +16,6 @@ case "$role" in
         cd /app
         exec node dist/index.js "$@"
         ;;
-    remote-gateway)
-        cd /app/remote-gateway
-        exec node dist/server.js "$@"
-        ;;
     *)
         exec "$role" "$@"
         ;;

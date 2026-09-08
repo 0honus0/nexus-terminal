@@ -23,7 +23,7 @@
       "connectionFailed": "连接失败",
       "inputError": "设置输入监听器时出错。",
       "noConnection": "未提供连接信息。",
-      "tokenError": "获取令牌失败"
+      "tokenError": "准备远程桌面会话失败"
     },
     "reconnectTooltip": "重新连接到远程桌面",
     "touchModeLabel": "触控",

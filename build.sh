@@ -10,7 +10,7 @@ readonly IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 usage() {
     cat <<'USAGE'
 Usage:
-  ./build.sh local [all|backend|frontend|remote-gateway]
+  ./build.sh local [all|backend|frontend]
   ./build.sh docker [all]
   ./build.sh docker-save [all] [output-directory]
 
@@ -107,11 +107,11 @@ main() {
             target="${target:-all}"
             case "$target" in
                 all)
-                    for component in backend frontend remote-gateway; do
+                    for component in backend frontend; do
                         build_local "$component"
                     done
                     ;;
-                backend|frontend|remote-gateway)
+                backend|frontend)
                     build_local "$target"
                     ;;
                 *)

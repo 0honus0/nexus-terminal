@@ -24,9 +24,7 @@ const backendEnv: NodeJS.ProcessEnv = {
   SESSION_COOKIE_NAME: 'nexus.seed.sid',
   SESSION_SECRET: 'e2e-seed-session-secret-do-not-use-outside-tests-000000000000000000000000',
   ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-  REMOTE_GATEWAY_SHARED_SECRET: 'e2e-seed-remote-gateway-shared-secret-do-not-use-outside-tests',
   DEPLOYMENT_MODE: 'local',
-  REMOTE_GATEWAY_API_BASE_LOCAL: 'http://127.0.0.1:29090',
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

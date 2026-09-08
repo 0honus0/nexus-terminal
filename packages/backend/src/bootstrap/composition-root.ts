@@ -29,7 +29,6 @@ import { SqliteTerminalThemeRepository } from '../infrastructure/database/reposi
 import { SqliteUserRepository } from '../infrastructure/database/repositories/sqlite-user.repository';
 import { DatabaseDiagnosticProbe } from '../infrastructure/diagnostics/database-diagnostic.probe';
 import { ProcessDiagnosticProbe } from '../infrastructure/diagnostics/process-diagnostic.probe';
-import { GuacamoleAdapter } from '../infrastructure/guacamole/guacamole.adapter';
 import { NetworkNotificationChannelAdapter } from '../infrastructure/notifications/network-notification-channel.adapter';
 import { I18nextNotificationLocalizer } from '../infrastructure/notifications/i18next-notification-localizer.adapter';
 import { AesGcmSecretCipher } from '../infrastructure/security/aes-gcm-secret-cipher';
@@ -92,6 +91,7 @@ import { WorkspaceStatusMonitorService } from '../modules/workspace/services/wor
 import { WorkspaceSuspendCoordinatorService } from '../modules/workspace/services/workspace-suspend-coordinator.service';
 import { WorkspaceTerminalService } from '../modules/workspace/services/workspace-terminal.service';
 import { RemoteDockerService } from '../platform/docker/remote-docker.service';
+import type { RemoteDesktopGateway } from '../platform/remote-desktop/remote-desktop-gateway.port';
 import { ExecutionSessionDiagnosticProbe } from '../platform/execution/diagnostics/execution-session-diagnostic.probe';
 import { ExecutionSessionManager } from '../platform/execution/execution-session-manager';
 import { FileRemovalService } from '../platform/filesystem/file-removal.service';
@@ -181,7 +181,14 @@ export interface CompositionRoot {
 }
 
 /** Explicit application graph. Concrete Infrastructure objects never escape this factory. */
-export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot => {
+export interface CompositionRootDependencies {
+  remoteDesktopGateway: RemoteDesktopGateway;
+}
+
+export const createCompositionRoot = (
+  config: RuntimeConfig,
+  dependencies: CompositionRootDependencies,
+): CompositionRoot => {
   const database = new DatabaseAdapter({
     dataDirectory: config.dataDirectory,
     nodeEnv: config.nodeEnv,
@@ -237,10 +244,7 @@ export const createCompositionRoot = (config: RuntimeConfig): CompositionRoot =>
   const executionSessions = new ExecutionSessionManager(sshTransport);
   const sshResolver = new SshConnectionResolver(connectionRepository, credentials, proxies);
   const sshConnectionTest = new SshConnectionTestService(sshResolver, sshTransport);
-  const remoteDesktop = new RemoteDesktopSessionService(
-    connections,
-    new GuacamoleAdapter({ apiBaseUrl: config.remoteGatewayApiBase, sharedSecret: config.remoteGatewaySharedSecret }),
-  );
+  const remoteDesktop = new RemoteDesktopSessionService(connections, dependencies.remoteDesktopGateway);
 
   const auth = new AuthService(user, passwordHasher, audit, notifications);
   const twoFactor = new TwoFactorService(

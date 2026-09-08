@@ -13,11 +13,10 @@ suffix="${suffix//[^A-Za-z0-9_.-]/-}"
 network="nexus-e2e-smoke-${suffix}"
 backend="nexus-e2e-backend-${suffix}"
 frontend="nexus-e2e-frontend-${suffix}"
-remote_gateway="nexus-e2e-remote-${suffix}"
+guacd="nexus-e2e-guacd-${suffix}"
 http_port="${NEXUS_DOCKER_SMOKE_PORT:-18113}"
 data_dir="$(mktemp -d)"
 cookie_jar="$(mktemp)"
-gateway_secret='docker-smoke-remote-gateway-secret-2026-0000000000000000'
 session_secret='docker-smoke-session-secret-2026-00000000000000000000000000000000'
 encryption_key='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 failed=1
@@ -25,8 +24,8 @@ failed=1
 print_logs() {
   echo "--- backend logs ---"
   docker logs "$backend" 2>&1 || true
-  echo "--- remote gateway logs ---"
-  docker logs "$remote_gateway" 2>&1 || true
+  echo "--- guacd logs ---"
+  docker logs "$guacd" 2>&1 || true
   echo "--- frontend logs ---"
   docker logs "$frontend" 2>&1 || true
 }
@@ -37,7 +36,7 @@ cleanup() {
     print_logs
   fi
   docker exec "$backend" sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
-  docker rm -f "$frontend" "$backend" "$remote_gateway" >/dev/null 2>&1 || true
+  docker rm -f "$frontend" "$backend" "$guacd" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   rm -rf "$data_dir" "$cookie_jar" || true
   exit "$status"
@@ -50,31 +49,10 @@ chmod 0777 "$data_dir"
 docker network create "$network" >/dev/null
 
 docker run -d \
-  --name "$remote_gateway" \
+  --name "$guacd" \
   --network "$network" \
-  --network-alias remote-gateway \
-  -e NODE_ENV=production \
-  -e REMOTE_GATEWAY_SHARED_SECRET="$gateway_secret" \
-  -e REMOTE_GATEWAY_API_HOST=0.0.0.0 \
-  -e REMOTE_GATEWAY_API_PORT=9090 \
-  -e REMOTE_GATEWAY_WS_PORT=8080 \
-  -e GUACD_HOST=127.0.0.1 \
-  -e GUACD_PORT=4822 \
-  "$image" remote-gateway >/dev/null
-
-remote_ready=0
-for _ in {1..30}; do
-  if docker exec "$remote_gateway" sh -lc 'nc -z 127.0.0.1 9090 && nc -z 127.0.0.1 8080'; then
-    remote_ready=1
-    break
-  fi
-  if [[ "$(docker inspect -f '{{.State.Running}}' "$remote_gateway" 2>/dev/null || true)" != "true" ]]; then
-    echo "Remote gateway container exited before becoming ready." >&2
-    exit 1
-  fi
-  sleep 1
-done
-[[ "$remote_ready" -eq 1 ]] || { echo "Remote gateway did not become ready." >&2; exit 1; }
+  --network-alias guacd \
+  "${GUACD_IMAGE:-guacamole/guacd:latest}" >/dev/null
 
 docker run -d \
   --name "$backend" \
@@ -87,9 +65,8 @@ docker run -d \
   -e DEPLOYMENT_MODE=docker \
   -e SESSION_SECRET="$session_secret" \
   -e ENCRYPTION_KEY="$encryption_key" \
-  -e REMOTE_GATEWAY_SHARED_SECRET="$gateway_secret" \
-  -e REMOTE_GATEWAY_API_BASE_DOCKER=http://remote-gateway:9090 \
-  -e REMOTE_GATEWAY_WS_URL_DOCKER=ws://remote-gateway:8080 \
+  -e GUACD_HOST=guacd \
+  -e GUACD_PORT=4822 \
   -e RP_ID=ssh.honus.top \
   -e RP_ORIGIN='https://ssh.honus.top,https://ssh.trui.de' \
   "$image" backend >/dev/null
@@ -108,7 +85,7 @@ for _ in {1..45}; do
 done
 [[ "$backend_ready" -eq 1 ]] || { echo "Backend did not become ready." >&2; exit 1; }
 
-docker exec "$backend" node -e "fetch('http://remote-gateway:9090/api/remote-desktop/token',{method:'POST',headers:{'content-type':'application/json','x-nexus-gateway-secret':process.env.REMOTE_GATEWAY_SHARED_SECRET},body:'{}'}).then(r=>{if(r.status!==400)throw new Error('unexpected remote gateway status '+r.status); console.log('remote gateway API reachable: '+r.status)})"
+docker exec "$backend" sh -lc 'nc -z guacd 4822'
 
 docker run -d \
   --name "$frontend" \

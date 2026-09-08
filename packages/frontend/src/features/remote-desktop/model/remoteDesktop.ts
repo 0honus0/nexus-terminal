@@ -10,6 +10,6 @@ export interface RemoteDesktopDisplay {
   dpi: number;
 }
 export interface RemoteDesktopSession {
-  token: string;
+  ticket: string;
 }
 export type RemoteDesktopState = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'disconnected' | 'error';

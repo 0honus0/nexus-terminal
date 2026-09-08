@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
+const { openRemoteDesktopWebSocket, reuseRemoteDesktopTicket } = require('../../support/remote-desktop-websocket.cjs');
 
 test('RDP RemoteApp options persist and create a remote desktop session', async ({ request }) => {
   await loginAsInitialAdmin(request);
@@ -35,5 +36,23 @@ test('RDP RemoteApp options persist and create a remote desktop session', async 
 
   const session = await request.post(`/api/v1/connections/${connectionId}/rdp-session?width=1600&height=1000&dpi=144`);
   expect(session.status(), await session.text()).toBe(200);
-  await expect(session.json()).resolves.toMatchObject({ token: 'e2e-remote-desktop-token' });
+  const sessionPayload = (await session.json()) as { ticket: string };
+  expect(sessionPayload).toMatchObject({ ticket: expect.any(String) });
+  expect(Object.keys(sessionPayload)).toEqual(['ticket']);
+  expect(sessionPayload.ticket.length).toBeGreaterThanOrEqual(32);
+
+  const storage = await request.storageState();
+  const cookie = storage.cookies.map(({ name, value }) => `${name}=${value}`).join('; ');
+  expect(cookie).toBeTruthy();
+
+  const tunnel = (await openRemoteDesktopWebSocket(sessionPayload.ticket, cookie)) as {
+    firstMessage: string;
+    close(): void;
+  };
+  expect(tunnel.firstMessage).toMatch(/(?:size|sync|name)/);
+  tunnel.close();
+
+  const reused = (await reuseRemoteDesktopTicket(sessionPayload.ticket, cookie)) as { code: number; reason: string };
+  expect(reused.code).toBe(1008);
+  expect(reused.reason).toContain('ticket');
 });

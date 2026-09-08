@@ -54,7 +54,6 @@ export const initializeEnvironment = async (): Promise<InitializedEnvironment> =
 
   ensureSecret('ENCRYPTION_KEY', 32);
   ensureSecret('SESSION_SECRET', 64);
-  ensureSecret('REMOTE_GATEWAY_SHARED_SECRET', 48);
   process.env.GUACD_HOST ||= 'localhost';
   process.env.GUACD_PORT ||= '4822';
 

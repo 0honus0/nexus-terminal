@@ -20,12 +20,11 @@ const backendEnv: Record<string, string> = {
   SESSION_COOKIE_NAME: 'nexus.e2e.sid',
   SESSION_SECRET: 'e2e-session-secret-do-not-use-outside-tests-000000000000000000000000',
   ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
-  REMOTE_GATEWAY_SHARED_SECRET: 'e2e-remote-gateway-shared-secret-do-not-use-outside-tests',
   DEPLOYMENT_MODE: 'local',
   RP_ID: 'localhost',
   RP_ORIGIN: 'http://localhost:4173',
-  REMOTE_GATEWAY_API_BASE_LOCAL: 'http://127.0.0.1:29090',
-  REMOTE_GATEWAY_WS_URL_LOCAL: 'ws://127.0.0.1:29090',
+  GUACD_HOST: '127.0.0.1',
+  GUACD_PORT: '24822',
 };
 
 export default defineConfig({
@@ -81,7 +80,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: 'node support/test-remote-gateway-server.mjs',
+      command: 'node support/test-guacd-server.mjs',
       cwd: e2eRoot,
       url: 'http://127.0.0.1:29090/health',
       reuseExistingServer: false,

@@ -3,7 +3,7 @@
     "title": "Remote Desktop",
     "titlePlaceholder": "Remote Desktop Connection",
     "status": {
-      "fetchingToken": "Fetching connection token...",
+      "fetchingToken": "Preparing remote desktop session...",
       "connectingWs": "Connecting WebSocket...",
       "idle": "Idle",
       "connectingRdp": "Connecting Remote Desktop...",
@@ -23,7 +23,7 @@
       "connectionFailed": "Connection Failed",
       "inputError": "Error setting up input listeners.",
       "noConnection": "No connection information provided.",
-      "tokenError": "Failed to retrieve token"
+      "tokenError": "Failed to prepare remote desktop session"
     },
     "reconnectTooltip": "Reconnect to the remote desktop",
     "touchModeLabel": "Touch",

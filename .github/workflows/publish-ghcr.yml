@@ -143,7 +143,6 @@ jobs:
             package.json
             packages/backend/package.json
             packages/frontend/package.json
-            packages/remote-gateway/package.json
           )
 
           for manifest in "${manifests[@]}"; do

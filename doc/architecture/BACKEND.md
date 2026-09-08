@@ -32,7 +32,7 @@ stored connection configuration
 
 The two runtimes are modeled as separate owners of transport/session state. The non-sharing rule for raw runtime resources is registered in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-runtime-003).
 
-The JavaScript baseline is ES2025. Backend and Remote Gateway currently compile with TypeScript 7; the Vue frontend uses the project-pinned TypeScript 6 toolchain.
+The JavaScript baseline is ES2025. Backend currently compiles with TypeScript 7; the Vue frontend uses the project-pinned TypeScript 6 toolchain.
 
 ## Source layout
 
@@ -87,7 +87,7 @@ Examples:
 - `notifications/` — SMTP/Webhook/Telegram network adapter;
 - `appearance/` — local background/HTML theme stores and GitHub catalog adapter;
 - `backup/` — Nexus backup codec, snapshot adapter and connection ZIP export;
-- `guacamole/` — Remote Gateway HTTP adapter;
+- `guacamole/` — in-process opaque-ticket registry and Guacamole runtime adapter;
 - `ssh-suspend/` — suspended-session log storage;
 - `system/` — local Node host metrics;
 - `diagnostics/` — process/database diagnostic probes.
@@ -148,7 +148,7 @@ The temporary frontend-compatibility directories have been deleted. HTTP routes 
 
 The deleted `interfaces/http/legacy-api/` and `interfaces/websocket/legacy-api/` paths are not permanent extension points and must not be recreated. The current rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-legacy-001).
 
-Permanent transport code such as HTTP streaming, WebSocket upgrade/auth/heartbeat/backpressure and transparent Remote Gateway forwarding remains in the normal Interface/Platform owners.
+Permanent transport code such as HTTP streaming and WebSocket upgrade/auth/heartbeat/backpressure remains in Interface owners; direct Guacamole handoff is isolated behind the Guacamole Infrastructure adapter.
 
 ### `bootstrap/` — composition and lifecycle
 

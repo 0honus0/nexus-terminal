@@ -51,10 +51,7 @@ for (const file of listed.filter((item) => item === 'package.json' || /^packages
 const e2eCode = listed.filter(
   (file) => isE2e(file) && /\.(?:[cm]?[jt]s|tsx)$/.test(file) && !file.includes('/node_modules/'),
 );
-const internalSourcePatterns = [
-  /packages\/(?:backend|frontend|remote-gateway)\/src\//,
-  /(?:import\s*\(|from\s+)["']\/src\//,
-];
+const internalSourcePatterns = [/packages\/(?:backend|frontend)\/src\//, /(?:import\s*\(|from\s+)["']\/src\//];
 for (const file of e2eCode) {
   const text = fs.readFileSync(path.join(repoRoot, file), 'utf8');
   for (const pattern of internalSourcePatterns) {

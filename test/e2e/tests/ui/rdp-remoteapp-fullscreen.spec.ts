@@ -112,12 +112,12 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect(form).toBeHidden();
     });
 
-    await step('RDP token generation succeeds with the persisted RemoteApp settings', async () => {
+    await step('RDP ticket generation succeeds with the persisted RemoteApp settings', async () => {
       const session = await context.request.post(
         `/api/v1/connections/${connectionId}/rdp-session?width=1440&height=900&dpi=120`,
       );
       expect(session.ok()).toBeTruthy();
-      await expect(session.json()).resolves.toMatchObject({ token: 'e2e-remote-desktop-token' });
+      await expect(session.json()).resolves.toMatchObject({ ticket: expect.any(String) });
     });
 
     await step('Connections launches RDP in the app-level surface without leaving connection management', async () => {
@@ -310,8 +310,9 @@ test('wide RDP restores the legacy 120 DPI connection rule', async ({ page, cont
 
     const tunnel = await tunnelPromise;
     const tunnelUrl = new URL(tunnel.url());
-    expect(Number(tunnelUrl.searchParams.get('width'))).toBeGreaterThan(1920);
-    expect(tunnelUrl.searchParams.get('dpi')).toBe('120');
+    expect(tunnelUrl.searchParams.get('ticket')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(tunnelUrl.searchParams.has('width')).toBe(false);
+    expect(tunnelUrl.searchParams.has('dpi')).toBe(false);
     await expect(page.getByTestId('remote-desktop-modal')).toContainText('Connected', { timeout: 15_000 });
   } finally {
     await context.request.delete(`/api/v1/connections/${connectionId}`);

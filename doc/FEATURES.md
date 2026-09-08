@@ -23,7 +23,7 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和
 
 - RDP 远程桌面。
 - VNC 远程桌面。
-- Remote Gateway 与 Web 前端配合提供浏览器内远程访问。
+- Backend 内置的 Guacamole 网关与 Web 前端配合提供浏览器内远程访问。
 
 ## 安全与认证
 
@@ -59,4 +59,4 @@ Nexus Terminal 提供 SSH / SFTP、远程桌面、安全认证、界面定制和
 
 ## 构建与平台
 
-Frontend、Backend 与 Remote Gateway 使用统一镜像发布，并支持 AMD64 / ARM64。稳定发布跟随 `:latest`，手动开发发布默认更新 `:dev`；镜像结构、Docker Compose、更新和源码构建方式见 [部署与更新](./DEPLOYMENT.md)。
+Frontend 与 Backend 使用统一镜像发布，并支持 AMD64 / ARM64。稳定发布跟随 `:latest`，手动开发发布默认更新 `:dev`；镜像结构、Docker Compose、更新和源码构建方式见 [部署与更新](./DEPLOYMENT.md)。

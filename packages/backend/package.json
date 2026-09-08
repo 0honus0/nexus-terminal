@@ -25,6 +25,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
+    "guacamole-lite": "1.2.0",
     "i18next": "^26.4.0",
     "iconv-lite": "^0.7.3",
     "ipaddr.js": "^2.5.0",

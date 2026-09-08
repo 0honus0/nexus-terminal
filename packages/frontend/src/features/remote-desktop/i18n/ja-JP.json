@@ -3,7 +3,7 @@
     "title": "リモートデスクトップ",
     "titlePlaceholder": "リモートデスクトップ接続",
     "status": {
-      "fetchingToken": "接続トークンを取得中...",
+      "fetchingToken": "リモートデスクトップセッションを準備中...",
       "connectingWs": "WebSocket に接続中...",
       "idle": "アイドル",
       "connectingRdp": "リモートデスクトップに接続中...",
@@ -23,7 +23,7 @@
       "connectionFailed": "接続に失敗しました",
       "inputError": "入力リスナーの設定中にエラーが発生しました。",
       "noConnection": "接続情報が提供されていません。",
-      "tokenError": "トークンの取得に失敗しました"
+      "tokenError": "リモートデスクトップセッションの準備に失敗しました"
     },
     "reconnectTooltip": "リモートデスクトップに再接続",
     "touchModeLabel": "タッチ",

@@ -23,6 +23,6 @@
 
 ## Repository packaging and release channels
 
-- The unified production image uses `scripts/docker/entrypoint.sh` as the role dispatcher for frontend/backend/remote-gateway. Docker helper scripts follow [EC-REPO-001](../engineering-constraints.md#ec-repo-001).
+- The unified production image uses `scripts/docker/entrypoint.sh` as the role dispatcher for frontend/backend; `guacd` remains a separate upstream service. Docker helper scripts follow [EC-REPO-001](../engineering-constraints.md#ec-repo-001).
 - GHCR `:latest` is the stable/release channel. Manual publish dispatch defaults to `:dev`; choosing the release channel updates `:latest`. Both flows also publish the immutable/custom release tag selected by the workflow.
 - Runtime/user HTML-theme data remains under the configured Nexus data directory (`custom_html_theme`); repository-owned HTML themes live under `assets/html-themes/local/` (shipped Backend presets) and `assets/html-themes/remote/` (remote GitHub catalog); neither belongs to narrative documentation.

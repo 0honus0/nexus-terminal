@@ -22,7 +22,7 @@ docker compose up -d
 
 ## 容器与镜像结构
 
-Frontend、Backend 与 Remote Gateway 共用同一个镜像。发布仓库提供两个滚动通道：
+Frontend 与 Backend 共用同一个镜像。发布仓库提供两个滚动通道：
 
 ```text
 ghcr.io/0honus0/nexus-terminal:latest  # 稳定 / Release
@@ -31,25 +31,24 @@ ghcr.io/0honus0/nexus-terminal:dev     # 最近一次手动 Dev 发布
 
 `docker-compose.yml` / `.env` 默认仍使用 `:latest`。需要跟随开发镜像时，将 `.env` 中 `NEXUS_IMAGE_TAG=dev` 后再执行 `docker compose pull && docker compose up -d`。
 
-Compose 仍以三个独立服务运行不同角色：
+Compose 以三个服务运行：
 
 - `frontend`：Web 静态资源与反向代理入口。
-- `backend`：认证、SSH/SFTP、设置、审计等后端 API。
-- `remote-gateway`：RDP/VNC 远程桌面网关。
+- `backend`：认证、SSH/SFTP、设置、审计以及内置 RDP/VNC Guacamole 网关。
 - `guacd`：Guacamole 协议代理。
 
-同一镜像的层会由 Docker 复用，不会保存三份完整镜像。
+`frontend` 与 `backend` 使用同一 Nexus 镜像，镜像层由 Docker 复用；`guacd` 使用独立上游镜像。
 
 当前发布 workflow 构建 `linux/amd64` 与 `linux/arm64`。GitHub Release 事件固定发布 `latest + release tag`；手动 `workflow_dispatch` 可选择 `dev` 或 `release` channel，默认 `dev`，并同时保留自定义 tag 或 `sha-<commit>` tag。
 
 ## `.env` 与持久化配置
 
-项目根目录 `.env` 同时用于 Docker Compose 插值，并作为 Backend 与 Remote Gateway 的 `env_file`。
+项目根目录 `.env` 同时用于 Docker Compose 插值，并作为 Backend 的 `env_file`。
 
 需要特别注意：
 
 - `docker-compose.yml` 中 `environment` 明确声明的变量优先于 `env_file`。
-- `APP_NAME`、端口、网关地址、Passkey 配置等都可以从根目录 `.env` 调整。
+- `APP_NAME`、端口、`GUACD_HOST` / `GUACD_PORT`、Passkey 配置等都可以从根目录 `.env` 调整。
 - Backend 首次启动时会在持久化数据目录中生成运行所需的安全密钥；`./data` 应整体备份。
 - `VITE_*` 是前端构建时变量，运行中的容器修改 `.env` 不会重新生成已经构建好的前端静态资源。
 - 修改运行时 `.env` 后建议执行 `docker compose up -d --force-recreate`，确保 Compose 重新创建相关容器。

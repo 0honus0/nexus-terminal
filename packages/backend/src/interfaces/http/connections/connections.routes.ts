@@ -189,7 +189,12 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
       }
       try {
         response.json(
-          await dependencies.remoteDesktop.create(id, 'RDP', displayOptions(request.query as Record<string, unknown>)),
+          await dependencies.remoteDesktop.create(
+            request.session.userId!,
+            id,
+            'RDP',
+            displayOptions(request.query as Record<string, unknown>),
+          ),
         );
       } catch (error) {
         const message = errorMessage(error);
@@ -199,8 +204,8 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
               ? 404
               : message.includes('不是 RDP') || message.includes('密码') || message.includes('参数无效')
                 ? 400
-                : message.includes('网关')
-                  ? 502
+                : message.includes('请求过多')
+                  ? 503
                   : 500,
           )
           .json({ message });
@@ -218,7 +223,12 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
       }
       try {
         response.json(
-          await dependencies.remoteDesktop.create(id, 'VNC', displayOptions(request.query as Record<string, unknown>)),
+          await dependencies.remoteDesktop.create(
+            request.session.userId!,
+            id,
+            'VNC',
+            displayOptions(request.query as Record<string, unknown>),
+          ),
         );
       } catch (error) {
         const message = errorMessage(error);
@@ -228,8 +238,8 @@ export const createConnectionsRouter = (dependencies: ConnectionsRouterDependenc
               ? 404
               : message.includes('不是 VNC') || message.includes('密码') || message.includes('参数无效')
                 ? 400
-                : message.includes('网关')
-                  ? 502
+                : message.includes('请求过多')
+                  ? 503
                   : 500,
           )
           .json({ message });

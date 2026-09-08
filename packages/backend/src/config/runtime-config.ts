@@ -16,9 +16,6 @@ export interface RuntimeConfig {
   encryptionKeyHex: string;
   sessionSecret: string;
   sessionCookieName: string;
-  remoteGatewaySharedSecret: string;
-  remoteGatewayApiBase: string;
-  remoteGatewayWsBaseUrl: string;
   allowOriginlessWebSockets: boolean;
   guacdHost: string;
   guacdPort: number;
@@ -91,17 +88,6 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
   encryptionKeyHex: requireValue(env, 'ENCRYPTION_KEY'),
   sessionSecret: requireValue(env, 'SESSION_SECRET'),
   sessionCookieName: env.SESSION_COOKIE_NAME?.trim() || 'nexus.sid',
-  remoteGatewaySharedSecret: requireValue(env, 'REMOTE_GATEWAY_SHARED_SECRET'),
-  remoteGatewayApiBase:
-    env.REMOTE_GATEWAY_API_BASE?.trim() ||
-    (env.DEPLOYMENT_MODE === 'local'
-      ? env.REMOTE_GATEWAY_API_BASE_LOCAL?.trim() || 'http://localhost:9090'
-      : env.REMOTE_GATEWAY_API_BASE_DOCKER?.trim() || 'http://remote-gateway:9090'),
-  remoteGatewayWsBaseUrl:
-    env.REMOTE_GATEWAY_WS_URL?.trim() ||
-    (env.DEPLOYMENT_MODE === 'local'
-      ? env.REMOTE_GATEWAY_WS_URL_LOCAL?.trim() || 'ws://localhost:8080'
-      : env.REMOTE_GATEWAY_WS_URL_DOCKER?.trim() || 'ws://remote-gateway:8080'),
   allowOriginlessWebSockets:
     (env.NODE_ENV?.trim() || 'development') !== 'production' || env.ALLOW_ORIGINLESS_WEBSOCKETS === 'true',
   guacdHost: env.GUACD_HOST?.trim() || 'localhost',
