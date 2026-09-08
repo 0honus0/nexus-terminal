@@ -89,24 +89,36 @@ async function expectPopupBelowApplicationModals(popup: Locator): Promise<void> 
 
 test('desktop Progress Display floats above the workspace without resizing the terminal', async ({ page, context }) => {
   await openFileManager(page, context);
-  await closeConnectedFileManager(page);
-  const terminal = page.getByTestId('terminal');
-  await expect(terminal).toBeVisible();
-  const terminalRect = () =>
-    terminal.evaluate((element) => {
-      const rect = element.getBoundingClientRect();
-      return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-    });
-  const before = await terminalRect();
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
+  try {
+    await rightClickRow(page, 'copy-source.txt');
+    await clickMenuItem(page, 'Copy');
+    await goIntoFolder(page, 'folder-seed');
+    await openCurrentDirectoryContextMenu(page);
+    await clickMenuItem(page, 'Paste');
+    await expect(visibleProgressCenter(page)).toBeVisible({ timeout: 10_000 });
+    await closeConnectedFileManager(page);
 
-  const display = await openDesktopProgressDisplay(page);
-  const after = await terminalRect();
-  expect(Math.abs(after.x - before.x)).toBeLessThan(1);
-  expect(Math.abs(after.y - before.y)).toBeLessThan(1);
-  expect(Math.abs(after.width - before.width)).toBeLessThan(1);
-  expect(Math.abs(after.height - before.height)).toBeLessThan(1);
+    const terminal = page.getByTestId('terminal');
+    await expect(terminal).toBeVisible();
+    const terminalRect = () =>
+      terminal.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      });
+    const before = await terminalRect();
 
-  await closeProgressDisplay(display);
+    const display = await openDesktopProgressDisplay(page);
+    const after = await terminalRect();
+    expect(Math.abs(after.x - before.x)).toBeLessThan(1);
+    expect(Math.abs(after.y - before.y)).toBeLessThan(1);
+    expect(Math.abs(after.width - before.width)).toBeLessThan(1);
+    expect(Math.abs(after.height - before.height)).toBeLessThan(1);
+
+    await closeProgressDisplay(display);
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
 });
 
 test('existing copy progress popup hides and restores through Progress Display', async ({ page, context }) => {
@@ -258,11 +270,6 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
         await expect(sendButton).toBeEnabled();
         await sendButton.click();
         await expect(modal).toBeHidden();
-
-        // Progress Display now floats above the Workspace. Exit the foreground
-        // File Manager popup before interacting with the central progress panel.
-        await page.getByTestId('file-manager-modal-close').click();
-        await expect(page.getByTestId('file-manager-modal')).toBeHidden();
       },
     );
 
@@ -292,6 +299,7 @@ test('Send Files restores the server-transfer task cards in Progress Display', a
 
         await taskCard.getByRole('button', { name: 'Remove', exact: true }).click();
         await expect(taskCard).toHaveCount(0);
+        await closeProgressDisplay(display);
       },
     );
 

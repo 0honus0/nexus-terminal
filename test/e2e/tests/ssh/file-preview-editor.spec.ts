@@ -572,14 +572,13 @@ test('desktop editor rapid zoom does not replay stale scroll state while font me
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
-  const connectionId = await ensureTestSshConnection(context.request);
-  await connectTestSshFromConnectionsPage(page, connectionId);
-
   const fixture = await fetch(
     `${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent('zoom-lines.txt')}&variant=zoom-lines&lines=1200`,
     { method: 'POST' },
   );
   expect(fixture.ok).toBeTruthy();
+  const connectionId = await ensureTestSshConnection(context.request);
+  await connectTestSshFromConnectionsPage(page, connectionId);
 
   await openConnectedFileManager(page);
   await expect(row(page, 'zoom-lines.txt')).toBeVisible({ timeout: 20_000 });
