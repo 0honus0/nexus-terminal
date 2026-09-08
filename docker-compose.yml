@@ -29,11 +29,11 @@ services:
       - .env
     environment:
       NODE_ENV: production
-      PORT: ${BACKEND_PORT:-3001}
+      PORT: 3001
       APP_NAME: ${APP_NAME:-Nexus Terminal}
-      DEPLOYMENT_MODE: ${DEPLOYMENT_MODE:-docker}
-      GUACD_HOST: ${GUACD_HOST:-guacd}
-      GUACD_PORT: ${GUACD_PORT:-4822}
+      DEPLOYMENT_MODE: docker
+      GUACD_HOST: guacd
+      GUACD_PORT: 4822
       RP_ID: ${RP_ID:-}
       RP_ORIGIN: ${RP_ORIGIN:-}
     volumes:

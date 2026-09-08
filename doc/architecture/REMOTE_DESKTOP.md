@@ -42,7 +42,7 @@ There is no private 9090 token API and no 8080 Guacamole WebSocket listener.
 
 ## Deployment relationship
 
-The unified image has `frontend` and `backend` runtime roles. `docker-compose.yml` runs `guacd` as its own service and points the Backend at `GUACD_HOST` / `GUACD_PORT`.
+The unified image has `frontend` and `backend` runtime roles. `docker-compose.yml` runs `guacd` as its own service and wires the Backend to the internal `guacd:4822` endpoint. Standalone Backend deployments can still override `GUACD_HOST` / `GUACD_PORT` directly in their process environment.
 
 The resulting path is:
 

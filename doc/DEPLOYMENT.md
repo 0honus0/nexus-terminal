@@ -48,7 +48,7 @@ Compose 以三个服务运行：
 需要特别注意：
 
 - `docker-compose.yml` 中 `environment` 明确声明的变量优先于 `env_file`。
-- `APP_NAME`、端口、`GUACD_HOST` / `GUACD_PORT`、Passkey 配置等都可以从根目录 `.env` 调整。
+- `APP_NAME`、对外 HTTP 端口、`GUACD_IMAGE`、网络地址段和 Passkey 配置可以从根目录 `.env` 调整。Compose 内部的 Backend 端口固定为 `3001`，Backend 通过内部网络固定连接 `guacd:4822`，避免用户配置与 Nginx/service discovery 脱节。
 - Backend 首次启动时会在持久化数据目录中生成运行所需的安全密钥；`./data` 应整体备份。
 - `VITE_*` 是前端构建时变量，运行中的容器修改 `.env` 不会重新生成已经构建好的前端静态资源。
 - 修改运行时 `.env` 后建议执行 `docker compose up -d --force-recreate`，确保 Compose 重新创建相关容器。
