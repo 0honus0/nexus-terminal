@@ -2036,7 +2036,6 @@
   .file-manager-search-slot .file-manager-action-button,
   .file-manager-actions .file-manager-search-slot > .file-manager-path-button {
     width: 1.75rem !important;
-    height: 1.75rem !important;
     padding-right: 0.35rem;
     padding-left: 0.35rem;
   }

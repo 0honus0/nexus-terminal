@@ -578,10 +578,12 @@ test('desktop editor rapid zoom does not replay stale scroll state while font me
   const commandInput = page.getByTestId('command-input');
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
   await commandInput.fill(
-    "for ((i=1;i<=1200;i++)); do printf 'zoom-line-%d\\n' \"$i\"; done > zoom-lines.txt; printf 'ZOOM_READY\\n'",
+    'for ((i=1;i<=1200;i++)); do printf \'zoom-line-%d\\n\' "$i"; done > "$NEXUS_E2E_ROOT/zoom-lines.txt"; printf \'ZOOM_READY\\n\'',
   );
   await commandInput.press('Enter');
-  await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 }).toContain('ZOOM_READY');
+  await expect
+    .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+    .toMatch(/ZOOM_READY[\s\S]*nexus-e2e\$\s*$/);
 
   await openConnectedFileManager(page);
   await expect(row(page, 'zoom-lines.txt')).toBeVisible({ timeout: 20_000 });
