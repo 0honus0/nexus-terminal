@@ -481,9 +481,10 @@ Store rules：
 - view/use-case/runtime composition 负责跨 feature orchestration；
 - persistent preferences 与 live runtime state 分离。
 
-## 10. Workspace and Agent runtime separation
+<a id="workspace-shared-ai-and-app-runtimes"></a>
+## 10. Workspace, App Platform and App frontend ownership
 
-这是长期架构中的核心边界。
+这是长期架构中的核心边界。完整产品体验通过 App Platform 注册；共享 AI/Conversation 能力属于 feature/public surface；Operations Agent 是第一个 built-in App，Workspace 仍然是独立 runtime owner 而不是 App host。详细边界见 [App Platform Architecture](./APP-PLATFORM.md) 与 [AI Platform Architecture](./AI-PLATFORM.md)。
 
 ### 10.1 Workspace owns
 
@@ -496,49 +497,114 @@ Workspace runtime 只拥有 Workspace-specific live composition，例如：
 - reconnect and suspend handoff orchestration；
 - 将 terminal/filesystem/status/docker/etc capability 绑定到该 runtime。
 
-### 10.2 Agent owns
+### 10.2 Frontend App Platform
 
-Agent 独立拥有：
+Future complete product experiences are registered as Apps rather than hard-coded into the global shell. Detailed package/security rules are in [App Platform Architecture](./APP-PLATFORM.md).
 
-- agent conversation/execution runtime；
-- agent protocol；
-- agent session lifecycle；
-- agent-specific UI/state。
+```text
+features/app-platform/
+├── registry/
+├── navigation/
+├── bridge/
+├── settings/
+└── public.ts
 
-### 10.3 Agent must not reuse Workspace internals
+AppShell
+   ↓
+FrontendAppRegistry
+   ├── navigation contributions
+   ├── route contributions
+   ├── settings contributions
+   └── App runtime chunks/bridges
+```
+
+An App declares contributions; it does not directly mutate global router/sidebar/Pinia ownership.
+
+Built-in Apps are compile-time lazy chunks registered statically. Future untrusted dynamically installed UI must use an isolated/sandboxed App Bridge rather than arbitrary same-origin JavaScript with full page privileges.
+
+### 10.3 Shared AI frontend feature surface
+
+Reusable AI UI/client capabilities remain outside every App:
+
+```text
+features/ai/
+├── providers/
+├── conversation/
+├── skills/
+├── artifacts/
+└── public.ts
+```
+
+This feature may expose safe Provider/model catalog clients, canonical conversation DTOs, Artifact lazy-read helpers, Skill metadata and other application-neutral UI contracts. It does **not** own live Operations state, future Roleplay state, Workspace, Context Planner, Recall policy or permission state.
+
+Frontend never performs authoritative Recall/vector search, compaction policy, model context budgeting or Tool authorization itself. Browser state can display safe provenance/metrics, but Backend remains authoritative for canonical conversation history, context/digest/handoff state and security decisions.
+
+### 10.4 Operations App frontend owner
+
+Operations Agent is a built-in App package rather than a hard-coded core runtime directory:
+
+```text
+packages/apps/operations/frontend/
+├── model/
+├── client/
+├── runtime/
+├── components/
+├── views/
+└── public.ts
+```
+
+It owns:
+
+- Operations conversation/run live projection；
+- `/api/v1/apps/nexus.operations/...` protocol clients；
+- event-stream reconnect/lifecycle；
+- Agent participant/runtime/backend (`native` / `acp`) presentation；
+- Goal/Plan/delegation/tool/approval/verification UI state；
+- context/Recall/Skill/Artifact explainability presentation；
+- LoopGuard/ResourceLease/Reviewer status presentation where useful；
+- App-specific navigation/routes/settings contributions.
+
+It consumes shared AI capabilities through `features/ai/public.ts` and App-host capabilities through `features/app-platform/public.ts`. It does not own Provider credentials, Backend Context planning, Recall engines, generic Skill registry or another App runtime.
+
+用户输入历史仍是 canonical conversation source。Frontend 可以展示完整历史、修正关系和 compaction/context 状态，但浏览器裁剪不是权威历史，不能本地覆盖 Backend digest/projection 后继续执行。Backend 分配稳定 sequence/id；显式编辑/删除必须走后端 conversation mutation contract 并失效相关派生状态。
+
+Frontend 不直接实现 ACP client。浏览器通过 Operations App HTTP/SSE contract 与 Nexus backend 通信；ACP wire/session/permission 由 Operations backend contribution 隔离。
+
+### 10.5 Future App packages
+
+Future Roleplay/Development/Research are examples of sibling App packages, not built-in assumptions:
+
+```text
+packages/apps/operations/       # first built-in App
+packages/apps/roleplay/         # create only after requirement exists
+packages/apps/development/      # create only after requirement exists
+```
+
+Apps may consume shared `features/ai` and other explicitly public capability surfaces, but never import another App's runtime/store. Roleplay can own Character/Persona/World/Lore/Scene/Speaker/branch state without inheriting Operations Agent/SSH/approval semantics.
+
+### 10.6 Apps must not reuse Workspace internals
 
 禁止：
 
 ```text
-Agent -> Workspace raw WebSocket
-Agent -> Workspace SessionStore
-Agent -> Workspace SFTP manager
-Agent -> Workspace Terminal manager
-Agent -> Workspace current cwd
-Agent -> Workspace upload socket
+Operations App -> Workspace raw WebSocket
+Operations App -> Workspace SessionStore
+Operations App -> Workspace SFTP manager
+Operations App -> Workspace Terminal manager
+Operations App -> Workspace current cwd
+Operations App -> Workspace upload socket
 ```
 
-如果两者都需要 terminal/filesystem/transfer 能力，应复用 capability interface，而不是 runtime object。
-
-例如：
+如果 Workspace 和某个 App 都需要 terminal/filesystem/transfer UI capability，应复用 feature public interface，而不是 runtime object：
 
 ```text
-Terminal Feature
-  └─ TerminalChannel port
+Terminal Feature public port
         ↑
-        ├─ WorkspaceTerminalAdapter -> Workspace protocol
-        └─ AgentTerminalAdapter     -> Agent protocol
+        ├── Workspace adapter
+        └── Operations App adapter
 ```
 
-类似模式应用于：
-
-```text
-FilesystemPort
-TransferPort
-StatusPort
-DockerPort
-RemoteDesktopPort   # if Agent later requires it
-```
+类似模式应用于 Filesystem/Transfer/Status/Docker 等展示能力。Backend machine execution仍由 App Capability Broker + Operations Tool/Policy/Approval boundary 管理，不等于把 frontend port 暴露给模型。
 
 ## 11. HTTP architecture
 
@@ -580,7 +646,7 @@ Raw WebSocket transport 只属于：
 client/websocket/
 ```
 
-Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. There is **no current `runtimes/agent/` source tree**: future Agent boundaries are architectural constraints only until an owner-approved public/runtime contract exists. If an Agent runtime is implemented later, it must own a separate protocol/runtime state rather than reusing Workspace sockets or sessions.
+Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. There is currently no Operations App package. When implemented, `packages/apps/operations/frontend/client|runtime` owns its App-scoped HTTP/SSE protocol state and must not reuse Workspace sockets/sessions. Generic App registration/bridge behavior belongs to `features/app-platform`, not to Workspace or the Operations package.
 
 Terminal/Filesystem/Transfer 等 feature 不应该直接发送 string message name。
 
@@ -727,15 +793,34 @@ Dashboard 不拥有这些数据模型。
 
 ### Settings
 
-Settings page 组合：
+Settings page 继续是 composition surface，不预先写死未来 App 的设置类别。插件式架构下，Owner 通过 settings contribution 注册自己的面板：
 
-- Preferences；
-- Security；
-- Appearance；
-- Backup；
-- Workspace settings。
+```text
+SettingsPage
+├── existing Nexus settings
+│   ├── Preferences / Security / Appearance / Backup / Workspace
+│   └── ...
+│
+├── shared AI settings contribution
+│   ├── Providers / credentials
+│   ├── model catalog
+│   ├── Context / compaction
+│   ├── Skills / MCP
+│   └── Artifact retention
+│
+└── App settings contributions
+    └── Operations Agent
+        ├── default role models
+        ├── Multi-Agent/delegation/run budgets
+        ├── permission / verification defaults
+        └── ACP backends
+```
 
-Settings screen 不再拥有一个万能 `settings.store.ts`。
+这里表达的是 ownership，不是最终 UI 信息架构要求。等产品需求确认后，可以显示为 `Settings > AI` 与 `Settings > Apps > Operations`，也可以采用其他一致的导航方式；`SettingsPage` 本身不 import Operations App store/runtime，也不持有 Provider secret。
+
+Provider API keys 与 ACP backend credentials 都属于 write-only secret input，但 backend owner 不同：Provider credential 属于共享 AI Platform，ACP credential 属于 Operations App。两者都不得保存在普通 preferences/settings store 或返回给浏览器；前端只持有 `apiKeyConfigured` / `credentialConfigured` 等安全状态。模型列表和 ACP backend capability/status 都由 Nexus backend 获取、归一化和缓存，浏览器不得直接携带 secret 调第三方 Provider 或 ACP backend。
+
+Settings screen 不再拥有一个万能 `settings.store.ts`。未来 App 的设置通过 Frontend App Registry/Settings contribution 接入，而不是继续扩大一个中心化 store。
 
 ## 17. Source ownership notes
 
@@ -745,12 +830,15 @@ Source directories do not carry their own README policy files. Durable placement
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `app/bootstrap/`          | Owns application startup ordering and public-feature bootstrap sequencing. It is not a product service locator and must not replace feature/runtime ownership.                                                                                           |
 | `app/pages/dashboard/`    | Application composition surface for public capabilities such as Connections, Tags, Audit, and System Overview; it does not own those domains.                                                                                                            |
-| `app/pages/settings/`     | Application composition surface for Security, Preferences, Appearance, Backup, and runtime-specific settings; domain settings remain with their feature owner.                                                                                           |
+| `app/pages/settings/`     | Application composition surface for existing Nexus settings plus registered shared/App settings contributions. It does not own Provider secrets or App runtime/domain state. |
+| future `features/app-platform/` | Reusable Frontend App Registry/navigation/bridge/settings contribution contracts. It composes Apps but does not own an App's live business state. |
+| future `features/ai/`     | Reusable frontend AI clients/contracts for Provider/model catalog, canonical conversation DTOs, Skills and Artifact access. It does not own any complete App runtime state. |
 | `foundation/async/`       | Business-neutral async coordination primitives, including latest-value persistence mechanics used by debounced UI settings.                                                                                                                              |
-| `foundation/browser/`     | Business-neutral browser/device capability primitives; product behavior stays in features/runtimes.                                                                                                                                                      |
+| `foundation/browser/`     | Business-neutral browser/device capability primitives; product behavior stays in features/runtimes/App packages.                                                                                                                                          |
 | `foundation/interaction/` | Business-neutral pointer/touch/drag/resize/wheel mechanics. Guacamole/remote-desktop input remains owned by the Remote Desktop feature.                                                                                                                  |
 | `runtimes/workspace/`     | Owns Workspace lifecycle, connection/session binding, protocol adapters, layout composition, reconnect orchestration, and suspend handoff. It is a composition owner, not a reusable capability owner.                                                   |
-| future Agent runtime      | No source directory exists today. A future independent Agent may consume public capability ports but must not reuse Workspace raw sockets/session/runtime state; no Agent product behavior is implemented until the public contract is formally defined. |
+| future `packages/apps/operations/frontend/` | First built-in App frontend contribution. Owns Operations conversation/run/delegation/approval UI state and contributes navigation/routes/settings through App Platform contracts; never reuses Workspace raw runtime state. |
+| future `packages/apps/*/frontend/` | Sibling App frontend packages. Apps may consume shared public features but must not import another App's runtime/store. Do not create placeholder App packages before a real requirement exists. |
 | `shared/feedback/`        | Cross-feature feedback primitives such as toast/confirm/alert with no domain policy.                                                                                                                                                                     |
 | `shared/focus/`           | Cross-feature focus/shortcut infrastructure with no feature-owned business behavior.                                                                                                                                                                     |
 
@@ -760,23 +848,23 @@ The mandatory frontend ownership and Agent boundaries are referenced by [EC-FE-0
 
 Architecture/static invariants are checked through the repository build and architecture guard. User-reachable behavior is validated through the real E2E system documented in [E2E](../testing/E2E.md). The mandatory verification and E2E policies are defined only by [EC-VER-001](../software-requirements/engineering-constraints.md#ec-ver-001) and the [EC-E2E-*](../software-requirements/engineering-constraints.md#ec-e2e-001) constraint rows.
 
-Current dependency model:
+Current + target dependency model:
 
 ```text
 Browser UI
    ↓
-Feature components / App pages
+AppShell / App pages
    ↓
-Feature clean models + capability ports
-   ↓
-Workspace runtime / future Agent runtime adapters
-   ↓
-Typed frontend HTTP / WS contract
-   ↓
-Backend Interfaces
-   ↓
-Backend Modules
-   ↓
+Feature public surfaces + FrontendAppRegistry
+   ├── Workspace runtime
+   └── built-in/future App frontend package
+            ↓
+Typed HTTP / SSE / WS contracts
+            ↓
+Backend Interfaces / App Host
+            ↓
+App Platform + owning App backend contribution + shared AI where applicable
+            ↓
 Platform capabilities
 ```
 

@@ -66,6 +66,9 @@ docker compose up -d
 - [后继开发工程约束](./software-requirements/engineering-constraints.md)
 - [Frontend 架构](./architecture/FRONTEND.md)
 - [Backend 架构](./architecture/BACKEND.md)
+- [App Platform / 插件应用架构](./architecture/APP-PLATFORM.md)
+- [AI / Conversation Platform 架构](./architecture/AI-PLATFORM.md)
+- [Operations Agent App 架构设计](./architecture/AGENT.md)
 - [远程桌面网关架构](./architecture/REMOTE_DESKTOP.md)
 - [E2E 测试与诊断](./testing/E2E.md)
 

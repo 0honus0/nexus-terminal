@@ -324,20 +324,90 @@ A practical ownership guide for locating code:
 
 **Shared** only when no stronger domain/capability owner exists.
 
-## Future AI/Agent integration
+<a id="future-app-ai-platform"></a>
+## Future App Platform and AI applications
 
-The intended AI/Agent integration follows the same application/module/capability split. The normative ownership constraints are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-runtime-003).
+Future Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App packages** model. The generic plugin host is defined in [App Platform Architecture](./APP-PLATFORM.md), shared AI capabilities in [AI Platform Architecture](./AI-PLATFORM.md), and the first built-in Operations App in [Operations Agent Architecture](./AGENT.md).
 
-Expected dependency direction:
+Target composition:
 
 ```text
-interfaces
-    ↓
-modules/ai
-    ↓
-platform capabilities
-    ↑
-infrastructure adapters
+interfaces/http/apps + interfaces/http/ai
+                 │
+                 ▼
+        modules/app-platform
+          │             │
+          │             └────► modules/ai
+          │
+          └── AppCapabilityBroker
+                    ▲
+                    │ declared/granted capability contracts
+                    │
+          packages/apps/operations/backend
+                    │
+                    ▼
+               platform capabilities
+                    ▲
+                    │
+             infrastructure adapters
+
+bootstrap validates/registers built-in App packages and constructs the concrete graph
 ```
 
-The design reuses execution/filesystem/archive/transfer/Docker/diagnostics capabilities while giving the Agent its own execution sessions and policy/approval/task state.
+`modules/app-platform` owns App manifest/registry/lifecycle/capability grants/AppStorage/App event-dispatch contracts. It must not import the Operations domain or another concrete App.
+
+`modules/ai` owns reusable Provider/model routing, canonical Conversation/User Input, Context/compaction/handoff, Recall mechanics, Skills, generic Tool Catalog/discovery/result handling, Artifacts and common AI telemetry. It has no runtime dependency on an App package.
+
+The first built-in App lives conceptually under `packages/apps/operations/backend/` and owns AgentDefinition, AgentRun/AgentRuntime, Coordinator/Delegation, Goal/Plan/Checkpoint semantics, native/ACP backend routing, Operations Tool policy/approval, ResourceLease and operations verification. It consumes shared AI and machine capabilities through the App capability boundary rather than directly owning Infrastructure handles.
+
+### Built-in vs installable Apps
+
+The first implementation should use a static Bootstrap App registry. Do not execute arbitrary uploaded JavaScript or plugin bundles in-process.
+
+Future installable packages use the configured Nexus data directory:
+
+```text
+${NEXUS_DATA_DIR}/apps/
+├── installed/<app-id>/<version>/    immutable package code
+├── data/<app-id>/                   mutable App data
+├── cache/<app-id>/
+└── staging/                         verify before activation; never execute here
+```
+
+Untrusted/community Backend Apps should eventually run out-of-process/containerized and call Nexus through an App RPC/Capability Broker boundary. Same-origin arbitrary frontend JavaScript is also not considered safely isolated; future untrusted frontend Apps should use a sandboxed bridge model.
+
+### Capability boundary
+
+An App declaration/grant is a ceiling, not user authorization or action approval:
+
+```text
+Nexus capability exists
+        ↓
+App manifest declares it
+        ↓
+App grant permits it
+        ↓
+current user/resource authorization
+        ↓
+App domain policy
+        ↓
+operation approval where required
+        ↓
+Platform execution
+```
+
+Apps never receive raw `ssh2` clients, raw database handles, Workspace runtime objects, Express routers or another App's store through the public App SDK.
+
+Provider credentials/model catalogs remain shared AI state and are not copied per App. Conversation history is shared at the canonical factual layer while derived App state remains App-owned. Recall/memory is explicitly App-scoped. Shared Tool discovery does not make Operations shell/filesystem/Docker capabilities available to unrelated Apps.
+
+### App protocol
+
+Apps do not own Express directly. The Interface/App Host dispatches authenticated transport-neutral operations under a generic App namespace:
+
+```text
+/api/v1/apps/<app-id>/...
+```
+
+Operations examples use `/api/v1/apps/nexus.operations/...`; shared Provider/model resources remain `/api/v1/ai/...`.
+
+HTTP/SSE/WebSocket authentication, request bounds, streaming/backpressure and transport lifecycle remain Interface responsibilities. A plugin cannot register a route that bypasses them.
