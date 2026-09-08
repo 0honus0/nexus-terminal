@@ -193,7 +193,9 @@
     },
     "untaggedGroup": "Untagged",
     "noUntaggedConnections": "No untagged connections found.",
-    "cloneName": "{name} Copy"
+    "cloneName": "{name} Copy",
+    "loadFailed": "Failed to load connections.",
+    "tagLoadFailed": "Failed to load connection tags. Connections are still available."
   },
   "workspaceConnectionList": {
     "untagged": "Untagged",

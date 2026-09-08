@@ -10,6 +10,7 @@
   const feedback = useFeedback();
   const savingSection = ref<string | null>(null);
   const loading = ref(true);
+  const loadError = ref('');
   const props = withDefaults(defineProps<{ locales?: readonly string[]; section?: 'all' | 'system' | 'workspace' }>(), {
     locales: () => ['en-US', 'zh-CN', 'ja-JP'],
     section: 'all',
@@ -41,6 +42,11 @@
   onMounted(async () => {
     try {
       await preferences.load();
+    } catch (cause) {
+      loadError.value = t('settings.preferences.loadFailed', {
+        error: cause instanceof Error ? cause.message : String(cause),
+      });
+      feedback.notifyError(loadError.value);
     } finally {
       syncing = true;
       Object.assign(form, preferences.values.value);
@@ -147,6 +153,9 @@
     </div>
 
     <div v-else-if="props.section === 'system'" class="space-y-6 p-6">
+      <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
+        {{ loadError }}
+      </p>
       <form class="space-y-4" @submit.prevent="savePatch('language', { language: form.language })">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.language.title') }}</h3>
         <BaseFormField :label="t('settings.language.selectLabel')" for-id="languageSelect">
@@ -196,6 +205,9 @@
     </div>
 
     <div v-else class="space-y-6 p-6">
+      <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
+        {{ loadError }}
+      </p>
       <section class="settings-section-content">
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.popupEditor.title') }}</h3>
         <form

@@ -183,6 +183,7 @@
       }
     },
     "preferences": {
+      "loadFailed": "Failed to load preferences: {error}",
       "saved": "Preferences saved.",
       "saveFailed": "Failed to save preferences: {error}"
     }

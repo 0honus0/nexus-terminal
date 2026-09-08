@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, reactive, ref, watch } from 'vue';
+  import { computed, onMounted, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseButton, BaseFormField, BaseInput, BaseTextarea } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
@@ -20,6 +20,10 @@
   const rawThemeEditing = ref(false);
   const importInput = ref<HTMLInputElement | null>(null);
   const search = ref('');
+
+  onMounted(() => {
+    void store.refreshThemes().catch(() => feedback.notifyError(t('styleCustomizer.errorLoadThemeDataFailed')));
+  });
 
   const activeTheme = computed(
     () => store.themes.find((theme) => theme.id === store.settings.activeTerminalThemeId) ?? null,

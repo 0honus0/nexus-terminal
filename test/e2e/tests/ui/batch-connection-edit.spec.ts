@@ -110,6 +110,52 @@ test('batch edit reports partial failure and keeps only the failed item selected
   }
 });
 
+test('batch edit loads auxiliary catalogs only when opened and remains usable when they fail', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await cleanup(context.request);
+  const id = await createConnection(context.request, NAMES[0]);
+  let proxyRequests = 0;
+  let keyRequests = 0;
+  await page.route('**/api/v1/proxies', (route) => {
+    proxyRequests += 1;
+    void route.abort('failed');
+  });
+  await page.route('**/api/v1/ssh-keys', (route) => {
+    keyRequests += 1;
+    void route.abort('failed');
+  });
+
+  try {
+    await page.goto('/connections');
+    expect(proxyRequests).toBe(0);
+    expect(keyRequests).toBe(0);
+
+    await page.getByTestId('batch-edit-toggle').click();
+    await page.getByTestId(`connection-row-${id}`).click();
+    await page.getByTestId('batch-edit-selected').click();
+    const modal = page.getByTestId('batch-edit-modal');
+    await expect(modal).toBeVisible();
+    await expect.poll(() => proxyRequests).toBeGreaterThan(0);
+    await expect.poll(() => keyRequests).toBeGreaterThan(0);
+    await expect(page.getByText('Failed to load proxies: Network Error', { exact: true })).toBeVisible();
+    await expect(page.getByText('Failed to load SSH keys: Network Error', { exact: true })).toBeVisible();
+
+    await modal.getByTestId('batch-edit-advanced-toggle').check();
+    await modal.getByTestId('batch-edit-notes-toggle').check();
+    await modal.locator('#batch-notes').fill('aux-catalog-failure-still-usable');
+    await modal.getByTestId('batch-edit-save').click();
+    await expect(modal).toBeHidden({ timeout: 15_000 });
+    const persisted = await context.request.get(`/api/v1/connections/${id}`);
+    expect(persisted.ok()).toBeTruthy();
+    await expect(persisted.json()).resolves.toMatchObject({ notes: 'aux-catalog-failure-still-usable' });
+  } finally {
+    await cleanup(context.request);
+  }
+});
+
 test.describe('narrow connections viewport', () => {
   test.use({
     viewport: { width: 375, height: 812 },

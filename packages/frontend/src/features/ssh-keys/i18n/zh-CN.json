@@ -5,6 +5,7 @@
       "useDirectInput": "或直接输入密钥内容",
       "manageKeysTitle": "管理 SSH 密钥",
       "loadingKeys": "正在加载密钥...",
+      "loadFailed": "加载 SSH 密钥失败：{error}",
       "noKey": "不使用 SSH 密钥",
       "manage": "管理"
     },

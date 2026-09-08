@@ -10,6 +10,7 @@
   const store = useAppearanceStore();
   const draft = ref(defaultWindowThemeColor);
   const saving = ref(false);
+  const loadError = ref(false);
   const status = ref<'saved' | 'error' | null>(null);
   const normalize = (value: string): string | null => {
     const trimmed = value.trim();
@@ -22,8 +23,13 @@
   };
   watch(() => store.settings.windowThemeColor, sync);
   onMounted(async () => {
-    await store.load();
-    sync();
+    try {
+      await store.load();
+    } catch {
+      loadError.value = true;
+    } finally {
+      sync();
+    }
   });
   const save = async (): Promise<void> => {
     const value = normalize(draft.value);
@@ -59,6 +65,9 @@
       {{ t('settings.category.appearance') }}
     </h2>
     <div class="space-y-6 p-6">
+      <p v-if="loadError" class="rounded border border-error/40 bg-error/5 p-3 text-sm text-error">
+        {{ t('settings.appearance.loadFailed') }}
+      </p>
       <div>
         <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.appearance.title') }}</h3>
         <p class="mb-4 text-sm text-text-secondary">{{ t('settings.appearance.description') }}</p>

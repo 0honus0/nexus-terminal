@@ -1,7 +1,7 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import type { Response } from '@playwright/test';
 import { loginAsInitialAdmin } from '../../support/auth';
-import { configureSshE2eSettings, E2E_SSH } from '../../support/ssh';
+import { configureSshE2eSettings, E2E_SSH, ensureTestSshConnection } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
 
 const FORM_NAME = 'E2E UI Created SSH';
@@ -36,6 +36,40 @@ test.beforeEach(async ({ context }) => {
 
 test.afterEach(async ({ context }) => {
   await cleanupConnections(context.request);
+});
+
+test('connections page remains usable when connection tags fail to load', async ({ page, context }) => {
+  const connectionId = await ensureTestSshConnection(context.request);
+  await page.route('**/api/v1/tags', (route) => route.abort('failed'));
+
+  await page.goto('/connections');
+  await expect(page.getByTestId(`connection-row-${connectionId}`)).toBeVisible();
+  await expect(
+    page.getByText('Failed to load connection tags. Connections are still available.', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByTestId('connections-add-button')).toBeEnabled();
+});
+
+test('direct connection form remains usable when the proxy catalog fails to load', async ({ page }) => {
+  await page.goto('/connections');
+  await page.route('**/api/v1/proxies', (route) => route.abort('failed'));
+  await page.getByTestId('connections-add-button').click();
+
+  const form = page.getByTestId('connection-form');
+  await expect(form).toBeVisible();
+  await expect(page.getByText('Failed to load proxies: Network Error', { exact: true })).toBeVisible();
+  await form.locator('#conn-name').fill(FORM_NAME);
+  await form.locator('#conn-host').fill(E2E_SSH.host);
+  await form.locator('#conn-port').fill(String(E2E_SSH.port));
+  await form.locator('#conn-username').fill(E2E_SSH.username);
+  await form.locator('#conn-password').fill(E2E_SSH.password);
+
+  const createPromise = page.waitForResponse(
+    (response) => response.url().endsWith('/api/v1/connections') && response.request().method() === 'POST',
+  );
+  await form.getByTestId('connection-submit-button').click();
+  expect((await createPromise).status()).toBe(201);
+  await expect(form).toBeHidden({ timeout: 15_000 });
 });
 
 test('regular connection form tests and creates a persisted working SSH connection', async ({ page, context }) => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { onMounted, reactive, ref, watch } from 'vue';
+  import { reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     BaseButton,
@@ -10,6 +10,7 @@
     BaseSelect,
     BaseTextarea,
   } from '@/foundation/ui';
+  import { useFeedback } from '@/shared/feedback/public';
   import { ConnectionTagPicker } from '@/features/tags/public';
   import { useProxies } from '@/features/proxies/public';
   import { useSshKeys } from '@/features/ssh-keys/public';
@@ -20,6 +21,7 @@
   const props = defineProps<{ visible: boolean; count: number }>();
   const emit = defineEmits<{ close: []; save: [update: ConnectionUpdate] }>();
   const { t } = useI18n();
+  const feedback = useFeedback();
   const proxies = useProxies();
   const sshKeys = useSshKeys();
 
@@ -59,9 +61,31 @@
     });
   };
 
+  const loadOptions = async (): Promise<void> => {
+    const [proxyResult, keyResult] = await Promise.allSettled([proxies.load(), sshKeys.load()]);
+    if (proxyResult.status === 'rejected') {
+      feedback.notifyError(
+        t('proxies.error', {
+          error: proxyResult.reason instanceof Error ? proxyResult.reason.message : String(proxyResult.reason),
+        }),
+      );
+    }
+    if (keyResult.status === 'rejected') {
+      feedback.notifyError(
+        t('sshKeys.selector.loadFailed', {
+          error: keyResult.reason instanceof Error ? keyResult.reason.message : String(keyResult.reason),
+        }),
+      );
+    }
+  };
   watch(
     () => props.visible,
-    (visible) => visible && reset(),
+    (visible) => {
+      if (!visible) return;
+      reset();
+      void loadOptions();
+    },
+    { immediate: true },
   );
   watch(
     () => form.authChoice,
@@ -71,8 +95,6 @@
       error.value = '';
     },
   );
-  onMounted(() => Promise.all([proxies.load(), sshKeys.load()]));
-
   const save = () => {
     error.value = '';
     const update: ConnectionUpdate = {};
