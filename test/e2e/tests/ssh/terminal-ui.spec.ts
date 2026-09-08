@@ -351,9 +351,7 @@ test('desktop touch hardware keeps the legacy desktop Workspace classification',
 test('a failed logout still releases live Workspace sessions before reporting the error', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  expect(
-    (await context.request.put('/api/v1/settings/nav-bar-visibility', { data: { visible: true } })).ok(),
-  ).toBeTruthy();
+  expect((await context.request.put('/api/v1/settings', { data: { navBarVisible: true } })).ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
@@ -385,9 +383,7 @@ test('a protected API 401 invalidates the local session and releases the live Wo
 
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  expect(
-    (await context.request.put('/api/v1/settings/nav-bar-visibility', { data: { visible: true } })).ok(),
-  ).toBeTruthy();
+  expect((await context.request.put('/api/v1/settings', { data: { navBarVisible: true } })).ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
@@ -402,8 +398,9 @@ test('a protected API 401 invalidates the local session and releases the live Wo
 
   const unauthorized = page.waitForResponse(
     (response) =>
-      response.url().includes('/api/v1/settings/nav-bar-visibility') &&
+      response.url().endsWith('/api/v1/settings') &&
       response.request().method() === 'PUT' &&
+      (response.request().postDataJSON() as { navBarVisible?: boolean } | null)?.navBarVisible === false &&
       response.status() === 401,
   );
   await tabBar.getByRole('button', { name: 'Hide', exact: true }).click();

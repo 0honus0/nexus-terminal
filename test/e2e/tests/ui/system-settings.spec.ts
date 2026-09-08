@@ -79,27 +79,52 @@ test('system settings persist timezone and language changes through the UI', asy
   }
 });
 
-test('preferences keep main settings when an auxiliary settings endpoint fails', async ({ page, context }) => {
+test('preferences load workspace values from the unified settings contract', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');
   expect(originalResponse.ok()).toBeTruthy();
-  const original = (await originalResponse.json()) as { language?: string; showPopupFileManager?: boolean };
+  const original = (await originalResponse.json()) as {
+    language?: string;
+    showPopupFileManager?: boolean;
+    navBarVisible?: boolean;
+    showConnectionTags?: boolean;
+    showQuickCommandTags?: boolean;
+  };
   const normalize = await context.request.put('/api/v1/settings', {
-    data: { language: 'en-US', showPopupFileManager: true },
+    data: {
+      language: 'en-US',
+      showPopupFileManager: true,
+      navBarVisible: true,
+      showConnectionTags: false,
+      showQuickCommandTags: false,
+    },
   });
   expect(normalize.ok()).toBeTruthy();
 
-  await page.route('**/api/v1/settings/nav-bar-visibility', (route) => route.abort('failed'));
+  const retiredRequests: string[] = [];
+  page.on('request', (request) => {
+    if (
+      /\/api\/v1\/settings\/(?:nav-bar-visibility|show-connection-tags|show-quick-command-tags|show-status-monitor-ip-address)/.test(
+        request.url(),
+      )
+    )
+      retiredRequests.push(request.url());
+  });
   try {
     await page.goto('/settings');
     await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
     await expect(page.locator('#showPopupFileManager')).toBeChecked();
+    await expect(page.locator('#showConnectionTags')).not.toBeChecked();
+    await expect(page.locator('#showQuickCommandTags')).not.toBeChecked();
+    expect(retiredRequests).toEqual([]);
   } finally {
-    await page.unroute('**/api/v1/settings/nav-bar-visibility');
     const restore = await context.request.put('/api/v1/settings', {
       data: {
         language: original.language ?? 'en-US',
         showPopupFileManager: original.showPopupFileManager ?? false,
+        navBarVisible: original.navBarVisible ?? true,
+        showConnectionTags: original.showConnectionTags ?? true,
+        showQuickCommandTags: original.showQuickCommandTags ?? true,
       },
     });
     expect(restore.ok()).toBeTruthy();

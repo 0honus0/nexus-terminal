@@ -56,4 +56,65 @@ test.describe('authenticated HTTP API', () => {
     expect(after.fileManagerRowSizeMultiplier).toBe(before.fileManagerRowSizeMultiplier);
     expect(after.quickCommandRowSizeMultiplier).toBe(before.quickCommandRowSizeMultiplier);
   });
+
+  test('uses one clean settings DTO and retires split preference endpoints', async ({ request }) => {
+    await loginAsInitialAdmin(request);
+    const beforeResponse = await request.get('/api/v1/settings');
+    expect(beforeResponse.ok()).toBeTruthy();
+    const before = (await beforeResponse.json()) as {
+      navBarVisible?: boolean;
+      showConnectionTags?: boolean;
+      showQuickCommandTags?: boolean;
+      showStatusMonitorIpAddress?: boolean;
+    };
+    expect(before).not.toHaveProperty('ipWhitelistEnabled');
+
+    try {
+      const update = await request.put('/api/v1/settings', {
+        data: {
+          navBarVisible: false,
+          showConnectionTags: false,
+          showQuickCommandTags: false,
+          showStatusMonitorIpAddress: true,
+        },
+      });
+      expect(update.ok()).toBeTruthy();
+
+      const settingsResponse = await request.get('/api/v1/settings');
+      expect(settingsResponse.ok()).toBeTruthy();
+      const settings = (await settingsResponse.json()) as Record<string, unknown>;
+      expect(settings).toMatchObject({
+        navBarVisible: false,
+        showConnectionTags: false,
+        showQuickCommandTags: false,
+        showStatusMonitorIpAddress: true,
+      });
+      for (const legacyName of [
+        'nav_bar_visible',
+        'show_connection_tags',
+        'show_quick_command_tags',
+        'show_status_monitor_ip_address',
+      ])
+        expect(settings).not.toHaveProperty(legacyName);
+
+      for (const path of [
+        '/api/v1/settings/nav-bar-visibility',
+        '/api/v1/settings/show-connection-tags',
+        '/api/v1/settings/show-quick-command-tags',
+        '/api/v1/settings/show-status-monitor-ip-address',
+      ]) {
+        expect((await request.get(path)).status()).toBe(404);
+      }
+    } finally {
+      const restore = await request.put('/api/v1/settings', {
+        data: {
+          navBarVisible: before.navBarVisible ?? true,
+          showConnectionTags: before.showConnectionTags ?? true,
+          showQuickCommandTags: before.showQuickCommandTags ?? true,
+          showStatusMonitorIpAddress: before.showStatusMonitorIpAddress ?? false,
+        },
+      });
+      expect(restore.ok()).toBeTruthy();
+    }
+  });
 });

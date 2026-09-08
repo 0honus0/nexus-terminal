@@ -13,7 +13,7 @@
     "tests/ui/protected-navigation.spec.ts",
     "tests/ui/ssh-key-management.spec.ts",
     "tests/websocket/authenticated-session.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts",
+    "tests/ssh/progress-display-copy-cancel.spec.ts",
     "tests/ssh/docker-manager-ui.spec.ts",
     "tests/ssh/protocol.spec.ts",
     "tests/ssh/status-docker-protocol.spec.ts",

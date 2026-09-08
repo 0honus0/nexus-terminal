@@ -91,6 +91,7 @@ export const SETTINGS_MIGRATIONS: readonly SettingsMigration[] = [
         : {};
     },
   },
+  removeSetting(9, 'ipWhitelistEnabled'),
 ];
 
 const validateMigrations = (migrations: readonly SettingsMigration[]): void => {

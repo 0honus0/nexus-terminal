@@ -53,8 +53,8 @@ async function recreateSecondaryConnection(request: APIRequestContext): Promise<
 test('workspace connection search filters by name and host and restores the full list', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  const settings = await context.request.put('/api/v1/settings/show-connection-tags', {
-    data: { enabled: false },
+  const settings = await context.request.put('/api/v1/settings', {
+    data: { showConnectionTags: false },
   });
   expect(settings.ok()).toBeTruthy();
   await resetTestSshFilesystem();
@@ -101,8 +101,8 @@ test('workspace connection list remains usable when connection tags fail to load
   await configureSshE2eSettings(context.request);
   expect(
     (
-      await context.request.put('/api/v1/settings/show-connection-tags', {
-        data: { enabled: true },
+      await context.request.put('/api/v1/settings', {
+        data: { showConnectionTags: true },
       })
     ).ok(),
   ).toBeTruthy();
@@ -142,8 +142,8 @@ test('workspace tag picker and group manager create, assign, remove, rename, and
   await configureSshE2eSettings(context.request);
   expect(
     (
-      await context.request.put('/api/v1/settings/show-connection-tags', {
-        data: { enabled: true },
+      await context.request.put('/api/v1/settings', {
+        data: { showConnectionTags: true },
       })
     ).ok(),
   ).toBeTruthy();

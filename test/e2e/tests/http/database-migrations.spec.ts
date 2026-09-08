@@ -64,6 +64,19 @@ const waitForBackend = async (
 };
 
 const HISTORICAL_DATABASE_SQL = `
+  CREATE TABLE settings (
+    key TEXT PRIMARY KEY NOT NULL,
+    value TEXT NOT NULL,
+    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  );
+
+  CREATE TABLE settings_migrations (
+    version INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+  );
+
   CREATE TABLE proxies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -117,6 +130,12 @@ const HISTORICAL_DATABASE_SQL = `
     (11, 'Add force_keyboard_interactive column to connections table'),
     (18, 'Fix Telnet CHECK constraint and add missing FK indexes');
 
+  INSERT INTO settings_migrations (version, name)
+  VALUES (8, 'Historical settings schema baseline');
+
+  INSERT INTO settings (key, value)
+  VALUES ('ipWhitelistEnabled', 'false');
+
   INSERT INTO proxies (id, name, type, host, port)
   VALUES (1, 'Historical Proxy', 'SOCKS5', '198.51.100.10', 1080);
 
@@ -148,6 +167,8 @@ const readUpgradeEvidence = (
   hasRdpOptions: boolean;
   migrations: Array<{ id: number; name: string }>;
   routes: Array<{ name: string; proxy_id: number | null; proxy_type: string | null }>;
+  settingsMigrations: Array<{ version: number; name: string }>;
+  ipWhitelistEnabled: string | null;
 } => {
   const script = String.raw`
     const { DatabaseSync } = require('node:sqlite');
@@ -156,10 +177,14 @@ const readUpgradeEvidence = (
       const columns = db.prepare('PRAGMA table_info(connections)').all();
       const migrations = db.prepare('SELECT id, name FROM migrations WHERE id IN (19, 20) ORDER BY id').all();
       const routes = db.prepare("SELECT name, proxy_id, proxy_type FROM connections WHERE name IN ('Legacy Proxyless SSH', 'Historical Proxied SSH') ORDER BY id").all();
+      const settingsMigrations = db.prepare('SELECT version, name FROM settings_migrations WHERE version = 9').all();
+      const ipWhitelistEnabled = db.prepare("SELECT value FROM settings WHERE key = 'ipWhitelistEnabled'").get()?.value ?? null;
       process.stdout.write(JSON.stringify({
         hasRdpOptions: columns.some((column) => column.name === 'rdp_options'),
         migrations,
         routes,
+        settingsMigrations,
+        ipWhitelistEnabled,
       }));
     } finally {
       db.close();
@@ -168,7 +193,7 @@ const readUpgradeEvidence = (
   return JSON.parse(execFileSync(process.execPath, ['-e', script, databasePath], { cwd: repoRoot, encoding: 'utf8' }));
 };
 
-test('historical databases apply current connection migrations through normal backend startup', async () => {
+test('historical databases apply current connection and settings migrations through normal backend startup', async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'nexus-connection-migration-e2e-'));
   const databasePath = path.join(dataDir, 'nexus-terminal.db');
   createHistoricalDatabase(databasePath);
@@ -259,6 +284,8 @@ test('historical databases apply current connection migrations through normal ba
       { name: 'Legacy Proxyless SSH', proxy_id: null, proxy_type: null },
       { name: 'Historical Proxied SSH', proxy_id: 1, proxy_type: 'proxy' },
     ]);
+    expect(upgrade.settingsMigrations).toEqual([{ version: 9, name: 'Remove ipWhitelistEnabled' }]);
+    expect(upgrade.ipWhitelistEnabled).toBeNull();
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

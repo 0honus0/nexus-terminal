@@ -4,6 +4,7 @@ import type { CaptchaService } from '../../../modules/auth/captcha.service';
 import type { IpBlacklistService } from '../../../modules/auth/ip-blacklist.service';
 import type { TwoFactorService } from '../../../modules/auth/two-factor.service';
 import type { PasskeyService } from '../../../modules/passkey/passkey.service';
+import type { PasskeySummary } from '../../../modules/passkey/passkey.types';
 import type { SettingsService } from '../../../modules/settings/settings.service';
 import type { UserService } from '../../../modules/user/user.service';
 import { createIpBlacklistCheck, requireAuthenticated } from './auth.middleware';
@@ -11,6 +12,14 @@ import { destroySession, errorMessage, regenerateSession, requestIp } from '../s
 import { route } from '../shared/route-handler';
 
 const REMEMBER_ME_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+
+const passkeySummaryDto = (passkey: PasskeySummary) => ({
+  credentialId: passkey.credentialId,
+  name: passkey.name,
+  transports: passkey.transports,
+  createdAt: passkey.createdAt,
+  lastUsedAt: passkey.lastUsedAt,
+});
 
 export interface AuthRouterDependencies {
   auth: AuthService;
@@ -401,7 +410,7 @@ export const createAuthRouter = (dependencies: AuthRouterDependencies): Router =
     '/user/passkeys',
     requireAuthenticated,
     route(async (request, response) => {
-      response.json(await dependencies.passkeys.list(request.session.userId!));
+      response.json((await dependencies.passkeys.list(request.session.userId!)).map(passkeySummaryDto));
     }),
   );
 

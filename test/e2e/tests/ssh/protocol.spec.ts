@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from 'node:crypto';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, ensureTestSshConnection, resetTestSshFilesystem } from '../../support/ssh';
@@ -71,6 +72,50 @@ test('backend can authenticate to the real SSH test server', async ({ request })
 
   expect(response.ok()).toBeTruthy();
   await expect(response.json()).resolves.toMatchObject({ success: true });
+});
+
+test('saved SSH key survives a name-only update without exposing decrypted material', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const suffix = crypto.randomUUID();
+  const privateKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey.export({
+    type: 'pkcs1',
+    format: 'pem',
+  });
+  const createKey = await request.post('/api/v1/ssh-keys', {
+    data: { name: `E2E protocol key ${suffix}`, privateKey },
+  });
+  expect(createKey.status()).toBe(201);
+  const keyId = ((await createKey.json()) as { key: { id: number } }).key.id;
+  let connectionId = 0;
+
+  try {
+    const rename = await request.put(`/api/v1/ssh-keys/${keyId}`, {
+      data: { name: `E2E protocol key renamed ${suffix}` },
+    });
+    expect(rename.ok()).toBeTruthy();
+    expect((await request.get(`/api/v1/ssh-keys/${keyId}/details`)).status()).toBe(404);
+
+    const createConnection = await request.post('/api/v1/connections', {
+      data: {
+        name: `E2E key connection ${suffix}`,
+        type: 'SSH',
+        host: E2E_SSH.host,
+        port: E2E_SSH.port,
+        username: E2E_SSH.username,
+        authMethod: 'key',
+        sshKeyId: keyId,
+      },
+    });
+    expect(createConnection.status()).toBe(201);
+    connectionId = ((await createConnection.json()) as { connection: { id: number } }).connection.id;
+
+    const connectionTest = await request.post(`/api/v1/connections/${connectionId}/test`);
+    expect(connectionTest.ok()).toBeTruthy();
+    await expect(connectionTest.json()).resolves.toMatchObject({ success: true });
+  } finally {
+    if (connectionId) await request.delete(`/api/v1/connections/${connectionId}`).catch(() => undefined);
+    await request.delete(`/api/v1/ssh-keys/${keyId}`).catch(() => undefined);
+  }
 });
 
 test('duplicate workspace.connect is rejected without breaking filesystem access', async ({ request }) => {

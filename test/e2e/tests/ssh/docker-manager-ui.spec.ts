@@ -260,8 +260,8 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
   expect((await context.request.put('/api/v1/settings', { data: { layoutLocked: false } })).ok()).toBeTruthy();
   expect(
     (
-      await context.request.put('/api/v1/settings/nav-bar-visibility', {
-        data: { visible: true },
+      await context.request.put('/api/v1/settings', {
+        data: { navBarVisible: true },
       })
     ).ok(),
   ).toBeTruthy();
@@ -527,8 +527,8 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       await expect(tabBar.getByRole('button', { name: 'Show Top Navigation', exact: true })).toBeVisible();
       await expect
         .poll(async () => {
-          const response = await context.request.get('/api/v1/settings/nav-bar-visibility');
-          return ((await response.json()) as { visible: boolean }).visible;
+          const response = await context.request.get('/api/v1/settings');
+          return ((await response.json()) as { navBarVisible: boolean }).navBarVisible;
         })
         .toBe(false);
 
@@ -536,14 +536,14 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       await expect(header).toBeVisible();
       await expect
         .poll(async () => {
-          const response = await context.request.get('/api/v1/settings/nav-bar-visibility');
-          return ((await response.json()) as { visible: boolean }).visible;
+          const response = await context.request.get('/api/v1/settings');
+          return ((await response.json()) as { navBarVisible: boolean }).navBarVisible;
         })
         .toBe(true);
     });
   } finally {
     await context.request.put('/api/v1/settings/layout', { data: originalLayout });
     await context.request.put('/api/v1/settings', { data: { layoutLocked: false } });
-    await context.request.put('/api/v1/settings/nav-bar-visibility', { data: { visible: true } });
+    await context.request.put('/api/v1/settings', { data: { navBarVisible: true } });
   }
 });

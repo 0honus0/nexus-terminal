@@ -44,22 +44,17 @@ test('quick command search stays visible by default and can be collapsed behind 
   const original = (await originalResponse.json()) as {
     language?: string;
     quickCommandsCollapsibleSearch?: boolean;
+    showQuickCommandTags?: boolean;
   };
-  const originalTagVisibilityResponse = await context.request.get('/api/v1/settings/show-quick-command-tags');
-  expect(originalTagVisibilityResponse.ok()).toBeTruthy();
-  const originalTagVisibility = (await originalTagVisibilityResponse.json()) as { enabled?: boolean };
 
   const normalize = await context.request.put('/api/v1/settings', {
     data: {
       language: 'en-US',
       quickCommandsCollapsibleSearch: false,
+      showQuickCommandTags: false,
     },
   });
   expect(normalize.ok()).toBeTruthy();
-  const normalizeTags = await context.request.put('/api/v1/settings/show-quick-command-tags', {
-    data: { enabled: false },
-  });
-  expect(normalizeTags.ok()).toBeTruthy();
 
   const commandId = await recreateQuickCommand(context.request);
   const connectionId = await ensureTestSshConnection(context.request);
@@ -124,13 +119,10 @@ test('quick command search stays visible by default and can be collapsed behind 
       data: {
         language: original.language ?? 'en-US',
         quickCommandsCollapsibleSearch: original.quickCommandsCollapsibleSearch ?? false,
+        showQuickCommandTags: original.showQuickCommandTags ?? true,
       },
     });
     expect(restore.ok()).toBeTruthy();
-    const restoreTags = await context.request.put('/api/v1/settings/show-quick-command-tags', {
-      data: { enabled: originalTagVisibility.enabled ?? true },
-    });
-    expect(restoreTags.ok()).toBeTruthy();
     await context.request.delete(`/api/v1/quick-commands/${commandId}`);
   }
 });

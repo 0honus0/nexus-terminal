@@ -1,13 +1,24 @@
 import { Router } from 'express';
 import type { AuditLogService } from '../../../modules/audit/audit.service';
 import type { ProxyService } from '../../../modules/proxies/proxy.service';
-import type { ProxyAuthMethod, ProxyInput, ProxyType } from '../../../modules/proxies/proxy.types';
+import type { Proxy, ProxyAuthMethod, ProxyInput, ProxyType } from '../../../modules/proxies/proxy.types';
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
 const proxyTypes = new Set<ProxyType>(['SOCKS5', 'HTTP']);
 const authMethods = new Set<ProxyAuthMethod>(['none', 'password', 'key']);
+const proxyDto = (proxy: Proxy) => ({
+  id: proxy.id,
+  name: proxy.name,
+  type: proxy.type,
+  host: proxy.host,
+  port: proxy.port,
+  username: proxy.username,
+  authMethod: proxy.authMethod,
+  createdAt: proxy.createdAt,
+  updatedAt: proxy.updatedAt,
+});
 const optionalNullableString = (value: unknown, field: string): string | null | undefined => {
   if (value === undefined || value === null) return value;
   if (typeof value !== 'string') throw new Error(`${field} 必须是字符串或 null。`);
@@ -73,7 +84,7 @@ export const createProxiesRouter = (dependencies: { proxies: ProxyService; audit
   router.get(
     '/',
     route(async (_request, response) => {
-      response.json(await dependencies.proxies.list());
+      response.json((await dependencies.proxies.list()).map(proxyDto));
     }),
   );
 
@@ -90,7 +101,7 @@ export const createProxiesRouter = (dependencies: { proxies: ProxyService; audit
         response.status(404).json({ message: `未找到 ID 为 ${id} 的代理` });
         return;
       }
-      response.json(proxy);
+      response.json(proxyDto(proxy));
     }),
   );
 
@@ -101,7 +112,7 @@ export const createProxiesRouter = (dependencies: { proxies: ProxyService; audit
         const input = proxyCreateInput(request.body);
         const proxy = await dependencies.proxies.create(input);
         await dependencies.audit.logAction('PROXY_CREATED', { proxyId: proxy.id, name: proxy.name, type: proxy.type });
-        response.status(201).json({ message: '代理创建成功', proxy });
+        response.status(201).json({ message: '代理创建成功', proxy: proxyDto(proxy) });
       } catch (error) {
         const message = errorMessage(error);
         response
@@ -136,7 +147,7 @@ export const createProxiesRouter = (dependencies: { proxies: ProxyService; audit
           return;
         }
         await dependencies.audit.logAction('PROXY_UPDATED', { proxyId: id, updatedFields: Object.keys(request.body) });
-        response.json({ message: '代理更新成功', proxy: updated });
+        response.json({ message: '代理更新成功', proxy: proxyDto(updated) });
       } catch (error) {
         const message = errorMessage(error);
         response
