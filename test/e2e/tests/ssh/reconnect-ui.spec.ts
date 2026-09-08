@@ -331,13 +331,11 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
       await step('close the final tab and return to the real empty Workspace state', async () => {
         await tabForName(MULTI_SESSION_NAMES[1]).getByRole('button', { name: 'Close Tab', exact: true }).click();
         await expect(tabs).toHaveCount(0);
-        await expect(page.getByTestId('workspace-connection-list')).toBeVisible();
-        await expect(
-          page
-            .getByTestId('workspace-connection-list')
-            .locator('[data-connection-id]')
-            .filter({ hasText: MULTI_SESSION_NAMES[0] }),
-        ).toBeVisible();
+        await expect(page.getByTestId('no-session-placeholder')).toBeVisible();
+        await page.getByRole('button', { name: 'New Connection Tab', exact: true }).click();
+        const list = page.getByTestId('workspace-connection-list');
+        await expect(list).toBeVisible();
+        await expect(list.locator('[data-connection-id]').filter({ hasText: MULTI_SESSION_NAMES[0] })).toBeVisible();
       });
     } finally {
       await setTestSshOnline(true);
