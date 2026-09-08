@@ -453,17 +453,6 @@
             <i class="fas fa-terminal" aria-hidden="true"></i>
           </button>
         </template>
-        <button
-          v-if="!terminalSearchOpen"
-          type="button"
-          class="command-bar-button"
-          :disabled="!ready || !command"
-          :title="t('common.all')"
-          :aria-label="t('common.all')"
-          @click="send(true)"
-        >
-          <i class="fas fa-share-alt" aria-hidden="true"></i>
-        </button>
       </div>
     </div>
   </form>

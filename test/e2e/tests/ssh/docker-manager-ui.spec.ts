@@ -306,6 +306,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         const suspendedSearch = suspendedPanel.locator('.suspended-session-search');
         await expect(suspendedPanel).toBeVisible();
         await expect(suspendedSearch).toBeVisible();
+        await expect(suspendedSearch).toHaveAttribute('type', 'text');
+        await expect
+          .poll(() => suspendedSearch.evaluate((element) => getComputedStyle(element).paddingRight))
+          .toBe('8px');
 
         await page.setViewportSize({ width: 1440, height: 1200 });
         await expect.poll(async () => (await filePane.boundingBox())?.height ?? 0).toBeGreaterThan(340);
@@ -395,6 +399,19 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       expect(narrowMetrics.iconNameGap as number).toBeLessThanOrEqual(12);
       expect(narrowMetrics.typeWidth).toBeLessThanOrEqual(34);
       expect(narrowMetrics.metadataDisplay).toBe('none');
+      const pathMetrics = await fileManager.evaluate((element) => {
+        const toolbar = element.querySelector<HTMLElement>('.file-manager-toolbar')!;
+        const path = element.querySelector<HTMLElement>('.file-manager-path-input')!;
+        const toolbarStyle = getComputedStyle(toolbar);
+        return {
+          pathWidth: path.getBoundingClientRect().width,
+          contentWidth:
+            toolbar.getBoundingClientRect().width -
+            Number.parseFloat(toolbarStyle.paddingLeft) -
+            Number.parseFloat(toolbarStyle.paddingRight),
+        };
+      });
+      expect(Math.abs(pathMetrics.pathWidth - pathMetrics.contentWidth)).toBeLessThan(2);
 
       const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/readdir-delay?ms=1200`, { method: 'POST' });
       expect(delayResponse.ok).toBeTruthy();
@@ -438,6 +455,21 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
       await page.getByTestId('terminal-tab-bar').getByRole('button', { name: 'Configure Layout', exact: true }).click();
       const configurator = page.getByRole('dialog', { name: 'Layout Configurator', exact: true });
       await expect(configurator).toBeVisible();
+      await expect(configurator.locator('input[type="number"]')).toHaveCount(0);
+      await expect(configurator.locator('.drag-handle-node').first()).toBeVisible();
+      await expect(configurator.getByTitle('Add Horizontal Container').first()).toContainText('H');
+      await expect(configurator.getByTitle('Add Vertical Container').first()).toContainText('V');
+      await expect(configurator.getByTestId('layout-left-sidebar-list')).toBeVisible();
+      const rightSidebar = configurator.getByTestId('layout-right-sidebar-list');
+      await expect(rightSidebar).toBeVisible();
+
+      const availableEditor = configurator.getByTestId('layout-available-pane-editor');
+      await expect(availableEditor).toBeVisible();
+      await availableEditor.dragTo(rightSidebar);
+      const draggedEditor = rightSidebar.locator('li').filter({ hasText: 'Editor' }).first();
+      await expect(draggedEditor).toBeVisible();
+      await draggedEditor.getByRole('button', { name: 'Remove', exact: true }).click();
+      await expect(draggedEditor).toHaveCount(0);
 
       const horizontal = configurator.getByTestId('workspace-layout-children-workspace-layout-root');
       await expect(horizontal).toHaveAttribute('data-layout-direction', 'horizontal');

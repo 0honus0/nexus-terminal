@@ -136,9 +136,9 @@
         </span>
         <input
           v-model="data.search.value"
-          type="search"
+          type="text"
           :placeholder="t('suspendedSshSessions.searchPlaceholder')"
-          class="suspended-session-search w-full rounded-lg border border-border/50 bg-input py-1.5 pl-10 pr-4 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
+          class="suspended-session-search w-full rounded-lg border border-border/50 bg-input py-1.5 pl-10 pr-2 text-sm text-foreground shadow-sm transition duration-150 ease-in-out focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/50"
         />
       </div>
     </div>

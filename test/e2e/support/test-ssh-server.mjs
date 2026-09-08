@@ -35,6 +35,7 @@ let statusSample = 0;
 let sftpWriteDelayMs = 0;
 let sftpStatDelayMs = 0;
 let sftpReadDirDelayMs = 0;
+let sftpReadDelayMs = 0;
 let archiveExecDelayMs = 0;
 let dockerContainerPresent = true;
 let dockerContainerState = 'running';
@@ -539,6 +540,7 @@ async function resetRoot() {
   sftpWriteDelayMs = 0;
   sftpStatDelayMs = 0;
   sftpReadDirDelayMs = 0;
+  sftpReadDelayMs = 0;
   archiveExecDelayMs = 0;
 }
 
@@ -686,6 +688,9 @@ function attachSftp(session, accept) {
       return;
     }
     try {
+      if (sftpReadDelayMs > 0) {
+        await new Promise((resolve) => setTimeout(resolve, sftpReadDelayMs));
+      }
       const buffer = Buffer.alloc(length);
       const { bytesRead } = await state.fileHandle.read(buffer, 0, length, Number(offset));
       if (bytesRead === 0) sftp.status(reqid, STATUS_CODE.EOF);
@@ -1139,6 +1144,7 @@ const controlServer = http.createServer(async (req, res) => {
       sftpWriteDelayMs = 0;
       sftpStatDelayMs = 0;
       sftpReadDirDelayMs = 0;
+      sftpReadDelayMs = 0;
       archiveExecDelayMs = 0;
       activeSftpChannels.clear();
       openedSftpChannels = 0;
@@ -1185,6 +1191,13 @@ const controlServer = http.createServer(async (req, res) => {
         : 0;
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ sftpReadDirDelayMs }));
+      return;
+    }
+    if (req.method === 'POST' && requestUrl.pathname === '/sftp/read-delay') {
+      const requestedDelay = Number(requestUrl.searchParams.get('ms') || '0');
+      sftpReadDelayMs = Number.isFinite(requestedDelay) ? Math.max(0, Math.min(10_000, Math.round(requestedDelay))) : 0;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ sftpReadDelayMs }));
       return;
     }
     if (req.method === 'POST' && requestUrl.pathname === '/archive/exec-delay') {

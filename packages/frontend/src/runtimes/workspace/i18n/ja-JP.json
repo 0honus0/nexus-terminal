@@ -49,6 +49,8 @@
     "containerLabel": "コンテナー ({direction})",
     "horizontal": "水平",
     "vertical": "垂直",
+    "horizontalShort": "H",
+    "verticalShort": "V",
     "toggleDirection": "方向を切り替える",
     "addHorizontalContainer": "水平コンテナーを追加",
     "addVerticalContainer": "垂直コンテナーを追加",

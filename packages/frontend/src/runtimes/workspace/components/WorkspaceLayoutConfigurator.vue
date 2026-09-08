@@ -1,17 +1,19 @@
 <script setup lang="ts">
   import { computed, ref, toRaw, watch } from 'vue';
+  import draggable from 'vuedraggable';
   import { useI18n } from 'vue-i18n';
-  import { BaseModal } from '@/foundation/ui';
+  import { OverlayPanel } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import WorkspaceLayoutNodeEditor from './WorkspaceLayoutNodeEditor.vue';
   import {
-    appendWorkspaceLayoutChild,
     createDefaultWorkspaceLayout,
     workspaceLayout,
     type WorkspaceLayoutNode,
     type WorkspacePaneName,
     type WorkspaceSidebarConfig,
   } from '../layout/workspaceLayout';
+
+  type DragItem = WorkspaceLayoutNode | WorkspacePaneName;
 
   const props = defineProps<{ visible: boolean; layoutLocked?: boolean }>();
   const emit = defineEmits<{ close: []; layoutLocked: [locked: boolean] }>();
@@ -33,6 +35,7 @@
     };
     return unproxy(value) as T;
   };
+
   watch(
     () => props.visible,
     (visible) => {
@@ -46,94 +49,85 @@
   );
 
   const mainPanes = computed(() => {
-    const result: WorkspacePaneName[] = [];
-    const visit = (node: WorkspaceLayoutNode) => {
-      if (node.type === 'pane' && node.component) result.push(node.component);
+    const result = new Set<WorkspacePaneName>();
+    const visit = (node: WorkspaceLayoutNode): void => {
+      if (node.type === 'pane' && node.component) result.add(node.component);
       else for (const child of node.children ?? []) visit(child);
     };
     visit(draft.value);
     return result;
   });
+
   const hasChanges = computed(
     () =>
       JSON.stringify(draft.value) !== JSON.stringify(originalDraft.value) ||
       JSON.stringify(sidebar.value) !== JSON.stringify(originalSidebar.value),
   );
-
-  const sidebarPanes = computed(() => new Set<WorkspacePaneName>([...sidebar.value.left, ...sidebar.value.right]));
+  const allUsedPanes = computed(
+    () => new Set<WorkspacePaneName>([...mainPanes.value, ...sidebar.value.left, ...sidebar.value.right]),
+  );
   const availablePanes = computed(() =>
-    workspaceLayout.paneNames.filter(
-      (pane) => pane !== 'terminal' || (!mainPanes.value.includes('terminal') && !sidebarPanes.value.has('terminal')),
-    ),
+    workspaceLayout.paneNames.filter((pane) => pane !== 'terminal' || !allUsedPanes.value.has('terminal')),
   );
-  const mainAvailablePanes = computed(() =>
-    workspaceLayout.paneNames.filter(
-      (pane) => !mainPanes.value.includes(pane) && (pane !== 'terminal' || !sidebarPanes.value.has('terminal')),
-    ),
-  );
+
   const paneLabel = (pane: WorkspacePaneName): string => t(`layout.pane.${pane}`);
-  const paneIcon = (pane: WorkspacePaneName): string => {
-    if (pane === 'connections') return 'fas fa-network-wired';
-    if (pane === 'fileManager') return 'fas fa-folder-open';
-    if (pane === 'commandHistory') return 'fas fa-history';
-    if (pane === 'quickCommands') return 'fas fa-bolt';
-    if (pane === 'dockerManager') return 'fab fa-docker';
-    if (pane === 'editor') return 'fas fa-file-alt';
-    if (pane === 'statusMonitor') return 'fas fa-tachometer-alt';
-    if (pane === 'suspendedSshSessions') return 'fas fa-pause-circle';
-    if (pane === 'commandBar') return 'fas fa-terminal';
-    if (pane === 'terminal') return 'fas fa-terminal';
-    return 'fas fa-window-maximize';
-  };
-  const addToMain = (pane: WorkspacePaneName): void => {
-    if (!mainAvailablePanes.value.includes(pane)) return;
-    const child: WorkspaceLayoutNode = { id: crypto.randomUUID(), type: 'pane', component: pane, size: 25 };
-    if (draft.value.type === 'container') {
-      const currentChildren = draft.value.children ?? [];
-      const children = appendWorkspaceLayoutChild(currentChildren, child);
-      if (children.length === currentChildren.length) return;
-      draft.value = { ...draft.value, children };
-      return;
+  const clonePane = (pane: WorkspacePaneName): WorkspaceLayoutNode => ({
+    id: crypto.randomUUID(),
+    type: 'pane',
+    component: pane,
+    size: 25,
+  });
+
+  const normalizeSidebar = (side: 'left' | 'right', items: DragItem[]): WorkspacePaneName[] => {
+    const other = side === 'left' ? sidebar.value.right : sidebar.value.left;
+    const next: WorkspacePaneName[] = [];
+    for (const item of items) {
+      const pane = typeof item === 'string' ? item : item.type === 'pane' ? item.component : undefined;
+      if (!pane || next.includes(pane) || other.includes(pane)) continue;
+      next.push(pane);
     }
-    const children = appendWorkspaceLayoutChild([{ ...draft.value, size: 100 }], child);
-    draft.value = {
-      id: crypto.randomUUID(),
-      type: 'container',
-      direction: 'horizontal',
-      children,
-    };
+    return next;
   };
-  const moveSidebar = (side: 'left' | 'right', index: number, delta: number): void => {
+
+  const leftSidebar = computed<DragItem[]>({
+    get: () => sidebar.value.left,
+    set: (items) => {
+      sidebar.value = { ...sidebar.value, left: normalizeSidebar('left', items) };
+    },
+  });
+  const rightSidebar = computed<DragItem[]>({
+    get: () => sidebar.value.right,
+    set: (items) => {
+      sidebar.value = { ...sidebar.value, right: normalizeSidebar('right', items) };
+    },
+  });
+
+  const canMoveToSidebar = (event: { draggedContext?: { element?: DragItem } }): boolean => {
+    const item = event.draggedContext?.element;
+    return Boolean(typeof item === 'string' || (item && typeof item === 'object' && item.type === 'pane'));
+  };
+
+  const removeSidebarPane = (side: 'left' | 'right', index: number): void => {
     const next = [...sidebar.value[side]];
-    const target = index + delta;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target]!, next[index]!];
+    next.splice(index, 1);
     sidebar.value = { ...sidebar.value, [side]: next };
   };
+
   const toggleLayoutLock = (): void => emit('layoutLocked', !Boolean(props.layoutLocked));
-  const setSidebar = (side: 'left' | 'right', name: WorkspacePaneName, enabled: boolean) => {
-    const other = side === 'left' ? 'right' : 'left';
-    if (enabled) {
-      if ((name === 'terminal' && mainPanes.value.includes(name)) || sidebar.value[other].includes(name)) return;
-      sidebar.value = { ...sidebar.value, [side]: [...new Set([...sidebar.value[side], name])] };
-      return;
-    }
-    sidebar.value = { ...sidebar.value, [side]: sidebar.value[side].filter((item) => item !== name) };
-  };
-  const attemptClose = async () => {
+  const attemptClose = async (): Promise<void> => {
     if (hasChanges.value) {
       const confirmed = await feedback.confirm({ message: t('layoutConfigurator.confirmClose') });
       if (!confirmed) return;
     }
     emit('close');
   };
-  const reset = async () => {
+  const reset = async (): Promise<void> => {
     const confirmed = await feedback.confirm({ message: t('layoutConfigurator.confirmReset') });
     if (!confirmed) return;
     draft.value = createDefaultWorkspaceLayout();
     sidebar.value = { left: ['connections', 'dockerManager'], right: [] };
   };
-  const save = async () => {
+  const save = async (): Promise<void> => {
     saving.value = true;
     try {
       await workspaceLayout.save(clone(draft.value), clone(sidebar.value));
@@ -147,232 +141,218 @@
 </script>
 
 <template>
-  <BaseModal
+  <OverlayPanel
     :visible="visible"
-    :title="t('layoutConfigurator.title')"
-    panel-class="h-auto min-h-[600px] w-auto min-w-[800px] max-w-[95vw] max-h-[90dvh]"
-    content-class="!py-0"
+    :z-index="1000"
+    :surface="false"
+    overlay-class="!p-0"
+    :close-on-escape="true"
     @close="attemptClose"
   >
-    <main class="grid min-h-[450px] flex-1 grid-cols-[220px_minmax(0,1fr)] gap-6 overflow-y-auto py-6">
-      <section class="flex min-w-[200px] flex-col overflow-y-auto border-r border-border pr-6">
-        <h3 class="mb-4 text-base font-semibold text-text-secondary">{{ t('layoutConfigurator.availablePanes') }}</h3>
-        <ul class="m-0 flex-grow list-none space-y-2 p-0">
-          <li
-            v-for="pane in availablePanes"
-            :key="pane"
-            class="flex items-center gap-2 rounded border border-border bg-background p-2 text-sm transition-colors hover:bg-header/60"
-          >
-            <i :class="paneIcon(pane)" class="w-4 shrink-0 text-center text-text-alt" aria-hidden="true"></i>
-            <span class="min-w-0 flex-1 truncate">{{ paneLabel(pane) }}</span>
-            <button
-              type="button"
-              class="available-action"
-              :title="t('layoutConfigurator.layoutPreview')"
-              :disabled="!mainAvailablePanes.includes(pane)"
-              @click="addToMain(pane)"
-            >
-              <i class="fas fa-plus" aria-hidden="true"></i>
-            </button>
-            <button
-              type="button"
-              class="available-action"
-              :title="t('layoutConfigurator.leftSidebar')"
-              @click="setSidebar('left', pane, true)"
-            >
-              ←
-            </button>
-            <button
-              type="button"
-              class="available-action"
-              :title="t('layoutConfigurator.rightSidebar')"
-              @click="setSidebar('right', pane, true)"
-            >
-              →
-            </button>
-          </li>
-          <li v-if="!availablePanes.length" class="p-2 text-sm italic text-text-alt">
-            {{ t('layoutConfigurator.noAvailablePanes') }}
-          </li>
-        </ul>
-      </section>
+    <div
+      data-testid="workspace-layout-configurator"
+      class="layout-configurator-dialog pointer-events-auto relative flex h-auto max-h-[90dvh] min-h-[600px] w-auto min-w-[800px] max-w-[95vw] cursor-default flex-col overflow-auto rounded-lg bg-background text-foreground shadow-xl"
+      role="dialog"
+      :aria-label="t('layoutConfigurator.title')"
+    >
+      <header class="flex items-center justify-between border-b border-border bg-header p-4">
+        <h2 class="m-0 text-lg font-semibold">{{ t('layoutConfigurator.title') }}</h2>
+        <button
+          type="button"
+          class="border-0 bg-transparent p-0 text-2xl leading-none text-text-secondary hover:text-foreground"
+          :title="t('common.close')"
+          :aria-label="t('common.close')"
+          @click="attemptClose"
+        >
+          ×
+        </button>
+      </header>
 
-      <div class="flex min-w-[350px] flex-col">
-        <section class="flex min-h-0 flex-1 flex-col">
-          <div class="mb-4 flex items-center justify-between gap-4">
-            <h3 class="text-base font-semibold text-text-secondary">{{ t('layoutConfigurator.layoutPreview') }}</h3>
-            <div class="flex items-center gap-2">
-              <label
-                id="layout-lock-label"
-                class="cursor-pointer select-none text-sm text-text-secondary"
-                @click="toggleLayoutLock"
-              >
-                {{ t('layoutConfigurator.lockLayout') }}
-              </label>
-              <button
-                type="button"
-                role="switch"
-                :aria-checked="Boolean(layoutLocked)"
-                aria-labelledby="layout-lock-label"
-                :class="[
-                  'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
-                  layoutLocked ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
-                ]"
-                @click="toggleLayoutLock"
-              >
-                <span
-                  aria-hidden="true"
-                  :class="[
-                    'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200',
-                    layoutLocked ? 'translate-x-5' : 'translate-x-0',
-                  ]"
-                ></span>
-              </button>
-            </div>
-          </div>
-
-          <div
-            class="flex min-h-[250px] flex-1 flex-col overflow-auto rounded border-2 border-dashed border-border bg-header/20 p-4"
+      <main class="grid min-h-[450px] flex-1 grid-cols-[220px_minmax(0,1fr)] gap-6 overflow-y-auto p-6">
+        <section class="flex min-w-[200px] flex-col overflow-y-auto border-r border-border pr-6">
+          <h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
+            {{ t('layoutConfigurator.availablePanes') }}
+          </h3>
+          <draggable
+            :list="availablePanes"
+            tag="ul"
+            class="layout-available-panes m-0 flex-grow list-none p-0"
+            :item-key="(pane: WorkspacePaneName) => pane"
+            :group="{ name: 'workspace-layout-items', pull: 'clone', put: false }"
+            :sort="false"
+            :clone="clonePane"
           >
-            <WorkspaceLayoutNodeEditor v-model="draft" :panes="mainAvailablePanes" :root="true" />
-          </div>
-          <div class="mt-4">
-            <button type="button" class="secondary-action" @click="reset">
-              {{ t('layoutConfigurator.resetDefault') }}
-            </button>
-          </div>
+            <template #item="{ element: pane }">
+              <li
+                :data-testid="`layout-available-pane-${pane}`"
+                class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-background-alt p-2 text-sm transition-colors hover:bg-header active:cursor-grabbing"
+              >
+                <i class="fas fa-grip-vertical mr-2 text-text-alt" aria-hidden="true"></i>
+                <span class="min-w-0 truncate">{{ paneLabel(pane) }}</span>
+              </li>
+            </template>
+            <template #footer>
+              <li v-if="!availablePanes.length" class="p-2 text-sm italic text-text-alt">
+                {{ t('layoutConfigurator.noAvailablePanes') }}
+              </li>
+            </template>
+          </draggable>
         </section>
 
-        <div class="mt-4 grid min-h-[150px] grid-cols-2 gap-6 border-t border-border pt-4">
-          <section class="flex min-w-0 flex-col">
-            <h3 class="mb-4 text-base font-semibold text-text-secondary">{{ t('layoutConfigurator.leftSidebar') }}</h3>
-            <ul
-              class="m-0 min-h-[120px] flex-1 list-none space-y-2 rounded border border-dashed border-border bg-header/20 p-2"
+        <div class="flex min-w-[350px] flex-col">
+          <section class="flex min-h-0 flex-1 flex-col">
+            <div class="mb-4 flex items-center justify-between gap-4">
+              <h3 class="m-0 text-base font-semibold text-text-secondary">
+                {{ t('layoutConfigurator.layoutPreview') }}
+              </h3>
+              <div class="flex items-center gap-2">
+                <label
+                  id="layout-lock-label"
+                  class="cursor-pointer select-none text-sm text-text-secondary"
+                  @click="toggleLayoutLock"
+                >
+                  {{ t('layoutConfigurator.lockLayout') }}
+                </label>
+                <button
+                  type="button"
+                  role="switch"
+                  :aria-checked="Boolean(layoutLocked)"
+                  aria-labelledby="layout-lock-label"
+                  :class="[
+                    'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+                    layoutLocked ? 'bg-primary' : 'bg-gray-300 dark:bg-gray-600',
+                  ]"
+                  @click="toggleLayoutLock"
+                >
+                  <span
+                    aria-hidden="true"
+                    :class="[
+                      'pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow ring-0 transition duration-200',
+                      layoutLocked ? 'translate-x-5' : 'translate-x-0',
+                    ]"
+                  ></span>
+                </button>
+              </div>
+            </div>
+
+            <div
+              data-layout-main-tree
+              class="flex min-h-[250px] flex-1 flex-col overflow-auto rounded border-2 border-dashed border-border-alt bg-background-alt p-4"
             >
-              <li
-                v-for="(pane, index) in sidebar.left"
-                :key="`left-${pane}`"
-                class="flex items-center gap-2 rounded border border-border bg-background p-2 text-sm"
-              >
-                <i :class="paneIcon(pane)" class="w-4 shrink-0 text-center text-text-alt" aria-hidden="true"></i>
-                <span class="min-w-0 flex-1 truncate">{{ paneLabel(pane) }}</span>
-                <button
-                  class="sidebar-action"
-                  type="button"
-                  :disabled="index === 0"
-                  @click="moveSidebar('left', index, -1)"
-                >
-                  <i class="fas fa-arrow-up" aria-hidden="true"></i>
-                </button>
-                <button
-                  class="sidebar-action"
-                  type="button"
-                  :disabled="index === sidebar.left.length - 1"
-                  @click="moveSidebar('left', index, 1)"
-                >
-                  <i class="fas fa-arrow-down" aria-hidden="true"></i>
-                </button>
-                <button class="sidebar-action hover:!text-error" type="button" @click="setSidebar('left', pane, false)">
-                  ×
-                </button>
-              </li>
-              <li
-                v-if="!sidebar.left.length"
-                class="flex min-h-[50px] items-center justify-center p-4 text-center text-sm italic text-text-alt"
-              >
-                {{ t('layoutConfigurator.dropHere') }}
-              </li>
-            </ul>
+              <WorkspaceLayoutNodeEditor v-model="draft" :root="true" :used-main-panes="mainPanes" class="flex-grow" />
+            </div>
+            <div class="mt-4 flex gap-2">
+              <button type="button" class="secondary-action" @click="reset">
+                {{ t('layoutConfigurator.resetDefault') }}
+              </button>
+            </div>
           </section>
 
-          <section class="flex min-w-0 flex-col">
-            <h3 class="mb-4 text-base font-semibold text-text-secondary">{{ t('layoutConfigurator.rightSidebar') }}</h3>
-            <ul
-              class="m-0 min-h-[120px] flex-1 list-none space-y-2 rounded border border-dashed border-border bg-header/20 p-2"
-            >
-              <li
-                v-for="(pane, index) in sidebar.right"
-                :key="`right-${pane}`"
-                class="flex items-center gap-2 rounded border border-border bg-background p-2 text-sm"
+          <div class="mt-4 grid min-h-[150px] grid-cols-2 gap-6 border-t border-border pt-4">
+            <section class="flex min-w-0 flex-col">
+              <h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
+                {{ t('layoutConfigurator.leftSidebar') }}
+              </h3>
+              <draggable
+                v-model="leftSidebar"
+                tag="ul"
+                data-testid="layout-left-sidebar-list"
+                class="layout-sidebar-list m-0 min-h-[120px] flex-1 list-none overflow-y-auto rounded border border-dashed border-border-alt bg-background-alt p-2"
+                :item-key="(item: DragItem) => (typeof item === 'string' ? item : (item.component ?? item.id))"
+                :group="{ name: 'workspace-layout-items' }"
+                :move="canMoveToSidebar"
               >
-                <i :class="paneIcon(pane)" class="w-4 shrink-0 text-center text-text-alt" aria-hidden="true"></i>
-                <span class="min-w-0 flex-1 truncate">{{ paneLabel(pane) }}</span>
-                <button
-                  class="sidebar-action"
-                  type="button"
-                  :disabled="index === 0"
-                  @click="moveSidebar('right', index, -1)"
-                >
-                  <i class="fas fa-arrow-up" aria-hidden="true"></i>
-                </button>
-                <button
-                  class="sidebar-action"
-                  type="button"
-                  :disabled="index === sidebar.right.length - 1"
-                  @click="moveSidebar('right', index, 1)"
-                >
-                  <i class="fas fa-arrow-down" aria-hidden="true"></i>
-                </button>
-                <button
-                  class="sidebar-action hover:!text-error"
-                  type="button"
-                  @click="setSidebar('right', pane, false)"
-                >
-                  ×
-                </button>
-              </li>
-              <li
-                v-if="!sidebar.right.length"
-                class="flex min-h-[50px] items-center justify-center p-4 text-center text-sm italic text-text-alt"
+                <template #item="{ element: pane, index }">
+                  <li
+                    class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-header p-2 text-sm active:cursor-grabbing"
+                  >
+                    <i class="fas fa-grip-vertical mr-2 shrink-0 text-text-alt" aria-hidden="true"></i>
+                    <span class="min-w-0 flex-1 truncate">{{
+                      paneLabel(typeof pane === 'string' ? pane : pane.component)
+                    }}</span>
+                    <button
+                      type="button"
+                      class="sidebar-remove"
+                      :title="t('common.remove')"
+                      :aria-label="t('common.remove')"
+                      @click.stop="removeSidebarPane('left', index)"
+                    >
+                      ×
+                    </button>
+                  </li>
+                </template>
+                <template #footer>
+                  <li
+                    v-if="!sidebar.left.length"
+                    class="flex min-h-[50px] items-center justify-center p-4 text-center text-sm italic text-text-alt"
+                  >
+                    {{ t('layoutConfigurator.dropHere') }}
+                  </li>
+                </template>
+              </draggable>
+            </section>
+
+            <section class="flex min-w-0 flex-col">
+              <h3 class="mb-4 mt-0 text-base font-semibold text-text-secondary">
+                {{ t('layoutConfigurator.rightSidebar') }}
+              </h3>
+              <draggable
+                v-model="rightSidebar"
+                tag="ul"
+                data-testid="layout-right-sidebar-list"
+                class="layout-sidebar-list m-0 min-h-[120px] flex-1 list-none overflow-y-auto rounded border border-dashed border-border-alt bg-background-alt p-2"
+                :item-key="(item: DragItem) => (typeof item === 'string' ? item : (item.component ?? item.id))"
+                :group="{ name: 'workspace-layout-items' }"
+                :move="canMoveToSidebar"
               >
-                {{ t('layoutConfigurator.dropHere') }}
-              </li>
-            </ul>
-          </section>
+                <template #item="{ element: pane, index }">
+                  <li
+                    class="mb-2 flex cursor-grab select-none items-center rounded border border-border bg-header p-2 text-sm active:cursor-grabbing"
+                  >
+                    <i class="fas fa-grip-vertical mr-2 shrink-0 text-text-alt" aria-hidden="true"></i>
+                    <span class="min-w-0 flex-1 truncate">{{
+                      paneLabel(typeof pane === 'string' ? pane : pane.component)
+                    }}</span>
+                    <button
+                      type="button"
+                      class="sidebar-remove"
+                      :title="t('common.remove')"
+                      :aria-label="t('common.remove')"
+                      @click.stop="removeSidebarPane('right', index)"
+                    >
+                      ×
+                    </button>
+                  </li>
+                </template>
+                <template #footer>
+                  <li
+                    v-if="!sidebar.right.length"
+                    class="flex min-h-[50px] items-center justify-center p-4 text-center text-sm italic text-text-alt"
+                  >
+                    {{ t('layoutConfigurator.dropHere') }}
+                  </li>
+                </template>
+              </draggable>
+            </section>
+          </div>
         </div>
-      </div>
-    </main>
+      </main>
 
-    <template #footer>
-      <div class="flex justify-end gap-3">
+      <footer class="flex justify-end gap-3 border-t border-border bg-header p-4">
         <button type="button" class="secondary-action" @click="attemptClose">{{ t('common.cancel') }}</button>
         <button type="button" class="primary-action" :disabled="!hasChanges || saving" @click="save">
           {{ saving ? t('common.saving') : t('common.save') }}{{ hasChanges ? '*' : '' }}
         </button>
-      </div>
-    </template>
-  </BaseModal>
+      </footer>
+    </div>
+  </OverlayPanel>
 </template>
 
 <style scoped>
-  .available-action,
-  .sidebar-action {
-    display: inline-flex;
-    width: 1.5rem;
-    height: 1.5rem;
-    flex: 0 0 1.5rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: 0.25rem;
-    color: var(--text-alt-color, var(--text-color-secondary));
-    transition:
-      background-color 0.15s ease,
-      color 0.15s ease;
-  }
-  .available-action:hover:not(:disabled),
-  .sidebar-action:hover:not(:disabled) {
-    background: var(--border-color);
-    color: var(--text-color);
-  }
-  .available-action:disabled,
-  .sidebar-action:disabled {
-    cursor: not-allowed;
-    opacity: 0.35;
-  }
   .secondary-action,
   .primary-action {
-    border-radius: 0.25rem;
     border: 1px solid var(--border-color);
+    border-radius: 0.25rem;
     padding: 0.5rem 1rem;
     font-size: 0.875rem;
     transition:
@@ -397,5 +377,26 @@
   .primary-action:disabled {
     cursor: not-allowed;
     opacity: 0.5;
+  }
+  .sidebar-remove {
+    display: inline-flex;
+    width: 1.5rem;
+    height: 1.5rem;
+    flex: 0 0 1.5rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.2rem;
+    color: var(--text-color-secondary);
+    font-size: 1rem;
+    line-height: 1;
+  }
+  .sidebar-remove:hover {
+    background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
+    color: var(--status-error-color);
+  }
+  :deep(.sortable-ghost) {
+    border: 1px dashed var(--link-active-color) !important;
+    background: color-mix(in srgb, var(--link-active-color) 12%, transparent) !important;
+    opacity: 0.45;
   }
 </style>

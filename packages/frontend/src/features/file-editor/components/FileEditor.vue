@@ -1,20 +1,12 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { BaseContextMenu, BaseSpinner } from '@/foundation/ui';
+  import { BaseContextMenu } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
   import { focusRegistry } from '@/shared/focus/public';
   import { useFeedback } from '@/shared/feedback/public';
-  const MonacoEditor = defineAsyncComponent({
-    loader: () => import('./MonacoEditor.vue'),
-    loadingComponent: BaseSpinner,
-    delay: 120,
-  });
-  const CodeMirrorMobileEditor = defineAsyncComponent({
-    loader: () => import('./CodeMirrorMobileEditor.vue'),
-    loadingComponent: BaseSpinner,
-    delay: 120,
-  });
+  const MonacoEditor = defineAsyncComponent(() => import('./MonacoEditor.vue'));
+  const CodeMirrorMobileEditor = defineAsyncComponent(() => import('./CodeMirrorMobileEditor.vue'));
   import { createFileEditorSession, type FileEditorSessionController } from '../composables/useFileEditorSession';
   import type { FileDocumentPort } from '../ports/file-document-port';
   import type { EditorLineEnding } from '../model/editor';
@@ -376,7 +368,9 @@
     </div>
 
     <div class="editor-content-area">
-      <BaseSpinner v-if="session.loading.value" class="m-6" />
+      <div v-if="session.loading.value" data-testid="file-editor-loading-state" class="editor-loading">
+        {{ t('fileManager.loadingFile') }}
+      </div>
       <template v-else-if="session.active.value">
         <CodeMirrorMobileEditor
           v-if="device.isMobile.value"
@@ -719,6 +713,18 @@
     text-align: center;
     font-size: 1.1em;
   }
+  .editor-loading {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    color: var(--text-color-secondary);
+    font-size: 1rem;
+    text-align: center;
+  }
+
   .editor-placeholder {
     color: #666;
   }

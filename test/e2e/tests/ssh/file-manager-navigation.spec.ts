@@ -270,18 +270,20 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
     let favorites = await openFavorites();
     const wideFavoriteBox = await favorites.boundingBox();
     expect(wideFavoriteBox).toBeTruthy();
-    expect(wideFavoriteBox!.width).toBeGreaterThanOrEqual(288);
-    const favoriteRadius = await favorites.evaluate((element) =>
-      Number.parseFloat(getComputedStyle(element).borderTopLeftRadius),
-    );
-    expect(favoriteRadius).toBeGreaterThan(0);
+    expect(wideFavoriteBox!.width).toBeGreaterThanOrEqual(318);
+    expect(wideFavoriteBox!.width).toBeLessThanOrEqual(322);
+    expect(wideFavoriteBox!.height).toBeLessThanOrEqual(320);
+    const favoritePresentation = await favorites.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { radius: Number.parseFloat(style.borderTopLeftRadius), maxHeight: style.maxHeight };
+    });
+    expect(favoritePresentation.radius).toBeGreaterThan(0);
 
     await page.setViewportSize({ width: 960, height: 760 });
-    await expect
-      .poll(async () => (await favorites.boundingBox())?.width ?? Number.POSITIVE_INFINITY)
-      .toBeLessThan(wideFavoriteBox!.width);
+    await expect.poll(async () => (await favorites.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(318);
     const compactFavoriteBox = await favorites.boundingBox();
     expect(compactFavoriteBox).toBeTruthy();
+    expect(compactFavoriteBox!.width).toBeLessThanOrEqual(322);
     expect(compactFavoriteBox!.x).toBeGreaterThanOrEqual(8);
     expect(compactFavoriteBox!.x + compactFavoriteBox!.width).toBeLessThanOrEqual(952);
     await page.setViewportSize({ width: 1440, height: 900 });

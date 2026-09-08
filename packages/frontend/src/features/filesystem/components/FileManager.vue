@@ -223,6 +223,9 @@
     maxStepsPerEvent: 3,
     stopImmediatePropagation: true,
   });
+  const FILE_MANAGER_REVERSE_WHEEL_GUARD_MS = 180;
+  let lastAppliedWheelDirection = 0;
+  let lastAppliedWheelAt = 0;
   const rowStyle = computed(() => ({ '--file-row-scale': renderedRowScale.value }));
   const estimatedRowHeight = computed(() => Math.max(24, 34 * renderedRowScale.value));
   const shouldVirtualize = computed(() => browser.visible.value.length > FILE_VIRTUALIZATION_THRESHOLD);
@@ -1121,8 +1124,23 @@
     }
   };
   const scaleRows = (event: WheelEvent) => {
+    if (event.ctrlKey && lastAppliedWheelDirection !== 0) {
+      const eventDirection = Math.sign(event.deltaY);
+      const isImmediateReverse =
+        eventDirection !== 0 &&
+        eventDirection !== lastAppliedWheelDirection &&
+        performance.now() - lastAppliedWheelAt < FILE_MANAGER_REVERSE_WHEEL_GUARD_MS;
+      if (isImmediateReverse) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+    }
+
     const change = resolveWheelScale(event, renderedRowScale.value);
     if (!change) return;
+    lastAppliedWheelDirection = Math.sign(change.wheelSteps);
+    lastAppliedWheelAt = performance.now();
     const oldEstimatedRowHeight = estimatedRowHeight.value;
     const scroller = listScroller.value;
     const anchoredRow = shouldVirtualize.value && scroller ? scroller.scrollTop / oldEstimatedRowHeight : null;
@@ -2003,6 +2021,10 @@
     }
   }
   @container file-manager-pane (max-width: 420px) {
+    .file-manager-path-input {
+      width: 100%;
+      flex: 1 1 100%;
+    }
     .file-manager-actions {
       display: grid;
       width: 100%;

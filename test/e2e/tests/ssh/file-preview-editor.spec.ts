@@ -202,8 +202,18 @@ test('file previews and text editor protect historical file-opening regressions'
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
 
-  await step('extensionless text opens with its real remote content', async () => {
-    await row(page, 'plainfile').dblclick();
+  await step('extensionless text opens with a compact legacy loading state and its real remote content', async () => {
+    const delayResponse = await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=900`, { method: 'POST' });
+    expect(delayResponse.ok).toBeTruthy();
+    try {
+      await row(page, 'plainfile').dblclick();
+      const loading = page.getByTestId('file-editor-loading-state').filter({ visible: true }).first();
+      await expect(loading).toBeVisible();
+      await expect(loading).toContainText(/loading/i);
+      await expect(loading.locator('.animate-spin')).toHaveCount(0);
+    } finally {
+      await fetch(`${E2E_SSH.controlUrl}/sftp/read-delay?ms=0`, { method: 'POST' });
+    }
     const editor = editorView(page);
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor).toContainText('plainfile');

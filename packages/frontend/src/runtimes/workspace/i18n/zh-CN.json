@@ -49,6 +49,8 @@
     "containerLabel": "容器 ({direction})",
     "horizontal": "水平",
     "vertical": "垂直",
+    "horizontalShort": "H",
+    "verticalShort": "V",
     "toggleDirection": "切换方向",
     "addHorizontalContainer": "添加水平容器",
     "addVerticalContainer": "添加垂直容器",

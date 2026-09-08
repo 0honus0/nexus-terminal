@@ -406,7 +406,7 @@
         >
           <div
             data-testid="quick-command-group-header"
-            class="quick-command-group-header group flex items-center rounded-md font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
+            class="quick-command-group-header group flex select-none items-center rounded-md font-semibold text-foreground transition-colors duration-150 hover:bg-header/80"
             :class="compact ? 'quick-command-group-header--compact' : ''"
             @click="store.toggle(group.name)"
           >
@@ -451,7 +451,7 @@
               v-for="command in group.commands"
               :key="command.id"
               :data-command-id="command.id"
-              class="quick-command-row group mb-1 flex cursor-pointer items-center rounded-md transition-colors duration-150 hover:bg-primary/10"
+              class="quick-command-row group mb-1 flex cursor-pointer select-none items-center rounded-md transition-colors duration-150 hover:bg-primary/10"
               :class="[
                 compact ? 'quick-command-row--compact' : '',
                 selectedId === command.id ? 'bg-primary/20 font-medium' : '',
@@ -461,8 +461,7 @@
             >
               <span
                 data-testid="quick-command-execute"
-                class="quick-command-display-text min-w-0 flex-1 truncate text-sm"
-                :class="displayMode === 'command' ? 'font-mono' : ''"
+                class="quick-command-display-text min-w-0 flex-1 truncate text-sm font-medium"
                 :title="displayText(command)"
                 >{{ displayText(command) }}</span
               >
@@ -476,7 +475,7 @@
           v-for="command in flat"
           :key="command.id"
           :data-command-id="command.id"
-          class="quick-command-row group mb-1 flex cursor-pointer items-center rounded-md transition-colors duration-150 hover:bg-primary/10"
+          class="quick-command-row group mb-1 flex cursor-pointer select-none items-center rounded-md transition-colors duration-150 hover:bg-primary/10"
           :class="[
             compact ? 'quick-command-row--compact' : '',
             selectedId === command.id ? 'bg-primary/20 font-medium' : '',
@@ -486,8 +485,7 @@
         >
           <span
             data-testid="quick-command-execute"
-            class="quick-command-display-text min-w-0 flex-1 truncate text-sm"
-            :class="displayMode === 'command' ? 'font-mono' : ''"
+            class="quick-command-display-text min-w-0 flex-1 truncate text-sm font-medium"
             :title="displayText(command)"
             >{{ displayText(command) }}</span
           >
@@ -589,7 +587,8 @@
       padding-right: 0.35rem;
     }
     .quick-command-display-text {
-      font-size: 0.7rem;
+      font-size: 0.875rem;
+      line-height: 1.25rem;
     }
   }
   @container quick-commands-pane (max-width: 240px) {
@@ -610,8 +609,8 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 0.68rem;
-      line-height: 1.35;
+      font-size: 0.875rem;
+      line-height: 1.25rem;
     }
   }
   .quick-control {

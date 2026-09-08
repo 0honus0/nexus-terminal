@@ -127,6 +127,9 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     const box = await terminal.boundingBox();
     expect(box).toBeTruthy();
     expect(box!.height).toBeGreaterThan(100);
+    await expect
+      .poll(() => terminal.locator('.xterm-viewport').evaluate((element) => getComputedStyle(element).overflowY))
+      .toBe('auto');
   });
 
   await step('terminal cursor is a fixed white block without blink animation', async () => {
@@ -206,6 +209,11 @@ test('connected SSH terminal accepts commands and keeps the rendered terminal al
     await inner.dispatchEvent('wheel', { ctrlKey: true, deltaY: 20, deltaMode: 0 });
     await page.waitForTimeout(80);
     expect(Number(await terminal.getAttribute('data-font-size'))).toBe(initial + 1);
+  });
+
+  await step('command bar omits the send-to-all shortcut', async () => {
+    const commandBar = page.getByTestId('command-input-bar');
+    await expect(commandBar.locator('.fa-share-alt')).toHaveCount(0);
   });
 
   await step('command input executes a real command in the persistent SSH shell', async () => {

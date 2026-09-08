@@ -154,6 +154,27 @@ test('quick command tags and saved variables survive persistence, grouping, rena
       await expect(toggle).toHaveAttribute('aria-expanded', 'false');
       await header.click({ position: { x: headerBox!.width - 3, y: headerBox!.height / 2 } });
       await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      const row = quickView.locator(`[data-command-id="${commandId}"]`);
+      await expect(row).toBeVisible();
+      const rowPresentation = await row.evaluate((element) => ({
+        selected: element.classList.contains('bg-primary/20'),
+        userSelect: getComputedStyle(element).userSelect,
+        fontSize: Number.parseFloat(
+          getComputedStyle(element.querySelector<HTMLElement>('[data-testid="quick-command-execute"]')!).fontSize,
+        ),
+        fontWeight: Number.parseInt(
+          getComputedStyle(element.querySelector<HTMLElement>('[data-testid="quick-command-execute"]')!).fontWeight,
+          10,
+        ),
+        monospaceClass: element
+          .querySelector<HTMLElement>('[data-testid="quick-command-execute"]')!
+          .classList.contains('font-mono'),
+      }));
+      expect(rowPresentation.selected).toBe(false);
+      expect(rowPresentation.userSelect).toBe('none');
+      expect(rowPresentation.fontSize).toBeGreaterThanOrEqual(14);
+      expect(rowPresentation.fontWeight).toBeGreaterThanOrEqual(500);
+      expect(rowPresentation.monospaceClass).toBe(false);
 
       await name.click();
       const input = group.getByTestId('quick-command-group-rename-input');

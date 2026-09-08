@@ -298,6 +298,22 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     await page.waitForTimeout(600);
     expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
   });
+
+  await step('File Manager ignores immediate opposite wheel inertia after an applied scale step', async () => {
+    const list = activeFileManagerList(page);
+    const before = await readScale(list, 'data-row-scale');
+    await ctrlWheel(list, -80);
+    const increased = await readScale(list, 'data-row-scale');
+    expect(increased).toBeGreaterThan(before);
+
+    await ctrlWheel(list, 80);
+    await page.waitForTimeout(80);
+    expect(await readScale(list, 'data-row-scale')).toBe(increased);
+
+    await page.waitForTimeout(140);
+    await ctrlWheel(list, 80);
+    await expect.poll(() => readScale(list, 'data-row-scale')).toBeLessThan(increased);
+  });
 });
 
 test('large Ctrl+wheel delta does not leak unused zoom steps into the next event', async ({ page, context }) => {

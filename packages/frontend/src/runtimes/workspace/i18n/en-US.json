@@ -49,6 +49,8 @@
     "containerLabel": "Container ({direction})",
     "horizontal": "Horizontal",
     "vertical": "Vertical",
+    "horizontalShort": "H",
+    "verticalShort": "V",
     "toggleDirection": "Toggle Direction",
     "addHorizontalContainer": "Add Horizontal Container",
     "addVerticalContainer": "Add Vertical Container",

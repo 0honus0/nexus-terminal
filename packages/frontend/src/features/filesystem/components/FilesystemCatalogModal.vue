@@ -160,7 +160,7 @@
     role="dialog"
     :aria-label="t('favoritePaths.title')"
     :style="panelStyle"
-    class="favorite-paths-popover fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border/50 bg-background shadow-lg"
+    class="favorite-paths-popover fixed z-50 flex flex-col overflow-hidden rounded-md border border-border/50 bg-background shadow-lg"
   >
     <div class="flex shrink-0 items-center gap-2 p-2">
       <div class="relative flex-grow">
@@ -326,14 +326,21 @@
 
 <style scoped>
   .favorite-paths-popover {
-    width: clamp(18rem, 32vw, 34rem);
+    width: 18rem;
     max-width: calc(100vw - 1rem);
-    max-height: min(28rem, calc(100dvh - 1rem));
+    max-height: min(20rem, calc(100dvh - 1rem));
   }
 
   .favorite-path-text {
-    overflow-wrap: anywhere;
+    overflow: hidden;
+    text-overflow: ellipsis;
     line-height: 1.35;
-    white-space: normal;
+    white-space: nowrap;
+  }
+
+  @media (min-width: 768px) {
+    .favorite-paths-popover {
+      width: 20rem;
+    }
   }
 </style>

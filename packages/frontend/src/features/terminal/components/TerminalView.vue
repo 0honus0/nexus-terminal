@@ -839,6 +839,10 @@
     z-index: 2;
     border: 0;
   }
+  .terminal-inner-container :deep(.xterm-viewport) {
+    overflow-y: auto;
+  }
+
   .terminal-transparent :deep(.xterm),
   .terminal-transparent :deep(.xterm-viewport),
   .terminal-transparent :deep(.xterm-screen) {
