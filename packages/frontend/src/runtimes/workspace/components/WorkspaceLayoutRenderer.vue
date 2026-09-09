@@ -323,6 +323,7 @@
         @upload-files="(path, files, directories) => emit('uploadFiles', path, files, directories)"
         @copy-to-clipboard="emit('clipboardSet', 'copy', $event)"
         @cut-to-clipboard="emit('clipboardSet', 'cut', $event)"
+        @move-to="(entries, destination) => emit('moveTo', entries, destination)"
         @paste="emit('paste', $event)"
         @compress="emit('compress', $event)"
         @compress-preset="emit('compressPreset', $event)"
