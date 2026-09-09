@@ -111,7 +111,13 @@
   let lastColumns = 0;
   let lastRows = 0;
   const fitAndResize = () => {
-    if (!terminal || !fit) return;
+    const element = root.value;
+    if (!terminal || !fit || !element) return;
+    // ResizeObserver fires again when an ancestor is hidden with display:none. Fitting xterm at
+    // that point collapses its viewport to a tiny fallback size; FitAddon clears the renderer
+    // before resizing, so restoring the tab later exposes a visible redraw/blank strip. Keep the
+    // last valid terminal geometry while hidden and fit only after the surface has real dimensions.
+    if (element.clientWidth <= 0 || element.clientHeight <= 0) return;
     fit.fit();
     if (terminal.cols !== lastColumns || terminal.rows !== lastRows) {
       lastColumns = terminal.cols;
