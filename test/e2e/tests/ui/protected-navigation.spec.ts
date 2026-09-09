@@ -24,16 +24,21 @@ test('auth status probe failures fall back to Login instead of rejecting protect
 
 test('stale dynamically imported components trigger one automatic page recovery', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
-  let topLevelNavigations = 0;
-  page.on('framenavigated', (frame) => {
-    if (frame === page.mainFrame()) topLevelNavigations += 1;
+  let documentNavigations = 0;
+  page.on('request', (request) => {
+    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentNavigations += 1;
   });
 
   await page.goto('/settings');
   await expect(page).toHaveURL(/\/settings$/);
-  const initialNavigations = topLevelNavigations;
+  const initialNavigations = documentNavigations;
 
-  const reload = page.waitForNavigation({ waitUntil: 'domcontentloaded' });
+  const reloadRequest = page.waitForRequest(
+    (request) =>
+      request.isNavigationRequest() &&
+      request.frame() === page.mainFrame() &&
+      new URL(request.url()).pathname === '/settings',
+  );
   await page.evaluate(() => {
     const event = new Event('vite:preloadError', { cancelable: true });
     Object.defineProperty(event, 'payload', {
@@ -41,9 +46,10 @@ test('stale dynamically imported components trigger one automatic page recovery'
     });
     window.dispatchEvent(event);
   });
-  await reload;
+  await reloadRequest;
+  await page.waitForLoadState('domcontentloaded');
   await expect(page).toHaveURL(/\/settings$/);
-  expect(topLevelNavigations).toBe(initialNavigations + 1);
+  expect(documentNavigations).toBe(initialNavigations + 1);
 
   await page.evaluate(() => {
     const event = new Event('vite:preloadError', { cancelable: true });
@@ -53,5 +59,5 @@ test('stale dynamically imported components trigger one automatic page recovery'
     window.dispatchEvent(event);
   });
   await page.waitForTimeout(500);
-  expect(topLevelNavigations).toBe(initialNavigations + 1);
+  expect(documentNavigations).toBe(initialNavigations + 1);
 });
