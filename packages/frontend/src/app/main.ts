@@ -5,9 +5,11 @@ import { setUnauthorizedHandler } from '@/client/http';
 import { createAuthNavigationFacade } from '@/features/auth/public';
 import { createAppRouter } from './router';
 import i18n from './i18n';
-import { registerAppServiceWorker } from './bootstrap/pwa';
+import { registerAppServiceWorker, registerGlobalDynamicImportRecovery } from './bootstrap/pwa';
 import './styles/global.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
+
+registerGlobalDynamicImportRecovery();
 
 const app = createApp(App);
 const pinia = createPinia();
