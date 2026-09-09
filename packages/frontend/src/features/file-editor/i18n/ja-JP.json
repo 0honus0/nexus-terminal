@@ -1,0 +1,19 @@
+{
+  "fileEditor": {
+    "title": "ファイルエディタ",
+    "encoding": "エンコーディング",
+    "contextMenu": {
+      "close": "タブを閉じる",
+      "closeOthers": "他のタブを閉じる",
+      "closeRight": "右側のタブを閉じる",
+      "closeLeft": "左側のタブを閉じる"
+    },
+    "lineEnding": "改行コード",
+    "refreshRemote": "リモートファイルを再読み込み",
+    "confirmDiscardChanges": "未保存の変更を破棄してリモートファイルを再読み込みしますか？",
+    "lineEndingLf": "LF",
+    "lineEndingCrlf": "CRLF",
+    "lineEndingCr": "CR",
+    "resizePopup": "エディターウィンドウのサイズを変更"
+  }
+}

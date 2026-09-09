@@ -1,0 +1,20 @@
+{
+  "terminal": {
+    "search": {
+      "open": "搜索终端",
+      "placeholder": "搜索终端...",
+      "previous": "查找上一个",
+      "next": "查找下一个",
+      "close": "关闭搜索"
+    },
+    "label": "终端",
+    "ariaLabel": "终端",
+    "mobile": {
+      "copy": "复制",
+      "paste": "粘贴",
+      "selectAll": "全选",
+      "adjustSelectionStart": "调整选区起点",
+      "adjustSelectionEnd": "调整选区终点"
+    }
+  }
+}

@@ -16,7 +16,8 @@
 ```bash
 mkdir -p nexus-terminal && cd nexus-terminal
 
-wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env}
+wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env.example}
+cp .env.example .env
 
 docker compose up -d
 ```
@@ -55,7 +56,7 @@ A browser-based SSH / SFTP / RDP / VNC remote access tool with terminal sessions
 
 ## Documentation
 
-[Features](./FEATURES.md) · [Usage](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [E2E](../test/e2e/README.md) · [中文](../README.md)
+[Features](./FEATURES.md) · [Usage](./USAGE.md) · [Deployment & updates](./DEPLOYMENT.md) · [Software requirements](./software-requirements/README.md) · [Frontend architecture](./architecture/FRONTEND.md) · [Backend architecture](./architecture/BACKEND.md) · [Remote Desktop architecture](./architecture/REMOTE_DESKTOP.md) · [E2E](./testing/E2E.md) · [Engineering constraints](./software-requirements/engineering-constraints.md) · [中文](../README.md)
 
 ## License
 

@@ -16,7 +16,8 @@
 ```bash
 mkdir -p nexus-terminal && cd nexus-terminal
 
-wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env}
+wget https://raw.githubusercontent.com/0honus0/nexus-terminal/refs/heads/main/{docker-compose.yml,.env.example}
+cp .env.example .env
 
 docker compose up -d
 ```
@@ -53,9 +54,23 @@ docker compose up -d
   <img src="./doc/imgs/e2e/mobile-workspace.png" alt="移动端工作区" width="360">
 </p>
 
-## 文档
+## 用户文档
 
-[功能](./doc/FEATURES.md) · [使用](./doc/USAGE.md) · [部署与更新](./doc/DEPLOYMENT.md) · [E2E](./test/e2e/README.md) · [English](./doc/README_EN.md)
+- [功能](./doc/FEATURES.md)
+- [使用](./doc/USAGE.md)
+- [部署与更新](./doc/DEPLOYMENT.md)
+- [English README](./doc/README_EN.md)
+
+## 工程文档
+
+- [软件需求](./doc/software-requirements/README.md)
+- [后继开发工程约束](./doc/software-requirements/engineering-constraints.md)
+- [Frontend 架构](./doc/architecture/FRONTEND.md)
+- [Backend 架构](./doc/architecture/BACKEND.md)
+- [Agent 完整架构设计](./doc/architecture/agent/ARCHITECTURE.md)
+- [Agent 实施方案](./doc/architecture/agent/IMPLEMENTATION.md)
+- [远程桌面网关架构](./doc/architecture/REMOTE_DESKTOP.md)
+- [E2E 测试与诊断](./doc/testing/E2E.md)
 
 ## License
 

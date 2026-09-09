@@ -1,6 +1,9 @@
 import { expect, test, type Locator, type Page } from '../../support/fixtures';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
+  closeConnectedFileManager,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
@@ -14,18 +17,21 @@ import {
 import { captureFunctionalScreenshot, functionalScreenshotsEnabled } from '../../support/functional-screenshots';
 import { slowStep, step } from '../../support/steps';
 
-const DESKTOP_POPUP_SIZE_STORAGE_KEY = 'nexus_fileEditorDesktopPopupSize';
+const M11_04A_EVIDENCE_DIR = process.env.M11_04A_EVIDENCE_DIR || '/tmp/nexus-m11-04a';
 
-async function connectMobileSsh(
-  page: Page,
-  request: Parameters<typeof loginAsInitialAdmin>[0],
-): Promise<void> {
+async function connectMobileSsh(page: Page, request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {
   await loginAsInitialAdmin(request);
   await configureSshE2eSettings(request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await expect(page.getByTestId('terminal')).toBeVisible({ timeout: 20_000 });
+}
+
+async function tapFileManagerRow(page: Page, filename: string): Promise<void> {
+  const row = fileManagerRow(page, filename);
+  await expect(row).toBeVisible();
+  await row.locator('button[data-file-path]').click();
 }
 
 async function longPressFile(page: Page, filename: string): Promise<Locator> {
@@ -63,7 +69,25 @@ async function longPressFile(page: Page, filename: string): Promise<Locator> {
   return menu;
 }
 
-function expectBoxInsideViewport(box: { x: number; y: number; width: number; height: number }, viewport: { width: number; height: number }): void {
+const pdfScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: /^PDF · \d+ pages$/ });
+const pdfPage = (dialog: Locator, pageNumber: number): Locator => dialog.locator(`[data-pdf-page="${pageNumber}"]`);
+const pdfCurrentPage = (dialog: Locator): Locator =>
+  dialog.getByRole('spinbutton', { name: 'Current page', exact: true });
+const pdfOutline = (dialog: Locator): Locator => dialog.getByRole('complementary', { name: 'Outline', exact: true });
+const pdfZoomLabel = (dialog: Locator): Locator => dialog.getByTestId('pdf-zoom-label');
+const previewHorizontalScrollbar = (dialog: Locator): Locator =>
+  dialog.getByRole('scrollbar', { name: 'Horizontal scroll', exact: true });
+const spreadsheetScroller = (dialog: Locator): Locator =>
+  dialog.getByRole('region', { name: 'Spreadsheet', exact: true });
+const worksheetTabs = (dialog: Locator): Locator => dialog.getByRole('tablist', { name: 'Worksheet', exact: true });
+const worksheetTab = (dialog: Locator, name: string): Locator =>
+  worksheetTabs(dialog).getByRole('tab', { name, exact: true });
+const docxScroller = (dialog: Locator): Locator => dialog.getByRole('region', { name: 'Word document', exact: true });
+
+function expectBoxInsideViewport(
+  box: { x: number; y: number; width: number; height: number },
+  viewport: { width: number; height: number },
+): void {
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width + 1);
@@ -75,47 +99,57 @@ async function dragPreviewWithTouch(
   from: { x: number; y: number },
   to: { x: number; y: number },
 ): Promise<void> {
-  await target.evaluate((element, points) => {
-    const makeTouch = (point: { x: number; y: number }) => new Touch({
-      identifier: 1,
-      target: element,
-      clientX: point.x,
-      clientY: point.y,
-      screenX: point.x,
-      screenY: point.y,
-      pageX: point.x,
-      pageY: point.y,
-      radiusX: 1,
-      radiusY: 1,
-      force: 1,
-    });
+  await target.evaluate(
+    (element, points) => {
+      const makeTouch = (point: { x: number; y: number }) =>
+        new Touch({
+          identifier: 1,
+          target: element,
+          clientX: point.x,
+          clientY: point.y,
+          screenX: point.x,
+          screenY: point.y,
+          pageX: point.x,
+          pageY: point.y,
+          radiusX: 1,
+          radiusY: 1,
+          force: 1,
+        });
 
-    const startTouch = makeTouch(points.from);
-    element.dispatchEvent(new TouchEvent('touchstart', {
-      bubbles: true,
-      cancelable: true,
-      touches: [startTouch],
-      targetTouches: [startTouch],
-      changedTouches: [startTouch],
-    }));
+      const startTouch = makeTouch(points.from);
+      element.dispatchEvent(
+        new TouchEvent('touchstart', {
+          bubbles: true,
+          cancelable: true,
+          touches: [startTouch],
+          targetTouches: [startTouch],
+          changedTouches: [startTouch],
+        }),
+      );
 
-    const moveTouch = makeTouch(points.to);
-    element.dispatchEvent(new TouchEvent('touchmove', {
-      bubbles: true,
-      cancelable: true,
-      touches: [moveTouch],
-      targetTouches: [moveTouch],
-      changedTouches: [moveTouch],
-    }));
+      const moveTouch = makeTouch(points.to);
+      element.dispatchEvent(
+        new TouchEvent('touchmove', {
+          bubbles: true,
+          cancelable: true,
+          touches: [moveTouch],
+          targetTouches: [moveTouch],
+          changedTouches: [moveTouch],
+        }),
+      );
 
-    element.dispatchEvent(new TouchEvent('touchend', {
-      bubbles: true,
-      cancelable: true,
-      touches: [],
-      targetTouches: [],
-      changedTouches: [moveTouch],
-    }));
-  }, { from, to });
+      element.dispatchEvent(
+        new TouchEvent('touchend', {
+          bubbles: true,
+          cancelable: true,
+          touches: [],
+          targetTouches: [],
+          changedTouches: [moveTouch],
+        }),
+      );
+    },
+    { from, to },
+  );
 }
 
 async function pinchPreviewWithTouch(
@@ -123,47 +157,57 @@ async function pinchPreviewWithTouch(
   start: [{ x: number; y: number }, { x: number; y: number }],
   end: [{ x: number; y: number }, { x: number; y: number }],
 ): Promise<void> {
-  await target.evaluate((element, points) => {
-    const makeTouch = (identifier: number, point: { x: number; y: number }) => new Touch({
-      identifier,
-      target: element,
-      clientX: point.x,
-      clientY: point.y,
-      screenX: point.x,
-      screenY: point.y,
-      pageX: point.x,
-      pageY: point.y,
-      radiusX: 1,
-      radiusY: 1,
-      force: 1,
-    });
+  await target.evaluate(
+    (element, points) => {
+      const makeTouch = (identifier: number, point: { x: number; y: number }) =>
+        new Touch({
+          identifier,
+          target: element,
+          clientX: point.x,
+          clientY: point.y,
+          screenX: point.x,
+          screenY: point.y,
+          pageX: point.x,
+          pageY: point.y,
+          radiusX: 1,
+          radiusY: 1,
+          force: 1,
+        });
 
-    const startTouches = [makeTouch(1, points.start[0]), makeTouch(2, points.start[1])];
-    element.dispatchEvent(new TouchEvent('touchstart', {
-      bubbles: true,
-      cancelable: true,
-      touches: startTouches,
-      targetTouches: startTouches,
-      changedTouches: startTouches,
-    }));
+      const startTouches = [makeTouch(1, points.start[0]), makeTouch(2, points.start[1])];
+      element.dispatchEvent(
+        new TouchEvent('touchstart', {
+          bubbles: true,
+          cancelable: true,
+          touches: startTouches,
+          targetTouches: startTouches,
+          changedTouches: startTouches,
+        }),
+      );
 
-    const endTouches = [makeTouch(1, points.end[0]), makeTouch(2, points.end[1])];
-    element.dispatchEvent(new TouchEvent('touchmove', {
-      bubbles: true,
-      cancelable: true,
-      touches: endTouches,
-      targetTouches: endTouches,
-      changedTouches: endTouches,
-    }));
+      const endTouches = [makeTouch(1, points.end[0]), makeTouch(2, points.end[1])];
+      element.dispatchEvent(
+        new TouchEvent('touchmove', {
+          bubbles: true,
+          cancelable: true,
+          touches: endTouches,
+          targetTouches: endTouches,
+          changedTouches: endTouches,
+        }),
+      );
 
-    element.dispatchEvent(new TouchEvent('touchend', {
-      bubbles: true,
-      cancelable: true,
-      touches: [],
-      targetTouches: [],
-      changedTouches: endTouches,
-    }));
-  }, { start, end });
+      element.dispatchEvent(
+        new TouchEvent('touchend', {
+          bubbles: true,
+          cancelable: true,
+          touches: [],
+          targetTouches: [],
+          changedTouches: endTouches,
+        }),
+      );
+    },
+    { start, end },
+  );
 }
 
 test('mobile long-press menu flattens archive actions and creates a real ZIP', async ({ page, context }) => {
@@ -172,15 +216,25 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
 
   await step('archive submenu items are flattened into the touch menu', async () => {
     const menu = await longPressFile(page, 'archive-source.txt');
-    for (const label of [
+    const menuItems = (await menu.locator('button').allTextContents()).map((text) => text.replace(/\s+/g, ' ').trim());
+    expect(menuItems).toEqual([
+      'Download',
+      'CutCtrl+X',
+      'CopyCtrl+C',
+      'Copy Path',
+      'DeleteDelete',
+      'RenameF2',
       'Compress to zip',
+      'Compress to zip with password...',
       'Compress to tar.gz',
       'Compress to tar.bz2',
-      'Compress to zip with password...',
       'Send to...',
-    ]) {
-      await expect(menu.getByText(label, { exact: true })).toBeVisible();
-    }
+      'New FolderCtrl+Shift+N',
+      'New File',
+      'Upload',
+      'Change Permissions',
+      'RefreshF5',
+    ]);
     await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
     await captureFunctionalScreenshot(page, 'mobile-context-menu.png');
   });
@@ -191,36 +245,126 @@ test('mobile long-press menu flattens archive actions and creates a real ZIP', a
   });
 });
 
+test('mobile long-press file menu stays inside narrow 320 and 375 viewports', async ({ page, context }) => {
+  const viewports = [
+    { name: '320x667', width: 320, height: 667 },
+    { name: '375x812', width: 375, height: 812 },
+    { name: '412x915', width: 412, height: 915 },
+  ];
+  await mkdir(M11_04A_EVIDENCE_DIR, { recursive: true });
+  await page.setViewportSize(viewports[0]);
+  await connectMobileSsh(page, context.request);
+  await openConnectedFileManager(page);
+  await page.screenshot({ path: path.join(M11_04A_EVIDENCE_DIR, 'm11-04a-before-menu.png') });
+
+  const metrics: Array<Record<string, unknown>> = [];
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    const menu = await longPressFile(page, 'archive-source.txt');
+    for (const label of [
+      'Copy',
+      'Cut',
+      'Compress to zip',
+      'Compress to tar.gz',
+      'Compress to tar.bz2',
+      'Compress to zip with password...',
+      'Rename',
+      'Change Permissions',
+      'Delete',
+    ]) {
+      await expect(menu.getByRole('button').filter({ hasText: label }).first()).toBeVisible();
+    }
+    await expect(page.getByTestId('file-manager-context-submenu')).toHaveCount(0);
+
+    const menuBox = await menu.boundingBox();
+    const fileManager = page.getByTestId('file-manager-modal');
+    const fileManagerBox = await fileManager.boundingBox();
+    const menuMetrics = await menu.evaluate((element) => ({
+      clientWidth: element.clientWidth,
+      scrollWidth: element.scrollWidth,
+      clientHeight: element.clientHeight,
+      scrollHeight: element.scrollHeight,
+    }));
+    const documentScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(menuBox).toBeTruthy();
+    expect(fileManagerBox).toBeTruthy();
+    expect(menuMetrics.scrollWidth).toBeLessThanOrEqual(menuMetrics.clientWidth + 1);
+    expect(documentScrollWidth).toBeLessThanOrEqual(viewport.width + 1);
+    expect(menuBox!.x).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.y).toBeGreaterThanOrEqual(0);
+    expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport.width + 1);
+    expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport.height + 1);
+    expect(fileManagerBox!.x).toBeGreaterThanOrEqual(0);
+    expect(fileManagerBox!.y).toBeGreaterThanOrEqual(0);
+    expect(fileManagerBox!.x + fileManagerBox!.width).toBeLessThanOrEqual(viewport.width + 1);
+    expect(fileManagerBox!.y + fileManagerBox!.height).toBeLessThanOrEqual(viewport.height + 1);
+    await page.screenshot({ path: path.join(M11_04A_EVIDENCE_DIR, `m11-04a-menu-${viewport.name}.png`) });
+    metrics.push({ viewport, menu: menuBox, fileManager: fileManagerBox, menuMetrics, documentScrollWidth });
+
+    await page.keyboard.press('Escape');
+    await expect(menu).toBeHidden();
+  }
+
+  await writeFile(path.join(M11_04A_EVIDENCE_DIR, 'm11-04a-metrics.json'), JSON.stringify(metrics, null, 2), 'utf8');
+});
+
 test('mobile CodeMirror search opens from the editor header and highlights remote text', async ({ page, context }) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
-  await slowStep('single tap opens a full-screen mobile editor without touching desktop popup size', async () => {
-    const desktopSize = JSON.stringify({ width: 1111, height: 777 });
-    await page.evaluate(([popupSizeKey, value]) => {
-      localStorage.setItem(popupSizeKey, value);
-    }, [DESKTOP_POPUP_SIZE_STORAGE_KEY, desktopSize]);
-
-    await fileManagerRow(page, 'plainfile').click();
-    const editor = page.getByTestId('file-editor-overlay');
+  await slowStep('single tap opens an inset mobile editor', async () => {
+    await tapFileManagerRow(page, 'plainfile');
+    const documentPopup = page.getByTestId('document-popup');
+    const editor = documentPopup.getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
-    await expect(editor.getByTestId('file-editor-resize-handle')).toHaveCount(0);
-    const popup = editor.locator('.editor-popup');
-    const popupBox = await popup.boundingBox();
+    await expect(documentPopup.getByTitle('Resize editor window', { exact: true })).toHaveCount(0);
+    const popupBox = await documentPopup.getByRole('dialog').boundingBox();
     const viewport = page.viewportSize();
     expect(popupBox).toBeTruthy();
     expect(viewport).toBeTruthy();
-    expect(Math.abs(popupBox!.width - viewport!.width)).toBeLessThanOrEqual(2);
-    expect(Math.abs(popupBox!.height - viewport!.height)).toBeLessThanOrEqual(2);
-    expect(await page.evaluate((popupSizeKey) => localStorage.getItem(popupSizeKey), DESKTOP_POPUP_SIZE_STORAGE_KEY))
-      .toBe(desktopSize);
-    await expect.poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
+    expect(popupBox!.x).toBeGreaterThanOrEqual(14);
+    expect(popupBox!.y).toBeGreaterThanOrEqual(14);
+    expect(viewport!.width - (popupBox!.x + popupBox!.width)).toBeGreaterThanOrEqual(14);
+    expect(viewport!.height - (popupBox!.y + popupBox!.height)).toBeGreaterThanOrEqual(14);
+    await expect
+      .poll(async () => editor.locator('.cm-content').innerText(), { timeout: 15_000 })
       .toContain('plain-no-extension');
+
+    const searchBox = await editor.getByTestId('file-editor-search').boundingBox();
+    const refreshBox = await editor.getByRole('button', { name: 'Refresh', exact: true }).boundingBox();
+    const saveBox = await editor.getByRole('button', { name: 'Save', exact: true }).boundingBox();
+    const actionsBox = await editor.locator('.editor-actions').boundingBox();
+    expect(searchBox).toBeTruthy();
+    expect(refreshBox).toBeTruthy();
+    expect(saveBox).toBeTruthy();
+    expect(actionsBox).toBeTruthy();
+    const searchCenterY = searchBox!.y + searchBox!.height / 2;
+    const refreshCenterY = refreshBox!.y + refreshBox!.height / 2;
+    const saveCenterY = saveBox!.y + saveBox!.height / 2;
+    expect(Math.abs(searchCenterY - refreshCenterY)).toBeLessThanOrEqual(1);
+    expect(Math.abs(refreshCenterY - saveCenterY)).toBeLessThanOrEqual(1);
+    expect(searchBox!.x + searchBox!.width).toBeLessThanOrEqual(refreshBox!.x + 1);
+    expect(saveBox!.x + saveBox!.width).toBeLessThanOrEqual(actionsBox!.x + actionsBox!.width + 1);
+
+    const contentAreaBox = await editor.locator('.editor-content-area').boundingBox();
+    const codeMirrorBox = await editor.locator('.cm-editor').boundingBox();
+    expect(contentAreaBox).toBeTruthy();
+    expect(codeMirrorBox).toBeTruthy();
+    expect(Math.abs(codeMirrorBox!.width - contentAreaBox!.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(codeMirrorBox!.height - contentAreaBox!.height)).toBeLessThanOrEqual(1);
+
+    const scroller = editor.locator('.cm-scroller');
+    const scrollerBox = await scroller.boundingBox();
+    expect(scrollerBox).toBeTruthy();
+    await scroller.click({
+      position: { x: Math.min(120, scrollerBox!.width - 10), y: Math.max(10, scrollerBox!.height - 24) },
+    });
+    await expect(editor.locator('.cm-editor')).toHaveClass(/cm-focused/);
   });
 
   await step('Search opens CodeMirror search UI and decorates the matching text', async () => {
-    const editor = page.getByTestId('file-editor-overlay');
+    const editor = page.getByTestId('document-popup').getByTestId('file-editor-view');
     await editor.getByTitle('Search').click();
     const searchPanel = editor.locator('.cm-panel.cm-search');
     await expect(searchPanel).toBeVisible();
@@ -229,9 +373,17 @@ test('mobile CodeMirror search opens from the editor header and highlights remot
     await searchInput.fill('plain-no-extension');
     await searchInput.press('End');
     await expect(searchInput).toHaveValue('plain-no-extension');
-    await expect.poll(async () => editor.locator('.cm-searchMatch').count(), { timeout: 10_000 })
-      .toBeGreaterThan(0);
+    await expect.poll(async () => editor.locator('.cm-searchMatch').count(), { timeout: 10_000 }).toBeGreaterThan(0);
     await captureFunctionalScreenshot(page, 'mobile-editor-search.png');
+  });
+
+  await step('closing the popup returns to the terminal instead of leaving an empty editor pane', async () => {
+    const documentPopup = page.getByTestId('document-popup');
+    const editor = documentPopup.getByTestId('file-editor-view');
+    await editor.getByTitle('Close Editor', { exact: true }).click();
+    await expect(documentPopup).toBeHidden();
+    await expect(page.locator('[data-testid="file-editor-view"]:visible')).toHaveCount(0);
+    await expect(page.getByTestId('terminal')).toBeVisible();
   });
 });
 
@@ -241,24 +393,24 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
   const filename = 'README-e2e.md';
 
   await slowStep('single tap keeps Markdown preview-first behavior on mobile', async () => {
-    await fileManagerRow(page, filename).click();
-    const preview = page.getByRole('dialog', { name: filename });
+    await tapFileManagerRow(page, filename);
+    const preview = page.getByTestId('document-popup');
     await expect(preview).toBeVisible({ timeout: 20_000 });
     await expect(preview.getByRole('heading', { name: 'Nexus Markdown E2E' })).toBeVisible();
     await expect(preview.locator('strong')).toHaveText('preview-ok');
     const editBox = await preview.getByRole('button', { name: 'Edit', exact: true }).boundingBox();
     expect(editBox).toBeTruthy();
     expect(editBox!.height).toBeGreaterThanOrEqual(40);
-    await expect(page.getByTestId('file-editor-overlay')).toHaveCount(0);
+    await expect(page.getByTestId('document-popup').getByTestId('file-editor-view')).toBeHidden();
     await captureFunctionalScreenshot(page, 'mobile-markdown-preview.png');
   });
 
   await slowStep('Edit switches the preview to mobile CodeMirror and Save persists real SFTP bytes', async () => {
-    const preview = page.getByRole('dialog', { name: filename });
+    const preview = page.getByTestId('document-popup');
     await preview.getByRole('button', { name: 'Edit', exact: true }).click();
-    await expect(preview).toBeHidden();
+    await expect(preview).toHaveAttribute('data-document-mode', 'editor');
 
-    const editor = page.getByTestId('file-editor-overlay');
+    const editor = preview.getByTestId('file-editor-view');
     await expect(editor).toBeVisible({ timeout: 20_000 });
     await expect(editor.locator('.codemirror-mobile-editor-container')).toBeVisible();
     await expect(editor.locator('.monaco-editor')).toHaveCount(0);
@@ -273,31 +425,27 @@ test('mobile Markdown preview edits and saves through CodeMirror', async ({ page
     await editor.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(editor).toContainText('Save successful', { timeout: 15_000 });
 
-    const remoteRead = await fetch(`${E2E_SSH.controlUrl}/read?name=${encodeURIComponent(filename)}`);
-    expect(remoteRead.ok).toBeTruthy();
-    const body = await remoteRead.json() as { base64: string };
-    expect(Buffer.from(body.base64, 'base64').toString('utf8'))
-      .toBe('# Mobile Markdown E2E\n\n**mobile-save-ok**\n');
-
-    await editor.getByTestId('file-editor-close').click();
+    await preview.getByTitle('Close Editor', { exact: true }).click();
     await expect(editor).toBeHidden();
   });
 
   await step('reopening the file renders the just-saved Markdown preview', async () => {
-    await fileManagerRow(page, filename).click();
-    const preview = page.getByRole('dialog', { name: filename });
+    await tapFileManagerRow(page, filename);
+    const preview = page.getByTestId('document-popup');
     await expect(preview.getByRole('heading', { name: 'Mobile Markdown E2E' })).toBeVisible({ timeout: 20_000 });
     await expect(preview.locator('strong')).toHaveText('mobile-save-ok');
   });
 });
 
-test('mobile virtual keyboard sends modified navigation escape sequences and consumes modifiers', async ({ page, context }) => {
+test('mobile virtual keyboard sends modified navigation escape sequences and consumes modifiers', async ({
+  page,
+  context,
+}) => {
   await connectMobileSsh(page, context.request);
 
-  const commandBar = page.getByTestId('command-input-bar');
   const commandInput = page.getByTestId('command-input');
   const terminalRows = page.getByTestId('terminal').locator('.xterm-rows');
-  await commandBar.locator('button:has(i.fa-keyboard)').click();
+  await page.getByTestId('toggle-virtual-keyboard').click();
   const keyboard = page.locator('.mobile-virtual-keyboard.virtual-keyboard-bar');
   await expect(keyboard).toBeVisible();
 
@@ -306,7 +454,8 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     await commandInput.press('Enter');
     await commandInput.fill("printf 'Nexus mobile virtual keyboard\\n'");
     await commandInput.press('Enter');
-    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toContain('Nexus mobile virtual keyboard');
     await captureFunctionalScreenshot(page, 'mobile-virtual-keyboard.png');
 
@@ -314,42 +463,48 @@ test('mobile virtual keyboard sends modified navigation escape sequences and con
     const screenshotAlt = keyboard.getByRole('button', { name: 'Alt', exact: true });
     await screenshotCtrl.click();
     await screenshotAlt.click();
-    await expect(screenshotCtrl).toHaveClass(/bg-primary/);
-    await expect(screenshotAlt).toHaveClass(/bg-primary/);
+    await expect(screenshotCtrl).toHaveAttribute('aria-pressed', 'true');
+    await expect(screenshotAlt).toHaveAttribute('aria-pressed', 'true');
     await captureFunctionalScreenshot(page, 'mobile-virtual-modifiers.png');
     await screenshotCtrl.click();
     await screenshotAlt.click();
-    await expect(screenshotCtrl).not.toHaveClass(/bg-primary/);
-    await expect(screenshotAlt).not.toHaveClass(/bg-primary/);
+    await expect(screenshotCtrl).toHaveAttribute('aria-pressed', 'false');
+    await expect(screenshotAlt).toHaveAttribute('aria-pressed', 'false');
   }
 
   await slowStep('Alt+Left sends the xterm Alt cursor sequence and clears Alt after one key', async () => {
-    await commandInput.fill("bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf 'ALT_LEFT_BYTES=%s\\n' \"$bytes\"");
+    await commandInput.fill(
+      'bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf \'ALT_LEFT_BYTES=%s\\n\' "$bytes"',
+    );
     await commandInput.press('Enter');
 
     const alt = keyboard.getByRole('button', { name: 'Alt', exact: true });
     await alt.click();
-    await expect(alt).toHaveClass(/bg-primary/);
+    await expect(alt).toHaveAttribute('aria-pressed', 'true');
     await keyboard.getByRole('button', { name: '←', exact: true }).click();
-    await expect(alt).not.toHaveClass(/bg-primary/);
-    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+    await expect(alt).toHaveAttribute('aria-pressed', 'false');
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toMatch(/ALT_LEFT_BYTES=\s*27\s+91\s+49\s+59\s+51\s+68/);
   });
 
   await slowStep('Ctrl+Alt+Del sends the modified Delete sequence and clears both modifiers', async () => {
-    await commandInput.fill("bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf 'CTRL_ALT_DEL_BYTES=%s\\n' \"$bytes\"");
+    await commandInput.fill(
+      'bytes=$(dd bs=1 count=6 2>/dev/null | od -An -t u1); printf \'CTRL_ALT_DEL_BYTES=%s\\n\' "$bytes"',
+    );
     await commandInput.press('Enter');
 
     const ctrl = keyboard.getByRole('button', { name: 'Ctrl', exact: true });
     const alt = keyboard.getByRole('button', { name: 'Alt', exact: true });
     await ctrl.click();
     await alt.click();
-    await expect(ctrl).toHaveClass(/bg-primary/);
-    await expect(alt).toHaveClass(/bg-primary/);
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'true');
+    await expect(alt).toHaveAttribute('aria-pressed', 'true');
     await keyboard.getByRole('button', { name: 'Del', exact: true }).click();
-    await expect(ctrl).not.toHaveClass(/bg-primary/);
-    await expect(alt).not.toHaveClass(/bg-primary/);
-    await expect.poll(async () => terminalRows.innerText(), { timeout: 15_000 })
+    await expect(ctrl).toHaveAttribute('aria-pressed', 'false');
+    await expect(alt).toHaveAttribute('aria-pressed', 'false');
+    await expect
+      .poll(async () => terminalRows.innerText(), { timeout: 15_000 })
       .toMatch(/CTRL_ALT_DEL_BYTES=\s*27\s+91\s+51\s+59\s+55\s+126/);
   });
 });
@@ -360,19 +515,19 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   const filename = 'preview.xlsx';
 
   await slowStep('single tap opens the spreadsheet preview with both sheet tabs visible', async () => {
-    await fileManagerRow(page, filename).click();
-    const dialog = page.getByRole('dialog', { name: filename });
+    await tapFileManagerRow(page, filename);
+    const dialog = page.getByTestId('document-popup');
     await expect(dialog).toBeVisible({ timeout: 20_000 });
-    const preview = dialog.getByTestId('spreadsheet-preview');
-    const tabs = dialog.getByTestId('spreadsheet-sheet-tabs');
+    const preview = spreadsheetScroller(dialog).locator('..');
+    const tabs = worksheetTabs(dialog);
     await expect(preview).toBeVisible();
     await expect(tabs).toBeVisible();
-    await expect(dialog.getByTestId('spreadsheet-sheet-0')).toHaveText('E2E');
-    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveText('Second');
-    await expect(dialog.getByTestId('spreadsheet-horizontal-scrollbar')).toBeHidden();
+    await expect(worksheetTab(dialog, 'E2E')).toHaveText('E2E');
+    await expect(worksheetTab(dialog, 'Second')).toHaveText('Second');
+    await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
 
     const [panelBox, tabsBox, viewport] = await Promise.all([
-      dialog.locator('section').boundingBox(),
+      dialog.getByRole('dialog').boundingBox(),
       tabs.boundingBox(),
       Promise.resolve(page.viewportSize()),
     ]);
@@ -384,8 +539,8 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
   });
 
   await step('tapping the second sheet replaces the narrow-grid content and resets scroll offsets', async () => {
-    const dialog = page.getByRole('dialog', { name: filename });
-    const scroller = dialog.getByTestId('spreadsheet-scroll-container');
+    const dialog = page.getByTestId('document-popup');
+    const scroller = spreadsheetScroller(dialog);
     const dimensions = await scroller.evaluate((element) => ({
       scrollWidth: element.scrollWidth,
       clientWidth: element.clientWidth,
@@ -409,27 +564,30 @@ test('mobile spreadsheet preview keeps sheet controls inside the narrow viewport
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
 
-    await dialog.getByTestId('spreadsheet-sheet-1').click();
+    await worksheetTab(dialog, 'Second').click();
     await expect(dialog.getByText('Second Sheet E2E', { exact: true })).toBeVisible();
-    await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+    await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
     await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBe(0);
     await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
     await captureFunctionalScreenshot(page, 'mobile-spreadsheet-preview.png');
   });
 });
 
-test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom, and content panning', async ({ page, context }) => {
+test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom, and content panning', async ({
+  page,
+  context,
+}) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
 
   const filename = 'preview.pdf';
-  await fileManagerRow(page, filename).click();
-  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  await tapFileManagerRow(page, filename);
+  const dialog = page.getByTestId('document-popup');
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   await expect(dialog.getByTestId('pdf-page-count')).toHaveText('3');
-  await expect(dialog.getByTestId('pdf-continuous-pages').locator('[data-pdf-page-number]')).toHaveCount(3);
+  await expect(dialog.locator('[data-pdf-page]')).toHaveCount(3);
 
-  const closeButton = dialog.getByRole('button', { name: 'Close preview', exact: true });
+  const closeButton = dialog.getByTitle('Close preview', { exact: true });
   const closeBox = await closeButton.boundingBox();
   expect(closeBox).toBeTruthy();
   expect(closeBox!.width).toBeGreaterThanOrEqual(40);
@@ -442,14 +600,13 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await expect(nextPageButton).toBeVisible();
   await expect(outlineToggle).toBeVisible();
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
   const closedOutlineToggleStyle = await outlineToggle.evaluate((element) => {
     const style = getComputedStyle(element);
     return { color: style.color, backgroundColor: style.backgroundColor };
   });
-  await expect(dialog.getByTestId('pdf-horizontal-scrollbar')).toBeHidden();
+  await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
 
-  const scroller = dialog.getByTestId('pdf-page-scroller');
+  const scroller = pdfScroller(dialog);
   await expect.poll(() => scroller.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
   const scrollerBoxBeforeDrawer = await scroller.boundingBox();
   expect(scrollerBoxBeforeDrawer).toBeTruthy();
@@ -459,58 +616,76 @@ test('mobile PDF continuously scrolls with an overlay outline drawer, pinch zoom
   await outlineToggle.click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(outlineToggle).toHaveClass(/pdf-toolbar-button-active/);
+  await expect
+    .poll(() =>
+      outlineToggle.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { color: style.color, backgroundColor: style.backgroundColor };
+      }),
+    )
+    .not.toEqual(closedOutlineToggleStyle);
 
   // Tapping the same toolbar button to hide the drawer must also clear its
   // visual active state. Touch browsers can otherwise leave :hover stuck.
   await outlineToggle.click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
-  await expect.poll(() => outlineToggle.evaluate((element) => {
-    const style = getComputedStyle(element);
-    return { color: style.color, backgroundColor: style.backgroundColor };
-  })).toEqual(closedOutlineToggleStyle);
+  await expect
+    .poll(() =>
+      outlineToggle.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { color: style.color, backgroundColor: style.backgroundColor };
+      }),
+    )
+    .toEqual(closedOutlineToggleStyle);
 
   await outlineToggle.click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
   const scrollerBoxWithDrawer = await scroller.boundingBox();
   expect(scrollerBoxWithDrawer).toBeTruthy();
   expect(Math.abs(scrollerBoxWithDrawer!.width - scrollerBoxBeforeDrawer!.width)).toBeLessThanOrEqual(1);
-  await expect(dialog.locator('[data-testid^="pdf-thumbnail-"]')).toHaveCount(0);
-  await dialog.getByTestId('pdf-outline').getByText('Second Chapter', { exact: true }).click();
-  await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('2');
-  await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
+  await pdfOutline(dialog).getByText('Second Chapter', { exact: true }).click();
+  await expect(pdfCurrentPage(dialog)).toHaveValue('2');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
 
   await outlineToggle.click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'false');
-  await expect(dialog.getByTestId('pdf-outline-close')).toBeVisible();
-  await dialog.getByTestId('pdf-outline-close').click();
+  await expect(pdfOutline(dialog).getByRole('button', { name: 'Close', exact: true })).toBeVisible();
+  await pdfOutline(dialog).getByRole('button', { name: 'Close', exact: true }).click();
   await expect(outlineDrawer).toHaveAttribute('aria-hidden', 'true');
   await expect(outlineToggle).toHaveAttribute('aria-expanded', 'false');
-  await expect(outlineToggle).not.toHaveClass(/pdf-toolbar-button-active/);
 
-  const thirdPage = dialog.getByTestId('pdf-page-3');
-  await scroller.evaluate((element, top) => element.scrollTo({ top, behavior: 'auto' }), await thirdPage.evaluate((element) => element.offsetTop));
-  await expect(dialog.getByTestId('pdf-current-page')).toHaveValue('3');
+  const thirdPage = pdfPage(dialog, 3);
+  await scroller.evaluate(
+    (element, top) => element.scrollTo({ top, behavior: 'auto' }),
+    await thirdPage.evaluate((element) => element.offsetTop),
+  );
+  await expect(pdfCurrentPage(dialog)).toHaveValue('3');
 
   await zoomInButton.click();
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
-  await scroller.evaluate((element) => { element.scrollLeft = 0; });
+  await scroller.evaluate((element) => {
+    element.scrollLeft = 0;
+  });
   await dragPreviewWithTouch(scroller, { x: 185, y: 220 }, { x: 75, y: 212 });
   await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 
-  const zoomBeforePinch = Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', ''));
+  const zoomBeforePinch = Number((await pdfZoomLabel(dialog).innerText()).replace('%', ''));
   await pinchPreviewWithTouch(
     scroller,
-    [{ x: 130, y: 250 }, { x: 220, y: 250 }],
-    [{ x: 90, y: 250 }, { x: 270, y: 250 }],
+    [
+      { x: 130, y: 250 },
+      { x: 220, y: 250 },
+    ],
+    [
+      { x: 90, y: 250 },
+      { x: 270, y: 250 },
+    ],
   );
-  await expect.poll(async () => Number((await dialog.getByTestId('pdf-zoom-label').innerText()).replace('%', '')))
+  await expect
+    .poll(async () => Number((await pdfZoomLabel(dialog).innerText()).replace('%', '')))
     .toBeGreaterThan(zoomBeforePinch);
-  await expect(dialog.getByTestId('pdf-fit-width')).toHaveAttribute('aria-pressed', 'false');
+  await expect(dialog.getByRole('button', { name: 'Fit width', exact: true })).toHaveAttribute('aria-pressed', 'false');
 });
 
 test('mobile DOCX touch-pans wide content without a desktop scrollbar track', async ({ page, context }) => {
@@ -518,84 +693,165 @@ test('mobile DOCX touch-pans wide content without a desktop scrollbar track', as
   await openConnectedFileManager(page);
 
   const filename = 'preview.docx';
-  await fileManagerRow(page, filename).click();
-  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  await tapFileManagerRow(page, filename);
+  const dialog = page.getByTestId('document-popup');
   await expect(dialog.getByText('Nexus DOCX E2E', { exact: true })).toBeVisible({ timeout: 20_000 });
-  const scroller = dialog.getByTestId('docx-preview-scroller');
+  const scroller = docxScroller(dialog);
   await expect.poll(() => scroller.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeGreaterThan(0);
-  await expect(dialog.getByTestId('docx-horizontal-scrollbar')).toBeHidden();
-  await scroller.evaluate((element) => { element.scrollLeft = 0; });
+  await expect(previewHorizontalScrollbar(dialog)).toBeHidden();
+  await scroller.evaluate((element) => {
+    element.scrollLeft = 0;
+  });
   await dragPreviewWithTouch(scroller, { x: 300, y: 220 }, { x: 90, y: 215 });
   await expect.poll(() => scroller.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0);
 });
 
-test('mobile preview close button clears cached state when popup file editing is enabled', async ({ page, context }) => {
+test('mobile preview close button clears cached state when popup file editing is enabled', async ({
+  page,
+  context,
+}) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  expect((await context.request.put('/api/v1/settings', {
-    data: { showPopupFileEditor: 'true' },
-  })).ok()).toBeTruthy();
+  expect(
+    (
+      await context.request.put('/api/v1/settings', {
+        data: { showPopupFileEditor: true },
+      })
+    ).ok(),
+  ).toBeTruthy();
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
   await openConnectedFileManager(page);
 
   const filename = 'preview.xlsx';
-  await fileManagerRow(page, filename).click();
-  const dialog = page.getByRole('dialog', { name: filename, exact: true });
+  await tapFileManagerRow(page, filename);
+  const dialog = page.getByTestId('document-popup');
   await expect(dialog).toBeVisible({ timeout: 20_000 });
   const tabCloseButton = dialog.getByRole('button', { name: 'Close tab preview.xlsx', exact: true });
   const tabCloseBox = await tabCloseButton.boundingBox();
   expect(tabCloseBox).toBeTruthy();
   expect(tabCloseBox!.width).toBeGreaterThanOrEqual(40);
   expect(tabCloseBox!.height).toBeGreaterThanOrEqual(40);
-  await dialog.getByTestId('spreadsheet-sheet-1').click();
-  await expect(dialog.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'true');
+  await worksheetTab(dialog, 'Second').click();
+  await expect(worksheetTab(dialog, 'Second')).toHaveAttribute('aria-selected', 'true');
 
-  await dialog.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await dialog.getByTitle('Close preview', { exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  await fileManagerRow(page, filename).click();
-  const reopened = page.getByRole('dialog', { name: filename, exact: true });
+  await tapFileManagerRow(page, filename);
+  const reopened = page.getByTestId('document-popup');
   await expect(reopened).toBeVisible({ timeout: 20_000 });
   await expect(reopened.getByTestId('file-preview-tabs').getByRole('tab')).toHaveCount(1);
-  await expect(reopened.getByTestId('spreadsheet-sheet-0')).toHaveAttribute('aria-pressed', 'true');
-  await expect(reopened.getByTestId('spreadsheet-sheet-1')).toHaveAttribute('aria-pressed', 'false');
+  await expect(worksheetTab(reopened, 'E2E')).toHaveAttribute('aria-selected', 'true');
+  await expect(worksheetTab(reopened, 'Second')).toHaveAttribute('aria-selected', 'false');
 });
 
-test('mobile upload progress stays inside the viewport and restores from Progress Display', async ({ page, context }) => {
+test('mobile upload progress stays inside the viewport and restores from Progress Display', async ({
+  page,
+  context,
+}) => {
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
   const filenames = ['mobile-progress-upload-a.bin', 'mobile-progress-upload-b.bin'];
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1000`, { method: 'POST' });
 
   try {
-    await slowStep('throttled uploads expose all floating controls without overflowing the Pixel viewport', async () => {
-      const fileInput = page.getByTestId('file-manager-modal').getByTestId('file-upload-input');
-      await fileInput.setInputFiles(filenames.map((name, index) => ({
-        name,
-        mimeType: 'application/octet-stream',
-        buffer: Buffer.alloc(8 * 1024 * 1024, 0x5a + index),
-      })));
+    await slowStep(
+      'throttled uploads expose all floating controls without overflowing the Pixel viewport',
+      async () => {
+        const fileInput = page.locator('input[type="file"][multiple]').filter({ visible: false }).last();
+        await fileInput.setInputFiles(
+          filenames.map((name, index) => ({
+            name,
+            mimeType: 'application/octet-stream',
+            buffer: Buffer.alloc(8 * 1024 * 1024, 0x5a + index),
+          })),
+        );
 
-      const popup = page.getByTestId('file-upload-progress-popup');
-      await expect(popup).toBeVisible({ timeout: 10_000 });
-      await expect(popup).toContainText(filenames[0]);
-      await expect(popup).toContainText(filenames[1]);
-      await expect(popup.getByTestId('file-upload-speed')).toBeVisible();
-      await expect(popup.getByTestId('file-upload-progress-hide')).toBeVisible();
-      await expect(popup.getByTestId('file-upload-cancel-all')).toBeVisible();
-      await expect(popup.getByTestId('file-upload-resize-handle')).toBeVisible();
+        const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
+        await expect(popup).toBeVisible({ timeout: 10_000 });
+        await expect(popup).toContainText('E2E SSH · Upload Tasks');
+        await expect(popup).toContainText(filenames[0]);
+        await expect(popup).toContainText(filenames[1]);
+        await expect(popup.getByTestId('transfer-progress-speed')).toBeVisible();
+        await expect(popup.getByTestId('transfer-progress-hide')).toBeVisible();
+        await expect(popup.getByTestId('transfer-progress-cancel-all')).toBeVisible();
+        await expect(popup.getByTestId('transfer-progress-resize')).toBeVisible();
 
-      const [popupBox, viewport] = await Promise.all([popup.boundingBox(), Promise.resolve(page.viewportSize())]);
-      expect(popupBox).toBeTruthy();
-      expect(viewport).toBeTruthy();
-      expectBoxInsideViewport(popupBox!, viewport!);
-      await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
+        const [popupBox, viewport] = await Promise.all([popup.boundingBox(), Promise.resolve(page.viewportSize())]);
+        expect(popupBox).toBeTruthy();
+        expect(viewport).toBeTruthy();
+        expectBoxInsideViewport(popupBox!, viewport!);
+        await captureFunctionalScreenshot(page, 'mobile-upload-progress.png');
 
-      await popup.getByTestId('file-upload-progress-hide').click();
-      await expect(popup).toBeHidden();
-    });
+        const resizeHandle = popup.getByTestId('transfer-progress-resize');
+        const resizeBox = await resizeHandle.boundingBox();
+        expect(resizeBox).toBeTruthy();
+        const resizeStart = { x: resizeBox!.x + resizeBox!.width / 2, y: resizeBox!.y + resizeBox!.height / 2 };
+        await resizeHandle.dispatchEvent('pointerdown', {
+          pointerId: 71,
+          isPrimary: true,
+          clientX: resizeStart.x,
+          clientY: resizeStart.y,
+          button: 0,
+          bubbles: true,
+        });
+        await page.evaluate(
+          ({ x, y }) =>
+            window.dispatchEvent(
+              new PointerEvent('pointermove', {
+                pointerId: 71,
+                isPrimary: true,
+                clientX: x,
+                clientY: y,
+                bubbles: true,
+              }),
+            ),
+          { x: resizeStart.x - 48, y: resizeStart.y - 56 },
+        );
+        await page.evaluate(() =>
+          window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 71, isPrimary: true, bubbles: true })),
+        );
+        const resizedBox = await popup.boundingBox();
+        expect(resizedBox).toBeTruthy();
+        expectBoxInsideViewport(resizedBox!, viewport!);
+        expect(resizedBox!.width).toBeLessThan(popupBox!.width);
+        expect(resizedBox!.height).toBeLessThan(popupBox!.height);
+
+        const header = popup.locator('.transfer-progress-header');
+        const headerBox = await header.boundingBox();
+        expect(headerBox).toBeTruthy();
+        const dragStart = { x: headerBox!.x + 18, y: headerBox!.y + 18 };
+        await header.dispatchEvent('pointerdown', {
+          pointerId: 72,
+          isPrimary: true,
+          clientX: dragStart.x,
+          clientY: dragStart.y,
+          button: 0,
+          bubbles: true,
+        });
+        await page.evaluate(() =>
+          window.dispatchEvent(
+            new PointerEvent('pointermove', { pointerId: 72, isPrimary: true, clientX: 0, clientY: 0, bubbles: true }),
+          ),
+        );
+        await page.evaluate(() =>
+          window.dispatchEvent(new PointerEvent('pointerup', { pointerId: 72, isPrimary: true, bubbles: true })),
+        );
+        const draggedBox = await popup.boundingBox();
+        expect(draggedBox).toBeTruthy();
+        expectBoxInsideViewport(draggedBox!, viewport!);
+        expect(draggedBox!.x).toBeGreaterThanOrEqual(7);
+        expect(draggedBox!.x).toBeLessThanOrEqual(9);
+        expect(draggedBox!.y).toBeGreaterThanOrEqual(7);
+        expect(draggedBox!.y).toBeLessThanOrEqual(9);
+
+        await closeConnectedFileManager(page);
+        await popup.getByTestId('transfer-progress-hide').click();
+        await expect(popup).toBeHidden();
+      },
+    );
 
     await step('Progress Display restores the hidden mobile upload window', async () => {
       // Close File Manager so the workspace toggle is accessible. The FileManager
@@ -605,19 +861,28 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       await expect(source).toBeVisible();
       await expect(source.getByTestId('hidden-progress-restore')).toBeEnabled();
 
-      const progressPanel = progressDisplay.locator('.transfer-progress-panel');
-      const [displayBox, viewport] = await Promise.all([progressPanel.boundingBox(), Promise.resolve(page.viewportSize())]);
+      const progressPanel = progressDisplay;
+      const [displayBox, viewport] = await Promise.all([
+        progressPanel.boundingBox(),
+        Promise.resolve(page.viewportSize()),
+      ]);
       expect(displayBox).toBeTruthy();
       expect(viewport).toBeTruthy();
       expectBoxInsideViewport(displayBox!, viewport!);
+      await captureFunctionalScreenshot(page, 'mobile-progress-display.png');
 
       await source.getByTestId('hidden-progress-restore').click();
       await expect(progressDisplay).toBeHidden();
-      await reopenConnectedFileManager(page);
-      const popup = page.getByTestId('file-upload-progress-popup');
+      const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
       await expect(popup).toBeVisible();
-      await popup.getByTestId('file-upload-cancel-all').click();
-      await expect(popup).toBeHidden({ timeout: 10_000 });
+      await popup.getByTestId('transfer-progress-cancel-all').click();
+      await expect
+        .poll(() =>
+          popup
+            .locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]')
+            .evaluateAll((tasks) => tasks.map((task) => task.getAttribute('data-task-status'))),
+        )
+        .toEqual(filenames.map(() => 'cancelled'));
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });

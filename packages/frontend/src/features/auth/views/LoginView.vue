@@ -1,0 +1,211 @@
+<script setup lang="ts">
+  import { computed, reactive, ref, watch } from 'vue';
+  import { useRouter } from 'vue-router';
+  import { useI18n } from 'vue-i18n';
+  import { apiErrorMessage } from '@/client/http';
+  import { BaseButton, BaseCheckbox, BaseFormField, BaseInput } from '@/foundation/ui';
+  import { useAuthSession } from '../public';
+
+  type CaptchaStatus = 'loading' | 'ready' | 'error' | 'invalid';
+
+  const props = withDefaults(
+    defineProps<{
+      captchaRequired?: boolean;
+      captchaToken?: string | null;
+      captchaStatus?: CaptchaStatus;
+      passkeyAvailable?: boolean;
+      passkeyLoading?: boolean;
+    }>(),
+    {
+      captchaRequired: false,
+      captchaToken: null,
+      captchaStatus: 'ready',
+      passkeyAvailable: false,
+      passkeyLoading: false,
+    },
+  );
+  const emit = defineEmits<{
+    passkey: [username: string];
+    loginAttempted: [];
+    securityChallengeFeedback: [message: string | null];
+    securityChallengeConsumed: [];
+  }>();
+
+  const router = useRouter();
+  const { t } = useI18n();
+  const auth = useAuthSession();
+
+  const credentials = reactive({ username: '', password: '' });
+  const rememberMe = ref(false);
+  const twoFactorToken = ref('');
+  const isLoading = ref(false);
+  const error = ref<string | null>(null);
+  const isBusy = computed(() => isLoading.value || props.passkeyLoading);
+  const captchaBlocked = computed(() => !auth.pendingSecondFactor.value && props.captchaStatus !== 'ready');
+
+  watch(
+    () => auth.pendingSecondFactor.value,
+    (pending) => {
+      if (!pending) twoFactorToken.value = '';
+    },
+  );
+
+  const submit = async (): Promise<void> => {
+    if (isBusy.value) return;
+    const submittingSecondFactor = auth.pendingSecondFactor.value;
+    error.value = null;
+    if (!submittingSecondFactor) {
+      emit('loginAttempted');
+      emit('securityChallengeFeedback', null);
+    }
+    isLoading.value = true;
+
+    try {
+      if (submittingSecondFactor) {
+        await auth.verifyTwoFactor(twoFactorToken.value);
+        await router.push({ name: 'Dashboard' });
+        return;
+      }
+
+      if (props.captchaStatus !== 'ready') {
+        return;
+      }
+      if (props.captchaRequired && !props.captchaToken) {
+        emit('securityChallengeFeedback', t('auth.login.error.captchaRequired'));
+        return;
+      }
+      try {
+        const result = await auth.login({
+          username: credentials.username,
+          password: credentials.password,
+          rememberMe: rememberMe.value,
+          captchaToken: props.captchaToken ?? undefined,
+        });
+
+        if (result.status === 'authenticated') await router.push({ name: 'Dashboard' });
+      } finally {
+        if (props.captchaRequired) emit('securityChallengeConsumed');
+      }
+    } catch (cause) {
+      error.value = apiErrorMessage(
+        cause,
+        t(submittingSecondFactor ? 'auth.login.error.twoFactorGeneric' : 'auth.login.error.generic'),
+      );
+    } finally {
+      isLoading.value = false;
+    }
+  };
+
+  const startPasskey = (): void => {
+    error.value = null;
+    emit('passkey', credentials.username);
+  };
+</script>
+
+<template>
+  <div class="flex min-h-dvh items-center justify-center overflow-y-auto bg-background p-4">
+    <div class="flex w-full max-w-4xl overflow-hidden rounded-xl border border-border/20 bg-background shadow-2xl">
+      <section
+        class="hidden w-2/5 flex-col items-center justify-center bg-gradient-to-br from-primary to-link p-10 text-white md:flex"
+      >
+        <img src="@/assets/logo.png" :alt="t('projectName')" class="mb-5 h-20 w-auto" />
+        <h1 class="mb-2 text-3xl font-bold">{{ t('projectName') }}</h1>
+        <p class="text-center text-base opacity-80">{{ t('slogan') }}</p>
+      </section>
+
+      <section class="flex w-full flex-col justify-center p-8 sm:p-12 md:w-3/5">
+        <div class="mb-6 flex justify-center md:hidden">
+          <img src="@/assets/logo.png" :alt="t('projectName')" class="h-16 w-auto" />
+        </div>
+
+        <h2 class="mb-6 text-center text-2xl font-semibold text-foreground">{{ t('auth.login.title') }}</h2>
+
+        <form class="space-y-5" @submit.prevent="submit">
+          <div v-if="!auth.pendingSecondFactor.value" class="space-y-6">
+            <BaseFormField :label="t('auth.login.username')" for-id="username">
+              <BaseInput
+                id="username"
+                v-model="credentials.username"
+                name="username"
+                autocomplete="username"
+                required
+                size="lg"
+                class="rounded-lg py-3"
+                :disabled="isBusy"
+              />
+            </BaseFormField>
+
+            <BaseFormField :label="t('auth.login.password')" for-id="password">
+              <BaseInput
+                id="password"
+                v-model="credentials.password"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                required
+                size="lg"
+                class="rounded-lg py-3"
+                :disabled="isBusy"
+              />
+            </BaseFormField>
+
+            <label class="flex cursor-pointer items-center gap-2 text-sm text-text-secondary" for="rememberMe">
+              <BaseCheckbox id="rememberMe" v-model="rememberMe" :disabled="isBusy" />
+              <span>{{ t('auth.login.rememberMe') }}</span>
+            </label>
+          </div>
+
+          <BaseFormField v-else :label="t('auth.login.twoFactorPrompt')" for-id="twoFactorToken">
+            <BaseInput
+              id="twoFactorToken"
+              v-model="twoFactorToken"
+              name="twoFactorToken"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              pattern="[0-9]{6}"
+              required
+              size="lg"
+              class="rounded-lg py-3"
+              :disabled="isBusy"
+            />
+          </BaseFormField>
+
+          <slot v-if="!auth.pendingSecondFactor.value" name="security" />
+
+          <p v-if="error" class="text-error text-center text-sm -mt-2 mb-2" role="alert">{{ error }}</p>
+
+          <BaseButton
+            type="submit"
+            variant="primary"
+            size="lg"
+            block
+            class="rounded-lg px-4 py-3"
+            :disabled="captchaBlocked"
+            :loading="isBusy"
+          >
+            {{
+              isBusy
+                ? t('auth.login.loggingIn')
+                : auth.pendingSecondFactor.value
+                  ? t('auth.login.verifyButton')
+                  : t('auth.login.loginButton')
+            }}
+          </BaseButton>
+
+          <BaseButton
+            v-if="props.passkeyAvailable && !auth.pendingSecondFactor.value"
+            type="button"
+            size="lg"
+            block
+            class="rounded-lg px-4 py-3"
+            :loading="isBusy"
+            @click="startPasskey"
+          >
+            <template #leading><i class="fas fa-key" aria-hidden="true"></i></template>
+            {{ isBusy ? t('auth.login.loggingIn') : t('auth.login.loginWithPasskey') }}
+          </BaseButton>
+        </form>
+      </section>
+    </div>
+  </div>
+</template>

@@ -1,0 +1,24 @@
+{
+  "commandHistory": {
+    "searchPlaceholder": "履歴を検索...",
+    "clear": "クリア",
+    "copy": "コピー",
+    "delete": "削除",
+    "loading": "ロード中...",
+    "empty": "履歴はありません",
+    "confirmClear": "すべての履歴をクリアしますか？",
+    "copied": "クリップボードにコピーしました",
+    "copyFailed": "コピーに失敗しました",
+    "actions": {
+      "sendToAllSessions": "すべてのセッションに送信"
+    },
+    "notifications": {
+      "sentToAllSessions": "コマンドは {count} 個のセッションに送信されました。",
+      "noActiveSshSessions": "コマンドを送信するアクティブな SSH セッションはありません。"
+    },
+    "addFailed": "コマンドは送信されましたが、履歴への保存に失敗しました: {error}",
+    "loadFailed": "コマンド履歴の読み込みに失敗しました: {error}",
+    "deleteFailed": "履歴の削除に失敗しました: {error}",
+    "clearFailed": "コマンド履歴の消去に失敗しました: {error}"
+  }
+}

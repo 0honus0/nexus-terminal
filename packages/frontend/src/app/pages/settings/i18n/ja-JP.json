@@ -1,0 +1,35 @@
+{
+  "settings": {
+    "title": "設定",
+    "category": {
+      "security": "セキュリティ設定",
+      "appearance": "外観設定",
+      "system": "システム設定",
+      "about": "バージョン情報",
+      "dataManagement": "データ管理"
+    },
+    "about": {
+      "version": "バージョン",
+      "checkingUpdate": "更新を確認中...",
+      "latestVersion": "最新バージョンです",
+      "updateAvailable": "新しいバージョン {version} が利用可能です！",
+      "error": {
+        "checkFailed": "更新の確認に失敗しました",
+        "checkFailedShort": "確認失敗",
+        "noReleases": "リリースバージョンが見つかりません",
+        "rateLimit": "GitHub API レート制限。後でもう一度お試しください"
+      }
+    },
+    "tabs": {
+      "security": "セキュリティ",
+      "ipControl": "IP 制御",
+      "workspace": "ワークスペース",
+      "system": "システム",
+      "dataManagement": "データ管理",
+      "appearance": "外観",
+      "about": "バージョン情報"
+    },
+    "loading": "読み込み中...",
+    "sectionsAriaLabel": "設定セクション"
+  }
+}

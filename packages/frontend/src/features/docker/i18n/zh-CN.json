@@ -1,0 +1,43 @@
+{
+  "dockerManager": {
+    "loading": "正在加载 Docker 容器...",
+    "notAvailable": "远程主机 Docker 不可用",
+    "installHintRemote": "请确保远程主机上已安装并运行 Docker。",
+    "error": {
+      "fetchFailed": "获取远程容器状态失败",
+      "commandFailed": "执行远程命令 '{command}' 失败",
+      "invalidResponse": "收到无效的服务器响应",
+      "noActiveSession": "无活动会话",
+      "connectFirst": "请先连接一个会话",
+      "sshDisconnected": "SSH 会话已断开。",
+      "sshError": "SSH 连接错误",
+      "sshNotConnected": "SSH 会话未连接。"
+    },
+    "noContainers": "在远程主机上未找到正在运行或已停止的容器。",
+    "header": {
+      "name": "名称",
+      "image": "镜像",
+      "status": "状态",
+      "ports": "端口",
+      "actions": "操作"
+    },
+    "action": {
+      "restart": "重启",
+      "stop": "停止",
+      "start": "启动",
+      "remove": "移除",
+      "enter": "进入",
+      "logs": "日志",
+      "removeConfirm": "确定要移除 {name} 吗？"
+    },
+    "waitingForSsh": "等待 SSH 连接...",
+    "stats": {
+      "noData": "无可用状态数据。",
+      "cpu": "CPU 使用率",
+      "memory": "内存使用 / 限制",
+      "netIO": "网络 I/O",
+      "blockIO": "磁盘 I/O",
+      "pids": "进程数"
+    }
+  }
+}

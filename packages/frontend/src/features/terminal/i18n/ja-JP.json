@@ -1,0 +1,20 @@
+{
+  "terminal": {
+    "search": {
+      "open": "ターミナルを検索",
+      "placeholder": "ターミナルを検索...",
+      "previous": "前を検索",
+      "next": "次を検索",
+      "close": "検索を閉じる"
+    },
+    "label": "ターミナル",
+    "ariaLabel": "ターミナル",
+    "mobile": {
+      "copy": "コピー",
+      "paste": "貼り付け",
+      "selectAll": "すべて選択",
+      "adjustSelectionStart": "選択範囲の開始位置を調整",
+      "adjustSelectionEnd": "選択範囲の終了位置を調整"
+    }
+  }
+}

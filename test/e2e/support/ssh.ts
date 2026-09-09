@@ -13,9 +13,11 @@ export async function configureSshE2eSettings(request: APIRequestContext): Promi
   const response = await request.put('/api/v1/settings', {
     data: {
       language: 'en-US',
-      showPopupFileManager: 'true',
-      showPopupFileEditor: 'true',
-      fileManagerShowDeleteConfirmation: 'true',
+      showPopupFileManager: true,
+      showPopupFileEditor: true,
+      fileManagerShowDeleteConfirmation: true,
+      workspaceSidebarPersistent: false,
+      showStatusMonitorIpAddress: false,
     },
   });
   expect(response.ok()).toBeTruthy();
@@ -31,10 +33,17 @@ export async function setTestSshOnline(online: boolean): Promise<void> {
   expect(response.ok).toBeTruthy();
 }
 
+export async function setTestSshLstatDenyPrefix(prefix: string): Promise<void> {
+  const response = await fetch(`${E2E_SSH.controlUrl}/sftp/lstat-deny-prefix?path=${encodeURIComponent(prefix)}`, {
+    method: 'POST',
+  });
+  expect(response.ok).toBeTruthy();
+}
+
 export async function removeNamedSshConnections(request: APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/connections');
   expect(response.ok()).toBeTruthy();
-  const connections = await response.json() as Array<{ id: number; name?: string }>;
+  const connections = (await response.json()) as Array<{ id: number; name?: string }>;
   for (const connection of connections.filter((item) => item.name === E2E_SSH.name)) {
     const deleteResponse = await request.delete(`/api/v1/connections/${connection.id}`);
     expect(deleteResponse.ok()).toBeTruthy();
@@ -44,7 +53,9 @@ export async function removeNamedSshConnections(request: APIRequestContext): Pro
 export async function ensureTestSshConnection(request: APIRequestContext): Promise<number> {
   const listResponse = await request.get('/api/v1/connections');
   expect(listResponse.ok()).toBeTruthy();
-  const existing = (await listResponse.json() as Array<{ id: number; name?: string }>).find((item) => item.name === E2E_SSH.name);
+  const existing = ((await listResponse.json()) as Array<{ id: number; name?: string }>).find(
+    (item) => item.name === E2E_SSH.name,
+  );
   if (existing) return existing.id;
 
   const createResponse = await request.post('/api/v1/connections', {
@@ -54,29 +65,48 @@ export async function ensureTestSshConnection(request: APIRequestContext): Promi
       host: E2E_SSH.host,
       port: E2E_SSH.port,
       username: E2E_SSH.username,
-      auth_method: 'password',
+      authMethod: 'password',
       password: E2E_SSH.password,
     },
   });
   expect(createResponse.status()).toBe(201);
-  const body = await createResponse.json() as { connection: { id: number } };
+  const body = (await createResponse.json()) as { connection: { id: number } };
   return body.connection.id;
 }
 
 export async function connectTestSshFromConnectionsPage(page: Page, connectionId: number): Promise<void> {
   await page.goto('/connections');
-  const row = page.locator(`[data-connection-id="${connectionId}"]`);
+  const row = page.getByTestId(`connection-row-${connectionId}`);
   await expect(row).toBeVisible();
   await row.getByRole('button', { name: 'Connect', exact: true }).click();
   await expect(page).toHaveURL(/\/workspace$/);
-  // Reaching the workspace route only means the session UI was created. Wait until the
-  // initial SSH handshake has completed so callers cannot race the product's intentional
-  // command-input guard and silently lose their first terminal action.
-  await expect(page.getByTestId('command-input')).toBeEnabled({ timeout: 20_000 });
+  // Reaching the workspace route only means the session UI was created. Observe the product's
+  // actual Workspace lifecycle rather than racing a test-only timeout against the SSH 20s ready
+  // timeout / 30s protocol timeout. The outer bound is only a deadlock guard; failures report the
+  // last real state/message so transport regressions stay diagnosable instead of looking flaky.
+  const activeTab = page.getByTestId('terminal-tab-bar').getByRole('tab', { selected: true });
+  await expect(activeTab).toBeVisible();
+  try {
+    await expect(activeTab).toHaveAttribute('data-session-state', 'connected', { timeout: 35_000 });
+  } catch (error) {
+    const state = (await activeTab.getAttribute('data-session-state')) ?? 'missing';
+    const status = (await activeTab.getAttribute('data-session-status')) ?? '';
+    throw new Error(
+      `Workspace SSH did not reach connected state (state=${state}${status ? `, status=${status}` : ''}). ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  await expect(page.getByTestId('command-input')).toBeEnabled();
 }
 
+const visibleFileManagerModal = (page: Page): Locator =>
+  page.locator('[data-testid="file-manager-modal"]:visible').first();
+const visibleFileManagerOpenButton = (page: Page): Locator =>
+  page.locator('[data-testid="open-file-manager-button"]:visible').first();
+
 export function activeFileManagerList(page: Page): Locator {
-  return page.getByTestId('file-manager-modal').locator('[data-testid="file-manager-list"]');
+  return visibleFileManagerModal(page).getByTestId('file-manager-list');
 }
 
 export function fileManagerRow(page: Page, filename: string): Locator {
@@ -84,7 +114,7 @@ export function fileManagerRow(page: Page, filename: string): Locator {
 }
 
 export async function openConnectedFileManager(page: Page): Promise<void> {
-  const openButton = page.getByTestId('open-file-manager-button');
+  const openButton = visibleFileManagerOpenButton(page);
   await expect(openButton).toBeVisible({ timeout: 20_000 });
   await openButton.click();
   await expect(page.getByText('File Manager', { exact: false }).first()).toBeVisible();
@@ -92,28 +122,25 @@ export async function openConnectedFileManager(page: Page): Promise<void> {
 }
 
 export async function closeConnectedFileManager(page: Page): Promise<void> {
-  const modal = page.getByTestId('file-manager-modal');
+  const modal = visibleFileManagerModal(page);
   await expect(modal).toBeVisible();
   await modal.getByTestId('file-manager-modal-close').click();
   await expect(modal).toBeHidden();
 }
 
 export async function reopenConnectedFileManager(page: Page): Promise<void> {
-  const openButton = page.getByTestId('open-file-manager-button');
-  await expect(openButton).toBeVisible({ timeout: 20_000 });
-  await openButton.click();
-  const modal = page.getByTestId('file-manager-modal');
+  let modal = visibleFileManagerModal(page);
+  if (!(await modal.isVisible().catch(() => false))) {
+    const openButton = visibleFileManagerOpenButton(page);
+    await expect(openButton).toBeVisible({ timeout: 20_000 });
+    await openButton.click();
+    modal = visibleFileManagerModal(page);
+  }
   await expect(modal).toBeVisible();
   await expect(activeFileManagerList(page)).toBeVisible({ timeout: 20_000 });
 }
 
-
-async function openProgressDisplay(
-  page: Page,
-  placement: 'inline' | 'overlay',
-  layoutTestId: 'progress-display-modal' | 'progress-display-overlay',
-  expectedLayout: { position: 'static' | 'fixed'; zIndex: 'auto' | '1100' },
-): Promise<Locator> {
+async function openProgressDisplay(page: Page): Promise<Locator> {
   const fileManagerModal = page.getByTestId('file-manager-modal');
   if (await fileManagerModal.isVisible()) {
     await closeConnectedFileManager(page);
@@ -125,28 +152,22 @@ async function openProgressDisplay(
 
   const display = page.getByTestId('progress-display-modal');
   await expect(display).toBeVisible();
-  await expect(display).toHaveAttribute('data-progress-display-placement', placement);
-  await expect.poll(() => page.getByTestId(layoutTestId).evaluate(element => ({
-    position: window.getComputedStyle(element).position,
-    zIndex: window.getComputedStyle(element).zIndex,
-  }))).toEqual(expectedLayout);
+  await expect(display).toHaveAttribute('data-progress-display-placement', 'overlay');
+  await expect
+    .poll(() =>
+      page.getByTestId('progress-display-overlay').evaluate((element) => ({
+        position: window.getComputedStyle(element).position,
+        zIndex: window.getComputedStyle(element).zIndex,
+      })),
+    )
+    .toEqual({ position: 'fixed', zIndex: '1100' });
   return display;
 }
 
-export async function openInlineProgressDisplay(page: Page): Promise<Locator> {
-  return openProgressDisplay(
-    page,
-    'inline',
-    'progress-display-modal',
-    { position: 'static', zIndex: 'auto' },
-  );
+export async function openDesktopProgressDisplay(page: Page): Promise<Locator> {
+  return openProgressDisplay(page);
 }
 
 export async function openMobileProgressDisplay(page: Page): Promise<Locator> {
-  return openProgressDisplay(
-    page,
-    'overlay',
-    'progress-display-overlay',
-    { position: 'fixed', zIndex: '1100' },
-  );
+  return openProgressDisplay(page);
 }

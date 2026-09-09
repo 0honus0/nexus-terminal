@@ -3,7 +3,8 @@
     "subject": "Nexus Terminal Test Notification ({event})",
     "email": {
       "body": "This is a test email from Nexus Terminal for event '{event}'.\n\nIf you received this, your SMTP configuration is working.\n\nTimestamp: {timestamp}",
-      "bodyHtml": "<p>This is a test email from <b>Nexus Terminal</b> for event '{event}'.</p><p>If you received this, your SMTP configuration is working.</p><p>Timestamp: {timestamp}</p>"
+      "bodyHtml": "<p>This is a test email from <b>Nexus Terminal</b> for event '{event}'.</p><p>If you received this, your SMTP configuration is working.</p><p>Timestamp: {timestamp}</p>",
+      "detailsMessage": "This is a test notification from Nexus Terminal (Email) for event '{event}'."
     },
     "webhook": {
       "detailsMessage": "This is a test notification from Nexus Terminal (Webhook - i18n) for event '{event}'."
@@ -45,6 +46,25 @@
     "PASSKEY_DELETED": "Passkey Deleted",
     "PASSKEY_DELETE_UNAUTHORIZED": "Passkey Deletion Unauthorized",
     "PASSKEY_NAME_UPDATED": "Passkey Name Updated",
-    "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "Passkey Name Update Unauthorized"
+    "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "Passkey Name Update Unauthorized",
+    "IP_BLOCKED": "IP Address Blocked"
+  },
+  "notification": {
+    "email": {
+      "defaultBody": "<p>Event: {eventDisplay}</p><p>Timestamp: {timestamp}</p><p>Details:</p><pre>{details}</pre>"
+    },
+    "telegram": {
+      "defaultBody": "*{eventDisplay}*\nTimestamp: {timestamp}\nDetails:\n```\n{details}\n```"
+    },
+    "test": {
+      "success": "Test notification sent successfully.",
+      "failure": "Test notification failed: {error}"
+    },
+    "details": {
+      "connectionTestSuccess": "Connection test successful for '{name}'!",
+      "connectionTestFailed": "Connection test failed for '{name}': {error}",
+      "ipWhitelistUpdated": "IP Whitelist updated successfully.",
+      "settingsUpdated": "Settings updated successfully."
+    }
   }
 }

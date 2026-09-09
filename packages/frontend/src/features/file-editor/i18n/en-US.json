@@ -1,0 +1,19 @@
+{
+  "fileEditor": {
+    "title": "File Editor",
+    "encoding": "Encoding",
+    "contextMenu": {
+      "close": "Close Tab",
+      "closeOthers": "Close Other Tabs",
+      "closeRight": "Close Tabs to the Right",
+      "closeLeft": "Close Tabs to the Left"
+    },
+    "lineEnding": "Line ending",
+    "refreshRemote": "Refresh remote file",
+    "confirmDiscardChanges": "Discard unsaved changes and reload the remote file?",
+    "lineEndingLf": "LF",
+    "lineEndingCrlf": "CRLF",
+    "lineEndingCr": "CR",
+    "resizePopup": "Resize editor window"
+  }
+}

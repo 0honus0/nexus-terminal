@@ -10,7 +10,7 @@ test('system settings persist timezone and language changes through the UI', asy
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');
   expect(originalResponse.ok()).toBeTruthy();
-  const original = await originalResponse.json() as Record<string, string | undefined>;
+  const original = (await originalResponse.json()) as { language?: string; timezone?: string };
 
   const normalize = await context.request.put('/api/v1/settings', {
     data: {
@@ -22,7 +22,8 @@ test('system settings persist timezone and language changes through the UI', asy
 
   try {
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-system').click();
+    await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
+    await expect(page.getByTestId('preferences-settings')).toBeVisible();
     await expect(page.locator('#languageSelect')).toBeVisible();
     await expect(page.locator('#timezoneSelect')).toBeVisible();
     await captureFunctionalScreenshot(page, 'system-settings.png', { viewport: { width: 1440, height: 900 } });
@@ -32,15 +33,15 @@ test('system settings persist timezone and language changes through the UI', asy
       const timezoneForm = page.locator('form').filter({ has: timezone });
       await timezone.selectOption(TARGET_TIMEZONE);
 
-      const responsePromise = page.waitForResponse((response) =>
-        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
       await timezoneForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');
       expect(persisted.ok()).toBeTruthy();
-      expect((await persisted.json() as Record<string, string>).timezone).toBe(TARGET_TIMEZONE);
+      expect(((await persisted.json()) as { timezone?: string }).timezone).toBe(TARGET_TIMEZONE);
     });
 
     await step('save a language through the system settings form', async () => {
@@ -48,8 +49,8 @@ test('system settings persist timezone and language changes through the UI', asy
       const languageForm = page.locator('form').filter({ has: language });
       await language.selectOption(TARGET_LANGUAGE);
 
-      const responsePromise = page.waitForResponse((response) =>
-        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
       await languageForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
@@ -57,12 +58,13 @@ test('system settings persist timezone and language changes through the UI', asy
 
       const persisted = await context.request.get('/api/v1/settings');
       expect(persisted.ok()).toBeTruthy();
-      expect((await persisted.json() as Record<string, string>).language).toBe(TARGET_LANGUAGE);
+      expect(((await persisted.json()) as { language?: string }).language).toBe(TARGET_LANGUAGE);
     });
 
     await step('both values survive a full settings page reload', async () => {
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.getByTestId('settings-tab-system').click();
+      await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
+      await expect(page.getByTestId('preferences-settings')).toBeVisible();
       await expect(page.locator('#timezoneSelect')).toHaveValue(TARGET_TIMEZONE);
       await expect(page.locator('#languageSelect')).toHaveValue(TARGET_LANGUAGE);
     });
@@ -77,30 +79,103 @@ test('system settings persist timezone and language changes through the UI', asy
   }
 });
 
+test('preferences load workspace values from the unified settings contract', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const originalResponse = await context.request.get('/api/v1/settings');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = (await originalResponse.json()) as {
+    language?: string;
+    showPopupFileManager?: boolean;
+    navBarVisible?: boolean;
+    showConnectionTags?: boolean;
+    showQuickCommandTags?: boolean;
+  };
+  const normalize = await context.request.put('/api/v1/settings', {
+    data: {
+      language: 'en-US',
+      showPopupFileManager: true,
+      navBarVisible: true,
+      showConnectionTags: false,
+      showQuickCommandTags: false,
+    },
+  });
+  expect(normalize.ok()).toBeTruthy();
+
+  const retiredRequests: string[] = [];
+  page.on('request', (request) => {
+    if (
+      /\/api\/v1\/settings\/(?:nav-bar-visibility|show-connection-tags|show-quick-command-tags|show-status-monitor-ip-address)/.test(
+        request.url(),
+      )
+    )
+      retiredRequests.push(request.url());
+  });
+  try {
+    await page.goto('/settings');
+    await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
+    await expect(page.locator('#showPopupFileManager')).toBeChecked();
+    await expect(page.locator('#showConnectionTags')).not.toBeChecked();
+    await expect(page.locator('#showQuickCommandTags')).not.toBeChecked();
+    expect(retiredRequests).toEqual([]);
+  } finally {
+    const restore = await context.request.put('/api/v1/settings', {
+      data: {
+        language: original.language ?? 'en-US',
+        showPopupFileManager: original.showPopupFileManager ?? false,
+        navBarVisible: original.navBarVisible ?? true,
+        showConnectionTags: original.showConnectionTags ?? true,
+        showQuickCommandTags: original.showQuickCommandTags ?? true,
+      },
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
+});
+
+test('preferences settings report a main settings load failure and keep the form usable', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
+  await page.route('**/api/v1/settings', async (route) => {
+    if (route.request().method() === 'GET') await route.abort('failed');
+    else await route.continue();
+  });
+
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
+  await expect(page.getByTestId('preferences-settings')).toBeVisible();
+  await expect(page.getByText('Failed to load preferences: Network Error', { exact: true }).first()).toBeVisible();
+  await expect(page.locator('#showPopupFileManager')).toBeVisible();
+});
+
 test('dashboard local and remote resource cards can be configured independently', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');
   expect(originalResponse.ok()).toBeTruthy();
-  const original = await originalResponse.json() as Record<string, string | undefined>;
+  const original = (await originalResponse.json()) as {
+    language?: string;
+    dashboardShowLocalResources?: boolean;
+    dashboardShowRemoteResources?: boolean;
+    remoteHostRefreshIntervalSeconds?: number;
+    statusMonitorIntervalSeconds?: number;
+  };
 
   const normalize = await context.request.put('/api/v1/settings', {
     data: {
       language: 'en-US',
-      dashboardShowLocalResources: 'true',
-      dashboardShowRemoteResources: 'true',
-      remoteHostRefreshIntervalSeconds: '30',
-      statusMonitorIntervalSeconds: '3',
+      dashboardShowLocalResources: true,
+      dashboardShowRemoteResources: true,
+      remoteHostRefreshIntervalSeconds: 30,
+      statusMonitorIntervalSeconds: 3,
     },
   });
   expect(normalize.ok()).toBeTruthy();
 
   try {
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-workspace').click();
+    await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
 
-    const localToggle = page.getByTestId('dashboard-show-local-resources');
-    const remoteToggle = page.getByTestId('dashboard-show-remote-resources');
-    const refreshInterval = page.getByTestId('dashboard-remote-refresh-interval');
+    const localToggle = page.getByRole('checkbox', { name: 'Show local resources', exact: true });
+    const remoteToggle = page.getByRole('checkbox', { name: 'Show remote resources', exact: true });
+    const refreshInterval = page.getByLabel('SSH resource refresh interval (seconds)', { exact: true });
     const resourceForm = page.locator('form').filter({ has: localToggle });
     await expect(localToggle).toBeChecked();
     await expect(remoteToggle).toBeChecked();
@@ -108,70 +183,76 @@ test('dashboard local and remote resource cards can be configured independently'
 
     await step('save an SSH dashboard refresh interval independently from the status monitor', async () => {
       await refreshInterval.fill('17');
-      const responsePromise = page.waitForResponse((response) =>
-        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
       await resourceForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');
       expect(persisted.ok()).toBeTruthy();
-      const values = await persisted.json() as Record<string, string>;
-      expect(values.remoteHostRefreshIntervalSeconds).toBe('17');
-      expect(values.statusMonitorIntervalSeconds).toBe('3');
+      const values = (await persisted.json()) as {
+        remoteHostRefreshIntervalSeconds?: number;
+        statusMonitorIntervalSeconds?: number;
+      };
+      expect(values.remoteHostRefreshIntervalSeconds).toBe(17);
+      expect(values.statusMonitorIntervalSeconds).toBe(3);
 
       const invalid = await context.request.put('/api/v1/settings', {
-        data: { remoteHostRefreshIntervalSeconds: '0' },
+        data: { remoteHostRefreshIntervalSeconds: 0 },
       });
       expect(invalid.status()).toBe(400);
     });
 
     await step('dashboard reflects the dedicated SSH refresh interval', async () => {
       await page.goto('/');
-      await expect(page.getByTestId('dashboard-system-resources').getByText('17s refresh', { exact: true })).toBeVisible();
+      await expect(page.getByTestId('dashboard-system-resources')).toBeVisible();
       await page.goto('/settings');
-      await page.getByTestId('settings-tab-workspace').click();
-      await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveValue('17');
+      await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
+      await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
     });
 
     await step('disable only local dashboard resources', async () => {
       await localToggle.uncheck();
-      const responsePromise = page.waitForResponse((response) =>
-        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
       await resourceForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');
       expect(persisted.ok()).toBeTruthy();
-      const values = await persisted.json() as Record<string, string>;
-      expect(values.dashboardShowLocalResources).toBe('false');
-      expect(values.dashboardShowRemoteResources).toBe('true');
+      const values = (await persisted.json()) as {
+        dashboardShowLocalResources?: boolean;
+        dashboardShowRemoteResources?: boolean;
+      };
+      expect(values.dashboardShowLocalResources).toBe(false);
+      expect(values.dashboardShowRemoteResources).toBe(true);
     });
 
     await step('switch to local-only resources and persist across reload', async () => {
       await localToggle.check();
       await remoteToggle.uncheck();
-      const responsePromise = page.waitForResponse((response) =>
-        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
       await resourceForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.getByTestId('settings-tab-workspace').click();
-      await expect(page.getByTestId('dashboard-show-local-resources')).toBeChecked();
-      await expect(page.getByTestId('dashboard-show-remote-resources')).not.toBeChecked();
-      await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveValue('17');
+      await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
+      await expect(page.getByRole('checkbox', { name: 'Show local resources', exact: true })).toBeChecked();
+      await expect(page.getByRole('checkbox', { name: 'Show remote resources', exact: true })).not.toBeChecked();
+      await expect(page.getByLabel('SSH resource refresh interval (seconds)', { exact: true })).toHaveValue('17');
     });
   } finally {
     const restore = await context.request.put('/api/v1/settings', {
       data: {
         language: original.language ?? 'en-US',
-        dashboardShowLocalResources: original.dashboardShowLocalResources ?? 'true',
-        dashboardShowRemoteResources: original.dashboardShowRemoteResources ?? 'true',
-        remoteHostRefreshIntervalSeconds: original.remoteHostRefreshIntervalSeconds ?? '30',
-        statusMonitorIntervalSeconds: original.statusMonitorIntervalSeconds ?? '3',
+        dashboardShowLocalResources: original.dashboardShowLocalResources ?? true,
+        dashboardShowRemoteResources: original.dashboardShowRemoteResources ?? true,
+        remoteHostRefreshIntervalSeconds: original.remoteHostRefreshIntervalSeconds ?? 30,
+        statusMonitorIntervalSeconds: original.statusMonitorIntervalSeconds ?? 3,
       },
     });
     expect(restore.ok()).toBeTruthy();
@@ -182,59 +263,58 @@ test('workspace popup editor setting is the only editor and preview close contro
   await loginAsInitialAdmin(context.request);
   const originalResponse = await context.request.get('/api/v1/settings');
   expect(originalResponse.ok()).toBeTruthy();
-  const original = await originalResponse.json() as Record<string, string | undefined>;
+  const original = (await originalResponse.json()) as { language?: string; showPopupFileEditor?: boolean };
   expect(original).not.toHaveProperty('clearFileEditorTabsOnClose');
 
   const normalize = await context.request.put('/api/v1/settings', {
     data: {
       language: 'en-US',
-      showPopupFileEditor: 'true',
+      showPopupFileEditor: true,
     },
   });
   expect(normalize.ok()).toBeTruthy();
 
   try {
     await page.goto('/settings');
-    await page.getByTestId('settings-tab-workspace').click();
+    await page.getByRole('tab', { name: 'Workspace', exact: true }).click();
 
-    const unifiedToggle = page.locator('#showPopupEditor');
+    const unifiedToggle = page.locator('#showPopupFileEditor');
     const unifiedForm = page.locator('form').filter({ has: unifiedToggle });
-    const unifiedSection = page.locator('.settings-section-content').filter({ has: unifiedToggle });
     await expect(unifiedToggle).toBeChecked();
-    await expect(unifiedSection).toContainText('Popup File Editor');
+    await expect(unifiedToggle.locator('xpath=ancestor::label')).toContainText('Popup File Editor');
 
     await step('disabling the single control saves only showPopupFileEditor', async () => {
       await unifiedToggle.uncheck();
-      const responsePromise = page.waitForResponse((response) =>
-        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
       await unifiedForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');
       expect(persisted.ok()).toBeTruthy();
-      const values = await persisted.json() as Record<string, string>;
-      expect(values.showPopupFileEditor).toBe('false');
+      const values = (await persisted.json()) as { showPopupFileEditor?: boolean };
+      expect(values.showPopupFileEditor).toBe(false);
     });
 
     await step('enabling the single control saves only showPopupFileEditor', async () => {
       await unifiedToggle.check();
-      const responsePromise = page.waitForResponse((response) =>
-        response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+      const responsePromise = page.waitForResponse(
+        (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
       );
       await unifiedForm.locator('button[type="submit"]').click();
       expect((await responsePromise).ok()).toBeTruthy();
 
       const persisted = await context.request.get('/api/v1/settings');
       expect(persisted.ok()).toBeTruthy();
-      const values = await persisted.json() as Record<string, string>;
-      expect(values.showPopupFileEditor).toBe('true');
+      const values = (await persisted.json()) as { showPopupFileEditor?: boolean };
+      expect(values.showPopupFileEditor).toBe(true);
     });
   } finally {
     const restore = await context.request.put('/api/v1/settings', {
       data: {
         language: original.language ?? 'en-US',
-        showPopupFileEditor: original.showPopupFileEditor ?? 'true',
+        showPopupFileEditor: original.showPopupFileEditor ?? true,
       },
     });
     expect(restore.ok()).toBeTruthy();

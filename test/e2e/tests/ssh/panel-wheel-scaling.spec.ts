@@ -15,7 +15,7 @@ const QUICK_COMMAND_NAME = 'E2E Wheel Scale Command';
 async function recreateQuickCommand(request: APIRequestContext): Promise<number> {
   const list = await request.get('/api/v1/quick-commands');
   expect(list.ok()).toBeTruthy();
-  const existing = await list.json() as Array<{ id: number; name?: string }>;
+  const existing = (await list.json()) as Array<{ id: number; name?: string }>;
   for (const command of existing.filter((item) => item.name === QUICK_COMMAND_NAME)) {
     const remove = await request.delete(`/api/v1/quick-commands/${command.id}`);
     expect(remove.ok()).toBeTruthy();
@@ -30,7 +30,7 @@ async function recreateQuickCommand(request: APIRequestContext): Promise<number>
     },
   });
   expect(create.status()).toBe(201);
-  const body = await create.json() as { command: { id: number } };
+  const body = (await create.json()) as { command: { id: number } };
   return body.command.id;
 }
 
@@ -49,8 +49,10 @@ const readScale = async (target: Locator, attribute: 'data-row-scale' | 'data-st
   return Number(value);
 };
 
-
-async function holdFirstSettingsResponse(page: Page, key: string): Promise<{
+async function holdFirstSettingsResponse(
+  page: Page,
+  key: string,
+): Promise<{
   firstStarted: Promise<void>;
   secondStarted: Promise<void>;
   releaseFirst: () => void;
@@ -59,9 +61,15 @@ async function holdFirstSettingsResponse(page: Page, key: string): Promise<{
   let firstStartedResolve!: () => void;
   let secondStartedResolve!: () => void;
   let releaseFirstResolve!: () => void;
-  const firstStarted = new Promise<void>((resolve) => { firstStartedResolve = resolve; });
-  const secondStarted = new Promise<void>((resolve) => { secondStartedResolve = resolve; });
-  const releaseFirstPromise = new Promise<void>((resolve) => { releaseFirstResolve = resolve; });
+  const firstStarted = new Promise<void>((resolve) => {
+    firstStartedResolve = resolve;
+  });
+  const secondStarted = new Promise<void>((resolve) => {
+    secondStartedResolve = resolve;
+  });
+  const releaseFirstPromise = new Promise<void>((resolve) => {
+    releaseFirstResolve = resolve;
+  });
   let matchingRequestCount = 0;
 
   const handler = async (route: Route) => {
@@ -108,18 +116,33 @@ async function holdFirstSettingsResponse(page: Page, key: string): Promise<{
 }
 
 test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ page, context }) => {
+  const sentFrames: string[] = [];
+  const receivedFrames: string[] = [];
+  page.on('websocket', (socket) => {
+    socket.on('framesent', (event) => {
+      if (typeof event.payload === 'string') sentFrames.push(event.payload);
+    });
+    socket.on('framereceived', (event) => {
+      if (typeof event.payload === 'string') receivedFrames.push(event.payload);
+    });
+  });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
-      fileManagerRowSizeMultiplier: '1.0',
-      fileManagerColWidths: JSON.stringify({ type: 50, name: 300, size: 100, permissions: 120, modified: 180 }),
-      quickCommandRowSizeMultiplier: '1.0',
-      statusMonitorScale: '1.0',
-      showQuickCommandTags: 'false',
+      fileManagerRowSizeMultiplier: 1,
+      fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
+      quickCommandRowSizeMultiplier: 1,
+      statusMonitorScale: 1,
+      showStatusMonitorIpAddress: true,
     },
   });
   expect(settings.ok()).toBeTruthy();
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
 
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
@@ -131,6 +154,61 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     await expect(monitor).toBeVisible({ timeout: 20_000 });
     await expect(monitor).toContainText('CPU', { timeout: 20_000 });
     await expect(monitor).toHaveAttribute('data-status-scale', '1.00');
+    await expect(monitor.locator('.monitor-panel')).toBeVisible();
+    await expect(monitor.locator('.metric-card')).toHaveCount(4);
+    await expect(monitor.locator('.metric-cpu .cpu-water')).toBeVisible();
+    await expect(monitor.locator('.network-card')).toBeVisible();
+
+    const countStatusControlFrames = () =>
+      sentFrames.reduce((count, frame) => {
+        try {
+          const message = JSON.parse(frame) as { type?: string };
+          return count + (message.type === 'status.start' || message.type === 'status.stop' ? 1 : 0);
+        } catch {
+          return count;
+        }
+      }, 0);
+    const countStatusSamples = () =>
+      receivedFrames.reduce((count, frame) => {
+        try {
+          const message = JSON.parse(frame) as { type?: string };
+          return count + (message.type === 'status.sample' ? 1 : 0);
+        } catch {
+          return count;
+        }
+      }, 0);
+
+    await expect.poll(countStatusSamples, { timeout: 15_000 }).toBeGreaterThan(0);
+    const controlsBeforeHistory = countStatusControlFrames();
+    const samplesBeforeHistory = countStatusSamples();
+
+    await monitor.locator('.metric-cpu').click();
+    await expect(monitor.locator('.history-card')).toBeVisible();
+    await expect(monitor.locator('.range-tabs button')).toHaveCount(4);
+    await monitor.locator('.network-card').click();
+    await expect(monitor.locator('.history-card')).toContainText('Network trend');
+    await expect.poll(countStatusSamples, { timeout: 10_000 }).toBeGreaterThan(samplesBeforeHistory);
+    expect(countStatusControlFrames()).toBe(controlsBeforeHistory);
+
+    const hostButton = monitor.getByRole('button', { name: '127.0.0.1', exact: true });
+    await expect(hostButton).toBeVisible();
+    await hostButton.click();
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('127.0.0.1');
+
+    await page.evaluate(() => {
+      Object.defineProperty(navigator.clipboard, 'writeText', {
+        configurable: true,
+        value: async () => {
+          throw new Error('clipboard blocked for E2E');
+        },
+      });
+      Object.defineProperty(document, 'execCommand', { configurable: true, value: () => false });
+    });
+    await hostButton.click();
+    await expect(page.getByText('Failed to copy IP address', { exact: true })).toBeVisible();
+
+    await monitor.locator('.network-card').click();
+    await expect(monitor.locator('.history-card')).toHaveCount(0);
 
     const beforeBox = await monitor.boundingBox();
     expect(beforeBox).toBeTruthy();
@@ -151,45 +229,55 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     await expect(monitor).toHaveAttribute('data-status-scale', '0.65');
   });
 
-  await step('quick commands reacts noticeably to one wheel notch and does not bounce back after persistence', async () => {
-    const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-    await expect(quickView).toBeVisible({ timeout: 20_000 });
-    const list = quickView.locator('.quick-command-list');
-    const row = quickView.locator(`[data-command-id="${quickCommandId}"]`);
-    await expect(row).toBeVisible({ timeout: 20_000 });
-    await expect(list).toHaveAttribute('data-row-scale', '1.00');
+  await step(
+    'quick commands reacts noticeably to one wheel notch and does not bounce back after persistence',
+    async () => {
+      const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
+      await expect(quickView).toBeVisible({ timeout: 20_000 });
+      const list = quickView.getByTestId('quick-command-list');
+      const row = quickView.locator(`[data-command-id="${quickCommandId}"]`);
+      await expect(row).toBeVisible({ timeout: 20_000 });
+      await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
-    const beforeRowBox = await row.boundingBox();
-    expect(beforeRowBox).toBeTruthy();
-    await ctrlWheel(list, 100);
-    await expect.poll(() => readScale(list, 'data-row-scale')).toBeLessThanOrEqual(0.9);
-    const afterRowBox = await row.boundingBox();
-    expect(afterRowBox).toBeTruthy();
-    expect(beforeRowBox!.height - afterRowBox!.height).toBeGreaterThan(1);
+      const beforeRowBox = await row.boundingBox();
+      expect(beforeRowBox).toBeTruthy();
+      await ctrlWheel(list, 100);
+      await expect.poll(() => readScale(list, 'data-row-scale')).toBeLessThanOrEqual(0.9);
+      const afterRowBox = await row.boundingBox();
+      expect(afterRowBox).toBeTruthy();
+      expect(beforeRowBox!.height - afterRowBox!.height).toBeGreaterThan(1);
 
-    const scaleAfterWheel = await readScale(list, 'data-row-scale');
-    await page.waitForTimeout(550);
-    expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
-  });
+      const scaleAfterWheel = await readScale(list, 'data-row-scale');
+      await page.waitForTimeout(550);
+      expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
+    },
+  );
 
   await slowStep('file manager keeps the Type column stable while repeatedly shrinking rows', async () => {
     await openConnectedFileManager(page);
     const list = activeFileManagerList(page);
-    const typeHeader = page.getByTestId('file-manager-modal').getByTestId('file-manager-type-header');
+    const fileManagerModal = page.getByTestId('file-manager-modal');
+    const typeHeader = fileManagerModal.getByTestId('file-manager-type-header');
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
     await expect(typeHeader).toBeVisible();
+    const headerTitles = (await fileManagerModal.locator('thead th').allTextContents()).map((text) =>
+      text.replace(/[▲▼]/g, '').trim(),
+    );
+    expect(headerTitles).toEqual(['Type', 'Name', 'Size', 'Permissions', 'Modified']);
 
     const typeHeaderLayout = await typeHeader.evaluate((element) => {
       const html = element as HTMLElement;
       const style = getComputedStyle(html);
       return {
         whiteSpace: style.whiteSpace,
+        textTransform: style.textTransform,
         width: html.getBoundingClientRect().width,
         clientHeight: html.clientHeight,
         scrollHeight: html.scrollHeight,
       };
     });
     expect(typeHeaderLayout.whiteSpace).toBe('nowrap');
+    expect(typeHeaderLayout.textTransform).toBe('none');
     expect(typeHeaderLayout.scrollHeight).toBeLessThanOrEqual(typeHeaderLayout.clientHeight + 1);
 
     const widths = [typeHeaderLayout.width];
@@ -210,27 +298,49 @@ test('panel Ctrl+wheel scaling is stable, bounded, and responsive', async ({ pag
     await page.waitForTimeout(600);
     expect(await readScale(list, 'data-row-scale')).toBe(scaleAfterWheel);
   });
-});
 
+  await step(
+    'File Manager filters tiny reverse inertia but follows a deliberate reverse wheel immediately',
+    async () => {
+      const list = activeFileManagerList(page);
+      const before = await readScale(list, 'data-row-scale');
+      await ctrlWheel(list, -80);
+      const increased = await readScale(list, 'data-row-scale');
+      expect(increased).toBeGreaterThan(before);
+
+      // The shared wheel accumulator resets on direction change, so a sub-threshold reverse delta
+      // does not bounce the row size back by itself.
+      await ctrlWheel(list, 20);
+      expect(await readScale(list, 'data-row-scale')).toBe(increased);
+
+      // Once the user's reverse movement accumulates a complete wheel step, apply it without any
+      // fixed time guard. This keeps trackpad/mouse reversal responsive instead of feeling sticky.
+      await ctrlWheel(list, 60);
+      await expect.poll(() => readScale(list, 'data-row-scale')).toBeLessThan(increased);
+    },
+  );
+});
 
 test('large Ctrl+wheel delta does not leak unused zoom steps into the next event', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
-      quickCommandRowSizeMultiplier: '1.0',
-      showQuickCommandTags: 'false',
+      quickCommandRowSizeMultiplier: 1,
     },
   });
   expect(settings.ok()).toBeTruthy();
-  await page.addInitScript(() => localStorage.removeItem('nexus_quickCommandRowSizeMultiplier'));
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);
 
   const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-  const list = quickView.locator('.quick-command-list');
+  const list = quickView.getByTestId('quick-command-list');
   await expect(quickView.locator(`[data-command-id="${quickCommandId}"]`)).toBeVisible({ timeout: 20_000 });
   await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
@@ -241,21 +351,25 @@ test('large Ctrl+wheel delta does not leak unused zoom steps into the next event
   expect(await readScale(list, 'data-row-scale')).toBe(0.64);
 });
 
-
-test('File Manager flushes the last wheel scale when its sidebar unmounts before debounce', async ({ page, context }) => {
+test('File Manager keeps the latest wheel scale when the sidebar is closed immediately', async ({ page, context }) => {
   test.setTimeout(60_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
-      fileManagerRowSizeMultiplier: '1.0',
-      fileManagerColWidths: JSON.stringify({ type: 50, name: 300, size: 100, permissions: 120, modified: 180 }),
+      showPopupFileManager: false,
+      fileManagerRowSizeMultiplier: 1,
+      fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
     },
   });
   expect(settings.ok()).toBeTruthy();
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
   const originalSidebarResponse = await context.request.get('/api/v1/settings/sidebar');
   expect(originalSidebarResponse.ok()).toBeTruthy();
-  const originalSidebar = await originalSidebarResponse.json() as { left: string[]; right: string[] };
+  const originalSidebar = (await originalSidebarResponse.json()) as { left: string[]; right: string[] };
   const sidebarResponse = await context.request.put('/api/v1/settings/sidebar', {
     data: { left: originalSidebar.left, right: ['fileManager'] },
   });
@@ -268,25 +382,33 @@ test('File Manager flushes the last wheel scale when its sidebar unmounts before
 
     const sidebarToggle = page.getByTestId('sidebar-pane-fileManager');
     await sidebarToggle.click();
-    const sidebar = page.getByTestId('right-sidebar-panel');
+    const sidebar = page
+      .locator('[data-workspace-sidebar]')
+      .filter({ has: page.getByTestId('file-manager-list') })
+      .filter({ visible: true })
+      .first();
     const list = sidebar.getByTestId('file-manager-list');
     await expect(list).toBeVisible();
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
-    const persisted = page.waitForResponse((response) => {
-      if (!response.url().includes('/api/v1/settings') || response.request().method() !== 'PUT') return false;
-      try {
-        const body = response.request().postDataJSON() as Record<string, unknown>;
-        return body.fileManagerRowSizeMultiplier === '0.92';
-      } catch {
-        return false;
-      }
-    }, { timeout: 10_000 });
+    const persisted = page.waitForResponse(
+      (response) => {
+        if (!response.url().includes('/api/v1/settings') || response.request().method() !== 'PUT') return false;
+        try {
+          const body = response.request().postDataJSON() as Record<string, unknown>;
+          return body.fileManagerRowSizeMultiplier === 0.92;
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 10_000 },
+    );
 
     await ctrlWheel(list, 100);
     await expect.poll(() => readScale(list, 'data-row-scale')).toBe(0.92);
-    // Close immediately, well before the normal 240ms debounce window expires.
-    await sidebar.locator('button[title="Close Sidebar"]').click();
+    // Close immediately through the visible sidebar panel control, well before the normal 240ms debounce window expires.
+    await sidebar.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(sidebar).toBeHidden();
     expect((await persisted).ok()).toBeTruthy();
 
     await sidebarToggle.click();
@@ -298,21 +420,26 @@ test('File Manager flushes the last wheel scale when its sidebar unmounts before
   }
 });
 
-test('latest panel scale wins even when an older settings response arrives last', async ({ page, context }) => {
+test('rapid panel scaling persists the newest value when save responses arrive out of order', async ({
+  page,
+  context,
+}) => {
   test.setTimeout(75_000);
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const settings = await context.request.put('/api/v1/settings', {
     data: {
-      fileManagerRowSizeMultiplier: '1.0',
-      fileManagerColWidths: JSON.stringify({ type: 50, name: 300, size: 100, permissions: 120, modified: 180 }),
-      quickCommandRowSizeMultiplier: '1.0',
-      statusMonitorScale: '1.0',
-      showQuickCommandTags: 'false',
+      fileManagerRowSizeMultiplier: 1,
+      fileManagerColWidths: { type: 50, name: 300, size: 100, permissions: 120, modified: 180 },
+      quickCommandRowSizeMultiplier: 1,
+      statusMonitorScale: 1,
     },
   });
   expect(settings.ok()).toBeTruthy();
-  await page.addInitScript(() => localStorage.removeItem('nexus_quickCommandRowSizeMultiplier'));
+  const tagVisibility = await context.request.put('/api/v1/settings', {
+    data: { showQuickCommandTags: false },
+  });
+  expect(tagVisibility.ok()).toBeTruthy();
   await resetTestSshFilesystem();
   const quickCommandId = await recreateQuickCommand(context.request);
   const connectionId = await ensureTestSshConnection(context.request);
@@ -320,7 +447,7 @@ test('latest panel scale wins even when an older settings response arrives last'
 
   await step('Quick Commands ignores the late response from the older scale save', async () => {
     const quickView = page.getByTestId('quick-commands-view').filter({ visible: true }).first();
-    const list = quickView.locator('.quick-command-list');
+    const list = quickView.getByTestId('quick-command-list');
     await expect(quickView.locator(`[data-command-id="${quickCommandId}"]`)).toBeVisible({ timeout: 20_000 });
     await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
@@ -367,26 +494,39 @@ test('latest panel scale wins even when an older settings response arrives last'
     }
   });
 
-  await slowStep('File Manager ignores the late response from the older row-scale save', async () => {
-    await openConnectedFileManager(page);
-    const list = activeFileManagerList(page);
-    await expect(list).toHaveAttribute('data-row-scale', '1.00');
+  await slowStep(
+    'File Manager keeps a rapid wheel burst monotonic while an older row-scale save is pending',
+    async () => {
+      await openConnectedFileManager(page);
+      const list = activeFileManagerList(page);
+      await expect(list).toHaveAttribute('data-row-scale', '1.00');
 
-    const race = await holdFirstSettingsResponse(page, 'fileManagerRowSizeMultiplier');
-    try {
-      await ctrlWheel(list, 100);
-      await race.firstStarted;
-      const firstScale = await readScale(list, 'data-row-scale');
-      await ctrlWheel(list, 100);
-      const latestScale = await readScale(list, 'data-row-scale');
-      expect(latestScale).toBeLessThan(firstScale);
-      await page.waitForTimeout(350);
-      race.releaseFirst();
-      await race.secondStarted;
-      await page.waitForTimeout(220);
-      expect(await readScale(list, 'data-row-scale')).toBe(latestScale);
-    } finally {
-      await race.dispose();
-    }
-  });
+      const race = await holdFirstSettingsResponse(page, 'fileManagerRowSizeMultiplier');
+      try {
+        await ctrlWheel(list, 100);
+        await race.firstStarted;
+        const firstScale = await readScale(list, 'data-row-scale');
+
+        const observed = [firstScale];
+        for (let index = 0; index < 4; index += 1) {
+          await ctrlWheel(list, 100);
+          observed.push(await readScale(list, 'data-row-scale'));
+        }
+        for (let index = 1; index < observed.length; index += 1) {
+          expect(observed[index]).toBeLessThan(observed[index - 1]!);
+        }
+
+        const latestScale = observed.at(-1)!;
+        await page.waitForTimeout(350);
+        expect(await readScale(list, 'data-row-scale')).toBe(latestScale);
+
+        race.releaseFirst();
+        await race.secondStarted;
+        await page.waitForTimeout(220);
+        expect(await readScale(list, 'data-row-scale')).toBe(latestScale);
+      } finally {
+        await race.dispose();
+      }
+    },
+  );
 });

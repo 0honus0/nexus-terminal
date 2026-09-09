@@ -6,86 +6,116 @@ export interface LatestValueSaverOptions<T> {
 }
 
 export interface LatestValueSaver<T> {
-  schedule: (value: T) => void;
-  flush: () => Promise<void>;
-  dispose: (options?: { flush?: boolean }) => void;
+  /** Keep only the newest value and persist it after the debounce window. */
+  schedule(value: T): void;
+  /** Persist all currently scheduled work, including a newer value queued during an in-flight save. */
+  flush(): Promise<void>;
+  /** Stop accepting new values. Optionally drain the newest pending value before resolving. */
+  dispose(options?: { flush?: boolean }): Promise<void>;
 }
 
 /**
- * Debounce UI churn while guaranteeing that persistence requests never overlap.
+ * Serial debounced persistence for UI settings.
  *
- * A newer value may arrive while an older request is in flight. The older request is
- * allowed to finish first, while consumers keep external-to-local synchronization locked;
- * the latest pending value is then saved immediately. This makes the final completed
- * request authoritative and prevents late responses from restoring stale UI state.
+ * Saves never overlap. If a newer value arrives while an older request is running,
+ * the running request finishes and the newest pending value is saved immediately.
+ * This prevents a late stale response from becoming the final persistence write.
  */
 export function createLatestValueSaver<T>(options: LatestValueSaverOptions<T>): LatestValueSaver<T> {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pendingValue: T | undefined;
   let hasPendingValue = false;
-  let saveInFlight = false;
   let disposed = false;
+  let running = false;
+  let drainPromise: Promise<void> | null = null;
+  let pendingState = false;
 
-  const setPending = (pending: boolean) => options.onPendingChange?.(pending);
+  const setPendingState = (pending: boolean): void => {
+    if (pendingState === pending) return;
+    pendingState = pending;
+    options.onPendingChange?.(pending);
+  };
 
-  const flush = async (): Promise<void> => {
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
+  const clearTimer = (): void => {
+    if (!timer) return;
+    clearTimeout(timer);
+    timer = null;
+  };
+
+  const drain = (): Promise<void> => {
+    clearTimer();
+    if (running) return drainPromise ?? Promise.resolve();
+    if (!hasPendingValue) {
+      setPendingState(false);
+      return Promise.resolve();
     }
-    if (saveInFlight || !hasPendingValue) return;
 
-    const value = pendingValue as T;
-    pendingValue = undefined;
-    hasPendingValue = false;
-    saveInFlight = true;
-    try {
-      await options.save(value);
-    } catch (error) {
-      options.onError?.(error);
-    } finally {
-      saveInFlight = false;
-      if (hasPendingValue) {
-        await flush();
-      } else {
-        setPending(false);
+    running = true;
+    drainPromise = (async () => {
+      while (hasPendingValue) {
+        const value = pendingValue as T;
+        pendingValue = undefined;
+        hasPendingValue = false;
+
+        try {
+          await options.save(value);
+        } catch (error) {
+          options.onError?.(error);
+        }
       }
-    }
+    })().finally(() => {
+      running = false;
+      drainPromise = null;
+      if (hasPendingValue) {
+        void drain();
+      } else {
+        setPendingState(false);
+      }
+    });
+
+    return drainPromise;
   };
 
   const schedule = (value: T): void => {
     if (disposed) return;
+
     pendingValue = value;
     hasPendingValue = true;
-    setPending(true);
+    setPendingState(true);
 
-    if (saveInFlight) return;
-    if (timer) clearTimeout(timer);
+    if (running) return;
+
+    clearTimer();
     timer = setTimeout(
       () => {
         timer = null;
-        void flush();
+        void drain();
       },
       Math.max(0, options.delayMs),
     );
   };
 
-  const dispose = ({ flush: shouldFlush = false }: { flush?: boolean } = {}): void => {
-    if (disposed) return;
+  const flush = (): Promise<void> => drain();
+
+  const dispose = async ({ flush: shouldFlush = false }: { flush?: boolean } = {}): Promise<void> => {
+    if (disposed) {
+      if (shouldFlush) await drain();
+      else if (running) await drainPromise;
+      return;
+    }
+
     disposed = true;
-    if (timer) {
-      clearTimeout(timer);
-      timer = null;
+    clearTimer();
+
+    if (shouldFlush) {
+      await drain();
+      return;
     }
-    if (shouldFlush && hasPendingValue) {
-      // flush() intentionally remains able to drain values after dispose; only schedule()
-      // rejects new work. This preserves the user's last interaction during unmount.
-      void flush();
-    } else if (!saveInFlight) {
-      pendingValue = undefined;
-      hasPendingValue = false;
-      setPending(false);
-    }
+
+    pendingValue = undefined;
+    hasPendingValue = false;
+    if (running) await drainPromise;
+    setPendingState(false);
   };
 
   return { schedule, flush, dispose };

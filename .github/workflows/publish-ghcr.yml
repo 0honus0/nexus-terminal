@@ -5,10 +5,23 @@ on:
     types: [published]
   workflow_dispatch:
     inputs:
+      source_ref:
+        description: Source branch or ref to publish
+        required: true
+        default: main
+        type: string
+      channel:
+        description: Image channel to publish
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - release
       architecture:
         description: Image architecture to build
         required: true
-        default: all
+        default: amd
         type: choice
         options:
           - arm
@@ -32,13 +45,60 @@ jobs:
     name: Prepare publication
     runs-on: ubuntu-latest
     outputs:
+      source_ref: ${{ steps.source.outputs.ref }}
+      source_sha: ${{ steps.source_commit.outputs.sha }}
       image_tag: ${{ steps.image_tag.outputs.value }}
+      channel: ${{ steps.channel.outputs.value }}
+      channel_tag: ${{ steps.channel.outputs.tag }}
       architecture: ${{ steps.architecture.outputs.value }}
       platforms: ${{ steps.architecture.outputs.platforms }}
 
     steps:
+      - name: Select publication source
+        id: source
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REQUESTED_SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            source_ref="$RELEASE_TAG"
+          else
+            source_ref="${REQUESTED_SOURCE_REF:-main}"
+          fi
+
+          if [[ -z "$source_ref" ]]; then
+            echo "Publication source ref must not be empty" >&2
+            exit 1
+          fi
+
+          echo "ref=$source_ref" >> "$GITHUB_OUTPUT"
+
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.source.outputs.ref }}
+
+      - name: Resolve source commit
+        id: source_commit
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js for dependency audit
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: |
+            packages/frontend/package-lock.json
+            packages/backend/package-lock.json
+
+      - name: Audit production dependencies
+        shell: bash
+        run: |
+          npm --prefix packages/frontend audit --omit=dev --audit-level=high
+          npm --prefix packages/backend audit --omit=dev --audit-level=high
 
       - name: Select image tag
         id: image_tag
@@ -46,13 +106,14 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
           REQUESTED_TAG: ${{ inputs.image_tag }}
+          SOURCE_SHA: ${{ steps.source_commit.outputs.sha }}
         run: |
           if [[ -n "$RELEASE_TAG" ]]; then
             image_tag="$RELEASE_TAG"
           elif [[ -n "$REQUESTED_TAG" ]]; then
             image_tag="$REQUESTED_TAG"
           else
-            image_tag="sha-${GITHUB_SHA::12}"
+            image_tag="sha-${SOURCE_SHA::12}"
           fi
 
           if [[ ! "$image_tag" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$ ]]; then
@@ -60,6 +121,35 @@ jobs:
             exit 1
           fi
           echo "value=$image_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Select image channel
+        id: channel
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_CHANNEL: ${{ inputs.channel }}
+        run: |
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            channel="release"
+          else
+            channel="${REQUESTED_CHANNEL:-dev}"
+          fi
+
+          case "$channel" in
+            dev)
+              channel_tag="dev"
+              ;;
+            release)
+              channel_tag="latest"
+              ;;
+            *)
+              echo "Unsupported image channel: $channel" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "value=$channel" >> "$GITHUB_OUTPUT"
+          echo "tag=$channel_tag" >> "$GITHUB_OUTPUT"
 
       - name: Select image architecture
         id: architecture
@@ -71,7 +161,7 @@ jobs:
           if [[ "$EVENT_NAME" == "release" ]]; then
             architecture="all"
           else
-            architecture="${REQUESTED_ARCHITECTURE:-all}"
+            architecture="${REQUESTED_ARCHITECTURE:-amd}"
           fi
 
           case "$architecture" in
@@ -104,7 +194,6 @@ jobs:
             package.json
             packages/backend/package.json
             packages/frontend/package.json
-            packages/remote-gateway/package.json
           )
 
           for manifest in "${manifests[@]}"; do
@@ -116,13 +205,15 @@ jobs:
           done
 
   publish:
-    name: Publish unified image (${{ needs.prepare.outputs.architecture }})
+    name: Publish unified image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
     needs: prepare
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
 
       - name: Set image name
         id: image
@@ -153,11 +244,11 @@ jobs:
           platforms: ${{ needs.prepare.outputs.platforms }}
           push: true
           tags: |
-            ${{ steps.image.outputs.name }}:latest
+            ${{ steps.image.outputs.name }}:${{ needs.prepare.outputs.channel_tag }}
             ${{ steps.image.outputs.name }}:${{ needs.prepare.outputs.image_tag }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.source_sha }}
             org.opencontainers.image.version=${{ needs.prepare.outputs.image_tag }}
           cache-from: type=gha,scope=unified-image
           cache-to: type=gha,mode=max,scope=unified-image

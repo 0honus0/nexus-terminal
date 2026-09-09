@@ -44,6 +44,9 @@ jspm_packages/
 scripts/*
 !scripts/e2e/
 !scripts/e2e/**
+!scripts/docker/
+!scripts/docker/**
+!scripts/check-test-policy.mjs
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
 
@@ -75,6 +78,7 @@ web_modules/
 .yarn-integrity
 
 # dotenv environment variable files
+/.env
 .env.development.local
 .env.test.local
 .env.production.local
@@ -180,3 +184,5 @@ electron-app/dist_electron/
 /test/e2e/*.db
 /test/e2e/*.sqlite
 /test/e2e/*.sqlite3
+
+!scripts/format-changed.mjs
