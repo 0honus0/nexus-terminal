@@ -1,6 +1,7 @@
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useDraggablePosition } from '@/foundation/interaction';
   import { OverlayPanel } from '@/foundation/ui';
   import { useConnections } from '@/features/connections/public';
   import type { ProgressSource, TransferTask } from '../model/transfer';
@@ -35,6 +36,78 @@
   }>();
   const { t, locale } = useI18n();
   const connections = useConnections();
+  const DESKTOP_POSITION_STORAGE_KEY = 'nexus.progress-display-position';
+  const VIEWPORT_MARGIN = 8;
+  const panelContent = ref<HTMLElement | null>(null);
+  const position = ref({ x: VIEWPORT_MARGIN, y: VIEWPORT_MARGIN });
+  const positionInitialized = ref(false);
+
+  const panelElement = (): HTMLElement | null => panelContent.value?.parentElement ?? null;
+  const clampPosition = (candidate: { x: number; y: number }, element: HTMLElement) => ({
+    x: Math.max(VIEWPORT_MARGIN, Math.min(candidate.x, window.innerWidth - element.offsetWidth - VIEWPORT_MARGIN)),
+    y: Math.max(VIEWPORT_MARGIN, Math.min(candidate.y, window.innerHeight - element.offsetHeight - VIEWPORT_MARGIN)),
+  });
+  const savePosition = (): void => {
+    if (props.mobile || !positionInitialized.value) return;
+    try {
+      localStorage.setItem(DESKTOP_POSITION_STORAGE_KEY, JSON.stringify(position.value));
+    } catch {
+      // The current position remains valid for this mount when storage is unavailable.
+    }
+  };
+  const restorePosition = async (): Promise<void> => {
+    if (props.mobile) return;
+    await nextTick();
+    const element = panelElement();
+    if (!element) return;
+
+    let next = { x: element.getBoundingClientRect().left, y: element.getBoundingClientRect().top };
+    try {
+      const raw = localStorage.getItem(DESKTOP_POSITION_STORAGE_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<{ x: number; y: number }>;
+        if (Number.isFinite(saved.x) && Number.isFinite(saved.y)) next = { x: saved.x!, y: saved.y! };
+      }
+    } catch {
+      // Ignore malformed or unavailable storage and keep the centered default.
+    }
+    position.value = clampPosition(next, element);
+    positionInitialized.value = true;
+  };
+  const clampRestoredPosition = (): void => {
+    if (props.mobile || !positionInitialized.value) return;
+    const element = panelElement();
+    if (!element) return;
+    position.value = clampPosition(position.value, element);
+    savePosition();
+  };
+  const drag = useDraggablePosition({
+    position,
+    getElement: panelElement,
+    canStart: (event) =>
+      !props.mobile &&
+      event.button === 0 &&
+      !(event.target as HTMLElement).closest('button, a, input, select, textarea'),
+    constrain: (candidate, element) => clampPosition(candidate, element),
+    onEnd: savePosition,
+  });
+  const panelStyle = computed(() =>
+    !props.mobile && positionInitialized.value
+      ? {
+          position: 'fixed' as const,
+          left: `${position.value.x}px`,
+          top: `${position.value.y}px`,
+          width: 'calc(100vw - 2rem)',
+          margin: '0',
+        }
+      : undefined,
+  );
+
+  onMounted(() => {
+    void restorePosition();
+    window.addEventListener('resize', clampRestoredPosition);
+  });
+  onBeforeUnmount(() => window.removeEventListener('resize', clampRestoredPosition));
 
   const done = (status: TransferTask['status']) =>
     ['completed', 'cancelled', 'skipped', 'partial', 'error'].includes(status);
@@ -120,6 +193,7 @@
     :close-on-escape="true"
     preset="standard-modal"
     panel-class="!h-[min(80dvh,46rem)] !max-w-6xl !p-0"
+    :panel-style="panelStyle"
     panel-test-id="progress-display-dialog"
     data-testid="progress-display-overlay"
     role="dialog"
@@ -129,6 +203,7 @@
   >
     <section
       v-if="visible"
+      ref="panelContent"
       data-testid="progress-display-modal"
       data-progress-display-placement="overlay"
       class="progress-display-overlay flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
@@ -136,7 +211,12 @@
       <div
         class="transfer-progress-panel mx-auto flex min-h-0 w-full max-w-6xl flex-1 flex-col overflow-hidden bg-background"
       >
-        <div class="transfer-progress-header relative flex-shrink-0 px-4 py-3 sm:px-6">
+        <div
+          data-testid="progress-display-drag-handle"
+          class="transfer-progress-header relative flex-shrink-0 px-4 py-3 sm:px-6"
+          :class="!mobile ? (drag.dragging.value ? 'cursor-grabbing select-none' : 'cursor-move') : ''"
+          @pointerdown="drag.startDragging"
+        >
           <h3 class="m-0 text-center text-lg font-semibold">{{ t('progressCenter.title') }}</h3>
           <button
             type="button"

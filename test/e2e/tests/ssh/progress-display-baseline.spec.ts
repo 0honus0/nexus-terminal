@@ -126,12 +126,40 @@ test('desktop Progress Display floats above the workspace without resizing the t
       });
     const before = await terminalRect();
 
-    const display = await openDesktopProgressDisplay(page);
+    let display = await openDesktopProgressDisplay(page);
     const after = await terminalRect();
     expect(Math.abs(after.x - before.x)).toBeLessThan(1);
     expect(Math.abs(after.y - before.y)).toBeLessThan(1);
     expect(Math.abs(after.width - before.width)).toBeLessThan(1);
     expect(Math.abs(after.height - before.height)).toBeLessThan(1);
+
+    await step('desktop Progress Display drags freely and restores its last position', async () => {
+      const dialog = page.getByTestId('progress-display-dialog');
+      const handle = display.getByTestId('progress-display-drag-handle');
+      const handleBox = await handle.boundingBox();
+      const beforeDrag = await dialog.boundingBox();
+      expect(handleBox).toBeTruthy();
+      expect(beforeDrag).toBeTruthy();
+
+      await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(handleBox!.x + handleBox!.width / 2 + 70, handleBox!.y + handleBox!.height / 2 + 45, {
+        steps: 8,
+      });
+      await page.mouse.up();
+
+      const moved = await dialog.boundingBox();
+      expect(moved).toBeTruthy();
+      expect(Math.abs(moved!.x - beforeDrag!.x)).toBeGreaterThan(30);
+      expect(Math.abs(moved!.y - beforeDrag!.y)).toBeGreaterThan(20);
+
+      await closeProgressDisplay(display);
+      display = await openDesktopProgressDisplay(page);
+      const restored = await page.getByTestId('progress-display-dialog').boundingBox();
+      expect(restored).toBeTruthy();
+      expect(Math.abs(restored!.x - moved!.x)).toBeLessThanOrEqual(2);
+      expect(Math.abs(restored!.y - moved!.y)).toBeLessThanOrEqual(2);
+    });
 
     await step(
       'background server-transfer polling does not replace the empty state with a loading screen',
