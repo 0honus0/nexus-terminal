@@ -782,7 +782,7 @@
       return !(entry.metadata.isDirectory && destination.startsWith(`${entry.path}/`));
     });
   const startRemoteDrag = (event: DragEvent, entry: RemoteFileEntry) => {
-    if (device.isMobile.value || device.hasTouch.value || !event.dataTransfer) return;
+    if (device.isMobile.value || !event.dataTransfer) return;
     const selection = selectedEntries();
     draggedRemoteEntries.value = browser.selected.value.has(entry.path) && selection.length ? selection : [entry];
     keyboardCursor.value = entry.path;
@@ -1416,7 +1416,12 @@
             data-file-parent
             tabindex="-1"
             class="cursor-pointer select-none transition-colors duration-150 hover:bg-header/50"
-            :class="keyboardCursor === PARENT_CURSOR ? 'bg-primary/10' : ''"
+            :class="[
+              keyboardCursor === PARENT_CURSOR ? 'bg-primary/10' : '',
+              remoteDragTarget === parentOf(browser.path.value)
+                ? 'outline-dashed outline-2 outline-offset-[-1px] outline-primary'
+                : '',
+            ]"
             @click="
               keyboardCursor = PARENT_CURSOR;
               browser.goParent();
@@ -1463,7 +1468,7 @@
                 ? 'cursor-pointer'
                 : '',
             ]"
-            :draggable="!device.isMobile.value && !device.hasTouch.value"
+            :draggable="!device.isMobile.value"
             @dragstart="startRemoteDrag($event, entry)"
             @dragend="endRemoteDrag"
             @dragover="entry.metadata.isDirectory && handleRemoteTargetDragOver($event, entry.path)"

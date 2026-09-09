@@ -631,40 +631,52 @@ test('file-manager and terminal path sync survive shell metacharacters and a del
   });
 });
 
-test('dragging a remote file onto a folder waits for the move and refreshes the file list', async ({
-  page,
-  context,
-}) => {
-  await loginAsInitialAdmin(context.request);
-  await configureSshE2eSettings(context.request);
-  await resetTestSshFilesystem();
+test.describe('remote drag move on touch-capable desktop', () => {
+  test.use({ hasTouch: true });
 
-  const sourceFixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent('.hermes.zip')}`, {
-    method: 'POST',
+  test('moves a remote file into a folder and back through the parent row', async ({ page, context }) => {
+    await loginAsInitialAdmin(context.request);
+    await configureSshE2eSettings(context.request);
+    await resetTestSshFilesystem();
+
+    const sourceFixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=${encodeURIComponent('.hermes.zip')}`, {
+      method: 'POST',
+    });
+    expect(sourceFixture.ok).toBeTruthy();
+    const destinationFixture = await fetch(`${E2E_SSH.controlUrl}/fixture-directory?name=Temp&size=1`, {
+      method: 'POST',
+    });
+    expect(destinationFixture.ok).toBeTruthy();
+
+    const connectionId = await ensureTestSshConnection(context.request);
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    await openConnectedFileManager(page);
+
+    expect(await page.evaluate(() => navigator.maxTouchPoints)).toBeGreaterThan(0);
+
+    const source = row(page, '.hermes.zip');
+    const destination = row(page, 'Temp');
+    await expect(source).toBeVisible();
+    await expect(source).toHaveAttribute('draggable', 'true');
+    await expect(destination).toBeVisible();
+
+    await source.dragTo(destination);
+    await expect(source).toHaveCount(0, { timeout: 20_000 });
+
+    await navigateViaPathInput(page, '/Temp');
+    const moved = row(page, '.hermes.zip');
+    const parent = parentRow(page);
+    await expect(moved).toBeVisible({ timeout: 20_000 });
+    await expect(moved).toHaveAttribute('draggable', 'true');
+    await expect(parent).toBeVisible();
+
+    await moved.dragTo(parent);
+    await expect(moved).toHaveCount(0, { timeout: 20_000 });
+
+    await navigateViaPathInput(page, '/');
+    await expect(row(page, '.hermes.zip')).toBeVisible({ timeout: 20_000 });
   });
-  expect(sourceFixture.ok).toBeTruthy();
-  const destinationFixture = await fetch(`${E2E_SSH.controlUrl}/fixture-directory?name=Temp&size=1`, {
-    method: 'POST',
-  });
-  expect(destinationFixture.ok).toBeTruthy();
-
-  const connectionId = await ensureTestSshConnection(context.request);
-  await connectTestSshFromConnectionsPage(page, connectionId);
-  await openConnectedFileManager(page);
-
-  const source = row(page, '.hermes.zip');
-  const destination = row(page, 'Temp');
-  await expect(source).toBeVisible();
-  await expect(destination).toBeVisible();
-
-  await source.dragTo(destination);
-
-  // The source list must refresh only after the asynchronous remote move completes.
-  await expect(source).toHaveCount(0, { timeout: 20_000 });
-  await navigateViaPathInput(page, '/Temp');
-  await expect(row(page, '.hermes.zip')).toBeVisible({ timeout: 20_000 });
 });
-
 test('file-manager terminal path sync does not pollute bash command history with Nexus control commands', async ({
   request,
 }) => {
