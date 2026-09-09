@@ -410,11 +410,36 @@
     }
   };
 
+  const preparingSessionId = ref<string | null>(null);
+  let activationGeneration = 0;
   const activateSession = (id: string) => {
-    registry.activate(id);
+    const generation = ++activationGeneration;
+    if (id === registry.activeId.value) {
+      preparingSessionId.value = null;
+      void nextTick(() => {
+        surfaces.get(id)?.fitTerminal?.();
+        surfaces.get(id)?.focusTerminal?.();
+      });
+      return;
+    }
+
+    // v-show normally makes inactive surfaces display:none. Showing a terminal and only then
+    // fitting xterm lets one frame escape with the stale viewport/canvas height, which appears
+    // as a brief flash along the bottom edge. Pre-show the target invisibly, fit it while it has
+    // real geometry, then make it active on the next animation frame.
+    preparingSessionId.value = id;
     void nextTick(() => {
+      if (generation !== activationGeneration || preparingSessionId.value !== id) return;
       surfaces.get(id)?.fitTerminal?.();
-      surfaces.get(id)?.focusTerminal?.();
+      window.requestAnimationFrame(() => {
+        if (generation !== activationGeneration || preparingSessionId.value !== id) return;
+        registry.activate(id);
+        preparingSessionId.value = null;
+        void nextTick(() => {
+          surfaces.get(id)?.fitTerminal?.();
+          surfaces.get(id)?.focusTerminal?.();
+        });
+      });
     });
   };
   const flushWorkspacePresentation = () =>
@@ -814,10 +839,16 @@
     >
       <WorkspaceSessionSurface
         v-for="session in registry.orderedSessions.value"
-        v-show="session.id === registry.activeId.value"
+        v-show="session.id === registry.activeId.value || session.id === preparingSessionId"
         :key="session.id"
         :ref="(value) => setSurface(session.id, value)"
         class="absolute inset-0"
+        :class="
+          session.id === preparingSessionId && session.id !== registry.activeId.value
+            ? 'invisible pointer-events-none'
+            : ''
+        "
+        :aria-hidden="session.id !== registry.activeId.value"
         :session="session"
         :layout="workspaceLayout.tree.value"
         :sidebars="workspaceLayout.sidebars.value"
