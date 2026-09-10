@@ -21,12 +21,32 @@ export const setUnauthorizedHandler = (handler: UnauthorizedHandler | null): voi
   unauthorizedHandler = handler;
 };
 
-const isExplicitLogoutRequest = (url: string | undefined): boolean =>
-  Boolean(url?.split('?', 1)[0]?.endsWith('/auth/logout'));
+const requestPath = (url: string | undefined): string => url?.split(/[?#]/, 1)[0] || 'unknown';
+const requestMethod = (method: string | undefined): string => method?.toUpperCase() || 'UNKNOWN';
+
+const isExplicitLogoutRequest = (url: string | undefined): boolean => requestPath(url).endsWith('/auth/logout');
+
+httpClient.interceptors.request.use((config) => {
+  logger.trace({ method: requestMethod(config.method), path: requestPath(config.url) }, 'HTTP request dispatch');
+  return config;
+});
 
 httpClient.interceptors.response.use(
   (response) => response,
   (error: unknown) => {
+    if (axios.isAxiosError(error)) {
+      const context = {
+        method: requestMethod(error.config?.method),
+        path: requestPath(error.config?.url),
+        statusCode: error.response?.status,
+        errorCode: error.code,
+      };
+      if (!error.response || (error.response.status ?? 0) >= 500) logger.warn(context, 'HTTP request failed');
+      else logger.debug(context, 'HTTP request rejected');
+    } else {
+      logger.warn({ err: error }, 'Unexpected HTTP client failure');
+    }
+
     if (
       axios.isAxiosError(error) &&
       error.response?.status === 401 &&
@@ -35,6 +55,7 @@ httpClient.interceptors.response.use(
       !handlingUnauthorized
     ) {
       handlingUnauthorized = true;
+      logger.debug({ path: requestPath(error.config?.url) }, 'Dispatching HTTP session-loss handler');
       void Promise.resolve(unauthorizedHandler())
         .catch((cause) => logger.error({ err: cause }, 'Failed to handle HTTP session loss'))
         .finally(() => {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../shared/logging/logger';
 import type { InitiateTransferPayload, TransferSubTask, TransferTask, TransferTaskStatus } from './transfers.types';
 
 export interface CreatedTransferTask {
@@ -29,6 +30,17 @@ export class TransferTaskRegistry {
     const controller = new AbortController();
     this.tasks.set(taskId, task);
     this.controllers.set(taskId, controller);
+    logger.debug(
+      {
+        taskId,
+        sourceConnectionId: payload.sourceConnectionId,
+        targetCount: payload.connectionIds.length,
+        sourceItemCount: payload.sourceItems.length,
+        subTaskCount: subTasks.length,
+        transferMethod: payload.transferMethod,
+      },
+      'Server transfer task queued',
+    );
     return { task: this.cloneWithConvenience(task), signal: controller.signal };
   }
   get(id: string) {
@@ -71,6 +83,7 @@ export class TransferTaskRegistry {
     const c = this.controllers.get(id);
     if (!c) return false;
     if (!c.signal.aborted) {
+      logger.debug({ taskId: id }, 'Server transfer task cancellation requested');
       this.setOverallStatus(id, 'cancelling');
       for (const s of t.subTasks)
         if (!['completed', 'failed', 'cancelled'].includes(s.status))
@@ -94,8 +107,10 @@ export class TransferTaskRegistry {
     if (!t) return;
     if (t.status === 'cancelled' && status !== 'cancelled') return;
     if (FINAL.has(t.status) && ['queued', 'in-progress'].includes(status)) return;
+    const previousStatus = t.status;
     t.status = status;
     t.updatedAt = new Date();
+    this.logStatusChange(t, previousStatus);
   }
   setSubTask(id: string, subTaskId: string, status: TransferSubTask['status'], progress?: number, message?: string) {
     const t = this.tasks.get(id);
@@ -120,6 +135,7 @@ export class TransferTaskRegistry {
   private recalculate(id: string) {
     const t = this.tasks.get(id);
     if (!t) return;
+    const previousStatus = t.status;
     const count = t.subTasks.length;
     if (!count) {
       t.overallProgress = 0;
@@ -168,6 +184,14 @@ export class TransferTaskRegistry {
     else if (queued === count) t.status = 'queued';
     else t.status = 'in-progress';
     t.updatedAt = new Date();
+    this.logStatusChange(t, previousStatus);
+  }
+  private logStatusChange(task: TransferTask, previousStatus: TransferTaskStatus): void {
+    if (task.status === previousStatus) return;
+    logger.debug(
+      { taskId: task.taskId, previousStatus, status: task.status, overallProgress: task.overallProgress },
+      'Server transfer task status changed',
+    );
   }
   private clone(t: TransferTask): TransferTask {
     return {

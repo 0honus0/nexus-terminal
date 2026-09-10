@@ -1,3 +1,4 @@
+import { logger } from '@/client/logging/logger';
 import { openWebSocket } from '@/client/websocket';
 
 interface ProtocolResponse<T = unknown> {
@@ -15,6 +16,7 @@ type EventHandler<T = unknown> = (payload: T) => void;
 type BinaryHandler = (data: Uint8Array) => void;
 
 interface PendingRequest {
+  operation: string;
   resolve(value: unknown): void;
   reject(error: Error): void;
   timer: number;
@@ -22,6 +24,8 @@ interface PendingRequest {
 
 const OPEN_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 30_000;
+const HIGH_FREQUENCY_OPERATIONS = new Set(['terminal.input', 'terminal.resize', 'docker.stats']);
+const HIGH_FREQUENCY_EVENTS = new Set(['status.sample', 'transfer.upload', 'transfer.copyMove', 'transfer.archive']);
 
 export class WorkspaceSocket {
   private socket?: WebSocket;
@@ -71,6 +75,7 @@ export class WorkspaceSocket {
 
       openTimer = window.setTimeout(() => {
         const error = new Error('Workspace WebSocket connection timed out.');
+        logger.warn({ pendingRequests: this.pending.size }, 'Workspace WebSocket open timed out');
         settleReject(error);
         if (this.socket !== socket) return;
 
@@ -109,6 +114,12 @@ export class WorkspaceSocket {
         );
         // A close-before-open must settle open(); otherwise callers can remain in "connecting"
         // forever because the request timeout starts only after the socket has opened.
+        const closeContext = {
+          closeCode: event.code,
+          reason: event.reason || undefined,
+          pendingRequests: this.pending.size,
+        };
+        if (event.code !== 1000) logger.warn(closeContext, 'Workspace WebSocket closed unexpectedly');
         settleReject(error);
         if (this.socket !== socket) return;
 
@@ -154,14 +165,19 @@ export class WorkspaceSocket {
     return new Promise<T>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         this.pending.delete(requestId);
+        logger.warn({ operation: type, requestId, pendingRequests: this.pending.size }, 'Workspace request timed out');
         reject(new Error(`Workspace request timed out: ${type}`));
       }, REQUEST_TIMEOUT_MS);
       this.pending.set(requestId, {
+        operation: type,
         resolve: (value) => resolve(value as T),
         reject,
         timer,
       });
       try {
+        if (!HIGH_FREQUENCY_OPERATIONS.has(type)) {
+          logger.trace({ operation: type, requestId, pendingRequests: this.pending.size }, 'Workspace request queued');
+        }
         this.sendJson({ type, requestId, payload });
       } catch (cause) {
         window.clearTimeout(timer);
@@ -173,6 +189,7 @@ export class WorkspaceSocket {
 
   async send(type: string, payload: Record<string, unknown> = {}): Promise<void> {
     await this.open();
+    if (!HIGH_FREQUENCY_OPERATIONS.has(type)) logger.trace({ operation: type }, 'Workspace message dispatch');
     this.sendJson({ type, payload });
   }
 
@@ -234,21 +251,47 @@ export class WorkspaceSocket {
     let message: ProtocolEvent;
     try {
       message = JSON.parse(raw) as ProtocolEvent;
-    } catch {
+    } catch (error) {
+      logger.warn({ err: error }, 'Workspace protocol returned invalid JSON');
       for (const handler of this.errorHandlers) handler('Workspace protocol returned invalid JSON.');
       return;
     }
     if (message.type === 'response') {
       const response = message as ProtocolResponse;
       const pending = this.pending.get(response.requestId);
-      if (!pending) return;
+      if (!pending) {
+        logger.debug({ requestId: response.requestId }, 'Workspace response has no pending request');
+        return;
+      }
       this.pending.delete(response.requestId);
       window.clearTimeout(pending.timer);
+      if (!HIGH_FREQUENCY_OPERATIONS.has(pending.operation)) {
+        logger.trace(
+          {
+            operation: pending.operation,
+            requestId: response.requestId,
+            ok: response.payload.ok,
+            pendingRequests: this.pending.size,
+          },
+          'Workspace response dispatched',
+        );
+      }
       if (response.payload.ok) pending.resolve(response.payload.data);
-      else pending.reject(new Error(response.payload.error || 'Workspace request failed.'));
+      else {
+        const reason = response.payload.error || 'Workspace request failed.';
+        logger.debug(
+          { operation: pending.operation, requestId: response.requestId, reason },
+          'Workspace request rejected',
+        );
+        pending.reject(new Error(reason));
+      }
       return;
     }
-    for (const handler of this.handlers.get(message.type) ?? []) handler(message.payload);
+    const handlers = this.handlers.get(message.type) ?? new Set<EventHandler>();
+    if (!HIGH_FREQUENCY_EVENTS.has(message.type)) {
+      logger.trace({ eventType: message.type, handlerCount: handlers.size }, 'Workspace event dispatched');
+    }
+    for (const handler of handlers) handler(message.payload);
   }
 
   private rejectPending(error: Error): void {

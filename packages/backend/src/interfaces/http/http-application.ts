@@ -105,31 +105,51 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
   app.disable('x-powered-by');
 
   app.use((request, response, next) => {
-    if (!runtimePerformanceMetrics.enabled) {
+    const measurePerformance = runtimePerformanceMetrics.enabled;
+    const diagnosticRequest = logger.isLevelEnabled('debug');
+    if (!measurePerformance && !diagnosticRequest) {
       next();
       return;
     }
-    const connection = String(request.headers.connection ?? '').toLowerCase();
-    const contentLength = Number.parseInt(String(request.headers['content-length'] ?? '0'), 10);
-    const startedAt = runtimePerformanceMetrics.httpRequestStarted({
-      persistentEligible:
-        request.httpVersionMajor === 1 && request.httpVersionMinor >= 1 && !connection.includes('close'),
-      connectionClose: connection.includes('close'),
-      upgradeHeader: Boolean(request.headers.upgrade) || connection.includes('upgrade'),
-      requestBodyBytes: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : 0,
-    });
+
+    let performanceStartedAt = 0n;
+    if (measurePerformance) {
+      const connection = String(request.headers.connection ?? '').toLowerCase();
+      const contentLength = Number.parseInt(String(request.headers['content-length'] ?? '0'), 10);
+      performanceStartedAt = runtimePerformanceMetrics.httpRequestStarted({
+        persistentEligible:
+          request.httpVersionMajor === 1 && request.httpVersionMinor >= 1 && !connection.includes('close'),
+        connectionClose: connection.includes('close'),
+        upgradeHeader: Boolean(request.headers.upgrade) || connection.includes('upgrade'),
+        requestBodyBytes: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : 0,
+      });
+    }
+    const diagnosticStartedAt = diagnosticRequest ? process.hrtime.bigint() : 0n;
     let finished = false;
     const finish = () => {
       if (finished) return;
       finished = true;
-      const header = response.getHeader('content-length');
-      const responseBytes =
-        typeof header === 'number' ? header : typeof header === 'string' ? Number.parseInt(header, 10) : 0;
-      runtimePerformanceMetrics.httpRequestFinished(
-        startedAt,
-        response.statusCode,
-        Number.isFinite(responseBytes) && responseBytes > 0 ? responseBytes : 0,
-      );
+      if (measurePerformance) {
+        const header = response.getHeader('content-length');
+        const responseBytes =
+          typeof header === 'number' ? header : typeof header === 'string' ? Number.parseInt(header, 10) : 0;
+        runtimePerformanceMetrics.httpRequestFinished(
+          performanceStartedAt,
+          response.statusCode,
+          Number.isFinite(responseBytes) && responseBytes > 0 ? responseBytes : 0,
+        );
+      }
+      if (diagnosticStartedAt !== 0n) {
+        const context = {
+          method: request.method,
+          path: request.path,
+          statusCode: response.statusCode,
+          completed: response.writableFinished,
+          durationMs: Number((Number(process.hrtime.bigint() - diagnosticStartedAt) / 1_000_000).toFixed(3)),
+        };
+        if (response.statusCode >= 400) logger.debug(context, 'HTTP request failed');
+        else if (logger.isLevelEnabled('trace')) logger.trace(context, 'HTTP request completed');
+      }
     };
     response.once('finish', finish);
     response.once('close', finish);

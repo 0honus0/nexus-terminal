@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Readable } from 'node:stream';
+import { logger } from '../../../shared/logging/logger';
 
 export const DOWNLOAD_TICKET_TTL_SECONDS = 5 * 60;
 const TTL_MS = DOWNLOAD_TICKET_TTL_SECONDS * 1000;
@@ -77,7 +78,10 @@ export class DownloadTicketRegistry {
     if (lease.state === 'waiting') {
       lease.state = 'active';
       lease.ownerIp = requestIp;
-    } else if (lease.ownerIp !== requestIp) return { status: 'locked' };
+    } else if (lease.ownerIp !== requestIp) {
+      logger.debug({ ticketId: lease.id, userId: lease.userId }, 'Download ticket claim rejected by owner lock');
+      return { status: 'locked' };
+    }
     lease.activeRequests += 1;
     this.touch(lease);
     return { status: 'ok', lease };
@@ -123,12 +127,21 @@ export class DownloadTicketRegistry {
     this.cleanupExpired();
     while (this.countForUser(userId) >= MAX_PER_USER) {
       const lease = this.oldestIdle(userId);
-      if (!lease) throw new DownloadTicketCapacityError();
+      if (!lease) {
+        logger.warn(
+          { userId, userTickets: this.countForUser(userId), totalTickets: this.leases.size },
+          'Download ticket capacity exhausted',
+        );
+        throw new DownloadTicketCapacityError();
+      }
       this.forget(lease, true);
     }
     while (this.leases.size >= MAX_TOTAL) {
       const lease = this.oldestIdle();
-      if (!lease) throw new DownloadTicketCapacityError();
+      if (!lease) {
+        logger.warn({ totalTickets: this.leases.size }, 'Global download ticket capacity exhausted');
+        throw new DownloadTicketCapacityError();
+      }
       this.forget(lease, true);
     }
   }

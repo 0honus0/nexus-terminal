@@ -1,4 +1,5 @@
 import { computed, nextTick, ref, shallowReactive } from 'vue';
+import { logger } from '@/client/logging/logger';
 import type { Connection } from '@/features/connections/public';
 import {
   applySuspendedAutoTermination,
@@ -24,6 +25,10 @@ const resumeInFlight = new Map<string, Promise<WorkspaceRuntimeSession>>();
 const handleSuspendedAutoTerminated = (event: { suspendedSessionId: string; reason: string }): void => {
   const notice = applySuspendedAutoTermination(event);
   if (!notice) return;
+  logger.warn(
+    { suspendedSessionId: event.suspendedSessionId, reason: event.reason },
+    'Suspended Workspace auto-terminated',
+  );
   suspendAutoTerminationNotice.value = notice;
   void refreshSuspendedSessionsCatalog();
 };
@@ -39,6 +44,10 @@ const add = (session: WorkspaceRuntimeSession, index = order.value.length): Work
   next.splice(Math.max(0, Math.min(index, next.length)), 0, session.id);
   order.value = next;
   activeId.value = session.id;
+  logger.debug(
+    { workspaceId: session.id, connectionId: session.connection.id, sessionCount: sessions.size },
+    'Workspace runtime registered',
+  );
   return session;
 };
 
@@ -54,6 +63,7 @@ const removeRuntime = (id: string, reason: string): void => {
   sharedEditorSession.closeScope(id);
   sessions.delete(id);
   order.value = order.value.filter((sessionId) => sessionId !== id);
+  logger.debug({ workspaceId: id, reason, sessionCount: sessions.size }, 'Workspace runtime removed');
   if (activeId.value === id) {
     const next = ids[index + 1] ?? ids[index - 1] ?? null;
     activeId.value = next && sessions.has(next) ? next : null;
@@ -71,7 +81,11 @@ const runResume = (
   replaceWorkspaceId?: string,
 ): Promise<WorkspaceRuntimeSession> => {
   const existing = resumeInFlight.get(suspended.id);
-  if (existing) return existing;
+  if (existing) {
+    logger.trace({ suspendedSessionId: suspended.id }, 'Reusing in-flight Workspace resume');
+    return existing;
+  }
+  logger.debug({ suspendedSessionId: suspended.id, replaceWorkspaceId }, 'Workspace resume queued');
   const task = (async () => {
     const previousActiveId = activeId.value;
     const replaceIndex = replaceWorkspaceId ? order.value.indexOf(replaceWorkspaceId) : -1;

@@ -9,6 +9,25 @@ export const isLogLevel = (value: unknown): value is LogLevel =>
 export const logger = pino({
   level: 'info',
   browser: { asObject: true },
+  redact: {
+    paths: [
+      'password',
+      'passphrase',
+      'secret',
+      'token',
+      'authorization',
+      'cookie',
+      '*.password',
+      '*.passphrase',
+      '*.secret',
+      '*.token',
+      '*.authorization',
+      '*.cookie',
+      'err.config.headers.Authorization',
+      'err.config.headers.authorization',
+    ],
+    censor: '[REDACTED]',
+  },
 });
 
 const logLevelChanged = (previousLevel: LogLevel, level: LogLevel): void => {

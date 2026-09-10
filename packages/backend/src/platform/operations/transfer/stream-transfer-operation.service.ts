@@ -4,6 +4,7 @@ import type { RemoteFileSystem, RemoteFileMetadata, RemotePositionedWriter } fro
 import type { RemoteFileEntry } from '../../filesystem/file-entry';
 import { toRemoteFileEntry } from '../../filesystem/file-entry';
 import type { TransferEvent, TransferOperation, TransferRequest } from './transfer-operation.port';
+import { logger } from '../../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
 interface ActiveTransfer {
@@ -63,6 +64,16 @@ export class StreamTransferOperationService implements TransferOperation {
     const controller = new AbortController();
     const active: ActiveTransfer = { requestId: request.requestId, ownerId: request.ownerId, controller, emit };
     this.active.set(activeKey, active);
+    logger.debug(
+      {
+        requestId: request.requestId,
+        mode: request.mode,
+        sourceCount: request.sourcePaths.length,
+        crossSession: request.sourceSessionId !== request.destinationSessionId,
+        activeTransfers: this.active.size,
+      },
+      'Workspace transfer started',
+    );
 
     try {
       const sourceSession = this.sessions.require(request.sourceSessionId);
@@ -127,6 +138,10 @@ export class StreamTransferOperationService implements TransferOperation {
       tracker.currentFile = undefined;
       tracker.totalKnown = true;
       this.emitProgress(tracker, true);
+      logger.debug(
+        { requestId: request.requestId, mode: request.mode, itemCount: results.length },
+        'Workspace transfer completed',
+      );
       emit({
         type: 'completed',
         requestId: request.requestId,
@@ -138,14 +153,17 @@ export class StreamTransferOperationService implements TransferOperation {
         ...(request.sourceOwnerId ? { sourceOwnerId: request.sourceOwnerId } : {}),
       });
     } catch (error) {
-      if (controller.signal.aborted) emit({ type: 'cancelled', requestId: request.requestId });
-      else
+      if (controller.signal.aborted) {
+        emit({ type: 'cancelled', requestId: request.requestId });
+      } else {
+        logger.warn({ err: error, requestId: request.requestId, mode: request.mode }, 'Workspace transfer failed');
         emit({
           type: 'failed',
           requestId: request.requestId,
           mode: request.mode,
           message: error instanceof Error ? error.message : String(error),
         });
+      }
     } finally {
       this.active.delete(activeKey);
     }
@@ -154,6 +172,7 @@ export class StreamTransferOperationService implements TransferOperation {
   async cancel(ownerId: string, requestId: string): Promise<boolean> {
     const active = this.active.get(this.key(ownerId, requestId));
     if (!active) return false;
+    logger.debug({ requestId, ownerId }, 'Workspace transfer cancellation requested');
     active.emit({ type: 'cancelling', requestId });
     active.controller.abort();
     return true;

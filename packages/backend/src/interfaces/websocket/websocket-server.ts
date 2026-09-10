@@ -4,6 +4,7 @@ import express, { type Request, type RequestHandler, type Response } from 'expre
 import ipaddr from 'ipaddr.js';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
+import { logger } from '../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import { bindUploadStream } from './upload-stream.transport';
 import { WorkspaceProtocolSession, type WorkspaceProtocolDependencies } from './workspace-protocol.session';
@@ -133,6 +134,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
 
   const trackClient = (record: ClientRecord): void => {
     clients.add(record);
+    logger.debug({ websocketKind: record.kind, activeClients: clients.size }, 'WebSocket client attached');
     const alive = () => {
       record.isAlive = true;
       record.missed = 0;
@@ -140,7 +142,13 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     record.socket.on('pong', alive);
     record.socket.on('message', alive);
     record.socket.on('message', (data) => runtimePerformanceMetrics.recordWebSocketInbound(rawDataByteLength(data)));
-    record.socket.once('close', () => clients.delete(record));
+    record.socket.once('close', (code) => {
+      clients.delete(record);
+      logger.debug(
+        { websocketKind: record.kind, closeCode: code, activeClients: clients.size },
+        'WebSocket client detached',
+      );
+    });
   };
 
   const onWorkspaceConnection = (socket: WebSocket, userId: number, username: string, clientIp: string): void => {
@@ -233,11 +241,13 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       return;
     }
     const pathname = url.pathname;
+    logger.trace({ path: pathname }, 'WebSocket upgrade dispatch');
     if (!ALLOWED_PATHS.has(pathname)) {
       rejectUpgrade(socket, 404, 'Not Found');
       return;
     }
     if (!allowedOrigin(request, config)) {
+      logger.debug({ path: pathname }, 'WebSocket upgrade rejected by origin policy');
       rejectUpgrade(socket, 403, 'Forbidden');
       return;
     }
@@ -247,6 +257,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       .check(clientIp)
       .then((decision) => {
         if (!decision.allowed) {
+          logger.debug({ path: pathname, statusCode: decision.statusCode }, 'WebSocket upgrade rejected by IP policy');
           rejectUpgrade(
             socket,
             decision.statusCode,
@@ -261,13 +272,17 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
           const userId = sessionRequest.session?.userId;
           const username = sessionRequest.session?.username;
           if (!userId || !username || sessionRequest.session.requiresTwoFactor === true) {
+            logger.debug({ path: pathname }, 'WebSocket upgrade rejected by session policy');
             rejectUpgrade(socket, 401, 'Unauthorized');
             return;
           }
           handleAuthenticatedUpgrade(sessionRequest, socket, head, url, pathname, userId, username, clientIp);
         });
       })
-      .catch(() => rejectUpgrade(socket, 500, 'Internal Server Error'));
+      .catch((error) => {
+        logger.error({ err: error, path: pathname }, 'WebSocket IP policy check failed');
+        rejectUpgrade(socket, 500, 'Internal Server Error');
+      });
   };
 
   server.on('upgrade', upgradeHandler);
@@ -280,6 +295,10 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       } else {
         record.missed += 1;
         if (record.missed >= MAX_MISSED_HEARTBEATS) {
+          logger.warn(
+            { websocketKind: record.kind, missedHeartbeats: record.missed },
+            'WebSocket client heartbeat expired',
+          );
           void record.protocol?.close();
           record.socket.terminate();
           continue;

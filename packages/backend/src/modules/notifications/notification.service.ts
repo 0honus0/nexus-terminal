@@ -1,3 +1,4 @@
+import { logger } from '../../shared/logging/logger';
 import type { SettingsService } from '../settings/settings.service';
 import type { NotificationChannelPort } from './notification-channel.port';
 import type { NotificationFormatter } from './notification-formatter.service';
@@ -30,13 +31,23 @@ export class NotificationService {
       this.settings.getSetting('language'),
     ]);
     if (!applicable.length) return;
+    logger.debug({ event, channelCount: applicable.length }, 'Notification fan-out dispatch');
     const locale = this.localizer.resolveLocale(language);
     const payload = { event, timestamp: Date.now(), details: this.localizeDetails(details, locale) };
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       applicable.map((setting) =>
         this.channels.send(this.formatter.prepare(setting, payload, timezone || 'UTC', locale)),
       ),
     );
+    for (let index = 0; index < results.length; index += 1) {
+      const result = results[index];
+      if (result?.status !== 'rejected') continue;
+      const setting = applicable[index];
+      logger.warn(
+        { err: result.reason, event, settingId: setting?.id, channelType: setting?.channelType },
+        'Notification channel delivery failed',
+      );
+    }
   }
 
   sendNotification(event: NotificationEvent, details?: Record<string, unknown> | string) {
@@ -82,6 +93,7 @@ export class NotificationService {
           { event: eventDisplay, eventDisplay },
         );
       }
+      logger.debug({ channelType }, 'Test notification dispatch');
       await this.channels.send(prepared);
       return {
         success: true,
@@ -89,6 +101,7 @@ export class NotificationService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      logger.warn({ err: error, channelType }, 'Test notification failed');
       return {
         success: false,
         message: this.localizer.translate(locale, 'notification.test.failure', 'Test notification failed: {error}', {

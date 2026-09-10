@@ -1,3 +1,5 @@
+import { logger } from '@/client/logging/logger';
+
 type FocusAction = () => boolean | void | Promise<boolean | void>;
 interface FocusRegistration {
   action: FocusAction;
@@ -25,7 +27,11 @@ export const focusRegistry = {
 
   async focus(id: string): Promise<boolean> {
     const registrations = targets.get(id);
-    if (!registrations?.length) return false;
+    if (!registrations?.length) {
+      logger.trace({ focusId: id }, 'Focus dispatch has no target');
+      return false;
+    }
+    logger.trace({ focusId: id, targetCount: registrations.length }, 'Focus dispatch');
     for (let index = registrations.length - 1; index >= 0; index -= 1) {
       const registration = registrations[index]!;
       if (registration.available && !registration.available()) continue;

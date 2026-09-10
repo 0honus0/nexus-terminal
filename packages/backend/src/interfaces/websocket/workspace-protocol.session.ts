@@ -10,6 +10,7 @@ import type { WorkspaceTerminalService } from '../../modules/workspace/services/
 import type { WorkspaceEvent, WorkspaceEventHub } from '../../modules/workspace/workspace-event-hub';
 import type { WorkspaceService } from '../../modules/workspace/workspace.service';
 import type { SshSuspendService } from '../../modules/ssh-suspend/ssh-suspend.service';
+import { logger } from '../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import type {
   DockerCommand,
@@ -22,6 +23,7 @@ import type { WorkspaceProtocolRequest } from './workspace-protocol.types';
 
 const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 const MAX_JSON_MESSAGE_BYTES = 1024 * 1024;
+const HIGH_FREQUENCY_OPERATIONS = new Set(['terminal.input', 'terminal.resize', 'docker.stats']);
 
 type JsonRecord = Record<string, unknown>;
 const record = (value: unknown): JsonRecord =>
@@ -111,6 +113,7 @@ export class WorkspaceProtocolSession {
   async handleMessage(raw: RawData, isBinary: boolean): Promise<void> {
     if (this.closed) return;
     if (isBinary) {
+      logger.debug({ workspaceId: this.workspaceId }, 'Rejected binary Workspace protocol request');
       this.socket.close(
         1003,
         'Workspace socket accepts JSON requests; terminal output is server-to-client binary only',
@@ -119,6 +122,10 @@ export class WorkspaceProtocolSession {
     }
     const bytes = Buffer.isBuffer(raw) ? raw : Array.isArray(raw) ? Buffer.concat(raw) : Buffer.from(raw);
     if (bytes.byteLength > MAX_JSON_MESSAGE_BYTES) {
+      logger.debug(
+        { workspaceId: this.workspaceId, messageBytes: bytes.byteLength },
+        'Rejected oversized Workspace protocol request',
+      );
       this.socket.close(1009, 'Workspace request too large');
       return;
     }
@@ -141,15 +148,29 @@ export class WorkspaceProtocolSession {
       message = parsed as WorkspaceProtocolRequest;
       if (typeof message.type !== 'string' || !message.type) throw new Error('Request type is required');
     } catch (error) {
+      logger.debug(
+        { err: error, workspaceId: this.workspaceId, messageBytes: bytes.byteLength },
+        'Invalid Workspace protocol request',
+      );
       this.socket.close(1003, error instanceof Error ? error.message : 'Invalid request');
       return;
     }
 
+    if (!HIGH_FREQUENCY_OPERATIONS.has(message.type)) {
+      logger.trace(
+        { operation: message.type, requestId: message.requestId, workspaceId: this.workspaceId },
+        'Workspace request dispatch',
+      );
+    }
     try {
       const result = await this.route(message.type, record(message.payload), message.requestId);
       if (message.requestId) this.sendResponse(message.requestId, true, result);
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
+      logger.debug(
+        { err: error, operation: message.type, requestId: message.requestId, workspaceId: this.workspaceId },
+        'Workspace request failed',
+      );
       if (message.requestId) this.sendResponse(message.requestId, false, undefined, text);
       else this.sendEvent('protocol.error', { operation: message.type, message: text });
     }
@@ -164,7 +185,10 @@ export class WorkspaceProtocolSession {
     this.terminalTransport.dispose();
     const workspaceId = this.workspaceId;
     this.workspaceId = undefined;
-    if (workspaceId) await this.dependencies.suspendCoordinator.closeWorkspace(workspaceId).catch(() => undefined);
+    if (workspaceId)
+      await this.dependencies.suspendCoordinator
+        .closeWorkspace(workspaceId)
+        .catch((error) => logger.warn({ err: error, workspaceId }, 'Workspace cleanup after protocol close failed'));
   }
 
   private async route(type: string, payload: JsonRecord, requestId?: string): Promise<unknown> {

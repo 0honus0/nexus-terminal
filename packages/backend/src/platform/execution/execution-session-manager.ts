@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../shared/logging/logger';
 import type { ResolvedSshConnection, SshConnectOptions } from '../connection/ssh-connection';
 import { ExecutionSession, type ExecutionSessionIdentity, type ExecutionSessionOwnerType } from './execution-session';
 import type { RemoteExecutionTransport, RemoteExecutionTransportFactory } from './remote-execution.port';
@@ -27,7 +28,25 @@ export class ExecutionSessionManager {
   async connect(request: ConnectExecutionSessionRequest): Promise<ExecutionSession> {
     const id = request.id ?? randomUUID();
     this.assertAvailable(id);
-    const transport = await this.transportFactory.connect(request.connection, request.connect);
+    logger.debug(
+      { executionSessionId: id, connectionId: request.connection.connectionId, ownerType: request.ownerType },
+      'Execution session connect dispatch',
+    );
+    let transport: RemoteExecutionTransport;
+    try {
+      transport = await this.transportFactory.connect(request.connection, request.connect);
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          executionSessionId: id,
+          connectionId: request.connection.connectionId,
+          ownerType: request.ownerType,
+        },
+        'Execution transport connect failed',
+      );
+      throw error;
+    }
     try {
       return this.attach({
         id,
@@ -78,7 +97,15 @@ export class ExecutionSessionManager {
     const session = this.sessions.get(id);
     if (!session) return;
     this.sessions.delete(id);
-    await session.close();
+    try {
+      await session.close();
+    } catch (error) {
+      logger.warn(
+        { err: error, executionSessionId: id, connectionId: session.connectionId, ownerType: session.ownerType },
+        'Execution session close failed',
+      );
+      throw error;
+    }
   }
 
   async closeByOwner(ownerType: ExecutionSessionOwnerType, ownerId?: string): Promise<void> {
@@ -86,13 +113,31 @@ export class ExecutionSessionManager {
       ([, session]) => session.ownerType === ownerType && (ownerId === undefined || session.ownerId === ownerId),
     );
     for (const [id] of matching) this.sessions.delete(id);
-    await Promise.all(matching.map(([, session]) => session.close().catch(() => undefined)));
+    if (matching.length)
+      logger.debug({ ownerType, ownerId, sessionCount: matching.length }, 'Execution sessions closing by owner');
+    await Promise.all(
+      matching.map(([id, session]) =>
+        session
+          .close()
+          .catch((error) =>
+            logger.warn({ err: error, executionSessionId: id, ownerType }, 'Execution session close failed'),
+          ),
+      ),
+    );
   }
 
   async closeAll(): Promise<void> {
     const sessions = [...this.sessions.values()];
     this.sessions.clear();
-    await Promise.all(sessions.map((session) => session.close().catch(() => undefined)));
+    await Promise.all(
+      sessions.map((session) =>
+        session
+          .close()
+          .catch((error) =>
+            logger.warn({ err: error, executionSessionId: session.id }, 'Execution session close failed'),
+          ),
+      ),
+    );
   }
 
   snapshot(): readonly (ExecutionSessionIdentity & { status: string })[] {
