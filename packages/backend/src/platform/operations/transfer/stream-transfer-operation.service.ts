@@ -4,6 +4,7 @@ import type { RemoteFileSystem, RemoteFileMetadata, RemotePositionedWriter } fro
 import type { RemoteFileEntry } from '../../filesystem/file-entry';
 import { toRemoteFileEntry } from '../../filesystem/file-entry';
 import type { TransferEvent, TransferOperation, TransferRequest } from './transfer-operation.port';
+import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
 interface ActiveTransfer {
   requestId: string;
@@ -25,17 +26,36 @@ interface TransferTracker {
 }
 
 const PROGRESS_INTERVAL_MS = 150;
-const POSITIONED_COPY_CHUNK_BYTES = 32 * 1024;
-const POSITIONED_COPY_CONCURRENCY = 32;
+const DEFAULT_POSITIONED_COPY_CHUNK_BYTES = 32 * 1024;
+const DEFAULT_POSITIONED_COPY_CONCURRENCY = 32;
+
+export interface StreamTransferOperationOptions {
+  positionedCopyChunkBytes?: number;
+  positionedCopyConcurrency?: number;
+}
 
 export class StreamTransferOperationService implements TransferOperation {
   private readonly active = new Map<string, ActiveTransfer>();
+  private readonly positionedCopyChunkBytes: number;
+  private readonly positionedCopyConcurrency: number;
 
   private key(ownerId: string | undefined, requestId: string): string {
     return `${ownerId ?? ''}\u0000${requestId}`;
   }
 
-  constructor(private readonly sessions: Pick<ExecutionSessionManager, 'require'>) {}
+  constructor(
+    private readonly sessions: Pick<ExecutionSessionManager, 'require'>,
+    options: StreamTransferOperationOptions = {},
+  ) {
+    this.positionedCopyChunkBytes = Math.max(
+      1,
+      Math.floor(options.positionedCopyChunkBytes ?? DEFAULT_POSITIONED_COPY_CHUNK_BYTES),
+    );
+    this.positionedCopyConcurrency = Math.max(
+      1,
+      Math.floor(options.positionedCopyConcurrency ?? DEFAULT_POSITIONED_COPY_CONCURRENCY),
+    );
+  }
 
   async run(request: TransferRequest, emit: (event: TransferEvent) => void): Promise<void> {
     const activeKey = this.key(request.ownerId, request.requestId);
@@ -232,74 +252,91 @@ export class StreamTransferOperationService implements TransferOperation {
     tracker: TransferTracker,
     signal: AbortSignal,
   ): Promise<void> {
-    tracker.totalFiles += 1;
-    tracker.totalBytes += Math.max(0, metadata.size);
-    tracker.currentFile = sourcePath;
-    this.emitProgress(tracker, true);
-    await destinationFs.ensureDirectory(path.posix.dirname(destinationPath));
-    const temporaryPath = `${destinationPath}.nexus-transfer-${tracker.requestId}.part`;
-    await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
-
-    const reader = await sourceFs.openPositionedReader(sourcePath);
-    let writer: RemotePositionedWriter;
+    const perfFileStartedAt = runtimePerformanceMetrics.transferFileStarted();
+    let perfCompleted = false;
     try {
-      writer = await destinationFs.openPositionedWriter(temporaryPath, { mode: metadata.mode });
-    } catch (error) {
-      await reader.close().catch(() => undefined);
-      throw error;
-    }
-    const abortOpenHandles = () => {
-      void Promise.allSettled([reader.close(), writer.close()]);
-    };
-    signal.addEventListener('abort', abortOpenHandles, { once: true });
-    if (signal.aborted) abortOpenHandles();
-    try {
-      const fileSize = Math.max(0, metadata.size);
-      let nextPosition = 0;
-      const workerCount = Math.min(
-        POSITIONED_COPY_CONCURRENCY,
-        Math.max(1, Math.ceil(fileSize / POSITIONED_COPY_CHUNK_BYTES)),
-      );
-      const worker = async () => {
-        while (true) {
-          this.throwIfAborted(signal);
-          const position = nextPosition;
-          if (position >= fileSize) return;
-          const blockLength = Math.min(POSITIONED_COPY_CHUNK_BYTES, fileSize - position);
-          nextPosition += blockLength;
+      tracker.totalFiles += 1;
+      tracker.totalBytes += Math.max(0, metadata.size);
+      tracker.currentFile = sourcePath;
+      this.emitProgress(tracker, true);
+      await destinationFs.ensureDirectory(path.posix.dirname(destinationPath));
+      const temporaryPath = `${destinationPath}.nexus-transfer-${tracker.requestId}.part`;
+      await destinationFs.removeFile(temporaryPath, { ignoreMissing: true });
 
-          let blockOffset = 0;
-          while (blockOffset < blockLength) {
-            this.throwIfAborted(signal);
-            const chunk = await reader.read(position + blockOffset, blockLength - blockOffset);
-            if (chunk.byteLength === 0) throw new Error(`Unexpected end of file while reading ${sourcePath}.`);
-            this.throwIfAborted(signal);
-            await writer.write(position + blockOffset, chunk);
-            blockOffset += chunk.byteLength;
-            tracker.transferredBytes += chunk.byteLength;
-            this.emitProgress(tracker);
-          }
-        }
+      const reader = await sourceFs.openPositionedReader(sourcePath);
+      let writer: RemotePositionedWriter;
+      try {
+        writer = await destinationFs.openPositionedWriter(temporaryPath, { mode: metadata.mode });
+      } catch (error) {
+        await reader.close().catch(() => undefined);
+        throw error;
+      }
+      const abortOpenHandles = () => {
+        void Promise.allSettled([reader.close(), writer.close()]);
       };
-      await Promise.all(Array.from({ length: workerCount }, () => worker()));
-      this.throwIfAborted(signal);
-    } catch (error) {
-      await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
-      throw error;
-    } finally {
-      signal.removeEventListener('abort', abortOpenHandles);
-      await Promise.allSettled([reader.close(), writer.close()]);
-    }
+      signal.addEventListener('abort', abortOpenHandles, { once: true });
+      if (signal.aborted) abortOpenHandles();
+      try {
+        const fileSize = Math.max(0, metadata.size);
+        let nextPosition = 0;
+        const workerCount =
+          fileSize === 0
+            ? 0
+            : Math.min(this.positionedCopyConcurrency, Math.ceil(fileSize / this.positionedCopyChunkBytes));
+        const worker = async () => {
+          const buffer = Buffer.allocUnsafe(Math.min(this.positionedCopyChunkBytes, fileSize));
+          runtimePerformanceMetrics.recordSftpPositionedReadAllocation(buffer.byteLength);
+          while (true) {
+            this.throwIfAborted(signal);
+            const position = nextPosition;
+            if (position >= fileSize) return;
+            const blockLength = Math.min(this.positionedCopyChunkBytes, fileSize - position);
+            nextPosition += blockLength;
 
-    try {
-      this.throwIfAborted(signal);
-      await destinationFs.replaceFile(temporaryPath, destinationPath);
-    } catch (error) {
-      await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
-      throw error;
+            const perfBlockStartedAt = runtimePerformanceMetrics.transferBlockStarted();
+            let blockCopiedBytes = 0;
+            try {
+              let blockOffset = 0;
+              while (blockOffset < blockLength) {
+                this.throwIfAborted(signal);
+                const target = buffer.subarray(0, blockLength - blockOffset);
+                const bytesRead = await reader.readInto(position + blockOffset, target);
+                if (bytesRead === 0) throw new Error(`Unexpected end of file while reading ${sourcePath}.`);
+                this.throwIfAborted(signal);
+                await writer.write(position + blockOffset, target.subarray(0, bytesRead));
+                blockOffset += bytesRead;
+                blockCopiedBytes += bytesRead;
+                tracker.transferredBytes += bytesRead;
+                this.emitProgress(tracker);
+              }
+            } finally {
+              runtimePerformanceMetrics.transferBlockFinished(perfBlockStartedAt, blockCopiedBytes);
+            }
+          }
+        };
+        await Promise.all(Array.from({ length: workerCount }, () => worker()));
+        this.throwIfAborted(signal);
+      } catch (error) {
+        await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
+        throw error;
+      } finally {
+        signal.removeEventListener('abort', abortOpenHandles);
+        await Promise.allSettled([reader.close(), writer.close()]);
+      }
+
+      try {
+        this.throwIfAborted(signal);
+        await destinationFs.replaceFile(temporaryPath, destinationPath);
+      } catch (error) {
+        await destinationFs.removeFile(temporaryPath, { ignoreMissing: true }).catch(() => undefined);
+        throw error;
+      }
+      tracker.completedFiles += 1;
+      perfCompleted = true;
+      this.emitProgress(tracker, true);
+    } finally {
+      runtimePerformanceMetrics.transferFileFinished(perfFileStartedAt, perfCompleted);
     }
-    tracker.completedFiles += 1;
-    this.emitProgress(tracker, true);
   }
 
   private async removeSource(

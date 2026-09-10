@@ -1,6 +1,7 @@
 import type { Client, SFTPWrapper } from 'ssh2';
 import type { RemoteFileSystem, RemoteFileSystemRole } from '../../../platform/filesystem/remote-filesystem';
 import { SshRemoteFileSystemAdapter } from './ssh-remote-file-system.adapter';
+import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
 type ChannelState = {
   channel?: SFTPWrapper;
@@ -55,9 +56,11 @@ export class SshSftpChannelPool {
     if (state.channel) return state.channel;
     if (state.opening) return state.opening;
 
+    const startedAt = runtimePerformanceMetrics.sftpChannelOpenStarted();
     const opening = new Promise<SFTPWrapper>((resolve, reject) => {
       this.client.sftp((error, channel) => {
         if (error) {
+          runtimePerformanceMetrics.sftpChannelOpenFinished(startedAt, false);
           reject(error);
           return;
         }
@@ -67,6 +70,7 @@ export class SshSftpChannelPool {
           } catch {
             /* best effort */
           }
+          runtimePerformanceMetrics.sftpChannelOpenFinished(startedAt, false);
           reject(new Error('SFTP channel pool closed while opening a channel.'));
           return;
         }
@@ -77,6 +81,7 @@ export class SshSftpChannelPool {
         channel.once('end', detach);
         channel.once('close', detach);
         channel.once('error', detach);
+        runtimePerformanceMetrics.sftpChannelOpenFinished(startedAt, true);
         resolve(channel);
       });
     });

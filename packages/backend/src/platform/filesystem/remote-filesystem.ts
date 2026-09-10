@@ -31,6 +31,7 @@ export interface RemoteWriteOptions {
 
 export interface RemotePositionedReader {
   read(position: number, length: number): Promise<Uint8Array>;
+  readInto(position: number, target: Uint8Array): Promise<number>;
   close(): Promise<void>;
 }
 

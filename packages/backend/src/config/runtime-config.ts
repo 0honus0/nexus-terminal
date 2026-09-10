@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { logger } from '../shared/logging/logger';
 
 export interface PasskeyRelyingPartyConfig {
   rpId: string;
@@ -19,6 +20,8 @@ export interface RuntimeConfig {
   allowOriginlessWebSockets: boolean;
   guacdHost: string;
   guacdPort: number;
+  transferPositionedChunkBytes: number;
+  transferPositionedConcurrency: number;
   passkeyRelyingParties: readonly PasskeyRelyingPartyConfig[];
   e2eResetEnabled: boolean;
   e2eSeedDatabase?: string;
@@ -65,7 +68,7 @@ const buildPasskeyRelyingParties = (env: NodeJS.ProcessEnv): PasskeyRelyingParty
   origins.forEach((rawOrigin, index) => {
     const origin = normalizeOrigin(rawOrigin);
     if (!origin) {
-      console.warn(`[Passkey Config] Ignoring invalid RP_ORIGIN value: ${rawOrigin}`);
+      logger.warn({ origin: rawOrigin }, 'Ignoring invalid passkey RP_ORIGIN value');
       return;
     }
     const hostname = new URL(origin).hostname.toLowerCase();
@@ -92,6 +95,16 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
     (env.NODE_ENV?.trim() || 'development') !== 'production' || env.ALLOW_ORIGINLESS_WEBSOCKETS === 'true',
   guacdHost: env.GUACD_HOST?.trim() || 'localhost',
   guacdPort: parsePositiveInteger(env.GUACD_PORT, 4822, 'GUACD_PORT'),
+  transferPositionedChunkBytes: parsePositiveInteger(
+    env.NEXUS_TRANSFER_POSITIONED_CHUNK_BYTES,
+    32 * 1024,
+    'NEXUS_TRANSFER_POSITIONED_CHUNK_BYTES',
+  ),
+  transferPositionedConcurrency: parsePositiveInteger(
+    env.NEXUS_TRANSFER_POSITIONED_CONCURRENCY,
+    32,
+    'NEXUS_TRANSFER_POSITIONED_CONCURRENCY',
+  ),
   passkeyRelyingParties: buildPasskeyRelyingParties(env),
   e2eResetEnabled: env.NEXUS_E2E_RESET_ENABLED === '1',
   e2eSeedDatabase: env.NEXUS_E2E_SEED_DB?.trim() || undefined,
