@@ -52,9 +52,9 @@ set_env() {
 
 print_logs() {
   echo "--- compose ps ---"
-  compose ps --all 2>&1 || true
+  compose --profile agent ps --all 2>&1 || true
   echo "--- compose logs ---"
-  compose logs --no-color 2>&1 || true
+  compose --profile agent logs --no-color 2>&1 || true
 }
 
 cleanup() {
@@ -148,7 +148,21 @@ NODE
   fi
   sleep 1
 done
-[[ "$runner_ready" -eq 1 ]] || { echo "Agent Runner did not report a usable sandbox." >&2; exit 1; }
+if [[ "$runner_ready" -ne 1 ]]; then
+  echo "Agent Runner did not report a usable sandbox." >&2
+  compose exec -T backend node - <<'NODE' || true
+const token = process.env.AGENT_RUNNER_TOKEN;
+const response = await fetch('http://nexus-agent-runner:8790/v1/availability', {
+  headers: { authorization: `Bearer ${token}` },
+}).catch(() => null);
+if (!response) {
+  console.error('runner availability: unreachable');
+  process.exit(1);
+}
+console.error(`runner availability: ${response.status} ${await response.text()}`);
+NODE
+  exit 1
+fi
 
 # Exercise the actual Controller -> Pack -> Environment -> bubblewrap job path, not only
 # binary presence or HTTP health. The Runner is network-internal; the probe originates from

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { EnvironmentCommand, EnvironmentJobRequest, EnvironmentJobResult, EnvironmentRecord } from '../types';
 import { JobRunner } from '../worker/job-runner';
-import { SandboxManager } from './sandbox-manager';
+import { SandboxManager, type SandboxAvailability } from './sandbox-manager';
 
 export class SandboxEngine {
   private readonly sandbox: SandboxManager;
@@ -12,8 +12,12 @@ export class SandboxEngine {
     this.sandbox = new SandboxManager(runtimeRoot, packsRoot, sandboxBinary);
   }
 
+  availability(): SandboxAvailability {
+    return this.sandbox.availability();
+  }
+
   available(): boolean {
-    return this.sandbox.available();
+    return this.availability().available;
   }
 
   async ping(): Promise<boolean> {

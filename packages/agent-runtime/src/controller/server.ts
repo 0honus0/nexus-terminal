@@ -101,17 +101,14 @@ export class RunnerControllerServer {
       }
       const url = new URL(request.url ?? '/', 'http://runner.internal');
       if (request.method === 'GET' && url.pathname === '/v1/availability') {
-        const sandboxAvailable = await this.dependencies.sandboxEngine.ping();
+        const sandbox = this.dependencies.sandboxEngine.availability();
         json(response, 200, {
-          available: sandboxAvailable,
-          state: sandboxAvailable ? 'ready' : 'degraded',
-          reason: sandboxAvailable ? 'ready' : 'sandbox_unavailable',
+          available: sandbox.available,
+          state: sandbox.available ? 'ready' : 'degraded',
+          reason: sandbox.available ? 'ready' : (sandbox.reason ?? 'sandbox_unavailable'),
           deploymentId: this.dependencies.deploymentId,
           controllerVersion: '1.0.0',
-          sandbox: {
-            available: sandboxAvailable,
-            reason: sandboxAvailable ? null : 'sandbox_unavailable',
-          },
+          sandbox,
           capabilities: { egressAllowlist: false },
         });
         return;

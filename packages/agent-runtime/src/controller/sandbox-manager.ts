@@ -13,6 +13,11 @@ export interface SandboxExecution {
   env: NodeJS.ProcessEnv;
 }
 
+export interface SandboxAvailability {
+  available: boolean;
+  reason: string | null;
+}
+
 interface SandboxMetadata {
   environmentId: string;
   generation: number;
@@ -35,7 +40,7 @@ export class SandboxManager {
     private readonly sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || 'bwrap',
   ) {}
 
-  available(): boolean {
+  availability(): SandboxAvailability {
     fs.mkdirSync(this.runtimeRoot, { recursive: true });
     const probeRoot = fs.mkdtempSync(path.join(this.runtimeRoot, '.sandbox-probe-'));
     try {
@@ -57,17 +62,34 @@ export class SandboxManager {
           'test "$PWD" = /workspace && test ! -e /var/lib/nexus-agent-runner',
         ],
         {
-          stdio: 'ignore',
+          encoding: 'utf8',
+          stdio: ['ignore', 'ignore', 'pipe'],
           timeout: 2_000,
           env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', LANG: process.env.LANG ?? 'C.UTF-8' },
         },
       );
-      return !result.error && result.status === 0;
+      if (!result.error && result.status === 0) return { available: true, reason: null };
+      const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
+      if (errorCode === 'ENOENT') return { available: false, reason: 'sandbox_binary_unavailable' };
+      if (errorCode === 'ETIMEDOUT') return { available: false, reason: 'sandbox_probe_timeout' };
+      const stderr = String(result.stderr ?? '').toLowerCase();
+      if (
+        stderr.includes('operation not permitted') ||
+        stderr.includes('permission denied') ||
+        stderr.includes('namespace')
+      ) {
+        return { available: false, reason: 'sandbox_namespace_unavailable' };
+      }
+      return { available: false, reason: 'sandbox_probe_failed' };
     } catch {
-      return false;
+      return { available: false, reason: 'sandbox_probe_failed' };
     } finally {
       fs.rmSync(probeRoot, { recursive: true, force: true });
     }
+  }
+
+  available(): boolean {
+    return this.availability().available;
   }
 
   create(command: EnvironmentCommand): string {
@@ -210,6 +232,11 @@ export class SandboxManager {
     return [
       '--die-with-parent',
       '--new-session',
+      '--unshare-user',
+      '--uid',
+      '0',
+      '--gid',
+      '0',
       '--unshare-pid',
       '--unshare-ipc',
       '--unshare-uts',
