@@ -305,7 +305,7 @@ Workspace B
 └─ Environment generation -> node18 + python3.10
 ```
 
-Tool Store 按 `family/version/digest/arch` 允许多版本并存。Workspace 切换 Node/Python/Go 版本只重建自己的 Environment generation，重新解析 PATH/只读 Tool Pack，同时继续 bind 同一 Workspace 文件；不得修改全局 `/usr/bin` 或影响其他 Workspace。Environment 由 Runner Sandbox Manager 管理；当前 Linux 实现以 bubblewrap 为基础，目标包括 process/filesystem/network namespace 隔离、独立 process tree、最小环境变量、只读 Tool Pack 等。不能仅靠 `cwd`、Node `vm` 或 `worker_threads` 宣称 hostile-code 安全隔离。
+Tool Store 按 `family/version/digest`（digest 按 arch 解析） 允许多版本并存。Workspace 切换 Node/Python/Go 版本只重建自己的 Environment generation，重新解析 PATH/只读 Tool Pack，同时继续 bind 同一 Workspace 文件；不得修改全局 `/usr/bin` 或影响其他 Workspace。Environment 由 Runner Sandbox Manager 管理；当前 Linux 实现以 bubblewrap 为基础，目标包括 process/filesystem/network namespace 隔离、独立 process tree、最小环境变量、只读 Tool Pack 等。不能仅靠 `cwd`、Node `vm` 或 `worker_threads` 宣称 hostile-code 安全隔离。
 
 ## 9. Runner Plugin 显式选择
 

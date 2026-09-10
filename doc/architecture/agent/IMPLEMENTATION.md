@@ -1119,7 +1119,7 @@ runtime/
       state
 ```
 
-`.control` 不进入任何 sandbox。Tool Pack 只读；项目 npm/pip/go 等依赖进入稳定 Workspace 的 `deps`/项目目录，不修改 Tool Pack。Tool Store key 为 `familyId/versionId/contentDigest/arch`；同 family 多版本可同时 installed/enabled/inUse。不同 Workspace 冻结不同版本组合，切版本只替换目标 Workspace 的 Environment generation，不修改 `/usr/bin` 或其他 Workspace。
+`.control` 不进入任何 sandbox。Tool Pack 只读；项目 npm/pip/go 等依赖进入稳定 Workspace 的 `deps`/项目目录，不修改 Tool Pack。Tool Store key 为 `familyId/versionId/contentDigest`（digest 按 arch 解析）；同 family 多版本可同时 installed/enabled/inUse。不同 Workspace 冻结不同版本组合，切版本只替换目标 Workspace 的 Environment generation，不修改 `/usr/bin` 或其他 Workspace。
 
 Environment generation 在 Backend DB 冻结 `runtime_digest + recipe_id + recipe_revision + catalog_revision + pack_refs_json + runner_plugins_json`。当前 `recipe_id=workspace-dev`；`kind=code` 暂作为兼容存储字段。`runner_plugins_json` 保存精确 `{pluginId,version,sdkVersion,protocolVersion,packageHash,entry}`，新建 Runner target 使用 `protocolVersion=2`；start/restart 使用该 generation 创建时事实，不根据当前安装状态重新猜测。工具版本或 Runner Plugin 版本变化都必须创建新 generation；旧 generation 不自动升级。
 
