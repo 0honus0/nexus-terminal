@@ -71,8 +71,8 @@ export const bindUploadStream = (
   };
 
   if (request.size === 0) {
-    void dependencies.operations
-      .appendUpload(request.workspaceId, request.uploadId, 0, Buffer.alloc(0), true)
+    void Promise.resolve()
+      .then(() => dependencies.operations.appendUpload(request.workspaceId, request.uploadId, 0, Buffer.alloc(0), true))
       .then(() => {
         uploadCompleted = true;
         if (socket.readyState === WebSocket.OPEN) socket.close(1000, 'Upload complete');
@@ -106,8 +106,11 @@ export const bindUploadStream = (
     bytesReceived = nextBytes;
     queuedBytes += data.byteLength;
     updateReceiveBackpressure();
-    void dependencies.operations
-      .appendUpload(request.workspaceId, request.uploadId, currentIndex, data, isLast)
+    // Workspace teardown can race an already-upgraded upload socket. Always enter the
+    // promise chain before calling the operation so a synchronous ownership/session error
+    // is contained to this WebSocket instead of escaping the event emitter as uncaughtException.
+    void Promise.resolve()
+      .then(() => dependencies.operations.appendUpload(request.workspaceId, request.uploadId, currentIndex, data, isLast))
       .then(() => {
         queuedBytes = Math.max(0, queuedBytes - data.byteLength);
         updateReceiveBackpressure();

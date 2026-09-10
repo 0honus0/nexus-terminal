@@ -10,7 +10,7 @@
     BaseSelect,
     OverlayPanel,
   } from '@/foundation/ui';
-  import { usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
+  import { useDraggablePosition, usePersistentResizablePanel, useResizeHandle } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
   import { loadFilePreview, previewKindFor } from '@/features/file-preview/public';
   import { loadFileEditor, type FileEditorSessionController } from '@/features/file-editor/public';
@@ -235,6 +235,109 @@
     get: () => props.progressVisible !== false,
     set: (visible: boolean) => emit('progressVisible', visible),
   });
+  const PROGRESS_RESTORE_POSITION_KEY = 'nexus.transfer-progress-restore-position';
+  const PROGRESS_RESTORE_MARGIN = 8;
+  const progressRestoreButton = ref<HTMLElement | null>(null);
+  const progressRestorePosition = ref({ x: 0, y: 0 });
+  const progressRestorePositionInitialized = ref(false);
+  const clampProgressRestorePosition = (candidate: { x: number; y: number }, element: HTMLElement) => ({
+    x: Math.max(
+      PROGRESS_RESTORE_MARGIN,
+      Math.min(candidate.x, Math.max(PROGRESS_RESTORE_MARGIN, window.innerWidth - element.offsetWidth - PROGRESS_RESTORE_MARGIN)),
+    ),
+    y: Math.max(
+      PROGRESS_RESTORE_MARGIN,
+      Math.min(candidate.y, Math.max(PROGRESS_RESTORE_MARGIN, window.innerHeight - element.offsetHeight - PROGRESS_RESTORE_MARGIN)),
+    ),
+  });
+  const saveProgressRestorePosition = (): void => {
+    if (props.mobile || !progressRestorePositionInitialized.value) return;
+    try {
+      localStorage.setItem(PROGRESS_RESTORE_POSITION_KEY, JSON.stringify(progressRestorePosition.value));
+    } catch {
+      // Keep the in-memory position when storage is unavailable.
+    }
+  };
+  const initializeProgressRestorePosition = async (): Promise<void> => {
+    if (props.mobile) return;
+    await nextTick();
+    const element = progressRestoreButton.value;
+    if (!element) return;
+    if (progressRestorePositionInitialized.value) {
+      progressRestorePosition.value = clampProgressRestorePosition(progressRestorePosition.value, element);
+      return;
+    }
+
+    const rect = element.getBoundingClientRect();
+    let next = { x: rect.left, y: rect.top };
+    try {
+      const raw = localStorage.getItem(PROGRESS_RESTORE_POSITION_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw) as Partial<{ x: number; y: number }>;
+        if (Number.isFinite(saved.x) && Number.isFinite(saved.y)) next = { x: saved.x!, y: saved.y! };
+      }
+    } catch {
+      // Ignore malformed or unavailable storage and keep the original bottom-right position.
+    }
+    progressRestorePosition.value = clampProgressRestorePosition(next, element);
+    progressRestorePositionInitialized.value = true;
+  };
+  const clampProgressRestoreToViewport = (): void => {
+    const element = progressRestoreButton.value;
+    if (!element || !progressRestorePositionInitialized.value) return;
+    progressRestorePosition.value = clampProgressRestorePosition(progressRestorePosition.value, element);
+    saveProgressRestorePosition();
+  };
+  let progressRestoreMoved = false;
+  let suppressProgressRestoreClick = false;
+  const progressRestoreDrag = useDraggablePosition({
+    position: progressRestorePosition,
+    getElement: () => progressRestoreButton.value,
+    canStart: (event) => !props.mobile && event.button === 0,
+    constrain: (candidate, element) => clampProgressRestorePosition(candidate, element),
+    onStart: () => {
+      progressRestoreMoved = false;
+    },
+    onMove: () => {
+      progressRestoreMoved = true;
+    },
+    onEnd: () => {
+      saveProgressRestorePosition();
+      if (!progressRestoreMoved) return;
+      suppressProgressRestoreClick = true;
+      window.setTimeout(() => {
+        suppressProgressRestoreClick = false;
+      }, 0);
+    },
+  });
+  const progressRestoreButtonStyle = computed(() =>
+    progressRestorePositionInitialized.value
+      ? {
+          position: 'fixed' as const,
+          left: `${progressRestorePosition.value.x}px`,
+          top: `${progressRestorePosition.value.y}px`,
+        }
+      : {
+          position: 'absolute' as const,
+          right: '3rem',
+          bottom: '0.75rem',
+        },
+  );
+  const showProgressRestoreButton = computed(
+    () => transfers.tasks.value.length > 0 && !progressVisible.value && !fileManagerPopupVisible.value,
+  );
+  const restoreHiddenProgress = (): void => {
+    if (suppressProgressRestoreClick) {
+      suppressProgressRestoreClick = false;
+      return;
+    }
+    progressVisible.value = true;
+  };
+  watch(showProgressRestoreButton, (visible) => {
+    if (visible) void initializeProgressRestorePosition();
+  });
+  onMounted(() => window.addEventListener('resize', clampProgressRestoreToViewport));
+  onBeforeUnmount(() => window.removeEventListener('resize', clampProgressRestoreToViewport));
   const removeTransferTask = (id: string): void => transfers.remove(id);
   const terminalApi = ref<TerminalApi | null>(null);
   const editorApi = ref<EditorApi | null>(null);
@@ -1193,13 +1296,26 @@
       @hide="progressVisible = false"
       @remove="removeTransferTask"
     />
-    <BaseButton
-      v-else-if="transfers.tasks.value.length && !fileManagerPopupVisible"
-      class="absolute bottom-3 right-12 z-30 shadow-lg"
-      size="sm"
-      @click="progressVisible = true"
-      >{{ t('progressCenter.title') }} ({{ transfers.tasks.value.length }})</BaseButton
+    <div
+      v-else-if="showProgressRestoreButton"
+      ref="progressRestoreButton"
+      data-testid="transfer-progress-restore-anchor"
+      class="z-30 touch-none select-none shadow-lg"
+      :class="progressRestoreDrag.dragging.value ? 'cursor-grabbing' : 'cursor-move'"
+      :style="progressRestoreButtonStyle"
+      @pointerdown="progressRestoreDrag.startDragging"
+      @dragstart.prevent
     >
+      <BaseButton
+        data-testid="transfer-progress-restore-button"
+        class="select-none"
+        size="sm"
+        :class="progressRestoreDrag.dragging.value ? 'cursor-grabbing' : 'cursor-move'"
+        @click="restoreHiddenProgress"
+      >
+        {{ t('progressCenter.title') }} ({{ transfers.tasks.value.length }})
+      </BaseButton>
+    </div>
     <SendFilesModal
       v-if="sendFilesItems.length"
       :visible="true"

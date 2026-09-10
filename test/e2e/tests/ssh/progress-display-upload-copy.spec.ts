@@ -36,6 +36,33 @@ test('registered upload progress can hide, restore, and cancel from Progress Dis
       await hideVisibleProgressCenter(page);
     });
 
+    await step('the small hidden-progress button itself drags freely and remembers its position', async () => {
+      const button = page.getByTestId('transfer-progress-restore-button');
+      await expect(button).toBeVisible();
+      const before = await button.boundingBox();
+      expect(before).toBeTruthy();
+
+      await page.mouse.move(before!.x + before!.width / 2, before!.y + before!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(before!.x + before!.width / 2 - 650, before!.y + before!.height / 2 - 180, { steps: 10 });
+      await page.mouse.up();
+
+      const moved = await button.boundingBox();
+      expect(moved).toBeTruthy();
+      expect(Math.abs(moved!.x - before!.x)).toBeGreaterThan(180);
+      expect(Math.abs(moved!.y - before!.y)).toBeGreaterThan(120);
+      await expect(visibleProgressCenter(page)).toBeHidden();
+      await page.screenshot({ path: '.tmp/progress-display-small-button-moved.png', fullPage: true });
+
+      await button.click();
+      await expect(visibleProgressCenter(page)).toBeVisible();
+      await hideVisibleProgressCenter(page);
+      const restored = await page.getByTestId('transfer-progress-restore-button').boundingBox();
+      expect(restored).toBeTruthy();
+      expect(Math.abs(restored!.x - moved!.x)).toBeLessThanOrEqual(2);
+      expect(Math.abs(restored!.y - moved!.y)).toBeLessThanOrEqual(2);
+    });
+
     await step(
       'Progress Display lists a compact hidden task with progress and Restore returns the window',
       async () => {
