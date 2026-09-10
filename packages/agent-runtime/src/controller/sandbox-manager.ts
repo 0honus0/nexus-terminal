@@ -34,6 +34,8 @@ const packTarget = (pack: PackRef): string =>
   `/opt/nexus/packs/${safeSegment(pack.familyId)}/${safeSegment(pack.versionId)}/${safeSegment(pack.contentDigest.replace(/^sha256:/, ''))}`;
 
 export class SandboxManager {
+  private lastProbeDiagnostic: string | null = null;
+
   constructor(
     private readonly runtimeRoot: string,
     private readonly packsRoot: string,
@@ -59,7 +61,7 @@ export class SandboxManager {
           '--',
           '/bin/sh',
           '-c',
-          'test "$PWD" = /workspace && test ! -e /var/lib/nexus-agent-runner',
+          'if [ "$PWD" != /workspace ]; then echo NEXUS_SANDBOX_PROBE_BAD_CWD >&2; exit 41; fi; if [ -e /var/lib/nexus-agent-runner ]; then echo NEXUS_SANDBOX_PROBE_RUNNER_ROOT_VISIBLE >&2; exit 42; fi',
         ],
         {
           encoding: 'utf8',
@@ -68,11 +70,31 @@ export class SandboxManager {
           env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', LANG: process.env.LANG ?? 'C.UTF-8' },
         },
       );
-      if (!result.error && result.status === 0) return { available: true, reason: null };
+      if (!result.error && result.status === 0) {
+        this.lastProbeDiagnostic = null;
+        return { available: true, reason: null };
+      }
       const errorCode = (result.error as NodeJS.ErrnoException | undefined)?.code;
       if (errorCode === 'ENOENT') return { available: false, reason: 'sandbox_binary_unavailable' };
       if (errorCode === 'ETIMEDOUT') return { available: false, reason: 'sandbox_probe_timeout' };
-      const stderr = String(result.stderr ?? '').toLowerCase();
+      const rawStderr = String(result.stderr ?? '');
+      this.logProbeDiagnostic(result.status, errorCode, rawStderr);
+      if (rawStderr.includes('NEXUS_SANDBOX_PROBE_BAD_CWD')) {
+        return { available: false, reason: 'sandbox_workdir_isolation_failed' };
+      }
+      if (rawStderr.includes('NEXUS_SANDBOX_PROBE_RUNNER_ROOT_VISIBLE')) {
+        return { available: false, reason: 'sandbox_filesystem_isolation_failed' };
+      }
+      const stderr = rawStderr.toLowerCase();
+      if (stderr.includes('capset') || stderr.includes('capability')) {
+        return { available: false, reason: 'sandbox_capability_unavailable' };
+      }
+      if (stderr.includes('mount proc') || stderr.includes('procfs')) {
+        return { available: false, reason: 'sandbox_proc_mount_unavailable' };
+      }
+      if (stderr.includes('mount') || stderr.includes('pivot_root')) {
+        return { available: false, reason: 'sandbox_mount_unavailable' };
+      }
       if (
         stderr.includes('operation not permitted') ||
         stderr.includes('permission denied') ||
@@ -251,6 +273,21 @@ export class SandboxManager {
       '--cap-drop',
       'ALL',
     ];
+  }
+
+  private logProbeDiagnostic(status: number | null, errorCode: string | undefined, stderr: string): void {
+    if (process.env.NEXUS_AGENT_SANDBOX_DIAGNOSTICS !== '1') return;
+    const sanitized = stderr
+      .replace(/[\r\n\t]+/g, ' ')
+      .replace(/[^\x20-\x7e]/g, '?')
+      .trim()
+      .slice(0, 512);
+    const signature = `${status ?? 'null'}:${errorCode ?? 'none'}:${sanitized}`;
+    if (signature === this.lastProbeDiagnostic) return;
+    this.lastProbeDiagnostic = signature;
+    console.warn(
+      `[nexus-agent-runner] sandbox probe failed status=${status ?? 'null'} error=${errorCode ?? 'none'} stderr=${JSON.stringify(sanitized)}`,
+    );
   }
 
   private logicalCwd(value: string): string {

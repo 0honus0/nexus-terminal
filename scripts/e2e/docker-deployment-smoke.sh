@@ -85,6 +85,8 @@ services:
       context: "$repo_root"
       dockerfile: scripts/docker/agent-runtime/Dockerfile
       target: controller
+    environment:
+      NEXUS_AGENT_SANDBOX_DIAGNOSTICS: '1'
 networks:
   nexus-terminal-network:
     name: nexus-e2e-network-$suffix
