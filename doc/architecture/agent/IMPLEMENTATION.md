@@ -1037,7 +1037,7 @@ localStorage key=nexus.agent.surface.v1.user.<userId>；数据schema={schemaVers
 
 P2 只新增可选的 `nexus-agent-runner` 主服务。Runner 可以由宿主 Docker 启动，但其内部实现明确禁止依赖宿主 Docker：**不挂 `/var/run/docker.sock`，不运行 dockerd，不使用 dockerode，不为 Environment、临时 job 或 Plugin 创建子容器**。Runner 内部由 Controller + Sandbox Manager + Pack installer + Toolchain Store + job protocol + cleanup/reconcile + quota + space reporter 完成执行环境管理。
 
-当前 Docker Compose `agent` profile 只向顶层 Runner 容器增加 `SYS_ADMIN`，用于 Docker security profile 下的 namespace/mount sandbox construction；不使用 `privileged`，Backend 不获得该 capability。`SandboxManager` 的真实 job 与 availability probe 共用同一 isolation argument builder，bubblewrap payload 在进入 Environment/Runner Plugin 前显式 `--cap-drop ALL`。因此“bwrap binary 存在”不再等价于 Runner 可用：namespace probe 失败时 `/v1/availability` 必须返回 degraded + 稳定 `sandbox_*` reason，不能回退为裸 Node child process。
+当前 Docker Compose `agent` profile 只向顶层 Runner 容器增加 `SYS_ADMIN + NET_ADMIN`：`SYS_ADMIN` 用于 Docker security profile 下的 namespace/mount sandbox construction，`NET_ADMIN` 只用于初始化新 network namespace 的 loopback；不使用 `privileged`，Backend 不获得这些 capability。`SandboxManager` 的真实 job 与 availability probe 共用同一 isolation argument builder，bubblewrap payload 在进入 Environment/Runner Plugin 前显式 `--cap-drop ALL`。因此“bwrap binary 存在”不再等价于 Runner 可用：sandbox probe 失败时 `/v1/availability` 必须返回 degraded + 稳定 `sandbox_*` reason，不能回退为裸 Node child process。
 
 当前部署关系为：
 

@@ -293,7 +293,7 @@ Memory 一期只读检索；默认不自动写，不安装向量数据库。采�
 
 `nexus-agent-runner` 是 Nexus 的受限本地执行服务。它本身可以作为一个部署 Docker 运行，但 **Runner 内部不运行 dockerd、不连接任何 Docker socket、不使用 dockerode、也不为 Environment/Plugin 创建嵌套容器**。宿主 Docker 只负责启动 `nexus-agent-runner` 这个服务；Runner 的 Environment、临时 job、browser process 和 Runner Plugin 都在该容器内部由 Sandbox Manager 管理。
 
-Docker Compose 的 `agent` profile 只为顶层 `nexus-agent-runner` 增加 namespace 构造所需的 `SYS_ADMIN` capability；不使用 `privileged`，也不把该 capability 加给 Backend。Sandbox Manager 创建 namespace/mount 后，bubblewrap 对 Environment/Runner Plugin payload 显式 `--cap-drop ALL`，因此该部署 capability 只属于 Runner Controller 的 sandbox-construction 边界，不属于被执行工作负载。Runner availability 必须实际执行与 job 共用的最小 sandbox probe；只有二进制存在但 namespace 建立失败时仍报告 degraded/fail closed。
+Docker Compose 的 `agent` profile 只为顶层 `nexus-agent-runner` 增加 sandbox construction 所需的 `SYS_ADMIN` 与 `NET_ADMIN` capability：前者用于 namespace/mount，后者只用于初始化隔离 network namespace 的 loopback；不使用 `privileged`，也不把这些 capability 加给 Backend。Sandbox Manager 创建 namespace/mount/network 后，bubblewrap 对 Environment/Runner Plugin payload 显式 `--cap-drop ALL`，因此部署 capability 只属于 Runner Controller 的 sandbox-construction 边界，不属于被执行工作负载。Runner availability 必须实际执行与 job 共用的最小 sandbox probe；只有二进制存在但 namespace 建立失败时仍报告 degraded/fail closed。
 
 ```text
 Host deployment

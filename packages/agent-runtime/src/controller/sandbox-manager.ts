@@ -89,6 +89,9 @@ export class SandboxManager {
       if (stderr.includes('capset') || stderr.includes('capability')) {
         return { available: false, reason: 'sandbox_capability_unavailable' };
       }
+      if (stderr.includes('loopback') || stderr.includes('rtm_newaddr')) {
+        return { available: false, reason: 'sandbox_network_namespace_unavailable' };
+      }
       if (stderr.includes('mount proc') || stderr.includes('procfs')) {
         return { available: false, reason: 'sandbox_proc_mount_unavailable' };
       }
