@@ -15,6 +15,7 @@ import {
 import { SshCommandSessionAdapter } from './ssh-command-session.adapter';
 import { SshShellSessionAdapter } from './ssh-shell-session.adapter';
 import { SshSftpChannelPool } from '../filesystem/ssh-sftp-channel-pool';
+import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
@@ -33,6 +34,7 @@ export class SshExecutionTransportAdapter implements RemoteExecutionTransport {
     this.sftpPool = new SshSftpChannelPool(client);
     client.on('error', (error: Error) => this.events.emit('error', error));
     client.on('close', () => {
+      if (this.open) runtimePerformanceMetrics.recordSshDisconnect();
       this.open = false;
       this.events.emit('close');
     });

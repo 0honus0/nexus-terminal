@@ -32,6 +32,7 @@
     "jschardet": "^3.1.4",
     "multer": "^2.3.0",
     "nodemailer": "^10.0.1",
+    "pino": "^9.14.0",
     "qrcode": "^1.5.4",
     "session-file-store": "^1.5.0",
     "socks": "^2.8.10",

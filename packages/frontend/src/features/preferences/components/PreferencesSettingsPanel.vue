@@ -4,7 +4,7 @@
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
   import { usePreferences } from '../composables/usePreferences';
-  import { commonTimezones, preferenceLanguageNames, type Preferences } from '../model/preferences';
+  import { LOG_LEVELS, commonTimezones, preferenceLanguageNames, type Preferences } from '../model/preferences';
 
   const { t } = useI18n();
   const feedback = useFeedback();
@@ -199,6 +199,43 @@
             :class="sectionMessages.timezone.success ? 'text-success' : 'text-error'"
           >
             {{ sectionMessages.timezone.text }}
+          </p>
+        </div>
+      </form>
+
+      <hr class="border-border/50" />
+
+      <form
+        data-testid="logging-settings-form"
+        class="space-y-4"
+        @submit.prevent="
+          savePatch('logging', { frontendLogLevel: form.frontendLogLevel, backendLogLevel: form.backendLogLevel })
+        "
+      >
+        <h3 class="mb-3 text-base font-semibold text-foreground">{{ t('settings.logging.title') }}</h3>
+        <div class="grid gap-4 md:grid-cols-2">
+          <BaseFormField :label="t('settings.logging.frontendLabel')" for-id="frontendLogLevelSelect">
+            <BaseSelect id="frontendLogLevelSelect" v-model="form.frontendLogLevel" :disabled="savingSection !== null">
+              <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level.toUpperCase() }}</option>
+            </BaseSelect>
+          </BaseFormField>
+          <BaseFormField :label="t('settings.logging.backendLabel')" for-id="backendLogLevelSelect">
+            <BaseSelect id="backendLogLevelSelect" v-model="form.backendLogLevel" :disabled="savingSection !== null">
+              <option v-for="level in LOG_LEVELS" :key="level" :value="level">{{ level.toUpperCase() }}</option>
+            </BaseSelect>
+          </BaseFormField>
+        </div>
+        <p class="text-xs text-text-secondary">{{ t('settings.logging.description') }}</p>
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <BaseButton type="submit" variant="primary" :loading="savingSection === 'logging'">{{
+            t('common.save')
+          }}</BaseButton>
+          <p
+            v-if="sectionMessages.logging?.text"
+            class="text-sm"
+            :class="sectionMessages.logging.success ? 'text-success' : 'text-error'"
+          >
+            {{ sectionMessages.logging.text }}
           </p>
         </div>
       </form>

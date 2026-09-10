@@ -1,5 +1,10 @@
+export const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'silent'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
 export interface Preferences {
   language: string;
+  frontendLogLevel: LogLevel;
+  backendLogLevel: LogLevel;
   timezone: string;
   showPopupFileEditor: boolean;
   shareFileEditorTabs: boolean;
@@ -40,6 +45,8 @@ export type PreferencePatch = Partial<Preferences>;
 
 export const defaultPreferences: Preferences = {
   language: 'en-US',
+  frontendLogLevel: 'info',
+  backendLogLevel: 'info',
   timezone: 'UTC',
   showPopupFileEditor: true,
   shareFileEditorTabs: true,

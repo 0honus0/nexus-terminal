@@ -27,6 +27,8 @@ import type { RemoteDesktopSessionService } from '../../modules/remote-desktop/r
 import type { ConnectionImportService } from '../../modules/connections/connection-import.service';
 import type { ConnectionService } from '../../modules/connections/connection.service';
 import type { SshConnectionTestService } from '../../modules/connections/services/ssh-connection-test.service';
+import { logger } from '../../shared/logging/logger';
+import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import type { NotificationService } from '../../modules/notifications/notification.service';
 import type { PasskeyService } from '../../modules/passkey/passkey.service';
 import type { SettingsService } from '../../modules/settings/settings.service';
@@ -101,6 +103,38 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
   const app = express();
   app.set('trust proxy', dependencies.trustProxy);
   app.disable('x-powered-by');
+
+  app.use((request, response, next) => {
+    if (!runtimePerformanceMetrics.enabled) {
+      next();
+      return;
+    }
+    const connection = String(request.headers.connection ?? '').toLowerCase();
+    const contentLength = Number.parseInt(String(request.headers['content-length'] ?? '0'), 10);
+    const startedAt = runtimePerformanceMetrics.httpRequestStarted({
+      persistentEligible:
+        request.httpVersionMajor === 1 && request.httpVersionMinor >= 1 && !connection.includes('close'),
+      connectionClose: connection.includes('close'),
+      upgradeHeader: Boolean(request.headers.upgrade) || connection.includes('upgrade'),
+      requestBodyBytes: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : 0,
+    });
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      const header = response.getHeader('content-length');
+      const responseBytes =
+        typeof header === 'number' ? header : typeof header === 'string' ? Number.parseInt(header, 10) : 0;
+      runtimePerformanceMetrics.httpRequestFinished(
+        startedAt,
+        response.statusCode,
+        Number.isFinite(responseBytes) && responseBytes > 0 ? responseBytes : 0,
+      );
+    };
+    response.once('finish', finish);
+    response.once('close', finish);
+    next();
+  });
 
   app.use(createIpWhitelistMiddleware(dependencies.ipWhitelist));
 
@@ -234,7 +268,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
 
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     if (response.headersSent) return;
-    console.error('[HTTP] Unhandled route error:', error);
+    logger.error({ err: error }, 'Unhandled HTTP route error');
     response.status(500).json({ message: 'Internal server error.', error: errorMessage(error) });
   });
 

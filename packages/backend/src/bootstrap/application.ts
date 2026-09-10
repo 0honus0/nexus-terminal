@@ -5,6 +5,7 @@ import { FileHttpSessionAdapter } from '../infrastructure/session/file-http-sess
 import { createHttpApplication } from '../interfaces/http/http-application';
 import { attachWebSocketServer, type BackendWebSocketServer } from '../interfaces/websocket/websocket-server';
 import { createCompositionRoot, type CompositionRoot } from './composition-root';
+import { startRuntimePerformanceReporter, type RuntimePerformanceReporter } from './runtime-performance-reporter';
 
 export interface BackendApplication {
   readonly server: Server;
@@ -22,6 +23,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     cookieName: config.sessionCookieName,
   });
   let webSockets!: BackendWebSocketServer;
+  let performanceReporter: RuntimePerformanceReporter | undefined;
   const httpApplication = createHttpApplication({
     sessionMiddleware: sessions.middleware,
     trustProxy: config.trustProxy,
@@ -104,6 +106,12 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     services,
     start: async () => {
       await services.initialize();
+      performanceReporter = startRuntimePerformanceReporter({
+        webSockets: () => webSockets.metrics(),
+        activeExecutionSessions: () => services.platform.executionSessions.snapshot().length,
+        activeWorkspaceSessions: () => services.modules.workspaceSessions.snapshot().length,
+        transfers: () => services.modules.transferTasks.metrics(),
+      });
       try {
         await new Promise<void>((resolve, reject) => {
           const onError = (error: Error) => reject(error);
@@ -114,6 +122,8 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
           });
         });
       } catch (error) {
+        performanceReporter?.stop();
+        performanceReporter = undefined;
         await webSockets.close().catch(() => undefined);
         guacamoleRuntime.close();
         await services.dispose();
@@ -121,6 +131,8 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
       }
     },
     stop: async () => {
+      performanceReporter?.stop();
+      performanceReporter = undefined;
       try {
         await webSockets.close();
         await new Promise<void>((resolve, reject) => {

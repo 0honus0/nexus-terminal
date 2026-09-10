@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type WebSocket from 'ws';
 import GuacamoleLite from 'guacamole-lite';
+import { logger } from '../../shared/logging/logger';
 import type {
   RemoteDesktopSessionIssuer,
   RemoteDesktopSessionRequest,
@@ -55,7 +56,7 @@ export class GuacamoleRuntimeAdapter implements RemoteDesktopSessionIssuer {
       },
     );
     this.server.on('error', (client, error) => {
-      console.error(`[Guacamole] client ${client?.connectionId ?? 'unknown'} error:`, error);
+      logger.error({ err: error, connectionId: client?.connectionId ?? 'unknown' }, 'Guacamole client error');
     });
   }
 
@@ -83,7 +84,7 @@ export class GuacamoleRuntimeAdapter implements RemoteDesktopSessionIssuer {
 
     void this.server.newConnection(socket, requestWithInternalToken).catch((error) => {
       this.pendingBridgeSettings.delete(bridgeId);
-      console.error('[Guacamole] failed to accept remote desktop session:', error);
+      logger.error({ err: error }, 'Failed to accept remote desktop session');
       if (socket.readyState === socket.OPEN) socket.close(1011, 'Remote desktop connection failed');
     });
     return true;

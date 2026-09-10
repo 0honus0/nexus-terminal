@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, watch } from 'vue';
   import { RouterView } from 'vue-router';
+  import { logger } from '@/client/logging/logger';
   import AppHeader from './shell/AppHeader.vue';
   import { useAuthSession } from '@/features/auth/public';
   import { AppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
@@ -35,19 +36,17 @@
           ? { vncModalWidth: size.width, vncModalHeight: size.height }
           : { rdpModalWidth: size.width, rdpModalHeight: size.height },
       )
-      .catch((cause) => console.error('[RemoteDesktop] Failed to persist window size:', cause));
+      .catch((cause) => logger.error({ err: cause }, 'Failed to persist remote desktop window size'));
   };
 
   watch(
     auth.isAuthenticated,
     (authenticated, wasAuthenticated) => {
       if (authenticated) {
-        void appearance
-          .load()
-          .catch((cause) => console.error('[Appearance] Failed to load application settings:', cause));
+        void appearance.load().catch((cause) => logger.error({ err: cause }, 'Failed to load appearance settings'));
         void preferences
           .load()
-          .catch((cause) => console.error('[Preferences] Failed to load application settings:', cause));
+          .catch((cause) => logger.error({ err: cause }, 'Failed to load application preferences'));
         return;
       }
       remoteDesktopLauncher.close();

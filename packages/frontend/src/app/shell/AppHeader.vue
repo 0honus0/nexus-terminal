@@ -3,6 +3,7 @@
   import { RouterLink, useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
+  import { logger } from '@/client/logging/logger';
   import { useAuthSession } from '@/features/auth/public';
   import { usePreferences } from '@/features/preferences/public';
   import { releaseRepository, releaseRepositoryUrl } from '@/app/config/release';
@@ -47,7 +48,7 @@
 
   onMounted(() => {
     if (auth.isAuthenticated.value)
-      void preferences.load().catch((cause) => console.error('[Preferences] Failed to load header settings:', cause));
+      void preferences.load().catch((cause) => logger.error({ err: cause }, 'Failed to load header preferences'));
     window.addEventListener('resize', handleResize);
     void updateUnderline();
   });

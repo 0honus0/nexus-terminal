@@ -22,6 +22,12 @@
         "saveFailed": "タイムゾーン設定の保存に失敗しました。"
       }
     },
+    "logging": {
+      "title": "ログレベル",
+      "frontendLabel": "フロントエンドのログレベル:",
+      "backendLabel": "バックエンドのログレベル:",
+      "description": "診断とパフォーマンス調査用です。DEBUG/TRACE では詳細な実行情報を出力し、パフォーマンス統計は DEBUG または TRACE の場合のみ出力します。変更はすぐに反映されます。"
+    },
     "popupEditor": {
       "title": "ポップアップファイルエディター",
       "enableLabel": "ファイルを開くときにポップアップエディターを表示する",

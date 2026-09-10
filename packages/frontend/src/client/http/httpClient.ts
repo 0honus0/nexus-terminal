@@ -1,4 +1,5 @@
 import axios, { type AxiosInstance } from 'axios';
+import { logger } from '../logging/logger';
 
 export interface ApiErrorBody {
   message?: string;
@@ -35,7 +36,7 @@ httpClient.interceptors.response.use(
     ) {
       handlingUnauthorized = true;
       void Promise.resolve(unauthorizedHandler())
-        .catch((cause) => console.error('[HTTP] Failed to handle session loss:', cause))
+        .catch((cause) => logger.error({ err: cause }, 'Failed to handle HTTP session loss'))
         .finally(() => {
           handlingUnauthorized = false;
         });

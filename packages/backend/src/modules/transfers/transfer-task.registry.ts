@@ -45,6 +45,19 @@ export class TransferTaskRegistry {
   list(userId: string | number) {
     return [...this.tasks.values()].filter((t) => t.userId === userId).map((t) => this.cloneWithConvenience(t));
   }
+  metrics(): { activeTasks: number; queuedSubTasks: number; activeSubTasks: number } {
+    let activeTasks = 0;
+    let queuedSubTasks = 0;
+    let activeSubTasks = 0;
+    for (const task of this.tasks.values()) {
+      if (!FINAL.has(task.status)) activeTasks += 1;
+      for (const subTask of task.subTasks) {
+        if (subTask.status === 'queued') queuedSubTasks += 1;
+        else if (['connecting', 'transferring', 'cancelling'].includes(subTask.status)) activeSubTasks += 1;
+      }
+    }
+    return { activeTasks, queuedSubTasks, activeSubTasks };
+  }
   remove(id: string, userId: string | number): 'removed' | 'not-found' | 'active' {
     const t = this.getOwned(id, userId);
     if (!t) return 'not-found';
