@@ -15,9 +15,9 @@ export interface WorkspaceShellIntegrationSnapshot {
 
 interface PendingSetup {
   phase: 'probe' | 'hook';
-  startMarker: string;
-  endMarker: string;
-  buffer: string;
+  startMarker: Buffer;
+  endMarker: Buffer;
+  buffer: Buffer;
   timeout: NodeJS.Timeout;
 }
 interface PendingDirectoryChange {
@@ -36,12 +36,13 @@ interface ShellState extends WorkspaceShellIntegrationSnapshot {
   hookReject?: (error: Error) => void;
   hookPromptTimeout?: NodeJS.Timeout;
   setup?: PendingSetup;
-  controlRemainder: string;
+  controlRemainder: Buffer;
   suppressOutputUntilPrompt: boolean;
   pendingDirectory?: PendingDirectoryChange;
 }
 
-const PROMPT_MARKER = '\x1b]777;NEXUS_PROMPT\x07';
+const PROMPT_MARKER = Buffer.from('\x1b]777;NEXUS_PROMPT\x07', 'ascii');
+const CLEAR_CURRENT_LINE = Buffer.from('\r\x1b[2K', 'ascii');
 const DELETED_CWD_SUFFIX = ' (deleted)';
 const SETUP_TIMEOUT_MS = 5_000;
 const DIRECTORY_TIMEOUT_MS = 10 * 60 * 1000;
@@ -60,9 +61,10 @@ export class WorkspaceShellIntegrationService {
     private readonly events: WorkspaceEventHub,
   ) {}
 
-  filterOutput(sessionId: string, chunk: string): string {
+  filterOutput(sessionId: string, chunk: Uint8Array): Uint8Array {
     const state = this.state(sessionId);
-    return this.consumePromptMarkers(sessionId, state, this.consumeSetupOutput(sessionId, state, chunk));
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+    return this.consumePromptMarkers(sessionId, state, this.consumeSetupOutput(sessionId, state, bytes));
   }
   noteUserInput(sessionId: string): void {
     this.state(sessionId).atPrompt = false;
@@ -225,7 +227,13 @@ export class WorkspaceShellIntegrationService {
       this.rejectProbe(state, new Error('终端路径探测超时。'));
     }, SETUP_TIMEOUT_MS);
     state.integrationReady = false;
-    state.setup = { phase: 'probe', startMarker: start, endMarker: end, buffer: '', timeout };
+    state.setup = {
+      phase: 'probe',
+      startMarker: Buffer.from(start, 'ascii'),
+      endMarker: Buffer.from(end, 'ascii'),
+      buffer: Buffer.alloc(0),
+      timeout,
+    };
     try {
       shell.write(this.buildProbeCommand(start, end));
     } catch (error) {
@@ -256,7 +264,13 @@ export class WorkspaceShellIntegrationService {
       state.setup = undefined;
       this.rejectHook(state, new Error('终端提示符集成初始化超时。'));
     }, SETUP_TIMEOUT_MS);
-    state.setup = { phase: 'hook', startMarker: start, endMarker: end, buffer: '', timeout };
+    state.setup = {
+      phase: 'hook',
+      startMarker: Buffer.from(start, 'ascii'),
+      endMarker: Buffer.from(end, 'ascii'),
+      buffer: Buffer.alloc(0),
+      timeout,
+    };
     try {
       shell.write(this.buildHookCommand(state.shellKind, start, end));
     } catch (error) {
@@ -270,7 +284,7 @@ export class WorkspaceShellIntegrationService {
   private state(id: string): ShellState {
     let state = this.states.get(id);
     if (!state) {
-      state = { controlRemainder: '', suppressOutputUntilPrompt: false };
+      state = { controlRemainder: Buffer.alloc(0), suppressOutputUntilPrompt: false };
       this.states.set(id, state);
     }
     return state;
@@ -320,51 +334,60 @@ export class WorkspaceShellIntegrationService {
       });
     }
   }
-  private consumePromptMarkers(sessionId: string, state: ShellState, chunk: string): string {
-    const data = state.controlRemainder + chunk;
-    state.controlRemainder = '';
-    let visible = '',
-      cursor = 0,
-      marker = data.indexOf(PROMPT_MARKER);
+  private consumePromptMarkers(sessionId: string, state: ShellState, chunk: Buffer): Buffer {
+    const data = state.controlRemainder.byteLength ? Buffer.concat([state.controlRemainder, chunk]) : chunk;
+    state.controlRemainder = Buffer.alloc(0);
+
+    let cursor = 0;
+    let marker = data.indexOf(PROMPT_MARKER);
+    if (marker === -1) {
+      const partial = this.partialMarkerSuffixLength(data, PROMPT_MARKER);
+      if (partial) state.controlRemainder = Buffer.from(data.subarray(data.byteLength - partial));
+      const complete = partial ? data.subarray(0, data.byteLength - partial) : data;
+      return state.suppressOutputUntilPrompt ? Buffer.alloc(0) : complete;
+    }
+
+    const visible: Buffer[] = [];
     while (marker !== -1) {
       if (state.suppressOutputUntilPrompt) {
-        visible += '\r\x1b[2K';
+        visible.push(CLEAR_CURRENT_LINE);
         state.suppressOutputUntilPrompt = false;
-      } else visible += data.slice(cursor, marker);
+      } else if (marker > cursor) {
+        visible.push(data.subarray(cursor, marker));
+      }
       state.atPrompt = true;
       state.integrationReady = true;
       if (state.hookPromise) this.resolveHook(state);
       void this.handlePrompt(sessionId, state);
-      cursor = marker + PROMPT_MARKER.length;
+      cursor = marker + PROMPT_MARKER.byteLength;
       marker = data.indexOf(PROMPT_MARKER, cursor);
     }
-    const tail = data.slice(cursor);
-    let partial = 0;
-    for (let length = Math.min(tail.length, PROMPT_MARKER.length - 1); length > 0; length--)
-      if (PROMPT_MARKER.startsWith(tail.slice(-length))) {
-        partial = length;
-        break;
-      }
-    const complete = partial ? tail.slice(0, -partial) : tail;
-    if (!state.suppressOutputUntilPrompt) visible += complete;
-    if (partial) state.controlRemainder = tail.slice(-partial);
-    return visible;
+
+    const tail = data.subarray(cursor);
+    const partial = this.partialMarkerSuffixLength(tail, PROMPT_MARKER);
+    const complete = partial ? tail.subarray(0, tail.byteLength - partial) : tail;
+    if (partial) state.controlRemainder = Buffer.from(tail.subarray(tail.byteLength - partial));
+    if (!state.suppressOutputUntilPrompt && complete.byteLength) visible.push(complete);
+    if (visible.length === 0) return Buffer.alloc(0);
+    return visible.length === 1 ? visible[0]! : Buffer.concat(visible);
   }
-  private consumeSetupOutput(_sessionId: string, state: ShellState, chunk: string): string {
+
+  private consumeSetupOutput(_sessionId: string, state: ShellState, chunk: Buffer): Buffer {
     const pending = state.setup;
     if (!pending) return chunk;
-    pending.buffer += chunk;
+    pending.buffer = pending.buffer.byteLength ? Buffer.concat([pending.buffer, chunk]) : Buffer.from(chunk);
     const start = pending.buffer.indexOf(pending.startMarker);
     if (start === -1) {
-      const keep = Math.max(pending.startMarker.length - 1, 0);
-      if (pending.buffer.length > keep) pending.buffer = pending.buffer.slice(-keep);
-      return '';
+      const keep = Math.max(pending.startMarker.byteLength - 1, 0);
+      if (pending.buffer.byteLength > keep) pending.buffer = Buffer.from(pending.buffer.subarray(-keep));
+      return Buffer.alloc(0);
     }
-    const outputStart = start + pending.startMarker.length,
-      end = pending.buffer.indexOf(pending.endMarker, outputStart);
-    if (end === -1) return '';
-    const output = pending.buffer.slice(outputStart, end).trim(),
-      trailing = pending.buffer.slice(end + pending.endMarker.length);
+    const outputStart = start + pending.startMarker.byteLength;
+    const end = pending.buffer.indexOf(pending.endMarker, outputStart);
+    if (end === -1) return Buffer.alloc(0);
+
+    const output = pending.buffer.subarray(outputStart, end).toString('utf8').trim();
+    const trailing = Buffer.from(pending.buffer.subarray(end + pending.endMarker.byteLength));
     state.setup = undefined;
     if (pending.phase === 'probe') {
       clearTimeout(pending.timeout);
@@ -381,6 +404,13 @@ export class WorkspaceShellIntegrationService {
       this.rejectHook(state, new Error('终端提示符集成初始化失败。'));
     }
     return trailing;
+  }
+
+  private partialMarkerSuffixLength(data: Buffer, marker: Buffer): number {
+    for (let length = Math.min(data.byteLength, marker.byteLength - 1); length > 0; length -= 1) {
+      if (data.subarray(data.byteLength - length).equals(marker.subarray(0, length))) return length;
+    }
+    return 0;
   }
   private resolveProbe(state: ShellState) {
     const resolve = state.probeResolve;
