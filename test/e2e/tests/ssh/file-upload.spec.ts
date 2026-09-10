@@ -414,6 +414,52 @@ test('multi-file upload remains usable and byte-complete on moderate-latency lin
   }
 });
 
+test('multi-file upload uses all configured streams instead of size-capacity throttling', async ({ page, context }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, 'hardwareConcurrency', { configurable: true, get: () => 4 });
+  });
+  await openFileManager(page, context);
+
+  const files = Array.from({ length: 6 }, (_, index) => ({
+    name: `scheduler-throughput-${index + 1}.bin`,
+    size: 2 * 1024 * 1024,
+    fill: 0x30 + index,
+  }));
+
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=900`, { method: 'POST' });
+  let openUploadStreams = 0;
+  let maxOpenUploadStreams = 0;
+  page.on('websocket', (socket) => {
+    if (!socket.url().includes('/ws/uploads?')) return;
+    openUploadStreams += 1;
+    maxOpenUploadStreams = Math.max(maxOpenUploadStreams, openUploadStreams);
+    socket.on('close', () => {
+      openUploadStreams = Math.max(0, openUploadStreams - 1);
+    });
+  });
+
+  try {
+    await dragLocalFiles(page, files);
+    const progressPopup = visibleProgressCenter(page);
+    await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+    const uploadTasks = progressPopup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+    await expect(uploadTasks).toHaveCount(files.length);
+
+    // Each file needs four delayed SFTP WRITE acknowledgements, so no first-wave stream can
+    // complete for ~3.6s. Observe the first wave directly at the browser transport boundary.
+    await expect.poll(() => maxOpenUploadStreams, { timeout: 2_500 }).toBeGreaterThanOrEqual(4);
+    await page.waitForTimeout(400);
+  } finally {
+    const progressPopup = visibleProgressCenter(page);
+    if (await progressPopup.isVisible().catch(() => false)) {
+      await progressPopup.getByTestId('transfer-progress-cancel-all').click().catch(() => undefined);
+    }
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+
+  expect(maxOpenUploadStreams, 'all six configured upload streams should be active in the first wave').toBe(files.length);
+});
+
 test('batch upload completes every file under slow SFTP acknowledgements', async ({ page, context }) => {
   await openFileManager(page, context);
 
