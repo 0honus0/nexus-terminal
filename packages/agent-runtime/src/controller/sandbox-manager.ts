@@ -232,11 +232,6 @@ export class SandboxManager {
     return [
       '--die-with-parent',
       '--new-session',
-      '--unshare-user',
-      '--uid',
-      '0',
-      '--gid',
-      '0',
       '--unshare-pid',
       '--unshare-ipc',
       '--unshare-uts',
@@ -253,6 +248,8 @@ export class SandboxManager {
       '--bind',
       workspace,
       '/workspace',
+      '--cap-drop',
+      'ALL',
     ];
   }
 

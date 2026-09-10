@@ -75,6 +75,8 @@ services:
     container_name: nexus-agent-runner
     restart: unless-stopped
     user: '0:0'
+    cap_add:
+      - SYS_ADMIN
     environment:
       PORT: 8790
       NEXUS_AGENT_DEPLOYMENT_ID: ${NEXUS_AGENT_DEPLOYMENT_ID:-nexus-local}

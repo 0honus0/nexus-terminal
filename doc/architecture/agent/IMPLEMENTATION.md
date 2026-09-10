@@ -1037,6 +1037,8 @@ localStorage key=nexus.agent.surface.v1.user.<userId>；数据schema={schemaVers
 
 P2 只新增可选的 `nexus-agent-runner` 主服务。Runner 可以由宿主 Docker 启动，但其内部实现明确禁止依赖宿主 Docker：**不挂 `/var/run/docker.sock`，不运行 dockerd，不使用 dockerode，不为 Environment、临时 job 或 Plugin 创建子容器**。Runner 内部由 Controller + Sandbox Manager + Pack installer + Toolchain Store + job protocol + cleanup/reconcile + quota + space reporter 完成执行环境管理。
 
+当前 Docker Compose `agent` profile 只向顶层 Runner 容器增加 `SYS_ADMIN`，用于 Docker security profile 下的 namespace/mount sandbox construction；不使用 `privileged`，Backend 不获得该 capability。`SandboxManager` 的真实 job 与 availability probe 共用同一 isolation argument builder，bubblewrap payload 在进入 Environment/Runner Plugin 前显式 `--cap-drop ALL`。因此“bwrap binary 存在”不再等价于 Runner 可用：namespace probe 失败时 `/v1/availability` 必须返回 degraded + 稳定 `sandbox_*` reason，不能回退为裸 Node child process。
+
 当前部署关系为：
 
 ```text
@@ -1206,6 +1208,8 @@ Backend 修改 ACL 前先确认 `userId + appId + environmentId` ownership，且
 ### 9.3 Sandbox、Plugin Runtime 与资源边界
 
 Environment core job 当前通过 `SandboxManager` 生成 bubblewrap 命令：新 PID/IPC/UTS/network namespace、最小只读 system runtime、独立 `/tmp`、只读精确 Pack、仅 bind 当前 Environment 的 `core/workspace`。Runner token/env 不进入 child。cwd 必须解析在 `/workspace` 内，禁止 `..`/symlink/跨 Environment 逃逸。
+
+Linux capability 只用于顶层 Runner 创建上述 namespace/mount；sandbox payload 显式 drop all capabilities。CI 的生产 Compose smoke 必须启用 `--profile agent`，从 Backend 网络路径使用真实 Controller token 检查 availability，并至少执行一次 `provision → start → Pack-bound sandbox job → delete`，否则不能把 Runner sandbox 部署标记为已验证。
 
 Runner Plugin process 同样使用独立 bubblewrap sandbox：只读挂载自己的已验证 package 与 worker bootstrap，默认无网络，清空 env，**不 bind 真实 plugin workspace**。它只能经 local stdio IPC 使用。Runner protocol v2 不再使用 newline JSON + Base64 bytes，而使用 `plugin-ipc.ts` 的固定 16-byte header framing：`magic/type/reserved/requestId/payloadLength`；control payload 是最大 256 KiB 的 JSON frame，workspace read/write 数据是最大 16 MiB 的 raw binary frame，同一 `requestId` 做关联。未知 frame type、超长、截断、错 requestId 或版本不匹配均 fail closed：
 
