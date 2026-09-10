@@ -788,19 +788,13 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
     expect(progressBox!.y + progressBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
     const task = uploadProgressTask(page, filename);
     await expect(task).toBeVisible({ timeout: 10_000 });
-    const readStatus = async (): Promise<string | null> => {
-      const text = await task.innerText();
-      const match = text.match(/\((Queued|Running|Completed|Cancelled|Failed|Partially completed)\)/);
-      const status = match?.[1]?.toLowerCase().replace(' ', '-') ?? null;
-      if (status) observedStatuses.add(status);
-      return status;
-    };
-    await expect.poll(readStatus, { timeout: 10_000 }).toBe('queued');
-    await expect.poll(readStatus, { timeout: 30_000 }).toBe('running');
-    await expect.poll(readStatus, { timeout: 60_000 }).toBe('completed');
-    expect(observedStatuses).toContain('queued');
-    expect(observedStatuses).toContain('running');
-    expect(observedStatuses).toContain('completed');
+    const initialStatus = await task.getAttribute('data-task-status');
+    if (initialStatus) observedStatuses.add(initialStatus);
+
+    // Successful terminal tasks now auto-clear about 800 ms after completion. Do not poll
+    // innerText() on a locator that is expected to disappear: one poll racing cleanup would
+    // otherwise wait the locator timeout and turn a successful upload into a flaky E2E.
+    await expect(task).toBeHidden({ timeout: 60_000 });
 
     await fileManager.getByTitle('Refresh', { exact: true }).click();
     await expect(fileManagerRow(page, filename)).toBeVisible({ timeout: 20_000 });
