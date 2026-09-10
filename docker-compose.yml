@@ -93,10 +93,11 @@ services:
       - nexus-terminal-network
     healthcheck:
       test:
-        [
-          'CMD-SHELL',
-          'wget -q --header="Authorization: Bearer $${NEXUS_AGENT_RUNNER_TOKEN}" -O /dev/null http://127.0.0.1:8790/v1/availability',
-        ]
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:8790/v1/availability',{headers:{authorization:'Bearer '+process.env.NEXUS_AGENT_RUNNER_TOKEN}}).then(async(response)=>{const body=await response.json();if(!response.ok||body.available!==true||body.sandbox?.available!==true)process.exit(1)}).catch(()=>process.exit(1))
       interval: 10s
       timeout: 3s
       retries: 10

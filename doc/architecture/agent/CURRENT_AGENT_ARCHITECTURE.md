@@ -758,13 +758,13 @@ no module cycles
 - `ARCHITECTURE.md` / `IMPLEMENTATION.md` 不再保留“Agent 尚未开工 / software-requirements 尚未同步”的历史前言；
 - `NXW1`、`/ws/uploads`、`NXR2`、Backend↔Runner HTTP streaming 已冻结为彼此独立的 transport contract。
 
-11. Workspace mixed-mode lease：**代码已落地，等待当前远程 Actions 运行验收**。
+11. Workspace mixed-mode lease：**完成并通过远程 Actions 验收**。
     - `LeasePort.acquireMany(owner, keys, mode)` 保留为同 mode convenience API，底层新增单事务 `acquireResources([{resourceKey,mode}])`，重复 key 按 write 优先合并；
     - `MutationGuardRequest.ownerId` 保持稳定 actor identity，并发长 mutation 使用独立 `leaseOwnerId` 表达具体 holder，避免把 actor 与 operation identity 混在一起；
     - upload/compress 对可证明唯一写目标使用 connection root read + canonical file write；decompress/copy-move/upload prepare 等宽写集合继续 connection root write；
     - mixed-mode root read 也记录 active mutation；未知结果同时 quarantine root coordination key 与精确 write key；
     - Platform 新增统一 absolute remote path canonicalization，Archive/Upload/Transfer/Workspace lease key 与真实 I/O 使用同一规范化规则；
-    - 已在现有 `ssh/protocol.spec.ts` 增加同一 Workspace 两个不同 ZIP 目标并发用例，不新增测试文件；运行态验收继续使用 GitHub Actions。
+    - GitHub Actions run `34498027448`（HEAD `e62847c`）整体 success，8 个 Playwright groups 全绿；新增同 Workspace 两个不同 ZIP 目标并发用例 1.6s passed，group 5 为 52 passed、group 3 为 37 passed、group 4 为 16 passed，并覆盖 archive overlap、mobile progress、multi-file upload 与 slow-SFTP batch。
 
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。
 

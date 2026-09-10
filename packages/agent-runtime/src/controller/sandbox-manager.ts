@@ -36,8 +36,38 @@ export class SandboxManager {
   ) {}
 
   available(): boolean {
-    const result = spawnSync(this.sandboxBinary, ['--version'], { stdio: 'ignore', timeout: 2_000 });
-    return !result.error && result.status === 0;
+    fs.mkdirSync(this.runtimeRoot, { recursive: true });
+    const probeRoot = fs.mkdtempSync(path.join(this.runtimeRoot, '.sandbox-probe-'));
+    try {
+      const result = spawnSync(
+        this.sandboxBinary,
+        [
+          ...this.isolationArguments(probeRoot),
+          '--chdir',
+          '/workspace',
+          '--setenv',
+          'HOME',
+          '/workspace',
+          '--setenv',
+          'TMPDIR',
+          '/tmp',
+          '--',
+          '/bin/sh',
+          '-c',
+          'test "$PWD" = /workspace && test ! -e /var/lib/nexus-agent-runner',
+        ],
+        {
+          stdio: 'ignore',
+          timeout: 2_000,
+          env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', LANG: process.env.LANG ?? 'C.UTF-8' },
+        },
+      );
+      return !result.error && result.status === 0;
+    } catch {
+      return false;
+    } finally {
+      fs.rmSync(probeRoot, { recursive: true, force: true });
+    }
   }
 
   create(command: EnvironmentCommand): string {
@@ -137,32 +167,10 @@ export class SandboxManager {
       if (fs.existsSync(path.join(source, 'bin'))) packBins.push(`${target}/bin`);
     }
 
-    const systemBindings: string[] = [];
-    for (const source of ['/bin', '/usr', '/lib', '/sbin', '/etc']) {
-      if (fs.existsSync(source)) systemBindings.push('--ro-bind', source, source);
-    }
-
     return {
       file: this.sandboxBinary,
       argv: [
-        '--die-with-parent',
-        '--new-session',
-        '--unshare-pid',
-        '--unshare-ipc',
-        '--unshare-uts',
-        '--unshare-net',
-        ...systemBindings,
-        '--proc',
-        '/proc',
-        '--dev',
-        '/dev',
-        '--tmpfs',
-        '/tmp',
-        '--dir',
-        '/workspace',
-        '--bind',
-        workspace,
-        '/workspace',
+        ...this.isolationArguments(workspace),
         ...packBindings,
         '--chdir',
         logicalCwd,
@@ -192,6 +200,33 @@ export class SandboxManager {
 
   environmentRoot(environmentId: string, generation: number): string {
     return path.join(this.runtimeRoot, 'environments', safeSegment(environmentId), String(generation));
+  }
+
+  private isolationArguments(workspace: string): string[] {
+    const systemBindings: string[] = [];
+    for (const source of ['/bin', '/usr', '/lib', '/sbin', '/etc']) {
+      if (fs.existsSync(source)) systemBindings.push('--ro-bind', source, source);
+    }
+    return [
+      '--die-with-parent',
+      '--new-session',
+      '--unshare-pid',
+      '--unshare-ipc',
+      '--unshare-uts',
+      '--unshare-net',
+      ...systemBindings,
+      '--proc',
+      '/proc',
+      '--dev',
+      '/dev',
+      '--tmpfs',
+      '/tmp',
+      '--dir',
+      '/workspace',
+      '--bind',
+      workspace,
+      '/workspace',
+    ];
   }
 
   private logicalCwd(value: string): string {

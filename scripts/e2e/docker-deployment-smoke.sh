@@ -21,6 +21,7 @@ data_dir="$workspace/data"
 cookie_jar="$(mktemp)"
 session_secret='docker-smoke-session-secret-2026-00000000000000000000000000000000'
 encryption_key='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+runner_token="$(node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))")"
 failed=1
 
 if [[ "$image" != *:* ]]; then
@@ -62,7 +63,7 @@ cleanup() {
     print_logs
   fi
   compose exec -T backend sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
-  compose down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
+  compose --profile agent down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
   rm -rf "$workspace" "$cookie_jar" || true
   exit "$status"
 }
@@ -78,6 +79,12 @@ services:
     container_name: nexus-e2e-backend-$suffix
   guacd:
     container_name: nexus-e2e-guacd-$suffix
+  nexus-agent-runner:
+    container_name: nexus-e2e-agent-runner-$suffix
+    build:
+      context: "$repo_root"
+      dockerfile: scripts/docker/agent-runtime/Dockerfile
+      target: controller
 networks:
   nexus-terminal-network:
     name: nexus-e2e-network-$suffix
@@ -98,15 +105,19 @@ set_env NEXUS_IMAGE_TAG "$image_tag"
 set_env NEXUS_HTTP_PORT "$http_port"
 set_env NEXUS_IPV6_SUBNET "fd01:ee:${network_hex}::/80"
 set_env NEXUS_IPV6_GATEWAY "fd01:ee:${network_hex}::1"
+set_env NEXUS_AGENT_RUNNER_TOKEN "$runner_token"
+set_env NEXUS_AGENT_DEPLOYMENT_ID "nexus-e2e-$suffix"
 set_env RP_ID 'ssh.honus.top'
 set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
 
 compose config >/dev/null
 # Production Compose intentionally depends on guacd being started, not on the image's
 # slow built-in health cadence. Start with the same semantics, then verify readiness
-# through the application ingress and an explicit Backend-to-guacd TCP probe.
-compose up -d
-compose ps
+# through the application ingress and explicit Backend-to-service probes. Enable the
+# production Agent profile here so this smoke also proves the Runner image, token contract,
+# bubblewrap sandbox, Pack install, and isolated Environment job path.
+compose --profile agent up -d --build
+compose --profile agent ps
 
 frontend_ready=0
 for _ in {1..60}; do
@@ -119,6 +130,119 @@ done
 [[ "$frontend_ready" -eq 1 ]] || { echo "Compose frontend did not become ready." >&2; exit 1; }
 
 compose exec -T backend sh -lc 'nc -z guacd 4822'
+
+runner_ready=0
+for _ in {1..60}; do
+  if compose exec -T backend node - <<'NODE'
+const token = process.env.AGENT_RUNNER_TOKEN;
+const response = await fetch('http://nexus-agent-runner:8790/v1/availability', {
+  headers: { authorization: `Bearer ${token}` },
+}).catch(() => null);
+if (!response?.ok) process.exit(1);
+const body = await response.json();
+if (body.available !== true || body.state !== 'ready' || body.sandbox?.available !== true) process.exit(1);
+NODE
+  then
+    runner_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "$runner_ready" -eq 1 ]] || { echo "Agent Runner did not report a usable sandbox." >&2; exit 1; }
+
+# Exercise the actual Controller -> Pack -> Environment -> bubblewrap job path, not only
+# binary presence or HTTP health. The Runner is network-internal; the probe originates from
+# Backend using the same shared Controller token as production Compose.
+compose exec -T backend node - <<'NODE'
+const { randomUUID } = require('node:crypto');
+const baseUrl = 'http://nexus-agent-runner:8790';
+const token = process.env.AGENT_RUNNER_TOKEN;
+const deploymentId = process.env.AGENT_RUNNER_DEPLOYMENT_ID;
+const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+const get = async (path) => {
+  const response = await fetch(`${baseUrl}${path}`, { headers });
+  if (!response.ok) throw new Error(`GET ${path} failed: ${response.status} ${await response.text()}`);
+  return response.json();
+};
+const post = async (path, body) => {
+  const response = await fetch(`${baseUrl}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error(`POST ${path} failed: ${response.status} ${await response.text()}`);
+  return response.json();
+};
+const catalog = await get('/v1/catalog');
+const recipe = catalog.recipes.find((candidate) => candidate.id === 'shell');
+const pack = catalog.packs.find((candidate) => candidate.familyId === 'base-tools' && candidate.enabled);
+if (!recipe || !pack?.contentDigest) throw new Error('Smoke catalog does not expose the shell/base-tools runtime.');
+
+const now = () => Math.floor(Date.now() / 1000);
+const environmentId = `smoke-env-${randomUUID()}`;
+const identity = {
+  deploymentId,
+  userId: 1,
+  appId: 'operations.default',
+  runId: 'smoke-run',
+  agentRuntimeId: 'smoke-runtime',
+  groupId: 'smoke-group',
+  environmentId,
+  generation: 1,
+  recipeId: recipe.id,
+  recipeRevision: recipe.revision,
+  runtimeDigest: catalog.runtimeDigest,
+  catalogRevision: catalog.revision,
+  packs: [{ familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest }],
+  runnerPlugins: [],
+  limits: recipe.defaultLimits,
+  network: { mode: 'none', hosts: [] },
+  retained: false,
+  expectedVersion: 0,
+};
+const command = (action) => ({
+  ...identity,
+  commandId: `smoke-${action}-${randomUUID()}`,
+  action,
+  operationHash: `v1:${'0'.repeat(64)}`,
+  issuedAt: now(),
+  deadlineAt: now() + 60,
+  nonce: randomUUID(),
+});
+
+const provision = await post('/v1/commands', command('provision'));
+if (provision.status !== 'succeeded') throw new Error(`Runner provision failed: ${JSON.stringify(provision)}`);
+const start = await post('/v1/commands', command('start'));
+if (start.status !== 'succeeded') throw new Error(`Runner start failed: ${JSON.stringify(start)}`);
+
+const jobId = `smoke-job-${randomUUID()}`;
+const job = {
+  jobId,
+  environmentId,
+  generation: 1,
+  userId: identity.userId,
+  appId: identity.appId,
+  runId: identity.runId,
+  agentRuntimeId: identity.agentRuntimeId,
+  operationHash: `v1:${'1'.repeat(64)}`,
+  issuedAt: now(),
+  deadlineAt: now() + 30,
+  nonce: randomUUID(),
+  argv: ['nexus-sh', '-c', 'printf runner-sandbox-ok'],
+  cwd: '/workspace',
+  maxBytes: 4096,
+  timeoutMs: 5000,
+};
+await post(`/v1/environments/${encodeURIComponent(environmentId)}/jobs`, job);
+let result;
+for (let attempt = 0; attempt < 100; attempt += 1) {
+  result = await get(`/v1/jobs/${encodeURIComponent(jobId)}`);
+  if (!['pending', 'running'].includes(result.status)) break;
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+if (result?.status !== 'succeeded' || result.result?.stdout !== 'runner-sandbox-ok' || result.result?.exitCode !== 0) {
+  throw new Error(`Runner sandbox job failed: ${JSON.stringify(result)}`);
+}
+const remove = await post('/v1/commands', command('delete'));
+if (remove.status !== 'succeeded') throw new Error(`Runner delete failed: ${JSON.stringify(remove)}`);
+console.log('agent runner sandbox job: runner-sandbox-ok');
+NODE
 
 curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
 curl -fsS "http://127.0.0.1:${http_port}/api/v1/status" | grep -q '"status"'
