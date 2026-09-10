@@ -3,13 +3,15 @@
   "group": 8,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
-    "tests/ui/notification-delivery.spec.ts",
-    "tests/ui/notification-settings.spec.ts",
-    "tests/ui/proxy-management.spec.ts",
-    "tests/ui/system-settings.spec.ts",
-    "tests/ui/theme-switching.spec.ts",
-    "tests/ssh/progress-display-copy-cancel.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/websocket/authenticated-session.spec.ts",
+    "tests/ssh/progress-display-baseline.spec.ts",
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/upload-protocol.spec.ts",
+    "tests/ssh/panel-wheel-scaling.spec.ts",
+    "tests/ssh/terminal-protocol.spec.ts",
+    "tests/ssh/terminal-tools-ui.spec.ts",
+    "tests/ssh/terminal-ui.spec.ts"
   ]
 }
