@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { normalizeAbsoluteRemotePath } from '../../../platform/filesystem/remote-path';
 import type {
   ArchiveEvent,
   ArchiveOperation,
@@ -57,7 +58,7 @@ export class WorkspaceOperationsService {
     const session = this.sessions.require(workspaceId);
     if (this.uploadGuards.has(this.uploadKey(workspaceId, uploadId))) throw new Error('LEASE_REENTRANT');
     const handle = await this.mutationGuard.beginMutation(
-      this.guardRequest(workspaceId, `upload:${uploadId}`, [session.connectionId], [destinationPath]),
+      this.pathGuardRequest(workspaceId, `upload:${uploadId}`, session.connectionId, [destinationPath]),
     );
     const key = this.uploadKey(workspaceId, uploadId);
     this.uploadGuards.set(key, handle);
@@ -270,30 +271,33 @@ export class WorkspaceOperationsService {
       if (event.type === 'progress') this.events.publish(workspaceId, { type: 'archive-event', event });
       else terminalEvent = event;
     };
-    await this.mutationGuard.withMutation(
-      this.guardRequest(workspaceId, `archive.${operation}:${input.requestId}`, [session.connectionId]),
-      async () => {
-        if (operation === 'compress') {
-          await this.archives.compress(
-            {
-              ...(input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>),
-              ownerId: workspaceId,
-              sessionId: session.executionSessionId,
-            },
-            emit,
-          );
-          return;
-        }
-        await this.archives.decompress(
+    const guard =
+      operation === 'compress'
+        ? this.pathGuardRequest(workspaceId, `archive.${operation}:${input.requestId}`, session.connectionId, [
+            (input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>).destinationPath,
+          ])
+        : this.guardRequest(workspaceId, `archive.${operation}:${input.requestId}`, [session.connectionId]);
+    await this.mutationGuard.withMutation(guard, async () => {
+      if (operation === 'compress') {
+        await this.archives.compress(
           {
-            ...(input as Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>),
+            ...(input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>),
             ownerId: workspaceId,
             sessionId: session.executionSessionId,
           },
           emit,
         );
-      },
-    );
+        return;
+      }
+      await this.archives.decompress(
+        {
+          ...(input as Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>),
+          ownerId: workspaceId,
+          sessionId: session.executionSessionId,
+        },
+        emit,
+      );
+    });
     if (terminalEvent) this.events.publish(workspaceId, { type: 'archive-event', event: terminalEvent });
   }
 
@@ -341,8 +345,23 @@ export class WorkspaceOperationsService {
     return {
       ownerType: 'workspace' as const,
       ownerId: workspaceId,
+      leaseOwnerId: `${workspaceId}:${randomUUID()}`,
       operationId: `${operationId}:${randomUUID()}`,
       resourceKeys,
+      timeoutSeconds: 300,
+    };
+  }
+
+  private pathGuardRequest(workspaceId: string, operationId: string, connectionId: number, paths: readonly string[]) {
+    return {
+      ownerType: 'workspace' as const,
+      ownerId: workspaceId,
+      leaseOwnerId: `${workspaceId}:${randomUUID()}`,
+      operationId: `${operationId}:${randomUUID()}`,
+      readResourceKeys: [`connection:${connectionId}`],
+      resourceKeys: paths.map(
+        (remotePath) => `connection:${connectionId}:file:${normalizeAbsoluteRemotePath(remotePath, 'Remote path')}`,
+      ),
       timeoutSeconds: 300,
     };
   }

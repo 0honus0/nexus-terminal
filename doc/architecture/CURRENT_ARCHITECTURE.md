@@ -70,7 +70,7 @@ Infrastructure
 
 Workspace 是用户交互式 SSH 工作面的 live owner。它拥有 connection/session binding、reconnect、terminal、SFTP capability adapter、layout/session presentation 和 suspend handoff。Terminal/FileManager/Editor/Preview/Transfer 等 feature 只依赖 typed capability port，不自己创建 Workspace socket 或直接持 SSH client。
 
-Workspace mutation 通过共享 `MutationGuard` 进入受控资源写入；Workspace 可以和 Agent 复用底层 Platform filesystem/execution/docker 能力，但不共享 AgentRuntime、Runner workspace、Approval/Lease 状态或 Agent 的执行身份。
+Workspace mutation 通过共享 `MutationGuard` 进入受控资源写入；Workspace 可以和 Agent 复用底层 Platform filesystem/execution/docker 能力，但不共享 AgentRuntime、Runner workspace、Approval 状态或 Agent 的执行身份。Lease provider 是共享的资源冲突原语：Agent mutation 继续获取 connection/target 根 write lease；Workspace 对 upload/compress 这类可证明唯一写目标的长操作使用 connection 根 read + canonical remote file write 的 mixed-mode claim，不同文件可并行、同文件互斥，并仍与 Agent 根 write 冲突；写集合较宽的 Workspace 操作继续拿根 write。所有 mixed claims 在单事务原子获取，未知结果同时 quarantine 协调根与精确写资源。
 
 ### 2.2 Remote Desktop runtime
 

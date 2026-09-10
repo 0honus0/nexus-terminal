@@ -43,7 +43,9 @@ export class LeaseMutationGuardAdapter implements MutationGuardPort {
     if (!request.ownerId || !request.operationId || request.resourceKeys.length < 1) {
       throw new Error('VALIDATION_FAILED');
     }
-    const owner: LeaseOwner = { type: request.ownerType, id: request.ownerId };
+    const readResourceKeys = request.readResourceKeys ?? [];
+    const mutationResourceKeys = [...new Set([...readResourceKeys, ...request.resourceKeys])];
+    const owner: LeaseOwner = { type: request.ownerType, id: request.leaseOwnerId ?? request.ownerId };
     const deadline = Date.now() + timeoutSeconds * 1000;
     const parent = request.signal;
     const controller = new AbortController();
@@ -57,7 +59,16 @@ export class LeaseMutationGuardAdapter implements MutationGuardPort {
         if (controller.signal.aborted) throw controller.signal.reason ?? new Error('ABORTED');
         if (Date.now() >= deadline) throw new Error('LEASE_CONFLICT');
         try {
-          const acquired = await this.leases.acquireMany(owner, request.resourceKeys, 'write', LEASE_TTL_SECONDS);
+          const acquired = readResourceKeys.length
+            ? await this.leases.acquireResources(
+                owner,
+                [
+                  ...readResourceKeys.map((resourceKey) => ({ resourceKey, mode: 'read' as const })),
+                  ...request.resourceKeys.map((resourceKey) => ({ resourceKey, mode: 'write' as const })),
+                ],
+                LEASE_TTL_SECONDS,
+              )
+            : await this.leases.acquireMany(owner, request.resourceKeys, 'write', LEASE_TTL_SECONDS);
           leaseIds = acquired.map((lease) => lease.id);
           break;
         } catch (error) {
@@ -98,8 +109,9 @@ export class LeaseMutationGuardAdapter implements MutationGuardPort {
       const effectiveReason = renewalError ? 'LEASE_RENEWAL_FAILED_DURING_MUTATION' : reason;
       if (!known || renewalError) {
         await this.leases
-          .quarantine(owner, request.resourceKeys, effectiveReason || 'MUTATION_OUTCOME_UNKNOWN', {
+          .quarantine(owner, mutationResourceKeys, effectiveReason || 'MUTATION_OUTCOME_UNKNOWN', {
             operationId: request.operationId,
+            actorOwnerId: request.ownerId,
             ...(renewalError ? { errorCode: code(renewalError) } : {}),
             ...(evidence ?? {}),
           } as JsonValue)

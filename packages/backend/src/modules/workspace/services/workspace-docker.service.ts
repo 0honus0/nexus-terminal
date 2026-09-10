@@ -23,6 +23,7 @@ export class WorkspaceDockerService {
       {
         ownerType: 'workspace',
         ownerId: workspaceId,
+        leaseOwnerId: `${workspaceId}:${randomUUID()}`,
         operationId: `docker.${command}:${randomUUID()}`,
         resourceKeys: [
           `connection:${workspace.connectionId}`,

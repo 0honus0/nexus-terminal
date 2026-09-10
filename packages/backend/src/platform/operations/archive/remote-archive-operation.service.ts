@@ -3,6 +3,7 @@ import type { ExecutionSession } from '../../execution/execution-session';
 import type { ExecutionSessionManager } from '../../execution/execution-session-manager';
 import { CommandExecutionError, type RemoteCommandSession } from '../../execution/remote-execution.port';
 import { quotePosixShellArg } from '../../execution/posix-shell';
+import { normalizeAbsoluteRemotePath } from '../../filesystem/remote-path';
 import type {
   ArchiveErrorCode,
   ArchiveEvent,
@@ -482,9 +483,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
   }
 
   private absolutePath(value: string, label: string): string {
-    const normalized = path.posix.normalize(value.replace(/\\/g, '/'));
-    if (!path.posix.isAbsolute(normalized)) throw new Error(`${label} must be absolute: ${value}`);
-    return normalized;
+    return normalizeAbsoluteRemotePath(value, label);
   }
 
   private emitFailed(

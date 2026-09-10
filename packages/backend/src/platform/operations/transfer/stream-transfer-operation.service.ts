@@ -3,6 +3,7 @@ import type { ExecutionSessionManager } from '../../execution/execution-session-
 import type { RemoteFileSystem, RemoteFileMetadata, RemotePositionedWriter } from '../../filesystem/remote-filesystem';
 import type { RemoteFileEntry } from '../../filesystem/file-entry';
 import { toRemoteFileEntry } from '../../filesystem/file-entry';
+import { normalizeAbsoluteRemotePath } from '../../filesystem/remote-path';
 import type { TransferEvent, TransferOperation, TransferRequest } from './transfer-operation.port';
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
@@ -379,9 +380,7 @@ export class StreamTransferOperationService implements TransferOperation {
   }
 
   private requireAbsolutePath(value: string, label: string): string {
-    const normalized = path.posix.normalize(value.replace(/\\/g, '/'));
-    if (!path.posix.isAbsolute(normalized)) throw new Error(`${label} path must be absolute: ${value}`);
-    return normalized;
+    return normalizeAbsoluteRemotePath(value, `${label} path`);
   }
 
   private throwIfAborted(signal: AbortSignal): void {

@@ -682,10 +682,10 @@ workspace ACL smoke
 git diff --check（前一轮）
 ```
 
-最新 Backend architecture check 在增加 Runtime exchange 后为：
+最新 Backend architecture check 为：
 
 ```text
-374 files
+381 files
 no forbidden layer edges
 no source cycles
 no module cycles
@@ -727,13 +727,13 @@ no module cycles
 6. 长期规范：**完成同步**。
    - `ARCHITECTURE.md` 与 `IMPLEMENTATION.md` 已同步三 target SDK/protocol freeze、Environment root 产品入口、Runner target、Workspace ACL、Workspace↔Artifact 与 Capability 边界。
 
-7. 本地验证状态：
+7. 本地/远程验证状态：
    - `packages/agent-runtime` build：**通过**；
-   - Backend build：**通过**；Backend architecture：**通过（374 files）**；
-   - Frontend architecture/i18n/vue-tsc/Vite/bundle budget：**通过**；
+   - Backend build：**通过**；Backend architecture：**通过（381 files）**；
+   - Frontend architecture/i18n/vue-tsc/Vite/bundle budget：**通过（302 source files；Initial JS 248.3/260 KiB gzip）**；
    - root `npm run build`：**通过**；当前宿主 Node `v22.17.0` 低于仓库声明的 Node `>=24`，构建仅产生 engine warning；
-   - root test policy：**通过（70 E2E specs）**；E2E groups check：**通过（68 grouped specs）**；
-   - Agent E2E：**通过，2/2**，并实际完成 seeded DB v19→v50 migration；
+   - root test policy：**通过（71 E2E spec files）**；E2E groups check：**通过（69 grouped specs / 8 groups）**；
+   - Agent Launcher/Hub 回归已由远程 Actions 验证，相关 group 8 为绿色；其余本轮 Workspace mixed-mode 运行验收仍以新 push 的远程 Actions 为准；
    - `npm run format:check`：**通过**；`git diff --check`：**通过**；
    - 完整 `npm run test:e2e`：**已执行但当前宿主无法形成全绿浏览器证据**。一次完整运行生成的 143 个 failure context 中 143/143 都在 Chromium 启动阶段因缺少 `libglib-2.0.so.0` 退出，未进入页面/业务断言；当前宿主同时没有 Docker CLI 与 `bwrap`。因此不能把 browser E2E 或生产 bubblewrap namespace 记为通过，需在仓库固定 E2E runner/具备依赖的宿主上重跑。
 
@@ -758,6 +758,14 @@ no module cycles
 - `ARCHITECTURE.md` / `IMPLEMENTATION.md` 不再保留“Agent 尚未开工 / software-requirements 尚未同步”的历史前言；
 - `NXW1`、`/ws/uploads`、`NXR2`、Backend↔Runner HTTP streaming 已冻结为彼此独立的 transport contract。
 
+11. Workspace mixed-mode lease：**代码已落地，等待当前远程 Actions 运行验收**。
+    - `LeasePort.acquireMany(owner, keys, mode)` 保留为同 mode convenience API，底层新增单事务 `acquireResources([{resourceKey,mode}])`，重复 key 按 write 优先合并；
+    - `MutationGuardRequest.ownerId` 保持稳定 actor identity，并发长 mutation 使用独立 `leaseOwnerId` 表达具体 holder，避免把 actor 与 operation identity 混在一起；
+    - upload/compress 对可证明唯一写目标使用 connection root read + canonical file write；decompress/copy-move/upload prepare 等宽写集合继续 connection root write；
+    - mixed-mode root read 也记录 active mutation；未知结果同时 quarantine root coordination key 与精确 write key；
+    - Platform 新增统一 absolute remote path canonicalization，Archive/Upload/Transfer/Workspace lease key 与真实 I/O 使用同一规范化规则；
+    - 已在现有 `ssh/protocol.spec.ts` 增加同一 Workspace 两个不同 ZIP 目标并发用例，不新增测试文件；运行态验收继续使用 GitHub Actions。
+
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。
 
 ## 19. 开发约束
@@ -765,9 +773,6 @@ no module cycles
 继续开发时保持：
 
 - 不新增测试文件；使用现有测试/E2E/内联 smoke。
-- 不 commit / push。
-- 不 reset / clean 工作树。
-- 工作树有其他无关 dirty files，不做全仓格式化或覆盖。
 - 只格式化/修改本次 Agent 相关文件。
 - Runner 不重新拿 Docker socket。
 - Plugin 不创建额外 Docker。

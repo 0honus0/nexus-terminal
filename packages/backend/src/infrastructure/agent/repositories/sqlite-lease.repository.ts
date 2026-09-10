@@ -3,6 +3,7 @@ import type { JsonValue } from '../../../modules/agent/agent.types';
 import type {
   LeaseMode,
   LeaseOwner,
+  LeaseResourceRequest,
   LeasePort,
   ResourceLease,
   ResourceQuarantine,
@@ -43,6 +44,22 @@ const normalizeKeys = (values: readonly string[]): string[] => {
     throw new Error('VALIDATION_FAILED');
   }
   return keys;
+};
+
+const normalizeResources = (values: readonly LeaseResourceRequest[]): LeaseResourceRequest[] => {
+  if (!Array.isArray(values) || values.length < 1 || values.length > MAX_KEYS) throw new Error('VALIDATION_FAILED');
+  const modes = new Map<string, LeaseMode>();
+  for (const value of values) {
+    if (!value || typeof value.resourceKey !== 'string' || (value.mode !== 'read' && value.mode !== 'write')) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const [key] = normalizeKeys([value.resourceKey]);
+    const previous = modes.get(key);
+    modes.set(key, previous === 'write' || value.mode === 'write' ? 'write' : 'read');
+  }
+  return [...modes.entries()]
+    .map(([resourceKey, mode]) => ({ resourceKey, mode }))
+    .sort((a, b) => a.resourceKey.localeCompare(b.resourceKey));
 };
 
 const ttl = (value = DEFAULT_TTL_SECONDS): number => {
@@ -87,13 +104,25 @@ export class SqliteLeaseRepository implements LeasePort {
     mode: LeaseMode,
     ttlSeconds = DEFAULT_TTL_SECONDS,
   ): Promise<ResourceLease[]> {
+    return this.acquireResources(
+      owner,
+      normalizeKeys(resourceKeys).map((resourceKey) => ({ resourceKey, mode })),
+      ttlSeconds,
+    );
+  }
+
+  async acquireResources(
+    owner: LeaseOwner,
+    resources: readonly LeaseResourceRequest[],
+    ttlSeconds = DEFAULT_TTL_SECONDS,
+  ): Promise<ResourceLease[]> {
     assertOwner(owner);
-    if (mode !== 'read' && mode !== 'write') throw new Error('VALIDATION_FAILED');
-    const keys = normalizeKeys(resourceKeys);
+    const requested = normalizeResources(resources);
     const duration = ttl(ttlSeconds);
     const now = Math.floor(Date.now() / 1000);
     return this.db.transaction(async (tx) => {
-      for (const key of keys) {
+      for (const request of requested) {
+        const key = request.resourceKey;
         await tx.execute('INSERT OR IGNORE INTO agent_resource_fences(resource_key, next_fence) VALUES (?, 1)', [key]);
         await this.quarantineExpiredMutations(tx, key, now);
         await tx.execute(
@@ -113,12 +142,13 @@ export class SqliteLeaseRepository implements LeasePort {
         if (active.some((row) => row.owner_type === owner.type && row.owner_id === owner.id)) {
           throw new Error('LEASE_REENTRANT');
         }
-        const conflict = mode === 'write' ? active.length > 0 : active.some((row) => row.mode === 'write');
+        const conflict = request.mode === 'write' ? active.length > 0 : active.some((row) => row.mode === 'write');
         if (conflict) throw new Error('LEASE_CONFLICT');
       }
 
       const leases: ResourceLease[] = [];
-      for (const key of keys) {
+      for (const request of requested) {
+        const key = request.resourceKey;
         const fenceRow = await tx.queryOne<{ next_fence: number }>(
           'SELECT next_fence FROM agent_resource_fences WHERE resource_key = ?',
           [key],
@@ -131,12 +161,12 @@ export class SqliteLeaseRepository implements LeasePort {
           `INSERT INTO agent_leases
             (id, resource_key, mode, owner_type, owner_id, fence, acquired_at, expires_at, active_mutation, operation_id)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, NULL)`,
-          [id, key, mode, owner.type, owner.id, fence, now, now + duration],
+          [id, key, request.mode, owner.type, owner.id, fence, now, now + duration],
         );
         leases.push({
           id,
           resourceKey: key,
-          mode,
+          mode: request.mode,
           owner: { ...owner },
           fence,
           acquiredAt: now,
@@ -187,7 +217,7 @@ export class SqliteLeaseRepository implements LeasePort {
       for (const id of ids) {
         const changed = await tx.execute(
           `UPDATE agent_leases SET active_mutation = 1, operation_id = ?
-           WHERE id = ? AND owner_type = ? AND owner_id = ? AND mode = 'write' AND expires_at > ? AND active_mutation = 0`,
+           WHERE id = ? AND owner_type = ? AND owner_id = ? AND expires_at > ? AND active_mutation = 0`,
           [operationId, id, owner.type, owner.id, now],
         );
         if (changed.changes !== 1) throw new Error('LEASE_LOST');

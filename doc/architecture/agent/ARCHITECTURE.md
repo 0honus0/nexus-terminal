@@ -249,9 +249,9 @@ operationHash 使用版本化 canonical JSON 的 UTF-8 SHA-256，包含 actor sc
 
 Policy 顺序：App enabled/grant→连接存在及 denylist→硬禁止→read allow/修改审批。Phase 1 任何 mutation 返回 CAPABILITY_UNAVAILABLE。Phase 2 结构化文件/服务/Docker 修改都审批；Shell 优先受限 argv catalog，未知 shell 文本一律审批，deny 模式先于审批；不把正则识别当 sandbox。远端 Shell 使用目标用户本来的系统权限，必须在 UI 提示不是容器隔离。
 
-Lease 30秒、每10秒续约；读共享、写互斥，resourceKey 不含 caller/App。第一版所有修改获取 target 根 write lease，所有读取取 target 根 read lease，子路径 keys 用于审计，避免目录/子文件锁不相交。targetIdentity 由受信 SSH host key+规范化 endpoint 推导，连接别名可显式映射同一 target；无法判定的别名/外部终端并发不能声称已互斥。
+Lease 30秒、每10秒续约；读共享、写互斥，resourceKey 不含 caller/App。Agent 修改继续获取 target 根 write lease，Agent 读取获取 target 根 read lease，确保不同 App/Agent 对同一目标仍按保守 target 边界互斥。LeasePort 的 `acquireMany(owner, keys, mode)` 保留为同 mode convenience API；底层同时支持一次事务中的 mixed-mode resource claims，供能证明写集合的调用方表达“协调根 read + 精确资源 write”。targetIdentity 由受信 SSH host key+规范化 endpoint 推导，连接别名可显式映射同一 target；无法判定的别名/外部终端并发不能声称已互斥。
 
-Workspace typed mutation 通过注入的共享 MutationGuardPort 接入同一 lease provider；Platform 不依赖 Agent 模块。Workspace 交互终端和外部 SSH 无法受此锁控制，界面注明，文件操作额外比对 hash/metadata，仍不声称远端任意工具有原子 CAS。Agent 不自动覆盖观测到的外部修改。
+Workspace typed mutation 通过注入的共享 MutationGuardPort 接入同一 lease provider；Platform 不依赖 Agent 模块。对于 upload 与 compress 这类可在执行前确定唯一写目标的长 mutation，Workspace 取 connection 根 read lease + canonical remote path write lease，使不同文件可以并行、同一文件保持互斥，同时仍与 Agent 的 target 根 write lease 冲突；decompress、copy/move、目录准备等写集合较宽或不能完整证明的操作继续取 connection 根 write lease。稳定 `ownerId` 表示 Workspace actor，具体并发持锁者通过独立 `leaseOwnerId` 区分；所有 claims 在一次事务原子获取，未知结果同时 quarantine 协调根与精确写资源。远端路径必须在实际 I/O 与 resourceKey 构造前使用同一个 Platform canonicalization 原语。Workspace 交互终端和外部 SSH 无法受此锁控制，界面注明，文件操作额外比对 hash/metadata，仍不声称远端任意工具有原子 CAS。Agent 不自动覆盖观测到的外部修改。
 
 Lease 过期只说明持有人失联，不说明远端作业已停止：已 started 的 mutation 对应 resource quarantine 保留，阻止下一次写，直到 reconciler 验证终止/结果或用户带证据确认解除。fencing 序号只对能校验的 Controller/本地 Gateway 有效，不能保证远端普通 SSH 命令受 fencing。取消/超时先拒绝新步骤，再请求中断；结果未知为 interrupted + needsReconciliation，不标 cancelled 成功，不重放 mutation。
 

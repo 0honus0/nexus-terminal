@@ -14,6 +14,7 @@ import type { FileRemovalService } from '../../../platform/filesystem/file-remov
 import type { MutationGuardPort } from '../../../platform/operations/mutation-guard.port';
 import type { RemoteFileSearchService } from '../../../platform/filesystem/remote-file-search.service';
 import type { RemoteFileSystem } from '../../../platform/filesystem/remote-filesystem';
+import { normalizeAbsoluteRemotePath } from '../../../platform/filesystem/remote-path';
 import type {
   RemoteTextFileReadResult,
   RemoteTextFileService,
@@ -219,6 +220,7 @@ export class WorkspaceFilesystemService {
       {
         ownerType: 'workspace',
         ownerId: workspaceId,
+        leaseOwnerId: `${workspaceId}:${randomUUID()}`,
         operationId: `${operation}:${randomUUID()}`,
         resourceKeys,
       },
@@ -242,8 +244,6 @@ export class WorkspaceFilesystemService {
     );
   }
   private absolute(value: string): string {
-    const normalized = path.posix.normalize(value.replace(/\\/g, '/'));
-    if (!path.posix.isAbsolute(normalized)) throw new Error(`Remote path must be absolute: ${value}`);
-    return normalized;
+    return normalizeAbsoluteRemotePath(value);
   }
 }

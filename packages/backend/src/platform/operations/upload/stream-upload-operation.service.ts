@@ -4,6 +4,7 @@ import type { Writable } from 'node:stream';
 import type { ExecutionSessionManager } from '../../execution/execution-session-manager';
 import type { RemoteFileSystem } from '../../filesystem/remote-filesystem';
 import { toRemoteFileEntry } from '../../filesystem/file-entry';
+import { normalizeAbsoluteRemotePath } from '../../filesystem/remote-path';
 import type {
   UploadChunkRequest,
   UploadEvent,
@@ -362,9 +363,7 @@ export class StreamUploadOperationService implements UploadOperation {
   }
 
   private absolutePath(value: string, label: string): string {
-    const normalized = path.posix.normalize(value.replace(/\\/g, '/'));
-    if (!path.posix.isAbsolute(normalized)) throw new Error(`${label} must be absolute: ${value}`);
-    return normalized;
+    return normalizeAbsoluteRemotePath(value, label);
   }
 
   private resolveRelativeDirectory(basePath: string, relativePath: string): string {

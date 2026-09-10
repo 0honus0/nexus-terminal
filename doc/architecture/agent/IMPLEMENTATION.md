@@ -795,13 +795,16 @@ canonicalize采用RFC8785的JSON序列化原则：对象key按UTF-16字典序排
 
 ### 5.4 Lease、quarantine与Workspace
 
-acquireMany(owner:{type,id},resourceKeys:string[],mode,ttl=30):Promise<Lease[]>在单事务：
-排序去重keys→确保resource_fences行→把过期且可能仍运行的mutation标quarantine→剔除可确认安全的expired leases→检查quarantine（写拒绝，受限reconcile只读例外）→查询活动锁（read只冲突write，write冲突全部）→每key分配nextFence并insert lease。
-任何key冲突整笔回滚，409 LEASE_CONFLICT带retryAfter，不先拿部分锁造成死锁。所有agent读/写均取target根锁；不同App争同目标也互斥。owner同key嵌套/读升级写拒绝LEASE_REENTRANT，调用方一次声明完整资源集。
+`acquireMany(owner:{type,id},resourceKeys:string[],mode,ttl=30):Promise<Lease[]>` 保留为同 mode convenience API；底层统一落到 `acquireResources(owner,[{resourceKey,mode}],ttl)`，后者允许一次事务中混合 read/write claim：
+排序去重并合并重复 key（write 优先）→确保 resource_fences 行→把过期且可能仍运行的 mutation 标 quarantine→剔除可确认安全的 expired leases→检查 quarantine→查询活动锁（read 只冲突 write，write 冲突全部）→每 key 分配 nextFence 并 insert lease。整个 claim set 单事务提交，任何 key 冲突整笔回滚，不先拿部分锁造成死锁。
 
-renew(leaseIds,owner,ttl)只更新owner+fence+未过期行且无撤销条件，更新行数必须全部匹配，否则整批失败。每10秒续期，失败立即停止新副作用，发送abort并等待核实。release幂等但只能本owner释放；quarantine只有reconcile确认或显式用户证据解决后CAS删除。lease过期不自动解除quarantine。
+Agent 现有读/写仍取 target 根锁，调用点无需迁移：读为 root read，修改为 root write；不同 App/Agent 争同目标继续互斥。owner 同 key 嵌套/读升级写仍拒绝 `LEASE_REENTRANT`。`MutationGuardRequest.ownerId` 是稳定 actor identity；并发长 mutation 可显式提供 `leaseOwnerId` 作为具体持锁者，使同一 Workspace 的独立操作通过普通 lease conflict 规则协调，而不是被误判成 actor 自身嵌套。
 
-Workspace MutationGuard与Agent共用同一个lease实例，通过Platform的MutationGuardPort注入。withLease在开始work前记录owner operation active，结束确认后清理；未知结果也写quarantine。为此agent_leases增active_mutation及operation_id（见SQL补充），不是凭tool表猜测Workspace是否仍运行。原始PTY/外部SSH不加入此保证，产品UI明确边界；新读探测发现冲突时不覆盖。
+Workspace 对写集合可证明的长 mutation 使用 mixed-mode：upload/compress 获取 `connection:<id>` read + canonical `connection:<id>:file:<path>` write；不同目标文件可并行，同目标写互斥，Agent 的 connection root write 仍会阻塞全部 Workspace mutation。decompress、copy/move、upload directory prepare 等不能预先穷举完整写集合的操作继续获取 connection root write。所有 remote path 在 I/O 与 resourceKey 构造前使用 Platform `normalizeAbsoluteRemotePath`，避免 `/a/../b` 之类不同字符串映射到同一远端对象却绕开 lease。
+
+renew(leaseIds,owner,ttl)只更新owner+fence+未过期行且无撤销条件，更新行数必须全部匹配，否则整批失败。每10秒续期，失败立即停止新副作用，发送abort并等待核实。mixed-mode claim 中的协调 read lease 也标记 active_mutation；未知结果同时 quarantine root coordination key 与精确写 key，不能因为 read mode 就丢失 target 级故障隔离。release幂等但只能本holder释放；quarantine只有reconcile确认或显式用户证据解决后CAS删除。lease过期不自动解除quarantine。
+
+Workspace MutationGuard与Agent共用同一个lease实例，通过Platform的MutationGuardPort注入。withLease在开始work前记录 holder operation active，结束确认后清理；terminal completed/failed/cancelled 只有在 guard settle/release 后才对浏览器发布，避免“UI 已完成但 lease 仍持有”的竞态。原始PTY/外部SSH不加入此保证，产品UI明确边界；新读探测发现冲突时不覆盖。
 
 ### 5.5 取消与失败处理
 

@@ -3,9 +3,16 @@ import type { JsonValue } from '../agent.types';
 export type LeaseMode = 'read' | 'write';
 export type LeaseOwnerType = 'agent' | 'workspace' | 'system';
 
+/** Concrete lease-holder identity. It may be runtime-scoped or operation-scoped. */
 export interface LeaseOwner {
   type: LeaseOwnerType;
   id: string;
+}
+
+/** One resource claim in an atomic mixed-mode lease acquisition. */
+export interface LeaseResourceRequest {
+  resourceKey: string;
+  mode: LeaseMode;
 }
 
 export interface ResourceLease {
@@ -35,6 +42,11 @@ export interface LeasePort {
     owner: LeaseOwner,
     resourceKeys: readonly string[],
     mode: LeaseMode,
+    ttlSeconds?: number,
+  ): Promise<ResourceLease[]>;
+  acquireResources(
+    owner: LeaseOwner,
+    resources: readonly LeaseResourceRequest[],
     ttlSeconds?: number,
   ): Promise<ResourceLease[]>;
   renew(leaseIds: readonly string[], owner: LeaseOwner, ttlSeconds?: number): Promise<ResourceLease[]>;

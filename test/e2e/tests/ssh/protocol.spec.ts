@@ -336,6 +336,44 @@ test('archive commands use the same remote root as filesystem operations', async
   }
 });
 
+test('distinct archive destinations can run concurrently in one Workspace', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const fixture = await fetch(`${E2E_SSH.controlUrl}/fixture?name=archive-second.txt&size=64`, { method: 'POST' });
+  expect(fixture.ok).toBeTruthy();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `archive-concurrent-${crypto.randomUUID()}`);
+
+  await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=1200`, { method: 'POST' });
+  try {
+    await waitForFilesystemReady(workspace.socket);
+    const [first, second] = await Promise.all([
+      runArchive(workspace.socket, 'compress', {
+        sources: ['/archive-source.txt'],
+        destination: '/archive-source.zip',
+        format: 'zip',
+      }),
+      runArchive(workspace.socket, 'compress', {
+        sources: ['/archive-second.txt'],
+        destination: '/archive-second.zip',
+        format: 'zip',
+      }),
+    ]);
+    test.skip(
+      first.code === 'COMMAND_NOT_FOUND' || second.code === 'COMMAND_NOT_FOUND',
+      'zip is not installed in this test environment',
+    );
+    expect(first.type, JSON.stringify(first)).toBe('completed');
+    expect(second.type, JSON.stringify(second)).toBe('completed');
+    expect(await rootFileNames(workspace.socket)).toEqual(
+      expect.arrayContaining(['archive-source.zip', 'archive-second.zip']),
+    );
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });
+    await closeWebSocket(workspace.socket);
+  }
+});
+
 test('ZIP Unicode Path entries extract Chinese filenames instead of escaped placeholders', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
