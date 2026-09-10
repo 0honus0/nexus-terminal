@@ -74,7 +74,7 @@
 <template>
   <section
     v-if="visible"
-    class="fixed z-[1040] flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
+    class="fixed z-30 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl"
     :style="style"
     :aria-label="$t('agent.hub.title')"
   >

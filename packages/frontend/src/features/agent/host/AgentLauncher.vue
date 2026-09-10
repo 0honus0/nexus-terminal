@@ -68,7 +68,7 @@
 <template>
   <button
     type="button"
-    class="fixed z-[1050] flex h-14 w-14 touch-none select-none items-center justify-center rounded-full border border-primary/40 bg-primary text-xl text-white shadow-xl transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+    class="fixed z-30 flex h-14 w-14 touch-none select-none items-center justify-center rounded-full border border-primary/40 bg-primary text-xl text-white shadow-xl transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
     :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }"
     :aria-label="$t('agent.launcher.open')"
     :title="$t('agent.launcher.open')"
