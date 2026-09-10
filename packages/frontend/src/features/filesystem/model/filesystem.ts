@@ -37,7 +37,7 @@ export interface RemoteTextFile {
   path: string;
   content: string;
   encoding: string;
-  rawContentBase64: string;
+  rawContent: Uint8Array;
 }
 export type FilesystemMutation =
   | { type: 'create-directory'; path: string }

@@ -13,6 +13,7 @@ import { createStatusMonitorSession, type StatusMonitorSessionController } from 
 import { createDockerSession, type DockerSessionController } from '@/features/docker/public';
 import { createWorkspaceCapabilityAdapters, type WorkspaceCapabilityAdapters } from '../adapters/capabilityAdapters';
 import type { WorkspaceConnectResult, WorkspaceLifecycleState } from '../model/workspace';
+import { WORKSPACE_BINARY_PROTOCOL_VERSION } from '../protocol/workspaceBinaryProtocol';
 import { WorkspaceSocket } from '../protocol/workspaceSocket';
 
 export interface WorkspaceRuntimeSessionOptions {
@@ -101,6 +102,9 @@ export class WorkspaceRuntimeSession {
         connectionId: this.connection.id,
         ...(this.lastViewport ? { viewport: this.lastViewport } : {}),
       });
+      if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
+        throw new Error('Workspace binary protocol version mismatch.');
+      }
       await this.adapters.workspaceConnected();
       await this.filesystemState.ensureLoaded();
       await this.statusController.workspaceConnected();
@@ -131,6 +135,9 @@ export class WorkspaceRuntimeSession {
         suspendedSessionId,
         workspaceId: this.id,
       });
+      if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
+        throw new Error('Workspace binary protocol version mismatch.');
+      }
       this.adapters.terminal.setPreviousOutputAvailable?.(Boolean(result.historyAvailable));
       await this.adapters.workspaceConnected();
       await this.filesystemState.ensureLoaded();

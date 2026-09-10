@@ -9,8 +9,13 @@ services:
     <<: *nexus-service
     command: ['frontend']
     container_name: nexus-terminal-frontend
+    environment:
+      NEXUS_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
     ports:
       - '${NEXUS_HTTP_PORT:-18111}:80'
+      - '${NEXUS_PLUGIN_FRONTEND_PORT:-18112}:8081'
+    volumes:
+      - ./data/agent/plugin-ui:/srv/plugins:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -36,6 +41,11 @@ services:
       GUACD_PORT: 4822
       RP_ID: ${RP_ID:-}
       RP_ORIGIN: ${RP_ORIGIN:-}
+      AGENT_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
+      AGENT_PLUGIN_FRONTEND_ORIGIN: ${NEXUS_PLUGIN_FRONTEND_ORIGIN:-http://localhost:18112}
+      AGENT_RUNNER_URL: ${AGENT_RUNNER_URL:-http://nexus-agent-runner:8790}
+      AGENT_RUNNER_TOKEN: ${NEXUS_AGENT_RUNNER_TOKEN:-}
+      AGENT_RUNNER_DEPLOYMENT_ID: ${NEXUS_AGENT_DEPLOYMENT_ID:-nexus-local}
     volumes:
       - ./data:/app/data
     depends_on:
@@ -54,6 +64,43 @@ services:
     restart: unless-stopped
     networks:
       - nexus-terminal-network
+
+  nexus-agent-runner:
+    image: ${NEXUS_AGENT_RUNNER_IMAGE:-nexus-agent-runner:local}
+    build:
+      context: .
+      dockerfile: scripts/docker/agent-runtime/Dockerfile
+      target: controller
+    profiles: ['agent']
+    container_name: nexus-agent-runner
+    restart: unless-stopped
+    user: '0:0'
+    environment:
+      PORT: 8790
+      NEXUS_AGENT_DEPLOYMENT_ID: ${NEXUS_AGENT_DEPLOYMENT_ID:-nexus-local}
+      NEXUS_AGENT_RUNNER_TOKEN: ${NEXUS_AGENT_RUNNER_TOKEN:-}
+      NEXUS_AGENT_RUNNER_ROOT: /var/lib/nexus-agent-runner
+      NEXUS_AGENT_CATALOG: /app/catalog/catalog.json
+      NEXUS_AGENT_PLUGIN_SOURCE_ROOT: /var/lib/nexus-agent-runner/plugin-source
+    volumes:
+      - ./data/agent-runner/state:/var/lib/nexus-agent-runner/state
+      - ./data/agent-runner/packs:/var/lib/nexus-agent-runner/packs
+      - ./data/agent-runner/cache:/var/lib/nexus-agent-runner/cache
+      - ./data/agent-runner/runtime:/var/lib/nexus-agent-runner/runtime
+      - ./data/agent-runner/quarantine:/var/lib/nexus-agent-runner/quarantine
+      - ./data/agent/plugins:/var/lib/nexus-agent-runner/plugin-source:ro
+    networks:
+      - nexus-terminal-network
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -q --header="Authorization: Bearer $${NEXUS_AGENT_RUNNER_TOKEN}" -O /dev/null http://127.0.0.1:8790/v1/availability',
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
 
 networks:
   nexus-terminal-network:

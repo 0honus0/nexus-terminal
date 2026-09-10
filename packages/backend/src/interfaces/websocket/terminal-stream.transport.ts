@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import type { WorkspaceTerminalService } from '../../modules/workspace/services/workspace-terminal.service';
+import { encodeWorkspaceBinaryFrame } from './workspace-binary.protocol';
 
 const HIGH_WATER_BYTES = 1024 * 1024;
 const LOW_WATER_BYTES = 256 * 1024;
@@ -8,9 +9,9 @@ const MAX_CHUNK_BYTES = 256 * 1024;
 const BACKPRESSURE_POLL_MS = 10;
 
 /**
- * Clean terminal transport: every binary server frame on the Workspace socket is raw terminal bytes.
- * Framing, sequence numbers and application ACKs are deliberately absent; WebSocket ordering plus
- * bufferedAmount-driven backpressure is the permanent transport contract.
+ * Clean terminal transport over Workspace binary protocol frames. Terminal payload stays raw bytes,
+ * while the binary frame kind prevents terminal output from colliding with request-scoped file/history
+ * response chunks on the same WebSocket.
  */
 export class TerminalStreamTransport {
   private workspaceId?: string;
@@ -85,7 +86,7 @@ export class TerminalStreamTransport {
     while (this.queue.length && this.socket.bufferedAmount < HIGH_WATER_BYTES) {
       const chunk = this.queue.shift()!;
       this.queuedBytes -= chunk.byteLength;
-      this.socket.send(chunk, { binary: true });
+      this.socket.send(encodeWorkspaceBinaryFrame('terminal', undefined, chunk), { binary: true });
     }
     if (this.queue.length || this.socket.bufferedAmount >= HIGH_WATER_BYTES) {
       this.setBackpressured(true);

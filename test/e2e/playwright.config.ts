@@ -57,6 +57,10 @@ export default defineConfig({
       testMatch: /http\/.*\.spec\.ts/,
     },
     {
+      name: 'agent',
+      testMatch: /agent\/.*\.spec\.ts/,
+    },
+    {
       name: 'websocket',
       testMatch: /websocket\/.*\.spec\.ts/,
       use: { ...devices['Desktop Chrome'] },
@@ -78,6 +82,15 @@ export default defineConfig({
     },
   ],
   webServer: [
+    {
+      command: 'node fixtures/agent/openai-provider.mjs',
+      cwd: e2eRoot,
+      url: 'http://127.0.0.1:29091/health',
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
     {
       command: 'node support/test-guacd-server.mjs',
       cwd: e2eRoot,

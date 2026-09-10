@@ -8,9 +8,11 @@ import {
 } from '../../support/ssh';
 import {
   closeWebSocket,
+  decodeWorkspaceBinaryFrame,
   openAuthenticatedWebSocket,
   openWorkspaceSession,
   requestWorkspace,
+  requestWorkspaceBinary,
   sendJson,
   waitForBinaryText,
   waitForFilesystemReady,
@@ -239,7 +241,9 @@ test('resume sends only the newest cached tail and pages older terminal history 
 
     const initialChunks: Buffer[] = [];
     const onInitialMessage = (data: Buffer, isBinary: boolean) => {
-      if (isBinary) initialChunks.push(Buffer.from(data));
+      if (!isBinary) return;
+      const frame = decodeWorkspaceBinaryFrame(Buffer.from(data));
+      if (frame.type === 1) initialChunks.push(frame.payload);
     };
     recoverySocket.on('message', onInitialMessage);
     const resumedWorkspaceId = `resumed-history-${crypto.randomUUID()}`;
@@ -278,18 +282,15 @@ test('resume sends only the newest cached tail and pages older terminal history 
     expect(snapshot.endsWith(cachedTail)).toBe(true);
 
     let older = '';
-    let firstPreviousPage: { dataBase64: string; hasMore: boolean } | null = null;
+    let firstPreviousPage: { data: { hasMore: boolean }; bytes: Buffer } | null = null;
     let hasMore = resumed.historyAvailable;
     let pages = 0;
     while (hasMore && pages < 10) {
-      const page = await requestWorkspace<{ dataBase64: string; hasMore: boolean }>(
-        recoverySocket,
-        'suspend.history.previous',
-      );
+      const page = await requestWorkspaceBinary<{ hasMore: boolean }>(recoverySocket, 'suspend.history.previous');
       firstPreviousPage ??= page;
-      const text = Buffer.from(page.dataBase64, 'base64').toString('utf8');
+      const text = page.bytes.toString('utf8');
       older = text + older;
-      hasMore = page.hasMore;
+      hasMore = page.data.hasMore;
       pages += 1;
     }
     expect(hasMore).toBe(false);
@@ -298,11 +299,12 @@ test('resume sends only the newest cached tail and pages older terminal history 
 
     const reset = await requestWorkspace<{ available: boolean }>(recoverySocket, 'suspend.history.reset');
     expect(reset.available).toBe(true);
-    const replayedFirstPage = await requestWorkspace<{ dataBase64: string; hasMore: boolean }>(
+    const replayedFirstPage = await requestWorkspaceBinary<{ hasMore: boolean }>(
       recoverySocket,
       'suspend.history.previous',
     );
-    expect(replayedFirstPage).toEqual(firstPreviousPage);
+    expect(replayedFirstPage.data).toEqual(firstPreviousPage!.data);
+    expect(replayedFirstPage.bytes.equals(firstPreviousPage!.bytes)).toBe(true);
     await requestWorkspace(recoverySocket, 'suspend.unmark');
   } finally {
     await closeWebSocket(recoverySocket);

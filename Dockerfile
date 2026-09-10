@@ -30,7 +30,7 @@ FROM alpine:${ALPINE_VERSION} AS runtime
 LABEL org.opencontainers.image.title="Nexus Terminal" \
       org.opencontainers.image.description="Unified runtime image for the frontend and backend"
 
-RUN apk add --no-cache nodejs nginx tini \
+RUN apk add --no-cache nodejs nginx tini bubblewrap \
     && rm -rf /usr/share/nginx/html/* /var/cache/apk/*
 
 WORKDIR /app
@@ -44,12 +44,13 @@ COPY --from=backend-builder /build/backend/package.json ./package.json
 
 COPY --from=frontend-builder /build/frontend/dist /usr/share/nginx/html
 COPY packages/frontend/nginx.conf /etc/nginx/http.d/default.conf
+COPY scripts/docker/plugin-frontend-nginx.conf.template /etc/nginx/templates/plugin-frontend.conf.template
 COPY scripts/docker/entrypoint.sh /usr/local/bin/nexus-terminal
 
 RUN chmod 0755 /usr/local/bin/nexus-terminal \
-    && mkdir -p /app/data /run/nginx
+    && mkdir -p /app/data /srv/plugins /run/nginx /etc/nginx/templates
 
-EXPOSE 80 3001
+EXPOSE 80 8081 3001
 
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/nexus-terminal"]
 CMD ["frontend"]

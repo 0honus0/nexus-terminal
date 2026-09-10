@@ -2,7 +2,7 @@
 
 > Mandatory engineering rules are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md). If explanatory text differs from that register, the constraint register is authoritative.
 
-This document describes the backend architecture after the clean-skeleton migration. It is the placement and dependency reference for future backend work, including future AI/Agent features.
+This document describes the current backend architecture after the clean-skeleton migration and Agent implementation baseline. It is the placement and dependency reference for Workspace, Agent/App Platform, and subsequent backend work.
 
 ## Core direction
 
@@ -21,7 +21,7 @@ bootstrap → constructs and owns the complete graph
 shared    → genuinely cross-cutting primitives only
 ```
 
-Workspace and future Agent runtimes reuse the same platform capabilities, but they own independent execution/runtime state:
+Workspace and Agent runtimes may reuse the same narrow platform capabilities, but they own independent execution/runtime state:
 
 ```text
 stored connection configuration
@@ -258,9 +258,9 @@ failure → rollback
   restore suspended ownership and resume shell output
 ```
 
-The current clean Workspace protocol does not use the historical replay/ACK envelope. Resume restores shell integration and replays cached terminal bytes through the active raw-binary terminal transport, while backpressure remains an Interface transport concern.
+The current clean Workspace protocol does not use the historical replay/ACK envelope or Base64 data payloads. Server-to-browser binary data uses Workspace binary protocol v1: a fixed 16-byte header distinguishes terminal frames from request-scoped response frames and carries the response requestId/length/final boundary. Terminal bytes, SFTP file bytes, editor raw snapshots and suspended-history pages are raw binary payloads; response payloads are split into bounded 256 KiB frames with WebSocket backpressure. Resume restores shell integration and replays cached terminal bytes through this framed binary transport, while lifecycle/control requests remain JSON and backpressure remains an Interface transport concern.
 
-## Diagnostics and future Agent self-diagnosis
+## Diagnostics and Agent self-diagnosis
 
 Diagnostics are a first-class, read-only extension point.
 
@@ -325,56 +325,45 @@ A practical ownership guide for locating code:
 **Shared** only when no stronger domain/capability owner exists.
 
 <a id="future-app-ai-platform"></a>
-## Future App Platform and AI applications
 
-Future Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App packages** model. The plugin host, shared AI capabilities and first built-in Operations App are defined in [Agent Architecture](./agent/ARCHITECTURE.md), with implementation details in [Agent Implementation](./agent/IMPLEMENTATION.md).
+## Agent App Platform and AI applications
+
+Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,environments,runtime,apps/operations}`, concrete adapters under `infrastructure/agent`, HTTP/SSE boundaries under `interfaces/http/agent`, and composition under `bootstrap/agent`. The plugin host, shared AI capabilities and built-in Operations App are defined in [Agent Architecture](./agent/ARCHITECTURE.md), with implementation details in [Agent Implementation](./agent/IMPLEMENTATION.md) and current delivery state in [Current Agent Architecture](./agent/CURRENT_AGENT_ARCHITECTURE.md).
 
 Target composition:
 
 ```text
-interfaces/http/apps + interfaces/http/ai
-                 │
-                 ▼
-        modules/app-platform
-          │             │
-          │             └────► modules/ai
-          │
-          └── AppCapabilityBroker
-                    ▲
-                    │ declared/granted capability contracts
-                    │
-          packages/apps/operations/backend
-                    │
-                    ▼
-               platform capabilities
-                    ▲
-                    │
-             infrastructure adapters
+interfaces/http/agent
+        │
+        ▼
+modules/agent/
+├── host             App registry/lifecycle/grants/AppStorage/Plugin lifecycle
+├── ai               Provider/Conversation/Context/Artifact/Memory/Integration
+├── capabilities     Tool Catalog/authorization/policy/approval/lease boundary
+├── environments     Environment control use cases
+├── runtime          Run/event/planning/recovery/collaboration/exchange
+└── apps/operations  built-in Operations contribution only
+        │
+        ▼ typed ports
+platform capabilities
+        ▲
+        │
+infrastructure/agent + existing infrastructure adapters
 
-bootstrap validates/registers built-in App packages and constructs the concrete graph
+bootstrap/agent validates/registers built-ins and constructs the concrete graph
 ```
 
-`modules/app-platform` owns App manifest/registry/lifecycle/capability grants/AppStorage/App event-dispatch contracts. It must not import the Operations domain or another concrete App.
+`modules/agent/host` owns App manifest/registry/lifecycle/capability grants/AppStorage/AppIntent and Plugin lifecycle/SDK contracts. It must not import Operations or Runtime private implementation. Backend architecture guard enforces the Agent area dependency matrix.
 
-`modules/ai` owns reusable Provider/model routing, canonical Conversation/User Input, Context/compaction/handoff, Recall mechanics, Skills, generic Tool Catalog/discovery/result handling, Artifacts and common AI telemetry. It has no runtime dependency on an App package.
+`modules/agent/ai` owns reusable Provider/model routing, canonical Conversation/User Input, Context, Recall/Memory, Skills, Artifacts and external integration contracts. Generic Tool Catalog and real capability authorization belong to `modules/agent/capabilities`, not AI. AI has no dependency on Operations private implementation.
 
-The first built-in App lives conceptually under `packages/apps/operations/backend/` and owns AgentDefinition, AgentRun/AgentRuntime, Coordinator/Delegation, Goal/Plan/Checkpoint semantics, native/ACP backend routing, Operations Tool policy/approval, ResourceLease and operations verification. It consumes shared AI and machine capabilities through the App capability boundary rather than directly owning Infrastructure handles.
+The built-in Operations contribution lives at `modules/agent/apps/operations/`. Generic AgentDefinition/Run/AgentRuntime/Plan/Checkpoint/Subagent scheduling belongs to `modules/agent/runtime`; Operations contributes concrete definitions, Tools, risk classification and verification policy through public Agent contracts. It consumes AI and machine capabilities through the Host/Capability boundary rather than owning Infrastructure handles.
 
 ### Built-in vs installable Apps
 
-The first implementation should use a static Bootstrap App registry. Do not execute arbitrary uploaded JavaScript or plugin bundles in-process.
+Built-in Apps are trusted compile-time contributions registered by Bootstrap. Installable packages follow the Agent Plugin contract: package staging/signature/file-list verification occurs before activation; Backend target code runs through the Backend-owned process sandbox, Runner target code runs only inside an explicitly selected Environment sandbox, and Frontend target assets are served from a separate origin into a sandboxed iframe. Plugin code does not create its own Docker container and never receives raw database, Workspace, Docker socket or other Host object.
 
-Future installable packages use the configured Nexus data directory:
-
-```text
-${NEXUS_DATA_DIR}/apps/
-├── installed/<app-id>/<version>/    immutable package code
-├── data/<app-id>/                   mutable App data
-├── cache/<app-id>/
-└── staging/                         verify before activation; never execute here
-```
-
-Untrusted/community Backend Apps should eventually run out-of-process/containerized and call Nexus through an App RPC/Capability Broker boundary. Same-origin arbitrary frontend JavaScript is also not considered safely isolated; future untrusted frontend Apps should use a sandboxed bridge model.
+Plugin package bytes, immutable installed versions, AppStorage and runtime workspace/Artifact data remain separate lifecycle owners. Upgrade is stage→validate→quiesce/snapshot→activate/health; migration failure may restore package/version state but cannot claim rollback of already executed remote side effects.
 
 ### Capability boundary
 

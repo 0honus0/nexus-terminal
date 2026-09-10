@@ -1,6 +1,6 @@
 # Nexus Terminal 软件需求
 
-本目录是 Nexus Terminal 当前软件需求规格与历史追溯入口。当前内容以重构 PR #9 的最终目录、协议、UI 行为和 E2E 约束为基线，并持续纳入之后经回归验证确认的需求；当前 SRS v1.7 在既有 Dashboard、Quick Commands、File Manager、Preview、Workspace 外框和 Terminal Clear 基线之上，继续固化最近容易遗漏的交互细节：Suspend 会话的 Dashboard/Workspace 统一入口、长日志尾部优先恢复与 handoff 后及时刷新、移动端恢复不产生重复 tab、File Manager popup resize/尺寸持久化、路径历史 context menu、移动文件行时间戳保留、Markdown 远程文档内链、transfer silent polling/freshness、移动终端原生方向滚动以及 RDP/VNC resize 几何。重构计划文档完成使命后不再作为需求来源。
+本目录是 Nexus Terminal 当前软件需求规格与历史追溯入口。当前内容以重构 PR #9 的最终目录、协议、UI 行为和 E2E 约束为基线，并持续纳入之后经回归验证确认的需求；当前 SRS v1.9 已同时覆盖后续 Workspace/File Manager/Preview/Remote Desktop 回归约束与 Agent implementation baseline，并根据当前源码审核区分“实现基线已存在 / live composition / 部分实现 / 完整 E2E 验收”。全局当前架构入口见 [`../architecture/CURRENT_ARCHITECTURE.md`](../architecture/CURRENT_ARCHITECTURE.md)；重构计划文档完成使命后不再作为需求来源。
 
 ## 阅读顺序
 

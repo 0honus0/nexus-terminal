@@ -20,6 +20,7 @@
     "test:e2e": "npm --prefix test/e2e test",
     "test:e2e:auth": "npm --prefix test/e2e run test:auth",
     "test:e2e:http": "npm --prefix test/e2e run test:http",
+    "test:e2e:agent": "npm --prefix test/e2e run test:agent",
     "test:e2e:websocket": "npm --prefix test/e2e run test:websocket",
     "test:e2e:ui": "npm --prefix test/e2e run test:ui",
     "test:e2e:ssh": "npm --prefix test/e2e run test:ssh",

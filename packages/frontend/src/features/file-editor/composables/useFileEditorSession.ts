@@ -1,7 +1,7 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import type { FileDocumentPort } from '../ports/file-document-port';
 import type { EditorDocument, EditorLineEnding } from '../model/editor';
-import { canonicalEditorEncoding, decodeEditorRawContent, encodeEditorContentBase64 } from '../model/editorEncoding';
+import { canonicalEditorEncoding, decodeEditorRawContent, encodeEditorContent } from '../model/editorEncoding';
 
 const languageFor = (path: string) => {
   const name = path.split('/').pop()?.toLowerCase() ?? '';
@@ -125,7 +125,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
         name: path.split('/').pop() || path,
         content: loaded.content,
         originalContent: loaded.content,
-        rawContentBase64: loaded.rawContentBase64,
+        rawContent: loaded.rawContent,
         encoding: canonicalEditorEncoding(loaded.encoding),
         language: languageFor(path),
         dirty: false,
@@ -169,9 +169,9 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     doc.saveState = 'saving';
     doc.error = undefined;
     try {
-      const rawContentBase64 = await encodeEditorContentBase64(contentToSave, encodingToSave);
+      const rawContent = await encodeEditorContent(contentToSave, encodingToSave);
       await port.save(doc.path, contentToSave, encodingToSave);
-      doc.rawContentBase64 = rawContentBase64;
+      doc.rawContent = rawContent;
       doc.originalContent = contentToSave;
       doc.dirty = doc.content !== contentToSave;
       doc.saveState = doc.dirty ? 'idle' : 'saved';
@@ -196,7 +196,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
       const loaded = await port.load(doc.path);
       doc.content = loaded.content;
       doc.originalContent = loaded.content;
-      doc.rawContentBase64 = loaded.rawContentBase64;
+      doc.rawContent = loaded.rawContent;
       doc.encoding = canonicalEditorEncoding(loaded.encoding);
       doc.dirty = false;
       doc.saveState = 'idle';
@@ -215,7 +215,7 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
     beginLoading();
     doc.error = undefined;
     try {
-      doc.content = await decodeEditorRawContent(doc.rawContentBase64, encoding);
+      doc.content = await decodeEditorRawContent(doc.rawContent, encoding);
       doc.originalContent = doc.content;
       doc.encoding = encoding;
       doc.dirty = false;

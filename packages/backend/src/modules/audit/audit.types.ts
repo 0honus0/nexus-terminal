@@ -49,6 +49,13 @@ export type AuditLogActionType =
   //   - SSH_SHELL_FAILURE:   { userId?: number, username?: string, connectionId: number, connectionName?: string, sessionId: string, ip?: string, reason: string }
   | 'SSH_SHELL_FAILURE'
 
+  // Agent Memory review/import
+  | 'AGENT_MEMORY_PROPOSED'
+  | 'AGENT_MEMORY_PUBLISHED'
+  | 'AGENT_MEMORY_REJECTED'
+  | 'AGENT_MEMORY_REVOKED'
+  | 'AGENT_MEMORY_IMPORTED'
+
   // System/Error
   | 'DATABASE_MIGRATION'
   | 'ADMIN_SETUP_COMPLETE';

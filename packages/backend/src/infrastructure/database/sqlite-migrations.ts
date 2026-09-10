@@ -1,4 +1,54 @@
 import type { DatabaseSync as Database } from 'node:sqlite';
+import {
+  createAgentAppGrantsTableSQL,
+  createAgentApprovalsTableSQL,
+  createAgentLeasesTableSQL,
+  createAgentResourceFencesTableSQL,
+  createAgentResourceQuarantineTableSQL,
+  createAgentAppStorageTableSQL,
+  createAgentAppsTableSQL,
+  createAgentArtifactCleanupConfirmationsTableSQL,
+  createAgentArtifactGrantsTableSQL,
+  createAgentHardLimitConfirmationsTableSQL,
+  createAgentSettingsTableSQL,
+  createAgentTargetDenylistMetaTableSQL,
+  createAgentTargetDenylistTableSQL,
+  createAgentArtifactLinksTableSQL,
+  createAgentCheckpointsTableSQL,
+  createAgentCommandsTableSQL,
+  createAgentEnvironmentCommandsTableSQL,
+  createAgentEnvironmentConfirmationsTableSQL,
+  createAgentIntegrationsTableSQL,
+  createAgentDelegationsTableSQL,
+  createAgentMailboxCursorsTableSQL,
+  createAgentMessagesTableSQL,
+  createAgentSchedulerWorkTableSQL,
+  createAgentDelegationEdgesTableSQL,
+  createAgentSharedFactsTableSQL,
+  createAgentMemoryImportConfirmationsTableSQL,
+  createAgentPublisherKeysTableSQL,
+  createAgentPluginStagesTableSQL,
+  createAgentPluginVersionsTableSQL,
+  createAgentPluginInstallationsTableSQL,
+  createAgentAppIntentReceiptsTableSQL,
+  createAgentAppIntentArtifactGrantsTableSQL,
+  createAgentEnvironmentGroupsTableSQL,
+  createAgentEnvironmentsTableSQL,
+  createAgentEventsTableSQL,
+  createAgentHostEventsTableSQL,
+  createAgentModelAttemptsTableSQL,
+  createAgentQuotaUsageTableSQL,
+  createAgentRunsTableSQL,
+  createAgentRuntimesTableSQL,
+  createAgentStepsTableSQL,
+  createAgentToolCallsTableSQL,
+  createAiArtifactsTableSQL,
+  createAiContextDigestsTableSQL,
+  createAiMemoriesTableSQL,
+  createAiProvidersTableSQL,
+  createAiThreadEntriesTableSQL,
+  createAiThreadsTableSQL,
+} from './sqlite-schema';
 
 // 1. 定义 migrations 表 SQL
 const createMigrationsTableSQL = `
@@ -321,6 +371,224 @@ const definedMigrations: Migration[] = [
             WHERE proxy_type = 'proxy'
               AND proxy_id IS NULL;
         `,
+  },
+  {
+    id: 21,
+    name: 'Create Agent P1-A host tables',
+    sql: [
+      createAgentAppsTableSQL,
+      createAgentAppGrantsTableSQL,
+      createAgentApprovalsTableSQL,
+      createAgentLeasesTableSQL,
+      createAgentResourceFencesTableSQL,
+      createAgentResourceQuarantineTableSQL,
+      createAgentAppStorageTableSQL,
+      createAgentSettingsTableSQL,
+      createAgentTargetDenylistTableSQL,
+    ].join('\n'),
+  },
+  {
+    id: 22,
+    name: 'Create Agent P1-B provider table',
+    sql: createAiProvidersTableSQL,
+  },
+  {
+    id: 23,
+    name: 'Create Agent P1-B artifact tables',
+    sql: [createAiArtifactsTableSQL, createAgentQuotaUsageTableSQL].join('\n'),
+  },
+  {
+    id: 24,
+    name: 'Create Agent P1-B ledger context and recall tables',
+    sql: [
+      createAiThreadsTableSQL,
+      createAgentRunsTableSQL,
+      createAiThreadEntriesTableSQL,
+      createAgentArtifactLinksTableSQL,
+      createAiContextDigestsTableSQL,
+      createAiMemoriesTableSQL,
+    ].join('\n'),
+  },
+  {
+    id: 25,
+    name: 'Create Agent P1-C runtime event and command tables',
+    sql: [
+      createAgentRuntimesTableSQL,
+      createAgentStepsTableSQL,
+      createAgentModelAttemptsTableSQL,
+      createAgentToolCallsTableSQL,
+      createAgentEventsTableSQL,
+      createAgentHostEventsTableSQL,
+      createAgentCommandsTableSQL,
+      createAgentCheckpointsTableSQL,
+    ].join('\n'),
+  },
+  {
+    id: 26,
+    name: 'Create Agent target denylist revision metadata',
+    sql: createAgentTargetDenylistMetaTableSQL,
+  },
+  {
+    id: 27,
+    name: 'Create Agent Artifact Library grants and cleanup confirmations',
+    sql: [createAgentArtifactGrantsTableSQL, createAgentArtifactCleanupConfirmationsTableSQL].join('\n'),
+  },
+  {
+    id: 28,
+    name: 'Create Agent Hard Limit confirmations',
+    sql: createAgentHardLimitConfirmationsTableSQL,
+  },
+  {
+    id: 29,
+    name: 'Create Agent P2 approval lease and quarantine tables',
+    sql: [
+      createAgentApprovalsTableSQL,
+      createAgentResourceFencesTableSQL,
+      createAgentLeasesTableSQL,
+      createAgentResourceQuarantineTableSQL,
+    ].join('\n'),
+  },
+  {
+    id: 30,
+    name: 'Create Agent P2 environment tables',
+    sql: [
+      createAgentEnvironmentGroupsTableSQL,
+      createAgentEnvironmentsTableSQL,
+      createAgentEnvironmentCommandsTableSQL,
+    ].join('\n'),
+  },
+  {
+    id: 31,
+    name: 'Create Agent environment confirmations',
+    sql: createAgentEnvironmentConfirmationsTableSQL,
+  },
+  {
+    id: 32,
+    name: 'Create Agent P3 integrations',
+    sql: createAgentIntegrationsTableSQL,
+  },
+  {
+    id: 33,
+    name: 'Add Agent runtime persistent schedule state',
+    sql: `ALTER TABLE agent_runtimes ADD COLUMN schedule_state TEXT NOT NULL DEFAULT 'queued'
+      CHECK(schedule_state IN ('queued','runnable','executing','waiting_message','waiting_approval','waiting_budget','joining','finished'));`,
+    check: async (db) => !(await columnExists(db, 'agent_runtimes', 'schedule_state')),
+  },
+  {
+    id: 34,
+    name: 'Add Agent runtime mailbox watermark',
+    sql: `ALTER TABLE agent_runtimes ADD COLUMN consumed_mailbox_sequence INTEGER NOT NULL DEFAULT 0
+      CHECK(consumed_mailbox_sequence >= 0);`,
+    check: async (db) => !(await columnExists(db, 'agent_runtimes', 'consumed_mailbox_sequence')),
+  },
+  {
+    id: 35,
+    name: 'Create Agent P3 subagent mailbox scheduler and shared facts',
+    sql: [
+      `UPDATE agent_runtimes SET schedule_state = CASE
+       WHEN status = 'running' THEN 'runnable'
+       WHEN status IN ('stopped','failed','interrupted') THEN 'finished'
+       ELSE schedule_state END;`,
+      createAgentDelegationsTableSQL,
+      createAgentMailboxCursorsTableSQL,
+      createAgentMessagesTableSQL,
+      createAgentSchedulerWorkTableSQL,
+      createAgentDelegationEdgesTableSQL,
+      createAgentSharedFactsTableSQL,
+    ].join('\n'),
+  },
+  {
+    id: 36,
+    name: 'Freeze Agent delegation capability snapshots',
+    sql: `ALTER TABLE agent_delegations ADD COLUMN capabilities_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(capabilities_json));`,
+    check: async (db) => !(await columnExists(db, 'agent_delegations', 'capabilities_json')),
+  },
+  {
+    id: 37,
+    name: 'Freeze Agent delegation messaging policy',
+    sql: `ALTER TABLE agent_delegations ADD COLUMN peer_messaging TEXT NOT NULL DEFAULT 'parent-child'
+      CHECK(peer_messaging IN ('parent-child','same-run'));`,
+    check: async (db) => !(await columnExists(db, 'agent_delegations', 'peer_messaging')),
+  },
+  {
+    id: 38,
+    name: 'Add Agent Memory optimistic version',
+    sql: `ALTER TABLE ai_memories ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0);`,
+    check: async (db) => !(await columnExists(db, 'ai_memories', 'version')),
+  },
+  {
+    id: 39,
+    name: 'Add Agent Memory review timestamp',
+    sql: `ALTER TABLE ai_memories ADD COLUMN reviewed_at INTEGER;`,
+    check: async (db) => !(await columnExists(db, 'ai_memories', 'reviewed_at')),
+  },
+  {
+    id: 40,
+    name: 'Add Agent Memory review action',
+    sql: `ALTER TABLE ai_memories ADD COLUMN review_action TEXT CHECK(review_action IS NULL OR review_action IN ('publish','reject','revoke'));`,
+    check: async (db) => !(await columnExists(db, 'ai_memories', 'review_action')),
+  },
+  {
+    id: 41,
+    name: 'Add Agent Memory proposer runtime',
+    sql: `ALTER TABLE ai_memories ADD COLUMN proposed_by_runtime_id TEXT;`,
+    check: async (db) => !(await columnExists(db, 'ai_memories', 'proposed_by_runtime_id')),
+  },
+  {
+    id: 42,
+    name: 'Create Agent Memory import confirmations',
+    sql: createAgentMemoryImportConfirmationsTableSQL,
+  },
+  {
+    id: 43,
+    name: 'Create Agent plugin trust and installation tables',
+    sql: [createAgentPublisherKeysTableSQL, createAgentPluginStagesTableSQL, createAgentPluginVersionsTableSQL].join(
+      '\n',
+    ),
+  },
+  {
+    id: 44,
+    name: 'Add Agent App new-run admission gate',
+    sql: `ALTER TABLE agent_apps ADD COLUMN accept_new_runs INTEGER NOT NULL DEFAULT 1 CHECK(accept_new_runs IN (0,1));`,
+    check: async (db) => !(await columnExists(db, 'agent_apps', 'accept_new_runs')),
+  },
+  {
+    id: 45,
+    name: 'Create per-user Agent plugin installations',
+    sql: createAgentPluginInstallationsTableSQL,
+  },
+  {
+    id: 46,
+    name: 'Create Agent AppIntent receipts and Artifact grants',
+    sql: [createAgentAppIntentReceiptsTableSQL, createAgentAppIntentArtifactGrantsTableSQL].join('\n'),
+  },
+  {
+    id: 47,
+    name: 'Add Agent plugin Runner entry',
+    sql: `ALTER TABLE agent_plugin_versions ADD COLUMN runner_entry TEXT;`,
+    check: async (db) => !(await columnExists(db, 'agent_plugin_versions', 'runner_entry')),
+  },
+  {
+    id: 48,
+    name: 'Rename Agent plugin UI entry to Frontend target entry',
+    sql: `ALTER TABLE agent_plugin_versions RENAME COLUMN ui_entry TO frontend_entry;`,
+    check: async (db) =>
+      (await columnExists(db, 'agent_plugin_versions', 'ui_entry')) &&
+      !(await columnExists(db, 'agent_plugin_versions', 'frontend_entry')),
+  },
+  {
+    id: 49,
+    name: 'Rename Agent Environment Base Runner digest to sandbox runtime digest',
+    sql: `ALTER TABLE agent_environments RENAME COLUMN base_runner_digest TO runtime_digest;`,
+    check: async (db) =>
+      (await columnExists(db, 'agent_environments', 'base_runner_digest')) &&
+      !(await columnExists(db, 'agent_environments', 'runtime_digest')),
+  },
+  {
+    id: 50,
+    name: 'Persist explicit Runner plugin targets per Agent Environment',
+    sql: `ALTER TABLE agent_environments ADD COLUMN runner_plugins_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(runner_plugins_json));`,
+    check: async (db) => !(await columnExists(db, 'agent_environments', 'runner_plugins_json')),
   },
 ];
 

@@ -4,6 +4,7 @@
   import AppHeader from './shell/AppHeader.vue';
   import { useAuthSession } from '@/features/auth/public';
   import { AppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
+  import { AgentSurfaceHost } from '@/features/agent/public';
   import { RemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { usePreferences } from '@/features/preferences/public';
   import DialogHost from '@/shared/feedback/components/DialogHost.vue';
@@ -63,6 +64,7 @@
     <div class="min-h-0 flex-1">
       <RouterView />
     </div>
+    <AgentSurfaceHost v-if="auth.isAuthenticated.value" />
     <RemoteDesktopModal
       :visible="remoteDesktopVisible"
       :connection="remoteDesktopConnection"

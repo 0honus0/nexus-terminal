@@ -1,4 +1,5 @@
 import { openWebSocket } from '@/client/websocket';
+import { decodeWorkspaceBinaryFrame } from './workspaceBinaryProtocol';
 
 interface ProtocolResponse<T = unknown> {
   type: 'response';
@@ -18,6 +19,12 @@ interface PendingRequest {
   resolve(value: unknown): void;
   reject(error: Error): void;
   timer: number;
+  expectBinary: boolean;
+  responseReceived: boolean;
+  responseValue?: unknown;
+  binaryDone: boolean;
+  binaryChunks: Uint8Array[];
+  binaryBytes: number;
 }
 
 const OPEN_TIMEOUT_MS = 10_000;
@@ -148,18 +155,42 @@ export class WorkspaceSocket {
   }
 
   async requestWithId<T = unknown>(type: string, requestId: string, payload: Record<string, unknown> = {}): Promise<T> {
+    return this.requestInternal<T>(type, requestId, payload, false) as Promise<T>;
+  }
+
+  requestBinary<T = unknown>(
+    type: string,
+    payload: Record<string, unknown> = {},
+  ): Promise<{ data: T; bytes: Uint8Array }> {
+    return this.requestInternal<T>(type, crypto.randomUUID(), payload, true) as Promise<{
+      data: T;
+      bytes: Uint8Array;
+    }>;
+  }
+
+  private async requestInternal<T>(
+    type: string,
+    requestId: string,
+    payload: Record<string, unknown>,
+    expectBinary: boolean,
+  ): Promise<T | { data: T; bytes: Uint8Array }> {
     if (!requestId) throw new Error('Workspace requestId is required.');
     if (this.pending.has(requestId)) throw new Error(`Workspace request is already pending: ${requestId}`);
     await this.open();
-    return new Promise<T>((resolve, reject) => {
+    return new Promise<T | { data: T; bytes: Uint8Array }>((resolve, reject) => {
       const timer = window.setTimeout(() => {
         this.pending.delete(requestId);
         reject(new Error(`Workspace request timed out: ${type}`));
       }, REQUEST_TIMEOUT_MS);
       this.pending.set(requestId, {
-        resolve: (value) => resolve(value as T),
+        resolve: (value) => resolve(value as T | { data: T; bytes: Uint8Array }),
         reject,
         timer,
+        expectBinary,
+        responseReceived: false,
+        binaryDone: false,
+        binaryChunks: [],
+        binaryBytes: 0,
       });
       try {
         this.sendJson({ type, requestId, payload });
@@ -219,14 +250,12 @@ export class WorkspaceSocket {
 
   private handleMessage(raw: unknown): void {
     if (raw instanceof ArrayBuffer) {
-      const bytes = new Uint8Array(raw);
-      for (const handler of this.binaryHandlers) handler(bytes);
+      this.handleBinaryMessage(new Uint8Array(raw));
       return;
     }
     if (raw instanceof Blob) {
       void raw.arrayBuffer().then((buffer) => {
-        const bytes = new Uint8Array(buffer);
-        for (const handler of this.binaryHandlers) handler(bytes);
+        this.handleBinaryMessage(new Uint8Array(buffer));
       });
       return;
     }
@@ -242,13 +271,63 @@ export class WorkspaceSocket {
       const response = message as ProtocolResponse;
       const pending = this.pending.get(response.requestId);
       if (!pending) return;
-      this.pending.delete(response.requestId);
-      window.clearTimeout(pending.timer);
-      if (response.payload.ok) pending.resolve(response.payload.data);
-      else pending.reject(new Error(response.payload.error || 'Workspace request failed.'));
+      if (!response.payload.ok) {
+        this.pending.delete(response.requestId);
+        window.clearTimeout(pending.timer);
+        pending.reject(new Error(response.payload.error || 'Workspace request failed.'));
+        return;
+      }
+      if (!pending.expectBinary) {
+        this.pending.delete(response.requestId);
+        window.clearTimeout(pending.timer);
+        pending.resolve(response.payload.data);
+        return;
+      }
+      pending.responseReceived = true;
+      pending.responseValue = response.payload.data;
+      this.resolveBinaryPending(response.requestId, pending);
       return;
     }
     for (const handler of this.handlers.get(message.type) ?? []) handler(message.payload);
+  }
+
+  private handleBinaryMessage(raw: Uint8Array): void {
+    let frame;
+    try {
+      frame = decodeWorkspaceBinaryFrame(raw);
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      this.rejectPending(error);
+      for (const handler of this.errorHandlers) handler(error.message);
+      this.close('Workspace binary protocol error');
+      return;
+    }
+    if (frame.kind === 'terminal') {
+      for (const handler of this.binaryHandlers) handler(frame.data);
+      return;
+    }
+    const pending = this.pending.get(frame.requestId);
+    if (!pending || !pending.expectBinary) return;
+    if (frame.data.byteLength) {
+      const copy = frame.data.slice();
+      pending.binaryChunks.push(copy);
+      pending.binaryBytes += copy.byteLength;
+    }
+    if (frame.final) pending.binaryDone = true;
+    this.resolveBinaryPending(frame.requestId, pending);
+  }
+
+  private resolveBinaryPending(requestId: string, pending: PendingRequest): void {
+    if (!pending.expectBinary || !pending.responseReceived || !pending.binaryDone) return;
+    this.pending.delete(requestId);
+    window.clearTimeout(pending.timer);
+    const bytes = new Uint8Array(pending.binaryBytes);
+    let offset = 0;
+    for (const chunk of pending.binaryChunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    pending.resolve({ data: pending.responseValue, bytes });
   }
 
   private rejectPending(error: Error): void {

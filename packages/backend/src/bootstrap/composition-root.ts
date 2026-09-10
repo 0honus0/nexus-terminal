@@ -1,4 +1,7 @@
 import type { RuntimeConfig } from '../config/runtime-config';
+import type { AgentServices } from '../modules/agent/public';
+import { composeAgent } from './agent/compose-agent';
+import { createAgentConnectionResolver, createAgentDiagnostics } from './agent/machine-support';
 import { NexusBackupCodecAdapter } from '../infrastructure/backup/backup-codec.adapter';
 import { SqliteBackupSnapshotAdapter } from '../infrastructure/backup/sqlite-backup-snapshot.adapter';
 import { GitHubHtmlThemeCatalogAdapter } from '../infrastructure/appearance/github-html-theme-catalog.adapter';
@@ -9,6 +12,9 @@ import { NetworkCaptchaVerifierAdapter } from '../infrastructure/auth/network-ca
 import { SimpleWebAuthnAdapter } from '../infrastructure/auth/simple-webauthn.adapter';
 import { SpeakeasyTwoFactorAdapter } from '../infrastructure/auth/speakeasy-two-factor.adapter';
 import { DatabaseAdapter } from '../infrastructure/database/database.adapter';
+import { LeaseMutationGuardAdapter } from '../infrastructure/agent/capabilities/lease-mutation-guard.adapter';
+import { RunnerHttpAdapter } from '../infrastructure/agent/environments/runner-http.adapter';
+import { SqliteLeaseRepository } from '../infrastructure/agent/repositories/sqlite-lease.repository';
 import { SqliteAppearanceSettingsRepository } from '../infrastructure/database/repositories/sqlite-appearance-settings.repository';
 import { SqliteAuditLogRepository } from '../infrastructure/database/repositories/sqlite-audit-log.repository';
 import { SqliteCommandHistoryRepository } from '../infrastructure/database/repositories/sqlite-command-history.repository';
@@ -105,6 +111,7 @@ import { StreamTransferOperationService } from '../platform/operations/transfer/
 import type { TransferOperation } from '../platform/operations/transfer/transfer-operation.port';
 import { StreamUploadOperationService } from '../platform/operations/upload/stream-upload-operation.service';
 import type { UploadOperation } from '../platform/operations/upload/upload-operation.port';
+import type { MutationGuardPort } from '../platform/operations/mutation-guard.port';
 import { PosixServerStatusCollector } from '../platform/system/posix-server-status.collector';
 import type { ServerStatusCollector } from '../platform/system/server-status.port';
 
@@ -120,6 +127,7 @@ export interface PlatformServices {
   serverTransfers: ServerTransferExecutor;
   serverStatus: ServerStatusCollector;
   docker: RemoteDockerService;
+  mutationGuard: MutationGuardPort;
 }
 
 export interface ModuleServices {
@@ -175,6 +183,7 @@ export interface ModuleServices {
 export interface CompositionRoot {
   platform: PlatformServices;
   modules: ModuleServices;
+  agent: AgentServices;
   initialize(): Promise<void>;
   resetForE2E(mode: 'seed' | 'empty'): Promise<void>;
   dispose(): Promise<void>;
@@ -196,6 +205,8 @@ export const createCompositionRoot = (
   });
   const cipher = new AesGcmSecretCipher(config.encryptionKeyHex);
   const passwordHasher = new BcryptPasswordHasher();
+  const agentLeases = new SqliteLeaseRepository(database);
+  const mutationGuard = new LeaseMutationGuardAdapter(agentLeases);
 
   const settingsRepository = new SqliteSettingsRepository(database);
   const settingsMigrationRepository = new SqliteSettingsMigrationRepository(database);
@@ -323,6 +334,7 @@ export const createCompositionRoot = (
     fileRemoval,
     directoryArchives,
     workspaceEvents,
+    mutationGuard,
   );
   const workspaceOperations = new WorkspaceOperationsService(
     workspaceSessions,
@@ -330,6 +342,7 @@ export const createCompositionRoot = (
     fileTransfers,
     archives,
     workspaceEvents,
+    mutationGuard,
   );
   const workspaceStatus = new WorkspaceStatusMonitorService(
     workspaceSessions,
@@ -338,7 +351,7 @@ export const createCompositionRoot = (
     serverStatus,
     workspaceEvents,
   );
-  const workspaceDocker = new WorkspaceDockerService(workspaceSessions, executionSessions, docker);
+  const workspaceDocker = new WorkspaceDockerService(workspaceSessions, executionSessions, docker, mutationGuard);
   const workspaceSuspend = new WorkspaceSuspendCoordinatorService(
     workspace,
     workspaceTerminal,
@@ -381,11 +394,29 @@ export const createCompositionRoot = (
     },
   );
 
+  const environmentController = new RunnerHttpAdapter(config.agentRunnerUrl, config.agentRunnerToken);
+
   const diagnostics = new SystemDiagnosticsService([
     new ProcessDiagnosticProbe(),
     new DatabaseDiagnosticProbe(database),
     new ExecutionSessionDiagnosticProbe(executionSessions),
   ]);
+  const agent = composeAgent({
+    database,
+    cipher,
+    dataDirectory: config.dataDirectory,
+    nexusVersion: config.appVersion,
+    nodeEnv: config.nodeEnv,
+    publicOrigin: config.agentPublicOrigin,
+    pluginFrontendOrigin: config.agentPluginFrontendOrigin,
+    connectionResolver: createAgentConnectionResolver(connections, sshResolver),
+    diagnostics: createAgentDiagnostics(diagnostics),
+    executionSessions,
+    docker,
+    leases: agentLeases,
+    environmentController,
+    audit,
+  });
 
   const modules: ModuleServices = {
     backup,
@@ -448,29 +479,36 @@ export const createCompositionRoot = (
     serverTransfers,
     serverStatus,
     docker,
+    mutationGuard,
   };
 
   return {
     platform,
     modules,
+    agent,
     initialize: async () => {
       await database.initialize();
+      await agent.initialize();
       await settings.ensureDefaults();
       await terminalThemes.initialize(presetTerminalThemes);
       await appearance.initialize();
     },
     resetForE2E: async (mode) => {
+      await agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
       transferTasks.cancelAll();
       await workspaceSuspend.dispose().catch(() => undefined);
       await sshSuspend.dispose().catch(() => undefined);
       await executionSessions.closeAll();
       await database.resetForE2E(mode, config.e2eSeedDatabase);
+      await agent.initialize();
       await settings.ensureDefaults();
       await terminalThemes.initialize(presetTerminalThemes);
       await appearance.initialize();
       sshResourceStatus.clearCache();
     },
     dispose: async () => {
+      await agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
+      await agent.dispose().catch(() => undefined);
       transferTasks.cancelAll();
       connectedHookService = undefined;
       await workspaceSuspend.dispose().catch(() => undefined);

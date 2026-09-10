@@ -1,0 +1,34 @@
+server {
+    listen 8081 default_server;
+    server_name _;
+    server_tokens off;
+
+    root /srv;
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "no-referrer" always;
+    add_header Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()" always;
+    add_header Cross-Origin-Resource-Policy "cross-origin" always;
+    add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors __NEXUS_PUBLIC_ORIGIN__" always;
+
+    location ~ ^/plugins/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/\. {
+        return 404;
+    }
+
+    location ~ ^/plugins/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+$ {
+        try_files $uri =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Permissions-Policy "camera=(), geolocation=(), microphone=(), payment=(), usb=()" always;
+        add_header Cross-Origin-Resource-Policy "cross-origin" always;
+        add_header Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors __NEXUS_PUBLIC_ORIGIN__" always;
+    }
+
+    location / {
+        return 404;
+    }
+}

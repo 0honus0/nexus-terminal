@@ -7,6 +7,7 @@ import {
   type E2eWebSocket,
   openWorkspaceSession,
   requestWorkspace,
+  sendJson,
   waitForBinaryText,
   waitForJson,
   waitForFilesystemReady,
@@ -141,6 +142,31 @@ test('duplicate workspace.connect is rejected without breaking filesystem access
       });
       expect(root.entries.map((item) => item.name)).toContain('seed.txt');
     });
+  } finally {
+    await closeWebSocket(workspace.socket);
+  }
+});
+
+test('workspace rejects request ids that cannot be represented by the binary correlation contract', async ({
+  request,
+}) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `request-id-${crypto.randomUUID()}`);
+
+  try {
+    const closed = new Promise<{ code: number; reason: string }>((resolve) => {
+      workspace.socket.once('close', (code: number, reason: Buffer) => {
+        resolve({ code, reason: reason.toString('utf8') });
+      });
+    });
+    sendJson(workspace.socket, {
+      type: 'filesystem.list',
+      requestId: 'x'.repeat(129),
+      payload: { path: '/' },
+    });
+    await expect(closed).resolves.toEqual({ code: 1003, reason: 'Invalid requestId' });
   } finally {
     await closeWebSocket(workspace.socket);
   }

@@ -51,15 +51,6 @@ const loadEditorCodec = () =>
     Buffer: buffer.Buffer,
   })));
 
-const bytesToBase64 = (bytes: Uint8Array): string => {
-  const chunkSize = 0x8000;
-  let binary = '';
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunkSize, bytes.length)));
-  }
-  return btoa(binary);
-};
-
 const encodeUtf16 = (content: string, littleEndian: boolean): Uint8Array => {
   const bytes = new Uint8Array(content.length * 2 + 2);
   bytes[0] = littleEndian ? 0xff : 0xfe;
@@ -73,30 +64,29 @@ const encodeUtf16 = (content: string, littleEndian: boolean): Uint8Array => {
   return bytes;
 };
 
-export const decodeEditorRawContent = async (rawContentBase64: string, encoding: string): Promise<string> => {
+export const decodeEditorRawContent = async (rawContent: Uint8Array, encoding: string): Promise<string> => {
   const normalized = normalizeEditorEncoding(encoding);
   if (normalized === 'utf8' || normalized === 'utf16le' || normalized === 'utf16be') {
-    const binary = atob(rawContentBase64);
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
     return new TextDecoder(normalized === 'utf8' ? 'utf-8' : normalized === 'utf16le' ? 'utf-16le' : 'utf-16be').decode(
-      bytes,
+      rawContent,
     );
   }
 
   const { iconv, Buffer } = await loadEditorCodec();
-  const bytes = Buffer.from(rawContentBase64, 'base64');
+  const bytes = Buffer.from(rawContent);
   if (iconv.encodingExists(normalized)) return iconv.decode(bytes, normalized);
   return new TextDecoder('utf-8').decode(bytes);
 };
 
-export const encodeEditorContentBase64 = async (content: string, encoding: string): Promise<string> => {
+export const encodeEditorContent = async (content: string, encoding: string): Promise<Uint8Array> => {
   const normalized = normalizeEditorEncoding(encoding);
   const contentWithoutBom = content.startsWith('\uFEFF') ? content.slice(1) : content;
-  if (normalized === 'utf8') return bytesToBase64(new TextEncoder().encode(contentWithoutBom));
-  if (normalized === 'utf16le') return bytesToBase64(encodeUtf16(contentWithoutBom, true));
-  if (normalized === 'utf16be') return bytesToBase64(encodeUtf16(contentWithoutBom, false));
+  if (normalized === 'utf8') return new TextEncoder().encode(contentWithoutBom);
+  if (normalized === 'utf16le') return encodeUtf16(contentWithoutBom, true);
+  if (normalized === 'utf16be') return encodeUtf16(contentWithoutBom, false);
 
   const { iconv, Buffer } = await loadEditorCodec();
   const encodingName = iconv.encodingExists(normalized) ? normalized : 'utf8';
-  return Buffer.from(iconv.encode(contentWithoutBom, encodingName)).toString('base64');
+  const encoded = Buffer.from(iconv.encode(contentWithoutBom, encodingName));
+  return new Uint8Array(encoded.buffer, encoded.byteOffset, encoded.byteLength).slice();
 };

@@ -3,6 +3,7 @@ import type { RuntimeConfig } from '../config/runtime-config';
 import { GuacamoleRuntimeAdapter } from '../infrastructure/guacamole/guacamole-runtime.adapter';
 import { FileHttpSessionAdapter } from '../infrastructure/session/file-http-session.adapter';
 import { createHttpApplication } from '../interfaces/http/http-application';
+import { closeAllAgentSseStreams } from '../interfaces/http/agent/agent-sse';
 import { attachWebSocketServer, type BackendWebSocketServer } from '../interfaces/websocket/websocket-server';
 import { createCompositionRoot, type CompositionRoot } from './composition-root';
 
@@ -26,9 +27,24 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     sessionMiddleware: sessions.middleware,
     trustProxy: config.trustProxy,
     sessionCookieName: sessions.cookieName,
+    nodeEnv: config.nodeEnv,
+    agentPublicOrigin: config.agentPublicOrigin,
+    agent: services.agent.host,
+    agentPlugins: services.agent.plugins,
+    agentProviders: services.agent.ai.providers,
+    agentIntegrations: services.agent.ai.integrations,
+    agentArtifacts: services.agent.ai.artifacts,
+    agentApprovals: services.agent.runtime.approvals,
+    agentConversations: services.agent.ai.conversations,
+    agentRuns: services.agent.runtime.runs,
+    agentCollaboration: services.agent.runtime.collaboration,
+    agentMemories: services.agent.ai.memories,
+    agentEvents: services.agent.runtime.events,
+    agentEnvironments: services.agent.runtime.environments,
     e2eResetEnabled: config.nodeEnv === 'test' && config.e2eResetEnabled,
     resetForE2E: (mode) =>
       webSockets.quiesce(async () => {
+        closeAllAgentSseStreams();
         await services.resetForE2E(mode);
         await sessions.clear();
       }),
@@ -122,6 +138,8 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     },
     stop: async () => {
       try {
+        await services.agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
+        closeAllAgentSseStreams();
         await webSockets.close();
         await new Promise<void>((resolve, reject) => {
           if (!server.listening) {

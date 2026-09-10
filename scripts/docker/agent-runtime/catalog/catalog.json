@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "revision": "2026-09-10.1",
+  "runtimeDigest": "nexus-agent-runner:local",
+  "recipes": [
+    {
+      "id": "shell",
+      "revision": "1",
+      "kind": "shell",
+      "displayName": "Shell",
+      "allowedFamilies": ["base-tools"],
+      "requiredCapabilities": ["shell"],
+      "defaultFamilies": ["base-tools"],
+      "defaultLimits": { "memoryBytes": 536870912, "cpus": 0.5, "pids": 128, "tmpfsBytes": 134217728 },
+      "networkDefaults": { "mode": "none", "hosts": [] }
+    },
+    {
+      "id": "code",
+      "revision": "1",
+      "kind": "code",
+      "displayName": "Code",
+      "allowedFamilies": ["base-tools"],
+      "requiredCapabilities": ["shell", "code"],
+      "defaultFamilies": ["base-tools"],
+      "defaultLimits": { "memoryBytes": 1073741824, "cpus": 1, "pids": 256, "tmpfsBytes": 268435456 },
+      "networkDefaults": { "mode": "none", "hosts": [] }
+    }
+  ],
+  "packs": [
+    {
+      "schemaVersion": 1,
+      "familyId": "base-tools",
+      "versionId": "1",
+      "displayName": "Base Tools",
+      "contentDigestByArch": {
+        "x64": "sha256:a2aa60a879344fb5268a177567afbbb5af087ce4239ee1471be595eeeffff24c",
+        "arm64": "sha256:e19ac06f771d35e5e9fe559854f2c8a9f8f478d73cb893a86251d3bf38dd44ff"
+      },
+      "downloadRefByArch": { "x64": "builtin://base-tools/1/x64", "arm64": "builtin://base-tools/1/arm64" },
+      "capabilities": ["shell", "code"],
+      "runnerApiRange": ">=1 <2",
+      "diskBytes": 16384,
+      "dependencies": [],
+      "supportedArchitectures": ["x64", "arm64"],
+      "status": "supported",
+      "sideBySide": false
+    }
+  ]
+}

@@ -32,11 +32,9 @@ interface TextReadResponse {
   path: string;
   content: string;
   encoding: string;
-  rawContentBase64: string;
 }
 interface BinaryReadResponse {
   path: string;
-  contentBase64: string;
 }
 interface RealpathResponse {
   requestedPath: string;
@@ -92,20 +90,12 @@ interface ArchiveEventWire {
   warning?: string;
 }
 
-const decodeBase64Bytes = (value: string): Uint8Array => {
-  const binary = atob(value);
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  return bytes;
-};
-
 interface WorkspaceTerminalGate {
   canSend(): boolean;
   deferResize(viewport: TerminalViewport): void;
 }
 
 interface TerminalHistoryResponseWire {
-  dataBase64: string;
   hasMore: boolean;
 }
 
@@ -180,11 +170,11 @@ export const createTerminalChannel = (socket: WorkspaceSocket, gate?: WorkspaceT
       if (!previousOutputAvailable) return null;
       if (historyLoad) return historyLoad;
       const task = socket
-        .request<TerminalHistoryResponseWire>('suspend.history.previous')
-        .then((page) => {
+        .requestBinary<TerminalHistoryResponseWire>('suspend.history.previous')
+        .then(({ data: page, bytes }) => {
           previousOutputAvailable = page.hasMore;
           return {
-            data: page.dataBase64 ? decodeBase64Bytes(page.dataBase64) : new Uint8Array(),
+            data: bytes,
             hasMore: page.hasMore,
           };
         })
@@ -208,7 +198,7 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
   search: (path, query): Promise<FileSearchResult> => socket.request('filesystem.search', { path, query }),
   stat: (path): Promise<RemoteFileEntry> => socket.request('filesystem.stat', { path }),
   async readText(path, encoding): Promise<RemoteTextFile> {
-    const result = await socket.request<TextReadResponse>('filesystem.readText', {
+    const { data: result, bytes } = await socket.requestBinary<TextReadResponse>('filesystem.readText', {
       path,
       ...(encoding ? { encoding } : {}),
     });
@@ -216,7 +206,7 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
       path: result.path,
       content: result.content,
       encoding: result.encoding,
-      rawContentBase64: result.rawContentBase64,
+      rawContent: bytes,
     };
   },
   async writeText(path, content, encoding) {
@@ -327,7 +317,7 @@ export const createFileDocumentPort = (filesystem: FilesystemChannel): FileDocum
       path: file.path,
       content: file.content,
       encoding: file.encoding,
-      rawContentBase64: file.rawContentBase64,
+      rawContent: file.rawContent,
     };
   },
   save: (path, content, encoding) => filesystem.writeText(path, content, encoding),
@@ -362,10 +352,10 @@ export const createFilePreviewSource = (socket: WorkspaceSocket): FilePreviewSou
       }
     }
     const result = await racePreviewAbort(
-      socket.request<BinaryReadResponse>('filesystem.readBinary', { path }),
+      socket.requestBinary<BinaryReadResponse>('filesystem.readBinary', { path }),
       signal,
     );
-    const bytes = decodeBase64Bytes(result.contentBase64);
+    const bytes = result.bytes;
     return { bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer };
   },
 });

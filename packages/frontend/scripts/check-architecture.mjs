@@ -48,6 +48,24 @@ for (const file of sourceFiles) {
 const firstSegment = (rel) => rel.split('/')[0];
 const featureName = (rel) => (rel.startsWith('features/') ? rel.split('/')[1] : null);
 const runtimeName = (rel) => (rel.startsWith('runtimes/') ? rel.split('/')[1] : null);
+const agentArea = (rel) => {
+  const parts = rel.split('/');
+  if (parts[0] !== 'features' || parts[1] !== 'agent') return null;
+  if (parts.length === 3 && parts[2] === 'public.ts') return 'public';
+  if (parts[2] === 'apps') return parts[3] ? `apps/${parts[3]}` : 'apps';
+  return parts[2] ?? 'root';
+};
+
+const allowedAgentAreas = {
+  public: new Set(['public', 'api', 'host', 'settings']),
+  host: new Set(['host', 'api', 'apps/operations', 'files']),
+  api: new Set(['api', 'host']),
+  ai: new Set(['ai', 'api', 'files']),
+  files: new Set(['files', 'api']),
+  runtime: new Set(['runtime', 'api']),
+  settings: new Set(['settings', 'api']),
+  'apps/operations': new Set(['apps/operations', 'ai', 'api', 'host', 'runtime']),
+};
 
 for (const [file, imports] of importsByFile) {
   const rel = relative(file);
@@ -118,7 +136,21 @@ const graph = new Map(sourceFiles.map((file) => [file, []]));
 for (const [file, imports] of importsByFile) {
   for (const specifier of imports) {
     const target = resolveInternalImport(file, specifier);
-    if (target) graph.get(file).push(target);
+    if (!target) continue;
+    graph.get(file).push(target);
+
+    const fromAgentArea = agentArea(relative(file));
+    const targetAgentArea = agentArea(relative(target));
+    if (fromAgentArea && targetAgentArea) {
+      const allowed = allowedAgentAreas[fromAgentArea];
+      if (!allowed) {
+        failures.push(`${relative(file)}: unknown Agent frontend area ${fromAgentArea}`);
+      } else if (!allowed.has(targetAgentArea)) {
+        failures.push(
+          `${relative(file)}: forbidden Agent frontend ${fromAgentArea} -> ${targetAgentArea} dependency (${specifier})`,
+        );
+      }
+    }
   }
 }
 

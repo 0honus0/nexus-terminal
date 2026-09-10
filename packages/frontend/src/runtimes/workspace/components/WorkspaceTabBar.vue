@@ -73,7 +73,7 @@
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('text/plain', id);
       const image = new Image();
-      image.src = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+      image.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/%3E';
       event.dataTransfer.setDragImage(image, 0, 0);
     }
   };

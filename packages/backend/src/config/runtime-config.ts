@@ -7,6 +7,11 @@ export interface PasskeyRelyingPartyConfig {
 
 export interface RuntimeConfig {
   appName: string;
+  appVersion: string;
+  agentPublicOrigin?: string;
+  agentPluginFrontendOrigin?: string;
+  agentRunnerUrl?: string;
+  agentRunnerToken?: string;
   host: string;
   trustProxy: string;
   port: number;
@@ -26,6 +31,7 @@ export interface RuntimeConfig {
 
 const DEFAULT_RP_ID = 'localhost';
 const DEFAULT_RP_ORIGIN = 'http://localhost:5173';
+const BACKEND_PACKAGE_VERSION = (require('../../package.json') as { version?: string }).version ?? '0.0.0';
 
 const requireValue = (env: NodeJS.ProcessEnv, name: string): string => {
   const value = env[name]?.trim();
@@ -54,6 +60,28 @@ const normalizeOrigin = (value: string): string | null => {
   }
 };
 
+const parseOptionalExactOrigin = (value: string | undefined, name: string): string | undefined => {
+  const raw = value?.trim();
+  if (!raw) return undefined;
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`${name} must be an exact http(s) origin.`);
+  }
+  if (
+    !['http:', 'https:'].includes(url.protocol) ||
+    url.username !== '' ||
+    url.password !== '' ||
+    url.pathname !== '/' ||
+    url.search !== '' ||
+    url.hash !== ''
+  ) {
+    throw new Error(`${name} must be an exact http(s) origin without credentials, path, query, or fragment.`);
+  }
+  return url.origin;
+};
+
 const buildPasskeyRelyingParties = (env: NodeJS.ProcessEnv): PasskeyRelyingPartyConfig[] => {
   const configuredIds = parseCsv(env.RP_ID);
   const configuredOrigins = parseCsv(env.RP_ORIGIN);
@@ -78,6 +106,11 @@ const buildPasskeyRelyingParties = (env: NodeJS.ProcessEnv): PasskeyRelyingParty
 
 export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv = process.env): RuntimeConfig => ({
   appName: env.APP_NAME?.trim() || 'Nexus Terminal',
+  appVersion: env.NEXUS_VERSION?.trim() || BACKEND_PACKAGE_VERSION,
+  agentPublicOrigin: parseOptionalExactOrigin(env.AGENT_PUBLIC_ORIGIN, 'AGENT_PUBLIC_ORIGIN'),
+  agentPluginFrontendOrigin: parseOptionalExactOrigin(env.AGENT_PLUGIN_FRONTEND_ORIGIN, 'AGENT_PLUGIN_FRONTEND_ORIGIN'),
+  agentRunnerUrl: env.AGENT_RUNNER_URL?.trim() || undefined,
+  agentRunnerToken: env.AGENT_RUNNER_TOKEN?.trim() || undefined,
   host: env.HOST?.trim() || '0.0.0.0',
   trustProxy: env.TRUST_PROXY?.trim() || 'loopback, linklocal, uniquelocal',
   port: parsePositiveInteger(env.PORT, 3001, 'PORT'),

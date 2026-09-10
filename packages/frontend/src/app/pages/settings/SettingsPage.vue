@@ -2,6 +2,7 @@
   import { computed, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { AppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
+  import { AgentSettingsPanel } from '@/features/agent/public';
   import { BackupSettingsPanel } from '@/features/backup/public';
   import { PreferencesSettingsPanel, type Preferences } from '@/features/preferences/public';
   import { SecuritySettingsPanel } from '@/features/security/public';
@@ -9,7 +10,7 @@
   import { setLocale, supportedLocales } from '@/app/i18n';
   import AboutPanel from './AboutPanel.vue';
 
-  type SettingsTab = 'workspace' | 'system' | 'security' | 'ipControl' | 'data' | 'appearance' | 'about';
+  type SettingsTab = 'workspace' | 'system' | 'security' | 'ipControl' | 'data' | 'appearance' | 'agent' | 'about';
 
   const { t } = useI18n();
   const auth = useAuthSession();
@@ -22,6 +23,7 @@
     { value: 'ipControl', label: t('settings.tabs.ipControl') },
     { value: 'data', label: t('settings.tabs.dataManagement') },
     { value: 'appearance', label: t('settings.tabs.appearance') },
+    { value: 'agent', label: t('agent.settings.tab') },
     { value: 'about', label: t('settings.tabs.about') },
   ]);
 
@@ -92,6 +94,7 @@
           id="settings-panel-appearance"
           @customize="appearance.openCustomizer()"
         />
+        <AgentSettingsPanel v-else-if="active === 'agent'" />
         <AboutPanel v-else id="settings-panel-about" />
       </div>
     </div>

@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "id": "nexus.operations",
+  "version": "1.0.0",
+  "displayName": "Operations",
+  "sdkVersion": "1.0.0",
+  "nexus": {
+    "minVersion": "1.0.0",
+    "maxVersion": "1.99.99"
+  },
+  "capabilities": [
+    "ai.model.use",
+    "runs.execute",
+    "machine.diagnostics.read",
+    "machine.files.read",
+    "machine.files.write",
+    "machine.shell.execute",
+    "machine.docker.mutate",
+    "environment.execute",
+    "environment.manage",
+    "integration.mcp.invoke",
+    "integration.acp.execute",
+    "browser.operate",
+    "artifacts.read",
+    "artifacts.write"
+  ],
+  "intents": [
+    {
+      "id": "memory.import",
+      "schemaVersion": 1
+    }
+  ]
+}

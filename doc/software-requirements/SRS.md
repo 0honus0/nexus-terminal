@@ -1,12 +1,12 @@
 # Nexus Terminal 软件需求规格说明书（SRS）
 
-版本：v1.7
+版本：v1.9
 
-状态：Current post-refactor baseline
+状态：Current post-refactor baseline + Agent implementation baseline
 
 ## 1. 文档目的
 
-本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。v1.5 进一步纳入 Dashboard 首屏可达性、Quick Commands 分组点击语义与窄 pane 缩放、File Manager 路径/收藏弹层响应式展示，以及 Preview 搜索/Spreadsheet 单页分页展示等 UI 回归约束；v1.6 继续收紧 Workspace 桌面标签栏与下方内容框的旧版四侧外框一致性；v1.7 补齐随后落地但尚未完整写入规范的交互细节，包括 Suspend 会话在 Dashboard/Workspace 的统一入口与 handoff 刷新、移动端恢复不生成重复 tab、File Manager popup 尺寸持久化与 resize handle、路径历史右键维护、移动文件行时间戳保留、Markdown 文档内链预览、后台 transfer polling 的 silent/freshness 语义、移动终端原生方向滚动以及 RDP/VNC resize 几何。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
+本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。v1.5～v1.7 收紧 Workspace/File Manager/Preview/Remote Desktop 等 UI 与交互回归约束；v1.8 在 Owner 明确放行后把冻结的 Agent 设计同步为正式分期研发需求；v1.9 根据当前源码和架构复核，把 Agent 状态从纯“计划阶段”更新为“实现基线/部分接线/验证缺口”，并修正 Environment/Runner 不再依赖 Docker Engine/子容器的正式边界，同时纳入 Nexus Workspace binary protocol v1 与 Agent Runner transport 相互独立的当前架构。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
 
 ## 2. 需求解释规则
 
@@ -43,6 +43,7 @@
 | [RDP / VNC 远程桌面](requirements/remote-desktop.md)               |           8 |         4 |
 | [移动端交互](requirements/mobile.md)                               |           4 |         0 |
 | [架构与跨模块需求](requirements/architecture.md)                   |           5 |         0 |
+| [Agent Platform](requirements/agent.md)                            |          14 |         0 |
 
 ## 4. 系统级特殊设计与非功能需求
 
@@ -59,7 +60,7 @@
 
 ## 6. 当前范围说明
 
-本需求基线覆盖当前 Nexus Terminal 用户可达能力与已经确认的 clean architecture 行为。Future Agent 目前只有架构边界，没有正式 App route、Frontend Agent runtime implementation 或 Backend Agent public HTTP/WebSocket contract，因此不虚构 Agent 产品功能；只保留未来实现必须遵守的 runtime 隔离约束。
+本需求基线覆盖当前 Nexus Terminal 用户可达能力与已经确认的 clean architecture 行为。Agent 正式范围见 [Agent Platform](requirements/agent.md)，长期设计以 `doc/architecture/agent/ARCHITECTURE.md` / `IMPLEMENTATION.md` 为规范源，当前源码接线与验证证据以 `CURRENT_AGENT_ARCHITECTURE.md` 为实现快照。P1/P2/P3 只保留为范围/依赖分组；需求状态必须区分“实现基线已存在”“已进入 live composition”“部分实现”和“完整 E2E 已验收”。当前 MCP 已进入 composition/tool catalog；ACP/Browser 仍只有部分类型/adapter/configuration，不得作为已交付执行能力。既有非 Agent 功能仍以当前已实现基线为准。
 
 ## 7. v1.5–v1.7 UI / 交互回归需求索引
 

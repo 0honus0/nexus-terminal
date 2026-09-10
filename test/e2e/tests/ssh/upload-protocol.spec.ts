@@ -6,15 +6,16 @@ import {
   openAuthenticatedWebSocket,
   openWorkspaceSession,
   requestWorkspace,
+  requestWorkspaceBinary,
   waitForFilesystemReady,
   waitForJson,
 } from '../../support/ws';
 
 async function readRemoteFile(socket: any, remotePath: string): Promise<Buffer> {
-  const response = await requestWorkspace<{ contentBase64: string }>(socket, 'filesystem.readBinary', {
+  const response = await requestWorkspaceBinary<{ path: string }>(socket, 'filesystem.readBinary', {
     path: remotePath,
   });
-  return Buffer.from(response.contentBase64, 'base64');
+  return response.bytes;
 }
 
 test('raw binary upload reports ready, progress, completion, and readable remote content', async ({ request }) => {
@@ -27,7 +28,8 @@ test('raw binary upload reports ready, progress, completion, and readable remote
     await waitForFilesystemReady(workspace.socket);
     const uploadId = `upload-${crypto.randomUUID()}`;
     const remotePath = '/upload-protocol.bin';
-    const payload = Buffer.from('nexus-upload-protocol\n', 'utf8');
+    const payload = Buffer.alloc(700 * 1024);
+    for (let offset = 0; offset < payload.length; offset += 1) payload[offset] = offset % 251;
 
     const readyPromise = waitForJson(
       workspace.socket,

@@ -3,6 +3,7 @@
   "group": 5,
   "workers": 8,
   "specs": [
+    "tests/auth/setup-login.spec.ts",
     "tests/http/auth-2fa.spec.ts",
     "tests/http/auth-api.spec.ts",
     "tests/http/backup.spec.ts",
@@ -14,12 +15,10 @@
     "tests/http/terminal-themes.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/batch-connection-edit.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
     "tests/ssh/quick-command-tags-variables.spec.ts",
-    "tests/ssh/sftp-download.spec.ts",
     "tests/ssh/progress-display-archive.spec.ts"
   ]
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type {
   DirectoryArchiveHandle,
@@ -10,6 +11,7 @@ import {
   type RemoteFileSearchResult,
 } from '../../../platform/filesystem/file-entry';
 import type { FileRemovalService } from '../../../platform/filesystem/file-removal.service';
+import type { MutationGuardPort } from '../../../platform/operations/mutation-guard.port';
 import type { RemoteFileSearchService } from '../../../platform/filesystem/remote-file-search.service';
 import type { RemoteFileSystem } from '../../../platform/filesystem/remote-filesystem';
 import type {
@@ -36,6 +38,7 @@ export class WorkspaceFilesystemService {
     private readonly removal: FileRemovalService,
     private readonly directoryArchives: DirectoryArchivePort,
     private readonly events: WorkspaceEventHub,
+    private readonly mutationGuard: MutationGuardPort,
   ) {}
 
   async initialize(workspaceId: string): Promise<void> {
@@ -74,43 +77,59 @@ export class WorkspaceFilesystemService {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
     return this.textFiles.read(fs, this.absolute(remotePath), encoding);
   }
-  async readBinary(workspaceId: string, remotePath: string): Promise<Uint8Array> {
+  async openBinaryRead(workspaceId: string, remotePath: string) {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
-    const stream = await fs.openRead(this.absolute(remotePath));
-    const chunks: Buffer[] = [];
-    for await (const chunk of stream) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-    return Buffer.concat(chunks);
+    return fs.openRead(this.absolute(remotePath));
   }
   async writeFile(workspaceId: string, remotePath: string, content: string, encoding = 'utf-8') {
-    const fs = await this.filesystem(this.sessions.require(workspaceId));
-    return this.textFiles.write(fs, this.absolute(remotePath), content, encoding);
+    const normalized = this.absolute(remotePath);
+    return this.withMutation(workspaceId, 'filesystem.write', [normalized], async () => {
+      const fs = await this.filesystem(this.sessions.require(workspaceId));
+      return this.textFiles.write(fs, normalized, content, encoding);
+    });
   }
   async createFile(workspaceId: string, remotePath: string, content = '', encoding = 'utf-8') {
-    const fs = await this.filesystem(this.sessions.require(workspaceId));
-    return this.textFiles.create(fs, this.absolute(remotePath), content, encoding);
+    const normalized = this.absolute(remotePath);
+    return this.withMutation(workspaceId, 'filesystem.create', [normalized], async () => {
+      const fs = await this.filesystem(this.sessions.require(workspaceId));
+      return this.textFiles.create(fs, normalized, content, encoding);
+    });
   }
   async createDirectory(workspaceId: string, remotePath: string): Promise<void> {
-    const fs = await this.filesystem(this.sessions.require(workspaceId));
-    await fs.createDirectory(this.absolute(remotePath));
+    const normalized = this.absolute(remotePath);
+    await this.withMutation(workspaceId, 'filesystem.mkdir', [normalized], async () => {
+      const fs = await this.filesystem(this.sessions.require(workspaceId));
+      await fs.createDirectory(normalized);
+    });
   }
   async removeDirectory(workspaceId: string, remotePath: string, force = false): Promise<void> {
-    const session = this.sessions.require(workspaceId),
-      normalized = this.absolute(remotePath);
-    if (force)
-      return this.removal.removeDirectoryForce(this.executions.require(session.executionSessionId), normalized);
-    await this.removal.remove(await this.filesystem(session), normalized);
+    const normalized = this.absolute(remotePath);
+    await this.withMutation(
+      workspaceId,
+      force ? 'filesystem.remove-force' : 'filesystem.remove',
+      [normalized],
+      async () => {
+        const session = this.sessions.require(workspaceId);
+        if (force) {
+          await this.removal.removeDirectoryForce(this.executions.require(session.executionSessionId), normalized);
+          return;
+        }
+        await this.removal.remove(await this.filesystem(session), normalized);
+      },
+    );
   }
   async removeFile(workspaceId: string, remotePath: string): Promise<void> {
-    const fs = await this.filesystem(this.sessions.require(workspaceId));
-    await fs.removeFile(this.absolute(remotePath));
+    const normalized = this.absolute(remotePath);
+    await this.withMutation(workspaceId, 'filesystem.remove-file', [normalized], async () => {
+      const fs = await this.filesystem(this.sessions.require(workspaceId));
+      await fs.removeFile(normalized);
+    });
   }
   async removePaths(
     workspaceId: string,
     remotePaths: readonly string[],
     options: { forceDirectoryPaths?: readonly string[] } = {},
   ): Promise<void> {
-    const session = this.sessions.require(workspaceId);
-    const fs = await this.filesystem(session);
     const normalizedPaths = remotePaths.map((remotePath) => this.absolute(remotePath));
     const forceDirectories = new Set(
       (options.forceDirectoryPaths ?? []).map((remotePath) => this.absolute(remotePath)),
@@ -119,20 +138,31 @@ export class WorkspaceFilesystemService {
       if (!normalizedPaths.includes(remotePath))
         throw new Error('Forced directory removal path must be part of the removal request.');
     }
-    const execution = this.executions.require(session.executionSessionId);
-    for (const remotePath of normalizedPaths) {
-      if (forceDirectories.has(remotePath)) await this.removal.removeDirectoryForce(execution, remotePath);
-      else await this.removal.remove(fs, remotePath);
-    }
+    await this.withMutation(workspaceId, 'filesystem.remove-many', normalizedPaths, async () => {
+      const session = this.sessions.require(workspaceId);
+      const fs = await this.filesystem(session);
+      const execution = this.executions.require(session.executionSessionId);
+      for (const remotePath of normalizedPaths) {
+        if (forceDirectories.has(remotePath)) await this.removal.removeDirectoryForce(execution, remotePath);
+        else await this.removal.remove(fs, remotePath);
+      }
+    });
   }
   async rename(workspaceId: string, sourcePath: string, destinationPath: string): Promise<void> {
-    const fs = await this.filesystem(this.sessions.require(workspaceId));
-    await fs.rename(this.absolute(sourcePath), this.absolute(destinationPath));
+    const source = this.absolute(sourcePath);
+    const destination = this.absolute(destinationPath);
+    await this.withMutation(workspaceId, 'filesystem.rename', [source, destination], async () => {
+      const fs = await this.filesystem(this.sessions.require(workspaceId));
+      await fs.rename(source, destination);
+    });
   }
   async chmod(workspaceId: string, remotePath: string, mode: number): Promise<void> {
     if (!Number.isInteger(mode) || mode < 0 || mode > 0o7777) throw new Error('Invalid chmod mode.');
-    const fs = await this.filesystem(this.sessions.require(workspaceId));
-    await fs.chmod(this.absolute(remotePath), mode);
+    const normalized = this.absolute(remotePath);
+    await this.withMutation(workspaceId, 'filesystem.chmod', [normalized], async () => {
+      const fs = await this.filesystem(this.sessions.require(workspaceId));
+      await fs.chmod(normalized, mode);
+    });
   }
   async realpath(workspaceId: string, remotePath: string) {
     const fs = await this.filesystem(this.sessions.require(workspaceId));
@@ -174,6 +204,28 @@ export class WorkspaceFilesystemService {
         };
     return null;
   }
+  private withMutation<T>(
+    workspaceId: string,
+    operation: string,
+    remotePaths: readonly string[],
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const session = this.sessions.require(workspaceId);
+    const resourceKeys = [
+      `connection:${session.connectionId}`,
+      ...remotePaths.map((remotePath) => `connection:${session.connectionId}:file:${remotePath}`),
+    ];
+    return this.mutationGuard.withMutation(
+      {
+        ownerType: 'workspace',
+        ownerId: workspaceId,
+        operationId: `${operation}:${randomUUID()}`,
+        resourceKeys,
+      },
+      async () => work(),
+    );
+  }
+
   private filesystem(session: WorkspaceSession) {
     return this.executions.require(session.executionSessionId).fileSystem('control');
   }

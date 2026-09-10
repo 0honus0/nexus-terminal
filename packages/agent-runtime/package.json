@@ -1,0 +1,25 @@
+{
+  "name": "@nexus-terminal/agent-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "start:worker": "node dist/worker/bootstrap.js"
+  },
+  "devDependencies": {
+    "@types/node": "^26.5.0",
+    "@types/semver": "7.7.1",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "puppeteer-core": "25.10.0",
+    "semver": "7.7.2",
+    "tar": "7.5.22"
+  }
+}

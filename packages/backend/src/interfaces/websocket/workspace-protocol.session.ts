@@ -18,10 +18,18 @@ import type {
 } from '../../platform/docker/docker.port';
 import type { ArchiveFormat } from '../../platform/operations/archive/archive-operation.port';
 import { TerminalStreamTransport } from './terminal-stream.transport';
+import {
+  encodeWorkspaceBinaryFrame,
+  MAX_WORKSPACE_BINARY_PAYLOAD_BYTES,
+  MAX_WORKSPACE_BINARY_REQUEST_ID_BYTES,
+  WORKSPACE_BINARY_PROTOCOL_VERSION,
+} from './workspace-binary.protocol';
 import type { WorkspaceProtocolRequest } from './workspace-protocol.types';
 
 const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 const MAX_JSON_MESSAGE_BYTES = 1024 * 1024;
+const BINARY_HIGH_WATER_BYTES = 1024 * 1024;
+const BINARY_BACKPRESSURE_POLL_MS = 10;
 
 type JsonRecord = Record<string, unknown>;
 const record = (value: unknown): JsonRecord =>
@@ -31,6 +39,17 @@ const numberValue = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 const stringArray = (value: unknown): string[] | undefined =>
   Array.isArray(value) && value.every((item) => typeof item === 'string') ? value : undefined;
+
+class WorkspaceBinaryResponse {
+  constructor(
+    readonly data: unknown,
+    readonly source: AsyncIterable<Uint8Array | Buffer | string>,
+  ) {}
+}
+
+const singleBinaryChunk = async function* (value: Uint8Array): AsyncIterable<Uint8Array> {
+  if (value.byteLength) yield value;
+};
 
 const dockerStatsWire = (stats: PlatformDockerStats) => ({
   id: stats.ID,
@@ -113,7 +132,7 @@ export class WorkspaceProtocolSession {
     if (isBinary) {
       this.socket.close(
         1003,
-        'Workspace socket accepts JSON requests; terminal output is server-to-client binary only',
+        'Workspace socket accepts JSON control requests; binary frames are server-to-client only',
       );
       return;
     }
@@ -129,6 +148,14 @@ export class WorkspaceProtocolSession {
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid request');
       message = parsed as WorkspaceProtocolRequest;
       if (typeof message.type !== 'string' || !message.type) throw new Error('Request type is required');
+      if (
+        message.requestId !== undefined &&
+        (typeof message.requestId !== 'string' ||
+          !message.requestId ||
+          Buffer.byteLength(message.requestId, 'utf8') > MAX_WORKSPACE_BINARY_REQUEST_ID_BYTES)
+      ) {
+        throw new Error('Invalid requestId');
+      }
     } catch (error) {
       this.socket.close(1003, error instanceof Error ? error.message : 'Invalid request');
       return;
@@ -136,7 +163,14 @@ export class WorkspaceProtocolSession {
 
     try {
       const result = await this.route(message.type, record(message.payload), message.requestId);
-      if (message.requestId) this.sendResponse(message.requestId, true, result);
+      if (message.requestId) {
+        if (result instanceof WorkspaceBinaryResponse) {
+          await this.sendBinaryResponse(message.requestId, result.source);
+          this.sendResponse(message.requestId, true, result.data);
+        } else {
+          this.sendResponse(message.requestId, true, result);
+        }
+      }
     } catch (error) {
       const text = error instanceof Error ? error.message : String(error);
       if (message.requestId) this.sendResponse(message.requestId, false, undefined, text);
@@ -291,7 +325,12 @@ export class WorkspaceProtocolSession {
       });
       this.dependencies.terminal.attach(workspaceId);
       void this.dependencies.filesystem.initialize(workspaceId).catch(() => undefined);
-      return { workspaceId, connectionId: session.connectionId, connectionName: session.connectionName };
+      return {
+        workspaceId,
+        connectionId: session.connectionId,
+        connectionName: session.connectionName,
+        binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
+      };
     } catch (error) {
       this.unbindWorkspace();
       throw error;
@@ -339,18 +378,16 @@ export class WorkspaceProtocolSession {
       path,
       stringValue(payload.encoding),
     );
-    return {
-      path,
-      content: result.content,
-      encoding: result.encodingUsed,
-      rawContentBase64: result.rawContentBase64,
-    };
+    return new WorkspaceBinaryResponse(
+      { path, content: result.content, encoding: result.encodingUsed },
+      singleBinaryChunk(result.rawContent),
+    );
   }
 
   private async filesystemReadBinary(payload: JsonRecord) {
     const path = this.requirePath(payload.path);
-    const bytes = await this.dependencies.filesystem.readBinary(this.requireWorkspace(), path);
-    return { path, contentBase64: Buffer.from(bytes).toString('base64') };
+    const stream = await this.dependencies.filesystem.openBinaryRead(this.requireWorkspace(), path);
+    return new WorkspaceBinaryResponse({ path }, stream);
   }
 
   private async filesystemWriteText(payload: JsonRecord) {
@@ -537,6 +574,7 @@ export class WorkspaceProtocolSession {
         connectionName: result.connectionName,
         resumedFrom: suspendedSessionId,
         historyAvailable: result.historyAvailable,
+        binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
       };
     } catch (error) {
       if (began) await this.dependencies.suspendCoordinator.rollbackResume(workspaceId).catch(() => false);
@@ -550,10 +588,7 @@ export class WorkspaceProtocolSession {
       this.requireWorkspace(),
       this.identity.userId,
     );
-    return {
-      dataBase64: Buffer.from(history.data).toString('base64'),
-      hasMore: history.hasMore,
-    };
+    return new WorkspaceBinaryResponse({ hasMore: history.hasMore }, singleBinaryChunk(history.data));
   }
 
   private suspendHistoryReset() {
@@ -666,6 +701,32 @@ export class WorkspaceProtocolSession {
 
   private sendEvent(type: string, payload: unknown): void {
     this.sendJson({ type, payload });
+  }
+
+  private async sendBinaryResponse(
+    requestId: string,
+    source: AsyncIterable<Uint8Array | Buffer | string>,
+  ): Promise<void> {
+    for await (const raw of source) {
+      const value = typeof raw === 'string' ? Buffer.from(raw, 'utf8') : Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
+      for (let offset = 0; offset < value.byteLength; offset += MAX_WORKSPACE_BINARY_PAYLOAD_BYTES) {
+        await this.waitForBinaryCapacity();
+        const chunk = value.subarray(offset, Math.min(offset + MAX_WORKSPACE_BINARY_PAYLOAD_BYTES, value.byteLength));
+        if (this.socket.readyState !== WebSocket.OPEN)
+          throw new Error('Workspace socket closed during binary response.');
+        this.socket.send(encodeWorkspaceBinaryFrame('response', requestId, chunk), { binary: true });
+      }
+    }
+    await this.waitForBinaryCapacity();
+    if (this.socket.readyState !== WebSocket.OPEN) throw new Error('Workspace socket closed during binary response.');
+    this.socket.send(encodeWorkspaceBinaryFrame('response', requestId, Buffer.alloc(0), true), { binary: true });
+  }
+
+  private async waitForBinaryCapacity(): Promise<void> {
+    while (this.socket.readyState === WebSocket.OPEN && this.socket.bufferedAmount >= BINARY_HIGH_WATER_BYTES) {
+      await new Promise((resolve) => setTimeout(resolve, BINARY_BACKPRESSURE_POLL_MS));
+    }
+    if (this.socket.readyState !== WebSocket.OPEN) throw new Error('Workspace socket is not open.');
   }
 
   private sendJson(message: unknown): void {

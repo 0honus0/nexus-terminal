@@ -10,5 +10,6 @@ declare module 'express-session' {
     currentChallenge?: string;
     passkeyOrigin?: string;
     passkeyRegistrationUserId?: number;
+    agentCsrfToken?: string;
   }
 }

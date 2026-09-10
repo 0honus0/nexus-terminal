@@ -12,6 +12,7 @@
     "test": "playwright test",
     "test:auth": "playwright test --project=auth",
     "test:http": "playwright test --project=http",
+    "test:agent": "playwright test --project=agent",
     "test:websocket": "playwright test --project=websocket",
     "test:ui": "playwright test --project=ui",
     "test:ssh": "playwright test --project=ssh",

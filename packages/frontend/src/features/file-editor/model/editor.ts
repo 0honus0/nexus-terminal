@@ -8,7 +8,7 @@ export interface EditorDocument {
   name: string;
   content: string;
   originalContent: string;
-  rawContentBase64: string;
+  rawContent: Uint8Array;
   encoding: string;
   language: string;
   dirty: boolean;
@@ -20,6 +20,6 @@ export interface EditorDocument {
 export interface LoadedEditorDocument {
   path: string;
   content: string;
-  rawContentBase64: string;
+  rawContent: Uint8Array;
   encoding: string;
 }

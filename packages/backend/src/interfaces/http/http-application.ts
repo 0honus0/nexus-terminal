@@ -31,7 +31,28 @@ import type { NotificationService } from '../../modules/notifications/notificati
 import type { PasskeyService } from '../../modules/passkey/passkey.service';
 import type { SettingsService } from '../../modules/settings/settings.service';
 import type { SystemHealthService } from '../../modules/system/system-health.service';
+import type {
+  AgentArtifactFacade,
+  AgentApprovalFacade,
+  AgentConversationFacade,
+  AgentEventFacade,
+  AgentEnvironmentFacade,
+  AgentHostFacade,
+  AgentPluginFacade,
+  AgentProviderFacade,
+  AgentRunFacade,
+  AgentCollaborationFacade,
+  AgentMemoryFacade,
+} from '../../modules/agent/public';
 import type { UserService } from '../../modules/user/user.service';
+import type { AgentIntegrationFacade } from '../../modules/agent/public';
+import { createAgentRouter } from './agent/agent.routes';
+import { createAppApprovalsRouter } from './agent/app-approvals.routes';
+import { createAppArtifactsRouter } from './agent/app-artifacts.routes';
+import { createAppIntegrationsRouter } from './agent/app-integrations.routes';
+import { createAppCollaborationRouter } from './agent/app-collaboration.routes';
+import { createAppRuntimeRouter } from './agent/app-runtime.routes';
+import { createAppThreadsRouter } from './agent/app-threads.routes';
 import { createAppearanceRouter } from './appearance/appearance.routes';
 import { createAuditRouter } from './audit/audit.routes';
 import { createCommandHistoryRouter } from './command-history/command-history.routes';
@@ -58,6 +79,20 @@ export interface HttpApplicationDependencies {
   sessionMiddleware: RequestHandler;
   trustProxy: string;
   sessionCookieName: string;
+  nodeEnv: string;
+  agentPublicOrigin?: string;
+  agent: AgentHostFacade;
+  agentPlugins: AgentPluginFacade;
+  agentProviders: AgentProviderFacade;
+  agentIntegrations: AgentIntegrationFacade;
+  agentArtifacts: AgentArtifactFacade;
+  agentApprovals: AgentApprovalFacade;
+  agentConversations: AgentConversationFacade;
+  agentRuns: AgentRunFacade;
+  agentCollaboration: AgentCollaborationFacade;
+  agentMemories: AgentMemoryFacade;
+  agentEvents: AgentEventFacade;
+  agentEnvironments: AgentEnvironmentFacade;
   e2eResetEnabled: boolean;
   resetForE2E(mode: 'seed' | 'empty'): Promise<void>;
   systemHealth: SystemHealthService;
@@ -179,6 +214,71 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       settings: dependencies.settings,
       users: dependencies.users,
       sessionCookieName: dependencies.sessionCookieName,
+    }),
+  );
+  app.use(
+    '/api/v1/agent',
+    createAgentRouter({
+      host: dependencies.agent,
+      plugins: dependencies.agentPlugins,
+      providers: dependencies.agentProviders,
+      artifacts: dependencies.agentArtifacts,
+      events: dependencies.agentEvents,
+      environments: dependencies.agentEnvironments,
+      nodeEnv: dependencies.nodeEnv,
+      publicOrigin: dependencies.agentPublicOrigin,
+    }),
+  );
+  app.use(
+    '/api/v1/apps/:appId/integrations',
+    createAppIntegrationsRouter({
+      integrations: dependencies.agentIntegrations,
+      nodeEnv: dependencies.nodeEnv,
+      publicOrigin: dependencies.agentPublicOrigin,
+    }),
+  );
+  app.use(
+    '/api/v1/apps/:appId/artifacts',
+    createAppArtifactsRouter({
+      artifacts: dependencies.agentArtifacts,
+      nodeEnv: dependencies.nodeEnv,
+      publicOrigin: dependencies.agentPublicOrigin,
+    }),
+  );
+  app.use(
+    '/api/v1/apps/:appId/approvals',
+    createAppApprovalsRouter({
+      approvals: dependencies.agentApprovals,
+      nodeEnv: dependencies.nodeEnv,
+      publicOrigin: dependencies.agentPublicOrigin,
+    }),
+  );
+  app.use(
+    '/api/v1/apps/:appId/threads',
+    createAppThreadsRouter({
+      conversations: dependencies.agentConversations,
+      nodeEnv: dependencies.nodeEnv,
+      publicOrigin: dependencies.agentPublicOrigin,
+    }),
+  );
+  app.use(
+    '/api/v1/apps/:appId',
+    createAppCollaborationRouter({
+      collaboration: dependencies.agentCollaboration,
+      memories: dependencies.agentMemories,
+      nodeEnv: dependencies.nodeEnv,
+      publicOrigin: dependencies.agentPublicOrigin,
+    }),
+  );
+  app.use(
+    '/api/v1/apps/:appId',
+    createAppRuntimeRouter({
+      runs: dependencies.agentRuns,
+      events: dependencies.agentEvents,
+      approvals: dependencies.agentApprovals,
+      environments: dependencies.agentEnvironments,
+      nodeEnv: dependencies.nodeEnv,
+      publicOrigin: dependencies.agentPublicOrigin,
     }),
   );
   app.use(

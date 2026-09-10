@@ -9,7 +9,7 @@ const testsRoot = path.join(e2eRoot, 'tests');
 const groupsRoot = path.join(e2eRoot, 'groups');
 const settingsPath = path.join(groupsRoot, 'settings.json');
 const timingsPath = path.join(groupsRoot, 'timings.json');
-const projectNames = ['auth', 'http', 'websocket', 'ui', 'ssh', 'mobile'];
+const projectNames = ['auth', 'http', 'agent', 'websocket', 'ui', 'ssh', 'mobile'];
 
 function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));

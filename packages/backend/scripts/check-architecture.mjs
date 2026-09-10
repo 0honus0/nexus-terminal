@@ -40,6 +40,52 @@ function moduleOf(file) {
   return relative[0] === 'modules' && relative.length > 1 ? relative[1] : null;
 }
 
+function agentAreaOf(file) {
+  const relative = path.relative(srcRoot, file).split(path.sep);
+  if (relative[0] !== 'modules' || relative[1] !== 'agent') return null;
+  const area = relative[2];
+  if (!area || area.endsWith('.ts')) return 'root';
+  if (area === 'apps') return 'apps';
+  return area;
+}
+
+const allowedAgentAreas = {
+  root: new Set(['root', 'host']),
+  host: new Set(['root', 'host']),
+  ai: new Set(['root', 'host', 'ai']),
+  capabilities: new Set(['root', 'host', 'capabilities']),
+  environments: new Set(['root', 'host', 'environments']),
+  runtime: new Set(['root', 'host', 'ai', 'capabilities', 'environments', 'runtime']),
+  apps: new Set(['root', 'host', 'ai', 'capabilities', 'environments', 'runtime', 'apps']),
+};
+
+const allowedRuntimeSubdomains = new Set([
+  'approvals',
+  'collaboration',
+  'definitions',
+  'events',
+  'exchange',
+  'execution',
+  'planning',
+  'recovery',
+  'runs',
+  'scheduling',
+]);
+
+for (const file of sourceFiles) {
+  const relativeParts = path.relative(srcRoot, file).split(path.sep);
+  if (relativeParts[0] !== 'modules' || relativeParts[1] !== 'agent' || relativeParts[2] !== 'runtime') continue;
+  if (relativeParts.length < 5) {
+    failures.push(
+      `${path.relative(srcRoot, file).split(path.sep).join('/')}: Agent runtime implementation must live in an explicit runtime subdomain`,
+    );
+    continue;
+  }
+  if (!allowedRuntimeSubdomains.has(relativeParts[3])) {
+    failures.push(`${relative(file)}: unknown Agent runtime subdomain ${relativeParts[3]}`);
+  }
+}
+
 function resolveLocalImport(fromFile, specifier) {
   if (!specifier.startsWith('.')) return null;
   const base = path.resolve(path.dirname(fromFile), specifier);
@@ -60,6 +106,21 @@ for (const file of sourceFiles) {
     if (target) {
       graph.get(path.normalize(file)).push(target);
       const targetLayer = layerOf(target);
+      const fromAgentArea = agentAreaOf(file);
+      const targetAgentArea = agentAreaOf(target);
+      if (fromAgentArea && targetAgentArea) {
+        const allowedAreas = allowedAgentAreas[fromAgentArea];
+        const publicContractTypeImport =
+          relativeFile === 'modules/agent/public.ts' &&
+          (targetAgentArea === 'ai' || targetAgentArea === 'runtime' || targetAgentArea === 'environments') &&
+          isTypeOnlyImport &&
+          /(?:\.port|\.types)$/.test(specifier);
+        if (!allowedAreas?.has(targetAgentArea) && !publicContractTypeImport) {
+          failures.push(
+            `${relativeFile}: forbidden Agent ${fromAgentArea} -> ${targetAgentArea} dependency (${specifier})`,
+          );
+        }
+      }
       const fromModule = moduleOf(file);
       const targetModule = moduleOf(target);
       if (fromModule && targetModule && fromModule !== targetModule) {
