@@ -125,6 +125,51 @@ test('registered copy progress hides and cancels through the shared Progress Dis
   }
 });
 
+test('completed upload row has no per-item hide placeholder before automatic cleanup', async ({ page, context }) => {
+  await openFileManager(page, context);
+  const filename = 'progress-completed-row.bin';
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=60`, { method: 'POST' });
+
+  try {
+    await dragLocalFile(page, filename, 1024 * 1024, 0x4d);
+    const center = visibleProgressCenter(page);
+    const task = visibleProgressTask(page, filename);
+    await expect(center).toBeVisible({ timeout: 10_000 });
+    await expect(task).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
+    await expect(task).not.toContainText('—');
+    await expect(center).toBeHidden({ timeout: 4_000 });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+});
+
+test('successful hidden upload auto-cleans its completed task from Progress Display', async ({ page, context }) => {
+  await openFileManager(page, context);
+  const filename = 'progress-auto-clean-upload.bin';
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=80`, { method: 'POST' });
+
+  try {
+    await dragLocalFile(page, filename, 2 * 1024 * 1024, 0x5a);
+    const center = visibleProgressCenter(page);
+    await expect(center).toBeVisible({ timeout: 10_000 });
+    await hideVisibleProgressCenter(page);
+
+    const display = await openProgressDisplay(page);
+    const hidden = hiddenTask(display, filename);
+    await expect(hidden).toBeVisible();
+    await expect(hidden).toContainText('Completed', { timeout: 15_000 });
+    await expect(hidden).toBeHidden({ timeout: 4_000 });
+    await expect(display.getByTestId('progress-display-empty')).toBeVisible();
+
+    await closeProgressDisplay(display);
+    await reopenConnectedFileManager(page);
+    await refreshFileManager(page);
+    await expect(row(page, filename)).toBeVisible({ timeout: 10_000 });
+  } finally {
+    await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
+  }
+});
+
 test('successful pasted copy auto-cleans its completed task and closes the floating progress window', async ({
   page,
   context,

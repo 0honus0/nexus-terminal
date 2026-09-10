@@ -44,27 +44,30 @@ const collectEntry = async (
  */
 const snapshotDroppedItems = (dataTransfer: DataTransfer): DroppedItemSnapshot[] => {
   const snapshots: DroppedItemSnapshot[] = [];
-  const representedRootFiles = new Set<string>();
+  const representedRootEntries = new Set<string>();
 
   for (const item of Array.from(dataTransfer.items)) {
     if (item.kind !== 'file') continue;
     const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
     if (entry) {
       snapshots.push({ entry });
-      if (entry.isFile) representedRootFiles.add(entry.name);
+      representedRootEntries.add(entry.name);
       continue;
     }
     const file = item.getAsFile();
     if (file) {
       snapshots.push({ file });
-      representedRootFiles.add(file.name);
+      representedRootEntries.add(file.name);
     }
   }
 
+  // Chromium can expose a dragged directory both as a FileSystemDirectoryEntry and as a
+  // zero-byte File in DataTransfer.files. Treat every top-level entry name (file or directory)
+  // as represented so that fallback enumeration never uploads the directory itself as a file.
   for (const file of Array.from(dataTransfer.files)) {
-    if (representedRootFiles.has(file.name)) continue;
+    if (representedRootEntries.has(file.name)) continue;
     snapshots.push({ file });
-    representedRootFiles.add(file.name);
+    representedRootEntries.add(file.name);
   }
   return snapshots;
 };
@@ -77,5 +80,5 @@ export const collectDroppedLocalFiles = async (dataTransfer: DataTransfer): Prom
     if (snapshot.entry) await collectEntry(snapshot.entry, '', files, directories);
     else if (snapshot.file) files.push({ file: snapshot.file });
   }
-  return { files, directories };
+  return { files, directories: [...new Set(directories)] };
 };

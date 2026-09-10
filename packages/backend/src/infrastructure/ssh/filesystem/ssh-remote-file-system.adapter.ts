@@ -172,9 +172,18 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
       await callVoid((callback) => channel.ext_openssh_rename(sourcePath, destinationPath, callback));
       return;
     } catch (atomicRenameError) {
-      if (!(await this.exists(destinationPath))) {
+      let destinationMetadata: RemoteFileMetadata | null = null;
+      try {
+        destinationMetadata = await this.metadata(destinationPath);
+      } catch (error) {
+        if (!isRemoteFileMissingError(error)) throw error;
+      }
+      if (!destinationMetadata) {
         await this.rename(sourcePath, destinationPath);
         return;
+      }
+      if (destinationMetadata.isDirectory) {
+        throw new Error(`Refusing to replace remote directory with a file: ${destinationPath}`);
       }
 
       const backupPath = `${sourcePath}.previous`;

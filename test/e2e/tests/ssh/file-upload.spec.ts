@@ -61,6 +61,90 @@ async function dragLocalFiles(page: Page, files: DragFileDescriptor[]): Promise<
   }
 }
 
+async function dragLocalFolder(
+  page: Page,
+  folderName: string,
+  files: Array<{ name: string; text: string }>,
+): Promise<void> {
+  const dataTransfer = await page.evaluateHandle(
+    ({ rootName, entries }) => {
+      const transfer = new DataTransfer();
+      const children = entries.map(({ name, text }) => {
+        const file = new File([text], name, { type: 'text/plain' });
+        return {
+          isFile: true,
+          isDirectory: false,
+          name,
+          fullPath: `/${rootName}/${name}`,
+          file: (resolve: (value: File) => void) => resolve(file),
+        };
+      });
+      const directoryEntry = {
+        isFile: false,
+        isDirectory: true,
+        name: rootName,
+        fullPath: `/${rootName}`,
+        createReader: () => {
+          let emitted = false;
+          return {
+            readEntries: (resolve: (value: typeof children) => void) => {
+              if (emitted) resolve([]);
+              else {
+                emitted = true;
+                resolve(children);
+              }
+            },
+          };
+        },
+      };
+
+      // Chromium can expose a directory both through webkitGetAsEntry() and as a
+      // zero-byte File fallback. Patch the prototype for this synthetic drop because
+      // DataTransferItem is a browser host object and an own-property override on one
+      // item does not survive DragEvent dispatch reliably.
+      const prototype = DataTransferItem.prototype;
+      const originalDescriptor = Object.getOwnPropertyDescriptor(prototype, 'webkitGetAsEntry');
+      const original = prototype.webkitGetAsEntry;
+      Object.defineProperty(prototype, 'webkitGetAsEntry', {
+        configurable: true,
+        writable: true,
+        value(this: DataTransferItem) {
+          const file = this.getAsFile();
+          if (file?.name === rootName) return directoryEntry;
+          return typeof original === 'function' ? original.call(this) : null;
+        },
+      });
+      (window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry = () => {
+        if (originalDescriptor) Object.defineProperty(prototype, 'webkitGetAsEntry', originalDescriptor);
+        else delete (prototype as unknown as { webkitGetAsEntry?: unknown }).webkitGetAsEntry;
+        delete (window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry;
+      };
+
+      // Keep the fallback File in DataTransfer.files so this test catches duplicate
+      // root-directory handling while webkitGetAsEntry() remains authoritative.
+      transfer.items.add(new File([], rootName, { type: 'application/x-directory' }));
+      return transfer;
+    },
+    { rootName: folderName, entries: files },
+  );
+
+  try {
+    const list = activeFileManagerList(page);
+    await list.dispatchEvent('dragenter', { dataTransfer });
+    const overlay = page.getByTestId('file-upload-drop-overlay');
+    await expect(overlay).toBeVisible();
+    await overlay.dispatchEvent('drop', { dataTransfer });
+    await expect(overlay).toBeHidden();
+  } finally {
+    await page
+      .evaluate(() => {
+        (window as unknown as { __restoreFolderDropEntry?: () => void }).__restoreFolderDropEntry?.();
+      })
+      .catch(() => undefined);
+    await dataTransfer.dispose();
+  }
+}
+
 async function waitForVisibleFiles(page: Page, names: string[], timeout = 45_000): Promise<void> {
   await expect
     .poll(
@@ -224,6 +308,46 @@ test('Windows-style multi-file drag uploads every file and applies one conflict 
       await expect.poll(() => readRemoteText(page, nonConflictName)).toBe('new-file-still-uploads\n');
     },
   );
+});
+
+test('folder upload into an existing directory overwrites only conflicting files and preserves the directory', async ({
+  page,
+  context,
+}) => {
+  await openFileManager(page, context);
+  const folderName = 'folder-overwrite-existing';
+  const replacement = 'replacement-from-folder-upload\n';
+  const fresh = 'new-file-from-folder-upload\n';
+  const fixture = await fetch(
+    `${E2E_SSH.controlUrl}/fixture-directory?name=${encodeURIComponent(folderName)}&size=4096`,
+    {
+      method: 'POST',
+    },
+  );
+  expect(fixture.ok).toBeTruthy();
+  await page.getByTestId('file-manager-modal').getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(fileManagerRow(page, folderName)).toBeVisible();
+
+  await dragLocalFolder(page, folderName, [
+    { name: '01-first.bin', text: replacement },
+    { name: 'new-from-local.txt', text: fresh },
+  ]);
+
+  const conflictModal = page.getByRole('dialog', { name: 'File already exists', exact: true });
+  await expect(conflictModal).toBeVisible({ timeout: 20_000 });
+  await expect(conflictModal.getByTestId('upload-conflict-filename')).toHaveText('01-first.bin');
+  await conflictModal
+    .getByRole('checkbox', { name: 'Use this choice for all remaining conflicts in this upload', exact: true })
+    .check();
+  await conflictModal.getByRole('button', { name: 'Overwrite', exact: true }).click();
+  await expect(conflictModal).toBeHidden();
+
+  await expect(fileManagerRow(page, folderName)).toBeVisible({ timeout: 30_000 });
+  await expect(fileManagerRow(page, folderName).locator('td.file-row-type .fa-folder').first()).toBeVisible();
+  await fileManagerRow(page, folderName).dblclick();
+  await expect(fileManagerRow(page, 'new-from-local.txt')).toBeVisible({ timeout: 30_000 });
+  await expect.poll(() => readRemoteText(page, '01-first.bin'), { timeout: 30_000 }).toBe(replacement);
+  await expect.poll(() => readRemoteText(page, 'new-from-local.txt'), { timeout: 30_000 }).toBe(fresh);
 });
 
 test('multi-file upload remains usable and byte-complete on moderate-latency links', async ({ page, context }) => {
@@ -656,6 +780,12 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
 
     const progressPopup = visibleProgressCenter(page);
     await expect(progressPopup).toBeVisible({ timeout: 10_000 });
+    const progressBox = await progressPopup.boundingBox();
+    expect(progressBox).toBeTruthy();
+    expect(progressBox!.x).toBeGreaterThanOrEqual(0);
+    expect(progressBox!.y).toBeGreaterThanOrEqual(0);
+    expect(progressBox!.x + progressBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
+    expect(progressBox!.y + progressBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
     const task = uploadProgressTask(page, filename);
     await expect(task).toBeVisible({ timeout: 10_000 });
     const readStatus = async (): Promise<string | null> => {
@@ -677,7 +807,7 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
     expect(await downloadRemoteFile(page, filename)).toEqual(payload);
 
     const afterMetrics = await fileManagerMetrics(page);
-    const progressBox = await progressPopup.boundingBox();
+    await expect(progressPopup).toBeHidden({ timeout: 4_000 });
     await page.screenshot({ path: path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-after-upload.png') });
     expect(afterMetrics.scrollWidth).toBeLessThanOrEqual(afterMetrics.clientWidth + 1);
     expect(beforeMetrics.scrollWidth).toBeLessThanOrEqual(beforeMetrics.clientWidth + 1);
@@ -685,11 +815,6 @@ test('file picker uploads a delayed file into a remote directory and refreshes t
     expect(modalBox!.y).toBeGreaterThanOrEqual(0);
     expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
     expect(modalBox!.y + modalBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
-    expect(progressBox).toBeTruthy();
-    expect(progressBox!.x).toBeGreaterThanOrEqual(0);
-    expect(progressBox!.y).toBeGreaterThanOrEqual(0);
-    expect(progressBox!.x + progressBox!.width).toBeLessThanOrEqual(viewport!.width + 1);
-    expect(progressBox!.y + progressBox!.height).toBeLessThanOrEqual(viewport!.height + 1);
     await writeFile(
       path.join(M11_03E_EVIDENCE_DIR, 'm11-03e-metrics.json'),
       JSON.stringify(

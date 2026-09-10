@@ -10,6 +10,7 @@ import type {
 } from '../model/transfer';
 
 type ConflictStrategy = 'overwrite' | 'skip';
+const TERMINAL_TASK_CLEANUP_DELAY_MS = 800;
 interface UploadConflict {
   id: string;
   path: string;
@@ -60,13 +61,13 @@ export function createTransferController(channel: TransferChannel) {
     const index = tasks.value.findIndex((task) => task.id === id);
     if (index >= 0) tasks.value.splice(index, 1);
   };
-  const scheduleSuccessfulCopyMoveCleanup = (task: TransferTask): void => {
-    if (task.status !== 'completed' || (task.kind !== 'copy' && task.kind !== 'move')) return;
+  const scheduleTerminalCleanup = (task: TransferTask): void => {
+    if (!['completed', 'skipped', 'cancelled'].includes(task.status)) return;
     const existing = completionCleanupTimers.get(task.id);
     if (existing !== undefined) window.clearTimeout(existing);
     completionCleanupTimers.set(
       task.id,
-      window.setTimeout(() => remove(task.id), 800),
+      window.setTimeout(() => remove(task.id), TERMINAL_TASK_CLEANUP_DELAY_MS),
     );
   };
   const failTask = (id: string, cause: unknown): void => {
@@ -185,7 +186,7 @@ export function createTransferController(channel: TransferChannel) {
 
     if (isDone(task.status) && task.kind === 'upload') cleanupUpload(task.id);
     settleTask(task);
-    scheduleSuccessfulCopyMoveCleanup(task);
+    scheduleTerminalCleanup(task);
   });
 
   const active = computed(() => tasks.value.filter((task) => !isDone(task.status)));
@@ -322,6 +323,7 @@ export function createTransferController(channel: TransferChannel) {
       task.status = 'cancelled';
       cleanupUpload(task.id);
       settleTask(task);
+      scheduleTerminalCleanup(task);
     } else if (!accepted && task.status === 'cancelling') {
       task.status = previousStatus;
     }
