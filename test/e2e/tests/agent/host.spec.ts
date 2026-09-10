@@ -18,6 +18,22 @@ type AppSummary = {
   pendingBudgetRequests: number;
 };
 
+test('Agent launcher stays passive until the user explicitly opens the Hub', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+
+  await page.goto('/connections');
+
+  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(launcher).toBeVisible();
+  await expect(hub).toHaveCount(0);
+
+  await page.getByTestId('connections-add-button').click({ trial: true });
+
+  await launcher.click();
+  await expect(hub).toBeVisible();
+});
+
 const csrfToken = async (request: import('@playwright/test').APIRequestContext): Promise<string> => {
   const response = await request.get('/api/v1/agent/security/csrf');
   expect(response.ok(), await response.text()).toBeTruthy();

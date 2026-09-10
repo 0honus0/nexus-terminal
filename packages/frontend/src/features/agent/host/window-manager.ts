@@ -87,7 +87,6 @@ export const agentWindowManager = {
     state.activeAppId = input.appId;
     rememberApp(input.appId);
     state.hubView = 'conversation';
-    if (state.status === 'closed' || state.status === 'minimized') state.status = 'visible';
   },
   setHubView(view: 'conversation' | 'files'): void {
     state.hubView = view;
