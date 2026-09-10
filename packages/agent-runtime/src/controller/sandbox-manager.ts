@@ -124,19 +124,16 @@ export class SandboxManager {
     if (!Number.isSafeInteger(generation) || generation < 1) throw new Error('VALIDATION_FAILED');
     const root = this.environmentRoot(environmentId, generation);
     if (fs.existsSync(root)) throw new Error('ENVIRONMENT_GENERATION_CONFLICT');
+    fs.mkdirSync(path.join(root, '.control'), { recursive: true, mode: 0o700 });
 
-    for (const relative of [
-      'core/workspace/work',
-      'core/workspace/deps',
-      'core/workspace/build',
-      'core/workspace/browser',
-      'core/workspace/jobs',
-      'core/workspace/tmp',
-      'plugins',
-      '.control',
-    ]) {
-      fs.mkdirSync(path.join(root, relative), { recursive: true, mode: 0o700 });
+    // Workspace data is stable across Environment generations. A generation is a
+    // runtime/profile boundary (for example after switching Node/Python/Go versions),
+    // not a second copy of the project filesystem.
+    const workspace = this.coreWorkspaceRoot(environmentId);
+    for (const relative of ['work', 'deps', 'build', 'browser', 'jobs', 'tmp']) {
+      fs.mkdirSync(path.join(workspace, relative), { recursive: true, mode: 0o700 });
     }
+    fs.mkdirSync(path.join(this.workspaceRoot(environmentId), '.control'), { recursive: true, mode: 0o700 });
     const metadata: SandboxMetadata = {
       environmentId,
       generation,
@@ -186,7 +183,7 @@ export class SandboxManager {
     if (metadata.environmentId !== request.environmentId || metadata.generation !== request.generation) {
       throw new Error('ENVIRONMENT_IDENTITY_MISMATCH');
     }
-    const workspace = path.join(root, 'core', 'workspace');
+    const workspace = this.coreWorkspaceRoot(metadata.environmentId);
     const logicalCwd = this.logicalCwd(request.cwd);
     const packBindings: string[] = [];
     const packBins: string[] = [];
@@ -247,6 +244,14 @@ export class SandboxManager {
 
   environmentRoot(environmentId: string, generation: number): string {
     return path.join(this.runtimeRoot, 'environments', safeSegment(environmentId), String(generation));
+  }
+
+  workspaceRoot(environmentId: string): string {
+    return path.join(this.runtimeRoot, 'workspaces', safeSegment(environmentId));
+  }
+
+  coreWorkspaceRoot(environmentId: string): string {
+    return path.join(this.workspaceRoot(environmentId), 'core', 'workspace');
   }
 
   private isolationArguments(workspace: string): string[] {

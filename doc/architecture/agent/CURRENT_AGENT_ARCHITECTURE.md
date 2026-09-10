@@ -277,33 +277,35 @@ interface PluginBackendSdk {
 
 后续扩展 `artifacts / ai / runs / events / settings / machine / intents` 时必须新增 typed SDK/Host IPC，不允许通用字符串 dispatcher 或直接传 Backend object。
 
-## 8. Runner 与 Environment
+## 8. Runner 与 Workspace Dev Environment
 
-`nexus-agent-runner` 本身是一个顶层部署容器，但内部：
+`nexus-agent-runner` 的 canonical Linux 部署是专用 host service，不再是需要 `SYS_ADMIN/NET_ADMIN` 的顶层 Runner 容器：
 
 ```text
 /var/run/docker.sock                 ❌
 /run/nexus-agent-runner/docker.sock ❌
 nested dockerd                       ❌
 dockerode                            ❌
-Environment child Docker             ❌
+Workspace/Environment child Docker  ❌
 Plugin child Docker                  ❌
+privileged Runner container          ❌
 ```
 
-Runner 是受限执行服务，不是 Docker orchestrator。
-
-Environment 定义为 Runner 内部执行环境：
+Runner 是受限执行服务，不是 Docker orchestrator。一个 Workspace 是稳定的项目/文件系统边界；Environment 是该 Workspace 的运行 profile/generation，而不是语言类型：
 
 ```text
-Environment A
+Workspace A
+├─ stable project files
+├─ Environment generation -> node22 + python3.12 + go1.23
 ├─ Core Task Sandbox
 ├─ plugin1 Runner Sandbox
 └─ plugin2 Runner Sandbox
+
+Workspace B
+└─ Environment generation -> node18 + python3.10
 ```
 
-Environment 由 Runner Sandbox Manager 管理。当前 Linux 实现以 bubblewrap 为基础，目标包括 process/filesystem/network namespace 隔离、独立 process tree、最小环境变量、只读 Pack 等。
-
-不能仅靠 `cwd`、Node `vm` 或 `worker_threads` 宣称 hostile-code 安全隔离。
+Tool Store 按 `family/version/digest/arch` 允许多版本并存。Workspace 切换 Node/Python/Go 版本只重建自己的 Environment generation，重新解析 PATH/只读 Tool Pack，同时继续 bind 同一 Workspace 文件；不得修改全局 `/usr/bin` 或影响其他 Workspace。Environment 由 Runner Sandbox Manager 管理；当前 Linux 实现以 bubblewrap 为基础，目标包括 process/filesystem/network namespace 隔离、独立 process tree、最小环境变量、只读 Tool Pack 等。不能仅靠 `cwd`、Node `vm` 或 `worker_threads` 宣称 hostile-code 安全隔离。
 
 ## 9. Runner Plugin 显式选择
 

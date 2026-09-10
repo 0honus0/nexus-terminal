@@ -143,17 +143,21 @@ packages/frontend/src/features/agent/
 
 Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/apps/operations/public` 子域依赖，并继续禁止 feature 反向依赖 Workspace runtime。
 
-## 5. Runner / Environment
+## 5. Runner / Workspace Dev Environment
 
-`nexus-agent-runner` 是独立受限执行平面，但**不是 Docker controller**。当前正式边界：
+`nexus-agent-runner` 是独立受限执行平面，但**不是 Docker controller**。当前正式方向已经收敛为 Workspace Dev Environment，而不是按 Node/Python/Go 分裂多个 Environment：
 
-- Runner、Backend、Environment work sandbox、Plugin sandbox 都不持 host Docker socket；
-- Runner 不启动 dockerd、不使用 nested Docker、不为每个 Environment 创建子容器；
-- Environment 是 Runner 内部 Sandbox Manager 的生命周期边界；当前 Linux 隔离依赖 fail-closed sandbox primitive（实现为 bubblewrap 路径），不可用时 Environment availability degraded/unavailable，不退化成裸进程；
-- Pack 是 immutable/versioned toolchain；Environment 通过 Recipe + 精确 Pack ref 冻结依赖；
-- Runner Plugin 按 Environment 显式选择并冻结 `{pluginId, version, sdkVersion, protocolVersion, packageHash, entry}`；历史 Environment 不根据当前安装状态自动升级协议。
+- 一个 Workspace 是稳定的项目/代码/文件系统边界；Node、Python、Go 等只是该 Workspace 的工具链选择，共享同一份 Workspace 文件；
+- Environment 是 Workspace 的**运行配置与 generation**，用于冻结工具版本、Runner Plugin、资源/网络策略并承载 runtime session，不再代表某一种语言；
+- 全局 Tool Store 以 `familyId/versionId/contentDigest`（digest 按 arch 解析） 保存不可变工具版本，同 family 多版本可并存；不同 Workspace 可以同时选择不同 Node/Python/Go 版本；
+- Workspace 切换工具版本时只创建/重启该 Workspace 的新 Environment generation，并重新解析该 generation 的 PATH/只读工具挂载；不修改全局 `/usr/bin`，不影响其他 Workspace，项目文件也不随 generation 复制或丢失；
+- Agent、Plugin、CI/task 以及后续接入的 Terminal runtime 都从当前 Workspace Environment 解析工具；Rust/JDK/CUDA 等后续工具继续扩展同一 Tool 模型，不新增语言专用 Environment 类型；
+- 当前 Linux sandbox 仍 fail closed，使用 bubblewrap 隔离 process/filesystem/PID/IPC/UTS/network；sandbox primitive 不可用时 Environment availability degraded/unavailable，不退化成 Runner Core/Backend 裸进程执行；
+- Runner、Backend、Workspace sandbox、Plugin sandbox 都不持 host Docker socket，Runner 不启动 dockerd、不使用 nested Docker、Plugin 不创建额外 Docker；
+- canonical Linux 部署将 Runner 作为专用 host service，使 bubblewrap 的 namespace/mount construction 不需要放宽长期运行的 Docker Runner 容器；Backend 通过受认证 Controller HTTP 到达它；
+- Runner Plugin 按 Workspace Environment generation 显式选择并冻结 `{pluginId, version, sdkVersion, protocolVersion, packageHash, entry}`，历史 generation 不根据当前安装状态自动升级协议。
 
-真实远端 Docker 操作仍属于 Nexus Backend 的 `machine.docker.*` capability，与 Runner sandbox 基础设施无关。
+现有 Browser ↔ Nexus Workspace 的 `NXW1`、`/ws/uploads`、Runner Plugin `NXR2` 与 Backend ↔ Runner HTTP 仍是四条独立 transport contract；Workspace 产品模型的统一不意味着合并 wire protocol。真实远端 Docker 操作仍属于 Nexus Backend 的 `machine.docker.*` capability，与 Runner sandbox 基础设施无关。
 
 ## 6. Plugin 三目标与隔离
 
@@ -186,8 +190,11 @@ Runner Plugin 不直接 bind 真实 workspace，必须经 Workspace Broker + Hos
 Nexus Workspace remote filesystem
 = 用户 SSH 会话的远程 mutable data
 
-Runner Plugin Workspace
-= Environment 生命周期内 mutable working data
+Runner Workspace Dev Environment filesystem
+= Workspace 生命周期内稳定 mutable project data；Environment generation 只切换运行配置/工具版本，不复制该数据
+
+Runner Plugin logical Workspace
+= 同一 Workspace 内的 Plugin scoped mutable data；跨 Plugin 默认 deny
 
 Artifact
 = durable file/result/evidence

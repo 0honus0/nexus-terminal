@@ -32,6 +32,7 @@ export class CleanupPlanner {
       try {
         if (env.sandboxId) await this.sandboxEngine.remove(env.sandboxId);
         fs.rmSync(path.join(this.root, 'runtime', 'environments', env.environmentId), { recursive: true, force: true });
+        fs.rmSync(path.join(this.root, 'runtime', 'workspaces', env.environmentId), { recursive: true, force: true });
         this.journal.deleteEnvironment(env.environmentId);
         deleted.push(env.environmentId);
       } catch (error) {

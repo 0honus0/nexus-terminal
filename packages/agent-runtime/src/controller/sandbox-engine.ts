@@ -93,9 +93,8 @@ export class SandboxEngine {
   }
 
   runtimeBytes(environmentId: string, generation: number): number {
-    const root = this.sandbox.environmentRoot(environmentId, generation);
     let total = 0;
-    const stack = [root];
+    const stack = [this.sandbox.environmentRoot(environmentId, generation), this.sandbox.workspaceRoot(environmentId)];
     while (stack.length) {
       const current = stack.pop()!;
       let entries: fs.Dirent[];

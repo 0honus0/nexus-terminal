@@ -59,7 +59,8 @@ const main = async (): Promise<void> => {
     pluginRunner,
   }).createServer();
   const port = Number(process.env.PORT || 8790);
-  server.listen(port, '0.0.0.0', () => console.log(`[nexus-agent-runner] controller listening on ${port}`));
+  const host = process.env.NEXUS_AGENT_RUNNER_HOST?.trim() || '127.0.0.1';
+  server.listen(port, host, () => console.log(`[nexus-agent-runner] controller listening on ${host}:${port}`));
 };
 
 void main().catch((error) => {

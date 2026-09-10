@@ -147,9 +147,9 @@ Concrete adapters：packages/backend/src/infrastructure/agent/ 下 repositories/
 | Frontend src/features/auth/public.ts                                                       | AgentSurfaceHost 只通过现有 public `useAuthSession` 读取认证状态；Agent 不创建第二套 auth/session store                                                             |
 | Frontend scripts/check-architecture.mjs                                                    | 保持 feature/public 边界和依赖环检查；Agent 新模块继续受同一生产架构门禁                                                                                            |
 | Frontend nginx.conf                                                                        | §7具体Agent prefix location覆盖较宽的^~ /api/；Artifact upload单独body上限，不放大全局                                                                              |
-| 根build.sh、Dockerfile、.github/workflows/publish-ghcr.yml                                 | 二期增加可选nexus-agent-runner服务镜像；Runner不挂Docker socket/不运行nested Docker；sandbox runtimeDigest/Pack manifest                                            |
-| docker-compose.yml                                                                         | 二期新增可选 `nexus-agent-runner` 服务/profile；Plugin Frontend origin 复用 frontend 主容器第二 listener，不新增 Plugin 服务                                        |
-| test/e2e组配置、.github/workflows/e2e.yml                                                  | 注册真实产品spec及Environment Recipe/Pack smoke；不增加unit suite                                                                                                   |
+| 根build.sh、Dockerfile、.github/workflows/publish-ghcr.yml                                 | 应用镜像继续不含 host Docker 控制；Agent Runner 以 host runtime 构建/发布，Tool Pack 保持 digest/version manifest                                                   |
+| docker-compose.yml                                                                         | Backend 通过 host-gateway + Controller token 访问 host `nexus-agent-runner`；不创建高权限 Runner Compose 服务；Plugin Frontend origin 仍复用 frontend 第二 listener |
+| test/e2e组配置、.github/workflows/e2e.yml                                                  | 注册真实产品 spec；部署 smoke 在 GitHub Actions host 启动 Runner/bubblewrap，并验证 Workspace generation 重建后稳定文件仍存在                                       |
 
 ### 1.3 import/public约束与生产构建
 
@@ -1031,13 +1031,13 @@ localStorage key=nexus.agent.surface.v1.user.<userId>；数据schema={schemaVers
 
 <a id="i9"></a>
 
-## 9. EnvironmentController、Runner Sandbox 与多环境控制（Phase 2）
+## 9. Workspace Dev Environment、Runner Sandbox 与多版本工具控制（Phase 2）
 
 ### 9.0 服务角色与持续管理
 
-P2 只新增可选的 `nexus-agent-runner` 主服务。Runner 可以由宿主 Docker 启动，但其内部实现明确禁止依赖宿主 Docker：**不挂 `/var/run/docker.sock`，不运行 dockerd，不使用 dockerode，不为 Environment、临时 job 或 Plugin 创建子容器**。Runner 内部由 Controller + Sandbox Manager + Pack installer + Toolchain Store + job protocol + cleanup/reconcile + quota + space reporter 完成执行环境管理。
+P2 增加可选的 `nexus-agent-runner` 主服务，但 canonical Linux 部署改为专用 **host service**：**不挂 `/var/run/docker.sock`，不运行 dockerd，不使用 dockerode，不为 Workspace Environment、临时 job 或 Plugin 创建子容器**。Runner 内部由 Controller + Sandbox Manager + Pack installer + Toolchain Store + job protocol + cleanup/reconcile + quota + space reporter 完成 Workspace Dev Environment 管理。
 
-当前 Docker Compose `agent` profile 只向顶层 Runner 容器增加 `SYS_ADMIN + NET_ADMIN`：`SYS_ADMIN` 用于 Docker security profile 下的 namespace/mount sandbox construction，`NET_ADMIN` 只用于初始化新 network namespace 的 loopback；不使用 `privileged`，Backend 不获得这些 capability。`SandboxManager` 的真实 job 与 availability probe 共用同一 isolation argument builder，bubblewrap payload 在进入 Environment/Runner Plugin 前显式 `--cap-drop ALL`。因此“bwrap binary 存在”不再等价于 Runner 可用：sandbox probe 失败时 `/v1/availability` 必须返回 degraded + 稳定 `sandbox_*` reason，不能回退为裸 Node child process。
+先前把 Runner 放进 Compose 并追加 `SYS_ADMIN + NET_ADMIN` 的实验已经证明会继续撞到 Docker 默认 AppArmor 的 mount propagation 边界（`bwrap: Failed to make / slave: Permission denied`）。正式方案不继续堆叠 capability，也不使用 `privileged` / `apparmor=unconfined` 放宽整个 Runner。`SandboxManager` 的真实 job 与 availability probe 仍共用同一 isolation argument builder，bubblewrap payload 显式 `--cap-drop ALL`；sandbox probe 失败时 `/v1/availability` 返回 degraded + 稳定 `sandbox_*` reason，不能回退为裸 Node child process。Backend 容器仅通过 host-gateway + Controller token 访问 host Runner。
 
 当前部署关系为：
 
@@ -1049,10 +1049,15 @@ frontend container
 backend container
 ├─ Nexus Backend Core
 └─ Backend Plugin process sandboxes
+       │
+       └─ authenticated Controller HTTP via host-gateway
 
-nexus-agent-runner container
+nexus-agent-runner host service
 ├─ Runner Core / Controller
-└─ Environment N
+├─ immutable multi-version Tool Store
+└─ Workspace N
+   ├─ stable project filesystem
+   ├─ Environment generation / pinned tool profile
    ├─ core/task sandbox
    ├─ explicit Runner Plugin sandbox(es)
    └─ per-plugin logical workspaces
@@ -1066,21 +1071,21 @@ Frontend 的 `EnvironmentSettings.vue` 仍是长期 Environment Manager。页面
 
 `packages/agent-runtime/` 的 Controller 关键文件固定为：
 
-| 文件                                                  | 职责                                                                                   |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `controller/sandbox-engine.ts`                        | Environment sandbox/job 生命周期 facade，不提供 Docker 方法                            |
-| `controller/sandbox-manager.ts`                       | Linux sandbox filesystem/process/network namespace 组装                                |
-| `controller/plugin-runner-runtime.ts`                 | Environment 内显式 Runner Plugin target 生命周期                                       |
-| `plugin-ipc.ts`                                       | Runner protocol v2 framing；bounded JSON control + raw binary frame，不使用 Base64 IPC |
-| `controller/workspace-broker.ts`                      | target workspace ACL、路径校验、同一底层文件访问；Host stream handle/原子写            |
-| `controller/environment-catalog.ts`                   | Recipe、Pack、`runtimeDigest` 读取/校验                                                |
-| `controller/pack-installer.ts` / `toolchain-store.ts` | Pack 下载、校验、原子只读安装与多版本 inventory                                        |
-| `controller/journal.ts` / `reconciler.ts`             | command/job/environment durable 对账与重启恢复                                         |
-| `controller/cleanup-planner.ts` / `space-reporter.ts` | runtime/cache cleanup 与分类计量                                                       |
-| `controller/quota-manager.ts`                         | Environment admission/resource policy                                                  |
-| `worker/plugin-runner-sandbox.worker.ts`              | Runner Plugin target 进程内入口，只暴露 RunnerPluginSdk                                |
+| 文件                                                  | 职责                                                                                       |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `controller/sandbox-engine.ts`                        | Workspace Environment generation/job 生命周期 facade，不提供 Docker 方法                   |
+| `controller/sandbox-manager.ts`                       | Linux sandbox filesystem/process/network namespace 组装；稳定 Workspace 与 generation 分离 |
+| `controller/plugin-runner-runtime.ts`                 | Workspace Environment generation 内显式 Runner Plugin target 生命周期                      |
+| `plugin-ipc.ts`                                       | Runner protocol v2 framing；bounded JSON control + raw binary frame，不使用 Base64 IPC     |
+| `controller/workspace-broker.ts`                      | stable target workspace ACL、路径校验、同一底层文件访问；Host stream handle/原子写         |
+| `controller/environment-catalog.ts`                   | Workspace profile、Tool Pack、`runtimeDigest` 读取/校验                                    |
+| `controller/pack-installer.ts` / `toolchain-store.ts` | Tool Pack 下载、校验、原子只读安装与同 family 多版本 inventory                             |
+| `controller/journal.ts` / `reconciler.ts`             | command/job/environment durable 对账与重启恢复                                             |
+| `controller/cleanup-planner.ts` / `space-reporter.ts` | runtime/cache cleanup 与分类计量                                                           |
+| `controller/quota-manager.ts`                         | Environment admission/resource policy                                                      |
+| `worker/plugin-runner-sandbox.worker.ts`              | Runner Plugin target 进程内入口，只暴露 RunnerPluginSdk                                    |
 
-`scripts/docker/agent-runtime/Dockerfile` 只构建 Runner Controller runtime，并安装 Linux sandbox primitive（当前为 bubblewrap）。不构建任何 Environment/Plugin 子执行 image target。Catalog 源位于 `scripts/docker/agent-runtime/catalog/`；`runtimeDigest` 表示 Runner sandbox ABI/runtime 的版本事实，而不是 Docker image digest。Environment Pack 仍作为带 manifest/checksum 的 release/OCI artifact 发布，不使用 mutable latest 作为版本事实。
+`packages/agent-runtime` 构建 host Runner Controller；Linux host 必须提供受支持的 sandbox primitive（当前为 bubblewrap）。`scripts/docker/agent-runtime/Dockerfile` 不再是 canonical deployment path，不得借它恢复高权限 Runner-in-Docker 方案。Catalog 源暂位于 `scripts/docker/agent-runtime/catalog/`；`runtimeDigest` 表示 Runner sandbox ABI/runtime 的版本事实。Tool Pack 作为带 manifest/checksum 的 release/OCI artifact 发布，不使用 mutable latest 作为版本事实。
 
 Runner 内部路径：
 
@@ -1088,33 +1093,35 @@ Runner 内部路径：
 /var/lib/nexus-agent-runner/state/       durable journal/inventory
 /var/lib/nexus-agent-runner/packs/       durable immutable packs
 /var/lib/nexus-agent-runner/cache/       reclaimable downloads/staging
-/var/lib/nexus-agent-runner/runtime/     Environment/job/workspace lifecycle data
+/var/lib/nexus-agent-runner/runtime/     stable Workspace + Environment generation/job lifecycle data
 /var/lib/nexus-agent-runner/quarantine/  unresolved ownership/side-effect data
 /run/nexus-agent-runner/                 short-lived control-plane data only
 ```
 
-Environment 运行树：
+Workspace 数据与 Environment generation 运行树分离：
 
 ```text
-runtime/environments/<environmentId>/<generation>/
-  .control/
-    metadata.json
-    state
-    workspace-acl.json
-  core/workspace/
-    work/
-    deps/
-    build/
-    browser/
-    jobs/
-    tmp/
-  plugins/
-    <pluginId>/workspace/
+runtime/
+  workspaces/<workspaceId>/
+    .control/workspace-acl.json
+    core/workspace/
+      work/
+      deps/
+      build/
+      browser/
+      jobs/
+      tmp/
+    plugins/
+      <pluginId>/workspace/
+  environments/<workspaceId>/<generation>/
+    .control/
+      metadata.json
+      state
 ```
 
-`.control` 不进入任何 sandbox。Pack 只读；项目 npm/pip 等依赖进入 Environment runtime workspace/deps，不修改 Pack。Pack install key 为 `familyId/versionId/contentDigest/arch`；同 family 多版本可同时 installed/enabled/inUse。
+`.control` 不进入任何 sandbox。Tool Pack 只读；项目 npm/pip/go 等依赖进入稳定 Workspace 的 `deps`/项目目录，不修改 Tool Pack。Tool Store key 为 `familyId/versionId/contentDigest/arch`；同 family 多版本可同时 installed/enabled/inUse。不同 Workspace 冻结不同版本组合，切版本只替换目标 Workspace 的 Environment generation，不修改 `/usr/bin` 或其他 Workspace。
 
-Environment 在 Backend DB 冻结 `runtime_digest + recipe_id + recipe_revision + catalog_revision + pack_refs_json + runner_plugins_json`。`runner_plugins_json` 保存精确 `{pluginId,version,sdkVersion,protocolVersion,packageHash,entry}`，当前新建 Runner target 使用 `protocolVersion=2`；因此后续 start/restart 使用创建时事实，不根据“当前有哪些插件”或宿主当前 SDK/协议版本重新猜测。冻结为 protocol v1 的旧 Environment 不自动升级 wire contract，必须重建 Environment 后才能由 v2 Runner 激活。
+Environment generation 在 Backend DB 冻结 `runtime_digest + recipe_id + recipe_revision + catalog_revision + pack_refs_json + runner_plugins_json`。当前 `recipe_id=workspace-dev`；`kind=code` 暂作为兼容存储字段。`runner_plugins_json` 保存精确 `{pluginId,version,sdkVersion,protocolVersion,packageHash,entry}`，新建 Runner target 使用 `protocolVersion=2`；start/restart 使用该 generation 创建时事实，不根据当前安装状态重新猜测。工具版本或 Runner Plugin 版本变化都必须创建新 generation；旧 generation 不自动升级。
 
 ### 9.2 API、显式 Runner target 与 Workspace Grant
 
@@ -1207,9 +1214,9 @@ Backend 修改 ACL 前先确认 `userId + appId + environmentId` ownership，且
 
 ### 9.3 Sandbox、Plugin Runtime 与资源边界
 
-Environment core job 当前通过 `SandboxManager` 生成 bubblewrap 命令：新 PID/IPC/UTS/network namespace、最小只读 system runtime、独立 `/tmp`、只读精确 Pack、仅 bind 当前 Environment 的 `core/workspace`。Runner token/env 不进入 child。cwd 必须解析在 `/workspace` 内，禁止 `..`/symlink/跨 Environment 逃逸。
+Workspace Environment core job 当前通过 `SandboxManager` 生成 bubblewrap 命令：新 PID/IPC/UTS/network namespace、最小只读 system runtime、独立 `/tmp`、只读精确 Tool Pack，并把当前 Workspace 的稳定 `core/workspace` bind 为 `/workspace`。Runner token/env 不进入 child。cwd 必须解析在 `/workspace` 内，禁止 `..`/symlink/跨 Workspace 逃逸。
 
-Linux capability 只用于顶层 Runner 创建上述 namespace/mount；sandbox payload 显式 drop all capabilities。CI 的生产 Compose smoke 必须启用 `--profile agent`，从 Backend 网络路径使用真实 Controller token 检查 availability，并至少执行一次 `provision → start → Pack-bound sandbox job → delete`，否则不能把 Runner sandbox 部署标记为已验证。
+host Runner 负责上述 namespace/mount construction；sandbox payload 显式 drop all capabilities。CI 的部署 smoke 必须在 GitHub Actions Linux host 安装 bubblewrap、直接启动 host Runner，再从 Compose Backend 经 host-gateway + 真实 Controller token 检查 availability，并至少执行一次 `provision → start → Tool-bound sandbox job → delete generation → provision next generation → 验证稳定 Workspace 文件仍存在 → delete`。这样同时验证 sandbox 部署和 Workspace 切换工具版本所依赖的 generation/filesystem 分离；不能用 Runner-in-Docker `privileged`/unconfined 作为替代。
 
 Runner Plugin process 同样使用独立 bubblewrap sandbox：只读挂载自己的已验证 package 与 worker bootstrap，默认无网络，清空 env，**不 bind 真实 plugin workspace**。它只能经 local stdio IPC 使用。Runner protocol v2 不再使用 newline JSON + Base64 bytes，而使用 `plugin-ipc.ts` 的固定 16-byte header framing：`magic/type/reserved/requestId/payloadLength`；control payload 是最大 256 KiB 的 JSON frame，workspace read/write 数据是最大 16 MiB 的 raw binary frame，同一 `requestId` 做关联。未知 frame type、超长、截断、错 requestId 或版本不匹配均 fail closed：
 
@@ -1254,9 +1261,9 @@ type RunnerStorageView = {
 
 ### 9.4 Lifecycle、Cleanup 与恢复
 
-`provision`：验证 command → ensure Pack → 创建 Environment runtime/.control → 写 sandbox metadata → 为冻结 `runnerPlugins` 创建逻辑 workspace → journal ready。此流程不创建 Docker resource。
+`provision`：验证 command 与 Catalog 中的精确 Tool Pack `{familyId,versionId,contentDigest}` → ensure Tool Pack → 创建/复用稳定 Workspace tree → 创建新的 Environment generation `.control`/sandbox metadata → 冻结该 generation 的 `packRefs + runnerPlugins` → journal ready。此流程不创建 Docker resource，也不复制 Workspace 项目文件。
 
-`start`：core Environment 标 running，并为冻结 target 启动 Runner Plugin process sandbox；`stop`：先 quiesce/dispose Runner Plugin，再终止该 Environment 的活跃 job/process tree，保留 runtime/workspace；`restart`：终止旧 process 后重新启动并激活相同冻结 targets；`delete`：dispose 插件、停止 jobs、删除该 Environment runtime tree。AppStorage/Artifact 不随 Environment 删除。
+`start`：当前 generation 标 running，并为冻结 target 启动 Runner Plugin process sandbox；`stop`：先 quiesce/dispose Runner Plugin，再终止该 generation 的活跃 job/process tree，保留稳定 Workspace；`restart`：终止旧 process 后按同一 generation 的冻结 tool profile 重建 sandbox；工具版本切换必须创建下一 generation，新 session 使用新 PATH/只读 Tool Pack，旧 session 终止；`delete generation`：dispose 插件、停止 jobs、只删除该 generation runtime。稳定 Workspace 只由显式 Workspace/runtime cleanup 回收，AppStorage/Artifact 不随 generation 删除。
 
 `cleanup-planner.ts` 的“清运行残余”流程改为 freeze new env/jobs → inventory → quiesce/terminate owned process trees → reconcile unknown → remove owned runtime trees → revoke short-lived control data → release quota → compact terminal journal → second inventory。没有 container/network/volume cleanup。任何无法确认 ownership/side effect 的内容进入 `quarantine/` 并返回 partial/reconciliation 状态。
 
@@ -1510,9 +1517,9 @@ AppIntent 继续负责**跨 App**的小 JSON/ArtifactRef 交接；它与同一 E
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | DECISION-01 | 一期Host/UI/模型/只读；二期修改与Docker；三期协议/多Agent/安装式插件                                                                                                                                                                                                                                                                                                                                                                                                 | 架构§1；实施§0                            |
 | DECISION-02 | 单用户，不做tenant/role，App必须隔离                                                                                                                                                                                                                                                                                                                                                                                                                                 | 架构§1/3                                  |
-| DECISION-03 | AgentRuntime是参与者，Group是配额聚合，Environment是Runner内部sandbox生命周期边界                                                                                                                                                                                                                                                                                                                                                                                    | 架构§3                                    |
+| DECISION-03 | AgentRuntime是参与者，Group是配额聚合，Workspace是稳定项目边界，Environment generation是该Workspace的冻结运行配置/会话生命周期边界                                                                                                                                                                                                                                                                                                                                   | 架构§3                                    |
 | DECISION-04 | Runner不挂任何Docker socket、不运行dockerd/nested Docker；真实Docker能力只归Backend受控capability                                                                                                                                                                                                                                                                                                                                                                    | §9                                        |
-| DECISION-05 | 每Environment使用独立process/filesystem/network sandbox；Plugin在Environment内再按target独立sandbox/workspace                                                                                                                                                                                                                                                                                                                                                        | §9.3                                      |
+| DECISION-05 | 每个Workspace runtime generation/session使用独立process/filesystem/network sandbox；稳定Workspace文件系统与sandbox生命周期分离，Plugin按target再使用独立sandbox/logical workspace                                                                                                                                                                                                                                                                                    | §9.3                                      |
 | DECISION-06 | 一期OpenAI-compatible Chat Completions streaming adapter+OpenAI preset，Anthropic三期                                                                                                                                                                                                                                                                                                                                                                                | §6.1                                      |
 | DECISION-07 | HTTPS公网默认，私网准确host:port例外，metadata始终拒绝，DNS固定，redirect拒绝                                                                                                                                                                                                                                                                                                                                                                                        | §6.1                                      |
 | DECISION-08 | 单一ai_thread_entries ledger；不保留两套input/message sequence                                                                                                                                                                                                                                                                                                                                                                                                       | §4.1                                      |
@@ -1525,7 +1532,7 @@ AppIntent 继续负责**跨 App**的小 JSON/ArtifactRef 交接；它与同一 E
 | DECISION-15 | 二期结构化工具优先，未知shell文本审批，硬deny不可覆盖，不把regex当sandbox                                                                                                                                                                                                                                                                                                                                                                                            | §5                                        |
 | DECISION-16 | 一期不自动写Memory；三期candidate→用户审查→published                                                                                                                                                                                                                                                                                                                                                                                                                 | §6.3                                      |
 | DECISION-17 | 一期只读仓库builtin Skill，三期签名安装、脚本另受capability约束                                                                                                                                                                                                                                                                                                                                                                                                      | §6.3/10.7                                 |
-| DECISION-18 | MCP/ACP/CDP/Subagent/安装式扩展三期；Runner sandbox Environment二期，Docker是独立Backend capability                                                                                                                                                                                                                                                                                                                                                                  | §0/9/10                                   |
+| DECISION-18 | MCP/ACP/CDP/Subagent/安装式扩展三期；Workspace Dev Environment + Runner sandbox二期，Docker是独立Backend capability                                                                                                                                                                                                                                                                                                                                                  | §0/9/10                                   |
 | DECISION-19 | Operations默认enabled，无模型degraded+引导，不阻断Core                                                                                                                                                                                                                                                                                                                                                                                                               | 架构§1/4                                  |
 | DECISION-20 | 全部当前/新增connection+denylist，不采用首次连接allowlist方案                                                                                                                                                                                                                                                                                                                                                                                                        | §5.1                                      |
 | DECISION-21 | Agent mutation做same-origin+CSRF，内部mTLS通道独立                                                                                                                                                                                                                                                                                                                                                                                                                   | §7.1                                      |
@@ -1534,7 +1541,7 @@ AppIntent 继续负责**跨 App**的小 JSON/ArtifactRef 交接；它与同一 E
 | DECISION-24 | Runner/sandbox不可用不阻断Core；availability明确原因，不退化为未隔离执行                                                                                                                                                                                                                                                                                                                                                                                             | §9.1/9.4                                  |
 | DECISION-25 | integer micro-USD、版本化价格、unknown=null；设置cost cap需已知价格                                                                                                                                                                                                                                                                                                                                                                                                  | §6.1                                      |
 | DECISION-26 | Plugin manifest使用显式`targets.frontend/backend/runner`；三层分别运行sandbox，不创建Plugin Docker，不用resources/key映射推断模块                                                                                                                                                                                                                                                                                                                                    | 架构§4；实施§10.7                         |
-| DECISION-27 | Runner无Docker socket/dockerd/nested Docker；Environment为Runner内部sandbox；Runner Plugin按Environment显式选择并冻结                                                                                                                                                                                                                                                                                                                                                | 架构§9；实施§9                            |
+| DECISION-27 | Runner无Docker socket/dockerd/nested Docker；Workspace Dev Environment负责稳定项目与多版本Tool选择，sandbox只承载generation/session；Runner Plugin按generation显式选择并冻结                                                                                                                                                                                                                                                                                         | 架构§9；实施§9                            |
 | DECISION-28 | Runner Plugin workspace默认私有；跨Plugin访问由目标workspace ACL的target/principal/path/permission授权，直接访问同一底层文件、不复制                                                                                                                                                                                                                                                                                                                                 | 架构§4.3/9.2；实施§9.2/10.7               |
 | DECISION-29 | Runtime一级实现拆为definitions/runs/execution/planning/scheduling/approvals/recovery/events/collaboration/exchange，不新增同义业务实体                                                                                                                                                                                                                                                                                                                               | 架构§3；实施§1/2/13                       |
 | DECISION-30 | PlanItem是用户可见durable plan projection，Step是Agent loop执行推进边界；Execution Graph从PlanItem依赖/evidence投影，不把Step当workflow node                                                                                                                                                                                                                                                                                                                         | 架构§3；实施§2                            |

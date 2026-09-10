@@ -531,6 +531,7 @@ export class RunnerControllerServer {
       }
       const recipe = this.dependencies.catalog.recipe(command.recipeId);
       if (recipe.revision !== command.recipeRevision) throw new Error('ENVIRONMENT_RECIPE_STALE');
+      this.dependencies.catalog.validateSelection(command.recipeId, command.packs);
       this.dependencies.quota.validate(command.limits);
       const targets = command.runnerPlugins ?? [];
       if (!Array.isArray(targets) || targets.length > 64) throw new Error('PLUGIN_RUNNER_TARGET_INVALID');

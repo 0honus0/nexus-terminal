@@ -32,17 +32,47 @@ export class EnvironmentCatalog {
   resolve(recipeId: string, versions: Record<string, string> = {}): PackRef[] {
     const recipe = this.recipe(recipeId);
     const architecture = process.arch;
-    return recipe.defaultFamilies.map((familyId) => {
+    const requestedFamilies = Object.keys(versions);
+    if (requestedFamilies.some((familyId) => !recipe.allowedFamilies.includes(familyId))) {
+      throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+    }
+    const families = [...new Set([...recipe.defaultFamilies, ...requestedFamilies])].sort();
+    return families.map((familyId) => {
       const candidates = this.load().packs.filter((pack) => pack.familyId === familyId && pack.status === 'supported');
       const selected = versions[familyId]
         ? this.pack(familyId, versions[familyId]!)
         : candidates.sort((a, b) => b.versionId.localeCompare(a.versionId, undefined, { numeric: true }))[0];
-      if (!selected || !selected.supportedArchitectures.includes(architecture))
+      if (!selected || selected.status !== 'supported' || !selected.supportedArchitectures.includes(architecture))
         throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
       const digest = selected.contentDigestByArch[architecture];
       if (!digest) throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
       return { familyId, versionId: selected.versionId, contentDigest: digest };
     });
+  }
+
+  validateSelection(recipeId: string, refs: readonly PackRef[]): void {
+    const recipe = this.recipe(recipeId);
+    if (!refs.length || refs.length > 32) throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+    const seen = new Set<string>();
+    for (const ref of refs) {
+      if (!recipe.allowedFamilies.includes(ref.familyId) || seen.has(ref.familyId)) {
+        throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+      }
+      seen.add(ref.familyId);
+      const pack = this.pack(ref.familyId, ref.versionId);
+      const digest = pack.contentDigestByArch[process.arch];
+      if (
+        pack.status !== 'supported' ||
+        !pack.supportedArchitectures.includes(process.arch) ||
+        !digest ||
+        digest !== ref.contentDigest
+      ) {
+        throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+      }
+    }
+    if (recipe.defaultFamilies.some((familyId) => !seen.has(familyId))) {
+      throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+    }
   }
 
   catalogPath(...parts: string[]): string {

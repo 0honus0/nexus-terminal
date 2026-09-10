@@ -294,24 +294,25 @@ export class WorkspaceBroker {
   }
 
   private workspaceRoot(environmentId: string, generation: number, targetPluginId: string): string {
-    return path.join(
-      this.environmentRoot(environmentId, generation),
-      'plugins',
-      explicitPluginId(targetPluginId),
-      'workspace',
-    );
+    this.requireEnvironmentGeneration(environmentId, generation);
+    return path.join(this.workspaceBase(environmentId), 'plugins', explicitPluginId(targetPluginId), 'workspace');
   }
 
-  private environmentRoot(environmentId: string, generation: number): string {
+  private requireEnvironmentGeneration(environmentId: string, generation: number): void {
     if (!SAFE_ID.test(environmentId) || !Number.isSafeInteger(generation) || generation < 1)
       throw new Error('ENVIRONMENT_ID_INVALID');
     const root = path.join(this.runtimeRoot, 'environments', environmentId, String(generation));
     if (!fs.existsSync(root)) throw new Error('ENVIRONMENT_NOT_FOUND');
-    return root;
+  }
+
+  private workspaceBase(environmentId: string): string {
+    if (!SAFE_ID.test(environmentId)) throw new Error('ENVIRONMENT_ID_INVALID');
+    return path.join(this.runtimeRoot, 'workspaces', environmentId);
   }
 
   private aclFile(environmentId: string, generation: number): string {
-    return path.join(this.environmentRoot(environmentId, generation), '.control', 'workspace-acl.json');
+    this.requireEnvironmentGeneration(environmentId, generation);
+    return path.join(this.workspaceBase(environmentId), '.control', 'workspace-acl.json');
   }
 
   private readAcl(environmentId: string, generation: number): WorkspaceAclDocument {

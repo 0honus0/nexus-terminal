@@ -49,7 +49,7 @@ export class SpaceReporter {
     const environments = this.journal.environments();
     const byEnvironment = environments.map((environment) => ({
       environmentId: environment.environmentId,
-      runtimeBytes: size(path.join(this.root, 'runtime', 'environments', environment.environmentId)),
+      runtimeBytes: this.sandboxEngine.runtimeBytes(environment.environmentId, environment.generation),
       status: environment.status,
     }));
     const runtimeReclaimableBytes = byEnvironment.reduce((total, item) => {

@@ -1,25 +1,14 @@
 {
   "schemaVersion": 1,
-  "revision": "2026-09-10.1",
+  "revision": "2026-09-11.1",
   "runtimeDigest": "nexus-agent-runner:local",
   "recipes": [
     {
-      "id": "shell",
-      "revision": "1",
-      "kind": "shell",
-      "displayName": "Shell",
-      "allowedFamilies": ["base-tools"],
-      "requiredCapabilities": ["shell"],
-      "defaultFamilies": ["base-tools"],
-      "defaultLimits": { "memoryBytes": 536870912, "cpus": 0.5, "pids": 128, "tmpfsBytes": 134217728 },
-      "networkDefaults": { "mode": "none", "hosts": [] }
-    },
-    {
-      "id": "code",
-      "revision": "1",
+      "id": "workspace-dev",
+      "revision": "2",
       "kind": "code",
-      "displayName": "Code",
-      "allowedFamilies": ["base-tools"],
+      "displayName": "Workspace Dev Environment",
+      "allowedFamilies": ["base-tools", "node", "python", "go"],
       "requiredCapabilities": ["shell", "code"],
       "defaultFamilies": ["base-tools"],
       "defaultLimits": { "memoryBytes": 1073741824, "cpus": 1, "pids": 256, "tmpfsBytes": 268435456 },

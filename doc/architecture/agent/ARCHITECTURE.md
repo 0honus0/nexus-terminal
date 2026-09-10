@@ -130,9 +130,9 @@ Backend container
 ├─ Backend Core
 └─ Backend Plugin Sandbox
 
-nexus-agent-runner container
+nexus-agent-runner host service
 ├─ Runner Core
-└─ Environment A
+└─ Workspace A / Environment generation
    ├─ core/task sandbox
    ├─ plugin1 runner sandbox
    └─ plugin2 runner sandbox
@@ -287,45 +287,52 @@ Memory 一期只读检索；默认不自动写，不安装向量数据库。采�
 
 备份包含 Agent DB 表及既有格式加密的 Provider credential；默认不包含 Artifact payload、Runner runtime/workspace 或插件代码。备份 API/UI 必须明确 exclusions；二期可选包含 ready/retain Artifact 的一致性快照。恢复缺 payload 标 unavailable，缺加密密钥 Provider degraded 且要求重新配置，不尝试明文降级。恢复后撤销所有 runtime tokens/审批，运行全部 interrupted；不能恢复正在执行的 sandbox/process。用户数据恢复不视为继续授权旧作业。
 
-## 9. Runner Environment：内部 Sandbox、Environment Pack、隔离与还原
+## 9. Workspace Dev Environment：Tool Store、Runtime Sandbox、隔离与还原
 
 ### 9.0 产品作用与部署边界
 
-`nexus-agent-runner` 是 Nexus 的受限本地执行服务。它本身可以作为一个部署 Docker 运行，但 **Runner 内部不运行 dockerd、不连接任何 Docker socket、不使用 dockerode、也不为 Environment/Plugin 创建嵌套容器**。宿主 Docker 只负责启动 `nexus-agent-runner` 这个服务；Runner 的 Environment、临时 job、browser process 和 Runner Plugin 都在该容器内部由 Sandbox Manager 管理。
+`nexus-agent-runner` 是 Nexus 的受限本地执行服务，但**不是 Docker controller**。Runner、Backend、Workspace sandbox 与 Plugin sandbox 都不持 host Docker socket；Runner 不运行 dockerd、不使用 dockerode、不使用 nested Docker，Plugin 也不会创建额外 Docker。
 
-Docker Compose 的 `agent` profile 只为顶层 `nexus-agent-runner` 增加 sandbox construction 所需的 `SYS_ADMIN` 与 `NET_ADMIN` capability：前者用于 namespace/mount，后者只用于初始化隔离 network namespace 的 loopback；不使用 `privileged`，也不把这些 capability 加给 Backend。Sandbox Manager 创建 namespace/mount/network 后，bubblewrap 对 Environment/Runner Plugin payload 显式 `--cap-drop ALL`，因此部署 capability 只属于 Runner Controller 的 sandbox-construction 边界，不属于被执行工作负载。Runner availability 必须实际执行与 job 共用的最小 sandbox probe；只有二进制存在但 namespace 建立失败时仍报告 degraded/fail closed。
+当前 canonical Linux 部署将 `nexus-agent-runner` 作为专用 host service，而不是在长期运行的 Docker Runner 容器里嵌套 bubblewrap。原因是 bubblewrap 构造 mount namespace 时需要 mount propagation 操作，Docker 默认 AppArmor 会在外层容器边界拒绝这类 mount；不能为了让测试通过而把整个 Runner 改成 `privileged`、`apparmor=unconfined` 或继续堆叠 capability。Backend 容器通过 host-gateway 到达 Runner 的受认证 Controller HTTP；Runner 默认只监听 loopback，部署时应显式绑定仅 Backend 可达的宿主接口并配合防火墙。Runner availability 必须真实执行与 job 共用的最小 sandbox probe，sandbox primitive 不可用时继续 degraded/fail closed。
 
 ```text
 Host deployment
 ├─ Frontend container
-├─ Backend container
-└─ nexus-agent-runner container
-   ├─ Runner Core / Controller
-   ├─ Environment A
-   │  ├─ core/task sandbox + core workspace
-   │  ├─ plugin1 sandbox + logical workspace
-   │  └─ plugin2 sandbox + logical workspace
-   └─ Environment B
-      └─ ...
+├─ Backend container ── authenticated Controller HTTP ──┐
+└─ nexus-agent-runner host service                      │
+   ├─ Runner Core / Controller ◀────────────────────────┘
+   ├─ immutable Tool Store
+   │  ├─ node/18 + node/20 + node/22
+   │  ├─ python/3.10 + python/3.12
+   │  └─ go/1.22 + go/1.23
+   ├─ Workspace A
+   │  ├─ stable project filesystem
+   │  ├─ Environment generation -> node22 + python3.12 + go1.23
+   │  └─ runtime sessions -> Agent / Plugin / CI-task / future Terminal
+   └─ Workspace B
+      ├─ stable project filesystem
+      └─ Environment generation -> node18 + python3.10
 ```
 
-Environment 是生命周期与执行隔离边界，不等于 Docker container。每个执行 sandbox 至少隔离 filesystem view、PID/IPC/UTS/network namespace、环境变量、cwd、临时目录和 process tree。Sandbox primitive 不可用时 Environment availability 明确 unavailable/degraded，不能退化成 Backend/Runner Core 直接执行用户代码。
+**Workspace 是稳定项目边界，Environment 是 Workspace 的运行配置/generation。** Node、Python、Go 不是三个 Environment，而是一个 Workspace Dev Environment 里的工具族。每个 sandbox 仍至少隔离 filesystem view、PID/IPC/UTS/network namespace、环境变量、cwd、临时目录和 process tree；Environment generation 停止/重建会终止旧 runtime session，但不会替换 Workspace 项目文件。
 
-真实 Docker 管理是另一条业务能力：Agent → Backend capability → manifest grant → Policy → Approval → Lease/MutationGuard → Nexus `RemoteDockerService` → 用户目标机器。它不经过 Runner 内部 Environment，也不会把任何 Docker socket 交给 Runner/Plugin。
+真实 Docker 管理仍是另一条业务能力：Agent → Backend capability → manifest grant → Policy → Approval → Lease/MutationGuard → Nexus `RemoteDockerService` → 用户目标机器。它不经过 Runner 的 Workspace Dev Environment，也不会把任何 Docker socket 交给 Runner/Plugin。
 
-用途仍由 Environment Recipe + 精确 Pack 组合：shell、code、data、browser。典型流程为 Artifact/受控输入 → 选择 Recipe/版本/明确 Runner Plugin targets → Runner sandbox 执行 → Artifact/结构化证据 → Verifier；若之后要修改真实远端机器，再进入 Backend 的 Policy/Approval/Lease 链。
+典型流程变为 Artifact/受控输入 → 选择 Workspace → 冻结该 Workspace 的 Tool versions/Runner Plugin targets → Sandbox Manager 建立 runtime generation → Agent/Plugin/CI-task 在同一 Workspace 文件视图中执行 → Artifact/结构化证据 → Verifier；若之后要修改真实远端机器，再进入 Backend 的 Policy/Approval/Lease 链。
 
-### 9.1 Catalog、runtimeDigest 与多版本 Pack
+### 9.1 Catalog、runtimeDigest 与多版本 Tool Store
 
 Environment Catalog 由 Nexus 发行物提供，Frontend 不硬编码版本。Catalog 包含：
 
-1. **Environment Pack**：Node/Python/JDK/Go/Chromium/data-tools 等 content-addressed immutable 工具链，记录 `familyId/versionId/contentDigest`、架构下载来源、capabilities、`runnerApiRange`、diskBytes、依赖、支持架构及 supported/deprecated/unavailable 状态。
-2. **Recipe/Profile**：shell/code/data/browser 等用途模板，定义允许/需要哪些 family、默认版本族、资源需求和网络默认值。
-3. **runtimeDigest**：当前 Runner sandbox ABI/runtime 的精确版本事实。它替代旧 `baseRunnerDigest`；不再表示某个子 Docker image。
+1. **Tool Pack**：Node/Python/Go/JDK/Rust/CUDA/Chromium/data-tools 等 content-addressed immutable 工具链，记录 `familyId/versionId/contentDigest`、架构下载来源、capabilities、`runnerApiRange`、diskBytes、依赖、支持架构及 supported/deprecated/unavailable 状态。
+2. **Workspace Profile**：当前产品只暴露统一的 `workspace-dev` 开发环境 profile；它定义允许的 Tool family、基础工具、资源需求和网络默认值。当前 transport 中 `kind=code` 仍作为兼容字段保留，不再代表产品上存在独立的 code Environment。
+3. **runtimeDigest**：当前 Runner sandbox ABI/runtime 的精确版本事实，不表示某个子 Docker image。
 
-同一 family 可多个版本同时 installed/enabled/inUse。Environment 创建时冻结 `runtimeDigest + recipeId + recipeRevision + catalogRevision + packRefs + runnerPlugins`。改变默认版本或升级插件只影响以后创建的 Environment；既有 Environment 继续使用冻结事实。历史恢复需要原 Pack digest；找不到则明确 `ENVIRONMENT_PACK_UNAVAILABLE`，不静默替换。
+Tool Store 的安装 key 为 `familyId/versionId/contentDigest`；Catalog 先按当前 arch 解析对应 digest。同一 family 的多个版本可以同时 installed/enabled/inUse，例如 Node 18/20/22 与 Python 3.10/3.12 并存；不同 Workspace 的 Environment profile 冻结各自精确 `packRefs`，因此 Workspace A 可以使用 Node 22 而 Workspace B 同时保持 Node 18。
 
-Pack 安装由 Runner Core 完成：download → checksum/digest → manifest/arch/runnerApiRange/dependency/archive safety → `packs/.staging` → fsync/read-only → atomic rename。Pack 不执行宿主安装脚本，也不能修改 Runner Core。Environment job 只获得请求中精确 Pack 的只读视图。
+Workspace 切换工具版本必须执行：确保目标 Tool Pack 已下载并校验 → 停止/替换该 Workspace 的旧 runtime generation → 创建新 generation 并冻结新的 `packRefs` → 把**同一稳定 Workspace filesystem** bind 到 `/workspace` → 根据新 generation 生成 PATH/只读工具挂载。这个过程不得修改 Runner 进程全局 PATH、宿主 `/usr/bin` 或其他 Workspace 的 profile。旧 generation 的 process/session 必须终止，不能在版本切换后继续持有旧工具或 lease。
+
+Tool Pack 安装由 Runner Core 完成：download → checksum/digest → manifest/arch/runnerApiRange/dependency/archive safety → `packs/.staging` → fsync/read-only → atomic rename。Pack 不执行宿主安装脚本，也不能修改 Runner Core。Environment job 只获得该 generation 冻结的精确 Tool Pack 只读视图；历史恢复找不到原 digest 时明确 `ENVIRONMENT_PACK_UNAVAILABLE`，不静默替换。
 
 ### 9.2 Runner 数据布局、Workspace 与 ACL
 
@@ -336,48 +343,51 @@ Runner 数据根固定分区：
   state/        # durable journal/inventory/watermark
   packs/        # durable immutable packs
   cache/        # reclaimable download/staging cache
-  runtime/      # Environment/job/plugin workspace 生命周期数据
+  runtime/      # stable Workspace data + Environment generation/runtime lifecycle data
   quarantine/   # 未确认 ownership/side-effect 残余
 /run/nexus-agent-runner/
   ...           # 仅短期控制面数据；不放长期业务事实
 ```
 
-单个 Environment 的 runtime 结构：
+Workspace 的稳定数据与 Environment generation 分开存放：
 
 ```text
-runtime/environments/<environmentId>/<generation>/
-  .control/
-    metadata.json
-    state
-    workspace-acl.json
-  core/workspace/
-    work/
-    deps/
-    build/
-    browser/
-    jobs/
-    tmp/
-  plugins/
-    <plugin1>/workspace/
-    <plugin2>/workspace/
+runtime/
+  workspaces/<workspaceId>/
+    .control/
+      workspace-acl.json
+    core/workspace/
+      work/
+      deps/
+      build/
+      browser/
+      jobs/
+      tmp/
+    plugins/
+      <plugin1>/workspace/
+      <plugin2>/workspace/
+  environments/<workspaceId>/<generation>/
+    .control/
+      metadata.json
+      state
 ```
 
-`.control` 只属于 Runner Core，任何 job/plugin sandbox 都不可见。core task sandbox 只看到自己的 `/workspace` 和精确 Pack；Runner Plugin sandbox 不直接看到真实 `plugins/<id>/workspace`，只经 Workspace Broker SDK 访问。
+`runtime/workspaces/<workspaceId>/` 是稳定项目边界；切换 Node/Python/Go 版本或重建 Environment generation 不改变它。`runtime/environments/.../<generation>/` 只保存这一代运行配置与状态，因此旧 runtime 可以被停止/删除而不复制项目文件。`.control` 只属于 Runner Core，任何 job/plugin sandbox 都不可见。core task sandbox 只看到稳定 `/workspace` 和该 generation 冻结的精确 Tool Pack；Runner Plugin sandbox 不直接看到真实 `plugins/<id>/workspace`，只经 Workspace Broker SDK 访问。
 
-Workspace 规则固定：自己的 workspace 默认允许，其他 Plugin workspace 默认拒绝；跨 Plugin grant 存在于**目标 workspace ACL**。授权对象由 `targetPluginId + principalPluginId + path + permissions` 明确表达。`workspace.read('plugin1','/output/report.json')` 直接读取 plugin1 的原文件，不复制；grant revoke 只撤访问，不移动/删除文件。target/principal 必须都在同一 Environment 的冻结 `runnerPlugins` 内，跨 Environment 永远拒绝。
+Workspace 规则固定：自己的 logical workspace 默认允许，其他 Plugin workspace 默认拒绝；跨 Plugin grant 存在于**目标 workspace ACL**，并随稳定 Workspace 保存。授权对象由 `targetPluginId + principalPluginId + path + permissions` 明确表达。`workspace.read('plugin1','/output/report.json')` 直接读取 plugin1 的原文件，不复制；grant revoke 只撤访问，不移动/删除文件。target/principal 必须都属于当前 Workspace Environment generation 的冻结 `runnerPlugins`；跨 Workspace 永远拒绝。
 
 空间统计分 `stateBytes / packBytes / cacheBytes / runtimeBytes / quarantineBytes / sandboxOverheadBytes`。`sandboxOverheadBytes` 只表示无法归入前五类的 sandbox/process runtime 开销，不再统计 Docker image/container/volume。当前没有额外可归因开销时可为 0。禁止重复计费。
 
 ### 9.3 Sandbox Manager、Job 与网络边界
 
-Runner 使用独立 Sandbox Manager（当前 Linux 实现基于 bubblewrap）启动 Environment job 和 Runner Plugin process。边界要求：
+Runner 使用独立 Sandbox Manager（当前 Linux 实现基于 bubblewrap）启动 Workspace Environment job 和 Runner Plugin process。边界要求：
 
 - 新 PID、IPC、UTS、network namespace；默认 network `none`。
-- 顶层 Runner 的部署 capability 不向 sandbox payload 继承；payload 启动前显式 drop all Linux capabilities。
-- 最小只读系统 runtime；Pack 只读；`/tmp` 独立；Host token/env 不传入 sandbox。
-- core job 只 bind 当前 Environment 的 core workspace，不能看到其他 Environment、Plugin workspace、Runner `state/packs/cache/quarantine` 控制目录。
+- sandbox payload 启动前显式 drop all Linux capabilities；host Runner 只承担 sandbox construction，不把 Runner token/env 或宿主控制目录传入 payload。
+- 最小只读系统 runtime；当前 generation 精确 Tool Pack 只读；`/tmp` 独立。
+- core job 只 bind 当前 Workspace 的稳定 core workspace，不能看到其他 Workspace、Plugin workspace、Runner `state/packs/cache/quarantine` 控制目录。
 - Runner Plugin 只读挂自己的已验证 package target 与最小 runtime；真实 workspace 不 bind，通过 local IPC 调 Workspace Broker。
-- 一个 sandbox stop/delete 必须终止其 process tree；Runner restart 以 journal + generation reconcile，不相信旧进程回调。
+- generation stop/delete/version-switch 必须终止其 process tree；新 generation 使用同一 Workspace 文件但重新建立 sandbox/PATH/tool mounts，旧 generation 回调不得写新 generation。
 - allowlist 网络只有存在真实 enforcement broker 时才 advertise；当前若 `egressAllowlist=false`，请求 allowlist 必须 fail closed，不能退化为 unrestricted 网络。
 
 Environment ResourceLimits 仍用于 admission/quota、运行监控和后续 kernel enforcement。某项要求严格 kernel limit 而当前部署无法提供时，Runner 必须报告 capability 缺失或拒绝对应高风险模式，不能用“目录隔离”冒充完整资源隔离。
@@ -386,13 +396,13 @@ Backend 与 Runner 只通过受认证 Controller protocol 交换冻结命令；�
 
 ### 9.4 生命周期、Cleanup 与恢复
 
-provision：验证命令 → ensure Pack → 创建 Environment runtime tree/.control → 创建 core sandbox metadata → 为明确 `runnerPlugins` 创建逻辑 workspace → journal `ready`。不会创建 Docker/container/network/volume。
+provision：验证命令 → ensure Tool Pack → 创建/复用稳定 Workspace tree → 创建新的 Environment generation `.control` → 冻结该 generation 的 tool refs/Runner Plugin targets → journal `ready`。不会创建 Docker/container/network/volume。
 
-start：Environment 转 running，并按冻结 target 启动 Runner Plugin sandboxes。stop：先 quiesce/dispose Runner Plugin，再终止该 Environment 活跃 job/process tree，保留 runtime/workspace 供继续或检查。restart：终止旧 process tree，重新建立 sandbox 并按冻结 target 激活。delete：dispose 插件、终止 job、删除该 Environment runtime tree；长期 AppStorage/Artifact 不受影响。
+start：Environment generation 转 running，并按冻结 target 启动 Runner Plugin sandboxes。stop：先 quiesce/dispose Runner Plugin，再终止该 generation 活跃 job/process tree，保留稳定 Workspace。restart：终止旧 process tree，按同一 generation 冻结事实重新建立 sandbox。version-switch/recreate：先停止旧 generation，再使用新的 tool refs 创建下一 generation；稳定 Workspace 不移动、不复制。delete generation：dispose 插件、终止 job、删除该 generation runtime；长期 AppStorage/Artifact 与稳定 Workspace 不因 generation 删除而自动消失。
 
 Runner startup reconcile 遍历 journal：running Environment 检查 sandbox runtime 事实并重新激活其冻结 Runner Plugin；中断中的 command/job 标记 unknown/reconciliation-required，不假装成功。旧 generation 的回调不得写新 generation。
 
-“清运行残余”不再删除 Docker resource，而是：freeze new env/jobs → quiesce/terminate owned process trees → reconcile unknown → 删除确认归属的 `runtime/` trees → 清短期控制面数据 → release quota → compact terminal journal → second inventory。无法确认 ownership/side effect 的数据进入 `quarantine/`。Pack uninstall 与 runtime cleanup 分开；停止/删除 Environment 都不会自动卸载 Pack。
+“清运行残余”不再删除 Docker resource，而是：freeze new env/jobs → quiesce/terminate owned process trees → reconcile unknown → 删除确认归属的 generation runtime；只有在明确执行 Workspace runtime cleanup 且不存在受保护/活跃 generation 时才删除 `runtime/workspaces/<workspaceId>` → 清短期控制面数据 → release quota → compact journal → second inventory。无法确认 ownership/side effect 的数据进入 `quarantine/`。Tool Pack uninstall 与 runtime cleanup 分开；停止/切换 Environment generation 都不会自动卸载 Tool Pack。
 
 Runner 备份默认不包含 Packs/runtime/cache，只保存 Nexus DB 中 Settings、PackRef、Environment target snapshot 和 Run/Checkpoint 事实。恢复后 Runner 根据 Catalog/Settings 重新核对所需 Pack；缺失明确显示，不伪装旧 sandbox 仍存在。
 

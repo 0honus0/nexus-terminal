@@ -19,6 +19,20 @@ compose_override="$workspace/docker-compose.smoke.yml"
 env_file="$workspace/.env"
 data_dir="$workspace/data"
 cookie_jar="$(mktemp)"
+runner_root="$workspace/agent-runner"
+runner_log="$workspace/agent-runner.log"
+runner_pid=''
+runner_port="$(node - <<'NODE'
+const net = require('node:net');
+const server = net.createServer();
+server.listen(0, '0.0.0.0', () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') process.exit(1);
+  console.log(address.port);
+  server.close();
+});
+NODE
+)"
 session_secret='docker-smoke-session-secret-2026-00000000000000000000000000000000'
 encryption_key='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 runner_token="$(node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))")"
@@ -52,9 +66,11 @@ set_env() {
 
 print_logs() {
   echo "--- compose ps ---"
-  compose --profile agent ps --all 2>&1 || true
+  compose ps --all 2>&1 || true
   echo "--- compose logs ---"
-  compose --profile agent logs --no-color 2>&1 || true
+  compose logs --no-color 2>&1 || true
+  echo "--- agent runner host log ---"
+  cat "$runner_log" 2>/dev/null || true
 }
 
 cleanup() {
@@ -63,7 +79,11 @@ cleanup() {
     print_logs
   fi
   compose exec -T backend sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
-  compose --profile agent down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
+  compose down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
+  if [[ -n "$runner_pid" ]]; then
+    kill "$runner_pid" >/dev/null 2>&1 || true
+    wait "$runner_pid" >/dev/null 2>&1 || true
+  fi
   rm -rf "$workspace" "$cookie_jar" || true
   exit "$status"
 }
@@ -77,16 +97,10 @@ services:
     container_name: nexus-e2e-frontend-$suffix
   backend:
     container_name: nexus-e2e-backend-$suffix
+    environment:
+      AGENT_RUNNER_URL: http://host.docker.internal:$runner_port
   guacd:
     container_name: nexus-e2e-guacd-$suffix
-  nexus-agent-runner:
-    container_name: nexus-e2e-agent-runner-$suffix
-    build:
-      context: "$repo_root"
-      dockerfile: scripts/docker/agent-runtime/Dockerfile
-      target: controller
-    environment:
-      NEXUS_AGENT_SANDBOX_DIAGNOSTICS: '1'
 networks:
   nexus-terminal-network:
     name: nexus-e2e-network-$suffix
@@ -99,6 +113,7 @@ ENCRYPTION_KEY=$encryption_key
 EOF
 chmod 0777 "$data_dir"
 chmod 0600 "$data_dir/.env"
+mkdir -p "$runner_root" "$data_dir/agent/plugins"
 
 # Keep the repository Compose/.env.example contract intact while overriding only values that
 # must be isolated for this smoke run: image, host port, Docker network, and WebAuthn origin.
@@ -113,13 +128,36 @@ set_env RP_ID 'ssh.honus.top'
 set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
 
 compose config >/dev/null
+# The canonical Linux Agent Runner is a dedicated host service. bubblewrap therefore
+# constructs namespaces/mounts outside Docker's container AppArmor boundary instead of
+# granting broad mount privileges to a long-lived Runner container. The Runner still has
+# no Docker socket/dockerd/nested Docker, and sandbox availability remains fail closed.
+NEXUS_AGENT_RUNNER_HOST=0.0.0.0 \
+PORT="$runner_port" \
+NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
+NEXUS_AGENT_DEPLOYMENT_ID="nexus-e2e-$suffix" \
+NEXUS_AGENT_RUNNER_ROOT="$runner_root" \
+NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runtime/catalog/catalog.json" \
+NEXUS_AGENT_PLUGIN_SOURCE_ROOT="$data_dir/agent/plugins" \
+NEXUS_AGENT_SANDBOX_DIAGNOSTICS=1 \
+node "$repo_root/packages/agent-runtime/dist/index.js" >"$runner_log" 2>&1 &
+runner_pid=$!
+
+runner_listener_ready=0
+for _ in {1..30}; do
+  if curl -fsS -H "Authorization: Bearer $runner_token" "http://127.0.0.1:${runner_port}/v1/availability" >/dev/null; then
+    runner_listener_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "$runner_listener_ready" -eq 1 ]] || { echo "Agent Runner host service did not start." >&2; exit 1; }
+
 # Production Compose intentionally depends on guacd being started, not on the image's
 # slow built-in health cadence. Start with the same semantics, then verify readiness
-# through the application ingress and explicit Backend-to-service probes. Enable the
-# production Agent profile here so this smoke also proves the Runner image, token contract,
-# bubblewrap sandbox, Pack install, and isolated Environment job path.
-compose --profile agent up -d --build
-compose --profile agent ps
+# through the application ingress and the authenticated Backend -> host Runner path.
+compose up -d --build
+compose ps
 
 frontend_ready=0
 for _ in {1..60}; do
@@ -137,7 +175,7 @@ runner_ready=0
 for _ in {1..60}; do
   if compose exec -T backend node - <<'NODE'
 const token = process.env.AGENT_RUNNER_TOKEN;
-const response = await fetch('http://nexus-agent-runner:8790/v1/availability', {
+const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
   headers: { authorization: `Bearer ${token}` },
 }).catch(() => null);
 if (!response?.ok) process.exit(1);
@@ -154,7 +192,7 @@ if [[ "$runner_ready" -ne 1 ]]; then
   echo "Agent Runner did not report a usable sandbox." >&2
   compose exec -T backend node - <<'NODE' || true
 const token = process.env.AGENT_RUNNER_TOKEN;
-const response = await fetch('http://nexus-agent-runner:8790/v1/availability', {
+const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
   headers: { authorization: `Bearer ${token}` },
 }).catch(() => null);
 if (!response) {
@@ -166,12 +204,12 @@ NODE
   exit 1
 fi
 
-# Exercise the actual Controller -> Pack -> Environment -> bubblewrap job path, not only
-# binary presence or HTTP health. The Runner is network-internal; the probe originates from
-# Backend using the same shared Controller token as production Compose.
+# Exercise the actual Controller -> Tool Store -> Workspace Dev Environment -> bubblewrap
+# job path, not only binary presence or HTTP health. The probe originates from Backend
+# through the host-gateway path using the same shared Controller token as production.
 compose exec -T backend node - <<'NODE'
 const { randomUUID } = require('node:crypto');
-const baseUrl = 'http://nexus-agent-runner:8790';
+const baseUrl = process.env.AGENT_RUNNER_URL;
 const token = process.env.AGENT_RUNNER_TOKEN;
 const deploymentId = process.env.AGENT_RUNNER_DEPLOYMENT_ID;
 const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
@@ -186,9 +224,11 @@ const post = async (path, body) => {
   return response.json();
 };
 const catalog = await get('/v1/catalog');
-const recipe = catalog.recipes.find((candidate) => candidate.id === 'shell');
+const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 const pack = catalog.packs.find((candidate) => candidate.familyId === 'base-tools' && candidate.enabled);
-if (!recipe || !pack?.contentDigest) throw new Error('Smoke catalog does not expose the shell/base-tools runtime.');
+if (!recipe || !pack?.contentDigest) {
+  throw new Error('Smoke catalog does not expose the Workspace Dev Environment/base-tools runtime.');
+}
 
 const now = () => Math.floor(Date.now() / 1000);
 const environmentId = `smoke-env-${randomUUID()}`;
@@ -212,9 +252,10 @@ const identity = {
   retained: false,
   expectedVersion: 0,
 };
-const command = (action) => ({
+const command = (action, generation = 1) => ({
   ...identity,
-  commandId: `smoke-${action}-${randomUUID()}`,
+  generation,
+  commandId: `smoke-${action}-${generation}-${randomUUID()}`,
   action,
   operationHash: `v1:${'0'.repeat(64)}`,
   issuedAt: now(),
@@ -240,7 +281,11 @@ const job = {
   issuedAt: now(),
   deadlineAt: now() + 30,
   nonce: randomUUID(),
-  argv: ['nexus-sh', '-c', 'printf runner-sandbox-ok'],
+  argv: [
+    'nexus-sh',
+    '-c',
+    'printf workspace-stable > /workspace/work/.version-switch-marker; printf runner-sandbox-ok',
+  ],
   cwd: '/workspace',
   maxBytes: 4096,
   timeoutMs: 5000,
@@ -257,7 +302,49 @@ if (result?.status !== 'succeeded' || result.result?.stdout !== 'runner-sandbox-
 }
 const remove = await post('/v1/commands', command('delete'));
 if (remove.status !== 'succeeded') throw new Error(`Runner delete failed: ${JSON.stringify(remove)}`);
-console.log('agent runner sandbox job: runner-sandbox-ok');
+
+// A tool-version switch recreates only the runtime generation. The Workspace filesystem
+// must remain stable so a new Node/Python/Go selection never copies or loses project files.
+const reprovision = await post('/v1/commands', command('provision', 2));
+if (reprovision.status !== 'succeeded') {
+  throw new Error(`Runner reprovision failed: ${JSON.stringify(reprovision)}`);
+}
+const restart = await post('/v1/commands', command('start', 2));
+if (restart.status !== 'succeeded') throw new Error(`Runner generation 2 start failed: ${JSON.stringify(restart)}`);
+const generationJobId = `smoke-generation-${randomUUID()}`;
+const generationJob = {
+  ...job,
+  jobId: generationJobId,
+  generation: 2,
+  operationHash: `v1:${'2'.repeat(64)}`,
+  issuedAt: now(),
+  deadlineAt: now() + 30,
+  nonce: randomUUID(),
+  argv: [
+    'nexus-sh',
+    '-c',
+    'test "$(cat /workspace/work/.version-switch-marker)" = workspace-stable && printf workspace-generation-ok',
+  ],
+};
+await post(`/v1/environments/${encodeURIComponent(environmentId)}/jobs`, generationJob);
+let generationResult;
+for (let attempt = 0; attempt < 100; attempt += 1) {
+  generationResult = await get(`/v1/jobs/${encodeURIComponent(generationJobId)}`);
+  if (!['pending', 'running'].includes(generationResult.status)) break;
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+if (
+  generationResult?.status !== 'succeeded' ||
+  generationResult.result?.stdout !== 'workspace-generation-ok' ||
+  generationResult.result?.exitCode !== 0
+) {
+  throw new Error(`Runner stable Workspace generation check failed: ${JSON.stringify(generationResult)}`);
+}
+const removeGeneration = await post('/v1/commands', command('delete', 2));
+if (removeGeneration.status !== 'succeeded') {
+  throw new Error(`Runner generation 2 delete failed: ${JSON.stringify(removeGeneration)}`);
+}
+console.log('agent runner sandbox job: runner-sandbox-ok; stable workspace generation: workspace-generation-ok');
 NODE
 
 curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
