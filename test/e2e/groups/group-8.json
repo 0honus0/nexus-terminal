@@ -9,7 +9,6 @@
     "tests/ui/proxy-management.spec.ts",
     "tests/ui/system-settings.spec.ts",
     "tests/ui/theme-switching.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/sftp-download.spec.ts",
     "tests/ssh/status-history-time-axis.spec.ts",
     "tests/ssh/progress-display-copy-cancel.spec.ts",
