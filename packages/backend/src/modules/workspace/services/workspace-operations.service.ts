@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type {
+  ArchiveEvent,
   ArchiveOperation,
   CompressArchiveRequest,
   DecompressArchiveRequest,
 } from '../../../platform/operations/archive/archive-operation.port';
 import type { MutationGuardHandle, MutationGuardPort } from '../../../platform/operations/mutation-guard.port';
-import type { TransferOperation, TransferMode } from '../../../platform/operations/transfer/transfer-operation.port';
+import type {
+  TransferEvent,
+  TransferOperation,
+  TransferMode,
+} from '../../../platform/operations/transfer/transfer-operation.port';
 import type {
   UploadConflictPolicy,
   UploadEvent,
@@ -58,15 +63,11 @@ export class WorkspaceOperationsService {
     this.uploadGuards.set(key, handle);
     let terminal: Promise<void> | null = null;
     const emit = (event: UploadEvent): void => {
-      this.events.publish(workspaceId, { type: 'upload-event', event });
-      if (['completed', 'cancelled', 'skipped', 'failed', 'conflict'].includes(event.type)) {
-        terminal = this.finishUploadGuard(
-          workspaceId,
-          uploadId,
-          event.type !== 'failed',
-          event.type === 'failed' ? event.message : undefined,
-        );
+      if (!this.isUploadTerminalEvent(event)) {
+        this.events.publish(workspaceId, { type: 'upload-event', event });
+        return;
       }
+      terminal = this.settleUploadTerminalEvent(workspaceId, uploadId, event);
     };
     try {
       await this.uploads.start(
@@ -120,26 +121,7 @@ export class WorkspaceOperationsService {
     requestId: string,
     mode: TransferMode,
   ) {
-    const destination = this.sessions.require(workspaceId),
-      source = this.sessions.require(sourceWorkspaceId);
-    if (source.userId !== destination.userId) throw new Error('无权访问源 SFTP 会话。');
-    return this.mutationGuard.withMutation(
-      this.guardRequest(workspaceId, `transfer.${mode}:${requestId}`, [source.connectionId, destination.connectionId]),
-      async () =>
-        this.transfers.run(
-          {
-            requestId,
-            ownerId: workspaceId,
-            sourceOwnerId: sourceWorkspaceId,
-            sourceSessionId: source.executionSessionId,
-            destinationSessionId: destination.executionSessionId,
-            sourcePaths,
-            destinationPath,
-            mode,
-          },
-          (event) => this.events.publish(workspaceId, { type: 'transfer-event', event }),
-        ),
-    );
+    return this.runGuardedTransfer(workspaceId, sourceWorkspaceId, sourcePaths, destinationPath, requestId, mode);
   }
 
   startTransfer(
@@ -150,31 +132,8 @@ export class WorkspaceOperationsService {
     requestId: string,
     mode: TransferMode,
   ): void {
-    const destination = this.sessions.require(workspaceId),
-      source = this.sessions.require(sourceWorkspaceId);
-    if (source.userId !== destination.userId) throw new Error('无权访问源 SFTP 会话。');
-    void this.mutationGuard
-      .withMutation(
-        this.guardRequest(workspaceId, `transfer.${mode}:${requestId}`, [
-          source.connectionId,
-          destination.connectionId,
-        ]),
-        async () =>
-          this.transfers.run(
-            {
-              requestId,
-              ownerId: workspaceId,
-              sourceOwnerId: sourceWorkspaceId,
-              sourceSessionId: source.executionSessionId,
-              destinationSessionId: destination.executionSessionId,
-              sourcePaths,
-              destinationPath,
-              mode,
-            },
-            (event) => this.events.publish(workspaceId, { type: 'transfer-event', event }),
-          ),
-      )
-      .catch((error) =>
+    void this.runGuardedTransfer(workspaceId, sourceWorkspaceId, sourcePaths, destinationPath, requestId, mode).catch(
+      (error) =>
         this.events.publish(workspaceId, {
           type: 'transfer-event',
           event: {
@@ -184,7 +143,7 @@ export class WorkspaceOperationsService {
             message: error instanceof Error ? error.message : String(error),
           },
         }),
-      );
+    );
   }
 
   copy(workspaceId: string, sources: readonly string[], destination: string, requestId: string) {
@@ -211,71 +170,39 @@ export class WorkspaceOperationsService {
   }
 
   compress(workspaceId: string, input: Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>) {
-    const session = this.sessions.require(workspaceId);
-    return this.mutationGuard.withMutation(
-      this.guardRequest(workspaceId, `archive.compress:${input.requestId}`, [session.connectionId]),
-      async () =>
-        this.archives.compress({ ...input, ownerId: workspaceId, sessionId: session.executionSessionId }, (event) =>
-          this.events.publish(workspaceId, { type: 'archive-event', event }),
-        ),
-    );
+    return this.runGuardedArchive(workspaceId, 'compress', input);
   }
 
   startCompress(workspaceId: string, input: Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>): void {
-    const session = this.sessions.require(workspaceId);
-    void this.mutationGuard
-      .withMutation(
-        this.guardRequest(workspaceId, `archive.compress:${input.requestId}`, [session.connectionId]),
-        async () =>
-          this.archives.compress({ ...input, ownerId: workspaceId, sessionId: session.executionSessionId }, (event) =>
-            this.events.publish(workspaceId, { type: 'archive-event', event }),
-          ),
-      )
-      .catch((error) =>
-        this.events.publish(workspaceId, {
-          type: 'archive-event',
-          event: {
-            type: 'failed',
-            operation: 'compress',
-            requestId: input.requestId,
-            message: error instanceof Error ? error.message : String(error),
-          },
-        }),
-      );
-  }
-
-  decompress(workspaceId: string, input: Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>) {
-    const session = this.sessions.require(workspaceId);
-    return this.mutationGuard.withMutation(
-      this.guardRequest(workspaceId, `archive.decompress:${input.requestId}`, [session.connectionId]),
-      async () =>
-        this.archives.decompress({ ...input, ownerId: workspaceId, sessionId: session.executionSessionId }, (event) =>
-          this.events.publish(workspaceId, { type: 'archive-event', event }),
-        ),
+    void this.runGuardedArchive(workspaceId, 'compress', input).catch((error) =>
+      this.events.publish(workspaceId, {
+        type: 'archive-event',
+        event: {
+          type: 'failed',
+          operation: 'compress',
+          requestId: input.requestId,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      }),
     );
   }
 
+  decompress(workspaceId: string, input: Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>) {
+    return this.runGuardedArchive(workspaceId, 'decompress', input);
+  }
+
   startDecompress(workspaceId: string, input: Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>): void {
-    const session = this.sessions.require(workspaceId);
-    void this.mutationGuard
-      .withMutation(
-        this.guardRequest(workspaceId, `archive.decompress:${input.requestId}`, [session.connectionId]),
-        async () =>
-          this.archives.decompress({ ...input, ownerId: workspaceId, sessionId: session.executionSessionId }, (event) =>
-            this.events.publish(workspaceId, { type: 'archive-event', event }),
-          ),
-      )
-      .catch((error) =>
-        this.events.publish(workspaceId, {
-          type: 'archive-event',
-          event: {
-            type: 'failed',
-            operation: 'decompress',
-            requestId: input.requestId,
-            message: error instanceof Error ? error.message : String(error),
-          },
-        }),
-      );
+    void this.runGuardedArchive(workspaceId, 'decompress', input).catch((error) =>
+      this.events.publish(workspaceId, {
+        type: 'archive-event',
+        event: {
+          type: 'failed',
+          operation: 'decompress',
+          requestId: input.requestId,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      }),
+    );
   }
 
   cancelArchive(workspaceId: string, requestId: string) {
@@ -292,6 +219,110 @@ export class WorkspaceOperationsService {
     for (const [key, handle] of guards) {
       this.uploadGuards.delete(key);
       await handle.confirm().catch(() => undefined);
+    }
+  }
+
+  private async runGuardedTransfer(
+    workspaceId: string,
+    sourceWorkspaceId: string,
+    sourcePaths: readonly string[],
+    destinationPath: string,
+    requestId: string,
+    mode: TransferMode,
+  ): Promise<void> {
+    const destination = this.sessions.require(workspaceId);
+    const source = this.sessions.require(sourceWorkspaceId);
+    if (source.userId !== destination.userId) throw new Error('无权访问源 SFTP 会话。');
+    let terminalEvent: TransferEvent | null = null;
+    const emit = (event: TransferEvent): void => {
+      if (this.isTransferTerminalEvent(event)) terminalEvent = event;
+      else this.events.publish(workspaceId, { type: 'transfer-event', event });
+    };
+    await this.mutationGuard.withMutation(
+      this.guardRequest(workspaceId, `transfer.${mode}:${requestId}`, [source.connectionId, destination.connectionId]),
+      async () =>
+        this.transfers.run(
+          {
+            requestId,
+            ownerId: workspaceId,
+            sourceOwnerId: sourceWorkspaceId,
+            sourceSessionId: source.executionSessionId,
+            destinationSessionId: destination.executionSessionId,
+            sourcePaths,
+            destinationPath,
+            mode,
+          },
+          emit,
+        ),
+    );
+    if (terminalEvent) this.events.publish(workspaceId, { type: 'transfer-event', event: terminalEvent });
+  }
+
+  private async runGuardedArchive(
+    workspaceId: string,
+    operation: 'compress' | 'decompress',
+    input:
+      Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'> | Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>,
+  ): Promise<void> {
+    const session = this.sessions.require(workspaceId);
+    let terminalEvent: ArchiveEvent | null = null;
+    const emit = (event: ArchiveEvent): void => {
+      if (event.type === 'progress') this.events.publish(workspaceId, { type: 'archive-event', event });
+      else terminalEvent = event;
+    };
+    await this.mutationGuard.withMutation(
+      this.guardRequest(workspaceId, `archive.${operation}:${input.requestId}`, [session.connectionId]),
+      async () => {
+        if (operation === 'compress') {
+          await this.archives.compress(
+            {
+              ...(input as Omit<CompressArchiveRequest, 'ownerId' | 'sessionId'>),
+              ownerId: workspaceId,
+              sessionId: session.executionSessionId,
+            },
+            emit,
+          );
+          return;
+        }
+        await this.archives.decompress(
+          {
+            ...(input as Omit<DecompressArchiveRequest, 'ownerId' | 'sessionId'>),
+            ownerId: workspaceId,
+            sessionId: session.executionSessionId,
+          },
+          emit,
+        );
+      },
+    );
+    if (terminalEvent) this.events.publish(workspaceId, { type: 'archive-event', event: terminalEvent });
+  }
+
+  private isTransferTerminalEvent(event: TransferEvent): boolean {
+    return event.type === 'completed' || event.type === 'failed' || event.type === 'cancelled';
+  }
+
+  private isUploadTerminalEvent(event: UploadEvent): boolean {
+    return ['completed', 'cancelled', 'skipped', 'failed', 'conflict'].includes(event.type);
+  }
+
+  private async settleUploadTerminalEvent(workspaceId: string, uploadId: string, event: UploadEvent): Promise<void> {
+    try {
+      await this.finishUploadGuard(
+        workspaceId,
+        uploadId,
+        event.type !== 'failed',
+        event.type === 'failed' ? event.message : undefined,
+      );
+      this.events.publish(workspaceId, { type: 'upload-event', event });
+    } catch (error) {
+      this.events.publish(workspaceId, {
+        type: 'upload-event',
+        event: {
+          type: 'failed',
+          uploadId,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
   }
 
