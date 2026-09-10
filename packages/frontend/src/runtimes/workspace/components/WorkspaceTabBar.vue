@@ -175,8 +175,8 @@
                 props.mobile
                   ? 'bg-border/30 text-foreground opacity-100'
                   : session.id === activeId
-                    ? 'text-text-secondary opacity-0 group-hover:opacity-100 hover:bg-header hover:text-foreground'
-                    : 'text-text-secondary opacity-0 group-hover:opacity-100 hover:bg-border hover:text-foreground'
+                    ? 'text-text-secondary opacity-100 hover:bg-header hover:text-foreground'
+                    : 'text-text-secondary opacity-100 hover:bg-border hover:text-foreground'
               "
               :title="t('tabs.closeTabTooltip')"
               :aria-label="t('tabs.closeTabTooltip')"

@@ -148,24 +148,42 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       expect(tagBox!.y).toBeGreaterThan(searchBox!.y + searchBox!.height - 1);
       expect(Math.abs(tagBox!.y - sortBox!.y)).toBeLessThanOrEqual(1);
       expect(Math.abs(tagBox!.y - orderBox!.y)).toBeLessThanOrEqual(1);
-      await expect(dashboard.getByTestId('dashboard-tag-filter')).toHaveCSS('text-align', 'center');
-      await expect(dashboard.getByTestId('dashboard-sort-by')).toHaveCSS('text-align', 'center');
-      await expect(dashboard.getByTestId('dashboard-tag-filter')).toHaveCSS('text-align-last', 'center');
-      await expect(dashboard.getByTestId('dashboard-sort-by')).toHaveCSS('text-align-last', 'center');
-      await expect(dashboard.getByTestId('dashboard-tag-filter')).toHaveCSS('line-height', '40px');
-      await expect(dashboard.getByTestId('dashboard-sort-by')).toHaveCSS('line-height', '40px');
-      const [tagChevronBox, sortChevronBox] = await Promise.all([
-        dashboard.getByTestId('dashboard-tag-filter-chevron').boundingBox(),
-        dashboard.getByTestId('dashboard-sort-by-chevron').boundingBox(),
-      ]);
-      expect(tagChevronBox).not.toBeNull();
-      expect(sortChevronBox).not.toBeNull();
-      expect(
-        Math.abs(tagChevronBox!.y + tagChevronBox!.height / 2 - (tagBox!.y + tagBox!.height / 2)),
-      ).toBeLessThanOrEqual(1);
-      expect(
-        Math.abs(sortChevronBox!.y + sortChevronBox!.height / 2 - (sortBox!.y + sortBox!.height / 2)),
-      ).toBeLessThanOrEqual(1);
+      for (const control of [dashboard.getByTestId('dashboard-tag-filter'), dashboard.getByTestId('dashboard-sort-by')]) {
+        const geometry = await control.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const label = element.querySelector(':scope > span')?.getBoundingClientRect();
+          const chevron = element.querySelector(':scope > svg')?.getBoundingClientRect();
+          return {
+            height: box.height,
+            centerX: box.left + box.width / 2,
+            centerY: box.top + box.height / 2,
+            labelCenterX: label ? label.left + label.width / 2 : Number.NaN,
+            labelCenterY: label ? label.top + label.height / 2 : Number.NaN,
+            chevronCenterY: chevron ? chevron.top + chevron.height / 2 : Number.NaN,
+          };
+        });
+        expect(Math.abs(geometry.height - 40)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.labelCenterX - geometry.centerX)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.labelCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.chevronCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
+      }
+      const tagFilter = dashboard.getByTestId('dashboard-tag-filter');
+      await tagFilter.click();
+      const tagMenu = page.getByTestId('dashboard-tag-filter-menu');
+      await expect(tagMenu).toBeVisible();
+      const firstOption = tagMenu.getByRole('option').first();
+      const optionGeometry = await firstOption.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const label = element.querySelector('span')?.getBoundingClientRect();
+        return {
+          x: label ? Math.abs(label.left + label.width / 2 - (box.left + box.width / 2)) : Number.POSITIVE_INFINITY,
+          y: label ? Math.abs(label.top + label.height / 2 - (box.top + box.height / 2)) : Number.POSITIVE_INFINITY,
+        };
+      });
+      expect(optionGeometry.x).toBeLessThanOrEqual(1);
+      expect(optionGeometry.y).toBeLessThanOrEqual(1);
+      await page.keyboard.press('Escape');
+      await expect(tagMenu).toBeHidden();
       const filterLeftGap = tagBox!.x - toolbarBox!.x;
       const filterRightGap = toolbarBox!.x + toolbarBox!.width - (orderBox!.x + orderBox!.width);
       expect(Math.abs(filterLeftGap - filterRightGap)).toBeLessThanOrEqual(1);

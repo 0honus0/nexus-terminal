@@ -315,6 +315,15 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
         await expect(tabForName(MULTI_SESSION_NAMES[2])).toHaveAttribute('aria-selected', 'true');
         await sendMarker('M08_CHARLIE_SESSION_STATE');
         await expect(tabs).toHaveCount(3);
+        const closeButtons = page
+          .getByTestId('terminal-tab-bar')
+          .getByRole('button', { name: 'Close Tab', exact: true });
+        await expect(closeButtons).toHaveCount(3);
+        for (let index = 0; index < 3; index += 1) {
+          await expect(closeButtons.nth(index)).toBeVisible();
+          await expect(closeButtons.nth(index)).toHaveCSS('opacity', '1');
+          await expect(closeButtons.nth(index).locator('svg')).toBeVisible();
+        }
         await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(3);
         expect(workspaceConnectIds).toHaveLength(3);
       });
