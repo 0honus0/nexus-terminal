@@ -177,7 +177,7 @@ const zeroDatabaseCounts = (): Record<DatabaseOperationKind, number> => ({
 });
 
 /**
- * Process-local counters for debug performance diagnosis. Collection is disabled unless debug/trace
+ * Process-local counters for trace performance diagnosis. Collection is disabled unless trace
  * logging enables the reporter (or a benchmark explicitly starts it), keeping the normal info path cheap.
  */
 export class RuntimePerformanceMetrics {

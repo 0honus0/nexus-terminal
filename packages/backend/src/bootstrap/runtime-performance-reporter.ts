@@ -37,9 +37,9 @@ export const startRuntimePerformanceReporter = (
   let timer: NodeJS.Timeout | undefined;
 
   const report = (): void => {
-    if (!collecting || !logger.isLevelEnabled('debug')) return;
+    if (!collecting || !logger.isLevelEnabled('trace')) return;
     const interval = runtimePerformanceMetrics.snapshotAndReset();
-    logger.debug(
+    logger.trace(
       {
         metric: 'runtime.performance',
         intervalMs,
@@ -66,7 +66,7 @@ export const startRuntimePerformanceReporter = (
   };
 
   const reconcileCollection = (): void => {
-    const shouldCollect = logger.isLevelEnabled('debug');
+    const shouldCollect = logger.isLevelEnabled('trace');
     if (shouldCollect === collecting) return;
     collecting = shouldCollect;
     if (collecting) {
