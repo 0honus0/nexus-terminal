@@ -1,12 +1,14 @@
 import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import { E2E_PORTS, E2E_URLS } from './test-env';
 
 export const E2E_SSH = {
   name: 'E2E SSH',
   host: '127.0.0.1',
-  port: 22222,
+  port: E2E_PORTS.ssh,
   username: 'e2e',
   password: 'e2e-password',
-  controlUrl: 'http://127.0.0.1:22223',
+  controlPort: E2E_PORTS.sshControl,
+  controlUrl: E2E_URLS.sshControlOrigin,
 } as const;
 
 export async function configureSshE2eSettings(request: APIRequestContext): Promise<void> {

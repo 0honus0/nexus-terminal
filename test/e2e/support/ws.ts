@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import type { APIRequestContext } from '@playwright/test';
+import { E2E_URLS } from './test-env';
 
 const repoRoot = path.resolve(process.cwd(), '../..');
 const requireFromBackend = createRequire(path.join(repoRoot, 'packages', 'backend', 'package.json'));
@@ -17,7 +18,7 @@ export type E2eWebSocket = any;
 
 export async function openAuthenticatedWebSocket(
   request: APIRequestContext,
-  url = 'ws://127.0.0.1:4173/ws/workspace',
+  url = `${E2E_URLS.frontendWsOrigin}/ws/workspace`,
 ): Promise<E2eWebSocket> {
   const state = await request.storageState();
   const cookies = state.cookies

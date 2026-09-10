@@ -7,6 +7,7 @@ import {
   resetTestSshFilesystem,
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
 
 const COMMAND_A = "printf 'HISTORY_MANAGED_A\\n'";
 const COMMAND_B = "printf 'HISTORY_MANAGED_B\\n'";
@@ -18,7 +19,7 @@ function markerCount(text: string, marker: string): number {
 test('command history UI searches, copies, re-runs, and deletes real terminal history', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
   await connectTestSshFromConnectionsPage(page, connectionId);

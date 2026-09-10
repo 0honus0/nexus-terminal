@@ -9,6 +9,7 @@ import {
   waitForFilesystemReady,
   waitForJson,
 } from '../../support/ws';
+import { E2E_URLS } from '../../support/test-env';
 
 async function readRemoteFile(socket: any, remotePath: string): Promise<Buffer> {
   const response = await requestWorkspace<{ contentBase64: string }>(socket, 'filesystem.readBinary', {
@@ -63,7 +64,7 @@ test('raw binary upload reports ready, progress, completion, and readable remote
     );
     const uploadSocket = await openAuthenticatedWebSocket(
       request,
-      `ws://127.0.0.1:4173/ws/uploads?workspaceId=${encodeURIComponent(workspace.workspaceId)}&uploadId=${encodeURIComponent(uploadId)}&size=${payload.length}`,
+      `${E2E_URLS.frontendWsOrigin}/ws/uploads?workspaceId=${encodeURIComponent(workspace.workspaceId)}&uploadId=${encodeURIComponent(uploadId)}&size=${payload.length}`,
     );
     uploadSocket.send(payload);
 
@@ -137,7 +138,6 @@ test('upload cancelled during pending start never becomes active after delayed r
   }
 });
 
-
 test('stale upload data after workspace close cannot terminate the backend', async ({ request }) => {
   await loginAsInitialAdmin(request);
   await resetTestSshFilesystem();
@@ -167,7 +167,7 @@ test('stale upload data after workspace close cannot terminate the backend', asy
     await ready;
     uploadSocket = await openAuthenticatedWebSocket(
       request,
-      `ws://127.0.0.1:4173/ws/uploads?workspaceId=${encodeURIComponent(workspace.workspaceId)}&uploadId=${encodeURIComponent(uploadId)}&size=${payload.length * 2}`,
+      `${E2E_URLS.frontendWsOrigin}/ws/uploads?workspaceId=${encodeURIComponent(workspace.workspaceId)}&uploadId=${encodeURIComponent(uploadId)}&size=${payload.length * 2}`,
     );
 
     // Keep the dedicated upload socket idle until the owning Workspace has been fully cleaned up.

@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import { E2E_SSH } from '../../support/ssh';
 
 const CHANNEL_NAME = 'E2E Webhook Channel';
 
@@ -31,7 +32,7 @@ test('notification settings create, edit, persist, and delete a webhook channel 
     await settings.getByTestId('notification-add-channel').click();
     await page.locator('#setting-name').fill(CHANNEL_NAME);
     await page.locator('#setting-channel-type').selectOption('webhook');
-    await page.locator('#webhook-url').fill('http://127.0.0.1:22223/e2e-notification-webhook');
+    await page.locator('#webhook-url').fill(`${E2E_SSH.controlUrl}/e2e-notification-webhook`);
     await page.locator('#webhook-method').selectOption('POST');
     await page.locator('#webhook-body').fill('{"event":"{event}"}');
     await page
@@ -89,7 +90,7 @@ test('notification settings keep long provider and event content readable on a n
   expect(language.ok()).toBeTruthy();
 
   const longName = 'E2E Notification Channel With An Extremely Long Narrow Screen Name';
-  const longUrl = 'http://127.0.0.1:22223/e2e-notification-provider-with-a-long-path-for-mobile-readability';
+  const longUrl = `${E2E_SSH.controlUrl}/e2e-notification-provider-with-a-long-path-for-mobile-readability`;
   const create = await context.request.post('/api/v1/notifications', {
     data: {
       channelType: 'webhook',

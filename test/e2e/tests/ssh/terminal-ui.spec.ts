@@ -9,6 +9,7 @@ import {
   resetTestSshFilesystem,
 } from '../../support/ssh';
 import { step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
 
 async function holdFirstTwoTerminalFontWrites(page: Page): Promise<{
   firstStarted: Promise<void>;
@@ -426,7 +427,7 @@ test('desktop terminal right-click copies a selection then pastes when no select
   page,
   context,
 }) => {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   const preferences = await context.request.put('/api/v1/settings', {

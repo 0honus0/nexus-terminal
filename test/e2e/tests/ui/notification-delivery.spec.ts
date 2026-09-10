@@ -2,10 +2,12 @@ import { writeFile } from 'node:fs/promises';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { slowStep, step } from '../../support/steps';
+import { E2E_SSH } from '../../support/ssh';
+import { E2E_PORTS } from '../../support/test-env';
 
 const CRUD_CHANNEL_NAME = 'E2E Notification CRUD Delivery';
-const STRICT_WEBHOOK_URL = 'http://127.0.0.1:22223/e2e-notification-webhook-strict';
-const FAILURE_WEBHOOK_URL = 'http://127.0.0.1:22223/e2e-notification-webhook-missing';
+const STRICT_WEBHOOK_URL = `${E2E_SSH.controlUrl}/e2e-notification-webhook-strict`;
+const FAILURE_WEBHOOK_URL = `${E2E_SSH.controlUrl}/e2e-notification-webhook-missing`;
 
 async function cleanupChannel(request: import('@playwright/test').APIRequestContext): Promise<void> {
   const response = await request.get('/api/v1/notifications');
@@ -62,7 +64,7 @@ test('notification test button performs a real webhook POST with configured head
   await settings.getByTestId('notification-add-channel').click();
   await page.locator('#setting-name').fill('E2E Unsaved Webhook Delivery');
   await page.locator('#setting-channel-type').selectOption('webhook');
-  await page.locator('#webhook-url').fill('http://127.0.0.1:22223/e2e-notification-webhook-strict');
+  await page.locator('#webhook-url').fill(STRICT_WEBHOOK_URL);
   await page.locator('#webhook-method').selectOption('POST');
   await page.locator('#webhook-headers').fill('{"Content-Type":"application/json","X-E2E-Webhook":"delivery"}');
   await page.locator('#webhook-body').fill('{"source":"nexus-e2e","event":"{event}","details":{details}}');
@@ -123,7 +125,7 @@ test('email notification test preserves legacy HTML body-template rendering', as
   await field('Recipient Email(s):').locator('input').fill('recipient@example.test');
   await field('Body Template (Optional)').locator('textarea').fill('<strong>NEXUS-E2E-HTML</strong> {eventDisplay}');
   await field('SMTP Host:').locator('input').fill('127.0.0.1');
-  await field('SMTP Port:').locator('input').fill('22224');
+  await field('SMTP Port:').locator('input').fill(String(E2E_PORTS.smtp));
   const secure = page.locator('label').filter({ hasText: 'Use TLS/SSL' }).locator('input[type=checkbox]');
   if (await secure.isChecked()) await secure.uncheck();
   await field('Sender Email:').locator('input').fill('nexus@example.test');
