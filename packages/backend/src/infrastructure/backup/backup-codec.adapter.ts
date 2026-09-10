@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { BackupCodecPort } from '../../modules/backup/backup.port';
 import type { BackupSnapshot } from '../../modules/backup/backup.types';
 import { BackupPasswordRequiredError, InvalidBackupPasswordError } from '../../shared/errors/backup.errors';
+import { runtimePerformanceMetrics, type CpuTaskKind } from '../../shared/observability/runtime-performance';
 
 const MAGIC = 'NEXUS_TERMINAL_BACKUP_V1\n';
 const BACKUP_FORMAT = 'nexus-terminal-backup' as const;
@@ -36,6 +37,32 @@ const decrypt = (payload: CipherPayload, key: Buffer): Buffer => {
   d.setAuthTag(Buffer.from(payload.tag, 'base64'));
   return Buffer.concat([d.update(Buffer.from(payload.ciphertext, 'base64')), d.final()]);
 };
+
+const measureCpu = <T>(kind: CpuTaskKind, work: () => T): T => {
+  const startedAt = runtimePerformanceMetrics.operationStarted();
+  if (startedAt === 0n) return work();
+  try {
+    return work();
+  } finally {
+    runtimePerformanceMetrics.recordCpuTask(kind, process.hrtime.bigint() - startedAt, startedAt);
+  }
+};
+
+const measureCpuAsync = async <T>(kind: CpuTaskKind, work: () => Promise<T>): Promise<T> => {
+  const startedAt = runtimePerformanceMetrics.operationStarted();
+  if (startedAt === 0n) return work();
+  try {
+    return await work();
+  } finally {
+    runtimePerformanceMetrics.recordCpuTask(kind, process.hrtime.bigint() - startedAt, startedAt);
+  }
+};
+
+const derivePasswordKey = (password: string, salt: Uint8Array, iterations: number): Promise<Buffer> =>
+  new Promise<Buffer>((resolve, reject) => {
+    crypto.pbkdf2(password, salt, iterations, 32, 'sha256', (error, key) => (error ? reject(error) : resolve(key)));
+  });
+
 const validCipher = (v: unknown): v is CipherPayload =>
   Boolean(
     v &&
@@ -54,75 +81,104 @@ export class NexusBackupCodecAdapter implements BackupCodecPort {
     this.instanceKey = crypto.createHash('sha256').update(`nexus-backup-instance:${instanceSecret}`).digest();
   }
   async encode(snapshot: BackupSnapshot, password: string): Promise<Uint8Array> {
-    if (!password) throw new Error('导出备份需要当前登录密码。');
-    const dataKey = crypto.randomBytes(32),
-      salt = crypto.randomBytes(16),
-      passwordKey = crypto.pbkdf2Sync(password, salt, PBKDF2_ITERATIONS, 32, 'sha256');
-    const envelope: Envelope = {
-      format: BACKUP_FORMAT,
-      version: BACKUP_VERSION,
-      createdAt: snapshot.createdAt,
-      passwordKdf: { algorithm: 'pbkdf2-sha256', salt: salt.toString('base64'), iterations: PBKDF2_ITERATIONS },
-      instanceWrappedKey: encrypt(dataKey, this.instanceKey),
-      passwordWrappedKey: encrypt(dataKey, passwordKey),
-      payload: encrypt(Buffer.from(JSON.stringify(snapshot), 'utf8'), dataKey),
-    };
-    return Buffer.from(MAGIC + JSON.stringify(envelope), 'utf8');
+    const totalStartedAt = runtimePerformanceMetrics.operationStarted();
+    try {
+      if (!password) throw new Error('导出备份需要当前登录密码。');
+      const dataKey = crypto.randomBytes(32);
+      const salt = crypto.randomBytes(16);
+      const passwordKey = await measureCpuAsync('backup.pbkdf2', () =>
+        derivePasswordKey(password, salt, PBKDF2_ITERATIONS),
+      );
+      const snapshotJson = measureCpu('backup.json.stringify.snapshot', () => JSON.stringify(snapshot));
+      const payload = measureCpu('backup.encrypt.payload', () => encrypt(Buffer.from(snapshotJson, 'utf8'), dataKey));
+      const envelope: Envelope = {
+        format: BACKUP_FORMAT,
+        version: BACKUP_VERSION,
+        createdAt: snapshot.createdAt,
+        passwordKdf: { algorithm: 'pbkdf2-sha256', salt: salt.toString('base64'), iterations: PBKDF2_ITERATIONS },
+        instanceWrappedKey: encrypt(dataKey, this.instanceKey),
+        passwordWrappedKey: encrypt(dataKey, passwordKey),
+        payload,
+      };
+      const envelopeJson = measureCpu('backup.json.stringify.envelope', () => JSON.stringify(envelope));
+      return Buffer.from(MAGIC + envelopeJson, 'utf8');
+    } finally {
+      if (totalStartedAt !== 0n)
+        runtimePerformanceMetrics.recordCpuTask(
+          'backup.encode.total',
+          process.hrtime.bigint() - totalStartedAt,
+          totalStartedAt,
+        );
+    }
   }
   async decode(bytes: Uint8Array, password?: string): Promise<{ snapshot: BackupSnapshot; usedPassword: boolean }> {
-    const content = Buffer.from(bytes).toString('utf8');
-    if (!content.startsWith(MAGIC)) throw new Error('不是有效的 Nexus Terminal 备份文件。');
-    let envelope: Envelope;
+    const totalStartedAt = runtimePerformanceMetrics.operationStarted();
     try {
-      envelope = JSON.parse(content.slice(MAGIC.length)) as Envelope;
-    } catch {
-      throw new Error('备份文件格式无效。');
-    }
-    if (
-      envelope.format !== BACKUP_FORMAT ||
-      envelope.version !== BACKUP_VERSION ||
-      envelope.passwordKdf?.algorithm !== 'pbkdf2-sha256' ||
-      envelope.passwordKdf.iterations !== PBKDF2_ITERATIONS ||
-      !envelope.passwordKdf.salt ||
-      !validCipher(envelope.instanceWrappedKey) ||
-      !validCipher(envelope.passwordWrappedKey) ||
-      !validCipher(envelope.payload)
-    )
-      throw new Error('备份文件加密参数无效。');
-    let dataKey: Buffer,
-      usedPassword = false;
-    try {
-      dataKey = decrypt(envelope.instanceWrappedKey, this.instanceKey);
-    } catch {
-      if (!password) throw new BackupPasswordRequiredError();
+      const content = Buffer.from(bytes).toString('utf8');
+      if (!content.startsWith(MAGIC)) throw new Error('不是有效的 Nexus Terminal 备份文件。');
+      let envelope: Envelope;
       try {
-        const key = crypto.pbkdf2Sync(
-          password,
-          Buffer.from(envelope.passwordKdf.salt, 'base64'),
-          envelope.passwordKdf.iterations,
-          32,
-          'sha256',
-        );
-        dataKey = decrypt(envelope.passwordWrappedKey, key);
-        usedPassword = true;
+        envelope = measureCpu('backup.json.parse.envelope', () => JSON.parse(content.slice(MAGIC.length)) as Envelope);
       } catch {
-        throw new InvalidBackupPasswordError();
+        throw new Error('备份文件格式无效。');
       }
-    }
-    try {
-      const snapshot = JSON.parse(decrypt(envelope.payload, dataKey).toString('utf8')) as BackupSnapshot;
       if (
-        snapshot.format !== BACKUP_FORMAT ||
-        snapshot.version !== BACKUP_VERSION ||
-        !snapshot.tables ||
-        typeof snapshot.tables !== 'object' ||
-        !Array.isArray(snapshot.files)
+        envelope.format !== BACKUP_FORMAT ||
+        envelope.version !== BACKUP_VERSION ||
+        envelope.passwordKdf?.algorithm !== 'pbkdf2-sha256' ||
+        envelope.passwordKdf.iterations !== PBKDF2_ITERATIONS ||
+        !envelope.passwordKdf.salt ||
+        !validCipher(envelope.instanceWrappedKey) ||
+        !validCipher(envelope.passwordWrappedKey) ||
+        !validCipher(envelope.payload)
       )
-        throw new Error('备份载荷版本或结构不受支持。');
-      return { snapshot, usedPassword };
-    } catch (error) {
-      if (usedPassword) throw new InvalidBackupPasswordError();
-      throw error;
+        throw new Error('备份文件加密参数无效。');
+      let dataKey: Buffer;
+      let usedPassword = false;
+      try {
+        dataKey = decrypt(envelope.instanceWrappedKey, this.instanceKey);
+      } catch {
+        if (!password) throw new BackupPasswordRequiredError();
+        try {
+          const key = await measureCpuAsync('backup.pbkdf2', () =>
+            derivePasswordKey(
+              password,
+              Buffer.from(envelope.passwordKdf.salt, 'base64'),
+              envelope.passwordKdf.iterations,
+            ),
+          );
+          dataKey = decrypt(envelope.passwordWrappedKey, key);
+          usedPassword = true;
+        } catch {
+          throw new InvalidBackupPasswordError();
+        }
+      }
+      try {
+        const plain = measureCpu('backup.decrypt.payload', () => decrypt(envelope.payload, dataKey));
+        const snapshot = measureCpu(
+          'backup.json.parse.snapshot',
+          () => JSON.parse(plain.toString('utf8')) as BackupSnapshot,
+        );
+        if (
+          snapshot.format !== BACKUP_FORMAT ||
+          snapshot.version !== BACKUP_VERSION ||
+          !snapshot.tables ||
+          typeof snapshot.tables !== 'object' ||
+          !Array.isArray(snapshot.files)
+        )
+          throw new Error('备份载荷版本或结构不受支持。');
+        return { snapshot, usedPassword };
+      } catch (error) {
+        if (usedPassword) throw new InvalidBackupPasswordError();
+        throw error;
+      }
+    } finally {
+      if (totalStartedAt !== 0n)
+        runtimePerformanceMetrics.recordCpuTask(
+          'backup.decode.total',
+          process.hrtime.bigint() - totalStartedAt,
+          totalStartedAt,
+        );
     }
   }
 }

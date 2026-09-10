@@ -105,6 +105,7 @@ test('desktop Progress Display floats above the workspace without resizing the t
     await route.continue();
   });
 
+  await page.setViewportSize({ width: 1024, height: 768 });
   await openFileManager(page, context);
   await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=3000`, { method: 'POST' });
   try {

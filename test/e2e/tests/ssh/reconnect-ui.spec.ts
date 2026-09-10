@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import type { APIRequestContext, Page, TestInfo } from '@playwright/test';
+import type { APIRequestContext, Locator, Page, TestInfo } from '@playwright/test';
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -59,6 +59,14 @@ async function openConnectionFromWorkspacePicker(page: Page, connectionId: numbe
   await row.click();
   await expect(picker).toBeHidden();
   await expect(page.locator('[data-testid="command-input"]:visible')).toBeEnabled({ timeout: 20_000 });
+}
+
+async function xtermGeometry(terminal: Locator): Promise<{ width: string; height: string; rowCount: number }> {
+  return terminal.locator('.xterm-screen').evaluate((screen) => ({
+    width: (screen as HTMLElement).style.width,
+    height: (screen as HTMLElement).style.height,
+    rowCount: screen.querySelector('.xterm-rows')?.children.length ?? 0,
+  }));
 }
 
 async function captureWorkspaceEvidence(page: Page, testInfo: TestInfo, name: 'before' | 'after'): Promise<void> {
@@ -207,6 +215,40 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
   }
 });
 
+test('hidden desktop terminal keeps its fitted geometry while switching sessions', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await setTestSshOnline(true);
+  await resetTestSshFilesystem();
+  await removeMultiSessionConnections(context.request);
+  const connectionIds = await createMultiSessionConnections(context.request);
+
+  try {
+    await connectTestSshFromConnectionsPage(page, connectionIds[0]!);
+    const terminals = page.getByTestId('terminal');
+    await expect(terminals).toHaveCount(1);
+    const activeGeometry = await xtermGeometry(terminals.nth(0));
+    expect(activeGeometry.rowCount).toBeGreaterThan(10);
+
+    await openConnectionFromWorkspacePicker(page, connectionIds[1]!);
+    await expect(terminals).toHaveCount(2);
+    // Allow the ResizeObserver callback caused by v-show/display:none to run. A hidden terminal
+    // must retain its last valid fitted geometry instead of being refit against a zero-size ancestor.
+    await page.waitForTimeout(100);
+    const hiddenGeometry = await xtermGeometry(terminals.nth(0));
+    expect(hiddenGeometry).toEqual(activeGeometry);
+
+    await page.getByTestId('terminal-tab-bar').getByRole('tab').filter({ hasText: MULTI_SESSION_NAMES[0] }).click();
+    await expect(page.getByTestId('terminal-tab-bar').locator('[role="tab"][aria-selected="true"]')).toHaveText(
+      new RegExp(MULTI_SESSION_NAMES[0]),
+    );
+    expect(await xtermGeometry(terminals.nth(0))).toEqual(activeGeometry);
+  } finally {
+    await setTestSshOnline(true);
+    await removeMultiSessionConnections(context.request);
+  }
+});
+
 test.describe('M08.03-a mobile Workspace session lifecycle', () => {
   test.use({ viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true });
 
@@ -269,6 +311,15 @@ test.describe('M08.03-a mobile Workspace session lifecycle', () => {
         await expect(tabForName(MULTI_SESSION_NAMES[2])).toHaveAttribute('aria-selected', 'true');
         await sendMarker('M08_CHARLIE_SESSION_STATE');
         await expect(tabs).toHaveCount(3);
+        const closeButtons = page
+          .getByTestId('terminal-tab-bar')
+          .getByRole('button', { name: 'Close Tab', exact: true });
+        await expect(closeButtons).toHaveCount(3);
+        for (let index = 0; index < 3; index += 1) {
+          await expect(closeButtons.nth(index)).toBeVisible();
+          await expect(closeButtons.nth(index)).toHaveCSS('opacity', '1');
+          await expect(closeButtons.nth(index).locator('svg')).toBeVisible();
+        }
         await expect.poll(() => new Set(workspaceConnectIds).size, { timeout: 20_000 }).toBe(3);
         expect(workspaceConnectIds).toHaveLength(3);
       });

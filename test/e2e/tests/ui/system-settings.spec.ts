@@ -320,3 +320,56 @@ test('workspace popup editor setting is the only editor and preview close contro
     expect(restore.ok()).toBeTruthy();
   }
 });
+
+test('system settings persist frontend and backend log levels through the UI', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const originalResponse = await context.request.get('/api/v1/settings');
+  expect(originalResponse.ok()).toBeTruthy();
+  const original = (await originalResponse.json()) as {
+    frontendLogLevel?: string;
+    backendLogLevel?: string;
+  };
+
+  const normalize = await context.request.put('/api/v1/settings', {
+    data: { frontendLogLevel: 'info', backendLogLevel: 'info' },
+  });
+  expect(normalize.ok()).toBeTruthy();
+
+  try {
+    await page.goto('/settings');
+    await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
+    const frontend = page.locator('#frontendLogLevelSelect');
+    const backend = page.locator('#backendLogLevelSelect');
+    const form = page.getByTestId('logging-settings-form');
+    await expect(frontend).toHaveValue('info');
+    await expect(backend).toHaveValue('info');
+
+    await frontend.selectOption('debug');
+    await backend.selectOption('debug');
+    const responsePromise = page.waitForResponse(
+      (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',
+    );
+    await form.locator('button[type="submit"]').click();
+    expect((await responsePromise).ok()).toBeTruthy();
+
+    const persisted = await context.request.get('/api/v1/settings');
+    expect(persisted.ok()).toBeTruthy();
+    expect(await persisted.json()).toMatchObject({ frontendLogLevel: 'debug', backendLogLevel: 'debug' });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
+    await expect(page.locator('#frontendLogLevelSelect')).toHaveValue('debug');
+    await expect(page.locator('#backendLogLevelSelect')).toHaveValue('debug');
+
+    const invalid = await context.request.put('/api/v1/settings', { data: { backendLogLevel: 'verbose' } });
+    expect(invalid.status()).toBe(400);
+  } finally {
+    const restore = await context.request.put('/api/v1/settings', {
+      data: {
+        frontendLogLevel: original.frontendLogLevel ?? 'info',
+        backendLogLevel: original.backendLogLevel ?? 'info',
+      },
+    });
+    expect(restore.ok()).toBeTruthy();
+  }
+});

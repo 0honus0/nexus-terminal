@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { logger } from '@/client/logging/logger';
 import { appearanceApi } from '../api/appearanceApi';
 import { defaultWindowThemeColor, normalizeUiTheme } from '../config/default-theme';
 import type { AppearanceSettings, TerminalTheme } from '../model/appearance';
@@ -76,7 +77,7 @@ export const useAppearanceStore = defineStore('appearance', {
       try {
         this.themes = await appearanceApi.listThemes();
       } catch (cause) {
-        console.warn('[Appearance] Failed to load terminal themes; appearance settings remain available.', cause);
+        logger.warn({ err: cause }, 'Failed to load terminal themes; appearance settings remain available');
       }
     },
 

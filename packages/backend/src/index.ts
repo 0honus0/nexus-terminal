@@ -1,6 +1,6 @@
-import { main } from './bootstrap/main';
+import { main, reportBackendStartupFailure } from './bootstrap/main';
 
 void main().catch((error) => {
-  console.error('Backend startup failed:', error);
+  reportBackendStartupFailure(error);
   process.exitCode = 1;
 });

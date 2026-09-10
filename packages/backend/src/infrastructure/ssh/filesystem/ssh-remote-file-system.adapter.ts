@@ -12,6 +12,7 @@ import type {
   RemoteWriteOptions,
 } from '../../../platform/filesystem/remote-filesystem';
 import { isRemoteFileMissingError } from '../../../platform/filesystem/remote-filesystem';
+import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 
 const call = <T>(invoke: (callback: (error: Error | undefined | null, value: T) => void) => void): Promise<T> =>
   new Promise<T>((resolve, reject) => invoke((error, value) => (error ? reject(error) : resolve(value))));
@@ -79,6 +80,26 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
     const channel = await this.channelProvider();
     const handle = await call<Buffer>((callback) => channel.open(remotePath, 'r', callback));
     let closed = false;
+    const readInto = async (position: number, target: Uint8Array): Promise<number> => {
+      if (closed) throw new Error(`Remote reader is closed: ${remotePath}`);
+      if (!Number.isSafeInteger(position) || position < 0) {
+        throw new Error('Remote positioned read requires a non-negative integer position.');
+      }
+      if (target.byteLength === 0) return 0;
+      const buffer = Buffer.from(target.buffer, target.byteOffset, target.byteLength);
+      const startedAt = runtimePerformanceMetrics.sftpPositionedReadStarted(buffer.length);
+      let bytesRead = 0;
+      try {
+        bytesRead = await new Promise<number>((resolve, reject) => {
+          channel.read(handle, buffer, 0, buffer.length, position, (error, count) =>
+            error ? reject(error) : resolve(count),
+          );
+        });
+        return bytesRead;
+      } finally {
+        runtimePerformanceMetrics.sftpPositionedReadFinished(startedAt, bytesRead);
+      }
+    };
     return {
       read: async (position, length) => {
         if (closed) throw new Error(`Remote reader is closed: ${remotePath}`);
@@ -87,11 +108,11 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
         }
         if (length === 0) return new Uint8Array();
         const buffer = Buffer.allocUnsafe(length);
-        const bytesRead = await new Promise<number>((resolve, reject) => {
-          channel.read(handle, buffer, 0, length, position, (error, count) => (error ? reject(error) : resolve(count)));
-        });
+        runtimePerformanceMetrics.recordSftpPositionedReadAllocation(length);
+        const bytesRead = await readInto(position, buffer);
         return buffer.subarray(0, bytesRead);
       },
+      readInto,
       close: async () => {
         if (closed) return;
         closed = true;
@@ -119,7 +140,12 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
         }
         const buffer = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
         if (buffer.length === 0) return;
-        await callVoid((callback) => channel.write(handle, buffer, 0, buffer.length, position, callback));
+        const startedAt = runtimePerformanceMetrics.sftpPositionedWriteStarted(buffer.length);
+        try {
+          await callVoid((callback) => channel.write(handle, buffer, 0, buffer.length, position, callback));
+        } finally {
+          runtimePerformanceMetrics.sftpPositionedWriteFinished(startedAt);
+        }
       },
       close: async () => {
         if (closed) return;
@@ -172,9 +198,18 @@ export class SshRemoteFileSystemAdapter implements RemoteFileSystem {
       await callVoid((callback) => channel.ext_openssh_rename(sourcePath, destinationPath, callback));
       return;
     } catch (atomicRenameError) {
-      if (!(await this.exists(destinationPath))) {
+      let destinationMetadata: RemoteFileMetadata | null = null;
+      try {
+        destinationMetadata = await this.metadata(destinationPath);
+      } catch (error) {
+        if (!isRemoteFileMissingError(error)) throw error;
+      }
+      if (!destinationMetadata) {
         await this.rename(sourcePath, destinationPath);
         return;
+      }
+      if (destinationMetadata.isDirectory) {
+        throw new Error(`Refusing to replace remote directory with a file: ${destinationPath}`);
       }
 
       const backupPath = `${sourcePath}.previous`;

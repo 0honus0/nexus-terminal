@@ -4,8 +4,9 @@ import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
 
-const BASE_URL = 'http://localhost:4173';
+const BASE_URL = E2E_URLS.frontendOrigin;
 const LOGIN_VIEWPORTS = [
   { label: '1280x800', width: 1280, height: 800 },
   { label: '320x667', width: 320, height: 667 },

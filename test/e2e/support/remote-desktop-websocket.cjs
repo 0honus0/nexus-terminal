@@ -3,10 +3,12 @@ const { createRequire } = require('node:module');
 
 const requireFromBackend = createRequire(path.resolve(__dirname, '../../../packages/backend/package.json'));
 const { WebSocket } = requireFromBackend('ws');
-const targetOrigin = 'http://127.0.0.1:3001';
+const backendPort = Number(process.env.NEXUS_E2E_BACKEND_PORT || 3001);
+const targetOrigin = `http://127.0.0.1:${backendPort}`;
+const targetWebSocketOrigin = `ws://127.0.0.1:${backendPort}`;
 
 const createSocket = (ticket, cookie) =>
-  new WebSocket(`ws://127.0.0.1:3001/ws/remote-desktop?ticket=${encodeURIComponent(ticket)}`, 'guacamole', {
+  new WebSocket(`${targetWebSocketOrigin}/ws/remote-desktop?ticket=${encodeURIComponent(ticket)}`, 'guacamole', {
     headers: {
       Cookie: cookie,
       Origin: targetOrigin,

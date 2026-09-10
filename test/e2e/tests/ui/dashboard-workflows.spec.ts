@@ -112,6 +112,14 @@ async function createConnection(
   return id;
 }
 
+async function chooseDashboardOption(page: Page, triggerTestId: string, optionTestId: string): Promise<void> {
+  const trigger = page.getByTestId(triggerTestId);
+  await trigger.click();
+  const option = page.getByTestId(optionTestId);
+  await expect(option).toBeVisible();
+  await option.click();
+}
+
 test('desktop dashboard exposes suspended sessions without changing the main workspace layout', async ({
   page,
   context,
@@ -517,35 +525,36 @@ test('dashboard filters connections and persists tag and sort preferences across
     });
 
     await step('an empty selected tag uses the restored tag-specific empty state', async () => {
-      const filter = dashboard.getByTestId('dashboard-tag-filter');
-      await filter.selectOption(String(emptyTagId));
+      await chooseDashboardOption(page, 'dashboard-tag-filter', `dashboard-tag-filter-option-${emptyTagId}`);
       await expect(dashboard.getByText('该标签下没有连接记录', { exact: true })).toBeVisible();
-      await filter.selectOption(String(alphaTagId));
+      await chooseDashboardOption(page, 'dashboard-tag-filter', `dashboard-tag-filter-option-${alphaTagId}`);
     });
 
     await step('tag filtering persists across a full page reload', async () => {
-      const filter = dashboard.getByTestId('dashboard-tag-filter');
-      await filter.selectOption(String(alphaTagId));
+      await chooseDashboardOption(page, 'dashboard-tag-filter', `dashboard-tag-filter-option-${alphaTagId}`);
       await expect(alphaRow).toBeVisible();
       await expect(betaRow).toBeHidden();
 
       expect((await context.request.delete(`/api/v1/tags/${emptyTagId}`)).ok()).toBeTruthy();
       await page.reload();
       const reloadedDashboard = page.getByTestId('dashboard-view');
-      await expect(reloadedDashboard.getByTestId('dashboard-tag-filter')).toHaveValue(String(alphaTagId));
+      await expect(reloadedDashboard.getByTestId('dashboard-tag-filter')).toHaveAttribute(
+        'data-value',
+        String(alphaTagId),
+      );
       await expect(reloadedDashboard.getByTestId(`dashboard-connection-row-${alphaId}`)).toBeVisible();
       await expect(reloadedDashboard.getByTestId(`dashboard-connection-row-${betaId}`)).toBeHidden();
     });
 
     await step('sort field and order persist independently from the connection data', async () => {
       const reloadedDashboard = page.getByTestId('dashboard-view');
-      await reloadedDashboard.getByTestId('dashboard-tag-filter').selectOption({ index: 0 });
-      await reloadedDashboard.getByTestId('dashboard-sort-by').selectOption('name');
+      await chooseDashboardOption(page, 'dashboard-tag-filter', 'dashboard-tag-filter-option-all');
+      await chooseDashboardOption(page, 'dashboard-sort-by', 'dashboard-sort-by-option-name');
       await reloadedDashboard.getByTestId('dashboard-sort-order').click();
 
       await page.reload();
       const finalDashboard = page.getByTestId('dashboard-view');
-      await expect(finalDashboard.getByTestId('dashboard-sort-by')).toHaveValue('name');
+      await expect(finalDashboard.getByTestId('dashboard-sort-by')).toHaveAttribute('data-value', 'name');
       const visibleFixtureRows = finalDashboard
         .locator('[data-testid^="dashboard-connection-row-"]')
         .filter({ hasText: /E2E Dashboard (Alpha|Beta)/ });
@@ -592,9 +601,63 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(resourceList).toBeVisible();
       await expect(localResource).toBeVisible();
       await expect(localResource).toContainText('CPU');
+      const recentCard = recentActivity.locator('ol > li').first();
+      await expect(recentCard).toBeVisible();
+      const [activityDotBox, activityTitleBox] = await Promise.all([
+        recentCard.locator('.activity-dot').boundingBox(),
+        recentCard.locator('.activity-title').boundingBox(),
+      ]);
+      expect(activityDotBox).not.toBeNull();
+      expect(activityTitleBox).not.toBeNull();
+      expect(
+        Math.abs(activityDotBox!.y + activityDotBox!.height / 2 - (activityTitleBox!.y + activityTitleBox!.height / 2)),
+      ).toBeLessThanOrEqual(1);
       await expect(page.getByTestId('dashboard-remote-refresh-interval')).toHaveText('30 秒刷新');
       await expect(page.getByTestId(`dashboard-connection-row-${alphaId}`)).toBeVisible();
       await expect(page.getByTestId(`dashboard-connection-row-${betaId}`)).toBeVisible();
+
+      const tagFilter = page.getByTestId('dashboard-tag-filter');
+      const sortFilter = page.getByTestId('dashboard-sort-by');
+      for (const control of [tagFilter, sortFilter]) {
+        const geometry = await control.evaluate((element) => {
+          const box = element.getBoundingClientRect();
+          const label = element.querySelector(':scope > span')?.getBoundingClientRect();
+          const chevron = element.querySelector(':scope > svg')?.getBoundingClientRect();
+          return {
+            height: box.height,
+            centerX: box.left + box.width / 2,
+            centerY: box.top + box.height / 2,
+            labelCenterX: label ? label.left + label.width / 2 : Number.NaN,
+            labelCenterY: label ? label.top + label.height / 2 : Number.NaN,
+            chevronCenterY: chevron ? chevron.top + chevron.height / 2 : Number.NaN,
+          };
+        });
+        expect(Math.abs(geometry.height - 40)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.labelCenterX - geometry.centerX)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.labelCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.chevronCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
+      }
+
+      await tagFilter.click();
+      const tagMenu = page.getByTestId('dashboard-tag-filter-menu');
+      await expect(tagMenu).toBeVisible();
+      const optionCenters = await tagMenu.getByRole('option').evaluateAll((options) =>
+        options.map((option) => {
+          const box = option.getBoundingClientRect();
+          const label = option.querySelector('span')?.getBoundingClientRect();
+          return {
+            x: label ? Math.abs(label.left + label.width / 2 - (box.left + box.width / 2)) : Number.POSITIVE_INFINITY,
+            y: label ? Math.abs(label.top + label.height / 2 - (box.top + box.height / 2)) : Number.POSITIVE_INFINITY,
+          };
+        }),
+      );
+      expect(optionCenters.length).toBeGreaterThan(1);
+      for (const center of optionCenters) {
+        expect(center.x).toBeLessThanOrEqual(1);
+        expect(center.y).toBeLessThanOrEqual(1);
+      }
+      await page.keyboard.press('Escape');
+      await expect(tagMenu).toBeHidden();
 
       const overflow = await dashboard.evaluate((element) => ({
         scrollWidth: element.scrollWidth,

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { request as playwrightRequest } from '@playwright/test';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
+import { E2E_URLS } from '../../support/test-env';
 const {
   openRemoteDesktopWebSocket,
   waitForRemoteDesktopTicketRejection,
@@ -10,7 +11,7 @@ const {
 } = require('../../support/remote-desktop-websocket.cjs');
 
 const databasePath = path.resolve(__dirname, '../../.tmp/backend-data/nexus-terminal.db');
-const backendBaseUrl = 'http://127.0.0.1:3001';
+const backendBaseUrl = E2E_URLS.backendOrigin;
 
 const sessionCookie = async (request: APIRequestContext): Promise<string> => {
   const storage = await request.storageState();

@@ -1,4 +1,6 @@
 import WebSocket, { type RawData } from 'ws';
+import { logger } from '../../shared/logging/logger';
+import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import type { WorkspaceOperationsService } from '../../modules/workspace/services/workspace-operations.service';
 import type { WorkspaceService } from '../../modules/workspace/workspace.service';
 
@@ -42,14 +44,18 @@ export const bindUploadStream = (
   let paused = false;
 
   const cleanupIncompleteUpload = (): void => {
+    if (paused) {
+      paused = false;
+      runtimePerformanceMetrics.uploadBackpressureChanged(false);
+    }
     if (uploadCompleted || cleanupStarted) return;
     cleanupStarted = true;
     void dependencies.operations
       .abortUpload(request.workspaceId, request.uploadId, 'Upload data transport closed before completion.')
       .catch((error) => {
-        console.error(
-          `[WebSocket upload/${request.workspaceId}/${request.uploadId}] unable to clean incomplete upload:`,
-          error,
+        logger.error(
+          { err: error, workspaceId: request.workspaceId, uploadId: request.uploadId },
+          'Unable to clean incomplete WebSocket upload',
         );
       });
   };
@@ -62,17 +68,19 @@ export const bindUploadStream = (
     if (!paused && queuedBytes >= SERVER_QUEUE_HIGH_WATER_BYTES) {
       socket.pause();
       paused = true;
+      runtimePerformanceMetrics.uploadBackpressureChanged(true);
       return;
     }
     if (paused && queuedBytes <= SERVER_QUEUE_LOW_WATER_BYTES) {
       socket.resume();
       paused = false;
+      runtimePerformanceMetrics.uploadBackpressureChanged(false);
     }
   };
 
   if (request.size === 0) {
-    void dependencies.operations
-      .appendUpload(request.workspaceId, request.uploadId, 0, Buffer.alloc(0), true)
+    void Promise.resolve()
+      .then(() => dependencies.operations.appendUpload(request.workspaceId, request.uploadId, 0, Buffer.alloc(0), true))
       .then(() => {
         uploadCompleted = true;
         if (socket.readyState === WebSocket.OPEN) socket.close(1000, 'Upload complete');
@@ -105,9 +113,15 @@ export const bindUploadStream = (
     const currentIndex = chunkIndex++;
     bytesReceived = nextBytes;
     queuedBytes += data.byteLength;
+    runtimePerformanceMetrics.recordUploadChunk(data.byteLength, queuedBytes);
     updateReceiveBackpressure();
-    void dependencies.operations
-      .appendUpload(request.workspaceId, request.uploadId, currentIndex, data, isLast)
+    // Workspace teardown can race an already-upgraded upload socket. Always enter the
+    // promise chain before calling the operation so a synchronous ownership/session error
+    // is contained to this WebSocket instead of escaping the event emitter as uncaughtException.
+    void Promise.resolve()
+      .then(() =>
+        dependencies.operations.appendUpload(request.workspaceId, request.uploadId, currentIndex, data, isLast),
+      )
       .then(() => {
         queuedBytes = Math.max(0, queuedBytes - data.byteLength);
         updateReceiveBackpressure();
@@ -119,7 +133,10 @@ export const bindUploadStream = (
       })
       .catch((error) => {
         queuedBytes = Math.max(0, queuedBytes - data.byteLength);
-        console.error(`[WebSocket upload/${request.workspaceId}/${request.uploadId}] append failed:`, error);
+        logger.error(
+          { err: error, workspaceId: request.workspaceId, uploadId: request.uploadId },
+          'WebSocket upload append failed',
+        );
         if (socket.readyState === WebSocket.OPEN) socket.close(1011, 'Upload append failed');
         closed = true;
       });

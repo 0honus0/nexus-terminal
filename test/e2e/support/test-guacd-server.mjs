@@ -7,8 +7,13 @@ const guacamoleEntry = requireFromBackend.resolve('guacamole-lite');
 const MockGuacdServer = requireFromBackend(path.join(path.dirname(guacamoleEntry), 'test/helpers/MockGuacdServer.js'));
 
 const host = '127.0.0.1';
-const guacdPort = 24822;
-const controlPort = 29090;
+const envPort = (name, fallback) => {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value < 1 || value > 65_535) throw new Error(`${name} must be a valid TCP port.`);
+  return value;
+};
+const guacdPort = envPort('NEXUS_E2E_GUACD_PORT', 24822);
+const controlPort = envPort('NEXUS_E2E_GUACD_CONTROL_PORT', 29090);
 const guacd = new MockGuacdServer({ port: guacdPort, verbose: false });
 let remoteClipboardStreamId = 100;
 

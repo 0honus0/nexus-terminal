@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'node:path';
+import { E2E_PORTS, E2E_URLS } from './support/test-env';
 
 const e2eRoot = __dirname;
 const repoRoot = path.resolve(e2eRoot, '../..');
@@ -13,7 +14,7 @@ const backendEnv: Record<string, string> = {
     Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   ),
   NODE_ENV: 'test',
-  PORT: '3001',
+  PORT: String(E2E_PORTS.backend),
   NEXUS_DATA_DIR: testDataDir,
   NEXUS_E2E_RESET_ENABLED: '1',
   NEXUS_E2E_SEED_DB: seedDbPath,
@@ -21,9 +22,10 @@ const backendEnv: Record<string, string> = {
   SESSION_SECRET: 'e2e-session-secret-do-not-use-outside-tests-000000000000000000000000',
   ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
   RP_ID: 'localhost',
-  RP_ORIGIN: 'http://localhost:4173',
+  RP_ORIGIN: E2E_URLS.frontendOrigin,
   GUACD_HOST: '127.0.0.1',
-  GUACD_PORT: '24822',
+  GUACD_PORT: String(E2E_PORTS.guacd),
+  NEXUS_VITE_BACKEND_ORIGIN: E2E_URLS.backendOrigin,
 };
 
 export default defineConfig({
@@ -40,7 +42,7 @@ export default defineConfig({
   use: {
     actionTimeout: isCI ? 15_000 : 0,
     navigationTimeout: isCI ? 30_000 : 0,
-    baseURL: 'http://localhost:4173',
+    baseURL: E2E_URLS.frontendOrigin,
     permissions: ['clipboard-read', 'clipboard-write'],
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
@@ -94,7 +96,7 @@ export default defineConfig({
     {
       command: 'node support/test-guacd-server.mjs',
       cwd: e2eRoot,
-      url: 'http://127.0.0.1:29090/health',
+      url: `${E2E_URLS.guacdControlOrigin}/health`,
       reuseExistingServer: false,
       timeout: 30_000,
       stdout: 'pipe',
@@ -103,7 +105,7 @@ export default defineConfig({
     {
       command: 'node support/test-ssh-server.mjs',
       cwd: e2eRoot,
-      url: 'http://127.0.0.1:22223/health',
+      url: `${E2E_URLS.sshControlOrigin}/health`,
       reuseExistingServer: false,
       timeout: 30_000,
       stdout: 'pipe',
@@ -113,20 +115,20 @@ export default defineConfig({
       command: `node ${JSON.stringify(prepareTestDataScript)} && npm exec tsx -- src/index.ts`,
       cwd: path.join(repoRoot, 'packages/backend'),
       env: backendEnv,
-      url: 'http://127.0.0.1:3001/api/v1/auth/needs-setup',
+      url: `${E2E_URLS.backendOrigin}/api/v1/auth/needs-setup`,
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: 'pipe',
       stderr: 'pipe',
     },
     {
-      command: 'npm run dev -- --host 127.0.0.1 --port 4173 --strictPort',
+      command: `npm run dev -- --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
       cwd: path.join(repoRoot, 'packages/frontend'),
       env: {
         ...backendEnv,
         NEXUS_VITE_CACHE_DIR: path.join(e2eRoot, '.tmp', 'vite-cache'),
       },
-      url: 'http://127.0.0.1:4173/login',
+      url: `${E2E_URLS.frontendLoopbackOrigin}/login`,
       reuseExistingServer: false,
       timeout: 120_000,
       stdout: 'pipe',

@@ -50,7 +50,7 @@ test('connection JSON import preserves legacy snake_case and current camelCase f
             name: proxyName,
             type: 'HTTP',
             host: E2E_SSH.host,
-            port: 22223,
+            port: E2E_SSH.controlPort,
             username: 'legacy-proxy-user',
             auth_method: 'password',
             encrypted_password: legacyEncrypt('legacy-proxy-password'),

@@ -8,9 +8,10 @@ import {
   resetTestSshFilesystem,
 } from '../../support/ssh';
 import { slowStep, step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
 
 async function enableClipboard(context: BrowserContext): Promise<void> {
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
 }
 
 async function connectMobileTerminal(page: Page, request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<void> {

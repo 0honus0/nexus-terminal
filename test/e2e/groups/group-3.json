@@ -10,6 +10,6 @@
     "tests/mobile/touch-advanced.spec.ts",
     "tests/mobile/touch-workflows.spec.ts",
     "tests/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts"
+    "tests/ssh/progress-display-archive.spec.ts"
   ]
 }

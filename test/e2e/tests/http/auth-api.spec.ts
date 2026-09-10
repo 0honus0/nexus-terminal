@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
+import { E2E_PORTS } from '../../support/test-env';
 
 test.describe('authenticated HTTP API', () => {
   test('rejects unauthenticated access to auth status', async ({ request }) => {
@@ -169,7 +170,7 @@ test.describe('authenticated HTTP API', () => {
         config: {
           to: 'recipient@example.test',
           smtpHost: '127.0.0.1',
-          smtpPort: 22224,
+          smtpPort: E2E_PORTS.smtp,
           smtpSecure: false,
           smtpUser: 'e2e-user',
           smtpPass: 'test-value-not-for-use',

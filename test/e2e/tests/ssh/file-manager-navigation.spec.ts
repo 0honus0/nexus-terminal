@@ -433,8 +433,37 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
     let favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
     await expect(favoriteItem).toBeVisible();
-    await manager(page).getByRole('button', { name: 'Favorite Paths', exact: true }).click();
+    await expect(favoriteItem.getByRole('button')).toHaveCount(1);
+    const [favoriteItemBox, favoritePathButtonBox] = await Promise.all([
+      favoriteItem.boundingBox(),
+      favoriteItem.getByRole('button').boundingBox(),
+    ]);
+    expect(favoriteItemBox).toBeTruthy();
+    expect(favoritePathButtonBox).toBeTruthy();
+    expect(favoritePathButtonBox!.width).toBeGreaterThan(favoriteItemBox!.width - 20);
+
+    await favoriteItem.click({ button: 'right' });
+    let favoriteContext = page.getByTestId('favorite-path-context-menu');
+    await expect(favoriteContext).toBeVisible();
+    await expect(favoriteContext.getByRole('button')).toHaveCount(3);
+    await expect(favoriteContext.getByRole('button', { name: 'Change terminal directory', exact: true })).toBeVisible();
+    await expect(favoriteContext.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
+    await expect(favoriteContext.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
+
+    await favoriteContext.getByRole('button', { name: 'Edit', exact: true }).click();
+    const editDialog = page.getByRole('dialog', { name: 'Edit Favorite Path', exact: true });
+    await expect(editDialog).toBeVisible();
+    await expect(editDialog.locator('#favPath-name')).toHaveValue(FAVORITE_NAME);
+    await expect(editDialog.locator('#favPath-path')).toHaveValue(FAVORITE_PATH);
+    await editDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(editDialog).toBeHidden();
+
+    await favoriteItem.click({ button: 'right' });
+    favoriteContext = page.getByTestId('favorite-path-context-menu');
+    await favoriteContext.getByRole('button', { name: 'Change terminal directory', exact: true }).click();
     await expect(favorites).toBeHidden();
+    await manager(page).getByRole('button', { name: 'Sync current path from terminal', exact: true }).click();
+    await expect(pathInput(page)).toHaveValue(FAVORITE_PATH, { timeout: 20_000 });
 
     await navigateViaPathInput(page, '/');
     favorites = await openFavorites();
@@ -444,7 +473,9 @@ test('common file-manager navigation tools work over real SFTP', async ({ page, 
 
     favorites = await openFavorites();
     favoriteItem = favorites.getByRole('listitem').filter({ hasText: FAVORITE_NAME });
-    await favoriteItem.getByRole('button', { name: 'Delete', exact: true }).click();
+    await favoriteItem.click({ button: 'right' });
+    favoriteContext = page.getByTestId('favorite-path-context-menu');
+    await favoriteContext.getByRole('button', { name: 'Delete', exact: true }).click();
     const confirmDialog = page.getByRole('dialog', { name: 'Please confirm', exact: true });
     await expect(confirmDialog).toBeVisible();
     await expect(confirmDialog).toContainText(FAVORITE_NAME);

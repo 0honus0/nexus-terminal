@@ -86,7 +86,9 @@ export class SshResourceStatusService {
           ownerType: 'system',
           ownerId: `resource:${key}`,
           connection,
-          connect: { timeoutMs: RESOURCE_CONNECT_TIMEOUT_MS },
+          // Resource sampling opens a real SSH transport, but it is background polling rather
+          // than a user-visible connection and must not update the dashboard's recent-connection time.
+          connect: { timeoutMs: RESOURCE_CONNECT_TIMEOUT_MS, suppressConnectedHook: true },
         });
         sessionId = session.id;
         let status = await this.collector.collect(session, key);

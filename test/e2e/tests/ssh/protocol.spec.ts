@@ -8,6 +8,7 @@ import {
   openWorkspaceSession,
   requestWorkspace,
   sendJson,
+  waitForBinaryBytes,
   waitForBinaryText,
   waitForJson,
   waitForFilesystemReady,
@@ -241,6 +242,24 @@ test('raw terminal output needs no acknowledgement and clean requests remain usa
     await requestWorkspace(workspace.socket, 'terminal.input', { data: "printf 'RAW_TERMINAL_E2E\\n'\r" });
     await expect(outputPromise).resolves.toContain('RAW_TERMINAL_E2E');
     await expect(requestWorkspace(workspace.socket, 'suspend.list')).resolves.toEqual(expect.any(Array));
+  } finally {
+    await closeWebSocket(workspace.socket);
+  }
+});
+
+test('terminal preserves raw UTF-8 bytes over SSH to binary WebSocket frames', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const workspace = await openWorkspaceSession(request, connectionId, `binary-terminal-${crypto.randomUUID()}`);
+
+  try {
+    const expected = Buffer.from('NEXUS_BINARY_UTF8_中文🙂_END\n', 'utf8');
+    const octal = [...expected].map((byte) => `\\${byte.toString(8).padStart(3, '0')}`).join('');
+    const outputPromise = waitForBinaryBytes(workspace.socket, expected, 15_000);
+    await requestWorkspace(workspace.socket, 'terminal.input', { data: `printf '${octal}'\r` });
+    const output = await outputPromise;
+    expect(output.indexOf(expected)).toBeGreaterThanOrEqual(0);
   } finally {
     await closeWebSocket(workspace.socket);
   }

@@ -1,4 +1,4 @@
-import { StringDecoder } from 'node:string_decoder';
+import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
 import type { WorkspaceShellIntegrationService } from './workspace-shell-integration.service';
@@ -11,9 +11,8 @@ interface InputItem {
   bytes: number;
 }
 interface TerminalState {
-  stdout: StringDecoder;
-  stderr: StringDecoder;
   queue: InputItem[];
+  queueHead: number;
   queuedBytes: number;
   waitingForDrain: boolean;
   unsubscribers: Array<() => void>;
@@ -35,9 +34,8 @@ export class WorkspaceTerminalService {
     if (this.states.has(sessionId)) return;
     const session = this.sessions.require(sessionId),
       state: TerminalState = {
-        stdout: new StringDecoder('utf8'),
-        stderr: new StringDecoder('utf8'),
         queue: [],
+        queueHead: 0,
         queuedBytes: 0,
         waitingForDrain: false,
         unsubscribers: [],
@@ -78,6 +76,7 @@ export class WorkspaceTerminalService {
     this.integration.noteUserInput(sessionId);
     state.queue.push({ data, sequence, bytes });
     state.queuedBytes += bytes;
+    runtimePerformanceMetrics.recordTerminalInputQueued(bytes, state.queuedBytes);
     this.drain(sessionId, state);
   }
   resize(sessionId: string, columns: number, rows: number): void {
@@ -112,13 +111,14 @@ export class WorkspaceTerminalService {
   private drain(id: string, state: TerminalState) {
     if (state.waitingForDrain) return;
     const shell = this.sessions.require(id).shell;
-    while (state.queue.length) {
-      const item = state.queue.shift()!;
+    while (state.queueHead < state.queue.length) {
+      const item = state.queue[state.queueHead++]!;
       state.queuedBytes -= item.bytes;
       const accepted = shell.write(item.data);
       if (item.sequence !== undefined)
         this.events.publish(id, { type: 'terminal-input-ack', sequence: item.sequence, bytes: item.bytes });
       if (!accepted) {
+        runtimePerformanceMetrics.recordTerminalInputDrainPause();
         state.waitingForDrain = true;
         let off: () => void = () => {};
         off = shell.onDrain(() => {
@@ -128,26 +128,35 @@ export class WorkspaceTerminalService {
           this.drain(id, state);
         });
         state.drainOff = off;
+        this.compactInputQueue(state);
         return;
       }
     }
+    this.compactInputQueue(state);
   }
-  private forwardStdout(id: string, state: TerminalState, data: Uint8Array) {
-    const decoded = state.stdout.write(Buffer.from(data));
-    const visible = this.integration.filterOutput(id, decoded);
-    if (visible) this.events.publish(id, { type: 'terminal-output', data: Buffer.from(visible, 'utf8') });
-  }
-  private forwardStderr(id: string, state: TerminalState, data: Uint8Array) {
-    const decoded = state.stderr.write(Buffer.from(data));
-    if (decoded) this.events.publish(id, { type: 'terminal-output', data: Buffer.from(decoded, 'utf8'), stderr: true });
-  }
-  private flush(id: string, state: TerminalState) {
-    const stdout = state.stdout.end();
-    if (stdout) {
-      const visible = this.integration.filterOutput(id, stdout);
-      if (visible) this.events.publish(id, { type: 'terminal-output', data: Buffer.from(visible, 'utf8') });
+
+  private compactInputQueue(state: TerminalState): void {
+    if (state.queueHead === state.queue.length) {
+      state.queue.length = 0;
+      state.queueHead = 0;
+    } else if (state.queueHead >= 1024 && state.queueHead * 2 >= state.queue.length) {
+      state.queue.splice(0, state.queueHead);
+      state.queueHead = 0;
     }
-    const stderr = state.stderr.end();
-    if (stderr) this.events.publish(id, { type: 'terminal-output', data: Buffer.from(stderr, 'utf8'), stderr: true });
+  }
+  private forwardStdout(id: string, _state: TerminalState, data: Uint8Array) {
+    const filterStartedAt = runtimePerformanceMetrics.operationStarted();
+    const visible = this.integration.filterOutput(id, data);
+    if (filterStartedAt !== 0n) {
+      runtimePerformanceMetrics.recordTerminalMarkerFilter(process.hrtime.bigint() - filterStartedAt);
+    }
+    if (visible.byteLength) this.events.publish(id, { type: 'terminal-output', data: visible });
+  }
+  private forwardStderr(id: string, _state: TerminalState, data: Uint8Array) {
+    if (data.byteLength) this.events.publish(id, { type: 'terminal-output', data, stderr: true });
+  }
+  private flush(_id: string, _state: TerminalState) {
+    // Byte-oriented marker filtering keeps only bounded ASCII marker remainders.
+    // They are intentionally not emitted on close because they can only be an incomplete Nexus control marker.
   }
 }

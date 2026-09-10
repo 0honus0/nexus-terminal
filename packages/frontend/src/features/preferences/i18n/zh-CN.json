@@ -22,6 +22,12 @@
         "saveFailed": "保存时区设置失败。"
       }
     },
+    "logging": {
+      "title": "日志等级",
+      "frontendLabel": "前端日志等级:",
+      "backendLabel": "后端日志等级:",
+      "description": "用于排查和性能调试。DEBUG/TRACE 会输出更详细的运行信息；性能统计仅在 DEBUG 或 TRACE 时输出。修改后立即生效。"
+    },
     "popupEditor": {
       "title": "弹窗文件编辑器",
       "enableLabel": "打开文件时显示弹窗编辑器",

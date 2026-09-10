@@ -380,42 +380,21 @@ interface TransferChannelAdapter extends TransferChannel {
 
 const UPLOAD_SCHEDULER_MIN_STREAMS = 6;
 const UPLOAD_SCHEDULER_STREAM_CEILING = 12;
-const UPLOAD_SCHEDULER_MIN_CAPACITY_UNITS = 8;
-const UPLOAD_SCHEDULER_CAPACITY_CEILING = 24;
-const UPLOAD_SCHEDULER_MAX_HEAD_BYPASSES = 3;
 
-interface ScheduledUpload {
-  request: UploadRequest;
-  bypassCount: number;
-}
-
-const uploadReservationUnits = (size: number): number => {
-  if (size <= 1024 * 1024) return 1;
-  if (size <= 16 * 1024 * 1024) return 2;
-  if (size <= 64 * 1024 * 1024) return 4;
-  return 6;
-};
-
-const uploadSchedulerPolicy = (): { streamLimit: number; capacityUnits: number } => {
+const uploadSchedulerStreamLimit = (): number => {
   const detected = typeof navigator === 'undefined' ? 4 : Number(navigator.hardwareConcurrency || 4);
   const hardwareConcurrency = Number.isFinite(detected) ? Math.max(1, Math.min(16, Math.round(detected))) : 4;
-  return {
-    streamLimit: Math.max(
-      UPLOAD_SCHEDULER_MIN_STREAMS,
-      Math.min(UPLOAD_SCHEDULER_STREAM_CEILING, Math.ceil(hardwareConcurrency * 1.5)),
-    ),
-    capacityUnits: Math.max(
-      UPLOAD_SCHEDULER_MIN_CAPACITY_UNITS,
-      Math.min(UPLOAD_SCHEDULER_CAPACITY_CEILING, hardwareConcurrency * 2),
-    ),
-  };
+  return Math.max(
+    UPLOAD_SCHEDULER_MIN_STREAMS,
+    Math.min(UPLOAD_SCHEDULER_STREAM_CEILING, Math.ceil(hardwareConcurrency * 1.5)),
+  );
 };
 
 export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: string): TransferChannelAdapter => {
   const handlers = new Set<(event: TransferEvent) => void>();
   const uploads = new Map<string, UploadRequest>();
   const uploadSockets = new Map<string, WebSocket>();
-  const queuedUploads: ScheduledUpload[] = [];
+  const queuedUploads: UploadRequest[] = [];
   const activeUploads = new Set<string>();
   const prepareRequests = new Map<string, UploadPrepareRequest>();
   const activeRemoteOperations = new Map<string, 'copy' | 'move' | 'compress' | 'decompress'>();
@@ -434,13 +413,13 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
 
   const removeQueuedUpload = (id: string): void => {
     for (let index = queuedUploads.length - 1; index >= 0; index -= 1) {
-      if (queuedUploads[index]?.request.id === id) queuedUploads.splice(index, 1);
+      if (queuedUploads[index]?.id === id) queuedUploads.splice(index, 1);
     }
   };
 
   const enqueueUpload = (request: UploadRequest): void => {
     removeQueuedUpload(request.id);
-    queuedUploads.push({ request, bypassCount: 0 });
+    queuedUploads.push(request);
   };
 
   const forgetUpload = (id: string): UploadRequest | undefined => {
@@ -534,44 +513,25 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     }
   };
 
-  const activeUploadCapacityUnits = (): number =>
-    [...activeUploads].reduce((total, id) => {
-      const request = uploads.get(id);
-      return total + (request ? uploadReservationUnits(request.file.size) : 0);
-    }, 0);
-
   function pumpUploadQueue(): void {
     if (!workspaceAvailable) return;
-    const policy = uploadSchedulerPolicy();
-    let activeCapacityUnits = activeUploadCapacityUnits();
+    const streamLimit = uploadSchedulerStreamLimit();
 
-    while (queuedUploads.length > 0 && activeUploads.size < policy.streamLimit) {
+    while (queuedUploads.length > 0 && activeUploads.size < streamLimit) {
       for (let index = queuedUploads.length - 1; index >= 0; index -= 1) {
         const queued = queuedUploads[index]!;
-        if (uploads.get(queued.request.id) !== queued.request) queuedUploads.splice(index, 1);
+        if (uploads.get(queued.id) !== queued) queuedUploads.splice(index, 1);
       }
       if (!queuedUploads.length) return;
 
-      const availableCapacityUnits = policy.capacityUnits - activeCapacityUnits;
-      const head = queuedUploads[0]!;
-      const headReservation = uploadReservationUnits(head.request.file.size);
-      let selectedIndex = 0;
-
-      if (headReservation > availableCapacityUnits) {
-        if (head.bypassCount >= UPLOAD_SCHEDULER_MAX_HEAD_BYPASSES) return;
-        selectedIndex = queuedUploads.findIndex(
-          (queued, index) => index > 0 && uploadReservationUnits(queued.request.file.size) <= availableCapacityUnits,
-        );
-        if (selectedIndex < 0) return;
-        head.bypassCount += 1;
-      }
-
-      const [selected] = queuedUploads.splice(selectedIndex, 1);
-      if (!selected) return;
-      const request = selected.request;
-      const reservation = uploadReservationUnits(request.file.size);
+      // File size is not a useful proxy for transport pressure: every upload stream already
+      // has bounded browser/server WebSocket buffering and SFTP backpressure. Charging large
+      // files extra "capacity units" reduced a nominal six-stream scheduler to only one or
+      // two streams for common large-file batches, leaving bandwidth idle. Keep FIFO fairness
+      // and let the explicit stream limit be the single concurrency control.
+      const request = queuedUploads.shift();
+      if (!request) return;
       activeUploads.add(request.id);
-      activeCapacityUnits += reservation;
       void startUploadRequest(request).catch((cause) => {
         if (uploads.get(request.id) !== request) return;
         if (!workspaceAvailable) return;

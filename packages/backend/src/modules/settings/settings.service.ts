@@ -10,6 +10,7 @@ import type {
 import type { SettingsMigrationRepository } from './settings-migration.repository.port';
 import type { SettingsRepository } from './settings.repository.port';
 import { runSettingsMigrations } from './settings-migrations';
+import { setBackendLogLevel } from '../../shared/logging/logger';
 
 export interface FocusItemConfig {
   shortcut?: string;
@@ -32,6 +33,8 @@ const KEYS = {
   showConnectionTags: 'showConnectionTags',
   showQuickCommandTags: 'showQuickCommandTags',
   showStatusIp: 'showStatusMonitorIpAddress',
+  frontendLogLevel: 'frontendLogLevel',
+  backendLogLevel: 'backendLogLevel',
 } as const;
 const VALID_PANES: ReadonlySet<PaneName> = new Set([
   'connections',
@@ -98,6 +101,8 @@ export class SettingsService {
   async ensureDefaults(): Promise<void> {
     const defaults: Record<string, string> = {
       ipWhitelist: '',
+      [KEYS.frontendLogLevel]: 'info',
+      [KEYS.backendLogLevel]: 'info',
       maxLoginAttempts: '5',
       loginBanDuration: '300',
       ipBlacklistEnabled: 'true',
@@ -139,6 +144,7 @@ export class SettingsService {
     const existing = await runSettingsMigrations(this.repository, this.migrations);
     const missing = Object.fromEntries(Object.entries(defaults).filter(([key]) => existing[key] === undefined));
     if (Object.keys(missing).length) await this.repository.setMany(missing);
+    setBackendLogLevel(existing[KEYS.backendLogLevel] ?? missing[KEYS.backendLogLevel] ?? 'info');
   }
   async getAllSettings(): Promise<Record<string, string>> {
     return Object.fromEntries((await this.repository.list()).map((v) => [v.key, v.value]));
@@ -146,11 +152,13 @@ export class SettingsService {
   getSetting(key: string) {
     return this.repository.get(key);
   }
-  setSetting(key: string, value: string) {
-    return this.repository.set(key, value);
+  async setSetting(key: string, value: string) {
+    await this.repository.set(key, value);
+    if (key === KEYS.backendLogLevel) setBackendLogLevel(value);
   }
-  setMultipleSettings(values: Record<string, string>) {
-    return this.repository.setMany(values);
+  async setMultipleSettings(values: Record<string, string>) {
+    await this.repository.setMany(values);
+    if (values[KEYS.backendLogLevel] !== undefined) setBackendLogLevel(values[KEYS.backendLogLevel]);
   }
   async deleteSetting(key: string) {
     await this.repository.delete(key);

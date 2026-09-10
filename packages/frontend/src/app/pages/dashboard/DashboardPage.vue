@@ -2,7 +2,7 @@
   import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
-  import { BaseSpinner } from '@/foundation/ui';
+  import { BaseListboxSelect, BaseSpinner } from '@/foundation/ui';
   import { useConnections, type Connection } from '@/features/connections/public';
   import { useConnectionTags } from '@/features/tags/public';
   import { auditApi, type AuditLogEntry } from '@/features/audit/public';
@@ -34,6 +34,17 @@
   const sort = ref<DashboardSort>(storedSort && validSorts.has(storedSort) ? storedSort : 'lastConnected');
   const sortOrder = ref<DashboardSortOrder>(storedOrder === 'asc' ? 'asc' : 'desc');
   const loading = ref(true);
+  const tagFilterOptions = computed(() => [
+    { value: '', label: t('dashboard.filterTags.all') },
+    ...(loading.value ? [{ value: '__loading__', label: t('common.loading'), disabled: true }] : []),
+    ...tags.tags.value.map((tag) => ({ value: tag.id, label: tag.name })),
+  ]);
+  const sortOptions = computed(() =>
+    (['lastConnected', 'name', 'type', 'updated', 'created'] as const).map((value) => ({
+      value,
+      label: t(`dashboard.sortOptions.${value}`),
+    })),
+  );
 
   const filtered = computed(() => {
     const term = search.value.trim().toLowerCase();
@@ -429,41 +440,27 @@
                   :placeholder="t('dashboard.searchConnectionsPlaceholder')"
                   class="h-10 w-full rounded-md border border-border bg-background pl-9 pr-3 text-sm text-foreground outline-none transition focus:border-primary/70 focus:ring-1 focus:ring-primary/40"
               /></label>
-              <div class="relative min-w-0 sm:min-w-32">
-                <select
+              <div class="min-w-0 sm:min-w-32">
+                <BaseListboxSelect
                   v-model="tagId"
+                  :options="tagFilterOptions"
                   data-testid="dashboard-tag-filter"
-                  class="h-10 min-w-0 w-full appearance-none rounded-md border border-border bg-background px-8 text-center text-xs text-foreground outline-none transition [text-align-last:center] focus:border-primary/70 focus:ring-1 focus:ring-primary/40 sm:text-sm"
+                  panel-test-id="dashboard-tag-filter-menu"
+                  option-test-id-prefix="dashboard-tag-filter-option"
+                  class="text-xs sm:text-sm"
                   :aria-label="t('dashboard.filterByTag')"
-                >
-                  <option value="">{{ t('dashboard.filterTags.all') }}</option>
-                  <option v-if="loading" disabled>{{ t('common.loading') }}</option>
-                  <option v-for="tag in tags.tags.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
-                </select>
-                <i
-                  data-testid="dashboard-tag-filter-chevron"
-                  class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs leading-none text-text-secondary"
-                  aria-hidden="true"
-                ></i>
+                />
               </div>
-              <div class="relative min-w-0 sm:min-w-32">
-                <select
+              <div class="min-w-0 sm:min-w-32">
+                <BaseListboxSelect
                   v-model="sort"
+                  :options="sortOptions"
                   data-testid="dashboard-sort-by"
-                  class="h-10 min-w-0 w-full appearance-none rounded-md border border-border bg-background px-8 text-center text-xs text-foreground outline-none transition [text-align-last:center] focus:border-primary/70 focus:ring-1 focus:ring-primary/40 sm:text-sm"
+                  panel-test-id="dashboard-sort-by-menu"
+                  option-test-id-prefix="dashboard-sort-by-option"
+                  class="text-xs sm:text-sm"
                   :aria-label="t('dashboard.sortBy')"
-                >
-                  <option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
-                  <option value="name">{{ t('dashboard.sortOptions.name') }}</option>
-                  <option value="type">{{ t('dashboard.sortOptions.type') }}</option>
-                  <option value="updated">{{ t('dashboard.sortOptions.updated') }}</option>
-                  <option value="created">{{ t('dashboard.sortOptions.created') }}</option>
-                </select>
-                <i
-                  data-testid="dashboard-sort-by-chevron"
-                  class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs leading-none text-text-secondary"
-                  aria-hidden="true"
-                ></i>
+                />
               </div>
               <button
                 data-testid="dashboard-sort-order"
@@ -723,26 +720,29 @@
           <li
             v-for="log in activity"
             :key="log.id"
-            class="relative min-w-0 rounded-xl border border-border/70 bg-header/15 px-4 py-3.5 pl-6 transition-colors hover:bg-header/25"
+            class="min-w-0 rounded-xl border border-border/70 bg-header/15 px-4 py-3.5 transition-colors hover:bg-header/25"
           >
-            <span
-              class="absolute left-2.5 top-4 h-1.5 w-1.5 rounded-full"
-              :class="isFailedAction(log.actionType) ? 'bg-error' : 'bg-primary'"
-              aria-hidden="true"
-            ></span>
             <div class="flex min-w-0 items-start justify-between gap-2">
-              <span
-                class="min-w-0 truncate text-sm font-medium leading-5"
-                :class="isFailedAction(log.actionType) ? 'text-error' : 'text-foreground'"
-                :title="actionLabel(log.actionType)"
-                >{{ actionLabel(log.actionType) }}</span
-              ><time class="shrink-0 pt-0.5 text-[10px] text-text-secondary">{{
+              <div class="flex min-w-0 items-center gap-2">
+                <span
+                  class="activity-dot h-1.5 w-1.5 shrink-0 rounded-full"
+                  :class="isFailedAction(log.actionType) ? 'bg-error' : 'bg-primary'"
+                  aria-hidden="true"
+                ></span>
+                <span
+                  class="activity-title min-w-0 truncate text-sm font-medium leading-5"
+                  :class="isFailedAction(log.actionType) ? 'text-error' : 'text-foreground'"
+                  :title="actionLabel(log.actionType)"
+                  >{{ actionLabel(log.actionType) }}</span
+                >
+              </div>
+              <time class="shrink-0 pt-0.5 text-[10px] text-text-secondary">{{
                 formatRelativeTime(log.timestamp)
               }}</time>
             </div>
             <p
               v-if="auditSummary(log.details)"
-              class="mt-1.5 truncate text-xs text-text-secondary"
+              class="mt-1.5 truncate pl-3.5 text-xs text-text-secondary"
               :title="auditSummary(log.details)"
             >
               {{ auditSummary(log.details) }}

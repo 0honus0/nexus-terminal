@@ -9,6 +9,7 @@ import type { SettingsService } from '../../../modules/settings/settings.service
 import { requireAuthenticated } from '../auth/auth.middleware';
 import { errorMessage, isRecord } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
+import { isLogLevel } from '../../../shared/logging/log-level';
 
 export interface SettingsRouterDependencies {
   backup: BackupService;
@@ -20,6 +21,8 @@ export interface SettingsRouterDependencies {
 
 const ALLOWED_SETTING_KEYS = new Set([
   'language',
+  'frontendLogLevel',
+  'backendLogLevel',
   'ipWhitelist',
   'maxLoginAttempts',
   'loginBanDuration',
@@ -164,6 +167,8 @@ const storedSettingValue = (key: string, value: unknown): string => {
     return JSON.stringify(value);
   }
   if (typeof value !== 'string') throw new Error(`设置 ${key} 必须是字符串`);
+  if ((key === 'frontendLogLevel' || key === 'backendLogLevel') && !isLogLevel(value))
+    throw new Error(`设置 ${key} 的日志等级无效`);
   if (key === 'commandInputSyncTarget' && !['none', 'quickCommands', 'commandHistory'].includes(value))
     throw new Error('commandInputSyncTarget 无效');
   return value;

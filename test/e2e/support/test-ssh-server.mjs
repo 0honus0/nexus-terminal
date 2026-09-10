@@ -25,9 +25,14 @@ const {
 const { ZipArchive } = requireFromBackend('archiver');
 
 const SSH_HOST = '127.0.0.1';
-const SSH_PORT = 22222;
-const CONTROL_PORT = 22223;
-const SMTP_PORT = 22224;
+const envPort = (name, fallback) => {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value < 1 || value > 65_535) throw new Error(`${name} must be a valid TCP port.`);
+  return value;
+};
+const SSH_PORT = envPort('NEXUS_E2E_SSH_PORT', 22222);
+const CONTROL_PORT = envPort('NEXUS_E2E_SSH_CONTROL_PORT', 22223);
+const SMTP_PORT = envPort('NEXUS_E2E_SMTP_PORT', 22224);
 const USERNAME = 'e2e';
 const PASSWORD = 'e2e-password';
 const DOCKER_CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -1271,7 +1276,9 @@ const controlServer = http.createServer(async (req, res) => {
         );
       } else if (variant === 'zoom-lines') {
         const requestedLines = Number(requestUrl.searchParams.get('lines') || '1200');
-        const lineCount = Number.isFinite(requestedLines) ? Math.max(1, Math.min(5000, Math.round(requestedLines))) : 1200;
+        const lineCount = Number.isFinite(requestedLines)
+          ? Math.max(1, Math.min(5000, Math.round(requestedLines)))
+          : 1200;
         await fsp.writeFile(
           path.join(rootDir, name),
           `${Array.from({ length: lineCount }, (_, index) => `zoom-line-${index + 1}`).join('\n')}\n`,

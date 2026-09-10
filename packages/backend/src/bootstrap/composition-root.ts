@@ -294,7 +294,10 @@ export const createCompositionRoot = (
   const fileSearch = new RemoteFileSearchService();
   const fileRemoval = new FileRemovalService();
   const uploads = new StreamUploadOperationService(executionSessions);
-  const fileTransfers = new StreamTransferOperationService(executionSessions);
+  const fileTransfers = new StreamTransferOperationService(executionSessions, {
+    positionedCopyChunkBytes: config.transferPositionedChunkBytes,
+    positionedCopyConcurrency: config.transferPositionedConcurrency,
+  });
   const archives = new RemoteArchiveOperationService(executionSessions);
   const directoryArchives = new ZipDirectoryArchiveAdapter();
   const serverTransfers = new ServerTransferExecutor(sshTransport);

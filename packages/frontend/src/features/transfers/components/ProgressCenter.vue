@@ -289,9 +289,10 @@
             class="legacy-progress block h-2 w-full"
           ></progress>
         </div>
-        <span class="text-right text-xs tabular-nums text-text-secondary">{{
-          !done(task.status) ? `${Math.round(task.progress)}%` : '—'
-        }}</span>
+        <span v-if="!done(task.status)" class="text-right text-xs tabular-nums text-text-secondary">
+          {{ Math.round(task.progress) }}%
+        </span>
+        <span v-else aria-hidden="true"></span>
         <button
           v-if="!done(task.status)"
           type="button"

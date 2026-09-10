@@ -91,17 +91,20 @@
     constrain: (candidate, element) => clampPosition(candidate, element),
     onEnd: savePosition,
   });
-  const panelStyle = computed(() =>
-    !props.mobile && positionInitialized.value
-      ? {
-          position: 'fixed' as const,
-          left: `${position.value.x}px`,
-          top: `${position.value.y}px`,
-          width: 'calc(100vw - 2rem)',
-          margin: '0',
-        }
-      : undefined,
-  );
+  const panelStyle = computed(() => {
+    if (props.mobile) return undefined;
+    const base = {
+      width: 'min(46rem, calc(100vw - 1rem))',
+      margin: '0',
+    };
+    if (!positionInitialized.value) return base;
+    return {
+      ...base,
+      position: 'fixed' as const,
+      left: `${position.value.x}px`,
+      top: `${position.value.y}px`,
+    };
+  });
 
   onMounted(() => {
     void restorePosition();

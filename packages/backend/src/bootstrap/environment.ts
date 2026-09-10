@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import dotenv from 'dotenv';
+import { logger } from '../shared/logging/logger';
 
 export interface InitializedEnvironment {
   dataDirectory: string;
@@ -10,7 +11,7 @@ export interface InitializedEnvironment {
 const loadEnvFile = (filePath: string): void => {
   const result = dotenv.config({ path: filePath });
   if (result.error && (result.error as NodeJS.ErrnoException).code !== 'ENOENT') {
-    console.warn(`[Environment] Unable to load ${filePath}: ${result.error.message}`);
+    logger.warn({ filePath, err: result.error }, 'Unable to load environment file');
   }
 };
 
@@ -59,9 +60,7 @@ export const initializeEnvironment = async (): Promise<InitializedEnvironment> =
 
   persistGeneratedSecrets(dataEnvPath, generated);
   if (generated.length > 0) {
-    console.warn(
-      `[Environment] Generated missing secrets and stored them in ${dataEnvPath}. Back up this file securely.`,
-    );
+    logger.warn({ dataEnvPath }, 'Generated missing secrets; back up the environment file securely');
   }
 
   return { dataDirectory };

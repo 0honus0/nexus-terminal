@@ -104,12 +104,9 @@ test('registered archive progress supports hide, restore, and real cancel for co
       },
     );
 
-    await step('Progress Display keeps completed archive history while cancelled work stays removed', async () => {
-      const modal = await openProgressDisplay(page);
-      const completed = hiddenTask(modal, 'archive-source.zip').filter({ hasText: 'Compress' }).first();
-      await expect(completed).toContainText('Completed');
-      await expect(hiddenTask(modal, 'archive-source.zip').filter({ hasText: 'Decompress' })).toHaveCount(0);
-      await closeProgressDisplay(modal);
+    await step('completed and cancelled archive work auto-cleans the final progress entry', async () => {
+      await expect(page.getByTestId('transfer-progress-toggle')).toHaveCount(0, { timeout: 10_000 });
+      await expect(page.getByTestId('transfer-progress-center')).toHaveCount(0);
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-hold?enabled=0`, { method: 'POST' });
@@ -147,11 +144,10 @@ test('overlapping archive requests keep independent task ownership', async ({ pa
       await expect(activeTask).toContainText('archive-source.zip');
       await expect(secondTask).toContainText('archive-second.zip');
 
-      await expect(activeTask).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
-      await expect(secondTask).toHaveAttribute('data-task-status', 'completed', { timeout: 15_000 });
       await refreshFileManager(page);
-      await expect(row(page, 'archive-source.zip')).toBeVisible();
-      await expect(row(page, 'archive-second.zip')).toBeVisible();
+      await expect(row(page, 'archive-source.zip')).toBeVisible({ timeout: 15_000 });
+      await expect(row(page, 'archive-second.zip')).toBeVisible({ timeout: 15_000 });
+      await expect(popup).toBeHidden({ timeout: 4_000 });
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/archive/exec-delay?ms=0`, { method: 'POST' });

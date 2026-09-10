@@ -1,5 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { E2E_ADMIN, loginAsInitialAdmin } from '../../support/auth';
+import { E2E_SSH } from '../../support/ssh';
 import { step, slowStep } from '../../support/steps';
 
 const BACKUP_CONNECTION_NAME = 'E2E Backup SSH';
@@ -21,11 +22,11 @@ test('full backup restores settings and connection data', async ({ request }) =>
       data: {
         name: BACKUP_CONNECTION_NAME,
         type: 'SSH',
-        host: '127.0.0.1',
-        port: 22222,
-        username: 'e2e',
+        host: E2E_SSH.host,
+        port: E2E_SSH.port,
+        username: E2E_SSH.username,
         authMethod: 'password',
-        password: 'e2e-password',
+        password: E2E_SSH.password,
       },
     });
     expect(create.status()).toBe(201);

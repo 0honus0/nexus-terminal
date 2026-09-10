@@ -1,8 +1,9 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { OverlayPanel } from '@/foundation/ui';
+  import { BaseContextMenu, OverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
+  import { useLongPressGesture } from '@/foundation/interaction';
   import { useFeedback } from '@/shared/feedback/public';
   import { useFilesystemCatalog } from '../composables/useFilesystemCatalog';
   import type { FavoritePath } from '../model/catalog';
@@ -21,6 +22,7 @@
   const panel = ref<HTMLElement | null>(null);
   const panelStyle = ref<Record<string, string>>({});
   const editing = ref<FavoritePath | null>(null);
+  const context = ref<{ item: FavoritePath; x: number; y: number } | null>(null);
   const formVisible = ref(false);
   const saving = ref(false);
   const errorMessage = ref('');
@@ -42,7 +44,7 @@
     panelStyle.value = { top: `${top}px`, left: `${left}px` };
   };
   const handleOutsidePointer = (event: MouseEvent): void => {
-    if (!props.visible || formVisible.value) return;
+    if (!props.visible || formVisible.value || context.value) return;
     const target = event.target as Node;
     if (props.triggerElement?.contains(target) || panel.value?.contains(target)) return;
     emit('close');
@@ -60,7 +62,10 @@
     () => props.visible,
     async (visible) => {
       detachPositioning();
-      if (!visible) return;
+      if (!visible) {
+        context.value = null;
+        return;
+      }
       catalog.favoriteSearch.value = '';
       try {
         await catalog.loadFavorites();
@@ -150,6 +155,40 @@
     emit('terminal', item.path);
     emit('close');
   };
+  const openContextAt = (item: FavoritePath, x: number, y: number): void => {
+    context.value = { item, x, y };
+  };
+  const openContext = (event: MouseEvent, item: FavoritePath): void => {
+    event.preventDefault();
+    openContextAt(item, event.clientX, event.clientY);
+  };
+  const longPress = useLongPressGesture<FavoritePath>({
+    enabled: () => device.hasTouch.value,
+    vibrateMs: 15,
+    onTrigger: (item, point) => openContextAt(item, point.x, point.y),
+  });
+  const navigateFromClick = (event: MouseEvent, item: FavoritePath): void => {
+    if (longPress.consumeClick(event)) return;
+    void navigateFavorite(item);
+  };
+  const sendContextToTerminal = (): void => {
+    if (!context.value) return;
+    const item = context.value.item;
+    context.value = null;
+    sendToTerminal(item);
+  };
+  const editContextFavorite = (): void => {
+    if (!context.value) return;
+    const item = context.value.item;
+    context.value = null;
+    openEdit(item);
+  };
+  const removeContextFavorite = (): void => {
+    if (!context.value) return;
+    const item = context.value.item;
+    context.value = null;
+    void removeFavorite(item);
+  };
 </script>
 
 <template>
@@ -206,58 +245,52 @@
         <li
           v-for="item in catalog.filteredFavorites.value"
           :key="item.id"
-          class="group flex cursor-pointer items-start justify-between rounded-lg p-2 transition-colors duration-150 hover:bg-primary/10"
+          class="group flex cursor-pointer items-start rounded-lg p-2 transition-colors duration-150 hover:bg-primary/10"
           :title="item.path"
+          @contextmenu.prevent.stop="openContext($event, item)"
+          @pointerdown="longPress.start($event, item)"
+          @pointermove="longPress.move"
+          @pointerup="longPress.end"
+          @pointercancel="longPress.cancel"
         >
           <button
             type="button"
-            class="mr-2 min-w-0 flex-grow overflow-hidden text-left"
+            class="min-w-0 w-full overflow-hidden text-left"
             :aria-label="item.name || item.path"
-            @click="navigateFavorite(item)"
+            @click="navigateFromClick($event, item)"
           >
             <span class="favorite-path-text block font-medium text-foreground">{{ item.name || item.path }}</span>
             <span v-if="item.name" class="favorite-path-text mt-0.5 block text-xs text-text-secondary">{{
               item.path
             }}</span>
           </button>
-          <div
-            class="flex shrink-0 items-center gap-1 transition-opacity duration-150"
-            :class="
-              device.hasTouch.value ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
-            "
-          >
-            <button
-              type="button"
-              class="rounded p-1.5 text-text-secondary transition-colors hover:bg-black/10 hover:text-primary"
-              :title="t('fileManager.actions.cdToTerminal')"
-              :aria-label="t('fileManager.actions.cdToTerminal')"
-              @click="sendToTerminal(item)"
-            >
-              <i class="fas fa-terminal text-xs" aria-hidden="true"></i>
-            </button>
-            <button
-              type="button"
-              class="rounded p-1.5 text-text-secondary transition-colors hover:bg-black/10 hover:text-primary"
-              :title="t('common.edit')"
-              :aria-label="t('common.edit')"
-              @click="openEdit(item)"
-            >
-              <i class="fas fa-pencil-alt text-xs" aria-hidden="true"></i>
-            </button>
-            <button
-              type="button"
-              class="rounded p-1.5 text-text-secondary transition-colors hover:bg-black/10 hover:text-error"
-              :title="t('common.delete')"
-              :aria-label="t('common.delete')"
-              @click="removeFavorite(item)"
-            >
-              <i class="fas fa-trash-alt text-xs" aria-hidden="true"></i>
-            </button>
-          </div>
         </li>
       </ul>
     </div>
   </div>
+
+  <BaseContextMenu
+    v-if="context"
+    :visible="true"
+    :x="context.x"
+    :y="context.y"
+    :width="210"
+    panel-test-id="favorite-path-context-menu"
+    @close="context = null"
+  >
+    <button class="favorite-context-item" @mousedown.prevent @click="sendContextToTerminal">
+      <i class="fas fa-terminal" aria-hidden="true"></i>
+      <span>{{ t('favoritePaths.terminalAction') }}</span>
+    </button>
+    <button class="favorite-context-item" @mousedown.prevent @click="editContextFavorite">
+      <i class="fas fa-pencil-alt" aria-hidden="true"></i>
+      <span>{{ t('common.edit') }}</span>
+    </button>
+    <button class="favorite-context-item text-error" @mousedown.prevent @click="removeContextFavorite">
+      <i class="fas fa-trash-alt" aria-hidden="true"></i>
+      <span>{{ t('common.delete') }}</span>
+    </button>
+  </BaseContextMenu>
 
   <OverlayPanel
     :visible="formVisible"
@@ -336,6 +369,28 @@
     text-overflow: ellipsis;
     line-height: 1.35;
     white-space: nowrap;
+  }
+
+  .favorite-context-item {
+    display: flex;
+    width: calc(100% - 0.5rem);
+    margin-inline: 0.25rem;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.42rem 0.75rem;
+    border-radius: 0.375rem;
+    text-align: left;
+    transition:
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+  .favorite-context-item:hover {
+    color: var(--link-active-color);
+    background: color-mix(in srgb, var(--link-active-color) 10%, transparent);
+  }
+  .favorite-context-item.text-error:hover {
+    color: var(--status-error-color);
+    background: color-mix(in srgb, var(--status-error-color) 10%, transparent);
   }
 
   @media (min-width: 768px) {

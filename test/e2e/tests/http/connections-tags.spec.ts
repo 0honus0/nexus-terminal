@@ -1,6 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { E2E_SSH, resetTestSshFilesystem } from '../../support/ssh';
+import { closeWebSocket, openWorkspaceSession } from '../../support/ws';
 import { step } from '../../support/steps';
 
 test('connection update, tags, clone, credentials, and delete form a complete lifecycle', async ({ request }) => {
@@ -150,6 +151,60 @@ test('new SSH connections appear in resource status immediately', async ({ reque
     if (connectionId) {
       expect((await request.delete(`/api/v1/connections/${connectionId}`)).ok()).toBeTruthy();
     }
+  }
+});
+
+test('background SSH resource refresh does not change recent connection time', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+
+  const name = 'E2E SSH Resource Does Not Touch Recent Time';
+  let connectionId = 0;
+  try {
+    const create = await request.post('/api/v1/connections', {
+      data: {
+        name,
+        type: 'SSH',
+        host: E2E_SSH.host,
+        port: E2E_SSH.port,
+        username: E2E_SSH.username,
+        authMethod: 'password',
+        password: E2E_SSH.password,
+      },
+    });
+    expect(create.status()).toBe(201);
+    connectionId = ((await create.json()) as { connection: { id: number } }).connection.id;
+
+    const readConnection = async () => {
+      const response = await request.get(`/api/v1/connections/${connectionId}`);
+      expect(response.ok()).toBeTruthy();
+      return (await response.json()) as {
+        connection?: { lastConnectedAt: number | null };
+        lastConnectedAt?: number | null;
+      };
+    };
+    const lastConnected = (value: Awaited<ReturnType<typeof readConnection>>) =>
+      value.connection?.lastConnectedAt ?? value.lastConnectedAt ?? null;
+
+    expect(lastConnected(await readConnection())).toBeNull();
+
+    const resources = await request.get('/api/v1/system/ssh-resources');
+    expect(resources.ok()).toBeTruthy();
+    const resourceRows = (await resources.json()) as Array<{ connectionId: number; status?: unknown }>;
+    expect(resourceRows.some((row) => row.connectionId === connectionId && row.status)).toBeTruthy();
+
+    // Resource collection establishes a real SSH transport in the background, but it is
+    // not a user connection and therefore must not make every dashboard card look recently used.
+    expect(lastConnected(await readConnection())).toBeNull();
+
+    const workspace = await openWorkspaceSession(request, connectionId);
+    try {
+      await expect.poll(async () => lastConnected(await readConnection()), { timeout: 10_000 }).not.toBeNull();
+    } finally {
+      await closeWebSocket(workspace.socket);
+    }
+  } finally {
+    if (connectionId) await request.delete(`/api/v1/connections/${connectionId}`);
   }
 });
 

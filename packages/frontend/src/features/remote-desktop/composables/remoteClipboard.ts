@@ -1,6 +1,7 @@
 import Guacamole from 'guacamole-common-js';
 import type { Client } from 'guacamole-common-js';
 import { writeClipboardText } from '@/foundation/browser';
+import { logger } from '@/client/logging/logger';
 
 export interface RemoteClipboardBridge {
   syncHostToRemote(): Promise<void>;
@@ -27,7 +28,7 @@ export const attachRemoteClipboard = (element: HTMLElement, client: Client): Rem
       writer.sendText(text);
       writer.sendEnd();
     } catch (cause) {
-      if (!isPermissionFailure(cause)) console.warn('[RemoteClipboard] Failed to read the host clipboard.', cause);
+      if (!isPermissionFailure(cause)) logger.warn({ err: cause }, 'Failed to read the host clipboard');
     }
   };
 
@@ -41,7 +42,7 @@ export const attachRemoteClipboard = (element: HTMLElement, client: Client): Rem
     reader.onend = () => {
       if (destroyed) return;
       void writeClipboardText(text).catch((cause: unknown) => {
-        if (!isPermissionFailure(cause)) console.warn('[RemoteClipboard] Failed to write the remote clipboard.', cause);
+        if (!isPermissionFailure(cause)) logger.warn({ err: cause }, 'Failed to write the remote clipboard');
       });
     };
   };

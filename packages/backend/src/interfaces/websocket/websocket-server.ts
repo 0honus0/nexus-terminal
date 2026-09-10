@@ -2,8 +2,9 @@ import http from 'node:http';
 import type { Socket } from 'node:net';
 import express, { type Request, type RequestHandler, type Response } from 'express';
 import ipaddr from 'ipaddr.js';
-import WebSocket, { WebSocketServer } from 'ws';
+import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
+import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import { bindUploadStream } from './upload-stream.transport';
 import { WorkspaceProtocolSession, type WorkspaceProtocolDependencies } from './workspace-protocol.session';
 
@@ -46,6 +47,14 @@ export interface WebSocketServerOptions {
 }
 
 export interface BackendWebSocketServer {
+  metrics(): {
+    total: number;
+    workspace: number;
+    upload: number;
+    remoteDesktop: number;
+    bufferedAmountBytes: number;
+    maxBufferedAmountBytes: number;
+  };
   /** Pause new upgrades, fully drain current clients, run an exclusive lifecycle operation, then resume upgrades. */
   quiesce<T>(operation: () => Promise<T>): Promise<T>;
   close(): Promise<void>;
@@ -97,8 +106,15 @@ const allowedOrigin = (request: http.IncomingMessage, config: WebSocketRuntimeOp
 };
 
 const rejectUpgrade = (socket: Socket, status: number, text: string): void => {
+  runtimePerformanceMetrics.webSocketUpgradeRejected();
   if (!socket.destroyed) socket.write(`HTTP/1.1 ${status} ${text}\r\nConnection: close\r\n\r\n`);
   socket.destroy();
+};
+
+const rawDataByteLength = (data: RawData): number => {
+  if (Buffer.isBuffer(data)) return data.byteLength;
+  if (Array.isArray(data)) return data.reduce((total, item) => total + item.byteLength, 0);
+  return data.byteLength;
 };
 
 const parseNonNegativeInteger = (value: string | null): number | null => {
@@ -123,6 +139,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     };
     record.socket.on('pong', alive);
     record.socket.on('message', alive);
+    record.socket.on('message', (data) => runtimePerformanceMetrics.recordWebSocketInbound(rawDataByteLength(data)));
     record.socket.once('close', () => clients.delete(record));
   };
 
@@ -175,7 +192,10 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         rejectUpgrade(socket, 400, 'Bad Request');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (ws) => onUploadConnection(ws, userId, { workspaceId, uploadId, size }));
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        runtimePerformanceMetrics.webSocketUpgradeAccepted();
+        onUploadConnection(ws, userId, { workspaceId, uploadId, size });
+      });
       return;
     }
 
@@ -185,14 +205,21 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         rejectUpgrade(socket, 400, 'Bad Request');
         return;
       }
-      wss.handleUpgrade(request, socket, head, (ws) => onRemoteDesktopConnection(ws, request, ticket, userId));
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        runtimePerformanceMetrics.webSocketUpgradeAccepted();
+        onRemoteDesktopConnection(ws, request, ticket, userId);
+      });
       return;
     }
 
-    wss.handleUpgrade(request, socket, head, (ws) => onWorkspaceConnection(ws, userId, username, clientIp));
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      runtimePerformanceMetrics.webSocketUpgradeAccepted();
+      onWorkspaceConnection(ws, userId, username, clientIp);
+    });
   };
 
   const upgradeHandler = (request: http.IncomingMessage, socket: Socket, head: Buffer): void => {
+    runtimePerformanceMetrics.webSocketUpgradeAttempt();
     if (closing || quiesceDepth > 0) {
       rejectUpgrade(socket, 503, 'Service Unavailable');
       return;
@@ -298,6 +325,28 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
   };
 
   return {
+    metrics: () => {
+      let workspace = 0;
+      let upload = 0;
+      let remoteDesktop = 0;
+      let bufferedAmountBytes = 0;
+      let maxBufferedAmountBytes = 0;
+      for (const record of clients) {
+        if (record.kind === 'workspace') workspace += 1;
+        else if (record.kind === 'upload') upload += 1;
+        else remoteDesktop += 1;
+        bufferedAmountBytes += record.socket.bufferedAmount;
+        maxBufferedAmountBytes = Math.max(maxBufferedAmountBytes, record.socket.bufferedAmount);
+      }
+      return {
+        total: clients.size,
+        workspace,
+        upload,
+        remoteDesktop,
+        bufferedAmountBytes,
+        maxBufferedAmountBytes,
+      };
+    },
     quiesce: <T>(operation: () => Promise<T>): Promise<T> => {
       quiesceDepth += 1;
       const previous = quiesceTail;

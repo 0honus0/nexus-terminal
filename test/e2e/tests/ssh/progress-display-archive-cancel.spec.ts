@@ -1,7 +1,6 @@
 import { expect, test } from '../../support/fixtures';
 import { closeConnectedFileManager, reopenConnectedFileManager, E2E_SSH } from '../../support/ssh';
 import {
-  hideVisibleProgressCenter,
   openFileManager,
   refreshFileManager,
   row,
@@ -24,14 +23,14 @@ test('archive remains cancelled while remote command preparation is stalled', as
     await closeConnectedFileManager(page);
     await task.getByTestId('transfer-progress-cancel').click();
     await expect(task).toHaveAttribute('data-task-status', 'cancelled', { timeout: 10_000 });
+    await expect(popup).toBeHidden({ timeout: 4_000 });
 
     // A prolonged remote preflight must not be allowed to forget the user's cancellation
-    // before the server eventually becomes responsive again.
+    // after the cancelled progress row has already auto-cleaned from the UI.
     await page.waitForTimeout(31_500);
     await fetch(`${E2E_SSH.controlUrl}/archive/preflight-hold?enabled=0`, { method: 'POST' });
     await page.waitForTimeout(4_000);
 
-    await hideVisibleProgressCenter(page);
     await reopenConnectedFileManager(page);
     await refreshFileManager(page);
     await expect(row(page, 'archive-source.zip')).toHaveCount(0);

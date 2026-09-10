@@ -1,5 +1,6 @@
 import { computed, ref, toRaw } from 'vue';
 import { httpClient } from '@/client/http';
+import { logger } from '@/client/logging/logger';
 import { createLatestValueSaver } from '@/foundation/async';
 
 export type WorkspacePaneName =
@@ -331,7 +332,7 @@ const resizeSaver = createLatestValueSaver<WorkspaceLayoutNode>({
     await httpClient.put('/settings/layout', nextTree);
     writeStored(LAYOUT_STORAGE_KEY, nextTree);
   },
-  onError: (error) => console.error('[WorkspaceLayout] Failed to persist resized layout.', error),
+  onError: (error) => logger.error({ err: error }, 'Failed to persist resized workspace layout'),
 });
 
 export const workspaceLayout = {

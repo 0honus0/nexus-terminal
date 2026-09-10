@@ -1,4 +1,3 @@
-import { StringDecoder } from 'node:string_decoder';
 import WebSocket, { type RawData } from 'ws';
 import type { WorkspaceCommandService } from '../../modules/workspace/services/workspace-command.service';
 import type { WorkspaceDockerService } from '../../modules/workspace/services/workspace-docker.service';
@@ -11,6 +10,7 @@ import type { WorkspaceTerminalService } from '../../modules/workspace/services/
 import type { WorkspaceEvent, WorkspaceEventHub } from '../../modules/workspace/workspace-event-hub';
 import type { WorkspaceService } from '../../modules/workspace/workspace.service';
 import type { SshSuspendService } from '../../modules/ssh-suspend/ssh-suspend.service';
+import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import type {
   DockerCommand,
   DockerStats as PlatformDockerStats,
@@ -144,7 +144,18 @@ export class WorkspaceProtocolSession {
 
     let message: WorkspaceProtocolRequest;
     try {
-      const parsed = JSON.parse(bytes.toString('utf8')) as unknown;
+      const parseStartedAt = runtimePerformanceMetrics.operationStarted();
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(bytes.toString('utf8')) as unknown;
+      } finally {
+        if (parseStartedAt !== 0n)
+          runtimePerformanceMetrics.recordCpuTask(
+            'websocket.json.parse',
+            process.hrtime.bigint() - parseStartedAt,
+            parseStartedAt,
+          );
+      }
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid request');
       message = parsed as WorkspaceProtocolRequest;
       if (typeof message.type !== 'string' || !message.type) throw new Error('Request type is required');
@@ -730,7 +741,21 @@ export class WorkspaceProtocolSession {
   }
 
   private sendJson(message: unknown): void {
-    if (this.socket.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
+    if (this.socket.readyState !== WebSocket.OPEN) return;
+    const stringifyStartedAt = runtimePerformanceMetrics.operationStarted();
+    let payload: string;
+    try {
+      payload = JSON.stringify(message);
+    } finally {
+      if (stringifyStartedAt !== 0n)
+        runtimePerformanceMetrics.recordCpuTask(
+          'websocket.json.stringify',
+          process.hrtime.bigint() - stringifyStartedAt,
+          stringifyStartedAt,
+        );
+    }
+    runtimePerformanceMetrics.recordWebSocketOutbound(Buffer.byteLength(payload, 'utf8'));
+    this.socket.send(payload);
   }
 
   private requireWorkspace(): string {

@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia';
+import { setFrontendLogLevel } from '@/client/logging/logger';
 import { preferencesApi } from '../api/preferencesApi';
 import { defaultPreferences, type PreferenceKey, type PreferencePatch, type Preferences } from '../model/preferences';
 
@@ -14,6 +15,7 @@ export const usePreferencesStore = defineStore('preferences', {
       if (!force && preferenceLoadPromise) return preferenceLoadPromise;
       const load = preferencesApi.load().then((values) => {
         this.values = values;
+        setFrontendLogLevel(values.frontendLogLevel);
         this.loaded = true;
         return this.values;
       });
@@ -34,6 +36,7 @@ export const usePreferencesStore = defineStore('preferences', {
       }
 
       Object.assign(this.values, patch);
+      if (patch.frontendLogLevel !== undefined) setFrontendLogLevel(patch.frontendLogLevel);
       try {
         await preferencesApi.update(patch);
         for (const key of keys) {
@@ -47,6 +50,7 @@ export const usePreferencesStore = defineStore('preferences', {
           preferenceKeyRevisions.delete(key);
         }
         Object.assign(this.values, rollback);
+        if (rollback.frontendLogLevel !== undefined) setFrontendLogLevel(rollback.frontendLogLevel);
         throw cause;
       }
     },

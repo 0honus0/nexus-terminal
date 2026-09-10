@@ -1,6 +1,7 @@
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import { E2E_URLS } from '../../support/test-env';
 
 const CONNECTION_NAME = 'E2E RDP RemoteApp';
 
@@ -30,7 +31,7 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       if (typeof event.payload === 'string') remoteFrames.push(event.payload);
     });
   });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
   await loginAsInitialAdmin(context.request);
   expect((await context.request.put('/api/v1/settings', { data: { language: 'en-US' } })).ok()).toBeTruthy();
   await cleanupConnection(context.request);
@@ -200,7 +201,7 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
       await expect.poll(() => remoteFrames.some((frame) => frame.includes(hostBase64))).toBeTruthy();
 
       const remoteText = 'NEXUS_RDP_REMOTE_CLIPBOARD_E2E';
-      const remoteClipboard = await context.request.post('http://127.0.0.1:29090/e2e/guacamole/clipboard', {
+      const remoteClipboard = await context.request.post(`${E2E_URLS.guacdControlOrigin}/e2e/guacamole/clipboard`, {
         data: { text: remoteText },
       });
       expect(remoteClipboard.ok()).toBeTruthy();
@@ -420,10 +421,7 @@ async function exercisePointerWindow(
   await expect.poll(async () => panel.boundingBox()).not.toBeNull();
   const resizedPanelBox = await panel.boundingBox();
   expect(resizedPanelBox).toBeTruthy();
-  expect(resizedPanelBox!.x + resizedPanelBox!.width).toBeCloseTo(
-    initialPanelBox!.x + initialPanelBox!.width + 120,
-    0,
-  );
+  expect(resizedPanelBox!.x + resizedPanelBox!.width).toBeCloseTo(initialPanelBox!.x + initialPanelBox!.width + 120, 0);
   expect(resizedPanelBox!.y + resizedPanelBox!.height).toBeCloseTo(
     initialPanelBox!.y + initialPanelBox!.height + 90,
     0,
@@ -495,7 +493,7 @@ test('VNC pointer resize and restore-button dragging share the same window seman
       if (typeof event.payload === 'string') remoteFrames.push(event.payload);
     });
   });
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'http://127.0.0.1:4173' });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: E2E_URLS.frontendLoopbackOrigin });
   await loginAsInitialAdmin(context.request);
   await page.setViewportSize({ width: 1600, height: 1100 });
   expect(
@@ -551,7 +549,7 @@ test('VNC pointer resize and restore-button dragging share the same window seman
     await expect.poll(() => remoteFrames.some((frame) => frame.includes(hostBase64))).toBeTruthy();
 
     const remoteText = 'NEXUS_VNC_REMOTE_CLIPBOARD_E2E';
-    const remoteClipboard = await context.request.post('http://127.0.0.1:29090/e2e/guacamole/clipboard', {
+    const remoteClipboard = await context.request.post(`${E2E_URLS.guacdControlOrigin}/e2e/guacamole/clipboard`, {
       data: { text: remoteText },
     });
     expect(remoteClipboard.ok()).toBeTruthy();

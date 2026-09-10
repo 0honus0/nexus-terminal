@@ -22,6 +22,12 @@
         "saveFailed": "Failed to save timezone setting."
       }
     },
+    "logging": {
+      "title": "Log levels",
+      "frontendLabel": "Frontend log level:",
+      "backendLabel": "Backend log level:",
+      "description": "Controls diagnostic and performance logging. DEBUG/TRACE emit more runtime detail; performance samples are emitted only at DEBUG or TRACE. Changes take effect immediately."
+    },
     "popupEditor": {
       "title": "Popup File Editor",
       "enableLabel": "Show popup editor when opening files",
