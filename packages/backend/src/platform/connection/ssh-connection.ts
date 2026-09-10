@@ -37,4 +37,5 @@ export interface ResolvedSshConnection {
 export interface SshConnectOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
+  suppressConnectedHook?: boolean;
 }

@@ -152,6 +152,8 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       await expect(dashboard.getByTestId('dashboard-sort-by')).toHaveCSS('text-align', 'center');
       await expect(dashboard.getByTestId('dashboard-tag-filter')).toHaveCSS('text-align-last', 'center');
       await expect(dashboard.getByTestId('dashboard-sort-by')).toHaveCSS('text-align-last', 'center');
+      await expect(dashboard.getByTestId('dashboard-tag-filter')).toHaveCSS('line-height', '40px');
+      await expect(dashboard.getByTestId('dashboard-sort-by')).toHaveCSS('line-height', '40px');
       const [tagChevronBox, sortChevronBox] = await Promise.all([
         dashboard.getByTestId('dashboard-tag-filter-chevron').boundingBox(),
         dashboard.getByTestId('dashboard-sort-by-chevron').boundingBox(),

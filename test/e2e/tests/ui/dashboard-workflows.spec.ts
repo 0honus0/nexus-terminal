@@ -596,6 +596,23 @@ test('dashboard filters connections and persists tag and sort preferences across
       await expect(page.getByTestId(`dashboard-connection-row-${alphaId}`)).toBeVisible();
       await expect(page.getByTestId(`dashboard-connection-row-${betaId}`)).toBeVisible();
 
+      const tagFilter = page.getByTestId('dashboard-tag-filter');
+      const sortFilter = page.getByTestId('dashboard-sort-by');
+      await expect(tagFilter).toHaveCSS('line-height', '40px');
+      await expect(sortFilter).toHaveCSS('line-height', '40px');
+      const [tagBox, sortBox, tagChevronBox, sortChevronBox] = await Promise.all([
+        tagFilter.boundingBox(),
+        sortFilter.boundingBox(),
+        page.getByTestId('dashboard-tag-filter-chevron').boundingBox(),
+        page.getByTestId('dashboard-sort-by-chevron').boundingBox(),
+      ]);
+      expect(tagBox).not.toBeNull();
+      expect(sortBox).not.toBeNull();
+      expect(tagChevronBox).not.toBeNull();
+      expect(sortChevronBox).not.toBeNull();
+      expect(Math.abs(tagChevronBox!.y + tagChevronBox!.height / 2 - (tagBox!.y + tagBox!.height / 2))).toBeLessThanOrEqual(1);
+      expect(Math.abs(sortChevronBox!.y + sortChevronBox!.height / 2 - (sortBox!.y + sortBox!.height / 2))).toBeLessThanOrEqual(1);
+
       const overflow = await dashboard.evaluate((element) => ({
         scrollWidth: element.scrollWidth,
         clientWidth: element.clientWidth,

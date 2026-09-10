@@ -433,24 +433,28 @@
                 <select
                   v-model="tagId"
                   data-testid="dashboard-tag-filter"
-                  class="h-10 min-w-0 w-full appearance-none rounded-md border border-border bg-background px-8 text-center text-xs text-foreground outline-none transition [text-align-last:center] focus:border-primary/70 focus:ring-1 focus:ring-primary/40 sm:text-sm"
+                  class="h-10 min-w-0 w-full appearance-none rounded-md border border-border bg-background px-8 py-0 text-center text-xs !leading-10 text-foreground outline-none transition [text-align-last:center] focus:border-primary/70 focus:ring-1 focus:ring-primary/40 sm:text-sm"
                   :aria-label="t('dashboard.filterByTag')"
                 >
                   <option value="">{{ t('dashboard.filterTags.all') }}</option>
                   <option v-if="loading" disabled>{{ t('common.loading') }}</option>
                   <option v-for="tag in tags.tags.value" :key="tag.id" :value="tag.id">{{ tag.name }}</option>
                 </select>
-                <i
+                <svg
                   data-testid="dashboard-tag-filter-chevron"
-                  class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs leading-none text-text-secondary"
+                  class="pointer-events-none absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 text-text-secondary"
+                  viewBox="0 0 12 12"
+                  fill="none"
                   aria-hidden="true"
-                ></i>
+                >
+                  <path d="M2.25 4.25 6 8l3.75-3.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
               </div>
               <div class="relative min-w-0 sm:min-w-32">
                 <select
                   v-model="sort"
                   data-testid="dashboard-sort-by"
-                  class="h-10 min-w-0 w-full appearance-none rounded-md border border-border bg-background px-8 text-center text-xs text-foreground outline-none transition [text-align-last:center] focus:border-primary/70 focus:ring-1 focus:ring-primary/40 sm:text-sm"
+                  class="h-10 min-w-0 w-full appearance-none rounded-md border border-border bg-background px-8 py-0 text-center text-xs !leading-10 text-foreground outline-none transition [text-align-last:center] focus:border-primary/70 focus:ring-1 focus:ring-primary/40 sm:text-sm"
                   :aria-label="t('dashboard.sortBy')"
                 >
                   <option value="lastConnected">{{ t('dashboard.sortOptions.lastConnected') }}</option>
@@ -459,11 +463,15 @@
                   <option value="updated">{{ t('dashboard.sortOptions.updated') }}</option>
                   <option value="created">{{ t('dashboard.sortOptions.created') }}</option>
                 </select>
-                <i
+                <svg
                   data-testid="dashboard-sort-by-chevron"
-                  class="fas fa-chevron-down pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs leading-none text-text-secondary"
+                  class="pointer-events-none absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 text-text-secondary"
+                  viewBox="0 0 12 12"
+                  fill="none"
                   aria-hidden="true"
-                ></i>
+                >
+                  <path d="M2.25 4.25 6 8l3.75-3.75" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
               </div>
               <button
                 data-testid="dashboard-sort-order"

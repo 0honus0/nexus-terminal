@@ -45,7 +45,7 @@ export class SshTransportAdapter implements RemoteExecutionTransportFactory {
       });
     }
 
-    if (connection.connectionId > 0 && this.options.onConnected) {
+    if (connection.connectionId > 0 && this.options.onConnected && !options.suppressConnectedHook) {
       setImmediate(() => {
         void Promise.resolve(this.options.onConnected?.(connection)).catch((error) => {
           console.error(`[SSH ${connection.displayName}] onConnected hook failed:`, error);
