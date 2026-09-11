@@ -62,6 +62,8 @@ const forbiddenEngineeringPatterns = [
   [/\bnpx\s+/, 'npx executor'],
   [/package-lock\.json/, 'package-lock.json'],
   [/cache:\s*npm\b/, 'npm Actions cache'],
+  [/\bpnpm\s+run\b[^\n]*\s--\s--/, 'legacy npm run argument separator'],
+  [/\bpnpm\s+exec\s+\S+\s+--\s+/, 'legacy npm exec argument separator'],
 ];
 for (const relative of engineeringFiles) {
   if (!exists(relative)) continue;
