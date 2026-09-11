@@ -8,6 +8,10 @@ export const workspaceRuntimeErrorRules: readonly AgentErrorRule[] = [
     rawCode(409, 'Workspace Runtime confirmation expired; preview again.'),
   ),
   onCodes(['CATALOG_REVISION_CONFLICT'], rawCode(409, 'Workspace Runtime Catalog changed; refresh and preview again.')),
+  onCodes(
+    ['WORKSPACE_GRANT_VERSION_CONFLICT', 'WORKSPACE_GENERATION_CONFLICT'],
+    rawCode(409, 'Workspace state changed; refresh and retry.'),
+  ),
   onCodes(['WORKSPACE_TOOLCHAIN_IN_USE'], rawCode(409, 'The Tool Pack is still used by an active Workspace.')),
   onCodes(
     ['WORKSPACE_NETWORK_ENFORCEMENT_UNAVAILABLE'],

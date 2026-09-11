@@ -27,6 +27,11 @@ export interface PluginWorkspaceGrant {
   permissions: PluginWorkspacePermission[];
 }
 
+export interface PluginWorkspaceGrantSet {
+  revision: number;
+  grants: PluginWorkspaceGrant[];
+}
+
 export interface PluginWorkspaceGrantInput {
   principalPluginId: string;
   path: string;

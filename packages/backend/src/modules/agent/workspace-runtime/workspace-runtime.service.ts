@@ -16,7 +16,7 @@ import type { AgentWorkspaceRepositoryPort } from './workspace-runtime.repositor
 import type {
   AgentWorkspaceCreateSpec,
   AgentWorkspaceView,
-  PluginWorkspaceGrant,
+  PluginWorkspaceGrantSet,
   PluginWorkspaceGrantInput,
   ToolchainPackRef,
   WorkspaceNetworkPolicy,
@@ -137,7 +137,7 @@ export class WorkspaceRuntimeService {
     workspaceId: string,
     targetPluginId: string,
     signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrant[]> {
+  ): Promise<PluginWorkspaceGrantSet> {
     const workspace = await this.requireLiveWorkspace(scope, workspaceId);
     if (!workspace.profile.runnerPlugins.some((target) => target.pluginId === targetPluginId)) {
       throw new Error('WORKSPACE_TARGET_NOT_FOUND');
@@ -150,8 +150,9 @@ export class WorkspaceRuntimeService {
     workspaceId: string,
     targetPluginId: string,
     grants: readonly PluginWorkspaceGrantInput[],
+    expectedRevision: number,
     signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrant[]> {
+  ): Promise<PluginWorkspaceGrantSet> {
     await this.assertExecutionEnabled(scope);
     const workspace = await this.requireLiveWorkspace(scope, workspaceId);
     const pluginIds = new Set(workspace.profile.runnerPlugins.map((target) => target.pluginId));
@@ -159,7 +160,14 @@ export class WorkspaceRuntimeService {
     if (grants.some((grant) => !pluginIds.has(grant.principalPluginId) || grant.principalPluginId === targetPluginId)) {
       throw new Error('WORKSPACE_GRANT_INVALID');
     }
-    return this.controller.replaceWorkspaceGrants(workspaceId, workspace.generation, targetPluginId, grants, signal);
+    return this.controller.replaceWorkspaceGrants(
+      workspaceId,
+      workspace.generation,
+      targetPluginId,
+      grants,
+      expectedRevision,
+      signal,
+    );
   }
 
   async openWorkspaceFileRead(

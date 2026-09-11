@@ -10,6 +10,11 @@ export interface WorkspaceGrant {
   permissions: WorkspacePermission[];
 }
 
+export interface WorkspaceGrantSet {
+  revision: number;
+  grants: WorkspaceGrant[];
+}
+
 export interface WorkspaceAccessTarget {
   workspaceId: string;
   generation: number;
@@ -21,6 +26,7 @@ export interface WorkspaceAccessTarget {
 interface WorkspaceAclDocument {
   schemaVersion: 1;
   grants: WorkspaceGrant[];
+  targetRevisions: Record<string, number>;
 }
 
 const SAFE_ID = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -73,20 +79,28 @@ export class WorkspaceBroker {
     generation: number,
     targetPluginId: string,
     grants: readonly Omit<WorkspaceGrant, 'targetPluginId'>[],
-  ): void {
+    expectedRevision: number,
+  ): WorkspaceGrantSet {
     const target = explicitPluginId(targetPluginId);
     if (!Array.isArray(grants) || grants.length > 256) throw new Error('WORKSPACE_ACL_INVALID');
+    if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 1) throw new Error('VALIDATION_FAILED');
     const normalized = grants.map((grant) => this.validateGrant({ ...grant, targetPluginId: target }));
     const document = this.readAcl(workspaceId, generation);
+    const currentRevision = document.targetRevisions[target] ?? 1;
+    if (currentRevision !== expectedRevision) throw new Error('WORKSPACE_GRANT_VERSION_CONFLICT');
     document.grants = [...document.grants.filter((grant) => grant.targetPluginId !== target), ...normalized];
+    document.targetRevisions[target] = currentRevision + 1;
     this.writeAcl(workspaceId, generation, document);
+    return this.grantSetFromDocument(document, target);
+  }
+
+  grantSetForTarget(workspaceId: string, generation: number, targetPluginId: string): WorkspaceGrantSet {
+    const target = explicitPluginId(targetPluginId);
+    return this.grantSetFromDocument(this.readAcl(workspaceId, generation), target);
   }
 
   grantsForTarget(workspaceId: string, generation: number, targetPluginId: string): WorkspaceGrant[] {
-    const target = explicitPluginId(targetPluginId);
-    return this.readAcl(workspaceId, generation)
-      .grants.filter((grant) => grant.targetPluginId === target)
-      .map((grant) => ({ ...grant, permissions: [...grant.permissions] }));
+    return this.grantSetForTarget(workspaceId, generation, targetPluginId).grants;
   }
 
   read(target: WorkspaceAccessTarget): Buffer {
@@ -313,11 +327,37 @@ export class WorkspaceBroker {
 
   private readAcl(workspaceId: string, generation: number): WorkspaceAclDocument {
     const file = this.aclFile(workspaceId, generation);
-    if (!fs.existsSync(file)) return { schemaVersion: 1, grants: [] };
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as WorkspaceAclDocument;
-    if (!parsed || parsed.schemaVersion !== 1 || !Array.isArray(parsed.grants))
+    if (!fs.existsSync(file)) return { schemaVersion: 1, grants: [], targetRevisions: {} };
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as Partial<WorkspaceAclDocument>;
+    if (!parsed || parsed.schemaVersion !== 1 || !Array.isArray(parsed.grants)) {
       throw new Error('WORKSPACE_ACL_INVALID');
-    return { schemaVersion: 1, grants: parsed.grants.map((grant) => this.validateGrant(grant)) };
+    }
+    const targetRevisions = parsed.targetRevisions ?? {};
+    if (
+      !targetRevisions ||
+      Array.isArray(targetRevisions) ||
+      typeof targetRevisions !== 'object' ||
+      Object.entries(targetRevisions).some(
+        ([targetPluginId, revision]) =>
+          !SAFE_ID.test(targetPluginId) || !Number.isSafeInteger(revision) || revision < 1,
+      )
+    ) {
+      throw new Error('WORKSPACE_ACL_INVALID');
+    }
+    return {
+      schemaVersion: 1,
+      grants: parsed.grants.map((grant) => this.validateGrant(grant)),
+      targetRevisions: { ...targetRevisions },
+    };
+  }
+
+  private grantSetFromDocument(document: WorkspaceAclDocument, targetPluginId: string): WorkspaceGrantSet {
+    return {
+      revision: document.targetRevisions[targetPluginId] ?? 1,
+      grants: document.grants
+        .filter((grant) => grant.targetPluginId === targetPluginId)
+        .map((grant) => ({ ...grant, permissions: [...grant.permissions] })),
+    };
   }
 
   private writeAcl(workspaceId: string, generation: number, value: WorkspaceAclDocument): void {

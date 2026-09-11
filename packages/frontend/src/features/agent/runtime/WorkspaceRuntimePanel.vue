@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, ref, watch } from 'vue';
+  import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import {
     agentApi,
@@ -17,6 +17,7 @@
   import WorkspaceCreateCard from './WorkspaceCreateCard.vue';
   import WorkspacePluginGrants from './WorkspacePluginGrants.vue';
   import WorkspaceToolchainCard from './WorkspaceToolchainCard.vue';
+  import { createWorkspaceGrantState } from './workspace-grant-state';
 
   const props = defineProps<{ appId: string; runId: string; busy?: boolean }>();
   const { t } = useI18n();
@@ -28,14 +29,12 @@
   const versions = ref<PluginVersionView[]>([]);
   const artifacts = ref<AgentArtifactRef[]>([]);
   const workspaceKey = ref('');
-  const grants = ref<PluginWorkspaceGrant[]>([]);
   const notice = ref('');
   const error = ref('');
   const loading = ref(false);
   const localBusy = ref(false);
   let refreshGeneration = 0;
 
-  const locked = computed(() => Boolean(props.busy) || localBusy.value || loading.value);
   const activeWorkspace = computed(
     () => workspaceList.value.find((workspace) => !['deleted', 'failed'].includes(workspace.status)) ?? null,
   );
@@ -73,17 +72,30 @@
   );
   const selectedWorkspace = computed(() => pluginTargets.value.find((item) => item.key === workspaceKey.value) ?? null);
 
-  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.workspaceRuntime.requestFailed'));
+  const grantState = createWorkspaceGrantState(
+    () => ({ appId: props.appId, runId: props.runId }),
+    () => {
+      const selected = selectedWorkspace.value;
+      return selected
+        ? {
+            key: selected.key,
+            workspaceId: selected.workspace.id,
+            workspaceGeneration: selected.workspace.generation,
+            targetPluginId: selected.targetPluginId,
+          }
+        : null;
+    },
+  );
+  const grants = grantState.grants;
+  const grantRevision = grantState.revision;
+  const grantLoading = grantState.loading;
+  const locked = computed(() => Boolean(props.busy) || localBusy.value || loading.value || grantLoading.value);
 
-  const loadGrants = async (): Promise<void> => {
-    const selected = selectedWorkspace.value;
-    grants.value = [];
-    if (!selected) return;
-    grants.value = await agentApi.workspaceGrants(props.appId, selected.workspace.id, selected.targetPluginId);
-  };
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.workspaceRuntime.requestFailed'));
 
   const refresh = async (): Promise<void> => {
     const current = ++refreshGeneration;
+    grantState.invalidate();
     loading.value = true;
     error.value = '';
     try {
@@ -109,7 +121,7 @@
       if (!pluginTargets.value.some((item) => item.key === workspaceKey.value)) {
         workspaceKey.value = pluginTargets.value[0]?.key ?? '';
       }
-      await loadGrants();
+      await grantState.load();
     } catch (cause) {
       if (current === refreshGeneration) error.value = explain(cause);
     } finally {
@@ -183,16 +195,7 @@
     switchToolVersions(activeWorkspace.value, changes);
   };
 
-  const replaceGrants = async (next: PluginWorkspaceGrant[]): Promise<void> => {
-    const selected = selectedWorkspace.value;
-    if (!selected) return;
-    grants.value = await agentApi.replaceWorkspaceGrants(
-      props.appId,
-      selected.workspace.id,
-      selected.targetPluginId,
-      next.map(({ principalPluginId, path, permissions }) => ({ principalPluginId, path, permissions })),
-    );
-  };
+  const replaceGrants = (next: PluginWorkspaceGrant[]): Promise<void> => grantState.replace(next);
 
   const addGrant = (input: {
     principalPluginId: string;
@@ -200,7 +203,7 @@
     permissions: PluginWorkspacePermission[];
   }): void => {
     const selected = selectedWorkspace.value;
-    if (!selected) return;
+    if (!selected || grantRevision.value === null) return;
     void run(async () => {
       const next = grants.value.filter(
         (grant) => !(grant.principalPluginId === input.principalPluginId && grant.path === input.path),
@@ -213,6 +216,7 @@
   };
 
   const removeGrant = (index: number): void => {
+    if (grantRevision.value === null) return;
     void run(async () => {
       await replaceGrants(grants.value.filter((_, candidateIndex) => candidateIndex !== index));
     }, t('agent.workspaceRuntime.grantsSaved'));
@@ -253,7 +257,11 @@
     { immediate: true },
   );
   watch(workspaceKey, () => {
-    if (!loading.value) void loadGrants().catch((cause) => (error.value = explain(cause)));
+    if (!loading.value) void grantState.load().catch((cause) => (error.value = explain(cause)));
+  });
+  onBeforeUnmount(() => {
+    refreshGeneration += 1;
+    grantState.dispose();
   });
 </script>
 

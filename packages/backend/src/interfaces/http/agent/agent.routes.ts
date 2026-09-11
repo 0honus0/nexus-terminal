@@ -764,7 +764,12 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/apps/:appId/workspaces/:workspaceId/plugins/:targetPluginId/grants',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['grants']) || !Array.isArray(request.body.grants)) {
+      if (
+        !isRecord(request.body) ||
+        !hasOnlyKeys(request.body, ['grants', 'expectedRevision']) ||
+        !Array.isArray(request.body.grants) ||
+        !positiveInteger(request.body.expectedRevision)
+      ) {
         throw new Error('VALIDATION_FAILED');
       }
       const grants = request.body.grants.map((candidate) => {
@@ -803,6 +808,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
           pathParam(request.params.workspaceId),
           pathParam(request.params.targetPluginId),
           grants,
+          request.body.expectedRevision,
         ),
       );
     }),

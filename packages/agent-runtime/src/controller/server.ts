@@ -215,15 +215,20 @@ export class RunnerControllerServer {
         if (request.method === 'GET') {
           const generation = Number(url.searchParams.get('generation'));
           if (generation !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
-          json(response, 200, {
-            targetPluginId,
-            grants: this.dependencies.pluginRunner.workspaceGrants(workspaceId, generation, targetPluginId),
-          });
+          const grantSet = this.dependencies.pluginRunner.workspaceGrants(workspaceId, generation, targetPluginId);
+          json(response, 200, { targetPluginId, ...grantSet });
           return;
         }
         const input = asRecord(await body(request));
         const generation = Number(input.generation);
-        if (generation !== workspace.generation || !Array.isArray(input.grants) || input.grants.length > 256) {
+        const expectedRevision = Number(input.expectedRevision);
+        if (
+          generation !== workspace.generation ||
+          !Number.isSafeInteger(expectedRevision) ||
+          expectedRevision < 1 ||
+          !Array.isArray(input.grants) ||
+          input.grants.length > 256
+        ) {
           throw new Error('VALIDATION_FAILED');
         }
         const grants = input.grants.map((candidate) => {
@@ -240,11 +245,14 @@ export class RunnerControllerServer {
           const permissions = grant.permissions.map(String) as WorkspacePermission[];
           return { principalPluginId, path: grantPath, permissions };
         });
-        this.dependencies.pluginRunner.replaceWorkspaceGrants(workspaceId, generation, targetPluginId, grants);
-        json(response, 200, {
+        const grantSet = this.dependencies.pluginRunner.replaceWorkspaceGrants(
+          workspaceId,
+          generation,
           targetPluginId,
-          grants: this.dependencies.pluginRunner.workspaceGrants(workspaceId, generation, targetPluginId),
-        });
+          grants,
+          expectedRevision,
+        );
+        json(response, 200, { targetPluginId, ...grantSet });
         return;
       }
       const commandMatch = url.pathname.match(/^\/v1\/commands\/([^/]+)$/);
@@ -319,7 +327,7 @@ export class RunnerControllerServer {
             ? 413
             : message.includes('NOT_FOUND')
               ? 404
-              : message.includes('MISMATCH') || message.includes('IDENTITY_CONFLICT')
+              : message.includes('CONFLICT') || message.includes('MISMATCH')
                 ? 409
                 : message.includes('UNAVAILABLE')
                   ? 503

@@ -525,6 +525,12 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 3. 目标切换时取消旧请求（AbortController）；
 4. 将 workspace、plugin installation、grant 分成 store slice，避免一个组件管理多个资源生命周期。
 
+> **解决方案（已采用）**
+>
+> Grants 不再由 `WorkspaceRuntimePanel` 自己维护异步生命周期。新增 panel-local `workspace-grant-state` slice，独立拥有 grants、revision、loading、AbortController 和 load generation；每次 target/app/run/workspace generation 变化都会先 abort 旧 GET，响应只有在 scope、target key、workspace generation 与 generation token 全部仍匹配时才允许落状态。组件卸载会 dispose slice；mutation 请求本身不会在发出后被 abort，而是只做响应归属检查，避免把已到达 Runner 的写操作制造成 unknown outcome。
+>
+> 并发控制下沉到真正的 ACL authority：Agent Runtime Runner 的 workspace ACL 为每个 target 持久保存独立 revision，旧 ACL 没有 revision map 时按 revision=1 懒迁移。GET 返回 `{revision, grants}`；replace 必须提交 `expectedRevision`，Runner 在同步 read/compare/write 临界区执行 CAS，成功后只递增该 target revision，冲突返回 `WORKSPACE_GRANT_VERSION_CONFLICT`。该 revision 经 Runner adapter、WorkspaceRuntimeService、public facade 和 Agent HTTP 原样贯通，Runner 409 也不再被包装成 503。这样快速切换 target 的旧响应不能覆盖新选择，两个浏览器/请求的连续保存也不能静默丢更新，同时不同 target 的编辑不会互相制造伪冲突。Frontend architecture checker 同时禁止 `WorkspaceRuntimePanel` 回退为直接调用 grants API，防止请求生命周期重新散回组件。
+
 ### R16：审批卡片使用本地墙上时钟，可能提前或延后显示过期
 
 位置：`packages/frontend/src/features/agent/runtime/ApprovalCard.vue`。

@@ -17,6 +17,7 @@ import {
   WorkspaceBroker,
   type WorkspaceAccessTarget,
   type WorkspaceGrant,
+  type WorkspaceGrantSet,
   type WorkspaceReadHandle,
 } from './workspace-broker';
 
@@ -345,12 +346,13 @@ export class PluginRunnerRuntime {
     generation: number,
     targetPluginId: string,
     grants: readonly Omit<WorkspaceGrant, 'targetPluginId'>[],
-  ): void {
-    this.workspaces.replaceTargetGrants(workspaceId, generation, targetPluginId, grants);
+    expectedRevision: number,
+  ): WorkspaceGrantSet {
+    return this.workspaces.replaceTargetGrants(workspaceId, generation, targetPluginId, grants, expectedRevision);
   }
 
-  workspaceGrants(workspaceId: string, generation: number, targetPluginId: string): WorkspaceGrant[] {
-    return this.workspaces.grantsForTarget(workspaceId, generation, targetPluginId);
+  workspaceGrants(workspaceId: string, generation: number, targetPluginId: string): WorkspaceGrantSet {
+    return this.workspaces.grantSetForTarget(workspaceId, generation, targetPluginId);
   }
 
   openWorkspaceFileRead(

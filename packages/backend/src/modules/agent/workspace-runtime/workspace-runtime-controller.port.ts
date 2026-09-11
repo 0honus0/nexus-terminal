@@ -1,6 +1,6 @@
 import type { JsonValue } from '../agent.types';
 import type {
-  PluginWorkspaceGrant,
+  PluginWorkspaceGrantSet,
   PluginWorkspaceGrantInput,
   WorkspaceRuntimeAvailability,
   WorkspaceRuntimeCatalog,
@@ -39,14 +39,15 @@ export interface WorkspaceRuntimeControllerPort {
     generation: number,
     targetPluginId: string,
     signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrant[]>;
+  ): Promise<PluginWorkspaceGrantSet>;
   replaceWorkspaceGrants(
     workspaceId: string,
     generation: number,
     targetPluginId: string,
     grants: readonly PluginWorkspaceGrantInput[],
+    expectedRevision: number,
     signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrant[]>;
+  ): Promise<PluginWorkspaceGrantSet>;
   openWorkspaceFileRead(
     workspaceId: string,
     generation: number,

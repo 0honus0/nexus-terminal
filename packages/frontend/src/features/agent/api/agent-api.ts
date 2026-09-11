@@ -61,6 +61,7 @@ export type {
   AgentWorkspaceView,
   PluginRunnerTargetView,
   PluginWorkspaceGrant,
+  PluginWorkspaceGrantSet,
   PluginWorkspacePermission,
   ToolchainCatalogPack,
   ToolchainPackRef,

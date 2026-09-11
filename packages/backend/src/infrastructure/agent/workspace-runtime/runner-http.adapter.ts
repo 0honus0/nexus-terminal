@@ -17,7 +17,7 @@ import type {
   WorkspaceRuntimeAvailability,
   WorkspaceRuntimeCatalog,
   WorkspaceRuntimeStorageView,
-  PluginWorkspaceGrant,
+  PluginWorkspaceGrantSet,
   PluginWorkspaceGrantInput,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 
@@ -162,12 +162,12 @@ export class RunnerHttpAdapter implements WorkspaceRuntimeControllerPort, Worksp
     generation: number,
     targetPluginId: string,
     signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrant[]> {
-    const result = await this.get<{ targetPluginId: string; grants: PluginWorkspaceGrant[] }>(
+  ): Promise<PluginWorkspaceGrantSet> {
+    const result = await this.get<{ targetPluginId: string } & PluginWorkspaceGrantSet>(
       `/v1/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/grants?generation=${generation}`,
       signal,
     );
-    return result.grants;
+    return { revision: result.revision, grants: result.grants };
   }
 
   async replaceWorkspaceGrants(
@@ -175,14 +175,15 @@ export class RunnerHttpAdapter implements WorkspaceRuntimeControllerPort, Worksp
     generation: number,
     targetPluginId: string,
     grants: readonly PluginWorkspaceGrantInput[],
+    expectedRevision: number,
     signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrant[]> {
-    const result = await this.request<{ targetPluginId: string; grants: PluginWorkspaceGrant[] }>(
+  ): Promise<PluginWorkspaceGrantSet> {
+    const result = await this.request<{ targetPluginId: string } & PluginWorkspaceGrantSet>(
       `/v1/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/grants`,
-      { method: 'POST', body: { generation, grants } },
+      { method: 'POST', body: { generation, grants, expectedRevision } },
       signal,
     );
-    return result.grants;
+    return { revision: result.revision, grants: result.grants };
   }
 
   openWorkspaceFileRead(
@@ -469,6 +470,16 @@ export class RunnerHttpAdapter implements WorkspaceRuntimeControllerPort, Worksp
       });
       if (!response.ok) {
         const text = (await response.text()).slice(0, 4096);
+        if (response.status === 409) {
+          try {
+            const parsed = JSON.parse(text) as { error?: unknown };
+            if (typeof parsed.error === 'string' && /^[A-Z][A-Z0-9_]+$/.test(parsed.error)) {
+              throw new Error(parsed.error);
+            }
+          } catch (error) {
+            if (error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message)) throw error;
+          }
+        }
         throw new Error(
           response.status === 401 || response.status === 403
             ? 'WORKSPACE_RUNTIME_AUTH_FAILED'

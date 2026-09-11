@@ -146,6 +146,11 @@ export interface PluginWorkspaceGrant {
   permissions: PluginWorkspacePermission[];
 }
 
+export interface PluginWorkspaceGrantSet {
+  revision: number;
+  grants: PluginWorkspaceGrant[];
+}
+
 export interface WorkspaceArtifactImportResult {
   artifact: AgentArtifactRef;
   workspaceId: string;
@@ -428,11 +433,17 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
       ).data,
     );
   },
-  async workspaceGrants(appId: string, workspaceId: string, targetPluginId: string): Promise<PluginWorkspaceGrant[]> {
+  async workspaceGrants(
+    appId: string,
+    workspaceId: string,
+    targetPluginId: string,
+    signal?: AbortSignal,
+  ): Promise<PluginWorkspaceGrantSet> {
     return unwrap(
       (
-        await httpClient.get<AgentEnvelope<PluginWorkspaceGrant[]>>(
+        await httpClient.get<AgentEnvelope<PluginWorkspaceGrantSet>>(
           `/agent/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/grants`,
+          { signal },
         )
       ).data,
     );
@@ -442,12 +453,13 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
     workspaceId: string,
     targetPluginId: string,
     grants: Array<Pick<PluginWorkspaceGrant, 'principalPluginId' | 'path' | 'permissions'>>,
-  ): Promise<PluginWorkspaceGrant[]> {
+    expectedRevision: number,
+  ): Promise<PluginWorkspaceGrantSet> {
     return unwrap(
       (
-        await httpClient.put<AgentEnvelope<PluginWorkspaceGrant[]>>(
+        await httpClient.put<AgentEnvelope<PluginWorkspaceGrantSet>>(
           `/agent/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/grants`,
-          { grants },
+          { grants, expectedRevision },
           { headers: await mutationHeaders() },
         )
       ).data,

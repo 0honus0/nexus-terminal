@@ -51,6 +51,13 @@ for (const file of sourceFiles) {
   ) {
     failures.push(`${rel}: Run HTTP reads must flow through features/agent/runtime/run-facade.ts`);
   }
+
+  if (
+    rel === 'features/agent/runtime/WorkspaceRuntimePanel.vue' &&
+    /\bagentApi\.(?:workspaceGrants|replaceWorkspaceGrants)\s*\(/.test(content)
+  ) {
+    failures.push(`${rel}: Workspace grant request lifecycle must flow through workspace-grant-state.ts`);
+  }
 }
 
 const firstSegment = (rel) => rel.split('/')[0];
