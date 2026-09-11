@@ -12,7 +12,6 @@ import { Reconciler } from './controller/reconciler';
 import { CertificateManager } from './controller/certificate-manager';
 import { RunnerControllerServer } from './controller/server';
 import { PluginRunnerRuntime } from './controller/plugin-runner-runtime';
-import { sandboxBinaryPath } from './controller/sandbox-binary';
 
 const main = async (): Promise<void> => {
   const root = process.env.NEXUS_AGENT_RUNNER_ROOT?.trim() || '/var/lib/nexus-agent-runner';
@@ -25,7 +24,7 @@ const main = async (): Promise<void> => {
     process.env.NEXUS_AGENT_RUNNER_TOKEN,
   );
   const catalog = new WorkspaceRuntimeCatalog(catalogFile);
-  const sandboxBinary = sandboxBinaryPath();
+  const sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || 'bwrap';
   const journal = new RunnerJournal(path.join(root, 'state', 'journal.json'));
   const sandboxEngine = new SandboxEngine(path.join(root, 'runtime'), path.join(root, 'packs'), sandboxBinary);
   const store = new ToolchainStore(path.join(root, 'packs'));

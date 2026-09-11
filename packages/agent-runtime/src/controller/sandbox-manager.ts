@@ -3,7 +3,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, ToolchainPackRef } from '../types';
-import { probeSandboxBinary, sandboxBinaryPath } from './sandbox-binary';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -65,12 +64,10 @@ export class SandboxManager {
   constructor(
     private readonly runtimeRoot: string,
     private readonly packsRoot: string,
-    private readonly sandboxBinary = sandboxBinaryPath(),
+    private readonly sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || 'bwrap',
   ) {}
 
   availability(): SandboxAvailability {
-    const binary = probeSandboxBinary(this.sandboxBinary);
-    if (!binary.available) return { available: false, reason: binary.reason };
     fs.mkdirSync(this.runtimeRoot, { recursive: true });
     const probeRoot = fs.mkdtempSync(path.join(this.runtimeRoot, '.sandbox-probe-'));
     try {

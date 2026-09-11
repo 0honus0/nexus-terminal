@@ -28,8 +28,9 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 BWRAP_VERSION=0.12.0
 BWRAP_SHA256=9760d007363e3abba7c747489910f9f82d9fca53ba3bd3282e396fa3c97a3314
 bwrap_root="/usr/local/lib/nexus-agent-runner/bubblewrap/$BWRAP_VERSION"
-bwrap_bin="$bwrap_root/bin/bwrap"
-if [[ ! -x "$bwrap_bin" ]] || [[ $("$bwrap_bin" --version 2>/dev/null) != "bubblewrap $BWRAP_VERSION" ]]; then
+bwrap_release_bin="$bwrap_root/bin/bwrap"
+bwrap_bin=/usr/local/bin/bwrap
+if [[ ! -x "$bwrap_release_bin" ]] || [[ $("$bwrap_release_bin" --version 2>/dev/null) != "bubblewrap $BWRAP_VERSION" ]]; then
   bwrap_tmp=$(mktemp -d)
   trap 'rm -rf "$bwrap_tmp"' EXIT
   bwrap_archive="$bwrap_tmp/bubblewrap.tar.xz"
@@ -47,14 +48,15 @@ if [[ ! -x "$bwrap_bin" ]] || [[ $("$bwrap_bin" --version 2>/dev/null) != "bubbl
   meson compile -C "$bwrap_tmp/build"
   [[ -f "$bwrap_tmp/build/bwrap" ]] || { echo 'Pinned bubblewrap build did not produce bwrap.' >&2; exit 9; }
   "${SUDO[@]}" install -d -m 0755 "$bwrap_root/bin"
-  "${SUDO[@]}" install -o root -g root -m 0755 "$bwrap_tmp/build/bwrap" "$bwrap_bin"
+  "${SUDO[@]}" install -o root -g root -m 0755 "$bwrap_tmp/build/bwrap" "$bwrap_release_bin"
   rm -rf "$bwrap_tmp"
   trap - EXIT
 fi
-if [[ $("$bwrap_bin" --version 2>/dev/null) != "bubblewrap $BWRAP_VERSION" ]]; then
+if [[ $("$bwrap_release_bin" --version 2>/dev/null) != "bubblewrap $BWRAP_VERSION" ]]; then
   echo 'Pinned bubblewrap version verification failed.' >&2
   exit 10
 fi
+"${SUDO[@]}" install -o root -g root -m 0755 "$bwrap_release_bin" "$bwrap_bin"
 bwrap_mode=$(stat -Lc '%a' "$bwrap_bin")
 bwrap_uid=$(stat -Lc '%u' "$bwrap_bin")
 if [[ "$bwrap_uid" != 0 ]] || (( (8#$bwrap_mode & 8#022) != 0 )); then

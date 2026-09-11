@@ -17,7 +17,7 @@ RUN apk add --no-cache build-base curl libcap-dev meson ninja xz \
       --output /build-bwrap/bubblewrap.tar.xz \
     && printf '%s  %s\n' "${BWRAP_SHA256}" /build-bwrap/bubblewrap.tar.xz | sha256sum -c - \
     && tar -xJf /build-bwrap/bubblewrap.tar.xz -C /build-bwrap \
-    && meson setup /build-bwrap/output "/build-bwrap/bubblewrap-${BWRAP_VERSION}" \
+    && CFLAGS='-include linux/limits.h' meson setup /build-bwrap/output "/build-bwrap/bubblewrap-${BWRAP_VERSION}" \
       -Dselinux=disabled -Dman=disabled -Dtests=false \
       -Dbash_completion=disabled -Dzsh_completion=disabled \
     && meson compile -C /build-bwrap/output \

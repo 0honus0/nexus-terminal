@@ -30,7 +30,8 @@
     "format:check": "node scripts/format-changed.mjs --check",
     "format:all": "prettier --write \"{packages,test,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"package.json\"",
     "format:all:check": "prettier --check \"{packages,test,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"package.json\"",
-    "check:test-policy": "node scripts/check-test-policy.mjs"
+    "check:test-policy": "node scripts/check-test-policy.mjs",
+    "check:sandbox-prerequisites": "node scripts/agent-runtime/check-prerequisites.mjs"
   },
   "repository": {
     "type": "git",

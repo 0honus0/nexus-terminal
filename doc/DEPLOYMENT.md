@@ -29,7 +29,7 @@ Agent 的 Workspace Dev Environment 使用宿主 `nexus-agent-runner` + bubblewr
 ./scripts/agent-runtime/prepare-ubuntu-host.sh
 ```
 
-该脚本从 bubblewrap 上游 release 安装 Nexus 当前固定的最新稳定版 `0.12.0`（release archive SHA-256 校验）到 `/usr/local/lib/nexus-agent-runner/bubblewrap/0.12.0/bin/bwrap`，不覆盖系统 `/usr/bin/bwrap`；随后加载仅匹配该 Nexus-owned binary 的 path-scoped AppArmor profile，并执行真实 user/network namespace probe。Runner 同时拒绝低于 `0.12.0` 的 sandbox binary override。脚本不会把 Runner 设为 privileged、不会关闭 AppArmor，也不会修改 `kernel.apparmor_restrict_unprivileged_userns`。如果宿主明确禁用了 unprivileged user namespaces 或缺少受支持的 profile，脚本 fail closed。
+该脚本从 bubblewrap 上游 release 安装 Nexus 当前固定的最新稳定版 `0.12.0`（release archive SHA-256 校验），保留 versioned release copy 并将受检二进制安装到稳定 `/usr/local/bin/bwrap`，不覆盖系统 `/usr/bin/bwrap`；随后加载仅匹配该稳定 Nexus-owned binary 的 path-scoped AppArmor profile，并执行真实 user/network namespace probe。版本/SHA/最新稳定状态由 `npm run check:sandbox-prerequisites -- --verify-latest` 与构建脚本统一检查，Runtime 代码只做能力可用性检查。脚本不会把 Runner 设为 privileged、不会关闭 AppArmor，也不会修改 `kernel.apparmor_restrict_unprivileged_userns`。如果宿主明确禁用了 unprivileged user namespaces 或缺少受支持的 profile，脚本 fail closed。
 
 Runner 默认监听 `127.0.0.1:8790`。当 Backend 运行在 Compose 中时，应把 Runner 绑定到仅 Docker host-gateway 可达的宿主接口，并在 `.env` 配置相同的 `NEXUS_AGENT_RUNNER_TOKEN` / `NEXUS_AGENT_DEPLOYMENT_ID`；Compose 默认通过 `host.docker.internal:8790` 访问。不要把 Runner Controller 直接暴露到公网。
 

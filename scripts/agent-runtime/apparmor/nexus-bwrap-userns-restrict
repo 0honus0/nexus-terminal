@@ -7,7 +7,7 @@ abi <abi/4.0>,
 
 include <tunables/global>
 
-profile nexus_bwrap /usr/local/lib/nexus-agent-runner/bubblewrap/0.12.0/bin/bwrap flags=(attach_disconnected,mediate_deleted) {
+profile nexus_bwrap /usr/local/bin/bwrap flags=(attach_disconnected,mediate_deleted) {
   allow capability,
   allow file rwlkm /{**,},
   allow network,

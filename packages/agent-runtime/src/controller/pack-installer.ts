@@ -8,7 +8,6 @@ import semver from 'semver';
 import type { CatalogPack, ToolchainPackRef } from '../types';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { ToolchainStore } from './toolchain-store';
-import { requireSupportedSandboxBinary, sandboxBinaryPath } from './sandbox-binary';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
 const RUNNER_API_VERSION = '1.0.0';
@@ -233,7 +232,7 @@ export class PackInstaller {
     private readonly catalog: WorkspaceRuntimeCatalog,
     private readonly store: ToolchainStore,
     private readonly cacheRoot: string,
-    private readonly sandboxBinary = sandboxBinaryPath(),
+    private readonly sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || 'bwrap',
   ) {
     fs.mkdirSync(path.join(cacheRoot, 'download'), { recursive: true });
     fs.mkdirSync(path.join(cacheRoot, 'mise'), { recursive: true });
@@ -475,7 +474,6 @@ export class PackInstaller {
     staging: string,
     pack: CatalogPack,
   ): Promise<void> {
-    requireSupportedSandboxBinary(this.sandboxBinary);
     const sandboxBinary = this.sandboxBinary;
     const systemBindings = sandboxSystemRuntimeArguments();
     const args = [
@@ -570,7 +568,6 @@ export class PackInstaller {
       current += `/${segment}`;
       targetParentArgs.push('--dir', current);
     }
-    requireSupportedSandboxBinary(this.sandboxBinary);
     const result = await runProcess(
       this.sandboxBinary,
       [
