@@ -67,6 +67,7 @@ docker compose up -d
 - [后继开发工程约束](./doc/software-requirements/engineering-constraints.md)
 - [Frontend 架构](./doc/architecture/FRONTEND.md)
 - [Backend 架构](./doc/architecture/BACKEND.md)
+- [Package Management 架构](./doc/architecture/PACKAGE_MANAGEMENT.md)
 - [Agent 完整架构设计](./doc/architecture/agent/ARCHITECTURE.md)
 - [Agent 实施方案](./doc/architecture/agent/IMPLEMENTATION.md)
 - [远程桌面网关架构](./doc/architecture/REMOTE_DESKTOP.md)

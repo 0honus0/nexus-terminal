@@ -404,17 +404,21 @@ async function runGroup(args) {
   const timingsOutput = path.join(e2eRoot, '.tmp', `spec-timings-group-${groupId}.json`);
   console.log(`[E2E groups] running group-${groupId}/${workers} with ${group.specs.length} specs`);
   const detached = process.platform !== 'win32';
-  const child = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'test', ...group.specs], {
-    cwd: e2eRoot,
-    detached,
-    env: {
-      ...process.env,
-      E2E_GROUP_ID: String(groupId),
-      E2E_GROUP_WORKERS: String(workers),
-      E2E_TIMINGS_OUTPUT: timingsOutput,
+  const child = spawn(
+    path.join(e2eRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'playwright.cmd' : 'playwright'),
+    ['test', ...group.specs],
+    {
+      cwd: e2eRoot,
+      detached,
+      env: {
+        ...process.env,
+        E2E_GROUP_ID: String(groupId),
+        E2E_GROUP_WORKERS: String(workers),
+        E2E_TIMINGS_OUTPUT: timingsOutput,
+      },
+      stdio: 'inherit',
     },
-    stdio: 'inherit',
-  });
+  );
 
   let receivedSignal;
   let forceKillTimer;

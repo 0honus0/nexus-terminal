@@ -12,13 +12,13 @@
     "start": "node dist/index.js"
   },
   "devDependencies": {
-    "@types/node": "^26.5.0",
+    "@types/node": "catalog:",
     "@types/semver": "7.7.1",
-    "typescript": "^7.0.2"
+    "typescript": "catalog:node-build"
   },
   "dependencies": {
-    "puppeteer-core": "25.10.0",
+    "puppeteer-core": "catalog:",
     "semver": "7.7.2",
-    "tar": "7.5.22"
+    "tar": "catalog:"
   }
 }

@@ -2,6 +2,7 @@ FROM node:24-bookworm
 
 ARG E2E_RUNNER_FINGERPRINT
 ARG PLAYWRIGHT_VERSION=1.63.0
+ARG PNPM_VERSION=11.26.0
 ENV DEBIAN_FRONTEND=noninteractive \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
@@ -18,13 +19,15 @@ RUN apt-get update \
         zip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN npx -y "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
-    && rm -rf /root/.npm/_npx \
+RUN corepack enable \
+    && corepack prepare "pnpm@${PNPM_VERSION}" --activate \
+    && pnpm dlx "playwright@${PLAYWRIGHT_VERSION}" install --with-deps chromium \
+    && pnpm store prune \
     && chmod -R a+rX /ms-playwright
 
 WORKDIR /workspace
 
 LABEL io.nexus-terminal.e2e-runner.fingerprint="${E2E_RUNNER_FINGERPRINT}" \
       org.opencontainers.image.source="https://github.com/0honus0/nexus-terminal" \
-      org.opencontainers.image.description="Nexus Terminal E2E runner with Node 24 and preinstalled Playwright Chromium" \
+      org.opencontainers.image.description="Nexus Terminal E2E runner with Node 24, pnpm, and preinstalled Playwright Chromium" \
       org.opencontainers.image.licenses="MIT"

@@ -72,10 +72,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up current Node.js
-        uses: actions/setup-node@v7
+      - name: Set up pnpm and current Node.js
+        uses: pnpm/setup@v2
         with:
-          node-version: 24.x
+          runtime: node@24
+          install: false
 
       - name: Resolve latest stable E2E environment
         id: state
@@ -92,7 +93,7 @@ jobs:
           fi
 
           if [[ "$can_update" == "true" ]]; then
-            npm run test:e2e:env:latest
+            pnpm run test:e2e:env:latest
           else
             latest="$RUNNER_TEMP/latest-e2e-environment.json"
             node scripts/e2e/resolve-latest-test-environment.mjs > "$latest"
@@ -162,7 +163,7 @@ jobs:
           node --check scripts/e2e/sync-test-environment.mjs
           node --check scripts/e2e/runner-image-info.mjs
           bash -n scripts/e2e/build-runner-image.sh
-          npm run test:e2e:groups:check
+          pnpm run test:e2e:groups:check
           git diff --check
 
       - name: Upload E2E environment patch
@@ -199,10 +200,11 @@ jobs:
         shell: bash
         run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
-      - name: Set up target Node.js
-        uses: actions/setup-node@v7
+      - name: Set up pnpm and target Node.js
+        uses: pnpm/setup@v2
         with:
-          node-version: ${{ needs.environment.outputs.node_version }}.x
+          runtime: node@${{ needs.environment.outputs.node_version }}
+          install: false
 
       - name: Log in to GHCR
         shell: bash
@@ -234,13 +236,17 @@ jobs:
         shell: bash
         run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
-      - name: Set up target Node.js
-        uses: actions/setup-node@v7
+      - name: Set up pnpm and target Node.js
+        uses: pnpm/setup@v2
         with:
-          node-version: ${{ needs.environment.outputs.node_version }}.x
+          runtime: node@${{ needs.environment.outputs.node_version }}
+          install: false
+
+      - name: Enforce package-manager architecture
+        run: pnpm run check:package-management
 
       - name: Enforce E2E-only test policy
-        run: npm run check:test-policy
+        run: pnpm run check:test-policy
 
       - name: Resolve and validate E2E groups
         id: groups
@@ -284,26 +290,27 @@ jobs:
         shell: bash
         run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
-      - name: Set up target Node.js
-        uses: actions/setup-node@v7
+      - name: Set up pnpm and target Node.js
+        uses: pnpm/setup@v2
         with:
-          node-version: ${{ needs.environment.outputs.node_version }}.x
-          cache: npm
-          cache-dependency-path: test/e2e/package-lock.json
+          runtime: node@${{ needs.environment.outputs.node_version }}
+          cache: true
+          install: false
 
-      - name: Install Docker smoke E2E dependencies
-        run: npm ci --prefix test/e2e
+      - name: Install Docker smoke workspace dependencies
+        run: >-
+          pnpm install --frozen-lockfile
+          --filter @nexus-terminal/e2e
+          --filter @nexus-terminal/agent-runtime
 
       - name: Verify Agent sandbox prerequisite pin
-        run: npm run check:sandbox-prerequisites -- --verify-latest
+        run: pnpm run check:sandbox-prerequisites --verify-latest
 
       - name: Install host Runner sandbox dependency
         run: ./scripts/agent-runtime/prepare-ubuntu-host.sh
 
       - name: Build host Agent Runner
-        run: |
-          npm ci --prefix packages/agent-runtime
-          npm run build --prefix packages/agent-runtime
+        run: pnpm run build:agent-runtime
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -357,38 +364,17 @@ jobs:
         shell: bash
         run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
-      - name: Install E2E runtime dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          npm ci --prefix packages/backend &
-          backend_pid=$!
-          npm ci --prefix packages/frontend &
-          frontend_pid=$!
-          npm ci --prefix test/e2e &
-          e2e_pid=$!
-
-          failed=0
-          if ! wait "$backend_pid"; then
-            echo "::error::Backend npm ci failed"
-            failed=1
-          fi
-          if ! wait "$frontend_pid"; then
-            echo "::error::Frontend npm ci failed"
-            failed=1
-          fi
-          if ! wait "$e2e_pid"; then
-            echo "::error::E2E npm ci failed"
-            failed=1
-          fi
-
-          exit "$failed"
+      - name: Install E2E workspace dependencies
+        run: >-
+          pnpm install --frozen-lockfile
+          --filter @nexus-terminal/backend
+          --filter @nexus-terminal/frontend
+          --filter @nexus-terminal/e2e
 
       - name: Verify preinstalled Playwright runtime
         run: |
           node --version
-          npm --prefix test/e2e exec -- playwright --version
+          pnpm --filter @nexus-terminal/e2e exec playwright --version
           test -d "$PLAYWRIGHT_BROWSERS_PATH"
           command -v zip
           command -v unzip

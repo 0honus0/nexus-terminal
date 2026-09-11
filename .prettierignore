@@ -7,3 +7,5 @@ test-results
 uploads
 temp-uploads
 *.min.js
+
+pnpm-lock.yaml

@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../..');
 const versions = JSON.parse(fs.readFileSync(path.join(scriptDir, 'versions.json'), 'utf8'));
+const rootPackage = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+const pnpmVersion = /^pnpm@(.+)$/.exec(String(rootPackage.packageManager ?? ''))?.[1];
+if (!pnpmVersion) throw new Error(`Invalid root packageManager: ${rootPackage.packageManager}`);
 
 if (!/^\d+$/.test(String(versions.node))) throw new Error(`Invalid Node major: ${versions.node}`);
 if (!/^\d+\.\d+\.\d+/.test(String(versions.playwright))) {
@@ -18,7 +21,7 @@ const definitionFiles = [
   'scripts/e2e/runner-image-info.mjs',
 ];
 const hash = crypto.createHash('sha256');
-hash.update(`node=${versions.node}\nplaywright=${versions.playwright}\n`);
+hash.update(`node=${versions.node}\nplaywright=${versions.playwright}\npnpm=${pnpmVersion}\n`);
 for (const relative of definitionFiles) {
   hash.update(`file=${relative}\n`);
   hash.update(fs.readFileSync(path.join(repoRoot, relative)));
@@ -28,6 +31,7 @@ for (const relative of definitionFiles) {
 const info = {
   node: String(versions.node),
   playwright: String(versions.playwright),
+  pnpm: pnpmVersion,
   tag: `playwright-${versions.playwright}-node${versions.node}`,
   fingerprint: hash.digest('hex'),
 };

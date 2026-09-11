@@ -278,7 +278,7 @@
     if (lower === 'makefile') return 'fas fa-cogs';
     if (lower === 'dockerfile' || lower.endsWith('docker-compose.yml') || lower.endsWith('docker-compose.yaml'))
       return 'fab fa-docker';
-    if (lower === 'package.json' || lower === 'package-lock.json') return 'fab fa-npm';
+    if (lower === 'package.json' || lower === 'package-lock.json' || lower === 'pnpm-lock.yaml') return 'fab fa-npm';
     if (lower === 'yarn.lock') return 'fab fa-yarn';
     if (lower === 'composer.json' || lower === 'composer.lock') return 'fab fa-php';
     if (lower === 'gemfile' || lower === 'gemfile.lock') return 'fas fa-gem';

@@ -25,6 +25,7 @@ done
 
 node_version="$(node -p "require('$versions_file').node")"
 playwright_version="$(node -p "require('$versions_file').playwright")"
+pnpm_version="$(node "$repo_root/scripts/e2e/runner-image-info.mjs" pnpm)"
 tag="$(node "$repo_root/scripts/e2e/runner-image-info.mjs" tag)"
 runner_fingerprint="$(node "$repo_root/scripts/e2e/runner-image-info.mjs" fingerprint)"
 full_image="$image:$tag"
@@ -34,6 +35,7 @@ echo "[E2E runner] building $full_image"
 docker build \
   --pull \
   --build-arg "PLAYWRIGHT_VERSION=$playwright_version" \
+  --build-arg "PNPM_VERSION=$pnpm_version" \
   --build-arg "E2E_RUNNER_FINGERPRINT=$runner_fingerprint" \
   -f "$repo_root/test/e2e/Dockerfile.runner" \
   -t "$full_image" \
@@ -41,7 +43,7 @@ docker build \
 
 echo "[E2E runner] smoke-checking $full_image"
 docker run --rm "$full_image" node --version
-docker run --rm "$full_image" sh -lc "npx -y playwright@${playwright_version} --version && test -d \"\$PLAYWRIGHT_BROWSERS_PATH\" && command -v zip && command -v unzip && command -v bzip2"
+docker run --rm "$full_image" sh -lc "pnpm --version | grep -Fx ${pnpm_version} && pnpm dlx playwright@${playwright_version} --version && test -d \"\$PLAYWRIGHT_BROWSERS_PATH\" && command -v zip && command -v unzip && command -v bzip2"
 
 if [[ "$push" == "true" ]]; then
   echo "[E2E runner] pushing $full_image"

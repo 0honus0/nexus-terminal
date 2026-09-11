@@ -34,7 +34,7 @@ if (formattable.length === 0) {
 
 const prettierBin = path.resolve('node_modules/prettier/bin/prettier.cjs');
 if (!existsSync(prettierBin)) {
-  console.error('Prettier is not installed at the repository root. Run npm ci first.');
+  console.error('Prettier is not installed at the repository root. Run pnpm install --frozen-lockfile first.');
   process.exit(1);
 }
 

@@ -112,7 +112,7 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: `node ${JSON.stringify(prepareTestDataScript)} && npm exec tsx -- src/index.ts`,
+      command: `node ${JSON.stringify(prepareTestDataScript)} && pnpm exec tsx -- src/index.ts`,
       cwd: path.join(repoRoot, 'packages/backend'),
       env: backendEnv,
       url: `${E2E_URLS.backendOrigin}/api/v1/auth/needs-setup`,
@@ -122,7 +122,7 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
-      command: `npm run dev -- --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
+      command: `pnpm run dev -- --host 127.0.0.1 --port ${E2E_PORTS.frontend} --strictPort`,
       cwd: path.join(repoRoot, 'packages/frontend'),
       env: {
         ...backendEnv,

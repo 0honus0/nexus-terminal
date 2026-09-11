@@ -58,7 +58,9 @@ async function main(): Promise<void> {
   fs.rmSync(seedDir, { recursive: true, force: true });
   fs.mkdirSync(seedDir, { recursive: true });
   if (!fs.existsSync(tsxCli)) {
-    throw new Error(`Backend tsx runtime is missing: ${tsxCli}. Run npm install for packages/backend first.`);
+    throw new Error(
+      `Backend tsx runtime is missing: ${tsxCli}. Run pnpm install --frozen-lockfile at the repository root first.`,
+    );
   }
 
   const output: string[] = [];

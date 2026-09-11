@@ -1491,17 +1491,17 @@ AppIntent 继续负责**跨 App**的小 JSON/ArtifactRef 交接；它与同一 W
 
 发布与验证命令沿用工程约束，不随文档复制出第二套规则：
 
-- npm run format / npm run format:check（只处理本任务文件，避免格式化用户其他dirty文件）。
-- npm run check:test-policy；npm run build:backend；npm run build:frontend。
-- npm --prefix packages/backend run check:architecture；npm --prefix packages/frontend run check:architecture。
-- npm --prefix test/e2e exec playwright test tests/agent/<本任务spec>；环境/参数沿用现有E2E配置，不能把本地缺浏览器当通过。
-- npm run test:e2e:groups:check；正式完整浏览器证据在既有GitHub Actions固定runner生成。
+- pnpm run format / pnpm run format:check（只处理本任务文件，避免格式化用户其他dirty文件）。
+- pnpm run check:test-policy；pnpm run build:backend；pnpm run build:frontend。
+- pnpm --filter @nexus-terminal/backend run check:architecture；pnpm --filter @nexus-terminal/frontend run check:architecture。
+- pnpm --filter @nexus-terminal/e2e exec playwright test tests/agent/<本任务spec>；环境/参数沿用现有E2E配置，不能把本地缺浏览器当通过。
+- pnpm run test:e2e:groups:check；正式完整浏览器证据在既有GitHub Actions固定runner生成。
 - 部署smoke经生产dist/Compose/Nginx真实入口；二期真实走 Backend → host Runner → Tool Store → Workspace → bubblewrap，双 Workspace 同时验证两组 Node/Python/Go、目标 Workspace 切版隔离、稳定源码、`runtimeDigest + packRefs` fingerprint/cache 分区与切回复用、同一 PackRef 全局仅一个 immutable digest 目录、以及 smoke 前后 `/usr/bin/node|python3|go` 不变；同时验证 Pack manifest、Recipe 权限及无 Docker socket 部署。host-gateway 的只读 Runner GET 探针仅对 Node `fetch failed` 这类 transport reset 做有上限退避重试；HTTP 非 2xx 不重试，command/job POST 也不盲重试，避免把 mutation outcome-unknown 隐藏成测试成功。
 - git diff --check。
 
 质量基准与功能E2E分开解释：固定至少10个任务（诊断、有限日志摘要、文件修改/外部变更冲突、服务重启核验、失败恢复、二期环境协作、三期Browser/Subagent），冻结输入、允许动作、成功证据及最大预算。使用真实模型的同任务对比记录verified成功率、总input/output/cache Tokens、重试、wall time、未知结果率；模型/提示/Skill版本均记录。安全硬门槛是越权/泄密/重复mutation为0；节省Token的变更不得降低已验证成功任务数，绝不只以少花Token通过。没有真实模型凭据只执行产品契约E2E，不伪造模型质量数据。
 
-验收表同时覆盖已实现与后续扩展范围；最终状态只以本次实际运行的 build/architecture/E2E/smoke 为准。2026-09-10 本地收尾验证中，agent-runtime build、Backend build/architecture、Frontend architecture/i18n/vue-tsc/Vite/bundle budget、root build、test policy、E2E groups、Agent E2E（2/2）、format check 与 `git diff --check` 均通过；seeded DB 也实际完成 v19→v50 migration。完整 `npm run test:e2e` 已执行，但当前宿主没有 `libglib-2.0.so.0`，一次完整运行生成的 143 个 failure context 中 143/143 都在 Playwright Chromium 启动阶段退出、尚未进入页面/业务断言，因此不能把 browser E2E 记为通过。当前宿主同时没有 Docker CLI 与 bubblewrap，且 Node v22.17.0 低于仓库声明的 Node >=24（本次 build 仅产生 engine warning）；所以也不能在本机声称生产容器内 bubblewrap namespace 已实际运行通过。完整浏览器与 sandbox 运行态证据必须在仓库固定 E2E runner / 具备相应系统依赖的宿主生成，不得通过跳过项目、`reuseExistingServer` 或降低安全边界伪造全绿。
+验收表同时覆盖已实现与后续扩展范围；最终状态只以本次实际运行的 build/architecture/E2E/smoke 为准。2026-09-10 本地收尾验证中，agent-runtime build、Backend build/architecture、Frontend architecture/i18n/vue-tsc/Vite/bundle budget、root build、test policy、E2E groups、Agent E2E（2/2）、format check 与 `git diff --check` 均通过；seeded DB 也实际完成 v19→v50 migration。完整 `pnpm run test:e2e` 已执行，但当前宿主没有 `libglib-2.0.so.0`，一次完整运行生成的 143 个 failure context 中 143/143 都在 Playwright Chromium 启动阶段退出、尚未进入页面/业务断言，因此不能把 browser E2E 记为通过。当前宿主同时没有 Docker CLI 与 bubblewrap，且 Node v22.17.0 低于仓库声明的 Node >=24（本次 build 仅产生 engine warning）；所以也不能在本机声称生产容器内 bubblewrap namespace 已实际运行通过。完整浏览器与 sandbox 运行态证据必须在仓库固定 E2E runner / 具备相应系统依赖的宿主生成，不得通过跳过项目、`reuseExistingServer` 或降低安全边界伪造全绿。
 
 <a id="frozen-decisions"></a>
 

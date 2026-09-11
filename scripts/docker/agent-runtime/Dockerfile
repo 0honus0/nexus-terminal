@@ -25,12 +25,21 @@ RUN apk add --no-cache build-base curl libcap-dev meson ninja xz \
     && /out/bwrap --version | grep -Fx "bubblewrap ${BWRAP_VERSION}"
 
 FROM node:${NODE_VERSION}-alpine AS builder
+ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
-COPY packages/agent-runtime/package.json packages/agent-runtime/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
-COPY packages/agent-runtime/tsconfig.json ./tsconfig.json
-COPY packages/agent-runtime/src ./src
-RUN npm run build && npm prune --omit=dev
+RUN corepack enable
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/agent-runtime/package.json ./packages/agent-runtime/package.json
+COPY packages/backend/package.json ./packages/backend/package.json
+COPY packages/frontend/package.json ./packages/frontend/package.json
+COPY test/e2e/package.json ./test/e2e/package.json
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @nexus-terminal/agent-runtime
+COPY packages/agent-runtime/tsconfig.json ./packages/agent-runtime/tsconfig.json
+COPY packages/agent-runtime/src ./packages/agent-runtime/src
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm --filter @nexus-terminal/agent-runtime build \
+    && pnpm --filter @nexus-terminal/agent-runtime --prod deploy /out/agent-runtime
 
 FROM node:${NODE_VERSION}-alpine AS controller
 ARG BWRAP_VERSION
@@ -39,9 +48,9 @@ WORKDIR /app
 RUN apk add --no-cache libcap
 COPY --from=bwrap-builder /out/bwrap /usr/local/bin/bwrap
 RUN /usr/local/bin/bwrap --version | grep -Fx "bubblewrap ${BWRAP_VERSION}"
-COPY --from=builder /build/dist ./dist
-COPY --from=builder /build/node_modules ./node_modules
-COPY --from=builder /build/package.json ./package.json
+COPY --from=builder /out/agent-runtime/dist ./dist
+COPY --from=builder /out/agent-runtime/node_modules ./node_modules
+COPY --from=builder /out/agent-runtime/package.json ./package.json
 COPY scripts/docker/agent-runtime/catalog ./catalog
 RUN mkdir -p /var/lib/nexus-agent-runner/state /var/lib/nexus-agent-runner/packs /var/lib/nexus-agent-runner/cache /var/lib/nexus-agent-runner/runtime /var/lib/nexus-agent-runner/quarantine /run/nexus-agent-runner
 EXPOSE 8790

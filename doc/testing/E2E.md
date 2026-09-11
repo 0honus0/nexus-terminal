@@ -42,20 +42,20 @@ On GitHub Actions, the mirrored reporter also prints concise live progress to th
 From the repository root:
 
 ```bash
-npm run test:e2e:seed
-npm run test:e2e:groups:generate -- --workers 4
-npm run test:e2e:groups:check -- --workers 4
-npm run test:e2e:groups:matrix -- --workers 4
-npm run test:e2e:group -- --workers 4 --group 1
-npm run test:e2e
-npm run test:e2e:auth
-npm run test:e2e:http
-npm run test:e2e:websocket
-npm run test:e2e:ui
-npm run test:e2e:ssh
-npm run test:e2e:mobile
-npm run test:e2e:list
-npm --prefix test/e2e run test:docs
+pnpm run test:e2e:seed
+pnpm run test:e2e:groups:generate --workers 4
+pnpm run test:e2e:groups:check --workers 4
+pnpm run test:e2e:groups:matrix --workers 4
+pnpm run test:e2e:group --workers 4 --group 1
+pnpm run test:e2e
+pnpm run test:e2e:auth
+pnpm run test:e2e:http
+pnpm run test:e2e:websocket
+pnpm run test:e2e:ui
+pnpm run test:e2e:ssh
+pnpm run test:e2e:mobile
+pnpm run test:e2e:list
+pnpm --filter @nexus-terminal/e2e run test:docs
 ```
 
 GitHub Actions provides the canonical complete browser E2E environment with the pinned Chromium/runtime dependencies. Local commands remain useful for listing tests, refreshing the seed, and focused development checks. The project-wide requirement is recorded in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001).
@@ -67,8 +67,8 @@ GitHub Actions provides the canonical complete browser E2E environment with the 
 Generating groups with another worker count creates exactly that many `group-N.json` files:
 
 ```bash
-npm run test:e2e:groups:generate -- --workers 3
-npm run test:e2e:groups:check -- --workers 3
+pnpm run test:e2e:groups:generate --workers 3
+pnpm run test:e2e:groups:check --workers 3
 ```
 
 The generator discovers all main specs under `auth`, `http`, `websocket`, `ui`, `ssh`, and `mobile`, keeps a whole spec as the smallest scheduling unit, and uses stable semantic families such as SSH file-manager, transfer, progress, terminal, connection, and UI security/settings/data. Related specs are kept together when doing so does not create an excessive load imbalance.
@@ -81,7 +81,7 @@ The `E2E` workflow accepts an optional `workers` value when manually dispatched.
 
 The group generator accepts up to one worker per discovered spec. GitHub-hosted runner concurrency is account-plan scoped, so requesting more workers than the account can run concurrently causes excess group jobs to queue rather than increasing effective parallelism. Keep the repository default conservative unless measured CI results justify a higher value.
 
-Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.63.0-node24`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `package-lock.json` before executing tests.
+Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.63.0-node24`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `pnpm-lock.yaml` before executing tests.
 
 On successful non-PR runs (`push`, scheduled, or `workflow_dispatch`), the workflow collects all group timing artifacts, refreshes the rolling history, reruns the **default** grouping algorithm, and commits changed `test/e2e/groups/` assignments back to the triggering branch. A manual `workers` override controls only that run’s matrix; rebalance still regenerates the repository default grouping from the collected timings. Pull requests skip the rebalance job and never write grouping state.
 
@@ -91,16 +91,16 @@ The repository keeps E2E/CI runtime versions in `scripts/e2e/versions.json`. Use
 
 ```bash
 # Resolve current upstream stable versions and synchronize the repository.
-npm run test:e2e:env:latest
+pnpm run test:e2e:env:latest
 
 # Re-apply the already recorded versions without contacting upstream version sources.
-npm run test:e2e:env:sync
+pnpm run test:e2e:env:sync
 
 # Build and smoke-check the configured image locally; add --push after GHCR login.
-npm run test:e2e:runner:build
+pnpm run test:e2e:runner:build
 ```
 
-`resolve-latest-test-environment.mjs` resolves the latest Node LTS major from the official Node.js release index, the latest stable `@playwright/test` version from npm, and the latest stable release major for the configured official GitHub/Docker actions. `sync-test-environment.mjs` then pins Playwright to that exact version, refreshes the E2E lockfile, synchronizes Node versions used by CI, updates the runner Dockerfile and GHCR image tag, and normalizes those action majors across workflows. OS-level browser dependencies and archive utilities are refreshed naturally when the runner image is rebuilt from its current Debian base.
+`resolve-latest-test-environment.mjs` resolves the latest Node LTS major from the official Node.js release index, the latest stable `@playwright/test` version from the npm registry, and the latest stable release major for the configured official GitHub/Docker actions. `sync-test-environment.mjs` then pins Playwright to that exact version, refreshes the shared workspace lockfile, synchronizes Node runtimes used by CI, updates the runner Dockerfile and GHCR image tag, and normalizes those action majors across workflows. OS-level browser dependencies and archive utilities are refreshed naturally when the runner image is rebuilt from its current Debian base.
 
 `.github/workflows/e2e.yml` starts every run by checking the latest stable test environment. On the default branch it applies available updates in-memory, builds and pushes the corresponding E2E runner image before any E2E jobs start, and passes the same environment patch to the build and test jobs. Pull requests and non-default branches check latest versions but are never rewritten automatically. A weekly schedule keeps this check active even when no source change triggers E2E.
 
@@ -111,7 +111,7 @@ The same workflow validates both deployment modes without duplicating the full s
 The production ingress suite targets a real Nginx endpoint rather than the Vite development server. In GitHub Actions it runs inside `Docker deployment smoke` against the frontend role from the final unified image, with `RP_ID=ssh.honus.top` and `RP_ORIGIN=https://ssh.honus.top,https://ssh.trui.de`; the request sends `Host: ssh.honus.top`, so the regression does not depend on public DNS. For focused local debugging, point it at any prepared production-style ingress:
 
 ```bash
-NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 npm --prefix test/e2e run test:ingress
+NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18113 pnpm --filter @nexus-terminal/e2e run test:ingress
 ```
 
 ## Regression coverage
@@ -148,8 +148,8 @@ The suite intentionally keeps regression tests for previously fixed production i
 For optional focused local browser debugging, install Chromium when the host already has (or can install) the required system libraries:
 
 ```bash
-npm --prefix test/e2e ci
-npm --prefix test/e2e exec -- playwright install chromium
+pnpm install --frozen-lockfile
+pnpm --filter @nexus-terminal/e2e exec playwright install chromium
 ```
 
 On Linux hosts that do not already contain Chromium system libraries, Playwright may require root privileges for `playwright install --with-deps chromium`. The canonical complete-E2E environment is documented in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001).

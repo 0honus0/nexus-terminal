@@ -25,28 +25,37 @@ RUN apk add --no-cache build-base curl libcap-dev meson ninja xz \
     && install -D -m 0755 /build/output/bwrap /out/bwrap \
     && /out/bwrap --version | grep -Fx "bubblewrap ${BWRAP_VERSION}"
 
-FROM node:${NODE_VERSION}-alpine AS backend-builder
-RUN apk add --no-cache python3 py3-setuptools make g++
-WORKDIR /build/backend
-COPY packages/backend/package.json packages/backend/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
-COPY packages/backend/src ./src
-COPY packages/backend/tsconfig.json ./tsconfig.json
-RUN npm run build \
-    && npm prune --omit=dev \
-    && npm cache clean --force
+FROM node:${NODE_VERSION}-alpine AS workspace-base
+ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
+WORKDIR /build
+RUN corepack enable
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/agent-runtime/package.json ./packages/agent-runtime/package.json
+COPY packages/backend/package.json ./packages/backend/package.json
+COPY packages/frontend/package.json ./packages/frontend/package.json
+COPY test/e2e/package.json ./test/e2e/package.json
 
-FROM node:${NODE_VERSION}-alpine AS frontend-builder
+FROM workspace-base AS backend-builder
+RUN apk add --no-cache python3 py3-setuptools make g++
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @nexus-terminal/backend
+COPY packages/backend/src ./packages/backend/src
+COPY packages/backend/scripts ./packages/backend/scripts
+COPY packages/backend/tsconfig.json ./packages/backend/tsconfig.json
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm --filter @nexus-terminal/backend build \
+    && pnpm --filter @nexus-terminal/backend --prod deploy /out/backend
+
+FROM workspace-base AS frontend-builder
 ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
-WORKDIR /build/frontend
-COPY packages/frontend/package.json packages/frontend/package-lock.json ./
-RUN --mount=type=cache,target=/root/.npm npm ci
-COPY packages/frontend/src ./src
-COPY packages/frontend/public ./public
-COPY packages/frontend/scripts ./scripts
-COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./
-RUN npm run build
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm install --frozen-lockfile --filter @nexus-terminal/frontend
+COPY packages/frontend/src ./packages/frontend/src
+COPY packages/frontend/public ./packages/frontend/public
+COPY packages/frontend/scripts ./packages/frontend/scripts
+COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./packages/frontend/
+RUN pnpm --filter @nexus-terminal/frontend build
 
 FROM alpine:${ALPINE_VERSION} AS runtime
 ARG BWRAP_VERSION
@@ -61,13 +70,12 @@ RUN /usr/local/bin/bwrap --version | grep -Fx "bubblewrap ${BWRAP_VERSION}"
 WORKDIR /app
 ENV NEXUS_HTML_THEME_ASSET_DIR=/app/assets/html-themes/local
 
-COPY --from=backend-builder /build/backend/dist ./dist
+COPY --from=backend-builder /out/backend/dist ./dist
 COPY assets/html-themes/local ./assets/html-themes/local
-COPY --from=backend-builder /build/backend/node_modules ./node_modules
-COPY --from=backend-builder /build/backend/package.json ./package.json
+COPY --from=backend-builder /out/backend/node_modules ./node_modules
+COPY --from=backend-builder /out/backend/package.json ./package.json
 
-
-COPY --from=frontend-builder /build/frontend/dist /usr/share/nginx/html
+COPY --from=frontend-builder /build/packages/frontend/dist /usr/share/nginx/html
 COPY packages/frontend/nginx.conf /etc/nginx/http.d/default.conf
 COPY scripts/docker/entrypoint.sh /usr/local/bin/nexus-terminal
 

@@ -85,20 +85,14 @@ jobs:
         shell: bash
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
-      - name: Set up Node.js for dependency audit
-        uses: actions/setup-node@v7
+      - name: Set up pnpm and Node.js for dependency audit
+        uses: pnpm/setup@v2
         with:
-          node-version: 24.x
-          cache: npm
-          cache-dependency-path: |
-            packages/frontend/package-lock.json
-            packages/backend/package-lock.json
+          runtime: node@24
+          install: false
 
       - name: Audit production dependencies
-        shell: bash
-        run: |
-          npm --prefix packages/frontend audit --omit=dev --audit-level=high
-          npm --prefix packages/backend audit --omit=dev --audit-level=high
+        run: pnpm audit --prod --audit-level=high
 
       - name: Select image tag
         id: image_tag

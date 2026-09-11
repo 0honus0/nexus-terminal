@@ -30,40 +30,30 @@ jobs:
           ref: ${{ github.event.repository.default_branch }}
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - name: Set up pnpm and Node.js
+        uses: pnpm/setup@v2
         with:
-          node-version: 24.x
-          cache: npm
-          cache-dependency-path: |
-            packages/frontend/package-lock.json
-            packages/backend/package-lock.json
-            test/e2e/package-lock.json
+          runtime: node@24
+          cache: true
+          require-lockfile: true
 
       - name: Create update branch
         shell: bash
         run: git checkout -B "$UPDATE_BRANCH"
 
-      - name: Update frontend dependencies
-        run: npm --prefix packages/frontend update --save
-
-      - name: Keep DOMPurify override aligned
-        shell: bash
-        run: |
-          version="$(node -p "require('./packages/frontend/package.json').dependencies.dompurify")"
-          npm --prefix packages/frontend pkg set "overrides.dompurify=$version"
-          npm --prefix packages/frontend install --package-lock-only
-
-      - name: Update backend dependencies
-        run: npm --prefix packages/backend update --save
+      - name: Update frontend and backend dependencies
+        run: >-
+          pnpm update --depth 0
+          --filter @nexus-terminal/frontend
+          --filter @nexus-terminal/backend
 
       - name: Detect changes
         id: changes
         shell: bash
         run: |
           if git diff --quiet -- \
-            packages/frontend/package.json packages/frontend/package-lock.json \
-            packages/backend/package.json packages/backend/package-lock.json; then
+            pnpm-workspace.yaml pnpm-lock.yaml \
+            packages/frontend/package.json packages/backend/package.json packages/agent-runtime/package.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No dependency updates are available." >> "$GITHUB_STEP_SUMMARY"
           else
@@ -73,30 +63,29 @@ jobs:
               echo
               echo '```text'
               git diff --stat -- \
-                packages/frontend/package.json packages/frontend/package-lock.json \
-                packages/backend/package.json packages/backend/package-lock.json
+                pnpm-workspace.yaml pnpm-lock.yaml \
+                packages/frontend/package.json packages/backend/package.json packages/agent-runtime/package.json
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Build frontend
         if: steps.changes.outputs.changed == 'true'
-        run: npm --prefix packages/frontend run build
+        run: pnpm run build:frontend
 
       - name: Build backend
         if: steps.changes.outputs.changed == 'true'
-        run: npm --prefix packages/backend run build
+        run: pnpm run build:backend
+
+      - name: Build Agent Runtime
+        if: steps.changes.outputs.changed == 'true'
+        run: pnpm run build:agent-runtime
 
       - name: Audit dependencies
         if: steps.changes.outputs.changed == 'true'
         shell: bash
         run: |
-          npm --prefix packages/frontend audit --audit-level=high
-          npm --prefix packages/backend audit --audit-level=high
-
-      - name: Install E2E dependencies
-        if: steps.changes.outputs.changed == 'true'
-        run: npm ci --prefix test/e2e
+          pnpm audit --audit-level=high
 
       - name: Run production ingress WebAuthn E2E
         if: steps.changes.outputs.changed == 'true'
@@ -172,7 +161,7 @@ jobs:
             exit 1
           fi
 
-          if ! NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 npm --prefix test/e2e run test:ingress; then
+          if ! NEXUS_PRODUCTION_BASE_URL=http://127.0.0.1:18112 pnpm --filter @nexus-terminal/e2e run test:ingress; then
             docker logs "$ingress_container" || true
             cat "$backend_log"
             exit 1
@@ -180,8 +169,7 @@ jobs:
 
       - name: Install Chromium and system dependencies
         if: steps.changes.outputs.changed == 'true'
-        working-directory: test/e2e
-        run: npx playwright install --with-deps chromium
+        run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
 
       - name: Install remote archive command dependencies
         if: steps.changes.outputs.changed == 'true'
@@ -189,7 +177,7 @@ jobs:
 
       - name: Run HTTP, WebSocket, UI, SSH, SFTP, and Mobile E2E
         if: steps.changes.outputs.changed == 'true'
-        run: npm run test:e2e
+        run: pnpm run test:e2e
 
       - name: Upload dependency update E2E logs
         if: always() && steps.changes.outputs.changed == 'true'
@@ -216,8 +204,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add \
-            packages/frontend/package.json packages/frontend/package-lock.json \
-            packages/backend/package.json packages/backend/package-lock.json
+            pnpm-workspace.yaml pnpm-lock.yaml \
+            packages/frontend/package.json packages/backend/package.json packages/agent-runtime/package.json
           git commit -m "chore(deps): update Nexus dependencies"
           git push --force-with-lease origin "HEAD:$UPDATE_BRANCH"
 
@@ -244,4 +232,4 @@ jobs:
             --base "$BASE_BRANCH" \
             --head "$UPDATE_BRANCH" \
             --title "chore(deps): update Nexus dependencies" \
-            --body $'Automated dependency refresh for the two Nexus packages:\n\n- `packages/frontend`\n- `packages/backend`\n\nBefore this PR is created or updated, the workflow builds both packages, runs `npm audit --audit-level=high`, and passes the full Nexus E2E suite. Major-version upgrades are intentionally excluded.'
+            --body $'Automated dependency refresh for the Nexus pnpm workspace (frontend/backend direct dependencies and their shared catalog entries).\n\nBefore this PR is created or updated, the workflow builds Frontend, Backend, and Agent Runtime, runs `pnpm audit --audit-level=high`, and passes the full Nexus E2E suite. Major-version upgrades are intentionally excluded.'

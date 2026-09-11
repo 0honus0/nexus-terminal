@@ -3,12 +3,12 @@
   "playwright": "1.63.0",
   "actions": {
     "checkout": "v7",
-    "setupNode": "v7",
     "uploadArtifact": "v7",
     "downloadArtifact": "v8",
     "setupQemu": "v4",
     "setupBuildx": "v4",
     "dockerLogin": "v4",
-    "dockerBuildPush": "v7"
+    "dockerBuildPush": "v7",
+    "setupPnpm": "v2"
   }
 }

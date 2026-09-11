@@ -622,7 +622,7 @@ curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
 curl -fsS "http://127.0.0.1:${http_port}/api/v1/status" | grep -q '"status"'
 curl -fsS -H "Host: ssh.honus.top" "http://127.0.0.1:${http_port}/.well-known/webauthn" >/dev/null
 
-NEXUS_PRODUCTION_BASE_URL="http://127.0.0.1:${http_port}" npm --prefix "$repo_root/test/e2e" run test:ingress
+NEXUS_PRODUCTION_BASE_URL="http://127.0.0.1:${http_port}" pnpm --dir "$repo_root/test/e2e" run test:ingress
 
 login_body='{"username":"e2e-admin","password":"E2e-Admin-Password-2026!","rememberMe":false}'
 curl -fsS \

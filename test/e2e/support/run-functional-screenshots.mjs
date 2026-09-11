@@ -12,15 +12,19 @@ const targetDir = path.join(repoRoot, 'doc', 'imgs', 'e2e');
 fs.rmSync(stagingDir, { recursive: true, force: true });
 fs.mkdirSync(stagingDir, { recursive: true });
 
-const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['playwright', 'test'], {
-  cwd: e2eRoot,
-  env: {
-    ...process.env,
-    E2E_CAPTURE_SCREENSHOTS: '1',
-    E2E_SCREENSHOT_OUTPUT_DIR: stagingDir,
+const result = spawnSync(
+  path.join(e2eRoot, 'node_modules', '.bin', process.platform === 'win32' ? 'playwright.cmd' : 'playwright'),
+  ['test'],
+  {
+    cwd: e2eRoot,
+    env: {
+      ...process.env,
+      E2E_CAPTURE_SCREENSHOTS: '1',
+      E2E_SCREENSHOT_OUTPUT_DIR: stagingDir,
+    },
+    stdio: 'inherit',
   },
-  stdio: 'inherit',
-});
+);
 
 if ((result.status ?? 1) !== 0) process.exit(result.status ?? 1);
 

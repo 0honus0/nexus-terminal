@@ -299,7 +299,7 @@ Diagnostic actor types are `system`, `agent` and `user`. Actor/scope policy and 
 Run:
 
 ```bash
-npm --prefix packages/backend run check:architecture
+pnpm --filter @nexus-terminal/backend run check:architecture
 ```
 
 The guard checks the dependency graph, including layer edges, source cycles and module-level cycles. The temporary compatibility-import exceptions were removed when the compatibility directories were deleted. The rules it enforces are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-arch-001).

@@ -35,7 +35,7 @@ async function latestNodeLtsMajor() {
 
 function latestPlaywrightVersion() {
   const value = execFileSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
+    process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm',
     ['view', '@playwright/test@latest', 'version'],
     { encoding: 'utf8' },
   ).trim();
@@ -57,7 +57,7 @@ const [
   node,
   playwright,
   checkout,
-  setupNode,
+  setupPnpm,
   uploadArtifact,
   downloadArtifact,
   setupQemu,
@@ -68,7 +68,7 @@ const [
   latestNodeLtsMajor(),
   Promise.resolve(latestPlaywrightVersion()),
   latestReleaseMajor('actions/checkout', token),
-  latestReleaseMajor('actions/setup-node', token),
+  latestReleaseMajor('pnpm/setup', token),
   latestReleaseMajor('actions/upload-artifact', token),
   latestReleaseMajor('actions/download-artifact', token),
   latestReleaseMajor('docker/setup-qemu-action', token),
@@ -83,7 +83,7 @@ const resolved = {
   playwright,
   actions: {
     checkout,
-    setupNode,
+    setupPnpm,
     uploadArtifact,
     downloadArtifact,
     setupQemu,

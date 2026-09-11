@@ -734,11 +734,11 @@ no module cycles
    - `packages/agent-runtime` build：**通过**；
    - Backend build：**通过**；Backend architecture：**通过（383 files）**；
    - Frontend architecture/i18n/vue-tsc/Vite/bundle budget：**通过（304 source files；Initial JS 249.1/260 KiB gzip）**；
-   - root `npm run build`：**通过**；当前宿主 Node `v22.17.0` 低于仓库声明的 Node `>=24`，构建仅产生 engine warning；
+   - root `pnpm run build`：**通过**；当前宿主 Node `v22.17.0` 低于仓库声明的 Node `>=24`，构建仅产生 engine warning；
    - root test policy：**通过（71 E2E spec files）**；E2E groups check：**通过（69 grouped specs / 8 groups）**；
    - Agent Launcher/Hub 回归已由远程 Actions 验证，相关 group 8 为绿色；其余本轮 Workspace mixed-mode 运行验收仍以新 push 的远程 Actions 为准；
-   - `npm run format:check`：**通过**；`git diff --check`：**通过**；
-   - 完整 `npm run test:e2e`：**已执行但当前宿主无法形成全绿浏览器证据**。一次完整运行生成的 143 个 failure context 中 143/143 都在 Chromium 启动阶段因缺少 `libglib-2.0.so.0` 退出，未进入页面/业务断言；当前宿主同时没有 Docker CLI 与 `bwrap`。因此不能把 browser E2E 或生产 bubblewrap namespace 记为通过，需在仓库固定 E2E runner/具备依赖的宿主上重跑。
+   - `pnpm run format:check`：**通过**；`git diff --check`：**通过**；
+   - 完整 `pnpm run test:e2e`：**已执行但当前宿主无法形成全绿浏览器证据**。一次完整运行生成的 143 个 failure context 中 143/143 都在 Chromium 启动阶段因缺少 `libglib-2.0.so.0` 退出，未进入页面/业务断言；当前宿主同时没有 Docker CLI 与 `bwrap`。因此不能把 browser E2E 或生产 bubblewrap namespace 记为通过，需在仓库固定 E2E runner/具备依赖的宿主上重跑。
 
 8. 相邻 Nexus SSH/Workspace binary transport：**完成 Base64 data-path 清理**。
    - `/ws/workspace` 使用独立 `binaryProtocolVersion=1`，固定 16-byte header 区分 terminal 与 request-scoped response；binary response 通过 requestId/final 分片重组，每个 payload frame 最大 256 KiB；

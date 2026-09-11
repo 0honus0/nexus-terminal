@@ -60,7 +60,7 @@ function syncActionVersions(actions) {
 
   const mappings = [
     ['actions/checkout', actions.checkout],
-    ['actions/setup-node', actions.setupNode],
+    ['pnpm/setup', actions.setupPnpm],
     ['actions/upload-artifact', actions.uploadArtifact],
     ['actions/download-artifact', actions.downloadArtifact],
     ['docker/setup-qemu-action', actions.setupQemu],
@@ -89,8 +89,8 @@ function syncNodeVersions(nodeVersion) {
     const file = `.github/workflows/${name}`;
     const absolute = path.join(repoRoot, file);
     const content = fs.readFileSync(absolute, 'utf8');
-    if (!/node-version:\s*\d+(?:\.x)?/.test(content)) continue;
-    replaceAllRequired(file, /node-version:\s*\d+(?:\.x)?/g, `node-version: ${nodeVersion}.x`, 'node-version');
+    if (!/runtime:\s*node@\d+(?:\.x)?/.test(content)) continue;
+    replaceAllRequired(file, /runtime:\s*node@\d+(?:\.x)?/g, `runtime: node@${nodeVersion}`, 'Node runtime');
   }
 }
 
@@ -101,16 +101,18 @@ function syncPlaywrightPackage(playwrightVersion, updateLock) {
   writeJson(packagePath, packageJson);
 
   if (!updateLock) return;
-  const result = spawnSync(
-    process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    ['install', '--prefix', 'test/e2e', '--package-lock-only', '--ignore-scripts'],
-    { cwd: repoRoot, stdio: 'inherit' },
-  );
-  if (result.status !== 0) throw new Error(`npm package-lock refresh failed with exit ${result.status}`);
+  const result = spawnSync(process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm', ['install', '--lockfile-only'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+  });
+  if (result.status !== 0) throw new Error(`pnpm lockfile refresh failed with exit ${result.status}`);
 }
 
 function syncRunnerFiles(config) {
   const tag = `playwright-${config.playwright}-node${config.node}`;
+  const rootPackage = readJson(path.join(repoRoot, 'package.json'));
+  const pnpmVersion = /^pnpm@(.+)$/.exec(String(rootPackage.packageManager ?? ''))?.[1];
+  if (!pnpmVersion) throw new Error(`Invalid root packageManager: ${rootPackage.packageManager}`);
 
   replaceRequired(
     'test/e2e/Dockerfile.runner',
@@ -123,6 +125,13 @@ function syncRunnerFiles(config) {
     /^ARG PLAYWRIGHT_VERSION=[^\n]+/m,
     `ARG PLAYWRIGHT_VERSION=${config.playwright}`,
     'runner Playwright arg',
+  );
+
+  replaceRequired(
+    'test/e2e/Dockerfile.runner',
+    /^ARG PNPM_VERSION=[^\n]+/m,
+    `ARG PNPM_VERSION=${pnpmVersion}`,
+    'runner pnpm arg',
   );
 
   replaceRequired(
@@ -141,7 +150,7 @@ if (args.playwright) config.playwright = args.playwright;
 
 const actionArgMap = {
   checkout: 'checkout',
-  'setup-node': 'setupNode',
+  'setup-pnpm': 'setupPnpm',
   'upload-artifact': 'uploadArtifact',
   'download-artifact': 'downloadArtifact',
   'setup-qemu': 'setupQemu',

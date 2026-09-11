@@ -10,12 +10,12 @@ readonly IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/build/build.sh local [backend|frontend]
+  scripts/build/build.sh local [agent-runtime|backend|frontend]
   scripts/build/build.sh docker
   scripts/build/build.sh docker-save [output-directory]
 
 Commands:
-  local        Run npm ci and npm run build in the selected package directories.
+  local        Build a workspace package with pnpm (dependencies must already be installed).
   docker       Build the single unified runtime image.
   docker-save  Build and export the unified runtime image as one tar archive.
 
@@ -43,13 +43,10 @@ require_command() {
 
 build_local() {
     local component="$1"
-    local package_dir="$ROOT_DIR/packages/$component"
-
     echo "==> Building $component locally"
     (
-        cd "$package_dir"
-        npm ci
-        npm run build
+        cd "$ROOT_DIR"
+        pnpm --filter "@nexus-terminal/$component" build
     )
 }
 
@@ -99,11 +96,11 @@ main() {
 
     case "$mode" in
         local)
-            require_command npm
+            require_command pnpm
             require_command node
             target="${target:-backend}"
             case "$target" in
-                backend|frontend)
+                agent-runtime|backend|frontend)
                     build_local "$target"
                     ;;
                 *)
