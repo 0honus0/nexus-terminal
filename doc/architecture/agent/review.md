@@ -380,6 +380,12 @@ lastDurableCursor
 4. mutation 请求带 `expectedVersion`，冲突统一转换为 refresh-and-retry 或显式冲突状态；
 5. 组件只读 store，不直接管理请求竞态。
 
+> **解决方案（已采用，生命周期扩大留给 R18）**
+>
+> 新增 `runtime/run-store.ts`，以 `version + eventCursor + inputRevision` 的单调投影接受 Run，任何一个维度回退的响应都不会覆盖已知新状态；`run-facade.ts` 成为该 store 的唯一 Run HTTP 入口，并按 `runId` 串行 snapshot refresh。durable WebSocket 事件把已交付 sequence 作为 minimum cursor 传给 refresh，避免 wake 已到达但随后被旧 snapshot 吞掉。mutation command 在发送前统一读取 store 中的最新 Run projection，因此 `expectedVersion` 不再由组件手里的陈旧副本直接决定。
+>
+> Operations 仍有 ledger/approval/subagent 等独立资源，它们没有共享 Run version，不能伪装成同一事务 snapshot；因此对这些请求按资源增加 generation + identity guard，线程切换、detail 切换或后发请求都会使旧响应失效。这里没有引入全局 Pinia 生命周期，也没有自动重试 mutation：409/CAS 冲突仍保持显式失败，统一的 conflict/error UX 属于 R17；跨组件/卸载后的 Runtime store 生命周期再由 R18 审核。
+
 ### R8：前端事件解析允许任意 `payload`，协议校验停留在外壳层
 
 位置：`agent-events.ts` 的 `parseWireEvent()`。

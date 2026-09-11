@@ -1,33 +1,84 @@
-import { agentApi, type AgentApprovalView, type AgentRunView, type AgentThreadView } from '../api/agent-api';
+import {
+  agentApi,
+  type AgentApprovalView,
+  type AgentRunSnapshot,
+  type AgentRunView,
+  type AgentThreadView,
+} from '../api/agent-api';
+import { createAgentRunStore } from './run-store';
 
-export const createAgentRunFacade = (appId: string) => ({
-  appId,
-  listThreads: (before?: string) => agentApi.threads(appId, before),
-  createThread: (title?: string) => agentApi.createThread(appId, title),
-  readLedger: (threadId: string, before?: string) => agentApi.ledger(appId, threadId, before),
-  definitions: () => agentApi.definitions(appId),
-  providers: () => agentApi.providers(),
-  settings: () => agentApi.settings(),
-  listRuns: (threadId?: string) => agentApi.runs(appId, threadId),
-  getRun: (runId: string) => agentApi.run(appId, runId),
-  listCheckpoints: (runId: string) => agentApi.checkpoints(appId, runId),
-  listApprovals: (runId: string) => agentApi.approvals(appId, runId),
-  listSubagents: (runId: string, before?: string) => agentApi.subagents(appId, runId, before),
-  listSubagentMessages: (runId: string, delegationId: string, before?: string) =>
-    agentApi.subagentMessages(appId, runId, delegationId, before),
-  cancelSubagent: (runId: string, delegation: Parameters<typeof agentApi.cancelSubagent>[2]) =>
-    agentApi.cancelSubagent(appId, runId, delegation),
-  resolveApproval: (approval: AgentApprovalView, decision: 'approved' | 'denied') =>
-    agentApi.resolveApproval(appId, approval, decision),
-  createRun: (input: Parameters<typeof agentApi.createRun>[1]) => agentApi.createRun(appId, input),
-  appendInput: (run: AgentRunView, text: string, artifactRefs: string[] = []) =>
-    agentApi.appendRunInput(appId, run, text, artifactRefs),
-  increaseBudget: (run: AgentRunView, increase: Parameters<typeof agentApi.increaseRunBudget>[2]) =>
-    agentApi.increaseRunBudget(appId, run, increase),
-  saveCheckpoint: (run: AgentRunView) => agentApi.saveCheckpoint(appId, run),
-  resumeRun: (run: AgentRunView, checkpointId: string) => agentApi.resumeRun(appId, run, checkpointId),
-  cancelRun: (run: AgentRunView) => agentApi.cancelRun(appId, run),
-  selectThread: (thread: AgentThreadView | null) => thread,
-});
+const MAX_SNAPSHOT_REFRESH_ATTEMPTS = 3;
+
+export const createAgentRunFacade = (appId: string) => {
+  const runStore = createAgentRunStore();
+  const refreshTails = new Map<string, Promise<void>>();
+
+  const currentRun = (run: AgentRunView): AgentRunView => runStore.latest(run.id) ?? run;
+
+  const refreshSnapshot = (runId: string, minimumEventCursor = 0): Promise<AgentRunSnapshot> => {
+    const previous = refreshTails.get(runId) ?? Promise.resolve();
+    const task = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (minimumEventCursor > 0) {
+          const cached = runStore.currentSnapshot(runId);
+          if (cached && cached.eventCursor >= minimumEventCursor) return cached;
+        }
+
+        for (let attempt = 0; attempt < MAX_SNAPSHOT_REFRESH_ATTEMPTS; attempt += 1) {
+          const candidate = await agentApi.run(appId, runId);
+          const accepted = runStore.acceptSnapshot(candidate);
+          if (accepted && accepted.eventCursor >= minimumEventCursor) return accepted;
+          const current = runStore.currentSnapshot(runId);
+          if (current && current.eventCursor >= minimumEventCursor) return current;
+        }
+        throw new Error('AGENT_RUN_SNAPSHOT_STALE');
+      });
+    const tail = task.then(
+      () => undefined,
+      () => undefined,
+    );
+    refreshTails.set(runId, tail);
+    void tail.finally(() => {
+      if (refreshTails.get(runId) === tail) refreshTails.delete(runId);
+    });
+    return task;
+  };
+
+  return {
+    appId,
+    listThreads: (before?: string) => agentApi.threads(appId, before),
+    createThread: (title?: string) => agentApi.createThread(appId, title),
+    readLedger: (threadId: string, before?: string) => agentApi.ledger(appId, threadId, before),
+    definitions: () => agentApi.definitions(appId),
+    providers: () => agentApi.providers(),
+    settings: () => agentApi.settings(),
+    listRuns: async (threadId?: string) => {
+      const page = await agentApi.runs(appId, threadId);
+      return { ...page, items: page.items.map((run) => runStore.accept(run)) };
+    },
+    getRun: (runId: string, minimumEventCursor = 0) => refreshSnapshot(runId, minimumEventCursor),
+    listCheckpoints: (runId: string) => agentApi.checkpoints(appId, runId),
+    listApprovals: (runId: string) => agentApi.approvals(appId, runId),
+    listSubagents: (runId: string, before?: string) => agentApi.subagents(appId, runId, before),
+    listSubagentMessages: (runId: string, delegationId: string, before?: string) =>
+      agentApi.subagentMessages(appId, runId, delegationId, before),
+    cancelSubagent: (runId: string, delegation: Parameters<typeof agentApi.cancelSubagent>[2]) =>
+      agentApi.cancelSubagent(appId, runId, delegation),
+    resolveApproval: (approval: AgentApprovalView, decision: 'approved' | 'denied') =>
+      agentApi.resolveApproval(appId, approval, decision),
+    createRun: async (input: Parameters<typeof agentApi.createRun>[1]) =>
+      runStore.accept(await agentApi.createRun(appId, input)),
+    appendInput: (run: AgentRunView, text: string, artifactRefs: string[] = []) =>
+      agentApi.appendRunInput(appId, currentRun(run), text, artifactRefs),
+    increaseBudget: async (run: AgentRunView, increase: Parameters<typeof agentApi.increaseRunBudget>[2]) =>
+      runStore.accept(await agentApi.increaseRunBudget(appId, currentRun(run), increase)),
+    saveCheckpoint: (run: AgentRunView) => agentApi.saveCheckpoint(appId, currentRun(run)),
+    resumeRun: async (run: AgentRunView, checkpointId: string) =>
+      runStore.accept(await agentApi.resumeRun(appId, currentRun(run), checkpointId)),
+    cancelRun: async (run: AgentRunView) => runStore.accept(await agentApi.cancelRun(appId, currentRun(run))),
+    selectThread: (thread: AgentThreadView | null) => thread,
+  };
+};
 
 export type AgentRunFacade = ReturnType<typeof createAgentRunFacade>;

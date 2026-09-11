@@ -43,6 +43,14 @@ for (const file of sourceFiles) {
   ) {
     failures.push(`${rel}: public feature surface must not re-export an internal Pinia store implementation`);
   }
+
+  if (
+    rel.startsWith('features/agent/') &&
+    rel !== 'features/agent/runtime/run-facade.ts' &&
+    /\bagentApi\.(?:run|runs)\s*\(/.test(content)
+  ) {
+    failures.push(`${rel}: Run HTTP reads must flow through features/agent/runtime/run-facade.ts`);
+  }
 }
 
 const firstSegment = (rel) => rel.split('/')[0];

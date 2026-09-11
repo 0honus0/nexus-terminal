@@ -53,6 +53,13 @@
   const draft = ref(agentSurfaceSession.state(props.appId).draft);
   let streamAbort: AbortController | null = null;
   let streamGeneration = 0;
+  let threadSelectionGeneration = 0;
+  let ledgerGeneration = 0;
+  let approvalsGeneration = 0;
+  let backgroundGeneration = 0;
+  let detailSubagentsGeneration = 0;
+  let detailOpenGeneration = 0;
+  let subagentMessagesGeneration = 0;
 
   const nonTerminal = new Set(['created', 'running', 'awaiting_approval', 'awaiting_budget', 'cancelling']);
   const providerSelection = computed(() => {
@@ -71,38 +78,45 @@
   const refreshLedger = async (): Promise<void> => {
     const thread = currentThread.value;
     if (!thread) return;
+    const requestGeneration = ++ledgerGeneration;
     const page = await facade.readLedger(thread.id);
+    if (requestGeneration !== ledgerGeneration || currentThread.value?.id !== thread.id) return;
     entries.value = page.items;
     nextCursor.value = page.nextCursor;
   };
 
-  const refreshRun = async (runId: string): Promise<AgentRunView | null> => {
+  const refreshRun = async (runId: string, minimumEventCursor = 0): Promise<AgentRunSnapshot | null> => {
     try {
-      const snapshot = await facade.getRun(runId);
-      run.value = snapshot;
+      const snapshot = await facade.getRun(runId, minimumEventCursor);
+      if (currentThread.value?.id === snapshot.threadId) run.value = snapshot;
       return snapshot;
     } catch {
-      run.value = null;
       return null;
     }
   };
 
   const refreshApprovals = async (runId?: string): Promise<void> => {
+    const requestGeneration = ++approvalsGeneration;
     if (!runId) {
       approvals.value = [];
       return;
     }
     try {
-      approvals.value = await facade.listApprovals(runId);
+      const next = await facade.listApprovals(runId);
+      if (requestGeneration !== approvalsGeneration || run.value?.id !== runId) return;
+      approvals.value = next;
     } catch {
-      approvals.value = [];
+      if (requestGeneration !== approvalsGeneration || run.value?.id !== runId) return;
     }
   };
 
   const refreshBackgroundRuns = async (): Promise<void> => {
+    const requestGeneration = ++backgroundGeneration;
+    const selectedThreadId = currentThread.value?.id ?? null;
     const page = await facade.listRuns();
+    if (requestGeneration !== backgroundGeneration || (currentThread.value?.id ?? null) !== selectedThreadId) return;
     backgroundRuns.value = page.items.filter(
-      (candidate) => nonTerminal.has(candidate.status) && candidate.threadId !== currentThread.value?.id,
+      (candidate) => nonTerminal.has(candidate.status) && candidate.threadId !== selectedThreadId,
     );
   };
 
@@ -129,7 +143,11 @@
             continue;
           }
           if (event.type === 'message.final') streamingText.value = '';
-          const next = await refreshRun(initial.id);
+          const durableCursor = event.id === undefined ? 0 : Number(event.id);
+          const next = await refreshRun(
+            initial.id,
+            Number.isSafeInteger(durableCursor) && durableCursor >= 0 ? durableCursor : 0,
+          );
           await Promise.all([
             refreshLedger(),
             refreshApprovals(initial.id),
@@ -149,14 +167,18 @@
 
   const selectThread = async (thread: AgentThreadView): Promise<void> => {
     if (currentThread.value?.id === thread.id) return;
+    const selectionGeneration = ++threadSelectionGeneration;
     stopRunStream();
     currentThread.value = thread;
     agentSurfaceSession.setThread(props.appId, thread.id);
     await refreshLedger();
+    if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
     const runs = await facade.listRuns(thread.id);
+    if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
     const active = runs.items.find((candidate) => nonTerminal.has(candidate.status)) ?? runs.items[0] ?? null;
     run.value = active;
     await refreshApprovals(active?.id);
+    if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
     if (active && nonTerminal.has(active.status)) startRunStream(active);
     await refreshBackgroundRuns();
   };
@@ -305,18 +327,28 @@
   };
 
   const refreshDetailSubagents = async (runId: string): Promise<void> => {
+    const requestGeneration = ++detailSubagentsGeneration;
     const page = await facade.listSubagents(runId);
+    if (requestGeneration !== detailSubagentsGeneration || detailSnapshot.value?.id !== runId) return;
     detailSubagents.value = page.items;
     const selected = detailSubagents.value.find((item) => item.id === selectedSubagentId.value) ?? null;
     if (!selected) {
+      subagentMessagesGeneration += 1;
       selectedSubagentId.value = null;
       detailSubagentMessages.value = [];
     }
   };
 
   const selectSubagent = async (delegation: AgentSubagentView): Promise<void> => {
+    const requestGeneration = ++subagentMessagesGeneration;
     selectedSubagentId.value = delegation.id;
     const page = await facade.listSubagentMessages(delegation.runId, delegation.id);
+    if (
+      requestGeneration !== subagentMessagesGeneration ||
+      selectedSubagentId.value !== delegation.id ||
+      detailSnapshot.value?.id !== delegation.runId
+    )
+      return;
     detailSubagentMessages.value = page.items;
   };
 
@@ -336,12 +368,16 @@
   };
 
   const openRunDetail = async (candidate: AgentRunView): Promise<void> => {
+    const requestGeneration = ++detailOpenGeneration;
+    detailSubagentsGeneration += 1;
+    subagentMessagesGeneration += 1;
     try {
       const [snapshot, checkpoints, subagents] = await Promise.all([
         facade.getRun(candidate.id),
         facade.listCheckpoints(candidate.id),
         facade.listSubagents(candidate.id),
       ]);
+      if (requestGeneration !== detailOpenGeneration) return;
       detailSnapshot.value = snapshot;
       detailCheckpoints.value = checkpoints;
       detailSubagents.value = subagents.items;
@@ -349,8 +385,16 @@
       detailSubagentMessages.value = [];
       detailVisible.value = true;
     } catch (cause) {
+      if (requestGeneration !== detailOpenGeneration) return;
       error.value = explain(cause);
     }
+  };
+
+  const closeRunDetail = (): void => {
+    detailOpenGeneration += 1;
+    detailSubagentsGeneration += 1;
+    subagentMessagesGeneration += 1;
+    detailVisible.value = false;
   };
 
   const saveCheckpoint = async (snapshot: AgentRunSnapshot): Promise<void> => {
@@ -387,10 +431,14 @@
   };
 
   const loadOlder = async (): Promise<void> => {
-    if (!currentThread.value || !nextCursor.value || busy.value) return;
+    const thread = currentThread.value;
+    const cursor = nextCursor.value;
+    if (!thread || !cursor || busy.value) return;
+    const requestGeneration = ++ledgerGeneration;
     busy.value = true;
     try {
-      const page = await facade.readLedger(currentThread.value.id, nextCursor.value);
+      const page = await facade.readLedger(thread.id, cursor);
+      if (requestGeneration !== ledgerGeneration || currentThread.value?.id !== thread.id) return;
       const known = new Set(entries.value.map((entry) => entry.id));
       entries.value = [...page.items.filter((entry) => !known.has(entry.id)), ...entries.value];
       nextCursor.value = page.nextCursor;
@@ -511,7 +559,7 @@
       :subagent-messages="detailSubagentMessages"
       :visible="detailVisible"
       :busy="busy"
-      @close="detailVisible = false"
+      @close="closeRunDetail"
       @save-checkpoint="saveCheckpoint"
       @resume-checkpoint="resumeCheckpoint"
       @select-subagent="selectSubagent"
