@@ -88,7 +88,8 @@
   const refreshRun = async (runId: string, minimumEventCursor = 0): Promise<AgentRunSnapshot | null> => {
     try {
       const snapshot = await facade.getRun(runId, minimumEventCursor);
-      if (currentThread.value?.id === snapshot.threadId) run.value = snapshot;
+      if (currentThread.value?.id !== snapshot.threadId || (run.value !== null && run.value.id !== runId)) return null;
+      run.value = snapshot;
       return snapshot;
     } catch {
       return null;
