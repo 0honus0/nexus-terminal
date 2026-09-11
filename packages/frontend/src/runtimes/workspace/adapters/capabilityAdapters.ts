@@ -1,4 +1,4 @@
-import { httpClient } from '@/client/http';
+import { apiErrorStatus, httpClient } from '@/client/http';
 import { logger } from '@/client/logging/logger';
 import { createWebSocketUrl } from '@/client/websocket';
 import type { DockerChannel, DockerCommand, DockerStats, DockerStatus } from '@/features/docker/public';
@@ -249,7 +249,11 @@ export const createFilesystemChannel = (socket: WorkspaceSocket): FilesystemChan
 
 const DIRECTORY_CHANGE_COMPLETION_TIMEOUT_MS = 10 * 60 * 1000 + 5_000;
 
-export const createTerminalDirectoryPort = (socket: WorkspaceSocket): TerminalDirectoryPort => ({
+export const createTerminalDirectoryPort = (
+  socket: WorkspaceSocket,
+  workspaceId?: string,
+  connectionId?: number,
+): TerminalDirectoryPort => ({
   readCurrentDirectory: () => socket.request<string>('terminal.currentDirectory'),
   changeDirectory(path, options) {
     const requestId = crypto.randomUUID();
@@ -288,7 +292,18 @@ export const createTerminalDirectoryPort = (socket: WorkspaceSocket): TerminalDi
         if (event.requestId === requestId) succeed({ path: event.path });
       });
       stopFailed = socket.on<DirectoryChangeFailedEvent>('terminal.directoryChangeFailed', (event) => {
-        if (event.requestId === requestId) fail(new Error(event.message));
+        if (event.requestId !== requestId) return;
+        logger.debug(
+          {
+            workspaceId,
+            connectionId,
+            requestId,
+            reason: event.message,
+            failureKind: 'terminal_directory_change_failed',
+          },
+          'Workspace terminal directory change failed',
+        );
+        fail(new Error(event.message));
       });
       stopClose = socket.onClose((reason) => fail(new Error(reason || 'Workspace connection closed.')));
       timer = window.setTimeout(
@@ -312,12 +327,28 @@ export const createFilesystemDownloadPort = (workspaceId: string, connectionId: 
       });
       return { url: `/api/v1/sftp/download-directory?${query}` };
     }
-    const { data } = await httpClient.post<{ url: string }>('/sftp/download-ticket', {
-      connectionId,
-      sessionId: workspaceId,
-      remotePath: path,
-    });
-    return data;
+    try {
+      const { data } = await httpClient.post<{ url: string }>('/sftp/download-ticket', {
+        connectionId,
+        sessionId: workspaceId,
+        remotePath: path,
+      });
+      return data;
+    } catch (cause) {
+      const status = apiErrorStatus(cause);
+      logger.debug(
+        {
+          err: cause,
+          workspaceId,
+          connectionId,
+          downloadKind: kind,
+          status,
+          failureKind: status === 404 ? 'workspace_or_file_not_found' : 'filesystem_download_ticket_failed',
+        },
+        'Workspace filesystem download ticket failed',
+      );
+      throw cause;
+    }
   },
 });
 
@@ -594,6 +625,12 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
           reason: event.reason || undefined,
           wasClean: event.wasClean,
           workspaceAvailable,
+          failureKind:
+            event.reason === 'Invalid workspace'
+              ? 'workspace_not_found_or_forbidden'
+              : event.code === 1000
+                ? undefined
+                : 'upload_transport_closed',
         },
         'Workspace upload WebSocket closed',
       );
@@ -681,6 +718,10 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       return;
     }
     if (event.type === 'failed') {
+      logger.debug(
+        { workspaceId, uploadId: id, reason: event.message, failureKind: 'upload_operation_failed' },
+        'Workspace upload operation failed',
+      );
       forgetUpload(id);
       closeUploadStream(id, 'Upload failed');
       pumpUploadQueue();
@@ -713,6 +754,16 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       activeRemoteOperations.delete(id);
       emit({ type: 'cancelled', id });
     } else if (event.type === 'failed') {
+      logger.debug(
+        {
+          workspaceId,
+          requestId: id,
+          operation: event.mode ?? activeRemoteOperations.get(id),
+          reason: event.message,
+          failureKind: 'copy_move_operation_failed',
+        },
+        'Workspace copy/move operation failed',
+      );
       activeRemoteOperations.delete(id);
       emit({ type: 'error', id, message: event.message ?? 'Transfer failed.' });
     }
@@ -737,6 +788,17 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       activeRemoteOperations.delete(id);
       emit({ type: 'cancelled', id });
     } else if (event.type === 'failed') {
+      logger.debug(
+        {
+          workspaceId,
+          requestId: id,
+          operation: event.operation,
+          code: event.code,
+          reason: event.message,
+          failureKind: 'archive_operation_failed',
+        },
+        'Workspace archive operation failed',
+      );
       activeRemoteOperations.delete(id);
       emit({
         type: 'error',
@@ -888,10 +950,20 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
   };
 };
 
-export const createStatusChannel = (socket: WorkspaceSocket): StatusChannel => ({
+export const createStatusChannel = (
+  socket: WorkspaceSocket,
+  workspaceId?: string,
+  connectionId?: number,
+): StatusChannel => ({
   subscribe(handler, error) {
     const stopSample = socket.on<ServerStatusSample>('status.sample', handler);
-    const stopError = socket.on<{ message: string }>('status.error', (payload) => error?.(payload.message));
+    const stopError = socket.on<{ message: string }>('status.error', (payload) => {
+      logger.debug(
+        { workspaceId, connectionId, reason: payload.message, failureKind: 'status_monitor_failed' },
+        'Workspace status monitor error event',
+      );
+      error?.(payload.message);
+    });
     return () => {
       stopSample();
       stopError();
@@ -949,12 +1021,12 @@ export const createWorkspaceCapabilityAdapters = (
   return {
     terminal,
     filesystem,
-    terminalDirectory: createTerminalDirectoryPort(socket),
+    terminalDirectory: createTerminalDirectoryPort(socket, workspaceId, connectionId),
     download: createFilesystemDownloadPort(workspaceId, connectionId),
     documents: createFileDocumentPort(filesystem),
     preview: createFilePreviewSource(socket),
     transfers,
-    status: createStatusChannel(socket),
+    status: createStatusChannel(socket, workspaceId, connectionId),
     docker: createDockerChannel(socket),
     suspend: createSshSuspendChannel(socket),
     async workspaceConnected() {

@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue';
 import { apiErrorMessage, apiErrorStatus } from '@/client/http';
+import { logger } from '@/client/logging/logger';
 import { sshSuspendApi } from '../api/sshSuspendApi';
 import type { SuspendedSession } from '../model/sshSuspend';
 
@@ -47,6 +48,11 @@ export function applySuspendedAutoTermination(
   if (session) {
     session.status = 'disconnected';
     session.disconnectedAt = new Date().toISOString();
+  } else {
+    logger.debug(
+      { suspendedSessionId: id, reason: event.reason, failureKind: 'suspended_session_not_found_in_catalog' },
+      'Suspended Workspace auto-termination referenced an unknown catalog session',
+    );
   }
   return {
     suspendedSessionId: id,
@@ -75,8 +81,19 @@ const load = async (options: { silent?: boolean; force?: boolean } = {}): Promis
       if (!options.silent) error.value = null;
       return { ok: true };
     } catch (cause) {
+      const status = apiErrorStatus(cause);
+      logger.debug(
+        {
+          err: cause,
+          status,
+          silent: Boolean(options.silent),
+          force: Boolean(options.force),
+          failureKind: status === 404 ? 'suspended_catalog_not_found' : 'suspended_catalog_load_failed',
+        },
+        'Suspended Workspace catalog load failed',
+      );
       if (!options.silent) error.value = apiErrorMessage(cause, 'Failed to load suspended SSH sessions.');
-      return { ok: false, status: apiErrorStatus(cause) };
+      return { ok: false, status };
     } finally {
       if (!options.silent) loading.value = false;
       loadPromise = null;
@@ -166,15 +183,44 @@ export function useSuspendedSessions() {
   });
 
   async function rename(session: SuspendedSession, name: string): Promise<string> {
-    const authoritativeName = await sshSuspendApi.rename(session.id, name);
-    session.customName = authoritativeName.trim() || undefined;
-    return authoritativeName;
+    try {
+      const authoritativeName = await sshSuspendApi.rename(session.id, name);
+      session.customName = authoritativeName.trim() || undefined;
+      return authoritativeName;
+    } catch (cause) {
+      logger.debug(
+        {
+          err: cause,
+          suspendedSessionId: session.id,
+          originalWorkspaceId: session.originalWorkspaceId,
+          status: apiErrorStatus(cause),
+          failureKind: 'suspended_session_rename_failed',
+        },
+        'Suspended Workspace rename failed',
+      );
+      throw cause;
+    }
   }
 
   async function remove(session: SuspendedSession): Promise<void> {
-    if (session.status === 'active') await sshSuspendApi.terminate(session.id);
-    else await sshSuspendApi.removeDisconnected(session.id);
-    removeSuspendedSessionFromCatalog(session.id);
+    try {
+      if (session.status === 'active') await sshSuspendApi.terminate(session.id);
+      else await sshSuspendApi.removeDisconnected(session.id);
+      removeSuspendedSessionFromCatalog(session.id);
+    } catch (cause) {
+      logger.debug(
+        {
+          err: cause,
+          suspendedSessionId: session.id,
+          originalWorkspaceId: session.originalWorkspaceId,
+          sessionStatus: session.status,
+          status: apiErrorStatus(cause),
+          failureKind: 'suspended_session_remove_failed',
+        },
+        'Suspended Workspace removal failed',
+      );
+      throw cause;
+    }
   }
 
   return {

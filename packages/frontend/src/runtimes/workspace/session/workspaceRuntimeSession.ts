@@ -55,7 +55,7 @@ export class WorkspaceRuntimeSession {
     options: WorkspaceRuntimeSessionOptions = {},
   ) {
     this.id = options.workspaceId ?? crypto.randomUUID();
-    this.socket = new WorkspaceSocket();
+    this.socket = new WorkspaceSocket({ workspaceId: this.id, connectionId: this.connection.id });
     this.adapters = createWorkspaceCapabilityAdapters(this.socket, this.id, this.connection.id);
     this.transferController = createTransferController(this.adapters.transfers);
     this.terminalState = createTerminalSessionState();

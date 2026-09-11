@@ -1,6 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
+  E2E_SSH,
   configureSshE2eSettings,
   connectTestSshFromConnectionsPage,
   ensureTestSshConnection,
@@ -15,6 +16,102 @@ import {
   waitForBinaryText,
   waitForFilesystemReady,
 } from '../../support/ws';
+
+test('stale suspended-session resume logs structured not-found diagnostics', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await configureSshE2eSettings(context.request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(context.request);
+  const settingsResponse = await context.request.get('/api/v1/settings');
+  expect(settingsResponse.ok()).toBeTruthy();
+  const originalFrontendLogLevel =
+    ((await settingsResponse.json()) as { frontendLogLevel?: string }).frontendLogLevel ?? 'info';
+  expect(
+    (
+      await context.request.put('/api/v1/settings', {
+        data: { frontendLogLevel: 'debug' },
+      })
+    ).ok(),
+  ).toBeTruthy();
+
+  const original = await openWorkspaceSession(context.request, connectionId, `stale-resume-${crypto.randomUUID()}`);
+  await requestWorkspace(original.socket, 'suspend.mark');
+  await closeWebSocket(original.socket);
+
+  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  let suspended: SuspendedSession | undefined;
+  const catalogSocket = await openAuthenticatedWebSocket(context.request);
+  try {
+    for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
+      const list = await requestWorkspace<SuspendedSession[]>(catalogSocket, 'suspend.list');
+      suspended = list.find(
+        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+      );
+      if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  } finally {
+    await closeWebSocket(catalogSocket);
+  }
+  expect(suspended).toBeTruthy();
+
+  const frontendDebugLogs: Array<Record<string, unknown>> = [];
+  page.on('console', (message) => {
+    if (message.type() !== 'debug' && message.type() !== 'log') return;
+    for (const argument of message.args()) {
+      void argument
+        .jsonValue()
+        .then((value) => {
+          if (value && typeof value === 'object' && typeof (value as { msg?: unknown }).msg === 'string') {
+            frontendDebugLogs.push(value as Record<string, unknown>);
+          }
+        })
+        .catch(() => undefined);
+    }
+  });
+
+  try {
+    await page.goto('/workspace?openSuspended=1');
+    const modal = page.getByTestId('suspended-sessions-modal');
+    await expect(modal).toBeVisible({ timeout: 20_000 });
+    const row = modal.getByTestId(`suspended-session-${suspended!.id}`);
+    await expect(row).toBeVisible({ timeout: 20_000 });
+    const resumeButton = row.getByRole('button', { name: 'Resume', exact: true });
+    await expect(resumeButton).toBeVisible();
+
+    const terminate = await context.request.delete(`/api/v1/ssh-suspend/terminate/${suspended!.id}`);
+    expect(terminate.ok(), await terminate.text()).toBeTruthy();
+    await resumeButton.click();
+
+    await expect
+      .poll(() =>
+        frontendDebugLogs.some(
+          (entry) =>
+            entry.msg === 'Workspace request rejected' &&
+            entry.operation === 'suspend.resume' &&
+            entry.failureKind === 'session_not_found_or_invalid' &&
+            entry.connectionId === connectionId,
+        ),
+      )
+      .toBeTruthy();
+    await expect
+      .poll(() =>
+        frontendDebugLogs.some(
+          (entry) =>
+            entry.msg === 'Workspace suspended-session resume failed in view' &&
+            entry.suspendedSessionId === suspended!.id &&
+            entry.connectionId === connectionId,
+        ),
+      )
+      .toBeTruthy();
+    expect(JSON.stringify(frontendDebugLogs)).not.toContain(E2E_SSH.password);
+  } finally {
+    if (suspended) await context.request.delete(`/api/v1/ssh-suspend/terminate/${suspended.id}`).catch(() => undefined);
+    const restoreSettings = await context.request.put('/api/v1/settings', {
+      data: { frontendLogLevel: originalFrontendLogLevel },
+    });
+    expect(restoreSettings.ok()).toBeTruthy();
+  }
+});
 
 test('a marked live SSH session survives WebSocket disconnect and resumes the same shell', async ({ request }) => {
   await loginAsInitialAdmin(request);
