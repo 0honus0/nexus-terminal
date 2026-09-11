@@ -1355,6 +1355,20 @@ Runtime: /usr/local/bin/mise
 
 Runtime 验证实际 installer version；发行 pin/SHA/latest stable policy 放在 prepare/check/CI，而不是散落 Runtime。
 
+mise materializer 的 bubblewrap `/etc` 与普通 Workspace sandbox 不同：
+
+```text
+sandboxSystemRuntimeArguments({ includeEtc: false })
+-> 不把宿主整个 /etc 绑定进 materializer
+
+materializerEtcRuntimeArguments(resolverSnapshot)
+-> 创建新的 /etc
+-> 只读挂载 /etc/ssl 与存在的 host.conf / hosts / nsswitch.conf / gai.conf
+-> 把启动前复制的 resolverSnapshot 挂成普通 /etc/resolv.conf
+```
+
+这样既给下载阶段提供 DNS/NSS/TLS 必需输入，又不会因为宿主 `/etc/resolv.conf -> /run/...` symlink 而要求暴露宿主 `/run`。Verifier 和普通 Workspace/Plugin sandbox 仍使用默认 `sandboxSystemRuntimeArguments()`，此次 materializer 特例不改变它们的 system runtime view。
+
 Bubblewrap 同理：Runtime 只调用稳定 `bwrap` 并验证实际 sandbox capability；发行版本策略放 prepare/check/build。
 
 ---

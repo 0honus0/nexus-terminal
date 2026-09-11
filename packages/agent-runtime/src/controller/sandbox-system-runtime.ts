@@ -3,10 +3,11 @@ import fs from 'node:fs';
 const DIRECTORY_BINDINGS = ['/usr', '/etc'] as const;
 const MERGED_USR_PATHS = ['/bin', '/sbin', '/lib', '/lib64'] as const;
 
-export const sandboxSystemRuntimeArguments = (): string[] => {
+export const sandboxSystemRuntimeArguments = (options: { includeEtc?: boolean } = {}): string[] => {
   const args: string[] = [];
 
   for (const source of DIRECTORY_BINDINGS) {
+    if (source === '/etc' && options.includeEtc === false) continue;
     if (fs.existsSync(source)) args.push('--ro-bind', source, source);
   }
 

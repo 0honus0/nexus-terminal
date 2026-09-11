@@ -23,6 +23,8 @@ const MAX_RELOCATABLE_TEXT_BYTES = 8 * 1024 * 1024;
 const INSTALL_OUTPUT_ROOT = '/nexus-output';
 const INSTALL_STAGING_PATH = `${INSTALL_OUTPUT_ROOT}/pack`;
 const INSTALL_MISE_ROOT = '/nexus-mise';
+const MATERIALIZER_ETC_DIRECTORIES = ['/etc/ssl'] as const;
+const MATERIALIZER_ETC_FILES = ['/etc/host.conf', '/etc/hosts', '/etc/nsswitch.conf', '/etc/gai.conf'] as const;
 
 interface PackManifest {
   schemaVersion: 1;
@@ -47,6 +49,18 @@ const parseMiseSource = (source: string, pack: CatalogPack): string => {
     throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_UNSUPPORTED');
   }
   return safeSegment(installerVersion);
+};
+
+const materializerEtcRuntimeArguments = (resolverSnapshot: string): string[] => {
+  const args = ['--dir', '/etc'];
+  for (const source of MATERIALIZER_ETC_DIRECTORIES) {
+    if (fs.existsSync(source)) args.push('--ro-bind', source, source);
+  }
+  for (const source of MATERIALIZER_ETC_FILES) {
+    if (fs.existsSync(source)) args.push('--ro-bind', source, source);
+  }
+  args.push('--ro-bind', resolverSnapshot, '/etc/resolv.conf');
+  return args;
 };
 
 const safeArchivePath = (raw: string): string => {
@@ -493,7 +507,8 @@ export class PackInstaller {
     pack: CatalogPack,
   ): Promise<void> {
     const sandboxBinary = this.sandboxBinary;
-    const systemBindings = sandboxSystemRuntimeArguments();
+    const systemBindings = sandboxSystemRuntimeArguments({ includeEtc: false });
+    const etcBindings = materializerEtcRuntimeArguments(resolverSnapshot);
     const args = [
       '--die-with-parent',
       '--new-session',
@@ -502,9 +517,7 @@ export class PackInstaller {
       '--unshare-ipc',
       '--unshare-uts',
       ...systemBindings,
-      '--ro-bind',
-      resolverSnapshot,
-      '/etc/resolv.conf',
+      ...etcBindings,
       '--proc',
       '/proc',
       '--dev',
