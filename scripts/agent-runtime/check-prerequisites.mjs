@@ -20,6 +20,35 @@ const forbidText = (relative, needle, message) => {
   if (read(relative).includes(needle)) failures.push(`${relative}: ${message}`);
 };
 
+const catalog = JSON.parse(read('scripts/docker/agent-runtime/catalog/catalog.json'));
+const miseSources = (catalog.packs ?? [])
+  .flatMap((pack) => Object.values(pack.downloadRefByArch ?? {}))
+  .filter((source) => typeof source === 'string' && source.startsWith('mise://'));
+const miseVersions = new Set(miseSources.map((source) => /^mise:\/\/([^/]+)\//.exec(source)?.[1]).filter(Boolean));
+if (miseVersions.size !== 1) {
+  failures.push(
+    'scripts/docker/agent-runtime/catalog/catalog.json: all mise Tool Packs must pin one installer version',
+  );
+}
+const [miseVersion = ''] = [...miseVersions];
+if (miseVersion) {
+  requireText(
+    'scripts/agent-runtime/prepare-ubuntu-host.sh',
+    `MISE_VERSION=${miseVersion}`,
+    'host mise version must match the Tool Catalog installer pin',
+  );
+  requireText(
+    'scripts/agent-runtime/prepare-ubuntu-host.sh',
+    'mise_stable_bin=/usr/local/bin/mise',
+    'host must publish the checked mise binary at the stable command path',
+  );
+  forbidText(
+    'packages/agent-runtime/src/controller/pack-installer.ts',
+    miseVersion,
+    'mise release policy belongs in Catalog/prepare/check, not Runner runtime code',
+  );
+}
+
 const { version, sha256 } = expected.bubblewrap;
 for (const relative of ['Dockerfile', 'scripts/docker/agent-runtime/Dockerfile']) {
   requireText(relative, `ARG BWRAP_VERSION=${version}`, `Bubblewrap version must be ${version}`);

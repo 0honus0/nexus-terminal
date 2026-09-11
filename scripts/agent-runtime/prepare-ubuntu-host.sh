@@ -102,6 +102,14 @@ fi
   echo 'Pinned mise version verification failed.' >&2
   exit 8
 }
+mise_stable_bin=/usr/local/bin/mise
+"${SUDO[@]}" install -o root -g root -m 0755 "$mise_bin" "$mise_stable_bin"
+mise_mode=$(stat -Lc '%a' "$mise_stable_bin")
+mise_uid=$(stat -Lc '%u' "$mise_stable_bin")
+if [[ "$mise_uid" != 0 ]] || (( (8#$mise_mode & 8#022) != 0 )); then
+  echo 'Pinned mise must be root-owned and not group/world writable.' >&2
+  exit 12
+fi
 
 if [[ -r /proc/sys/kernel/unprivileged_userns_clone ]] && [[ $(cat /proc/sys/kernel/unprivileged_userns_clone) != 1 ]]; then
   echo 'Unprivileged user namespaces are disabled by the kernel; refusing to weaken the host security policy automatically.' >&2

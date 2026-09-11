@@ -577,6 +577,28 @@ console.log(
 );
 NODE
 
+# Both multi-version Workspaces share the global immutable Tool Store. Reusing the same
+# exact PackRef must not create per-Workspace copies or duplicate digest directories.
+assert_single_pack_copy() {
+  local family="$1"
+  local version="$2"
+  local root="$runner_root/packs/$family/$version"
+  local copies
+  [[ -d "$root" ]] || { echo "Expected Tool Store pack missing: $family@$version" >&2; exit 1; }
+  copies="$(find "$root" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
+  [[ "$copies" == "1" ]] || {
+    echo "Tool Store contains $copies immutable copies for $family@$version; expected exactly one." >&2
+    exit 1
+  }
+}
+assert_single_pack_copy base-tools 1
+assert_single_pack_copy node 24.21.0
+assert_single_pack_copy node 22.23.2
+assert_single_pack_copy python 3.14.7
+assert_single_pack_copy python 3.13.15
+assert_single_pack_copy go 1.27.1
+assert_single_pack_copy go 1.26.8
+
 host_tool_snapshot_after="$(host_tool_snapshot)"
 [[ "$host_tool_snapshot_before" == "$host_tool_snapshot_after" ]] || {
   echo 'Runner Tool Store modified host /usr/bin tool state.' >&2

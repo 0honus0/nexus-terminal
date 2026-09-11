@@ -8,7 +8,7 @@ import semver from 'semver';
 import type { CatalogPack, ToolchainPackRef } from '../types';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { ToolchainStore } from './toolchain-store';
-import { sandboxResolverRuntimeArguments, sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
+import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
 const RUNNER_API_VERSION = '1.0.0';
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
@@ -17,7 +17,6 @@ const MAX_SINGLE_FILE_BYTES = 256 * 1024 * 1024;
 const MAX_ENTRIES = 16_384;
 const MAX_DEPTH = 32;
 const MAX_MANIFEST_BYTES = 64 * 1024;
-const MISE_VERSION = '2026.9.5';
 const MISE_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_MISE_OUTPUT_BYTES = 64 * 1024;
 const MAX_RELOCATABLE_TEXT_BYTES = 8 * 1024 * 1024;
@@ -38,6 +37,16 @@ interface PackManifest {
 const safeSegment = (value: string): string => {
   if (!/^[A-Za-z0-9_.-]{1,128}$/.test(value)) throw new Error('WORKSPACE_TOOLCHAIN_REF_INVALID');
   return value;
+};
+
+const parseMiseSource = (source: string, pack: CatalogPack): string => {
+  const match = source.match(/^mise:\/\/([^/]+)\/([^/]+)\/([^/]+)$/);
+  if (!match) throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_UNSUPPORTED');
+  const [, installerVersion = '', familyId = '', versionId = ''] = match;
+  if (familyId !== pack.familyId || versionId !== pack.versionId) {
+    throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_UNSUPPORTED');
+  }
+  return safeSegment(installerVersion);
 };
 
 const safeArchivePath = (raw: string): string => {
@@ -411,15 +420,13 @@ export class PackInstaller {
     source: string,
   ): Promise<void> {
     if (!['node', 'python', 'go'].includes(pack.familyId)) throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_UNSUPPORTED');
-    const expectedSource = `mise://${MISE_VERSION}/${pack.familyId}/${pack.versionId}`;
-    if (source !== expectedSource) throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_UNSUPPORTED');
+    const installerVersion = parseMiseSource(source, pack);
     const staging = this.store.stagingPath(commandId, ref);
     fs.rmSync(staging, { recursive: true, force: true });
     const miseRoot = path.join(this.cacheRoot, 'mise');
     const working = path.join(miseRoot, 'work');
     fs.mkdirSync(working, { recursive: true, mode: 0o700 });
-    const miseBin =
-      process.env.NEXUS_AGENT_MISE_BIN?.trim() || `/usr/local/lib/nexus-agent-runner/mise/${MISE_VERSION}/bin/mise`;
+    const miseBin = process.env.NEXUS_AGENT_MISE_BIN?.trim() || '/usr/local/bin/mise';
     const env: NodeJS.ProcessEnv = {
       PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin',
       HOME: path.join(miseRoot, 'home'),
@@ -439,12 +446,16 @@ export class PackInstaller {
     ]) {
       if (directory) fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
+    const resolverSnapshot = path.join(miseRoot, 'resolv.conf');
+    fs.copyFileSync('/etc/resolv.conf', resolverSnapshot);
+    fs.chmodSync(resolverSnapshot, 0o600);
     try {
       const version = await runProcess(miseBin, ['--version'], { cwd: working, env, timeoutMs: 10_000 });
-      if (!version.stdout.trim().startsWith(MISE_VERSION))
+      if (version.stdout.trim().split(/\s+/, 1)[0] !== installerVersion) {
         throw new Error('WORKSPACE_TOOLCHAIN_INSTALLER_VERSION_MISMATCH');
+      }
       fs.mkdirSync(staging, { recursive: true, mode: 0o700 });
-      await this.materializeWithMiseSandbox(miseBin, miseRoot, staging, pack);
+      await this.materializeWithMiseSandbox(miseBin, miseRoot, resolverSnapshot, staging, pack);
       const materialized = path.join(staging, 'pack');
       if (!fs.existsSync(materialized) || !fs.statSync(materialized).isDirectory()) {
         throw new Error('WORKSPACE_TOOLCHAIN_INSTALL_INVALID');
@@ -477,12 +488,12 @@ export class PackInstaller {
   private async materializeWithMiseSandbox(
     miseBin: string,
     miseRoot: string,
+    resolverSnapshot: string,
     staging: string,
     pack: CatalogPack,
   ): Promise<void> {
     const sandboxBinary = this.sandboxBinary;
     const systemBindings = sandboxSystemRuntimeArguments();
-    const resolverBindings = sandboxResolverRuntimeArguments();
     const args = [
       '--die-with-parent',
       '--new-session',
@@ -491,7 +502,9 @@ export class PackInstaller {
       '--unshare-ipc',
       '--unshare-uts',
       ...systemBindings,
-      ...resolverBindings,
+      '--ro-bind',
+      resolverSnapshot,
+      '/etc/resolv.conf',
       '--proc',
       '/proc',
       '--dev',
