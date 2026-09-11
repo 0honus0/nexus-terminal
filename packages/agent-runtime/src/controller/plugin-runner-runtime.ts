@@ -392,7 +392,7 @@ export class PluginRunnerRuntime {
   private start(environment: EnvironmentRecord, target: PluginRunnerTarget): RunnerPluginProcess {
     if (!this.available()) throw new Error('PLUGIN_RUNNER_SANDBOX_UNAVAILABLE');
     this.validateTarget(target);
-    const source = path.join(this.pluginSourceRoot, this.safe(target.pluginId), target.version);
+    const source = path.join(this.pluginSourceRoot, this.safe(target.pluginId), 'versions', target.version);
     const marker = path.join(source, '.nexus-package-hash');
     if (!fs.existsSync(marker) || fs.readFileSync(marker, 'utf8').trim() !== target.packageHash) {
       throw new Error('PLUGIN_RUNNER_SOURCE_MISMATCH');

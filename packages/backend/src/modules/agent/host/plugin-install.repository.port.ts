@@ -61,7 +61,7 @@ export interface PluginInstallRepositoryPort {
   revokePublisherKey(userId: number, keyId: string, revokedAt: number): Promise<boolean>;
   createStage(record: PluginStageRecord): Promise<void>;
   getStage(userId: number, stageId: string): Promise<PluginStageRecord | null>;
-  listStageIds(): Promise<string[]>;
+  listStages(): Promise<PluginStageRecord[]>;
   updateStage(
     userId: number,
     stageId: string,

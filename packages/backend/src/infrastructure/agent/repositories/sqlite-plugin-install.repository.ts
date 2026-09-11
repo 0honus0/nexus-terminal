@@ -219,9 +219,9 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
     return row ? mapStage(row) : null;
   }
 
-  async listStageIds(): Promise<string[]> {
-    const rows = await this.db.queryAll<{ id: string }>('SELECT id FROM agent_plugin_stages ORDER BY id');
-    return rows.map((row) => row.id);
+  async listStages(): Promise<PluginStageRecord[]> {
+    const rows = await this.db.queryAll<StageRow>(`SELECT ${STAGE_COLUMNS} FROM agent_plugin_stages ORDER BY id`);
+    return rows.map(mapStage);
   }
 
   async updateStage(

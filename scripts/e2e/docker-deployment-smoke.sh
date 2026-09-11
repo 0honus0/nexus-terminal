@@ -33,6 +33,17 @@ server.listen(0, '0.0.0.0', () => {
 });
 NODE
 )"
+plugin_frontend_port="$(node - <<'NODE'
+const net = require('node:net');
+const server = net.createServer();
+server.listen(0, '127.0.0.1', () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') process.exit(1);
+  console.log(address.port);
+  server.close();
+});
+NODE
+)"
 session_secret='docker-smoke-session-secret-2026-00000000000000000000000000000000'
 encryption_key='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 runner_token="$(node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))")"
@@ -113,13 +124,18 @@ ENCRYPTION_KEY=$encryption_key
 EOF
 chmod 0777 "$data_dir"
 chmod 0600 "$data_dir/.env"
-mkdir -p "$runner_root" "$data_dir/agent/plugins"
+mkdir -p "$runner_root" "$data_dir/agent/plugins/smoke-static/versions/1/frontend"
+printf 'smoke-package-hash\n' > "$data_dir/agent/plugins/smoke-static/versions/1/.nexus-package-hash"
+printf '<!doctype html><title>plugin-static-ok</title>\n' > "$data_dir/agent/plugins/smoke-static/versions/1/frontend/index.html"
 
 # Keep the repository Compose/.env.example contract intact while overriding only values that
 # must be isolated for this smoke run: image, host port, Docker network, and WebAuthn origin.
 set_env NEXUS_IMAGE_REPOSITORY "$image_repository"
 set_env NEXUS_IMAGE_TAG "$image_tag"
 set_env NEXUS_HTTP_PORT "$http_port"
+set_env NEXUS_PUBLIC_ORIGIN "http://127.0.0.1:$http_port"
+set_env NEXUS_PLUGIN_FRONTEND_PORT "$plugin_frontend_port"
+set_env NEXUS_PLUGIN_FRONTEND_ORIGIN "http://127.0.0.1:$plugin_frontend_port"
 set_env NEXUS_IPV6_SUBNET "fd01:ee:${network_hex}::/80"
 set_env NEXUS_IPV6_GATEWAY "fd01:ee:${network_hex}::1"
 set_env NEXUS_AGENT_RUNNER_TOKEN "$runner_token"
@@ -168,6 +184,26 @@ for _ in {1..60}; do
   sleep 1
 done
 [[ "$frontend_ready" -eq 1 ]] || { echo "Compose frontend did not become ready." >&2; exit 1; }
+
+plugin_frontend_headers="$workspace/plugin-frontend.headers"
+plugin_frontend_body="$workspace/plugin-frontend.body"
+plugin_frontend_ready=0
+for _ in {1..30}; do
+  if curl -fsS -D "$plugin_frontend_headers" -o "$plugin_frontend_body" \
+    "http://127.0.0.1:${plugin_frontend_port}/plugins/smoke-static/1/index.html"; then
+    plugin_frontend_ready=1
+    break
+  fi
+  sleep 1
+done
+[[ "$plugin_frontend_ready" -eq 1 ]] || { echo "Plugin frontend listener did not become ready." >&2; exit 1; }
+grep -Fq 'plugin-static-ok' "$plugin_frontend_body"
+grep -Eqi '^Content-Security-Policy: .*frame-ancestors http://127\.0\.0\.1:' "$plugin_frontend_headers"
+grep -Eqi '^Cache-Control: public, max-age=31536000, immutable' "$plugin_frontend_headers"
+if curl -fsS "http://127.0.0.1:${plugin_frontend_port}/plugins/smoke-static/1/.nexus-package-hash" >/dev/null 2>&1; then
+  echo "Plugin frontend listener exposed a dotfile." >&2
+  exit 1
+fi
 
 compose exec -T backend sh -lc 'nc -z guacd 4822'
 

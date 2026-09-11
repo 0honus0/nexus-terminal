@@ -11,6 +11,7 @@ export interface RuntimeConfig {
   appVersion: string;
   agentPublicOrigin?: string;
   agentPluginFrontendOrigin?: string;
+  agentPluginFrontendPort: number;
   agentRunnerUrl?: string;
   agentRunnerToken?: string;
   host: string;
@@ -112,6 +113,7 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
   appVersion: env.NEXUS_VERSION?.trim() || BACKEND_PACKAGE_VERSION,
   agentPublicOrigin: parseOptionalExactOrigin(env.AGENT_PUBLIC_ORIGIN, 'AGENT_PUBLIC_ORIGIN'),
   agentPluginFrontendOrigin: parseOptionalExactOrigin(env.AGENT_PLUGIN_FRONTEND_ORIGIN, 'AGENT_PLUGIN_FRONTEND_ORIGIN'),
+  agentPluginFrontendPort: parsePositiveInteger(env.AGENT_PLUGIN_FRONTEND_PORT, 3002, 'AGENT_PLUGIN_FRONTEND_PORT'),
   agentRunnerUrl: env.AGENT_RUNNER_URL?.trim() || undefined,
   agentRunnerToken: env.AGENT_RUNNER_TOKEN?.trim() || undefined,
   host: env.HOST?.trim() || '0.0.0.0',

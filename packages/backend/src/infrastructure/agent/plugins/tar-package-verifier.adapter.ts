@@ -141,17 +141,15 @@ const parseFileList = (raw: Buffer): SignedFileList => {
 };
 
 export class TarPackageVerifierAdapter implements PackageVerifierPort {
-  private readonly stagingRoot: string;
   private readonly pluginsRoot: string;
-  private readonly pluginFrontendRoot: string;
+  private readonly unverifiedStagingRoot: string;
 
   constructor(dataDirectory: string) {
-    this.stagingRoot = path.join(dataDirectory, 'agent', 'plugin-staging');
     this.pluginsRoot = path.join(dataDirectory, 'agent', 'plugins');
-    this.pluginFrontendRoot = path.join(dataDirectory, 'agent', 'plugin-ui'); // legacy storage directory; target semantics are Frontend
-    fs.mkdirSync(this.stagingRoot, { recursive: true, mode: 0o700 });
+    this.unverifiedStagingRoot = path.join(this.pluginsRoot, '.staging');
     fs.mkdirSync(this.pluginsRoot, { recursive: true, mode: 0o700 });
-    fs.mkdirSync(this.pluginFrontendRoot, { recursive: true, mode: 0o755 });
+    fs.mkdirSync(this.unverifiedStagingRoot, { recursive: true, mode: 0o700 });
+    this.migrateLegacyLayout(dataDirectory);
   }
 
   async normalizePublisherKey(publicKeyPem: string): Promise<PublisherKeyInfo> {
@@ -173,10 +171,11 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
       throw new Error('PLUGIN_PACKAGE_TOO_LARGE');
     }
     const stageId = safeSegment(input.stageId);
-    const finalPath = this.archivePath(stageId);
+    const stageRoot = this.unverifiedStageDirectory(stageId);
+    fs.rmSync(stageRoot, { recursive: true, force: true });
+    fs.mkdirSync(stageRoot, { recursive: true, mode: 0o700 });
+    const finalPath = path.join(stageRoot, 'package.tar');
     const temporaryPath = `${finalPath}.part`;
-    fs.rmSync(temporaryPath, { force: true });
-    fs.rmSync(finalPath, { force: true });
     const handle = await fs.promises.open(temporaryPath, 'wx', 0o600);
     const hash = createHash('sha256');
     let bytes = 0;
@@ -191,21 +190,25 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
       await handle.sync();
     } catch (error) {
       await handle.close().catch(() => undefined);
-      fs.rmSync(temporaryPath, { force: true });
+      fs.rmSync(stageRoot, { recursive: true, force: true });
       throw error;
     }
     await handle.close();
     fs.renameSync(temporaryPath, finalPath);
-    fsyncPath(this.stagingRoot);
+    fsyncPath(stageRoot);
+    fsyncPath(this.unverifiedStagingRoot);
     return { stageId, packageHash: hash.digest('hex'), sizeBytes: bytes };
   }
 
   async verify(
     stageId: string,
+    appIdHint: string | null,
     resolvePublisherKey: (keyId: string) => Promise<string | null>,
     validateManifest: (raw: AgentAppManifest) => ValidatedManifest,
   ): Promise<VerifiedPluginPackage> {
-    const archive = this.archivePath(safeSegment(stageId));
+    const safeStageId = safeSegment(stageId);
+    const stageRoot = this.locateStageDirectory(safeStageId, appIdHint);
+    const archive = path.join(stageRoot, 'package.tar');
     if (!fs.existsSync(archive)) throw new Error('PLUGIN_STAGE_NOT_FOUND');
     const archiveStat = fs.lstatSync(archive);
     if (
@@ -217,7 +220,7 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
       throw new Error('PLUGIN_PACKAGE_INVALID');
     }
     const packageHash = await hashFile(archive);
-    const unpacked = this.unpackedPath(stageId);
+    const unpacked = path.join(stageRoot, 'unpacked');
     fs.rmSync(unpacked, { force: true, recursive: true });
     fs.mkdirSync(unpacked, { recursive: true, mode: 0o700 });
 
@@ -246,8 +249,9 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
           }
         },
       });
-      for (const required of CONTROL_FILES)
+      for (const required of CONTROL_FILES) {
         if (!archiveFiles.has(required)) throw new Error('PLUGIN_CONTROL_FILE_MISSING');
+      }
       await tar.x({ file: archive, cwd: unpacked, strict: true, preservePaths: false, unlink: true });
 
       const manifestPath = path.join(unpacked, 'manifest.json');
@@ -283,6 +287,7 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
         throw new Error('PLUGIN_MANIFEST_INVALID');
       }
       const manifest = validateManifest(rawManifest);
+      if (appIdHint !== null && manifest.id !== appIdHint) throw new Error('PLUGIN_APP_ID_MISMATCH');
       const listed = new Set(fileList.files.map((file) => file.path));
       for (const archived of archiveFiles) {
         if (CONTROL_FILES.has(archived) || archived === '.') continue;
@@ -295,8 +300,9 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
         if (!archiveFiles.has(file.path)) throw new Error('PLUGIN_LISTED_FILE_MISSING');
         const local = path.join(unpacked, ...file.path.split('/'));
         const stat = fs.lstatSync(local);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== file.sizeBytes)
+        if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== file.sizeBytes) {
           throw new Error('PLUGIN_FILE_MISMATCH');
+        }
         if ((await hashFile(local)) !== file.sha256) throw new Error('PLUGIN_FILE_HASH_MISMATCH');
       }
       const frontendEntry = manifest.targets?.frontend?.entry ?? null;
@@ -321,7 +327,7 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
         .sort();
       if (skillFiles.length > 64) throw new Error('PLUGIN_TOO_MANY_SKILLS');
       return {
-        stageId,
+        stageId: safeStageId,
         packageHash,
         publisherKeyId: keyInfo.keyId,
         manifest,
@@ -337,24 +343,46 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
     }
   }
 
+  async adoptStage(stageId: string, appId: string): Promise<void> {
+    const safeStageId = safeSegment(stageId);
+    const safeAppId = safeSegment(appId);
+    const source = this.unverifiedStageDirectory(safeStageId);
+    const targetRoot = this.pluginStagingRoot(safeAppId);
+    const target = path.join(targetRoot, safeStageId);
+    if (fs.existsSync(target)) {
+      if (fs.existsSync(source)) throw new Error('PLUGIN_STAGE_STORAGE_CONFLICT');
+      return;
+    }
+    if (!fs.existsSync(source)) {
+      const located = this.locateStageDirectory(safeStageId, safeAppId);
+      if (located === target) return;
+      throw new Error('PLUGIN_STAGE_NOT_FOUND');
+    }
+    fs.mkdirSync(targetRoot, { recursive: true, mode: 0o700 });
+    fs.renameSync(source, target);
+    fsyncPath(targetRoot);
+  }
+
   async install(stageId: string, verified: VerifiedPluginPackage): Promise<void> {
     if (stageId !== verified.stageId) throw new Error('PLUGIN_STAGE_MISMATCH');
-    const unpacked = this.unpackedPath(safeSegment(stageId));
+    await this.adoptStage(stageId, verified.manifest.id);
+    const safeAppId = safeSegment(verified.manifest.id);
+    const safeVersion = safeSegment(verified.manifest.version);
+    const stageRoot = this.locateStageDirectory(safeSegment(stageId), safeAppId);
+    const unpacked = path.join(stageRoot, 'unpacked');
     if (!fs.existsSync(unpacked)) throw new Error('PLUGIN_STAGE_NOT_VERIFIED');
-    const appRoot = path.join(this.pluginsRoot, safeSegment(verified.manifest.id));
-    const target = path.join(appRoot, safeSegment(verified.manifest.version));
-    fs.mkdirSync(appRoot, { recursive: true, mode: 0o700 });
+    const appRoot = path.join(this.pluginsRoot, safeAppId);
+    const versionsRoot = path.join(appRoot, 'versions');
+    const target = path.join(versionsRoot, safeVersion);
+    fs.mkdirSync(versionsRoot, { recursive: true, mode: 0o700 });
     if (fs.existsSync(target)) {
       const marker = path.join(target, '.nexus-package-hash');
-      if (fs.existsSync(marker) && fs.readFileSync(marker, 'utf8').trim() === verified.packageHash) {
-        this.ensureUiProjection(target, verified);
-        return;
-      }
+      if (fs.existsSync(marker) && fs.readFileSync(marker, 'utf8').trim() === verified.packageHash) return;
       throw new Error('PLUGIN_VERSION_IMMUTABLE');
     }
     fs.writeFileSync(path.join(unpacked, '.nexus-package-hash'), `${verified.packageHash}\n`, { mode: 0o600 });
     fsyncPath(path.join(unpacked, '.nexus-package-hash'));
-    const incoming = path.join(appRoot, `.incoming-${safeSegment(stageId)}`);
+    const incoming = path.join(versionsRoot, `.incoming-${safeSegment(stageId)}`);
     if (fs.existsSync(incoming)) {
       unlockTree(incoming);
       fs.rmSync(incoming, { recursive: true, force: true });
@@ -363,82 +391,125 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
     lockTree(incoming);
     fs.chmodSync(incoming, 0o555);
     fs.renameSync(incoming, target);
-    fsyncPath(appRoot);
-    this.ensureUiProjection(target, verified);
+    fsyncPath(versionsRoot);
   }
 
   async removeInstalled(appId: string, version: string): Promise<void> {
     const safeAppId = safeSegment(appId);
     const safeVersion = safeSegment(version);
-    const target = path.join(this.pluginsRoot, safeAppId, safeVersion);
+    const target = path.join(this.pluginsRoot, safeAppId, 'versions', safeVersion);
     if (fs.existsSync(target)) {
       unlockTree(target);
       fs.rmSync(target, { recursive: true, force: true });
     }
-    const frontendTarget = path.join(this.pluginFrontendRoot, safeAppId, safeVersion);
-    if (fs.existsSync(frontendTarget)) {
-      unlockTree(frontendTarget);
-      fs.rmSync(frontendTarget, { recursive: true, force: true });
+  }
+
+  async discardStage(stageId: string, appId?: string | null): Promise<void> {
+    const safeStageId = safeSegment(stageId);
+    const candidates = [this.unverifiedStageDirectory(safeStageId)];
+    if (appId) candidates.push(path.join(this.pluginStagingRoot(safeSegment(appId)), safeStageId));
+    else candidates.push(...this.findScopedStageDirectories(safeStageId));
+    for (const target of new Set(candidates)) fs.rmSync(target, { recursive: true, force: true });
+  }
+
+  async reconcileStages(activeStages: readonly { stageId: string; appId: string | null }[]): Promise<void> {
+    if (activeStages.length > 100_000) throw new Error('PLUGIN_STAGE_RECONCILE_TOO_LARGE');
+    const active = new Map(
+      activeStages.map((stage) => [safeSegment(stage.stageId), stage.appId && safeSegment(stage.appId)]),
+    );
+    for (const [stageId, appId] of active) {
+      if (appId) await this.adoptStage(stageId, appId).catch(() => undefined);
     }
-  }
-
-  async discardStage(stageId: string): Promise<void> {
-    const safe = safeSegment(stageId);
-    fs.rmSync(this.archivePath(safe), { force: true });
-    fs.rmSync(this.unpackedPath(safe), { force: true, recursive: true });
-  }
-
-  async reconcileStages(activeStageIds: readonly string[]): Promise<void> {
-    if (activeStageIds.length > 100_000) throw new Error('PLUGIN_STAGE_RECONCILE_TOO_LARGE');
-    const active = new Set(activeStageIds.map((stageId) => safeSegment(stageId)));
-    for (const name of fs.readdirSync(this.stagingRoot)) {
-      if (name.endsWith('.tar.part')) {
-        fs.rmSync(path.join(this.stagingRoot, name), { force: true });
-        continue;
+    for (const entry of fs.readdirSync(this.unverifiedStagingRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || active.has(entry.name)) continue;
+      fs.rmSync(path.join(this.unverifiedStagingRoot, entry.name), { recursive: true, force: true });
+    }
+    for (const entry of fs.readdirSync(this.pluginsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === '.staging' || !/^[A-Za-z0-9_.-]{1,128}$/.test(entry.name)) continue;
+      const stagingRoot = this.pluginStagingRoot(entry.name);
+      if (!fs.existsSync(stagingRoot)) continue;
+      for (const staged of fs.readdirSync(stagingRoot, { withFileTypes: true })) {
+        if (!staged.isDirectory()) continue;
+        const expectedAppId = active.get(staged.name);
+        if (expectedAppId === entry.name) continue;
+        if (expectedAppId === null) continue;
+        fs.rmSync(path.join(stagingRoot, staged.name), { recursive: true, force: true });
       }
-      const match = name.match(/^([A-Za-z0-9_.-]{1,128})\.(tar|unpacked)$/);
-      if (!match || active.has(match[1]!)) continue;
-      const target = path.join(this.stagingRoot, name);
-      fs.rmSync(target, { force: true, recursive: match[2] === 'unpacked' });
     }
   }
 
-  private ensureUiProjection(pluginRoot: string, verified: VerifiedPluginPackage): void {
-    if (!verified.frontendEntry) return;
-    const relativeEntry = verified.frontendEntry.slice('frontend/'.length);
-    if (!relativeEntry) throw new Error('PLUGIN_FRONTEND_ENTRY_INVALID');
-    const sourceRoot = path.join(pluginRoot, 'frontend');
-    const sourceEntry = path.join(sourceRoot, ...relativeEntry.split('/'));
-    const sourceStat = fs.lstatSync(sourceEntry);
-    if (!sourceStat.isFile() || sourceStat.isSymbolicLink()) throw new Error('PLUGIN_FRONTEND_ENTRY_INVALID');
-
-    const appRoot = path.join(this.pluginFrontendRoot, safeSegment(verified.manifest.id));
-    const target = path.join(appRoot, safeSegment(verified.manifest.version));
-    fs.mkdirSync(appRoot, { recursive: true, mode: 0o755 });
-    if (fs.existsSync(target)) {
-      const marker = path.join(target, '.nexus-package-hash');
-      if (fs.existsSync(marker) && fs.readFileSync(marker, 'utf8').trim() === verified.packageHash) return;
-      throw new Error('PLUGIN_FRONTEND_VERSION_IMMUTABLE');
+  private locateStageDirectory(stageId: string, appIdHint: string | null): string {
+    if (appIdHint) {
+      const scoped = path.join(this.pluginStagingRoot(safeSegment(appIdHint)), safeSegment(stageId));
+      if (fs.existsSync(scoped)) return scoped;
     }
-    const incoming = path.join(appRoot, `.incoming-${safeSegment(verified.stageId)}`);
-    if (fs.existsSync(incoming)) {
-      unlockTree(incoming);
-      fs.rmSync(incoming, { recursive: true, force: true });
-    }
-    fs.cpSync(sourceRoot, incoming, { recursive: true, dereference: false, errorOnExist: true });
-    fs.writeFileSync(path.join(incoming, '.nexus-package-hash'), `${verified.packageHash}\n`, { mode: 0o600 });
-    fs.writeFileSync(path.join(incoming, '.nexus-ui-entry'), `${relativeEntry}\n`, { mode: 0o600 });
-    lockTree(incoming);
-    fs.chmodSync(incoming, 0o555);
-    fs.renameSync(incoming, target);
-    fsyncPath(appRoot);
+    const unverified = this.unverifiedStageDirectory(stageId);
+    if (fs.existsSync(unverified)) return unverified;
+    const scoped = this.findScopedStageDirectories(stageId);
+    if (scoped.length === 1) return scoped[0]!;
+    if (scoped.length > 1) throw new Error('PLUGIN_STAGE_STORAGE_CONFLICT');
+    throw new Error('PLUGIN_STAGE_NOT_FOUND');
   }
 
-  private archivePath(stageId: string): string {
-    return path.join(this.stagingRoot, `${safeSegment(stageId)}.tar`);
+  private findScopedStageDirectories(stageId: string): string[] {
+    const safeStageId = safeSegment(stageId);
+    const matches: string[] = [];
+    for (const entry of fs.readdirSync(this.pluginsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === '.staging' || !/^[A-Za-z0-9_.-]{1,128}$/.test(entry.name)) continue;
+      const candidate = path.join(this.pluginsRoot, entry.name, 'staging', safeStageId);
+      if (fs.existsSync(candidate)) matches.push(candidate);
+      if (matches.length > 1) break;
+    }
+    return matches;
   }
 
-  private unpackedPath(stageId: string): string {
-    return path.join(this.stagingRoot, `${safeSegment(stageId)}.unpacked`);
+  private pluginStagingRoot(appId: string): string {
+    return path.join(this.pluginsRoot, safeSegment(appId), 'staging');
+  }
+
+  private unverifiedStageDirectory(stageId: string): string {
+    return path.join(this.unverifiedStagingRoot, safeSegment(stageId));
+  }
+
+  private migrateLegacyLayout(dataDirectory: string): void {
+    const legacyStagingRoot = path.join(dataDirectory, 'agent', 'plugin-staging');
+    if (fs.existsSync(legacyStagingRoot)) {
+      for (const entry of fs.readdirSync(legacyStagingRoot, { withFileTypes: true })) {
+        const match = entry.name.match(/^([A-Za-z0-9_.-]{1,128})\.(tar|tar\.part|unpacked)$/);
+        if (!match) continue;
+        const stageId = safeSegment(match[1]!);
+        const stageRoot = this.unverifiedStageDirectory(stageId);
+        fs.mkdirSync(stageRoot, { recursive: true, mode: 0o700 });
+        const destinationName =
+          match[2] === 'unpacked' ? 'unpacked' : match[2] === 'tar.part' ? 'package.tar.part' : 'package.tar';
+        const source = path.join(legacyStagingRoot, entry.name);
+        const destination = path.join(stageRoot, destinationName);
+        if (fs.existsSync(destination)) throw new Error('PLUGIN_STAGE_STORAGE_CONFLICT');
+        fs.renameSync(source, destination);
+      }
+      if (fs.readdirSync(legacyStagingRoot).length === 0) fs.rmdirSync(legacyStagingRoot);
+    }
+
+    for (const entry of fs.readdirSync(this.pluginsRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === '.staging' || !/^[A-Za-z0-9_.-]{1,128}$/.test(entry.name)) continue;
+      const appRoot = path.join(this.pluginsRoot, entry.name);
+      const versionsRoot = path.join(appRoot, 'versions');
+      fs.mkdirSync(versionsRoot, { recursive: true, mode: 0o700 });
+      for (const child of fs.readdirSync(appRoot, { withFileTypes: true })) {
+        if (!child.isDirectory() || ['versions', 'staging', 'dev'].includes(child.name)) continue;
+        if (!/^[A-Za-z0-9_.-]{1,128}$/.test(child.name)) continue;
+        const legacyVersion = path.join(appRoot, child.name);
+        if (!fs.existsSync(path.join(legacyVersion, '.nexus-package-hash'))) continue;
+        const destination = path.join(versionsRoot, child.name);
+        if (fs.existsSync(destination)) throw new Error('PLUGIN_VERSION_STORAGE_CONFLICT');
+        fs.renameSync(legacyVersion, destination);
+      }
+    }
+
+    const legacyUiRoot = path.join(dataDirectory, 'agent', 'plugin-ui');
+    if (fs.existsSync(legacyUiRoot)) {
+      unlockTree(legacyUiRoot);
+      fs.rmSync(legacyUiRoot, { recursive: true, force: true });
+    }
   }
 }

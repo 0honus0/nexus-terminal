@@ -56,6 +56,7 @@ export class InstalledPluginSkillSourceAdapter implements PluginSkillSourcePort 
       'agent',
       'plugins',
       safeSegment(scope.appId),
+      'versions',
       safeSegment(installation.version),
     );
     const marker = fs.readFileSync(path.join(root, '.nexus-package-hash'), 'utf8').trim();

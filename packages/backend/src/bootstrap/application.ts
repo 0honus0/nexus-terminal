@@ -2,6 +2,7 @@ import http, { type Server } from 'node:http';
 import type { RuntimeConfig } from '../config/runtime-config';
 import { GuacamoleRuntimeAdapter } from '../infrastructure/guacamole/guacamole-runtime.adapter';
 import { FileHttpSessionAdapter } from '../infrastructure/session/file-http-session.adapter';
+import { createPluginFrontendStaticServer } from '../infrastructure/agent/plugins/plugin-frontend-static-server';
 import { createHttpApplication } from '../interfaces/http/http-application';
 import { closeAllAgentSseStreams } from '../interfaces/http/agent/agent-sse';
 import { attachWebSocketServer, type BackendWebSocketServer } from '../interfaces/websocket/websocket-server';
@@ -87,6 +88,18 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     workspaceFilesystem: services.modules.workspaceFilesystem,
   });
   const server = http.createServer(httpApplication);
+  if (config.agentPluginFrontendOrigin && !config.agentPublicOrigin) {
+    throw new Error('PLUGIN_FRONTEND_PUBLIC_ORIGIN_REQUIRED');
+  }
+  if (config.agentPluginFrontendOrigin && config.agentPluginFrontendOrigin === config.agentPublicOrigin) {
+    throw new Error('PLUGIN_FRONTEND_ORIGIN_NOT_ISOLATED');
+  }
+  const pluginFrontendServer = config.agentPluginFrontendOrigin
+    ? createPluginFrontendStaticServer({
+        dataDirectory: config.dataDirectory,
+        publicOrigin: config.agentPublicOrigin!,
+      })
+    : undefined;
   webSockets = attachWebSocketServer({
     server,
     sessionMiddleware: sessions.middleware,
@@ -129,18 +142,25 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
         transfers: () => services.modules.transferTasks.metrics(),
       });
       try {
-        await new Promise<void>((resolve, reject) => {
-          const onError = (error: Error) => reject(error);
-          server.once('error', onError);
-          server.listen(config.port, config.host, () => {
-            server.off('error', onError);
-            resolve();
+        const listen = (target: Server, port: number): Promise<void> =>
+          new Promise<void>((resolve, reject) => {
+            const onError = (error: Error) => reject(error);
+            target.once('error', onError);
+            target.listen(port, config.host, () => {
+              target.off('error', onError);
+              resolve();
+            });
           });
-        });
+        await listen(server, config.port);
+        if (pluginFrontendServer) await listen(pluginFrontendServer, config.agentPluginFrontendPort);
       } catch (error) {
         performanceReporter?.stop();
         performanceReporter = undefined;
         await webSockets.close().catch(() => undefined);
+        if (pluginFrontendServer?.listening) {
+          await new Promise<void>((resolve) => pluginFrontendServer.close(() => resolve()));
+        }
+        if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
         guacamoleRuntime.close();
         await services.dispose();
         throw error;
@@ -153,6 +173,11 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
         await services.agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
         closeAllAgentSseStreams();
         await webSockets.close();
+        if (pluginFrontendServer?.listening) {
+          await new Promise<void>((resolve, reject) =>
+            pluginFrontendServer.close((error) => (error ? reject(error) : resolve())),
+          );
+        }
         await new Promise<void>((resolve, reject) => {
           if (!server.listening) {
             resolve();

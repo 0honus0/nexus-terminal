@@ -963,7 +963,7 @@ client_max_body_size 1m;
 
 仅在apps prefix内部增加content上传嵌套location（准确匹配 /api/v1/apps/<appId>/artifacts/<uuid>/content，PUT）：client_max_body_size 50m、proxy_request_buffering off、client_body_timeout 120s，继承/重复安全proxy headers；其他Agent JSON仍1MiB。Backend在raw PUT路由验证Content-Length/CSRF/ownership后才消费stream。Backend SSE写Cache-Control:no-store、X-Accel-Buffering:no，不压缩；代理不添加Connection:upgrade。
 
-所有Agent JSON/SSE/Artifact仍保持现有安全headers。安装式 Plugin Frontend 使用 Frontend 主容器第二 listener 的独立 origin，并在该 origin 设置严格 CSP/frame-ancestors；Nexus CSP仅增加frame-src该精确origin，不删除全局X-Frame-Options DENY、不开放通用CORS。第二 listener 不代理 Nexus API/session；Runner Controller 通道也不暴露到浏览器，不接受浏览器cookie代替内部认证 token。
+所有Agent JSON/SSE/Artifact仍保持现有安全headers。安装式 Plugin Frontend 使用 Backend 独立 static listener 的独立 origin，并在该 origin 设置严格 CSP/frame-ancestors；Nexus CSP仅增加frame-src该精确origin，不删除全局X-Frame-Options DENY、不开放通用CORS。该 listener 只读 `agent/plugins/<appId>/versions/<version>/frontend/`，只接受 GET/HEAD，不挂 Nexus API/session/RPC，也不设置 Nexus cookie；Runner Controller 通道同样不暴露到浏览器。
 
 <a id="i8"></a>
 
@@ -1459,7 +1459,7 @@ E2E agent-messages.spec.ts：同key重复/冲突、同Run授权、跨App/Run伪�
 
 安装式 App 由 `host/plugin-install.service.ts` 统一提供 stage/verify/install/upgrade/uninstall/deleteData。`package-verifier.port.ts` / `tar-package-verifier.adapter.ts` 校验签名、文件 hash、路径和限额，并从 manifest 的显式 `targets.frontend/backend/runner` 解析入口；禁止通用 `resources` map 推断模块。
 
-Frontend target：已验证 `frontend/` 静态投影仍使用独立 origin，但由 **Frontend 主容器第二个 Nginx listener** 提供，不创建 `plugin-ui` service/image。`host/app-bridge.ts` 用 iframe `allow-scripts` + MessageChannel/nonce/source/seq/size/timeout；第二 listener 无 Nexus API/session proxy。Host descriptor 明确返回 `sdkVersion + protocolVersion=1`，Frontend 在建立 bridge 前验证；当前正式 RPC contract 只有 `host.appInfo` 与 `storage.get/put/delete`，定义集中在 `host/plugin-sdk.ts`。
+Frontend target：已验证 `frontend/` 继续使用独立 origin，但由 **Backend 独立 Plugin Frontend static listener** 直接读取 immutable 安装目录，不创建 `plugin-ui` service/image，也不把插件目录挂给 Frontend 容器。`host/app-bridge.ts` 用 iframe `allow-scripts` + MessageChannel/nonce/source/seq/size/timeout；static listener 无 Nexus API/session/RPC。Host descriptor 明确返回 `sdkVersion + protocolVersion=1`，Frontend 在建立 bridge 前验证；当前正式 RPC contract 只有 `host.appInfo` 与 `storage.get/put/delete`，定义集中在 `host/plugin-sdk.ts`。
 
 Backend target：`LocalPluginBackendRuntimeAdapter` 在 Backend 主容器内创建独立 bubblewrap process sandbox，动态插件只在 sandbox worker 中 import；Backend Core 不 eval/import 插件。sandbox 无网络、无 `/app/data`、无 DB/env/secret，只读插件 package。当前 `PluginBackendSdkV1` 只显式开放 scope-bound AppStorage get/put/delete，类型契约位于 `host/plugin-sdk.types.ts`；activation context 固定 `{schemaVersion:1,protocolVersion:1,scope,plugin:{pluginId,version,sdkVersion},sdk}`。Host 通过 env 注入固定 protocolVersion 与安装包 sdkVersion，worker 的 `runtime.ready` 回报两者，Host 不匹配即 fail closed。以后每项能力通过 typed SDK/IPC 增加，不能给任意 Backend object、SQL、URL 或通用 method dispatcher。
 

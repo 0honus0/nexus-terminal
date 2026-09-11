@@ -9,13 +9,8 @@ services:
     <<: *nexus-service
     command: ['frontend']
     container_name: nexus-terminal-frontend
-    environment:
-      NEXUS_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
     ports:
       - '${NEXUS_HTTP_PORT:-18111}:80'
-      - '${NEXUS_PLUGIN_FRONTEND_PORT:-18112}:8081'
-    volumes:
-      - ./data/agent/plugin-ui:/srv/plugins:ro
     depends_on:
       backend:
         condition: service_healthy
@@ -33,6 +28,8 @@ services:
     env_file:
       - path: .env
         required: false
+    ports:
+      - '${NEXUS_PLUGIN_FRONTEND_PORT:-18112}:3002'
     environment:
       NODE_ENV: production
       PORT: 3001
@@ -43,6 +40,7 @@ services:
       RP_ORIGIN: ${RP_ORIGIN:-}
       AGENT_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
       AGENT_PLUGIN_FRONTEND_ORIGIN: ${NEXUS_PLUGIN_FRONTEND_ORIGIN:-http://localhost:18112}
+      AGENT_PLUGIN_FRONTEND_PORT: 3002
       AGENT_RUNNER_URL: ${NEXUS_AGENT_RUNNER_URL:-http://host.docker.internal:8790}
       AGENT_RUNNER_TOKEN: ${NEXUS_AGENT_RUNNER_TOKEN:-}
       AGENT_RUNNER_DEPLOYMENT_ID: ${NEXUS_AGENT_DEPLOYMENT_ID:-nexus-local}

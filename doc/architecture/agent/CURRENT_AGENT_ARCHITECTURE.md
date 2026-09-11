@@ -210,7 +210,7 @@ Frontend container
 
 不再有独立 `plugin-ui` Docker。
 
-Frontend 主容器 Nginx 使用第二 listener 提供 verified Plugin frontend assets，保持与 Nexus 页面不同 origin。
+Backend 使用独立 Plugin Frontend listener 直接提供 `agent/plugins/<appId>/versions/<version>/frontend/` 中的 verified immutable assets；Frontend 容器不挂插件目录，仍保持与 Nexus 页面不同 origin。
 
 iframe：
 

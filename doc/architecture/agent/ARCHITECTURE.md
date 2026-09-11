@@ -138,7 +138,7 @@ nexus-agent-runner host service
    └─ plugin2 runner sandbox
 ```
 
-**Frontend target** 由 Frontend 主容器的第二个 Nginx listener 提供已验证静态投影，形成与 Nexus 页面不同的 origin，但不增加 `plugin-ui` Docker。iframe 固定 `sandbox="allow-scripts"`，不给 `allow-same-origin`、导航、下载、表单或 Nexus cookie。父页面用 `event.source + nonce` 建立 MessageChannel，初始化后业务 RPC 只走绑定 port。
+**Frontend target** 由 Backend 主进程的独立 Plugin Frontend listener 直接读取已安装 immutable package 中的 `frontend/`，形成与 Nexus 页面不同的 origin；Frontend 容器不挂插件目录，也不再维护 `plugin-ui` 静态投影。该 listener 只接受 GET/HEAD 静态资源，不挂 Nexus API/session/RPC。iframe 固定 `sandbox="allow-scripts"`，不给 `allow-same-origin`、导航、下载、表单或 Nexus cookie。父页面用 `event.source + nonce` 建立 MessageChannel，初始化后业务 RPC 只走绑定 port。
 
 **Backend target** 在 Backend 容器内启动独立 OS process sandbox；动态插件绝不在 Backend Core module graph 中 `eval/import`。sandbox 默认无网络，不可见 `/app/data`、SQLite、Backend env/secrets 或任意宿主路径，只读挂载该插件的已验证代码和最小系统 runtime。sandbox 不可建立时 fail closed。
 
@@ -179,7 +179,7 @@ AppStorage 使用 `(userId,appId,key)`，单 value 64 KiB、单 App 16 MiB，CAS
 
 ### 4.3 安装式扩展、workspace 共享与跨 App 交接
 
-包由 `manifest.json`、`files.json`、Ed25519 签名、`frontend/`、`backend/`、`runner/`、`skills/` 等显式部分组成。可信 publisher key 由用户显式导入。拒绝未签名包、路径穿越、压缩炸弹（压缩包 50 MiB、展开 200 MiB、1 万文件）、设备文件、链接逃逸和清单/hash 不一致。代码存 `NEXUS_DATA_DIR/agent/plugins/<appId>/<version>` immutable 目录；可变长期数据只经 AppStorage/Artifact。
+包由 `manifest.json`、`files.json`、Ed25519 签名、`frontend/`、`backend/`、`runner/`、`skills/` 等显式部分组成。可信 publisher key 由用户显式导入。拒绝未签名包、路径穿越、压缩炸弹（压缩包 50 MiB、展开 200 MiB、1 万文件）、设备文件、链接逃逸和清单/hash 不一致。正式代码存 `NEXUS_DATA_DIR/agent/plugins/<appId>/versions/<version>` immutable 目录；验签前暂存只允许进入 `agent/plugins/.staging/<stageId>`，身份验证并写入 DB 后原子迁入 `<appId>/staging/<stageId>`。可变长期数据只经 AppStorage/Artifact。
 
 升级流程：stage → 验签/校验 targets → 暂停该 App 新 Run → 等待旧 Run 终态 → AppStorage snapshot → 在 Backend target sandbox 执行 migration（若声明）→ health → 原子切 `activeVersion`。失败恢复 snapshot/旧 pointer；不声称能回滚已发生的远端副作用。停用不卸载；卸载代码不自动删除长期数据；`deleteData` 是独立高风险动作。
 

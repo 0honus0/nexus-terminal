@@ -168,7 +168,7 @@ export class PluginInstallService {
     const stage = await this.requireStage(userId, stageId);
     if (stage.status === 'installed') throw new Error('PLUGIN_STAGE_ALREADY_INSTALLED');
     try {
-      const verified = await this.verifyPackage(userId, stageId);
+      const verified = await this.verifyPackage(userId, stage);
       if (this.registry.isBuiltin(verified.manifest.id)) throw new Error('PLUGIN_APP_ID_RESERVED');
       if (verified.packageHash !== stage.packageHash) throw new Error('PLUGIN_STAGE_CHANGED');
       const now = this.clock.nowUnixSeconds();
@@ -183,6 +183,7 @@ export class PluginInstallService {
         errorCode: null,
         updatedAt: now,
       });
+      await this.verifier.adoptStage(stageId, verified.manifest.id);
       return { stage: updated, plugin };
     } catch (error) {
       const errorCode = error instanceof Error ? error.message.slice(0, 128) : 'PLUGIN_VERIFY_FAILED';
@@ -200,7 +201,7 @@ export class PluginInstallService {
   async install(userId: number, stageId: string): Promise<PluginInstallResult> {
     let stage = await this.requireStage(userId, stageId);
     if (!['verified', 'failed'].includes(stage.status)) throw new Error('PLUGIN_STAGE_NOT_VERIFIED');
-    const verified = await this.verifyPackage(userId, stageId);
+    const verified = await this.verifyPackage(userId, stage);
     if (verified.packageHash !== stage.packageHash) throw new Error('PLUGIN_STAGE_CHANGED');
     if (this.registry.isBuiltin(verified.manifest.id)) throw new Error('PLUGIN_APP_ID_RESERVED');
     const scope = { userId, appId: verified.manifest.id };
@@ -274,14 +275,14 @@ export class PluginInstallService {
       errorCode: null,
       updatedAt: now,
     });
-    await this.verifier.discardStage(stageId);
+    await this.verifier.discardStage(stageId, stage.appId);
     return { stage, plugin, app: this.appView(current, plugin) };
   }
 
   async upgrade(userId: number, appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult> {
     if (this.registry.isBuiltin(appId)) throw new Error('PLUGIN_APP_ID_RESERVED');
     let stage = await this.requireStage(userId, stageId);
-    const verified = await this.verifyPackage(userId, stageId);
+    const verified = await this.verifyPackage(userId, stage);
     if (verified.manifest.id !== appId) throw new Error('PLUGIN_APP_ID_MISMATCH');
     if (verified.packageHash !== stage.packageHash) throw new Error('PLUGIN_STAGE_CHANGED');
     const scope = { userId, appId };
@@ -371,7 +372,7 @@ export class PluginInstallService {
         errorCode: null,
         updatedAt: this.clock.nowUnixSeconds(),
       });
-      await this.verifier.discardStage(stage.id);
+      await this.verifier.discardStage(stage.id, appId);
     } catch {
       // The active version is already atomically committed. Preserve the staged package for reconciliation/retry.
     }
@@ -553,7 +554,10 @@ export class PluginInstallService {
   }
 
   async initializeInstalledVersions(): Promise<void> {
-    await this.verifier.reconcileStages(await this.repository.listStageIds()).catch(() => undefined);
+    const stages = await this.repository.listStages();
+    await this.verifier
+      .reconcileStages(stages.map((stage) => ({ stageId: stage.id, appId: stage.appId })))
+      .catch(() => undefined);
     for (const plugin of await this.repository.listVersions()) {
       if (plugin.status === 'installed') this.registry.registerVersion(this.definition(plugin));
     }
@@ -668,9 +672,10 @@ export class PluginInstallService {
     return stage;
   }
 
-  private verifyPackage(userId: number, stageId: string): Promise<VerifiedPluginPackage> {
+  private verifyPackage(userId: number, stage: PluginStageRecord): Promise<VerifiedPluginPackage> {
     return this.verifier.verify(
-      stageId,
+      stage.id,
+      stage.appId,
       async (keyId) => {
         const key = await this.repository.getPublisherKey(userId, keyId);
         return key && key.revokedAt === null ? key.publicKeyPem : null;

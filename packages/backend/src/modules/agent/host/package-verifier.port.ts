@@ -40,11 +40,13 @@ export interface PackageVerifierPort {
   stage(source: PluginStageSource): Promise<StagedPluginPackage>;
   verify(
     stageId: string,
+    appIdHint: string | null,
     resolvePublisherKey: (keyId: string) => Promise<string | null>,
     validateManifest: (raw: AgentAppManifest) => ValidatedManifest,
   ): Promise<VerifiedPluginPackage>;
+  adoptStage(stageId: string, appId: string): Promise<void>;
   install(stageId: string, verified: VerifiedPluginPackage): Promise<void>;
   removeInstalled(appId: string, version: string): Promise<void>;
-  discardStage(stageId: string): Promise<void>;
-  reconcileStages(activeStageIds: readonly string[]): Promise<void>;
+  discardStage(stageId: string, appId?: string | null): Promise<void>;
+  reconcileStages(activeStages: readonly { stageId: string; appId: string | null }[]): Promise<void>;
 }

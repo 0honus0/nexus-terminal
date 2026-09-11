@@ -279,6 +279,7 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
       'agent',
       'plugins',
       this.safe(plugin.appId),
+      'versions',
       this.safe(plugin.version),
     );
     const marker = path.join(pluginRoot, '.nexus-package-hash');
