@@ -306,8 +306,67 @@ test('Agent WebSocket replays durable Host events after a disconnect', async ({ 
   expect(replayedSequence).toBeGreaterThan(firstSequence);
   await closeAgentSubscription(page, 'second');
 
-  const retiredSse = await context.request.get('/api/v1/agent/events?cursor=0');
-  expect(retiredSse.status()).toBe(404);
+  const retiredHostSse = await context.request.get('/api/v1/agent/events?cursor=0');
+  expect(retiredHostSse.status()).toBe(410);
+  await expect(retiredHostSse.json()).resolves.toMatchObject({
+    error: { code: 'AGENT_STREAM_PROTOCOL_REPLACED' },
+  });
+
+  const retiredRunSse = await context.request.get(
+    '/api/v1/apps/nexus.operations/runs/00000000-0000-4000-8000-000000000000/events?cursor=0',
+  );
+  expect(retiredRunSse.status()).toBe(410);
+  await expect(retiredRunSse.json()).resolves.toMatchObject({
+    error: { code: 'AGENT_STREAM_PROTOCOL_REPLACED' },
+  });
+});
+
+test('Agent WebSocket bounds concurrent sockets per authenticated session', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  const hostSocketPromise = page.waitForEvent('websocket', {
+    predicate: (socket) => new URL(socket.url()).pathname === '/ws/agent',
+  });
+  await page.goto('/connections');
+  const hostSocket = await hostSocketPromise;
+  await waitForAgentSubscribed(hostSocket);
+
+  const outcomes = await page.evaluate(async () => {
+    const url = `${window.location.origin.replace(/^http/, 'ws')}/ws/agent`;
+    const sockets = [new WebSocket(url), new WebSocket(url), new WebSocket(url)];
+    const results = await Promise.all(
+      sockets.map(
+        (socket) =>
+          new Promise<'open' | 'rejected'>((resolve) => {
+            let settled = false;
+            const finish = (result: 'open' | 'rejected') => {
+              if (settled) return;
+              settled = true;
+              resolve(result);
+            };
+            const timer = window.setTimeout(() => finish('rejected'), 5_000);
+            socket.addEventListener('open', () => {
+              window.clearTimeout(timer);
+              finish('open');
+            });
+            socket.addEventListener('error', () => {
+              window.clearTimeout(timer);
+              finish('rejected');
+            });
+            socket.addEventListener('close', () => {
+              window.clearTimeout(timer);
+              if (socket.readyState !== WebSocket.OPEN) finish('rejected');
+            });
+          }),
+      ),
+    );
+    for (const socket of sockets) {
+      if (socket.readyState === WebSocket.OPEN) socket.close(1000, 'E2E socket limit probe complete');
+    }
+    return results;
+  });
+
+  expect(outcomes.filter((outcome) => outcome === 'open')).toHaveLength(2);
+  expect(outcomes.filter((outcome) => outcome === 'rejected')).toHaveLength(1);
 });
 
 test('Agent Host initializes Operations safely and persists explicit lifecycle/settings choices', async ({

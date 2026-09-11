@@ -1,6 +1,6 @@
 import { Router, type Request } from 'express';
 import type { AgentApprovalFacade, AgentWorkspaceRuntimeFacade, AgentRunFacade } from '../../../modules/agent/public';
-import { agentData, agentRequestId, agentRoute } from './agent-http';
+import { agentData, agentError, agentRequestId, agentRoute } from './agent-http';
 import { pathParam, positiveInteger, withVersionConflictDetails } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
 import {
@@ -110,6 +110,16 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       agentData(request, response, await dependencies.runs.listCheckpoints(scope, pathParam(request.params.runId)));
     }),
   );
+
+  router.get('/runs/:runId/events', (request, response) => {
+    agentError(
+      request,
+      response,
+      410,
+      'AGENT_STREAM_PROTOCOL_REPLACED',
+      'Agent Run event streaming moved to the /ws/agent WebSocket protocol.',
+    );
+  });
 
   router.post(
     '/runs/:runId/checkpoints',

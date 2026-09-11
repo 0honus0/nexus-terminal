@@ -9,9 +9,16 @@ const MAX_SUBSCRIPTIONS = 16;
 const SAFE_SUBSCRIPTION_ID = /^[A-Za-z0-9._:-]{1,128}$/;
 const MAX_IDENTIFIER_LENGTH = 128;
 
+interface AgentProtocolTelemetry {
+  replayLag(lag: number): void;
+  protocolError(code: string): void;
+  slowConsumerClose(): void;
+}
+
 interface AgentProtocolDependencies {
   events: AgentEventFacade;
   runs: AgentRunFacade;
+  telemetry?: AgentProtocolTelemetry;
 }
 
 interface AgentProtocolContext {
@@ -109,6 +116,10 @@ export class AgentProtocolSession {
     }
   }
 
+  subscriptionCount(): number {
+    return this.subscriptions.size;
+  }
+
   async close(): Promise<void> {
     if (this.closed) return;
     this.closed = true;
@@ -145,6 +156,7 @@ export class AgentProtocolSession {
       highWater = snapshot.eventCursor;
     }
     if (cursor > highWater) throw new Error('CURSOR_AHEAD');
+    this.dependencies.telemetry?.replayLag(highWater - cursor);
 
     const subscription: AgentSubscription = {
       id: subscriptionId,
@@ -268,6 +280,7 @@ export class AgentProtocolSession {
   }
 
   private sendError(requestId: string | undefined, code: string, subscriptionId?: string): void {
+    this.dependencies.telemetry?.protocolError(code);
     this.send({
       type: 'error',
       ...(requestId ? { requestId } : {}),
@@ -291,6 +304,7 @@ export class AgentProtocolSession {
       return false;
     }
     if (this.socket.bufferedAmount >= MAX_BUFFERED_BYTES) {
+      this.dependencies.telemetry?.slowConsumerClose();
       this.socket.close(1013, 'Agent protocol client is too slow');
       return false;
     }

@@ -8,6 +8,12 @@ export interface WebSocketPerformanceSnapshot {
   workspace: number;
   upload: number;
   remoteDesktop: number;
+  agent: number;
+  agentSubscriptions: number;
+  agentMaxReplayLag: number;
+  agentProtocolErrors: number;
+  agentSlowConsumerCloses: number;
+  agentConnectionLimitRejections: number;
   bufferedAmountBytes: number;
   maxBufferedAmountBytes: number;
 }

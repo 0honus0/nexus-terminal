@@ -598,6 +598,10 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 3. E2E 同时覆盖 host/run 两种订阅、断线重连、cursor replay、权限拒绝和 quiesce；
 4. 不要让 WebSocket 传输层反向改变 Event/Run 领域模型，继续保持“durable event replay + ephemeral delta”边界。
 
+> **复核结论 / 解决方案（已采用）**
+>
+> WebSocket 已是唯一 live Browser Agent event transport，不恢复 SSE 双栈。旧公开 GET 路径 `/api/v1/agent/events` 与 `/api/v1/apps/:appId/runs/:runId/events` 现在保留 authenticated 410 tombstone，统一返回 `AGENT_STREAM_PROTOCOL_REPLACED` 并指向 `/ws/agent`；因此旧客户端不会从“曾经存在的流”退化成难以诊断的 404，但新代码也不会继续维护 SSE writer/backpressure/auth-refresh 第二套实现。现有 `host.spec.ts` 直接断言两个旧路径的 410 contract。架构/实施文档同步把 Browser Agent transport 改为 HTTP + WebSocket；Provider SSE 仍是独立 adapter 内部协议，不受影响。
+
 ### D2：WebSocket subscribe 存在高水位读取与监听注册之间的竞态，可能永久漏掉 durable wake
 
 位置：`packages/backend/src/interfaces/websocket/agent-protocol.session.ts` 的 `subscribe()`。
@@ -606,11 +610,19 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 
 建议将订阅建立改为原子化顺序：先登记 subscription 和 wake listener，再读取起始 high-water，随后立即执行一次 drain；或采用两次读取校验：注册后再次读取 high-water，若高于初值则强制 drain。Run/host 两条路径都必须使用同一策略。
 
+> **复核结论（原 finding 已过时，无需改订阅顺序）**
+>
+> 当前实现读取 high-water 后确实才注册 wake listener，但注册完成、写入 `subscriptions` 后会**无条件**执行一次 `scheduleDrain(subscription)`。`drain()` 不以先前读取的 high-water 为上限，而是直接从 durable repository 按客户端 `subscription.cursor` 分页读取到数据库当下为空为止。因此若事件恰好在 high-water 读取后、listener 注册前提交，即使那次 wake 丢失，首次无条件 drain 仍会把该 durable sequence 读出；不存在“没有后续事件就永久停在旧 cursor”的窗口。high-water 在这里只用于拒绝 `CURSOR_AHEAD` 与 subscribed ack，不是 replay 截止水位。为此不做会增加订阅复杂度的双读/重排。
+
 ### D3：WebSocket 客户端当前仍是一次性连接，未完成新协议要求的断线恢复
 
 `1aa44fc` 的后端实现支持 cursor replay，但前端 `agent-events.ts` 的 `connect()` 在 socket close 后直接结束 iterator，没有自动重连。也就是说，后端已经提供了 durable replay 能力，前端没有消费该能力，实际兼容性只完成了一半。
 
 建议优先补齐前端 subscription supervisor：保存最后 durable sequence、指数退避重连、重连时重新 subscribe、连接期间只丢弃 ephemeral event，并在恢复后触发 snapshot refresh。否则 Agent UI 在代理重启、网络切换、浏览器休眠后会永久停止更新。
+
+> **复核结论（已由 R6 解决）**
+>
+> `agent-events.ts` 已有长期 transport supervisor：保存最后已交付 durable cursor、单连接、400ms→8s 指数退避+jitter、重连重新 subscribe、HTTP 401 session probe、AbortSignal 同时终止 socket/ack/timer，并在发生过事件的连接断开时发前端内部 `transport.disconnected` 清理不可重放 delta。R18 又把 active Run iterator/Abort 生命周期收进 `run-facade`。远端 E2E 已验证自动重连与 durable Host catch-up，因此本项不再新增第二套 retry loop。
 
 ### D4：新 WebSocket 事件加入 `schemaVersion`，但前端解析器丢弃该字段
 
@@ -618,11 +630,21 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 
 建议把 `schemaVersion` 纳入 wire event 类型并做正整数校验；按 `(eventType, schemaVersion)` 选择 parser，未知版本进入 `unknown event` 分支并触发 snapshot refresh，而不是静默投影。
 
+> **复核结论（已由 R8 解决）**
+>
+> durable Run wire event 现在保留并校验 `schemaVersion`，前端暴露 discriminated union；未知 event type、未知 schema 或坏 payload 都转为 `AgentUnknownEvent`，保留 durable sequence 以触发 authoritative snapshot refresh，而不解释未知 payload。Host event 当前没有 schemaVersion，只按现有 Host contract 校验。
+
 ### D5：WebSocket 生命周期已接入通用 server，但 Agent 专属连接配额和指标缺失
 
 旧 SSE 实现有每 session 的连接上限、待发送事件上限和 writer drain；新实现有单 socket `MAX_SUBSCRIPTIONS` 与 bufferedAmount 限制，但没有 Agent connection/session 级限额，也没有区分订阅数、replay lag、重连次数和关闭原因的指标。
 
 建议在 `websocket-server.ts` 的 `ClientRecord`/metrics 中增加 Agent 专属计数：每 user/session 的 socket 上限、每 socket subscription 上限、最大 replay duration、slow-consumer 次数和 protocol error 次数。连接配额应在 upgrade 或 session attach 阶段拒绝，不能等到订阅后才耗尽资源。
+
+> **解决方案（已采用）**
+>
+> 通用 WebSocket server 原本已经按 kind 统计 active Agent socket，AgentProtocolSession 也已有每 socket 16 subscription 与 1MiB slow-consumer 1013 保护，因此原 finding 部分过时。缺口已补为：authenticated session 最多 3 条 Agent socket，第 4 条在 `handleUpgrade` 前以 HTTP 429 拒绝；`metrics()` 同时报告当前 Agent subscriptions、进程期最大初始 replay lag、protocol error、slow-consumer close 与 connection-limit rejection，runtime performance reporter 的类型契约也显式包含这些字段。现有 `host.spec.ts` 用真实 Browser session 保持 Host subscription 后再开 3 条 socket，断言只允许其中 2 条。
+>
+> 没有添加“reconnect count”：当前 wire protocol 没有稳定 client-instance id，服务端无法区分同一客户端重连与新 tab/新 surface；伪造该指标会误导运维。重连行为由前端 supervisor 与 E2E 验证，服务端只记录它能直接观测的连接、订阅、lag、错误与 close/rejection 事实。
 
 ### D6：`4b79386` 的 StateCommit 拆文件是兼容性正向改动，但公共 Port 仍未同步收窄
 
@@ -630,21 +652,39 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 
 建议下一步只改 Port 与 constructor 注入，不再继续拆 concrete transition 文件：为 Run、Model、Tool、Approval、Collaboration 提供 capability-specific ports，均由同一 adapter 实现。
 
+> **复核结论（调用方最小权限已完成）**
+>
+> 当前 `StateCommitPort` 仍作为 SQLite adapter 的完整实现契约存在，但模块调用方已经只注入 `RunCommandCommitPort`、`RunCreationCommitPort`、`ApprovalDecisionCommitPort`、`ApprovalSweepCommitPort`、`ProjectionCommitPort`、`CollaborationCommitPort`、`RootExecutionCommitPort` 等 `Pick<>` capability ports；全仓搜索只有 concrete adapter 实现/类型定义直接引用完整 `StateCommitPort`。因此“调用方没有同步获得最小权限”已过时。保留一个完整 adapter interface 能明确同一事务 authority，不需要为了文件形式再制造多个 concrete adapters。
+
 ### D7：`06445c5` 前端 Workspace Runtime 拆分与既有边界兼容，但状态仍由父组件集中管理
 
 将 `WorkspaceRuntimePanel.vue` 拆成 Create、Toolchain、Grants、ArtifactTransfer 子组件，改善了视图复杂度，符合 Frontend feature 内聚原则。但父组件仍持有 catalog/apps/installations/versions/workspaces/artifacts/grants 全部状态，且 grants 请求存在前述竞态；这属于文件拆分而非真正状态边界拆分。
 
 建议进一步抽出 `workspace-runtime-store` 或 composable，按 catalog/workspace/plugin/grant 分片管理 revision、AbortController 和 refresh generation；组件只接收 typed state 与 command。
 
+> **复核结论（正确性缺口已解决，不引入大一统 store）**
+>
+> R15 已把真正需要独立 revision/Abort/generation 的 grants 生命周期抽为 `workspace-grant-state.ts`，Runner 端持久 CAS revision；R17 又把 mutation conflict/reconciliation 生命周期抽为共享 runtime operation state。父组件剩余的 catalog/workspaces/apps/installations/versions/artifacts 是同一面板的一次组合读取，统一受 `refreshGeneration` 与 selection identity 保护，mutation 又由 `locked` 串行化；子组件只持表单 draft 并 emit typed command。此时再引入覆盖全部资源的全局/共享 Workspace store 会复制 Backend authoritative state 与既有 generation guard，收益主要是文件搬运而非正确性，因此不做。若未来某一资源获得独立长期 subscription/CAS，再像 grants 一样按资源抽 slice。
+
 ### D8：`ae78197` 的 ownership 规则与已有 Host→Operations 直接 import 冲突
 
 新文档强调统一 runtime ownership、Host 不拥有 App 私有实现；但当前 `AgentHubWindow.vue` 仍直接 import `apps/operations/OperationsView.vue`。因此文档方向合理，代码尚未完全兼容。应将该路径列为架构门禁失败项，而不是继续依赖约定。
+
+> **复核结论（已解决）**
+>
+> `AgentHubWindow.vue` 当前只调用 Host-owned `builtinAppView()`，不再直接 import Operations 私有 view；唯一 composition bridge `host/builtin-apps.ts` 只从 `apps/operations/public.ts` 取得 `OperationsAppView`。Frontend architecture checker 默认禁止 Host→`apps/operations`，仅对这一条 `builtin-apps.ts -> apps/*/public.ts` composition edge 放行。因此 Host 不再越过 App public surface，原 finding 已过时。
 
 ### D9：dev 新增能力范围已超过“当前 live execution”说明，需区分已接线与仅存在代码
 
 当前分支同时包含 ACP、Browser/CDP adapter、MCP、Workspace Runner、multi-version toolchain 等代码。与既有 Phase 规划相比，只有部分能力进入 composition root；如果不标记 phase，维护者会把“文件存在”误认为“功能可用”。
 
 建议在每个 Port/adapter/contribution 上增加 `phase: active | reserved` 元数据，composition root 启动时拒绝将 reserved capability 注册到 production catalog，并在 CURRENT_AGENT_ARCHITECTURE 中维护一张实际接线表。
+
+> **复核结论（已通过显式接线表 + 架构门禁解决，不给所有 Port 加冗余 phase 字段）**
+>
+> `CURRENT_AGENT_ARCHITECTURE.md` 已明确区分：MCP/Subagent/Memory/Plugin 进入当前 composition；ACP 与 Browser/CDP/Puppeteer **未完成，reserved / roadmap-only**。虽有 `AcpAdapter` 与 `PuppeteerBrowserGateway` 源码骨架，production composition root 没有实例化/注入，Operations manifest 也不声明 `integration.acp.execute` / `browser.operate` 且无默认 grant。Backend architecture checker 会在 `bootstrap/agent/*` 出现 `AcpAdapter`、`PuppeteerBrowserGateway` 等 reserved production symbols 时直接失败。
+>
+> 因此没有给每个 Port/adapter 再复制一个 `phase` 字段：文件存在本身不是 capability registration，真正的 live authority 是 manifest/grant/catalog/composition；当前接线表和 composition checker 正好守住这些边界，也满足“reserved 能力不得进入 production composition root”的约束。
 
 ## dev 分支建议调整优先级
 

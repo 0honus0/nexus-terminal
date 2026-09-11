@@ -934,11 +934,13 @@ AppSummaryView={id,displayName,version,enabled,health,runningRuns,pendingApprova
 
 `/ws/agent` 只接受文本 JSON `subscribe`/`unsubscribe`。`subscribe.payload={subscriptionId,channel:'host'|'run',cursor,appId?,runId?}`；服务端回 `subscribed` 后发送 `event`。durable `event.payload={subscriptionId,durability:'durable',sequence,eventType,payload,occurredAt,schemaVersion?}`，ephemeral 使用 `durability:'ephemeral'` 且没有 sequence。V1 durable event 不压缩、无 CURSOR_EXPIRED；未知 event type 在同 schema 下可跳过渲染但 cursor 仍推进，未知 schema major 必须终止详细流并显示升级提示。
 
+Browser Agent live event transport 只保留 `/ws/agent`。旧的 `GET /api/v1/agent/events` 与 `GET /api/v1/apps/:appId/runs/:runId/events` 不再建立 SSE；为已存在的旧客户端保留 authenticated 410 tombstone，返回 `AGENT_STREAM_PROTOCOL_REPLACED` 并指向 `/ws/agent`。这只是迁移错误契约，不恢复双协议实现，也不改变 durable replay/event domain。
+
 `cursor` 必须是安全整数且 ≥0。Host high-water 取 `hostCursor(userId)`；Run 订阅先用 `{userId,appId,runId}` 读取 snapshot 校验 ownership，再取 `eventCursor`，因此不可访问 Run 不会因 cursor 校验泄露存在性。cursor 超过 high-water 返回协议 `error{code:'CURSOR_AHEAD'}`，不能安静等待未来游标。WebSocket upgrade 统一继承现有 Origin/IP/session/2FA 校验；浏览器登出会 abort 并关闭 socket，reset/shutdown 通过 WebSocket quiesce/drain 关闭现有订阅。
 
 订阅无丢失算法：客户端先从 Host summary 或 Run snapshot 取得 durable cursor=C，再发送 `subscribe`。服务端先校验 high-water 并安装 wake/transient listener，再以数据库为事实源循环 `readHost/readRun(after=last,limit=100)`，发送 durable page 后推进 last；新的 commit 通过 EventHub wake 触发下一轮 drain。EventHub 只负责唤醒/ephemeral delta，不是 durable 消息仓库；断线后客户端用最后已处理的 durable sequence 重新 subscribe，遗漏事实从数据库补回。消息重复允许，前端按 sequence 幂等推进 cursor。
 
-Agent WebSocket 单个出站消息≤64KiB，大对象继续用 ref；单 socket `bufferedAmount` 达 1MiB 即以 1013 关闭，让客户端按最后 durable cursor 重连，不能阻塞全局 commit。入站文本消息≤16KiB，binary 直接拒绝；每 socket 最多 16 个 subscription。底层共享 WebSocket server 每15秒 ping，连续2次 heartbeat 未响应即 terminate；这些 transport guardrail 不改变 Run/StateCommit 事务语义。
+Agent WebSocket 单个出站消息≤64KiB，大对象继续用 ref；单 socket `bufferedAmount` 达 1MiB 即以 1013 关闭，让客户端按最后 durable cursor 重连，不能阻塞全局 commit。入站文本消息≤16KiB，binary 直接拒绝；每 socket 最多 16 个 subscription；每个 authenticated session 最多 3 条 Agent socket（与退役 SSE 的 session 上限一致），第 4 条 upgrade 以 429 拒绝。底层共享 WebSocket server 每15秒 ping，连续2次 heartbeat 未响应即 terminate；这些 transport guardrail 不改变 Run/StateCommit 事务语义。runtime performance diagnostics 额外暴露当前 Agent socket/subscription 数、进程期最大初始 replay lag、protocol error、slow-consumer close 与 connection-limit rejection；服务端没有稳定 client instance id，因此不把“新标签页”猜成“重连次数”。
 
 ### 7.3 Frontend transport、Nginx 与 CSRF
 

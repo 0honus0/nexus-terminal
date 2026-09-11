@@ -24,7 +24,7 @@ Workspace Runtime 是受限本地执行能力；稳定实体是 `Workspace`，�
 
 ```text
 App.vue → features/agent/host → 当前 App contribution
-                     ↓ Agent HTTP / SSE
+                     ↓ Agent HTTP / WebSocket
 interfaces/http/agent
                      ↓ 注入的 use cases
 modules/agent/
@@ -41,7 +41,7 @@ infrastructure/agent/{repositories,providers,artifacts,workspace-runtime,integra
 bootstrap/agent/compose-agent.ts 是具体依赖组装入口
 ```
 
-通用 Harness 归 runtime，不放 ai/harness 或 apps/operations；AI 层只提供模型和上下文服务，不反向依赖 Run 调度。Policy、Approval、Lease 属于共享 capabilities，Operations 只提供风险分类和 verifier。HTTP/SSE 控制器统一在 interfaces/http/agent，不放 App domain。SQL、SDK、网络客户端只在 Infrastructure。
+通用 Harness 归 runtime，不放 ai/harness 或 apps/operations；AI 层只提供模型和上下文服务，不反向依赖 Run 调度。Policy、Approval、Lease 属于共享 capabilities，Operations 只提供风险分类和 verifier。Agent HTTP 控制器统一在 interfaces/http/agent，Browser 事件 WebSocket 统一在 interfaces/websocket，不放 App domain。SQL、SDK、网络客户端只在 Infrastructure。
 
 依赖图固定：apps → runtime/ai/capabilities/host/workspace-runtime 的 public 契约；Agent runtime → ai/capabilities/host 的 ports，不反向拥有 Workspace Runtime；workspace-runtime → host 的授权/Plugin target 契约；capabilities → host 的授权契约和既有机器能力；ai → host scope 类型；`agent/exchange` 可桥接 Workspace Runtime 与 Artifact，但两边不互相反向依赖。Workspace 控制 action 的安全编排通过 capabilities 注册的 Tool 实现，避免 workspace-runtime 与 capabilities 循环。跨 App 不准私有 import。Infrastructure 只 type-import module 的 _.types/_.port；Bootstrap 导入具体类。前后端 architecture checker 都要检查 Agent 子目录，而不只检查顶层 feature。
 
@@ -96,7 +96,7 @@ Runtime 实现也不继续在一级目录堆服务；当前按职责拆为 `defi
 
 一个 AgentRuntime 当前最多关联一个状态非 `deleted/failed` 的 root Workspace；Workspace 保存稳定项目文件和 ownership，Profile 冻结 recipe/tool refs/Runner Plugin/resource/network，Generation 是可替换的运行实例。Harness 在 Backend，不创建“control workspace”。参与者通过显式 Artifact grant、Workspace Runtime Gateway 或 Runner Plugin Workspace Broker 交换结果，不能直接获得 sandbox/process/PTY handle。
 
-userId/connectionId 沿用整数；Agent 实例 ID 使用 node:crypto.randomUUID()；appId 为稳定 namespaced manifest 字符串。数据库时间使用整数 epoch seconds，HTTP/SSE 转 ISO 8601；计时器使用单调时钟，毫秒参数须以 Ms 命名。App 数据查询必须携带服务端推导的 userId/appId；父子复合 FK 与 repository scope 检查共同防止串 App，用户提供的 owner 字段不能授权。
+userId/connectionId 沿用整数；Agent 实例 ID 使用 node:crypto.randomUUID()；appId 为稳定 namespaced manifest 字符串。数据库时间使用整数 epoch seconds，HTTP/WebSocket 对外按各协议契约编码；计时器使用单调时钟，毫秒参数须以 Ms 命名。App 数据查询必须携带服务端推导的 userId/appId；父子复合 FK 与 repository scope 检查共同防止串 App，用户提供的 owner 字段不能授权。
 
 ExecutionSession ownerType='agent'，ownerId=agentRuntimeId。Workspace 继续拥有自己的 ExecutionSession；只共享机器能力代码，不共享实时连接、PTY/SFTP/上传 socket/cwd。关闭 AgentRuntime 只 closeByOwner('agent', agentRuntimeId)。
 
@@ -266,7 +266,7 @@ Run 状态唯一为 created/running/awaiting_approval/awaiting_budget/cancelling
 
 Model transport 最多重试2次（总3 attempts），仅超时/连接故障/429/502/503/504，退避1秒、2秒加0～250ms jitter，Retry-After 上限30秒。取消优先。完整 tool proposal 一旦提交，本 step 不因 provider 断流重新产生第二次 mutation。tool_call JSON 未完整结束不能执行；相同 step 的 operationHash 去重，跨 step 不凭 hash 永久禁止用户合理重复操作。
 
-Durable events、领域投影、canonical message/ledger 与 Host summary outbox 在同一 SQLite transaction 提交；事件能重建运行投影，不替代 Provider/config/Artifact 文件等各自事实源。原有 DatabaseAdapter 全局串行，事务只做有界 SQL，不在其中做网络/模型/磁盘写。delta/tool output chunk 为 transient，没有 durable sequence/SSE id；重连丢弃草稿，从 snapshot/final 恢复。
+Durable events、领域投影、canonical message/ledger 与 Host summary outbox 在同一 SQLite transaction 提交；事件能重建运行投影，不替代 Provider/config/Artifact 文件等各自事实源。原有 DatabaseAdapter 全局串行，事务只做有界 SQL，不在其中做网络/模型/磁盘写。delta/tool output chunk 为 transient，没有 durable sequence/event id；重连丢弃草稿，从 snapshot/final 恢复。
 
 当前单Backend/单scheduler部署继续以现有单连接SQLite为正式基线；默认 Runtime 软值2、默认 Hard Limit 4 是首轮已验证容量基线，不是不可突破的隐藏上限。用户可在 Agent Settings 二次确认后提高 Hard Limit，但设置页必须提示已超出当前验证基线并建议重新执行负载验收；只有进入多Backend、多用户高并发，或提高并发后在正确限流/batch/分页下仍无法满足DB queue wait与transaction p95目标时，才连同scheduler/claim/lease/idempotency拓扑一起重新设计数据库方案。
 

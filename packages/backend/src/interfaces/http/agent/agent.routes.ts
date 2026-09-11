@@ -315,6 +315,16 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     }),
   );
 
+  router.get('/events', (request, response) => {
+    agentError(
+      request,
+      response,
+      410,
+      'AGENT_STREAM_PROTOCOL_REPLACED',
+      'Agent event streaming moved to the /ws/agent WebSocket protocol.',
+    );
+  });
+
   router.get(
     '/summary',
     agentRoute(async (request, response) => {
