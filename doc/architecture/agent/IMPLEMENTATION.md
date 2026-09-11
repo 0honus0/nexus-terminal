@@ -283,7 +283,7 @@ ModelRequest={attemptId,stepId,model,messages,tools,maxOutputTokens,temperature?
 
 attempt完整生命周期planned→reserved→streaming→completed/failed/aborted；失败也settle usage。可重试网络/timeout/429/502/503/504，最多2次，1s/2s+jitter250ms，Retry-After≤30s；每次retry前重新检查当前attempt deadline、取消状态与Run active-time软预算；401/403/schema不重试。已有tool.proposed则消费已提交proposal，不再重试model step。unique(step_id,provider_call_id)防重复chunk，unique(step_id,operation_hash)防等价proposal重复执行。
 
-Checkpoint={schemaVersion:1,runId,ledgerThrough,planVersion,completedStepIds,evidenceRefs,modelConfigurationVersion,definitionVersion,policyRevision,workspaceArtifactManifestRefs}。save只在无running/reconciling tool时，flush当前commit并校验Artifact ready后事务保存；不保存active lease供恢复使用。Resume核实checkpoint作用域/来源未删除/模型可用/目标未deny、未知修改已处理，旧审批supersede；新Run重新取得 lease/Workspace generation，不复用旧token或进程。
+Checkpoint={schemaVersion:1,runId,ledgerThrough,planVersion,completedStepIds,evidenceRefs,modelConfigurationVersion,definitionVersion,policyRevision,workspaceArtifactManifestRefs,recoveryManifest}。`recoveryManifest` 固定 event cursor 与 `contextBoundary={baseThrough,runThrough}`，并记录 tool operationHash/risk/status/sideEffectStatus/verificationStatus、delegation settle 状态和 resource quarantine。save 只在所有 tool/delegation 到安全 terminal 边界、无 unknown mutation/quarantine 且 Artifact ready 时事务保存；不保存 active lease 供恢复使用。Resume 核实 checkpoint 作用域/来源未删除/模型可用/目标未 deny、manifest 完整且无未知修改，并拒绝 event cursor 之后新启动的 mutate/destructive tool 或当前 resource quarantine，不能用旧 checkpoint 回到真实副作用发生之前；旧审批 supersede。新 Run 重新取得 lease/Workspace generation，不复用旧 token 或进程。新 Run 的模型上下文只读取 checkpoint 固化的历史 boundary 加当前 Run 新 ledger，不能读取 checkpoint 之后的父 Run 内容；再次 checkpoint/resume 时继承并冻结 lineage sequence 上限。
 
 <a id="i3"></a>
 

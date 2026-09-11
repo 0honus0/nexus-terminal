@@ -62,6 +62,32 @@ export interface CheckpointValidation {
   checkpoint: CheckpointView | null;
 }
 
+const checkpointRecoveryReasons = (checkpoint: CheckpointView): string[] => {
+  const manifest = checkpoint.snapshot.recoveryManifest;
+  if (!manifest) return ['CHECKPOINT_RECOVERY_MANIFEST_MISSING'];
+  const reasons: string[] = [];
+  if (
+    checkpoint.snapshot.runId !== checkpoint.runId ||
+    checkpoint.snapshot.ledgerThrough !== checkpoint.ledgerThrough ||
+    manifest.schemaVersion !== 1 ||
+    manifest.eventThrough !== checkpoint.eventThrough ||
+    !Number.isSafeInteger(manifest.contextBoundary.baseThrough) ||
+    manifest.contextBoundary.baseThrough < 0 ||
+    Object.keys(manifest.contextBoundary.runThrough).length > 64 ||
+    Object.values(manifest.contextBoundary.runThrough).some((through) => !Number.isSafeInteger(through) || through < 0)
+  ) {
+    reasons.push('CHECKPOINT_INVALID');
+  }
+  if (
+    manifest.quarantinedResourceKeys.length > 0 ||
+    manifest.tools.some((tool) => tool.sideEffectStatus === 'unknown' || tool.quarantinedResourceKeys.length > 0) ||
+    manifest.delegations.some((delegation) => ['queued', 'running', 'waiting'].includes(delegation.status))
+  ) {
+    reasons.push('CHECKPOINT_NOT_SAFE');
+  }
+  return reasons;
+};
+
 export class CheckpointService {
   constructor(
     private readonly checkpoints: CheckpointRepositoryPort,
@@ -120,6 +146,7 @@ export class CheckpointService {
     ]);
     if (!run || !checkpoint || checkpoint.runId !== runId)
       return { valid: false, reasons: ['CHECKPOINT_NOT_FOUND'], checkpoint };
+    reasons.push(...checkpointRecoveryReasons(checkpoint));
     if (run.version !== expectedVersion) reasons.push('STATE_CONFLICT');
     if (!TERMINAL_RUN_STATUSES.has(run.status)) reasons.push('RUN_RESUME_SOURCE_NOT_TERMINAL');
     if (run.needsReconciliation) reasons.push('RECONCILIATION_REQUIRED');
@@ -144,8 +171,16 @@ export class CheckpointService {
         break;
       }
     }
-    if ((await this.checkpoints.missingArtifactRefs(scope, checkpointId)).length) {
-      reasons.push('CHECKPOINT_ARTIFACT_UNAVAILABLE');
+    const [missingArtifactRefs, recoveryHazards] = await Promise.all([
+      this.checkpoints.missingArtifactRefs(scope, checkpointId),
+      this.checkpoints.recoveryHazards(scope, checkpointId),
+    ]);
+    if (missingArtifactRefs.length) reasons.push('CHECKPOINT_ARTIFACT_UNAVAILABLE');
+    if (
+      recoveryHazards.postCheckpointMutationToolCallIds.length > 0 ||
+      recoveryHazards.quarantinedResourceKeys.length > 0
+    ) {
+      reasons.push('CHECKPOINT_SIDE_EFFECT_DIVERGED');
     }
     return { valid: reasons.length === 0, reasons: [...new Set(reasons)], checkpoint };
   }
@@ -162,6 +197,8 @@ export class CheckpointService {
     if (!validation.valid || !validation.checkpoint) throw new Error(validation.reasons[0] ?? 'CHECKPOINT_INVALID');
     const source = await this.runs.snapshot(scope, runId);
     if (!source) throw new Error('NOT_FOUND');
+    const recoveryManifest = validation.checkpoint.snapshot.recoveryManifest;
+    if (!recoveryManifest) throw new Error('CHECKPOINT_RECOVERY_MANIFEST_MISSING');
     const [settings, app, provider] = await Promise.all([
       this.settings.get(scope.userId),
       this.lifecycle.get(scope),
@@ -191,6 +228,10 @@ export class CheckpointService {
       ...source.definition,
       policyRevision: app.policyRevision,
       settingsRevision: settings.revision,
+      contextBoundary: {
+        baseThrough: recoveryManifest.contextBoundary.baseThrough,
+        runThrough: { ...recoveryManifest.contextBoundary.runThrough },
+      },
     };
     const refs = [
       ...new Set([
@@ -203,6 +244,10 @@ export class CheckpointService {
       checkpointId,
       expectedVersion,
       checkpointCreatedAt: validation.checkpoint.createdAt,
+      contextBoundary: {
+        baseThrough: recoveryManifest.contextBoundary.baseThrough,
+        runThrough: { ...recoveryManifest.contextBoundary.runThrough },
+      },
     };
     const committed = await this.stateCommit.createRun({
       scope,
@@ -220,6 +265,10 @@ export class CheckpointService {
           checkpointId,
           ledgerThrough: validation.checkpoint.ledgerThrough,
           eventThrough: validation.checkpoint.eventThrough,
+          contextBoundary: {
+            baseThrough: recoveryManifest.contextBoundary.baseThrough,
+            runThrough: { ...recoveryManifest.contextBoundary.runThrough },
+          },
         },
         artifactRefs: refs,
       },

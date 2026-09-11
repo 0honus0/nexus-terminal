@@ -359,6 +359,7 @@ export interface AgentRunView {
     connectionIds: number[];
     policyRevision: number;
     settingsRevision: number;
+    contextBoundary?: { baseThrough: number; runThrough: Record<string, number> };
   };
   plan: AgentRunPlan;
   usage: {
@@ -398,6 +399,22 @@ export interface AgentCheckpointView {
     definitionVersion: string;
     policyRevision: number;
     workspaceArtifactManifestRefs: string[];
+    recoveryManifest?: {
+      schemaVersion: 1;
+      eventThrough: number;
+      contextBoundary: { baseThrough: number; runThrough: Record<string, number> };
+      tools: Array<{
+        toolCallId: string;
+        operationHash: string;
+        risk: 'read' | 'mutate' | 'destructive';
+        status: string;
+        sideEffectStatus: 'not_started' | 'confirmed' | 'unknown';
+        verificationStatus: 'not_started' | 'verified' | 'unverified' | 'failed';
+        quarantinedResourceKeys: string[];
+      }>;
+      delegations: Array<{ delegationId: string; status: string }>;
+      quarantinedResourceKeys: string[];
+    };
   };
   createdAt: number;
 }

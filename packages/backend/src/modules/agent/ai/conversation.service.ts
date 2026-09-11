@@ -10,6 +10,7 @@ import type {
   ThreadPage,
   ThreadView,
 } from './conversation.repository.port';
+import type { ContextHistoryBoundary } from './context.types';
 
 const normalizeTitle = (title: unknown): string => {
   if (title === undefined || title === null || title === '') return 'New conversation';
@@ -54,6 +55,26 @@ export class ConversationService {
 
   readPage(scope: Scope, threadId: string, limit = 50, before?: string): Promise<LedgerPage> {
     return this.repository.readEntries(scope, threadId, validateLimit(limit, 200), before);
+  }
+
+  readContextPage(
+    scope: Scope,
+    threadId: string,
+    runId: string,
+    historyBoundary: ContextHistoryBoundary,
+    limit = 50,
+  ): Promise<LedgerPage> {
+    if (
+      !Number.isSafeInteger(historyBoundary.baseThrough) ||
+      historyBoundary.baseThrough < 0 ||
+      Object.keys(historyBoundary.runThrough).length > 64 ||
+      Object.entries(historyBoundary.runThrough).some(
+        ([historyRunId, through]) => !historyRunId || !Number.isSafeInteger(through) || through < 0,
+      )
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    return this.repository.readContextEntries(scope, threadId, runId, historyBoundary, validateLimit(limit, 200));
   }
 
   append(

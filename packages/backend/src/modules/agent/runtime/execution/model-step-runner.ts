@@ -79,6 +79,10 @@ export class ModelStepRunner {
     const contextPlan = await this.context.compose({
       scope,
       threadId: snapshot.threadId,
+      runId: snapshot.id,
+      ...(snapshot.definition.contextBoundary === undefined
+        ? {}
+        : { historyBoundary: snapshot.definition.contextBoundary }),
       currentInput: latestInputText(snapshot),
       collaborationContext,
       modelContextWindow: model.contextWindow,

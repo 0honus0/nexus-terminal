@@ -125,8 +125,13 @@ export class ContextService {
       }
     }
 
+    if (input.historyBoundary !== undefined && !input.runId) throw new Error('VALIDATION_FAILED');
+    const ledgerPromise =
+      input.historyBoundary === undefined
+        ? this.conversations.readPage(input.scope, input.threadId, 100)
+        : this.conversations.readContextPage(input.scope, input.threadId, input.runId!, input.historyBoundary, 100);
     const [ledgerPage, recallItems, skillMetadata] = await Promise.all([
-      this.conversations.readPage(input.scope, input.threadId, 100),
+      ledgerPromise,
       this.recall.recall(input.scope, input.currentInput, input.maxRecallItems, input.maxRecallBytes),
       this.skills.search(input.scope, input.currentInput),
     ]);

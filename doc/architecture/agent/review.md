@@ -506,6 +506,12 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 
 建议 checkpoint 增加 `recoveryManifest`：记录每个 tool attempt、operationHash、sideEffectStatus、verificationStatus、resource quarantine 和最后 event cursor。resume 只复制可安全重放的模型上下文；未知 mutation 必须先进入 reconciliation，不能直接进入 runnable。
 
+> **解决方案（已采用）**
+>
+> Checkpoint 现在在同一 SQLite transaction 内生成 `recoveryManifest`：固定 `eventThrough` 与 point-in-time `contextBoundary`，记录每个 tool call 的 `operationHash/risk/status/sideEffectStatus/verificationStatus`、delegation 状态和 resource quarantine。保存时不再只排除 `running/reconciling` tool，而是要求所有 tool 已到 terminal 边界、mutation side effect 不能是 `unknown`、没有 quarantine，且所有 delegation 已 settled；否则直接 `CHECKPOINT_NOT_SAFE`。旧的、没有 `recoveryManifest` 的 checkpoint 仍可读取，但 resume fail-closed 为 `CHECKPOINT_RECOVERY_MANIFEST_MISSING`，不会根据当前 Run 状态猜测历史副作用。
+>
+> 同时修复了真实的历史重放漏洞：resume 新 Run 虽然一直是新 execution identity，但此前 `ContextService` 仍读取 Thread 最新 ledger，导致从旧 checkpoint 恢复时把 checkpoint 之后的源 Run message/tool result 带进模型上下文。新 Run definition 现在携带 immutable `contextBoundary={baseThrough,runThrough}`；snapshot 与 Context ledger 查询只读取初始 checkpoint 基线、已继承 resume lineage 各自截至 checkpoint 的 sequence，以及当前新 Run 自己的新 entry。这个边界在再次 checkpoint/resume 时继续按 lineage 固化，因此不会因二次恢复把第一次 checkpoint 后被排除的父 Run 内容重新纳入。Resume 还会重新检查 checkpoint `eventThrough` 之后是否启动过 mutate/destructive tool，并检查当前源 Run 的 resource quarantine；任何 checkpoint 之后的真实副作用或当前隔离状态都返回 `CHECKPOINT_SIDE_EFFECT_DIVERGED`，防止 time-travel 把已经发生的外部修改当成“尚未执行”。旧审批仍 supersede，旧 tool/delegation 不重放。
+
 ### R15：前端 `WorkspaceRuntimePanel` 的多请求刷新保护不完整
 
 位置：`packages/frontend/src/features/agent/runtime/WorkspaceRuntimePanel.vue`。

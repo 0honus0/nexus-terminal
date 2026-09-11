@@ -22,7 +22,12 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     rawCode(409, 'The Run cannot be deleted while it is active or still referenced.'),
   ),
   onCodes(
-    ['CHECKPOINT_NOT_SAFE', 'RUN_RESUME_SOURCE_NOT_TERMINAL'],
+    [
+      'CHECKPOINT_NOT_SAFE',
+      'CHECKPOINT_RECOVERY_MANIFEST_MISSING',
+      'CHECKPOINT_SIDE_EFFECT_DIVERGED',
+      'RUN_RESUME_SOURCE_NOT_TERMINAL',
+    ],
     rawCode(409, 'The Run is not at a safe checkpoint or resume boundary.'),
   ),
   onCodes(['CHECKPOINT_ARTIFACT_UNAVAILABLE'], rawCode(409, 'A checkpoint Artifact is unavailable.')),

@@ -9,6 +9,7 @@ import type {
   ThreadPage,
   ThreadView,
 } from '../../../modules/agent/ai/conversation.repository.port';
+import type { ContextHistoryBoundary } from '../../../modules/agent/ai/context.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 
 interface ThreadRow {
@@ -148,6 +149,36 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
       items: page.map(mapEntry).reverse(),
       nextCursor: rows.length > limit && last ? encodeEntryCursor(last.sequence) : null,
     };
+  }
+
+  async readContextEntries(
+    scope: Scope,
+    threadId: string,
+    runId: string,
+    historyBoundary: ContextHistoryBoundary,
+    limit: number,
+  ): Promise<LedgerPage> {
+    if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
+    const inherited = Object.entries(historyBoundary.runThrough);
+    const clauses = ['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')];
+    const parameters: unknown[] = [
+      threadId,
+      scope.userId,
+      scope.appId,
+      historyBoundary.baseThrough,
+      runId,
+      ...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
+      limit,
+    ];
+    const rows = await this.db.queryAll<EntryRow>(
+      `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+       FROM ai_thread_entries
+       WHERE thread_id = ? AND user_id = ? AND app_id = ?
+         AND (${clauses.join(' OR ')})
+       ORDER BY sequence DESC LIMIT ?`,
+      parameters,
+    );
+    return { items: rows.map(mapEntry).reverse(), nextCursor: null };
   }
 
   async appendEntry(scope: Scope, threadId: string, entry: AppendLedgerEntry): Promise<LedgerEntryView> {

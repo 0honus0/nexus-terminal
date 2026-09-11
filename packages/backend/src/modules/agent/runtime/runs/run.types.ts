@@ -72,6 +72,11 @@ export interface RunUsage {
   subagentMessageBytes: number;
 }
 
+export interface RunContextBoundary {
+  baseThrough: number;
+  runThrough: Record<string, number>;
+}
+
 export interface RunDefinitionSnapshot {
   schemaVersion: 1;
   agentDefinitionId: string;
@@ -79,6 +84,7 @@ export interface RunDefinitionSnapshot {
   connectionIds: number[];
   policyRevision: number;
   settingsRevision: number;
+  contextBoundary?: RunContextBoundary;
 }
 
 export interface RunView extends Scope {

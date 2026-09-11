@@ -87,15 +87,31 @@ export class SqliteRunRepository
         [runId, scope.userId, scope.appId],
       );
       if (!row) return null;
+      const run = mapRunRow(row);
+      const historyBoundary = run.definition.contextBoundary;
+      const inherited = historyBoundary ? Object.entries(historyBoundary.runThrough) : [];
+      const historyClause = historyBoundary
+        ? `AND (${['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')].join(' OR ')})`
+        : '';
       const entries = await tx.queryAll<EntryRow>(
         `SELECT id, sequence, kind, payload_json, created_at
          FROM ai_thread_entries
          WHERE thread_id = ? AND user_id = ? AND app_id = ?
+           ${historyClause}
          ORDER BY sequence DESC LIMIT 50`,
-        [row.thread_id, scope.userId, scope.appId],
+        historyBoundary
+          ? [
+              row.thread_id,
+              scope.userId,
+              scope.appId,
+              historyBoundary.baseThrough,
+              row.id,
+              ...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
+            ]
+          : [row.thread_id, scope.userId, scope.appId],
       );
       return {
-        ...mapRunRow(row),
+        ...run,
         recentEntries: entries.reverse().map((entry) => ({
           id: entry.id,
           sequence: entry.sequence,
