@@ -3,8 +3,8 @@
   "group": 7,
   "workers": 8,
   "specs": [
-    "tests/agent/host.spec.ts",
-    "tests/agent/provider.spec.ts",
+    "tests/ssh/sftp-download.spec.ts",
+    "tests/ssh/status-history-time-axis.spec.ts",
     "tests/ssh/progress-display-baseline.spec.ts",
     "tests/ssh/docker-manager-ui.spec.ts",
     "tests/ssh/protocol.spec.ts",
