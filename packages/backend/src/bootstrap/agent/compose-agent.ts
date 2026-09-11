@@ -41,20 +41,6 @@ import { MemoryService } from '../../modules/agent/ai/memory.service';
 import { SkillRegistry } from '../../modules/agent/ai/skill-registry';
 import { OPERATIONS_AGENT_DEFINITIONS } from '../../modules/agent/apps/operations/agent-definitions';
 import { createOperationsAppContribution } from '../../modules/agent/apps/operations/public';
-import { createWorkspaceJobTool } from '../../modules/agent/apps/operations/workspace-tools';
-import {
-  createWorkspaceControlTool,
-  createWorkspaceCreateTool,
-  createWorkspaceSwitchToolVersionsTool,
-} from '../../modules/agent/apps/operations/workspace-runtime-management-tools';
-import { createDiagnosticsTool, createReadFileTool } from '../../modules/agent/apps/operations/tools';
-import { createMcpTools } from '../../modules/agent/apps/operations/mcp-tools';
-import { createCollaborationTools } from '../../modules/agent/apps/operations/collaboration-tools';
-import {
-  createDockerMutationTool,
-  createShellTool,
-  createWriteFileTool,
-} from '../../modules/agent/apps/operations/mutation-tools';
 import type { AgentConnectionResolverPort, AgentDiagnosticsPort } from '../../modules/agent/capabilities/machine.port';
 import { ApprovalService } from '../../modules/agent/runtime/approvals/approval.service';
 import { PolicyService } from '../../modules/agent/capabilities/policy.service';
@@ -98,7 +84,6 @@ import type {
   SharedFactRepositoryPort,
 } from '../../modules/agent/runtime/collaboration/subagent.repository.port';
 import { PlanService } from '../../modules/agent/runtime/planning/plan.service';
-import { createPlanUpdateTool } from '../../modules/agent/runtime/planning/plan-tool';
 import type { AgentServices } from '../../modules/agent/public';
 import type { ExecutionSessionManager } from '../../platform/execution/execution-session-manager';
 import type { RemoteDockerService } from '../../platform/docker/remote-docker.service';
@@ -108,6 +93,12 @@ import type { AuditLogService } from '../../modules/audit/audit.service';
 import { composePlugins } from './compose-plugins';
 import { composeWorkspaceRuntime } from './compose-workspace-runtime';
 import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
+import {
+  createMcpToolContributionHooks,
+  registerMachineToolContributions,
+  registerRuntimeToolContributions,
+  registerWorkspaceToolContributions,
+} from './tool-contributions';
 
 export interface ComposeAgentOptions {
   database: RelationalDatabase;
@@ -269,63 +260,23 @@ export const composeAgent = ({
   const workspaceRuntime = composedWorkspaceRuntime.service;
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const toolCatalog = new ToolCatalog();
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'machine.diagnostics',
-    capability: 'machine.diagnostics.read',
-    tools: [createDiagnosticsTool(machine, cryptoHash)],
+  registerMachineToolContributions({ catalog: toolCatalog, machine, artifacts, cryptoHash });
+  registerWorkspaceToolContributions({
+    catalog: toolCatalog,
+    repository: workspaceRepository,
+    runtime: workspaceRuntime,
+    gateway: workspaceRuntimeController,
+    cryptoHash,
   });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'machine.files.read',
-    capability: 'machine.files.read',
-    tools: [createReadFileTool(machine, cryptoHash)],
-  });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'machine.files.write',
-    capability: 'machine.files.write',
-    tools: [createWriteFileTool(machine, artifacts, cryptoHash)],
-  });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'machine.shell',
-    capability: 'machine.shell.execute',
-    tools: [createShellTool(machine, cryptoHash)],
-  });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'machine.docker',
-    capability: 'machine.docker.mutate',
-    tools: [createDockerMutationTool(machine, cryptoHash)],
-  });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'workspace.runtime.execute',
-    capability: 'workspace.runtime.execute',
-    tools: [createWorkspaceJobTool(workspaceRepository, workspaceRuntimeController, cryptoHash)],
-  });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'workspace.runtime.manage',
-    capability: 'workspace.runtime.manage',
-    tools: [
-      createWorkspaceCreateTool(workspaceRuntime, workspaceRepository, cryptoHash),
-      createWorkspaceControlTool(workspaceRuntime, workspaceRepository, cryptoHash),
-      createWorkspaceSwitchToolVersionsTool(workspaceRuntime, workspaceRepository, cryptoHash),
-    ],
-  });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'runtime.plan',
-    capability: 'runs.execute',
-    tools: [createPlanUpdateTool(plans, runRepository, cryptoHash)],
-  });
-  toolCatalog.registerContribution({
-    schemaVersion: 1,
-    id: 'runtime.collaboration',
-    capability: 'runs.execute',
-    tools: createCollaborationTools(subagents, mailbox, sharedFacts, memories, cryptoHash),
+  registerRuntimeToolContributions({
+    catalog: toolCatalog,
+    plans,
+    runs: runRepository,
+    subagents,
+    mailbox,
+    facts: sharedFacts,
+    memories,
+    cryptoHash,
   });
   const integrations = new IntegrationService(
     integrationRepository,
@@ -334,25 +285,12 @@ export const composeAgent = ({
     lifecycle,
     cryptoHash,
     systemClock,
-    {
-      mcpRefreshed: (scope, integration, snapshot, schemaHash) => {
-        toolCatalog.replaceOwnedContribution(scope, `mcp:${integration.id}`, {
-          schemaVersion: 1,
-          id: `integration.mcp.${integration.id}`,
-          capability: 'integration.mcp.invoke',
-          tools: createMcpTools(
-            scope,
-            integration,
-            schemaHash,
-            snapshot.tools,
-            integrationRepository,
-            mcpRuntime,
-            cryptoHash,
-          ),
-        });
-      },
-      removed: (scope, integrationId) => toolCatalog.removeOwned(scope, `mcp:${integrationId}`),
-    },
+    createMcpToolContributionHooks({
+      catalog: toolCatalog,
+      repository: integrationRepository,
+      runtime: mcpRuntime,
+      cryptoHash,
+    }),
   );
   const toolExecutor = new ToolExecutor(toolCatalog, capabilityBroker);
   const policy = new PolicyService();

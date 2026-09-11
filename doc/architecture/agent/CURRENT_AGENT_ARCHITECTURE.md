@@ -747,7 +747,7 @@ no module cycles
    - 现有 SSH E2E helper/spec 已同步 framing；700 KiB raw upload→SFTP→多帧 binary read round-trip 通过，request-only suspend/resume history 用例通过；浏览器 UI E2E 仍受上述宿主 Chromium `libglib-2.0.so.0` 缺失限制。
 
 9. Phase 3 接线状态：**MCP / Subagent / Memory / Plugin 已进入当前 composition；ACP 与 Browser/CDP/Puppeteer 明确标记为未完成（reserved / roadmap-only）**。
-   - MCP：`McpAdapter` 已由 `compose-agent.ts` 创建，`IntegrationService` refresh 后把 MCP tools 作为 scoped `CapabilityContribution` 注入 Tool Catalog；
+   - MCP：`McpAdapter` 已由 `compose-agent.ts` 创建；`IntegrationService` refresh 后由 `bootstrap/agent/tool-contributions.ts` 的窄 hook 把 MCP tools 作为 scoped `CapabilityContribution` 注入 Tool Catalog；
    - Subagent/Memory：repository、policy/service/scheduler、mailbox/shared facts、Memory review/import 已由 composition root 组装并暴露受限 facade；
    - Plugin：stage/verify/install/upgrade/uninstall、Frontend isolated frame、Backend sandbox 与 Runner target 都有当前 Host/Runner 接线；
    - ACP：**未完成**。`IntegrationService` 已支持 `kind='acp'` 的配置校验/持久化，`AcpAdapter` 也已存在，但当前 composition root 没有实例化/注入 ACP runtime；`nexus.operations` manifest 不声明 `integration.acp.execute` 且无默认 grant，因此只能视为保留骨架；
@@ -792,6 +792,12 @@ no module cycles
     - StateCommit `*-transitions.ts` 的导出 transition 必须以 `tx: RelationalDatabase` 为首参数，且不得自行开启 transaction；
     - ACP/Browser 继续保留 roadmap skeleton，但 `bootstrap/agent/**` 与 Operations manifest 静态禁止 live wiring / reserved capability 暴露；
     - `NativeAgentBackend` 的 SQLite/Express/Runner concrete dependency 已由既有 layer / technology-package checker 覆盖，不再增加重复专用规则。
+
+15. Composition Root Tool contribution owner：**已收敛**。
+    - `compose-agent.ts` 不再直接 import Operations Tool creator，也不再手写 machine/workspace/runtime/MCP contribution metadata；
+    - `bootstrap/agent/tool-contributions.ts` 只负责把已构造 Port/Service 注册为 Tool contribution，并维护 MCP owned contribution hook；
+    - scheduler、StateCommit、Policy/Lease、lifecycle 与 `AgentServices` facade 仍留在真正 composition root，不为缩行数拆成二次业务 facade；
+    - Backend architecture checker 禁止 Operations Tool creator、`registerContribution()` / `replaceOwnedContribution()` 重新直接进入 `compose-agent.ts`。
 
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。
 

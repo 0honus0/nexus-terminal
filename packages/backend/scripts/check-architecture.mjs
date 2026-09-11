@@ -210,6 +210,30 @@ for (const file of sourceFiles) {
       }
     }
   }
+  if (relativeFile === 'bootstrap/agent/compose-agent.ts') {
+    const operationsToolCreators = [
+      'createDiagnosticsTool',
+      'createReadFileTool',
+      'createWriteFileTool',
+      'createShellTool',
+      'createDockerMutationTool',
+      'createWorkspaceJobTool',
+      'createWorkspaceCreateTool',
+      'createWorkspaceControlTool',
+      'createWorkspaceSwitchToolVersionsTool',
+      'createCollaborationTools',
+      'createMcpTools',
+      'createPlanUpdateTool',
+    ];
+    for (const symbol of operationsToolCreators) {
+      if (new RegExp(`\\b${symbol}\\b`).test(text)) {
+        failures.push(`${relativeFile}: Tool creator ${symbol} must stay behind bootstrap tool-contribution helpers`);
+      }
+    }
+    if (/\.(?:registerContribution|replaceOwnedContribution)\s*\(/.test(text)) {
+      failures.push(`${relativeFile}: Tool contribution metadata must stay behind bootstrap tool-contribution helpers`);
+    }
+  }
   importPattern.lastIndex = 0;
   for (let match = importPattern.exec(text); match; match = importPattern.exec(text)) {
     const importPrefix = match[1];

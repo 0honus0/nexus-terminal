@@ -188,11 +188,15 @@ reserved capability    虚线
 
 > **解决方案（已采用，与 P1 #2 同一实施）**：采用 Agent 专用 staged `MutationLeaseGuard`，不采用会提前 mark-active 的通用 Workspace `MutationGuardPort`。底层 `LeasePort` 只留在 guard adapter owner 内，`NativeAgentBackend` 只经 `ToolCallRunner` 使用窄 mutation lease capability。安全顺序固定为 `Lease acquire → StateCommit.begin → mark active → side effect → StateCommit.settle → settle/release 或 quarantine`，不得把 `mark active` 移到 durable begin 之前。
 
-### P1-代码-3：`composeAgent()` 已成为超大组合根，且混入业务注册细节
+### P1-代码-3：`composeAgent()` 的 Tool contribution 注册过度集中（审核后降为 P2）
 
-`packages/backend/src/bootstrap/agent/compose-agent.ts` 除了实例化 adapter，还直接注册 machine、workspace、plan、collaboration、MCP、mutation 等多组 Tool contribution，并编排 scheduler、approval、lifecycle callback。组合根允许连接依赖，但当前注册逻辑已足以形成第二个业务编排层，新增 Tool 时会持续扩大该文件。
+审核确认结构问题真实，但原“第二个业务编排层”判断偏重：Run/Tool/Policy/Lease/Workspace/MCP 的实际业务行为仍在各自 Service/Tool/Adapter 中，`composeAgent()` 主要承担依赖连接。真实增长点是它曾直接 import Operations Tool creator，并手写 machine、workspace、plan、collaboration 与 MCP 的 contribution id/capability/lifecycle 注册细节，导致新增 Tool 持续扩大组合根。
 
-建议按 capability contribution 拆成 `composeMachineTools`、`composeWorkspaceTools`、`composeRuntimeTools`、`composeIntegrationTools` 四个纯组装函数；每个函数只接收所需 Port 并返回 contribution。`composeAgent()` 只负责调用这些函数和连接生命周期，不迁移状态机逻辑。
+> **解决方案（已采用，只拆 Tool contribution registration）**
+>
+> 新增 `bootstrap/agent/tool-contributions.ts`，提供 `registerMachineToolContributions()`、`registerWorkspaceToolContributions()`、`registerRuntimeToolContributions()` 与 `createMcpToolContributionHooks()`。这些函数只把已构造的 Port/Service 转成 `CapabilityContribution` 并注册到 `ToolCatalog`；不拥有 Scheduler、StateCommit、Policy、Lease 或 lifecycle 状态机。
+>
+> `composeAgent()` 继续保留 concrete adapter 创建、scheduler/lifecycle callback、AgentServices facade 与 App contribution wiring，不为了缩文件行数拆出无意义 facade，也不引入通用 DI/container。Backend architecture checker 禁止 Operations Tool creator、`registerContribution()` 或 `replaceOwnedContribution()` 重新直接进入 `compose-agent.ts`。
 
 ### P2-代码-1：Frontend Host 直接 import Operations UI，违反已声明 App 隔离边界
 

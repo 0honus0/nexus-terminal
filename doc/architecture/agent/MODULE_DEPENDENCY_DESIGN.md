@@ -44,6 +44,7 @@ bootstrap/agent/compose-agent.ts
 bootstrap/agent/compose-plugins.ts
 bootstrap/agent/compose-workspace-runtime.ts
 bootstrap/agent/lifecycle-sweeps.ts
+bootstrap/agent/tool-contributions.ts
 ```
 
 禁止反向依赖：
@@ -79,7 +80,7 @@ composeAgent(options: ComposeAgentOptions): AgentServices
 1. 构造 Repository / Adapter；
 2. 把 concrete adapter 收窄成 capability Port；
 3. 构造 domain service / runtime；
-4. 注册 Tool / App / Integration contribution；
+4. 调用窄 bootstrap helper 注册 Tool contribution，并直接连接 App / Integration lifecycle；
 5. 连接 lifecycle。
 
 不应在这里实现：
@@ -89,6 +90,8 @@ composeAgent(options: ComposeAgentOptions): AgentServices
 - HTTP 输入验证；
 - Plugin package 验证算法；
 - Workspace sandbox 实现。
+
+Tool contribution metadata 与 Operations Tool creator 统一收敛在 `bootstrap/agent/tool-contributions.ts`。该 helper 只接收已经构造好的 Port/Service，并执行 `ToolCatalog.registerContribution()/replaceOwnedContribution()`；不得创建 Scheduler、StateCommit、Policy/Lease owner 或实现 lifecycle 状态机。Architecture checker 禁止这些 Tool creator 与 contribution mutation API 重新直接进入 `compose-agent.ts`。
 
 ### 2.2 Collaboration Repository capability wiring
 
