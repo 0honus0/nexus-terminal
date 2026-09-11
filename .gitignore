@@ -46,6 +46,8 @@ scripts/*
 !scripts/e2e/**
 !scripts/docker/
 !scripts/docker/**
+!scripts/agent-runtime/
+!scripts/agent-runtime/**
 !scripts/check-test-policy.mjs
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/

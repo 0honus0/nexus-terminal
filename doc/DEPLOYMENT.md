@@ -21,6 +21,18 @@ docker compose up -d
 
 默认对外 HTTP 端口为 `18111`，可通过 `.env` 中的 `NEXUS_HTTP_PORT` 修改。
 
+### 可选 Agent Runner host service
+
+Agent 的 Workspace Dev Environment 使用宿主 `nexus-agent-runner` + bubblewrap，不在 Compose 中启动高权限 Runner 容器。Ubuntu/Debian host 首次启用前，从源码 checkout 执行：
+
+```bash
+./scripts/agent-runtime/prepare-ubuntu-host.sh
+```
+
+该脚本安装发行版 `/usr/bin/bwrap`，在 Ubuntu 24.04+ 加载 path-scoped `bwrap-userns-restrict` AppArmor profile，并执行真实 user/network namespace probe。它不会把 Runner 设为 privileged、不会关闭 AppArmor，也不会修改 `kernel.apparmor_restrict_unprivileged_userns`。如果宿主明确禁用了 unprivileged user namespaces 或缺少受支持的 profile，脚本 fail closed。
+
+Runner 默认监听 `127.0.0.1:8790`。当 Backend 运行在 Compose 中时，应把 Runner 绑定到仅 Docker host-gateway 可达的宿主接口，并在 `.env` 配置相同的 `NEXUS_AGENT_RUNNER_TOKEN` / `NEXUS_AGENT_DEPLOYMENT_ID`；Compose 默认通过 `host.docker.internal:8790` 访问。不要把 Runner Controller 直接暴露到公网。
+
 ## 容器与镜像结构
 
 Frontend 与 Backend 共用同一个镜像。发布仓库提供两个滚动通道：

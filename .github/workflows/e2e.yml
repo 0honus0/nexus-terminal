@@ -294,9 +294,7 @@ jobs:
         run: npm ci --prefix test/e2e
 
       - name: Install host Runner sandbox dependency
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bubblewrap
+        run: ./scripts/agent-runtime/prepare-ubuntu-host.sh
 
       - name: Build host Agent Runner
         run: |

@@ -293,7 +293,7 @@ Memory 一期只读检索；默认不自动写，不安装向量数据库。采�
 
 `nexus-agent-runner` 是 Nexus 的受限本地执行服务，但**不是 Docker controller**。Runner、Backend、Workspace sandbox 与 Plugin sandbox 都不持 host Docker socket；Runner 不运行 dockerd、不使用 dockerode、不使用 nested Docker，Plugin 也不会创建额外 Docker。
 
-当前 canonical Linux 部署将 `nexus-agent-runner` 作为专用 host service，而不是在长期运行的 Docker Runner 容器里嵌套 bubblewrap。原因是 bubblewrap 构造 mount namespace 时需要 mount propagation 操作，Docker 默认 AppArmor 会在外层容器边界拒绝这类 mount；不能为了让测试通过而把整个 Runner 改成 `privileged`、`apparmor=unconfined` 或继续堆叠 capability。Backend 容器通过 host-gateway 到达 Runner 的受认证 Controller HTTP；Runner 默认只监听 loopback，部署时应显式绑定仅 Backend 可达的宿主接口并配合防火墙。Runner availability 必须真实执行与 job 共用的最小 sandbox probe，sandbox primitive 不可用时继续 degraded/fail closed。
+当前 canonical Linux 部署将 `nexus-agent-runner` 作为专用 host service，而不是在长期运行的 Docker Runner 容器里嵌套 bubblewrap。原因是 bubblewrap 构造 mount namespace 时需要 mount propagation 操作，Docker 默认 AppArmor 会在外层容器边界拒绝这类 mount；不能为了让测试通过而把整个 Runner 改成 `privileged`、`apparmor=unconfined` 或继续堆叠 capability。Ubuntu 24.04+ 若启用了 AppArmor unprivileged-userns 限制，必须为发行版 `/usr/bin/bwrap` 加载 path-scoped `bwrap-userns-restrict` profile；仓库提供 `scripts/agent-runtime/prepare-ubuntu-host.sh` 安装并验证这一 prerequisite，脚本明确不会关闭 `kernel.apparmor_restrict_unprivileged_userns`。Backend 容器通过 host-gateway 到达 Runner 的受认证 Controller HTTP；Runner 默认只监听 loopback，部署时应显式绑定仅 Backend 可达的宿主接口并配合防火墙。Runner availability 必须真实执行与 job 共用的最小 sandbox probe，sandbox primitive 不可用时继续 degraded/fail closed。
 
 ```text
 Host deployment
