@@ -147,6 +147,33 @@ const closeAgentSubscription = async (page: Page, key: string): Promise<void> =>
   }, key);
 };
 
+const setOperationsEnabledFromPage = async (
+  page: Page,
+  enabled: boolean,
+  expectedVersion: number,
+): Promise<AppSummary> =>
+  page.evaluate(
+    async ({ targetEnabled, version }) => {
+      const csrfResponse = await fetch('/api/v1/agent/security/csrf', { credentials: 'same-origin' });
+      const csrfText = await csrfResponse.text();
+      if (!csrfResponse.ok) throw new Error(csrfText);
+      const csrf = JSON.parse(csrfText) as { data: { token: string } };
+      const response = await fetch('/api/v1/agent/apps/nexus.operations', {
+        method: 'PATCH',
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Nexus-CSRF': csrf.data.token,
+        },
+        body: JSON.stringify({ enabled: targetEnabled, expectedVersion: version }),
+      });
+      const text = await response.text();
+      if (!response.ok) throw new Error(text);
+      return (JSON.parse(text) as { data: AppSummary }).data;
+    },
+    { targetEnabled: enabled, version: expectedVersion },
+  );
+
 test('Agent WebSocket replays durable Host events after a disconnect', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await page.goto('/connections');
@@ -160,23 +187,15 @@ test('Agent WebSocket replays durable Host events after a disconnect', async ({ 
   expect(apps.ok(), await apps.text()).toBeTruthy();
   const appsBody = (await apps.json()) as AgentEnvelope<AppSummary[]>;
   const operations = appsBody.data.find((app) => app.id === 'nexus.operations')!;
-  const csrf = await csrfToken(context.request);
+  const originalEnabled = operations.enabled;
 
   await openHostAgentSubscription(page, initialCursor, 'first');
-  const disabled = await context.request.patch('/api/v1/agent/apps/nexus.operations', {
-    headers: { 'X-Nexus-CSRF': csrf },
-    data: { enabled: false, expectedVersion: operations.stateVersion },
-  });
-  expect(disabled.ok(), await disabled.text()).toBeTruthy();
-  const disabledBody = (await disabled.json()) as AgentEnvelope<AppSummary>;
+  const toggled = await setOperationsEnabledFromPage(page, !originalEnabled, operations.stateVersion);
   const firstSequence = await waitForDurableAgentSequence(page, 'first', initialCursor);
   await closeAgentSubscription(page, 'first');
 
-  const enabled = await context.request.patch('/api/v1/agent/apps/nexus.operations', {
-    headers: { 'X-Nexus-CSRF': csrf },
-    data: { enabled: true, expectedVersion: disabledBody.data.stateVersion },
-  });
-  expect(enabled.ok(), await enabled.text()).toBeTruthy();
+  const restored = await setOperationsEnabledFromPage(page, originalEnabled, toggled.stateVersion);
+  expect(restored.enabled).toBe(originalEnabled);
 
   await openHostAgentSubscription(page, firstSequence, 'second');
   const replayedSequence = await waitForDurableAgentSequence(page, 'second', firstSequence);
