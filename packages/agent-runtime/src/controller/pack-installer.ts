@@ -8,7 +8,7 @@ import semver from 'semver';
 import type { CatalogPack, ToolchainPackRef } from '../types';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { ToolchainStore } from './toolchain-store';
-import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
+import { sandboxResolverRuntimeArguments, sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
 const RUNNER_API_VERSION = '1.0.0';
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
@@ -476,6 +476,7 @@ export class PackInstaller {
   ): Promise<void> {
     const sandboxBinary = this.sandboxBinary;
     const systemBindings = sandboxSystemRuntimeArguments();
+    const resolverBindings = sandboxResolverRuntimeArguments();
     const args = [
       '--die-with-parent',
       '--new-session',
@@ -484,6 +485,7 @@ export class PackInstaller {
       '--unshare-ipc',
       '--unshare-uts',
       ...systemBindings,
+      ...resolverBindings,
       '--proc',
       '/proc',
       '--dev',

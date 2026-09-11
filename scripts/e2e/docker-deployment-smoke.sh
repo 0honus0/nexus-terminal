@@ -95,6 +95,7 @@ cleanup() {
     kill "$runner_pid" >/dev/null 2>&1 || true
     wait "$runner_pid" >/dev/null 2>&1 || true
   fi
+  chmod -R u+w "$runner_root" >/dev/null 2>&1 || true
   rm -rf "$workspace" "$cookie_jar" || true
   exit "$status"
 }
