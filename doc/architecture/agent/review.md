@@ -458,6 +458,10 @@ CollaborationCommitPort
 
 这些 Port 由同一个 `SqliteStateCommitAdapter` 实现，内部共享 transaction context。这样既不破坏跨表原子性，也能让构造函数表达最小权限。
 
+> **解决方案（已采用）**
+>
+> 保留 `StateCommitPort` 作为 infrastructure adapter 的完整事务 facade，但模块调用方已改为 capability-specific `Pick` view：`RunCommandCommitPort`、`RunCreationCommitPort`、`RootExecutionCommitPort`、`CollaborationCommitPort`、`ApprovalDecisionCommitPort`、`ApprovalSweepCommitPort` 与 `ProjectionCommitPort`。`SqliteStateCommitAdapter` 仍是唯一 concrete authority，跨表 transaction context 与原子 ordering 没有拆散。Backend architecture checker 同时禁止 RunService、NativeAgentBackend、SubagentParticipantExecutor、ApprovalService、CheckpointService、PlanService 和 lifecycle sweeps 回退到完整 `StateCommitPort`。
+
 ### R12：StateCommit command 需要统一幂等键、attempt 和 owner epoch
 
 当前 RunService 已有 idempotency key，但模型 step、tool begin/settle、subagent work settle 等不同 command 的幂等语义分散在 transition 实现中。对于进程崩溃后重试，单靠 `expectedRunVersion` 只能拒绝旧写，不能区分“同一 attempt 的重放”与“新 attempt”。
