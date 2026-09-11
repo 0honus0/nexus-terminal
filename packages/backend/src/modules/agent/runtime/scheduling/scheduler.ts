@@ -12,6 +12,7 @@ export class AgentScheduler {
   private readonly queues = new Map<string, QueuedRun[]>();
   private readonly appOrder: string[] = [];
   private readonly active = new Map<string, { controller: AbortController; done: Promise<void> }>();
+  private readonly activeByUser = new Map<number, number>();
   private appCursor = 0;
   private accepting = true;
   private pumping = false;
@@ -90,8 +91,8 @@ export class AgentScheduler {
     void this.pump();
   }
 
-  get activeCount(): number {
-    return this.active.size;
+  activeCountForUser(userId: number): number {
+    return this.activeByUser.get(userId) ?? 0;
   }
 
   hasActiveRun(runId: string): boolean {
@@ -124,7 +125,7 @@ export class AgentScheduler {
             configured.effectiveSettings.hardLimits.maxConcurrentRuntimes,
           ),
         );
-        if (this.active.size + this.externalActiveCount(next.run.userId) >= maxConcurrent) {
+        if (this.activeCountForUser(next.run.userId) + this.externalActiveCount(next.run.userId) >= maxConcurrent) {
           this.requeueFront(next);
           break;
         }
@@ -158,10 +159,22 @@ export class AgentScheduler {
         console.error(`[Agent Scheduler] run ${run.id} failed outside the persisted harness:`, error);
       } finally {
         this.active.delete(run.id);
+        this.decrementActiveUser(run.userId);
         void this.pump();
       }
     })();
+    this.incrementActiveUser(run.userId);
     this.active.set(run.id, { controller, done });
+  }
+
+  private incrementActiveUser(userId: number): void {
+    this.activeByUser.set(userId, (this.activeByUser.get(userId) ?? 0) + 1);
+  }
+
+  private decrementActiveUser(userId: number): void {
+    const current = this.activeByUser.get(userId) ?? 0;
+    if (current <= 1) this.activeByUser.delete(userId);
+    else this.activeByUser.set(userId, current - 1);
   }
 
   private nextQueued(): QueuedRun | null {

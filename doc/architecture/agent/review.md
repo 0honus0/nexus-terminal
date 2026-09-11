@@ -273,6 +273,10 @@ activeByUser[userId] + externalActiveByUser[userId] < effectiveLimit[userId]
 
 如果产品还需要全局上限，单独增加 `globalMaxConcurrentRuntimes` 并单独判断，不要复用用户级上限。启动、正常结束、异常结束和 quiesce 都必须通过同一计数器增减，并用 finally 防止泄漏。
 
+> **解决方案（已采用）**
+>
+> Root `AgentScheduler` 新增按用户 active 计数，`maxConcurrentRuntimes` 只与当前用户的 root active + 同用户 subagent active 比较；不再把整个进程的 `active.size` 当成用户配额。`SubagentScheduler` 的 `RootSchedulerView` 同步收窄为 `activeCountForUser(userId)`，child claim 也只组合当前用户的 root/child active。当前产品没有独立全局 runtime 上限，因此不额外引入第二个 global limit。Root active 计数在 start 时增加、execution finally 中删除，正常结束、异常与 abort 都走同一释放路径。
+
 ### R2：调度队列为进程内存结构，恢复依赖外部唤醒，重启后存在“已创建但不再执行”窗口
 
 位置：`scheduler.ts` 的 `queues`、`active`，以及 `SubagentScheduler` 的同类内存状态。

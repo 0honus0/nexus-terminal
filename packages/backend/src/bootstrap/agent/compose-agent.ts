@@ -345,9 +345,7 @@ export const composeAgent = ({
     schedulerClaims,
     subagentParticipant,
     {
-      get activeCount() {
-        return scheduler.activeCount;
-      },
+      activeCountForUser: (userId) => scheduler.activeCountForUser(userId),
       hasActiveRun: (runId) => scheduler.hasActiveRun(runId),
       activeRunIds: () => scheduler.activeRunIds(),
       enqueueRun: async (runId, scope) => {

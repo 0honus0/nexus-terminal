@@ -15,7 +15,7 @@ interface ActiveChild {
 }
 
 export interface RootSchedulerView {
-  readonly activeCount: number;
+  activeCountForUser(userId: number): number;
   hasActiveRun(runId: string): boolean;
   activeRunIds(): string[];
   enqueueRun(runId: string, scope: Scope): Promise<void>;
@@ -125,7 +125,7 @@ export class SubagentScheduler {
             configured.effectiveSettings.hardLimits.maxConcurrentRuntimes,
           ),
         );
-        if (this.roots.activeCount + this.activeForUser(scope.userId) >= maxConcurrent) break;
+        if (this.roots.activeCountForUser(scope.userId) + this.activeForUser(scope.userId) >= maxConcurrent) break;
         const claimed = await this.work.claimWork(
           candidate.id,
           candidate.version,
