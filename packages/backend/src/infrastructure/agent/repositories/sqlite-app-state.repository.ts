@@ -2,6 +2,7 @@ import type { AppStateRepositoryPort } from '../../../modules/agent/host/app-sta
 import type { AppRecord, AppStatePatch } from '../../../modules/agent/host/app.types';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { appendHostEvent, appChangedPayload } from '../events/host-event-outbox';
 
 interface AppRow {
   user_id: number;
@@ -63,60 +64,72 @@ export class SqliteAppStateRepository implements AppStateRepositoryPort {
   }
 
   async insertDefault(record: AppRecord): Promise<boolean> {
-    const result = await this.db.execute(
-      `INSERT OR IGNORE INTO agent_apps (
-        user_id, app_id, active_version, desired_state, observed_state, health_reason,
-        policy_revision, running_count, approval_count, budget_request_count, accept_new_runs,
-        version, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        record.userId,
-        record.appId,
-        record.activeVersion,
-        record.desiredState,
-        record.observedState,
-        record.healthReason,
-        record.policyRevision,
-        record.runningCount,
-        record.approvalCount,
-        record.budgetRequestCount,
-        record.acceptNewRuns ? 1 : 0,
-        record.version,
-        record.createdAt,
-        record.updatedAt,
-      ],
-    );
-    return result.changes === 1;
+    return this.db.transaction(async (tx) => {
+      const result = await tx.execute(
+        `INSERT OR IGNORE INTO agent_apps (
+          user_id, app_id, active_version, desired_state, observed_state, health_reason,
+          policy_revision, running_count, approval_count, budget_request_count, accept_new_runs,
+          version, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          record.userId,
+          record.appId,
+          record.activeVersion,
+          record.desiredState,
+          record.observedState,
+          record.healthReason,
+          record.policyRevision,
+          record.runningCount,
+          record.approvalCount,
+          record.budgetRequestCount,
+          record.acceptNewRuns ? 1 : 0,
+          record.version,
+          record.createdAt,
+          record.updatedAt,
+        ],
+      );
+      if (result.changes !== 1) return false;
+      await appendHostEvent(tx, record.userId, 'app.changed', appChangedPayload(record), record.updatedAt);
+      return true;
+    });
   }
 
   async compareAndSet(scope: Scope, expectedVersion: number, patch: AppStatePatch): Promise<AppRecord> {
-    const assignments: string[] = [];
-    const values: unknown[] = [];
-    const add = (column: string, value: unknown): void => {
-      assignments.push(`${column} = ?`);
-      values.push(value);
-    };
+    const updatedAt = Math.floor(Date.now() / 1000);
+    return this.db.transaction(async (tx) => {
+      const assignments: string[] = [];
+      const values: unknown[] = [];
+      const add = (column: string, value: unknown): void => {
+        assignments.push(`${column} = ?`);
+        values.push(value);
+      };
 
-    if (patch.activeVersion !== undefined) add('active_version', patch.activeVersion);
-    if (patch.desiredState !== undefined) add('desired_state', patch.desiredState);
-    if (patch.observedState !== undefined) add('observed_state', patch.observedState);
-    if (patch.healthReason !== undefined) add('health_reason', patch.healthReason);
-    if (patch.runningCount !== undefined) add('running_count', patch.runningCount);
-    if (patch.approvalCount !== undefined) add('approval_count', patch.approvalCount);
-    if (patch.budgetRequestCount !== undefined) add('budget_request_count', patch.budgetRequestCount);
-    if (patch.acceptNewRuns !== undefined) add('accept_new_runs', patch.acceptNewRuns ? 1 : 0);
+      if (patch.activeVersion !== undefined) add('active_version', patch.activeVersion);
+      if (patch.desiredState !== undefined) add('desired_state', patch.desiredState);
+      if (patch.observedState !== undefined) add('observed_state', patch.observedState);
+      if (patch.healthReason !== undefined) add('health_reason', patch.healthReason);
+      if (patch.runningCount !== undefined) add('running_count', patch.runningCount);
+      if (patch.approvalCount !== undefined) add('approval_count', patch.approvalCount);
+      if (patch.budgetRequestCount !== undefined) add('budget_request_count', patch.budgetRequestCount);
+      if (patch.acceptNewRuns !== undefined) add('accept_new_runs', patch.acceptNewRuns ? 1 : 0);
 
-    assignments.push('version = version + 1', 'updated_at = ?');
-    values.push(Math.floor(Date.now() / 1000), scope.userId, scope.appId, expectedVersion);
-    const result = await this.db.execute(
-      `UPDATE agent_apps SET ${assignments.join(', ')}
-       WHERE user_id = ? AND app_id = ? AND version = ?`,
-      values,
-    );
-    if (result.changes !== 1) throw new Error('APP_STATE_VERSION_CONFLICT');
+      assignments.push('version = version + 1', 'updated_at = ?');
+      values.push(updatedAt, scope.userId, scope.appId, expectedVersion);
+      const result = await tx.execute(
+        `UPDATE agent_apps SET ${assignments.join(', ')}
+         WHERE user_id = ? AND app_id = ? AND version = ?`,
+        values,
+      );
+      if (result.changes !== 1) throw new Error('APP_STATE_VERSION_CONFLICT');
 
-    const updated = await this.get(scope);
-    if (!updated) throw new Error('AGENT_APP_NOT_FOUND');
-    return updated;
+      const row = await tx.queryOne<AppRow>(
+        `SELECT ${selectColumns} FROM agent_apps WHERE user_id = ? AND app_id = ?`,
+        [scope.userId, scope.appId],
+      );
+      if (!row) throw new Error('AGENT_APP_NOT_FOUND');
+      const updated = mapRow(row);
+      await appendHostEvent(tx, scope.userId, 'app.changed', appChangedPayload(updated), updatedAt);
+      return updated;
+    });
   }
 }

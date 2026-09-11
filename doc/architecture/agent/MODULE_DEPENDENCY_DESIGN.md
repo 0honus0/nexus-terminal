@@ -685,7 +685,9 @@ patchRun()
 artifactForInput()
 ```
 
-这些函数全部显式接收同一个 `tx: RelationalDatabase`。
+这些函数全部显式接收同一个 `tx: RelationalDatabase`。`allocateHostEvent()` 现在复用 `infrastructure/agent/events/host-event-outbox.ts` 的 `appendHostEvent(tx, ...)`，因此 Run StateCommit 与 Host 层 mutation 共享同一 durable cursor/outbox 分配规则，但 Run transition 仍只使用 facade 传入的同一 transaction，不取得独立 transaction authority。
+
+Host 层的 App lifecycle、feature settings、App grants、Plugin active-version/uninstall mutation 必须先在各自 SQLite transaction 中完成状态 CAS + 对应 `app.changed` / `feature.changed` / `authorization.changed` append；transaction 成功返回后，`compose-agent.ts` 的 `publishHostWake(userId)` 才读取最新 host cursor 并唤醒 `AgentEventHub`。EventHub 只是 wake bus，不是 durable truth，wake 失败不能回滚已经提交的状态，也不能把网络通知放进数据库 transaction。
 
 ### 8.3 Tool transitions
 

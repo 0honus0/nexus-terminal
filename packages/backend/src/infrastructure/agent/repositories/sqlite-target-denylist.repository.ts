@@ -4,6 +4,7 @@ import type {
   TargetDenylistSnapshot,
 } from '../../../modules/agent/host/target-denylist.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { appendHostEvent } from '../events/host-event-outbox';
 
 interface DenylistRow {
   connection_id: number;
@@ -25,33 +26,6 @@ const listEntries = async (db: RelationalDatabase): Promise<TargetDenylistEntry[
      FROM agent_target_denylist ORDER BY connection_id`,
   );
   return rows.map(mapRow);
-};
-
-const allocateHostEvent = async (
-  tx: RelationalDatabase,
-  userId: number,
-  revision: number,
-  connectionIds: readonly number[],
-  occurredAt: number,
-): Promise<number> => {
-  await tx.execute('INSERT OR IGNORE INTO agent_host_cursors (user_id, next_sequence) VALUES (?, 1)', [userId]);
-  const cursor = await tx.queryOne<{ next_sequence: number }>(
-    'SELECT next_sequence FROM agent_host_cursors WHERE user_id = ?',
-    [userId],
-  );
-  if (!cursor) throw new Error('HOST_CURSOR_UNAVAILABLE');
-  const sequence = cursor.next_sequence;
-  const advanced = await tx.execute(
-    'UPDATE agent_host_cursors SET next_sequence = next_sequence + 1 WHERE user_id = ? AND next_sequence = ?',
-    [userId, sequence],
-  );
-  if (advanced.changes !== 1) throw new Error('STATE_CONFLICT');
-  await tx.execute(
-    `INSERT INTO agent_host_events (user_id, sequence, type, payload_json, occurred_at)
-     VALUES (?, ?, 'authorization.changed', ?, ?)`,
-    [userId, sequence, JSON.stringify({ revision, connectionIds: [...connectionIds] }), occurredAt],
-  );
-  return sequence;
 };
 
 export class SqliteTargetDenylistRepository implements TargetDenylistRepositoryPort {
@@ -117,7 +91,13 @@ export class SqliteTargetDenylistRepository implements TargetDenylistRepositoryP
         );
       }
 
-      const eventCursor = await allocateHostEvent(tx, changedBy, nextRevision, connectionIds, changedAt);
+      const eventCursor = await appendHostEvent(
+        tx,
+        changedBy,
+        'authorization.changed',
+        { revision: nextRevision, connectionIds: [...connectionIds] },
+        changedAt,
+      );
       return {
         revision: nextRevision,
         entries: await listEntries(tx),

@@ -1,4 +1,5 @@
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { appendHostEvent, appChangedPayload } from '../events/host-event-outbox';
 import type {
   PluginInstallRepositoryPort,
   PluginInstallationRecord,
@@ -422,6 +423,16 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
         `SELECT ${APP_STATE_COLUMNS} FROM agent_apps WHERE user_id=? AND app_id=?`,
         [userId, appId],
       );
+      if (!updated) throw new Error('AGENT_APP_NOT_FOUND');
+      const app = mapAppState(updated);
+      await appendHostEvent(tx, userId, 'app.changed', appChangedPayload(app), updatedAt);
+      await appendHostEvent(
+        tx,
+        userId,
+        'authorization.changed',
+        { appId, policyRevision: app.policyRevision },
+        updatedAt,
+      );
     });
     if (!updated) throw new Error('AGENT_APP_NOT_FOUND');
     return mapAppState(updated);
@@ -453,6 +464,16 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
       updated = await tx.queryOne<AppStateRow>(
         `SELECT ${APP_STATE_COLUMNS} FROM agent_apps WHERE user_id=? AND app_id=?`,
         [userId, appId],
+      );
+      if (!updated) throw new Error('AGENT_APP_NOT_FOUND');
+      const app = mapAppState(updated);
+      await appendHostEvent(tx, userId, 'app.changed', appChangedPayload(app), updatedAt);
+      await appendHostEvent(
+        tx,
+        userId,
+        'authorization.changed',
+        { appId, policyRevision: app.policyRevision },
+        updatedAt,
       );
     });
     if (!updated) throw new Error('AGENT_APP_NOT_FOUND');

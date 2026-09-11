@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { ClockPort, JsonValue } from '../agent.types';
+import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import { validateManifest } from './app-manifest-validator';
 import { AppRegistryService } from './app-registry.service';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
 import type { AppStoragePort, AppStorageRecord } from './app-storage.port';
 import type { AppCapabilityBroker } from './app-capability-broker';
 import type { AppStorageSnapshotPort } from './app-storage-snapshot.port';
-import type { AgentAppDefinition, AppRecord, AppView } from './app.types';
+import type { AgentAppDefinition, AppRecord, AppStatePatch, AppView } from './app.types';
 import type { PackageVerifierPort, VerifiedPluginPackage } from './package-verifier.port';
 import type { PluginPackageSourcePort } from './plugin-package-source.port';
 import type {
@@ -101,6 +101,7 @@ export class PluginInstallService {
     private readonly runtime: PluginBackendRuntimePort,
     private readonly clock: ClockPort,
     private readonly nexusVersion: string,
+    private readonly onHostStateCommitted: (userId: number) => void = () => undefined,
     private readonly publicOrigin?: string,
     private readonly pluginFrontendOrigin?: string,
   ) {}
@@ -228,7 +229,7 @@ export class PluginInstallService {
     this.registry.registerVersion(this.definition(plugin));
 
     if (!existingState) {
-      await this.states.insertDefault({
+      const inserted = await this.states.insertDefault({
         ...scope,
         activeVersion: verified.manifest.version,
         desiredState: 'disabled',
@@ -243,6 +244,7 @@ export class PluginInstallService {
         createdAt: now,
         updatedAt: now,
       });
+      if (inserted) this.onHostStateCommitted(userId);
     }
     let current = await this.states.get(scope);
     if (!current) throw new Error('PLUGIN_APP_STATE_MISSING');
@@ -256,6 +258,7 @@ export class PluginInstallService {
         'disabled',
         now,
       );
+      this.onHostStateCommitted(userId);
     } else {
       await this.repository.upsertInstallation({
         userId,
@@ -303,7 +306,7 @@ export class PluginInstallService {
     this.registry.registerVersion(this.definition(nextPlugin));
 
     const draining = state.acceptNewRuns
-      ? await this.states.compareAndSet(scope, state.version, { acceptNewRuns: false })
+      ? await this.compareAndSetState(scope, state.version, { acceptNewRuns: false })
       : state;
     if (draining.runningCount > 0) {
       return {
@@ -339,19 +342,18 @@ export class PluginInstallService {
         beforeSwitch.desiredState === 'enabled' ? 'running' : 'disabled',
         this.clock.nowUnixSeconds(),
       );
+      this.onHostStateCommitted(userId);
     } catch (error) {
       await this.storage.restore(scope, snapshot).catch(() => undefined);
       await this.runtime.dispose(scope, nextPlugin).catch(() => undefined);
       if (draining.desiredState === 'enabled') await this.runtime.activate(scope, oldPlugin).catch(() => undefined);
       const current = await this.states.get(scope).catch(() => null);
       if (current && current.activeVersion === oldPlugin.version && !current.acceptNewRuns) {
-        await this.states
-          .compareAndSet(scope, current.version, {
-            acceptNewRuns: true,
-            observedState: draining.observedState,
-            healthReason: draining.healthReason,
-          })
-          .catch(() => undefined);
+        await this.compareAndSetState(scope, current.version, {
+          acceptNewRuns: true,
+          observedState: draining.observedState,
+          healthReason: draining.healthReason,
+        }).catch(() => undefined);
       }
       if ((await this.repository.countInstalled(appId, nextPlugin.version).catch(() => 1)) === 0) {
         await this.verifier.removeInstalled(appId, nextPlugin.version).catch(() => undefined);
@@ -396,7 +398,7 @@ export class PluginInstallService {
     const plugin = await this.repository.getVersion(appId, installation.version);
     if (!plugin) throw new Error('PLUGIN_VERSION_NOT_FOUND');
     const draining = state.acceptNewRuns
-      ? await this.states.compareAndSet(scope, state.version, { acceptNewRuns: false })
+      ? await this.compareAndSetState(scope, state.version, { acceptNewRuns: false })
       : state;
     if (draining.runningCount > 0) return { state: 'draining', app: this.appView(draining, plugin) };
 
@@ -417,17 +419,16 @@ export class PluginInstallService {
         beforeRemoval.version,
         this.clock.nowUnixSeconds(),
       );
+      this.onHostStateCommitted(userId);
     } catch (error) {
       if (draining.desiredState === 'enabled') await this.runtime.activate(scope, plugin).catch(() => undefined);
       const current = await this.states.get(scope).catch(() => null);
       if (current && current.activeVersion === plugin.version && !current.acceptNewRuns) {
-        await this.states
-          .compareAndSet(scope, current.version, {
-            acceptNewRuns: true,
-            observedState: draining.observedState,
-            healthReason: draining.healthReason,
-          })
-          .catch(() => undefined);
+        await this.compareAndSetState(scope, current.version, {
+          acceptNewRuns: true,
+          observedState: draining.observedState,
+          healthReason: draining.healthReason,
+        }).catch(() => undefined);
       }
       throw error;
     }
@@ -639,9 +640,9 @@ export class PluginInstallService {
     if (current.desiredState === 'disabled') {
       await this.runtime.dispose(scope, plugin).catch(() => undefined);
       if (current.observedState !== 'disabled') {
-        await this.states
-          .compareAndSet(scope, current.version, { observedState: 'disabled', healthReason: null })
-          .catch(() => undefined);
+        await this.compareAndSetState(scope, current.version, { observedState: 'disabled', healthReason: null }).catch(
+          () => undefined,
+        );
       }
       return;
     }
@@ -656,14 +657,20 @@ export class PluginInstallService {
       const observedState = health.available ? 'running' : 'degraded';
       const healthReason = health.available ? null : (health.reason ?? 'PLUGIN_RUNTIME_UNAVAILABLE');
       if (current.observedState !== observedState || current.healthReason !== healthReason) {
-        await this.states.compareAndSet(scope, current.version, { observedState, healthReason }).catch(() => undefined);
+        await this.compareAndSetState(scope, current.version, { observedState, healthReason }).catch(() => undefined);
       }
     } catch (error) {
       const healthReason = error instanceof Error ? error.message.slice(0, 1024) : 'PLUGIN_RUNTIME_UNAVAILABLE';
-      await this.states
-        .compareAndSet(scope, current.version, { observedState: 'degraded', healthReason })
-        .catch(() => undefined);
+      await this.compareAndSetState(scope, current.version, { observedState: 'degraded', healthReason }).catch(
+        () => undefined,
+      );
     }
+  }
+
+  private async compareAndSetState(scope: Scope, expectedVersion: number, patch: AppStatePatch): Promise<AppRecord> {
+    const updated = await this.states.compareAndSet(scope, expectedVersion, patch);
+    this.onHostStateCommitted(scope.userId);
+    return updated;
   }
 
   private async requireStage(userId: number, stageId: string): Promise<PluginStageRecord> {

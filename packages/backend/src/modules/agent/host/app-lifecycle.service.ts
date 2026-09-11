@@ -2,7 +2,7 @@ import type { ClockPort, Scope } from '../agent.types';
 import type { AppGrantRepositoryPort } from './app-grant.repository.port';
 import { AppRegistryService } from './app-registry.service';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
-import type { AgentAppDefinition, AppRecord, AppView } from './app.types';
+import type { AgentAppDefinition, AppRecord, AppStatePatch, AppView } from './app.types';
 
 const QUIESCE_SECONDS = 10;
 
@@ -12,6 +12,7 @@ export class AppLifecycleService {
     private readonly states: AppStateRepositoryPort,
     private readonly grants: AppGrantRepositoryPort,
     private readonly clock: ClockPort,
+    private readonly onHostStateCommitted: (userId: number) => void = () => undefined,
   ) {}
 
   async initializeDefaults(userId: number): Promise<void> {
@@ -64,7 +65,7 @@ export class AppLifecycleService {
         health.status === 'healthy' ? 'running' : health.status === 'degraded' ? 'degraded' : 'failed';
       const healthReason = health.reason ?? null;
       if (current.observedState === observedState && current.healthReason === healthReason) continue;
-      await this.states.compareAndSet(scope, current.version, { observedState, healthReason });
+      await this.compareAndSetState(scope, current.version, { observedState, healthReason });
     }
   }
 
@@ -95,6 +96,7 @@ export class AppLifecycleService {
       createdAt: now,
       updatedAt: now,
     });
+    if (inserted) this.onHostStateCommitted(userId);
 
     const current = await this.states.get(scope);
     if (!current) throw new Error(`Agent App state disappeared after initialization: ${scope.appId}`);
@@ -119,7 +121,7 @@ export class AppLifecycleService {
   private async enable(definition: AgentAppDefinition, current: AppRecord): Promise<AppRecord> {
     if (current.desiredState === 'enabled' && ['running', 'degraded'].includes(current.observedState)) return current;
 
-    const starting = await this.states.compareAndSet(current, current.version, {
+    const starting = await this.compareAndSetState(current, current.version, {
       activeVersion: definition.manifest.version,
       desiredState: 'enabled',
       observedState: 'enabling',
@@ -133,12 +135,12 @@ export class AppLifecycleService {
       const health = (await definition.health?.({ userId: starting.userId, appId: starting.appId })) ?? {
         status: 'healthy' as const,
       };
-      return this.states.compareAndSet(starting, starting.version, {
+      return this.compareAndSetState(starting, starting.version, {
         observedState: health.status === 'healthy' ? 'running' : health.status === 'degraded' ? 'degraded' : 'failed',
         healthReason: health.reason ?? null,
       });
     } catch (error) {
-      const failed = await this.states.compareAndSet(starting, starting.version, {
+      const failed = await this.compareAndSetState(starting, starting.version, {
         observedState: 'failed',
         healthReason: error instanceof Error ? error.message : 'APP_INITIALIZATION_FAILED',
       });
@@ -149,7 +151,7 @@ export class AppLifecycleService {
   private async disable(definition: AgentAppDefinition, current: AppRecord): Promise<AppRecord> {
     if (current.desiredState === 'disabled' && current.observedState === 'disabled') return current;
 
-    const stopping = await this.states.compareAndSet(current, current.version, {
+    const stopping = await this.compareAndSetState(current, current.version, {
       desiredState: 'disabled',
       observedState: 'disabling',
       healthReason: null,
@@ -162,16 +164,22 @@ export class AppLifecycleService {
       else await definition.quiesce?.(this.clock.nowUnixSeconds() + QUIESCE_SECONDS);
       if (definition.disposeForScope) await definition.disposeForScope(scope);
       else await definition.dispose?.();
-      return await this.states.compareAndSet(stopping, stopping.version, {
+      return await this.compareAndSetState(stopping, stopping.version, {
         observedState: 'disabled',
         healthReason: null,
       });
     } catch (error) {
-      return this.states.compareAndSet(stopping, stopping.version, {
+      return this.compareAndSetState(stopping, stopping.version, {
         observedState: 'disabling',
         healthReason: error instanceof Error ? error.message : 'APP_QUIESCE_FAILED',
       });
     }
+  }
+
+  private async compareAndSetState(scope: Scope, expectedVersion: number, patch: AppStatePatch): Promise<AppRecord> {
+    const updated = await this.states.compareAndSet(scope, expectedVersion, patch);
+    this.onHostStateCommitted(scope.userId);
+    return updated;
   }
 
   private toView(record: AppRecord): AppView {

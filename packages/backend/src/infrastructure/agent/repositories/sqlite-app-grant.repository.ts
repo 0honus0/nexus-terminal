@@ -2,6 +2,7 @@ import type { AppGrantRepositoryPort } from '../../../modules/agent/host/app-gra
 import type { CapabilityGrant } from '../../../modules/agent/host/app.types';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { appendHostEvent } from '../events/host-event-outbox';
 
 interface GrantRow {
   capability: CapabilityGrant['capability'];
@@ -50,6 +51,7 @@ export class SqliteAppGrantRepository implements AppGrantRepositoryPort {
   }
 
   async replace(scope: Scope, expectedPolicyRevision: number, grants: readonly CapabilityGrant[]): Promise<number> {
+    const updatedAt = Math.floor(Date.now() / 1000);
     return this.db.transaction(async (tx) => {
       const app = await tx.queryOne<{ policy_revision: number }>(
         'SELECT policy_revision FROM agent_apps WHERE user_id = ? AND app_id = ?',
@@ -80,9 +82,16 @@ export class SqliteAppGrantRepository implements AppGrantRepositoryPort {
         `UPDATE agent_apps
          SET policy_revision = ?, version = version + 1, updated_at = ?
          WHERE user_id = ? AND app_id = ? AND policy_revision = ?`,
-        [nextRevision, Math.floor(Date.now() / 1000), scope.userId, scope.appId, expectedPolicyRevision],
+        [nextRevision, updatedAt, scope.userId, scope.appId, expectedPolicyRevision],
       );
       if (result.changes !== 1) throw new Error('APP_POLICY_VERSION_CONFLICT');
+      await appendHostEvent(
+        tx,
+        scope.userId,
+        'authorization.changed',
+        { appId: scope.appId, policyRevision: nextRevision, capabilities: grants.map((grant) => grant.capability) },
+        updatedAt,
+      );
       return nextRevision;
     });
   }

@@ -4,6 +4,7 @@ import type {
   AgentSettingsRepositoryPort,
 } from '../../../modules/agent/host/agent-settings.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { appendHostEvent } from '../events/host-event-outbox';
 
 interface SettingsRow {
   user_id: number;
@@ -45,16 +46,37 @@ export class SqliteAgentSettingsRepository implements AgentSettingsRepositoryPor
     settings: AgentSettingsDocument,
     updatedAt: number,
   ): Promise<AgentSettingsRecord> {
-    const result = await this.db.execute(
-      `UPDATE agent_settings
-       SET value_json = ?, revision = revision + 1, updated_at = ?
-       WHERE user_id = ? AND revision = ?`,
-      [JSON.stringify(settings), updatedAt, userId, expectedRevision],
-    );
-    if (result.changes !== 1) throw new Error('SETTINGS_VERSION_CONFLICT');
+    return this.db.transaction(async (tx) => {
+      const currentRow = await tx.queryOne<SettingsRow>(
+        'SELECT user_id, value_json, revision, updated_at FROM agent_settings WHERE user_id = ? AND revision = ?',
+        [userId, expectedRevision],
+      );
+      if (!currentRow) throw new Error('SETTINGS_VERSION_CONFLICT');
+      const current = mapRow(currentRow);
+      const result = await tx.execute(
+        `UPDATE agent_settings
+         SET value_json = ?, revision = revision + 1, updated_at = ?
+         WHERE user_id = ? AND revision = ?`,
+        [JSON.stringify(settings), updatedAt, userId, expectedRevision],
+      );
+      if (result.changes !== 1) throw new Error('SETTINGS_VERSION_CONFLICT');
 
-    const updated = await this.get(userId);
-    if (!updated) throw new Error('AGENT_SETTINGS_NOT_FOUND');
-    return updated;
+      const updatedRow = await tx.queryOne<SettingsRow>(
+        'SELECT user_id, value_json, revision, updated_at FROM agent_settings WHERE user_id = ?',
+        [userId],
+      );
+      if (!updatedRow) throw new Error('AGENT_SETTINGS_NOT_FOUND');
+      const updated = mapRow(updatedRow);
+      if (current.settings.feature.enabled !== updated.settings.feature.enabled) {
+        await appendHostEvent(
+          tx,
+          userId,
+          'feature.changed',
+          { featureEnabled: updated.settings.feature.enabled, revision: updated.revision },
+          updatedAt,
+        );
+      }
+      return updated;
+    });
   }
 }

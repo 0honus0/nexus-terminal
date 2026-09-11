@@ -23,6 +23,7 @@ export interface ComposePluginsOptions {
   capabilityBroker: AppCapabilityBroker;
   artifactStore: LocalArtifactStore;
   clock: ClockPort;
+  onHostStateCommitted: (userId: number) => void;
 }
 
 export interface ComposedPlugins {
@@ -41,6 +42,7 @@ export const composePlugins = ({
   capabilityBroker,
   artifactStore,
   clock,
+  onHostStateCommitted,
 }: ComposePluginsOptions): ComposedPlugins => {
   const appStorage = new SqliteAppStorageRepository(database);
   const pluginSdkStorage: AppStoragePort = {
@@ -73,6 +75,7 @@ export const composePlugins = ({
     pluginBackendRuntime,
     clock,
     nexusVersion,
+    onHostStateCommitted,
     publicOrigin,
     pluginFrontendOrigin,
   );

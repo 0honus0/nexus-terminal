@@ -133,13 +133,21 @@ export const composeAgent = ({
   audit,
 }: ComposeAgentOptions): AgentServices => {
   const registry = new AppRegistryService();
+  const runRepository = new SqliteRunRepository(database);
+  const eventHub = new AgentEventHub();
+  const publishHostWake = (userId: number): void => {
+    void runRepository
+      .hostCursor(userId)
+      .then((cursor) => eventHub.publishHostWake(userId, cursor))
+      .catch(() => undefined);
+  };
   const appStates = new SqliteAppStateRepository(database);
   const appGrants = new SqliteAppGrantRepository(database);
   const targetDenylist = new SqliteTargetDenylistRepository(database);
   const settingsRepository = new SqliteAgentSettingsRepository(database);
   const hardLimitConfirmations = new SqliteHardLimitConfirmationRepository(database);
   const hardLimitUsage = new SqliteHardLimitUsageAdapter(database);
-  const lifecycle = new AppLifecycleService(registry, appStates, appGrants, systemClock);
+  const lifecycle = new AppLifecycleService(registry, appStates, appGrants, systemClock, publishHostWake);
   const settings = new AgentSettingsService(settingsRepository, hardLimitConfirmations, hardLimitUsage, systemClock);
   const capabilityBroker = new AppCapabilityBroker(registry, appStates, appGrants, targetDenylist);
   const providerRepository = new SqliteProviderRepository(database, cipher);
@@ -182,13 +190,13 @@ export const composeAgent = ({
     capabilityBroker,
     artifactStore,
     clock: systemClock,
+    onHostStateCommitted: publishHostWake,
   });
   const conversationRepository = new SqliteConversationRepository(database);
   const conversations = new ConversationService(conversationRepository, systemClock, settings, lifecycle);
   const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
   const skills = new SkillRegistry(new InstalledPluginSkillSourceAdapter(database, dataDirectory));
   const context = new ContextService(conversations, recall, skills);
-  const runRepository = new SqliteRunRepository(database);
   const stateCommit = new SqliteStateCommitAdapter(database);
   const subagentRepository = new SqliteSubagentRepository(database);
   const runScopes: RunScopeRepositoryPort = subagentRepository;
@@ -217,7 +225,6 @@ export const composeAgent = ({
   );
   const definitions = new AgentDefinitionRegistry();
   for (const definition of OPERATIONS_AGENT_DEFINITIONS) definitions.register('nexus.operations', definition);
-  const eventHub = new AgentEventHub();
   const subagents = new SubagentService(
     delegationRepository,
     runtimeParticipants,
@@ -391,7 +398,7 @@ export const composeAgent = ({
   );
   const notifyCommitted = (run: Parameters<AgentScheduler['enqueue']>[0]) => {
     eventHub.publishRunWake(run.id, run.eventCursor);
-    void runRepository.hostCursor(run.userId).then((cursor) => eventHub.publishHostWake(run.userId, cursor));
+    publishHostWake(run.userId);
   };
   const runs = new RunService(
     settings,
@@ -490,6 +497,7 @@ export const composeAgent = ({
             grantedAt: systemClock.nowUnixSeconds(),
           })),
         );
+        publishHostWake(userId);
         return { app: await lifecycle.get(scope), grants: await appGrants.list(scope) };
       },
       createAppIntent: (scope, input) => appIntents.createConfirmed(scope, input),
@@ -507,6 +515,8 @@ export const composeAgent = ({
       patchSettings: async (userId, patch, expectedRevision) => {
         const before = await settings.get(userId);
         const updated = await settings.patch(userId, patch, expectedRevision);
+        const featureChanged = before.effectiveSettings.feature.enabled !== updated.effectiveSettings.feature.enabled;
+        if (featureChanged) publishHostWake(userId);
         if (before.effectiveSettings.feature.enabled && !updated.effectiveSettings.feature.enabled) {
           const deadline = systemClock.nowUnixSeconds() + 10;
           for (const definition of registry.list()) await lifecycle.quiesce(definition.manifest.id, deadline);
