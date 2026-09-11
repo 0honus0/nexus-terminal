@@ -301,25 +301,8 @@ export class RunnerControllerServer {
         });
         return;
       }
-      if (request.method === 'POST' && url.pathname === '/v1/packs/ensure') {
-        const input = asRecord(await body(request));
-        const packs = Array.isArray(input.packs) ? input.packs : [];
-        await this.dependencies.installer.ensure(packs as never[]);
-        json(response, 200, { installed: packs.length });
-        return;
-      }
-      if (request.method === 'POST' && url.pathname === '/v1/cache-cleanup') {
-        json(response, 200, this.dependencies.cleanup.cacheCleanup());
-        return;
-      }
-      if (request.method === 'POST' && url.pathname === '/v1/runtime-cleanup') {
-        const input = asRecord(await body(request));
-        if (!Number.isSafeInteger(input.userId) || (input.userId as number) < 1) throw new Error('VALIDATION_FAILED');
-        json(response, 200, await this.dependencies.cleanup.runtimeCleanup(input.userId as number));
-        return;
-      }
       if (request.method === 'POST' && url.pathname === '/v1/commands') {
-        json(response, 202, await this.executeCommand(await body(request)));
+        json(response, 202, this.beginCommand(await body(request)));
         return;
       }
       json(response, 404, { error: 'NOT_FOUND' });
@@ -415,11 +398,11 @@ export class RunnerControllerServer {
     );
   }
 
-  private async executeCommand(input: unknown) {
+  private beginCommand(input: unknown) {
     const record = asRecord(input);
     const action = typeof record.action === 'string' ? record.action : '';
     if (['cacheCleanup', 'runtimeCleanup', 'packInstall', 'packUninstall'].includes(action)) {
-      return this.executeAdminCommand(
+      return this.beginAdminCommand(
         record,
         action as 'cacheCleanup' | 'runtimeCleanup' | 'packInstall' | 'packUninstall',
       );
@@ -428,20 +411,24 @@ export class RunnerControllerServer {
     this.validateCommand(command);
     const hash = payloadHash(command);
     const existing = this.dependencies.journal.begin(command.commandId, hash, command.action, command.workspaceId);
-    if (existing.status !== 'pending') return existing;
-    this.dependencies.journal.running(command.commandId);
-    try {
-      let result: unknown;
-      if (command.action === 'provision') result = await this.provision(command);
-      else result = await this.workspaceAction(command);
-      this.dependencies.journal.succeed(command.commandId, result);
-    } catch (error) {
-      this.dependencies.journal.fail(command.commandId, error instanceof Error ? error.message : String(error));
+    if (existing.status === 'pending') {
+      this.dependencies.journal.running(command.commandId);
+      void this.executeWorkspaceCommand(command);
     }
     return this.dependencies.journal.command(command.commandId)!;
   }
 
-  private async executeAdminCommand(
+  private async executeWorkspaceCommand(command: WorkspaceRuntimeCommand): Promise<void> {
+    try {
+      const result =
+        command.action === 'provision' ? await this.provision(command) : await this.workspaceAction(command);
+      this.dependencies.journal.succeed(command.commandId, result);
+    } catch (error) {
+      this.dependencies.journal.fail(command.commandId, error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  private beginAdminCommand(
     command: Record<string, unknown>,
     action: 'cacheCleanup' | 'runtimeCleanup' | 'packInstall' | 'packUninstall',
   ) {
@@ -449,8 +436,18 @@ export class RunnerControllerServer {
     const commandId = String(command.commandId);
     const hash = payloadHash(command);
     const existing = this.dependencies.journal.begin(commandId, hash, action, null);
-    if (existing.status !== 'pending') return existing;
-    this.dependencies.journal.running(commandId);
+    if (existing.status === 'pending') {
+      this.dependencies.journal.running(commandId);
+      void this.executeAdminCommand(command, action);
+    }
+    return this.dependencies.journal.command(commandId)!;
+  }
+
+  private async executeAdminCommand(
+    command: Record<string, unknown>,
+    action: 'cacheCleanup' | 'runtimeCleanup' | 'packInstall' | 'packUninstall',
+  ): Promise<void> {
+    const commandId = String(command.commandId);
     try {
       let result: unknown;
       if (action === 'cacheCleanup') result = this.dependencies.cleanup.cacheCleanup();
@@ -495,7 +492,6 @@ export class RunnerControllerServer {
     } catch (error) {
       this.dependencies.journal.fail(commandId, error instanceof Error ? error.message : String(error));
     }
-    return this.dependencies.journal.command(commandId)!;
   }
 
   private validateCommonCommand(command: Record<string, unknown>): void {

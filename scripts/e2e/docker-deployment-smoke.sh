@@ -240,6 +240,23 @@ NODE
   exit 1
 fi
 
+host_tool_snapshot() {
+  local tool path resolved
+  for tool in node python3 go; do
+    path="/usr/bin/$tool"
+    if [[ -e "$path" || -L "$path" ]]; then
+      resolved="$(readlink -f "$path" 2>/dev/null || printf '%s' "$path")"
+      printf '%s\t' "$tool"
+      stat -Lc '%d:%i:%s:%Y:%a' "$path"
+      printf 'link=%s\n' "$(readlink "$path" 2>/dev/null || true)"
+      if [[ -f "$resolved" ]]; then sha256sum "$resolved"; fi
+    else
+      printf '%s\tMISSING\n' "$tool"
+    fi
+  done | sha256sum | awk '{print $1}'
+}
+host_tool_snapshot_before="$(host_tool_snapshot)"
+
 # Exercise the actual Controller -> Tool Store -> Workspace Dev Environment -> bubblewrap
 # job path, not only binary presence or HTTP health. The probe originates from Backend
 # through the host-gateway path using the same shared Controller token as production.
@@ -259,6 +276,18 @@ const post = async (path, body) => {
   if (!response.ok) throw new Error(`POST ${path} failed: ${response.status} ${await response.text()}`);
   return response.json();
 };
+const awaitCommand = async (submitted, timeoutMs = 12 * 60 * 1000) => {
+  if (!['pending', 'running'].includes(submitted?.status)) return submitted;
+  const deadline = Date.now() + timeoutMs;
+  let current = submitted;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    current = await get(`/v1/commands/${encodeURIComponent(submitted.commandId)}`);
+    if (!['pending', 'running'].includes(current.status)) return current;
+  }
+  throw new Error(`Runner command timed out: ${JSON.stringify(current)}`);
+};
+const submitCommand = async (body) => awaitCommand(await post('/v1/commands', body));
 const catalog = await get('/v1/catalog');
 const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 const pack = catalog.packs.find((candidate) => candidate.familyId === 'base-tools' && candidate.enabled);
@@ -298,9 +327,9 @@ const command = (action, generation = 1) => ({
   nonce: randomUUID(),
 });
 
-const provision = await post('/v1/commands', command('provision'));
+const provision = await submitCommand(command('provision'));
 if (provision.status !== 'succeeded') throw new Error(`Runner provision failed: ${JSON.stringify(provision)}`);
-const start = await post('/v1/commands', command('start'));
+const start = await submitCommand(command('start'));
 if (start.status !== 'succeeded') throw new Error(`Runner start failed: ${JSON.stringify(start)}`);
 
 const jobId = `smoke-job-${randomUUID()}`;
@@ -335,16 +364,16 @@ for (let attempt = 0; attempt < 100; attempt += 1) {
 if (result?.status !== 'succeeded' || result.result?.stdout !== 'runner-sandbox-ok' || result.result?.exitCode !== 0) {
   throw new Error(`Runner sandbox job failed: ${JSON.stringify(result)}`);
 }
-const remove = await post('/v1/commands', command('delete'));
+const remove = await submitCommand(command('delete'));
 if (remove.status !== 'succeeded') throw new Error(`Runner delete failed: ${JSON.stringify(remove)}`);
 
 // A tool-version switch recreates only the runtime generation. The Workspace filesystem
 // must remain stable so a new Node/Python/Go selection never copies or loses project files.
-const reprovision = await post('/v1/commands', command('provision', 2));
+const reprovision = await submitCommand(command('provision', 2));
 if (reprovision.status !== 'succeeded') {
   throw new Error(`Runner reprovision failed: ${JSON.stringify(reprovision)}`);
 }
-const restart = await post('/v1/commands', command('start', 2));
+const restart = await submitCommand(command('start', 2));
 if (restart.status !== 'succeeded') throw new Error(`Runner generation 2 start failed: ${JSON.stringify(restart)}`);
 const generationJobId = `smoke-generation-${randomUUID()}`;
 const generationJob = {
@@ -375,12 +404,183 @@ if (
 ) {
   throw new Error(`Runner stable Workspace generation check failed: ${JSON.stringify(generationResult)}`);
 }
-const removeGeneration = await post('/v1/commands', command('delete', 2));
+const removeGeneration = await submitCommand(command('delete', 2));
 if (removeGeneration.status !== 'succeeded') {
   throw new Error(`Runner generation 2 delete failed: ${JSON.stringify(removeGeneration)}`);
 }
-console.log('agent runner sandbox job: runner-sandbox-ok; stable workspace generation: workspace-generation-ok');
+
+const ref = (familyId, versionId) => {
+  const candidate = catalog.packs.find(
+    (item) => item.familyId === familyId && item.versionId === versionId && item.enabled && item.contentDigest,
+  );
+  if (!candidate) throw new Error(`Required smoke Tool Pack unavailable: ${familyId}@${versionId}`);
+  return { familyId, versionId, contentDigest: candidate.contentDigest };
+};
+const baseRef = ref('base-tools', '1');
+const newToolchain = [baseRef, ref('go', '1.27.1'), ref('node', '24.21.0'), ref('python', '3.14.7')];
+const oldToolchain = [baseRef, ref('go', '1.26.8'), ref('node', '22.23.2'), ref('python', '3.13.15')];
+const makeIdentity = (workspaceId, generation, toolchain) => ({
+  deploymentId,
+  userId: 1,
+  appId: 'operations.default',
+  runId: 'smoke-multiversion-run',
+  agentRuntimeId: 'smoke-multiversion-runtime',
+  workspaceId,
+  generation,
+  recipeId: recipe.id,
+  recipeRevision: recipe.revision,
+  runtimeDigest: catalog.runtimeDigest,
+  catalogRevision: catalog.revision,
+  toolchain,
+  runnerPlugins: [],
+  limits: recipe.defaultLimits,
+  network: { mode: 'none', hosts: [] },
+  retained: false,
+  expectedVersion: 0,
+});
+const lifecycle = (identity, action) => ({
+  ...identity,
+  commandId: `smoke-${action}-${identity.generation}-${randomUUID()}`,
+  action,
+  operationHash: `v1:${'3'.repeat(64)}`,
+  issuedAt: now(),
+  deadlineAt: now() + 15 * 60,
+  nonce: randomUUID(),
+});
+const runWorkspaceJob = async (identity, shell, expectedStdout) => {
+  const id = `smoke-toolchain-${randomUUID()}`;
+  await post(`/v1/workspaces/${encodeURIComponent(identity.workspaceId)}/jobs`, {
+    jobId: id,
+    workspaceId: identity.workspaceId,
+    generation: identity.generation,
+    userId: identity.userId,
+    appId: identity.appId,
+    runId: identity.runId,
+    agentRuntimeId: identity.agentRuntimeId,
+    operationHash: `v1:${'4'.repeat(64)}`,
+    issuedAt: now(),
+    deadlineAt: now() + 60,
+    nonce: randomUUID(),
+    argv: ['nexus-sh', '-c', shell],
+    cwd: '/workspace',
+    maxBytes: 16 * 1024,
+    timeoutMs: 30_000,
+  });
+  let current;
+  for (let attempt = 0; attempt < 300; attempt += 1) {
+    current = await get(`/v1/jobs/${encodeURIComponent(id)}`);
+    if (!['pending', 'running'].includes(current.status)) break;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  if (current?.status !== 'succeeded' || current.result?.exitCode !== 0 || current.result?.stdout !== expectedStdout) {
+    throw new Error(`Workspace toolchain job failed: ${JSON.stringify(current)}`);
+  }
+};
+const requireLifecycle = async (identity, action) => {
+  const result = await submitCommand(lifecycle(identity, action));
+  if (result.status !== 'succeeded') {
+    throw new Error(`Runner ${action} failed for ${identity.workspaceId}: ${JSON.stringify(result)}`);
+  }
+  return result;
+};
+
+const workspaceA = `smoke-toolchain-a-${randomUUID()}`;
+const workspaceB = `smoke-toolchain-b-${randomUUID()}`;
+const aNew1 = makeIdentity(workspaceA, 1, newToolchain);
+const bOld1 = makeIdentity(workspaceB, 1, oldToolchain);
+await requireLifecycle(aNew1, 'provision');
+await requireLifecycle(aNew1, 'start');
+await requireLifecycle(bOld1, 'provision');
+await requireLifecycle(bOld1, 'start');
+await runWorkspaceJob(
+  aNew1,
+  [
+    'test "$(node --version)" = v24.21.0',
+    'test "$(python3 --version)" = "Python 3.14.7"',
+    'test "$(go version | awk \'{print $3}\')" = go1.27.1',
+    'test ! -e /workspace/deps/.profile-marker',
+    'printf A-stable > /workspace/work/.workspace-marker',
+    'printf A-new > /workspace/deps/.profile-marker',
+    'printf "%s" "$NEXUS_TOOLCHAIN_FINGERPRINT" > /workspace/work/.new-fingerprint',
+    'printf A-new-ok',
+  ].join(' && '),
+  'A-new-ok',
+);
+await runWorkspaceJob(
+  bOld1,
+  [
+    'test "$(node --version)" = v22.23.2',
+    'test "$(python3 --version)" = "Python 3.13.15"',
+    'test "$(go version | awk \'{print $3}\')" = go1.26.8',
+    'test ! -e /workspace/deps/.profile-marker',
+    'printf B-stable > /workspace/work/.workspace-marker',
+    'printf B-old > /workspace/deps/.profile-marker',
+    'printf B-old-ok',
+  ].join(' && '),
+  'B-old-ok',
+);
+
+await requireLifecycle(aNew1, 'delete');
+const aOld2 = makeIdentity(workspaceA, 2, oldToolchain);
+await requireLifecycle(aOld2, 'provision');
+await requireLifecycle(aOld2, 'start');
+await runWorkspaceJob(
+  aOld2,
+  [
+    'test "$(cat /workspace/work/.workspace-marker)" = A-stable',
+    'test "$(node --version)" = v22.23.2',
+    'test "$(python3 --version)" = "Python 3.13.15"',
+    'test "$(go version | awk \'{print $3}\')" = go1.26.8',
+    'test ! -e /workspace/deps/.profile-marker',
+    'test "$(cat /workspace/work/.new-fingerprint)" != "$NEXUS_TOOLCHAIN_FINGERPRINT"',
+    'printf A-old > /workspace/deps/.profile-marker',
+    'printf A-old-ok',
+  ].join(' && '),
+  'A-old-ok',
+);
+await runWorkspaceJob(
+  bOld1,
+  [
+    'test "$(cat /workspace/work/.workspace-marker)" = B-stable',
+    'test "$(cat /workspace/deps/.profile-marker)" = B-old',
+    'test "$(node --version)" = v22.23.2',
+    'test "$(python3 --version)" = "Python 3.13.15"',
+    'test "$(go version | awk \'{print $3}\')" = go1.26.8',
+    'printf B-stable-ok',
+  ].join(' && '),
+  'B-stable-ok',
+);
+
+await requireLifecycle(aOld2, 'delete');
+const aNew3 = makeIdentity(workspaceA, 3, newToolchain);
+await requireLifecycle(aNew3, 'provision');
+await requireLifecycle(aNew3, 'start');
+await runWorkspaceJob(
+  aNew3,
+  [
+    'test "$(cat /workspace/work/.workspace-marker)" = A-stable',
+    'test "$(cat /workspace/deps/.profile-marker)" = A-new',
+    'test "$(cat /workspace/work/.new-fingerprint)" = "$NEXUS_TOOLCHAIN_FINGERPRINT"',
+    'test "$(node --version)" = v24.21.0',
+    'test "$(python3 --version)" = "Python 3.14.7"',
+    'test "$(go version | awk \'{print $3}\')" = go1.27.1',
+    'printf A-new-reused-ok',
+  ].join(' && '),
+  'A-new-reused-ok',
+);
+await requireLifecycle(aNew3, 'delete');
+await requireLifecycle(bOld1, 'delete');
+
+console.log(
+  'agent runner sandbox job: runner-sandbox-ok; stable workspace generation: workspace-generation-ok; multi-version workspaces: node/python/go switch isolated',
+);
 NODE
+
+host_tool_snapshot_after="$(host_tool_snapshot)"
+[[ "$host_tool_snapshot_before" == "$host_tool_snapshot_after" ]] || {
+  echo 'Runner Tool Store modified host /usr/bin tool state.' >&2
+  exit 1
+}
 
 curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
 curl -fsS "http://127.0.0.1:${http_port}/api/v1/status" | grep -q '"status"'

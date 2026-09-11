@@ -266,7 +266,8 @@ jobs:
     needs: [environment, runner-image]
     if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # First-run Tool Store materialization verifies six real Node/Python/Go packs.
+    timeout-minutes: 35
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7

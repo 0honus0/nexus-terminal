@@ -1086,7 +1086,7 @@ Frontend 的 `EnvironmentSettings.vue` 仍是长期 Environment Manager。页面
 | `controller/quota-manager.ts`                         | Environment admission/resource policy                                                      |
 | `worker/plugin-runner-sandbox.worker.ts`              | Runner Plugin target 进程内入口，只暴露 RunnerPluginSdk                                    |
 
-`packages/agent-runtime` 构建 host Runner Controller；Linux host 必须提供受支持的 sandbox primitive（当前为 bubblewrap）。`scripts/docker/agent-runtime/Dockerfile` 不再是 canonical deployment path，不得借它恢复高权限 Runner-in-Docker 方案。Catalog 源暂位于 `scripts/docker/agent-runtime/catalog/`；`runtimeDigest` 表示 Runner sandbox ABI/runtime 的版本事实。Tool Pack 作为带 manifest/checksum 的 release/OCI artifact 发布，不使用 mutable latest 作为版本事实。
+`packages/agent-runtime` 构建 host Runner Controller；Linux host 必须提供受支持的 sandbox primitive（当前为 bubblewrap）。`scripts/docker/agent-runtime/Dockerfile` 不再是 canonical deployment path，不得借它恢复高权限 Runner-in-Docker 方案。Catalog 源暂位于 `scripts/docker/agent-runtime/catalog/`；`runtimeDigest` 表示 Runner sandbox ABI/runtime 的版本事实。`base-tools` 使用仓库发行 archive；Node/Python/Go 的 x64 发行 Pack 使用 Catalog 固定的 exact version + `mise 2026.9.5` materialize；mise 本身运行在仅暴露 cache/staging 的 bubblewrap materializer sandbox，最终 tool version 再由无网络 verifier sandbox 检查，并以 Nexus canonical tree digest 作为最终 content identity，不使用 mutable latest。host prerequisite 只安装经过 release SHA-256 校验的 pinned mise；普通 API 不能覆盖 installer binary 或 source。
 
 Runner 内部路径：
 
@@ -1127,7 +1127,7 @@ runtime/
       state
 ```
 
-`.control` 不进入任何 sandbox。Tool Pack 只读；源码/普通项目文件保持在稳定 Workspace，平台管理的依赖与构建状态按当前冻结 `runtimeDigest + packRefs` 的 SHA-256 `toolchainFingerprint` 分区到 `core/toolchains/<fingerprint>/deps|build`。Sandbox 把当前 profile 映射回 `/workspace/deps` 与 `/workspace/build`，并把 npm/pip/Go cache 指向该 profile；不同版本组合不会共享这些 ABI/cache，切回相同组合则复用原 profile。Runner 同时注入 `NEXUS_TOOLCHAIN_FINGERPRINT`，供上层依赖管理器给项目内缓存做相同分区；用户主动在源码树创建的 `node_modules`、`.venv` 等目录仍属于普通项目数据，不宣称由 Runner 自动隔离。Tool Store key 为 `familyId/versionId/contentDigest`（digest 按 arch 解析）；同 family 多版本可同时 installed/enabled/inUse。不同 Workspace 冻结不同版本组合，切版本只替换目标 Workspace 的 Environment generation，不修改 `/usr/bin` 或其他 Workspace。
+`.control` 不进入任何 sandbox。当前发行 Catalog 的 x64 实包包括 Node 24.21.0/22.23.2、Python 3.14.7/3.13.15、Go 1.27.1/1.26.8；未在当前 arch 声明 digest 的版本直接显示 unavailable。Tool Pack 只读；源码/普通项目文件保持在稳定 Workspace，平台管理的依赖与构建状态按当前冻结 `runtimeDigest + packRefs` 的 SHA-256 `toolchainFingerprint` 分区到 `core/toolchains/<fingerprint>/deps|build`。Sandbox 把当前 profile 映射回 `/workspace/deps` 与 `/workspace/build`，并把 npm/pip/Go cache 指向该 profile；不同版本组合不会共享这些 ABI/cache，切回相同组合则复用原 profile。Runner 同时注入 `NEXUS_TOOLCHAIN_FINGERPRINT`，供上层依赖管理器给项目内缓存做相同分区；用户主动在源码树创建的 `node_modules`、`.venv` 等目录仍属于普通项目数据，不宣称由 Runner 自动隔离。Tool Store key 为 `familyId/versionId/contentDigest`（digest 按 arch 解析）；同 family 多版本可同时 installed/enabled/inUse。不同 Workspace 冻结不同版本组合，切版本只替换目标 Workspace 的 Environment generation，不修改 `/usr/bin` 或其他 Workspace。
 
 Environment generation 在 Backend DB 冻结 `runtime_digest + recipe_id + recipe_revision + catalog_revision + pack_refs_json + runner_plugins_json`。当前 `recipe_id=workspace-dev`；`kind=code` 暂作为兼容存储字段。`runner_plugins_json` 保存精确 `{pluginId,version,sdkVersion,protocolVersion,packageHash,entry}`，新建 Runner target 使用 `protocolVersion=2`；start/restart 使用该 generation 创建时事实，不根据当前安装状态重新猜测。工具版本或 Runner Plugin 版本变化都必须创建新 generation；旧 generation 不自动升级。
 

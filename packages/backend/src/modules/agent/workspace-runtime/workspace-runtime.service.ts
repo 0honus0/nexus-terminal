@@ -8,6 +8,7 @@ import { hashOperation } from '../operation-hash';
 import type {
   AgentWorkspaceReadHandle,
   RunnerCommandRequest,
+  RunnerCommandResult,
   WorkspaceRuntimeControllerPort,
 } from './workspace-runtime-controller.port';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION, type PluginRunnerTargetSourcePort } from '../host/plugin-runner-target.port';
@@ -27,6 +28,8 @@ import type {
 } from './workspace-runtime.types';
 
 const COMMAND_SECONDS = 120;
+const TOOLCHAIN_COMMAND_SECONDS = 12 * 60;
+const COMMAND_POLL_MS = 250;
 const ADMIN_SCOPE = { userId: 0, appId: 'nexus.host' } as const;
 
 const cleanHosts = (hosts: readonly string[]): string[] => {
@@ -302,6 +305,7 @@ export class WorkspaceRuntimeService {
     action: 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize',
     expectedVersion: number,
     parameters: JsonValue,
+    waitForTerminal = false,
   ): Promise<WorkspaceRuntimeCommandView> {
     if (action !== 'stop' && action !== 'delete') await this.assertExecutionEnabled(scope);
     const [workspace, availability] = await Promise.all([
@@ -319,11 +323,19 @@ export class WorkspaceRuntimeService {
     ) {
       throw new Error('PLUGIN_RUNNER_PROTOCOL_VERSION_UNSUPPORTED');
     }
-    return this.dispatch(scope, action, workspaceId, workspace.generation, {
-      ...this.runnerPayload(workspace, availability.deploymentId),
-      expectedVersion,
-      parameters,
-    });
+    return this.dispatch(
+      scope,
+      action,
+      workspaceId,
+      workspace.generation,
+      {
+        ...this.runnerPayload(workspace, availability.deploymentId),
+        expectedVersion,
+        parameters,
+      },
+      true,
+      waitForTerminal,
+    );
   }
 
   async switchToolVersions(
@@ -390,6 +402,7 @@ export class WorkspaceRuntimeService {
         parameters: { reason: 'workspace-toolchain-switch' },
       },
       false,
+      true,
     );
     commands.push(deleted);
     if (deleted.status !== 'succeeded') {
@@ -423,11 +436,19 @@ export class WorkspaceRuntimeService {
         .catch(() => undefined);
       throw error;
     }
-    const provision = await this.dispatch(scope, 'provision', workspaceId, generation, {
-      ...this.runnerPayload(reconfigured, availability.deploymentId),
-      expectedVersion: reconfigured.version,
-      parameters: { reason: 'workspace-toolchain-switch' },
-    });
+    const provision = await this.dispatch(
+      scope,
+      'provision',
+      workspaceId,
+      generation,
+      {
+        ...this.runnerPayload(reconfigured, availability.deploymentId),
+        expectedVersion: reconfigured.version,
+        parameters: { reason: 'workspace-toolchain-switch' },
+      },
+      true,
+      true,
+    );
     commands.push(provision);
     if (provision.status !== 'succeeded') {
       const current = (await this.repository.getWorkspace(scope, workspaceId)) ?? reconfigured;
@@ -437,9 +458,14 @@ export class WorkspaceRuntimeService {
     if (wasRunning) {
       const ready = await this.repository.getWorkspace(scope, workspaceId);
       if (!ready || ready.status !== 'ready') throw new Error('WORKSPACE_STATE_INVALID');
-      const started = await this.action(scope, workspaceId, 'start', ready.version, {
-        reason: 'workspace-toolchain-switch',
-      });
+      const started = await this.action(
+        scope,
+        workspaceId,
+        'start',
+        ready.version,
+        { reason: 'workspace-toolchain-switch' },
+        true,
+      );
       commands.push(started);
       if (started.status !== 'succeeded') {
         const current = (await this.repository.getWorkspace(scope, workspaceId)) ?? ready;
@@ -535,6 +561,7 @@ export class WorkspaceRuntimeService {
     generation: number,
     payload: JsonValue,
     syncWorkspace = true,
+    waitForTerminal = false,
   ): Promise<WorkspaceRuntimeCommandView> {
     const now = this.now();
     const commandId = randomUUID();
@@ -542,7 +569,8 @@ export class WorkspaceRuntimeService {
       { schemaVersion: 2, scope: { userId: scope.userId, appId: scope.appId }, action, generation, payload },
       this.cryptoHash,
     );
-    const deadlineAt = now + COMMAND_SECONDS;
+    const deadlineAt =
+      now + (action === 'provision' || action === 'packInstall' ? TOOLCHAIN_COMMAND_SECONDS : COMMAND_SECONDS);
     const payloadRecord = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
     const wirePayload: JsonValue = { ...payloadRecord, issuedAt: now, nonce: randomUUID() };
     const command = await this.repository.createCommand({
@@ -573,7 +601,10 @@ export class WorkspaceRuntimeService {
       payload: wirePayload,
     };
     try {
-      const remote = await this.controller.submit(request);
+      let remote = await this.controller.submit(request);
+      if (waitForTerminal && ['pending', 'running'].includes(remote.status)) {
+        remote = await this.awaitRemoteCommand(commandId, deadlineAt);
+      }
       const updated = await this.repository.completeCommand(scope, commandId, remote.status, remote.result, this.now());
       if (syncWorkspace) await this.syncWorkspaceStatus(scope, updated);
       return updated;
@@ -588,6 +619,20 @@ export class WorkspaceRuntimeService {
       if (syncWorkspace) await this.syncWorkspaceStatus(scope, updated);
       return updated;
     }
+  }
+
+  private async awaitRemoteCommand(commandId: string, deadlineAt: number): Promise<RunnerCommandResult> {
+    let last: RunnerCommandResult | null = null;
+    while (this.now() <= deadlineAt) {
+      last = await this.controller.query(commandId);
+      if (!['pending', 'running'].includes(last.status)) return last;
+      await new Promise<void>((resolve) => setTimeout(resolve, COMMAND_POLL_MS));
+    }
+    return {
+      commandId,
+      status: 'unknown',
+      result: { errorCode: 'WORKSPACE_COMMAND_DEADLINE_EXCEEDED' },
+    };
   }
 
   private async assertExecutionEnabled(scope: Scope): Promise<void> {

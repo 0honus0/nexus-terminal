@@ -56,7 +56,7 @@ const safeSegment = (value: string): string => {
 };
 
 const packTarget = (pack: ToolchainPackRef): string =>
-  `/opt/nexus/packs/${safeSegment(pack.familyId)}/${safeSegment(pack.versionId)}/${safeSegment(pack.contentDigest.replace(/^sha256:/, ''))}`;
+  `/opt/nexus/packs/${safeSegment(pack.familyId)}/${safeSegment(pack.versionId)}`;
 
 export class SandboxManager {
   private lastProbeDiagnostic: string | null = null;
@@ -291,6 +291,9 @@ export class SandboxManager {
         '--setenv',
         'GOCACHE',
         '/workspace/deps/cache/go/build',
+        '--setenv',
+        'GOTOOLCHAIN',
+        'local',
         '--setenv',
         'PATH',
         [...packBins, '/usr/local/bin', '/usr/bin', '/bin'].join(':'),

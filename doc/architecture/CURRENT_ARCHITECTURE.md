@@ -150,6 +150,7 @@ Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/apps
 - 一个 Workspace 是稳定的项目/代码/文件系统边界；Node、Python、Go 等只是该 Workspace 的工具链选择，共享同一份 Workspace 文件；
 - Environment 是 Workspace 的**运行配置与 generation**，用于冻结工具版本、Runner Plugin、资源/网络策略并承载 runtime session，不再代表某一种语言；
 - 全局 Tool Store 以 `familyId/versionId/contentDigest`（digest 按 arch 解析） 保存不可变工具版本，同 family 多版本可并存；不同 Workspace 可以同时选择不同 Node/Python/Go 版本；
+- 当前 x64 Catalog 已实际提供 Node 24.21.0/22.23.2、Python 3.14.7/3.13.15、Go 1.27.1/1.26.8；这些 pack 由 SHA-256 固定的 `mise 2026.9.5 install-into` 在专用 bubblewrap materializer sandbox 内生成，版本再由无网络 verifier sandbox 检查；最终身份仍由 Nexus canonical tree digest 决定，installer 不写全局 `/usr/bin`；
 - Workspace 切换工具版本时只创建/重启该 Workspace 的新 Environment generation，并重新解析该 generation 的 PATH/只读工具挂载；不修改全局 `/usr/bin`，不影响其他 Workspace，项目文件也不随 generation 复制或丢失；
 - 平台管理的 `/workspace/deps`、`/workspace/build` 与 npm/pip/Go cache 按精确 `runtimeDigest + packRefs` 的 `toolchainFingerprint` 分区；不同 ABI 工具组合不共享这些依赖状态，切回相同组合可复用，项目源码仍保持稳定；
 - Agent、Plugin、CI/task 以及后续接入的 Terminal runtime 都从当前 Workspace Environment 解析工具；Rust/JDK/CUDA 等后续工具继续扩展同一 Tool 模型，不新增语言专用 Environment 类型；

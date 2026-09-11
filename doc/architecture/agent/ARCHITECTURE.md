@@ -332,7 +332,7 @@ Tool Store 的安装 key 为 `familyId/versionId/contentDigest`；Catalog 先按
 
 Workspace 切换工具版本必须执行：确保目标 Tool Pack 已下载并校验 → 停止/替换该 Workspace 的旧 runtime generation → 创建新 generation 并冻结新的 `packRefs` → 把**同一稳定 Workspace filesystem** bind 到 `/workspace` → 根据新 generation 生成 PATH/只读工具挂载。这个过程不得修改 Runner 进程全局 PATH、宿主 `/usr/bin` 或其他 Workspace 的 profile。旧 generation 的 process/session 必须终止，不能在版本切换后继续持有旧工具或 lease。
 
-Tool Pack 安装由 Runner Core 完成：download → checksum/digest → manifest/arch/runnerApiRange/dependency/archive safety → `packs/.staging` → fsync/read-only → atomic rename。Pack 不执行宿主安装脚本，也不能修改 Runner Core。Environment job 只获得该 generation 冻结的精确 Tool Pack 只读视图；历史恢复找不到原 digest 时明确 `ENVIRONMENT_PACK_UNAVAILABLE`，不静默替换。
+Tool Pack 安装由 Runner Core 完成。内置 `base-tools` 继续走 release archive 的 archive-safety/manifest/digest 校验；Node/Python/Go 只允许 Catalog 锁定的 `mise://<installerVersion>/<family>/<exactVersion>` source，由 host prerequisite 安装并 SHA-256 固定 `mise 2026.9.5`；Runner 再把 `mise install-into` 放进专用 bubblewrap materializer sandbox，只暴露可写 mise cache + staging、只读系统 runtime，隔离 user/PID/IPC/UTS 并 drop all capabilities，安装阶段保留网络仅用于下载。Nexus 随后拒绝逃逸 symlink，把 Python 等安装树中的 staging prefix 规范化为 sandbox canonical `/opt/nexus/packs/<family>/<version>`；exact tool version 会在第二个无网络 bubblewrap verifier 中执行并校验，然后计算包含 path/type/exec-bit/file-content/safe-symlink 的 canonical tree digest；只有与 Catalog 的 arch digest 精确一致才写 manifest、fsync/read-only 并 atomic rename。mise 是受信任的发行 prerequisite，但不能决定最终 Pack identity，也不能写 `/usr/bin` 或 Runner Core；普通 API 不能提供任意 installer/source。Workspace job 只获得该 generation 冻结的精确 Tool Pack 只读视图；历史恢复找不到原 digest 时明确 pack unavailable，不静默替换。
 
 ### 9.2 Runner 数据布局、Workspace 与 ACL
 

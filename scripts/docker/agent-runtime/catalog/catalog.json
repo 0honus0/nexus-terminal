@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": "2026-09-11.2",
-  "runtimeDigest": "nexus-agent-runner:workspace-toolchain-profile-v1",
+  "revision": "2026-09-11.3",
+  "runtimeDigest": "nexus-agent-runner:workspace-toolchain-profile-v2",
   "recipes": [
     {
       "id": "workspace-dev",
@@ -11,8 +11,16 @@
       "allowedFamilies": ["base-tools", "node", "python", "go"],
       "requiredCapabilities": ["shell", "code"],
       "defaultFamilies": ["base-tools"],
-      "defaultLimits": { "memoryBytes": 1073741824, "cpus": 1, "pids": 256, "tmpfsBytes": 268435456 },
-      "networkDefaults": { "mode": "none", "hosts": [] }
+      "defaultLimits": {
+        "memoryBytes": 1073741824,
+        "cpus": 1,
+        "pids": 256,
+        "tmpfsBytes": 268435456
+      },
+      "networkDefaults": {
+        "mode": "none",
+        "hosts": []
+      }
     }
   ],
   "packs": [
@@ -25,7 +33,10 @@
         "x64": "sha256:a2aa60a879344fb5268a177567afbbb5af087ce4239ee1471be595eeeffff24c",
         "arm64": "sha256:e19ac06f771d35e5e9fe559854f2c8a9f8f478d73cb893a86251d3bf38dd44ff"
       },
-      "downloadRefByArch": { "x64": "builtin://base-tools/1/x64", "arm64": "builtin://base-tools/1/arm64" },
+      "downloadRefByArch": {
+        "x64": "builtin://base-tools/1/x64",
+        "arm64": "builtin://base-tools/1/arm64"
+      },
       "capabilities": ["shell", "code"],
       "runnerApiRange": ">=1 <2",
       "diskBytes": 16384,
@@ -33,6 +44,120 @@
       "supportedArchitectures": ["x64", "arm64"],
       "status": "supported",
       "sideBySide": false
+    },
+    {
+      "schemaVersion": 1,
+      "familyId": "node",
+      "versionId": "24.21.0",
+      "displayName": "Node 24.21.0",
+      "contentDigestByArch": {
+        "x64": "sha256:d3ae1c0a4392e108ce3f09bef78c07b6fd3ccb79956ed9216e91c8670d82b0aa"
+      },
+      "downloadRefByArch": {
+        "x64": "mise://2026.9.5/node/24.21.0"
+      },
+      "capabilities": ["node"],
+      "runnerApiRange": ">=1 <2",
+      "diskBytes": 201365320,
+      "dependencies": [],
+      "supportedArchitectures": ["x64"],
+      "status": "supported",
+      "sideBySide": true
+    },
+    {
+      "schemaVersion": 1,
+      "familyId": "node",
+      "versionId": "22.23.2",
+      "displayName": "Node 22.23.2",
+      "contentDigestByArch": {
+        "x64": "sha256:ce0267307c62788c5a4a65a9311d4041b3f52cb13031e41fb1b1008550b6e9b2"
+      },
+      "downloadRefByArch": {
+        "x64": "mise://2026.9.5/node/22.23.2"
+      },
+      "capabilities": ["node"],
+      "runnerApiRange": ">=1 <2",
+      "diskBytes": 196778142,
+      "dependencies": [],
+      "supportedArchitectures": ["x64"],
+      "status": "supported",
+      "sideBySide": true
+    },
+    {
+      "schemaVersion": 1,
+      "familyId": "python",
+      "versionId": "3.14.7",
+      "displayName": "Python 3.14.7",
+      "contentDigestByArch": {
+        "x64": "sha256:2e6c4c15ef0a1ac144c4d78ab240691cf680e293297170b894ec14bd905e4013"
+      },
+      "downloadRefByArch": {
+        "x64": "mise://2026.9.5/python/3.14.7"
+      },
+      "capabilities": ["python"],
+      "runnerApiRange": ">=1 <2",
+      "diskBytes": 101178952,
+      "dependencies": [],
+      "supportedArchitectures": ["x64"],
+      "status": "supported",
+      "sideBySide": true
+    },
+    {
+      "schemaVersion": 1,
+      "familyId": "python",
+      "versionId": "3.13.15",
+      "displayName": "Python 3.13.15",
+      "contentDigestByArch": {
+        "x64": "sha256:eadeb2faa2a25c82c73ab30f96490663e5a0278d8fa83f0a3783c617a7ad5e93"
+      },
+      "downloadRefByArch": {
+        "x64": "mise://2026.9.5/python/3.13.15"
+      },
+      "capabilities": ["python"],
+      "runnerApiRange": ">=1 <2",
+      "diskBytes": 98354944,
+      "dependencies": [],
+      "supportedArchitectures": ["x64"],
+      "status": "supported",
+      "sideBySide": true
+    },
+    {
+      "schemaVersion": 1,
+      "familyId": "go",
+      "versionId": "1.27.1",
+      "displayName": "Go 1.27.1",
+      "contentDigestByArch": {
+        "x64": "sha256:e7aa8698663c809b3b92c06b2779368ae650a842e6ead0f017642494c9676ad1"
+      },
+      "downloadRefByArch": {
+        "x64": "mise://2026.9.5/go/1.27.1"
+      },
+      "capabilities": ["go"],
+      "runnerApiRange": ">=1 <2",
+      "diskBytes": 243910883,
+      "dependencies": [],
+      "supportedArchitectures": ["x64"],
+      "status": "supported",
+      "sideBySide": true
+    },
+    {
+      "schemaVersion": 1,
+      "familyId": "go",
+      "versionId": "1.26.8",
+      "displayName": "Go 1.26.8",
+      "contentDigestByArch": {
+        "x64": "sha256:c4977d54874871d95f025c452b875fbb60c9dc7a7a3832d4cbc3fea49fc7cfd7"
+      },
+      "downloadRefByArch": {
+        "x64": "mise://2026.9.5/go/1.26.8"
+      },
+      "capabilities": ["go"],
+      "runnerApiRange": ">=1 <2",
+      "diskBytes": 232513030,
+      "dependencies": [],
+      "supportedArchitectures": ["x64"],
+      "status": "supported",
+      "sideBySide": true
     }
   ]
 }
