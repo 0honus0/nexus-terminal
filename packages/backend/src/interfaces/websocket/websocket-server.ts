@@ -4,12 +4,14 @@ import express, { type Request, type RequestHandler, type Response } from 'expre
 import ipaddr from 'ipaddr.js';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
+import type { AgentEventFacade, AgentRunFacade } from '../../modules/agent/public';
 import { logger } from '../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
+import { AgentProtocolSession } from './agent-protocol.session';
 import { bindUploadStream } from './upload-stream.transport';
 import { WorkspaceProtocolSession, type WorkspaceProtocolDependencies } from './workspace-protocol.session';
 
-const ALLOWED_PATHS = new Set(['/ws/workspace', '/ws/uploads', '/ws/remote-desktop']);
+const ALLOWED_PATHS = new Set(['/ws/workspace', '/ws/uploads', '/ws/remote-desktop', '/ws/agent']);
 const SAFE_WORKSPACE_ID = /^[A-Za-z0-9_-]{8,128}$/;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const MAX_MISSED_HEARTBEATS = 2;
@@ -20,8 +22,8 @@ interface SessionRequest extends Request {
 
 interface ClientRecord {
   socket: WebSocket;
-  kind: 'workspace' | 'upload' | 'remote-desktop';
-  protocol?: WorkspaceProtocolSession;
+  kind: 'workspace' | 'upload' | 'remote-desktop' | 'agent';
+  protocol?: { close(): Promise<void> | void };
   isAlive: boolean;
   missed: number;
 }
@@ -33,6 +35,8 @@ export interface RemoteDesktopWebSocketAcceptor {
 export interface WebSocketServerDependencies extends WorkspaceProtocolDependencies {
   ipWhitelist: IpWhitelistService;
   remoteDesktop: RemoteDesktopWebSocketAcceptor;
+  agentEvents: AgentEventFacade;
+  agentRuns: AgentRunFacade;
 }
 
 export interface WebSocketRuntimeOptions {
@@ -53,6 +57,7 @@ export interface BackendWebSocketServer {
     workspace: number;
     upload: number;
     remoteDesktop: number;
+    agent: number;
     bufferedAmountBytes: number;
     maxBufferedAmountBytes: number;
   };
@@ -182,6 +187,19 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     trackClient({ socket, kind: 'remote-desktop', isAlive: true, missed: 0 });
   };
 
+  const onAgentConnection = (socket: WebSocket, userId: number): void => {
+    const protocol = new AgentProtocolSession(
+      socket,
+      { userId },
+      { events: dependencies.agentEvents, runs: dependencies.agentRuns },
+    );
+    const record: ClientRecord = { socket, kind: 'agent', protocol, isAlive: true, missed: 0 };
+    trackClient(record);
+    socket.on('message', (data, isBinary) => void protocol.handleMessage(data, isBinary));
+    socket.once('close', () => void protocol.close());
+    socket.once('error', () => void protocol.close());
+  };
+
   const handleAuthenticatedUpgrade = (
     request: SessionRequest,
     socket: Socket,
@@ -216,6 +234,14 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       wss.handleUpgrade(request, socket, head, (ws) => {
         runtimePerformanceMetrics.webSocketUpgradeAccepted();
         onRemoteDesktopConnection(ws, request, ticket, userId);
+      });
+      return;
+    }
+
+    if (pathname === '/ws/agent') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        runtimePerformanceMetrics.webSocketUpgradeAccepted();
+        onAgentConnection(ws, userId);
       });
       return;
     }
@@ -348,12 +374,14 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       let workspace = 0;
       let upload = 0;
       let remoteDesktop = 0;
+      let agent = 0;
       let bufferedAmountBytes = 0;
       let maxBufferedAmountBytes = 0;
       for (const record of clients) {
         if (record.kind === 'workspace') workspace += 1;
         else if (record.kind === 'upload') upload += 1;
-        else remoteDesktop += 1;
+        else if (record.kind === 'remote-desktop') remoteDesktop += 1;
+        else agent += 1;
         bufferedAmountBytes += record.socket.bufferedAmount;
         maxBufferedAmountBytes = Math.max(maxBufferedAmountBytes, record.socket.bufferedAmount);
       }
@@ -362,6 +390,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         workspace,
         upload,
         remoteDesktop,
+        agent,
         bufferedAmountBytes,
         maxBufferedAmountBytes,
       };

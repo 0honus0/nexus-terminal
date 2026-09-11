@@ -4,7 +4,6 @@ import { GuacamoleRuntimeAdapter } from '../infrastructure/guacamole/guacamole-r
 import { FileHttpSessionAdapter } from '../infrastructure/session/file-http-session.adapter';
 import { createPluginFrontendStaticServer } from '../infrastructure/agent/plugins/plugin-frontend-static-server';
 import { createHttpApplication } from '../interfaces/http/http-application';
-import { closeAllAgentSseStreams } from '../interfaces/http/agent/agent-sse';
 import { attachWebSocketServer, type BackendWebSocketServer } from '../interfaces/websocket/websocket-server';
 import { createCompositionRoot, type CompositionRoot } from './composition-root';
 import { startRuntimePerformanceReporter, type RuntimePerformanceReporter } from './runtime-performance-reporter';
@@ -47,7 +46,6 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     e2eResetEnabled: config.nodeEnv === 'test' && config.e2eResetEnabled,
     resetForE2E: (mode) =>
       webSockets.quiesce(async () => {
-        closeAllAgentSseStreams();
         await services.resetForE2E(mode);
         await sessions.clear();
       }),
@@ -112,6 +110,8 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
       remoteDesktop: {
         accept: (socket, request, ticket, userId) => guacamoleRuntime.acceptSession(ticket, userId, socket, request),
       },
+      agentEvents: services.agent.runtime.events,
+      agentRuns: services.agent.runtime.runs,
       workspace: services.modules.workspace,
       events: services.modules.workspaceEvents,
       terminal: services.modules.workspaceTerminal,
@@ -171,7 +171,6 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
       performanceReporter = undefined;
       try {
         await services.agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
-        closeAllAgentSseStreams();
         await webSockets.close();
         if (pluginFrontendServer?.listening) {
           await new Promise<void>((resolve, reject) =>

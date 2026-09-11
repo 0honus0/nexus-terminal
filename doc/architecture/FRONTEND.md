@@ -522,7 +522,7 @@ AgentHubWindow
 
 ```text
 features/agent/
-├── api/       typed HTTP/SSE client + transport parsing
+├── api/       typed HTTP + `/ws/agent` client + transport parsing
 ├── ai/        conversation presentation
 ├── files/     Files / Artifact Library 与 picker
 ├── runtime/   Run/Task/Approval/Subagent/Environment presentation + facade
@@ -535,7 +535,7 @@ Frontend 不执行权威 Recall/vector search、context budgeting、Tool authori
 
 ### 10.4 Operations App frontend owner
 
-Operations Agent 当前作为 `features/agent/apps/operations/` 下的 built-in contribution，由 Agent Host 组合，不另建 npm workspace package。它通过 `runtime/run-facade.ts` 和 `api/` 使用 App-scoped HTTP/SSE contract。
+Operations Agent 当前作为 `features/agent/apps/operations/` 下的 built-in contribution，由 Agent Host 组合，不另建 npm workspace package。它通过 `runtime/run-facade.ts` 和 `api/` 使用 App-scoped HTTP + `/ws/agent` contract。
 
 It owns:
 
@@ -552,7 +552,7 @@ It owns:
 
 用户输入历史仍是 canonical conversation source。Frontend 可以展示完整历史、修正关系和 compaction/context 状态，但浏览器裁剪不是权威历史，不能本地覆盖 Backend digest/projection 后继续执行。Backend 分配稳定 sequence/id；显式编辑/删除必须走后端 conversation mutation contract 并失效相关派生状态。
 
-Frontend 不直接实现 ACP client。浏览器通过 Operations App HTTP/SSE contract 与 Nexus backend 通信；ACP wire/session/permission 由 Operations backend contribution 隔离。
+Frontend 不直接实现 ACP client。浏览器通过 Operations App HTTP + `/ws/agent` contract 与 Nexus backend 通信；ACP wire/session/permission 由 Operations backend contribution 隔离。
 
 ### 10.5 Future Agent App contributions
 
@@ -622,7 +622,7 @@ Raw WebSocket transport 只属于：
 client/websocket/
 ```
 
-Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. Agent/App-scoped HTTP/SSE transport ownership belongs to `features/agent/api/`; Run-facing composition belongs to `features/agent/runtime/`, Host/Plugin bridge belongs to `features/agent/host/`, and built-in Operations presentation belongs to `features/agent/apps/operations/`. Agent code must not reuse Workspace sockets/sessions, and Workspace code must not import Agent live state. Dynamic Plugin UI uses its isolated Host bridge rather than Workspace WebSocket or direct Nexus API/session access.
+Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. Agent/App-scoped HTTP + `/ws/agent` transport ownership belongs to `features/agent/api/`; Run-facing composition belongs to `features/agent/runtime/`, Host/Plugin bridge belongs to `features/agent/host/`, and built-in Operations presentation belongs to `features/agent/apps/operations/`. Agent code must not reuse Workspace sockets/sessions, and Workspace code must not import Agent live state. Dynamic Plugin UI uses its isolated Host bridge rather than Workspace WebSocket or direct Nexus API/session access.
 
 Terminal/Filesystem/Transfer 等 feature 不应该直接发送 string message name。
 
@@ -801,7 +801,7 @@ Source directories do not carry their own README policy files. Durable placement
 | `app/pages/dashboard/`                       | Application composition surface for public capabilities such as Connections, Tags, Audit, and System Overview; it does not own those domains.                                                           |
 | `app/pages/settings/`                        | Application composition surface for existing Nexus settings plus registered shared/App settings contributions. It does not own Provider secrets or App runtime/domain state.                            |
 | `features/agent/host/`                       | Current Agent App Host/Launcher/Hub/App switch/Plugin iframe bridge owner. It composes App presentation but does not own canonical Run/Provider/Artifact facts.                                         |
-| `features/agent/api/`                        | Typed Agent HTTP/SSE clients and transport parsing. It does not own user-visible runtime state or security decisions.                                                                                   |
+| `features/agent/api/`                        | Typed Agent HTTP + `/ws/agent` clients and transport parsing. It does not own user-visible runtime state or security decisions.                                                                         |
 | `features/agent/{ai,files,runtime,settings}` | Shared Agent presentation/use-case boundaries for conversation, Artifact Library, Run/Environment projection and settings. They consume Backend facts and do not own Workspace live runtime resources.  |
 | `foundation/async/`                          | Business-neutral async coordination primitives, including latest-value persistence mechanics used by debounced UI settings.                                                                             |
 | `foundation/browser/`                        | Business-neutral browser/device capability primitives; product behavior stays in features/runtimes/App packages.                                                                                        |

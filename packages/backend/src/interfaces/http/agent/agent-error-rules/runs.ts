@@ -49,7 +49,7 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     ],
     rawCode(409, 'Agent runtime state changed; refresh and retry.'),
   ),
-  onCodes(['RUN_QUEUE_FULL', 'SSE_SESSION_LIMIT'], rawCode(429, 'Agent capacity is temporarily exhausted.')),
+  onCodes(['RUN_QUEUE_FULL'], rawCode(429, 'Agent capacity is temporarily exhausted.')),
   onCodes(
     ['CONTEXT_BUDGET_EXCEEDED', 'MODEL_PRICE_UNKNOWN'],
     rawCode(422, 'The selected model cannot satisfy the requested Agent budget.'),

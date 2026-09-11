@@ -328,7 +328,6 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
     '/api/v1/apps/:appId',
     createAppRuntimeRouter({
       runs: dependencies.agentRuns,
-      events: dependencies.agentEvents,
       approvals: dependencies.agentApprovals,
       workspaceRuntime: dependencies.agentWorkspaceRuntime,
       nodeEnv: dependencies.nodeEnv,

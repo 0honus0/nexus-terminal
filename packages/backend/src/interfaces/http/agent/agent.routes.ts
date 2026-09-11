@@ -24,14 +24,6 @@ import {
 import { agentUserId, createAgentMutationSecurity, issueAgentCsrf, requireAgentAuthenticated } from './agent-security';
 import { createPluginRouter } from './plugins.routes';
 import { createWorkspaceRuntimeRouter } from './workspace-runtime.routes';
-import {
-  acquireAgentSseSlot,
-  AgentSseWriter,
-  initializeSseResponse,
-  reloadAgentSession,
-  resolveSseCursor,
-  waitForSseWake,
-} from './agent-sse';
 
 export interface AgentRouterDependencies {
   host: AgentHostFacade;
@@ -88,12 +80,6 @@ const appSummary = (app: AppView) => ({
   pendingApprovals: app.approvalCount,
   pendingBudgetRequests: app.budgetRequestCount,
 });
-
-const hostEventFrame = (userId: number, event: Awaited<ReturnType<AgentEventFacade['readHost']>>[number]): string =>
-  `id: host:${userId}:${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify({
-    occurredAt: event.occurredAt,
-    payload: event.payload,
-  })}\n\n`;
 
 const providerInputKeys = [
   'kind',
@@ -350,49 +336,6 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         totalPendingBudgetRequests,
         eventCursor,
       });
-    }),
-  );
-
-  router.get(
-    '/events',
-    agentRoute(async (request, response) => {
-      const userId = agentUserId(request);
-      const highWater = await dependencies.events.hostCursor(userId);
-      let cursor = resolveSseCursor(request, `host:${userId}:`, highWater);
-      const releaseSlot = acquireAgentSseSlot(request);
-      initializeSseResponse(response);
-      const writer = new AgentSseWriter(response);
-      const startedAt = Date.now();
-      let lastHeartbeatAt = startedAt;
-      let lastAuthCheckAt = startedAt;
-      try {
-        while (!writer.closed && Date.now() - startedAt < 10 * 60 * 1000) {
-          const page = await dependencies.events.readHost(userId, cursor, 100);
-          if (page.length > 0) {
-            for (const event of page) {
-              if (!writer.enqueue(hostEventFrame(userId, event))) break;
-              cursor = event.sequence;
-            }
-            if (page.length === 100) continue;
-          }
-          const now = Date.now();
-          if (now - lastHeartbeatAt >= 15_000) {
-            writer.heartbeat();
-            lastHeartbeatAt = now;
-          }
-          if (now - lastAuthCheckAt >= 5_000) {
-            if (!(await reloadAgentSession(request, userId))) {
-              writer.close(true);
-              break;
-            }
-            lastAuthCheckAt = now;
-          }
-          await waitForSseWake((wake) => dependencies.events.onHostWake(userId, wake));
-        }
-      } finally {
-        releaseSlot();
-        writer.close(true);
-      }
     }),
   );
 

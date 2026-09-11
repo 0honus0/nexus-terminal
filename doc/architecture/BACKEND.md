@@ -328,7 +328,7 @@ A practical ownership guide for locating code:
 
 ## Agent App Platform and AI applications
 
-Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,environments,runtime,apps/operations}`, concrete adapters under `infrastructure/agent`, HTTP/SSE boundaries under `interfaces/http/agent`, and composition under `bootstrap/agent`. The plugin host, shared AI capabilities and built-in Operations App are defined in [Agent Architecture](./agent/ARCHITECTURE.md), with implementation details in [Agent Implementation](./agent/IMPLEMENTATION.md) and current delivery state in [Current Agent Architecture](./agent/CURRENT_AGENT_ARCHITECTURE.md).
+Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,workspace-runtime,runtime,apps/operations}`, concrete adapters under `infrastructure/agent`, HTTP boundaries under `interfaces/http/agent`, the Browser Agent event boundary under `interfaces/websocket/agent-protocol.session.ts` (`/ws/agent`), and composition under `bootstrap/agent`. The plugin host, shared AI capabilities and built-in Operations App are defined in [Agent Architecture](./agent/ARCHITECTURE.md), with implementation details in [Agent Implementation](./agent/IMPLEMENTATION.md) and current delivery state in [Current Agent Architecture](./agent/CURRENT_AGENT_ARCHITECTURE.md).
 
 Target composition:
 
@@ -399,4 +399,4 @@ Apps do not own Express directly. The Interface/App Host dispatches authenticate
 
 Operations examples use `/api/v1/apps/nexus.operations/...`; shared Provider/model resources remain `/api/v1/ai/...`.
 
-HTTP/SSE/WebSocket authentication, request bounds, streaming/backpressure and transport lifecycle remain Interface responsibilities. A plugin cannot register a route that bypasses them.
+HTTP/WebSocket authentication, request bounds, streaming/backpressure and transport lifecycle remain Interface responsibilities. Provider SSE parsing stays inside the Provider adapter; Browser Agent events use the `/ws/agent` Interface boundary. A plugin cannot register a route that bypasses them.

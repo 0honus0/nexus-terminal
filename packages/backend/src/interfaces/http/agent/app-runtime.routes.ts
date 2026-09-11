@@ -1,27 +1,13 @@
 import { Router, type Request } from 'express';
-import type {
-  AgentApprovalFacade,
-  AgentWorkspaceRuntimeFacade,
-  AgentEventFacade,
-  AgentRunFacade,
-} from '../../../modules/agent/public';
+import type { AgentApprovalFacade, AgentWorkspaceRuntimeFacade, AgentRunFacade } from '../../../modules/agent/public';
 import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { CreateRunCommand, RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
 import { agentData, agentRequestId, agentRoute } from './agent-http';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
-import {
-  acquireAgentSseSlot,
-  AgentSseWriter,
-  initializeSseResponse,
-  reloadAgentSession,
-  resolveSseCursor,
-  waitForSseWake,
-} from './agent-sse';
 
 export interface AppRuntimeRouterDependencies {
   runs: AgentRunFacade;
-  events: AgentEventFacade;
   approvals: AgentApprovalFacade;
   workspaceRuntime: AgentWorkspaceRuntimeFacade;
   nodeEnv: string;
@@ -155,13 +141,6 @@ const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
   }
   return value as unknown as AgentWorkspaceCreateSpec;
 };
-
-const runFrame = (runId: string, event: Awaited<ReturnType<AgentEventFacade['readRun']>>[number]): string =>
-  `id: ${runId}:${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify({
-    schemaVersion: event.schemaVersion,
-    occurredAt: event.occurredAt,
-    payload: event.payload,
-  })}\n\n`;
 
 export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencies): Router => {
   const router = Router({ mergeParams: true });
@@ -499,58 +478,6 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         ),
         202,
       );
-    }),
-  );
-
-  router.get(
-    '/runs/:runId/events',
-    agentRoute(async (request, response) => {
-      const userId = agentUserId(request);
-      const appId = pathParam(request.params.appId);
-      const runId = pathParam(request.params.runId);
-      const scope = { userId, appId };
-      const snapshot = await dependencies.runs.get(scope, runId);
-      let cursor = resolveSseCursor(request, `${runId}:`, snapshot.eventCursor);
-      const releaseSlot = acquireAgentSseSlot(request);
-      initializeSseResponse(response);
-      const writer = new AgentSseWriter(response);
-      const unsubscribeTransient = dependencies.events.onTransient(runId, (event) => {
-        writer.enqueue(
-          `event: ${event.type}\ndata: ${JSON.stringify({ occurredAt: event.occurredAt, payload: event.payload })}\n\n`,
-        );
-      });
-      const startedAt = Date.now();
-      let lastHeartbeatAt = startedAt;
-      let lastAuthCheckAt = startedAt;
-      try {
-        while (!writer.closed && Date.now() - startedAt < 10 * 60 * 1000) {
-          const page = await dependencies.events.readRun(scope, runId, cursor, 100);
-          if (page.length > 0) {
-            for (const event of page) {
-              if (!writer.enqueue(runFrame(runId, event))) break;
-              cursor = event.sequence;
-            }
-            if (page.length === 100) continue;
-          }
-          const now = Date.now();
-          if (now - lastHeartbeatAt >= 15_000) {
-            writer.heartbeat();
-            lastHeartbeatAt = now;
-          }
-          if (now - lastAuthCheckAt >= 5_000) {
-            if (!(await reloadAgentSession(request, userId))) {
-              writer.close(true);
-              break;
-            }
-            lastAuthCheckAt = now;
-          }
-          await waitForSseWake((wake) => dependencies.events.onRunWake(runId, wake));
-        }
-      } finally {
-        unsubscribeTransient();
-        releaseSlot();
-        writer.close(true);
-      }
     }),
   );
 

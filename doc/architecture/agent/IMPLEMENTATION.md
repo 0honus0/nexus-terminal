@@ -10,7 +10,7 @@
 | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | P1-A | Host、scope、App/grant/settings持久化、生产manifest、architecture guard                                                                               | 需求/本文契约；host.spec.ts                                                                          |
 | P1-B | Provider/Secret/出站策略、Artifact与文件库后端、Ledger、Context、内置Skill/Recall                                                                     | P1-A；provider.spec.ts、artifacts.spec.ts                                                            |
-| P1-C | 通用Run/Native Harness、只读Tools、state commit、调度、SSE/summary、cancel/reconcile                                                                  | P1-B；runs.spec.ts、events.spec.ts、read-tools.spec.ts                                               |
+| P1-C | 通用Run/Native Harness、只读Tools、state commit、调度、Agent event subscription/summary、cancel/reconcile                                             | P1-B；runs.spec.ts、events.spec.ts、read-tools.spec.ts                                               |
 | P1-D | Launcher/Hub/Operations/文件库 UI、Nexus Settings 的 Agent tab（总开关/App管理/设置分区/Workspace Runtime unavailable）、ingress/reset/shutdown、打包 | P1-C；hub.spec.ts、settings.spec.ts、artifact-library.spec.ts、lifecycle.spec.ts、deployment.spec.ts |
 | P2-A | canonical hash、Approval、Lease、修改Tools、Workspace MutationGuard                                                                                   | P1-D；approvals.spec.ts、leases.spec.ts、mutation.spec.ts                                            |
 | P2-B | nexus-agent-runner/Sandbox Manager、Workspace Runtime RPC/隔离/配额/Artifact协作/发布                                                                 | P2-A；Workspace Runtime / multi-version E2E                                                          |
@@ -34,18 +34,18 @@
 
 P1 当前依赖替换清单：
 
-| 原实现                                        | 处理             | 模块/原因                                                                             |
-| --------------------------------------------- | ---------------- | ------------------------------------------------------------------------------------- |
-| Manifest 手写 SemVer regex/compare            | 替换             | `semver@^7`；npm 自身长期使用的 SemVer 实现                                           |
-| Manifest/Tool 结构化输入的重复手写 shape 校验 | 渐进替换         | `ajv@^8`；先用于稳定 JSON Schema 边界，领域授权/策略检查继续代码实现                  |
-| Artifact `Content-Disposition` 手写 escaping  | 替换             | `content-disposition@^3`；负责 RFC filename 编码                                      |
-| Frontend SSE 手写 parser                      | 已替换           | `eventsource-parser@^4`                                                               |
-| Provider SSE 手写 parser                      | 替换             | `eventsource-parser@^4`，保留 Provider chunk/Tool 参数/usage 业务映射                 |
-| Conversation/Artifact 长列表全量 DOM          | 替换             | `vue-virtual-scroller@^3`，使用 DynamicScroller/RecycleScroller                       |
-| UUID 版本 regex                               | 替换             | `uuid@^14`；统一 validate/version，生成继续使用 Node `crypto.randomUUID()`            |
-| HTTP `Range` 手写 parser                      | 替换             | `range-parser@^1.3`；只负责 RFC Range，单 range/8 MiB 上限仍由 Artifact adapter 强制  |
-| IP 分类                                       | 保留现有成熟模块 | `ipaddr.js` 已满足地址分类；Nexus SSRF/DNS rebinding policy 继续 adapter 编排         |
-| Hub drag/resize                               | 暂缓第三方替换   | 候选虽成熟但当前安全/维护审计存在未决项；优先复用现有 Foundation pointer/overlay 原语 |
+| 原实现                                        | 处理             | 模块/原因                                                                              |
+| --------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------- |
+| Manifest 手写 SemVer regex/compare            | 替换             | `semver@^7`；npm 自身长期使用的 SemVer 实现                                            |
+| Manifest/Tool 结构化输入的重复手写 shape 校验 | 渐进替换         | `ajv@^8`；先用于稳定 JSON Schema 边界，领域授权/策略检查继续代码实现                   |
+| Artifact `Content-Disposition` 手写 escaping  | 替换             | `content-disposition@^3`；负责 RFC filename 编码                                       |
+| Frontend Agent SSE parser                     | 已删除           | Browser 事件改为原生 WebSocket `/ws/agent`；不再保留 SSE/parser 兼容层                 |
+| Provider SSE 手写 parser                      | 替换             | Backend 继续使用 `eventsource-parser@^4`，保留 Provider chunk/Tool 参数/usage 业务映射 |
+| Conversation/Artifact 长列表全量 DOM          | 替换             | `vue-virtual-scroller@^3`，使用 DynamicScroller/RecycleScroller                        |
+| UUID 版本 regex                               | 替换             | `uuid@^14`；统一 validate/version，生成继续使用 Node `crypto.randomUUID()`             |
+| HTTP `Range` 手写 parser                      | 替换             | `range-parser@^1.3`；只负责 RFC Range，单 range/8 MiB 上限仍由 Artifact adapter 强制   |
+| IP 分类                                       | 保留现有成熟模块 | `ipaddr.js` 已满足地址分类；Nexus SSRF/DNS rebinding policy 继续 adapter 编排          |
+| Hub drag/resize                               | 暂缓第三方替换   | 候选虽成熟但当前安全/维护审计存在未决项；优先复用现有 Foundation pointer/overlay 原语  |
 
 后续 P2/P3 每个新能力仍先过此闸门，尤其是 JSON Schema、MCP、CDP、归档/解包、签名、重试/限流 primitive、虚拟列表和浏览器协议，不默认从零实现。
 
@@ -130,7 +130,7 @@ Concrete adapters：packages/backend/src/infrastructure/agent/ 下 repositories/
 | 当前文件                                                                                   | 精确改动与兼容边界                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Backend src/bootstrap/composition-root.ts                                                  | 调compose-agent，注入database/SecretCipher/ConnectionService/ExecutionSessionManager/diagnostics及机器ports；返回agent facade和quiesce/dispose。不要把整个root给App |
-| Backend src/bootstrap/application.ts                                                       | 向HTTP注入facade；shutdown先quiesce Agent和SSE再server.close；resetForE2E先同样排空再reset DB                                                                       |
+| Backend src/bootstrap/application.ts                                                       | 向HTTP/WebSocket注入facade；shutdown先quiesce Agent和WebSocket clients再server.close；resetForE2E先同样排空再reset DB                                               |
 | Backend src/interfaces/http/http-application.ts                                            | 在现有认证/IP/2FA边界后挂agent.routes；保留express.json 1mb及其他API响应，不改旧WS协议                                                                              |
 | Backend src/infrastructure/database/sqlite-schema.registry.ts                              | 新库加入§4当期DDL；仅此处登记base schema                                                                                                                            |
 | Backend src/infrastructure/database/sqlite-migrations.ts                                   | 旧库按顺序升级；无module migration contribution机制，不新增第二个DB连接                                                                                             |
@@ -280,7 +280,7 @@ Checkpoint={schemaVersion:1,runId,ledgerThrough,planVersion,completedStepIds,evi
 
 ## 3. 默认参数、Hard Limits 与配置契约
 
-AGENT_DEFAULTS是服务端默认值源；Agent Settings不是单纯的模型设置，而是并入现有 Nexus Settings 的宿主级配置分区，先提供 Agent 功能总开关，再按模型与Provider、执行与性能、预算与上下文、Hard Limits、Subagent、Artifact与存储、Workspace Runtime、安全与网络、系统保护分区展示。管理员可在Hard Limits模块修改本实例的Run/并发/Artifact/Workspace资源最终策略上限；提高任何Hard Limit必须先提交preview，再二次确认后CAS保存。Settings返回requestedSettings+effectiveSettings+hardLimits+runtimeCapabilities+revision；createRun保存会影响运行语义的effective snapshot，运行中不因后来调高设置而扩容。降低授权/denylist立即生效。event batch/commit queue/SSE/transient持久化边界属于固定guardrail；模型真实window、Provider限流、宿主当前CPU/内存/磁盘和Controller可用性属于runtimeCapabilities，只描述现实能力，不构造第二套资源上限。
+AGENT_DEFAULTS是服务端默认值源；Agent Settings不是单纯的模型设置，而是并入现有 Nexus Settings 的宿主级配置分区，先提供 Agent 功能总开关，再按模型与Provider、执行与性能、预算与上下文、Hard Limits、Subagent、Artifact与存储、Workspace Runtime、安全与网络、系统保护分区展示。管理员可在Hard Limits模块修改本实例的Run/并发/Artifact/Workspace资源最终策略上限；提高任何Hard Limit必须先提交preview，再二次确认后CAS保存。Settings返回requestedSettings+effectiveSettings+hardLimits+runtimeCapabilities+revision；createRun保存会影响运行语义的effective snapshot，运行中不因后来调高设置而扩容。降低授权/denylist立即生效。event batch/commit queue/Agent WebSocket/transient持久化边界属于固定guardrail；模型真实window、Provider限流、宿主当前CPU/内存/磁盘和Controller可用性属于runtimeCapabilities，只描述现实能力，不构造第二套资源上限。
 
 | 参数（单位）                                                   | 默认软值 / 默认Hard Limit                  | 口径                                                                                                                                                                                                                                          |
 | -------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -327,7 +327,7 @@ Agent Settings使用同一个`agent_settings.value_json`保存版本化、namesp
 | Artifact与存储    | 单对象/单Run/全局配额、未retain TTL                                                                                                                                                                                 | 已用量高于新配额时拒绝降低；`minFreeDiskBytes`只读显示，不允许向下调                                                                                                                                                                                                                                                                |
 | Workspace Runtime | active Workspace 数、idle TTL、Recipe/Tool version 选择                                                                                                                                                             | 受 Agent Settings Hard Limits 控制；Controller 只验证实际能否分配/隔离，资源不足返回availability/resource错误，不再另设隐藏资源上限                                                                                                                                                                                                 |
 | 安全与网络        | target denylist、Provider私网例外、capability授权入口                                                                                                                                                               | hard deny、CSRF、approval hash、lease/fencing、metadata拒绝等不可关闭                                                                                                                                                                                                                                                               |
-| 系统保护          | Run created排队容量20、event batch 64/256KiB、commit queue 256/4MiB、安全终态预留、SSE每session 3、delta/tool chunk不落库                                                                                           | 只读展示/诊断；这些是有界队列/协议/数据库正确性guardrail，不是任务资源Hard Limit，也没有另一套可配置资源上限                                                                                                                                                                                                                        |
+| 系统保护          | Run created排队容量20、event batch 64/256KiB、commit queue 256/4MiB、安全终态预留、Agent WS每socket 16订阅/1MiB缓冲、delta不落库                                                                                    | 只读展示/诊断；这些是有界队列/协议/数据库正确性guardrail，不是任务资源Hard Limit，也没有另一套可配置资源上限                                                                                                                                                                                                                        |
 
 性能设置必须同时展示`current executing / requested / effective / hard limit`。例如`maxConcurrentRuntimes=2`且Hard Limit=4时显示“当前执行1 / 有效2 / Hard Limit 4”；`maxConcurrentModelCalls=auto`显示“自动（当前有效2）”，用户改为1后Runtime仍可并发2但模型调用串行排队。如果Runtime调为1，即使模型并发请求值更高，effective仍为1。root和所有Subagent共用Runtime/model slot，waiting/tool/join状态按各自permit规则计算。
 
@@ -643,7 +643,7 @@ Workspace Profile/Generation 的 Runner command 只保存可公开到控制面�
 
 StateCommit输入={scope,runId,expectedRunVersion,expectedInputRevision?,expectedPolicyRevision?,generation,events,runPatch,ledgerAppends,toolPatches,approvalPatches,commandCompletion?}。events是受schema限制的事实（≤64条/≤256 KiB），不是任意JSON SQL。输出={runVersion,eventCursor,ledgerCursor,committedEvents}。投影patch只能由domain reducer从事件导出；repository检查事件和patch一致，不能允许API直接构造patch。
 
-单事务步骤：验证generation及scope→CAS run.version/输入/授权revision→为ledgerAppends分配ai_threads.next_sequence→为events分配agent_runs.next_event_sequence→insert entries/events与变更记录→更新Run状态/水位/usage→按旧新状态差额更新agent_apps计数→分配host sequence并写安全summary.changed outbox→可选commit幂等response→COMMIT。异常整笔回滚；只有commit成功才唤醒SSE与scheduler。创建Run的事务还包含input、初始runtime、run.created和幂等claim，不先返回201再写DB。
+单事务步骤：验证generation及scope→CAS run.version/输入/授权revision→为ledgerAppends分配ai_threads.next_sequence→为events分配agent_runs.next_event_sequence→insert entries/events与变更记录→更新Run状态/水位/usage→按旧新状态差额更新agent_apps计数→分配host sequence并写安全summary.changed outbox→可选commit幂等response→COMMIT。异常整笔回滚；只有commit成功才唤醒 Agent event hub 与 scheduler。创建Run的事务还包含input、初始runtime、run.created和幂等claim，不先返回201再写DB。
 
 运行事实表是唯一可重建运行状态源，但Provider/config、Ledger正文、Artifact metadata仍是各自canonical记录；event保留其ref/version。禁止以“event唯一事实”删除这些不可替代数据。重建时不依赖delta；已删除Run的数据不再承诺恢复。
 
@@ -663,7 +663,7 @@ claim使用unique约束：同key不同hash→409 IDEMPOTENCY_PAYLOAD_MISMATCH；
 
 当前Agent直接复用现有单连接`DatabaseAdapter`，不为Agent新增第二个Backend写连接、Redis或PostgreSQL。默认 Runtime 软值2、默认Hard Limit 4、模型并发auto→2，加上delta/tool chunk不落库、Artifact raw bytes不入SQLite、StateCommit批量提交与分页读取，构成首轮SQLite已验证容量基线；Hard Limit以后可由用户在Settings二次确认提高，但这不自动代表更高并发已经完成容量验收，设置页需明确风险，必要时重新跑本节负载门槛。数据库替换不是开工前置条件。
 
-真正风险是全Backend DB操作都经过单一串行队列，因此transaction内严禁等待模型、SSH、Docker、HTTP、文件fsync或外部mutex。Agent实现必须观测`dbQueueDepth/dbQueueWaitMs/transactionDurationMs/agentBusyCount`；P1-C/P1-D负载验收至少覆盖默认2 Runtime持续运行、默认Hard Limit 4 burst、Host+Run SSE和普通Workspace/Settings请求并存。首轮工程门槛：默认并发不出现`AGENT_BUSY`，StateCommit p95≤25ms，DB queue wait p95≤50ms，普通非Agent API不出现持续性>100ms数据库排队；hard-limit burst允许背压但不能丢安全终态或破坏event/ledger/run原子性。
+真正风险是全Backend DB操作都经过单一串行队列，因此transaction内严禁等待模型、SSH、Docker、HTTP、文件fsync或外部mutex。Agent实现必须观测`dbQueueDepth/dbQueueWaitMs/transactionDurationMs/agentBusyCount`；P1-C/P1-D负载验收至少覆盖默认2 Runtime持续运行、默认Hard Limit 4 burst、Host+Run `/ws/agent` subscriptions和普通Workspace/Settings请求并存。首轮工程门槛：默认并发不出现`AGENT_BUSY`，StateCommit p95≤25ms，DB queue wait p95≤50ms，普通非Agent API不出现持续性>100ms数据库排队；hard-limit burst允许背压但不能丢安全终态或破坏event/ledger/run原子性。
 
 只有出现多Backend实例、多用户高并发、用户把Runtime Hard Limit显著提高并实际产生持续高并发、重新引入durable高频stream写、跨进程work claiming/leader需求，或在正确batch/分页且transaction无外部I/O后仍无法满足上述延迟门槛，才重新评估WAL/读连接拆分或数据库迁移。进入多Backend后必须连同scheduler/lease/claim/event sequence/idempotency一起重设计，不能只替换SQLite驱动。
 
@@ -848,7 +848,7 @@ Restore先quiesce→恢复DB→撤销Agent tokens/未consume approvals→所有�
 
 <a id="i7"></a>
 
-## 7. HTTP、SSE、安全与生产Ingress
+## 7. HTTP、Agent WebSocket、安全与生产Ingress
 
 ### 7.1 通用传输规则与接口表
 
@@ -863,7 +863,6 @@ Agent mutation额外要求X-Nexus-CSRF=session绑定的随机256-bit token；GET
 | GET/PATCH /agent/settings                                                                 | GET→requestedSettings/effectiveSettings/hardLimits/runtimeCapabilities/availability/revision；PATCH={patch:{section:{...}},expectedVersion}→同结构；P1 host.controller                                                                               |
 | GET/PUT /agent/target-denylist                                                            | put={connectionIds:number[],reason,expectedRevision}→revision/list；P1，配置只影响Agent工具                                                                                                                                                          |
 | GET /agent/summary                                                                        | 无→HostSnapshot；P1 host.controller                                                                                                                                                                                                                  |
-| GET /agent/events?cursor=0                                                                | Host SSE；P1 events.controller                                                                                                                                                                                                                       |
 | GET /agent/workspace-runtime/availability                                                 | →{available:false,reason:'phase_not_enabled'或'daemon_unavailable',recipes:[],packs:[]}；P1真实消费者；P2返回Runner/engine探测结果                                                                                                                   |
 | GET /agent/workspace-runtime/catalog                                                      | →{catalogRevision,recipes,packs,runtimeCapabilities}；P2；每个 Pack 显示 available/enabled/installed/inUse/deprecated、digest、diskBytes 与 arch                                                                                                     |
 | GET /agent/workspace-runtime/storage                                                      | →state/packs/cache/runtime/quarantine/sandboxOverhead互斥用量与reclaimable；P2                                                                                                                                                                       |
@@ -883,7 +882,6 @@ Agent mutation额外要求X-Nexus-CSRF=session绑定的随机256-bit token；GET
 | GET /apps/:appId/threads/:id/entries                                                      | page→LedgerEntryView[]；P1                                                                                                                                                                                                                           |
 | POST /apps/:appId/runs                                                                    | CreateRunCommand去command（幂等从header）→201 RunView，Location指snapshot；P1                                                                                                                                                                        |
 | GET /apps/:appId/runs/:id                                                                 | →RunSnapshot含eventCursor及分页ref；P1                                                                                                                                                                                                               |
-| GET /apps/:appId/runs/:id/events?cursor=0                                                 | durable+transient SSE；P1                                                                                                                                                                                                                            |
 | POST /apps/:appId/runs/:id/inputs                                                         | {text,artifactRefs,expectedVersion}→202 {inputId,sequence,runVersion}；P1                                                                                                                                                                            |
 | POST /apps/:appId/runs/:id/budget                                                         | {scope?:'run'                                                                                                                                                                                                                                        | 'delegation'                                                                          | 'mailbox',refId?,increase:{...},expectedVersion}→RunView；P1只启用scope=run（maxRunTokens/maxRunSteps/maxActiveExecutionSeconds/maxCostMicros），P3增加delegation（maxTokens/maxSteps）与mailbox（maxMessages/maxBytes）；都只提高本次Run内对应软预算，幂等且不得越当前Agent Settings Hard Limit |
 | POST /apps/:appId/runs/:id/cancel                                                         | {expectedVersion}→202 RunView或已终态200；P1                                                                                                                                                                                                         |
@@ -918,48 +916,28 @@ CreateRun input.text UTF-8最多32KiB、refs最多10个，完整JSON最多1MiB�
 
 错误码映射：400 VALIDATION_FAILED/CURSOR_INVALID；401 AUTH_REQUIRED；403 RESOURCE_FORBIDDEN/APP_CAPABILITY_DENIED/CSRF_REJECTED；404 NOT_FOUND；409 STATE_CONFLICT/AGENT_DISABLED/APPROVAL_STALE/LEASE_CONFLICT/RESOURCE_CHANGED/IDEMPOTENCY_* /RECONCILIATION_REQUIRED；410 ARTIFACT_UNAVAILABLE；413 PAYLOAD_TOO_LARGE；422 MODEL_CAPABILITY_UNSUPPORTED/CONTEXT_BUDGET_EXCEEDED；429 RUN_QUEUE_FULL；503 AGENT_BUSY/WORKSPACE_RUNTIME_UNAVAILABLE/PROVIDER_UNAVAILABLE；507 ARTIFACT_QUOTA_EXCEEDED。未知内部异常返回INTERNAL_ERROR+requestId，不把stack转给模型或浏览器。
 
-### 7.2 SSE协议和cursor
+### 7.2 `/ws/agent` subscription、durable replay 与 cursor
 
 DurableEvent={eventId,runId,sequence,schemaVersion:1,type,occurredAt,payload}；
-TransientEvent={runId,agentRuntimeId,modelAttemptId?,toolCallId?,streamId,chunkIndex,type,payload}，type仅message.delta/tool.output_chunk；不要求tool输出虚构modelAttemptId。
+TransientEvent={runId,type,payload,occurredAt}，type仅`message.delta`/`tool.delta`；它只在当前 Run subscription 上实时投递，不分配 durable sequence，也不要求 tool 输出虚构 modelAttemptId。
 HostEvent={sequence,schemaVersion:1,type:'summary.changed'|'feature.changed'|'app.changed'|'authorization.changed',occurredAt,payload:{featureEnabled:boolean,hostState:'enabled'|'disabling'|'disabled',apps:AppSummaryView[]}}，不含message/tool/Artifact正文或完整Settings。
 AppSummaryView={id,displayName,version,enabled,health,runningRuns,pendingApprovals,pendingBudgetRequests}；HostSnapshot={featureEnabled,hostState,apps,totalRunningRuns,totalPendingApprovals,totalPendingBudgetRequests,eventCursor}。`featureEnabled`来自Settings期望值；`hostState`在featureEnabled=false但仍在quiesce时为disabling，完成收敛后为disabled。runningRuns统计Run running/awaiting_approval/awaiting_budget/cancelling，不按Runtime/Subagent数量重复统计；预算请求通过Host summary提醒用户。
 
-Durable SSE写 id: <runId>:<sequence>，event: <type>，data为JSON；Host id: host:<userId>:<sequence>；transient不写id行。heartbeat为冒号注释，每15秒。V1持久事件不压缩，无CURSOR_EXPIRED；Run显式删除后404。未知event type同schema可跳过渲染但cursor推进；未知schema major终止详细流并显示升级提示，不能假装已经完整同步。
+`/ws/agent` 只接受文本 JSON `subscribe`/`unsubscribe`。`subscribe.payload={subscriptionId,channel:'host'|'run',cursor,appId?,runId?}`；服务端回 `subscribed` 后发送 `event`。durable `event.payload={subscriptionId,durability:'durable',sequence,eventType,payload,occurredAt,schemaVersion?}`，ephemeral 使用 `durability:'ephemeral'` 且没有 sequence。V1 durable event 不压缩、无 CURSOR_EXPIRED；未知 event type 在同 schema 下可跳过渲染但 cursor 仍推进，未知 schema major 必须终止详细流并显示升级提示。
 
-请求cursor整数≥0；Last-Event-ID必须是当前scope同Run/host格式。仅header时采用header；仅query时采用query；两者都有须解析到相同sequence，否则400 CURSOR_CONFLICT；超过当前high-water400 CURSOR_AHEAD，不能安静等待未来游标。不存在/不可访问的Run先404，再处理cursor避免泄露。用户注销/授权变化最多5秒检查一次session有效性，失效关闭流；前端401停止重试。
+`cursor` 必须是安全整数且 ≥0。Host high-water 取 `hostCursor(userId)`；Run 订阅先用 `{userId,appId,runId}` 读取 snapshot 校验 ownership，再取 `eventCursor`，因此不可访问 Run 不会因 cursor 校验泄露存在性。cursor 超过 high-water 返回协议 `error{code:'CURSOR_AHEAD'}`，不能安静等待未来游标。WebSocket upgrade 统一继承现有 Origin/IP/session/2FA 校验；浏览器登出会 abort 并关闭 socket，reset/shutdown 通过 WebSocket quiesce/drain 关闭现有订阅。
 
-订阅无丢失算法：读一致性snapshot(cursor=C)→GET events?cursor=C；服务端以DB为事实源循环readAfter(last,limit=100)→发送全部并推进last→空页时等待有界通知或1秒poll→再次DB补读。先注册wake再读页可降低延迟，但无论wake丢失都靠poll补齐；不把只订阅内存EventEmitter当持久消息。消息重复允许，前端按(runId,sequence)去重。
+订阅无丢失算法：客户端先从 Host summary 或 Run snapshot 取得 durable cursor=C，再发送 `subscribe`。服务端先校验 high-water 并安装 wake/transient listener，再以数据库为事实源循环 `readHost/readRun(after=last,limit=100)`，发送 durable page 后推进 last；新的 commit 通过 EventHub wake 触发下一轮 drain。EventHub 只负责唤醒/ephemeral delta，不是 durable 消息仓库；断线后客户端用最后已处理的 durable sequence 重新 subscribe，遗漏事实从数据库补回。消息重复允许，前端按 sequence 幂等推进 cursor。
 
-单event payload≤64KiB，大对象用ref；每客户端待发≤256events/1MiB，response.write=false等待drain最多5秒；溢出关闭客户端让其重连，不能阻塞全局commit。连接最多每session3条（Host+当前Run+页面转换暂用），超限429；每10分钟server可主动rotate连接以重新认证，不影响cursor。
+Agent WebSocket 单个出站消息≤64KiB，大对象继续用 ref；单 socket `bufferedAmount` 达 1MiB 即以 1013 关闭，让客户端按最后 durable cursor 重连，不能阻塞全局 commit。入站文本消息≤16KiB，binary 直接拒绝；每 socket 最多 16 个 subscription。底层共享 WebSocket server 每15秒 ping，连续2次 heartbeat 未响应即 terminate；这些 transport guardrail 不改变 Run/StateCommit 事务语义。
 
-### 7.3 专用fetch客户端、Nginx与CSRF
+### 7.3 Frontend transport、Nginx 与 CSRF
 
-Frontend api/agent-events.ts：subscribe({url,cursor,signal,onEvent,onSessionLost}):Promise<void>，fetch credentials:'include'/Accept:'text/event-stream'，不通过现有Axios。sse-parser.ts使用streaming TextDecoder，支持CRLF/多data行/空行分帧/注释，frame max128KiB，总buffer max256KiB；残缺帧不投递，EOF丢弃。重连1/2/4/8/15秒+jitter，离线等online；401清会话，403/404/不兼容停止；取消signal不重试。每次cursor仅来自已处理durable event，不能由最后delta覆盖。POST的401同样通过注入facade失效session。
+Frontend `api/agent-events.ts` 通过现有 `openWebSocket('/ws/agent')` 建立 Browser-only Agent event channel，并继续向上暴露 `host(cursor,signal)` / `run(appId,runId,cursor,signal)` 的 `AsyncIterable`，因此 presentation 不持有原始 socket。AbortSignal 会关闭当前连接；Host/Operations 外层循环重连时只携带最后已处理的 durable sequence，ephemeral delta 永远不能覆盖 cursor。连接尚未 open、协议拒绝或网络 close 都必须使等待 promise 收敛，不能留下悬挂订阅。
 
-packages/frontend/nginx.conf添加更具体的Agent location；保留原 /api/ 与 /ws/。外层 ^~ /api/v1/agent/ 和 ^~ /api/v1/apps/ 两段采用同样代理参数：
+`packages/frontend/nginx.conf` 继续复用现有 `/ws/` WebSocket proxy：Upgrade/Connection、Host、X-Forwarded-* 等规则与 Workspace/Upload/Remote Desktop 一致，不新增 Agent 专用 HTTP streaming location。Agent JSON 继续走 `/api/`；Artifact content 的 50MiB/streaming 特例保持独立。Backend `/ws/agent` upgrade 仍执行 WebSocket server 的 Origin、IP whitelist、session/2FA 与 heartbeat 检查，不接受 body/userId 伪造身份。
 
-```nginx
-# 此片段的 proxy_pass/headers 放进上述两个 Agent prefix location；
-# 不能只写regex location，现有 ^~ /api/ 会屏蔽它。
-proxy_pass http://backend:3001;
-proxy_http_version 1.1;
-proxy_set_header Connection "";
-proxy_set_header Host $host;
-proxy_set_header X-Forwarded-Host $http_host;
-proxy_set_header X-Forwarded-Proto $scheme;
-proxy_set_header X-Real-IP $remote_addr;
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-proxy_buffering off;
-proxy_cache off;
-proxy_read_timeout 75s;
-proxy_send_timeout 75s;
-client_max_body_size 1m;
-```
-
-仅在apps prefix内部增加content上传嵌套location（准确匹配 /api/v1/apps/<appId>/artifacts/<uuid>/content，PUT）：client_max_body_size 50m、proxy_request_buffering off、client_body_timeout 120s，继承/重复安全proxy headers；其他Agent JSON仍1MiB。Backend在raw PUT路由验证Content-Length/CSRF/ownership后才消费stream。Backend SSE写Cache-Control:no-store、X-Accel-Buffering:no，不压缩；代理不添加Connection:upgrade。
-
-所有Agent JSON/SSE/Artifact仍保持现有安全headers。安装式 Plugin Frontend 使用 Backend 独立 static listener 的独立 origin，并在该 origin 设置严格 CSP/frame-ancestors；Nexus CSP仅增加frame-src该精确origin，不删除全局X-Frame-Options DENY、不开放通用CORS。该 listener 只读 `agent/plugins/<appId>/versions/<version>/frontend/`，只接受 GET/HEAD，不挂 Nexus API/session/RPC，也不设置 Nexus cookie；Runner Controller 通道同样不暴露到浏览器。
+Agent mutation HTTP 仍要求 X-Nexus-CSRF、Origin/Sec-Fetch-Site 与既有幂等/CAS规则；WebSocket 事件通道是只读事实分发面，不能执行 mutation，也不能绕过 Capability/Policy/Approval/Lease/MutationGuard。所有 Agent JSON/WebSocket/Artifact 保持现有安全 headers/边界。安装式 Plugin Frontend 仍使用 Backend 独立 static listener 的独立 origin；Runner Controller 通道同样不暴露到浏览器。
 
 <a id="i8"></a>
 
@@ -972,7 +950,7 @@ Frontend根=packages/frontend/src/features/agent/。
 | 文件                                                                                                      | 实施契约                                                                                                                                                                                                                              |
 | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | public.ts                                                                                                 | lazy export `AgentSurfaceHost`、export `AgentSettingsPanel` 与受限 `agentApi` 类型/函数；供 App.vue 和现有 SettingsPage 从 public 入口组合，不导独立 Agent 页面 route                                                                 |
-| host/AgentSurfaceHost.vue                                                                                 | 读取现有 auth public facade；维护 Host summary/SSE、用户切换、layout 持久化与 session dispose；登出 abort Agent 请求/订阅，不创建第二套 auth store                                                                                    |
+| host/AgentSurfaceHost.vue                                                                                 | 读取现有 auth public facade；维护 Host summary/Agent event subscription、用户切换、layout 持久化与 session dispose；登出 abort Agent 请求/订阅，不创建第二套 auth store                                                               |
 | host/AgentLauncher.vue                                                                                    | 单击立即open、6px拖动阈值、pointercancel/keydown；App选择仅在Hub内完成。角标取HostSummary，不取App store                                                                                                                              |
 | host/AgentHubWindow.vue                                                                                   | bounds拖动/resize/clamp/maximize/minimize/close，非模态；标题区单选 App；Files lazy-load；内置 Operations 直接挂载，安装式 App 统一进入 `PluginAppFrame`，不靠运行时组件名映射                                                        |
 | host/AgentAppSwitcher.vue                                                                                 | 常驻Hub标题区/会话栏顶部；授权App目录，**单选**当前App、最近项、搜索/启用状态/键盘选择；一个Thread/Run只归属一个App，不做多App组合执行                                                                                                |
@@ -981,7 +959,7 @@ Frontend根=packages/frontend/src/features/agent/。
 | host/window-manager.ts                                                                                    | openHub({restoreRecent:true})、switchApp({appId,threadId?})、minimizeHub()、closeHub()、setBounds(bounds)                                                                                                                             |
 | host/surface-session.ts                                                                                   | maintain perAppViewState Map；activateApp(appId)、restoreThread(appId)、pauseDetail(appId)、disposeSession()；切App只暂停旧App详细订阅，不 cancel 其 Run/Workspace，generation避免旧响应覆盖                                          |
 | api/agent-api.ts                                                                                          | JSON request/CSRF/幂等key封装，保留原Axios配置                                                                                                                                                                                        |
-| api/agent-events.ts、sse-parser.ts                                                                        | §7 fetch/SSE有界解析、独立AbortSignal                                                                                                                                                                                                 |
+| api/agent-events.ts                                                                                       | §7 `/ws/agent` WebSocket subscription/replay、独立AbortSignal；不保留 Browser SSE parser                                                                                                                                              |
 | runtime/run-facade.ts                                                                                     | 以明确 `appId` 绑定 Thread/Run/Approval/Subagent/Checkpoint API；供 Operations 调用，不暴露可变全局 store                                                                                                                             |
 | runtime/TaskRail.vue、TaskDetailDrawer.vue、WorkspaceRuntimePanel.vue、ToolTimeline.vue、ApprovalCard.vue | 当前 Run 预算/PlanItem/工具/审批摘要与按需详情；PlanItem/Run/verification 状态走 i18n；TaskDetail 内提供 root Workspace、显式 Runner Plugin target、目标 Workspace ACL 与 Workspace↔Artifact 产品入口，不把 Runtime Step 当用户计划项 |
 | runtime/SubagentTree.vue、SubagentCard.vue、MessageExchangePanel.vue                                      | Subagent participant 树、状态、预算、证据及显式消息交换视图                                                                                                                                                                           |
@@ -994,7 +972,7 @@ Frontend根=packages/frontend/src/features/agent/。
 | settings/SubagentSettings.vue                                                                             | 三期delegation深度/profile模型与子预算；不显示历史累计数或独立child并发，Runtime并发统一去Performance设置                                                                                                                             |
 | settings/StorageArtifactSettings.vue                                                                      | Artifact单对象/Run/全局配额、TTL、已用量；min free disk只读                                                                                                                                                                           |
 | settings/SafetyNetworkSettings.vue                                                                        | denylist、Provider私网例外、capability入口；不可关闭的hard deny只读解释                                                                                                                                                               |
-| settings/SystemGuardrails.vue                                                                             | 只读显示event batch/commit queue/SSE/transient策略和数据库压力，不允许普通用户修改                                                                                                                                                    |
+| settings/SystemGuardrails.vue                                                                             | 只读显示event batch/commit queue/Agent WebSocket/transient策略和数据库压力，不允许普通用户修改                                                                                                                                        |
 | ai/AgentConversation.vue、ConversationMessage.vue                                                         | conversation-first 主视图、ledger/streaming message 展示与唯一 Composer；Run 执行/审批/预算等待时仍允许追加输入                                                                                                                       |
 | files/ArtifactLibraryView.vue                                                                             | Hub 长期 Files/Artifact Library 入口；分页/虚拟列表、来源/类型/retained 状态、下载/retain/delete/cleanup 等用户级文件管理                                                                                                             |
 | files/ArtifactPicker.vue                                                                                  | Composer 附件选择器；跨 App Artifact 使用现有显式 attach/grant，不因用户级文件库可见而扩大当前 App capability                                                                                                                         |
@@ -1002,7 +980,7 @@ Frontend根=packages/frontend/src/features/agent/。
 | settings/WorkspaceRuntimeSettings.vue                                                                     | 单一长期 Workspace Runtime Manager；availability/catalog/Pack setup/uninstall/storage/runtime cleanup/settings reset 均在同一设置模块，不维护拆散的第二套 Workspace Runtime store                                                     |
 | i18n/zh-CN.json、en-US.json、ja-JP.json                                                                   | agent命名空间、三语同键；不复制全局样式                                                                                                                                                                                               |
 
-Frontend Agent 不维护第二套认证或跨 feature 私有 store：`AgentSurfaceHost` 只从 auth 的 public facade 读取当前会话，并通过 Agent API/SSE 与 Backend 通信。窗口/每 App 轻量 presentation state 分别集中在 `window-manager.ts` 与 `surface-session.ts`；read-only diagnostics 仍通过 Backend capability，不让前端 Agent 绕过 Host 直接驱动 Workspace 内部对象。
+Frontend Agent 不维护第二套认证或跨 feature 私有 store：`AgentSurfaceHost` 只从 auth 的 public facade 读取当前会话，并通过 Agent HTTP API + `/ws/agent` 与 Backend 通信。窗口/每 App 轻量 presentation state 分别集中在 `window-manager.ts` 与 `surface-session.ts`；read-only diagnostics 仍通过 Backend capability，不让前端 Agent 绕过 Host 直接驱动 Workspace 内部对象。
 
 ### 8.2 窗口与会话规则
 
@@ -1018,13 +996,13 @@ Conversation 与执行状态分层：当前 `OperationsView` 组合唯一 `Agent
 
 localStorage key=nexus.agent.surface.v1.user.<userId>；数据schema={schemaVersion:1,bounds,maximized,launcherPosition,recentAppIds}，8KiB上限，未知字段丢弃，NaN/超视口bounds修正。刷新仅恢复appIds/布局，最近会话通过threads?limit=1按updatedAt获取；不保存thread/run/private draft。保存latest-value-wins，flush布局在页面隐藏/卸载，不发送运行数据。
 
-当前没有独立 `run.store`。`OperationsView` 以局部 view state + `run-facade.ts` 读取服务端 snapshot/ledger，并用独立 AbortController 消费 Run SSE；`model.delta` 只进入临时 `streamingText`，`message.final` 后清空并刷新 durable ledger，不能把半段 delta 当 final。审批卡片提交只调用 Backend resolve，Frontend 不自行把 requested 状态改为 approved；冲突/重连重新以服务端 snapshot 为准。
+当前没有独立 `run.store`。`OperationsView` 以局部 view state + `run-facade.ts` 读取服务端 snapshot/ledger，并用独立 AbortController 消费 Run `/ws/agent` subscription；`message.delta` 只进入临时 `streamingText`，`message.final` 后清空并刷新 durable ledger，不能把半段 delta 当 final。审批卡片提交只调用 Backend resolve，Frontend 不自行把 requested 状态改为 approved；冲突/重连重新以服务端 snapshot 为准。
 
 长会话继续以 Backend 稳定 cursor/sequence 分页为事实来源；当前 Frontend 已分页读取 ledger，后续若基准显示 DOM/内存压力，再在 `AgentConversation` 内引入有界 page cache/虚拟化，不新增另一套 Run store 或改变服务端 ledger 语义。任何虚拟化实现都必须保持 prepend anchor、滚动不中断输入以及 durable cursor 可重取。
 
-当前 SSE `model.delta` 使用轻量临时字符串，`message.final` 后回到 durable ledger；后续性能增强可以把可见 delta 批量到 animation frame，但不得改变 final/durable 边界。TaskRail 只消费 Run/Plan projection，不遍历完整 ledger 推导计划。性能优化若继续实施，以真实浏览器基准和现有 E2E 组为依据，不能为了性能新增平行状态真相源。
+当前 `/ws/agent` `message.delta` 使用轻量临时字符串，`message.final` 后回到 durable ledger；后续性能增强可以把可见 delta 批量到 animation frame，但不得改变 final/durable 边界。TaskRail 只消费 Run/Plan projection，不遍历完整 ledger 推导计划。性能优化若继续实施，以真实浏览器基准和现有 E2E 组为依据，不能为了性能新增平行状态真相源。
 
-模态presence仅影响交互/焦点，不取消任务；键盘只由当前focus owner处理，Agent不接管全局Ctrl组合或浏览器后退。原RDP modal/外观确认在Agent上方；原生全屏不退出。logout触发onSessionLost→Abort全部SSE/request、清private store/draft/tickets、卸载iframe、关闭MessagePort和Hub；保留layout不含敏感数据，其他Workspace的清理由既有auth流程负责。
+模态presence仅影响交互/焦点，不取消任务；键盘只由当前focus owner处理，Agent不接管全局Ctrl组合或浏览器后退。原RDP modal/外观确认在Agent上方；原生全屏不退出。logout触发auth状态变化→Abort全部 Agent WebSocket subscription/request、清private store/draft/tickets、卸载iframe、关闭MessagePort和Hub；保留layout不含敏感数据，其他Workspace的清理由既有auth流程负责。
 
 <a id="i9"></a>
 
@@ -1478,23 +1456,23 @@ AppIntent 继续负责**跨 App**的小 JSON/ArtifactRef 交接；它与同一 W
 
 下列 spec 是各阶段验收归属；现有实现只通过仓库中实际存在的 E2E/构建命令声明通过，不以设计文字替代运行证据。新增验收继续遵循 EC-E2E-001/002/003；本次架构调整不新增测试文件，复用现有 Agent E2E 与 smoke。
 
-| 验收组                 | 产品操作与必须观察的结果                                                                                                                                                                                                                                                                               | 归属                                                                         |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
-| Host/Manifest          | 无模型仍可开Nexus；Operations引导；enabled/grants重启保留；另一个App注册不改Operations；dist manifest存在                                                                                                                                                                                              | P1-A host.spec.ts                                                            |
-| Provider/秘密          | 用户配置Provider、test成功/失败、401不重试、私网拒绝/显式例外、DNS更换/redirect拒绝；API无secret                                                                                                                                                                                                       | P1-B provider.spec.ts                                                        |
-| Ledger/Run             | 创建/追加输入/同thread重复活跃Run冲突；刷新恢复原文/最终结果；换App查别App对象404                                                                                                                                                                                                                      | P1-C runs.spec.ts                                                            |
-| Event/SSE              | 生产ingress连续输出>15秒；snapshot→catchup并发提交不漏；重复fact只应用一次；delta断线不伪final                                                                                                                                                                                                         | P1-C events.spec.ts                                                          |
-| UI                     | Launcher单击/键盘恢复最后App、拖动不误打开；AppSwitcher仅在Hub页面内切换。App A运行中切到B后A继续推进且B不显示A的TaskRail，切回A通过snapshot+catchup恢复最新状态且不重复任务；关闭/最小化不cancel；移动sheet/键盘、RDP焦点、登出清理                                                                   | P1-D hub.spec.ts                                                             |
-| Nexus Settings / Agent | 现有Settings增加Agent tab且保持当前视觉/键盘基调；总开关/App启停语义分离；Hard Limit提高必须二次确认；feature关闭隐藏Launcher、拒绝新执行但数据保留，重新开启不自动resume                                                                                                                              | P1-D settings.spec.ts                                                        |
-| 审批与Hash             | 相同操作hash稳定、args顺序/目标版本变化失效、同审批并发批准仅一次consume、黑名单拒绝不可被批准覆盖                                                                                                                                                                                                     | P2-A approvals.spec.ts                                                       |
-| Lease与未知副作用      | 两个读可并行、写被读/写阻塞；Workspace typed mutation共用资源key；SSH断线结果未知→quarantine，不重复执行                                                                                                                                                                                               | P2-A leases.spec.ts                                                          |
-| Artifact / 文件库      | 上传大小/流中断/磁盘满、ready前崩溃、rename后DB失败、range/跨App/retain/GC/restore缺payload；用户级文件库分页/预览/回来源/跨App显式attach/清理preview保护引用，万级metadata不全量挂DOM                                                                                                                 | P1-B artifacts.spec.ts；P1-D artifact-library.spec.ts；P2-C recovery.spec.ts |
-| Workspace Runtime      | Runner无Docker socket/dockerd；sandbox不可用明确降级；错token/nonce/generation/超配拒绝；跨 Workspace/插件目录默认不可达；stop保留Artifact、delete正确范围                                                                                                                                             | P2-B workspace-runtime-isolation E2E                                         |
-| 生命周期 / 功能开关    | Agent总开关关闭后立即拒绝新执行、隐藏Launcher但Settings/安全cleanup/审计仍可用且历史数据保留；进行中Run按quiesce/cancel/reconcile安全收敛，未知mutation不伪cancel；重新开启不自动resume旧Run。Run中reset排空或明确失败；旧generation回调不能写新库；shutdown不被SSE挂住；Controller重启按commandId对账 | P1-D lifecycle.spec.ts；P2-B workspace-runtime E2E                           |
-| 协议扩展               | MCP schema更新审批失效、ACP禁止自主生产副作用、CDP nodeRef过期、网页内容不升级权限、浏览器下载→code Artifact链                                                                                                                                                                                         | P3-A mcp/acp/browser.spec.ts                                                 |
-| Subagent多模型         | 每子独立模型、统一Runtime并发、delegation深度、顺序创建不限历史数量、父budget计费不重复扣预留、配置快照、不支持模型拒绝                                                                                                                                                                                | P3-B delegation.spec.ts                                                      |
-| 通信/调度              | Mailbox重复/乱序恢复/TTL/背压、跨Run拒绝、join释放slot、等待图防环、parent request唤醒、递归取消、failFast/隔离模式                                                                                                                                                                                    | P3-B agent-messages.spec.ts                                                  |
-| 插件/Memory            | 签名/路径炸弹拒绝、升级失败恢复AppStorage、iframe不能访问Nexus cookie、bridge错source/nonce拒绝、Memory只经用户发布生效                                                                                                                                                                                | P3-C plugins.spec.ts、P3-B memory.spec.ts                                    |
+| 验收组                 | 产品操作与必须观察的结果                                                                                                                                                                                                                                                                                           | 归属                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| Host/Manifest          | 无模型仍可开Nexus；Operations引导；enabled/grants重启保留；另一个App注册不改Operations；dist manifest存在                                                                                                                                                                                                          | P1-A host.spec.ts                                                            |
+| Provider/秘密          | 用户配置Provider、test成功/失败、401不重试、私网拒绝/显式例外、DNS更换/redirect拒绝；API无secret                                                                                                                                                                                                                   | P1-B provider.spec.ts                                                        |
+| Ledger/Run             | 创建/追加输入/同thread重复活跃Run冲突；刷新恢复原文/最终结果；换App查别App对象404                                                                                                                                                                                                                                  | P1-C runs.spec.ts                                                            |
+| Event/WebSocket        | `/ws/agent` 生产ingress持续连接；snapshot→sequence replay并发提交不漏；断线后按 durable cursor catch-up；ephemeral delta断线不伪final                                                                                                                                                                              | P1-C events.spec.ts                                                          |
+| UI                     | Launcher单击/键盘恢复最后App、拖动不误打开；AppSwitcher仅在Hub页面内切换。App A运行中切到B后A继续推进且B不显示A的TaskRail，切回A通过snapshot+catchup恢复最新状态且不重复任务；关闭/最小化不cancel；移动sheet/键盘、RDP焦点、登出清理                                                                               | P1-D hub.spec.ts                                                             |
+| Nexus Settings / Agent | 现有Settings增加Agent tab且保持当前视觉/键盘基调；总开关/App启停语义分离；Hard Limit提高必须二次确认；feature关闭隐藏Launcher、拒绝新执行但数据保留，重新开启不自动resume                                                                                                                                          | P1-D settings.spec.ts                                                        |
+| 审批与Hash             | 相同操作hash稳定、args顺序/目标版本变化失效、同审批并发批准仅一次consume、黑名单拒绝不可被批准覆盖                                                                                                                                                                                                                 | P2-A approvals.spec.ts                                                       |
+| Lease与未知副作用      | 两个读可并行、写被读/写阻塞；Workspace typed mutation共用资源key；SSH断线结果未知→quarantine，不重复执行                                                                                                                                                                                                           | P2-A leases.spec.ts                                                          |
+| Artifact / 文件库      | 上传大小/流中断/磁盘满、ready前崩溃、rename后DB失败、range/跨App/retain/GC/restore缺payload；用户级文件库分页/预览/回来源/跨App显式attach/清理preview保护引用，万级metadata不全量挂DOM                                                                                                                             | P1-B artifacts.spec.ts；P1-D artifact-library.spec.ts；P2-C recovery.spec.ts |
+| Workspace Runtime      | Runner无Docker socket/dockerd；sandbox不可用明确降级；错token/nonce/generation/超配拒绝；跨 Workspace/插件目录默认不可达；stop保留Artifact、delete正确范围                                                                                                                                                         | P2-B workspace-runtime-isolation E2E                                         |
+| 生命周期 / 功能开关    | Agent总开关关闭后立即拒绝新执行、隐藏Launcher但Settings/安全cleanup/审计仍可用且历史数据保留；进行中Run按quiesce/cancel/reconcile安全收敛，未知mutation不伪cancel；重新开启不自动resume旧Run。Run中reset排空或明确失败；旧generation回调不能写新库；shutdown不被Agent WebSocket挂住；Controller重启按commandId对账 | P1-D lifecycle.spec.ts；P2-B workspace-runtime E2E                           |
+| 协议扩展               | MCP schema更新审批失效、ACP禁止自主生产副作用、CDP nodeRef过期、网页内容不升级权限、浏览器下载→code Artifact链                                                                                                                                                                                                     | P3-A mcp/acp/browser.spec.ts                                                 |
+| Subagent多模型         | 每子独立模型、统一Runtime并发、delegation深度、顺序创建不限历史数量、父budget计费不重复扣预留、配置快照、不支持模型拒绝                                                                                                                                                                                            | P3-B delegation.spec.ts                                                      |
+| 通信/调度              | Mailbox重复/乱序恢复/TTL/背压、跨Run拒绝、join释放slot、等待图防环、parent request唤醒、递归取消、failFast/隔离模式                                                                                                                                                                                                | P3-B agent-messages.spec.ts                                                  |
+| 插件/Memory            | 签名/路径炸弹拒绝、升级失败恢复AppStorage、iframe不能访问Nexus cookie、bridge错source/nonce拒绝、Memory只经用户发布生效                                                                                                                                                                                            | P3-C plugins.spec.ts、P3-B memory.spec.ts                                    |
 
 产品E2E fixture放test/e2e/fixtures/agent/，用于模拟Provider/MCP/ACP的延迟、错误、截断等下游条件；不要读取fixture内部计数/日志作为唯一断言，调用次数/重复副作用通过Nexus事件与真实产品目标结果验证。不能为了断言加test-only DOM属性；使用真实accessible role/name。每spec独立reset，CI组清单唯一分配，新增/删除spec同步groups generator。截图通过现有captureFunctionalScreenshot在业务checkpoint声明，不新增历史截图manifest。
 

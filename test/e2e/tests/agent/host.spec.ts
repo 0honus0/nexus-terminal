@@ -1,6 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import type { Page } from '@playwright/test';
 
 type AgentEnvelope<T> = { data: T; requestId: string };
 type AgentErrorEnvelope = { error: { code: string; message: string }; requestId: string };
@@ -43,6 +44,148 @@ const csrfToken = async (request: import('@playwright/test').APIRequestContext):
   expect(body.data.token).toMatch(/^[0-9a-f]{64}$/);
   return body.data.token;
 };
+
+const openHostAgentSubscription = async (page: Page, cursor: number, key: string): Promise<void> => {
+  await page.evaluate(
+    ({ startCursor, probeKey }) =>
+      new Promise<void>((resolve, reject) => {
+        const socket = new WebSocket(`${window.location.origin.replace(/^http/, 'ws')}/ws/agent`);
+        const subscriptionId = `e2e-${probeKey}`;
+        const requestId = `subscribe-${probeKey}`;
+        const state = { socket, messages: [] as unknown[] };
+        const probes = ((
+          globalThis as typeof globalThis & { __agentWsProbes?: Record<string, typeof state> }
+        ).__agentWsProbes ??= {});
+        probes[probeKey] = state;
+        const timeout = window.setTimeout(
+          () => reject(new Error('Timed out opening Agent WebSocket subscription')),
+          10_000,
+        );
+        socket.addEventListener('open', () => {
+          socket.send(
+            JSON.stringify({
+              type: 'subscribe',
+              requestId,
+              payload: { subscriptionId, channel: 'host', cursor: startCursor },
+            }),
+          );
+        });
+        socket.addEventListener('message', (event) => {
+          const message = JSON.parse(String(event.data)) as { type?: string; requestId?: string };
+          state.messages.push(message);
+          if (message.type === 'subscribed' && message.requestId === requestId) {
+            window.clearTimeout(timeout);
+            resolve();
+          }
+        });
+        socket.addEventListener('error', () => {
+          window.clearTimeout(timeout);
+          reject(new Error('Agent WebSocket failed to open'));
+        });
+        socket.addEventListener('close', (event) => {
+          if (socket.readyState !== WebSocket.OPEN) {
+            window.clearTimeout(timeout);
+            if (state.messages.length === 0)
+              reject(new Error(`Agent WebSocket closed before subscribe: ${event.code}`));
+          }
+        });
+      }),
+    { startCursor: cursor, probeKey: key },
+  );
+};
+
+const waitForDurableAgentSequence = async (page: Page, key: string, after: number): Promise<number> => {
+  await page.waitForFunction(
+    ({ probeKey, minimum }) => {
+      const probes = (
+        globalThis as typeof globalThis & {
+          __agentWsProbes?: Record<string, { messages: Array<{ type?: string; payload?: unknown }> }>;
+        }
+      ).__agentWsProbes;
+      const messages = probes?.[probeKey]?.messages ?? [];
+      return messages.some((message) => {
+        if (message.type !== 'event' || !message.payload || typeof message.payload !== 'object') return false;
+        const payload = message.payload as { durability?: string; sequence?: number };
+        return payload.durability === 'durable' && typeof payload.sequence === 'number' && payload.sequence > minimum;
+      });
+    },
+    { probeKey: key, minimum: after },
+  );
+  return page.evaluate(
+    ({ probeKey, minimum }) => {
+      const probes = (
+        globalThis as typeof globalThis & {
+          __agentWsProbes?: Record<string, { messages: Array<{ type?: string; payload?: unknown }> }>;
+        }
+      ).__agentWsProbes;
+      for (const message of probes?.[probeKey]?.messages ?? []) {
+        if (message.type !== 'event' || !message.payload || typeof message.payload !== 'object') continue;
+        const payload = message.payload as { durability?: string; sequence?: number };
+        if (payload.durability === 'durable' && typeof payload.sequence === 'number' && payload.sequence > minimum) {
+          return payload.sequence;
+        }
+      }
+      throw new Error('Durable Agent event not found');
+    },
+    { probeKey: key, minimum: after },
+  );
+};
+
+const closeAgentSubscription = async (page: Page, key: string): Promise<void> => {
+  await page.evaluate(async (probeKey) => {
+    const probes = (
+      globalThis as typeof globalThis & {
+        __agentWsProbes?: Record<string, { socket: WebSocket }>;
+      }
+    ).__agentWsProbes;
+    const socket = probes?.[probeKey]?.socket;
+    if (!socket || socket.readyState === WebSocket.CLOSED) return;
+    await new Promise<void>((resolve) => {
+      socket.addEventListener('close', () => resolve(), { once: true });
+      socket.close(1000, 'E2E probe complete');
+    });
+  }, key);
+};
+
+test('Agent WebSocket replays durable Host events after a disconnect', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await page.goto('/connections');
+
+  const summary = await context.request.get('/api/v1/agent/summary');
+  expect(summary.ok(), await summary.text()).toBeTruthy();
+  const summaryBody = (await summary.json()) as AgentEnvelope<{ eventCursor: number }>;
+  const initialCursor = summaryBody.data.eventCursor;
+
+  const apps = await context.request.get('/api/v1/agent/apps');
+  expect(apps.ok(), await apps.text()).toBeTruthy();
+  const appsBody = (await apps.json()) as AgentEnvelope<AppSummary[]>;
+  const operations = appsBody.data.find((app) => app.id === 'nexus.operations')!;
+  const csrf = await csrfToken(context.request);
+
+  await openHostAgentSubscription(page, initialCursor, 'first');
+  const disabled = await context.request.patch('/api/v1/agent/apps/nexus.operations', {
+    headers: { 'X-Nexus-CSRF': csrf },
+    data: { enabled: false, expectedVersion: operations.stateVersion },
+  });
+  expect(disabled.ok(), await disabled.text()).toBeTruthy();
+  const disabledBody = (await disabled.json()) as AgentEnvelope<AppSummary>;
+  const firstSequence = await waitForDurableAgentSequence(page, 'first', initialCursor);
+  await closeAgentSubscription(page, 'first');
+
+  const enabled = await context.request.patch('/api/v1/agent/apps/nexus.operations', {
+    headers: { 'X-Nexus-CSRF': csrf },
+    data: { enabled: true, expectedVersion: disabledBody.data.stateVersion },
+  });
+  expect(enabled.ok(), await enabled.text()).toBeTruthy();
+
+  await openHostAgentSubscription(page, firstSequence, 'second');
+  const replayedSequence = await waitForDurableAgentSequence(page, 'second', firstSequence);
+  expect(replayedSequence).toBeGreaterThan(firstSequence);
+  await closeAgentSubscription(page, 'second');
+
+  const retiredSse = await context.request.get('/api/v1/agent/events?cursor=0');
+  expect(retiredSse.status()).toBe(404);
+});
 
 test('Agent Host initializes Operations safely and persists explicit lifecycle/settings choices', async ({
   request,
