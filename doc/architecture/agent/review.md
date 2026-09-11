@@ -218,13 +218,13 @@ reserved capability    虚线
 >
 > `NativeAgentBackend` 只拿 `snapshot/rootRuntimeId/pendingMutation`；`SubagentParticipantExecutor`、Plan、Approval、Checkpoint 只拿 snapshot；`SubagentService` 只拿 snapshot + host cursor；`RunService` 只拿 snapshot + list。无 consumer 的 `createdQueue()` 已删除。Backend architecture checker 禁止 broad Run repository capability 回流，并针对上述核心 consumer 固定其允许的 reader 上限。
 
-### P2-代码-3：运行时与后继能力在源码目录中已并列，容易被误认为已接线
+### P2-代码-3：运行时与后继能力在源码目录中已并列，但 production wiring 已有硬门禁（已解决）
 
-`infrastructure/agent/integrations/` 下已经存在 `acp.adapter.ts`、`browser-gateway.adapter.ts`、`mcp.adapter.ts`，而当前组成根实际只接入 MCP。建议对 ACP、Browser/CDP adapter 使用明确的 `reserved` 标记或移动到后继目录，避免维护者误把“adapter 存在”理解为 live execution 已完成；production composition root 应增加阶段断言。
+审核后确认目录并列本身不是 authority，也不需要为了“看起来未接线”移动或删除 ACP / Browser/CDP/Puppeteer skeleton。当前真正需要保证的是 production composition 与 manifest 不把 reserved 能力接入 live execution。
 
-> **解决方案（采用；文档状态已完成，静态 guard 待本轮 P3-代码-2 落地）**
+> **解决方案（已采用，由前述状态文档与 Review #8 静态 guard 完成）**
 >
-> 不为“看起来未接线”而移动/删除现有 ACP 与 Browser/CDP/Puppeteer skeleton，避免产生无价值目录 churn。改为在 `ARCHITECTURE.md`、`IMPLEMENTATION.md`、`MODULE_DEPENDENCY_DESIGN.md`、`CURRENT_AGENT_ARCHITECTURE.md` 四份 canonical 文档统一标记：**ACP 未完成（reserved / roadmap-only）**、**Browser/CDP/Puppeteer 未完成（reserved / roadmap-only）**。当前 `nexus.operations` manifest 不声明 `integration.acp.execute` / `browser.operate`，不创建默认 grant，production composition root / Tool Catalog 也不得接线这两项。后续 architecture checker 增加“reserved adapter 不得被 production composition 实例化”的规则；只有 capability declaration、Policy/Approval/Lease/StateCommit、runtime wiring、UI/API、failure/recovery 与产品 E2E 全部完成后才能改为 implemented。
+> `ARCHITECTURE.md`、`IMPLEMENTATION.md`、`MODULE_DEPENDENCY_DESIGN.md`、`CURRENT_AGENT_ARCHITECTURE.md` 已统一标记：MCP = **Active / live**，ACP = **Reserved / roadmap-only**，Browser/CDP/Puppeteer = **Reserved / roadmap-only**。Backend architecture checker 已禁止 ACP/Browser reserved adapter/Port 符号进入 `bootstrap/agent/**`，并静态禁止 Operations manifest 声明 `integration.acp.execute` / `browser.operate`；当前 production composition 只实例化 MCP live runtime。ACP/Browser skeleton 继续原位保留，未来只有在 capability、Policy/Approval/Lease/StateCommit、runtime wiring、UI/API、failure/recovery 与产品 E2E 全部完成后才能移除 reserved 状态。
 
 ### P3-代码-1：Tool contribution 注册缺少统一的 owner 元数据
 
