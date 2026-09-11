@@ -1,9 +1,9 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted } from 'vue';
-  import OperationsView from '../apps/operations/OperationsView.vue';
   import type { HostSummaryView } from '../api/agent-api';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
+  import { builtinAppView } from './builtin-apps';
   import { agentSurfaceSession } from './surface-session';
   import { agentWindowManager } from './window-manager';
 
@@ -12,6 +12,7 @@
   const props = defineProps<{ summary: HostSummaryView }>();
   const state = agentWindowManager.state;
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
+  const activeBuiltinView = computed(() => (activeApp.value ? builtinAppView(activeApp.value.id) : null));
   const visible = computed(() => state.status === 'visible');
 
   let mode: 'move' | 'resize' | null = null;
@@ -136,7 +137,12 @@
 
     <div class="min-h-0 flex-1">
       <ArtifactLibraryView v-if="state.hubView === 'files'" :apps="summary.apps" />
-      <OperationsView v-else-if="activeApp?.id === 'nexus.operations'" :key="activeApp.id" :app-id="activeApp.id" />
+      <component
+        :is="activeBuiltinView"
+        v-else-if="activeApp && activeBuiltinView"
+        :key="activeApp.id"
+        :app-id="activeApp.id"
+      />
       <PluginAppFrame v-else-if="activeApp" :key="`${activeApp.id}@${activeApp.version}`" :app-id="activeApp.id" />
       <div v-else class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary">
         {{ $t('agent.hub.chooseApp') }}

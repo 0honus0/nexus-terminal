@@ -200,9 +200,13 @@ reserved capability    虚线
 
 ### P2-代码-1：Frontend Host 直接 import Operations UI，违反已声明 App 隔离边界
 
-`packages/frontend/src/features/agent/host/AgentHubWindow.vue` 直接导入 `../apps/operations/OperationsView.vue`。这与 `ARCHITECTURE.md` 中“host 只依赖 app-contribution.types、不 import apps 组件”的约束不一致，会让 Host 对内置 App 产生编译期耦合，也使未来动态/安装式 App 无法复用同一 surface。
+审核确认问题真实：`AgentHubWindow.vue` 曾直接静态 import `apps/operations/OperationsView.vue`，且 frontend architecture checker 还显式允许 `host -> apps/operations`，与 canonical `IMPLEMENTATION.md` 的 Host/App ownership 约束相冲突。
 
-建议由 Operations contribution 提供 public view/route descriptor，Host 只消费 `features/agent/apps/operations/public.ts` 对应的前端 public contract；若静态 builtin registry 必须保留，应将该 import 集中到单独的 `builtin-apps.ts`，并在架构 checker 中显式列为唯一例外。
+> **解决方案（已采用）**
+>
+> 新增 `apps/operations/public.ts`，只从 Operations owner 内部 lazy export `OperationsAppView`；新增 `host/builtin-apps.ts` 作为唯一静态 builtin composition seam，按 App id 返回 public view。`AgentHubWindow.vue` 只依赖 `builtin-apps.ts`，不再知道 `OperationsView.vue` 的私有路径；安装式 App 仍统一走 `PluginAppFrame`。
+>
+> Frontend architecture checker 已移除通用 `host -> apps/operations` 许可：`host/**` 默认不得依赖 `apps/**`，仅 `host/builtin-apps.ts` 可 import `apps/<app>/public.ts`，不能直接 import App 私有 Vue 实现。这样内置 App 的静态 composition 例外被集中、可审计，也保留未来增加 builtin App 时的明确扩展点。
 
 ### P2-代码-2：后端 Agent 子域虽未直接依赖 Infrastructure，但跨子域访问仍偏宽
 

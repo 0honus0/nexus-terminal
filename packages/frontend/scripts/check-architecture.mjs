@@ -58,7 +58,7 @@ const agentArea = (rel) => {
 
 const allowedAgentAreas = {
   public: new Set(['public', 'api', 'host', 'settings']),
-  host: new Set(['host', 'api', 'apps/operations', 'files']),
+  host: new Set(['host', 'api', 'files']),
   api: new Set(['api', 'host']),
   ai: new Set(['ai', 'api', 'files']),
   files: new Set(['files', 'api']),
@@ -143,9 +143,12 @@ for (const [file, imports] of importsByFile) {
     const targetAgentArea = agentArea(relative(target));
     if (fromAgentArea && targetAgentArea) {
       const allowed = allowedAgentAreas[fromAgentArea];
+      const builtinAppPublicImport =
+        relative(file) === 'features/agent/host/builtin-apps.ts' &&
+        /^features\/agent\/apps\/[^/]+\/public\.ts$/.test(relative(target));
       if (!allowed) {
         failures.push(`${relative(file)}: unknown Agent frontend area ${fromAgentArea}`);
-      } else if (!allowed.has(targetAgentArea)) {
+      } else if (!allowed.has(targetAgentArea) && !builtinAppPublicImport) {
         failures.push(
           `${relative(file)}: forbidden Agent frontend ${fromAgentArea} -> ${targetAgentArea} dependency (${specifier})`,
         );
