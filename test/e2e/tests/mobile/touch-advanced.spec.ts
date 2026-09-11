@@ -880,11 +880,15 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       const uploadTasks = popup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
       await expect(uploadTasks).toHaveCount(filenames.length);
       await popup.getByTestId('transfer-progress-cancel-all').click();
+      // Cancellation is two-phase while an in-flight SFTP WRITE is deliberately stalled:
+      // the UI enters `cancelling` immediately, then settles after that write returns.
       await expect
-        .poll(() =>
-          popup
-            .locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]')
-            .evaluateAll((tasks) => tasks.map((task) => task.getAttribute('data-task-status'))),
+        .poll(
+          () =>
+            popup
+              .locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]')
+              .evaluateAll((tasks) => tasks.map((task) => task.getAttribute('data-task-status'))),
+          { timeout: 20_000 },
         )
         .toEqual(filenames.map(() => 'cancelled'));
     });
