@@ -236,14 +236,16 @@ reserved capability    虚线
 >
 > 实际剩余问题只做 API least-authority 清理：`registerContribution()` 收窄为仅接受静态 contribution，不再公开可选 `scope/ownerKey`；动态 scoped ownership 只能走 `replaceOwnedContribution()`。无产品 consumer 的 `CapabilityContributionView`、`ToolCatalog.contributions()` 以及随之失去用途的内部 `contributionId` 存储已删除。未来若出现真实 contribution introspection consumer，再按其授权与数据需求重新设计。
 
-### P3-代码-2：建议把架构违规检查纳入源码门禁
+### P3-代码-2：架构违规检查应纳入源码门禁（已完成）
 
-现有源码已经暴露出 Frontend Host→Operations UI 的违规路径。建议在 frontend/backend architecture checker 中加入：
+审核确认原建议的四类违规路径现在都已有硬门禁，不需要继续叠加重复规则：
 
-1. `features/agent/host/**` 禁止 import `features/agent/apps/**`，仅允许 `builtin-apps.ts` 例外；
-2. `NativeAgentBackend` 禁止依赖底层 `LeasePort` mutation API；
-3. `compose-agent.ts` 禁止出现 Tool 实现函数体，只允许调用 capability composer；
-4. reserved adapter 禁止被 production composition root 实例化。
+1. Frontend `host/**` 默认禁止依赖 `apps/**`，仅 `host/builtin-apps.ts -> apps/<app>/public.ts` 是唯一静态 builtin 例外；
+2. `NativeAgentBackend` 禁止依赖底层 `LeasePort`，整个 Agent Runtime 也禁止直接调用 `markMutationActive/markMutationSettled`；
+3. `compose-agent.ts` 禁止 Operations Tool creator 以及直接 `registerContribution()/replaceOwnedContribution()`，Tool contribution metadata 与 creator 已收敛到专用 bootstrap helper；
+4. ACP/Browser reserved adapter/Port 禁止进入 `bootstrap/agent/**`，Operations manifest 也静态禁止 `integration.acp.execute` / `browser.operate`。
+
+这些规则已分别由 Review #2/#8、P1-代码-3、P2-代码-1 等实施完成；本项作为汇总验收关闭，不再新增同义 checker 规则。
 
 ## 前后端 Runtime 深度审核（第一批）
 
