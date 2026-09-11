@@ -53,21 +53,13 @@
     hostAbort = controller;
     const currentGeneration = ++generation;
     void (async () => {
-      let cursor = initial.eventCursor;
-      while (!controller.signal.aborted && currentGeneration === generation) {
-        try {
-          for await (const event of agentEvents.host(cursor, controller.signal)) {
-            if (controller.signal.aborted || currentGeneration !== generation) return;
-            if (event.id) {
-              const sequence = Number(event.id.slice(event.id.lastIndexOf(':') + 1));
-              if (Number.isSafeInteger(sequence) && sequence >= 0) cursor = sequence;
-            }
-            await refresh();
-          }
-        } catch {
+      try {
+        for await (const _event of agentEvents.host(initial.eventCursor, controller.signal)) {
           if (controller.signal.aborted || currentGeneration !== generation) return;
+          await refresh();
         }
-        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      } catch {
+        if (controller.signal.aborted || currentGeneration !== generation) return;
       }
     })();
   };

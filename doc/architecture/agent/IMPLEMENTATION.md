@@ -942,7 +942,7 @@ Agent WebSocket 单个出站消息≤64KiB，大对象继续用 ref；单 socket
 
 ### 7.3 Frontend transport、Nginx 与 CSRF
 
-Frontend `api/agent-events.ts` 通过现有 `openWebSocket('/ws/agent')` 建立 Browser-only Agent event channel，并继续向上暴露 `host(cursor,signal)` / `run(appId,runId,cursor,signal)` 的 `AsyncIterable`，因此 presentation 不持有原始 socket。AbortSignal 会关闭当前连接；Host/Operations 外层循环重连时只携带最后已处理的 durable sequence，ephemeral delta 永远不能覆盖 cursor。连接尚未 open、协议拒绝或网络 close 都必须使等待 promise 收敛，不能留下悬挂订阅。
+Frontend `api/agent-events.ts` 通过现有 `openWebSocket('/ws/agent')` 建立 Browser-only Agent event channel，并继续向上暴露 `host(cursor,signal)` / `run(appId,runId,cursor,signal)` 的长期 `AsyncIterable`，因此 presentation 不持有原始 socket 或重连 timer。transport supervisor 内部只保留最后已交付的 durable sequence，一次只建立一个 socket；`OPEN_FAILED`、网络 close、1013 与 `AGENT_STREAM_FAILED` 按 400ms 起、最高 8s 的指数退避+jitter 重连，协议/cursor 错误直接终止。WebSocket open 失败时以只读 Host summary 探测 session，HTTP 401 交给现有 unauthorized handler 并停止重连。AbortSignal 会同时关闭 socket、reject 尚未完成的 subscribe ack 和 timer；连接曾产出事件后断开会发前端内部 `transport.disconnected`，presentation 清掉不可重放的 ephemeral draft 并从 durable snapshot/final 恢复。
 
 `packages/frontend/nginx.conf` 继续复用现有 `/ws/` WebSocket proxy：Upgrade/Connection、Host、X-Forwarded-* 等规则与 Workspace/Upload/Remote Desktop 一致，不新增 Agent 专用 HTTP streaming location。Agent JSON 继续走 `/api/`；Artifact content 的 50MiB/streaming 特例保持独立。Backend `/ws/agent` upgrade 仍执行 WebSocket server 的 Origin、IP whitelist、session/2FA 与 heartbeat 检查，不接受 body/userId 伪造身份。
 

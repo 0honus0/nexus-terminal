@@ -119,37 +119,30 @@
     streamAbort = controller;
     const generation = ++streamGeneration;
     void (async () => {
-      let cursor = initial.eventCursor;
-      while (!controller.signal.aborted && generation === streamGeneration) {
-        try {
-          for await (const event of agentEvents.run(props.appId, initial.id, cursor, controller.signal)) {
-            if (controller.signal.aborted || generation !== streamGeneration) return;
-            if (event.id) {
-              const sequence = Number(event.id.slice(event.id.lastIndexOf(':') + 1));
-              if (Number.isSafeInteger(sequence) && sequence >= 0) cursor = sequence;
-            }
-            if (event.type === 'message.delta') {
-              const payload = event.payload as { text?: unknown } | undefined;
-              if (payload && typeof payload.text === 'string') streamingText.value += payload.text;
-              continue;
-            }
-            if (event.type === 'message.final') streamingText.value = '';
-            const next = await refreshRun(initial.id);
-            await Promise.all([
-              refreshLedger(),
-              refreshApprovals(initial.id),
-              refreshBackgroundRuns(),
-              ...(detailVisible.value && detailSnapshot.value?.id === initial.id
-                ? [refreshDetailSubagents(initial.id)]
-                : []),
-            ]);
-            if (!next || !nonTerminal.has(next.status)) return;
-          }
-        } catch (cause) {
+      try {
+        for await (const event of agentEvents.run(props.appId, initial.id, initial.eventCursor, controller.signal)) {
           if (controller.signal.aborted || generation !== streamGeneration) return;
-          error.value = explain(cause);
+          if (event.type === 'transport.disconnected') streamingText.value = '';
+          if (event.type === 'message.delta') {
+            const payload = event.payload as { text?: unknown } | undefined;
+            if (payload && typeof payload.text === 'string') streamingText.value += payload.text;
+            continue;
+          }
+          if (event.type === 'message.final') streamingText.value = '';
+          const next = await refreshRun(initial.id);
+          await Promise.all([
+            refreshLedger(),
+            refreshApprovals(initial.id),
+            refreshBackgroundRuns(),
+            ...(detailVisible.value && detailSnapshot.value?.id === initial.id
+              ? [refreshDetailSubagents(initial.id)]
+              : []),
+          ]);
+          if (!next || !nonTerminal.has(next.status)) return;
         }
-        await new Promise((resolve) => window.setTimeout(resolve, 800));
+      } catch (cause) {
+        if (controller.signal.aborted || generation !== streamGeneration) return;
+        error.value = explain(cause);
       }
     })();
   };

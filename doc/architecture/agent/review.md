@@ -358,6 +358,14 @@ lastDurableCursor
 
 重连期间合并重复 cursor，只允许单个 active socket；认证失效立即停止并交给 auth session 处理。把“durable wake 只表示需要 refresh”写进类型和调用约定，避免组件把它当作完整事件流。
 
+> **审核结论（原问题部分失效，重连 authority 下沉到 transport）**
+>
+> 当前源码中 Host 与 Operations 实际都在 presentation 层维护外层重试循环，并分别以固定 1200ms / 800ms 延时重建 `agentEvents` iterator，所以“socket close 后 UI 永久停止”并不完全成立；durable cursor 也由两个组件各自推进。真实问题是连接生命周期、cursor authority、错误分类和重试策略散落在调用方：没有统一指数退避/抖动，两个组件行为不一致，socket 已 open 但仍等待 `subscribed` ack 时 AbortSignal 不能保证该 promise 收敛，而且断线前的 ephemeral `message.delta` 草稿没有统一失效边界。
+>
+> `api/agent-events.ts` 现将原单连接逻辑收窄为 `connectOnce()`，并在其外建立唯一 subscription supervisor。Supervisor 保存最后**已经交付给消费者**的 durable sequence，重复/旧 sequence 不再向上交付；每次重连只创建一个 socket，并以 400ms 起、最高 8s 的指数退避加 jitter 重新 subscribe 当前 cursor。`AGENT_WS_OPEN_FAILED`、网络 close、1013/backpressure 与一般 stream failure 可恢复；协议/cursor 错误直接终止。由于浏览器 WebSocket API 无法读取 upgrade 的 HTTP 401，open failure 会额外发一次只读 Host summary 探测，明确 401 时复用现有 HTTP unauthorized handler 并停止 supervisor。
+>
+> AbortSignal 现在同时关闭 socket、reject 尚未完成的 subscribe ack 并取消 reconnect timer。连接曾产出事件后断开时，transport 会发送仅限前端内部的 `transport.disconnected`（无 durable id、不推进 cursor）；Operations 收到后清掉不可重放的 `streamingText` 并立即按 durable snapshot/ledger 恢复。Host/Operations 已删除各自的固定延时重连循环，只消费长期 `AsyncIterable`，因此 presentation 不再持有 transport retry authority。
+
 ### R7：Frontend API 层缺少统一的 Run cursor/store，组件容易各自拉取并覆盖新状态
 
 位置：`packages/frontend/src/features/agent/runtime/run-facade.ts`、`api/agent-api.ts` 及 Runtime Vue 组件。

@@ -1,4 +1,6 @@
 import { openWebSocket } from '@/client/websocket';
+import { AgentApiError } from './agent-api-error';
+import { agentHttpClient } from './agent-http-client';
 
 export interface AgentStreamEvent<T = unknown> {
   id?: string;
@@ -88,7 +90,7 @@ const waitForOpen = (socket: WebSocket, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', onAbort, { once: true });
   });
 
-async function* connect(request: AgentSubscriptionRequest, signal: AbortSignal): AsyncIterable<AgentStreamEvent> {
+async function* connectOnce(request: AgentSubscriptionRequest, signal: AbortSignal): AsyncIterable<AgentStreamEvent> {
   if (signal.aborted) return;
 
   const socket = openWebSocket('/ws/agent');
@@ -107,6 +109,7 @@ async function* connect(request: AgentSubscriptionRequest, signal: AbortSignal):
     current?.();
   };
   const abort = (): void => {
+    rejectSubscribed?.(new Error('ABORTED'));
     if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
       socket.close(1000, 'Agent subscription aborted');
     }
@@ -185,6 +188,83 @@ async function* connect(request: AgentSubscriptionRequest, signal: AbortSignal):
     if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
       socket.close(1000, 'Agent subscription ended');
     }
+  }
+}
+
+const RETRY_BASE_MS = 400;
+const RETRY_MAX_MS = 8_000;
+
+const requestWithCursor = (request: AgentSubscriptionRequest, cursor: number): AgentSubscriptionRequest =>
+  request.channel === 'host'
+    ? { channel: 'host', cursor }
+    : { channel: 'run', appId: request.appId, runId: request.runId, cursor };
+
+const durableSequence = (event: AgentStreamEvent): number | null => {
+  if (event.id === undefined) return null;
+  const sequence = Number(event.id);
+  return Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : null;
+};
+
+const assertSessionAfterOpenFailure = async (): Promise<void> => {
+  try {
+    await agentHttpClient.get('/agent/summary');
+  } catch (cause) {
+    if (cause instanceof AgentApiError && cause.status === 401) throw new Error('AGENT_WS_AUTH_REQUIRED');
+  }
+};
+
+const retryableTransportError = (cause: unknown): boolean =>
+  cause instanceof Error &&
+  (cause.message === 'AGENT_WS_OPEN_FAILED' ||
+    cause.message === 'AGENT_STREAM_FAILED' ||
+    /^AGENT_WS_CLOSED_\d+$/.test(cause.message));
+
+const waitForReconnect = (attempt: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve();
+      return;
+    }
+    const exponent = Math.min(attempt, 6);
+    const base = Math.min(RETRY_MAX_MS, RETRY_BASE_MS * 2 ** exponent);
+    const delay = Math.min(RETRY_MAX_MS, base + Math.floor(base * 0.2 * Math.random()));
+    const onAbort = (): void => {
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, delay);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+
+async function* connect(request: AgentSubscriptionRequest, signal: AbortSignal): AsyncIterable<AgentStreamEvent> {
+  let cursor = request.cursor;
+  let retryAttempt = 0;
+
+  while (!signal.aborted) {
+    let sawEvent = false;
+    try {
+      for await (const event of connectOnce(requestWithCursor(request, cursor), signal)) {
+        if (signal.aborted) return;
+        const sequence = durableSequence(event);
+        if (sequence !== null && sequence <= cursor) continue;
+        sawEvent = true;
+        yield event;
+        if (sequence !== null) cursor = sequence;
+        retryAttempt = 0;
+      }
+      if (signal.aborted) return;
+    } catch (cause) {
+      if (signal.aborted) return;
+      if (cause instanceof Error && cause.message === 'AGENT_WS_OPEN_FAILED') await assertSessionAfterOpenFailure();
+      if (!retryableTransportError(cause)) throw cause;
+    }
+
+    if (sawEvent) yield { type: 'transport.disconnected', payload: null };
+    await waitForReconnect(retryAttempt, signal);
+    retryAttempt += 1;
   }
 }
 
