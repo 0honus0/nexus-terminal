@@ -3,6 +3,7 @@
   "group": 5,
   "workers": 8,
   "specs": [
+    "tests/auth/setup-login.spec.ts",
     "tests/http/auth-2fa.spec.ts",
     "tests/http/auth-api.spec.ts",
     "tests/http/backup.spec.ts",
@@ -20,7 +21,6 @@
     "tests/ssh/quick-command-tags-variables.spec.ts",
     "tests/ssh/sftp-download.spec.ts",
     "tests/ssh/status-history-time-axis.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/ssh/progress-display-upload-copy.spec.ts"
   ]
 }
