@@ -36,7 +36,7 @@ export const usePreferencesStore = defineStore('preferences', {
       }
 
       Object.assign(this.values, patch);
-      if (patch.frontendLogLevel !== undefined) setFrontendLogLevel(patch.frontendLogLevel);
+      if (patch.frontendLogLevel !== undefined) setFrontendLogLevel(patch.frontendLogLevel, true);
       try {
         await preferencesApi.update(patch);
         for (const key of keys) {
@@ -50,7 +50,7 @@ export const usePreferencesStore = defineStore('preferences', {
           preferenceKeyRevisions.delete(key);
         }
         Object.assign(this.values, rollback);
-        if (rollback.frontendLogLevel !== undefined) setFrontendLogLevel(rollback.frontendLogLevel);
+        if (rollback.frontendLogLevel !== undefined) setFrontendLogLevel(rollback.frontendLogLevel, true);
         throw cause;
       }
     },

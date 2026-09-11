@@ -1,3 +1,4 @@
+import { logger } from '../../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../../shared/observability/runtime-performance';
 import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceSessionRegistry } from '../workspace-session-registry';
@@ -49,9 +50,10 @@ export class WorkspaceTerminalService {
         this.flush(sessionId, state);
         this.events.publish(sessionId, { type: 'terminal-closed' });
       }),
-      session.shell.onError((error) =>
-        this.events.publish(sessionId, { type: 'terminal-error', message: error.message }),
-      ),
+      session.shell.onError((error) => {
+        logger.warn({ err: error, workspaceId: sessionId }, 'Workspace terminal shell error');
+        this.events.publish(sessionId, { type: 'terminal-error', message: error.message });
+      }),
     );
   }
   detach(sessionId: string): void {
@@ -72,7 +74,18 @@ export class WorkspaceTerminalService {
     if (sequence !== undefined && (!Number.isInteger(sequence) || sequence < 0 || sequence > 0xffffffff))
       throw new Error('Invalid SSH input sequence.');
     const state = this.requireState(sessionId);
-    if (state.queuedBytes + bytes > MAX_QUEUED_INPUT_BYTES) throw new Error('SSH input queue limit exceeded.');
+    if (state.queuedBytes + bytes > MAX_QUEUED_INPUT_BYTES) {
+      logger.warn(
+        {
+          workspaceId: sessionId,
+          incomingBytes: bytes,
+          queuedBytes: state.queuedBytes,
+          queueLimitBytes: MAX_QUEUED_INPUT_BYTES,
+        },
+        'Workspace terminal input queue limit exceeded',
+      );
+      throw new Error('SSH input queue limit exceeded.');
+    }
     this.integration.noteUserInput(sessionId);
     state.queue.push({ data, sequence, bytes });
     state.queuedBytes += bytes;
@@ -120,6 +133,7 @@ export class WorkspaceTerminalService {
       if (!accepted) {
         runtimePerformanceMetrics.recordTerminalInputDrainPause();
         state.waitingForDrain = true;
+        logger.debug({ workspaceId: id, queuedBytes: state.queuedBytes }, 'SSH terminal input waiting for drain');
         let off: () => void = () => {};
         off = shell.onDrain(() => {
           off();

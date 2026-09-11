@@ -1,5 +1,6 @@
 import { Readable } from 'node:stream';
 import type { SshSuspendService } from '../../ssh-suspend/ssh-suspend.service';
+import { logger } from '../../../shared/logging/logger';
 import type { SuspendedSessionLogStore } from '../../ssh-suspend/suspended-session-log.port';
 import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceService } from '../workspace.service';
@@ -169,6 +170,7 @@ export class WorkspaceSuspendCoordinatorService {
     // The transport is now owned by SshSuspendService and immediately visible as `hanging`.
     // Cleanup of ancillary file operations must not delay the user-visible suspend handoff.
     await this.operations.cleanup(workspaceId).catch(() => undefined);
+    logger.info({ workspaceId, suspendedSessionId: suspendSessionId }, 'Workspace suspended');
     return { suspended: true, suspendSessionId };
   }
 
@@ -190,6 +192,10 @@ export class WorkspaceSuspendCoordinatorService {
       historyCursor: 0,
     };
     this.pending.set(newWorkspaceId, pending);
+    logger.debug(
+      { workspaceId: newWorkspaceId, suspendedSessionId: suspendSessionId, pendingResumes: this.pending.size },
+      'Suspended Workspace resume queued',
+    );
 
     let prepared: Awaited<ReturnType<SshSuspendService['prepareResume']>>;
     let attached = false;
@@ -234,8 +240,13 @@ export class WorkspaceSuspendCoordinatorService {
       };
     } catch (error) {
       // If closeWorkspace() already consumed this reservation, it has also detached/rolled back
-      // whatever state existed at that point. Do not race a second cleanup against that rollback.
-      if (this.pending.get(newWorkspaceId) === pending) {
+      // whatever state existed at that point. This is an expected client-cancellation path, not an
+      // operational warning; real preparation failures remain visible at warn.
+      const cancelledByClient = this.pending.get(newWorkspaceId) !== pending;
+      const context = { err: error, workspaceId: newWorkspaceId, suspendedSessionId: suspendSessionId };
+      if (cancelledByClient) logger.debug(context, 'Suspended Workspace resume preparation cancelled');
+      else logger.warn(context, 'Suspended Workspace resume preparation failed');
+      if (!cancelledByClient) {
         this.pending.delete(newWorkspaceId);
         if (attached) {
           this.terminal.detach(newWorkspaceId);
@@ -275,7 +286,15 @@ export class WorkspaceSuspendCoordinatorService {
     this.createMark(workspaceId, pending.userId, pending.logIdentifier);
     const session = this.workspaces.requireSession(workspaceId);
     session.shell.resume();
-    await this.filesystem.initialize(workspaceId).catch(() => undefined);
+    logger.info(
+      { workspaceId, suspendedSessionId: pending.suspendSessionId, historyAvailable: pending.historyCursor > 0 },
+      'Suspended Workspace resumed',
+    );
+    await this.filesystem
+      .initialize(workspaceId)
+      .catch((error) =>
+        logger.warn({ err: error, workspaceId }, 'Workspace filesystem initialization after resume failed'),
+      );
   }
 
   async loadPreviousHistory(workspaceId: string, userId: number): Promise<PreviousWorkspaceHistoryResult> {
@@ -374,7 +393,9 @@ export class WorkspaceSuspendCoordinatorService {
     mark.stopOutput?.();
     mark.stopOutput = undefined;
     await mark.writeChain.catch(() => undefined);
-    await this.logs.flush(mark.logIdentifier).catch(() => undefined);
+    await this.logs
+      .flush(mark.logIdentifier)
+      .catch((error) => logger.warn({ err: error }, 'Suspended Workspace log flush failed'));
   }
 
   private toSuspendSnapshot(snapshot: WorkspaceShellIntegrationSnapshot) {

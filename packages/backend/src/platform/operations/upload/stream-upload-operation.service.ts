@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
 import type { Writable } from 'node:stream';
+import { logger } from '../../../shared/logging/logger';
 import type { ExecutionSessionManager } from '../../execution/execution-session-manager';
 import type { RemoteFileSystem } from '../../filesystem/remote-filesystem';
 import { toRemoteFileEntry } from '../../filesystem/file-entry';
@@ -119,6 +120,15 @@ export class StreamUploadOperationService implements UploadOperation {
       settle: () => settlePending(),
     };
     this.pending.set(key, pending);
+    logger.debug(
+      {
+        workspaceId: request.ownerId,
+        uploadId: request.uploadId,
+        totalSize: request.size,
+        pendingUploads: this.pending.size,
+      },
+      'Upload start queued',
+    );
     let filesystem: RemoteFileSystem | undefined;
     let temporaryPath: string | undefined;
     let stream: Writable | undefined;
@@ -225,6 +235,12 @@ export class StreamUploadOperationService implements UploadOperation {
   async cancel(ownerId: string, uploadId: string): Promise<boolean> {
     const key = this.uploadKey(ownerId, uploadId);
     const upload = this.active.get(key);
+    const pending = this.pending.get(key);
+    if (!upload && !pending) return false;
+    logger.debug(
+      { workspaceId: ownerId, uploadId, uploadState: upload ? 'active' : 'pending' },
+      'Upload cancellation dispatch',
+    );
     if (upload) {
       upload.cancelled = true;
       this.active.delete(upload.key);
@@ -237,7 +253,6 @@ export class StreamUploadOperationService implements UploadOperation {
       return true;
     }
 
-    const pending = this.pending.get(key);
     if (!pending) return false;
     if (!pending.cancelled) {
       pending.cancelled = true;
@@ -335,6 +350,10 @@ export class StreamUploadOperationService implements UploadOperation {
       await upload.filesystem.replaceFile(upload.temporaryPath, upload.destinationPath);
       const metadata = await upload.filesystem.metadata(upload.destinationPath);
       this.active.delete(upload.key);
+      logger.debug(
+        { workspaceId: upload.ownerId, uploadId: upload.uploadId, totalSize: upload.totalSize },
+        'Upload completed',
+      );
       upload.emit({
         type: 'completed',
         uploadId: upload.uploadId,
@@ -352,6 +371,16 @@ export class StreamUploadOperationService implements UploadOperation {
     upload.cancelled = true;
     if (!upload.stream.destroyed) upload.stream.destroy();
     await upload.filesystem.removeFile(upload.temporaryPath, { ignoreMissing: true }).catch(() => undefined);
+    logger.warn(
+      {
+        workspaceId: upload.ownerId,
+        uploadId: upload.uploadId,
+        bytesWritten: upload.bytesWritten,
+        totalSize: upload.totalSize,
+        reason: message,
+      },
+      'Upload failed',
+    );
     upload.emit({ type: 'failed', uploadId: upload.uploadId, message });
   }
 

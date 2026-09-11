@@ -1,3 +1,4 @@
+import { logger } from '../../shared/logging/logger';
 import type { TransferOrchestratorService } from './transfer-orchestrator.service';
 import type { TransferTaskRegistry } from './transfer-task.registry';
 import type { InitiateTransferPayload, TransferTask } from './transfers.types';
@@ -12,6 +13,7 @@ export class TransfersService {
     this.validate(payload);
     const { task, signal } = this.tasks.create(payload, userId);
     void this.orchestrator.process(task.taskId, signal).catch((error) => {
+      logger.error({ err: error, taskId: task.taskId }, 'Server transfer orchestrator escaped with an error');
       this.tasks.setOverallStatus(
         task.taskId,
         error instanceof Error && error.name === 'AbortError' ? 'cancelled' : 'failed',

@@ -9,10 +9,41 @@ export const isLogLevel = (value: unknown): value is LogLevel =>
 export const logger = pino({
   level: 'info',
   browser: { asObject: true },
+  redact: {
+    paths: [
+      'password',
+      'passphrase',
+      'secret',
+      'token',
+      'authorization',
+      'cookie',
+      '*.password',
+      '*.passphrase',
+      '*.secret',
+      '*.token',
+      '*.authorization',
+      '*.cookie',
+      'err.config.headers.Authorization',
+      'err.config.headers.authorization',
+    ],
+    censor: '[REDACTED]',
+  },
 });
 
-export const setFrontendLogLevel = (value: unknown): LogLevel => {
+const logLevelChanged = (previousLevel: LogLevel, level: LogLevel): void => {
+  const context = { previousLevel, logLevel: level };
+  if (logger.isLevelEnabled('info')) logger.info(context, 'Frontend log level changed');
+  else if (logger.isLevelEnabled('warn')) logger.warn(context, 'Frontend log level changed');
+  else if (logger.isLevelEnabled('error')) logger.error(context, 'Frontend log level changed');
+};
+
+export const setFrontendLogLevel = (value: unknown, announceChange = false): LogLevel => {
   const level: LogLevel = isLogLevel(value) ? value : 'info';
+  const previousLevel: LogLevel = isLogLevel(logger.level) ? logger.level : 'info';
+  if (level === previousLevel) return level;
+
+  if (announceChange && level === 'silent') logLevelChanged(previousLevel, level);
   logger.level = level;
+  if (announceChange && level !== 'silent') logLevelChanged(previousLevel, level);
   return level;
 };

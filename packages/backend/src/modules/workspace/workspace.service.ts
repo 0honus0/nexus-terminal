@@ -3,6 +3,7 @@ import type { ExecutionSessionManager } from '../../platform/execution/execution
 import type { ConnectionService } from '../connections/connection.service';
 import type { SshConnectionResolver } from '../connections/services/ssh-connection-resolver.service';
 import type { AuditLogService } from '../audit/audit.service';
+import { logger } from '../../shared/logging/logger';
 import type { NotificationService } from '../notifications/notification.service';
 import type { WorkspaceSession } from './workspace-session';
 import type { WorkspaceSessionRegistry } from './workspace-session-registry';
@@ -122,6 +123,10 @@ export class WorkspaceService {
         ip: request.clientIp,
         reason: error instanceof Error ? error.message : String(error),
       };
+      logger.warn(
+        { err: error, workspaceId: request.workspaceId, connectionId: request.connectionId },
+        'Workspace shell initialization failed',
+      );
       await this.audit.logAction('SSH_SHELL_FAILURE', details).catch(() => undefined);
       await this.notifications.publish('SSH_SHELL_FAILURE', details).catch(() => undefined);
       throw error;

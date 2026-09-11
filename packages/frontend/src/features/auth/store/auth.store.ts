@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { apiErrorStatus } from '@/client/http';
+import { logger } from '@/client/logging/logger';
 import { authApi } from '../api/authApi';
 import type {
   AuthSessionState,
@@ -31,6 +32,7 @@ export const useAuthStore = defineStore('auth', {
       try {
         this.setupState = (await authApi.needsSetup()) ? 'required' : 'complete';
       } catch {
+        logger.warn('Setup state probe failed; using compatibility fallback');
         // Legacy bootstrap kept the application navigable when the setup probe
         // itself was unavailable. Backend route/auth policy remains authoritative.
         this.setupState = 'complete';
@@ -51,6 +53,7 @@ export const useAuthStore = defineStore('auth', {
         this.sessionState = user ? 'authenticated' : 'anonymous';
         if (!user) this.pendingSecondFactor = false;
       } catch {
+        logger.debug('Auth session probe failed; treating session as anonymous');
         this.user = null;
         this.sessionState = 'anonymous';
         this.pendingSecondFactor = false;
@@ -72,6 +75,7 @@ export const useAuthStore = defineStore('auth', {
         this.sessionState = 'anonymous';
         this.user = null;
         this.pendingSecondFactor = true;
+        logger.debug('Login requires second-factor verification');
         return result;
       }
 
@@ -91,6 +95,7 @@ export const useAuthStore = defineStore('auth', {
         return user;
       } catch (error) {
         if (apiErrorStatus(error) === 400) this.pendingSecondFactor = false;
+        logger.debug({ statusCode: apiErrorStatus(error) }, 'Frontend second-factor verification failed');
         throw error;
       }
     },

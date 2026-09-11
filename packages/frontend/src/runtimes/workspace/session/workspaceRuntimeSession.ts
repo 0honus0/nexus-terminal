@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue';
+import { logger } from '@/client/logging/logger';
 import type { Connection } from '@/features/connections/public';
 import {
   createTerminalSessionState,
@@ -71,6 +72,10 @@ export class WorkspaceRuntimeSession {
         this.statusMessage.value = message;
       }),
       this.socket.on<{ message: string }>('terminal.error', ({ message }) => {
+        logger.warn(
+          { workspaceId: this.id, connectionId: this.connection.id, reason: message },
+          'Workspace terminal error',
+        );
         this.markCapabilitiesDisconnected();
         this.state.value = 'error';
         this.statusMessage.value = message;
@@ -81,6 +86,7 @@ export class WorkspaceRuntimeSession {
         this.state.value = 'disconnected';
       }),
       this.socket.on<{ operation: string; message: string }>('protocol.error', ({ operation, message }) => {
+        logger.debug({ workspaceId: this.id, operation, reason: message }, 'Workspace protocol error event');
         this.statusMessage.value = `${operation}: ${message}`;
       }),
       this.socket.on<{ suspendedSessionId: string; reason: string }>('suspend.autoTerminated', (event) =>
@@ -116,6 +122,10 @@ export class WorkspaceRuntimeSession {
       return result;
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
+      logger.warn(
+        { err: error, workspaceId: this.id, connectionId: this.connection.id, reconnectAttempt: this.reconnectAttempt },
+        'Workspace runtime connection failed',
+      );
       this.state.value = 'error';
       this.statusMessage.value = error.message;
       throw error;
@@ -152,6 +162,10 @@ export class WorkspaceRuntimeSession {
       return result;
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
+      logger.warn(
+        { err: error, workspaceId: this.id, suspendedSessionId },
+        'Workspace suspended-session resume failed',
+      );
       this.state.value = 'error';
       this.statusMessage.value = error.message;
       throw error;
@@ -222,11 +236,24 @@ export class WorkspaceRuntimeSession {
     if (this.reconnectTimer !== undefined || this.disposed || this.closing || this.markedForSuspend.value) return;
     if (!this.hasConnected.value && this.reconnectAttempt >= INITIAL_RECONNECT_ATTEMPT_LIMIT) {
       this.state.value = 'error';
+      logger.warn(
+        { workspaceId: this.id, connectionId: this.connection.id, reconnectAttempt: this.reconnectAttempt },
+        'Workspace initial reconnect limit reached',
+      );
       return;
     }
     this.reconnectAttempt += 1;
     const delay = Math.min(2 ** Math.min(this.reconnectAttempt, 5) * 1000, RECONNECT_MAX_DELAY_MS);
     this.state.value = 'reconnecting';
+    logger.debug(
+      {
+        workspaceId: this.id,
+        connectionId: this.connection.id,
+        reconnectAttempt: this.reconnectAttempt,
+        delayMs: delay,
+      },
+      'Workspace reconnect scheduled',
+    );
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = undefined;
       void this.reconnect();

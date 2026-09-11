@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import { apiErrorMessage } from '@/client/http';
+import { logger } from '@/client/logging/logger';
 import { serverTransfersApi } from '../api/serverTransfersApi';
 import { toTransferTask, type SendFilesRequest, type ServerTransferTask } from '../model/serverTransfer';
 
@@ -32,6 +33,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
       if (generation === freshnessGeneration) items.value = nextItems;
     } catch (cause) {
       if (generation === freshnessGeneration) {
+        logger.debug({ background }, 'Server transfer refresh failed');
         error.value = apiErrorMessage(cause, 'Failed to load transfer tasks.');
       }
     } finally {
@@ -64,6 +66,7 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
       if (refreshInFlight) {
         pendingRefresh = true;
         pendingRefreshBackground = pendingRefreshBackground && background;
+        logger.trace({ background }, 'Server transfer refresh queued behind in-flight refresh');
         return refreshInFlight;
       }
     }
@@ -76,11 +79,16 @@ export const useServerTransfersStore = defineStore('serverTransfers', () => {
     const task = await serverTransfersApi.send(request);
     invalidateInFlightRefresh();
     items.value = [task, ...items.value.filter((item) => item.taskId !== task.taskId)];
+    logger.debug(
+      { taskId: task.taskId, status: task.status, subTaskCount: task.subTasks.length },
+      'Server transfer task queued in UI',
+    );
     return task;
   };
 
   const cancel = async (taskId: string): Promise<void> => {
     const task = items.value.find((item) => item.taskId === taskId);
+    logger.debug({ taskId, currentStatus: task?.status }, 'Server transfer cancellation dispatch');
     invalidateInFlightRefresh();
     if (task && !['completed', 'failed', 'partially-completed', 'cancelled'].includes(task.status)) {
       task.status = 'cancelling';

@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import type { WorkspaceTerminalService } from '../../modules/workspace/services/workspace-terminal.service';
+import { logger } from '../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import { encodeWorkspaceBinaryFrame } from './workspace-binary.protocol';
 
@@ -51,6 +52,15 @@ export class TerminalStreamTransport {
       this.queuedBytes += chunk.byteLength;
       runtimePerformanceMetrics.recordTerminalEnqueue(chunk.byteLength, this.queuedBytes, this.socket.bufferedAmount);
       if (this.queuedBytes > MAX_QUEUED_BYTES) {
+        logger.warn(
+          {
+            workspaceId: this.workspaceId,
+            queuedBytes: this.queuedBytes,
+            socketBufferedBytes: this.socket.bufferedAmount,
+            queueLimitBytes: MAX_QUEUED_BYTES,
+          },
+          'Terminal output queue limit exceeded',
+        );
         this.socket.close(1013, 'Terminal consumer is too slow');
         this.dispose();
         return;
@@ -245,6 +255,15 @@ export class TerminalStreamTransport {
       this.backpressureStartedAt = 0n;
     }
     runtimePerformanceMetrics.terminalBackpressureChanged(active);
+    logger.debug(
+      {
+        workspaceId: this.workspaceId,
+        active,
+        queuedBytes: this.queuedBytes,
+        socketBufferedBytes: this.socket.bufferedAmount,
+      },
+      'Terminal output backpressure changed',
+    );
     this.reconcileBackpressure();
   }
 

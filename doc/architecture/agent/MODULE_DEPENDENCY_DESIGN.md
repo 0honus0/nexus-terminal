@@ -1534,6 +1534,42 @@ modules/workspace/WorkspaceTerminalService
 
 不应该为了名称统一强制改成 Local Runner adapter。
 
+### 15.1 远程 Workspace transport 的 diagnostics / performance 边界
+
+`main -> dev` 同步后，现有 Nexus SSH Workspace transport 增强了低频 dispatch diagnostics，但 owner 没有变化：
+
+```text
+interfaces/http/http-application.ts
+interfaces/websocket/websocket-server.ts
+interfaces/websocket/workspace-protocol.session.ts
+modules/workspace/workspace-session-registry.ts
+platform/execution/execution-session-manager.ts
+frontend/runtimes/workspace/protocol/workspaceSocket.ts
+frontend/runtimes/workspace/session/workspaceRuntimeRegistry.ts
+```
+
+具体约束：
+
+```text
+startRuntimePerformanceReporter()
+  -> 仅 logger trace level 开启 runtimePerformanceMetrics collection
+
+WorkspaceProtocolSession.handleMessage()
+  -> terminal.input / terminal.resize / docker.stats 不写逐请求 trace
+  -> 其它 control request 才写 sparse dispatch trace
+  -> binary download/preview response 仍按 dev 的 binary framing/backpressure 状态机完成
+
+WorkspaceSocket.requestInternal()
+  -> PendingRequest.operation 只用于 diagnostics
+  -> expectBinary/responseReceived/binaryDone 仍决定 binary request 何时 resolve
+
+HTTP / WebSocket / ExecutionSession lifecycle
+  -> debug/warn/error 只补失败、连接、关闭与超时诊断
+  -> 不取得 Agent Capability / Policy / Approval / Lease / StateCommit authority
+```
+
+因此这些 diagnostics 属于远程 Workspace transport 可观测性，不得被当作 Agent Workspace Runtime 的执行/安全 owner，也不得为了日志复用把两套 runtime 合并。
+
 ---
 
 ## 16. 允许与禁止的后续拆分

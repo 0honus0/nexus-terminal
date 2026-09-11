@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { ExecutionSession } from '../../execution/execution-session';
 import type { ExecutionSessionManager } from '../../execution/execution-session-manager';
 import { CommandExecutionError, type RemoteCommandSession } from '../../execution/remote-execution.port';
+import { logger } from '../../../shared/logging/logger';
 import { quotePosixShellArg } from '../../execution/posix-shell';
 import { normalizeAbsoluteRemotePath } from '../../filesystem/remote-path';
 import type {
@@ -225,6 +226,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     const active = this.activeByOwner.get(ownerId)?.get(requestId);
     if (!active) return false;
     active.cancelled = true;
+    logger.debug({ requestId, ownerId, operation: active.operation }, 'Archive cancellation requested');
     active.preflightAbort.abort();
     await active.command?.terminate({ signal: 'TERM', graceMs: 800, forceMs: 2_500 }).catch(() => undefined);
     return true;
@@ -247,6 +249,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     };
     ownerOperations.set(requestId, active);
     this.activeByOwner.set(ownerId, ownerOperations);
+    logger.debug({ requestId, ownerId, operation, activeForOwner: ownerOperations.size }, 'Archive operation started');
     return active;
   }
 
@@ -494,6 +497,7 @@ export class RemoteArchiveOperationService implements ArchiveOperation {
     code?: ArchiveErrorCode,
     commandNotFound?: string,
   ): void {
+    logger.warn({ requestId, operation, code, commandNotFound, reason: message }, 'Archive operation failed');
     emit({
       type: 'failed',
       operation,

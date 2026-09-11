@@ -1,3 +1,4 @@
+import { logger } from '../../shared/logging/logger';
 import type { SshConnectionResolver } from '../connections/services/ssh-connection-resolver.service';
 import type { ExecutionSession } from '../../platform/execution/execution-session';
 import type { ExecutionSessionManager } from '../../platform/execution/execution-session-manager';
@@ -24,6 +25,10 @@ export class TransferOrchestratorService {
   async process(taskId: string, signal: AbortSignal): Promise<void> {
     const task = this.tasks.get(taskId);
     if (!task) return;
+    logger.debug(
+      { taskId, subTaskCount: task.subTasks.length, concurrency: Math.min(this.concurrency, task.subTasks.length) },
+      'Server transfer task dispatch',
+    );
     let source: ExecutionSession | undefined;
     try {
       this.throwIfAborted(signal);
@@ -52,11 +57,17 @@ export class TransferOrchestratorService {
         this.tasks.setOverallStatus(taskId, 'cancelled');
       } else {
         const message = error instanceof Error ? error.message : String(error);
+        logger.warn({ err: error, taskId }, 'Server transfer task failed');
         this.finishPending(taskId, 'failed', message);
         if ((this.tasks.get(taskId)?.subTasks.length ?? 0) === 0) this.tasks.setOverallStatus(taskId, 'failed');
       }
     } finally {
-      if (source) await this.sessions.close(source.id).catch(() => undefined);
+      if (source)
+        await this.sessions
+          .close(source.id)
+          .catch((error) =>
+            logger.warn({ err: error, taskId, executionSessionId: source!.id }, 'Transfer source close failed'),
+          );
       this.tasks.finalize(taskId);
       this.tasks.releaseCancellation(taskId);
     }
@@ -65,7 +76,15 @@ export class TransferOrchestratorService {
     const task = this.tasks.get(taskId);
     if (!task) return;
     const item = task.payload.sourceItems.find((i) => i.name === sub.sourceItemName);
+    logger.trace(
+      { taskId, subTaskId: sub.subTaskId, targetConnectionId: sub.connectionId },
+      'Server transfer sub-task dispatch',
+    );
     if (!item) {
+      logger.warn(
+        { taskId, subTaskId: sub.subTaskId, targetConnectionId: sub.connectionId },
+        'Server transfer source item missing',
+      );
       this.tasks.setSubTask(
         taskId,
         sub.subTaskId,
@@ -105,6 +124,10 @@ export class TransferOrchestratorService {
         this.tasks.setSubTask(taskId, sub.subTaskId, 'cancelled', sub.progress, 'Sub-task cancelled by user.');
         return;
       }
+      logger.warn(
+        { err: error, taskId, subTaskId: sub.subTaskId, targetConnectionId: sub.connectionId },
+        'Server transfer sub-task failed',
+      );
       this.tasks.setSubTask(
         taskId,
         sub.subTaskId,

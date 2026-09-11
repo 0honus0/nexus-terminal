@@ -2,7 +2,7 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 import type { RelationalDatabase, SqlStatementResult } from '../../platform/storage/relational-database.port';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
-import { getBackendLogLevel } from '../../shared/logging/logger';
+import { getBackendLogLevel, logger } from '../../shared/logging/logger';
 import type {
   DatabaseWorkerData,
   DatabaseWorkerMetrics,
@@ -215,9 +215,11 @@ export class DatabaseAdapter implements RelationalDatabase {
     };
     const worker = new Worker(WORKER_BOOTSTRAP, { eval: true, workerData });
     this.worker = worker;
+    logger.debug({ sourceMode: runningSource ? 'typescript' : 'javascript' }, 'SQLite database worker started');
     worker.on('message', (response: DatabaseWorkerResponse) => this.handleResponse(response));
     worker.on('error', (error: Error) => {
       if (this.worker !== worker) return;
+      logger.error({ err: error, pendingRequests: this.pending.size }, 'SQLite database worker error');
       this.worker = null;
       this.workerInitialization = null;
       this.rejectPending(error);
@@ -227,7 +229,12 @@ export class DatabaseAdapter implements RelationalDatabase {
       this.worker = null;
       this.workerInitialization = null;
       if (!this.expectedWorkerExit) {
-        this.rejectPending(new Error(`SQLite database worker exited unexpectedly with code ${code}.`));
+        const error = new Error(`SQLite database worker exited unexpectedly with code ${code}.`);
+        logger.error(
+          { err: error, exitCode: code, pendingRequests: this.pending.size },
+          'SQLite database worker exited',
+        );
+        this.rejectPending(error);
       }
     });
   }
@@ -271,7 +278,9 @@ export class DatabaseAdapter implements RelationalDatabase {
         } as DatabaseWorkerRequest);
       } catch (error) {
         this.pending.delete(id);
-        rejectRequest(error instanceof Error ? error : new Error(String(error)));
+        const cause = error instanceof Error ? error : new Error(String(error));
+        logger.error({ err: cause, databaseOperation: payload.type }, 'Unable to dispatch SQLite worker request');
+        rejectRequest(cause);
       }
     });
   }
@@ -336,7 +345,22 @@ export class DatabaseAdapter implements RelationalDatabase {
             this.drainOperationQueue();
           });
       };
+      const queuedBehindBarrier =
+        this.exclusiveOperationActive ||
+        this.operationQueue.length > 0 ||
+        (mode === 'exclusive' && this.activeSharedOperations > 0);
       this.operationQueue.push({ mode, run });
+      if (queuedBehindBarrier) {
+        logger.trace(
+          {
+            mode,
+            queuedOperations: this.operationQueue.length,
+            activeSharedOperations: this.activeSharedOperations,
+            exclusiveOperationActive: this.exclusiveOperationActive,
+          },
+          'SQLite operation queued behind scheduler barrier',
+        );
+      }
       this.drainOperationQueue();
     });
   }

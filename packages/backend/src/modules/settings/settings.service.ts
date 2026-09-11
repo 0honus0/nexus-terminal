@@ -154,11 +154,11 @@ export class SettingsService {
   }
   async setSetting(key: string, value: string) {
     await this.repository.set(key, value);
-    if (key === KEYS.backendLogLevel) setBackendLogLevel(value);
+    if (key === KEYS.backendLogLevel) setBackendLogLevel(value, true);
   }
   async setMultipleSettings(values: Record<string, string>) {
     await this.repository.setMany(values);
-    if (values[KEYS.backendLogLevel] !== undefined) setBackendLogLevel(values[KEYS.backendLogLevel]);
+    if (values[KEYS.backendLogLevel] !== undefined) setBackendLogLevel(values[KEYS.backendLogLevel], true);
   }
   async deleteSetting(key: string) {
     await this.repository.delete(key);

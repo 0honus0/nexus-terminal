@@ -2,6 +2,7 @@ import type { ArchiveEvent } from '../../platform/operations/archive/archive-ope
 import type { TransferEvent } from '../../platform/operations/transfer/transfer-operation.port';
 import type { UploadEvent } from '../../platform/operations/upload/upload-operation.port';
 import type { ServerStatus } from '../../platform/system/server-status.port';
+import { logger } from '../../shared/logging/logger';
 
 export type WorkspaceEvent =
   | { type: 'terminal-output'; data: Uint8Array; stderr?: boolean }
@@ -39,8 +40,8 @@ export class WorkspaceEventHub {
     for (const listener of this.listeners.get(sessionId) ?? []) {
       try {
         listener(event);
-      } catch {
-        /* interface observers are isolated */
+      } catch (error) {
+        logger.error({ err: error, workspaceId: sessionId, eventType: event.type }, 'Workspace event listener failed');
       }
     }
   }
