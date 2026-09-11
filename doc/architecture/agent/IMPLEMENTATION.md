@@ -49,11 +49,14 @@ P1 当前依赖替换清单：
 
 后续 P2/P3 每个新能力仍先过此闸门，尤其是 JSON Schema、MCP、CDP、归档/解包、签名、重试/限流 primitive、虚拟列表和浏览器协议，不默认从零实现。
 
-### 0.2 Phase 3 未完成能力标记
+### 0.2 Phase 3 当前状态与批准实现契约
 
-- **ACP：未完成。** 当前允许保留 `IntegrationKind='acp'` 的配置模型、`AcpRuntimePort`/`AcpTransportPort`、`AcpAdapter` 与 `integration.acp.execute` capability type，但 production composition 不实例化 ACP runtime，Operations manifest 不声明该 capability，也不得产生默认 grant。
-- **Browser/CDP/Puppeteer：未完成。** 当前允许保留 Browser ports、`PuppeteerBrowserGateway`、browser Workspace/Profile 相关 schema 与 `browser.operate` capability type，但 production composition / Tool Catalog 不接入 live Browser execution，Operations manifest 不声明该 capability，也不得产生默认 grant。
-- 上述两项只有在 capability declaration、Policy/Approval/Lease/StateCommit 边界、runtime wiring、UI/API、failure/recovery contract 和对应产品 E2E 全部落地后，才能从 `reserved` 改为 `implemented`；仅存在类、Port、schema 或依赖包不能改变状态。
+- **ACP：当前仍未完成。** 已批准本批实现 live execution，但在 Runner workspace-profile transport、permission→Nexus Approval 映射、composition/tool wiring、failure recovery 和 E2E 完成前继续标记 `reserved`。Backend 不 spawn ACP backend；Runner 在冻结 Workspace generation sandbox 内持有 ACP child process/stdio stream。
+- **Browser/CDP/Puppeteer：当前仍未完成。** 已批准本批实现 live execution，但 raw CDP/Puppeteer authority 必须从 Backend skeleton 下沉 Runner。Backend 只发 typed Browser command；Runner 按冻结的 Browser target/profile 选择 endpoint 并持有 socket/session。
+- Browser endpoint `scope` 只表示可达域：`docker-network | external-network`。`external-network` 包括宿主机、其它 Docker network、LAN/VPN/VPC 和公网；两种 scope 都允许 `ws`/`wss`，明文允许、TLS 校验与 auth 由独立 transport policy 显式控制。Agent 输入不得携带 endpoint URL；配置更新不得静默改变已运行 generation。
+- Browser tool 不提供 `evaluate`、raw CDP、任意 selector fallback；只接受稳定的 typed operation 和 snapshot `nodeRef`。endpoint 连接策略与页面 navigation/subresource/download 策略必须分开校验。
+- **Workspace local Terminal：批准实现。** 新增 Runtime interactive-session port 与 Runner PTY owner；不得把 `workspace_execute_argv` 改成长任务，也不得复用 SSH `WorkspaceTerminalService`。PTY create/attach/input/output/resize/signal/close 都绑定同一 `workspaceId + generation`；generation 变化立即使旧 session stale/closed。
+- ACP/Browser 只有 capability declaration、Policy/Approval/Lease/StateCommit 或等价安全边界、runtime wiring、UI/API、failure/recovery contract 和产品 E2E 全部落地后，才能从 `reserved` 改为 `implemented`。
 
 <a id="i1"></a>
 

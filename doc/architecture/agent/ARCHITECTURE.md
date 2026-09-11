@@ -16,6 +16,15 @@ Agent 默认可以选择全部当前及未来连接；全局 connection denylist
 
 > **当前 Phase 3 接线状态（dev）**：MCP 已进入 live composition；**ACP 未完成**，只保留 integration schema、capability type、Port/Adapter skeleton，当前 `nexus.operations` manifest 不声明 `integration.acp.execute`、不创建默认 grant；**Browser/CDP/Puppeteer 未完成**，只保留 Browser ports、`PuppeteerBrowserGateway` 与 Workspace/browser 设计骨架，当前 manifest 不声明 `browser.operate`、Tool Catalog/composition root 不接入 live execution。两项在完成正式接线、授权、E2E 前都只能视为 `reserved / roadmap-only`，不得因源码中存在 Adapter/Port 而标记为已交付。
 
+### 1.1 已批准的下一批 live execution 契约
+
+当前实现批次已批准把 **ACP、Browser/CDP/Puppeteer、Workspace local Terminal** 推进到 live，但在对应 runtime wiring、Capability/Policy、失败恢复和产品 E2E 全部通过前，ACP/Browser 的当前状态仍保持 `reserved / roadmap-only`。不能先通过修改 manifest/guard 把骨架伪装成已交付能力。
+
+- **ACP**：`IntegrationKind='acp'` 继续使用 `transport='workspace-profile'`。Backend 持有 Integration/Run/Approval/StateCommit authority；真正 ACP child process 与双向 byte stream 由 Runner 在冻结的 `workspaceId + generation + profile` sandbox 中创建。ACP permission request 必须映射为 Nexus 本地 inspection/policy/approval，一次 permission 不能升级为永久 grant；ACP 直接 filesystem/terminal request 继续 fail closed。
+- **Browser/CDP/Puppeteer**：原始 CDP socket、Puppeteer instance、Browser context 与 page lifecycle 归 **Runner Browser Runtime**；Backend 只调用受限 `BrowserGatewayPort` command，不接收/返回裸 CDP URL。Browser endpoint 以 `browserTargetId + profileRevision` 冻结到 Workspace generation，Runtime 从管理员配置的 endpoint 列表选择可达项。endpoint 的 `scope` 表达网络可达域而非安全等级：`docker-network` 表示 Runtime 所在/已加入 Docker network 内可用的 service/container DNS/IP，`external-network` 表示 Docker network 之外但 Runtime 可达的宿主、其它 Docker network、LAN/VPN/VPC 或公网地址。两类都可配置 `ws://`/`wss://`；plaintext/TLS/auth 是独立 transport policy，不和 scope 强绑定。优先配置稳定 service DNS，不把容器临时 IP 当长期 identity。
+- **Browser 安全边界**：Agent 只选择 `browserTargetId`，不得注入 endpoint URL。CDP endpoint allow policy 与 Browser 页面 navigation/subresource/redirect/download policy 是两层独立策略。Tool Catalog 只暴露 create/navigate/snapshot/click/type/close 等结构化操作；不暴露 selector fallback、`evaluate`、raw CDP command 或任意 JavaScript。snapshot mutation 后旧 `snapshotId + nodeRef` 必须失效。
+- **Workspace local Terminal**：新增独立 interactive-session owner/port，session 绑定 `workspaceId + generation`，由 Runner 在同一 sandbox/toolchain profile 内创建 PTY。它提供 create/attach/input/output/resize/signal/close，但不复用 Agent 模型身份、Agent one-shot job、SSH `WorkspaceTerminalService` 或远程 SSH/SFTP socket。Workspace stop/restart/delete/generation replacement 必须主动终止旧 PTY；断线重连只允许在同 generation 的有界 session 生命周期内 attach。
+
 Workspace Runtime 是受限本地执行能力；稳定实体是 `Workspace`，运行配置由 `WorkspaceProfile` 冻结，实际运行实例由 `generation` 标识。Runner sandbox 只是 generation 的实现细节，不把 Docker 当作本地执行模型，也不使用裸 `/api/v1/runtime`。Workspace Runtime availability 是设置页的真实消费者；Runner 未配置或 sandbox primitive 不可用时返回 unavailable/degraded，不能回退为宿主裸进程。
 
 适用工程边界引用 [EC-REQ-001、EC-ARCH-001/009、EC-RUNTIME-003/004/005、EC-E2E-001/002](../../software-requirements/engineering-constraints.md)。已定义正式契约不等于已实现产品；软件需求/FR/SRS 已进入正式 Agent 实现基线，后续架构调整必须同步需求、实现快照和对应验证证据，不能只改设计文档或只凭源码目录判断交付状态。

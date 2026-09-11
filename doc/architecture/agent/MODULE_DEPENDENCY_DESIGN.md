@@ -1532,20 +1532,36 @@ browser.operate capability type (roadmap only)
 puppeteer-core
 ```
 
-当前 Browser/CDP/Puppeteer live execution **未完成**；production composition root / Tool Catalog 不接线，`nexus.operations` manifest 不声明 `browser.operate`，也不会创建默认 grant。
+当前 Browser/CDP/Puppeteer live execution **尚未完成**；production composition root / Tool Catalog 目前仍不接线，`nexus.operations` manifest 仍不声明 `browser.operate`。本批已批准实现，guard 只能在 Runner-side Browser Runtime、Backend typed gateway、manifest/grant、Policy/Approval 与 E2E 同步落地时一起调整，不能先删除门禁。
 
-Backend architecture checker 将这个 reserved 边界固化为静态门禁：`bootstrap/agent/**` 不得出现 ACP/Browser reserved runtime/gateway wiring 或 `integration.acp.execute` / `browser.operate` live capability，Operations manifest 也不得声明这两个 capability。该 guard 不删除 Port/Adapter/schema skeleton；未来 roadmap 真正批准 live execution 时，应连同 manifest/grant/approval/policy/E2E 一起显式修改此规则。
-
-未来方向：
+批准后的最终依赖方向：
 
 ```text
-Workspace Profile
--> Browser runtime preparation
--> CDP endpoint binding
--> PuppeteerBrowserGateway
--> click/type/navigation/snapshot
--> download -> Artifact
+Agent Tool / BrowserCapabilityService (Backend)
+-> BrowserGatewayPort (typed commands only)
+-> RunnerBrowserGatewayAdapter (Backend infrastructure)
+-> authenticated Backend<->Runner protocol
+-> BrowserSessionManager (Runner)
+-> BrowserEndpointResolver
+   -> docker-network endpoint (service/container DNS or configured IP)
+   -> external-network endpoint (host / other Docker network / LAN / VPN / VPC / public)
+-> Puppeteer/CDP (Runner owns raw socket/context/page)
 ```
+
+`docker-network | external-network` 是 reachability scope，不是 trust level。endpoint transport 另带 plaintext/TLS/auth policy；`ws` 与 `wss` 均可按管理员策略使用。Agent 只能引用 `browserTargetId`，不得提交裸 endpoint。Browser navigation policy 与 CDP endpoint policy 分离；Tool Catalog 不公开 selector/evaluate/raw-CDP。
+
+Workspace local Terminal 的依赖方向独立于 Browser：
+
+```text
+Frontend local terminal surface
+-> Backend authenticated terminal session facade
+-> WorkspaceRuntimeInteractiveSessionPort
+-> Runner interactive-session protocol
+-> WorkspacePtySessionManager
+-> generation-scoped sandbox + toolchain profile
+```
+
+该 port 不属于 Agent model/tool execution owner，也不复用 SSH `WorkspaceTerminalService`。ACP 则复用 Workspace sandbox construction，但通过 bounded process-stream transport 而不是 PTY。
 
 ### MCP
 

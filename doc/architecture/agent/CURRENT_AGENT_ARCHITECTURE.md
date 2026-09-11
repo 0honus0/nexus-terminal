@@ -753,6 +753,8 @@ no module cycles
    - ACP：**未完成**。`IntegrationService` 已支持 `kind='acp'` 的配置校验/持久化，`AcpAdapter` 也已存在，但当前 composition root 没有实例化/注入 ACP runtime；`nexus.operations` manifest 不声明 `integration.acp.execute` 且无默认 grant，因此只能视为保留骨架；
    - Browser/CDP/Puppeteer：**未完成**。`PuppeteerBrowserGateway` 和对应 ports 已存在，但当前 composition root/Tool Catalog 没有把它接到 live Agent 执行路径；`nexus.operations` manifest 不声明 `browser.operate` 且无默认 grant，因此仍是保留骨架而非产品能力。
 
+   **已批准的下一步实现契约（尚不改变上述当前状态）**：ACP transport 下沉到 Runner workspace-profile process stream；Browser raw CDP/Puppeteer owner 下沉 Runner，并通过 `browserTargetId + profileRevision` 冻结 endpoint 选择，endpoint reachability scope 使用 `docker-network | external-network`（后者覆盖宿主、其它 Docker network、LAN/VPN/VPC/公网），`ws/wss` 与 TLS/auth/plaintext policy 分离；Backend 仅保留 typed Browser command/Capability/Approval authority。Workspace local Terminal 新增 generation-scoped PTY interactive-session port，不复用 Agent one-shot job 或 SSH Terminal owner。三项实现完成并经远端 E2E 后，本段再从 approved contract 改写为真实 live wiring。
+
 10. 本轮文档/guard 审核：**已修正已知正式矛盾**。
 
 - SRS/FR 不再描述 Runner 持 Docker Engine 或每 Workspace generation 创建子容器；当前正式模型是 Runner 内部 Sandbox Manager，Runner/Backend/work sandbox 都没有 Docker socket/dockerd/nested Docker；
