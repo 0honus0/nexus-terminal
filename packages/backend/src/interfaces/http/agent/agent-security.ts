@@ -1,10 +1,11 @@
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { agentData, agentError, agentRequestId } from './agent-http';
 
 export interface AgentSecurityOptions {
   nodeEnv: string;
   publicOrigin?: string;
+  csrfSecret: string;
 }
 
 export const agentUserId = (request: Request): number => {
@@ -31,12 +32,15 @@ const loopbackOrigin = (origin: string): boolean => {
   }
 };
 
-const tokenMatches = (expected: string | undefined, supplied: string | undefined): boolean => {
-  if (!expected || !supplied) return false;
+const tokenMatches = (expected: string, supplied: string | undefined): boolean => {
+  if (!supplied) return false;
   const left = Buffer.from(expected);
   const right = Buffer.from(supplied);
   return left.length === right.length && timingSafeEqual(left, right);
 };
+
+const agentCsrfToken = (request: Request, secret: string): string =>
+  createHmac('sha256', secret).update('nexus-agent-csrf-v1\0').update(request.sessionID).digest('hex');
 
 export const createAgentMutationSecurity =
   (options: AgentSecurityOptions): RequestHandler =>
@@ -61,15 +65,14 @@ export const createAgentMutationSecurity =
       }
     }
 
-    if (!tokenMatches(request.session.agentCsrfToken, request.header('x-nexus-csrf'))) {
+    if (!tokenMatches(agentCsrfToken(request, options.csrfSecret), request.header('x-nexus-csrf'))) {
       agentError(request, response, 403, 'CSRF_REJECTED', 'A valid Agent CSRF token is required.');
       return;
     }
     next();
   };
 
-export const issueAgentCsrf = (request: Request, response: Response): void => {
-  request.session.agentCsrfToken ??= randomBytes(32).toString('hex');
+export const issueAgentCsrf = (request: Request, response: Response, secret: string): void => {
   response.setHeader('Cache-Control', 'no-store');
-  agentData(request, response, { token: request.session.agentCsrfToken });
+  agentData(request, response, { token: agentCsrfToken(request, secret) });
 };

@@ -31,6 +31,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     sessionCookieName: sessions.cookieName,
     nodeEnv: config.nodeEnv,
     agentPublicOrigin: config.agentPublicOrigin,
+    agentCsrfSecret: config.sessionSecret,
     agent: services.agent.host,
     agentPlugins: services.agent.plugins,
     agentProviders: services.agent.ai.providers,

@@ -7,6 +7,7 @@ export interface AppApprovalsRouterDependencies {
   approvals: AgentApprovalFacade;
   nodeEnv: string;
   publicOrigin?: string;
+  csrfSecret: string;
 }
 
 const pathParam = (value: string | string[] | undefined): string => {
@@ -27,6 +28,7 @@ export const createAppApprovalsRouter = (dependencies: AppApprovalsRouterDepende
   const mutationSecurity = createAgentMutationSecurity({
     nodeEnv: dependencies.nodeEnv,
     publicOrigin: dependencies.publicOrigin,
+    csrfSecret: dependencies.csrfSecret,
   });
 
   router.use(requireAgentAuthenticated);

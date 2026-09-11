@@ -83,6 +83,7 @@ export interface HttpApplicationDependencies {
   sessionCookieName: string;
   nodeEnv: string;
   agentPublicOrigin?: string;
+  agentCsrfSecret: string;
   agent: AgentHostFacade;
   agentPlugins: AgentPluginFacade;
   agentProviders: AgentProviderFacade;
@@ -281,6 +282,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       workspaceRuntime: dependencies.agentWorkspaceRuntime,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
+      csrfSecret: dependencies.agentCsrfSecret,
     }),
   );
   app.use(
@@ -289,6 +291,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       integrations: dependencies.agentIntegrations,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
+      csrfSecret: dependencies.agentCsrfSecret,
     }),
   );
   app.use(
@@ -297,6 +300,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       artifacts: dependencies.agentArtifacts,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
+      csrfSecret: dependencies.agentCsrfSecret,
     }),
   );
   app.use(
@@ -305,6 +309,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       approvals: dependencies.agentApprovals,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
+      csrfSecret: dependencies.agentCsrfSecret,
     }),
   );
   app.use(
@@ -313,6 +318,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       conversations: dependencies.agentConversations,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
+      csrfSecret: dependencies.agentCsrfSecret,
     }),
   );
   app.use(
@@ -322,6 +328,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       memories: dependencies.agentMemories,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
+      csrfSecret: dependencies.agentCsrfSecret,
     }),
   );
   app.use(
@@ -332,6 +339,7 @@ export const createHttpApplication = (dependencies: HttpApplicationDependencies)
       workspaceRuntime: dependencies.agentWorkspaceRuntime,
       nodeEnv: dependencies.nodeEnv,
       publicOrigin: dependencies.agentPublicOrigin,
+      csrfSecret: dependencies.agentCsrfSecret,
     }),
   );
   app.use(

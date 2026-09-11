@@ -7,6 +7,7 @@ export interface AppThreadsRouterDependencies {
   conversations: AgentConversationFacade;
   nodeEnv: string;
   publicOrigin?: string;
+  csrfSecret: string;
 }
 
 const pathParam = (value: string | string[] | undefined): string => {
@@ -31,6 +32,7 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
   const mutationSecurity = createAgentMutationSecurity({
     nodeEnv: dependencies.nodeEnv,
     publicOrigin: dependencies.publicOrigin,
+    csrfSecret: dependencies.csrfSecret,
   });
 
   router.use(requireAgentAuthenticated);

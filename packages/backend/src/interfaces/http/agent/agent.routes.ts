@@ -34,6 +34,7 @@ export interface AgentRouterDependencies {
   workspaceRuntime: AgentWorkspaceRuntimeFacade;
   nodeEnv: string;
   publicOrigin?: string;
+  csrfSecret: string;
 }
 
 const appIntentRangeFor = (
@@ -119,13 +120,14 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   const mutationSecurity = createAgentMutationSecurity({
     nodeEnv: dependencies.nodeEnv,
     publicOrigin: dependencies.publicOrigin,
+    csrfSecret: dependencies.csrfSecret,
   });
 
   router.use(requireAgentAuthenticated);
 
   router.get(
     '/security/csrf',
-    agentRoute(async (request, response) => issueAgentCsrf(request, response)),
+    agentRoute(async (request, response) => issueAgentCsrf(request, response, dependencies.csrfSecret)),
   );
 
   router.use('/plugins', createPluginRouter(dependencies.plugins, mutationSecurity));

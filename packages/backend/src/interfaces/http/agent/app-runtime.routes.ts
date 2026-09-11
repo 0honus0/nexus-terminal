@@ -12,6 +12,7 @@ export interface AppRuntimeRouterDependencies {
   workspaceRuntime: AgentWorkspaceRuntimeFacade;
   nodeEnv: string;
   publicOrigin?: string;
+  csrfSecret: string;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -147,6 +148,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
   const mutationSecurity = createAgentMutationSecurity({
     nodeEnv: dependencies.nodeEnv,
     publicOrigin: dependencies.publicOrigin,
+    csrfSecret: dependencies.csrfSecret,
   });
 
   router.use(requireAgentAuthenticated);

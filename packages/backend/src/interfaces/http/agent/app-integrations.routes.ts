@@ -8,6 +8,7 @@ export interface AppIntegrationsRouterDependencies {
   integrations: AgentIntegrationFacade;
   nodeEnv: string;
   publicOrigin?: string;
+  csrfSecret: string;
 }
 
 const param = (value: string | string[] | undefined): string => {
@@ -28,6 +29,7 @@ export const createAppIntegrationsRouter = (dependencies: AppIntegrationsRouterD
   const mutationSecurity = createAgentMutationSecurity({
     nodeEnv: dependencies.nodeEnv,
     publicOrigin: dependencies.publicOrigin,
+    csrfSecret: dependencies.csrfSecret,
   });
   router.use(requireAgentAuthenticated);
 

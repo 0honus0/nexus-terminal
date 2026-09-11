@@ -9,6 +9,7 @@ export interface AppArtifactsRouterDependencies {
   artifacts: AgentArtifactFacade;
   nodeEnv: string;
   publicOrigin?: string;
+  csrfSecret: string;
 }
 
 const pathParam = (value: string | string[] | undefined): string => {
@@ -54,6 +55,7 @@ export const createAppArtifactsRouter = (dependencies: AppArtifactsRouterDepende
   const mutationSecurity = createAgentMutationSecurity({
     nodeEnv: dependencies.nodeEnv,
     publicOrigin: dependencies.publicOrigin,
+    csrfSecret: dependencies.csrfSecret,
   });
 
   router.use(requireAgentAuthenticated);

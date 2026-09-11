@@ -10,6 +10,7 @@ export interface AppCollaborationRouterDependencies {
   memories: AgentMemoryFacade;
   nodeEnv: string;
   publicOrigin?: string;
+  csrfSecret: string;
 }
 
 const param = (value: string | string[] | undefined): string => {
@@ -73,6 +74,7 @@ export const createAppCollaborationRouter = (dependencies: AppCollaborationRoute
   const mutationSecurity = createAgentMutationSecurity({
     nodeEnv: dependencies.nodeEnv,
     publicOrigin: dependencies.publicOrigin,
+    csrfSecret: dependencies.csrfSecret,
   });
   router.use(requireAgentAuthenticated);
 
