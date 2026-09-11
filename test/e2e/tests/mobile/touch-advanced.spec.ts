@@ -880,17 +880,28 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       const uploadTasks = popup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
       await expect(uploadTasks).toHaveCount(filenames.length);
       await popup.getByTestId('transfer-progress-cancel-all').click();
-      // Cancellation is two-phase while an in-flight SFTP WRITE is deliberately stalled:
-      // the UI enters `cancelling` immediately, then settles after that write returns.
+      // Cancellation is two-phase while an in-flight SFTP WRITE is deliberately stalled.
+      // Terminal rows may be retained as `cancelled` or pruned by the progress center before
+      // this poll samples them, so accept either settled UI representation. The remote-file
+      // assertions below remain the authoritative side-effect check.
       await expect
         .poll(
-          () =>
-            popup
-              .locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]')
-              .evaluateAll((tasks) => tasks.map((task) => task.getAttribute('data-task-status'))),
+          async () => {
+            const statuses = await uploadTasks.evaluateAll((tasks) =>
+              tasks.map((task) => task.getAttribute('data-task-status')),
+            );
+            return statuses.length === 0 || statuses.every((status) => status === 'cancelled');
+          },
           { timeout: 20_000 },
         )
-        .toEqual(filenames.map(() => 'cancelled'));
+        .toBe(true);
+
+      await reopenConnectedFileManager(page);
+      const fileManager = page.getByTestId('file-manager-modal').filter({ visible: true }).first();
+      await fileManager.getByRole('button', { name: 'Refresh', exact: true }).click();
+      for (const filename of filenames) {
+        await expect(fileManagerRow(page, filename)).toHaveCount(0);
+      }
     });
   } finally {
     await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=0`, { method: 'POST' });
