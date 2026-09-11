@@ -1,14 +1,16 @@
 <script setup lang="ts">
-  import { computed, ref } from 'vue';
+  import { computed, defineAsyncComponent, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { AppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
+  import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
   import { BackupSettingsPanel } from '@/features/backup/public';
-  import { PreferencesSettingsPanel, type Preferences } from '@/features/preferences/public';
+  import { loadPreferencesSettingsPanel, type Preferences } from '@/features/preferences/public';
   import { SecuritySettingsPanel } from '@/features/security/public';
   import { useAuthSession } from '@/features/auth/public';
   import { setLocale, supportedLocales } from '@/app/i18n';
   import AboutPanel from './AboutPanel.vue';
 
+  const PreferencesSettingsPanel = defineAsyncComponent(loadPreferencesSettingsPanel);
+  const AppearanceSettingsPanel = defineAsyncComponent(loadAppearanceSettingsPanel);
   type SettingsTab = 'workspace' | 'system' | 'security' | 'ipControl' | 'data' | 'appearance' | 'about';
 
   const { t } = useI18n();

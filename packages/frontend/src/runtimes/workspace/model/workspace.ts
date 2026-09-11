@@ -17,4 +17,5 @@ export interface WorkspaceConnectResult {
   workspaceId: string;
   connectionId: number;
   connectionName: string;
+  lastConnectedAt?: number;
 }

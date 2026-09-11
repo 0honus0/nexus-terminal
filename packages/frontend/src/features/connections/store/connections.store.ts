@@ -19,6 +19,18 @@ export const useConnectionsStore = defineStore('connections', {
     async refresh(id: number) {
       return this.upsert(await connectionsApi.get(id));
     },
+    markConnected(id: number, timestamp: number) {
+      const i = this.items.findIndex((item) => item.id === id);
+      if (i < 0 || !Number.isFinite(timestamp)) return null;
+      const current = this.items[i]!;
+      const next = {
+        ...current,
+        lastConnectedAt: timestamp,
+        updatedAt: Math.max(current.updatedAt, timestamp),
+      };
+      this.items[i] = next;
+      return next;
+    },
     async create(input: ConnectionInput) {
       const item = await connectionsApi.create(input);
       return this.upsert(item);

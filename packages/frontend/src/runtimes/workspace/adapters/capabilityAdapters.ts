@@ -900,13 +900,13 @@ export const createWorkspaceCapabilityAdapters = (
     docker: createDockerChannel(socket),
     suspend: createSshSuspendChannel(socket),
     async workspaceConnected() {
-      await transfers.workspaceConnected();
       workspaceBound = true;
       if (deferredTerminalViewport) {
         const viewport = deferredTerminalViewport;
         deferredTerminalViewport = undefined;
         await terminal.resize(viewport);
       }
+      void transfers.workspaceConnected().catch(() => undefined);
     },
     workspaceDisconnected() {
       workspaceBound = false;

@@ -849,6 +849,7 @@
             : ''
         "
         :aria-hidden="session.id !== registry.activeId.value"
+        :active="session.id === registry.activeId.value"
         :session="session"
         :layout="workspaceLayout.tree.value"
         :sidebars="workspaceLayout.sidebars.value"

@@ -160,12 +160,18 @@ test('RDP RemoteApp persists cleanly, forwards display-update settings, and supp
     await step('Dashboard launches the same RDP surface without replacing the dashboard route', async () => {
       await page.goto('/');
       const dashboard = page.getByTestId('dashboard-view');
-      await expect(dashboard.getByTestId(`dashboard-connection-row-${connectionId}`)).toBeVisible({ timeout: 20_000 });
+      const connectionRow = dashboard.getByTestId(`dashboard-connection-row-${connectionId}`);
+      await expect(connectionRow).toBeVisible({ timeout: 20_000 });
+      const previousLastConnectedAt = Number(await connectionRow.getAttribute('data-last-connected-at'));
+      await page.waitForTimeout(1_100);
       await dashboard.getByTestId(`dashboard-connect-${connectionId}`).click();
       await expect(page).toHaveURL(/\/$/);
       const modal = page.getByTestId('remote-desktop-modal');
       await expect(modal).toBeVisible();
       await expect(modal).toContainText('Connected', { timeout: 15_000 });
+      await expect
+        .poll(async () => Number(await connectionRow.getAttribute('data-last-connected-at')), { timeout: 10_000 })
+        .toBeGreaterThan(previousLastConnectedAt);
       await modal.getByTestId('rdp-window-close').click();
       await expect(modal).toBeHidden();
       await expect(page).toHaveURL(/\/$/);

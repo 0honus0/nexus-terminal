@@ -42,7 +42,8 @@ assertRawBudget(/^WorkspaceView-[^.]+\.js$/, 'Workspace route chunk', 100 * 1024
 assertRawBudget(/^session-[^.]+\.js$/, 'Workspace runtime core chunk', 80 * 1024);
 assertRawBudget(/^WorkspaceSessionSurface-[^.]+\.js$/, 'Workspace session surface chunk', 150 * 1024);
 
-const forbiddenInitialAssets = /(?:MonacoEditor|TerminalView|WorkspaceView|WorkspaceSessionSurface|iconv-lite-umd)-/;
+const forbiddenInitialAssets =
+  /(?:MonacoEditor|TerminalView|WorkspaceView|WorkspaceSessionSurface|ConnectionEditorModal|ConnectionsView|RemoteDesktopModal|AppearanceCustomizerModal|PreferencesSettingsPanel|iconv-lite-umd)-/;
 const eagerHeavyAsset = uniqueInitialJs.find((asset) => forbiddenInitialAssets.test(asset));
 if (eagerHeavyAsset) throw new Error(`Heavy lazy asset was pulled into initial preload: ${eagerHeavyAsset}`);
 

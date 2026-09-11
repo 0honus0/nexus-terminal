@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue';
 import { logger } from '@/client/logging/logger';
-import { refreshConnection, type Connection } from '@/features/connections/public';
+import { markConnectionConnected, type Connection } from '@/features/connections/public';
 import {
   createTerminalSessionState,
   type TerminalSessionState,
@@ -107,20 +107,29 @@ export class WorkspaceRuntimeSession {
         connectionId: this.connection.id,
         ...(this.lastViewport ? { viewport: this.lastViewport } : {}),
       });
-      await refreshConnection(this.connection.id).catch((error) =>
-        logger.debug(
-          { err: error, workspaceId: this.id, connectionId: this.connection.id },
-          'Workspace connection metadata refresh failed',
-        ),
-      );
       await this.adapters.workspaceConnected();
-      await this.filesystemState.ensureLoaded();
-      await this.statusController.workspaceConnected();
-      this.dockerController.workspaceConnected();
-      if (!this.socket.connected) throw new Error('Workspace connection closed during capability recovery.');
+      if (!this.socket.connected) throw new Error('Workspace connection closed during terminal activation.');
       this.hasConnected.value = true;
       this.reconnectAttempt = 0;
       this.state.value = 'connected';
+      if (result.lastConnectedAt !== undefined) markConnectionConnected(this.connection.id, result.lastConnectedAt);
+      void this.filesystemState
+        .ensureLoaded()
+        .catch((error) =>
+          logger.debug(
+            { err: error, workspaceId: this.id, connectionId: this.connection.id },
+            'Workspace filesystem warmup failed',
+          ),
+        );
+      void this.statusController
+        .workspaceConnected()
+        .catch((error) =>
+          logger.debug(
+            { err: error, workspaceId: this.id, connectionId: this.connection.id },
+            'Workspace status warmup failed',
+          ),
+        );
+      this.dockerController.workspaceConnected();
       return result;
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
@@ -149,15 +158,21 @@ export class WorkspaceRuntimeSession {
       });
       this.adapters.terminal.setPreviousOutputAvailable?.(Boolean(result.historyAvailable));
       await this.adapters.workspaceConnected();
-      await this.filesystemState.ensureLoaded();
-      await this.statusController.workspaceConnected();
-      this.dockerController.workspaceConnected();
-      if (!this.socket.connected) throw new Error('Workspace connection closed during capability recovery.');
+      if (!this.socket.connected) throw new Error('Workspace connection closed during terminal activation.');
       this.hasConnected.value = true;
       this.reconnectAttempt = 0;
       this.markedForSuspend.value = true;
       this.markedForSuspendAt.value = markedAt ?? new Date().toISOString();
       this.state.value = 'connected';
+      void this.filesystemState
+        .ensureLoaded()
+        .catch((error) =>
+          logger.debug({ err: error, workspaceId: this.id }, 'Resumed workspace filesystem warmup failed'),
+        );
+      void this.statusController
+        .workspaceConnected()
+        .catch((error) => logger.debug({ err: error, workspaceId: this.id }, 'Resumed workspace status warmup failed'));
+      this.dockerController.workspaceConnected();
       return result;
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));

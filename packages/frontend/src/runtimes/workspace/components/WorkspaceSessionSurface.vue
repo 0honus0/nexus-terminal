@@ -65,6 +65,7 @@
   }
 
   const props = defineProps<{
+    active?: boolean;
     session: WorkspaceRuntimeSession;
     layout: WorkspaceLayoutNode;
     sidebars: WorkspaceSidebarConfig;
@@ -243,11 +244,17 @@
   const clampProgressRestorePosition = (candidate: { x: number; y: number }, element: HTMLElement) => ({
     x: Math.max(
       PROGRESS_RESTORE_MARGIN,
-      Math.min(candidate.x, Math.max(PROGRESS_RESTORE_MARGIN, window.innerWidth - element.offsetWidth - PROGRESS_RESTORE_MARGIN)),
+      Math.min(
+        candidate.x,
+        Math.max(PROGRESS_RESTORE_MARGIN, window.innerWidth - element.offsetWidth - PROGRESS_RESTORE_MARGIN),
+      ),
     ),
     y: Math.max(
       PROGRESS_RESTORE_MARGIN,
-      Math.min(candidate.y, Math.max(PROGRESS_RESTORE_MARGIN, window.innerHeight - element.offsetHeight - PROGRESS_RESTORE_MARGIN)),
+      Math.min(
+        candidate.y,
+        Math.max(PROGRESS_RESTORE_MARGIN, window.innerHeight - element.offsetHeight - PROGRESS_RESTORE_MARGIN),
+      ),
     ),
   });
   const saveProgressRestorePosition = (): void => {
@@ -954,6 +961,7 @@
         <span aria-hidden="true">&times;</span>
       </button>
       <WorkspaceLayoutRenderer
+        :active="active !== false"
         class="box-border h-full min-h-0 !border-0 pt-10"
         :node="sidebarNode(activeLeftSidebar, 'left')"
         :session="session"
@@ -1040,6 +1048,7 @@
 
     <div class="relative min-h-0 min-w-0 flex-1">
       <WorkspaceLayoutRenderer
+        :active="active !== false"
         :node="mobile ? sidebarNode(mobilePane, 'left') : layout"
         :session="session"
         :document-mode="documentMode"
@@ -1141,6 +1150,7 @@
         <span aria-hidden="true">&times;</span>
       </button>
       <WorkspaceLayoutRenderer
+        :active="active !== false"
         class="box-border h-full min-h-0 !border-0 pt-10"
         :node="sidebarNode(activeRightSidebar, 'right')"
         :session="session"

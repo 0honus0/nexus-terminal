@@ -326,7 +326,12 @@ export class WorkspaceProtocolSession {
       });
       this.dependencies.terminal.attach(workspaceId);
       void this.dependencies.filesystem.initialize(workspaceId).catch(() => undefined);
-      return { workspaceId, connectionId: session.connectionId, connectionName: session.connectionName };
+      return {
+        workspaceId,
+        connectionId: session.connectionId,
+        connectionName: session.connectionName,
+        lastConnectedAt: session.lastConnectedAt,
+      };
     } catch (error) {
       this.unbindWorkspace();
       throw error;

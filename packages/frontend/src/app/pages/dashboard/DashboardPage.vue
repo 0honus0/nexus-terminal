@@ -64,21 +64,25 @@
     });
   });
   const MAX_RECENT_LOGS = 5;
-  const usedCount = computed(() => connections.connections.value.filter((item) => item.lastConnectedAt).length);
-  const protocolCounts = computed(() =>
-    Object.fromEntries(
-      ['SSH', 'RDP', 'VNC'].map((type) => [
-        type,
-        connections.connections.value.filter((item) => item.type === type).length,
-      ]),
-    ),
-  );
-  const latestConnection = computed(
-    () =>
-      [...connections.connections.value]
-        .filter((item) => item.lastConnectedAt !== null)
-        .sort((a, b) => (b.lastConnectedAt ?? 0) - (a.lastConnectedAt ?? 0))[0] ?? null,
-  );
+  const connectionSummary = computed(() => {
+    let usedCount = 0;
+    const protocolCounts: Record<Connection['type'], number> = { SSH: 0, RDP: 0, VNC: 0 };
+    let latestConnection: Connection | null = null;
+    let latestTimestamp = -1;
+    for (const item of connections.connections.value) {
+      protocolCounts[item.type] += 1;
+      if (!item.lastConnectedAt) continue;
+      usedCount += 1;
+      if (item.lastConnectedAt > latestTimestamp) {
+        latestTimestamp = item.lastConnectedAt;
+        latestConnection = item;
+      }
+    }
+    return { usedCount, protocolCounts, latestConnection };
+  });
+  const usedCount = computed(() => connectionSummary.value.usedCount);
+  const protocolCounts = computed(() => connectionSummary.value.protocolCounts);
+  const latestConnection = computed(() => connectionSummary.value.latestConnection);
   const activeSuspendedSessions = computed(() =>
     suspended.sessions.value
       .filter((session) => session.status === 'active')
@@ -123,10 +127,9 @@
       return String(timestamp);
     }
   };
+  const tagNameById = computed(() => new Map(tags.tags.value.map((tag) => [tag.id, tag.name] as const)));
   const tagNames = (item: Connection): string[] =>
-    item.tagIds
-      .map((id) => tags.tags.value.find((tag) => tag.id === id)?.name)
-      .filter((name): name is string => Boolean(name));
+    item.tagIds.map((id) => tagNameById.value.get(id)).filter((name): name is string => Boolean(name));
   const actionLabel = (actionType: string): string => t(`auditLog.actions.${actionType}`, actionType);
   const isFailedAction = (actionType: string): boolean => {
     const normalized = actionType.toLowerCase();
@@ -160,27 +163,40 @@
 
   let localRefreshTimer: number | undefined;
   let remoteRefreshTimer: number | undefined;
+  let remoteInitialTimer: number | undefined;
+  const refreshLocal = () => {
+    if (!document.hidden) void resources.loadLocal();
+  };
+  const refreshRemote = () => {
+    if (!document.hidden) void resources.loadRemote();
+  };
   const scheduleLocalRefresh = () => {
     window.clearInterval(localRefreshTimer);
     localRefreshTimer = undefined;
     if (!preferences.values.value.dashboardShowLocalResources) return;
     const seconds = Math.max(1, preferences.values.value.statusMonitorIntervalSeconds);
-    localRefreshTimer = window.setInterval(() => void resources.loadLocal(), seconds * 1000);
+    localRefreshTimer = window.setInterval(refreshLocal, seconds * 1000);
   };
   const scheduleRemoteRefresh = () => {
     window.clearInterval(remoteRefreshTimer);
     remoteRefreshTimer = undefined;
     if (!preferences.values.value.dashboardShowRemoteResources) return;
     const seconds = Math.max(1, preferences.values.value.remoteHostRefreshIntervalSeconds);
-    remoteRefreshTimer = window.setInterval(() => void resources.loadRemote(), seconds * 1000);
+    remoteRefreshTimer = window.setInterval(refreshRemote, seconds * 1000);
   };
   const syncLocalRefresh = () => {
     scheduleLocalRefresh();
-    if (preferences.values.value.dashboardShowLocalResources) void resources.loadLocal();
+    if (preferences.values.value.dashboardShowLocalResources) refreshLocal();
   };
   const syncRemoteRefresh = () => {
     scheduleRemoteRefresh();
-    if (preferences.values.value.dashboardShowRemoteResources) void resources.loadRemote();
+    window.clearTimeout(remoteInitialTimer);
+    remoteInitialTimer = undefined;
+    if (!preferences.values.value.dashboardShowRemoteResources) return;
+    remoteInitialTimer = window.setTimeout(() => {
+      remoteInitialTimer = undefined;
+      refreshRemote();
+    }, 800);
   };
 
   watch(tagId, (value) => localStorage.setItem(DASHBOARD_TAG_KEY, value === '' ? 'all' : String(value)));
@@ -198,7 +214,14 @@
     syncRemoteRefresh,
   );
 
+  const handleVisibilityChange = () => {
+    if (document.hidden) return;
+    if (preferences.values.value.dashboardShowLocalResources) refreshLocal();
+    if (preferences.values.value.dashboardShowRemoteResources) refreshRemote();
+  };
+
   onMounted(async () => {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     loading.value = true;
     suspended.startPolling();
     const [, , audit] = await Promise.allSettled([
@@ -216,6 +239,8 @@
   onBeforeUnmount(() => {
     window.clearInterval(localRefreshTimer);
     window.clearInterval(remoteRefreshTimer);
+    window.clearTimeout(remoteInitialTimer);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     suspended.stopPolling();
   });
   const percent = (value?: number) => {

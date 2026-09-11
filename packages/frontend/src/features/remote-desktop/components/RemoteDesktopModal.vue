@@ -36,7 +36,7 @@
   const emit = defineEmits<{
     close: [];
     sizeChange: [size: { width: number; height: number }];
-    connected: [connectionId: number];
+    connected: [connectionId: number, lastConnectedAt: number];
   }>();
   const { t } = useI18n();
   const device = useDeviceCapabilities();
@@ -250,7 +250,7 @@
     try {
       const spec = currentDisplay();
       const session = await props.sessionPort.create(connectionId, protocol, spec);
-      emit('connected', connectionId);
+      emit('connected', connectionId, session.lastConnectedAt);
       if (
         generation !== connectGeneration ||
         !props.visible ||
@@ -339,7 +339,7 @@
   };
 
   const exitFullscreen = async () => {
-    if (document.fullscreenElement !== panel.value) return;
+    if (!panel.value || document.fullscreenElement !== panel.value) return;
     try {
       await document.exitFullscreen();
     } catch {
@@ -356,7 +356,7 @@
     }
   };
   const onFullscreen = () => {
-    fullscreen.value = document.fullscreenElement === panel.value;
+    fullscreen.value = Boolean(panel.value && document.fullscreenElement === panel.value);
     void nextTick(sendSize);
   };
   const handleFullscreenKeydown = (event: KeyboardEvent) => {
@@ -432,7 +432,7 @@
     () => [props.visible, props.connection?.id, props.connection?.type] as const,
     ([visible, connectionId, protocol], previous) => {
       if (visible) {
-        fullscreen.value = document.fullscreenElement === panel.value;
+        fullscreen.value = Boolean(panel.value && document.fullscreenElement === panel.value);
         const changedConnection = previous?.[1] !== connectionId || previous?.[2] !== protocol;
         if (!previous?.[0] || changedConnection) {
           minimized.value = false;

@@ -56,6 +56,7 @@
   const { t } = useI18n();
 
   const props = defineProps<{
+    active?: boolean;
     node: WorkspaceLayoutNode;
     session: WorkspaceRuntimeSession;
     documentMode: 'editor' | 'preview';
@@ -176,6 +177,7 @@
   >
     <Pane v-for="child in node.children ?? []" :key="child.id" :size="child.size" :min-size="5">
       <WorkspaceLayoutRenderer
+        :active="active !== false"
         :node="child"
         :session="session"
         :document-mode="documentMode"
@@ -269,6 +271,7 @@
     <TerminalView
       v-else-if="node.component === 'terminal'"
       ref="terminalRef"
+      :active="active !== false"
       class="min-h-0 flex-1"
       :channel="terminalChannel ?? session.adapters.terminal"
       :font-family="terminalFontFamily"
@@ -368,7 +371,7 @@
     </template>
 
     <StatusMonitor
-      v-else-if="node.component === 'statusMonitor'"
+      v-else-if="node.component === 'statusMonitor' && active !== false"
       class="min-h-0 flex-1 overflow-hidden"
       :session="session.statusController"
       :interval-seconds="statusIntervalSeconds"
@@ -378,7 +381,7 @@
       @update:scale="emit('statusScale', $event)"
     />
     <DockerManager
-      v-else-if="node.component === 'dockerManager'"
+      v-else-if="node.component === 'dockerManager' && active !== false"
       class="min-h-0 flex-1 overflow-hidden"
       :session="session.dockerController"
       :interval-seconds="dockerIntervalSeconds"

@@ -9,4 +9,5 @@ export interface WorkspaceSession {
   executionSessionId: string;
   shell: RemoteShellSession;
   createdAt: number;
+  lastConnectedAt?: number;
 }

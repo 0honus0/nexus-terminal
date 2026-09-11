@@ -4,6 +4,7 @@ import { sshSuspendApi } from '../api/sshSuspendApi';
 import type { SuspendedSession } from '../model/sshSuspend';
 
 const BASE_POLL_MS = 1_500;
+const IDLE_POLL_MS = 10_000;
 const MAX_POLL_MS = 60_000;
 const ERROR_POLL_MS = 10_000;
 const HANDOFF_REFRESH_DELAYS_MS = [0, 120, 300, 650, 1_200] as const;
@@ -133,7 +134,9 @@ const schedulePoll = (): void => {
       result.status === 429
         ? Math.min(pollIntervalMs * 2, MAX_POLL_MS)
         : result.ok
-          ? BASE_POLL_MS
+          ? sessions.value.some((session) => session.status === 'active')
+            ? BASE_POLL_MS
+            : IDLE_POLL_MS
           : Math.min(Math.max(pollIntervalMs, ERROR_POLL_MS), MAX_POLL_MS);
     schedulePoll();
   }, pollIntervalMs);

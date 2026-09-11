@@ -6,6 +6,7 @@ export function useConnections() {
     connections: computed(() => store.items),
     load: store.load.bind(store),
     refresh: store.refresh.bind(store),
+    markConnected: store.markConnected.bind(store),
     create: store.create.bind(store),
     update: store.update.bind(store),
     remove: store.remove.bind(store),
@@ -14,3 +15,5 @@ export function useConnections() {
 }
 
 export const refreshConnection = (id: number) => useConnectionsStore().refresh(id);
+export const markConnectionConnected = (id: number, timestamp: number) =>
+  useConnectionsStore().markConnected(id, timestamp);

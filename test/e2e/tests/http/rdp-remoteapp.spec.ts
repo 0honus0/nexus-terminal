@@ -41,9 +41,10 @@ const createRdpConnection = async (request: APIRequestContext, name: string): Pr
 const createSessionTicket = async (request: APIRequestContext, connectionId: number): Promise<string> => {
   const session = await request.post(`/api/v1/connections/${connectionId}/rdp-session?width=1600&height=1000&dpi=144`);
   expect(session.status(), await session.text()).toBe(200);
-  const payload = (await session.json()) as { ticket: string };
-  expect(payload).toMatchObject({ ticket: expect.any(String) });
-  expect(Object.keys(payload)).toEqual(['ticket']);
+  const payload = (await session.json()) as { ticket: string; lastConnectedAt: number };
+  expect(payload).toMatchObject({ ticket: expect.any(String), lastConnectedAt: expect.any(Number) });
+  expect(Object.keys(payload).sort()).toEqual(['lastConnectedAt', 'ticket']);
+  expect(payload.lastConnectedAt).toBeGreaterThan(0);
   expect(payload.ticket).toMatch(/^[A-Za-z0-9_-]{43}$/);
   return payload.ticket;
 };
