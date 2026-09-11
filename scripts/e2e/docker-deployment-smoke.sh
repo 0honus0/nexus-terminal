@@ -208,7 +208,7 @@ fi
 # job path, not only binary presence or HTTP health. The probe originates from Backend
 # through the host-gateway path using the same shared Controller token as production.
 compose exec -T backend node - <<'NODE'
-const { randomUUID } = require('node:crypto');
+const { randomUUID } = await import('node:crypto');
 const baseUrl = process.env.AGENT_RUNNER_URL;
 const token = process.env.AGENT_RUNNER_TOKEN;
 const deploymentId = process.env.AGENT_RUNNER_DEPLOYMENT_ID;
