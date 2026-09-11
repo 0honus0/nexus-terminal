@@ -54,6 +54,7 @@ import { createEnvironmentJobTool } from '../../modules/agent/apps/operations/en
 import {
   createEnvironmentControlTool,
   createEnvironmentCreateTool,
+  createEnvironmentSwitchVersionsTool,
 } from '../../modules/agent/apps/operations/environment-management-tools';
 import { createDiagnosticsTool, createReadFileTool } from '../../modules/agent/apps/operations/tools';
 import { createMcpTools } from '../../modules/agent/apps/operations/mcp-tools';
@@ -304,6 +305,7 @@ export const composeAgent = ({
     tools: [
       createEnvironmentCreateTool(environmentService, environmentRepository, cryptoHash),
       createEnvironmentControlTool(environmentService, environmentRepository, cryptoHash),
+      createEnvironmentSwitchVersionsTool(environmentService, environmentRepository, cryptoHash),
     ],
   });
   toolCatalog.registerContribution({
@@ -682,6 +684,8 @@ export const composeAgent = ({
           environmentService.createGroup(scope, runId, agentRuntimeId, environments, retained, idempotencyKey),
         action: (scope, environmentId, action, expectedVersion, parameters) =>
           environmentService.action(scope, environmentId, action, expectedVersion, parameters),
+        switchVersions: (scope, environmentId, versions, expectedVersion, expectedCatalogRevision) =>
+          environmentService.switchVersions(scope, environmentId, versions, expectedVersion, expectedCatalogRevision),
         getCommand: (scope, commandId) => environmentService.getCommand(scope, commandId),
         previewSetup: (userId, selections, expectedVersion) =>
           environmentManagement.previewSetup(userId, selections, expectedVersion),

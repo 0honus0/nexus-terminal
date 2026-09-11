@@ -149,6 +149,12 @@ export interface EnvironmentCommandView extends Scope {
   completedAt: number | null;
 }
 
+export interface EnvironmentVersionSwitchView {
+  outcome: 'succeeded' | 'failed' | 'unknown';
+  environment: EnvironmentView;
+  commands: EnvironmentCommandView[];
+}
+
 export interface EnvironmentCreateSpec {
   recipeId: string;
   versions?: Record<string, string>;

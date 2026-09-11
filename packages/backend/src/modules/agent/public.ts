@@ -11,6 +11,7 @@ import type {
   EnvironmentSettingsResetPreview,
   EnvironmentSetupPreview,
   EnvironmentStorageView,
+  EnvironmentVersionSwitchView,
   EnvironmentWorkspaceGrant,
   EnvironmentWorkspaceGrantInput,
 } from './environments/environment.types';
@@ -331,6 +332,13 @@ export interface AgentEnvironmentFacade {
     expectedVersion: number,
     parameters: JsonValue,
   ): Promise<EnvironmentCommandView>;
+  switchVersions(
+    scope: Scope,
+    environmentId: string,
+    versions: Record<string, string>,
+    expectedVersion: number,
+    expectedCatalogRevision?: string,
+  ): Promise<EnvironmentVersionSwitchView>;
   getCommand(scope: Scope, commandId: string): Promise<EnvironmentCommandView>;
   previewSetup(userId: number, selections: unknown, expectedVersion: number): Promise<EnvironmentSetupPreview>;
   confirmSetup(userId: number, confirmationId: string, expectedVersion: number): Promise<EnvironmentCommandView>;

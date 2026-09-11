@@ -21,6 +21,7 @@ import type {
   EnvironmentNetworkPolicy,
   EnvironmentPackRef,
   EnvironmentResourceLimits,
+  EnvironmentVersionSwitchView,
   EnvironmentWorkspaceGrant,
   EnvironmentWorkspaceGrantInput,
 } from './environment.types';
@@ -403,6 +404,186 @@ export class EnvironmentService {
     return this.dispatch(scope, action, environmentId, env.groupId, env.generation, payload);
   }
 
+  async switchVersions(
+    scope: Scope,
+    environmentId: string,
+    versions: Record<string, string>,
+    expectedVersion: number,
+    expectedCatalogRevision?: string,
+  ): Promise<EnvironmentVersionSwitchView> {
+    if (!versions || typeof versions !== 'object' || Array.isArray(versions)) throw new Error('VALIDATION_FAILED');
+    const requested = Object.entries(versions);
+    if (
+      requested.length < 1 ||
+      requested.length > 32 ||
+      requested.some(
+        ([familyId, versionId]) => !familyId || familyId.length > 128 || !versionId || versionId.length > 128,
+      )
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    await this.assertExecutionEnabled(scope);
+    const [environment, availability, catalog] = await Promise.all([
+      this.repository.getEnvironment(scope, environmentId),
+      this.controller.availability(),
+      this.controller.catalog().catch(() => null),
+    ]);
+    if (!environment) throw new Error('NOT_FOUND');
+    if (!availability.available || !availability.deploymentId || !catalog) {
+      throw new Error('ENVIRONMENT_CONTROLLER_UNAVAILABLE');
+    }
+    if (expectedCatalogRevision && catalog.revision !== expectedCatalogRevision) {
+      throw new Error('CATALOG_REVISION_CONFLICT');
+    }
+    if (environment.version !== expectedVersion) throw new Error('STATE_CONFLICT');
+    if (!['ready', 'running', 'stopped'].includes(environment.status)) throw new Error('ENVIRONMENT_STATE_INVALID');
+
+    const recipe = catalog.recipes.find((candidate) => candidate.id === environment.recipeId);
+    if (!recipe) throw new Error('ENVIRONMENT_RECIPE_NOT_FOUND');
+    const currentVersions = Object.fromEntries(
+      environment.packRefs.map((pack) => [pack.familyId, pack.versionId]),
+    ) as Record<string, string>;
+    const nextPackRefs = resolveEnvironmentPacks(catalog, recipe.id, { ...currentVersions, ...versions });
+    if (JSON.stringify(nextPackRefs) === JSON.stringify(environment.packRefs)) {
+      throw new Error('ENVIRONMENT_VERSION_NO_CHANGE');
+    }
+
+    const group = await this.repository.getGroup(scope, environment.groupId);
+    if (!group) throw new Error('NOT_FOUND');
+    const wasRunning = environment.status === 'running';
+    const commands: EnvironmentCommandView[] = [];
+
+    // Reserve this Environment generation before touching the Runner so a concurrent HTTP
+    // lifecycle request cannot observe a transient `deleted` group and create a second Workspace.
+    const switching = await this.repository.setEnvironmentStatus(
+      scope,
+      environmentId,
+      expectedVersion,
+      'stopping',
+      this.now(),
+    );
+    await this.repository.refreshGroupStatus(scope, environment.groupId, this.now()).catch(() => undefined);
+    const deleted = await this.dispatch(
+      scope,
+      'delete',
+      environmentId,
+      environment.groupId,
+      environment.generation,
+      {
+        deploymentId: availability.deploymentId,
+        userId: scope.userId,
+        appId: scope.appId,
+        runId: group.runId,
+        agentRuntimeId: group.agentRuntimeId,
+        groupId: environment.groupId,
+        environmentId,
+        recipeId: environment.recipeId,
+        recipeRevision: environment.recipeRevision,
+        runtimeDigest: environment.runtimeDigest,
+        catalogRevision: environment.catalogRevision,
+        packs: environment.packRefs.map((pack) => ({ ...pack })),
+        runnerPlugins: environment.runnerPlugins.map((target) => ({ ...target })),
+        limits: { ...environment.limits },
+        network: { mode: environment.network.mode, hosts: [...environment.network.hosts] },
+        retained: group.retained,
+        expectedVersion: switching.version,
+        parameters: { reason: 'workspace-version-switch' },
+      },
+      false,
+    );
+    commands.push(deleted);
+    if (deleted.status !== 'succeeded') {
+      if (deleted.status === 'failed') {
+        await this.repository
+          .setEnvironmentStatus(scope, environmentId, switching.version, environment.status, this.now())
+          .catch(() => undefined);
+        await this.repository.refreshGroupStatus(scope, environment.groupId, this.now()).catch(() => undefined);
+      }
+      const current = (await this.repository.getEnvironment(scope, environmentId)) ?? switching;
+      return {
+        outcome: deleted.status === 'failed' ? 'failed' : 'unknown',
+        environment: current,
+        commands,
+      };
+    }
+
+    const generation = environment.generation + 1;
+    let reconfigured;
+    try {
+      reconfigured = await this.repository.reconfigureEnvironment({
+        scope,
+        environmentId,
+        expectedVersion: switching.version,
+        expectedGeneration: environment.generation,
+        recipeRevision: recipe.revision,
+        runtimeDigest: catalog.runtimeDigest,
+        catalogRevision: catalog.revision,
+        packRefs: nextPackRefs,
+        generation,
+        now: this.now(),
+      });
+    } catch (error) {
+      // The old Runner generation is already gone. Never leave the DB claiming it is still
+      // runnable if a concurrent state conflict prevents installing the next generation.
+      await this.repository
+        .setEnvironmentStatus(scope, environmentId, switching.version, 'failed', this.now())
+        .catch(() => undefined);
+      await this.repository.refreshGroupStatus(scope, environment.groupId, this.now()).catch(() => undefined);
+      throw error;
+    }
+    await this.repository.refreshGroupStatus(scope, reconfigured.groupId, this.now()).catch(() => undefined);
+    const provision = await this.dispatch(scope, 'provision', environmentId, reconfigured.groupId, generation, {
+      deploymentId: availability.deploymentId,
+      userId: scope.userId,
+      appId: scope.appId,
+      runId: group.runId,
+      agentRuntimeId: group.agentRuntimeId,
+      groupId: reconfigured.groupId,
+      environmentId,
+      recipeId: reconfigured.recipeId,
+      recipeRevision: reconfigured.recipeRevision,
+      runtimeDigest: reconfigured.runtimeDigest,
+      catalogRevision: reconfigured.catalogRevision,
+      packs: reconfigured.packRefs.map((pack) => ({ ...pack })),
+      runnerPlugins: reconfigured.runnerPlugins.map((target) => ({ ...target })),
+      limits: { ...reconfigured.limits },
+      network: { mode: reconfigured.network.mode, hosts: [...reconfigured.network.hosts] },
+      retained: group.retained,
+      expectedVersion: reconfigured.version,
+      parameters: { reason: 'workspace-version-switch' },
+    });
+    commands.push(provision);
+    if (provision.status !== 'succeeded') {
+      const current = (await this.repository.getEnvironment(scope, environmentId)) ?? reconfigured;
+      return {
+        outcome: provision.status === 'failed' ? 'failed' : 'unknown',
+        environment: current,
+        commands,
+      };
+    }
+
+    if (wasRunning) {
+      const ready = await this.repository.getEnvironment(scope, environmentId);
+      if (!ready || ready.status !== 'ready') throw new Error('ENVIRONMENT_STATE_INVALID');
+      const started = await this.action(scope, environmentId, 'start', ready.version, {
+        reason: 'workspace-version-switch',
+      });
+      commands.push(started);
+      if (started.status !== 'succeeded') {
+        const current = (await this.repository.getEnvironment(scope, environmentId)) ?? ready;
+        return {
+          outcome: started.status === 'failed' ? 'failed' : 'unknown',
+          environment: current,
+          commands,
+        };
+      }
+    }
+
+    const current = await this.repository.getEnvironment(scope, environmentId);
+    if (!current) throw new Error('NOT_FOUND');
+    return { outcome: 'succeeded', environment: current, commands };
+  }
+
   async getCommand(scope: Scope, commandId: string): Promise<EnvironmentCommandView> {
     const local = await this.repository.getCommand(scope, commandId);
     if (!local) throw new Error('NOT_FOUND');
@@ -468,6 +649,7 @@ export class EnvironmentService {
     groupId: string | undefined,
     generation: number,
     payload: JsonValue,
+    syncEnvironment = true,
   ): Promise<EnvironmentCommandView> {
     const now = this.now();
     const commandId = randomUUID();
@@ -498,10 +680,11 @@ export class EnvironmentService {
     });
     if (command.id !== commandId) {
       if (!['pending', 'running'].includes(command.status)) {
-        await this.syncEnvironmentStatus(scope, command);
+        if (syncEnvironment) await this.syncEnvironmentStatus(scope, command);
         return command;
       }
-      return this.getCommand(scope, command.id);
+      if (syncEnvironment) return this.getCommand(scope, command.id);
+      return command;
     }
     const request: RunnerCommandRequest = {
       commandId,
@@ -514,7 +697,7 @@ export class EnvironmentService {
     try {
       const remote = await this.controller.submit(request);
       const updated = await this.repository.completeCommand(scope, commandId, remote.status, remote.result, this.now());
-      await this.syncEnvironmentStatus(scope, updated);
+      if (syncEnvironment) await this.syncEnvironmentStatus(scope, updated);
       return updated;
     } catch (error) {
       const updated = await this.repository.completeCommand(
@@ -524,7 +707,7 @@ export class EnvironmentService {
         { errorCode: error instanceof Error ? error.message.slice(0, 200) : 'ENVIRONMENT_CONTROLLER_UNAVAILABLE' },
         this.now(),
       );
-      await this.syncEnvironmentStatus(scope, updated);
+      if (syncEnvironment) await this.syncEnvironmentStatus(scope, updated);
       return updated;
     }
   }
@@ -545,7 +728,7 @@ export class EnvironmentService {
   private async syncEnvironmentStatus(scope: Scope, command: EnvironmentCommandView): Promise<void> {
     if (!command.environmentId || !['succeeded', 'failed', 'unknown'].includes(command.status)) return;
     const environment = await this.repository.getEnvironment(scope, command.environmentId);
-    if (!environment) return;
+    if (!environment || environment.generation !== command.generation) return;
     let next = environment.status;
     if (command.status === 'succeeded') {
       next =

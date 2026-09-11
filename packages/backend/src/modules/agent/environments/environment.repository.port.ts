@@ -53,6 +53,19 @@ export interface CreateEnvironmentCommandRecord {
   createdAt: number;
 }
 
+export interface ReconfigureEnvironmentRecord {
+  scope: Scope;
+  environmentId: string;
+  expectedVersion: number;
+  expectedGeneration: number;
+  recipeRevision: string;
+  runtimeDigest: string;
+  catalogRevision: string;
+  packRefs: EnvironmentPackRef[];
+  generation: number;
+  now: number;
+}
+
 export interface EnvironmentRepositoryPort {
   createGroup(
     group: CreateEnvironmentGroupRecord,
@@ -71,6 +84,7 @@ export interface EnvironmentRepositoryPort {
     status: EnvironmentStatus,
     now: number,
   ): Promise<EnvironmentView>;
+  reconfigureEnvironment(record: ReconfigureEnvironmentRecord): Promise<EnvironmentView>;
   refreshGroupStatus(scope: Scope, groupId: string, now: number): Promise<EnvironmentGroupDetail>;
   createCommand(record: CreateEnvironmentCommandRecord): Promise<EnvironmentCommandView>;
   getCommand(scope: Scope, commandId: string): Promise<EnvironmentCommandView | null>;

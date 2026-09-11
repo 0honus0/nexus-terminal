@@ -5,6 +5,7 @@ import type {
   CreateEnvironmentGroupRecord,
   CreateEnvironmentRecord,
   EnvironmentRepositoryPort,
+  ReconfigureEnvironmentRecord,
 } from '../../../modules/agent/environments/environment.repository.port';
 import type {
   EnvironmentCommandView,
@@ -295,6 +296,35 @@ export class SqliteEnvironmentRepository implements EnvironmentRepositoryPort {
     );
     if (changed.changes !== 1) throw new Error('STATE_CONFLICT');
     const result = await this.getEnvironment(scope, environmentId);
+    if (!result) throw new Error('NOT_FOUND');
+    return result;
+  }
+
+  async reconfigureEnvironment(record: ReconfigureEnvironmentRecord): Promise<EnvironmentView> {
+    if (record.generation !== record.expectedGeneration + 1) throw new Error('VALIDATION_FAILED');
+    const changed = await this.db.execute(
+      `UPDATE agent_environments
+       SET recipe_revision=?,runtime_digest=?,catalog_revision=?,pack_refs_json=?,generation=?,status='creating',
+           version=version+1,last_active_at=?,updated_at=?
+       WHERE id=? AND version=? AND generation=? AND status='stopping'
+         AND group_id IN (SELECT id FROM agent_environment_groups WHERE user_id=? AND app_id=?)`,
+      [
+        record.recipeRevision,
+        record.runtimeDigest,
+        record.catalogRevision,
+        JSON.stringify(record.packRefs),
+        record.generation,
+        record.now,
+        record.now,
+        record.environmentId,
+        record.expectedVersion,
+        record.expectedGeneration,
+        record.scope.userId,
+        record.scope.appId,
+      ],
+    );
+    if (changed.changes !== 1) throw new Error('STATE_CONFLICT');
+    const result = await this.getEnvironment(record.scope, record.environmentId);
     if (!result) throw new Error('NOT_FOUND');
     return result;
   }

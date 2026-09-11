@@ -412,3 +412,168 @@ export const createEnvironmentControlTool = (
     };
   },
 });
+
+export const createEnvironmentSwitchVersionsTool = (
+  environments: EnvironmentService,
+  repository: EnvironmentRepositoryPort,
+  cryptoHash: CryptoHashPort,
+): AgentTool => ({
+  descriptor: {
+    name: 'environment_switch_versions',
+    version: '1.0.0',
+    description:
+      'Switch Node, Python, Go, or other allowed tool versions for this Workspace Environment. Recreates only this Workspace runtime generation and requires user approval.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        environmentId: { type: 'string', minLength: 1, maxLength: 128 },
+        versions: {
+          type: 'object',
+          minProperties: 1,
+          maxProperties: 32,
+          additionalProperties: { type: 'string', minLength: 1, maxLength: 128 },
+        },
+      },
+      required: ['environmentId', 'versions'],
+    },
+    riskClass: 'mutate',
+    capability: 'environment.manage',
+  },
+  inspect: async (input, context, policyRevision) => {
+    const args = record(input);
+    onlyKeys(args, ['environmentId', 'versions', 'expectedVersion', 'generation', 'groupId', 'catalogRevision']);
+    const environmentId = stringValue(args.environmentId, 128);
+    const versions = versionsValue(args.versions);
+    if (!Object.keys(versions).length) throw new Error('TOOL_ARGUMENTS_INVALID');
+    const environment = await repository.getEnvironment(context, environmentId);
+    if (!environment) throw new Error('NOT_FOUND');
+    if (!['ready', 'running', 'stopped'].includes(environment.status)) throw new Error('ENVIRONMENT_STATE_INVALID');
+    const group = await repository.getGroup(context, environment.groupId);
+    if (!group || group.runId !== context.runId || group.agentRuntimeId !== context.agentRuntimeId) {
+      throw new Error('RESOURCE_FORBIDDEN');
+    }
+    const catalog = await environments.catalog(context.signal);
+    const recipe = catalog.recipes.find((candidate) => candidate.id === environment.recipeId);
+    if (!recipe) throw new Error('ENVIRONMENT_RECIPE_NOT_FOUND');
+    for (const [familyId, versionId] of Object.entries(versions)) {
+      if (!recipe.allowedFamilies.includes(familyId)) throw new Error('ENVIRONMENT_PACK_FORBIDDEN');
+      if (
+        !catalog.packs.some(
+          (pack) => pack.familyId === familyId && pack.versionId === versionId && pack.status !== 'unavailable',
+        )
+      ) {
+        throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+      }
+    }
+    const normalizedArguments: JsonValue = {
+      environmentId,
+      versions,
+      expectedVersion: environment.version,
+      generation: environment.generation,
+      groupId: environment.groupId,
+      catalogRevision: catalog.revision,
+    };
+    const target = environmentTarget(cryptoHash, {
+      environmentId,
+      generation: environment.generation,
+      runId: context.runId,
+      agentRuntimeId: context.agentRuntimeId,
+      configuration: {
+        schemaVersion: 1,
+        environmentId,
+        generation: environment.generation,
+        currentPackRefs: environment.packRefs.map((pack) => ({
+          familyId: pack.familyId,
+          versionId: pack.versionId,
+          contentDigest: pack.contentDigest,
+        })),
+        requestedVersions: versions,
+        catalogRevision: catalog.revision,
+      },
+    });
+    const resourceKeys = [`environment:${environmentId}:${environment.generation}`];
+    const preconditions: ToolPrecondition[] = [
+      {
+        kind: 'environmentGeneration',
+        key: environmentId,
+        observedValue: {
+          generation: environment.generation,
+          version: environment.version,
+          status: environment.status,
+        },
+      },
+      { kind: 'metadata', key: 'environmentCatalog', observedValue: { revision: catalog.revision } },
+    ];
+    return {
+      toolName: 'environment_switch_versions',
+      toolVersion: '1.0.0',
+      normalizedArguments,
+      target,
+      resourceKeys,
+      risk: 'mutate',
+      mutation: true,
+      operationHash: operation(
+        cryptoHash,
+        context,
+        'environment_switch_versions',
+        target,
+        normalizedArguments,
+        resourceKeys,
+        preconditions,
+        policyRevision,
+      ),
+      operationHashVersion: 1,
+      preconditions,
+      secretRefs: [],
+      policyRevision,
+      inputRevision: context.inputRevision,
+    };
+  },
+  execute: async (inspection, context): Promise<ToolResult> => {
+    const args = record(inspection.normalizedArguments);
+    const environmentId = stringValue(args.environmentId, 128);
+    const switched = await environments.switchVersions(
+      context,
+      environmentId,
+      versionsValue(args.versions),
+      positiveInteger(args.expectedVersion),
+      stringValue(args.catalogRevision, 128),
+    );
+    const ok = switched.outcome === 'succeeded';
+    return {
+      ok,
+      summary: ok
+        ? `Workspace tool versions switched; Environment generation is now ${switched.environment.generation}.`
+        : 'Workspace tool version switch did not complete successfully.',
+      data: {
+        environmentId,
+        generation: switched.environment.generation,
+        status: switched.environment.status,
+        packRefs: switched.environment.packRefs.map((pack) => ({
+          familyId: pack.familyId,
+          versionId: pack.versionId,
+          contentDigest: pack.contentDigest,
+        })),
+        commandIds: switched.commands.map((command) => command.id),
+      },
+      artifactRefs: [],
+      truncated: false,
+      outcome: switched.outcome === 'unknown' ? 'unknown' : 'confirmed',
+      errorCode:
+        switched.outcome === 'unknown'
+          ? 'ENVIRONMENT_RECONCILIATION_REQUIRED'
+          : switched.outcome === 'failed'
+            ? 'ENVIRONMENT_VERSION_SWITCH_FAILED'
+            : undefined,
+      verification: {
+        status: switched.outcome === 'succeeded' ? 'verified' : switched.outcome === 'failed' ? 'failed' : 'unverified',
+        summary:
+          switched.outcome === 'succeeded'
+            ? 'Runner confirmed old-generation deletion, new-generation provisioning, and required restart.'
+            : 'The complete generation transition was not confirmed.',
+        evidenceRefs: [],
+      },
+    };
+  },
+});

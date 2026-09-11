@@ -458,6 +458,44 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     }),
   );
 
+  router.post(
+    '/environments/:environmentId/versions',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (
+        !isRecord(request.body) ||
+        !hasOnlyKeys(request.body, ['versions', 'expectedVersion', 'catalogRevision']) ||
+        !isRecord(request.body.versions) ||
+        Object.keys(request.body.versions).length < 1 ||
+        Object.keys(request.body.versions).length > 32 ||
+        Object.entries(request.body.versions).some(
+          ([familyId, versionId]) =>
+            !familyId || familyId.length > 128 || typeof versionId !== 'string' || !versionId || versionId.length > 128,
+        ) ||
+        !positiveInteger(request.body.expectedVersion) ||
+        (request.body.catalogRevision !== undefined &&
+          (typeof request.body.catalogRevision !== 'string' ||
+            !request.body.catalogRevision ||
+            request.body.catalogRevision.length > 128))
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(
+        request,
+        response,
+        await dependencies.environments.switchVersions(
+          scope,
+          pathParam(request.params.environmentId),
+          request.body.versions as Record<string, string>,
+          request.body.expectedVersion,
+          request.body.catalogRevision as string | undefined,
+        ),
+        202,
+      );
+    }),
+  );
+
   router.get(
     '/runs/:runId/events',
     agentRoute(async (request, response) => {
