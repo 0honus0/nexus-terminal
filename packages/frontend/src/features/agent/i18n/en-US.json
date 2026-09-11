@@ -350,7 +350,7 @@
       "title": "Workspace dev environment",
       "description": "One Workspace keeps stable project files while each runtime generation composes Node, Python, Go, and Runner Plugin versions.",
       "refresh": "Refresh",
-      "recipe": "Environment profile",
+      "recipe": "Workspace profile",
       "retained": "Retain workspace",
       "toolVersions": "Toolchain versions",
       "toolVersionsHint": "Optional tools are mounted by version from the shared read-only Tool Store. Different Workspaces can use different versions.",

@@ -6,7 +6,7 @@
 >
 > 分支：`dev`
 >
-> 本文记录当前源码实际落地/接线状态、Plugin 三目标模型、Runner/Environment/Workspace 模型、Runtime 拆分、相邻 Nexus Workspace transport 和仍未完成的产品接线/验证项。详细长期规范仍参考同目录 `ARCHITECTURE.md` 与 `IMPLEMENTATION.md`；本文不把“类/adapter 已存在”自动等同为 live capability。
+> 本文记录当前源码实际落地/接线状态、Plugin 三目标模型、Workspace/Profile/Generation Runtime 模型、Runtime 拆分、相邻 Nexus Workspace transport 和仍未完成的产品接线/验证项。详细长期规范仍参考同目录 `ARCHITECTURE.md` 与 `IMPLEMENTATION.md`；本文不把“类/adapter 已存在”自动等同为 live capability。
 
 ## 1. 总体架构
 
@@ -26,7 +26,7 @@ Backend
 ├─ Capability / Tool Catalog
 ├─ Policy / Approval / Lease / MutationGuard
 ├─ AI / Artifact / Memory / Integration
-├─ Environment Control Plane
+├─ Workspace Runtime Control Plane
 └─ Backend Plugin Sandbox
       ↓ trusted Runner protocol
 nexus-agent-runner
@@ -34,7 +34,7 @@ nexus-agent-runner
 ├─ Sandbox Manager
 ├─ Pack Manager
 ├─ Workspace Broker
-└─ Environment
+└─ Workspace generation
    ├─ Core Task Sandbox
    ├─ Runner Plugin Sandbox A
    └─ Runner Plugin Sandbox B
@@ -44,7 +44,7 @@ nexus-agent-runner
 
 - Frontend：人机交互和 Frontend Plugin 执行宿主。
 - Backend：身份、App、Run、权限、Policy、Approval、Lease、Artifact、Memory、Capability 和控制平面。
-- Runner：受限本地执行平面，负责 Environment、sandbox、Pack、workspace 和 Runner Plugin。
+- Runner：受限本地执行平面，负责 Workspace generation、sandbox、Tool Pack、Workspace Broker 和 Runner Plugin。
 - Plugin：签名扩展包，可显式声明 `frontend / backend / runner` 三个 target。
 - Docker：真实 Docker 操作属于 Backend/Nexus `machine.docker.*` capability，不是 Runner 基础设施。
 
@@ -63,7 +63,7 @@ App
       │     └─ Evidence
       ├─ PlanProjection
       │  └─ PlanItem 0..64
-      ├─ EnvironmentGroup / Environment
+      ├─ Workspace / Profile / Generation
       ├─ Artifact
       ├─ Checkpoint
       ├─ Approval
@@ -91,7 +91,6 @@ packages/backend/src/modules/agent/runtime/
 ├─ definitions/
 ├─ events/
 ├─ execution/
-├─ exchange/
 ├─ planning/
 ├─ recovery/
 ├─ runs/
@@ -166,7 +165,7 @@ interface CapabilityContribution {
 
 Catalog 会校验 contribution 内所有 Tool 的 `descriptor.capability` 必须与 contribution capability 一致。
 
-当前静态 machine/environment/runtime tools 与动态 MCP tools 已使用该模型。
+当前静态 machine/workspace-runtime/runtime tools 与动态 MCP tools 已使用该模型。
 
 后续增加 Kubernetes、DB、Cloud 等功能，应新增明确 contribution，而不是继续在 composition root 散落 `register(tool)`。
 
@@ -286,35 +285,37 @@ interface PluginBackendSdk {
 /run/nexus-agent-runner/docker.sock ❌
 nested dockerd                       ❌
 dockerode                            ❌
-Workspace/Environment child Docker  ❌
+Workspace/generation child Docker  ❌
 Plugin child Docker                  ❌
 privileged Runner container          ❌
 ```
 
-Runner 是受限执行服务，不是 Docker orchestrator。一个 Workspace 是稳定的项目/文件系统边界；Environment 是该 Workspace 的运行 profile/generation，而不是语言类型：
+Runner 是受限执行服务，不是 Docker orchestrator。一个 Workspace 是稳定的项目/文件系统边界；Workspace Profile 是冻结运行配置，Generation 是该 Profile 的一次运行实例，而不是语言类型：
 
 ```text
 Workspace A
 ├─ stable project files
-├─ Environment generation -> node22 + python3.12 + go1.23
+├─ generation -> node22 + python3.12 + go1.23
 ├─ Core Task Sandbox
 ├─ plugin1 Runner Sandbox
 └─ plugin2 Runner Sandbox
 
 Workspace B
-└─ Environment generation -> node18 + python3.10
+└─ generation -> node18 + python3.10
 ```
 
-Tool Store 按 `family/version/digest`（digest 按 arch 解析） 允许多版本并存。Workspace 切换 Node/Python/Go 版本只重建自己的 Environment generation，重新解析 PATH/只读 Tool Pack，同时继续 bind 同一 Workspace 文件；不得修改全局 `/usr/bin` 或影响其他 Workspace。Environment 由 Runner Sandbox Manager 管理；当前 Linux 实现以 bubblewrap 为基础，目标包括 process/filesystem/network namespace 隔离、独立 process tree、最小环境变量、只读 Tool Pack 等。不能仅靠 `cwd`、Node `vm` 或 `worker_threads` 宣称 hostile-code 安全隔离。
+Tool Store 按 `family/version/digest`（digest 按 arch 解析）允许多版本并存。Workspace 切换 Node/Python/Go 版本只重建自己的 generation，重新解析 PATH/只读 Tool Pack，同时继续 bind 同一 Workspace 文件；不得修改全局 `/usr/bin` 或影响其他 Workspace。Generation 由 Runner Sandbox Manager 管理；当前 Linux 实现固定使用受支持的 bubblewrap（当前发行 0.12.0+）作为 process/filesystem/network namespace 隔离边界，并建立独立 process tree、最小环境变量和只读 Tool Pack。不能仅靠 `cwd`、Node `vm` 或 `worker_threads` 宣称 hostile-code 安全隔离。
+
+Runtime consumer/owner 边界：Agent one-shot job、Runner Plugin、CI/task 与 future local Terminal 可以共享 Workspace/Profile/Generation 和 Tool Store，但 transport/identity 不合并。现有 SSH Terminal/SFTP/remote Docker 仍由 Nexus Workspace/remote-machine 模块持有 live session；RDP/VNC 仍由 Guacamole runtime 持有。future local Terminal 需要单独的 Workspace Runtime interactive-session port，不能把 SSH `WorkspaceTerminalService`、PTY 或 Agent 模型身份直接复用到 Runner。
 
 ## 9. Runner Plugin 显式选择
 
-Environment 不自动注入所有 enabled Runner Plugin。
+Workspace Profile 不自动注入所有 enabled Runner Plugin。
 
 创建请求必须显式：
 
 ```ts
-interface EnvironmentCreateSpec {
+interface AgentWorkspaceCreateSpec {
   recipeId: string;
   versions?: Record<string, string>;
   runnerPluginIds?: string[];
@@ -342,16 +343,16 @@ Backend 对每个 requested Plugin 验证：
 }
 ```
 
-该列表持久化到 `agent_environments.runner_plugins_json`，后续 start/restart/reconcile 使用冻结记录，不根据当前安装状态猜历史 Environment。Runner protocol v2 是 wire-incompatible contract；旧 protocol-v1 Environment 不自动套用 v2，必须重建后再激活。
+该列表持久化到 `agent_workspaces.runner_plugins_json`，后续 start/restart/reconcile 使用冻结记录，不根据当前安装状态猜历史 generation。Runner protocol v2 是 wire-incompatible contract；旧 protocol generation 不自动套用 v2，必须重建后再激活。
 
-Agent 自己调用 `environment_create` Tool 也使用同一 `runnerPluginIds`，没有模型调用旁路。
+Agent 自己调用 `workspace_create` Tool 也使用同一 `runnerPluginIds`，没有模型调用旁路。
 
 ## 10. Workspace 模型
 
-每个 Runner Plugin 有自己的 workspace，但属于同一个 Environment 的底层存储体系：
+每个 Runner Plugin 有自己的 logical workspace，但属于同一个稳定 Workspace：
 
 ```text
-Environment A
+Workspace A
 ├─ core/workspace/
 ├─ plugins/plugin1/workspace/
 ├─ plugins/plugin2/workspace/
@@ -383,7 +384,7 @@ workspace.read('plugin1', '/output/report.json');
 Host 实际绑定：
 
 ```text
-environmentId
+workspaceId + generation
 callerPluginId   // Host 根据当前 sandbox 绑定，插件不能传
  targetPluginId  // plugin1
 path             // /output/report.json
@@ -447,18 +448,18 @@ plugin2
 - `..` traversal；
 - Runner/宿主真实绝对路径；
 - symlink escape；
-- 跨 Environment target。
+- 跨 Workspace target。
 
 ## 11. Workspace ↔ Artifact bridge
 
-Workspace 是 Environment 生命周期内 mutable working data；Artifact 是长期 durable result。
+Workspace 是稳定 mutable working data；Generation 只承载当前 Profile 的运行实例。Artifact 是长期 durable result。
 
-两者转换由 Backend Runtime 的 `exchange` 子域负责，不让 Environment 反向依赖 Artifact，也不把 Artifact SDK 直接交给 Runner Plugin。
+两者转换由 Backend Agent 顶层 `exchange` 子域负责，不让 Workspace Runtime 反向依赖 Artifact，也不把 Artifact SDK 直接交给 Runner Plugin。
 
 代码位置：
 
 ```text
-packages/backend/src/modules/agent/runtime/exchange/
+packages/backend/src/modules/agent/exchange/
 ├─ workspace-artifact.service.ts
 └─ workspace-artifact.types.ts
 ```
@@ -467,17 +468,17 @@ packages/backend/src/modules/agent/runtime/exchange/
 
 ```text
 workspace -> artifact
-requires environment.execute + artifacts.write
+requires workspace.runtime.execute + artifacts.write
 
 artifact -> workspace
-requires environment.execute + artifacts.read
+requires workspace.runtime.execute + artifacts.read
 ```
 
-Backend 先验证 `scope + environmentId + targetPluginId`，然后通过 Runner Controller 受控读写目标 workspace。Host-only bridge 使用 `application/octet-stream` streaming：GET 在 Runner 打开并 `fstat` 文件后以 read handle 固定本次读取对象，Backend 消费完/失败/timeout 都关闭；PUT 必须有 `Content-Length`，Runner 写同目录临时文件、精确校验长度、`fsync` 后原子 rename，失败清理临时文件。Backend 不再使用整文件 `arrayBuffer()` / `Buffer.concat()`。
+Backend 先验证 `scope + workspaceId + generation + targetPluginId`，然后通过 Runner Controller 受控读写目标 workspace。Host-only bridge 使用 `application/octet-stream` streaming：GET 在 Runner 打开并 `fstat` 文件后以 read handle 固定本次读取对象，Backend 消费完/失败/timeout 都关闭；PUT 必须有 `Content-Length`，Runner 写同目录临时文件、精确校验长度、`fsync` 后原子 rename，失败清理临时文件。Backend 不再使用整文件 `arrayBuffer()` / `Buffer.concat()`。
 
 当前 Runner Host transport hard cap：256 MiB；Artifact 自身单文件、总量和磁盘 quota 仍独立生效。Artifact→Workspace 按 Artifact 8 MiB range 上限分段读取并连续传输，因此 bridge 可以真实处理 >16 MiB 文件而不把大文件塞进 JSON/Base64。
 
-注意：Workspace↔Artifact 是生命周期转换，因此会创建/写入另一个 durable Artifact；它和同 Environment 内跨 Plugin workspace 共享不是同一机制，transfer handle 也不会暴露给 Frontend/Plugin/模型。
+注意：Workspace↔Artifact 是生命周期转换，因此会创建/写入另一个 durable Artifact；它和同 Workspace 内跨 Plugin logical workspace 共享不是同一机制，transfer handle 也不会暴露给 Frontend/Plugin/模型。
 
 ### 11.1 当前四条 binary/data transport 边界
 
@@ -522,15 +523,15 @@ terraform
 ...
 ```
 
-Environment 使用 Recipe + 精确 Pack refs。Pack 共享 immutable store，但 Environment/Plugin 不能修改 Pack。
+Workspace Profile 使用 Recipe + 精确 Pack refs。Pack 共享 immutable store，但 Workspace generation/Plugin 不能修改 Pack。
 
-目标是让 Environment 描述“需要什么运行能力”，而不是把 Node/Python/JDK 映射成不同 Docker image。
+目标是让 Workspace Profile 描述“需要什么运行能力”，而不是把 Node/Python/JDK 映射成不同 Docker image。
 
 ## 13. Artifact / AppStorage / Workspace 分工
 
 ```text
 Workspace
-= Environment 中 mutable working data
+= Workspace 中 mutable working data
 
 Artifact
 = durable file/result
@@ -547,7 +548,7 @@ report.pdf / patch.diff / screenshot.png -> Artifact
 cursor / config / plugin state -> AppStorage
 ```
 
-Environment delete 不应自动删除 Artifact 或 AppStorage。
+Workspace generation delete 不应自动删除 Artifact、AppStorage 或稳定 Workspace 文件。
 
 ## 14. Subagent / Multi-Agent
 
@@ -566,7 +567,7 @@ Run
 - SharedFacts；
 - Artifact refs。
 
-不共享直接内存、DB handle、Environment process handle。
+不共享直接内存、DB handle、Workspace generation process handle。
 
 Handoff 可以作为调度语义，但不能取代 AgentRuntime participant 模型。
 
@@ -579,7 +580,7 @@ Handoff 可以作为调度语义，但不能取代 AgentRuntime participant 模�
 代码运行位置             -> frontend/backend/runner target
 Agent 能做的一件事       -> Capability / Tool
 运行所需软件             -> Pack
-一次隔离执行环境         -> Environment
+一次隔离运行实例         -> Workspace generation
 执行中 mutable 文件      -> Workspace
 长期文件/结果            -> Artifact
 长期小状态               -> AppStorage
@@ -628,14 +629,14 @@ doc/architecture/agent/
 
 ```text
 packages/backend/src/modules/agent/capabilities/tool-catalog.ts
-packages/backend/src/modules/agent/apps/operations/environment-management-tools.ts
+packages/backend/src/modules/agent/apps/operations/workspace-runtime-management-tools.ts
 packages/backend/src/modules/agent/runtime/planning/
-packages/backend/src/modules/agent/runtime/exchange/
-packages/backend/src/modules/agent/environments/environment.service.ts
+packages/backend/src/modules/agent/exchange/
+packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.service.ts
 packages/backend/src/modules/agent/host/plugin-install.service.ts
 packages/backend/src/infrastructure/agent/plugins/local-plugin-backend-runtime.adapter.ts
 packages/backend/src/infrastructure/agent/plugins/plugin-backend-sandbox.worker.ts
-packages/backend/src/infrastructure/agent/environments/runner-http.adapter.ts
+packages/backend/src/infrastructure/agent/workspace-runtime/runner-http.adapter.ts
 
 packages/agent-runtime/src/controller/sandbox-engine.ts
 packages/agent-runtime/src/controller/plugin-runner-runtime.ts
@@ -657,7 +658,7 @@ packages/frontend/src/features/agent/api/agent-api.ts
 - Plugin package 使用显式 `targets.frontend/backend/runner`；
 - Frontend Plugin 不再单独创建 `plugin-ui` Docker；
 - Backend Plugin 在 Backend 内部 process sandbox；
-- Runner Plugin 按 Environment 显式选择；
+- Runner Plugin 按 Workspace Profile 显式选择并冻结到 generation；
 - `runner_plugins_json` 持久化；
 - Workspace target ACL；
 - Workspace `read/write/list/stat/mkdir/rename/remove`；
@@ -666,7 +667,7 @@ packages/frontend/src/features/agent/api/agent-api.ts
 - Runtime 一级子域拆分；
 - PlanItem 与 Runtime Step 分离；
 - Capability Contribution；
-- Agent `environment_create` Tool 支持明确 `runnerPluginIds`；
+- Agent `workspace_create` Tool 支持明确 `runnerPluginIds`；
 - Frontend Agent plan 使用 `AgentRunPlan`，TaskRail 直接展示 PlanItem；
 - Frontend architecture checker 增加 Agent `host/api/ai/files/runtime/settings/apps/operations/public` 子域依赖矩阵；
 - Nexus Workspace `NXW1 v1` binary framing 与 SSH/SFTP Base64 data-path 清理；
@@ -687,7 +688,7 @@ git diff --check（前一轮）
 最新 Backend architecture check 为：
 
 ```text
-381 files
+383 files
 no forbidden layer edges
 no source cycles
 no module cycles
@@ -695,12 +696,12 @@ no module cycles
 
 ## 18. 本轮架构审核后的当前状态与后续项
 
-截至 2026-09-10，核心 Agent/Environment/Plugin/Workspace 架构基线已经收敛，但不能把所有 Phase 3 文件的存在都视为完整产品接线。以下按“已进入 live composition / 部分实现 / 验证受限”记录当前事实。
+截至 2026-09-11，核心 Agent/Workspace Runtime/Plugin 架构基线已经收敛，但不能把所有 Phase 3 文件的存在都视为完整产品接线。以下按“已进入 live composition / 部分实现 / 验证受限”记录当前事实。
 
 1. Plugin SDK contract：**完成**。
    - Frontend descriptor 明确返回安装包 `sdkVersion + protocolVersion=1`，Frontend 建立 bridge 前校验；
    - Backend activation context 固定 `schemaVersion=1 + protocolVersion=1 + pluginId/version/sdkVersion`，sandbox `runtime.ready` 回报 `sdkVersion/protocolVersion` 并由 Host fail-closed 校验；
-   - Runner frozen target 当前固定 `{pluginId,version,sdkVersion,protocolVersion=2,packageHash,entry}`，Environment start/reconcile 使用冻结值，Runner sandbox activation/`runtime.ready` 再次校验；protocol v1 旧 Environment 不自动升级；
+   - Runner frozen target 当前固定 `{pluginId,version,sdkVersion,protocolVersion=2,packageHash,entry}`，Workspace generation start/reconcile 使用冻结值，Runner sandbox activation/`runtime.ready` 再次校验；旧 protocol generation 不自动升级；
    - Runner protocol v2 使用 16-byte framed IPC：bounded JSON control + raw binary workspace frame，已去掉 workspace Base64 IPC；
    - 没有声明尚未实现的未来 SDK，也没有通用 method dispatcher。
 
@@ -708,16 +709,16 @@ no module cycles
    - PlanItem 保持 typed projection，不回退 JSON dump；
    - PlanItem status、depends/evidence 标签、Run status 与 verification status 均已进入 Agent 三语 i18n，不再直接显示内部枚举作为用户文案。
 
-3. Environment/Workspace 产品 API/UI：**完成当前 bounded contract**。
-   - root Run Environment 列表使用 `?runtime=root` 由 Backend 解析 root runtime；创建请求不接受浏览器提供 `agentRuntimeId`；
-   - `EnvironmentWorkspacePanel` 提供 Recipe、显式 Runner Plugin target 选择，以及 start/stop/restart/delete；
-   - 同一 runtime 最多一个非 `deleted/failed` EnvironmentGroup；failed/deleted 后允许重建，Service 与 repository 语义一致；
-   - Workspace grant 管理由目标 workspace ACL 决定，跨 Plugin 默认 deny；target/principal 必须属于同一 Environment 冻结的 Runner targets；
-   - Workspace↔Artifact 产品入口已接入 Frontend，仍通过 Backend `runtime/exchange` 并重新检查 `environment.execute + artifacts.write/read`；Frontend API 不变，底层已升级为 Host-only binary streaming。
+3. Workspace Runtime 产品 API/UI：**完成当前 bounded contract**。
+   - root Run Workspace 列表使用 `?runtime=root` 由 Backend 解析 root runtime；创建请求不接受浏览器提供 `agentRuntimeId`；
+   - `WorkspaceRuntimePanel` 提供 Recipe、显式 Runner Plugin target 选择，以及 start/stop/restart/delete/tool version switch；
+   - 同一 AgentRuntime 最多一个非 `deleted/failed` root Workspace；failed/deleted 后允许重建，Service 与 repository 语义一致；
+   - Workspace grant 管理由目标 workspace ACL 决定，跨 Plugin 默认 deny；target/principal 必须属于同一 Workspace generation 冻结的 Runner targets；
+   - Workspace↔Artifact 产品入口已接入 Frontend，仍通过 Backend `agent/exchange` 并重新检查 `workspace.runtime.execute + artifacts.write/read`；Frontend API 不变，底层已升级为 Host-only binary streaming。
 
 4. Capability Catalog：**保持完成态约束**。
    - 新增 capability 继续通过 `CapabilityContribution` 注册；
-   - Environment 管理与执行能力保持 `environment.manage` / `environment.execute` 分离；
+   - Workspace Runtime 管理与执行能力保持 `workspace.runtime.manage` / `workspace.runtime.execute` 分离；
    - 不创建万能字符串 registry，不让 Frontend/Plugin/MCP/Runner 形成真实副作用旁路。
 
 5. Workspace 大文件：**当前 stream/handle 收尾完成**。
@@ -727,12 +728,12 @@ no module cycles
    - Artifact→Workspace 按 8 MiB Artifact range 分段读取，20 MiB+ 本地 smoke 已验证，未通过放大 Base64/JSON 上限实现。
 
 6. 长期规范：**完成同步**。
-   - `ARCHITECTURE.md` 与 `IMPLEMENTATION.md` 已同步三 target SDK/protocol freeze、Environment root 产品入口、Runner target、Workspace ACL、Workspace↔Artifact 与 Capability 边界。
+   - `ARCHITECTURE.md` 与 `IMPLEMENTATION.md` 已同步三 target SDK/protocol freeze、Workspace root 产品入口、Runner target、Workspace ACL、Workspace↔Artifact 与 Capability 边界。
 
 7. 本地/远程验证状态：
    - `packages/agent-runtime` build：**通过**；
-   - Backend build：**通过**；Backend architecture：**通过（381 files）**；
-   - Frontend architecture/i18n/vue-tsc/Vite/bundle budget：**通过（302 source files；Initial JS 248.3/260 KiB gzip）**；
+   - Backend build：**通过**；Backend architecture：**通过（383 files）**；
+   - Frontend architecture/i18n/vue-tsc/Vite/bundle budget：**通过（304 source files；Initial JS 249.1/260 KiB gzip）**；
    - root `npm run build`：**通过**；当前宿主 Node `v22.17.0` 低于仓库声明的 Node `>=24`，构建仅产生 engine warning；
    - root test policy：**通过（71 E2E spec files）**；E2E groups check：**通过（69 grouped specs / 8 groups）**；
    - Agent Launcher/Hub 回归已由远程 Actions 验证，相关 group 8 为绿色；其余本轮 Workspace mixed-mode 运行验收仍以新 push 的远程 Actions 为准；
@@ -754,7 +755,7 @@ no module cycles
 
 10. 本轮文档/guard 审核：**已修正已知正式矛盾**。
 
-- SRS/FR 不再描述 Runner 持 Docker Engine 或每 Environment 创建子容器；当前正式模型是 Runner 内部 Sandbox Manager，Runner/Backend/work sandbox 都没有 Docker socket/dockerd/nested Docker；
+- SRS/FR 不再描述 Runner 持 Docker Engine 或每 Workspace generation 创建子容器；当前正式模型是 Runner 内部 Sandbox Manager，Runner/Backend/work sandbox 都没有 Docker socket/dockerd/nested Docker；
 - Frontend 总架构已对齐真实 `features/agent/{host,api,ai,files,runtime,settings,apps/operations}` owner，不再保留平行的虚构 App/AI package 结构；
 - Frontend architecture checker 已补 Agent 子域 guard，与长期架构中“前后端都检查 Agent 子目录”的要求一致；
 - `ARCHITECTURE.md` / `IMPLEMENTATION.md` 不再保留“Agent 尚未开工 / software-requirements 尚未同步”的历史前言；
@@ -784,4 +785,4 @@ no module cycles
 
 ## 20. 一句话架构基线
 
-> Nexus Agent 是一个以 Backend 为 durable/control plane、以 `nexus-agent-runner` 为 sandbox execution plane、以 Frontend 为 interaction plane 的 Agent Platform；Plugin 只能通过明确 `frontend/backend/runner` target 与 target-specific SDK 扩展，Runtime 保持 `Thread → Run → AgentRuntime → Step`，用户计划使用独立 `PlanItem`，真实副作用统一进入 Capability，Environment 内 Plugin workspace 默认隔离且由目标 ACL 授权访问同一底层文件，长期结果通过 Artifact 管理，Runner 永远不以 Docker socket/nested Docker 作为执行基础设施。
+> Nexus Agent 是一个以 Backend 为 durable/control plane、以 `nexus-agent-runner` 为 sandbox execution plane、以 Frontend 为 interaction plane 的 Agent Platform；Plugin 只能通过明确 `frontend/backend/runner` target 与 target-specific SDK 扩展，Runtime 保持 `Thread → Run → AgentRuntime → Step`，用户计划使用独立 `PlanItem`，真实副作用统一进入 Capability，Workspace 内 Plugin logical workspace 默认隔离且由目标 ACL 授权访问同一底层文件，长期结果通过 Artifact 管理，Runner 永远不以 Docker socket/nested Docker 作为执行基础设施。

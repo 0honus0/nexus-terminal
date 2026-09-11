@@ -350,7 +350,7 @@
       "title": "Workspace 開発環境",
       "description": "1 つの Workspace でプロジェクトファイルを安定して共有し、各 runtime generation で Node、Python、Go と Runner Plugin のバージョンを構成します。",
       "refresh": "更新",
-      "recipe": "Environment profile",
+      "recipe": "Workspace profile",
       "retained": "Workspace を保持",
       "toolVersions": "ツールチェーンのバージョン",
       "toolVersionsHint": "オプションのツールは共有の読み取り専用 Tool Store からバージョン単位でマウントされ、Workspace ごとに異なるバージョンを選択できます。",

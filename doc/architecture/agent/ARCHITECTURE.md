@@ -8,13 +8,13 @@
 
 Agent 默认可以选择全部当前及未来连接；全局 connection denylist 优先拒绝，审批不能覆盖。此默认值只影响目标可访问性，不意味着全部动作免审批。第三方 App 还必须获得 manifest 所声明的 capability grant。
 
-| 阶段    | 实际交付                                                                                                                                                                          | 不交付                                                                   |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Phase 1 | 静态 App Host、Operations、Provider 配置、Thread/Run/流式会话、只读诊断/文件读取、Artifact、只读 Recall、内置 Skill、Launcher/Hub、恢复与审计；环境 availability API/前端占位说明 | 真实 Environment sandbox、远端 mutation、动态插件、MCP/ACP/CDP、多 Agent |
-| Phase 2 | Policy/Approval/Lease 完整修改闭环、文件变更、受审批 Shell/远端 Docker、独立 EnvironmentController 与 shell/code/data 环境、UI/AI 启停删、checkpoint、环境配额/固化               | 浏览器自动化和外部协议 Agent                                             |
-| Phase 3 | Browser/CDP、MCP、ACP、多 Agent、经审核 Memory 写入、安装式 App/Skill、Frontend/Backend/Runner 三目标 sandbox                                                                     | 未隔离上传代码直接进入 Core、无限自治或绕过审批                          |
+| 阶段    | 实际交付                                                                                                                                                                                                  | 不交付                                                              |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Phase 1 | 静态 App Host、Operations、Provider 配置、Thread/Run/流式会话、只读诊断/文件读取、Artifact、只读 Recall、内置 Skill、Launcher/Hub、恢复与审计；Workspace Runtime availability 占位                        | 真实 Runner sandbox、远端 mutation、动态插件、MCP/ACP/CDP、多 Agent |
+| Phase 2 | Policy/Approval/Lease 完整修改闭环、文件变更、受审批 Shell/远端 Docker、Workspace Runtime Controller、稳定 Workspace + Profile/Generation、多版本 Tool Store、UI/AI 启停删、checkpoint、运行资源配额/固化 | 浏览器自动化和外部协议 Agent                                        |
+| Phase 3 | Browser/CDP、MCP、ACP、多 Agent、经审核 Memory 写入、安装式 App/Skill、Frontend/Backend/Runner 三目标 sandbox                                                                                             | 未隔离上传代码直接进入 Core、无限自治或绕过审批                     |
 
-Runner Environment 是受限本地执行能力；代码实体使用 AgentRuntime、EnvironmentGroup、ExecutionEnvironment/Sandbox，不把 Docker 当成 Environment 的实现模型，也不使用裸 `/api/v1/runtime`。Phase 1 的 EnvironmentAvailabilityPort 是真实设置页面的消费者，生产返回 unavailable；测试替身仅在 E2E 组合中注入，不创建无人消费的未来空实现。
+Workspace Runtime 是受限本地执行能力；稳定实体是 `Workspace`，运行配置由 `WorkspaceProfile` 冻结，实际运行实例由 `generation` 标识。Runner sandbox 只是 generation 的实现细节，不把 Docker 当作本地执行模型，也不使用裸 `/api/v1/runtime`。Workspace Runtime availability 是设置页的真实消费者；Runner 未配置或 sandbox primitive 不可用时返回 unavailable/degraded，不能回退为宿主裸进程。
 
 适用工程边界引用 [EC-REQ-001、EC-ARCH-001/009、EC-RUNTIME-003/004/005、EC-E2E-001/002](../../software-requirements/engineering-constraints.md)。已定义正式契约不等于已实现产品；软件需求/FR/SRS 已进入正式 Agent 实现基线，后续架构调整必须同步需求、实现快照和对应验证证据，不能只改设计文档或只凭源码目录判断交付状态。
 
@@ -30,18 +30,18 @@ modules/agent/
   runtime       Run/参与者/Harness/调度/Event/Checkpoint
   ai            Provider/Conversation/Context/Artifact/Recall/Skill/Tool catalog
   capabilities  检查/授权/Policy/Approval/Lease/目标/机器 facade
-  environments  执行环境控制用例与 ports
+  workspace-runtime  Workspace/Profile/Generation、Runner 控制与 ports
   apps/operations  仅运维定义、工具与业务策略 contribution
                      ↓ typed ports
 既有 Modules diagnostics/connections + Platform execution/filesystem/docker
                      ↑ adapters
-infrastructure/agent/{repositories,providers,artifacts,environments,integrations}
+infrastructure/agent/{repositories,providers,artifacts,workspace-runtime,integrations}
 bootstrap/agent/compose-agent.ts 是具体依赖组装入口
 ```
 
 通用 Harness 归 runtime，不放 ai/harness 或 apps/operations；AI 层只提供模型和上下文服务，不反向依赖 Run 调度。Policy、Approval、Lease 属于共享 capabilities，Operations 只提供风险分类和 verifier。HTTP/SSE 控制器统一在 interfaces/http/agent，不放 App domain。SQL、SDK、网络客户端只在 Infrastructure。
 
-依赖图固定：apps → runtime/ai/capabilities/host 的 public 契约；runtime → ai/capabilities/environments/host 的 ports；capabilities → host 的授权契约和既有机器能力；environments → host 契约；ai → host scope 类型；host 不反向 import apps/runtime。环境控制 action 的安全编排通过 capabilities 注册的 Tool 实现，避免 environments 与 capabilities 循环。跨 App 不准私有 import。Infrastructure 只 type-import module 的 _.types/_.port；Bootstrap 导入具体类。前后端 architecture checker 都要检查 Agent 子目录，而不只检查顶层 feature。
+依赖图固定：apps → runtime/ai/capabilities/host/workspace-runtime 的 public 契约；Agent runtime → ai/capabilities/host 的 ports，不反向拥有 Workspace Runtime；workspace-runtime → host 的授权/Plugin target 契约；capabilities → host 的授权契约和既有机器能力；ai → host scope 类型；`agent/exchange` 可桥接 Workspace Runtime 与 Artifact，但两边不互相反向依赖。Workspace 控制 action 的安全编排通过 capabilities 注册的 Tool 实现，避免 workspace-runtime 与 capabilities 循环。跨 App 不准私有 import。Infrastructure 只 type-import module 的 _.types/_.port；Bootstrap 导入具体类。前后端 architecture checker 都要检查 Agent 子目录，而不只检查顶层 feature。
 
 前端集中于 features/agent/{host,api,ai,files,runtime,settings,apps/operations}；公共会话/事件投影归 runtime，文件库归 files，Agent 宿主设置归 settings，Operations UI 通过 facade 使用。独立容器程序放 packages/agent-runtime；Docker 构建/运维辅助文件仅放 scripts/docker/agent-runtime。内置 App 不另建 npm workspace package。Frontend architecture guard 必须像 Backend 一样约束 Agent 子域依赖，而不能只把整个 `features/agent` 当成一个无内部边界的 feature。
 
@@ -78,7 +78,7 @@ Agent 实现采用 **reuse-first** 原则：存在成熟、长期维护、许可
 ```text
 App → Thread(0..N) → Run(0..N)
 Run → AgentRuntime(1..N；前两期为1，三期可按 delegation 动态增加参与者，执行并发统一受 maxConcurrentRuntimes 调度)
-AgentRuntime → EnvironmentGroup(0..1) → ExecutionEnvironment(0..N)
+AgentRuntime → Workspace(0..1 active root Workspace；同一稳定 id 可有递增 Generation)
 Run → PlanProjection(0..1) → PlanItem(0..64，依赖/evidence投影)
 Run → Step → ModelAttempt / ToolCall → Approval(0..N历史，最多1个有效请求)
 Run → DurableEvent、Checkpoint、ArtifactRef
@@ -91,7 +91,7 @@ Thread 可为空；同一 Thread 同时只有一个非终态 Run。Run 是预算
 
 Runtime 实现也不继续在一级目录堆服务；当前按职责拆为 `definitions / runs / execution / planning / scheduling / approvals / recovery / events / collaboration / exchange`。这些是实现子域而非新的业务层级：外层负责 durable/control，内层 Agent Loop 保持 `context → model → tool/result → next step` 的轻循环。
 
-EnvironmentGroup 只聚合所有权、总配额和环境列表；Harness 在 Backend，不创建 control environment。环境种类为 shell/code/data/browser。同一组的不同 Environment 使用独立 sandbox/workspace/process namespace，不共享 cwd、浏览器 profile、网络 namespace 或凭据。其他参与者通过显式 Artifact grant 或受控 Environment 接口交换结果，不能直接获得 sandbox/process handle。
+一个 AgentRuntime 当前最多关联一个状态非 `deleted/failed` 的 root Workspace；Workspace 保存稳定项目文件和 ownership，Profile 冻结 recipe/tool refs/Runner Plugin/resource/network，Generation 是可替换的运行实例。Harness 在 Backend，不创建“control workspace”。参与者通过显式 Artifact grant、Workspace Runtime Gateway 或 Runner Plugin Workspace Broker 交换结果，不能直接获得 sandbox/process/PTY handle。
 
 userId/connectionId 沿用整数；Agent 实例 ID 使用 node:crypto.randomUUID()；appId 为稳定 namespaced manifest 字符串。数据库时间使用整数 epoch seconds，HTTP/SSE 转 ISO 8601；计时器使用单调时钟，毫秒参数须以 Ms 命名。App 数据查询必须携带服务端推导的 userId/appId；父子复合 FK 与 repository scope 检查共同防止串 App，用户提供的 owner 字段不能授权。
 
@@ -132,7 +132,7 @@ Backend container
 
 nexus-agent-runner host service
 ├─ Runner Core
-└─ Workspace A / Environment generation
+└─ Workspace A / generation
    ├─ core/task sandbox
    ├─ plugin1 runner sandbox
    └─ plugin2 runner sandbox
@@ -142,7 +142,7 @@ nexus-agent-runner host service
 
 **Backend target** 在 Backend 容器内启动独立 OS process sandbox；动态插件绝不在 Backend Core module graph 中 `eval/import`。sandbox 默认无网络，不可见 `/app/data`、SQLite、Backend env/secrets 或任意宿主路径，只读挂载该插件的已验证代码和最小系统 runtime。sandbox 不可建立时 fail closed。
 
-**Runner target** 不是全局 Backend 插件的替代执行位置。它只在某个 Environment 明确选择后实例化。`EnvironmentCreateSpec.runnerPluginIds` 指定目标插件；Backend 逐个验证安装、enabled、activeVersion 和 `targets.runner`，冻结为 `{pluginId,version,sdkVersion,protocolVersion,packageHash,entry}` 并持久化到 Environment。Runner 不扫描目录猜插件，也不自动把所有 enabled 插件注入所有 Environment。Agent 自己调用 `environment_create` 时也使用同一显式 `runnerPluginIds` 字段，不存在“模型路径自动注入插件”的旁路。
+**Runner target** 不是全局 Backend 插件的替代执行位置。它只在某个 Workspace Profile 明确选择后随 generation 实例化。`AgentWorkspaceCreateSpec.runnerPluginIds` 指定目标插件；Backend 逐个验证安装、enabled、activeVersion 和 `targets.runner`，冻结为 `{pluginId,version,sdkVersion,protocolVersion,packageHash,entry}` 并持久化到 Workspace Profile。Runner 不扫描目录猜插件，也不自动把所有 enabled 插件注入所有 Workspace。Agent 的 `workspace_create` tool 也使用同一显式 `runnerPluginIds` 字段，不存在“模型路径自动注入插件”的旁路。
 
 SDK 同样按目标明确，不提供一个通过字符串 method/key 动态扩张的万能对象。当前基础接口为：
 
@@ -169,11 +169,11 @@ type RunnerPluginSdk = {
 };
 ```
 
-SDK contract 不是只在安装阶段检查：三 target 都明确携带 `sdkVersion + protocolVersion`，但三个 target 的 wire protocol 独立演进，不要求数值相同。Frontend descriptor 返回安装包 `sdkVersion` 与 Host `protocolVersion=1`，建立 bridge 前校验；Backend sandbox activation context 固定 `{schemaVersion:1,protocolVersion:1,scope,plugin:{pluginId,version,sdkVersion},sdk}`，worker 的 `runtime.ready` 回报并由 Host 复核两种版本；Runner target 把 `sdkVersion + protocolVersion=2` 一起随 Environment snapshot 冻结，sandbox activation/`runtime.ready` 再次校验。Runner protocol v2 将 stdio 改为固定 16-byte header 的 framed IPC：小控制消息是 bounded JSON frame，workspace bytes 是 raw binary frame，以 `requestId` 关联，禁止 Base64 内联。协议版本不匹配直接拒绝，不根据宿主当前版本猜测历史 Environment 应使用哪个 SDK/协议；冻结为 Runner protocol v1 的旧 Environment 必须重建后才能使用 v2 runtime。
+SDK contract 不是只在安装阶段检查：三 target 都明确携带 `sdkVersion + protocolVersion`，但三个 target 的 wire protocol 独立演进，不要求数值相同。Frontend descriptor 返回安装包 `sdkVersion` 与 Host `protocolVersion=1`，建立 bridge 前校验；Backend sandbox activation context 固定 `{schemaVersion:1,protocolVersion:1,scope,plugin:{pluginId,version,sdkVersion},sdk}`，worker 的 `runtime.ready` 回报并由 Host 复核两种版本；Runner target 把 `sdkVersion + protocolVersion=2` 一起随 Workspace Profile snapshot 冻结，sandbox activation/`runtime.ready` 再次校验。Runner protocol v2 将 stdio 改为固定 16-byte header 的 framed IPC：小控制消息是 bounded JSON frame，workspace bytes 是 raw binary frame，以 `requestId` 关联，禁止 Base64 内联。协议版本不匹配直接拒绝，不根据宿主当前版本猜测历史 generation 应使用哪个 SDK/协议；冻结为旧 Runner protocol 的 generation 必须重建后才能使用新 runtime。
 
 未来增加 `ai/runs/machine/browser/...` 时必须在对应 target SDK 增加明确 typed interface，并仍经过 manifest grant、Policy/Approval/Lease/Quota/Audit；不能通过任意 method 名、任意 URL、任意 host object 或 payload 自带 `appId/userId/callerPluginId` 绕过边界。调用者身份由 Host 绑定。
 
-AppStorage 使用 `(userId,appId,key)`，单 value 64 KiB、单 App 16 MiB，CAS version；插件不能自建 SQL 或读取其他 App 表。Frontend/Backend target 访问 AppStorage 都由 Backend 重新校验当前 App 安装/启用状态。Runner Plugin 的 `workspace.read/write` SDK 仍是单次有界 `Uint8Array` API（当前 binary frame 最大 16 MiB），避免插件通过一个 IPC 请求无限占用内存；需要长期保留或搬运更大文件时，由 Backend 的 `runtime/exchange` Workspace↔Artifact bridge 做明确生命周期转换。Host-only bridge 使用 `application/octet-stream` streaming，不再整文件 `arrayBuffer()/Buffer.concat()`，Runner transport hard cap 为 256 MiB，并继续受 Artifact 自身单文件/总量/磁盘 quota 限制；分别要求 `environment.execute + artifacts.write`（workspace→artifact）或 `environment.execute + artifacts.read`（artifact→workspace）。这不是跨 Plugin workspace 共享机制，也不会把 Artifact API 或 transfer handle 直接交给 Runner Plugin。
+AppStorage 使用 `(userId,appId,key)`，单 value 64 KiB、单 App 16 MiB，CAS version；插件不能自建 SQL 或读取其他 App 表。Frontend/Backend target 访问 AppStorage 都由 Backend 重新校验当前 App 安装/启用状态。Runner Plugin 的 `workspace.read/write` SDK 仍是单次有界 `Uint8Array` API（当前 binary frame 最大 16 MiB），避免插件通过一个 IPC 请求无限占用内存；需要长期保留或搬运更大文件时，由 Backend 的 `agent/exchange` Workspace↔Artifact bridge 做明确生命周期转换。Host-only bridge 使用 `application/octet-stream` streaming，不再整文件 `arrayBuffer()/Buffer.concat()`，Runner transport hard cap 为 256 MiB，并继续受 Artifact 自身单文件/总量/磁盘 quota 限制；分别要求 `workspace.runtime.execute + artifacts.write`（workspace→artifact）或 `workspace.runtime.execute + artifacts.read`（artifact→workspace）。这不是跨 Plugin workspace 共享机制，也不会把 Artifact API 或 transfer handle 直接交给 Runner Plugin。
 
 跨层调用必须经过 Host：Frontend Plugin → Frontend bridge → authenticated Backend API；Backend Plugin → Backend Host IPC；Runner Plugin → Runner Host IPC。Frontend Plugin 不能直连 Runner，Backend Plugin 不能拿 Runner 内部对象，Runner Plugin 不能直连 Backend DB/API。Docker 也不是 Runner Plugin SDK 的隐式能力；真实 Docker 操作属于 Nexus Backend 的 `machine.docker.*` capability。
 
@@ -183,10 +183,10 @@ AppStorage 使用 `(userId,appId,key)`，单 value 64 KiB、单 App 16 MiB，CAS
 
 升级流程：stage → 验签/校验 targets → 暂停该 App 新 Run → 等待旧 Run 终态 → AppStorage snapshot → 在 Backend target sandbox 执行 migration（若声明）→ health → 原子切 `activeVersion`。失败恢复 snapshot/旧 pointer；不声称能回滚已发生的远端副作用。停用不卸载；卸载代码不自动删除长期数据；`deleteData` 是独立高风险动作。
 
-Environment 内每个 Runner Plugin 有自己的逻辑 workspace：
+每个 Workspace generation 内的 Runner Plugin 有自己的逻辑 workspace：
 
 ```text
-Environment A
+Workspace A
 ├─ core/workspace/
 ├─ plugins/plugin1/workspace/
 ├─ plugins/plugin2/workspace/
@@ -204,9 +204,9 @@ type WorkspaceGrant = {
 };
 ```
 
-例如 plugin2 调用 `workspace.read('plugin1','/output/report.json')` 时，Runner 检查 `plugin1` 的 grant 是否允许 `principalPluginId=plugin2 + read + path`。授权后读取的是 plugin1 workspace 的**同一份底层文件**，不 copy/paste；撤销 grant 后访问立即失败，原文件不变。`..`、真实宿主绝对路径、symlink 逃逸和跨 Environment target 全部拒绝。Backend 的 grant API 先验证 `userId + appId + environmentId` 所有权以及 target/principal 均是该 Environment 冻结的 Runner Plugin，Runner 再做第二次验证。
+例如 plugin2 调用 `workspace.read('plugin1','/output/report.json')` 时，Runner 检查 `plugin1` 的 grant 是否允许 `principalPluginId=plugin2 + read + path`。授权后读取的是 plugin1 workspace 的**同一份底层文件**，不 copy/paste；撤销 grant 后访问立即失败，原文件不变。`..`、真实宿主绝对路径、symlink 逃逸和跨 Workspace target 全部拒绝。Backend 的 grant API 先验证 `userId + appId + workspaceId + generation` 所有权以及 target/principal 均是该 Workspace Profile 冻结的 Runner Plugin，Runner 再做第二次验证。
 
-AppIntent 只传 schema-validated 小 JSON/ArtifactRef：发送/接收双方 manifest、当前 grants 和目标 App 状态均检查；确认后创建 receiver grant，原 Artifact owner 不变。grant 可撤销、有 TTL，不带 SSH handle、secret 或完整私有历史；接收 App 再执行工具时重新授权。AppIntent 是跨 App 的长期数据交接机制，与同一 Environment 内 Runner Plugin 的 workspace grant 不混用。
+AppIntent 只传 schema-validated 小 JSON/ArtifactRef：发送/接收双方 manifest、当前 grants 和目标 App 状态均检查；确认后创建 receiver grant，原 Artifact owner 不变。grant 可撤销、有 TTL，不带 SSH handle、secret 或完整私有历史；接收 App 再执行工具时重新授权。AppIntent 是跨 App 的长期数据交接机制，与同一 Workspace generation 内 Runner Plugin 的 workspace grant 不混用。
 
 ### 4.4 Nexus Workspace、Runner Plugin 与 Host bridge 的协议必须独立
 
@@ -217,7 +217,7 @@ Nexus 现在同时存在多条“传 bytes”的路径，但它们属于不同 r
 | Browser ↔ Nexus Workspace           | `NXW1` / `binaryProtocolVersion=1`  | Workspace runtime 的交互终端、SFTP 读取、编辑器 raw snapshot、suspend history | client→server 仍是最大 1 MiB JSON control；server→browser binary 使用固定 16-byte header，区分 terminal / request-scoped response，UTF-8 requestId 最多 128 bytes，单 payload frame 最大 256 KiB，binary response 以 final frame 收尾；禁止 Base64 data payload |
 | Browser → upload stream             | `/ws/uploads` raw binary            | Workspace Transfer/Upload                                                     | 一条 socket 对应一个 upload，WebSocket message 按序就是文件 bytes；声明总大小决定完成边界，不套 `NXW1`，避免 bulk upload 与主 Workspace control/terminal 互相 head-of-line blocking                                                                             |
 | Runner Plugin sandbox ↔ Runner Host | `NXR2` / Runner `protocolVersion=2` | 单个 Runner Plugin 的 local stdio SDK IPC                                     | 固定 16-byte header + uint32 requestId；JSON control 最大 256 KiB，单次 workspace binary 最大 16 MiB；callerPluginId 由 Host 绑定；禁止 Base64 和任意 Host object                                                                                               |
-| Backend ↔ `nexus-agent-runner`      | authenticated Controller HTTP       | Environment command、Catalog、Workspace↔Artifact Host bridge                  | 控制体有界 JSON；workspace bridge 使用 `application/octet-stream` streaming，精确 `Content-Length`，当前 hard cap 256 MiB；它不是 Runner Plugin SDK，也不把 transport handle 暴露给 Plugin/Frontend                                                             |
+| Backend ↔ `nexus-agent-runner`      | authenticated Controller HTTP       | Workspace command、Catalog、Workspace↔Artifact Host bridge                    | 控制体有界 JSON；workspace bridge 使用 `application/octet-stream` streaming，精确 `Content-Length`，当前 hard cap 256 MiB；它不是 Runner Plugin SDK，也不把 transport handle 暴露给 Plugin/Frontend                                                             |
 
 这四条路径只共享“有界、可取消、fail closed、raw bytes 不 Base64 膨胀”的原则，不共享 magic、requestId 类型、版本号或生命周期。`NXW1 v1` 与 Plugin Frontend/Backend target 的 `protocolVersion=1` 也只是各自独立协议碰巧同号，不能建立兼容关系。Workspace 和 Agent 可以复用 Platform filesystem/execution capability，但不得复用彼此 live socket、PTY/SFTP、cwd、ExecutionSession、Runner workspace handle 或协议内部对象。
 
@@ -235,7 +235,7 @@ Context 分稳定前缀（安全/工具协议）、半稳定任务计划和动�
 
 Token 以每次 request input+output 累计，包括重试、cached input 和失败调用的保守估计；不是仅计算新增文本。Context 输入上限 min(32000, modelWindow-outputReserve)，估算额外预留15%；每次调用前同时预留输入和最大输出，完成后按 usage 结算。usage 缺失用保守上界，不当作零。价格来自版本化配置，以 integer micro-USD 存储；未知价格返回 null，不伪装免费。设置了 cost budget 而价格未知时禁止开始。用户可调的 Run token/step/active-time/cost 都是**软预算**：下一步预留会越过当前预算时不把 Run 判失败，而是在安全边界进入 `awaiting_budget`、释放执行/model/tool slot并提醒用户；只有用户显式提高**本次 Run**预算后才继续。Agent Settings 同时提供管理员可配置的 Hard Limits，作为本实例对 Run/并发/环境资源的最终策略上限；普通 Settings 上调不自动放大已运行 Run。Hard Limit 提高必须二次确认，确认界面显示旧值→新值、可能增加的模型成本/CPU/内存/磁盘/并发压力及当前资源状态。模型真实 context/output 能力、Runner/宿主实际可分配资源和协议/数据库固定 guardrail 是运行事实或正确性约束，不再形成第二套配置层；超出真实能力时该次操作明确失败或降级，不悄悄套用其他资源上限。
 
-Agent Settings是宿主级配置中心，不只配置模型。UI分为模型与Provider、执行与性能、预算与上下文、Hard Limits、Subagent、Artifact与存储、Environment、安全与网络等小模块，并提供只读系统保护页。软预算显示requested/effective，Hard Limits模块允许管理员配置本实例的Run/并发/Artifact/Environment资源上限；任何提高都必须经过二次确认。数据库/event/SSE正确性guardrail保持只读，模型真实window与宿主当前资源作为运行时能力直接展示，不再作为另一层Hard Limit。模型并发默认`auto`跟随当前有效AgentRuntime执行并发（默认2），用户可主动降到1等更保守值；实际模型请求仍受Provider自身限流/能力影响。
+Agent Settings是宿主级配置中心，不只配置模型。UI分为模型与Provider、执行与性能、预算与上下文、Hard Limits、Subagent、Artifact与存储、Workspace Runtime、安全与网络等小模块，并提供只读系统保护页。软预算显示requested/effective，Hard Limits模块允许管理员配置本实例的Run/并发/Artifact/Workspace Runtime资源上限；任何提高都必须经过二次确认。数据库/event/SSE正确性guardrail保持只读，模型真实window与宿主当前资源作为运行时能力直接展示，不再作为另一层Hard Limit。模型并发默认`auto`跟随当前有效AgentRuntime执行并发（默认2），用户可主动降到1等更保守值；实际模型请求仍受Provider自身限流/能力影响。
 
 只缓存只读工具：key 包含 app、target fingerprint、规范化参数、观察版本、工具版本，TTL 最多5秒；命中仍计 Run step 并重新授权。修改成功或未知结果立即失效相关缓存；不缓存 mutation、审批或凭据。每个 model/tool/verification/delegation 都计入统一 `maxRunSteps` 软预算；连续3步无新增证据或相同失败签名连续3次由 loop guard 阻止继续自动换方法。软预算耗尽只暂停询问用户，Agent Settings Hard Limits 和 loop guard 才是无限运行的最终保护。评测同时比较任务成功率、验证率、Token 与恢复率，不能只用省 Token 掩盖失败。
 
@@ -243,7 +243,7 @@ Agent Settings是宿主级配置中心，不只配置模型。UI分为模型与P
 
 唯一 AgentTool 接口为 descriptor/inspect/execute/verify；inspect 无副作用，execute 只收已经复查的 ToolInspection。共享 ToolExecutor 控制所有安全步骤，工具不能自行省略。
 
-Tool 不再在 composition root 以大量零散 `register(tool)` 形成隐式目录。每个能力通过显式 `CapabilityContribution {schemaVersion,id,capability,tools[]}` 注册，Catalog 强制 contribution 内每个 Tool 的 `descriptor.capability` 与声明 capability 相同；静态 machine/environment/runtime 能力和动态 MCP 都走同一 contribution 边界。Target 表示代码运行位置，Capability 表示“允许做什么”，二者不能互相替代；以后增加 Kubernetes/DB/Cloud 也是新增明确 capability contribution，而不是增加新的 Plugin target 或字符串映射 dispatcher。
+Tool 不再在 composition root 以大量零散 `register(tool)` 形成隐式目录。每个能力通过显式 `CapabilityContribution {schemaVersion,id,capability,tools[]}` 注册，Catalog 强制 contribution 内每个 Tool 的 `descriptor.capability` 与声明 capability 相同；静态 machine/workspace-runtime/runtime 能力和动态 MCP 都走同一 contribution 边界。Target 表示代码运行位置，Capability 表示“允许做什么”，二者不能互相替代；以后增加 Kubernetes/DB/Cloud 也是新增明确 capability contribution，而不是增加新的 Plugin target 或字符串映射 dispatcher。
 
 operationHash 使用版本化 canonical JSON 的 UTF-8 SHA-256，包含 actor scope、tool/version、target fingerprint、normalized arguments、secret 引用版本、policyRevision 和前置条件。具体编码与测试向量见实施 §5。Approval 绑定精确 hash，600秒有效；前端 hash 只是 UI 对齐，服务端复算。approval resolve 与 execute 前都复查；网络 inspect 在事务外，提交用 version/policyRevision/hash CAS，不能拿 DB 锁等待 SSH。
 
@@ -293,7 +293,7 @@ Memory 一期只读检索；默认不自动写，不安装向量数据库。采�
 
 `nexus-agent-runner` 是 Nexus 的受限本地执行服务，但**不是 Docker controller**。Runner、Backend、Workspace sandbox 与 Plugin sandbox 都不持 host Docker socket；Runner 不运行 dockerd、不使用 dockerode、不使用 nested Docker，Plugin 也不会创建额外 Docker。
 
-当前 canonical Linux 部署将 `nexus-agent-runner` 作为专用 host service，而不是在长期运行的 Docker Runner 容器里嵌套 bubblewrap。原因是 bubblewrap 构造 mount namespace 时需要 mount propagation 操作，Docker 默认 AppArmor 会在外层容器边界拒绝这类 mount；不能为了让测试通过而把整个 Runner 改成 `privileged`、`apparmor=unconfined` 或继续堆叠 capability。Ubuntu 24.04+ 若启用了 AppArmor unprivileged-userns 限制，必须为发行版 `/usr/bin/bwrap` 加载 path-scoped `bwrap-userns-restrict` profile；仓库提供 `scripts/agent-runtime/prepare-ubuntu-host.sh` 安装并验证这一 prerequisite，脚本明确不会关闭 `kernel.apparmor_restrict_unprivileged_userns`。Backend 容器通过 host-gateway 到达 Runner 的受认证 Controller HTTP；Runner 默认只监听 loopback，部署时应显式绑定仅 Backend 可达的宿主接口并配合防火墙。Runner availability 必须真实执行与 job 共用的最小 sandbox probe，sandbox primitive 不可用时继续 degraded/fail closed。
+当前 canonical Linux 部署将 `nexus-agent-runner` 作为专用 host service，而不是在长期运行的 Docker Runner 容器里嵌套 bubblewrap。原因是 bubblewrap 构造 mount namespace 时需要 mount propagation 操作，Docker 默认 AppArmor 会在外层容器边界拒绝这类 mount；不能为了让测试通过而把整个 Runner 改成 `privileged`、`apparmor=unconfined` 或继续堆叠 capability。Ubuntu 24.04+ 若启用了 AppArmor unprivileged-userns 限制，仓库通过 `scripts/agent-runtime/prepare-ubuntu-host.sh` 从上游 release 安装当前固定的最新稳定 `bubblewrap 0.12.0`（SHA-256 校验）到 Nexus-owned root-only 路径，并只为该路径加载 `nexus-bwrap-userns-restrict` profile；系统 `/usr/bin/bwrap` 不被覆盖，脚本明确不会关闭 `kernel.apparmor_restrict_unprivileged_userns`。具体 Bubblewrap release/version/SHA 由 host prepare、Docker build 与仓库 check 脚本统一约束；Runner/Plugin Runtime 代码只做 sandbox availability/真实执行的 fail-closed，不重复硬编码版本门槛。Backend 容器通过 host-gateway 到达 Runner 的受认证 Controller HTTP；Runner 默认只监听 loopback，部署时应显式绑定仅 Backend 可达的宿主接口并配合防火墙。Runner availability 必须真实执行与 job 共用的最小 sandbox probe，sandbox primitive 不可用时继续 degraded/fail closed。
 
 ```text
 Host deployment
@@ -307,28 +307,30 @@ Host deployment
    │  └─ go/1.22 + go/1.23
    ├─ Workspace A
    │  ├─ stable project filesystem
-   │  ├─ Environment generation -> node22 + python3.12 + go1.23
+   │  ├─ generation -> node22 + python3.12 + go1.23
    │  └─ runtime sessions -> Agent / Plugin / CI-task / future Terminal
    └─ Workspace B
       ├─ stable project filesystem
-      └─ Environment generation -> node18 + python3.10
+      └─ generation -> node18 + python3.10
 ```
 
-**Workspace 是稳定项目边界，Environment 是 Workspace 的运行配置/generation。** Node、Python、Go 不是三个 Environment，而是一个 Workspace Dev Environment 里的工具族。每个 sandbox 仍至少隔离 filesystem view、PID/IPC/UTS/network namespace、环境变量、cwd、临时目录和 process tree；Environment generation 停止/重建会终止旧 runtime session，但不会替换 Workspace 项目文件。
+**Workspace 是稳定项目边界，Profile 是运行配置，Generation 是一次运行实例。** Node、Python、Go 不是独立运行实体，而是一个 Workspace Profile 里的工具族。每个 sandbox 仍至少隔离 filesystem view、PID/IPC/UTS/network namespace、环境变量、cwd、临时目录和 process tree；generation 停止/重建会终止旧 runtime session，但不会替换 Workspace 项目文件。
 
-真实 Docker 管理仍是另一条业务能力：Agent → Backend capability → manifest grant → Policy → Approval → Lease/MutationGuard → Nexus `RemoteDockerService` → 用户目标机器。它不经过 Runner 的 Workspace Dev Environment，也不会把任何 Docker socket 交给 Runner/Plugin。
+Runtime consumer 的统一范围必须固定：Agent one-shot job、Runner Plugin、CI/task 与未来的**本地** Terminal 可以共享 `workspaceId + generation`、Workspace/Profile、Tool Store 和 sandbox execution contract；但 owner/transport 仍各自独立。现有 SSH Terminal/SFTP/远程 Docker 属于 Nexus `modules/workspace` 与 remote-machine capability，它们的 live SSH session、PTY、cwd、SFTP socket 不进入 Runner；RDP/VNC 继续属于 Guacamole runtime。未来若实现本地交互式 Terminal，应新增 Workspace Runtime interactive-session port，不能复用 Agent 模型身份，也不能把现有 `WorkspaceTerminalService` 搬进本地 Runner。
+
+真实 Docker 管理仍是另一条业务能力：Agent → Backend capability → manifest grant → Policy → Approval → Lease/MutationGuard → Nexus `RemoteDockerService` → 用户目标机器。它不经过本地 Workspace Runtime，也不会把任何 Docker socket 交给 Runner/Plugin。
 
 典型流程变为 Artifact/受控输入 → 选择 Workspace → 冻结该 Workspace 的 Tool versions/Runner Plugin targets → Sandbox Manager 建立 runtime generation → Agent/Plugin/CI-task 在同一 Workspace 文件视图中执行 → Artifact/结构化证据 → Verifier；若之后要修改真实远端机器，再进入 Backend 的 Policy/Approval/Lease 链。
 
 ### 9.1 Catalog、runtimeDigest 与多版本 Tool Store
 
-Environment Catalog 由 Nexus 发行物提供，Frontend 不硬编码版本。Catalog 包含：
+Workspace Runtime Catalog 由 Nexus 发行物提供，Frontend 不硬编码版本。Catalog 包含：
 
 1. **Tool Pack**：Node/Python/Go/JDK/Rust/CUDA/Chromium/data-tools 等 content-addressed immutable 工具链，记录 `familyId/versionId/contentDigest`、架构下载来源、capabilities、`runnerApiRange`、diskBytes、依赖、支持架构及 supported/deprecated/unavailable 状态。
-2. **Workspace Profile**：当前产品只暴露统一的 `workspace-dev` 开发环境 profile；它定义允许的 Tool family、基础工具、资源需求和网络默认值。当前 transport 中 `kind=code` 仍作为兼容字段保留，不再代表产品上存在独立的 code Environment。
+2. **Workspace Profile**：当前产品只暴露统一的 `workspace-dev` 开发环境 profile；它定义允许的 Tool family、基础工具、资源需求和网络默认值。当前 transport 中 `kind=code` 仍作为兼容字段保留，不再代表产品上存在独立的 code 运行实体。
 3. **runtimeDigest**：当前 Runner sandbox ABI/runtime 的精确版本事实，不表示某个子 Docker image。
 
-Tool Store 的安装 key 为 `familyId/versionId/contentDigest`；Catalog 先按当前 arch 解析对应 digest。同一 family 的多个版本可以同时 installed/enabled/inUse，例如 Node 18/20/22 与 Python 3.10/3.12 并存；不同 Workspace 的 Environment profile 冻结各自精确 `packRefs`，因此 Workspace A 可以使用 Node 22 而 Workspace B 同时保持 Node 18。
+Tool Store 的安装 key 为 `familyId/versionId/contentDigest`；Catalog 先按当前 arch 解析对应 digest。同一 family 的多个版本可以同时 installed/enabled/inUse，例如 Node 18/20/22 与 Python 3.10/3.12 并存；不同 Workspace Profile 冻结各自精确 `packRefs`，因此 Workspace A 可以使用 Node 22 而 Workspace B 同时保持 Node 18。
 
 Workspace 切换工具版本必须执行：确保目标 Tool Pack 已下载并校验 → 停止/替换该 Workspace 的旧 runtime generation → 创建新 generation 并冻结新的 `packRefs` → 把**同一稳定 Workspace filesystem** bind 到 `/workspace` → 根据新 generation 生成 PATH/只读工具挂载。这个过程不得修改 Runner 进程全局 PATH、宿主 `/usr/bin` 或其他 Workspace 的 profile。旧 generation 的 process/session 必须终止，不能在版本切换后继续持有旧工具或 lease。
 
@@ -343,13 +345,13 @@ Runner 数据根固定分区：
   state/        # durable journal/inventory/watermark
   packs/        # durable immutable packs
   cache/        # reclaimable download/staging cache
-  runtime/      # stable Workspace data + Environment generation/runtime lifecycle data
+  runtime/      # stable Workspace data + generation/runtime lifecycle data
   quarantine/   # 未确认 ownership/side-effect 残余
 /run/nexus-agent-runner/
   ...           # 仅短期控制面数据；不放长期业务事实
 ```
 
-Workspace 的稳定数据与 Environment generation 分开存放：
+Workspace 的稳定数据与 generation 分开存放：
 
 ```text
 runtime/
@@ -373,21 +375,21 @@ runtime/
     plugins/
       <plugin1>/workspace/
       <plugin2>/workspace/
-  environments/<workspaceId>/<generation>/
+  generations/<workspaceId>/<generation>/
     .control/
       metadata.json
       state
 ```
 
-`runtime/workspaces/<workspaceId>/` 是稳定项目边界；切换 Node/Python/Go 版本或重建 Environment generation 不改变它。`runtime/environments/.../<generation>/` 只保存这一代运行配置与状态，因此旧 runtime 可以被停止/删除而不复制项目文件。平台管理的工具依赖与构建缓存按冻结 `runtimeDigest + packRefs` 计算的 `toolchainFingerprint` 分区到 `core/toolchains/<fingerprint>/`；sandbox 把当前 profile 的 `deps/build` 映射为 `/workspace/deps`、`/workspace/build`，并把 npm/pip/Go cache 指向该 profile，所以切到 Node 22/Python 3.12 不会污染 Node 20/Python 3.10 的平台依赖缓存，切回旧版本时又能复用原 profile。用户自行在源码树创建的 `node_modules`、`.venv` 或其他目录属于项目数据，不宣称自动 ABI 隔离；需要稳定跨版本行为时应使用 `/workspace/deps` 或由上层依赖管理器基于当前 `NEXUS_TOOLCHAIN_FINGERPRINT` 建立自己的版本化目录。`.control` 只属于 Runner Core，任何 job/plugin sandbox 都不可见。core task sandbox 只看到稳定 `/workspace` 和该 generation 冻结的精确 Tool Pack；Runner Plugin sandbox 不直接看到真实 `plugins/<id>/workspace`，只经 Workspace Broker SDK 访问。
+`runtime/workspaces/<workspaceId>/` 是稳定项目边界；切换 Node/Python/Go 版本或重建 generation 不改变它。`runtime/generations/.../<generation>/` 只保存这一代运行配置与状态，因此旧 runtime 可以被停止/删除而不复制项目文件。平台管理的工具依赖与构建缓存按冻结 `runtimeDigest + packRefs` 计算的 `toolchainFingerprint` 分区到 `core/toolchains/<fingerprint>/`；sandbox 把当前 profile 的 `deps/build` 映射为 `/workspace/deps`、`/workspace/build`，并把 npm/pip/Go cache 指向该 profile，所以切到 Node 22/Python 3.12 不会污染 Node 20/Python 3.10 的平台依赖缓存，切回旧版本时又能复用原 profile。用户自行在源码树创建的 `node_modules`、`.venv` 或其他目录属于项目数据，不宣称自动 ABI 隔离；需要稳定跨版本行为时应使用 `/workspace/deps` 或由上层依赖管理器基于当前 `NEXUS_TOOLCHAIN_FINGERPRINT` 建立自己的版本化目录。`.control` 只属于 Runner Core，任何 job/plugin sandbox 都不可见。core task sandbox 只看到稳定 `/workspace` 和该 generation 冻结的精确 Tool Pack；Runner Plugin sandbox 不直接看到真实 `plugins/<id>/workspace`，只经 Workspace Broker SDK 访问。
 
-Workspace 规则固定：自己的 logical workspace 默认允许，其他 Plugin workspace 默认拒绝；跨 Plugin grant 存在于**目标 workspace ACL**，并随稳定 Workspace 保存。授权对象由 `targetPluginId + principalPluginId + path + permissions` 明确表达。`workspace.read('plugin1','/output/report.json')` 直接读取 plugin1 的原文件，不复制；grant revoke 只撤访问，不移动/删除文件。target/principal 必须都属于当前 Workspace Environment generation 的冻结 `runnerPlugins`；跨 Workspace 永远拒绝。
+Workspace 规则固定：自己的 logical workspace 默认允许，其他 Plugin workspace 默认拒绝；跨 Plugin grant 存在于**目标 workspace ACL**，并随稳定 Workspace 保存。授权对象由 `targetPluginId + principalPluginId + path + permissions` 明确表达。`workspace.read('plugin1','/output/report.json')` 直接读取 plugin1 的原文件，不复制；grant revoke 只撤访问，不移动/删除文件。target/principal 必须都属于当前 Workspace generation 的冻结 `runnerPlugins`；跨 Workspace 永远拒绝。
 
 空间统计分 `stateBytes / packBytes / cacheBytes / runtimeBytes / quarantineBytes / sandboxOverheadBytes`。`sandboxOverheadBytes` 只表示无法归入前五类的 sandbox/process runtime 开销，不再统计 Docker image/container/volume。当前没有额外可归因开销时可为 0。禁止重复计费。
 
 ### 9.3 Sandbox Manager、Job 与网络边界
 
-Runner 使用独立 Sandbox Manager（当前 Linux 实现基于 bubblewrap）启动 Workspace Environment job 和 Runner Plugin process。边界要求：
+Runner 使用独立 Sandbox Manager（当前 Linux 实现基于 bubblewrap）启动 Workspace generation job 和 Runner Plugin process。边界要求：
 
 - 新 PID、IPC、UTS、network namespace；默认 network `none`。
 - sandbox payload 启动前显式 drop all Linux capabilities；host Runner 只承担 sandbox construction，不把 Runner token/env 或宿主控制目录传入 payload。
@@ -397,21 +399,21 @@ Runner 使用独立 Sandbox Manager（当前 Linux 实现基于 bubblewrap）启
 - generation stop/delete/version-switch 必须终止其 process tree；新 generation 使用同一 Workspace 文件但重新建立 sandbox/PATH/tool mounts，旧 generation 回调不得写新 generation。
 - allowlist 网络只有存在真实 enforcement broker 时才 advertise；当前若 `egressAllowlist=false`，请求 allowlist 必须 fail closed，不能退化为 unrestricted 网络。
 
-Environment ResourceLimits 仍用于 admission/quota、运行监控和后续 kernel enforcement。某项要求严格 kernel limit 而当前部署无法提供时，Runner 必须报告 capability 缺失或拒绝对应高风险模式，不能用“目录隔离”冒充完整资源隔离。
+Workspace Profile ResourceLimits 仍用于 admission/quota、运行监控和后续 kernel enforcement。某项要求严格 kernel limit 而当前部署无法提供时，Runner 必须报告 capability 缺失或拒绝对应高风险模式，不能用“目录隔离”冒充完整资源隔离。
 
-Backend 与 Runner 只通过受认证 Controller protocol 交换冻结命令；请求包含 `deploymentId/userId/appId/runId/agentRuntimeId/groupId/environmentId/generation/runtimeDigest/catalogRevision/packRefs/runnerPlugins/operationHash/deadline/nonce`。Runner 再校验 Catalog、generation、quota 和 target 格式。Frontend/模型不能提交宿主路径、进程 handle 或 sandbox binary 参数。
+Backend 与 Runner 只通过受认证 Controller protocol 交换冻结命令；请求包含 `deploymentId/userId/appId/runId/agentRuntimeId/workspaceId/generation/runtimeDigest/catalogRevision/toolchain/runnerPlugins/operationHash/deadline/nonce`。Runner 再校验 Catalog、generation、quota 和 target 格式。Frontend/模型不能提交宿主路径、进程 handle 或 sandbox binary 参数。
 
 ### 9.4 生命周期、Cleanup 与恢复
 
-provision：验证命令 → ensure Tool Pack → 创建/复用稳定 Workspace tree → 创建新的 Environment generation `.control` → 冻结该 generation 的 tool refs/Runner Plugin targets → journal `ready`。不会创建 Docker/container/network/volume。
+provision：验证命令 → ensure Tool Pack → 创建/复用稳定 Workspace tree → 创建新的 generation `.control` → 冻结该 generation 的 tool refs/Runner Plugin targets → journal `ready`。不会创建 Docker/container/network/volume。
 
-start：Environment generation 转 running，并按冻结 target 启动 Runner Plugin sandboxes。stop：先 quiesce/dispose Runner Plugin，再终止该 generation 活跃 job/process tree，保留稳定 Workspace。restart：终止旧 process tree，按同一 generation 冻结事实重新建立 sandbox。version-switch/recreate：先停止旧 generation，再使用新的 tool refs 创建下一 generation；稳定 Workspace 不移动、不复制。delete generation：dispose 插件、终止 job、删除该 generation runtime；长期 AppStorage/Artifact 与稳定 Workspace 不因 generation 删除而自动消失。
+start：Workspace generation 转 running，并按冻结 target 启动 Runner Plugin sandboxes。stop：先 quiesce/dispose Runner Plugin，再终止该 generation 活跃 job/process tree，保留稳定 Workspace。restart：终止旧 process tree，按同一 generation 冻结事实重新建立 sandbox。version-switch/recreate：先停止旧 generation，再使用新的 tool refs 创建下一 generation；稳定 Workspace 不移动、不复制。delete generation：dispose 插件、终止 job、删除该 generation runtime；长期 AppStorage/Artifact 与稳定 Workspace 不因 generation 删除而自动消失。
 
-Runner startup reconcile 遍历 journal：running Environment 检查 sandbox runtime 事实并重新激活其冻结 Runner Plugin；中断中的 command/job 标记 unknown/reconciliation-required，不假装成功。旧 generation 的回调不得写新 generation。
+Runner startup reconcile 遍历 journal：running Workspace 检查 generation sandbox runtime 事实并重新激活其冻结 Runner Plugin；中断中的 command/job 标记 unknown/reconciliation-required，不假装成功。旧 generation 的回调不得写新 generation。
 
-“清运行残余”不再删除 Docker resource，而是：freeze new env/jobs → quiesce/terminate owned process trees → reconcile unknown → 删除确认归属的 generation runtime；只有在明确执行 Workspace runtime cleanup 且不存在受保护/活跃 generation 时才删除 `runtime/workspaces/<workspaceId>` → 清短期控制面数据 → release quota → compact journal → second inventory。无法确认 ownership/side effect 的数据进入 `quarantine/`。Tool Pack uninstall 与 runtime cleanup 分开；停止/切换 Environment generation 都不会自动卸载 Tool Pack。
+“清运行残余”不再删除 Docker resource，而是：freeze new workspace/jobs → quiesce/terminate owned process trees → reconcile unknown → 删除确认归属的 generation runtime；只有在明确执行 Workspace runtime cleanup 且不存在受保护/活跃 generation 时才删除 `runtime/workspaces/<workspaceId>` → 清短期控制面数据 → release quota → compact journal → second inventory。无法确认 ownership/side effect 的数据进入 `quarantine/`。Tool Pack uninstall 与 runtime cleanup 分开；停止/切换 Workspace generation 都不会自动卸载 Tool Pack。
 
-Runner 备份默认不包含 Packs/runtime/cache，只保存 Nexus DB 中 Settings、PackRef、Environment target snapshot 和 Run/Checkpoint 事实。恢复后 Runner 根据 Catalog/Settings 重新核对所需 Pack；缺失明确显示，不伪装旧 sandbox 仍存在。
+Runner 备份默认不包含 Packs/runtime/cache，只保存 Nexus DB 中 Settings、PackRef、Workspace Profile/Runner target snapshot 和 Run/Checkpoint 事实。恢复后 Runner 根据 Catalog/Settings 重新核对所需 Pack；缺失明确显示，不伪装旧 sandbox 仍存在。
 
 ## 10. MCP、ACP、CDP 和多 Agent（Phase 3）
 
@@ -419,7 +421,7 @@ MCP 首版只支持管理员登记的 Streamable HTTP，非任意模型提供 UR
 
 ACP 采用隔离外部 backend adapter，权限请求映射成本地 ToolInspection/Approval；外部 Agent 的自主 filesystem/network 禁止访问 Nexus 或生产连接，所有生产作用经过本地 capability RPC。无法拦截外部实现自主副作用的 ACP backend 只允许离线分析，不注册为运维执行器。适配器握手协商协议版本，不支持版本直接 degraded，不静默 fallback。
 
-CDP endpoint 只在 browser environment 内，由 Gateway代理；BrowserSession绑定环境generation。snapshot 返回 nodeRef=(snapshotId,nodeIndex)，导航/DOM版本改变后旧 ref失效；navigate/click/type/download均按 action检查域名、会话、风险和预算。evaluate默认无capability，不接受任意selector/JS替代nodeRef。Cookie/profile不跨Run；页面文本、下载文件是untrusted。截图/DOM超64KiB转Artifact；type secret用短期secretRef，审计只存redacted。
+CDP endpoint 只在 browser Workspace Profile/Generation 内由 Gateway 代理；BrowserSession 绑定明确的 workspaceId + generation。snapshot 返回 nodeRef=(snapshotId,nodeIndex)，导航/DOM版本改变后旧 ref失效；navigate/click/type/download均按 action检查域名、会话、风险和预算。evaluate默认无capability，不接受任意selector/JS替代nodeRef。Cookie/profile不跨Run；页面文本、下载文件是untrusted。截图/DOM超64KiB转Artifact；type secret用短期secretRef，审计只存redacted。
 
 多 Agent 通过原生 Subagent 实现 Coordinator/Worker/Reviewer。Subagent **不设置累计创建数量上限，也不再设置独立的 Subagent 并发上限**；完成/失败/取消的历史 Subagent 不占未来创建名额。所有 root/child 统一受全局 `maxConcurrentRuntimes`（默认软值2，默认Hard Limit 4）调度，超过可执行 Runtime 数量的子任务进入有界队列；设置页直接显示当前 executing Runtime 数、requested/effective 与当前 Hard Limit。全局模型并发是独立软上限，默认`auto`跟随有效Runtime并发并可由用户调低；因此 Runtime 可以处于 runnable/tool/waiting，而只有取得model slot的参与者才能发起模型stream。Subagent只保留 `maxDelegationDepth`（默认软值2、默认Hard Limit 3且可在Agent Settings二次确认调整，root为0）及 profile/model/budget 约束。
 
@@ -465,15 +467,15 @@ SharedFacts只允许run-scoped key/value+version CAS，值64KiB、单Run总1MiB�
 
 ## 11. 前端 UI 与原页面兼容
 
-全局只有一个 AgentLauncher 和一个 AgentHubWindow，挂在 App.vue 的 RouterView 外、登录后可见；**Agent 只提供全局非模态浮窗，不提供独立全页 presentation，不修改当前 RouterView 路由，也不改 AppHeader/顶部横向导航。** Agent Hub 采用**conversation-first**：中间 Conversation 是始终存在的主工作区，用户通过自然语言产生目标、计划、执行任务、审批和结果；Run/Step/Subagent/Environment 是对话派生的执行事实，不把用户强制切换到独立“任务管理后台”。窗口非模态，不锁body、不遮原终端，不引用 RemoteDesktopModal 的连接或Guacamole对象。默认1080×700、最小640×420（小视口例外），边界按顶部导航/visualViewport clamp；宽<1200收任务详情，宽<768用全宽sheet，避让虚拟键盘/安全区。
+全局只有一个 AgentLauncher 和一个 AgentHubWindow，挂在 App.vue 的 RouterView 外、登录后可见；**Agent 只提供全局非模态浮窗，不提供独立全页 presentation，不修改当前 RouterView 路由，也不改 AppHeader/顶部横向导航。** Agent Hub 采用**conversation-first**：中间 Conversation 是始终存在的主工作区，用户通过自然语言产生目标、计划、执行任务、审批和结果；Run/Step/Subagent/Workspace 是对话派生的执行事实，不把用户强制切换到独立“任务管理后台”。窗口非模态，不锁body、不遮原终端，不引用 RemoteDesktopModal 的连接或Guacamole对象。默认1080×700、最小640×420（小视口例外），边界按顶部导航/visualViewport clamp；宽<1200收任务详情，宽<768用全宽sheet，避让虚拟键盘/安全区。
 
-Launcher只定义**单击**打开：恢复上一次选中的有效App及其会话视图状态；移动>6px视为拖动并取消本次打开，pointercancel/卸载释放capture，Enter/Space立即打开并忽略repeat/合成click。App切换始终在Hub内部完成：标题区/会话栏顶部提供常驻的单选`AgentAppSwitcher`，可搜索授权App并显示最近项；选择A→B只改变前台presentation，A已启动的Run/Environment/Subagent/审批/预算等待全部继续，不能因切换App、最小化或关闭Hub而cancel。Host持续订阅各App安全summary；非当前App暂停详细SSE和重型视图，重新切回时用snapshot+catchup恢复。每个已访问App在当前登录生命周期内保留独立的threadId/draft/scroll/选中task等轻量view state；刷新后运行事实从服务端恢复，未提交draft仍不持久化。无历史默认Operations；停用App过滤，全部无效显示empty-state。
+Launcher只定义**单击**打开：恢复上一次选中的有效App及其会话视图状态；移动>6px视为拖动并取消本次打开，pointercancel/卸载释放capture，Enter/Space立即打开并忽略repeat/合成click。App切换始终在Hub内部完成：标题区/会话栏顶部提供常驻的单选`AgentAppSwitcher`，可搜索授权App并显示最近项；选择A→B只改变前台presentation，A已启动的Run/Workspace/Subagent/审批/预算等待全部继续，不能因切换App、最小化或关闭Hub而cancel。Host持续订阅各App安全summary；非当前App暂停详细SSE和重型视图，重新切回时用snapshot+catchup恢复。每个已访问App在当前登录生命周期内保留独立的threadId/draft/scroll/选中task等轻量view state；刷新后运行事实从服务端恢复，未提交draft仍不持久化。无历史默认Operations；停用App过滤，全部无效显示empty-state。
 
-Hub内部左侧为可收起的会话/App导航，并提供用户级“文件”入口；中间始终是当前 Conversation + 固定 Composer，右侧为可折叠 TaskRail。文件库打开时复用 Hub 主内容区展示统一 Artifact 管理视图，关闭/返回后恢复原 Thread 的 scroll/draft，不创建第二套会话状态。TaskRail 展示当前会话由 Agent 生成的 typed PlanItem/进行中任务及同 App 的后台活跃 Run 摘要，不复制完整日志；PlanItem 的 status/depends/evidence 与 Run/verification 状态统一走 Agent i18n。点击任务在右侧 TaskDetailDrawer 原位展开步骤、状态、资源、审批、Artifact、Subagent、Environment/Workspace 与日志，关闭详情恢复原 Conversation 滚动锚点和 draft，不切换到第二套 Composer。Root Run 的 Environment 产品入口通过 `environment-groups?runtime=root` 只读取 root runtime 的 group；创建请求只提交 Recipe、显式 Runner Plugin ids 与 retention，由 Backend 解析 root `agentRuntimeId`，浏览器不能伪造 runtime identity。同一 runtime 最多一个状态非 `deleted/failed` 的活跃 EnvironmentGroup，幂等重放先返回原 group，再执行唯一性约束。Environment create/start/restart 与目标 Workspace ACL 写入必须重新通过 `environment.manage` Capability；stop/delete 作为安全收敛路径仍允许 teardown。Workspace↔Artifact 转换继续走 Backend exchange/capability 路径，并分别检查 `environment.execute + artifacts.write/read`，不把 Artifact/Runner 内部对象直接交给前端或 Plugin。Operations 的 Timeline/Approval/Artifact/Token 都作为消息内卡片或 TaskDetail 的按需视图存在；消息 Composer 的“附件/文件”按钮打开轻量选择器，从文件库选现有 Artifact 或上传新文件，“引用知识”则是另一条知识检索入口，二者名称和职责不混用。App切换保留内存draft/scroll，暂停旧详细SSE而不cancel；新App先授权registry→本地contribution map→lazy import→snapshot+catchup。navigationGeneration丢弃过期异步加载。授权失败绝不因本地chunk存在继续渲染。
+Hub内部左侧为可收起的会话/App导航，并提供用户级“文件”入口；中间始终是当前 Conversation + 固定 Composer，右侧为可折叠 TaskRail。文件库打开时复用 Hub 主内容区展示统一 Artifact 管理视图，关闭/返回后恢复原 Thread 的 scroll/draft，不创建第二套会话状态。TaskRail 展示当前会话由 Agent 生成的 typed PlanItem/进行中任务及同 App 的后台活跃 Run 摘要，不复制完整日志；PlanItem 的 status/depends/evidence 与 Run/verification 状态统一走 Agent i18n。点击任务在右侧 TaskDetailDrawer 原位展开步骤、状态、资源、审批、Artifact、Subagent、Workspace Runtime 与日志，关闭详情恢复原 Conversation 滚动锚点和 draft，不切换到第二套 Composer。Root Run 的 Workspace 产品入口读取 `/apps/:appId/runs/:runId/workspaces?runtime=root`，创建请求只提交 Workspace spec（Recipe、版本选择、显式 Runner Plugin ids、资源/网络）与 retention，由 Backend 解析 root `agentRuntimeId`，浏览器不能伪造 runtime identity。同一 runtime 最多一个状态非 `deleted/failed` 的活跃 Workspace，repository 在幂等重放后执行唯一性约束。Workspace create/start/restart 与目标 Workspace ACL 写入必须重新通过 `workspace.runtime.manage` Capability；stop/delete 作为安全收敛路径仍允许 teardown。Workspace↔Artifact 转换继续走 Backend exchange/capability 路径，并分别检查 `workspace.runtime.execute + artifacts.write/read`，不把 Artifact/Runner 内部对象直接交给前端或 Plugin。Operations 的 Timeline/Approval/Artifact/Token 都作为消息内卡片或 TaskDetail 的按需视图存在；消息 Composer 的“附件/文件”按钮打开轻量选择器，从文件库选现有 Artifact 或上传新文件，“引用知识”则是另一条知识检索入口，二者名称和职责不混用。App切换保留内存draft/scroll，暂停旧详细SSE而不cancel；新App先授权registry→本地contribution map→lazy import→snapshot+catchup。navigationGeneration丢弃过期异步加载。授权失败绝不因本地chunk存在继续渲染。
 
-Hub标题/工具区只提供**单选 App 切换**及当前会话/任务所需控制，不支持一个 Run 同时组合多个 App，也不提供 Settings 或 Runner 配置跳转。Agent 的宿主级配置统一并入现有 Nexus `/settings` 页面，新增 `Agent` tab；其中管理 Agent 总开关、App 启停、模型与Provider、执行与性能、预算与上下文、Hard Limits、Subagent、Artifact与存储、Environment/Runner、安全与网络、系统保护。 Agent总开关默认开启；关闭时服务端先禁止新Run/step/Environment claim，再按现有cancel/quiesce/reconcile收敛执行，未知远端副作用仍quarantine。关闭完成后隐藏Launcher；Settings及安全清理/审计入口仍可用，历史会话、文件、配置和审计数据都保留但不通过已关闭的Hub继续交互，重新开启后可重新浏览；重新开启不自动续跑旧Run。Environment Manager 在该 tab 内长期存在：一期显示真实 unavailable，二期启用完整 Catalog/Pack/cleanup 管理，不另造第二套配置状态。系统保护只读展示event batch、commit queue、SSE连接上限、transient delta策略和当前数据库压力/availability；普通用户不能关闭背压或改成逐chunk持久化。执行与性能页允许调低Runtime/模型并发等软上限，模型并发默认Auto跟随Runtime并发。
+Hub标题/工具区只提供**单选 App 切换**及当前会话/任务所需控制，不支持一个 Run 同时组合多个 App，也不提供 Settings 或 Runner 配置跳转。Agent 的宿主级配置统一并入现有 Nexus `/settings` 页面，新增 `Agent` tab；其中管理 Agent 总开关、App 启停、模型与Provider、执行与性能、预算与上下文、Hard Limits、Subagent、Artifact与存储、Workspace Runtime/Runner、安全与网络、系统保护。 Agent总开关默认开启；关闭时服务端先禁止新 Run/step/Workspace Runtime claim，再按现有cancel/quiesce/reconcile收敛执行，未知远端副作用仍quarantine。关闭完成后隐藏Launcher；Settings及安全清理/审计入口仍可用，历史会话、文件、配置和审计数据都保留但不通过已关闭的Hub继续交互，重新开启后可重新浏览；重新开启不自动续跑旧Run。Workspace Runtime Manager 在该 tab 内长期存在：一期显示真实 unavailable，二期启用完整 Catalog/Pack/cleanup 管理，不另造第二套配置状态。系统保护只读展示event batch、commit queue、SSE连接上限、transient delta策略和当前数据库压力/availability；普通用户不能关闭背压或改成逐chunk持久化。执行与性能页允许调低Runtime/模型并发等软上限，模型并发默认Auto跟随Runtime并发。
 
-Launcher角标只订阅Host summary，不加载每App的private store；后台运行、审批和预算请求只更新角标/通知，不自动抢焦点。关闭Hub/最小化/切App都只是presentation动作：释放或暂停不可见重型视图与详细流，保留每App轻量view state和Host摘要，**绝不取消Run/Environment/Subagent**。重新打开默认回到最后选中的App；切回后台App时重新snapshot+catchup当前真实状态。Agent 不新增顶栏导航、不注册独立 Agent 页面路由；任何文件/任务详情都在同一 Hub 内切换并可返回原 Conversation 滚动锚点和 draft。
+Launcher角标只订阅Host summary，不加载每App的private store；后台运行、审批和预算请求只更新角标/通知，不自动抢焦点。关闭Hub/最小化/切App都只是presentation动作：释放或暂停不可见重型视图与详细流，保留每App轻量view state和Host摘要，**绝不取消 Run/Workspace/Subagent**。重新打开默认回到最后选中的App；切回后台App时重新snapshot+catchup当前真实状态。Agent 不新增顶栏导航、不注册独立 Agent 页面路由；任何文件/任务详情都在同一 Hub 内切换并可返回原 Conversation 滚动锚点和 draft。
 
 运行中的 Conversation **始终允许继续输入**。Composer提交先持久化用户输入并立即返回，不等待当前模型/tool/job结束；若模型正在stream则按§7规则终止旧attempt并在下一安全step合并新输入，若不可安全中断的tool/job已started则标记pending input并在结果确认后优先处理。用户可用自然语言纠正目标、改变约束、要求暂停某类动作或继续询问相关内容；前端不猜测“这是聊天还是控制命令”，Harness根据最新input watermark重新规划，任何生产副作用仍需原Policy/Approval/Lease。UI不得因为Run busy/awaiting approval/awaiting budget而禁用Composer，仅取消/登出/会话不可写时禁用。
 

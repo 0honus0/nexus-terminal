@@ -350,7 +350,7 @@
       "title": "Workspace 开发环境",
       "description": "一个 Workspace 共享稳定项目文件，并在独立 generation 中组合 Node、Python、Go 等工具版本与 Runner Plugin。",
       "refresh": "刷新",
-      "recipe": "环境 Profile",
+      "recipe": "Workspace Profile",
       "retained": "保留 Workspace",
       "toolVersions": "工具链版本",
       "toolVersionsHint": "可选工具按版本从共享只读 Tool Store 挂载；不同 Workspace 可使用不同版本。",
