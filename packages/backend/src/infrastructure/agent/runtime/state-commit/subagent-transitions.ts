@@ -17,7 +17,14 @@ import type {
 import type { RunBudget, RunUsage } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
-import { allocateHostEvent, appendEvents, summaryPayload, usageWithDelta } from './transaction-primitives';
+import {
+  allocateHostEvent,
+  appendEvents,
+  cancelRunSubagentWork,
+  summaryPayload,
+  updateAppLiveCount,
+  usageWithDelta,
+} from './transaction-primitives';
 
 export const beginSubagentModelStepTransition = async (
   tx: RelationalDatabase,
@@ -614,6 +621,9 @@ export const settleSubagentToolTransition = async (
   if (delegationChanged.changes !== 1 || runtimeChanged.changes !== 1 || workChanged.changes !== 1) {
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
+  const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
+  const finalCancellation = cancelling && nextExecuting === 0;
+  if (finalCancellation) await cancelRunSubagentWork(tx, row.id, command.now, true);
   if (!cancelling && (command.continuation === 'runnable' || waitingBudget) && row.status === 'running') {
     await tx.execute(
       `INSERT INTO agent_scheduler_work
@@ -658,21 +668,29 @@ export const settleSubagentToolTransition = async (
           } as const,
         ]
       : []),
+    ...(finalCancellation
+      ? [
+          { type: 'run.cancelled', payload: { reason: 'participants_settled' } } as const,
+          { type: 'run.status_changed', payload: { from: 'cancelling', to: 'cancelled' } } as const,
+        ]
+      : []),
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
-  const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const activeDelta =
     nextExecuting === 0 && row.active_execution_started_at !== null
       ? Math.max(0, command.now - row.active_execution_started_at)
       : 0;
   const mergedUsage = usageWithDelta(row, { steps: 1 });
   const changedRun = await tx.execute(
-    `UPDATE agent_runs SET status = ?, usage_json = ?, active_execution_seconds = active_execution_seconds + ?,
+    `UPDATE agent_runs SET status = ?, completed_at = CASE WHEN ? = 'cancelled' THEN ? ELSE completed_at END,
+     usage_json = ?, active_execution_seconds = active_execution_seconds + ?,
      active_execution_started_at = CASE WHEN ? = 0 THEN NULL ELSE active_execution_started_at END,
      executing_runtime_count = ?, next_event_sequence = next_event_sequence + ?, version = version + 1, updated_at = ?
      WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
     [
-      waitingBudget ? 'awaiting_budget' : row.status,
+      finalCancellation ? 'cancelled' : waitingBudget ? 'awaiting_budget' : row.status,
+      finalCancellation ? 'cancelled' : waitingBudget ? 'awaiting_budget' : row.status,
+      command.now,
       JSON.stringify(mergedUsage),
       activeDelta,
       nextExecuting,
@@ -692,6 +710,8 @@ export const settleSubagentToolTransition = async (
        WHERE user_id = ? AND app_id = ?`,
       [command.now, row.user_id, row.app_id],
     );
+  } else if (finalCancellation) {
+    await updateAppLiveCount(tx, row.user_id, row.app_id, -1, command.now);
   }
   const updated = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
   if (!updated) throw new Error('NOT_FOUND');
@@ -829,8 +849,13 @@ export const settleSubagentModelStepTransition = async (
     throw new Error('ATTEMPT_STATE_CONFLICT');
   }
   const tokenDelta = command.inputTokens + command.outputTokens;
+  const cancelling = row.status === 'cancelling';
   const delegationBudgetExceeded = delegation.used_tokens + tokenDelta > delegation.max_tokens;
-  const effectiveOutcome = delegationBudgetExceeded && command.outcome === 'completed' ? 'failed' : command.outcome;
+  const effectiveOutcome = cancelling
+    ? 'cancelled'
+    : delegationBudgetExceeded && command.outcome === 'completed'
+      ? 'failed'
+      : command.outcome;
   const effectiveErrorCode = delegationBudgetExceeded ? 'DELEGATION_BUDGET_EXCEEDED' : command.errorCode;
   const effectiveResult = delegationBudgetExceeded
     ? ({
@@ -902,6 +927,9 @@ export const settleSubagentModelStepTransition = async (
   if (delegationChanged.changes !== 1 || runtimeChanged.changes !== 1 || workChanged.changes !== 1) {
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
+  const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
+  const finalCancellation = cancelling && nextExecuting === 0;
+  if (finalCancellation) await cancelRunSubagentWork(tx, row.id, command.now, true);
   const currentUsage = JSON.parse(row.usage_json) as RunUsage;
   const nextUsage: RunUsage = {
     inputTokens: currentUsage.inputTokens + command.inputTokens,
@@ -943,19 +971,28 @@ export const settleSubagentModelStepTransition = async (
         evidenceRefs: command.evidenceRefs,
       },
     },
+    ...(finalCancellation
+      ? [
+          { type: 'run.cancelled', payload: { reason: 'participants_settled' } } as const,
+          { type: 'run.status_changed', payload: { from: 'cancelling', to: 'cancelled' } } as const,
+        ]
+      : []),
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
-  const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const activeDelta =
     row.executing_runtime_count <= 1 && row.active_execution_started_at !== null
       ? Math.max(0, command.now - row.active_execution_started_at)
       : 0;
   const changedRun = await tx.execute(
-    `UPDATE agent_runs SET usage_json = ?, active_execution_seconds = active_execution_seconds + ?,
+    `UPDATE agent_runs SET status = ?, completed_at = CASE WHEN ? = 'cancelled' THEN ? ELSE completed_at END,
+     usage_json = ?, active_execution_seconds = active_execution_seconds + ?,
      active_execution_started_at = CASE WHEN ? = 0 THEN NULL ELSE active_execution_started_at END,
      executing_runtime_count = ?, next_event_sequence = next_event_sequence + ?, version = version + 1, updated_at = ?
      WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
     [
+      finalCancellation ? 'cancelled' : row.status,
+      finalCancellation ? 'cancelled' : row.status,
+      command.now,
       JSON.stringify(nextUsage),
       activeDelta,
       nextExecuting,
@@ -969,6 +1006,7 @@ export const settleSubagentModelStepTransition = async (
     ],
   );
   if (changedRun.changes !== 1) throw new Error('STATE_CONFLICT');
+  if (finalCancellation) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, command.now);
   const updated = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
   if (!updated) throw new Error('NOT_FOUND');
   const run = mapRunRow(updated);

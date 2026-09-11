@@ -434,6 +434,12 @@ SubagentWorkCoordinator   -> state commit、重试、取消、事件
 - token/cost/step/message 使用统一原子 reserve/settle；
 - active count 只由 coordinator 汇总，Root/Subagent 不各自维护独立事实。
 
+> **解决方案（已采用，不新增第二套 budget authority）**
+>
+> 复核当前实现后，预算与 usage 已经不是 Root/child 各算一份：`begin/settleSubagent*` 与 Root model/tool transition 都通过同一个 `StateCommit` 更新 `agent_runs.usage_json`、`executing_runtime_count` 和 active execution time；R1 也已让两个 scheduler 以“同一用户 Root active + child active”的总和执行 `maxConcurrentRuntimes`。因此没有再引入会与 StateCommit 重叠的 `ExecutionBudgetCoordinator`。
+>
+> 本项修复剩余的取消/调度分裂：Root scheduler 现在反向检查同 Run 的 active child，和 child 对 active root 的排除形成对称互斥；child `claimWork` 在 BEGIN IMMEDIATE 事务内要求 parent Run 仍为 `running`，直接 enqueue 也 fail-closed。`run.cancel` 不再把任意 running Run 的 `executing_runtime_count` 强行写成 1，而是保留真实 count；count=0（包括 parked parent）立即 durable 收敛为 `cancelled` 并清理未执行 child work/delegation。存在 active child 时先写 `cancelling`，随后同时 abort Root 与该 Run 的所有 active child；最后一个 child model/tool settle 原子写 `run.cancelled`、`cancelling -> cancelled`、清理残余 collaboration work 并递减 app live count。这样 parent cancel 仍以 durable intent 为 authority，同时不会再出现 parked Run 永久卡 `cancelling` 或取消后新 claim。
+
 ### R11：`StateCommitPort` 接口过大，跨越 Run、Model、Tool、Approval、Subagent 多种事务语义
 
 位置：`packages/backend/src/modules/agent/runtime/runs/state-commit.port.ts`。

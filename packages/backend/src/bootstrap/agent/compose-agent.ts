@@ -314,6 +314,7 @@ export const composeAgent = ({
     systemClock,
     (userId) => runRepository.hostCursor(userId),
     (userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
+    (runId) => subagentScheduler?.hasActiveRun(runId) ?? false,
   );
   const subagentContext = new SubagentContextBuilder(runtimeParticipants, mailboxReader, toolCatalog);
   const subagentParticipant = new SubagentParticipantExecutor(
@@ -372,7 +373,10 @@ export const composeAgent = ({
     (run) => scheduler.enqueue(run),
     (run) => notifyCommitted(run),
     (run) => scheduler.signalInput(run),
-    (runId) => scheduler.cancel(runId),
+    (runId) => {
+      scheduler.cancel(runId);
+      subagentScheduler?.cancel(runId);
+    },
     (userId, cursor) => eventHub.publishHostWake(userId, cursor),
   );
   const checkpointRepository = new SqliteCheckpointRepository(database);

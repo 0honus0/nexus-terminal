@@ -92,6 +92,41 @@ export const summaryPayload = (run: RunView): JsonValue => ({
 
 export const allocateHostEvent = appendHostEvent;
 
+export const cancelRunSubagentWork = async (
+  tx: RelationalDatabase,
+  runId: string,
+  now: number,
+  includeClaimed: boolean,
+): Promise<void> => {
+  const cancellableWork = includeClaimed ? "('queued','waiting','claimed')" : "('queued','waiting')";
+  await tx.execute(
+    `UPDATE agent_scheduler_work SET status = 'cancelled', version = version + 1, updated_at = ?
+     WHERE run_id = ? AND status IN ${cancellableWork}`,
+    [now, runId],
+  );
+  await tx.execute(
+    `UPDATE agent_delegations SET status = 'cancelled', version = version + 1, updated_at = ?, completed_at = ?
+     WHERE run_id = ? AND status IN ('queued','running','waiting')
+       AND NOT EXISTS (
+         SELECT 1 FROM agent_scheduler_work w
+         WHERE w.run_id = agent_delegations.run_id
+           AND w.agent_runtime_id = agent_delegations.child_runtime_id
+           AND w.status = 'claimed'
+       )`,
+    [now, now, runId],
+  );
+  await tx.execute(
+    `UPDATE agent_runtimes SET status = 'stopped', schedule_state = 'finished', updated_at = ?
+     WHERE run_id = ? AND participant_id <> 'root'
+       AND id IN (
+         SELECT child_runtime_id FROM agent_delegations
+         WHERE run_id = ? AND status = 'cancelled'
+       )
+       AND status IN ('created','running','stopping','interrupted')`,
+    [now, runId, runId],
+  );
+};
+
 export const updateAppLiveCount = async (
   tx: RelationalDatabase,
   userId: number,

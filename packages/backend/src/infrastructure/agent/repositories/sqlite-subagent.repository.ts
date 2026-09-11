@@ -963,28 +963,32 @@ export class SqliteSubagentRepository
   }
 
   async enqueueWork(record: EnqueueWorkRecord): Promise<SchedulerWorkView> {
-    await this.db.execute(
-      `INSERT OR IGNORE INTO agent_scheduler_work
-        (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
-         deadline_at, created_at, updated_at, version)
-       VALUES (?, ?, ?, ?, 'queued', ?, NULL, ?, ?, ?, ?, 1)`,
-      [
+    return this.db.transaction(async (tx) => {
+      const run = await tx.queryOne<{ status: string }>('SELECT status FROM agent_runs WHERE id = ?', [record.runId]);
+      if (!run || run.status !== 'running') throw new Error('RUN_NOT_SCHEDULABLE');
+      await tx.execute(
+        `INSERT OR IGNORE INTO agent_scheduler_work
+          (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
+           deadline_at, created_at, updated_at, version)
+         VALUES (?, ?, ?, ?, 'queued', ?, NULL, ?, ?, ?, ?, 1)`,
+        [
+          record.id,
+          record.runId,
+          record.runtimeId,
+          record.kind,
+          JSON.stringify(record.payload),
+          record.notBefore,
+          record.deadlineAt,
+          record.now,
+          record.now,
+        ],
+      );
+      const row = await tx.queryOne<WorkRow>(`SELECT ${workColumns} FROM agent_scheduler_work WHERE id = ?`, [
         record.id,
-        record.runId,
-        record.runtimeId,
-        record.kind,
-        JSON.stringify(record.payload),
-        record.notBefore,
-        record.deadlineAt,
-        record.now,
-        record.now,
-      ],
-    );
-    const row = await this.db.queryOne<WorkRow>(`SELECT ${workColumns} FROM agent_scheduler_work WHERE id = ?`, [
-      record.id,
-    ]);
-    if (!row) throw new Error('SCHEDULER_WORK_NOT_FOUND');
-    return mapWork(row);
+      ]);
+      if (!row) throw new Error('SCHEDULER_WORK_NOT_FOUND');
+      return mapWork(row);
+    });
   }
 
   async readyWork(now: number, limit: number, excludedRunIds: readonly string[] = []): Promise<SchedulerWorkView[]> {
@@ -1048,14 +1052,20 @@ export class SqliteSubagentRepository
   ): Promise<SchedulerWorkView | null> {
     return this.db.transaction(async (tx) => {
       const candidate = await tx.queryOne<WorkRow>(
-        `SELECT ${workColumns} FROM agent_scheduler_work
-         WHERE id = ? AND status = 'queued' AND not_before <= ? AND version = ?`,
+        `SELECT ${qualifiedWorkColumns}
+         FROM agent_scheduler_work w
+         JOIN agent_runs r ON r.id = w.run_id
+         WHERE w.id = ? AND w.status = 'queued' AND w.not_before <= ? AND w.version = ? AND r.status = 'running'`,
         [workId, now, expectedVersion],
       );
       if (!candidate) return null;
       const claimed = await tx.execute(
         `UPDATE agent_scheduler_work SET status = 'claimed', owner_epoch = ?, version = version + 1, updated_at = ?
-         WHERE id = ? AND status = 'queued' AND version = ?`,
+         WHERE id = ? AND status = 'queued' AND version = ?
+           AND EXISTS (
+             SELECT 1 FROM agent_runs r
+             WHERE r.id = agent_scheduler_work.run_id AND r.status = 'running'
+           )`,
         [ownerEpoch, now, workId, expectedVersion],
       );
       if (claimed.changes !== 1) return null;

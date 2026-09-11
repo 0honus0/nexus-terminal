@@ -97,6 +97,16 @@ export class SubagentScheduler {
     return false;
   }
 
+  cancel(runId: string): boolean {
+    let cancelled = false;
+    for (const active of this.active.values()) {
+      if (active.runId !== runId) continue;
+      active.controller.abort(new Error('CANCELLED'));
+      cancelled = true;
+    }
+    return cancelled;
+  }
+
   private async pump(): Promise<void> {
     if (this.pumping || !this.accepting) return;
     this.pumping = true;

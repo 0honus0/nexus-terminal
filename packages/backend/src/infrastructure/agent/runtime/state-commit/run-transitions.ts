@@ -21,6 +21,7 @@ import {
   appendEvents,
   appendLedger,
   artifactForInput,
+  cancelRunSubagentWork,
   COUNTED_LIVE,
   CREATED_QUEUE_LIMIT,
   emptyUsage,
@@ -475,7 +476,7 @@ export const cancelRunTransition = async (
   let updatedRow = row;
   if (NON_TERMINAL.has(row.status)) {
     accepted = true;
-    const immediate = row.status !== 'running' && row.status !== 'cancelling';
+    const immediate = row.executing_runtime_count === 0 || (row.status !== 'running' && row.status !== 'cancelling');
     const nextStatus: RunStatus = immediate ? 'cancelled' : 'cancelling';
     if (row.status === 'awaiting_approval') {
       const approvalsChanged = await tx.execute(
@@ -503,8 +504,10 @@ export const cancelRunTransition = async (
     }
     const events: DurableEventInput[] = [
       { type: 'run.cancel_requested', payload: { previousStatus: row.status } },
+      ...(immediate ? [{ type: 'run.cancelled', payload: { reason: 'no_active_participants' } } as const] : []),
       { type: 'run.status_changed', payload: { from: row.status, to: nextStatus } },
     ];
+    await cancelRunSubagentWork(tx, row.id, command.now, immediate);
     await appendEvents(tx, row, events, command.now);
     const changed = await tx.execute(
       `UPDATE agent_runs SET status = ?, completed_at = ?, executing_runtime_count = ?,
@@ -514,7 +517,7 @@ export const cancelRunTransition = async (
       [
         nextStatus,
         immediate ? command.now : null,
-        immediate ? 0 : 1,
+        immediate ? 0 : row.executing_runtime_count,
         nextStatus,
         events.length,
         command.now,
@@ -527,8 +530,8 @@ export const cancelRunTransition = async (
     if (changed.changes !== 1) throw new Error('STATE_CONFLICT');
     if (immediate) {
       await tx.execute(
-        `UPDATE agent_runtimes SET status = 'stopped', updated_at = ?
-         WHERE run_id = ? AND status IN ('created','running','stopping')`,
+        `UPDATE agent_runtimes SET status = 'stopped', schedule_state = 'finished', updated_at = ?
+         WHERE run_id = ? AND status IN ('created','running','stopping','interrupted')`,
         [command.now, row.id],
       );
       if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, command.now);
