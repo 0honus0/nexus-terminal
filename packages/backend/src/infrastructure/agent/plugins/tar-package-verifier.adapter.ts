@@ -149,7 +149,6 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
     this.unverifiedStagingRoot = path.join(this.pluginsRoot, '.staging');
     fs.mkdirSync(this.pluginsRoot, { recursive: true, mode: 0o700 });
     fs.mkdirSync(this.unverifiedStagingRoot, { recursive: true, mode: 0o700 });
-    this.migrateLegacyLayout(dataDirectory);
   }
 
   async normalizePublisherKey(publicKeyPem: string): Promise<PublisherKeyInfo> {
@@ -469,47 +468,5 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
 
   private unverifiedStageDirectory(stageId: string): string {
     return path.join(this.unverifiedStagingRoot, safeSegment(stageId));
-  }
-
-  private migrateLegacyLayout(dataDirectory: string): void {
-    const legacyStagingRoot = path.join(dataDirectory, 'agent', 'plugin-staging');
-    if (fs.existsSync(legacyStagingRoot)) {
-      for (const entry of fs.readdirSync(legacyStagingRoot, { withFileTypes: true })) {
-        const match = entry.name.match(/^([A-Za-z0-9_.-]{1,128})\.(tar|tar\.part|unpacked)$/);
-        if (!match) continue;
-        const stageId = safeSegment(match[1]!);
-        const stageRoot = this.unverifiedStageDirectory(stageId);
-        fs.mkdirSync(stageRoot, { recursive: true, mode: 0o700 });
-        const destinationName =
-          match[2] === 'unpacked' ? 'unpacked' : match[2] === 'tar.part' ? 'package.tar.part' : 'package.tar';
-        const source = path.join(legacyStagingRoot, entry.name);
-        const destination = path.join(stageRoot, destinationName);
-        if (fs.existsSync(destination)) throw new Error('PLUGIN_STAGE_STORAGE_CONFLICT');
-        fs.renameSync(source, destination);
-      }
-      if (fs.readdirSync(legacyStagingRoot).length === 0) fs.rmdirSync(legacyStagingRoot);
-    }
-
-    for (const entry of fs.readdirSync(this.pluginsRoot, { withFileTypes: true })) {
-      if (!entry.isDirectory() || entry.name === '.staging' || !/^[A-Za-z0-9_.-]{1,128}$/.test(entry.name)) continue;
-      const appRoot = path.join(this.pluginsRoot, entry.name);
-      const versionsRoot = path.join(appRoot, 'versions');
-      fs.mkdirSync(versionsRoot, { recursive: true, mode: 0o700 });
-      for (const child of fs.readdirSync(appRoot, { withFileTypes: true })) {
-        if (!child.isDirectory() || ['versions', 'staging', 'dev'].includes(child.name)) continue;
-        if (!/^[A-Za-z0-9_.-]{1,128}$/.test(child.name)) continue;
-        const legacyVersion = path.join(appRoot, child.name);
-        if (!fs.existsSync(path.join(legacyVersion, '.nexus-package-hash'))) continue;
-        const destination = path.join(versionsRoot, child.name);
-        if (fs.existsSync(destination)) throw new Error('PLUGIN_VERSION_STORAGE_CONFLICT');
-        fs.renameSync(legacyVersion, destination);
-      }
-    }
-
-    const legacyUiRoot = path.join(dataDirectory, 'agent', 'plugin-ui');
-    if (fs.existsSync(legacyUiRoot)) {
-      unlockTree(legacyUiRoot);
-      fs.rmSync(legacyUiRoot, { recursive: true, force: true });
-    }
   }
 }

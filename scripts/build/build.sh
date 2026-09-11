@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+readonly ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 readonly IMAGE_REPOSITORY="${NEXUS_IMAGE_REPOSITORY:-${NEXUS_IMAGE_PREFIX:-ghcr.io/0honus0/nexus-terminal}}"
 readonly IMAGE_TAG="${NEXUS_IMAGE_TAG:-latest}"
 readonly IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
@@ -10,9 +10,9 @@ readonly IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 usage() {
     cat <<'USAGE'
 Usage:
-  ./build.sh local [all|backend|frontend]
-  ./build.sh docker [all]
-  ./build.sh docker-save [all] [output-directory]
+  scripts/build/build.sh local [backend|frontend]
+  scripts/build/build.sh docker
+  scripts/build/build.sh docker-save [output-directory]
 
 Commands:
   local        Run npm ci and npm run build in the selected package directories.
@@ -24,15 +24,12 @@ Environment variables:
   NEXUS_IMAGE_TAG         Image tag (default: latest)
   VITE_API_BASE_URL        Optional frontend API base URL embedded at build time
 
-The optional "all" argument is accepted for compatibility with older commands.
-
 Examples:
-  ./build.sh local
-  ./build.sh local frontend
-  ./build.sh docker
-  NEXUS_IMAGE_TAG=dev ./build.sh docker
-  ./build.sh docker-save ./dist-scripts/docker-images
-  ./build.sh docker-save all ./dist-scripts/docker-images
+  scripts/build/build.sh local backend
+  scripts/build/build.sh local frontend
+  scripts/build/build.sh docker
+  NEXUS_IMAGE_TAG=dev scripts/build/build.sh docker
+  scripts/build/build.sh docker-save ./dist-scripts/docker-images
 USAGE
 }
 
@@ -104,13 +101,8 @@ main() {
         local)
             require_command npm
             require_command node
-            target="${target:-all}"
+            target="${target:-backend}"
             case "$target" in
-                all)
-                    for component in backend frontend; do
-                        build_local "$component"
-                    done
-                    ;;
                 backend|frontend)
                     build_local "$target"
                     ;;
@@ -123,19 +115,15 @@ main() {
             ;;
         docker)
             require_command docker
-            if [[ -n "$target" && "$target" != "all" ]]; then
-                echo "Docker builds now produce one unified image; unsupported target: $target" >&2
+            if [[ -n "$target" ]]; then
+                echo "Docker build does not accept a component target: $target" >&2
                 exit 2
             fi
             build_docker
             ;;
         docker-save)
             require_command docker
-            if [[ "$target" == "all" ]]; then
-                output_dir="${3:-$ROOT_DIR/dist-scripts/docker-images}"
-            else
-                output_dir="${target:-$ROOT_DIR/dist-scripts/docker-images}"
-            fi
+            output_dir="${target:-$ROOT_DIR/dist-scripts/docker-images}"
             build_docker
             save_docker "$output_dir"
             ;;

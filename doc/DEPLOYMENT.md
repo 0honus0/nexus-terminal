@@ -139,7 +139,7 @@ docker compose up -d --remove-orphans
 ```bash
 git clone https://github.com/0honus0/nexus-terminal.git
 cd nexus-terminal
-./build.sh docker
+scripts/build/build.sh docker
 ```
 
 默认镜像为：
@@ -153,7 +153,7 @@ ghcr.io/0honus0/nexus-terminal:latest
 ```bash
 NEXUS_IMAGE_REPOSITORY=local/nexus-terminal \
 NEXUS_IMAGE_TAG=dev \
-./build.sh docker
+scripts/build/build.sh docker
 ```
 
 随后在 `.env` 中设置相同的 `NEXUS_IMAGE_REPOSITORY` 与 `NEXUS_IMAGE_TAG`，再运行 `docker compose up -d`。统一镜像的运行角色入口脚本位于 `scripts/docker/entrypoint.sh`；Docker 相关运行脚本统一归 `scripts/docker/`，见 [EC-REPO-001](./software-requirements/engineering-constraints.md#ec-repo-001)。

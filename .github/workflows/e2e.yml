@@ -14,7 +14,7 @@ on:
       - 'test/e2e/**'
       - 'scripts/e2e/**'
       - 'scripts/check-test-policy.mjs'
-      - 'build.sh'
+      - 'scripts/build/build.sh'
       - 'package.json'
       - '.github/workflows/e2e.yml'
   pull_request:
@@ -30,7 +30,7 @@ on:
       - 'test/e2e/**'
       - 'scripts/e2e/**'
       - 'scripts/check-test-policy.mjs'
-      - 'build.sh'
+      - 'scripts/build/build.sh'
       - 'package.json'
       - '.github/workflows/e2e.yml'
   schedule:
