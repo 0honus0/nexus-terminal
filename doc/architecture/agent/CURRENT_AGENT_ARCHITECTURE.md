@@ -800,6 +800,7 @@ no module cycles
     - scheduler、StateCommit、Policy/Lease、lifecycle 与 `AgentServices` facade 仍留在真正 composition root，不为缩行数拆成二次业务 facade；
     - Backend architecture checker 禁止 Operations Tool creator、`registerContribution()` / `replaceOwnedContribution()` 重新直接进入 `compose-agent.ts`。
     - GitHub Actions run `34581381495`（产品代码 HEAD `af04bf7`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
+    - GitHub Actions run `34584611396`（产品代码 HEAD `aaff050`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
 16. Frontend Host / builtin App ownership：**已收敛**。
     - `AgentHubWindow.vue` 不再直接 import `apps/operations/OperationsView.vue`；
