@@ -14,6 +14,8 @@ Agent 默认可以选择全部当前及未来连接；全局 connection denylist
 | Phase 2 | Policy/Approval/Lease 完整修改闭环、文件变更、受审批 Shell/远端 Docker、Workspace Runtime Controller、稳定 Workspace + Profile/Generation、多版本 Tool Store、UI/AI 启停删、checkpoint、运行资源配额/固化 | 浏览器自动化和外部协议 Agent                                        |
 | Phase 3 | Browser/CDP、MCP、ACP、多 Agent、经审核 Memory 写入、安装式 App/Skill、Frontend/Backend/Runner 三目标 sandbox                                                                                             | 未隔离上传代码直接进入 Core、无限自治或绕过审批                     |
 
+> **当前 Phase 3 接线状态（dev）**：MCP 已进入 live composition；**ACP 未完成**，只保留 integration schema、capability type、Port/Adapter skeleton，当前 `nexus.operations` manifest 不声明 `integration.acp.execute`、不创建默认 grant；**Browser/CDP/Puppeteer 未完成**，只保留 Browser ports、`PuppeteerBrowserGateway` 与 Workspace/browser 设计骨架，当前 manifest 不声明 `browser.operate`、Tool Catalog/composition root 不接入 live execution。两项在完成正式接线、授权、E2E 前都只能视为 `reserved / roadmap-only`，不得因源码中存在 Adapter/Port 而标记为已交付。
+
 Workspace Runtime 是受限本地执行能力；稳定实体是 `Workspace`，运行配置由 `WorkspaceProfile` 冻结，实际运行实例由 `generation` 标识。Runner sandbox 只是 generation 的实现细节，不把 Docker 当作本地执行模型，也不使用裸 `/api/v1/runtime`。Workspace Runtime availability 是设置页的真实消费者；Runner 未配置或 sandbox primitive 不可用时返回 unavailable/degraded，不能回退为宿主裸进程。
 
 适用工程边界引用 [EC-REQ-001、EC-ARCH-001/009、EC-RUNTIME-003/004/005、EC-E2E-001/002](../../software-requirements/engineering-constraints.md)。已定义正式契约不等于已实现产品；软件需求/FR/SRS 已进入正式 Agent 实现基线，后续架构调整必须同步需求、实现快照和对应验证证据，不能只改设计文档或只凭源码目录判断交付状态。
@@ -417,6 +419,8 @@ Runner startup reconcile 遍历 journal：running Workspace 检查 generation sa
 Runner 备份默认不包含 Packs/runtime/cache，只保存 Nexus DB 中 Settings、PackRef、Workspace Profile/Runner target snapshot 和 Run/Checkpoint 事实。恢复后 Runner 根据 Catalog/Settings 重新核对所需 Pack；缺失明确显示，不伪装旧 sandbox 仍存在。
 
 ## 10. MCP、ACP、CDP 和多 Agent（Phase 3）
+
+当前状态必须区分设计目标与已交付能力：**MCP 已接线；ACP = 未完成（reserved）；Browser/CDP/Puppeteer = 未完成（reserved）**。以下 ACP/CDP 段落描述未来正式接线时必须满足的安全与协议约束，不表示当前 dev 已提供对应执行能力。
 
 MCP 首版只支持管理员登记的 Streamable HTTP，非任意模型提供 URL；stdio 只在隔离环境内按固定 command profile。server trust/version、工具 schema hash、工具名 namespacing、输入32 KiB/输出10 MiB/超时60秒逐工具限制；工具刷新改 schema 后旧审批失效。MCP declared annotations 不能自证 read，未知工具当 mutation，走本地 executor。
 

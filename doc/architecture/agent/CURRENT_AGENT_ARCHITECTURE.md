@@ -746,12 +746,12 @@ no module cycles
    - File Editor 持有 `Uint8Array rawContent`，encoding reinterpret 不再执行 `atob/btoa`；upload 继续使用既有独立 `/ws/uploads` raw binary transport；
    - 现有 SSH E2E helper/spec 已同步 framing；700 KiB raw upload→SFTP→多帧 binary read round-trip 通过，request-only suspend/resume history 用例通过；浏览器 UI E2E 仍受上述宿主 Chromium `libglib-2.0.so.0` 缺失限制。
 
-9. Phase 3 接线状态：**MCP / Subagent / Memory / Plugin 已进入当前 composition；ACP / Browser 仍是部分实现**。
+9. Phase 3 接线状态：**MCP / Subagent / Memory / Plugin 已进入当前 composition；ACP 与 Browser/CDP/Puppeteer 明确标记为未完成（reserved / roadmap-only）**。
    - MCP：`McpAdapter` 已由 `compose-agent.ts` 创建，`IntegrationService` refresh 后把 MCP tools 作为 scoped `CapabilityContribution` 注入 Tool Catalog；
    - Subagent/Memory：repository、policy/service/scheduler、mailbox/shared facts、Memory review/import 已由 composition root 组装并暴露受限 facade；
    - Plugin：stage/verify/install/upgrade/uninstall、Frontend isolated frame、Backend sandbox 与 Runner target 都有当前 Host/Runner 接线；
-   - ACP：`IntegrationService` 已支持 `kind='acp'` 的配置校验/持久化，`AcpAdapter` 也已存在，但当前 composition root 没有实例化/注入 ACP runtime，因此不能宣称 ACP 执行能力已交付；
-   - Browser/CDP：`PuppeteerBrowserGateway` 和对应 ports 已存在，但当前 composition root/Tool Catalog 没有把它接到 live Agent 执行路径，因此仍是实现骨架而非产品能力。
+   - ACP：**未完成**。`IntegrationService` 已支持 `kind='acp'` 的配置校验/持久化，`AcpAdapter` 也已存在，但当前 composition root 没有实例化/注入 ACP runtime；`nexus.operations` manifest 不声明 `integration.acp.execute` 且无默认 grant，因此只能视为保留骨架；
+   - Browser/CDP/Puppeteer：**未完成**。`PuppeteerBrowserGateway` 和对应 ports 已存在，但当前 composition root/Tool Catalog 没有把它接到 live Agent 执行路径；`nexus.operations` manifest 不声明 `browser.operate` 且无默认 grant，因此仍是保留骨架而非产品能力。
 
 10. 本轮文档/guard 审核：**已修正已知正式矛盾**。
 
@@ -768,6 +768,13 @@ no module cycles
     - mixed-mode root read 也记录 active mutation；未知结果同时 quarantine root coordination key 与精确 write key；
     - Platform 新增统一 absolute remote path canonicalization，Archive/Upload/Transfer/Workspace lease key 与真实 I/O 使用同一规范化规则；
     - GitHub Actions run `34498027448`（HEAD `e62847c`）整体 success，8 个 Playwright groups 全绿；新增同 Workspace 两个不同 ZIP 目标并发用例 1.6s passed，group 5 为 52 passed、group 3 为 37 passed、group 4 为 16 passed，并覆盖 archive overlap、mobile progress、multi-file upload 与 slow-SFTP batch。
+
+12. Root execution owner 收敛：**本轮代码已完成，本地完整门禁通过**。
+    - `NativeAgentBackend` 构造依赖由 13 项收敛为 6 项，只直接持有 Run/Delegation snapshot、`StateCommitPort`、`ModelStepRunner`、`ToolCallRunner` 与 `ClockPort`；
+    - `ModelStepRunner` 负责 Provider/model/Context/model stream/ModelCallLimiter 与 transport retry，`ToolCallRunner` 负责 Tool inspect/policy、read lease 与 Tool execution；
+    - Agent mutation 使用独立 staged `MutationLeaseGuardPort`，底层 `LeasePort` 只存在于 infrastructure adapter；顺序固定为 `lease acquire → StateCommit.beginMutationTool → mark active → side effect → StateCommit.settleMutationTool → settle/release 或 quarantine`；
+    - Backend architecture checker 禁止 `NativeAgentBackend` 重新直接依赖 Provider/Context/Tool/Lease execution services 或调用 mutation lease marker；
+    - Backend/Frontend architecture + build、Agent Runtime build、test-policy、69 specs/8 groups assignment、sandbox prerequisite、shell syntax 与 `git diff --check` 均已通过；远端产品 E2E 以本轮最终 dev 代码 SHA 为准。
 
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。
 

@@ -1,0 +1,645 @@
+# MODULE_DEPENDENCY_DESIGN Review
+
+审查范围：`MODULE_DEPENDENCY_DESIGN.md`，并对照同目录的 `ARCHITECTURE.md`、`CURRENT_AGENT_ARCHITECTURE.md`、`IMPLEMENTATION.md`。
+
+结论：总体分层方向正确，Port 收窄、StateCommit 单一事务入口、Tool inspect/policy 分离等设计应保留；但当前依赖图仍有几处职责过重和文档口径不一致。建议先处理 P1，再进行目录级重构。
+
+## P1：建议在下一轮重构处理
+
+### 1. `NativeAgentBackend` 依赖过多，成为隐性编排中枢
+
+文档为它注入 `RunRepositoryPort`、`DelegationRepositoryPort`、Provider、Context、Model、StateCommit、ToolCatalog、ToolExecutor、Lease、Policy、Limiter、Clock 等十余项能力，同时承担模型循环、审批重检、lease、取消、结果落库和 delegation 读取。这样会使执行策略与基础设施细节继续耦合，也会让每次新增 capability 都修改核心 backend。
+
+建议拆成三个明确的内部服务，并由 backend 只做顺序编排：
+
+```text
+ModelStepRunner       -> Context / LanguageModel / ModelCallLimiter
+ToolExecutionCoordinator -> ToolCatalog / ToolExecutor / Policy / Lease
+RunProgressCoordinator -> RunRepository / StateCommit / Clock
+```
+
+三者都只依赖 Port；`NativeAgentBackend` 保留取消、阶段顺序和最终错误映射。不要把三者提升为新的领域实体或公共 facade。
+
+> **解决方案（已采用）**
+>
+> 审核后不采用原建议中的第三个 `RunProgressCoordinator`，避免把 `RunRepositoryPort + StateCommitPort + ClockPort` 再包装成一个模糊 facade，削弱 durable transition authority 的可见性。实际拆为两个 execution-internal runner：
+>
+> ```text
+> ModelStepRunner -> Provider / Context / LanguageModel / ModelCallLimiter
+> ToolCallRunner  -> ToolCatalog / ToolExecutor / Policy / read lease / staged mutation lease
+> ```
+>
+> `NativeAgentBackend` 继续直接持有 `RunRepositoryPort`、`DelegationRepositoryPort`、`StateCommitPort` 与 `ClockPort`，只负责 Run 主循环、阶段顺序、模型步骤 durable transition、cancel/fail safe boundary。构造依赖由 13 项降为 6 项；模型 transport/context 与 Tool/Policy/Lease 不再直接注入 Backend。Backend architecture checker 固定禁止上述低层 execution dependency 重新进入 `NativeAgentBackend`。
+
+### 2. Lease 安全职责出现双重入口
+
+当前 Root mutation 同时由 `LeaseCoordinator` 和 `LeasePort` 直接参与：前者负责通用 acquire/renew/release/quarantine，后者又被 `NativeAgentBackend` 直接用于 mutation-active / settled 标记。这样容易出现 read/mutation 两套续租、释放和异常处理语义，尤其在未知结果、取消和进程重启时。
+
+建议增加一个窄的 `MutationLeasePort`（或 `MutationGuardPort`）统一 mutation 生命周期：
+
+```text
+beginMutation -> mark active -> side effect -> settle/quarantine
+```
+
+`NativeAgentBackend` 只调用该 capability；底层仍可复用 `LeasePort`，但不得同时暴露给 runtime execution。`LeaseCoordinator` 保留只读资源 lease primitive，避免把 mutation 状态机塞进通用 coordinator。
+
+> **解决方案（已采用）**
+>
+> 不直接复用现有 Workspace `MutationGuardPort`，因为它的 `beginMutation()` 在拿到 lease 后会立即 `markMutationActive`，会把 Agent 要求的 `durable mutation state` 顺序提前。Agent Runtime 改为内部 `MutationLeaseGuard` capability：
+>
+> ```text
+> acquire write lease
+> -> StateCommit.beginMutationTool   # durable mutation state
+> -> MutationLeaseGuard.activate
+> -> side effect
+> -> StateCommit.settleMutationTool
+> -> MutationLeaseGuard.confirm / quarantine
+> ```
+>
+> `MutationLeaseGuard` 独占 mutation lease 的 acquire/renew/active/settled/release/quarantine 低层操作；`NativeAgentBackend` 不再持有或调用 `LeasePort`。`LeaseCoordinator` 只继续服务 read lease / 非 mutation lease primitive。renewal failure、未知副作用和 state commit after-effect failure 都由该 capability 收敛到 quarantine。Backend architecture checker 已增加静态规则，禁止 `runtime/execution/native-agent-backend.ts` 直接依赖 `LeasePort` 或调用 `markMutationActive/markMutationSettled`。
+
+### 3. `SubagentScheduler` 聚合五类 Repository Port，边界仍偏宽
+
+虽然已经从一个大 Repository 拆成多个 Port，但 Scheduler 仍直接持有 `runScopes`、`work`、`delegations`、`runtimes`、`mailboxes`，并负责 claim、上下文拼装、participant 查找、settle。Port 数量减少了权限泄漏，却没有完全解决调度策略与协作存储细节耦合的问题。
+
+建议引入两个内部 adapter：
+
+```text
+SchedulerWorkStore       -> scope/claim/ready/settle
+CollaborationContextStore -> delegation/runtime/mailbox reads
+```
+
+Scheduler 只依赖这两个 capability；adapter 内部再收窄到现有 Repository Port。这样可独立测试调度策略，也可在未来替换 SQLite 查询而不改 Scheduler。
+
+## P2：建议同步调整
+
+### 4. StateCommit transition 文件与 Runtime execution 的 owner 描述不够一致
+
+文档一方面规定 `StateCommitPort` 是唯一 durable transition authority，另一方面又让 `NativeAgentBackend` 直接依赖 `RunRepositoryPort` 读取 pending durable state，并让 Scheduler/Service 分别读取和推进相关状态。若读取的是可变 projection，容易出现“读取快照来自 A、提交版本来自 B”的竞态。
+
+建议明确两类接口：
+
+- `RunSnapshotPort`：只读、带 version/event cursor 的一致快照；
+- `StateCommitPort`：所有状态迁移和带 CAS 的写入。
+
+Runtime、Scheduler、HTTP facade 统一读取 `RunSnapshotPort`，禁止通过通用 Repository 读取会参与迁移的半成品字段。文档中的 `RunRepositoryPort` 应改名或拆分，避免把查询和迁移权限混在一个 Port。
+
+### 5. Plugin / Workspace Runtime 的阶段边界在依赖文档中不够显式
+
+`MODULE_DEPENDENCY_DESIGN.md` 同时描述当前 dev 架构、ACP/Browser/MCP 后继边界和 Workspace Runtime 调用边界，但没有在每个依赖图旁标注 Phase。读者容易把保留的后继 Port 当成当前 live dependency，导致提前实现或错误接线。
+
+建议在每个后继模块标注 `Phase 2/Phase 3 / reserved`，并在依赖图中区分：
+
+```text
+active dependency      实线
+reserved capability    虚线
+```
+
+同时增加一张“当前已接线依赖”小图，作为代码审查和架构 checker 的唯一输入。
+
+### 6. 文档存在目录和 owner 的潜在漂移
+
+架构总览规定 Runtime 按 `definitions / runs / execution / planning / scheduling / approvals / recovery / events / collaboration / exchange` 拆分；依赖文档则把部分职责描述为 `modules/agent/runtime/execution` 下的 backend，同时将 StateCommit implementation 放在 infrastructure。两者本身不冲突，但缺少“public port owner / concrete adapter owner / orchestration owner”的固定表，后续很容易重新把逻辑堆回 runtime 一级目录。
+
+建议新增一张 owner 表，每个能力只列三项：
+
+```text
+Public Port      modules/...
+Orchestrator     modules/...
+Concrete Adapter infrastructure/...
+```
+
+架构 checker 和 review 以后按此表检查，而不是依赖文件名猜测边界。
+
+## P3：可维护性改进
+
+### 7. Repository capability 命名可进一步按读写语义区分
+
+当前 `DelegationRepositoryPort`、`RuntimeParticipantRepositoryPort` 等名称仍可能同时包含 query 和 mutation。建议对长期稳定的 Port 使用 `...Reader`、`...Writer` 或 `...Store` 后缀，至少将 Scheduler 使用的 claim/settle 写能力与 runtime 的只读 participant 查询分开。
+
+### 8. 增加依赖约束的自动化验收项
+
+建议为架构 checker 增加以下静态规则，并在本目录文档中固定规则编号：
+
+1. `NativeAgentBackend` 不得直接 import SQLite、Express、Runner client；
+2. Runtime execution 不得直接调用 `LeasePort` 的 mutation 标记方法；
+3. Scheduler 不得直接构造 Repository 或开启 transaction；
+4. transition 函数必须接收 transaction context；
+5. reserved Phase 模块不得出现在当前 production composition root。
+
+## 建议实施顺序
+
+1. 先统一 mutation lease 入口，并补未知结果/取消路径的契约测试；
+2. 拆 `NativeAgentBackend` 的三个内部 coordinator，保持 public API 不变；
+3. 将 Scheduler 的五个 Port 收敛为两个内部 capability；
+4. 拆分 `RunSnapshotPort` 与 `StateCommitPort` 的读写语义；
+5. 更新依赖图、owner 表和 Phase 标记，再同步 architecture checker。
+
+以上调整不改变 Run、ToolCall、Approval、Workspace、Artifact 等领域实体，也不建议引入新的 `Task`、`Job`、`Workflow` 一级实体。
+
+## 代码实现复核补充
+
+以下意见来自对 `packages/backend/src` 与 `packages/frontend/src/features/agent` 当前实现的检查。
+
+### P1-代码-1：`NativeAgentBackend` 的实际依赖比设计文档更集中
+
+`packages/backend/src/modules/agent/runtime/execution/native-agent-backend.ts` 的构造函数当前直接接收 13 项依赖，并在同一个类中完成 snapshot 读取、provider/model 选择、上下文组装、预算预留、模型调用、Tool inspect/execute、delegation 上下文、lease、取消和 StateCommit。此前文档中的“建议拆分”已经被源码验证为真实重构点，而不是预防性建议。
+
+建议先抽出 `ModelStepRunner` 和 `ToolCallRunner` 两个文件，保留 `NativeAgentBackend` 的 public `AgentBackendPort` 不变；每次只迁移一条完整调用链，避免一次性拆散状态顺序。
+
+> **解决方案（已采用，与 P1 #1 同一实施）**：新增 execution-internal `ModelStepRunner` 与 `ToolCallRunner`，保留 `AgentBackendPort` 不变，不新增公共 facade。`ModelStepRunner` 接管 Provider/Context/model stream/model limiter/retry transport；`ToolCallRunner` 接管 inspect/policy、read lease 与 staged mutation lease/Tool execution。`NativeAgentBackend` 保留 Run snapshot、StateCommit 编排和 terminal boundary，避免把 durable authority 移入新的“进度协调器”。
+
+### P1-代码-2：mutation lease 仍存在直接旁路
+
+源码中 `NativeAgentBackend` 同时注入 `LeaseCoordinator` 和 `LeasePort`（见其构造函数及 `compose-agent.ts` 的实例化），与文档描述的双重入口完全一致。这样 runtime execution 可以绕过 coordinator 直接操作底层 lease，后续很难保证 read、mutation、quarantine 的统一审计和释放顺序。
+
+建议删除 `NativeAgentBackend` 对 `LeasePort` 的直接依赖，改为注入窄的 mutation guard port；`LeaseCoordinator` 只作为该 port 的 infrastructure-backed implementation 或只服务 read lease。
+
+> **解决方案（已采用，与 P1 #2 同一实施）**：采用 Agent 专用 staged `MutationLeaseGuard`，不采用会提前 mark-active 的通用 Workspace `MutationGuardPort`。底层 `LeasePort` 只留在 guard adapter owner 内，`NativeAgentBackend` 只经 `ToolCallRunner` 使用窄 mutation lease capability。安全顺序固定为 `Lease acquire → StateCommit.begin → mark active → side effect → StateCommit.settle → settle/release 或 quarantine`，不得把 `mark active` 移到 durable begin 之前。
+
+### P1-代码-3：`composeAgent()` 已成为超大组合根，且混入业务注册细节
+
+`packages/backend/src/bootstrap/agent/compose-agent.ts` 除了实例化 adapter，还直接注册 machine、workspace、plan、collaboration、MCP、mutation 等多组 Tool contribution，并编排 scheduler、approval、lifecycle callback。组合根允许连接依赖，但当前注册逻辑已足以形成第二个业务编排层，新增 Tool 时会持续扩大该文件。
+
+建议按 capability contribution 拆成 `composeMachineTools`、`composeWorkspaceTools`、`composeRuntimeTools`、`composeIntegrationTools` 四个纯组装函数；每个函数只接收所需 Port 并返回 contribution。`composeAgent()` 只负责调用这些函数和连接生命周期，不迁移状态机逻辑。
+
+### P2-代码-1：Frontend Host 直接 import Operations UI，违反已声明 App 隔离边界
+
+`packages/frontend/src/features/agent/host/AgentHubWindow.vue` 直接导入 `../apps/operations/OperationsView.vue`。这与 `ARCHITECTURE.md` 中“host 只依赖 app-contribution.types、不 import apps 组件”的约束不一致，会让 Host 对内置 App 产生编译期耦合，也使未来动态/安装式 App 无法复用同一 surface。
+
+建议由 Operations contribution 提供 public view/route descriptor，Host 只消费 `features/agent/apps/operations/public.ts` 对应的前端 public contract；若静态 builtin registry 必须保留，应将该 import 集中到单独的 `builtin-apps.ts`，并在架构 checker 中显式列为唯一例外。
+
+### P2-代码-2：后端 Agent 子域虽未直接依赖 Infrastructure，但跨子域访问仍偏宽
+
+源码扫描未发现 `modules/agent` 直接 import SQLite 或 HTTP 实现，这是正确的；但 `compose-agent.ts` 将同一个 `SqliteRunRepository` 同时注入 `RunService`、`PlanService`、`NativeAgentBackend`、`CheckpointService`、`SubagentService` 和 Scheduler。类型 Port 虽然隔离了方法权限，但 snapshot、计划、checkpoint、协作查询仍共享同一宽泛运行时读取模型。
+
+建议按用途增加 `RunSnapshotReader`、`RunPlanReader`、`CheckpointReader` 等只读 Port；至少先把 `NativeAgentBackend` 与 `SubagentService` 从完整 `RunRepositoryPort` 中移除不必要的方法，配合架构 checker 检查 constructor 参数类型。
+
+### P2-代码-3：运行时与后继能力在源码目录中已并列，容易被误认为已接线
+
+`infrastructure/agent/integrations/` 下已经存在 `acp.adapter.ts`、`browser-gateway.adapter.ts`、`mcp.adapter.ts`，而当前组成根实际只接入 MCP。建议对 ACP、Browser/CDP adapter 使用明确的 `reserved` 标记或移动到后继目录，避免维护者误把“adapter 存在”理解为 live execution 已完成；production composition root 应增加阶段断言。
+
+> **解决方案（采用；文档状态已完成，静态 guard 待本轮 P3-代码-2 落地）**
+>
+> 不为“看起来未接线”而移动/删除现有 ACP 与 Browser/CDP/Puppeteer skeleton，避免产生无价值目录 churn。改为在 `ARCHITECTURE.md`、`IMPLEMENTATION.md`、`MODULE_DEPENDENCY_DESIGN.md`、`CURRENT_AGENT_ARCHITECTURE.md` 四份 canonical 文档统一标记：**ACP 未完成（reserved / roadmap-only）**、**Browser/CDP/Puppeteer 未完成（reserved / roadmap-only）**。当前 `nexus.operations` manifest 不声明 `integration.acp.execute` / `browser.operate`，不创建默认 grant，production composition root / Tool Catalog 也不得接线这两项。后续 architecture checker 增加“reserved adapter 不得被 production composition 实例化”的规则；只有 capability declaration、Policy/Approval/Lease/StateCommit、runtime wiring、UI/API、failure/recovery 与产品 E2E 全部完成后才能改为 implemented。
+
+### P3-代码-1：Tool contribution 注册缺少统一的 owner 元数据
+
+当前 `compose-agent.ts` 中 contribution 的 `id`、`capability`、tools 由多处手写，MCP 又通过动态 `replaceOwnedContribution` 管理 owner。建议统一 contribution descriptor，强制包含 `ownerAppId`、`phase`、`lifecycle` 和 `replacePolicy`，由 `ToolCatalog` 校验静态与动态 contribution 不能互相覆盖。
+
+### P3-代码-2：建议把架构违规检查纳入源码门禁
+
+现有源码已经暴露出 Frontend Host→Operations UI 的违规路径。建议在 frontend/backend architecture checker 中加入：
+
+1. `features/agent/host/**` 禁止 import `features/agent/apps/**`，仅允许 `builtin-apps.ts` 例外；
+2. `NativeAgentBackend` 禁止依赖底层 `LeasePort` mutation API；
+3. `compose-agent.ts` 禁止出现 Tool 实现函数体，只允许调用 capability composer；
+4. reserved adapter 禁止被 production composition root 实例化。
+
+## 前后端 Runtime 深度审核（第一批）
+
+本节基于当前源码逐文件检查，重点覆盖 Backend Scheduler/Execution/Event、HTTP/WS 事件链路，以及 Frontend API/Run 投影。
+
+### R1：`AgentScheduler` 的并发计数混用了全局 active 与按用户限制
+
+位置：`packages/backend/src/modules/agent/runtime/scheduling/scheduler.ts`。
+
+`pump()` 使用：
+
+```ts
+this.active.size + this.externalActiveCount(next.run.userId) >= maxConcurrent;
+```
+
+`this.active.size` 是整个进程、所有用户和所有 App 的运行数，而 `maxConcurrent` 是当前用户设置。只要用户 A 已经运行了较多 Run，用户 B 即使没有任何运行中的 Run，也可能被错误阻塞；反过来，当 `externalActiveCount` 只统计协作 scheduler 时，也无法准确表示同一用户的全部 Runtime。
+
+影响：多用户场景下调度公平性和配置语义错误，可能出现无关用户互相阻塞；单用户场景下也无法区分 root runtime 与 subagent runtime 的配额。
+
+建议：维护 `activeByUser: Map<number, number>`，统一由 root/subagent scheduler 上报按用户计数；检查条件改为：
+
+```text
+activeByUser[userId] + externalActiveByUser[userId] < effectiveLimit[userId]
+```
+
+如果产品还需要全局上限，单独增加 `globalMaxConcurrentRuntimes` 并单独判断，不要复用用户级上限。启动、正常结束、异常结束和 quiesce 都必须通过同一计数器增减，并用 finally 防止泄漏。
+
+### R2：调度队列为进程内存结构，恢复依赖外部唤醒，重启后存在“已创建但不再执行”窗口
+
+位置：`scheduler.ts` 的 `queues`、`active`，以及 `SubagentScheduler` 的同类内存状态。
+
+当前队列、active controller 和 requeue 状态都只存在内存。虽然 Run/Work 状态会持久化，但进程重启后是否能被重新扫描、重新入队，取决于 bootstrap sweep 和调用方是否恰好触发 wake；文档要求 durable scheduler，但代码主调度器仍是 memory-first。
+
+影响：进程在 `created/running` 与真正 enqueue 之间崩溃时，Run 可能长期停留在非终态；active 执行中断后如果没有 recovery sweep，可能没有明确的 `interrupted` 或 reconciliation 记录。
+
+建议：将 scheduler 明确拆为 `DurableRunnableScanner` 与 `InProcessDispatcher`：
+
+1. scanner 按固定周期和启动阶段扫描 `created/running/awaiting_*` 中可运行项；
+2. dispatcher 只保存短期执行句柄，不把它作为 work existence 的事实来源；
+3. claim 使用数据库版本/CAS，带 owner epoch、lease expiry 和 attempt watermark；
+4. 进程重启先把过期 owner 标记为 interrupted/reconciling，再重新扫描可恢复项。
+
+### R3：`AgentScheduler` 使用 `Date.now()`，没有遵循统一 `ClockPort`
+
+位置：`scheduler.ts` 中的 `enqueuedAt`、quiesce deadline 和 transient event 时间。
+
+Runtime 其他模块已注入 `ClockPort`，但 Scheduler 直接使用墙上时间，导致测试无法稳定控制时间，也可能在系统时钟回拨/跳跃时错误计算排空超时。`enqueuedAt` 目前没有被使用，反而增加了误导性的时间状态。
+
+建议：注入 `ClockPort`，同时区分 `nowUnixSeconds()` 与 `nowMonotonicMilliseconds()`；排空、重试和 lease deadline 使用单调时钟，事件落库时间使用 Unix 时间。删除未使用的 `enqueuedAt`，或将其真正用于公平性/超时策略。
+
+### R4：Scheduler 捕获执行异常后只记录日志，没有保证 Run durable failure
+
+位置：`AgentScheduler.start()` 的 `catch`。
+
+当前异常路径只执行 `console.error`，随后从 `active` 删除并继续 pump。若异常发生在 backend 尚未调用 StateCommit 的窗口，Run 可能继续保持 `running`，没有 `failed/interrupted`、错误码或 reconciliation 标记。
+
+建议：为 `AgentBackendPort.execute()` 定义可恢复/不可恢复错误契约；Scheduler catch 必须调用一个幂等的 `StateCommit.markExecutionInterrupted/failed`，带 expected version、owner epoch 和错误分类。若提交失败，写入 recovery queue，由 lifecycle sweep 重试，而不是仅依赖日志。
+
+### R5：Backend EventHub 只负责进程内分发，无法单独保证订阅期间的顺序与背压
+
+位置：`packages/backend/src/modules/agent/runtime/events/event-hub.ts`。
+
+EventHub 直接同步遍历 listener，listener 异常会向发布方传播；没有 per-listener queue、顺序序号校验、慢消费者隔离或最大缓存。当前 durable 事件依靠外部 cursor replay，transient 事件则可能在慢客户端或 listener 抛错时丢失，这种差异没有在接口类型中明确表达。
+
+建议：将 EventHub 分成 `DurableWakeBus` 与 `TransientEventBus`。前者只发布“有新 cursor”的提示，不承载事件内容；后者为每个订阅建立有界异步队列，listener 异常隔离，超限时主动丢弃并发送 `transient_gap`。对所有 publish 使用 try/catch，禁止订阅者异常破坏状态提交调用栈。
+
+### R6：Frontend WebSocket 订阅没有自动重连、退避和 cursor 重新同步
+
+位置：`packages/frontend/src/features/agent/api/agent-events.ts`。
+
+`connect()` 建立单个 socket，关闭后直接结束 async iterator；调用方如果没有重新创建 iterator，订阅即永久停止。代码也没有指数退避、最大重连间隔、连接代次或重新从最后 durable sequence 订阅的机制。ephemeral 事件在断线期间丢失是允许的，但 durable wake 必须触发 API 重新拉取，否则 UI 会停留在旧 Run snapshot。
+
+建议实现 `AgentEventSubscription`：
+
+```text
+lastDurableCursor
+  -> socket close
+  -> exponential backoff + jitter
+  -> subscribe(lastDurableCursor)
+  -> replay API / snapshot refresh
+```
+
+重连期间合并重复 cursor，只允许单个 active socket；认证失效立即停止并交给 auth session 处理。把“durable wake 只表示需要 refresh”写进类型和调用约定，避免组件把它当作完整事件流。
+
+### R7：Frontend API 层缺少统一的 Run cursor/store，组件容易各自拉取并覆盖新状态
+
+位置：`packages/frontend/src/features/agent/runtime/run-facade.ts`、`api/agent-api.ts` 及 Runtime Vue 组件。
+
+`createAgentRunFacade()` 只是 API 方法转发器，没有维护当前 Run 的 `version/eventCursor/inputRevision`，也没有处理并发请求返回乱序。组件收到事件后若分别调用 `getRun/listApprovals/listSubagents`，旧响应可能覆盖新响应，形成状态回退。
+
+建议新增按 `appId/runId` 索引的 `run-store`：
+
+1. 所有 snapshot 采用 `version` 单调合并，旧版本直接丢弃；
+2. durable wake 按 cursor 去重并串行刷新；
+3. approval/plan/subagent 子资源随同一 snapshot revision 更新；
+4. mutation 请求带 `expectedVersion`，冲突统一转换为 refresh-and-retry 或显式冲突状态；
+5. 组件只读 store，不直接管理请求竞态。
+
+### R8：前端事件解析允许任意 `payload`，协议校验停留在外壳层
+
+位置：`agent-events.ts` 的 `parseWireEvent()`。
+
+当前只校验 durability、sequence、eventType 和 occurredAt，事件 payload 保持 `unknown` 后直接交给上层。这样一旦后端变更字段或恶意/损坏消息进入客户端，错误会延迟到任意组件，难以定位；同时 eventType 与 payload 的对应关系没有类型保证。
+
+建议建立 discriminated union：按 `eventType` 为 `run.status_changed`、`tool.*`、`message.*`、`approval.*` 定义 payload schema，解析阶段完成校验和版本兼容；未知事件保留为 `AgentUnknownEvent` 并记录 telemetry，不直接投影到业务状态。
+
+### R9：`SubagentScheduler` 文件接近 1000 行，调度、模型执行和协作上下文没有形成可替换边界
+
+位置：`packages/backend/src/modules/agent/runtime/collaboration/subagent-scheduler.ts`。
+
+该文件同时包含初始化清理、claim、work selection、delegation/runtime/mailbox 查询、上下文截断、model call、tool execution、lease、StateCommit settle、重试和 quiesce。它实际上复制了 Root Runtime 的一部分执行循环，又额外耦合 collaboration 查询，后续 Root 与 Subagent 的修复很容易分叉。
+
+建议拆为四层：
+
+```text
+SubagentWorkScanner       -> durable ready/claim/recovery
+SubagentContextBuilder    -> delegation/mailbox/shared facts + limits
+ParticipantExecutor       -> model/tool/lease execution
+SubagentWorkCoordinator   -> state commit、重试、取消、事件
+```
+
+其中 `ParticipantExecutor` 应复用 Root 的通用 `ModelStepRunner`/`ToolCallRunner`，差异通过 participant policy 注入；不要继续复制 NativeAgentBackend 的逻辑。
+
+### R10：Subagent 与 Root 的预算/并发/取消语义可能分裂
+
+从 composition wiring 看，Root scheduler 与 `SubagentScheduler` 分别拥有 active count、model limiter、lease coordinator 和 enqueue callback。若一个 Run 同时包含 root 与 child，预算检查、取消传播和 app quiesce 由两个循环分别处理，容易出现 parent 已取消但 child 仍可 claim 新 work，或 child 用量未及时反映到 parent hard limit。
+
+建议定义 Run 级 `ExecutionBudgetCoordinator` 和 `CancellationTree`：
+
+- parent cancel 先写 durable cancellation intent，再广播给所有 participant；
+- child claim 前检查 parent status/version 和 cancellation epoch；
+- token/cost/step/message 使用统一原子 reserve/settle；
+- active count 只由 coordinator 汇总，Root/Subagent 不各自维护独立事实。
+
+### R11：`StateCommitPort` 接口过大，跨越 Run、Model、Tool、Approval、Subagent 多种事务语义
+
+位置：`packages/backend/src/modules/agent/runtime/runs/state-commit.port.ts`。
+
+该 Port 当前包含大量不同状态机的 command/result，调用者可以看到不属于自身生命周期的方法。虽然 concrete adapter 只有一个事务入口是正确的，但公共 Port 过大仍会造成权限和认知耦合。
+
+建议保留一个 infrastructure 内部事务 facade，同时向模块暴露 capability-specific ports：
+
+```text
+RunCommitPort
+ModelStepCommitPort
+ToolCommitPort
+ApprovalCommitPort
+CollaborationCommitPort
+```
+
+这些 Port 由同一个 `SqliteStateCommitAdapter` 实现，内部共享 transaction context。这样既不破坏跨表原子性，也能让构造函数表达最小权限。
+
+### R12：StateCommit command 需要统一幂等键、attempt 和 owner epoch
+
+当前 RunService 已有 idempotency key，但模型 step、tool begin/settle、subagent work settle 等不同 command 的幂等语义分散在 transition 实现中。对于进程崩溃后重试，单靠 `expectedRunVersion` 只能拒绝旧写，不能区分“同一 attempt 的重放”与“新 attempt”。
+
+建议所有外部副作用相关 command 统一携带：
+
+```text
+commandId / idempotencyKey
+attemptId
+ownerEpoch
+expectedVersion
+inputWatermark
+```
+
+数据库为 `(runId, commandId)` 或 `(toolCallId, attemptId)` 建唯一约束；重复提交返回原结果，owner epoch 过期返回明确 `STALE_EXECUTOR`，不要统一转成普通 conflict。
+
+### R13：HTTP Runtime 路由虽有公共解析函数，但缺少统一 request schema 版本
+
+位置：`packages/backend/src/interfaces/http/agent/app-runtime.routes.ts`、`agent-route-input.ts`。
+
+当前路由大量依赖 `pathParam/queryString/parseLimit` 和 service 内部的手写字段校验。校验逻辑分散后，新增 endpoint 很容易漏掉 unknown key、数组长度、版本字段或 body 上限；前端也无法根据 endpoint 版本安全演进。
+
+建议为 Run、Approval、Checkpoint、Workspace command 定义 versioned DTO schema（可用 AJV adapter），HTTP 层一次完成：unknown key 拒绝、大小/深度限制、枚举校验和 schemaVersion 检查；Service 只接收已解析的 domain command。错误响应统一返回 `code、field、expectedVersion、currentVersion?`，便于前端冲突处理。
+
+### R14：Checkpoint resume 需要显式防重放与副作用状态检查
+
+位置：`packages/backend/src/modules/agent/runtime/recovery/checkpoint.service.ts`。
+
+Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint 中的 tool/delegation 状态按“已确认、未知、未开始”分类。若 checkpoint 只保存 projection 而未保存 side-effect watermark，恢复逻辑可能把未知 mutation 当作未执行重新执行。
+
+建议 checkpoint 增加 `recoveryManifest`：记录每个 tool attempt、operationHash、sideEffectStatus、verificationStatus、resource quarantine 和最后 event cursor。resume 只复制可安全重放的模型上下文；未知 mutation 必须先进入 reconciliation，不能直接进入 runnable。
+
+### R15：前端 `WorkspaceRuntimePanel` 的多请求刷新保护不完整
+
+位置：`packages/frontend/src/features/agent/runtime/WorkspaceRuntimePanel.vue`。
+
+`refresh()` 使用 `refreshGeneration` 防止主请求覆盖，但 `loadGrants()` 在主请求完成后异步读取，未携带 generation 检查；用户快速切换 workspace/plugin target 时，旧 grants 响应可能覆盖新选择。`replaceGrants()` 也没有 expected revision/CAS 参数，连续保存可能丢更新。
+
+建议：
+
+1. 所有子资源请求携带 `generation` 和选中 key，响应只在两者仍匹配时写入；
+2. grants API 返回 revision，替换时提交 expectedRevision；
+3. 目标切换时取消旧请求（AbortController）；
+4. 将 workspace、plugin installation、grant 分成 store slice，避免一个组件管理多个资源生命周期。
+
+### R16：审批卡片使用本地墙上时钟，可能提前或延后显示过期
+
+位置：`packages/frontend/src/features/agent/runtime/ApprovalCard.vue`。
+
+组件用 `Date.now()` 每秒计算剩余时间，但服务端 approval expiry 是权威时间，客户端时钟偏差会导致按钮在服务端已过期时仍可点击，或反之。后端 CAS 会最终拒绝，但用户会看到错误操作。
+
+建议后端返回 `serverNow` 或在 bootstrap/响应头提供时间偏移；前端以 `serverNow + monotonic elapsed` 计算倒计时。按钮点击前仍必须刷新 approval 或接受服务端 409，并将状态更新为 expired/stale，而不是只显示通用请求失败。
+
+### R17：前端 Runtime 组件缺少统一的错误/冲突恢复状态
+
+`TaskRail`、`WorkspaceRuntimePanel`、审批和文件传输组件各自维护 `busy/error/notice`。当 API 返回 version conflict、app draining、run interrupted 或 unknown outcome 时，组件通常只显示本地字符串，未触发 snapshot refresh 或 reconciliation UI。
+
+建议定义 Runtime error state machine：`idle/loading/mutating/conflict/reconciling/failed`，在 API client 层映射错误码；组件只处理状态和用户动作。对 `VERSION_CONFLICT` 自动拉取最新 snapshot，对 `OUTCOME_UNKNOWN` 显示“需要核实”并提供 reconciliation 入口，避免用户重复点击产生第二次副作用。
+
+### R18：Frontend `run-facade` 仍是无状态转发层，无法承载 Runtime 生命周期
+
+`createAgentRunFacade()` 返回的函数直接调用 `agentApi`，没有 `dispose()`、事件订阅、请求取消、缓存或 active run 切换语义。Host/Hub 销毁时如果上层没有逐个停止 subscription，后台 async iterator 可能继续持有 socket。
+
+建议 facade 变成显式生命周期对象：`start()` 建立 host/run subscriptions，`dispose()` 取消全部 AbortController，`selectRun()` 切换并清理旧资源；内部委托 `run-store` 做 cursor 合并。Vue 组件只消费 facade/store，不直接创建长期网络任务。
+
+## Runtime 重构落地顺序
+
+1. 先修复 `AgentScheduler` 按用户计数、异常 durable settle 和 Clock 注入；
+2. 建立 durable scanner/recovery sweep，明确重启后的 claim/owner epoch；
+3. 抽取 Root/Subagent 共用的 model/tool runner，削减两个超大执行文件；
+4. 将 StateCommit 拆成 capability-specific ports，统一 command idempotency/attempt；
+5. 增加 WebSocket 自动重连和前端 `run-store`，以 cursor/version 为唯一合并规则；
+6. 修正 Workspace grants、approval server clock 和 Runtime error state machine；
+7. 最后再做 HTTP schema/version 收敛和架构 checker 门禁。
+
+## dev 分支兼容性复核
+
+对比基线 `main` 与当前 `dev` 分支（重点检查 `1aa44fc`、`06445c5`、`4b79386`、`ae78197`）后，结论是：整体架构方向与此前 Agent 设计兼容，但有三类需要调整的兼容性问题：传输协议替换的迁移完整性、Runtime ownership 文档与实现的同步、以及新增 WebSocket 的事件一致性边界。
+
+### D1：SSE→WebSocket 的替换方向合理，但属于协议 breaking change，不能只做代码切换
+
+`1aa44fc` 删除了 Agent SSE 路由和 `agent-sse.ts`，新增 `/ws/agent`、`AgentProtocolSession` 和前端 WebSocket client。此前架构文档已经把原生 WebSocket 作为目标方案，因此方向兼容；但现有前端/第三方调用方若仍使用旧 SSE endpoint，会直接失效。
+
+建议：
+
+1. 在 `ARCHITECTURE.md`、`IMPLEMENTATION.md` 和 API 变更记录中明确协议版本与迁移窗口；
+2. 保留一个短期 SSE compatibility adapter，或至少返回明确的 `410 AGENT_STREAM_PROTOCOL_REPLACED`；
+3. E2E 同时覆盖 host/run 两种订阅、断线重连、cursor replay、权限拒绝和 quiesce；
+4. 不要让 WebSocket 传输层反向改变 Event/Run 领域模型，继续保持“durable event replay + ephemeral delta”边界。
+
+### D2：WebSocket subscribe 存在高水位读取与监听注册之间的竞态，可能永久漏掉 durable wake
+
+位置：`packages/backend/src/interfaces/websocket/agent-protocol.session.ts` 的 `subscribe()`。
+
+当前流程先读取 `highWater`，然后创建 listener、加入 `subscriptions`，最后 `scheduleDrain()`。如果事件在读取 highWater 后、listener 注册前提交，后续没有新的事件触发 wake，客户端会停在旧 cursor；这与原 SSE 的“注册后读取/定时唤醒”语义不兼容。
+
+建议将订阅建立改为原子化顺序：先登记 subscription 和 wake listener，再读取起始 high-water，随后立即执行一次 drain；或采用两次读取校验：注册后再次读取 high-water，若高于初值则强制 drain。Run/host 两条路径都必须使用同一策略。
+
+### D3：WebSocket 客户端当前仍是一次性连接，未完成新协议要求的断线恢复
+
+`1aa44fc` 的后端实现支持 cursor replay，但前端 `agent-events.ts` 的 `connect()` 在 socket close 后直接结束 iterator，没有自动重连。也就是说，后端已经提供了 durable replay 能力，前端没有消费该能力，实际兼容性只完成了一半。
+
+建议优先补齐前端 subscription supervisor：保存最后 durable sequence、指数退避重连、重连时重新 subscribe、连接期间只丢弃 ephemeral event，并在恢复后触发 snapshot refresh。否则 Agent UI 在代理重启、网络切换、浏览器休眠后会永久停止更新。
+
+### D4：新 WebSocket 事件加入 `schemaVersion`，但前端解析器丢弃该字段
+
+后端 `AgentProtocolSession.drain()` 会在 durable event 中发送可选 `schemaVersion`；前端 `AgentWireEventPayload` 和 `parseWireEvent()` 没有保留或校验该字段。未来事件 schema 演进时，客户端无法判断兼容版本，只能把不认识的 payload 当当前版本处理。
+
+建议把 `schemaVersion` 纳入 wire event 类型并做正整数校验；按 `(eventType, schemaVersion)` 选择 parser，未知版本进入 `unknown event` 分支并触发 snapshot refresh，而不是静默投影。
+
+### D5：WebSocket 生命周期已接入通用 server，但 Agent 专属连接配额和指标缺失
+
+旧 SSE 实现有每 session 的连接上限、待发送事件上限和 writer drain；新实现有单 socket `MAX_SUBSCRIPTIONS` 与 bufferedAmount 限制，但没有 Agent connection/session 级限额，也没有区分订阅数、replay lag、重连次数和关闭原因的指标。
+
+建议在 `websocket-server.ts` 的 `ClientRecord`/metrics 中增加 Agent 专属计数：每 user/session 的 socket 上限、每 socket subscription 上限、最大 replay duration、slow-consumer 次数和 protocol error 次数。连接配额应在 upgrade 或 session attach 阶段拒绝，不能等到订阅后才耗尽资源。
+
+### D6：`4b79386` 的 StateCommit 拆文件是兼容性正向改动，但公共 Port 仍未同步收窄
+
+将 3458 行的 `sqlite-state-commit.adapter.ts` 拆为 run/model/tool/approval/subagent transitions，符合“单一事务入口、transition 接收 tx”的既有设计，属于合理重构。但 `StateCommitPort` 仍暴露跨所有状态机的宽接口，调用方没有随拆分同步获得最小权限。
+
+建议下一步只改 Port 与 constructor 注入，不再继续拆 concrete transition 文件：为 Run、Model、Tool、Approval、Collaboration 提供 capability-specific ports，均由同一 adapter 实现。
+
+### D7：`06445c5` 前端 Workspace Runtime 拆分与既有边界兼容，但状态仍由父组件集中管理
+
+将 `WorkspaceRuntimePanel.vue` 拆成 Create、Toolchain、Grants、ArtifactTransfer 子组件，改善了视图复杂度，符合 Frontend feature 内聚原则。但父组件仍持有 catalog/apps/installations/versions/workspaces/artifacts/grants 全部状态，且 grants 请求存在前述竞态；这属于文件拆分而非真正状态边界拆分。
+
+建议进一步抽出 `workspace-runtime-store` 或 composable，按 catalog/workspace/plugin/grant 分片管理 revision、AbortController 和 refresh generation；组件只接收 typed state 与 command。
+
+### D8：`ae78197` 的 ownership 规则与已有 Host→Operations 直接 import 冲突
+
+新文档强调统一 runtime ownership、Host 不拥有 App 私有实现；但当前 `AgentHubWindow.vue` 仍直接 import `apps/operations/OperationsView.vue`。因此文档方向合理，代码尚未完全兼容。应将该路径列为架构门禁失败项，而不是继续依赖约定。
+
+### D9：dev 新增能力范围已超过“当前 live execution”说明，需区分已接线与仅存在代码
+
+当前分支同时包含 ACP、Browser/CDP adapter、MCP、Workspace Runner、multi-version toolchain 等代码。与既有 Phase 规划相比，只有部分能力进入 composition root；如果不标记 phase，维护者会把“文件存在”误认为“功能可用”。
+
+建议在每个 Port/adapter/contribution 上增加 `phase: active | reserved` 元数据，composition root 启动时拒绝将 reserved capability 注册到 production catalog，并在 CURRENT_AGENT_ARCHITECTURE 中维护一张实际接线表。
+
+## dev 分支建议调整优先级
+
+### 必须先改（兼容性/正确性）
+
+1. 修复 WebSocket subscribe 的 high-water/listener race；
+2. 补前端 WebSocket 自动重连、cursor replay 和 snapshot refresh；
+3. 明确 SSE→WebSocket 协议迁移策略与错误码；
+4. 修正 AgentScheduler 按用户计数和异常 durable settle。
+
+### 随后改（结构优化）
+
+1. 收窄 StateCommit capability ports；
+2. 抽取 Root/Subagent 共用执行器；
+3. 将 Workspace Runtime 状态移出父组件；
+4. 修正 Host→Operations import 并加入架构 checker；
+5. 统一 active/reserved phase 标记与 composition root 校验。
+
+总体判断：dev 分支新增 Agent 架构大部分沿着既有设计演进，StateCommit 拆分、Workspace Runtime 子组件拆分和专用 WebSocket 都是合理方向；但 WebSocket 迁移尚未达到端到端兼容，Runtime 的 durable recovery、前端状态生命周期和 ownership 门禁仍需补齐后，才能视为与原架构完整兼容。
+
+## Agent 功能的成熟 Node 模块复用评估
+
+### 总体结论
+
+当前项目已经引入 `ajv`、`semver`、`eventsource-parser`、`ws`、`tar`、`archiver`、`ipaddr.js`、`undici` 和 `vue-virtual-scroller`，这些选择基本合理。后续应继续坚持“通用协议/格式/并发原语优先复用，Nexus 特有的 durable 状态机和安全策略保留自研”的原则。
+
+下面的建议分为三类：
+
+- **建议直接复用或扩大使用**：已有依赖能覆盖当前自写代码；
+- **可选复用**：能减少样板，但不能替代领域语义；
+- **不建议替换**：看似通用，实际与 Run/CAS/Lease/审计强绑定。
+
+### M1：JSON Schema 校验应统一通过 `ajv`，避免重复手写 shape validator
+
+项目已有 `ajv` 和 `modules/agent/json-schema-validator.ts`，但 Runtime HTTP command、Provider、Workspace、Plugin、Approval 等仍大量使用 `isRecord`、`hasOnlyKeys`、`typeof`、数组长度和枚举的手写组合。手写校验容易出现不同 endpoint 的 unknown key、深度、数值范围和错误路径不一致。
+
+建议：
+
+1. 为 `CreateRunCommand`、`AppendInputCommand`、`BudgetIncreaseCommand`、`ApprovalDecision`、`CheckpointResume`、Workspace command、Plugin manifest 建立 versioned JSON Schema；
+2. HTTP 层统一调用 AJV adapter，开启 `allErrors`、`strict`、`unevaluatedProperties: false` 和显式 format；
+3. Domain service 接收已解析 DTO，保留业务校验（scope、policy revision、目标权限、CAS）在 Service/StateCommit；
+4. 不把 AJV 当作授权或状态迁移器。
+
+### M2：SemVer、tar、archiver、Content-Disposition、虚拟列表的复用已经正确，应禁止再次自写
+
+当前已有 `semver`、`tar`、`archiver`、`content-disposition` 和 `vue-virtual-scroller`，与架构文档的 reuse-first 决策一致。后续优化重点不是换库，而是把边界固定下来：
+
+- `semver` 只负责版本解析/比较，App id、target、capability 和兼容性仍由 Host 校验；
+- `tar` 只负责归档读取，路径穿越、symlink、digest、签名文件和原子安装仍由 PackageVerifier 负责；
+- `archiver` 只负责打包，Artifact owner/grant、大小、临时文件和 fsync 仍由 Artifact Store 负责；
+- `content-disposition` 只负责 header 编码，Range、授权和 nosniff 仍由 HTTP 层负责；
+- `vue-virtual-scroller` 只负责渲染窗口，cursor 分页、stream buffer、anchor 恢复仍由 Runtime store 负责。
+
+### M3：事件协议解析应继续使用 `eventsource-parser`/`ws`，但 WebSocket wire schema 应增加 schema validator
+
+Provider SSE 已使用 `eventsource-parser`，传输 WebSocket 已使用 `ws`，不应再实现底层 frame/parser。当前缺口在于 Agent WebSocket message/event payload 的手写校验仍较薄。
+
+建议使用现有 AJV 为 subscribe/unsubscribe、subscribed、event、error 定义 wire schema，并将 `schemaVersion` 纳入校验；`ws` 只负责连接、背压和 close code，订阅 cursor、replay 和权限继续由 Agent protocol service 管理。
+
+### M4：重试退避可考虑 `p-retry`，但只能包装无副作用的 Provider/HTTP 请求
+
+当前 `NativeAgentBackend`、Provider adapter、Runner adapter 各自实现 retryable error、Retry-After、timeout 和 AbortSignal 等逻辑。`p-retry`（或同类成熟库）可以减少指数退避、attempt 上限、AbortSignal 和随机抖动的样板。
+
+适用范围：
+
+- Provider 建连、幂等的 model request 建立阶段；
+- Runner catalog/read-only query；
+- MCP metadata refresh。
+
+不适用范围：
+
+- Tool mutation side effect；
+- `StateCommit` transition；
+- lease acquire/renew/release；
+- 已写入 `started` 的 tool attempt。
+
+即便采用 `p-retry`，每次 attempt 仍必须由领域代码记录 attemptId、预算、取消原因和最终 outcome，不能让库内部重试绕过 durable ledger。若不希望增加一个小依赖，也可以抽一个仅供 adapter 使用的 `RetryPolicy`，但不要复制到每个 Runtime 文件。
+
+### M5：内存并发队列可用 `p-queue`/`bottleneck`，但不能替换当前 durable Scheduler
+
+`AgentScheduler` 和 `SubagentScheduler` 当前自写 queue、fairness、active map、pump、quiesce。`p-queue` 或 `bottleneck` 能提供并发上限、优先级、暂停和事件，但它们是进程内队列，不能表达 Run version、DB claim、owner epoch、recovery 或跨进程互斥。
+
+建议只在 `InProcessDispatcher` 层考虑使用 `p-queue`：
+
+```text
+Durable scanner/claim/CAS  ->  p-queue dispatcher  ->  execution handle
+```
+
+不要把 library queue 直接注入 RunService，也不要用它替代 SQLite work claim。若当前调度器仍是单进程且需要减少维护，可先抽出自己的 `DispatcherQueuePort`，未来再决定是否换库。
+
+### M6：Canonical JSON/hash 可以评估 `fast-json-stable-stringify`，但必须先做兼容性基准
+
+项目在 `operation-hash.ts`、Run idempotency 中自写 canonicalization。成熟的 `fast-json-stable-stringify` 可减少排序键、数组/数字/递归处理的重复代码，但 operationHash 是审批、重检和 mutation 防重放的安全契约，不能直接替换。
+
+建议先建立 golden vectors：
+
+- `-0`、浮点、Unicode、嵌套对象、数组顺序；
+- undefined/非 JSON 值拒绝策略；
+- schemaVersion 变化后的 hash 是否有意变化；
+- 旧数据和旧 approval 的 hash 兼容。
+
+只有确认新库输出与现有 v1 完全一致，或明确升级为 `operationHash v2` 并迁移历史数据，才可采用。否则保留自研 canonicalizer，并把它移动到一个共享纯 utility，避免两份实现继续漂移。
+
+### M7：HTTP 客户端、超时和 AbortSignal 优先复用 `undici` 原生能力
+
+项目已在 safe MCP fetch 使用 `undici`，但 Provider/Runner/部分 Agent HTTP 仍分别实现 timeout timer、response size 和错误映射。可以统一一个 Infrastructure `SafeHttpClient`，内部使用 `undici` 的 `fetch/Agent/AbortSignal.timeout`（Node 24），提供：
+
+- connect/header/body timeout；
+- 最大响应字节数和流式读取；
+- DNS/TLS/outbound policy hook；
+- Retry-After 和标准错误映射。
+
+目标是减少 transport 样板；DNS rebinding、connection denylist、目标 scope 和 mutation verification 仍必须由 Nexus policy/adapter 控制，不能交给 HTTP 库。
+
+### M8：网络目标分类继续使用 `ipaddr.js`，不建议引入“全自动 SSRF”库
+
+当前使用 `ipaddr.js` + Node DNS/TLS + 自有 `OutboundPolicyAdapter`，符合架构要求。`ssrf-req-filter` 等黑盒库不能表达当前的 connection denylist、DNS rebinding、代理信任和审批 scope，也可能与 `undici` agent 行为冲突。
+
+建议只复用底层 IP parser，补充针对 IPv4-mapped IPv6、DNS 多地址、重解析和 redirect 禁止的测试；不要把“是否允许目标”委托给第三方库。
+
+### M9：限流/熔断库只能用于 Provider transport，不能代替 Agent budget/lease
+
+可以评估 `Bottleneck` 或 `opossum`：
+
+- `Bottleneck` 适合 provider per-user/per-provider request rate/concurrency；
+- `opossum` 适合 Provider/Runner 连续失败时的短路。
+
+但 Run hard limit、model call limiter、tool timeout、lease TTL、approval expiry 和 app quiesce 是 durable 领域约束，不能由内存 limiter/circuit breaker 作为事实来源。若采用，必须把它放在 adapter 外层，并在 StateCommit/metrics 中记录拒绝原因。
+
+### M10：Cursor、分页和状态合并不应引入通用数据 fetching 库替代领域 store
+
+Frontend 可以评估 TanStack Query/Vue Query 来处理 HTTP cache、请求取消、失效和重试，但当前 Agent 的 `version/eventCursor/inputRevision` 合并规则不是普通 cache invalidation。直接套用 query cache 可能让旧响应覆盖新 durable snapshot。
+
+建议先实现轻量 `run-store`，明确版本单调合并和 cursor replay；若后续引入 Vue Query，只把它作为 transport cache，所有 Run snapshot 必须经过 domain merge function，不能由库默认替换。
+
+### M11：成熟模块采用建议表
+
+| 能力                  | 当前实现                    | 建议                                      | 边界                       |
+| --------------------- | --------------------------- | ----------------------------------------- | -------------------------- |
+| JSON Schema           | 已有 AJV + 部分手写校验     | 扩大 AJV DTO 覆盖                         | 不负责授权/CAS             |
+| SemVer/归档/下载头    | 已复用成熟库                | 保持现状                                  | 安全、owner、原子提交自研  |
+| WebSocket/SSE parser  | `ws`/`eventsource-parser`   | 增加 AJV wire schema                      | cursor/replay 自研         |
+| Retry/backoff         | 多处手写                    | adapter 层评估 `p-retry`                  | 不重试 mutation/transition |
+| 内存 dispatcher       | 自写 Map/queue              | 可评估 `p-queue`/`bottleneck`             | 不替代 durable scheduler   |
+| Canonical JSON        | 自写                        | 先 golden vector，再评估 stable stringify | hash 契约不可破坏          |
+| HTTP transport        | `undici` 部分使用           | 统一 SafeHttpClient                       | policy/verification 自研   |
+| SSRF/IP               | `ipaddr.js` + policy        | 保持现状                                  | 不采用黑盒 SSRF 库         |
+| Frontend virtual list | 已有 `vue-virtual-scroller` | 保持现状                                  | store/pagination 自研      |
+| Data fetching         | 轻量 API facade             | 可选 Vue Query作为缓存层                  | version/cursor merge 自研  |
+
+### M12：依赖引入的门禁
+
+每个新增库应在实现交接中记录：版本、许可证、维护状态、bundle/runtime 成本、适配层位置、替换失败时的回退方案。对 Agent 特别增加三条门禁：
+
+1. 库不能持有 Run/Tool/Approval 的 durable truth；
+2. 库不能绕过 capability/policy/lease/verification；
+3. 库的 retry、queue、cache 行为必须可观测，且不会改变既有公开事件和状态迁移。
+
+本轮评估的优先落地项是：扩大 AJV DTO 校验、统一 undici SafeHttpClient、为 adapter 评估 p-retry、抽出可替换的 in-process dispatcher；暂不建议引入通用 workflow/queue/state-machine 库替代自研 Runtime。

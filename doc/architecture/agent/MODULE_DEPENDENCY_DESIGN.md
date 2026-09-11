@@ -149,6 +149,9 @@ NativeAgentBackend
 
 ```text
 modules/agent/runtime/execution/native-agent-backend.ts
+modules/agent/runtime/execution/model-step-runner.ts
+modules/agent/runtime/execution/tool-call-runner.ts
+modules/agent/runtime/execution/mutation-lease-guard.port.ts
 modules/agent/runtime/execution/lease-coordinator.ts
 modules/agent/runtime/execution/execution-errors.ts
 modules/agent/runtime/execution/model-accounting.ts
@@ -162,16 +165,9 @@ modules/agent/runtime/execution/text-budget.ts
 ```text
 RunRepositoryPort
 DelegationRepositoryPort
-ProviderService
-ContextService
-LanguageModelPort
 StateCommitPort
-ToolCatalog
-ToolExecutor
-LeaseCoordinator
-LeasePort
-PolicyService
-ModelCallLimiter
+ModelStepRunner
+ToolCallRunner
 ClockPort
 ```
 
@@ -179,11 +175,12 @@ ClockPort
 
 - `RunRepositoryPort`：读取 Run snapshot / pending durable state；
 - `StateCommitPort`：唯一 durable transition authority；
-- `ToolExecutor`：inspect / execute Tool；
-- `PolicyService`：根据 inspection 做 policy decision；
-- `LeaseCoordinator`：共享 lease primitive；
-- `LeasePort`：Agent mutation 特有的 mutation-active / settled durable lease 标记仍直接使用；
+- `ModelStepRunner`：封装 Provider/Context/LanguageModel/ModelCallLimiter 与 model transport retry，不拥有 Run terminal transition；
+- `ToolCallRunner`：封装 ToolCatalog/ToolExecutor/Policy、read lease 与 staged mutation lease；
+- `MutationLeaseGuardPort`：只由 `ToolCallRunner` 使用，底层 Adapter 独占 mutation acquire/renew/active/settled/release/quarantine；
 - `DelegationRepositoryPort`：只读 Root 的 child delegation 状态。
+
+`NativeAgentBackend` 不再直接依赖 `LeasePort`、`LeaseCoordinator`、`ToolExecutor`、`PolicyService`、Provider/Context/LanguageModel 或 `ModelCallLimiter`。Backend architecture checker 将这些 direct dependency 视为回退。
 
 ### 3.2 Root Tool 普通 inspect / policy 链
 
@@ -757,7 +754,7 @@ verification
 lease release
 ```
 
-这些仍由 `NativeAgentBackend` / `LeaseCoordinator` 控制。
+这些由 `NativeAgentBackend` 保持阶段顺序、`ToolCallRunner` 执行 Tool lifecycle，mutation lease 的 acquire/renew/active/settled/release/quarantine 则统一收敛到 `MutationLeaseGuardPort` 的 infrastructure adapter。`NativeAgentBackend` 不直接拥有底层 `LeasePort`。
 
 ### 8.5 `settleMutationToolTransition()` 的 authority
 
@@ -841,7 +838,7 @@ App approval_count -1
 Host summary event
 ```
 
-Approval transition 不执行真实 Tool side effect，也不操作 lease；审批完成后是否进入 mutation execution 仍由 `NativeAgentBackend` 重新 inspect / policy / revision check 后决定。
+Approval transition 不执行真实 Tool side effect，也不操作 lease；审批完成后是否进入 mutation execution 仍由 `NativeAgentBackend` 驱动下一阶段，并通过 `ToolCallRunner` 重新 inspect / policy / revision check 后决定。
 
 ### 8.7 Root model transitions
 
@@ -1434,6 +1431,8 @@ agentApi.importArtifactToWorkspace()
 
 ### ACP
 
+**状态：未完成（reserved / roadmap-only）。** 当前只保留边界和实现骨架，不属于 production live execution。
+
 保留：
 
 ```text
@@ -1444,7 +1443,7 @@ ACP Integration schema
 integration.acp.execute capability type (roadmap only)
 ```
 
-当前不宣称 live ACP execution 已完成；`nexus.operations` manifest 不声明该 capability，也不会创建默认 grant。
+当前 live ACP execution **未完成**；production composition root 不实例化/注入 ACP runtime，`nexus.operations` manifest 不声明该 capability，也不会创建默认 grant。
 
 未来调用方向应保持：
 
@@ -1458,6 +1457,8 @@ Agent Runtime
 
 ### Browser/CDP
 
+**状态：未完成（reserved / roadmap-only）。** 当前只保留 Browser/CDP/Puppeteer 后继接线骨架，不属于 production live execution。
+
 保留：
 
 ```text
@@ -1469,7 +1470,7 @@ browser.operate capability type (roadmap only)
 puppeteer-core
 ```
 
-当前 `nexus.operations` manifest 不声明 `browser.operate`，也不会创建默认 grant；Browser/CDP/Puppeteer 代码只保留后继接线骨架。
+当前 Browser/CDP/Puppeteer live execution **未完成**；production composition root / Tool Catalog 不接线，`nexus.operations` manifest 不声明 `browser.operate`，也不会创建默认 grant。
 
 未来方向：
 

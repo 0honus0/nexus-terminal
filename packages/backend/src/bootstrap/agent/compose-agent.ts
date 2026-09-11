@@ -1,6 +1,7 @@
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
+import { AgentMutationLeaseGuardAdapter } from '../../infrastructure/agent/capabilities/agent-mutation-lease-guard.adapter';
 import { NodeCryptoHashAdapter } from '../../infrastructure/agent/capabilities/node-crypto-hash.adapter';
 import { SqliteAgentSettingsRepository } from '../../infrastructure/agent/repositories/sqlite-agent-settings.repository';
 import { SqliteHardLimitConfirmationRepository } from '../../infrastructure/agent/repositories/sqlite-hard-limit-confirmation.repository';
@@ -71,6 +72,8 @@ import { AgentEventHub } from '../../modules/agent/runtime/events/event-hub';
 import { NativeAgentBackend } from '../../modules/agent/runtime/execution/native-agent-backend';
 import { LeaseCoordinator } from '../../modules/agent/runtime/execution/lease-coordinator';
 import { ModelCallLimiter } from '../../modules/agent/runtime/execution/model-call-limiter';
+import { ModelStepRunner } from '../../modules/agent/runtime/execution/model-step-runner';
+import { ToolCallRunner } from '../../modules/agent/runtime/execution/tool-call-runner';
 import { RunService } from '../../modules/agent/runtime/runs/run.service';
 import { CheckpointService } from '../../modules/agent/runtime/recovery/checkpoint.service';
 import { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
@@ -343,19 +346,15 @@ export const composeAgent = ({
   const policy = new PolicyService();
   const modelCalls = new ModelCallLimiter(settings);
   const leaseCoordinator = new LeaseCoordinator(leases, systemClock);
+  const mutationLeaseGuard = new AgentMutationLeaseGuardAdapter(leases, systemClock);
+  const modelSteps = new ModelStepRunner(providers, context, languageModel, modelCalls);
+  const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
   const nativeBackend = new NativeAgentBackend(
     runRepository,
     delegationRepository,
-    providers,
-    context,
-    languageModel,
     stateCommit,
-    toolCatalog,
-    toolExecutor,
-    leaseCoordinator,
-    leases,
-    policy,
-    modelCalls,
+    modelSteps,
+    toolCalls,
     systemClock,
   );
   const scheduler = new AgentScheduler(

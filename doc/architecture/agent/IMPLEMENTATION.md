@@ -15,7 +15,7 @@
 | P2-A | canonical hash、Approval、Lease、修改Tools、Workspace MutationGuard                                                                                   | P1-D；approvals.spec.ts、leases.spec.ts、mutation.spec.ts                                            |
 | P2-B | nexus-agent-runner/Sandbox Manager、Workspace Runtime RPC/隔离/配额/Artifact协作/发布                                                                 | P2-A；Workspace Runtime / multi-version E2E                                                          |
 | P2-C | Workspace Runtime UI/AI控制、checkpoint resume、可选Artifact备份恢复                                                                                  | P2-B；Workspace Runtime UI / recovery E2E                                                            |
-| P3-A | MCP/ACP/CDP适配器与对应 Workspace Profile/Recipe                                                                                                      | P2-C；mcp.spec.ts、acp.spec.ts、browser.spec.ts                                                      |
+| P3-A | MCP/ACP/CDP适配器与对应 Workspace Profile/Recipe；**当前仅 MCP 已完成 live 接线，ACP 与 Browser/CDP/Puppeteer 均未完成（reserved/roadmap-only）**     | P2-C；mcp.spec.ts；ACP/Browser 完成接线前不得把 acp/browser 设计 spec 当作已交付证据                 |
 | P3-B | 多Agent/SharedFacts/Memory审核                                                                                                                        | P3-A；delegation.spec.ts、memory.spec.ts                                                             |
 | P3-C | 安装式App/Skill、隔离UI、升级/回退/卸载                                                                                                               | P3-B；plugins.spec.ts                                                                                |
 
@@ -48,6 +48,12 @@ P1 当前依赖替换清单：
 | Hub drag/resize                               | 暂缓第三方替换   | 候选虽成熟但当前安全/维护审计存在未决项；优先复用现有 Foundation pointer/overlay 原语  |
 
 后续 P2/P3 每个新能力仍先过此闸门，尤其是 JSON Schema、MCP、CDP、归档/解包、签名、重试/限流 primitive、虚拟列表和浏览器协议，不默认从零实现。
+
+### 0.2 Phase 3 未完成能力标记
+
+- **ACP：未完成。** 当前允许保留 `IntegrationKind='acp'` 的配置模型、`AcpRuntimePort`/`AcpTransportPort`、`AcpAdapter` 与 `integration.acp.execute` capability type，但 production composition 不实例化 ACP runtime，Operations manifest 不声明该 capability，也不得产生默认 grant。
+- **Browser/CDP/Puppeteer：未完成。** 当前允许保留 Browser ports、`PuppeteerBrowserGateway`、browser Workspace/Profile 相关 schema 与 `browser.operate` capability type，但 production composition / Tool Catalog 不接入 live Browser execution，Operations manifest 不声明该 capability，也不得产生默认 grant。
+- 上述两项只有在 capability declaration、Policy/Approval/Lease/StateCommit 边界、runtime wiring、UI/API、failure/recovery contract 和对应产品 E2E 全部落地后，才能从 `reserved` 改为 `implemented`；仅存在类、Port、schema 或依赖包不能改变状态。
 
 <a id="i1"></a>
 
@@ -93,7 +99,10 @@ P1 当前依赖替换清单：
 | runtime/runs/state-commit.port.ts                         | 唯一运行事实原子提交入口                                                                                                                                                                      |
 | runtime/runs/idempotency.ts                               | Run 命令幂等键/请求 hash 规则                                                                                                                                                                 |
 | runtime/execution/agent-backend.port.ts                   | Agent Loop 的窄 Backend 执行契约                                                                                                                                                              |
-| runtime/execution/native-agent-backend.ts                 | `context → model → tool/result → next step` 的 Native Harness；不承担外围资源管理                                                                                                             |
+| runtime/execution/native-agent-backend.ts                 | Root Run 主循环、阶段顺序、StateCommit 编排、cancel/fail safe boundary；不直接依赖 Provider/Context/Tool/底层 Lease                                                                           |
+| runtime/execution/model-step-runner.ts                    | Provider/model 选择、Context compose、model stream、ModelCallLimiter 与 transport retry；不拥有 Run terminal transition                                                                       |
+| runtime/execution/tool-call-runner.ts                     | Tool schema/inspect/policy、read lease、staged mutation lease 与 Tool 执行；不暴露底层 `LeasePort` 给 Native backend                                                                          |
+| runtime/execution/mutation-lease-guard.port.ts            | Agent mutation staged lease capability；固定 `acquire → StateCommit.begin → activate → side effect → StateCommit.settle → confirm/quarantine` 顺序                                            |
 | runtime/execution/model-call-limiter.ts                   | 全局/用户模型调用 permit 与释放                                                                                                                                                               |
 | runtime/planning/plan.types.ts                            | `RunPlan/PlanItem`、依赖/evidence/环校验                                                                                                                                                      |
 | runtime/planning/plan.service.ts                          | revision-CAS 的 durable plan projection                                                                                                                                                       |

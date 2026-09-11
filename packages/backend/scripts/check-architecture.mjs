@@ -98,6 +98,29 @@ for (const file of sourceFiles) {
   const text = fs.readFileSync(file, 'utf8');
   const fromLayer = layerOf(file);
   const relativeFile = path.relative(srcRoot, file).split(path.sep).join('/');
+  if (relativeFile === 'modules/agent/runtime/execution/native-agent-backend.ts') {
+    const forbiddenExecutionDependencies = [
+      'ContextService',
+      'LanguageModelPort',
+      'ProviderService',
+      'ToolCatalog',
+      'ToolExecutor',
+      'PolicyService',
+      'ModelCallLimiter',
+      'LeaseCoordinator',
+      'LeasePort',
+    ];
+    for (const symbol of forbiddenExecutionDependencies) {
+      if (new RegExp(`\\b${symbol}\\b`).test(text)) {
+        failures.push(
+          `${relativeFile}: NativeAgentBackend must depend on ModelStepRunner/ToolCallRunner instead of ${symbol}`,
+        );
+      }
+    }
+    if (/\bmarkMutation(?:Active|Settled)\b/.test(text)) {
+      failures.push(`${relativeFile}: mutation lease markers must be owned by the staged mutation lease capability`);
+    }
+  }
   importPattern.lastIndex = 0;
   for (let match = importPattern.exec(text); match; match = importPattern.exec(text)) {
     const importPrefix = match[1];
