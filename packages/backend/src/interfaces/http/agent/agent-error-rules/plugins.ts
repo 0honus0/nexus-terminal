@@ -1,0 +1,90 @@
+import type { AgentErrorRule } from './rule';
+import { onCodes, onCodesOrPrefixes, rawCode } from './rule';
+
+export const pluginErrorRules: readonly AgentErrorRule[] = [
+  onCodes(
+    [
+      'PUBLISHER_KEY_INVALID',
+      'PUBLISHER_KEY_LABEL_INVALID',
+      'PLUGIN_FRONTEND_RPC_INVALID',
+      'PLUGIN_PACKAGE_REF_INVALID',
+    ],
+    rawCode(400, 'Invalid Agent plugin request.'),
+  ),
+  onCodes(['PUBLISHER_KEY_NOT_FOUND', 'PLUGIN_STAGE_NOT_FOUND', 'PLUGIN_VERSION_NOT_FOUND', 'PLUGIN_NOT_INSTALLED'], {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'Agent plugin resource was not found.',
+  }),
+  onCodes(
+    [
+      'PLUGIN_STAGE_VERSION_CONFLICT',
+      'PLUGIN_VERSION_IMMUTABLE',
+      'PLUGIN_UPGRADE_REQUIRED',
+      'PLUGIN_INSTALLATION_STATE_CONFLICT',
+      'PLUGIN_VERSION_ALREADY_ACTIVE',
+      'PLUGIN_MUST_BE_UNINSTALLED',
+      'PLUGIN_STAGE_ALREADY_INSTALLED',
+      'PLUGIN_STAGE_NOT_VERIFIED',
+      'PLUGIN_STAGE_CHANGED',
+      'AGENT_APP_DRAINING',
+    ],
+    rawCode(409, 'Agent plugin state changed or cannot accept this operation.'),
+  ),
+  onCodes(
+    [
+      'PLUGIN_PACKAGE_TOO_LARGE',
+      'PLUGIN_ARCHIVE_TOO_LARGE',
+      'PLUGIN_ARCHIVE_FILE_TOO_LARGE',
+      'PLUGIN_FILE_LIST_TOO_LARGE',
+      'PLUGIN_FRONTEND_RPC_TOO_LARGE',
+    ],
+    rawCode(413, 'Agent plugin payload is too large.'),
+  ),
+  onCodes(
+    [
+      'PLUGIN_ARCHIVE_UNSAFE',
+      'PLUGIN_ARCHIVE_TOO_DEEP',
+      'PLUGIN_ARCHIVE_TOO_MANY_FILES',
+      'PLUGIN_ARCHIVE_DUPLICATE_PATH',
+      'PLUGIN_CONTROL_FILE_MISSING',
+      'PLUGIN_MANIFEST_INVALID',
+      'PLUGIN_FILE_LIST_INVALID',
+      'PLUGIN_SIGNATURE_INVALID',
+      'PLUGIN_PUBLISHER_UNTRUSTED',
+      'PLUGIN_PUBLISHER_KEY_MISMATCH',
+      'PLUGIN_UNLISTED_FILE',
+      'PLUGIN_LISTED_FILE_MISSING',
+      'PLUGIN_FILE_MISMATCH',
+      'PLUGIN_FILE_HASH_MISMATCH',
+      'PLUGIN_RESOURCE_MISSING',
+      'PLUGIN_UI_ENTRY_INVALID',
+      'PLUGIN_BACKEND_ENTRY_INVALID',
+      'PLUGIN_TOO_MANY_SKILLS',
+      'PLUGIN_APP_ID_RESERVED',
+      'PLUGIN_APP_ID_MISMATCH',
+    ],
+    rawCode(422, 'Agent plugin package failed validation.'),
+  ),
+  onCodes(['PLUGIN_FRONTEND_RPC_METHOD_DENIED'], rawCode(403, 'Agent plugin UI method is not allowed.')),
+  onCodes(['PLUGIN_RUNTIME_MIGRATION_TOO_LARGE'], rawCode(413, 'Agent plugin migration payload is too large.')),
+  onCodes(
+    ['PLUGIN_RUNTIME_IDENTITY_CONFLICT', 'PLUGIN_RUNTIME_SOURCE_MISMATCH'],
+    rawCode(409, 'Agent plugin runtime identity no longer matches the installed package.'),
+  ),
+  onCodesOrPrefixes(
+    [
+      'PLUGIN_RUNTIME_UNAVAILABLE',
+      'PLUGIN_RUNTIME_INSTANCE_MISSING',
+      'PLUGIN_RUNTIME_INSTANCE_STOPPED',
+      'PLUGIN_FRONTEND_ORIGIN_UNAVAILABLE',
+      'PLUGIN_FRONTEND_ORIGIN_NOT_ISOLATED',
+    ],
+    ['PLUGIN_RUNTIME_START_', 'PLUGIN_RUNTIME_CONTROL_', 'PLUGIN_RUNTIME_PLUGIN_ERROR:'],
+    (raw) => ({
+      status: 503,
+      code: raw.split(':')[0]!,
+      message: 'Agent plugin runtime or isolated UI origin is unavailable.',
+    }),
+  ),
+];
