@@ -97,6 +97,9 @@ for (const file of sourceFiles) {
   const text = fs.readFileSync(file, 'utf8');
   const fromLayer = layerOf(file);
   const relativeFile = path.relative(srcRoot, file).split(path.sep).join('/');
+  if (relativeFile.startsWith('modules/agent/runtime/') && /\bmarkMutation(?:Active|Settled)\b/.test(text)) {
+    failures.push(`${relativeFile}: Agent Runtime may not call low-level mutation lease markers directly`);
+  }
   if (relativeFile === 'modules/agent/runtime/execution/native-agent-backend.ts') {
     const forbiddenExecutionDependencies = [
       'ContextService',
@@ -115,9 +118,6 @@ for (const file of sourceFiles) {
           `${relativeFile}: NativeAgentBackend must depend on ModelStepRunner/ToolCallRunner instead of ${symbol}`,
         );
       }
-    }
-    if (/\bmarkMutation(?:Active|Settled)\b/.test(text)) {
-      failures.push(`${relativeFile}: mutation lease markers must be owned by the staged mutation lease capability`);
     }
     if (/\bDelegationRepositoryPort\b/.test(text)) {
       failures.push(`${relativeFile}: NativeAgentBackend may only depend on DelegationReaderPort`);
@@ -147,6 +147,9 @@ for (const file of sourceFiles) {
         );
       }
     }
+    if (/\bRelationalDatabase\b|\.transaction\s*\(/.test(text)) {
+      failures.push(`${relativeFile}: SubagentScheduler may not own persistence transactions`);
+    }
   }
   if (relativeFile === 'modules/agent/runtime/collaboration/subagent-participant-executor.ts') {
     const forbiddenParticipantCapabilities = [
@@ -173,6 +176,38 @@ for (const file of sourceFiles) {
   if (relativeFile === 'modules/agent/runtime/collaboration/mailbox.service.ts') {
     if (/\bDelegationRepositoryPort\b/.test(text)) {
       failures.push(`${relativeFile}: MailboxService may only depend on DelegationReaderPort`);
+    }
+  }
+  if (/^infrastructure\/agent\/runtime\/state-commit\/.*-transitions\.ts$/.test(relativeFile)) {
+    if (/\.transaction\s*\(/.test(text)) {
+      failures.push(
+        `${relativeFile}: StateCommit transition modules must use the transaction context supplied by the adapter`,
+      );
+    }
+    for (const match of text.matchAll(/export const\s+(\w+Transition)\s*=\s*async\s*\(/g)) {
+      const signature = text.slice(match.index, match.index + 320);
+      if (!/=\s*async\s*\(\s*tx:\s*RelationalDatabase\b/.test(signature)) {
+        failures.push(`${relativeFile}: ${match[1]} must receive tx: RelationalDatabase as its first parameter`);
+      }
+    }
+  }
+  if (relativeFile.startsWith('bootstrap/agent/')) {
+    const reservedProductionSymbols = [
+      'AcpAdapter',
+      'AcpRuntimePort',
+      'AcpTransportPort',
+      'PuppeteerBrowserGateway',
+      'BrowserGatewayPort',
+      'BrowserEndpointPort',
+      'integration.acp.execute',
+      'browser.operate',
+    ];
+    for (const symbol of reservedProductionSymbols) {
+      if (text.includes(symbol)) {
+        failures.push(
+          `${relativeFile}: reserved ACP/Browser capability ${symbol} may not enter production composition`,
+        );
+      }
     }
   }
   importPattern.lastIndex = 0;
@@ -230,6 +265,19 @@ for (const file of sourceFiles) {
     if ((fromLayer === 'platform' || fromLayer === 'modules') && ['express', 'ws', 'ssh2'].includes(specifier)) {
       failures.push(`${relativeFile}: ${fromLayer} may not import technology package ${specifier}`);
     }
+  }
+}
+
+const operationsManifestPath = path.join(srcRoot, 'modules/agent/apps/operations/app.manifest.json');
+const operationsManifest = JSON.parse(fs.readFileSync(operationsManifestPath, 'utf8'));
+const operationsCapabilities = new Set(
+  Array.isArray(operationsManifest.capabilities) ? operationsManifest.capabilities : [],
+);
+for (const reservedCapability of ['integration.acp.execute', 'browser.operate']) {
+  if (operationsCapabilities.has(reservedCapability)) {
+    failures.push(
+      `modules/agent/apps/operations/app.manifest.json: reserved capability ${reservedCapability} may not be declared before its live implementation is approved`,
+    );
   }
 }
 

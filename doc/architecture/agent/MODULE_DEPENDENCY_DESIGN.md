@@ -661,7 +661,7 @@ work.settleWork(...)
 
 不是靠内存 Map 标记完成。
 
-`SubagentScheduler` 自身不得重新依赖 Provider/LanguageModel/Tool/Lease/StateCommit 或 delegation/runtime/mailbox repository。Backend architecture checker 同时禁止 `SubagentParticipantExecutor` 获取 `readyWork/terminalWork/claimWork/resetClaimedWork`，因此 durable scan/claim authority 不会在拆分后漂移到 execution 层。
+`SubagentScheduler` 自身不得重新依赖 Provider/LanguageModel/Tool/Lease/StateCommit 或 delegation/runtime/mailbox repository，也不得取得 `RelationalDatabase` 或自行调用 `.transaction()`。Backend architecture checker 同时禁止 `SubagentParticipantExecutor` 获取 `readyWork/terminalWork/claimWork/resetClaimedWork`，因此 durable scan/claim authority 不会在拆分后漂移到 execution 层，persistence transaction authority 也不会漂移进 Scheduler。
 
 ---
 
@@ -692,6 +692,8 @@ this.db.transaction(...)
 ```ts
 transition(tx, command);
 ```
+
+Backend architecture checker 对 `infrastructure/agent/runtime/state-commit/*-transitions.ts` 固定验证：每个导出的 `*Transition` 首参数必须是 `tx: RelationalDatabase`，且 transition module 内不得出现 `.transaction()`。
 
 禁止 transition 自己重新调用：
 
@@ -1514,6 +1516,8 @@ puppeteer-core
 ```
 
 当前 Browser/CDP/Puppeteer live execution **未完成**；production composition root / Tool Catalog 不接线，`nexus.operations` manifest 不声明 `browser.operate`，也不会创建默认 grant。
+
+Backend architecture checker 将这个 reserved 边界固化为静态门禁：`bootstrap/agent/**` 不得出现 ACP/Browser reserved runtime/gateway wiring 或 `integration.acp.execute` / `browser.operate` live capability，Operations manifest 也不得声明这两个 capability。该 guard 不删除 Port/Adapter/schema skeleton；未来 roadmap 真正批准 live execution 时，应连同 manifest/grant/approval/policy/E2E 一起显式修改此规则。
 
 未来方向：
 

@@ -145,13 +145,18 @@ reserved capability    虚线
 
 ### 8. 增加依赖约束的自动化验收项
 
-建议为架构 checker 增加以下静态规则，并在本目录文档中固定规则编号：
-
-1. `NativeAgentBackend` 不得直接 import SQLite、Express、Runner client；
-2. Runtime execution 不得直接调用 `LeasePort` 的 mutation 标记方法；
-3. Scheduler 不得直接构造 Repository 或开启 transaction；
-4. transition 函数必须接收 transaction context；
-5. reserved Phase 模块不得出现在当前 production composition root。
+> **解决方案（已采用，按审核后的 coverage 补 guard）**
+>
+> 原建议第 1 条不再增加重复专用规则：`modules -> infrastructure/interfaces` 的 layer checker 已阻止 `NativeAgentBackend` 直接取得 SQLite/Runner concrete adapter，`modules` 直接 import `express/ws/ssh2` 也已有 technology-package guard。
+>
+> 本轮补齐其余真实 coverage 缺口：
+>
+> 1. 整个 `modules/agent/runtime/**` 禁止直接调用底层 `markMutationActive/markMutationSettled`；mutation marker 继续只属于 staged mutation lease infrastructure capability；
+> 2. `SubagentScheduler` 明确禁止取得 `RelationalDatabase` 或调用 `.transaction()`，避免 scheduler 获得 persistence transaction authority；
+> 3. `infrastructure/agent/runtime/state-commit/*-transitions.ts` 的每个导出 `*Transition` 必须以 `tx: RelationalDatabase` 为首参数，且 transition module 自身禁止重新 `.transaction()`；
+> 4. `bootstrap/agent/**` 禁止 ACP/Browser reserved runtime/gateway symbol 与 `integration.acp.execute` / `browser.operate` capability 进入 production composition；Operations manifest 同样静态禁止声明这两个 reserved capability。
+>
+> 当前代码在加 guard 前已满足以上边界；本项修复的是自动化防回退能力，不改变 Runtime 行为。ACP/Browser 的 Port/Adapter/schema skeleton 继续保留，只有 production live wiring 被禁止。
 
 ## 建议实施顺序
 

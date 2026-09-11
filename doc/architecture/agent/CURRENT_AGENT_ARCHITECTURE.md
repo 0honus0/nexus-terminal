@@ -786,6 +786,13 @@ no module cycles
     - GitHub Actions run `34579244526`（产品代码 HEAD `9f4ffbd`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
     - GitHub Actions run `34576022008`（产品代码 HEAD `15f821b`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
+14. Architecture guard coverage：**已补齐当前已知 owner/phase 防回退缺口**。
+    - 整个 Agent Runtime 禁止直接调用底层 mutation lease marker；
+    - `SubagentScheduler` 禁止取得 `RelationalDatabase` / `.transaction()` authority；
+    - StateCommit `*-transitions.ts` 的导出 transition 必须以 `tx: RelationalDatabase` 为首参数，且不得自行开启 transaction；
+    - ACP/Browser 继续保留 roadmap skeleton，但 `bootstrap/agent/**` 与 Operations manifest 静态禁止 live wiring / reserved capability 暴露；
+    - `NativeAgentBackend` 的 SQLite/Express/Runner concrete dependency 已由既有 layer / technology-package checker 覆盖，不再增加重复专用规则。
+
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。
 
 ## 19. 开发约束
