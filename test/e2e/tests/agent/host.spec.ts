@@ -181,8 +181,8 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
     });
   });
 
-  await step('Environment availability reports the optional Runner as not configured', async () => {
-    const response = await request.get('/api/v1/agent/environments/availability');
+  await step('Workspace Runtime availability reports the optional Runner as not configured', async () => {
+    const response = await request.get('/api/v1/agent/workspace-runtime/availability');
     expect(response.ok(), await response.text()).toBeTruthy();
     await expect(response.json()).resolves.toMatchObject({
       data: {
