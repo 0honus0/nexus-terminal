@@ -754,7 +754,9 @@ test('mobile upload progress stays inside the viewport and restores from Progres
   await connectMobileSsh(page, context.request);
   await openConnectedFileManager(page);
   const filenames = ['mobile-progress-upload-a.bin', 'mobile-progress-upload-b.bin'];
-  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=1000`, { method: 'POST' });
+  // Keep both writes alive across screenshot capture, resize/drag, hide, and restore.
+  // A one-second delay let screenshot-enabled CI finish the uploads before Cancel All.
+  await fetch(`${E2E_SSH.controlUrl}/sftp/write-delay?ms=15000`, { method: 'POST' });
 
   try {
     await slowStep(
@@ -875,6 +877,8 @@ test('mobile upload progress stays inside the viewport and restores from Progres
       await expect(progressDisplay).toBeHidden();
       const popup = page.getByTestId('transfer-progress-center').filter({ visible: true }).first();
       await expect(popup).toBeVisible();
+      const uploadTasks = popup.locator('[data-testid="transfer-progress-task"][data-task-kind="upload"]');
+      await expect(uploadTasks).toHaveCount(filenames.length);
       await popup.getByTestId('transfer-progress-cancel-all').click();
       await expect
         .poll(() =>
