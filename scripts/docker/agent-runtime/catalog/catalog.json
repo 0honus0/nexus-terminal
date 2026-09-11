@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "revision": "2026-09-11.1",
-  "runtimeDigest": "nexus-agent-runner:local",
+  "revision": "2026-09-11.2",
+  "runtimeDigest": "nexus-agent-runner:workspace-toolchain-profile-v1",
   "recipes": [
     {
       "id": "workspace-dev",

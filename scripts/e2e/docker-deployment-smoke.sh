@@ -284,7 +284,7 @@ const job = {
   argv: [
     'nexus-sh',
     '-c',
-    'printf workspace-stable > /workspace/work/.version-switch-marker; printf runner-sandbox-ok',
+    'printf workspace-stable > /workspace/work/.version-switch-marker; printf "%s" "$NEXUS_TOOLCHAIN_FINGERPRINT" > /workspace/deps/.toolchain-profile-marker; printf runner-sandbox-ok',
   ],
   cwd: '/workspace',
   maxBytes: 4096,
@@ -323,7 +323,7 @@ const generationJob = {
   argv: [
     'nexus-sh',
     '-c',
-    'test "$(cat /workspace/work/.version-switch-marker)" = workspace-stable && printf workspace-generation-ok',
+    'test "$(cat /workspace/work/.version-switch-marker)" = workspace-stable && test "$(cat /workspace/deps/.toolchain-profile-marker)" = "$NEXUS_TOOLCHAIN_FINGERPRINT" && printf workspace-generation-ok',
   ],
 };
 await post(`/v1/environments/${encodeURIComponent(environmentId)}/jobs`, generationJob);

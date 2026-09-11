@@ -24,6 +24,8 @@
   const versions = ref<PluginVersionView[]>([]);
   const artifacts = ref<AgentArtifactRef[]>([]);
   const selectedRecipeId = ref('');
+  const createToolVersions = ref<Record<string, string>>({});
+  const workspaceToolVersions = ref<Record<string, Record<string, string>>>({});
   const selectedRunnerPluginIds = ref<string[]>([]);
   const retained = ref(false);
   const workspaceKey = ref('');
@@ -46,6 +48,31 @@
   const activeGroup = computed(
     () => groups.value.find((group) => !['deleted', 'failed'].includes(group.status)) ?? null,
   );
+  const selectedRecipe = computed(
+    () => catalog.value?.recipes.find((recipe) => recipe.id === selectedRecipeId.value) ?? null,
+  );
+  const packsForFamily = (familyId: string) =>
+    (catalog.value?.packs ?? [])
+      .filter((pack) => pack.familyId === familyId && pack.status === 'supported')
+      .sort((a, b) => b.versionId.localeCompare(a.versionId, undefined, { numeric: true }));
+  const selectableFamilies = (recipeId: string): string[] => {
+    const recipe = catalog.value?.recipes.find((candidate) => candidate.id === recipeId);
+    if (!recipe) return [];
+    return recipe.allowedFamilies.filter(
+      (familyId) => !recipe.defaultFamilies.includes(familyId) && packsForFamily(familyId).length > 0,
+    );
+  };
+  const createToolFamilies = computed(() => (selectedRecipe.value ? selectableFamilies(selectedRecipe.value.id) : []));
+  const pinnedVersion = (environment: EnvironmentView, familyId: string): string =>
+    environment.packRefs.find((pack) => pack.familyId === familyId)?.versionId ?? '';
+  const changedWorkspaceVersions = (environment: EnvironmentView): Record<string, string> => {
+    const draft = workspaceToolVersions.value[environment.id] ?? {};
+    return Object.fromEntries(
+      selectableFamilies(environment.recipeId)
+        .filter((familyId) => Boolean(draft[familyId]) && draft[familyId] !== pinnedVersion(environment, familyId))
+        .map((familyId) => [familyId, draft[familyId]!]),
+    );
+  };
   const runnerCandidates = computed(() =>
     installations.value
       .filter((installation) => installation.status === 'installed')
@@ -127,9 +154,24 @@
         (artifact) => artifact.appId === props.appId && artifact.status === 'ready',
       );
       groups.value = details;
+      workspaceToolVersions.value = Object.fromEntries(
+        details.flatMap((group) =>
+          group.environments.map((environment) => [
+            environment.id,
+            Object.fromEntries(environment.packRefs.map((pack) => [pack.familyId, pack.versionId])),
+          ]),
+        ),
+      );
       if (!nextCatalog.recipes.some((recipe) => recipe.id === selectedRecipeId.value)) {
         selectedRecipeId.value = nextCatalog.recipes[0]?.id ?? '';
       }
+      createToolVersions.value = Object.fromEntries(
+        Object.entries(createToolVersions.value).filter(
+          ([familyId, versionId]) =>
+            createToolFamilies.value.includes(familyId) &&
+            packsForFamily(familyId).some((pack) => pack.versionId === versionId),
+        ),
+      );
       selectedRunnerPluginIds.value = selectedRunnerPluginIds.value.filter((pluginId) =>
         runnerCandidates.value.some((candidate) => candidate.pluginId === pluginId),
       );
@@ -168,7 +210,15 @@
       await agentApi.createEnvironmentGroup(
         props.appId,
         props.runId,
-        [{ recipeId: selectedRecipeId.value, runnerPluginIds: [...selectedRunnerPluginIds.value] }],
+        [
+          {
+            recipeId: selectedRecipeId.value,
+            versions: Object.fromEntries(
+              Object.entries(createToolVersions.value).filter(([, versionId]) => Boolean(versionId)),
+            ),
+            runnerPluginIds: [...selectedRunnerPluginIds.value],
+          },
+        ],
         retained.value,
       );
       await refresh();
@@ -180,6 +230,27 @@
       await agentApi.environmentAction(props.appId, environment, action);
       await refresh();
     }, t('agent.environments.actionSubmitted'));
+  };
+
+  const switchToolVersions = (environment: EnvironmentView): void => {
+    const changes = changedWorkspaceVersions(environment);
+    if (!catalog.value || Object.keys(changes).length === 0) return;
+    void run(async () => {
+      const result = await agentApi.switchEnvironmentVersions(
+        props.appId,
+        environment,
+        changes,
+        catalog.value!.revision,
+      );
+      if (result.outcome !== 'succeeded') {
+        throw new Error(
+          result.outcome === 'unknown'
+            ? t('agent.environments.versionSwitchUnknown')
+            : t('agent.environments.versionSwitchFailed'),
+        );
+      }
+      await refresh();
+    }, t('agent.environments.versionSwitched'));
   };
 
   const replaceGrants = async (next: EnvironmentWorkspaceGrant[]): Promise<void> => {
@@ -254,6 +325,9 @@
     () => void refresh(),
     { immediate: true },
   );
+  watch(selectedRecipeId, () => {
+    createToolVersions.value = {};
+  });
   watch(workspaceKey, () => {
     if (!loading.value) void loadGrants().catch((cause) => (error.value = explain(cause)));
   });
@@ -294,6 +368,24 @@
           {{ $t('agent.environments.retained') }}
         </label>
       </div>
+      <div v-if="createToolFamilies.length" class="mt-2 rounded border border-border p-2">
+        <div class="text-[10px] font-medium">{{ $t('agent.environments.toolVersions') }}</div>
+        <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.environments.toolVersionsHint') }}</p>
+        <div class="mt-2 grid gap-2 sm:grid-cols-3">
+          <label v-for="familyId in createToolFamilies" :key="familyId" class="text-[10px] text-text-secondary">
+            {{ familyId }}
+            <select
+              v-model="createToolVersions[familyId]"
+              class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
+            >
+              <option value="">{{ $t('agent.environments.toolNotSelected') }}</option>
+              <option v-for="pack in packsForFamily(familyId)" :key="pack.versionId" :value="pack.versionId">
+                {{ pack.versionId }}
+              </option>
+            </select>
+          </label>
+        </div>
+      </div>
       <div class="mt-2">
         <div class="text-[10px] font-medium">{{ $t('agent.environments.runnerPlugins') }}</div>
         <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.environments.runnerPluginsHint') }}</p>
@@ -332,8 +424,46 @@
           </span>
         </div>
         <p class="mt-1 text-[9px] text-text-secondary">
-          {{ $t('agent.environments.frozenTargets', { count: environment.runnerPlugins.length }) }}
+          {{
+            $t('agent.environments.generationAndTargets', {
+              generation: environment.generation,
+              count: environment.runnerPlugins.length,
+            })
+          }}
         </p>
+        <div v-if="selectableFamilies(environment.recipeId).length" class="mt-2 rounded border border-border p-2">
+          <div class="text-[10px] font-medium">{{ $t('agent.environments.workspaceToolVersions') }}</div>
+          <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.environments.workspaceToolVersionsHint') }}</p>
+          <div class="mt-2 grid gap-2 sm:grid-cols-3">
+            <label
+              v-for="familyId in selectableFamilies(environment.recipeId)"
+              :key="familyId"
+              class="text-[10px] text-text-secondary"
+            >
+              {{ familyId }}
+              <select
+                v-model="workspaceToolVersions[environment.id][familyId]"
+                class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
+                :disabled="locked"
+              >
+                <option v-if="!pinnedVersion(environment, familyId)" value="">
+                  {{ $t('agent.environments.toolNotSelected') }}
+                </option>
+                <option v-for="pack in packsForFamily(familyId)" :key="pack.versionId" :value="pack.versionId">
+                  {{ pack.versionId }}
+                </option>
+              </select>
+            </label>
+          </div>
+          <button
+            type="button"
+            class="mt-2 rounded border border-border px-2 py-1 text-[10px] disabled:opacity-50"
+            :disabled="locked || Object.keys(changedWorkspaceVersions(environment)).length === 0"
+            @click="switchToolVersions(environment)"
+          >
+            {{ $t('agent.environments.switchToolVersions') }}
+          </button>
+        </div>
         <div v-if="environment.runnerPlugins.length" class="mt-1 space-y-1">
           <div
             v-for="target in environment.runnerPlugins"

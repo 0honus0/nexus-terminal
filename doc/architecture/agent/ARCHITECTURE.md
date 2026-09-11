@@ -358,11 +358,18 @@ runtime/
       workspace-acl.json
     core/workspace/
       work/
-      deps/
-      build/
+      deps/      # mountpoint; active backing comes from the pinned toolchain profile
+      build/     # mountpoint; active backing comes from the pinned toolchain profile
       browser/
       jobs/
       tmp/
+    core/toolchains/<toolchainFingerprint>/
+      deps/
+        cache/node/
+        cache/python/
+        cache/go/
+        go/pkg/mod/
+      build/
     plugins/
       <plugin1>/workspace/
       <plugin2>/workspace/
@@ -372,7 +379,7 @@ runtime/
       state
 ```
 
-`runtime/workspaces/<workspaceId>/` 是稳定项目边界；切换 Node/Python/Go 版本或重建 Environment generation 不改变它。`runtime/environments/.../<generation>/` 只保存这一代运行配置与状态，因此旧 runtime 可以被停止/删除而不复制项目文件。`.control` 只属于 Runner Core，任何 job/plugin sandbox 都不可见。core task sandbox 只看到稳定 `/workspace` 和该 generation 冻结的精确 Tool Pack；Runner Plugin sandbox 不直接看到真实 `plugins/<id>/workspace`，只经 Workspace Broker SDK 访问。
+`runtime/workspaces/<workspaceId>/` 是稳定项目边界；切换 Node/Python/Go 版本或重建 Environment generation 不改变它。`runtime/environments/.../<generation>/` 只保存这一代运行配置与状态，因此旧 runtime 可以被停止/删除而不复制项目文件。平台管理的工具依赖与构建缓存按冻结 `runtimeDigest + packRefs` 计算的 `toolchainFingerprint` 分区到 `core/toolchains/<fingerprint>/`；sandbox 把当前 profile 的 `deps/build` 映射为 `/workspace/deps`、`/workspace/build`，并把 npm/pip/Go cache 指向该 profile，所以切到 Node 22/Python 3.12 不会污染 Node 20/Python 3.10 的平台依赖缓存，切回旧版本时又能复用原 profile。用户自行在源码树创建的 `node_modules`、`.venv` 或其他目录属于项目数据，不宣称自动 ABI 隔离；需要稳定跨版本行为时应使用 `/workspace/deps` 或由上层依赖管理器基于当前 `NEXUS_TOOLCHAIN_FINGERPRINT` 建立自己的版本化目录。`.control` 只属于 Runner Core，任何 job/plugin sandbox 都不可见。core task sandbox 只看到稳定 `/workspace` 和该 generation 冻结的精确 Tool Pack；Runner Plugin sandbox 不直接看到真实 `plugins/<id>/workspace`，只经 Workspace Broker SDK 访问。
 
 Workspace 规则固定：自己的 logical workspace 默认允许，其他 Plugin workspace 默认拒绝；跨 Plugin grant 存在于**目标 workspace ACL**，并随稳定 Workspace 保存。授权对象由 `targetPluginId + principalPluginId + path + permissions` 明确表达。`workspace.read('plugin1','/output/report.json')` 直接读取 plugin1 的原文件，不复制；grant revoke 只撤访问，不移动/删除文件。target/principal 必须都属于当前 Workspace Environment generation 的冻结 `runnerPlugins`；跨 Workspace 永远拒绝。
 

@@ -908,6 +908,7 @@ Agent mutation额外要求X-Nexus-CSRF=session绑定的随机256-bit token；GET
 | GET /apps/:appId/runs/:runId/environment-groups                                 | →GroupView[]；`?runtime=root` 时由 Backend 解析 root runtime 并只返回该 runtime 的 groups；P2                                                                                                                                                                                                                                                                                                          |
 | GET /apps/:appId/environment-groups/:groupId                                    | →GroupView+EnvironmentView[]；P2                                                                                                                                                                                                                                                                                                                                                                       |
 | POST /apps/:appId/environments/:id/actions                                      | {action:'start'                                                                                                                                                                                                                                                                                                                                                                                        | 'stop'                                                                                | 'restart'                                                                                                                                                                                                                                                                                        | 'delete' | 'setNetwork' | 'resize',expectedVersion,parameters?,confirmedOperationHash?}→202 ControlCommandView或ApprovalView；P2 |
+| POST /apps/:appId/environments/:id/versions                                     | `{versions:{familyId:versionId},expectedVersion,catalogRevision?}` → `EnvironmentVersionSwitchView`；Backend 先 CAS reserve 当前 generation，再确认删除旧 generation，更新冻结 Tool refs/generation，provision 新 generation，原来 running 时再 start；任一步 unknown 即停止并进入 reconciliation，不修改其他 Workspace；P2                                                                            |
 | GET /apps/:appId/environment-commands/:id                                       | →pending/running/succeeded/failed/unknown；P2                                                                                                                                                                                                                                                                                                                                                          |
 | POST /apps/:appId/plugin-intents                                                | {receiverAppId,intentId,input,artifactRefs,confirmed:true}→intent receipt；P3                                                                                                                                                                                                                                                                                                                          |
 | POST /agent/plugins/stage、/verify、/install                                    | {artifactRef或stageId,expectedVersion?}→Stage/InstalledView；P3 plugin.controller                                                                                                                                                                                                                                                                                                                      |
@@ -1106,11 +1107,18 @@ runtime/
     .control/workspace-acl.json
     core/workspace/
       work/
-      deps/
-      build/
+      deps/      # mountpoint; active backing comes from the pinned toolchain profile
+      build/     # mountpoint; active backing comes from the pinned toolchain profile
       browser/
       jobs/
       tmp/
+    core/toolchains/<toolchainFingerprint>/
+      deps/
+        cache/node/
+        cache/python/
+        cache/go/
+        go/pkg/mod/
+      build/
     plugins/
       <pluginId>/workspace/
   environments/<workspaceId>/<generation>/
@@ -1119,7 +1127,7 @@ runtime/
       state
 ```
 
-`.control` 不进入任何 sandbox。Tool Pack 只读；项目 npm/pip/go 等依赖进入稳定 Workspace 的 `deps`/项目目录，不修改 Tool Pack。Tool Store key 为 `familyId/versionId/contentDigest`（digest 按 arch 解析）；同 family 多版本可同时 installed/enabled/inUse。不同 Workspace 冻结不同版本组合，切版本只替换目标 Workspace 的 Environment generation，不修改 `/usr/bin` 或其他 Workspace。
+`.control` 不进入任何 sandbox。Tool Pack 只读；源码/普通项目文件保持在稳定 Workspace，平台管理的依赖与构建状态按当前冻结 `runtimeDigest + packRefs` 的 SHA-256 `toolchainFingerprint` 分区到 `core/toolchains/<fingerprint>/deps|build`。Sandbox 把当前 profile 映射回 `/workspace/deps` 与 `/workspace/build`，并把 npm/pip/Go cache 指向该 profile；不同版本组合不会共享这些 ABI/cache，切回相同组合则复用原 profile。Runner 同时注入 `NEXUS_TOOLCHAIN_FINGERPRINT`，供上层依赖管理器给项目内缓存做相同分区；用户主动在源码树创建的 `node_modules`、`.venv` 等目录仍属于普通项目数据，不宣称由 Runner 自动隔离。Tool Store key 为 `familyId/versionId/contentDigest`（digest 按 arch 解析）；同 family 多版本可同时 installed/enabled/inUse。不同 Workspace 冻结不同版本组合，切版本只替换目标 Workspace 的 Environment generation，不修改 `/usr/bin` 或其他 Workspace。
 
 Environment generation 在 Backend DB 冻结 `runtime_digest + recipe_id + recipe_revision + catalog_revision + pack_refs_json + runner_plugins_json`。当前 `recipe_id=workspace-dev`；`kind=code` 暂作为兼容存储字段。`runner_plugins_json` 保存精确 `{pluginId,version,sdkVersion,protocolVersion,packageHash,entry}`，新建 Runner target 使用 `protocolVersion=2`；start/restart 使用该 generation 创建时事实，不根据当前安装状态重新猜测。工具版本或 Runner Plugin 版本变化都必须创建新 generation；旧 generation 不自动升级。
 

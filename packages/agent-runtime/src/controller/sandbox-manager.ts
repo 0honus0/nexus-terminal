@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -24,7 +25,30 @@ interface SandboxMetadata {
   generation: number;
   packs: PackRef[];
   networkMode: 'none' | 'allowlist';
+  runtimeDigest?: string;
+  toolchainFingerprint?: string;
 }
+
+const toolchainFingerprint = (runtimeDigest: string, packs: readonly PackRef[]): string =>
+  createHash('sha256')
+    .update(runtimeDigest)
+    .update('\u0000')
+    .update(
+      JSON.stringify(
+        [...packs]
+          .map((pack) => ({
+            familyId: pack.familyId,
+            versionId: pack.versionId,
+            contentDigest: pack.contentDigest,
+          }))
+          .sort((a, b) =>
+            `${a.familyId}\u0000${a.versionId}\u0000${a.contentDigest}`.localeCompare(
+              `${b.familyId}\u0000${b.versionId}\u0000${b.contentDigest}`,
+            ),
+          ),
+      ),
+    )
+    .digest('hex');
 
 const safeSegment = (value: string): string => {
   if (!SAFE_SEGMENT.test(value)) throw new Error('ENVIRONMENT_ID_INVALID');
@@ -135,11 +159,18 @@ export class SandboxManager {
       fs.mkdirSync(path.join(workspace, relative), { recursive: true, mode: 0o700 });
     }
     fs.mkdirSync(path.join(this.workspaceRoot(environmentId), '.control'), { recursive: true, mode: 0o700 });
+    const fingerprint = toolchainFingerprint(command.runtimeDigest, command.packs);
+    const profile = this.toolchainProfileRoot(environmentId, fingerprint);
+    for (const relative of ['deps/cache/node', 'deps/cache/python', 'deps/cache/go', 'deps/go/pkg/mod', 'build']) {
+      fs.mkdirSync(path.join(profile, relative), { recursive: true, mode: 0o700 });
+    }
     const metadata: SandboxMetadata = {
       environmentId,
       generation,
       packs: command.packs.map((pack) => ({ ...pack })),
       networkMode: command.network.mode,
+      runtimeDigest: command.runtimeDigest,
+      toolchainFingerprint: fingerprint,
     };
     this.writeJson(path.join(root, '.control', 'metadata.json'), metadata);
     this.writeState(root, 'ready');
@@ -185,6 +216,13 @@ export class SandboxManager {
       throw new Error('ENVIRONMENT_IDENTITY_MISMATCH');
     }
     const workspace = this.coreWorkspaceRoot(metadata.environmentId);
+    const fingerprint =
+      metadata.toolchainFingerprint ??
+      toolchainFingerprint(metadata.runtimeDigest ?? 'legacy-runtime-v0', metadata.packs);
+    const profile = this.toolchainProfileRoot(metadata.environmentId, fingerprint);
+    for (const relative of ['deps/cache/node', 'deps/cache/python', 'deps/cache/go', 'deps/go/pkg/mod', 'build']) {
+      fs.mkdirSync(path.join(profile, relative), { recursive: true, mode: 0o700 });
+    }
     const logicalCwd = this.logicalCwd(request.cwd);
     const packBindings: string[] = [];
     const packBins: string[] = [];
@@ -215,7 +253,7 @@ export class SandboxManager {
     return {
       file: this.sandboxBinary,
       argv: [
-        ...this.isolationArguments(workspace),
+        ...this.isolationArguments(workspace, profile),
         ...packBindings,
         '--chdir',
         logicalCwd,
@@ -225,6 +263,36 @@ export class SandboxManager {
         '--setenv',
         'TMPDIR',
         '/tmp',
+        '--setenv',
+        'NEXUS_TOOLCHAIN_FINGERPRINT',
+        fingerprint,
+        '--setenv',
+        'NEXUS_DEPS_ROOT',
+        '/workspace/deps',
+        '--setenv',
+        'XDG_CACHE_HOME',
+        '/workspace/deps/cache',
+        '--setenv',
+        'npm_config_cache',
+        '/workspace/deps/cache/node/npm',
+        '--setenv',
+        'npm_config_store_dir',
+        '/workspace/deps/cache/node/pnpm-store',
+        '--setenv',
+        'PIP_CACHE_DIR',
+        '/workspace/deps/cache/python/pip',
+        '--setenv',
+        'PYTHONPYCACHEPREFIX',
+        '/workspace/deps/cache/python/pycache',
+        '--setenv',
+        'GOPATH',
+        '/workspace/deps/go',
+        '--setenv',
+        'GOMODCACHE',
+        '/workspace/deps/go/pkg/mod',
+        '--setenv',
+        'GOCACHE',
+        '/workspace/deps/cache/go/build',
         '--setenv',
         'PATH',
         [...packBins, '/usr/local/bin', '/usr/bin', '/bin'].join(':'),
@@ -255,8 +323,23 @@ export class SandboxManager {
     return path.join(this.workspaceRoot(environmentId), 'core', 'workspace');
   }
 
-  private isolationArguments(workspace: string): string[] {
+  toolchainProfileRoot(environmentId: string, fingerprint: string): string {
+    if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('ENVIRONMENT_TOOLCHAIN_FINGERPRINT_INVALID');
+    return path.join(this.workspaceRoot(environmentId), 'core', 'toolchains', fingerprint);
+  }
+
+  private isolationArguments(workspace: string, profile?: string): string[] {
     const systemBindings = sandboxSystemRuntimeArguments();
+    const profileBindings = profile
+      ? [
+          '--bind',
+          path.join(profile, 'deps'),
+          '/workspace/deps',
+          '--bind',
+          path.join(profile, 'build'),
+          '/workspace/build',
+        ]
+      : [];
     return [
       '--die-with-parent',
       '--new-session',
@@ -277,6 +360,7 @@ export class SandboxManager {
       '--bind',
       workspace,
       '/workspace',
+      ...profileBindings,
       '--cap-drop',
       'ALL',
     ];

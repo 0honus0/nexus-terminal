@@ -151,6 +151,7 @@ Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/apps
 - Environment 是 Workspace 的**运行配置与 generation**，用于冻结工具版本、Runner Plugin、资源/网络策略并承载 runtime session，不再代表某一种语言；
 - 全局 Tool Store 以 `familyId/versionId/contentDigest`（digest 按 arch 解析） 保存不可变工具版本，同 family 多版本可并存；不同 Workspace 可以同时选择不同 Node/Python/Go 版本；
 - Workspace 切换工具版本时只创建/重启该 Workspace 的新 Environment generation，并重新解析该 generation 的 PATH/只读工具挂载；不修改全局 `/usr/bin`，不影响其他 Workspace，项目文件也不随 generation 复制或丢失；
+- 平台管理的 `/workspace/deps`、`/workspace/build` 与 npm/pip/Go cache 按精确 `runtimeDigest + packRefs` 的 `toolchainFingerprint` 分区；不同 ABI 工具组合不共享这些依赖状态，切回相同组合可复用，项目源码仍保持稳定；
 - Agent、Plugin、CI/task 以及后续接入的 Terminal runtime 都从当前 Workspace Environment 解析工具；Rust/JDK/CUDA 等后续工具继续扩展同一 Tool 模型，不新增语言专用 Environment 类型；
 - 当前 Linux sandbox 仍 fail closed，使用 bubblewrap 隔离 process/filesystem/PID/IPC/UTS/network；sandbox primitive 不可用时 Environment availability degraded/unavailable，不退化成 Runner Core/Backend 裸进程执行；
 - Runner、Backend、Workspace sandbox、Plugin sandbox 都不持 host Docker socket，Runner 不启动 dockerd、不使用 nested Docker、Plugin 不创建额外 Docker；

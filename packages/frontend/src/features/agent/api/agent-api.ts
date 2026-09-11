@@ -409,7 +409,7 @@ export interface PluginRunnerTargetView {
   pluginId: string;
   version: string;
   sdkVersion: string;
-  protocolVersion: 1;
+  protocolVersion: 2;
   packageHash: string;
   entry: string;
 }
@@ -451,6 +451,12 @@ export interface EnvironmentGroupView {
 
 export interface EnvironmentGroupDetail extends EnvironmentGroupView {
   environments: EnvironmentView[];
+}
+
+export interface EnvironmentVersionSwitchView {
+  outcome: 'succeeded' | 'failed' | 'unknown';
+  environment: EnvironmentView;
+  commands: EnvironmentCommandView[];
 }
 
 export type EnvironmentWorkspacePermission = 'read' | 'write' | 'list' | 'delete';
@@ -1356,6 +1362,22 @@ export const agentApi = {
         await httpClient.post<AgentEnvelope<EnvironmentCommandView>>(
           `/apps/${encodeURIComponent(appId)}/environments/${encodeURIComponent(environment.id)}/actions`,
           { action, expectedVersion: environment.version, parameters: {} },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+        )
+      ).data,
+    );
+  },
+  async switchEnvironmentVersions(
+    appId: string,
+    environment: EnvironmentView,
+    versions: Record<string, string>,
+    catalogRevision: string,
+  ): Promise<EnvironmentVersionSwitchView> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<EnvironmentVersionSwitchView>>(
+          `/apps/${encodeURIComponent(appId)}/environments/${encodeURIComponent(environment.id)}/versions`,
+          { versions, expectedVersion: environment.version, catalogRevision },
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
