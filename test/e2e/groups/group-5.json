@@ -3,10 +3,23 @@
   "group": 5,
   "workers": 8,
   "specs": [
+    "tests/auth/setup-login.spec.ts",
+    "tests/http/auth-2fa.spec.ts",
+    "tests/http/auth-api.spec.ts",
+    "tests/http/backup.spec.ts",
+    "tests/http/connection-import.spec.ts",
+    "tests/http/connections-tags.spec.ts",
+    "tests/http/database-migrations.spec.ts",
+    "tests/http/quick-commands-audit.spec.ts",
+    "tests/http/rdp-remoteapp.spec.ts",
+    "tests/http/terminal-themes.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/connection-create.spec.ts",
-    "tests/ssh/file-manager-navigation.spec.ts",
-    "tests/ssh/file-preview-editor.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts",
+    "tests/ssh/command-history-management.spec.ts",
+    "tests/ssh/quick-command-collapsible-search.spec.ts",
+    "tests/ssh/quick-command-management.spec.ts",
+    "tests/ssh/quick-command-tags-variables.spec.ts",
     "tests/ssh/progress-display-upload-copy.spec.ts"
   ]
 }
