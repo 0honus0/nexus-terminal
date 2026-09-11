@@ -14,7 +14,7 @@ import { estimateTokens, modelCost } from '../execution/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { RunView } from '../runs/run.types';
-import type { StateCommitPort } from '../runs/state-commit.port';
+import type { CollaborationCommitPort } from '../runs/state-commit.port';
 import type { MailboxService } from './mailbox.service';
 import type { SubagentContextBuilder } from './subagent-context-builder';
 import type {
@@ -61,7 +61,7 @@ export class SubagentParticipantExecutor {
     private readonly providers: ProviderService,
     private readonly modelPort: LanguageModelPort,
     private readonly modelCalls: ModelCallLimiter,
-    private readonly stateCommit: StateCommitPort,
+    private readonly stateCommit: CollaborationCommitPort,
     private readonly contextBuilder: SubagentContextBuilder,
     private readonly toolExecutor: ToolExecutor,
     private readonly leaseCoordinator: LeaseCoordinator,

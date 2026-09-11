@@ -1,5 +1,5 @@
 import type { ClockPort } from '../../modules/agent/agent.types';
-import type { StateCommitPort } from '../../modules/agent/runtime/runs/state-commit.port';
+import type { ApprovalSweepCommitPort } from '../../modules/agent/runtime/runs/state-commit.port';
 import type { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
 import type { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
 
@@ -11,7 +11,7 @@ export interface AgentLifecycleSweeps {
 }
 
 export interface CreateAgentLifecycleSweepsOptions {
-  stateCommit: StateCommitPort;
+  stateCommit: ApprovalSweepCommitPort;
   workspaceRuntime: WorkspaceRuntimeService;
   scheduler: AgentScheduler;
   clock: ClockPort;

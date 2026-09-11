@@ -1,13 +1,13 @@
 import type { JsonValue, Scope } from '../../agent.types';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
-import type { StateCommitPort } from '../runs/state-commit.port';
+import type { ProjectionCommitPort } from '../runs/state-commit.port';
 import { TERMINAL_RUN_STATUSES } from '../runs/run.types';
 import { normalizePlanItems, type PlanItem, type RunPlan } from './plan.types';
 
 export class PlanService {
   constructor(
     private readonly runs: RunSnapshotReaderPort,
-    private readonly commits: StateCommitPort,
+    private readonly commits: ProjectionCommitPort,
     private readonly now: () => number,
   ) {}
 

@@ -537,3 +537,44 @@ export interface StateCommitPort {
   quiesceApp(appId: string, now: number): Promise<number>;
   interruptNonTerminalRuns(now: number): Promise<number>;
 }
+
+export type RunCommandCommitPort = Pick<
+  StateCommitPort,
+  'createRun' | 'appendInput' | 'cancelRun' | 'increaseRunBudget' | 'deleteRun'
+>;
+
+export type RunCreationCommitPort = Pick<StateCommitPort, 'createRun'>;
+export type ApprovalDecisionCommitPort = Pick<StateCommitPort, 'resolveToolApproval'>;
+export type ApprovalSweepCommitPort = Pick<StateCommitPort, 'expireToolApprovals'>;
+export type ProjectionCommitPort = Pick<StateCommitPort, 'commit'>;
+
+export type CollaborationCommitPort = Pick<
+  StateCommitPort,
+  | 'beginSubagentModelStep'
+  | 'beginSubagentTool'
+  | 'commitSubagentToolProposal'
+  | 'settleSubagentModelStep'
+  | 'settleSubagentTool'
+  | 'settleSubagentWithoutModel'
+>;
+
+export type RootExecutionCommitPort = Pick<
+  StateCommitPort,
+  | 'beginModelStep'
+  | 'beginMutationTool'
+  | 'beginReadTool'
+  | 'commit'
+  | 'commitToolProposal'
+  | 'interruptUnexpectedRootExecution'
+  | 'parkModelStep'
+  | 'parkRuntime'
+  | 'pauseModelStepForBudget'
+  | 'pauseRuntimeForBudget'
+  | 'requestToolApproval'
+  | 'retryModelStep'
+  | 'settleModelStep'
+  | 'settleMutationTool'
+  | 'settleReadTool'
+  | 'supersedeModelStep'
+  | 'supersedeMutationTool'
+>;

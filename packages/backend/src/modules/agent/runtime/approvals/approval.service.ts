@@ -1,7 +1,7 @@
 import type { ClockPort, Scope } from '../../agent.types';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
-import type { StateCommitPort } from '../runs/state-commit.port';
+import type { ApprovalDecisionCommitPort } from '../runs/state-commit.port';
 import type { RunView } from '../runs/run.types';
 import type { ApprovalRepositoryPort, ApprovalView } from './approval.repository.port';
 
@@ -9,7 +9,7 @@ export class ApprovalService {
   constructor(
     private readonly approvals: ApprovalRepositoryPort,
     private readonly runs: RunSnapshotReaderPort,
-    private readonly stateCommit: StateCommitPort,
+    private readonly stateCommit: ApprovalDecisionCommitPort,
     private readonly clock: ClockPort,
     private readonly onResolved: (run: RunView) => void,
   ) {}

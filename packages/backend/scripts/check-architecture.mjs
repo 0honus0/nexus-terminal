@@ -118,6 +118,18 @@ for (const file of sourceFiles) {
   ) {
     failures.push(`${relativeFile}: this consumer may only depend on RunSnapshotReaderPort`);
   }
+  const narrowStateCommitConsumers = new Set([
+    'modules/agent/runtime/approvals/approval.service.ts',
+    'modules/agent/runtime/runs/run.service.ts',
+    'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+    'modules/agent/runtime/planning/plan.service.ts',
+    'modules/agent/runtime/recovery/checkpoint.service.ts',
+    'modules/agent/runtime/execution/native-agent-backend.ts',
+    'bootstrap/agent/lifecycle-sweeps.ts',
+  ]);
+  if (narrowStateCommitConsumers.has(relativeFile) && /\bStateCommitPort\b/.test(text)) {
+    failures.push(`${relativeFile}: depend on a capability-specific StateCommit view, not the full StateCommitPort`);
+  }
   if (relativeFile === 'modules/agent/runtime/execution/native-agent-backend.ts') {
     const forbiddenExecutionDependencies = [
       'ContextService',

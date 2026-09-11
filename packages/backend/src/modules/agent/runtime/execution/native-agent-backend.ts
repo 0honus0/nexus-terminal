@@ -11,7 +11,7 @@ import { boundedUtf8 } from './text-budget';
 import { ToolCallRunner } from './tool-call-runner';
 import type { PendingMutationTool, RunExecutionReaderPort } from '../runs/run.repository.port';
 import type { DelegationReaderPort } from '../collaboration/subagent.repository.port';
-import type { StateCommitPort } from '../runs/state-commit.port';
+import type { RootExecutionCommitPort } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
 
 const MAX_COLLABORATION_BYTES = 8 * 1024;
@@ -51,7 +51,7 @@ export class NativeAgentBackend implements AgentBackendPort {
   constructor(
     private readonly repository: RunExecutionReaderPort,
     private readonly delegations: DelegationReaderPort,
-    private readonly stateCommit: StateCommitPort,
+    private readonly stateCommit: RootExecutionCommitPort,
     private readonly modelSteps: ModelStepRunner,
     private readonly toolCalls: ToolCallRunner,
     private readonly clock: ClockPort,
@@ -380,7 +380,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         const readContext = this.toolContext(proposed.run, runtimeId, proposed.toolStepId, signal);
         const readLeaseTtlSeconds = Math.min(300, Math.max(30, proposed.run.budget.toolTimeoutSeconds + 15));
         const readLease = await this.toolCalls.acquireRead(readContext, inspection, readLeaseTtlSeconds);
-        let toolSettled: Awaited<ReturnType<StateCommitPort['settleReadTool']>>;
+        let toolSettled: Awaited<ReturnType<RootExecutionCommitPort['settleReadTool']>>;
         let executedToolResult: ToolResult | null = null;
         try {
           const started = await this.stateCommit.beginReadTool({
@@ -656,7 +656,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           .catch(() => undefined);
       }
 
-      let settled: Awaited<ReturnType<StateCommitPort['settleMutationTool']>>;
+      let settled: Awaited<ReturnType<RootExecutionCommitPort['settleMutationTool']>>;
       try {
         settled = await this.stateCommit.settleMutationTool({
           scope,
@@ -757,7 +757,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     snapshot: RunSnapshot,
     model: ProviderModelConfig,
     estimatedInputTokens: number,
-  ): Promise<Awaited<ReturnType<StateCommitPort['commit']>> | null> {
+  ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>> | null> {
     const worstCaseTokens = estimatedInputTokens + snapshot.budget.maxOutputTokens;
     const remainingTokens = Math.max(
       0,
@@ -815,7 +815,7 @@ export class NativeAgentBackend implements AgentBackendPort {
   private async failAtSafeBoundary(
     snapshot: RunSnapshot | RunView,
     code: string,
-  ): Promise<Awaited<ReturnType<StateCommitPort['commit']>>> {
+  ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>>> {
     const now = this.clock.nowUnixSeconds();
     return this.stateCommit.commit({
       scope: { userId: snapshot.userId, appId: snapshot.appId },
@@ -837,7 +837,7 @@ export class NativeAgentBackend implements AgentBackendPort {
 
   private async cancelAtSafeBoundary(
     snapshot: RunSnapshot | RunView,
-  ): Promise<Awaited<ReturnType<StateCommitPort['commit']>>> {
+  ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>>> {
     const now = this.clock.nowUnixSeconds();
     return this.stateCommit.commit({
       scope: { userId: snapshot.userId, appId: snapshot.appId },

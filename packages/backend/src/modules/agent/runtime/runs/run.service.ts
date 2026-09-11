@@ -7,7 +7,7 @@ import { isAgentUuid } from '../../uuid';
 import type { AgentDefinitionRegistryPort } from '../definitions/agent-definition.port';
 import type { RunQueryPort } from './run.repository.port';
 import { requestHash, requireIdempotencyKey } from './idempotency';
-import type { StateCommitPort } from './state-commit.port';
+import type { RunCommandCommitPort } from './state-commit.port';
 import type {
   CreateRunCommand,
   RunBudget,
@@ -130,7 +130,7 @@ export class RunService {
     private readonly lifecycle: AppLifecycleService,
     private readonly providers: ProviderService,
     private readonly definitions: AgentDefinitionRegistryPort,
-    private readonly stateCommit: StateCommitPort,
+    private readonly stateCommit: RunCommandCommitPort,
     private readonly repository: RunQueryPort,
     private readonly clock: ClockPort,
     private readonly onCreated: (run: RunView) => void = () => undefined,

@@ -9,7 +9,7 @@ import type { AgentDefinitionRegistryPort } from '../definitions/agent-definitio
 import type { CheckpointRepositoryPort, CheckpointView } from './checkpoint.repository.port';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
-import type { StateCommitPort } from '../runs/state-commit.port';
+import type { RunCreationCommitPort } from '../runs/state-commit.port';
 import { TERMINAL_RUN_STATUSES, type RunBudget, type RunDefinitionSnapshot, type RunView } from '../runs/run.types';
 
 const clampBudget = (
@@ -71,7 +71,7 @@ export class CheckpointService {
     private readonly providers: ProviderService,
     private readonly definitions: AgentDefinitionRegistryPort,
     private readonly denylist: TargetDenylistRepositoryPort,
-    private readonly stateCommit: StateCommitPort,
+    private readonly stateCommit: RunCreationCommitPort,
     private readonly clock: ClockPort,
     private readonly onCreated: (run: RunView) => void = () => undefined,
     private readonly onCommitted: (run: RunView) => void = () => undefined,
