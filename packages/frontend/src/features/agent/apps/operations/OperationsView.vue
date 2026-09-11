@@ -3,7 +3,6 @@
   import { useI18n } from 'vue-i18n';
   import { connectionService, type Connection } from '@/features/connections/public';
   import AgentConversation from '../../ai/AgentConversation.vue';
-  import { agentEvents } from '../../api/agent-events';
   import { agentApi, formatAgentApiError } from '../../api/agent-api';
   import type {
     AgentApprovalBatch,
@@ -29,6 +28,7 @@
   const props = defineProps<{ appId: string }>();
   const { t } = useI18n();
   const facade = createAgentRunFacade(props.appId);
+  facade.start();
   const runtimeOperation = createRuntimeOperationState();
   const threads = ref<AgentThreadView[]>([]);
   const currentThread = ref<AgentThreadView | null>(null);
@@ -57,8 +57,6 @@
   const loading = ref(true);
   const error = ref('');
   const draft = ref(agentSurfaceSession.state(props.appId).draft);
-  let streamAbort: AbortController | null = null;
-  let streamGeneration = 0;
   let threadSelectionGeneration = 0;
   let ledgerGeneration = 0;
   let approvalsGeneration = 0;
@@ -152,51 +150,46 @@
   };
 
   const stopRunStream = (): void => {
-    streamGeneration += 1;
-    streamAbort?.abort();
-    streamAbort = null;
+    facade.selectRun(null);
     streamingText.value = '';
   };
 
   const startRunStream = (initial: AgentRunView): void => {
-    stopRunStream();
-    const controller = new AbortController();
-    streamAbort = controller;
-    const generation = ++streamGeneration;
-    void (async () => {
-      try {
-        for await (const event of agentEvents.run(props.appId, initial.id, initial.eventCursor, controller.signal)) {
-          if (controller.signal.aborted || generation !== streamGeneration) return;
-          if (event.type === 'transport.disconnected') streamingText.value = '';
-          if (event.type === 'message.delta') {
-            if (!event.payload.delegationId) streamingText.value += event.payload.text;
-            continue;
-          }
-          if (event.type === 'tool.delta') continue;
-          if (event.type === 'message.final') streamingText.value = '';
-          const durableCursor = event.id === undefined ? 0 : Number(event.id);
-          const next = await refreshRun(
-            initial.id,
-            Number.isSafeInteger(durableCursor) && durableCursor >= 0 ? durableCursor : 0,
-          );
-          await Promise.all([
-            refreshLedger(),
-            refreshApprovals(initial.id),
-            refreshBackgroundRuns(),
-            ...(detailVisible.value && detailSnapshot.value?.id === initial.id
-              ? [refreshDetailSubagents(initial.id)]
-              : []),
-          ]);
-          if (!next || !nonTerminal.has(next.status)) {
-            streamingText.value = '';
-            return;
-          }
+    streamingText.value = '';
+    facade.selectRun(initial, {
+      onEvent: async (event, signal) => {
+        if (signal.aborted) return;
+        if (event.type === 'transport.disconnected') streamingText.value = '';
+        if (event.type === 'message.delta') {
+          if (!event.payload.delegationId) streamingText.value += event.payload.text;
+          return;
         }
-      } catch (cause) {
-        if (controller.signal.aborted || generation !== streamGeneration) return;
+        if (event.type === 'tool.delta') return;
+        if (event.type === 'message.final') streamingText.value = '';
+        const durableCursor = event.id === undefined ? 0 : Number(event.id);
+        const next = await refreshRun(
+          initial.id,
+          Number.isSafeInteger(durableCursor) && durableCursor >= 0 ? durableCursor : 0,
+        );
+        if (signal.aborted) return;
+        await Promise.all([
+          refreshLedger(),
+          refreshApprovals(initial.id),
+          refreshBackgroundRuns(),
+          ...(detailVisible.value && detailSnapshot.value?.id === initial.id
+            ? [refreshDetailSubagents(initial.id)]
+            : []),
+        ]);
+        if (signal.aborted) return;
+        if (!next || !nonTerminal.has(next.status)) {
+          streamingText.value = '';
+          facade.selectRun(null);
+        }
+      },
+      onError: (cause) => {
         error.value = explain(cause);
-      }
-    })();
+      },
+    });
   };
 
   const selectThread = async (thread: AgentThreadView): Promise<void> => {
@@ -503,7 +496,10 @@
   };
 
   onMounted(load);
-  onBeforeUnmount(stopRunStream);
+  onBeforeUnmount(() => {
+    facade.dispose();
+    streamingText.value = '';
+  });
 </script>
 
 <template>

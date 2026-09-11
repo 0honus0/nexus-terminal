@@ -49,5 +49,7 @@ export const createAgentRunStore = () => {
     return current.snapshot;
   };
 
-  return { accept, acceptSnapshot, latest, currentSnapshot };
+  const clear = (): void => runs.clear();
+
+  return { accept, acceptSnapshot, latest, currentSnapshot, clear };
 };

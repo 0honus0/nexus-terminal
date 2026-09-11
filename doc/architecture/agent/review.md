@@ -565,6 +565,14 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 
 建议 facade 变成显式生命周期对象：`start()` 建立 host/run subscriptions，`dispose()` 取消全部 AbortController，`selectRun()` 切换并清理旧资源；内部委托 `run-store` 做 cursor 合并。Vue 组件只消费 facade/store，不直接创建长期网络任务。
 
+> **解决方案（已采用；原“无状态转发层”描述已被 R7 部分淘汰）**
+>
+> R7 已让 `run-facade.ts` 持有单调 `run-store` 与按 runId 串行的 snapshot refresh，因此本项不再重复引入第二个 store。剩余真实问题是 active Run 的长期 `/ws/agent` iterator、AbortController 与 generation 仍由 `OperationsView` 直接拥有。现在 facade 增加显式 `start()/selectRun()/dispose()`：`selectRun()` 会先 abort 旧 subscription，再从该 Run 的已知 durable cursor 建立唯一新 iterator；`dispose()` abort subscription、清 refresh tail/store，并让已在途的 snapshot 在返回后 fail-closed，不会重新写回已 dispose store。
+>
+> `OperationsView` 不再 import `agent-events` 或创建 Run subscription AbortController，只接收 facade 回调并解释 event；facade 把同一个 AbortSignal 传给 handler，因此 Thread/Run 切换发生在异步 snapshot/ledger refresh 中间时，旧 handler 在 await 返回后仍会停止写 UI。Run 终态显式 `selectRun(null)`，组件卸载显式 `dispose()`。Frontend architecture checker 固化这条 ownership。
+>
+> Host subscription **没有**塞进 per-App Run facade：它跨所有 App，由已有 `AgentSurfaceHost` 在 auth/user 生命周期中唯一 start/stop，并在 logout/unmount abort。把 Host subscription 复制到每个 Operations facade 会制造重复连接和第二个 Host lifecycle authority，因此保留当前分层。普通有界 HTTP 请求继续依赖 R7 的 generation/identity guard；本项收口的是会长期持有 socket 的网络任务。
+
 ## Runtime 重构落地顺序
 
 1. 先修复 `AgentScheduler` 按用户计数、异常 durable settle 和 Clock 注入；

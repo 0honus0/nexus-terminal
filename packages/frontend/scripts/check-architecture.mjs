@@ -70,6 +70,17 @@ for (const file of sourceFiles) {
   ) {
     failures.push(`${rel}: Runtime mutation errors must flow through runtime-operation-state.ts`);
   }
+
+  if (rel === 'features/agent/apps/operations/OperationsView.vue' && content.includes('../../api/agent-events')) {
+    failures.push(`${rel}: active Run event lifecycle must be owned by runtime/run-facade.ts`);
+  }
+
+  if (
+    rel === 'features/agent/runtime/run-facade.ts' &&
+    (!content.includes('agentEvents.run') || !content.includes('selectRun') || !content.includes('dispose'))
+  ) {
+    failures.push(`${rel}: Run facade must own explicit start/selectRun/dispose subscription lifecycle`);
+  }
 }
 
 const firstSegment = (rel) => rel.split('/')[0];
