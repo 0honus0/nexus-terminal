@@ -372,7 +372,7 @@ const waitForOpen = (socket: WebSocket, signal: AbortSignal): Promise<void> =>
     };
     const onOpen = (): void => finish();
     const onError = (): void => finish(new Error('AGENT_WS_OPEN_FAILED'));
-    const onClose = (event: CloseEvent): void => finish(new Error(`AGENT_WS_CLOSED_${event.code}`));
+    const onClose = (event: CloseEvent): void => finish(new Error(`AGENT_WS_OPEN_CLOSED_${event.code}`));
     const onAbort = (): void => finish();
     socket.addEventListener('open', onOpen, { once: true });
     socket.addEventListener('error', onError, { once: true });
@@ -380,7 +380,11 @@ const waitForOpen = (socket: WebSocket, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', onAbort, { once: true });
   });
 
-async function* connectOnce(request: AgentSubscriptionRequest, signal: AbortSignal): AsyncIterable<AgentStreamEvent> {
+async function* connectOnce(
+  request: AgentSubscriptionRequest,
+  signal: AbortSignal,
+  onSubscribed: () => void,
+): AsyncIterable<AgentStreamEvent> {
   if (signal.aborted) return;
 
   const socket = openWebSocket('/ws/agent');
@@ -461,6 +465,7 @@ async function* connectOnce(request: AgentSubscriptionRequest, signal: AbortSign
     await subscribedAck;
     resolveSubscribed = undefined;
     rejectSubscribed = undefined;
+    onSubscribed();
 
     while (!signal.aborted) {
       while (queue.length > 0) yield queue.shift()!;
@@ -495,7 +500,7 @@ const durableSequence = (event: AgentStreamEvent): number | null => {
   return Number.isSafeInteger(sequence) && sequence >= 0 ? sequence : null;
 };
 
-const assertSessionAfterOpenFailure = async (): Promise<void> => {
+const assertActiveSession = async (): Promise<void> => {
   try {
     await agentHttpClient.get('/agent/summary');
   } catch (cause) {
@@ -507,7 +512,12 @@ const retryableTransportError = (cause: unknown): boolean =>
   cause instanceof Error &&
   (cause.message === 'AGENT_WS_OPEN_FAILED' ||
     cause.message === 'AGENT_STREAM_FAILED' ||
+    /^AGENT_WS_OPEN_CLOSED_\d+$/.test(cause.message) ||
     /^AGENT_WS_CLOSED_\d+$/.test(cause.message));
+
+const needsSessionProbe = (cause: unknown): boolean =>
+  cause instanceof Error &&
+  (cause.message === 'AGENT_WS_OPEN_FAILED' || /^AGENT_WS_OPEN_CLOSED_\d+$/.test(cause.message));
 
 const waitForReconnect = (attempt: number, signal: AbortSignal): Promise<void> =>
   new Promise((resolve) => {
@@ -536,20 +546,21 @@ async function* connect(request: AgentSubscriptionRequest, signal: AbortSignal):
   while (!signal.aborted) {
     let sawEvent = false;
     try {
-      for await (const event of connectOnce(requestWithCursor(request, cursor), signal)) {
+      for await (const event of connectOnce(requestWithCursor(request, cursor), signal, () => {
+        retryAttempt = 0;
+      })) {
         if (signal.aborted) return;
         const sequence = durableSequence(event);
         if (sequence !== null && sequence <= cursor) continue;
         sawEvent = true;
         yield event;
         if (sequence !== null) cursor = sequence;
-        retryAttempt = 0;
       }
       if (signal.aborted) return;
     } catch (cause) {
       if (signal.aborted) return;
-      if (cause instanceof Error && cause.message === 'AGENT_WS_OPEN_FAILED') await assertSessionAfterOpenFailure();
       if (!retryableTransportError(cause)) throw cause;
+      if (needsSessionProbe(cause)) await assertActiveSession();
     }
 
     if (sawEvent) yield { type: 'transport.disconnected', payload: null };

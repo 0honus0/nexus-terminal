@@ -1,7 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
-import type { Page } from '@playwright/test';
+import type { APIRequestContext, Page, WebSocket as PlaywrightWebSocket } from '@playwright/test';
 
 type AgentEnvelope<T> = { data: T; requestId: string };
 type AgentErrorEnvelope = { error: { code: string; message: string }; requestId: string };
@@ -147,6 +147,51 @@ const closeAgentSubscription = async (page: Page, key: string): Promise<void> =>
   }, key);
 };
 
+const waitForAgentSubscribed = async (socket: PlaywrightWebSocket): Promise<void> =>
+  new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timed out waiting for Agent WebSocket subscribed acknowledgement'));
+    }, 10_000);
+    const onFrame = ({ payload }: { payload: string | Buffer }): void => {
+      try {
+        const message = JSON.parse(typeof payload === 'string' ? payload : payload.toString('utf8')) as {
+          type?: string;
+        };
+        if (message.type !== 'subscribed') return;
+        cleanup();
+        resolve();
+      } catch {
+        // Ignore unrelated/non-JSON frames; the Agent protocol itself will reject malformed payloads.
+      }
+    };
+    const onClose = (): void => {
+      cleanup();
+      reject(new Error('Agent WebSocket closed before subscribed acknowledgement'));
+    };
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      socket.off('framereceived', onFrame);
+      socket.off('close', onClose);
+    };
+    socket.on('framereceived', onFrame);
+    socket.on('close', onClose);
+  });
+
+const setOperationsEnabledFromApi = async (
+  request: APIRequestContext,
+  enabled: boolean,
+  expectedVersion: number,
+  csrf: string,
+): Promise<AppSummary> => {
+  const response = await request.patch('/api/v1/agent/apps/nexus.operations', {
+    headers: { 'X-Nexus-CSRF': csrf },
+    data: { enabled, expectedVersion },
+  });
+  expect(response.ok(), await response.text()).toBeTruthy();
+  return ((await response.json()) as AgentEnvelope<AppSummary>).data;
+};
+
 const setOperationsEnabledFromPage = async (
   page: Page,
   enabled: boolean,
@@ -173,6 +218,48 @@ const setOperationsEnabledFromPage = async (
     },
     { targetEnabled: enabled, version: expectedVersion },
   );
+
+test('Agent Host reconnects automatically and catches up durable Host events', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+
+  const apps = await context.request.get('/api/v1/agent/apps');
+  expect(apps.ok(), await apps.text()).toBeTruthy();
+  const appsBody = (await apps.json()) as AgentEnvelope<AppSummary[]>;
+  let operations = appsBody.data.find((app) => app.id === 'nexus.operations')!;
+  const originalEnabled = operations.enabled;
+  const csrf = await csrfToken(context.request);
+  if (!operations.enabled) {
+    operations = await setOperationsEnabledFromApi(context.request, true, operations.stateVersion, csrf);
+  }
+
+  const initialSocketPromise = page.waitForEvent('websocket', {
+    predicate: (socket) => new URL(socket.url()).pathname === '/ws/agent',
+  });
+  await page.goto('/connections');
+  const initialSocket = await initialSocketPromise;
+  await waitForAgentSubscribed(initialSocket);
+
+  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+  const hub = page.locator('section[aria-label="Agent"]');
+  await launcher.click();
+  await expect(hub).toBeVisible();
+
+  try {
+    await context.setOffline(true);
+    await expect.poll(() => initialSocket.isClosed(), { timeout: 5_000 }).toBe(true);
+
+    operations = await setOperationsEnabledFromApi(context.request, false, operations.stateVersion, csrf);
+    await expect(hub).toBeVisible();
+
+    await context.setOffline(false);
+    await expect(hub).toHaveCount(0, { timeout: 15_000 });
+  } finally {
+    await context.setOffline(false).catch(() => undefined);
+    if (operations.enabled !== originalEnabled) {
+      operations = await setOperationsEnabledFromApi(context.request, originalEnabled, operations.stateVersion, csrf);
+    }
+  }
+});
 
 test('Agent WebSocket replays durable Host events after a disconnect', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
