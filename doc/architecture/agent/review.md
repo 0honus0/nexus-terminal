@@ -478,6 +478,12 @@ inputWatermark
 
 数据库为 `(runId, commandId)` 或 `(toolCallId, attemptId)` 建唯一约束；重复提交返回原结果，owner epoch 过期返回明确 `STALE_EXECUTOR`，不要统一转成普通 conflict。
 
+> **复核结论（原建议不按统一 command envelope 落地）**
+>
+> 当前实现已经按“可重放边界”使用不同且更窄的 fencing identity，不能只看 `expectedRunVersion`：用户/HTTP command 使用 `agent_commands` 的 `(userId, appId, commandName, idempotencyKey)` 与 request hash；Root model step 使用 durable `stepId + attemptId + inputWatermark`，`agent_model_attempts` 以 `(stepId, attemptIndex)` 唯一且所有 retry/settle 都校验当前 streaming attempt；tool 使用 `toolCallId + providerCallId/operationHash`，mutation begin 还原子 consume approval，未知副作用通过 `running/reconciling + needsReconciliation` fail-closed；durable child work 使用 `workId + ownerEpoch + work version`，旧 owner settle 返回明确的 `SCHEDULER_WORK_STALE`，不会降成普通 `STATE_CONFLICT`。
+>
+> 更重要的是当前 restart contract 明确不恢复旧 Root Run：启动 sweep 把所有非终态 Run durable 收敛为 `interrupted`，并取消 queued/claimed/waiting child work；因此不存在“进程崩溃后用同一 Root command envelope 自动重放 model/tool attempt”的合法路径。给所有 StateCommit command 机械加入 `commandId/ownerEpoch/inputWatermark` 会制造没有 owner 的 Root epoch、重复 identity 和第二套 replay authority。这里保留各 capability 自己的 durable identity；如果未来产品改成 crash-resume，同一变更必须同时引入持久 execution lease/epoch 与 resume protocol，而不能只给 command interface 加字段。
+
 ### R13：HTTP Runtime 路由虽有公共解析函数，但缺少统一 request schema 版本
 
 位置：`packages/backend/src/interfaces/http/agent/app-runtime.routes.ts`、`agent-route-input.ts`。
