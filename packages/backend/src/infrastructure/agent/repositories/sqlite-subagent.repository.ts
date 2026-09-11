@@ -5,13 +5,18 @@ import type { RunBudget, RunUsage } from '../../../modules/agent/runtime/runs/ru
 import type {
   CreateDelegationRecord,
   CreateDelegationResult,
+  DelegationRepositoryPort,
   EnqueueWorkRecord,
+  MailboxRepositoryPort,
+  RunScopeRepositoryPort,
   RuntimeModelWorkView,
+  RuntimeParticipantRepositoryPort,
   RuntimeParticipantView,
   RuntimeToolWorkView,
+  SchedulerWorkRepositoryPort,
   SendMessageRecord,
+  SharedFactRepositoryPort,
   SharedFactView,
-  SubagentRepositoryPort,
 } from '../../../modules/agent/runtime/collaboration/subagent.repository.port';
 import type {
   AgentMessage,
@@ -296,7 +301,15 @@ const delegationInScope = async (
     [delegationId, runId, scope.userId, scope.appId],
   );
 
-export class SqliteSubagentRepository implements SubagentRepositoryPort {
+export class SqliteSubagentRepository
+  implements
+    RunScopeRepositoryPort,
+    RuntimeParticipantRepositoryPort,
+    DelegationRepositoryPort,
+    MailboxRepositoryPort,
+    SchedulerWorkRepositoryPort,
+    SharedFactRepositoryPort
+{
   constructor(private readonly db: RelationalDatabase) {}
 
   async scopeForRun(runId: string): Promise<Scope | null> {

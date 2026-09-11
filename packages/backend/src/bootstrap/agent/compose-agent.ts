@@ -9,16 +9,11 @@ import { SqliteAppGrantRepository } from '../../infrastructure/agent/repositorie
 import { SqliteAppStateRepository } from '../../infrastructure/agent/repositories/sqlite-app-state.repository';
 import { SqliteConversationRepository } from '../../infrastructure/agent/repositories/sqlite-conversation.repository';
 import { SqliteApprovalRepository } from '../../infrastructure/agent/repositories/sqlite-approval.repository';
-import { SqliteAppStorageRepository } from '../../infrastructure/agent/repositories/sqlite-app-storage.repository';
 import { SqliteAppIntentRepository } from '../../infrastructure/agent/repositories/sqlite-app-intent.repository';
 import { SqliteSubagentRepository } from '../../infrastructure/agent/repositories/sqlite-subagent.repository';
 import { SqliteMemoryRepository } from '../../infrastructure/agent/repositories/sqlite-memory.repository';
 import { SqliteMemoryProvenanceAdapter } from '../../infrastructure/agent/repositories/sqlite-memory-provenance.adapter';
-import { SqlitePluginInstallRepository } from '../../infrastructure/agent/repositories/sqlite-plugin-install.repository';
-import { ArtifactPluginPackageSourceAdapter } from '../../infrastructure/agent/plugins/artifact-plugin-package-source.adapter';
-import { TarPackageVerifierAdapter } from '../../infrastructure/agent/plugins/tar-package-verifier.adapter';
 import { InstalledPluginSkillSourceAdapter } from '../../infrastructure/agent/plugins/installed-plugin-skill-source.adapter';
-import { LocalPluginBackendRuntimeAdapter } from '../../infrastructure/agent/plugins/local-plugin-backend-runtime.adapter';
 import { OpenAiCompatibleAdapter } from '../../infrastructure/agent/providers/openai-compatible.adapter';
 import { McpAdapter } from '../../infrastructure/agent/integrations/mcp.adapter';
 import { OutboundPolicyAdapter } from '../../infrastructure/agent/providers/outbound-policy.adapter';
@@ -67,15 +62,14 @@ import { ToolExecutor } from '../../modules/agent/capabilities/tool-executor';
 import type { LeasePort } from '../../modules/agent/capabilities/lease.port';
 import { AgentSettingsService } from '../../modules/agent/host/agent-settings.service';
 import { AppCapabilityBroker } from '../../modules/agent/host/app-capability-broker';
-import type { AppStoragePort } from '../../modules/agent/host/app-storage.port';
 import { AppLifecycleService } from '../../modules/agent/host/app-lifecycle.service';
 import { AppIntentService } from '../../modules/agent/host/app-intent.service';
 import { validateManifest } from '../../modules/agent/host/app-manifest-validator';
 import { AppRegistryService } from '../../modules/agent/host/app-registry.service';
-import { PluginInstallService } from '../../modules/agent/host/plugin-install.service';
 import { AgentDefinitionRegistry } from '../../modules/agent/runtime/definitions/agent-definition.registry';
 import { AgentEventHub } from '../../modules/agent/runtime/events/event-hub';
 import { NativeAgentBackend } from '../../modules/agent/runtime/execution/native-agent-backend';
+import { LeaseCoordinator } from '../../modules/agent/runtime/execution/lease-coordinator';
 import { ModelCallLimiter } from '../../modules/agent/runtime/execution/model-call-limiter';
 import { RunService } from '../../modules/agent/runtime/runs/run.service';
 import { CheckpointService } from '../../modules/agent/runtime/recovery/checkpoint.service';
@@ -85,6 +79,14 @@ import { SubagentService } from '../../modules/agent/runtime/collaboration/subag
 import { SubagentScheduler } from '../../modules/agent/runtime/collaboration/subagent-scheduler';
 import { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
 import { SharedFactsService } from '../../modules/agent/runtime/collaboration/shared-facts.service';
+import type {
+  DelegationRepositoryPort,
+  MailboxRepositoryPort,
+  RunScopeRepositoryPort,
+  RuntimeParticipantRepositoryPort,
+  SchedulerWorkRepositoryPort,
+  SharedFactRepositoryPort,
+} from '../../modules/agent/runtime/collaboration/subagent.repository.port';
 import { PlanService } from '../../modules/agent/runtime/planning/plan.service';
 import { createPlanUpdateTool } from '../../modules/agent/runtime/planning/plan-tool';
 import type { AgentServices } from '../../modules/agent/public';
@@ -93,7 +95,9 @@ import type { RemoteDockerService } from '../../platform/docker/remote-docker.se
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../shared/security/crypto.port';
 import type { AuditLogService } from '../../modules/audit/audit.service';
+import { composePlugins } from './compose-plugins';
 import { composeWorkspaceRuntime } from './compose-workspace-runtime';
+import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
 
 export interface ComposeAgentOptions {
   database: RelationalDatabase;
@@ -167,40 +171,18 @@ export const composeAgent = ({
     new AppIntentArtifactAdapter(artifactStore),
     systemClock,
   );
-  const appStorage = new SqliteAppStorageRepository(database);
-  const pluginSdkStorage: AppStoragePort = {
-    get: async (scope, key) => {
-      const decision = await capabilityBroker.authorize(scope, 'storage.app');
-      if (!decision.allowed) throw new Error(decision.code);
-      return appStorage.get(scope, key);
-    },
-    put: async (scope, key, value, expectedVersion) => {
-      const decision = await capabilityBroker.authorize(scope, 'storage.app');
-      if (!decision.allowed) throw new Error(decision.code);
-      return appStorage.put(scope, key, value, expectedVersion);
-    },
-    delete: async (scope, key, expectedVersion) => {
-      const decision = await capabilityBroker.authorize(scope, 'storage.app');
-      if (!decision.allowed) throw new Error(decision.code);
-      return appStorage.delete(scope, key, expectedVersion);
-    },
-  };
-  const pluginBackendRuntime = new LocalPluginBackendRuntimeAdapter(dataDirectory, pluginSdkStorage);
-  const pluginRepository = new SqlitePluginInstallRepository(database);
-  const plugins = new PluginInstallService(
-    pluginRepository,
-    new TarPackageVerifierAdapter(dataDirectory),
-    new ArtifactPluginPackageSourceAdapter(artifactStore),
-    registry,
-    appStates,
-    appStorage,
-    capabilityBroker,
-    pluginBackendRuntime,
-    systemClock,
+  const { appStorage, plugins } = composePlugins({
+    database,
+    dataDirectory,
     nexusVersion,
     publicOrigin,
     pluginFrontendOrigin,
-  );
+    registry,
+    appStates,
+    capabilityBroker,
+    artifactStore,
+    clock: systemClock,
+  });
   const conversationRepository = new SqliteConversationRepository(database);
   const conversations = new ConversationService(conversationRepository, systemClock, settings, lifecycle);
   const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
@@ -209,10 +191,23 @@ export const composeAgent = ({
   const runRepository = new SqliteRunRepository(database);
   const stateCommit = new SqliteStateCommitAdapter(database);
   const subagentRepository = new SqliteSubagentRepository(database);
+  const runScopes: RunScopeRepositoryPort = subagentRepository;
+  const runtimeParticipants: RuntimeParticipantRepositoryPort = subagentRepository;
+  const delegationRepository: DelegationRepositoryPort = subagentRepository;
+  const mailboxRepository: MailboxRepositoryPort = subagentRepository;
+  const schedulerWork: SchedulerWorkRepositoryPort = subagentRepository;
+  const sharedFactRepository: SharedFactRepositoryPort = subagentRepository;
   const subagentPolicy = new SubagentPolicyService(appStorage, settings, providers);
   let subagentScheduler: SubagentScheduler | null = null;
-  const mailbox = new MailboxService(subagentRepository, settings, systemClock, () => subagentScheduler?.wake());
-  const sharedFacts = new SharedFactsService(subagentRepository, systemClock);
+  const mailbox = new MailboxService(
+    mailboxRepository,
+    runtimeParticipants,
+    delegationRepository,
+    settings,
+    systemClock,
+    () => subagentScheduler?.wake(),
+  );
+  const sharedFacts = new SharedFactsService(sharedFactRepository, systemClock);
   const memories = new MemoryService(
     new SqliteMemoryRepository(database),
     registry,
@@ -224,7 +219,8 @@ export const composeAgent = ({
   for (const definition of OPERATIONS_AGENT_DEFINITIONS) definitions.register('nexus.operations', definition);
   const eventHub = new AgentEventHub();
   const subagents = new SubagentService(
-    subagentRepository,
+    delegationRepository,
+    runtimeParticipants,
     runRepository,
     subagentPolicy,
     providers,
@@ -339,15 +335,17 @@ export const composeAgent = ({
   const toolExecutor = new ToolExecutor(toolCatalog, capabilityBroker);
   const policy = new PolicyService();
   const modelCalls = new ModelCallLimiter(settings);
+  const leaseCoordinator = new LeaseCoordinator(leases, systemClock);
   const nativeBackend = new NativeAgentBackend(
     runRepository,
-    subagentRepository,
+    delegationRepository,
     providers,
     context,
     languageModel,
     stateCommit,
     toolCatalog,
     toolExecutor,
+    leaseCoordinator,
     leases,
     policy,
     modelCalls,
@@ -362,7 +360,11 @@ export const composeAgent = ({
   );
   subagentScheduler = new SubagentScheduler(
     settings,
-    subagentRepository,
+    runScopes,
+    schedulerWork,
+    delegationRepository,
+    runtimeParticipants,
+    mailboxRepository,
     runRepository,
     providers,
     languageModel,
@@ -370,7 +372,7 @@ export const composeAgent = ({
     stateCommit,
     toolCatalog,
     toolExecutor,
-    leases,
+    leaseCoordinator,
     mailbox,
     eventHub,
     {
@@ -419,49 +421,13 @@ export const composeAgent = ({
     (run) => scheduler.enqueue(run),
     (run) => notifyCommitted(run),
   );
-  let approvalExpiryTimer: NodeJS.Timeout | null = null;
-  let approvalExpirySweep = Promise.resolve();
-  const sweepExpiredApprovals = (): void => {
-    approvalExpirySweep = approvalExpirySweep
-      .then(async () => {
-        const resumed = await stateCommit.expireToolApprovals(systemClock.nowUnixSeconds());
-        for (const run of resumed) {
-          notifyCommitted(run);
-          scheduler.enqueue(run);
-        }
-      })
-      .catch((error) => console.error('[Agent] approval expiry sweep failed:', error));
-  };
-  const startApprovalExpirySweep = (): void => {
-    if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
-    sweepExpiredApprovals();
-    approvalExpiryTimer = setInterval(sweepExpiredApprovals, 15_000);
-    approvalExpiryTimer.unref?.();
-  };
-  const stopApprovalExpirySweep = async (): Promise<void> => {
-    if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
-    approvalExpiryTimer = null;
-    await approvalExpirySweep.catch(() => undefined);
-  };
-  let workspaceReconcileTimer: NodeJS.Timeout | null = null;
-  let workspaceReconcileSweep = Promise.resolve();
-  const sweepWorkspaceReconciliation = (): void => {
-    workspaceReconcileSweep = workspaceReconcileSweep
-      .then(() => workspaceRuntime.reconcile())
-      .then(() => undefined)
-      .catch((error) => console.error('[Agent] workspace reconciliation sweep failed:', error));
-  };
-  const startWorkspaceReconciliation = (): void => {
-    if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
-    sweepWorkspaceReconciliation();
-    workspaceReconcileTimer = setInterval(sweepWorkspaceReconciliation, 15_000);
-    workspaceReconcileTimer.unref?.();
-  };
-  const stopWorkspaceReconciliation = async (): Promise<void> => {
-    if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
-    workspaceReconcileTimer = null;
-    await workspaceReconcileSweep.catch(() => undefined);
-  };
+  const lifecycleSweeps = createAgentLifecycleSweeps({
+    stateCommit,
+    workspaceRuntime,
+    scheduler,
+    clock: systemClock,
+    notifyCommitted,
+  });
 
   const approvalRepository = new SqliteApprovalRepository(database);
   const approvals = new ApprovalService(approvalRepository, runRepository, stateCommit, systemClock, (run) => {
@@ -642,7 +608,7 @@ export const composeAgent = ({
           mailbox.send(scope, runId, senderRuntimeId, input, idempotencyKey),
         readMessages: (scope, runId, runtimeId, after, limit) => mailbox.read(scope, runId, runtimeId, after, limit),
         listSubagentMessages: (scope, runId, delegationId, limit, before) =>
-          subagentRepository.listDelegationMessages(scope, runId, delegationId, limit, before),
+          mailboxRepository.listDelegationMessages(scope, runId, delegationId, limit, before),
         consumeMessages: (scope, runId, runtimeId, through, expectedConsumedSequence) =>
           mailbox.consume(scope, runId, runtimeId, through, expectedConsumedSequence),
         getFact: (scope, runId, key) => sharedFacts.get(scope, runId, key),
@@ -670,8 +636,7 @@ export const composeAgent = ({
       await stateCommit.interruptNonTerminalRuns(systemClock.nowUnixSeconds());
       scheduler.resume();
       await subagentScheduler?.initialize();
-      startApprovalExpirySweep();
-      startWorkspaceReconciliation();
+      lifecycleSweeps.start();
     },
     initializeForUser: async (userId) => {
       await settings.get(userId);
@@ -690,8 +655,7 @@ export const composeAgent = ({
     },
     dispose: async () => {
       await Promise.all([
-        stopApprovalExpirySweep(),
-        stopWorkspaceReconciliation(),
+        lifecycleSweeps.stop(),
         subagentScheduler?.dispose() ?? Promise.resolve(),
         mcpRuntime.closeAll(),
       ]);

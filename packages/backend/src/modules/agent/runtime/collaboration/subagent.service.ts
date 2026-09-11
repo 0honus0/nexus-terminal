@@ -5,7 +5,7 @@ import type { AppCapabilityBroker } from '../../host/app-capability-broker';
 import type { AgentCapability } from '../../host/app.types';
 import type { RunRepositoryPort } from '../runs/run.repository.port';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
-import type { SubagentRepositoryPort } from './subagent.repository.port';
+import type { DelegationRepositoryPort, RuntimeParticipantRepositoryPort } from './subagent.repository.port';
 import type { DelegationView, DependencyMode, JoinResult, SubagentProfile } from './subagent.types';
 import type { SubagentPolicyService } from './subagent-policy';
 import type { AgentEventHub } from '../events/event-hub';
@@ -83,7 +83,8 @@ const modelKey = (model: { providerId: string; modelId: string; configurationVer
 
 export class SubagentService {
   constructor(
-    private readonly repository: SubagentRepositoryPort,
+    private readonly delegations: DelegationRepositoryPort,
+    private readonly runtimes: RuntimeParticipantRepositoryPort,
     private readonly runs: RunRepositoryPort,
     private readonly policy: SubagentPolicyService,
     private readonly providers: ProviderService,
@@ -105,9 +106,9 @@ export class SubagentService {
     const input = parseRequest(raw, now);
     const [run, parentRuntime, settings, allDelegations] = await Promise.all([
       this.runs.snapshot(scope, runId),
-      this.repository.runtime(scope, runId, parentRuntimeId),
+      this.runtimes.runtime(scope, runId, parentRuntimeId),
       this.policy.get(scope),
-      this.repository.listDelegations(scope, runId),
+      this.delegations.listDelegations(scope, runId),
     ]);
     if (!run) throw new Error('RUN_NOT_FOUND');
     if (!parentRuntime) throw new Error('AGENT_RUNTIME_NOT_FOUND');
@@ -153,7 +154,7 @@ export class SubagentService {
       capabilities: grantedCapabilities,
       peerMessaging: profile.peerMessaging,
     } satisfies JsonValue;
-    const created = await this.repository.createDelegation({
+    const created = await this.delegations.createDelegation({
       scope,
       id: delegationId,
       runId,
@@ -195,7 +196,7 @@ export class SubagentService {
   ): Promise<DelegationView[]> {
     if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1 || limit > 101))
       throw new Error('VALIDATION_FAILED');
-    return this.repository.listDelegations(scope, runId, parentRuntimeId, limit, before);
+    return this.delegations.listDelegations(scope, runId, parentRuntimeId, limit, before);
   }
 
   async cancelTree(
@@ -204,12 +205,12 @@ export class SubagentService {
     delegationId: string,
     expectedVersion: number,
   ): Promise<DelegationView> {
-    const current = await this.repository.delegation(scope, runId, delegationId);
+    const current = await this.delegations.delegation(scope, runId, delegationId);
     if (!current) throw new Error('DELEGATION_NOT_FOUND');
-    const descendants = await this.repository.descendants(scope, runId, current.childRuntimeId);
+    const descendants = await this.delegations.descendants(scope, runId, current.childRuntimeId);
     for (const descendant of descendants) {
       if (!['completed', 'failed', 'cancelled'].includes(descendant.status)) {
-        await this.repository.cancelDelegation(
+        await this.delegations.cancelDelegation(
           scope,
           runId,
           descendant.id,
@@ -218,7 +219,7 @@ export class SubagentService {
         );
       }
     }
-    const result = await this.repository.cancelDelegation(
+    const result = await this.delegations.cancelDelegation(
       scope,
       runId,
       delegationId,
@@ -246,7 +247,7 @@ export class SubagentService {
     ) {
       throw new Error('VALIDATION_FAILED');
     }
-    const values = await Promise.all(ids.map((id) => this.repository.delegation(scope, runId, id)));
+    const values = await Promise.all(ids.map((id) => this.delegations.delegation(scope, runId, id)));
     if (values.some((value) => value === null)) throw new Error('DELEGATION_NOT_FOUND');
     const delegations = values as DelegationView[];
     if (delegations.some((delegation) => delegation.parentRuntimeId !== callerRuntimeId)) {

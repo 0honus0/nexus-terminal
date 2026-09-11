@@ -1,5 +1,5 @@
 import type { JsonValue, Scope, ClockPort } from '../../agent.types';
-import type { SharedFactView, SubagentRepositoryPort } from './subagent.repository.port';
+import type { SharedFactRepositoryPort, SharedFactView } from './subagent.repository.port';
 
 const MAX_FACT_BYTES = 64 * 1024;
 const MAX_RUN_FACT_BYTES = 1024 * 1024;
@@ -27,7 +27,7 @@ const normalizeValue = (value: unknown): JsonValue => {
 
 export class SharedFactsService {
   constructor(
-    private readonly repository: SubagentRepositoryPort,
+    private readonly repository: SharedFactRepositoryPort,
     private readonly clock: ClockPort,
   ) {}
 

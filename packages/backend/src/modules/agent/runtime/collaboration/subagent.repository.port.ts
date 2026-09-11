@@ -125,9 +125,29 @@ export interface SharedFactView {
   updatedAt: number;
 }
 
-export interface SubagentRepositoryPort {
+export interface RunScopeRepositoryPort {
   scopeForRun(runId: string): Promise<Scope | null>;
+}
+
+export interface RuntimeParticipantRepositoryPort {
   runtime(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeParticipantView | null>;
+  recentRuntimeToolExchanges(
+    scope: Scope,
+    runId: string,
+    runtimeId: string,
+    limit: number,
+  ): Promise<RuntimeToolExchangeView[]>;
+  runtimeToolWork(
+    scope: Scope,
+    runId: string,
+    runtimeId: string,
+    toolStepId: string,
+    toolCallId: string,
+  ): Promise<RuntimeToolWorkView | null>;
+  activeRuntimeModelWork(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeModelWorkView | null>;
+}
+
+export interface DelegationRepositoryPort {
   delegation(scope: Scope, runId: string, delegationId: string): Promise<DelegationView | null>;
   listDelegations(
     scope: Scope,
@@ -145,6 +165,9 @@ export interface SubagentRepositoryPort {
     now: number,
   ): Promise<DelegationView>;
   descendants(scope: Scope, runId: string, runtimeId: string): Promise<DelegationView[]>;
+}
+
+export interface MailboxRepositoryPort {
   sendMessage(record: SendMessageRecord): Promise<MessageReceipt>;
   readMessages(scope: Scope, runId: string, runtimeId: string, after: number, limit: number): Promise<AgentMessage[]>;
   listDelegationMessages(
@@ -154,20 +177,6 @@ export interface SubagentRepositoryPort {
     limit: number,
     before?: { createdAt: number; id: string },
   ): Promise<AgentMessage[]>;
-  recentRuntimeToolExchanges(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    limit: number,
-  ): Promise<RuntimeToolExchangeView[]>;
-  runtimeToolWork(
-    scope: Scope,
-    runId: string,
-    runtimeId: string,
-    toolStepId: string,
-    toolCallId: string,
-  ): Promise<RuntimeToolWorkView | null>;
-  activeRuntimeModelWork(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeModelWorkView | null>;
   consumeMessages(
     scope: Scope,
     runId: string,
@@ -177,6 +186,9 @@ export interface SubagentRepositoryPort {
     now: number,
   ): Promise<number>;
   expireMessages(now: number, limit: number): Promise<number>;
+}
+
+export interface SchedulerWorkRepositoryPort {
   enqueueWork(record: EnqueueWorkRecord): Promise<SchedulerWorkView>;
   readyWork(now: number, limit: number, excludedRunIds?: readonly string[]): Promise<SchedulerWorkView[]>;
   terminalWork(now: number, limit: number): Promise<SchedulerWorkView[]>;
@@ -194,6 +206,9 @@ export interface SubagentRepositoryPort {
     now: number,
   ): Promise<void>;
   resetClaimedWork(ownerEpoch: number, now: number): Promise<number>;
+}
+
+export interface SharedFactRepositoryPort {
   getFact(scope: Scope, runId: string, key: string): Promise<SharedFactView | null>;
   compareAndSetFact(
     scope: Scope,

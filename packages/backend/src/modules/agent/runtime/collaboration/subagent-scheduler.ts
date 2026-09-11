@@ -2,19 +2,29 @@ import { randomInt, randomUUID } from 'node:crypto';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { LanguageModelPort } from '../../ai/language-model.port';
 import type { ModelMessage, ModelToolSchema, ProviderModelConfig, TokenUsage } from '../../ai/model.types';
-import { calculateModelCostMicros, type ProviderService } from '../../ai/provider.service';
-import type { LeaseOwner, LeasePort, ResourceLease } from '../../capabilities/lease.port';
+import type { ProviderService } from '../../ai/provider.service';
+import type { LeaseOwner, ResourceLease } from '../../capabilities/lease.port';
 import type { ToolCatalog } from '../../capabilities/tool-catalog';
 import type { ToolExecutor } from '../../capabilities/tool-executor';
 import type { ToolContext, ToolProposal, ToolResult } from '../../capabilities/tool.types';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import type { AgentEventHub } from '../events/event-hub';
 import type { MailboxService } from './mailbox.service';
+import { executionErrorCode, failedToolResult as buildFailedToolResult } from '../execution/execution-errors';
+import { LeaseCoordinator, type LeaseRenewal } from '../execution/lease-coordinator';
 import type { ModelCallLimiter } from '../execution/model-call-limiter';
+import { estimateTokens, modelCost } from '../execution/model-accounting';
+import { boundedUtf8 } from '../execution/text-budget';
 import type { RunRepositoryPort } from '../runs/run.repository.port';
 import type { RunView } from '../runs/run.types';
 import type { StateCommitPort } from '../runs/state-commit.port';
-import type { SubagentRepositoryPort } from './subagent.repository.port';
+import type {
+  DelegationRepositoryPort,
+  MailboxRepositoryPort,
+  RunScopeRepositoryPort,
+  RuntimeParticipantRepositoryPort,
+  SchedulerWorkRepositoryPort,
+} from './subagent.repository.port';
 import type { DelegationView, SchedulerWorkView } from './subagent.types';
 
 const CONTROL_POLL_MS = 500;
@@ -24,67 +34,17 @@ const MAX_CONTEXT_BYTES = 64 * 1024;
 const INBOX_LIMIT = 8;
 const INBOX_BYTES = 8 * 1024;
 
-const estimateTokens = (value: string): number => Math.max(1, Math.ceil(Buffer.byteLength(value, 'utf8') / 4));
-
-const boundedUtf8 = (value: string, maxBytes: number): string => {
-  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
-  let result = '';
-  for (const character of value) {
-    if (Buffer.byteLength(result + character, 'utf8') > maxBytes) break;
-    result += character;
-  }
-  return result;
-};
-
-const errorCode = (error: unknown): string => {
-  if (error instanceof Error) {
-    if (error.name === 'AbortError') return 'ABORTED';
-    if (/^[A-Z][A-Z0-9_]+$/.test(error.message)) return error.message;
-    const code = (error as Error & { code?: unknown }).code;
-    if (typeof code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(code)) return code;
-  }
-  return 'SUBAGENT_EXECUTION_FAILED';
-};
-
-const modelCost = (model: ProviderModelConfig, usage: TokenUsage): number =>
-  calculateModelCostMicros(model, usage.inputTokens, usage.outputTokens) ?? 0;
+const errorCode = (error: unknown): string => executionErrorCode(error, 'SUBAGENT_EXECUTION_FAILED');
 
 const terminalDelegation = (value: DelegationView): boolean =>
   value.status === 'completed' || value.status === 'failed' || value.status === 'cancelled';
 
-const waitForRetry = (milliseconds: number, signal: AbortSignal): Promise<void> =>
-  new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(signal.reason ?? new Error('ABORTED'));
-      return;
-    }
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      reject(signal.reason ?? new Error('ABORTED'));
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, milliseconds);
-    signal.addEventListener('abort', onAbort, { once: true });
+const failedToolResult = (error: unknown): ToolResult =>
+  buildFailedToolResult(error, {
+    fallbackCode: 'SUBAGENT_EXECUTION_FAILED',
+    summaryPrefix: 'Subagent tool failed',
+    verificationSummary: 'The subagent tool did not return a successful result.',
   });
-
-const failedToolResult = (error: unknown): ToolResult => {
-  const code = errorCode(error);
-  return {
-    ok: false,
-    summary: `Subagent tool failed: ${code}`,
-    artifactRefs: [],
-    truncated: false,
-    outcome: 'confirmed',
-    errorCode: code,
-    verification: {
-      status: 'failed',
-      summary: 'The subagent tool did not return a successful result.',
-      evidenceRefs: [],
-    },
-  };
-};
 
 interface ToolCallAccumulator {
   id?: string;
@@ -124,7 +84,11 @@ export class SubagentScheduler {
 
   constructor(
     private readonly settings: AgentSettingsService,
-    private readonly repository: SubagentRepositoryPort,
+    private readonly runScopes: RunScopeRepositoryPort,
+    private readonly work: SchedulerWorkRepositoryPort,
+    private readonly delegations: DelegationRepositoryPort,
+    private readonly runtimes: RuntimeParticipantRepositoryPort,
+    private readonly mailboxes: MailboxRepositoryPort,
     private readonly runs: RunRepositoryPort,
     private readonly providers: ProviderService,
     private readonly modelPort: LanguageModelPort,
@@ -132,7 +96,7 @@ export class SubagentScheduler {
     private readonly stateCommit: StateCommitPort,
     private readonly toolCatalog: ToolCatalog,
     private readonly toolExecutor: ToolExecutor,
-    private readonly leases: LeasePort,
+    private readonly leaseCoordinator: LeaseCoordinator,
     private readonly mailbox: MailboxService,
     private readonly events: AgentEventHub,
     private readonly roots: RootSchedulerView,
@@ -140,7 +104,7 @@ export class SubagentScheduler {
   ) {}
 
   async initialize(): Promise<void> {
-    await this.repository.resetClaimedWork(this.ownerEpoch, this.clock.nowUnixSeconds());
+    await this.work.resetClaimedWork(this.ownerEpoch, this.clock.nowUnixSeconds());
     this.resume();
   }
 
@@ -197,23 +161,18 @@ export class SubagentScheduler {
       while (this.accepting && safety < 64) {
         safety += 1;
         const now = this.clock.nowUnixSeconds();
-        const terminalCandidates = await this.repository.terminalWork(now, 64);
+        const terminalCandidates = await this.work.terminalWork(now, 64);
         if (terminalCandidates.length > 0) {
           const handled = await this.handleTerminalCandidate(terminalCandidates[0]!);
           if (handled) continue;
         }
-        const candidates = await this.repository.readyWork(now, 128, this.roots.activeRunIds());
+        const candidates = await this.work.readyWork(now, 128, this.roots.activeRunIds());
         if (candidates.length === 0) break;
         const candidate = await this.pickCandidate(candidates);
         if (!candidate) break;
-        const scope = await this.repository.scopeForRun(candidate.runId);
+        const scope = await this.runScopes.scopeForRun(candidate.runId);
         if (!scope) {
-          await this.repository.claimWork(
-            candidate.id,
-            candidate.version,
-            this.ownerEpoch,
-            this.clock.nowUnixSeconds(),
-          );
+          await this.work.claimWork(candidate.id, candidate.version, this.ownerEpoch, this.clock.nowUnixSeconds());
           continue;
         }
         const configured = await this.settings.get(scope.userId);
@@ -225,7 +184,7 @@ export class SubagentScheduler {
           ),
         );
         if (this.roots.activeCount + this.activeForUser(scope.userId) >= maxConcurrent) break;
-        const claimed = await this.repository.claimWork(
+        const claimed = await this.work.claimWork(
           candidate.id,
           candidate.version,
           this.ownerEpoch,
@@ -239,7 +198,7 @@ export class SubagentScheduler {
           continue;
         }
         if (claimed.kind !== 'model_step' && claimed.kind !== 'tool_step') {
-          await this.repository
+          await this.work
             .settleWork(claimed.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds())
             .catch(() => undefined);
           continue;
@@ -252,23 +211,18 @@ export class SubagentScheduler {
   }
 
   private async handleTerminalCandidate(work: SchedulerWorkView): Promise<boolean> {
-    const scope = await this.repository.scopeForRun(work.runId);
+    const scope = await this.runScopes.scopeForRun(work.runId);
     if (!scope) return false;
-    const claimed = await this.repository.claimWork(
-      work.id,
-      work.version,
-      this.ownerEpoch,
-      this.clock.nowUnixSeconds(),
-    );
+    const claimed = await this.work.claimWork(work.id, work.version, this.ownerEpoch, this.clock.nowUnixSeconds());
     if (!claimed) return false;
     const payload = claimed.payload;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || typeof payload.delegationId !== 'string') {
-      await this.repository.settleWork(claimed.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      await this.work.settleWork(claimed.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return true;
     }
-    const delegation = await this.repository.delegation(scope, claimed.runId, payload.delegationId);
+    const delegation = await this.delegations.delegation(scope, claimed.runId, payload.delegationId);
     if (!delegation || terminalDelegation(delegation)) {
-      await this.repository.settleWork(claimed.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      await this.work.settleWork(claimed.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return true;
     }
     const code =
@@ -301,7 +255,7 @@ export class SubagentScheduler {
   private async pickCandidate(candidates: SchedulerWorkView[]): Promise<SchedulerWorkView | null> {
     const enriched: Array<{ work: SchedulerWorkView; scope: Scope }> = [];
     for (const work of candidates) {
-      const scope = await this.repository.scopeForRun(work.runId);
+      const scope = await this.runScopes.scopeForRun(work.runId);
       if (scope) enriched.push({ work, scope });
     }
     if (enriched.length === 0) return null;
@@ -354,11 +308,11 @@ export class SubagentScheduler {
   }
 
   private async handleInboxWake(scope: Scope, work: SchedulerWorkView): Promise<void> {
-    await this.repository.settleWork(work.id, this.ownerEpoch, 'completed', this.clock.nowUnixSeconds());
-    const delegations = await this.repository.listDelegations(scope, work.runId);
+    await this.work.settleWork(work.id, this.ownerEpoch, 'completed', this.clock.nowUnixSeconds());
+    const delegations = await this.delegations.listDelegations(scope, work.runId);
     const child = delegations.find((delegation) => delegation.childRuntimeId === work.agentRuntimeId);
     if (child && !terminalDelegation(child)) {
-      await this.repository.enqueueWork({
+      await this.work.enqueueWork({
         id: `work-${crypto.randomUUID()}`,
         runId: work.runId,
         runtimeId: work.agentRuntimeId,
@@ -383,16 +337,16 @@ export class SubagentScheduler {
       typeof payload.toolStepId !== 'string' ||
       typeof payload.toolCallId !== 'string'
     ) {
-      await this.repository.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      await this.work.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return;
     }
     const [delegation, run, toolWork] = await Promise.all([
-      this.repository.delegation(scope, work.runId, payload.delegationId),
+      this.delegations.delegation(scope, work.runId, payload.delegationId),
       this.runs.snapshot(scope, work.runId),
-      this.repository.runtimeToolWork(scope, work.runId, work.agentRuntimeId, payload.toolStepId, payload.toolCallId),
+      this.runtimes.runtimeToolWork(scope, work.runId, work.agentRuntimeId, payload.toolStepId, payload.toolCallId),
     ]);
     if (!delegation || !run || !toolWork || terminalDelegation(delegation) || run.status !== 'running') {
-      await this.repository.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      await this.work.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return;
     }
     if (delegation.deadlineAt <= this.clock.nowUnixSeconds() || work.deadlineAt <= this.clock.nowUnixSeconds()) {
@@ -444,7 +398,7 @@ export class SubagentScheduler {
       activeRun = begun.run;
       this.events.publishRunWake(work.runId, begun.eventCursor);
     } else if (toolWork.status !== 'running') {
-      await this.repository.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      await this.work.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return;
     }
 
@@ -462,16 +416,17 @@ export class SubagentScheduler {
       );
       const leaseTtlSeconds = Math.min(300, Math.max(30, activeRun.budget.toolTimeoutSeconds + 15));
       let leases: ResourceLease[] = [];
-      let renewal: ReturnType<SubagentScheduler['startLeaseRenewal']> | null = null;
+      let renewal: LeaseRenewal | null = null;
       try {
-        leases = await this.acquireLeasesWithRetry(
+        leases = await this.leaseCoordinator.acquireWithRetry(
           owner,
           toolWork.inspection.resourceKeys,
+          'read',
           leaseTtlSeconds,
           signal,
           context.deadlineAt,
         );
-        renewal = this.startLeaseRenewal(
+        renewal = this.leaseCoordinator.startRenewal(
           leases.map((lease) => lease.id),
           owner,
           leaseTtlSeconds,
@@ -488,7 +443,7 @@ export class SubagentScheduler {
         toolResult = failedToolResult(error);
       } finally {
         await renewal?.stop().catch(() => undefined);
-        await this.leases
+        await this.leaseCoordinator
           .release(
             leases.map((lease) => lease.id),
             owner,
@@ -545,13 +500,13 @@ export class SubagentScheduler {
   private async executeChild(scope: Scope, work: SchedulerWorkView, signal: AbortSignal): Promise<void> {
     const payload = work.payload;
     if (!payload || typeof payload !== 'object' || Array.isArray(payload) || typeof payload.delegationId !== 'string') {
-      await this.repository.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      await this.work.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return;
     }
-    const delegation = await this.repository.delegation(scope, work.runId, payload.delegationId);
+    const delegation = await this.delegations.delegation(scope, work.runId, payload.delegationId);
     const run = await this.runs.snapshot(scope, work.runId);
     if (!delegation || !run || terminalDelegation(delegation) || run.status !== 'running') {
-      await this.repository.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      await this.work.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return;
     }
     if (delegation.deadlineAt <= this.clock.nowUnixSeconds()) {
@@ -576,7 +531,7 @@ export class SubagentScheduler {
       return;
     }
 
-    const interruptedModel = await this.repository.activeRuntimeModelWork(scope, work.runId, work.agentRuntimeId);
+    const interruptedModel = await this.runtimes.activeRuntimeModelWork(scope, work.runId, work.agentRuntimeId);
     if (interruptedModel) {
       const settled = await this.stateCommit.settleSubagentModelStep({
         scope,
@@ -619,20 +574,14 @@ export class SubagentScheduler {
       await this.failBeforeModel(scope, work, delegation, 'SUBAGENT_MODEL_UNAVAILABLE');
       return;
     }
-    const runtime = await this.repository.runtime(scope, work.runId, work.agentRuntimeId);
+    const runtime = await this.runtimes.runtime(scope, work.runId, work.agentRuntimeId);
     if (!runtime) {
-      await this.repository.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      await this.work.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return;
     }
     const [inbox, toolExchanges] = await Promise.all([
-      this.repository.readMessages(
-        scope,
-        work.runId,
-        work.agentRuntimeId,
-        runtime.consumedMailboxSequence,
-        INBOX_LIMIT,
-      ),
-      this.repository.recentRuntimeToolExchanges(scope, work.runId, work.agentRuntimeId, 8),
+      this.mailboxes.readMessages(scope, work.runId, work.agentRuntimeId, runtime.consumedMailboxSequence, INBOX_LIMIT),
+      this.runtimes.recentRuntimeToolExchanges(scope, work.runId, work.agentRuntimeId, 8),
     ]);
     const offeredTools = this.childToolSchemas(scope, delegation, model, run);
     const messages = this.childMessages(delegation, inbox, toolExchanges);
@@ -771,7 +720,7 @@ export class SubagentScheduler {
             this.events.publishRunWake(work.runId, proposed.eventCursor);
             if (inbox.length > 0) {
               const through = inbox.at(-1)?.recipientSequence ?? runtime.consumedMailboxSequence;
-              await this.repository
+              await this.mailboxes
                 .consumeMessages(
                   scope,
                   work.runId,
@@ -820,7 +769,7 @@ export class SubagentScheduler {
 
     if (inbox.length > 0 && outcome === 'completed') {
       const through = inbox.at(-1)?.recipientSequence ?? runtime.consumedMailboxSequence;
-      await this.repository
+      await this.mailboxes
         .consumeMessages(
           scope,
           work.runId,
@@ -840,8 +789,8 @@ export class SubagentScheduler {
 
   private childMessages(
     delegation: DelegationView,
-    inbox: Awaited<ReturnType<SubagentRepositoryPort['readMessages']>>,
-    toolExchanges: Awaited<ReturnType<SubagentRepositoryPort['recentRuntimeToolExchanges']>>,
+    inbox: Awaited<ReturnType<MailboxRepositoryPort['readMessages']>>,
+    toolExchanges: Awaited<ReturnType<RuntimeParticipantRepositoryPort['recentRuntimeToolExchanges']>>,
   ): ModelMessage[] {
     const inboxText = boundedUtf8(
       JSON.stringify(
@@ -961,67 +910,6 @@ export class SubagentScheduler {
     };
   }
 
-  private async acquireLeasesWithRetry(
-    owner: LeaseOwner,
-    resourceKeys: readonly string[],
-    ttlSeconds: number,
-    signal: AbortSignal,
-    deadlineAt: number,
-  ): Promise<ResourceLease[]> {
-    while (true) {
-      if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
-      if (this.clock.nowUnixSeconds() >= deadlineAt) throw new Error('TOOL_TIMEOUT');
-      try {
-        return await this.leases.acquireMany(owner, resourceKeys, 'read', ttlSeconds);
-      } catch (error) {
-        if (errorCode(error) !== 'LEASE_CONFLICT') throw error;
-        await waitForRetry(Math.min(500, Math.max(50, deadlineAt * 1000 - Date.now())), signal);
-      }
-    }
-  }
-
-  private startLeaseRenewal(
-    leaseIds: readonly string[],
-    owner: LeaseOwner,
-    ttlSeconds: number,
-    parentSignal: AbortSignal,
-  ): { signal: AbortSignal; stop: () => Promise<unknown | null> } {
-    const controller = new AbortController();
-    let stopped = false;
-    let renewalError: unknown | null = null;
-    let tail = Promise.resolve();
-    const abortFromParent = (): void => {
-      if (!controller.signal.aborted) controller.abort(parentSignal.reason ?? new Error('ABORTED'));
-    };
-    if (parentSignal.aborted) abortFromParent();
-    else parentSignal.addEventListener('abort', abortFromParent, { once: true });
-    const renew = (): void => {
-      tail = tail.then(async () => {
-        if (stopped || controller.signal.aborted) return;
-        try {
-          await this.leases.renew(leaseIds, owner, ttlSeconds);
-        } catch (error) {
-          renewalError = error;
-          controller.abort(error);
-        }
-      });
-    };
-    const timer = setInterval(renew, 10_000);
-    timer.unref?.();
-    return {
-      signal: controller.signal,
-      stop: async () => {
-        if (!stopped) {
-          stopped = true;
-          clearInterval(timer);
-          parentSignal.removeEventListener('abort', abortFromParent);
-        }
-        await tail.catch(() => undefined);
-        return renewalError;
-      },
-    };
-  }
-
   private async failBeforeModel(
     scope: Scope,
     work: SchedulerWorkView,
@@ -1079,25 +967,25 @@ export class SubagentScheduler {
   }
 
   private async cancelSiblings(scope: Scope, failed: DelegationView): Promise<void> {
-    const siblings = await this.repository.listDelegations(scope, failed.runId, failed.parentRuntimeId);
+    const siblings = await this.delegations.listDelegations(scope, failed.runId, failed.parentRuntimeId);
     for (const sibling of siblings) {
       if (sibling.id === failed.id || terminalDelegation(sibling)) continue;
-      const descendants = await this.repository.descendants(scope, failed.runId, sibling.childRuntimeId);
+      const descendants = await this.delegations.descendants(scope, failed.runId, sibling.childRuntimeId);
       for (const descendant of descendants) {
         if (!terminalDelegation(descendant)) {
-          await this.repository
+          await this.delegations
             .cancelDelegation(scope, failed.runId, descendant.id, descendant.version, this.clock.nowUnixSeconds())
             .catch(() => undefined);
         }
       }
-      await this.repository
+      await this.delegations
         .cancelDelegation(scope, failed.runId, sibling.id, sibling.version, this.clock.nowUnixSeconds())
         .catch(() => undefined);
     }
   }
 
   private async resumeParent(scope: Scope, runId: string, completed: DelegationView): Promise<void> {
-    const all = await this.repository.listDelegations(scope, runId);
+    const all = await this.delegations.listDelegations(scope, runId);
     const parentDelegation = all.find((delegation) => delegation.childRuntimeId === completed.parentRuntimeId) ?? null;
     if (parentDelegation) {
       this.wake();

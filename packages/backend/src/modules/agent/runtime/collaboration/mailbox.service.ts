@@ -2,7 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { JsonValue, Scope, ClockPort } from '../../agent.types';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
-import type { SubagentRepositoryPort } from './subagent.repository.port';
+import type {
+  DelegationRepositoryPort,
+  MailboxRepositoryPort,
+  RuntimeParticipantRepositoryPort,
+} from './subagent.repository.port';
 import type { AgentMessage, AgentMessageKind, MessageReceipt } from './subagent.types';
 
 const MAX_PENDING_PER_RECIPIENT = 64;
@@ -93,7 +97,9 @@ const parseMessage = (raw: unknown): ParsedMessage => {
 
 export class MailboxService {
   constructor(
-    private readonly repository: SubagentRepositoryPort,
+    private readonly mailboxes: MailboxRepositoryPort,
+    private readonly runtimes: RuntimeParticipantRepositoryPort,
+    private readonly delegations: DelegationRepositoryPort,
     private readonly settings: AgentSettingsService,
     private readonly clock: ClockPort,
     private readonly onWorkAvailable: () => void = () => undefined,
@@ -110,9 +116,9 @@ export class MailboxService {
     const message = parseMessage(raw);
     if (message.recipientRuntimeId === senderRuntimeId) throw new Error('MESSAGE_RECIPIENT_INVALID');
     const [sender, recipient, delegations, settings] = await Promise.all([
-      this.repository.runtime(scope, runId, senderRuntimeId),
-      this.repository.runtime(scope, runId, message.recipientRuntimeId),
-      this.repository.listDelegations(scope, runId),
+      this.runtimes.runtime(scope, runId, senderRuntimeId),
+      this.runtimes.runtime(scope, runId, message.recipientRuntimeId),
+      this.delegations.listDelegations(scope, runId),
       this.settings.get(scope.userId),
     ]);
     if (!sender || !recipient) throw new Error('AGENT_RUNTIME_NOT_FOUND');
@@ -140,7 +146,7 @@ export class MailboxService {
     const encoded = JSON.stringify(envelope);
     const sizeBytes = Buffer.byteLength(encoded, 'utf8');
     if (sizeBytes > MAX_ENVELOPE_BYTES) throw new Error('MESSAGE_TOO_LARGE');
-    const receipt = await this.repository.sendMessage({
+    const receipt = await this.mailboxes.sendMessage({
       scope,
       id,
       runId,
@@ -177,7 +183,7 @@ export class MailboxService {
     ) {
       throw new Error('VALIDATION_FAILED');
     }
-    return this.repository.readMessages(scope, runId, runtimeId, after, limit);
+    return this.mailboxes.readMessages(scope, runId, runtimeId, after, limit);
   }
 
   async consume(
@@ -195,7 +201,7 @@ export class MailboxService {
     ) {
       throw new Error('VALIDATION_FAILED');
     }
-    return this.repository.consumeMessages(
+    return this.mailboxes.consumeMessages(
       scope,
       runId,
       runtimeId,
@@ -207,14 +213,14 @@ export class MailboxService {
 
   async sweepExpired(limit = 256): Promise<number> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000) throw new Error('VALIDATION_FAILED');
-    return this.repository.expireMessages(this.clock.nowUnixSeconds(), limit);
+    return this.mailboxes.expireMessages(this.clock.nowUnixSeconds(), limit);
   }
 
   private assertPeerPolicy(
     senderRuntimeId: string,
     recipientRuntimeId: string,
     delegationId: string,
-    delegations: Awaited<ReturnType<SubagentRepositoryPort['listDelegations']>>,
+    delegations: Awaited<ReturnType<DelegationRepositoryPort['listDelegations']>>,
   ): void {
     const subject = delegations.find((delegation) => delegation.id === delegationId);
     if (!subject) throw new Error('DELEGATION_NOT_FOUND');

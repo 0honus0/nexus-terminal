@@ -5,32 +5,24 @@ import type { ProviderModelConfig, TokenUsage } from '../../ai/model.types';
 import { calculateModelCostMicros, ProviderService } from '../../ai/provider.service';
 import { AGENT_DEFAULTS } from '../../agent-defaults';
 import type { ClockPort, JsonValue } from '../../agent.types';
-import type { LeaseMode, LeaseOwner, LeasePort, ResourceLease } from '../../capabilities/lease.port';
+import type { LeaseOwner, LeasePort, ResourceLease } from '../../capabilities/lease.port';
 import { PolicyService } from '../../capabilities/policy.service';
 import { ToolCatalog } from '../../capabilities/tool-catalog';
 import { ToolExecutor } from '../../capabilities/tool-executor';
 import type { ToolContext, ToolProposal, ToolResult } from '../../capabilities/tool.types';
 import type { AgentBackendPort, BackendSignal } from './agent-backend.port';
+import { executionErrorCode, failedToolResult as buildFailedToolResult, waitForRetry } from './execution-errors';
+import { LeaseCoordinator } from './lease-coordinator';
 import { ModelCallLimiter } from './model-call-limiter';
+import { estimateTokens, modelCost } from './model-accounting';
+import { boundedUtf8 } from './text-budget';
 import type { PendingMutationTool, RunRepositoryPort } from '../runs/run.repository.port';
-import type { SubagentRepositoryPort } from '../collaboration/subagent.repository.port';
+import type { DelegationRepositoryPort } from '../collaboration/subagent.repository.port';
 import type { StateCommitPort } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
 
 const MAX_ASSISTANT_BYTES = 256 * 1024;
 const MAX_COLLABORATION_BYTES = 8 * 1024;
-
-const boundedUtf8 = (value: string, maxBytes: number): string => {
-  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
-  let result = '';
-  for (const character of value) {
-    if (Buffer.byteLength(result + character, 'utf8') > maxBytes) break;
-    result += character;
-  }
-  return result;
-};
-
-const estimateTokens = (value: string): number => Math.max(1, Math.ceil(Buffer.byteLength(value, 'utf8') / 4));
 
 const latestInputText = (run: RunSnapshot): string => {
   for (let index = run.recentEntries.length - 1; index >= 0; index -= 1) {
@@ -71,15 +63,7 @@ const usageWithAttempt = (base: RunUsage, delta: TokenUsage, costMicros: number)
 
 const usageWithToolStep = (base: RunUsage): RunUsage => ({ ...base, steps: base.steps + 1 });
 
-const errorCode = (error: unknown): string => {
-  if (error instanceof Error) {
-    if (error.name === 'AbortError') return 'ABORTED';
-    if (/^[A-Z][A-Z0-9_]+$/.test(error.message)) return error.message;
-    const code = (error as Error & { code?: unknown }).code;
-    if (typeof code === 'string' && /^[A-Z][A-Z0-9_]+$/.test(code)) return code;
-  }
-  return 'MODEL_EXECUTION_FAILED';
-};
+const errorCode = (error: unknown): string => executionErrorCode(error, 'MODEL_EXECUTION_FAILED');
 
 const signalReason = (signal: AbortSignal): string | null => {
   if (!signal.aborted) return null;
@@ -115,45 +99,18 @@ const retryAfterMilliseconds = (error: unknown): number => {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.min(30_000, Math.ceil(value)) : 0;
 };
 
-const waitForRetry = (milliseconds: number, signal: AbortSignal): Promise<void> =>
-  new Promise<void>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(signal.reason ?? new Error('ABORTED'));
-      return;
-    }
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal.reason ?? new Error('ABORTED'));
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, milliseconds);
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-
 interface ToolCallAccumulator {
   id?: string;
   name?: string;
   argumentsJson: string;
 }
 
-const failedToolResult = (error: unknown): ToolResult => {
-  const code = errorCode(error);
-  return {
-    ok: false,
-    summary: `Read-only tool failed: ${code}`,
-    artifactRefs: [],
-    truncated: false,
-    outcome: 'confirmed',
-    errorCode: code,
-    verification: {
-      status: 'failed',
-      summary: 'The read-only tool did not return a successful result.',
-      evidenceRefs: [],
-    },
-  };
-};
+const failedToolResult = (error: unknown): ToolResult =>
+  buildFailedToolResult(error, {
+    fallbackCode: 'MODEL_EXECUTION_FAILED',
+    summaryPrefix: 'Read-only tool failed',
+    verificationSummary: 'The read-only tool did not return a successful result.',
+  });
 
 const unknownMutationResult = (error: unknown): ToolResult => {
   const code = errorCode(error);
@@ -172,19 +129,17 @@ const unknownMutationResult = (error: unknown): ToolResult => {
   };
 };
 
-const modelCost = (model: ProviderModelConfig, usage: TokenUsage): number =>
-  calculateModelCostMicros(model, usage.inputTokens, usage.outputTokens) ?? 0;
-
 export class NativeAgentBackend implements AgentBackendPort {
   constructor(
     private readonly repository: RunRepositoryPort,
-    private readonly subagents: SubagentRepositoryPort,
+    private readonly delegations: DelegationRepositoryPort,
     private readonly providers: ProviderService,
     private readonly context: ContextService,
     private readonly modelPort: LanguageModelPort,
     private readonly stateCommit: StateCommitPort,
     private readonly toolCatalog: ToolCatalog,
     private readonly toolExecutor: ToolExecutor,
+    private readonly leaseCoordinator: LeaseCoordinator,
     private readonly leases: LeasePort,
     private readonly policy: PolicyService,
     private readonly modelCalls: ModelCallLimiter,
@@ -230,7 +185,7 @@ export class NativeAgentBackend implements AgentBackendPort {
 
       const remainingSteps = snapshot.budget.maxRunSteps - snapshot.usage.steps;
       const offeredTools = remainingSteps >= 2 ? this.toolCatalog.schemas(scope) : [];
-      const directSubagents = await this.subagents.listDelegations(scope, snapshot.id, runtimeId, 50);
+      const directSubagents = await this.delegations.listDelegations(scope, snapshot.id, runtimeId, 50);
       const collaborationContext =
         directSubagents.length === 0
           ? undefined
@@ -436,7 +391,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         const afterModelUsage = usageWithModel(currentRun.usage, settledUsage, modelCost(model, settledUsage));
 
         if (toolCalls.size === 0) {
-          const activeChildren = (await this.subagents.listDelegations(scope, snapshot.id, runtimeId, 100)).filter(
+          const activeChildren = (await this.delegations.listDelegations(scope, snapshot.id, runtimeId, 100)).filter(
             (delegation) => !['completed', 'failed', 'cancelled'].includes(delegation.status),
           );
           if (activeChildren.length > 0) {
@@ -552,7 +507,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         const readOwner: LeaseOwner = { type: 'agent', id: runtimeId };
         const readContext = this.toolContext(proposed.run, runtimeId, proposed.toolStepId, signal);
         const readLeaseTtlSeconds = Math.min(300, Math.max(30, proposed.run.budget.toolTimeoutSeconds + 15));
-        const readLeases = await this.acquireLeasesWithRetry(
+        const readLeases = await this.leaseCoordinator.acquireWithRetry(
           readOwner,
           inspection.resourceKeys,
           'read',
@@ -561,7 +516,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           readContext.deadlineAt,
         );
         const readLeaseIds = readLeases.map((lease) => lease.id);
-        const readRenewal = this.startLeaseRenewal(readLeaseIds, readOwner, readLeaseTtlSeconds, signal);
+        const readRenewal = this.leaseCoordinator.startRenewal(readLeaseIds, readOwner, readLeaseTtlSeconds, signal);
         let toolSettled: Awaited<ReturnType<StateCommitPort['settleReadTool']>>;
         let executedToolResult: ToolResult | null = null;
         try {
@@ -605,7 +560,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           yield { type: 'durable', runId: snapshot.id, cursor: toolSettled.eventCursor };
         } finally {
           await readRenewal.stop().catch(() => undefined);
-          await this.leases.release(readLeaseIds, readOwner).catch(() => undefined);
+          await this.leaseCoordinator.release(readLeaseIds, readOwner).catch(() => undefined);
         }
 
         if (['cancelled', 'interrupted', 'failed'].includes(toolSettled.run.status)) {
@@ -741,68 +696,6 @@ export class NativeAgentBackend implements AgentBackendPort {
     }
   }
 
-  private async acquireLeasesWithRetry(
-    owner: LeaseOwner,
-    resourceKeys: readonly string[],
-    mode: LeaseMode,
-    ttlSeconds: number,
-    signal: AbortSignal,
-    deadlineAt: number,
-  ): Promise<ResourceLease[]> {
-    while (true) {
-      if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
-      if (this.clock.nowUnixSeconds() >= deadlineAt) throw new Error('TOOL_TIMEOUT');
-      try {
-        return await this.leases.acquireMany(owner, resourceKeys, mode, ttlSeconds);
-      } catch (error) {
-        if (errorCode(error) !== 'LEASE_CONFLICT') throw error;
-        await waitForRetry(Math.min(500, Math.max(50, deadlineAt * 1000 - Date.now())), signal);
-      }
-    }
-  }
-
-  private startLeaseRenewal(
-    leaseIds: readonly string[],
-    owner: LeaseOwner,
-    ttlSeconds: number,
-    parentSignal: AbortSignal,
-  ): { signal: AbortSignal; stop: () => Promise<unknown | null> } {
-    const controller = new AbortController();
-    let stopped = false;
-    let renewalError: unknown | null = null;
-    let tail = Promise.resolve();
-    const abortFromParent = (): void => {
-      if (!controller.signal.aborted) controller.abort(parentSignal.reason ?? new Error('ABORTED'));
-    };
-    if (parentSignal.aborted) abortFromParent();
-    else parentSignal.addEventListener('abort', abortFromParent, { once: true });
-    const renew = (): void => {
-      tail = tail.then(async () => {
-        if (stopped || controller.signal.aborted) return;
-        try {
-          await this.leases.renew(leaseIds, owner, ttlSeconds);
-        } catch (error) {
-          renewalError = error;
-          controller.abort(error);
-        }
-      });
-    };
-    const timer = setInterval(renew, 10_000);
-    timer.unref?.();
-    return {
-      signal: controller.signal,
-      stop: async () => {
-        if (!stopped) {
-          stopped = true;
-          clearInterval(timer);
-          parentSignal.removeEventListener('abort', abortFromParent);
-        }
-        await tail.catch(() => undefined);
-        return renewalError;
-      },
-    };
-  }
-
   private async *executePendingMutation(
     snapshot: RunSnapshot,
     pending: PendingMutationTool,
@@ -852,7 +745,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     const leaseTtlSeconds = Math.min(300, Math.max(30, snapshot.budget.toolTimeoutSeconds + 15));
     let acquired: ResourceLease[];
     try {
-      acquired = await this.acquireLeasesWithRetry(
+      acquired = await this.leaseCoordinator.acquireWithRetry(
         owner,
         inspection.resourceKeys,
         'write',
@@ -876,7 +769,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       return;
     }
     const leaseIds = acquired.map((lease) => lease.id);
-    const renewal = this.startLeaseRenewal(leaseIds, owner, leaseTtlSeconds, signal);
+    const renewal = this.leaseCoordinator.startRenewal(leaseIds, owner, leaseTtlSeconds, signal);
     let mutationStarted = false;
     try {
       const begun = await this.stateCommit.beginMutationTool({
@@ -909,7 +802,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       if (renewalError) toolResult = unknownMutationResult(renewalError);
 
       if (toolResult.outcome !== 'confirmed') {
-        await this.leases
+        await this.leaseCoordinator
           .quarantine(
             owner,
             inspection.resourceKeys,
@@ -937,7 +830,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           now: this.clock.nowUnixSeconds(),
         });
       } catch (error) {
-        await this.leases
+        await this.leaseCoordinator
           .quarantine(
             owner,
             inspection.resourceKeys,
@@ -953,9 +846,9 @@ export class NativeAgentBackend implements AgentBackendPort {
         try {
           await this.leases.markMutationSettled(leaseIds, owner, pending.toolCallId);
           mutationStarted = false;
-          await this.leases.release(leaseIds, owner);
+          await this.leaseCoordinator.release(leaseIds, owner);
         } catch (error) {
-          await this.leases
+          await this.leaseCoordinator
             .quarantine(
               owner,
               inspection.resourceKeys,
@@ -972,7 +865,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     } finally {
       await renewal.stop().catch(() => undefined);
       if (!mutationStarted) {
-        await this.leases.release(leaseIds, owner).catch(() => undefined);
+        await this.leaseCoordinator.release(leaseIds, owner).catch(() => undefined);
       }
     }
   }
