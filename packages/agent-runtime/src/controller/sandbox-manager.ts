@@ -262,6 +262,7 @@ export class SandboxManager {
     return [
       '--die-with-parent',
       '--new-session',
+      '--unshare-user',
       '--unshare-pid',
       '--unshare-ipc',
       '--unshare-uts',

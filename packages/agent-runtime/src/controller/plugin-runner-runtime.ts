@@ -402,6 +402,7 @@ export class PluginRunnerRuntime {
     const args = [
       '--die-with-parent',
       '--new-session',
+      '--unshare-user',
       '--unshare-pid',
       '--unshare-ipc',
       '--unshare-uts',
