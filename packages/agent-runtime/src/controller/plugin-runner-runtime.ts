@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { valid as validSemver } from 'semver';
@@ -12,6 +12,7 @@ import {
 } from '../plugin-ipc';
 import type { WorkspaceRecord, PluginRunnerTarget } from '../types';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
+import { probeSandboxBinary, sandboxBinaryPath } from './sandbox-binary';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 import {
   WorkspaceBroker,
@@ -287,14 +288,13 @@ export class PluginRunnerRuntime {
   constructor(
     runtimeRoot: string,
     private readonly pluginSourceRoot: string,
-    private readonly sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || 'bwrap',
+    private readonly sandboxBinary = sandboxBinaryPath(),
   ) {
     this.workspaces = new WorkspaceBroker(runtimeRoot);
   }
 
   available(): boolean {
-    const result = spawnSync(this.sandboxBinary, ['--version'], { stdio: 'ignore', timeout: 2_000 });
-    return !result.error && result.status === 0;
+    return probeSandboxBinary(this.sandboxBinary).available;
   }
 
   prepareWorkspace(workspace: WorkspaceRecord): void {

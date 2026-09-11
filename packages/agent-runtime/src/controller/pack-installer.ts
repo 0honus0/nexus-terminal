@@ -8,6 +8,7 @@ import semver from 'semver';
 import type { CatalogPack, ToolchainPackRef } from '../types';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { ToolchainStore } from './toolchain-store';
+import { requireSupportedSandboxBinary, sandboxBinaryPath } from './sandbox-binary';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
 const RUNNER_API_VERSION = '1.0.0';
@@ -207,6 +208,13 @@ const runProcess = async (
         resolve({ stdout: stdout.toString('utf8'), stderr: stderr.toString('utf8') });
         return;
       }
+      const diagnostic = stderr
+        .toString('utf8')
+        .replace(/[\u0000-\u001f\u007f]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 2048);
+      if (diagnostic) process.stderr.write(`[nexus-agent-runner] isolated tool materializer failed: ${diagnostic}\n`);
       reject(
         new Error(
           killedForOutput
@@ -225,6 +233,7 @@ export class PackInstaller {
     private readonly catalog: WorkspaceRuntimeCatalog,
     private readonly store: ToolchainStore,
     private readonly cacheRoot: string,
+    private readonly sandboxBinary = sandboxBinaryPath(),
   ) {
     fs.mkdirSync(path.join(cacheRoot, 'download'), { recursive: true });
     fs.mkdirSync(path.join(cacheRoot, 'mise'), { recursive: true });
@@ -466,7 +475,8 @@ export class PackInstaller {
     staging: string,
     pack: CatalogPack,
   ): Promise<void> {
-    const sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || '/usr/bin/bwrap';
+    requireSupportedSandboxBinary(this.sandboxBinary);
+    const sandboxBinary = this.sandboxBinary;
     const systemBindings = sandboxSystemRuntimeArguments();
     const args = [
       '--die-with-parent',
@@ -560,9 +570,9 @@ export class PackInstaller {
       current += `/${segment}`;
       targetParentArgs.push('--dir', current);
     }
-    const sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || '/usr/bin/bwrap';
+    requireSupportedSandboxBinary(this.sandboxBinary);
     const result = await runProcess(
-      sandboxBinary,
+      this.sandboxBinary,
       [
         '--die-with-parent',
         '--new-session',

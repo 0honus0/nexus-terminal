@@ -15,9 +15,52 @@ else
   exit 2
 fi
 
-"${SUDO[@]}" apt-get update
-"${SUDO[@]}" apt-get install -y bubblewrap apparmor apparmor-utils apparmor-profiles ca-certificates curl
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
+"${SUDO[@]}" apt-get update
+"${SUDO[@]}" apt-get install -y \
+  apparmor apparmor-utils ca-certificates curl gcc libcap-dev meson ninja-build pkg-config xz-utils
+
+# Ubuntu 24.04 still ships bubblewrap 0.9.x. Versions before 0.12.0 are affected by
+# GHSA-pxhw-h44j-8pfx, a setup-time symlink traversal that is directly relevant when
+# constructing a sandbox around downloaded tool content. Build the patched upstream
+# release into a Nexus-owned root-only path instead of replacing /usr/bin/bwrap.
+BWRAP_VERSION=0.12.0
+BWRAP_SHA256=9760d007363e3abba7c747489910f9f82d9fca53ba3bd3282e396fa3c97a3314
+bwrap_root="/usr/local/lib/nexus-agent-runner/bubblewrap/$BWRAP_VERSION"
+bwrap_bin="$bwrap_root/bin/bwrap"
+if [[ ! -x "$bwrap_bin" ]] || [[ $("$bwrap_bin" --version 2>/dev/null) != "bubblewrap $BWRAP_VERSION" ]]; then
+  bwrap_tmp=$(mktemp -d)
+  trap 'rm -rf "$bwrap_tmp"' EXIT
+  bwrap_archive="$bwrap_tmp/bubblewrap.tar.xz"
+  curl --fail --location --proto '=https' --tlsv1.2 \
+    "https://github.com/containers/bubblewrap/releases/download/v$BWRAP_VERSION/bubblewrap-$BWRAP_VERSION.tar.xz" \
+    --output "$bwrap_archive"
+  printf '%s  %s\n' "$BWRAP_SHA256" "$bwrap_archive" | sha256sum -c -
+  tar -xJf "$bwrap_archive" -C "$bwrap_tmp"
+  meson setup "$bwrap_tmp/build" "$bwrap_tmp/bubblewrap-$BWRAP_VERSION" \
+    -Dselinux=disabled \
+    -Dman=disabled \
+    -Dtests=false \
+    -Dbash_completion=disabled \
+    -Dzsh_completion=disabled
+  meson compile -C "$bwrap_tmp/build"
+  [[ -f "$bwrap_tmp/build/bwrap" ]] || { echo 'Pinned bubblewrap build did not produce bwrap.' >&2; exit 9; }
+  "${SUDO[@]}" install -d -m 0755 "$bwrap_root/bin"
+  "${SUDO[@]}" install -o root -g root -m 0755 "$bwrap_tmp/build/bwrap" "$bwrap_bin"
+  rm -rf "$bwrap_tmp"
+  trap - EXIT
+fi
+if [[ $("$bwrap_bin" --version 2>/dev/null) != "bubblewrap $BWRAP_VERSION" ]]; then
+  echo 'Pinned bubblewrap version verification failed.' >&2
+  exit 10
+fi
+bwrap_mode=$(stat -Lc '%a' "$bwrap_bin")
+bwrap_uid=$(stat -Lc '%u' "$bwrap_bin")
+if [[ "$bwrap_uid" != 0 ]] || (( (8#$bwrap_mode & 8#022) != 0 )); then
+  echo 'Pinned bubblewrap must be root-owned and not group/world writable.' >&2
+  exit 11
+fi
 
 MISE_VERSION=2026.9.5
 case "$(uname -m)" in
@@ -49,7 +92,7 @@ if [[ ! -x "$mise_bin" ]] || [[ $("$mise_bin" --version 2>/dev/null | awk '{prin
   extracted_mise="$mise_tmp/extract/mise/bin/mise"
   [[ -f "$extracted_mise" ]] || { echo 'Pinned mise archive did not contain mise/bin/mise.' >&2; exit 7; }
   "${SUDO[@]}" install -d -m 0755 "$mise_root/bin"
-  "${SUDO[@]}" install -m 0755 "$extracted_mise" "$mise_bin"
+  "${SUDO[@]}" install -o root -g root -m 0755 "$extracted_mise" "$mise_bin"
   rm -rf "$mise_tmp"
   trap - EXIT
 fi
@@ -63,27 +106,16 @@ if [[ -r /proc/sys/kernel/unprivileged_userns_clone ]] && [[ $(cat /proc/sys/ker
   exit 3
 fi
 
-profile=/etc/apparmor.d/bwrap-userns-restrict
-extra_profile=/usr/share/apparmor/extra-profiles/bwrap-userns-restrict
-if [[ -f "$extra_profile" ]]; then
-  "${SUDO[@]}" install -m 0644 "$extra_profile" "$profile"
-elif [[ ! -f "$profile" ]]; then
-  echo 'Ubuntu bwrap-userns-restrict AppArmor profile is unavailable; refusing to disable AppArmor userns restrictions.' >&2
-  exit 4
-fi
-
+profile_source="$script_dir/apparmor/nexus-bwrap-userns-restrict"
+profile=/etc/apparmor.d/nexus-bwrap-userns-restrict
+[[ -f "$profile_source" ]] || { echo 'Nexus bubblewrap AppArmor profile is missing.' >&2; exit 4; }
+"${SUDO[@]}" install -o root -g root -m 0644 "$profile_source" "$profile"
 "${SUDO[@]}" apparmor_parser -r "$profile"
-
-sandbox_bin=$(command -v bwrap)
-if [[ $(readlink -f "$sandbox_bin") != /usr/bin/bwrap ]]; then
-  echo "Expected distro bubblewrap at /usr/bin/bwrap, got $sandbox_bin; the AppArmor profile is path-scoped." >&2
-  exit 5
-fi
 
 # Validate exactly the capability that Nexus requires: an unprivileged user namespace
 # containing a private network namespace. This intentionally does not relax the host-wide
 # AppArmor/sysctl policy, and the sandbox payload still drops all capabilities.
-/usr/bin/bwrap \
+"$bwrap_bin" \
   --die-with-parent \
   --new-session \
   --unshare-user \
@@ -95,4 +127,4 @@ fi
   --cap-drop ALL \
   -- /bin/true
 
-echo "Nexus Agent Runner prerequisites are ready (bubblewrap + mise $MISE_VERSION)."
+echo "Nexus Agent Runner prerequisites are ready (bubblewrap $BWRAP_VERSION + mise $MISE_VERSION)."

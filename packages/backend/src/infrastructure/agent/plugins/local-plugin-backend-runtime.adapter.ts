@@ -2,6 +2,7 @@ import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:chil
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
+import semver from 'semver';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { AppStoragePort } from '../../../modules/agent/host/app-storage.port';
 import type { AppStorageSnapshot } from '../../../modules/agent/host/app-storage-snapshot.port';
@@ -17,6 +18,7 @@ const MAX_PROTOCOL_BYTES = 20 * 1024 * 1024;
 const CONTROL_TIMEOUT_MS = 30_000;
 const PLUGIN_BACKEND_PROTOCOL_VERSION: typeof PluginBackendProtocolVersion = 1;
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
+const MINIMUM_BUBBLEWRAP_VERSION = '0.12.0';
 
 type StorageRequest =
   | { kind: 'storage.get'; requestId: number; key: string }
@@ -357,8 +359,17 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
   }
 
   private sandboxAvailable(): boolean {
-    const result = spawnSync(this.sandboxBinary, ['--version'], { stdio: 'ignore', timeout: 2_000 });
-    return !result.error && result.status === 0;
+    const result = spawnSync(this.sandboxBinary, ['--version'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2_000,
+    });
+    if (result.error || result.status !== 0) return false;
+    const match = String(result.stdout ?? '')
+      .trim()
+      .match(/^bubblewrap\s+(\d+\.\d+\.\d+)$/);
+    const version = match?.[1];
+    return Boolean(version && semver.valid(version) && semver.gte(version, MINIMUM_BUBBLEWRAP_VERSION));
   }
 
   private instanceKey(scope: Scope, plugin: PluginVersionRecord): string {

@@ -12,6 +12,7 @@ import { Reconciler } from './controller/reconciler';
 import { CertificateManager } from './controller/certificate-manager';
 import { RunnerControllerServer } from './controller/server';
 import { PluginRunnerRuntime } from './controller/plugin-runner-runtime';
+import { sandboxBinaryPath } from './controller/sandbox-binary';
 
 const main = async (): Promise<void> => {
   const root = process.env.NEXUS_AGENT_RUNNER_ROOT?.trim() || '/var/lib/nexus-agent-runner';
@@ -24,14 +25,11 @@ const main = async (): Promise<void> => {
     process.env.NEXUS_AGENT_RUNNER_TOKEN,
   );
   const catalog = new WorkspaceRuntimeCatalog(catalogFile);
+  const sandboxBinary = sandboxBinaryPath();
   const journal = new RunnerJournal(path.join(root, 'state', 'journal.json'));
-  const sandboxEngine = new SandboxEngine(
-    path.join(root, 'runtime'),
-    path.join(root, 'packs'),
-    process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || undefined,
-  );
+  const sandboxEngine = new SandboxEngine(path.join(root, 'runtime'), path.join(root, 'packs'), sandboxBinary);
   const store = new ToolchainStore(path.join(root, 'packs'));
-  const installer = new PackInstaller(catalog, store, path.join(root, 'cache'));
+  const installer = new PackInstaller(catalog, store, path.join(root, 'cache'), sandboxBinary);
   const quota = new QuotaManager({
     maxMemoryBytes: Number(process.env.NEXUS_AGENT_MAX_MEMORY_BYTES || 8 * 1024 * 1024 * 1024),
     maxCpus: Number(process.env.NEXUS_AGENT_MAX_CPUS || 4),
@@ -43,7 +41,7 @@ const main = async (): Promise<void> => {
   const pluginRunner = new PluginRunnerRuntime(
     path.join(root, 'runtime'),
     process.env.NEXUS_AGENT_PLUGIN_SOURCE_ROOT?.trim() || '',
-    process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || undefined,
+    sandboxBinary,
   );
   await new Reconciler(journal, sandboxEngine, pluginRunner).reconcile();
   const server = new RunnerControllerServer({
