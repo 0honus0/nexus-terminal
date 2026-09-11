@@ -1,9 +1,9 @@
 import { Router, type Request } from 'express';
 import type { AgentApprovalFacade, AgentWorkspaceRuntimeFacade, AgentRunFacade } from '../../../modules/agent/public';
 import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
-import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { CreateRunCommand, RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
 import { agentData, agentRequestId, agentRoute } from './agent-http';
+import { hasOnlyKeys, isJsonValue, isRecord, pathParam, positiveInteger } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
 
 export interface AppRuntimeRouterDependencies {
@@ -15,26 +15,11 @@ export interface AppRuntimeRouterDependencies {
   csrfSecret: string;
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const hasOnlyKeys = (value: Record<string, unknown>, keys: readonly string[]): boolean => {
-  const allowed = new Set(keys);
-  return Object.keys(value).every((key) => allowed.has(key));
-};
-
-const pathParam = (value: string | string[] | undefined): string => {
-  if (typeof value !== 'string' || value.length === 0) throw new Error('VALIDATION_FAILED');
-  return value;
-};
-
 const queryString = (value: unknown): string | undefined => {
   if (value === undefined) return undefined;
   if (Array.isArray(value) || typeof value !== 'string' || value.length === 0) throw new Error('VALIDATION_FAILED');
   return value;
 };
-
-const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 
 const idempotencyKey = (request: Request): string => {
   const value = request.header('idempotency-key');
@@ -428,7 +413,8 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       ) {
         throw new Error('VALIDATION_FAILED');
       }
-      const parameters = request.body.parameters === undefined ? {} : (request.body.parameters as JsonValue);
+      const parameters = request.body.parameters === undefined ? {} : request.body.parameters;
+      if (!isJsonValue(parameters)) throw new Error('VALIDATION_FAILED');
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       agentData(
         request,
