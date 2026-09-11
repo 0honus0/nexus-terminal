@@ -27,14 +27,20 @@ export const sandboxResolverRuntimeArguments = (): string[] => {
   const resolver = '/etc/resolv.conf';
   if (!fs.existsSync(resolver)) return [];
   const resolved = fs.realpathSync(resolver);
-  if (resolved === resolver || resolved.startsWith('/etc/')) return [];
+  const preboundPrefixes = [...DIRECTORY_BINDINGS, ...MERGED_USR_PATHS];
+  if (
+    resolved === resolver ||
+    preboundPrefixes.some((prefix) => resolved === prefix || resolved.startsWith(`${prefix}/`))
+  ) {
+    return [];
+  }
 
   const args: string[] = [];
   const segments = resolved.split('/').filter(Boolean);
   let current = '';
   for (const segment of segments.slice(0, -1)) {
     current += `/${segment}`;
-    if (!fs.existsSync(current)) args.push('--dir', current);
+    args.push('--dir', current);
   }
   args.push('--ro-bind', resolved, resolved);
   return args;
