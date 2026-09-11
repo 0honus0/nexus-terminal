@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { connectionService, type Connection } from '@/features/connections/public';
   import AgentConversation from '../../ai/AgentConversation.vue';
   import { agentEvents } from '../../api/agent-events';
@@ -21,11 +22,14 @@
   } from '../../api/agent-api';
   import { agentSurfaceSession } from '../../host/surface-session';
   import { createAgentRunFacade } from '../../runtime/run-facade';
+  import { createRuntimeOperationState } from '../../runtime/runtime-operation-state';
   import TaskDetailDrawer from '../../runtime/TaskDetailDrawer.vue';
   import TaskRail from '../../runtime/TaskRail.vue';
 
   const props = defineProps<{ appId: string }>();
+  const { t } = useI18n();
   const facade = createAgentRunFacade(props.appId);
+  const runtimeOperation = createRuntimeOperationState();
   const threads = ref<AgentThreadView[]>([]);
   const currentThread = ref<AgentThreadView | null>(null);
   const entries = ref<AgentLedgerEntry[]>([]);
@@ -73,7 +77,12 @@
     const model = configuredModel ?? provider.models[0];
     return model ? { provider, model } : null;
   });
-  const canSend = computed(() => Boolean(definitions.value[0] && providerSelection.value && currentThread.value));
+  const mutationLocked = computed(
+    () => busy.value || runtimeOperation.mutationBlocked.value || run.value?.needsReconciliation === true,
+  );
+  const canSend = computed(
+    () => Boolean(definitions.value[0] && providerSelection.value && currentThread.value) && !mutationLocked.value,
+  );
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
@@ -92,6 +101,9 @@
       const snapshot = await facade.getRun(runId, minimumEventCursor);
       if (currentThread.value?.id !== snapshot.threadId || (run.value !== null && run.value.id !== runId)) return null;
       run.value = snapshot;
+      if (snapshot.needsReconciliation) {
+        runtimeOperation.markReconciling('RECONCILIATION_REQUIRED', t('agent.operations.reconciliationRequired'));
+      }
       return snapshot;
     } catch {
       return null;
@@ -121,6 +133,22 @@
     backgroundRuns.value = page.items.filter(
       (candidate) => nonTerminal.has(candidate.status) && candidate.threadId !== selectedThreadId,
     );
+  };
+
+  const recoverRuntimeFailure = async (cause: unknown, runId?: string): Promise<void> => {
+    const decision = runtimeOperation.fail(cause);
+    error.value = explain(cause);
+    if (!decision.refreshAuthoritativeState) return;
+
+    const targetRunId = runId ?? run.value?.id;
+    if (!targetRunId || run.value?.id !== targetRunId) return;
+    const next = await refreshRun(targetRunId);
+    await Promise.all([refreshApprovals(targetRunId), refreshLedger(), refreshBackgroundRuns()]);
+    if (next?.needsReconciliation || decision.phase === 'reconciling') {
+      runtimeOperation.markReconciling('RECONCILIATION_REQUIRED', t('agent.operations.reconciliationRequired'));
+      return;
+    }
+    if (decision.phase === 'conflict' && next) runtimeOperation.succeed();
   };
 
   const stopRunStream = (): void => {
@@ -224,6 +252,18 @@
     }
   };
 
+  const beginRuntimeMutation = (): boolean => {
+    if (mutationLocked.value) return false;
+    busy.value = true;
+    runtimeOperation.beginMutation();
+    error.value = '';
+    return true;
+  };
+
+  const finishRuntimeMutation = (): void => {
+    busy.value = false;
+  };
+
   const resolveArtifactRefs = async (artifacts: AgentArtifactRef[], activeRun?: AgentRunView): Promise<string[]> => {
     const thread = currentThread.value;
     if (!thread) throw new Error('NOT_FOUND');
@@ -239,9 +279,7 @@
   };
 
   const send = async (text: string, selectedArtifacts: AgentArtifactRef[]): Promise<void> => {
-    if (busy.value || !currentThread.value) return;
-    busy.value = true;
-    error.value = '';
+    if (!currentThread.value || !beginRuntimeMutation()) return;
     try {
       const active = run.value;
       if (active && nonTerminal.has(active.status)) {
@@ -254,6 +292,7 @@
         const next = await refreshRun(active.id);
         await Promise.all([refreshApprovals(active.id), refreshBackgroundRuns()]);
         if (next) startRunStream(next);
+        runtimeOperation.succeed();
         return;
       }
       const selection = providerSelection.value;
@@ -279,56 +318,55 @@
       await refreshLedger();
       await Promise.all([refreshApprovals(created.id), refreshBackgroundRuns()]);
       startRunStream(created);
+      runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
+      await recoverRuntimeFailure(cause, run.value?.id);
     } finally {
-      busy.value = false;
+      finishRuntimeMutation();
     }
   };
 
   const cancel = async (): Promise<void> => {
-    if (!run.value || busy.value) return;
-    busy.value = true;
-    error.value = '';
+    if (!run.value || !beginRuntimeMutation()) return;
+    const runId = run.value.id;
     try {
       run.value = await facade.cancelRun(run.value);
       await Promise.all([refreshLedger(), refreshApprovals(run.value.id), refreshBackgroundRuns()]);
+      runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
+      await recoverRuntimeFailure(cause, runId);
     } finally {
-      busy.value = false;
+      finishRuntimeMutation();
     }
   };
 
   const increaseBudget = async (increase: Parameters<typeof facade.increaseBudget>[1]): Promise<void> => {
-    if (!run.value || busy.value) return;
-    busy.value = true;
-    error.value = '';
+    if (!run.value || !beginRuntimeMutation()) return;
+    const runId = run.value.id;
     try {
       run.value = await facade.increaseBudget(run.value, increase);
       await Promise.all([refreshLedger(), refreshApprovals(run.value.id), refreshBackgroundRuns()]);
       if (run.value && nonTerminal.has(run.value.status)) startRunStream(run.value);
+      runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
+      await recoverRuntimeFailure(cause, runId);
     } finally {
-      busy.value = false;
+      finishRuntimeMutation();
     }
   };
 
   const resolveApproval = async (approval: AgentApprovalView, decision: 'approved' | 'denied'): Promise<void> => {
-    if (busy.value || approval.status !== 'requested') return;
-    busy.value = true;
-    error.value = '';
+    if (approval.status !== 'requested' || !beginRuntimeMutation()) return;
     try {
       await facade.resolveApproval(approval, decision);
       const next = await refreshRun(approval.runId);
       await Promise.all([refreshApprovals(approval.runId), refreshLedger(), refreshBackgroundRuns()]);
       if (next && nonTerminal.has(next.status)) startRunStream(next);
+      runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
-      await refreshApprovals(approval.runId);
+      await recoverRuntimeFailure(cause, approval.runId);
     } finally {
-      busy.value = false;
+      finishRuntimeMutation();
     }
   };
 
@@ -359,17 +397,25 @@
   };
 
   const cancelSubagent = async (delegation: AgentSubagentView): Promise<void> => {
-    if (busy.value) return;
-    busy.value = true;
-    error.value = '';
+    if (!beginRuntimeMutation()) return;
     try {
       await facade.cancelSubagent(delegation.runId, delegation);
       await refreshDetailSubagents(delegation.runId);
       if (selectedSubagentId.value === delegation.id) await selectSubagent(delegation);
+      runtimeOperation.succeed();
     } catch (cause) {
+      const decision = runtimeOperation.fail(cause);
       error.value = explain(cause);
+      if (decision.refreshAuthoritativeState) {
+        try {
+          await refreshDetailSubagents(delegation.runId);
+          if (decision.phase === 'conflict') runtimeOperation.succeed();
+        } catch {
+          // Keep conflict/reconciliation state locked until an authoritative refresh succeeds.
+        }
+      }
     } finally {
-      busy.value = false;
+      finishRuntimeMutation();
     }
   };
 
@@ -404,23 +450,20 @@
   };
 
   const saveCheckpoint = async (snapshot: AgentRunSnapshot): Promise<void> => {
-    if (busy.value) return;
-    busy.value = true;
-    error.value = '';
+    if (!beginRuntimeMutation()) return;
     try {
       await facade.saveCheckpoint(snapshot);
       detailCheckpoints.value = await facade.listCheckpoints(snapshot.id);
+      runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
+      await recoverRuntimeFailure(cause, snapshot.id);
     } finally {
-      busy.value = false;
+      finishRuntimeMutation();
     }
   };
 
   const resumeCheckpoint = async (snapshot: AgentRunSnapshot, checkpoint: AgentCheckpointView): Promise<void> => {
-    if (busy.value) return;
-    busy.value = true;
-    error.value = '';
+    if (!beginRuntimeMutation()) return;
     try {
       const resumed = await facade.resumeRun(snapshot, checkpoint.id);
       run.value = resumed;
@@ -429,10 +472,11 @@
       detailVisible.value = false;
       await Promise.all([refreshLedger(), refreshApprovals(resumed.id), refreshBackgroundRuns()]);
       startRunStream(resumed);
+      runtimeOperation.succeed();
     } catch (cause) {
-      error.value = explain(cause);
+      await recoverRuntimeFailure(cause, snapshot.id);
     } finally {
-      busy.value = false;
+      finishRuntimeMutation();
     }
   };
 
@@ -525,6 +569,12 @@
         >
           {{ error }}
         </div>
+        <div
+          v-if="run?.needsReconciliation || runtimeOperation.phase.value === 'reconciling'"
+          class="absolute left-4 right-4 top-14 z-10 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning"
+        >
+          {{ $t('agent.operations.reconciliationRequired') }}
+        </div>
         <AgentConversation
           :app-id="appId"
           :entries="entries"
@@ -532,7 +582,7 @@
           :run="run"
           :streaming-text="streamingText"
           :draft="draft"
-          :busy="busy"
+          :busy="mutationLocked"
           :can-send="canSend"
           :attachments="attachments"
           @load-older="loadOlder"
@@ -551,7 +601,7 @@
         :hard-limits="hardLimits"
         :approvals="approvals"
         :approval-clock="approvalBatch?.clock ?? null"
-        :busy="busy"
+        :busy="mutationLocked"
         @increase-budget="increaseBudget"
         @resolve-approval="resolveApproval"
         @open-run="openRunDetail"
@@ -565,7 +615,7 @@
       :selected-subagent-id="selectedSubagentId"
       :subagent-messages="detailSubagentMessages"
       :visible="detailVisible"
-      :busy="busy"
+      :busy="mutationLocked"
       @close="closeRunDetail"
       @save-checkpoint="saveCheckpoint"
       @resume-checkpoint="resumeCheckpoint"

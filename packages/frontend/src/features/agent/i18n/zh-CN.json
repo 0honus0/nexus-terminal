@@ -253,7 +253,8 @@
       "loading": "正在加载会话...",
       "targets": "SSH 目标",
       "targetsHint": "请在新 Run 启动前选择目标；服务端仍会强制检查 Agent grant 与 denylist。",
-      "noTargets": "当前没有可用的 SSH 连接。"
+      "noTargets": "当前没有可用的 SSH 连接。",
+      "reconciliationRequired": "此 Run 需要先完成对账，才能发送新的修改操作。"
     },
     "files": {
       "search": "搜索文件",
@@ -413,7 +414,11 @@
       "exported": "已导出 Artifact {id}。",
       "imported": "已向 Workspace 导入 {bytes} 字节。",
       "requestFailed": "Workspace Runtime 请求失败。",
-      "oneWorkspacePerRuntime": "每个 runtime 最多拥有一个活跃 Workspace；创建替代项前需先删除当前 Workspace。"
+      "oneWorkspacePerRuntime": "每个 runtime 最多拥有一个活跃 Workspace；创建替代项前需先删除当前 Workspace。",
+      "reconciliationRequired": "Workspace 命令结果未知；请先核实结果，再发送新的修改操作。",
+      "verifyOutcome": "核实结果",
+      "reconciliationPending": "Workspace 命令结果仍未知；系统没有重试原修改操作。",
+      "reconciliationResolved": "Workspace 命令结果已完成对账。"
     },
     "subagents": {
       "title": "Subagent",

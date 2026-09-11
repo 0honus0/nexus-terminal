@@ -17,6 +17,7 @@
   import WorkspaceCreateCard from './WorkspaceCreateCard.vue';
   import WorkspacePluginGrants from './WorkspacePluginGrants.vue';
   import WorkspaceToolchainCard from './WorkspaceToolchainCard.vue';
+  import { createRuntimeOperationState } from './runtime-operation-state';
   import { createWorkspaceGrantState } from './workspace-grant-state';
 
   const props = defineProps<{ appId: string; runId: string; busy?: boolean }>();
@@ -34,6 +35,7 @@
   const loading = ref(false);
   const localBusy = ref(false);
   let refreshGeneration = 0;
+  const operationState = createRuntimeOperationState();
 
   const activeWorkspace = computed(
     () => workspaceList.value.find((workspace) => !['deleted', 'failed'].includes(workspace.status)) ?? null,
@@ -89,15 +91,16 @@
   const grants = grantState.grants;
   const grantRevision = grantState.revision;
   const grantLoading = grantState.loading;
-  const locked = computed(() => Boolean(props.busy) || localBusy.value || loading.value || grantLoading.value);
+  const refreshLocked = computed(() => Boolean(props.busy) || localBusy.value || loading.value || grantLoading.value);
+  const locked = computed(() => refreshLocked.value || operationState.mutationBlocked.value);
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.workspaceRuntime.requestFailed'));
 
-  const refresh = async (): Promise<void> => {
+  const refresh = async (preserveError = false): Promise<boolean> => {
     const current = ++refreshGeneration;
     grantState.invalidate();
     loading.value = true;
-    error.value = '';
+    if (!preserveError) error.value = '';
     try {
       const [nextCatalog, summaries, nextInstallations, nextVersions, nextWorkspaces, artifactPage] = await Promise.all(
         [
@@ -109,7 +112,7 @@
           agentApi.files({ appId: props.appId }),
         ],
       );
-      if (current !== refreshGeneration) return;
+      if (current !== refreshGeneration) return false;
       catalog.value = nextCatalog;
       apps.value = summaries;
       installations.value = nextInstallations;
@@ -122,23 +125,32 @@
         workspaceKey.value = pluginTargets.value[0]?.key ?? '';
       }
       await grantState.load();
+      return true;
     } catch (cause) {
       if (current === refreshGeneration) error.value = explain(cause);
+      return false;
     } finally {
       if (current === refreshGeneration) loading.value = false;
     }
   };
 
-  const run = async (action: () => Promise<void>, success: string): Promise<void> => {
+  const run = async (action: () => Promise<void | 'reconciling'>, success: string): Promise<void> => {
     if (locked.value) return;
     localBusy.value = true;
+    operationState.beginMutation();
     error.value = '';
     notice.value = '';
     try {
-      await action();
+      const outcome = await action();
+      if (outcome === 'reconciling') return;
+      operationState.succeed();
       if (success) notice.value = success;
     } catch (cause) {
-      error.value = explain(cause);
+      const decision = operationState.fail(cause);
+      const message = explain(cause);
+      const refreshed = decision.refreshAuthoritativeState ? await refresh(true) : false;
+      if (decision.phase === 'conflict' && refreshed) operationState.succeed();
+      error.value = message;
     } finally {
       localBusy.value = false;
     }
@@ -179,13 +191,20 @@
         changes,
         catalog.value!.revision,
       );
-      if (result.outcome !== 'succeeded') {
-        throw new Error(
-          result.outcome === 'unknown'
-            ? t('agent.workspaceRuntime.versionSwitchUnknown')
-            : t('agent.workspaceRuntime.versionSwitchFailed'),
+      if (result.outcome === 'unknown') {
+        const commandIds = result.commands
+          .filter((command) => ['pending', 'running', 'unknown'].includes(command.status))
+          .map((command) => command.id);
+        operationState.markReconciling(
+          'WORKSPACE_OUTCOME_UNKNOWN',
+          t('agent.workspaceRuntime.versionSwitchUnknown'),
+          commandIds,
         );
+        await refresh(true);
+        error.value = t('agent.workspaceRuntime.versionSwitchUnknown');
+        return 'reconciling';
       }
+      if (result.outcome === 'failed') throw new Error(t('agent.workspaceRuntime.versionSwitchFailed'));
       await refresh();
     }, t('agent.workspaceRuntime.versionSwitched'));
   };
@@ -251,6 +270,31 @@
     }, '');
   };
 
+  const verifyUnknownOutcome = async (): Promise<void> => {
+    const commandIds = [...operationState.reconciliationCommandIds.value];
+    if (operationState.phase.value !== 'reconciling' || commandIds.length === 0 || localBusy.value) return;
+    localBusy.value = true;
+    try {
+      const commands = await Promise.all(commandIds.map((commandId) => agentApi.workspaceRuntimeCommand(commandId)));
+      const unresolved = commands
+        .filter((command) => ['pending', 'running', 'unknown'].includes(command.status))
+        .map((command) => command.id);
+      operationState.updateReconciliationCommands(unresolved);
+      await refresh(true);
+      if (unresolved.length === 0) {
+        operationState.succeed();
+        error.value = '';
+        notice.value = t('agent.workspaceRuntime.reconciliationResolved');
+      } else {
+        error.value = t('agent.workspaceRuntime.reconciliationPending');
+      }
+    } catch (cause) {
+      error.value = explain(cause);
+    } finally {
+      localBusy.value = false;
+    }
+  };
+
   watch(
     () => [props.appId, props.runId] as const,
     () => void refresh(),
@@ -275,8 +319,8 @@
       <button
         type="button"
         class="rounded border border-border px-2 py-1 text-[11px]"
-        :disabled="locked"
-        @click="refresh"
+        :disabled="refreshLocked"
+        @click="void refresh()"
       >
         {{ $t('agent.workspaceRuntime.refresh') }}
       </button>
@@ -284,6 +328,22 @@
 
     <p v-if="error" class="mt-2 rounded bg-error/10 px-2 py-1 text-[10px] text-error">{{ error }}</p>
     <p v-if="notice" class="mt-2 rounded bg-header px-2 py-1 text-[10px]">{{ notice }}</p>
+
+    <div
+      v-if="operationState.phase.value === 'reconciling'"
+      class="mt-2 flex items-center justify-between gap-2 rounded border border-warning/40 bg-warning/10 px-2 py-1 text-[10px]"
+    >
+      <span>{{ $t('agent.workspaceRuntime.reconciliationRequired') }}</span>
+      <button
+        v-if="operationState.reconciliationCommandIds.value.length"
+        type="button"
+        class="shrink-0 rounded border border-warning/50 px-2 py-1 font-medium"
+        :disabled="refreshLocked"
+        @click="verifyUnknownOutcome"
+      >
+        {{ $t('agent.workspaceRuntime.verifyOutcome') }}
+      </button>
+    </div>
 
     <WorkspaceCreateCard
       v-if="catalog && !activeWorkspace"

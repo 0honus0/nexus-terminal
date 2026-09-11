@@ -253,7 +253,8 @@
       "loading": "Loading conversation...",
       "targets": "SSH targets",
       "targetsHint": "Choose targets before starting a new Run. The server still enforces Agent grants and the denylist.",
-      "noTargets": "No SSH connections are available."
+      "noTargets": "No SSH connections are available.",
+      "reconciliationRequired": "This Run requires reconciliation before another mutation can be sent."
     },
     "files": {
       "search": "Search files",
@@ -413,7 +414,11 @@
       "exported": "Exported Artifact {id}.",
       "imported": "Imported {bytes} bytes into the workspace.",
       "requestFailed": "Workspace Runtime request failed.",
-      "oneWorkspacePerRuntime": "A runtime owns at most one active Workspace. Delete it before creating a replacement."
+      "oneWorkspacePerRuntime": "A runtime owns at most one active Workspace. Delete it before creating a replacement.",
+      "reconciliationRequired": "A Workspace command has an unknown outcome. Verify it before sending another mutation.",
+      "verifyOutcome": "Verify outcome",
+      "reconciliationPending": "The Workspace command outcome is still unknown. The original mutation was not retried.",
+      "reconciliationResolved": "Workspace command outcome reconciled."
     },
     "subagents": {
       "title": "Subagents",

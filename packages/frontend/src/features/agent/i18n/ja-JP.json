@@ -253,7 +253,8 @@
       "loading": "会話を読み込んでいます...",
       "targets": "SSH ターゲット",
       "targetsHint": "新しい Run を開始する前にターゲットを選択してください。サーバー側では Agent grant と denylist を引き続き強制します。",
-      "noTargets": "利用可能な SSH 接続がありません。"
+      "noTargets": "利用可能な SSH 接続がありません。",
+      "reconciliationRequired": "この Run は、別の変更操作を送信する前に照合が必要です。"
     },
     "files": {
       "search": "ファイルを検索",
@@ -413,7 +414,11 @@
       "exported": "Artifact {id} をエクスポートしました。",
       "imported": "Workspace に {bytes} バイトをインポートしました。",
       "requestFailed": "Workspace Runtime リクエストに失敗しました。",
-      "oneWorkspacePerRuntime": "各 runtime が持てるアクティブな Workspace は 1 つです。置き換える前に現在の Workspace を削除してください。"
+      "oneWorkspacePerRuntime": "各 runtime が持てるアクティブな Workspace は 1 つです。置き換える前に現在の Workspace を削除してください。",
+      "reconciliationRequired": "Workspace コマンドの結果が不明です。別の変更操作を送信する前に結果を確認してください。",
+      "verifyOutcome": "結果を確認",
+      "reconciliationPending": "Workspace コマンドの結果はまだ不明です。元の変更操作は再実行していません。",
+      "reconciliationResolved": "Workspace コマンドの結果を照合しました。"
     },
     "subagents": {
       "title": "Subagent",

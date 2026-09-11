@@ -62,6 +62,14 @@ for (const file of sourceFiles) {
   if (rel === 'features/agent/runtime/ApprovalCard.vue' && /\bDate\.now\s*\(/.test(content)) {
     failures.push(`${rel}: approval expiry must use the server clock anchor, not the browser wall clock`);
   }
+
+  if (
+    (rel === 'features/agent/apps/operations/OperationsView.vue' ||
+      rel === 'features/agent/runtime/WorkspaceRuntimePanel.vue') &&
+    !content.includes('runtime-operation-state')
+  ) {
+    failures.push(`${rel}: Runtime mutation errors must flow through runtime-operation-state.ts`);
+  }
 }
 
 const firstSegment = (rel) => rel.split('/')[0];

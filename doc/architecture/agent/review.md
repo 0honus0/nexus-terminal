@@ -551,6 +551,14 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 
 建议定义 Runtime error state machine：`idle/loading/mutating/conflict/reconciling/failed`，在 API client 层映射错误码；组件只处理状态和用户动作。对 `VERSION_CONFLICT` 自动拉取最新 snapshot，对 `OUTCOME_UNKNOWN` 显示“需要核实”并提供 reconciliation 入口，避免用户重复点击产生第二次副作用。
 
+> **解决方案（已采用；原问题部分已被 R7/R13/R15/R16 消解）**
+>
+> 新增共享 `runtime-operation-state.ts`，统一把机器错误归类为 `conflict/reconciling/failed`，并提供 `idle/loading/mutating` 生命周期与 mutation lock。它不保存任何 Run/Workspace 业务事实，只决定恢复策略：409、`*_CONFLICT`、`*_STALE` 触发权威 refresh；`RECONCILIATION_REQUIRED`/unknown outcome 进入 reconciling 并禁止新的 mutation；普通失败只显示错误。组件不会自动重试原 mutation，因此不会为了“恢复 UX”制造第二次副作用。
+>
+> `OperationsView` 的 Run/审批/预算/取消/checkpoint mutation 现在统一通过该状态机：冲突后只重新拉 Run snapshot、ledger、approvals 与 background runs；如果 snapshot 的 `needsReconciliation` 为 true，则持续锁定 mutation 并显示 reconciliation 提示。R16 已有的 approval 409 refresh 由同一恢复路径接管。`WorkspaceRuntimePanel` 同样统一分类 conflict，并在 toolchain switch 返回 unknown 时保存真实 command id、锁定 mutation，提供“核实结果”按钮。核实调用既有只读 `GET /agent/workspace-runtime/commands/:id`，绝不重放原命令。
+>
+> 为让这条只读 reconciliation 路径真正可用，Backend `getCommand()` 与 startup reconcile sweep 现在也会查询本地 `unknown` command，SQLite 允许 `unknown` 基于 Runner query 收敛为 `running/succeeded/failed/unknown`。因此 unknown outcome 不再是只能显示字符串的死状态；但没有真实 reconciliation capability 的资源也不会凭空出现伪按钮。Frontend architecture checker 要求 Operations/Workspace mutation owner 继续接入共享状态机。
+
 ### R18：Frontend `run-facade` 仍是无状态转发层，无法承载 Runtime 生命周期
 
 `createAgentRunFacade()` 返回的函数直接调用 `agentApi`，没有 `dispose()`、事件订阅、请求取消、缓存或 active run 切换语义。Host/Hub 销毁时如果上层没有逐个停止 subscription，后台 async iterator 可能继续持有 socket。

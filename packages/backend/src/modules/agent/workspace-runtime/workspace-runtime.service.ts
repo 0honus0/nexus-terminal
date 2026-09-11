@@ -489,7 +489,7 @@ export class WorkspaceRuntimeService {
   async getCommand(scope: Scope, commandId: string): Promise<WorkspaceRuntimeCommandView> {
     const local = await this.repository.getCommand(scope, commandId);
     if (!local) throw new Error('NOT_FOUND');
-    if (!['pending', 'running'].includes(local.status)) return local;
+    if (!['pending', 'running', 'unknown'].includes(local.status)) return local;
     try {
       const remote = await this.controller.query(commandId);
       const updated = await this.repository.completeCommand(scope, commandId, remote.status, remote.result, this.now());

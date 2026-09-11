@@ -325,7 +325,7 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
     const changed = await this.db.execute(
       `UPDATE agent_workspace_runtime_commands
        SET status=?,result_json=?,completed_at=CASE WHEN ? IN ('succeeded','failed','unknown') THEN ? ELSE NULL END
-       WHERE id=? AND user_id=? AND app_id=? AND status IN ('pending','running')`,
+       WHERE id=? AND user_id=? AND app_id=? AND status IN ('pending','running','unknown')`,
       [status, result === null ? null : JSON.stringify(result), status, now, commandId, scope.userId, scope.appId],
     );
     if (changed.changes !== 1) {
@@ -342,7 +342,7 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('VALIDATION_FAILED');
     const rows = await this.db.queryAll<CommandRow>(
       `SELECT ${COMMAND_COLUMNS} FROM agent_workspace_runtime_commands
-       WHERE status IN ('pending','running') ORDER BY created_at,id LIMIT ?`,
+       WHERE status IN ('pending','running','unknown') ORDER BY created_at,id LIMIT ?`,
       [limit],
     );
     return rows.map(commandView);
