@@ -11,7 +11,7 @@
 - 哪些 helper 是允许共享的领域 primitive，哪些状态机禁止抽成 generic helper；
 - 后续拆文件时必须保持的事务与安全顺序。
 
-> 本文描述当前 `dev` 架构。ACP 与 Browser/CDP 是保留的后继能力边界，不因为当前未接入 live execution 而删除。
+> 本文描述当前 `dev` 架构。状态只使用两类：**Active / live** 表示已经进入 production composition / capability execution；**Reserved / roadmap-only** 表示仅保留类型、Port、Adapter 或设计骨架，尚未进入 production live execution。P1/P2/P3 只表示历史实施/验收分组，不作为当前交付状态。ACP 与 Browser/CDP 是保留的后继能力边界，不因为当前未接入 live execution 而删除。
 
 ---
 
@@ -1255,6 +1255,8 @@ AgentSettingsPanel.vue
 
 ## 11. Plugin 调用边界
 
+**状态：Active / live。** Plugin install/runtime 已由 `compose-plugins.ts` 接入 production composition；以下依赖描述当前真实调用边界，不是 roadmap 草图。
+
 Composition：
 
 ```text
@@ -1308,6 +1310,8 @@ Plugin frontend 是独立 origin / CSP / iframe sandbox boundary，不应回到 
 ---
 
 ## 12. Workspace Runtime 调用边界
+
+**状态：Active / live。** Workspace Runtime 已由 `compose-workspace-runtime.ts` 接入 production composition，并通过 Runner/Controller 执行真实 Workspace lifecycle 与 bounded job。
 
 总体链：
 
@@ -1454,7 +1458,7 @@ agentApi.importArtifactToWorkspace()
 
 ---
 
-## 14. ACP / Browser / MCP 保留边界
+## 14. Integration / Browser execution 状态边界
 
 ### ACP
 
@@ -1511,6 +1515,8 @@ Workspace Profile
 ```
 
 ### MCP
+
+**状态：Active / live。** `McpAdapter` 已进入 production composition，Operations manifest 声明 `integration.mcp.invoke`，MCP Tool 通过 Tool Catalog / Policy / Approval / Lease 等现有安全边界执行。
 
 现有方向：
 

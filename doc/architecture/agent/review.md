@@ -115,6 +115,12 @@ reserved capability    虚线
 
 同时增加一张“当前已接线依赖”小图，作为代码审查和架构 checker 的唯一输入。
 
+> **解决方案（已采用，按审核结论修订）**
+>
+> 该问题仅保留为文档状态表达问题，不采用“Phase 2/Phase 3 = 当前状态”的标注，也不让 architecture checker 以文档依赖图作为唯一规则源。源码 import graph 与显式 source rule 继续是静态硬门禁，文档负责准确描述当前 wiring。
+>
+> `MODULE_DEPENDENCY_DESIGN.md` 现在统一使用 **Active / live** 与 **Reserved / roadmap-only** 两类状态：Plugin Runtime、Workspace Runtime、MCP 标为 Active/live；ACP、Browser/CDP/Puppeteer 继续标为 Reserved/roadmap-only。原“ACP / Browser / MCP 保留边界”标题已改为中性的 execution 状态边界，避免把已 live 的 MCP 误读为 reserved。P1/P2/P3 明确只作为历史实施/验收分组，不作为当前交付状态。
+
 ### 6. 文档存在目录和 owner 的潜在漂移
 
 架构总览规定 Runtime 按 `definitions / runs / execution / planning / scheduling / approvals / recovery / events / collaboration / exchange` 拆分；依赖文档则把部分职责描述为 `modules/agent/runtime/execution` 下的 backend，同时将 StateCommit implementation 放在 infrastructure。两者本身不冲突，但缺少“public port owner / concrete adapter owner / orchestration owner”的固定表，后续很容易重新把逻辑堆回 runtime 一级目录。
