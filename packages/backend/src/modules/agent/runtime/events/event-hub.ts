@@ -8,15 +8,15 @@ export class AgentEventHub {
   private readonly transientListeners = new Map<string, Set<Listener<TransientRunEvent>>>();
 
   publishRunWake(runId: string, cursor: number): void {
-    for (const listener of this.runWakeListeners.get(runId) ?? []) listener(cursor);
+    this.publish(this.runWakeListeners.get(runId), cursor);
   }
 
   publishHostWake(userId: number, cursor: number): void {
-    for (const listener of this.hostWakeListeners.get(userId) ?? []) listener(cursor);
+    this.publish(this.hostWakeListeners.get(userId), cursor);
   }
 
   publishTransient(event: TransientRunEvent): void {
-    for (const listener of this.transientListeners.get(event.runId) ?? []) listener(event);
+    this.publish(this.transientListeners.get(event.runId), event);
   }
 
   onRunWake(runId: string, listener: Listener<number>): () => void {
@@ -35,6 +35,16 @@ export class AgentEventHub {
     this.runWakeListeners.clear();
     this.hostWakeListeners.clear();
     this.transientListeners.clear();
+  }
+
+  private publish<TEvent>(listeners: Set<Listener<TEvent>> | undefined, event: TEvent): void {
+    for (const listener of [...(listeners ?? [])]) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.error('[Agent EventHub] listener failed:', error);
+      }
+    }
   }
 
   private add<TKey, TEvent>(map: Map<TKey, Set<Listener<TEvent>>>, key: TKey, listener: Listener<TEvent>): () => void {

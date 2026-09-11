@@ -334,6 +334,12 @@ EventHub 直接同步遍历 listener，listener 异常会向发布方传播；�
 
 建议：将 EventHub 分成 `DurableWakeBus` 与 `TransientEventBus`。前者只发布“有新 cursor”的提示，不承载事件内容；后者为每个订阅建立有界异步队列，listener 异常隔离，超限时主动丢弃并发送 `transient_gap`。对所有 publish 使用 try/catch，禁止订阅者异常破坏状态提交调用栈。
 
+> **审核结论（部分成立，按现有 WebSocket backpressure 契约最小修复）**
+>
+> 当前 EventHub 实际已经把 durable 与 transient 语义分开：`publishRunWake/publishHostWake` 只携带 cursor wake，不承载 durable event；`AgentProtocolSession` 收到 wake 后按 cursor 从 repository 分页 replay。Transient 才直接携带 delta，而且 WebSocket session 已以 `socket.bufferedAmount >= 1 MiB` 主动关闭慢客户端，单条 outbound 也限制为 64 KiB；durable drain 用 `drainRequested` 合并 wake。因此再在 EventHub 内复制 per-listener async queue / `transient_gap` 会形成第二套背压状态机，没有必要。
+>
+> 真正成立的问题是 listener 同步异常可能沿 `publish*()` 反向抛入 StateCommit 后的执行调用栈。`AgentEventHub` 现统一通过 snapshot listener set 的 `publish()` 分发，并逐 listener `try/catch` 隔离异常；一个 WebSocket/subscriber 失败不会阻止其他 listener，也不会把已经 durable commit 的 Run 误判成新的 execution failure。Transient 丢失仍遵循协议原约定：慢客户端直接断开，断线后只恢复 durable cursor，不伪造 transient replay。
+
 ### R6：Frontend WebSocket 订阅没有自动重连、退避和 cursor 重新同步
 
 位置：`packages/frontend/src/features/agent/api/agent-events.ts`。
