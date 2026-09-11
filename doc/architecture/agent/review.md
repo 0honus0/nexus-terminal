@@ -292,6 +292,12 @@ activeByUser[userId] + externalActiveByUser[userId] < effectiveLimit[userId]
 3. claim 使用数据库版本/CAS，带 owner epoch、lease expiry 和 attempt watermark；
 4. 进程重启先把过期 owner 标记为 interrupted/reconciling，再重新扫描可恢复项。
 
+> **审核结论（原问题部分失效，按当前安全恢复契约修正文档）**
+>
+> 当前 Root scheduler 的 `queues/active` 确实是进程内状态，但“重启后 created/running Run 可能长期卡住”已不成立：`composeAgent().initialize()` 在 scheduler 恢复接单前先调用 `StateCommit.interruptNonTerminalRuns()`，把 `created/running/awaiting_approval/awaiting_budget/cancelling` 全部原子收敛为 `interrupted`，并根据未决 mutation 设置 `needsReconciliation`。Canonical `ARCHITECTURE.md` 也明确规定 Backend restart 不自动续跑旧 Run，安全继续只能通过 Checkpoint Resume 创建新 Run。
+>
+> 因此不为 Root 引入 `DurableRunnableScanner`，也不恢复已删除的 `createdQueue()` reader；那会把产品从 fail-closed restart 语义改成后台自动恢复。真实需要修正的是文档把 Root dispatcher 与 Subagent durable work queue 混称为“持久 scheduler”。当前文档已明确：Root `AgentScheduler` 是 commit 后唤醒的 in-process dispatcher，持久事实是 Run/Input/Runtime/Event；Subagent `agent_scheduler_work` 才是会 scan/claim 的 SQLite durable queue。若未来产品要求 Root crash-resume，应作为新的状态机/owner-epoch/reconciliation 设计，而不是让当前内存队列偷偷承担 durable authority。
+
 ### R3：`AgentScheduler` 使用 `Date.now()`，没有遵循统一 `ClockPort`
 
 位置：`scheduler.ts` 中的 `enqueuedAt`、quiesce deadline 和 transient event 时间。

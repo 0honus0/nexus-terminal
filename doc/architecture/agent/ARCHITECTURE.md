@@ -452,7 +452,7 @@ UI增加Subagent设置（深度、每角色模型与预算）和Run内子任务�
 
 ### 10.2 调度、等待与无死锁
 
-Scheduler是Backend单进程的持久队列，不引入Redis或分布式锁。工作项为model_step/tool_step/consume_inbox/verify/join_resume，持久记录queued/claimed/waiting/completed/cancelled、generation、deadline、依赖和attempt；重启从DB恢复，已started mutation只转reconcile，不重新执行。未来多Backend实例必须先引入一致的leader/claim协议，本版部署只启一个Agent scheduler。
+Root `AgentScheduler` 是单 Backend 进程内 dispatcher：Run/Input/Runtime/Event 事实先由 StateCommit 持久化，commit 后才 enqueue；dispatcher 队列和 AbortController 不作为 durable work 事实。Backend 重启时所有非终态 Root Run 统一收敛为 `interrupted`，不自动续跑旧 Run，用户只能经安全 Checkpoint Resume 创建新 Run。Subagent 的 `model_step/tool_step/consume_inbox/terminal` 才使用 SQLite `agent_scheduler_work` 持久队列，记录 queued/claimed/waiting/completed/cancelled、owner epoch、deadline、依赖和 attempt，并由 `SubagentScheduler` 启动/轮询扫描恢复；已 started mutation 只转 reconcile，不重新执行。两者都不引入 Redis 或分布式锁。未来多 Backend 实例必须先引入一致的 leader/claim 协议，本版部署只启一个 Agent scheduler 进程。
 
 配额分为 Run 通用 token/step/active-time/cost 预算与全局 Runtime/Provider/工具/环境并发配额，不再维护累计Subagent创建预算或独立子执行并发额度。模型streaming与tool执行持execution permit；等待reply/join/approval释放permit但保留有界checkpoint，不继续占着名额阻塞子任务。子工具仍受同Run默认一个toolCall并发限制。cancel、expiry、lease续约、reconcile为控制路径，不排在模型任务后面；控制路径不能绕过mutation策略。
 
