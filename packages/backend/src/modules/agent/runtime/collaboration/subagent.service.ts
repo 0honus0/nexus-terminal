@@ -3,7 +3,7 @@ import type { JsonValue, Scope, ClockPort } from '../../agent.types';
 import type { ProviderService } from '../../ai/provider.service';
 import type { AppCapabilityBroker } from '../../host/app-capability-broker';
 import type { AgentCapability } from '../../host/app.types';
-import type { RunRepositoryPort } from '../runs/run.repository.port';
+import type { HostCursorReaderPort, RunSnapshotReaderPort } from '../runs/run.repository.port';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type { DelegationRepositoryPort, RuntimeParticipantRepositoryPort } from './subagent.repository.port';
 import type { DelegationView, DependencyMode, JoinResult, SubagentProfile } from './subagent.types';
@@ -85,7 +85,7 @@ export class SubagentService {
   constructor(
     private readonly delegations: DelegationRepositoryPort,
     private readonly runtimes: RuntimeParticipantRepositoryPort,
-    private readonly runs: RunRepositoryPort,
+    private readonly runs: RunSnapshotReaderPort & HostCursorReaderPort,
     private readonly policy: SubagentPolicyService,
     private readonly providers: ProviderService,
     private readonly capabilities: AppCapabilityBroker,

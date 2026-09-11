@@ -806,6 +806,12 @@ no module cycles
     - Frontend architecture checker 默认禁止 `host/** -> apps/**`，仅允许 `host/builtin-apps.ts -> apps/<app>/public.ts`，因此 Host 无法重新依赖 App 私有组件。
     - GitHub Actions run `34582398075`（产品代码 HEAD `debdac1`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
+17. Run read least-authority：**已收敛**。
+    - broad `RunRepositoryPort` 已删除，`SqliteRunRepository` 仍是单一 concrete adapter，但分别实现 `RunSnapshotReaderPort`、`RunQueryPort`、`RunExecutionReaderPort`、`RunEventReaderPort`、`HostCursorReaderPort`；
+    - Plan/Approval/Checkpoint/Subagent participant 只拿 snapshot；`SubagentService` 只拿 snapshot + host cursor；`RunService` 只拿 snapshot + list；`NativeAgentBackend` 只拿 `snapshot/rootRuntimeId/pendingMutation`；
+    - 无产品 consumer 的 `createdQueue()` 已删除，后继若需要必须按新的 durable owner 重新引入；
+    - Backend architecture checker 禁止 broad Run repository/dead queue API 回流，并固定核心 consumer 的 reader 上限；StateCommit 的单一 durable mutation authority 与 snapshot transaction 语义未改变。
+
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。
 
 ## 19. 开发约束

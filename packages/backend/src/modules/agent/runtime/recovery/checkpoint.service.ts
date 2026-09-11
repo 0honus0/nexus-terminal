@@ -8,7 +8,7 @@ import { isAgentUuid } from '../../uuid';
 import type { AgentDefinitionRegistryPort } from '../definitions/agent-definition.port';
 import type { CheckpointRepositoryPort, CheckpointView } from './checkpoint.repository.port';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
-import type { RunRepositoryPort } from '../runs/run.repository.port';
+import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { StateCommitPort } from '../runs/state-commit.port';
 import { TERMINAL_RUN_STATUSES, type RunBudget, type RunDefinitionSnapshot, type RunView } from '../runs/run.types';
 
@@ -65,7 +65,7 @@ export interface CheckpointValidation {
 export class CheckpointService {
   constructor(
     private readonly checkpoints: CheckpointRepositoryPort,
-    private readonly runs: RunRepositoryPort,
+    private readonly runs: RunSnapshotReaderPort,
     private readonly settings: AgentSettingsService,
     private readonly lifecycle: AppLifecycleService,
     private readonly providers: ProviderService,

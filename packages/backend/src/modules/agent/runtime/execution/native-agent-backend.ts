@@ -9,7 +9,7 @@ import { ModelStepRunner, type ModelToolCall } from './model-step-runner';
 import { estimateTokens, modelCost } from './model-accounting';
 import { boundedUtf8 } from './text-budget';
 import { ToolCallRunner } from './tool-call-runner';
-import type { PendingMutationTool, RunRepositoryPort } from '../runs/run.repository.port';
+import type { PendingMutationTool, RunExecutionReaderPort } from '../runs/run.repository.port';
 import type { DelegationReaderPort } from '../collaboration/subagent.repository.port';
 import type { StateCommitPort } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
@@ -49,7 +49,7 @@ const signalReason = (signal: AbortSignal): string | null => {
 
 export class NativeAgentBackend implements AgentBackendPort {
   constructor(
-    private readonly repository: RunRepositoryPort,
+    private readonly repository: RunExecutionReaderPort,
     private readonly delegations: DelegationReaderPort,
     private readonly stateCommit: StateCommitPort,
     private readonly modelSteps: ModelStepRunner,

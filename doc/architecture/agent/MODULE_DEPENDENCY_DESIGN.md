@@ -149,7 +149,7 @@ SubagentParticipantExecutor
   <- DelegationCancellationPort          # read + cancel, no create
   <- RuntimeParticipantRepositoryPort
   <- MailboxConsumerPort                 # consume only
-  <- RunRepositoryPort
+  <- RunSnapshotReaderPort               # snapshot only
   <- StateCommitPort
   <- SubagentContextBuilder
 
@@ -161,6 +161,20 @@ SubagentContextBuilder
 NativeAgentBackend
   <- DelegationReaderPort
 ```
+
+### 2.3 Run read capability wiring
+
+`SqliteRunRepository` 仍是一个 concrete adapter，但 broad `RunRepositoryPort` 已删除。composition root 通过 structural typing 把它投影成窄读取能力：
+
+```text
+RunSnapshotReaderPort   -> snapshot
+RunQueryPort            -> snapshot + list
+RunExecutionReaderPort  -> snapshot + rootRuntimeId + pendingMutation
+RunEventReaderPort      -> readEvents + readHostEvents
+HostCursorReaderPort    -> hostCursor
+```
+
+核心 consumer 上限：Plan/Approval/Checkpoint/Subagent participant 只拿 snapshot；`SubagentService` 只拿 snapshot + host cursor；`RunService` 只拿 snapshot + list；`NativeAgentBackend` 只拿 execution reader。无 consumer 的 `createdQueue()` 不保留。所有接口均为 read capability，durable mutation authority 仍只属于 `StateCommitPort`。
 
 ---
 
@@ -184,7 +198,7 @@ modules/agent/runtime/execution/text-budget.ts
 主要依赖：
 
 ```text
-RunRepositoryPort
+RunExecutionReaderPort
 DelegationReaderPort
 StateCommitPort
 ModelStepRunner
@@ -194,7 +208,7 @@ ClockPort
 
 其中：
 
-- `RunRepositoryPort`：读取 Run snapshot / pending durable state；
+- `RunExecutionReaderPort`：仅暴露 `snapshot/rootRuntimeId/pendingMutation`；
 - `StateCommitPort`：唯一 durable transition authority；
 - `ModelStepRunner`：封装 Provider/Context/LanguageModel/ModelCallLimiter 与 model transport retry，不拥有 Run terminal transition；
 - `ToolCallRunner`：封装 ToolCatalog/ToolExecutor/Policy、read lease 与 staged mutation lease；
@@ -485,7 +499,7 @@ compareAndSetFact()
 ```text
 DelegationRepositoryPort
 RuntimeParticipantRepositoryPort
-RunRepositoryPort
+RunSnapshotReaderPort + HostCursorReaderPort
 SubagentPolicyService
 ProviderService
 AppCapabilityBroker
@@ -506,7 +520,7 @@ join()
 `create()` 的核心读取：
 
 ```text
-RunRepositoryPort.snapshot()
+RunSnapshotReaderPort.snapshot()
 RuntimeParticipantRepositoryPort.runtime()
 DelegationRepositoryPort.listDelegations()
 SubagentPolicyService.get()

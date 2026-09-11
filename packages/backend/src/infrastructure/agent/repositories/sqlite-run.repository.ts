@@ -2,9 +2,12 @@ import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { ToolInspection } from '../../../modules/agent/capabilities/tool.types';
 import type { HostEvent, RunEvent, RunSnapshot } from '../../../modules/agent/runtime/runs/run.types';
 import type {
+  HostCursorReaderPort,
   PendingMutationTool,
+  RunEventReaderPort,
+  RunExecutionReaderPort,
   RunPage,
-  RunRepositoryPort,
+  RunQueryPort,
   Scope,
 } from '../../../modules/agent/runtime/runs/run.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
@@ -72,7 +75,9 @@ const mapEvent = (row: EventRow): RunEvent => ({
   occurredAt: row.occurred_at,
 });
 
-export class SqliteRunRepository implements RunRepositoryPort {
+export class SqliteRunRepository
+  implements RunQueryPort, RunEventReaderPort, HostCursorReaderPort, RunExecutionReaderPort
+{
   constructor(private readonly db: RelationalDatabase) {}
 
   async snapshot(scope: Scope, runId: string): Promise<RunSnapshot | null> {
@@ -206,13 +211,5 @@ export class SqliteRunRepository implements RunRepositoryPort {
       approvalVersion: row.approval_version,
       inspection: JSON.parse(row.inspection_json) as ToolInspection,
     };
-  }
-
-  async createdQueue(limit: number): Promise<ReturnType<typeof mapRunRow>[]> {
-    const rows = await this.db.queryAll<RunRow>(
-      `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE status = 'created' ORDER BY created_at, id LIMIT ?`,
-      [limit],
-    );
-    return rows.map(mapRunRow);
   }
 }

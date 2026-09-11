@@ -17,15 +17,28 @@ export interface PendingMutationTool {
   inspection: ToolInspection;
 }
 
-export interface RunRepositoryPort {
+export interface RunSnapshotReaderPort {
   snapshot(scope: Scope, runId: string): Promise<RunSnapshot | null>;
+}
+
+export interface RunListReaderPort {
   list(scope: Scope, threadId: string | undefined, limit: number, before?: string): Promise<RunPage>;
+}
+
+export interface RunQueryPort extends RunSnapshotReaderPort, RunListReaderPort {}
+
+export interface RunEventReaderPort {
   readEvents(scope: Scope, runId: string, after: number, limit: number): Promise<RunEvent[]>;
   readHostEvents(userId: number, after: number, limit: number): Promise<HostEvent[]>;
+}
+
+export interface HostCursorReaderPort {
   hostCursor(userId: number): Promise<number>;
+}
+
+export interface RunExecutionReaderPort extends RunSnapshotReaderPort {
   rootRuntimeId(scope: Scope, runId: string): Promise<string>;
   pendingMutation(scope: Scope, runId: string): Promise<PendingMutationTool | null>;
-  createdQueue(limit: number): Promise<RunView[]>;
 }
 
 export type { Scope } from '../../agent.types';

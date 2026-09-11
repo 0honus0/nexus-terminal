@@ -12,7 +12,7 @@ import { LeaseCoordinator, type LeaseRenewal } from '../execution/lease-coordina
 import type { ModelCallLimiter } from '../execution/model-call-limiter';
 import { estimateTokens, modelCost } from '../execution/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
-import type { RunRepositoryPort } from '../runs/run.repository.port';
+import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { RunView } from '../runs/run.types';
 import type { StateCommitPort } from '../runs/state-commit.port';
 import type { MailboxService } from './mailbox.service';
@@ -57,7 +57,7 @@ export class SubagentParticipantExecutor {
     private readonly delegations: DelegationCancellationPort,
     private readonly runtimes: RuntimeParticipantRepositoryPort,
     private readonly mailboxes: MailboxConsumerPort,
-    private readonly runs: RunRepositoryPort,
+    private readonly runs: RunSnapshotReaderPort,
     private readonly providers: ProviderService,
     private readonly modelPort: LanguageModelPort,
     private readonly modelCalls: ModelCallLimiter,

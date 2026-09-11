@@ -100,6 +100,24 @@ for (const file of sourceFiles) {
   if (relativeFile.startsWith('modules/agent/runtime/') && /\bmarkMutation(?:Active|Settled)\b/.test(text)) {
     failures.push(`${relativeFile}: Agent Runtime may not call low-level mutation lease markers directly`);
   }
+  if (/\bRunRepositoryPort\b|\bcreatedQueue\b/.test(text)) {
+    failures.push(
+      `${relativeFile}: broad/dead Run repository capability is forbidden; depend on a narrow Run reader port`,
+    );
+  }
+  const snapshotOnlyRunReaders = new Set([
+    'modules/agent/runtime/approvals/approval.service.ts',
+    'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+    'modules/agent/runtime/planning/plan-tool.ts',
+    'modules/agent/runtime/planning/plan.service.ts',
+    'modules/agent/runtime/recovery/checkpoint.service.ts',
+  ]);
+  if (
+    snapshotOnlyRunReaders.has(relativeFile) &&
+    /\b(?:RunQueryPort|RunListReaderPort|RunEventReaderPort|HostCursorReaderPort|RunExecutionReaderPort)\b/.test(text)
+  ) {
+    failures.push(`${relativeFile}: this consumer may only depend on RunSnapshotReaderPort`);
+  }
   if (relativeFile === 'modules/agent/runtime/execution/native-agent-backend.ts') {
     const forbiddenExecutionDependencies = [
       'ContextService',
@@ -121,6 +139,16 @@ for (const file of sourceFiles) {
     }
     if (/\bDelegationRepositoryPort\b/.test(text)) {
       failures.push(`${relativeFile}: NativeAgentBackend may only depend on DelegationReaderPort`);
+    }
+    if (
+      /\b(?:RunQueryPort|RunListReaderPort|RunEventReaderPort|HostCursorReaderPort|RunSnapshotReaderPort)\b/.test(text)
+    ) {
+      failures.push(`${relativeFile}: NativeAgentBackend may only depend on RunExecutionReaderPort`);
+    }
+  }
+  if (relativeFile === 'modules/agent/runtime/collaboration/subagent.service.ts') {
+    if (/\b(?:RunQueryPort|RunListReaderPort|RunEventReaderPort|RunExecutionReaderPort)\b/.test(text)) {
+      failures.push(`${relativeFile}: SubagentService may only depend on RunSnapshotReaderPort + HostCursorReaderPort`);
     }
   }
   if (relativeFile === 'modules/agent/runtime/collaboration/subagent-scheduler.ts') {

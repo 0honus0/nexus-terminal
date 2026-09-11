@@ -29,7 +29,7 @@ RunProgressCoordinator -> RunRepository / StateCommit / Clock
 > ToolCallRunner  -> ToolCatalog / ToolExecutor / Policy / read lease / staged mutation lease
 > ```
 >
-> `NativeAgentBackend` 继续直接持有 `RunRepositoryPort`、`DelegationReaderPort`、`StateCommitPort` 与 `ClockPort`，只负责 Run 主循环、阶段顺序、模型步骤 durable transition、cancel/fail safe boundary。构造依赖由 13 项降为 6 项；模型 transport/context 与 Tool/Policy/Lease 不再直接注入 Backend，Root 也不取得 delegation create/cancel authority。Backend architecture checker 固定禁止上述低层 execution dependency 或宽 `DelegationRepositoryPort` 重新进入 `NativeAgentBackend`。
+> `NativeAgentBackend` 继续直接持有 Run execution read capability、`DelegationReaderPort`、`StateCommitPort` 与 `ClockPort`，只负责 Run 主循环、阶段顺序、模型步骤 durable transition、cancel/fail safe boundary。构造依赖由 13 项降为 6 项；模型 transport/context 与 Tool/Policy/Lease 不再直接注入 Backend，Root 也不取得 delegation create/cancel authority。后续 read least-authority 收敛又把 Run 读取固定为 `RunExecutionReaderPort`（`snapshot/rootRuntimeId/pendingMutation`）。Backend architecture checker 固定禁止低层 execution dependency、宽 delegation capability 与额外 Run reader 重新进入 `NativeAgentBackend`。
 
 ### 2. Lease 安全职责出现双重入口
 
@@ -92,15 +92,15 @@ Scheduler 只依赖这两个 capability；adapter 内部再收窄到现有 Repos
 
 ## P2：建议同步调整
 
-### 4. `RunRepositoryPort` 读取接口偏宽，但 StateCommit authority 未分裂（审核后降为 P3）
+### 4. Run 读取接口偏宽，但 StateCommit authority 未分裂（审核后降为 P3，已收敛）
 
-> **审核结论：原竞态判断不成立；不按原方案重构。**
+> **审核结论：原竞态判断不成立；不按原 race 方案重构。**
 >
-> 当前 `RunRepositoryPort` 已经是纯读取 Port，只暴露 `snapshot/list/readEvents/readHostEvents/hostCursor/rootRuntimeId/pendingMutation/createdQueue`，没有 durable mutation 方法。`RunSnapshot` 自带 `version/eventCursor`，`SqliteRunRepository.snapshot()` 在同一数据库 transaction 中读取 Run projection 与 recent entries；所有 Run/Step/Tool/Approval/Subagent durable transition 仍由 `StateCommitPort` 持有，并通过 `expectedRunVersion`、Tool/Step version、work `ownerEpoch/version` 等 CAS 防止旧快照覆盖新状态。因此“读取快照来自 A、提交版本来自 B”属于正常 optimistic concurrency，冲突会 fail closed 为 `STATE_CONFLICT`，不是现存竞态缺陷。
+> 原审核确认当时的 `RunRepositoryPort` 是纯读取 Port，没有 durable mutation 方法。`RunSnapshot` 自带 `version/eventCursor`，`SqliteRunRepository.snapshot()` 在同一数据库 transaction 中读取 Run projection 与 recent entries；所有 Run/Step/Tool/Approval/Subagent durable transition 仍由 `StateCommitPort` 持有，并通过 `expectedRunVersion`、Tool/Step version、work `ownerEpoch/version` 等 CAS 防止旧快照覆盖新状态。因此“读取快照来自 A、提交版本来自 B”属于正常 optimistic concurrency，冲突会 fail closed 为 `STATE_CONFLICT`，不是现存竞态缺陷。
 >
-> 当前真实问题只是 read authority 偏宽：例如 `NativeAgentBackend` 实际只需要 `snapshot/rootRuntimeId/pendingMutation`，却拿到了整个 `RunRepositoryPort`。这是 Interface Segregation / least-read-authority 的结构性改进项，不影响 StateCommit 单一写 authority。
+> **解决方案（已采用，与 P2-代码-2 同一实施）**：删除 broad `RunRepositoryPort`，按真实消费面拆成 `RunSnapshotReaderPort`、`RunQueryPort`、`RunExecutionReaderPort`、`RunEventReaderPort` 与 `HostCursorReaderPort`。`NativeAgentBackend` 只拿 `RunExecutionReaderPort`；Plan/Approval/Checkpoint/Subagent participant 只拿 snapshot reader；`SubagentService` 只拿 snapshot + host cursor；`RunService` 只拿 snapshot + list。`SqliteRunRepository` 仍是同一个 adapter，不拆数据库实现、不改变 transaction/StateCommit authority。
 >
-> 若后续确有维护收益，可按用途渐进拆成 `RunSnapshotPort`、`RunExecutionQueryPort`、`RunEventReaderPort`、`RunQueryPort` 等窄查询接口；不要为了修不存在的 race 做全局改名。`createdQueue()` 目前也可单独排查是否为 dead API。该项从 P2 降为 P3 / 可选清理，当前暂缓。
+> `createdQueue()` 经当前 HEAD 全仓扫描确认无产品 consumer，已按 pre-release 策略从 Port 与 SQLite adapter 删除；未来若 durable scheduler 确有该查询需求，再按当时 owner 重新引入。Architecture checker 禁止 broad `RunRepositoryPort` / `createdQueue` 回流，并固定各核心 consumer 的最大 Run read capability。该项保持 P3 定性，但结构问题已关闭。
 
 ### 5. Plugin / Workspace Runtime 的阶段边界在依赖文档中不够显式
 
@@ -208,11 +208,15 @@ reserved capability    虚线
 >
 > Frontend architecture checker 已移除通用 `host -> apps/operations` 许可：`host/**` 默认不得依赖 `apps/**`，仅 `host/builtin-apps.ts` 可 import `apps/<app>/public.ts`，不能直接 import App 私有 Vue 实现。这样内置 App 的静态 composition 例外被集中、可审计，也保留未来增加 builtin App 时的明确扩展点。
 
-### P2-代码-2：后端 Agent 子域虽未直接依赖 Infrastructure，但跨子域访问仍偏宽
+### P2-代码-2：后端 Run read capability 过宽（已收敛）
 
-源码扫描未发现 `modules/agent` 直接 import SQLite 或 HTTP 实现，这是正确的；但 `compose-agent.ts` 将同一个 `SqliteRunRepository` 同时注入 `RunService`、`PlanService`、`NativeAgentBackend`、`CheckpointService`、`SubagentService` 和 Scheduler。类型 Port 虽然隔离了方法权限，但 snapshot、计划、checkpoint、协作查询仍共享同一宽泛运行时读取模型。
+审核确认不是 Infrastructure 越层问题，而是 read least-authority：同一个 `SqliteRunRepository` 可以继续复用，但此前多个 runtime consumer 都通过 broad `RunRepositoryPort` 获得与实际调用无关的查询权限。
 
-建议按用途增加 `RunSnapshotReader`、`RunPlanReader`、`CheckpointReader` 等只读 Port；至少先把 `NativeAgentBackend` 与 `SubagentService` 从完整 `RunRepositoryPort` 中移除不必要的方法，配合架构 checker 检查 constructor 参数类型。
+> **解决方案（已采用，与 Review #4 同一实施）**
+>
+> 不按业务名复制 `RunPlanReader/CheckpointReader`，因为这些 consumer 实际都只需要同一个 `snapshot()` capability。改为按方法权限拆 `RunSnapshotReaderPort`、`RunQueryPort`、`RunExecutionReaderPort`、`RunEventReaderPort`、`HostCursorReaderPort`；同一个 `SqliteRunRepository` 同时实现这些接口，composition root 依赖 TypeScript structural typing 注入窄 capability。
+>
+> `NativeAgentBackend` 只拿 `snapshot/rootRuntimeId/pendingMutation`；`SubagentParticipantExecutor`、Plan、Approval、Checkpoint 只拿 snapshot；`SubagentService` 只拿 snapshot + host cursor；`RunService` 只拿 snapshot + list。无 consumer 的 `createdQueue()` 已删除。Backend architecture checker 禁止 broad Run repository capability 回流，并针对上述核心 consumer 固定其允许的 reader 上限。
 
 ### P2-代码-3：运行时与后继能力在源码目录中已并列，容易被误认为已接线
 

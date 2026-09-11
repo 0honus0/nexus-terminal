@@ -25,7 +25,7 @@ import type { SharedFactsService } from '../../modules/agent/runtime/collaborati
 import type { SubagentService } from '../../modules/agent/runtime/collaboration/subagent.service';
 import { createPlanUpdateTool } from '../../modules/agent/runtime/planning/plan-tool';
 import type { PlanService } from '../../modules/agent/runtime/planning/plan.service';
-import type { RunRepositoryPort } from '../../modules/agent/runtime/runs/run.repository.port';
+import type { RunSnapshotReaderPort } from '../../modules/agent/runtime/runs/run.repository.port';
 import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type { AgentWorkspaceRepositoryPort } from '../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
@@ -111,7 +111,7 @@ export const registerWorkspaceToolContributions = ({
 export interface RuntimeToolContributionOptions {
   catalog: ToolCatalog;
   plans: PlanService;
-  runs: RunRepositoryPort;
+  runs: RunSnapshotReaderPort;
   subagents: SubagentService;
   mailbox: MailboxService;
   facts: SharedFactsService;

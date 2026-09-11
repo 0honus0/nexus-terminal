@@ -5,7 +5,7 @@ import { AgentSettingsService } from '../../host/agent-settings.service';
 import { AppLifecycleService } from '../../host/app-lifecycle.service';
 import { isAgentUuid } from '../../uuid';
 import type { AgentDefinitionRegistryPort } from '../definitions/agent-definition.port';
-import type { RunRepositoryPort } from './run.repository.port';
+import type { RunQueryPort } from './run.repository.port';
 import { requestHash, requireIdempotencyKey } from './idempotency';
 import type { StateCommitPort } from './state-commit.port';
 import type {
@@ -131,7 +131,7 @@ export class RunService {
     private readonly providers: ProviderService,
     private readonly definitions: AgentDefinitionRegistryPort,
     private readonly stateCommit: StateCommitPort,
-    private readonly repository: RunRepositoryPort,
+    private readonly repository: RunQueryPort,
     private readonly clock: ClockPort,
     private readonly onCreated: (run: RunView) => void = () => undefined,
     private readonly onCommitted: (run: RunView) => void = () => undefined,
