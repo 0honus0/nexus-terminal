@@ -540,6 +540,16 @@ export interface AgentToolInspection {
   inputRevision: number;
 }
 
+export interface AgentServerClockAnchor {
+  serverUnixMilliseconds: number;
+  clientMonotonicMilliseconds: number;
+}
+
+export interface AgentApprovalBatch {
+  items: AgentApprovalView[];
+  clock: AgentServerClockAnchor;
+}
+
 export interface AgentApprovalView {
   id: string;
   userId: number;
@@ -1059,14 +1069,18 @@ export const agentApi = {
       ).data,
     );
   },
-  async approvals(appId: string, runId: string): Promise<AgentApprovalView[]> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<AgentApprovalView[]>>(
-          `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/approvals`,
-        )
-      ).data,
+  async approvals(appId: string, runId: string): Promise<AgentApprovalBatch> {
+    const response = await httpClient.get<AgentEnvelope<AgentApprovalView[]>>(
+      `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/approvals`,
     );
+    const serverUnixMilliseconds = Number(response.headers['x-agent-server-time-ms']);
+    if (!Number.isSafeInteger(serverUnixMilliseconds) || serverUnixMilliseconds <= 0) {
+      throw new Error('AGENT_SERVER_TIME_INVALID');
+    }
+    return {
+      items: unwrap(response.data),
+      clock: { serverUnixMilliseconds, clientMonotonicMilliseconds: performance.now() },
+    };
   },
   async resolveApproval(
     appId: string,

@@ -5,6 +5,7 @@
   import { agentEvents } from '../../api/agent-events';
   import { agentApi, formatAgentApiError } from '../../api/agent-api';
   import type {
+    AgentApprovalBatch,
     AgentApprovalView,
     AgentCheckpointView,
     AgentArtifactRef,
@@ -35,7 +36,8 @@
   const connections = ref<Connection[]>([]);
   const selectedConnectionIds = ref<number[]>([]);
   const attachments = ref<AgentArtifactRef[]>([]);
-  const approvals = ref<AgentApprovalView[]>([]);
+  const approvalBatch = ref<AgentApprovalBatch | null>(null);
+  const approvals = computed(() => approvalBatch.value?.items ?? []);
   const hardLimits = ref<AgentHardLimits | null>(null);
   const backgroundRuns = ref<AgentRunView[]>([]);
   const detailSnapshot = ref<AgentRunSnapshot | null>(null);
@@ -99,13 +101,13 @@
   const refreshApprovals = async (runId?: string): Promise<void> => {
     const requestGeneration = ++approvalsGeneration;
     if (!runId) {
-      approvals.value = [];
+      approvalBatch.value = null;
       return;
     }
     try {
       const next = await facade.listApprovals(runId);
       if (requestGeneration !== approvalsGeneration || run.value?.id !== runId) return;
-      approvals.value = next;
+      approvalBatch.value = next;
     } catch {
       if (requestGeneration !== approvalsGeneration || run.value?.id !== runId) return;
     }
@@ -548,6 +550,7 @@
         :background-runs="backgroundRuns"
         :hard-limits="hardLimits"
         :approvals="approvals"
+        :approval-clock="approvalBatch?.clock ?? null"
         :busy="busy"
         @increase-budget="increaseBudget"
         @resolve-approval="resolveApproval"

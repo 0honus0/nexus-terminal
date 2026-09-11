@@ -16,7 +16,12 @@ export const agentRequestId = (request: Request, response: Response): string => 
   return requestId;
 };
 
+const stampAgentServerTime = (response: Response): void => {
+  response.setHeader('X-Agent-Server-Time-Ms', String(Date.now()));
+};
+
 export const agentData = (request: Request, response: Response, data: unknown, status = 200): void => {
+  stampAgentServerTime(response);
   response.status(status).json({ data, requestId: agentRequestId(request, response) });
 };
 
@@ -28,6 +33,7 @@ export const agentError = (
   message: string,
   details?: unknown,
 ): void => {
+  stampAgentServerTime(response);
   response.status(status).json({
     error: { code, message, ...(details === undefined ? {} : { details }) },
     requestId: agentRequestId(request, response),

@@ -58,6 +58,10 @@ for (const file of sourceFiles) {
   ) {
     failures.push(`${rel}: Workspace grant request lifecycle must flow through workspace-grant-state.ts`);
   }
+
+  if (rel === 'features/agent/runtime/ApprovalCard.vue' && /\bDate\.now\s*\(/.test(content)) {
+    failures.push(`${rel}: approval expiry must use the server clock anchor, not the browser wall clock`);
+  }
 }
 
 const firstSegment = (rel) => rel.split('/')[0];

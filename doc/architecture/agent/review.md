@@ -539,6 +539,12 @@ Resume 虽然创建新 Run 是正确方向，但恢复前必须把 checkpoint �
 
 建议后端返回 `serverNow` 或在 bootstrap/响应头提供时间偏移；前端以 `serverNow + monotonic elapsed` 计算倒计时。按钮点击前仍必须刷新 approval 或接受服务端 409，并将状态更新为 expired/stale，而不是只显示通用请求失败。
 
+> **解决方案（已采用）**
+>
+> Agent HTTP 成功与错误响应统一增加 `X-Agent-Server-Time-Ms`，作为与 Approval `expiresAt` 同一服务端墙上时钟域的时间锚点。`agentApi.approvals()` 不把该值塞进 Approval domain DTO，而是返回 `{items, clock}`：`clock` 同时记录响应头的服务端 Unix 毫秒与收到响应时的 `performance.now()`。`ApprovalCard` 只用 `server anchor + monotonic elapsed` 计算当前服务端时间和剩余秒数，完全移除 `Date.now()`；Frontend architecture checker 禁止该组件回退到浏览器墙上时钟。
+>
+> resolve 的竞态边界保持服务端权威：按钮只在 anchored server time 尚未过期时可操作；即使点击和服务端 expiry 恰好竞争，`APPROVAL_STALE` 已映射为 409，`OperationsView.resolveApproval()` 的失败路径会重新拉取 approvals 并替换 clock anchor，因此 UI 会收敛到 expired/stale 状态，不会基于本地时间继续允许重复操作。
+
 ### R17：前端 Runtime 组件缺少统一的错误/冲突恢复状态
 
 `TaskRail`、`WorkspaceRuntimePanel`、审批和文件传输组件各自维护 `busy/error/notice`。当 API 返回 version conflict、app draining、run interrupted 或 unknown outcome 时，组件通常只显示本地字符串，未触发 snapshot refresh 或 reconciliation UI。

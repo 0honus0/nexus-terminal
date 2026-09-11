@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed } from 'vue';
-  import type { AgentApprovalView, AgentHardLimits, AgentRunView } from '../api/agent-api';
+  import type { AgentApprovalView, AgentHardLimits, AgentRunView, AgentServerClockAnchor } from '../api/agent-api';
   import ToolTimeline from './ToolTimeline.vue';
 
   const props = defineProps<{
@@ -8,6 +8,7 @@
     backgroundRuns: AgentRunView[];
     hardLimits: AgentHardLimits | null;
     approvals: AgentApprovalView[];
+    approvalClock: AgentServerClockAnchor | null;
     busy?: boolean;
   }>();
   const emit = defineEmits<{
@@ -97,6 +98,7 @@
 
         <ToolTimeline
           :approvals="approvals"
+          :clock="approvalClock"
           :busy="busy"
           @resolve="(approval, decision) => emit('resolveApproval', approval, decision)"
         />

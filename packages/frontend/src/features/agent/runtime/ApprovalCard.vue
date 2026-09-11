@@ -1,14 +1,20 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref } from 'vue';
-  import type { AgentApprovalView } from '../api/agent-api';
+  import type { AgentApprovalView, AgentServerClockAnchor } from '../api/agent-api';
 
-  const props = defineProps<{ approval: AgentApprovalView; busy?: boolean }>();
+  const props = defineProps<{ approval: AgentApprovalView; clock: AgentServerClockAnchor; busy?: boolean }>();
   const emit = defineEmits<{ resolve: [approval: AgentApprovalView, decision: 'approved' | 'denied'] }>();
-  const now = ref(Math.floor(Date.now() / 1000));
-  const timer = window.setInterval(() => (now.value = Math.floor(Date.now() / 1000)), 1000);
+  const monotonicNow = ref(performance.now());
+  const timer = window.setInterval(() => (monotonicNow.value = performance.now()), 1000);
   onBeforeUnmount(() => window.clearInterval(timer));
 
-  const remaining = computed(() => Math.max(0, props.approval.expiresAt - now.value));
+  const serverNowMilliseconds = computed(
+    () =>
+      props.clock.serverUnixMilliseconds + Math.max(0, monotonicNow.value - props.clock.clientMonotonicMilliseconds),
+  );
+  const remaining = computed(() =>
+    Math.max(0, Math.ceil((props.approval.expiresAt * 1000 - serverNowMilliseconds.value) / 1000)),
+  );
   const actionable = computed(
     () => props.approval.status === 'requested' && remaining.value > 0 && props.busy !== true,
   );

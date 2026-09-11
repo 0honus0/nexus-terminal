@@ -1,8 +1,8 @@
 <script setup lang="ts">
-  import type { AgentApprovalView } from '../api/agent-api';
+  import type { AgentApprovalView, AgentServerClockAnchor } from '../api/agent-api';
   import ApprovalCard from './ApprovalCard.vue';
 
-  defineProps<{ approvals: AgentApprovalView[]; busy?: boolean }>();
+  defineProps<{ approvals: AgentApprovalView[]; clock: AgentServerClockAnchor | null; busy?: boolean }>();
   const emit = defineEmits<{ resolve: [approval: AgentApprovalView, decision: 'approved' | 'denied'] }>();
 </script>
 
@@ -12,7 +12,9 @@
     <ApprovalCard
       v-for="approval in approvals"
       :key="approval.id"
+      v-if="clock"
       :approval="approval"
+      :clock="clock"
       :busy="busy"
       @resolve="(item, decision) => emit('resolve', item, decision)"
     />

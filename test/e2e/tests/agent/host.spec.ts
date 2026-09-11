@@ -39,6 +39,8 @@ const csrfToken = async (request: import('@playwright/test').APIRequestContext):
   const response = await request.get('/api/v1/agent/security/csrf');
   expect(response.ok(), await response.text()).toBeTruthy();
   expect(response.headers()['cache-control']).toContain('no-store');
+  const serverTimeMilliseconds = Number(response.headers()['x-agent-server-time-ms']);
+  expect(Number.isSafeInteger(serverTimeMilliseconds) && serverTimeMilliseconds > 0).toBeTruthy();
   const body = (await response.json()) as AgentEnvelope<{ token: string }>;
   expect(body.requestId).toBe(response.headers()['x-request-id']);
   expect(body.data.token).toMatch(/^[0-9a-f]{64}$/);
