@@ -776,12 +776,13 @@ no module cycles
     - Backend architecture checker 禁止 `NativeAgentBackend` 重新直接依赖 Provider/Context/Tool/Lease execution services 或调用 mutation lease marker；
     - Backend/Frontend architecture + build、Agent Runtime build、test-policy、69 specs/8 groups assignment、sandbox prerequisite、shell syntax 与 `git diff --check` 均已通过；远端产品 E2E 以本轮最终 dev 代码 SHA 为准。
 
-13. Child execution owner 收敛：**本轮代码已完成，远端验收待最终 dev SHA**。
+13. Child execution owner 收敛：**完成并通过远端 Actions 验收**。
     - `SubagentScheduler` 从接近 1000 行收敛为 durable work scheduler，只负责 scope/fairness/capacity、`ready/terminal` scan、claim CAS、active tracking 与 quiesce；
     - 已 claim 的 `model_step/tool_step/consume_inbox/terminal` execution 进入 `SubagentParticipantExecutor`，其 durable Run/Runtime/Delegation/Step/Tool 状态仍显式经 `StateCommitPort`；
     - `SubagentContextBuilder` 独立负责 runtime/mailbox/tool-history context、child tool schema 与 context/token limit，避免 context assembly 继续长在 Scheduler 中；
     - 不采用只把五个 Repository Port 包成两个 Store facade 的方案，也不新增会隐藏 StateCommit authority 的 `SubagentWorkCoordinator`；
     - Backend architecture checker 禁止 Provider/Model/Tool/Lease/StateCommit/collaboration repository 回流 `SubagentScheduler`，并禁止 participant executor 获取 `readyWork/terminalWork/claimWork/resetClaimedWork` durable scan/claim authority。
+    - GitHub Actions run `34576022008`（产品代码 HEAD `15f821b`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。
 
