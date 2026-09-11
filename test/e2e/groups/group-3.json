@@ -3,7 +3,8 @@
   "group": 3,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
+    "tests/agent/host.spec.ts",
+    "tests/agent/provider.spec.ts",
     "tests/http/auth-2fa.spec.ts",
     "tests/http/auth-api.spec.ts",
     "tests/http/backup.spec.ts",
@@ -14,11 +15,11 @@
     "tests/http/rdp-remoteapp.spec.ts",
     "tests/http/terminal-themes.spec.ts",
     "tests/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
     "tests/ssh/quick-command-tags-variables.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts"
+    "tests/ssh/progress-display-upload-copy.spec.ts",
+    "tests/ssh/suspend-resume.spec.ts"
   ]
 }
