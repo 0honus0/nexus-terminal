@@ -1,3 +1,4 @@
+import type { ClockPort } from '../../agent.types';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import type { AgentBackendPort } from '../execution/agent-backend.port';
 import { AgentEventHub } from '../events/event-hub';
@@ -5,7 +6,6 @@ import type { RunView } from '../runs/run.types';
 
 interface QueuedRun {
   run: RunView;
-  enqueuedAt: number;
 }
 
 export class AgentScheduler {
@@ -21,6 +21,7 @@ export class AgentScheduler {
     private readonly settings: AgentSettingsService,
     private readonly backend: AgentBackendPort,
     private readonly events: AgentEventHub,
+    private readonly clock: ClockPort,
     private readonly hostCursor: (userId: number) => Promise<number>,
     private readonly externalActiveCount: (userId: number) => number = () => 0,
     private readonly runBlocked: (runId: string) => boolean = () => false,
@@ -40,7 +41,7 @@ export class AgentScheduler {
       this.appOrder.push(run.appId);
     }
     if (queue.some((candidate) => candidate.run.id === run.id)) return;
-    queue.push({ run, enqueuedAt: Date.now() });
+    queue.push({ run });
     void this.pump();
   }
 
@@ -73,7 +74,7 @@ export class AgentScheduler {
     this.queues.clear();
     this.appOrder.length = 0;
     for (const active of this.active.values()) active.controller.abort(new Error('AGENT_QUIESCE'));
-    const remainingMs = Math.max(0, deadlineUnixSeconds * 1000 - Date.now());
+    const remainingMs = Math.max(0, deadlineUnixSeconds * 1000 - this.clock.nowUnixMilliseconds());
     if (this.active.size === 0 || remainingMs === 0) return;
     await Promise.race([
       Promise.allSettled([...this.active.values()].map((active) => active.done)),
@@ -151,7 +152,7 @@ export class AgentScheduler {
               runId: signal.runId,
               type: signal.eventType,
               payload: signal.payload,
-              occurredAt: Math.floor(Date.now() / 1000),
+              occurredAt: this.clock.nowUnixSeconds(),
             });
           }
         }

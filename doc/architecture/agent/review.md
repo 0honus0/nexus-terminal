@@ -304,7 +304,11 @@ activeByUser[userId] + externalActiveByUser[userId] < effectiveLimit[userId]
 
 Runtime 其他模块已注入 `ClockPort`，但 Scheduler 直接使用墙上时间，导致测试无法稳定控制时间，也可能在系统时钟回拨/跳跃时错误计算排空超时。`enqueuedAt` 目前没有被使用，反而增加了误导性的时间状态。
 
-建议：注入 `ClockPort`，同时区分 `nowUnixSeconds()` 与 `nowMonotonicMilliseconds()`；排空、重试和 lease deadline 使用单调时钟，事件落库时间使用 Unix 时间。删除未使用的 `enqueuedAt`，或将其真正用于公平性/超时策略。
+建议：注入 `ClockPort`，同时区分 durable timestamp 与 timeout duration；排空、重试和 lease deadline 不应直接散落 `Date.now()`。删除未使用的 `enqueuedAt`，或将其真正用于公平性/超时策略。
+
+> **解决方案（已采用）**
+>
+> `ClockPort` 增加 `nowUnixMilliseconds()`，Root `AgentScheduler` 由 composition root 注入同一个 `systemClock`：transient event 的 `occurredAt` 使用 `nowUnixSeconds()`，quiesce 只在入口用 `deadlineUnixSeconds * 1000 - nowUnixMilliseconds()` 计算一次 remaining duration，再交给 timer 等待；删除完全未消费的 `QueuedRun.enqueuedAt`。`SubagentScheduler` 同步去掉直接 `Date.now()`：owner epoch 基于注入 clock 的毫秒值加随机后缀，quiesce deadline 同样经 Clock 计算。当前 scheduler 不存在需要循环比较 elapsed time 的 deadline loop，因此不再为此额外扩一套 agent-wide monotonic duration API。
 
 ### R4：Scheduler 捕获执行异常后只记录日志，没有保证 Run durable failure
 

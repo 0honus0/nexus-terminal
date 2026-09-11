@@ -311,6 +311,7 @@ export const composeAgent = ({
     settings,
     nativeBackend,
     eventHub,
+    systemClock,
     (userId) => runRepository.hostCursor(userId),
     (userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
   );

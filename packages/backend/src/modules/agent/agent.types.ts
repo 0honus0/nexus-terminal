@@ -22,8 +22,10 @@ export interface PageRequest {
 
 export interface ClockPort {
   nowUnixSeconds(): number;
+  nowUnixMilliseconds(): number;
 }
 
 export const systemClock: ClockPort = {
   nowUnixSeconds: () => Math.floor(Date.now() / 1000),
+  nowUnixMilliseconds: () => Date.now(),
 };

@@ -29,7 +29,7 @@ export interface RootSchedulerView {
  */
 export class SubagentScheduler {
   private readonly active = new Map<string, ActiveChild>();
-  private readonly ownerEpoch = Date.now() * 1_000 + randomInt(1, 1_000);
+  private readonly ownerEpoch: number;
   private accepting = false;
   private pumping = false;
   private timer: NodeJS.Timeout | null = null;
@@ -43,7 +43,9 @@ export class SubagentScheduler {
     private readonly participant: SubagentParticipantExecutor,
     private readonly roots: RootSchedulerView,
     private readonly clock: ClockPort,
-  ) {}
+  ) {
+    this.ownerEpoch = this.clock.nowUnixMilliseconds() * 1_000 + randomInt(1, 1_000);
+  }
 
   async initialize(): Promise<void> {
     await this.work.resetClaimedWork(this.ownerEpoch, this.clock.nowUnixSeconds());
@@ -69,7 +71,7 @@ export class SubagentScheduler {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
     for (const active of this.active.values()) active.controller.abort(new Error('AGENT_QUIESCE'));
-    const remainingMs = Math.max(0, deadlineUnixSeconds * 1000 - Date.now());
+    const remainingMs = Math.max(0, deadlineUnixSeconds * 1000 - this.clock.nowUnixMilliseconds());
     if (this.active.size === 0 || remainingMs === 0) return;
     await Promise.race([
       Promise.allSettled([...this.active.values()].map((active) => active.done)),
