@@ -1,4 +1,4 @@
-import { httpClient } from '@/client/http';
+import { agentHttpClient as httpClient } from './agent-http-client';
 import type { AgentArtifactRef, AgentEnvelope, AgentSettingsView } from './agent-api.types';
 
 const unwrap = <T>(envelope: AgentEnvelope<T>): T => envelope.data;

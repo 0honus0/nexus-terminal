@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import {
     agentApi,
+    formatAgentApiError,
     type AgentAppSummary,
     type PluginInstallation,
     type PluginPublisherKey,
@@ -58,13 +59,7 @@
     versions.value.find((item) => item.appId === appId);
   const appSummary = (appId: string): AgentAppSummary | undefined => props.apps.find((item) => item.id === appId);
 
-  const explain = (cause: unknown): string => {
-    if (cause && typeof cause === 'object' && 'response' in cause) {
-      const response = (cause as { response?: { data?: { error?: { message?: string; code?: string } } } }).response;
-      return response?.data?.error?.message || response?.data?.error?.code || 'AGENT_REQUEST_FAILED';
-    }
-    return cause instanceof Error ? cause.message : 'AGENT_REQUEST_FAILED';
-  };
+  const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
   const refresh = async (): Promise<void> => {
     const [nextPublishers, nextInstallations, nextVersions] = await Promise.all([

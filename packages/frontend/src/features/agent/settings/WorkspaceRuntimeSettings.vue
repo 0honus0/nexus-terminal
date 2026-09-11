@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import {
     agentApi,
+    formatAgentApiError,
     type AgentSettingsView,
     type WorkspaceRuntimeAvailability,
     type WorkspaceRuntimeCatalog,
@@ -51,17 +52,8 @@
     return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
   };
 
-  const errorMessage = (cause: unknown): string => {
-    if (cause && typeof cause === 'object' && 'response' in cause) {
-      const response = (cause as { response?: { data?: { error?: { message?: string; code?: string } } } }).response;
-      return (
-        response?.data?.error?.message ||
-        response?.data?.error?.code ||
-        t('agent.settings.workspaceRuntime.requestFailed')
-      );
-    }
-    return cause instanceof Error ? cause.message : t('agent.settings.workspaceRuntime.requestFailed');
-  };
+  const errorMessage = (cause: unknown): string =>
+    formatAgentApiError(cause, t('agent.settings.workspaceRuntime.requestFailed'));
 
   const syncSelection = () => {
     selectedRecipeIds.value = [...requested.value.enabledRecipeIds];

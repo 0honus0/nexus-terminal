@@ -1,4 +1,4 @@
-import { httpClient } from '@/client/http';
+import { agentHttpClient as httpClient } from './agent-http-client';
 import type {
   AgentArtifactRef,
   AgentEnvelope,
@@ -16,6 +16,7 @@ export type {
   AgentSettingsDocument,
   AgentSettingsView,
 } from './agent-api.types';
+export { AgentApiError, formatAgentApiError, toAgentApiError } from './agent-api-error';
 
 export interface AgentAppSummary {
   id: string;

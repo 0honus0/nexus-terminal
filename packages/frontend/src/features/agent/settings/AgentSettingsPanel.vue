@@ -2,6 +2,7 @@
   import { onMounted, ref } from 'vue';
   import {
     agentApi,
+    formatAgentApiError,
     type AgentAppSummary,
     type AgentHardLimits,
     type AgentProviderView,
@@ -36,13 +37,7 @@
   const error = ref('');
   const notice = ref('');
 
-  const message = (cause: unknown): string => {
-    if (cause && typeof cause === 'object' && 'response' in cause) {
-      const response = (cause as { response?: { data?: { error?: { message?: string; code?: string } } } }).response;
-      return response?.data?.error?.message || response?.data?.error?.code || 'Agent request failed.';
-    }
-    return cause instanceof Error ? cause.message : 'Agent request failed.';
-  };
+  const message = (cause: unknown): string => formatAgentApiError(cause, 'Agent request failed.');
 
   const load = async () => {
     loading.value = true;

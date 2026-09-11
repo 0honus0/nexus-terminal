@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import { RecycleScroller } from 'vue-virtual-scroller';
-  import { agentApi, type AgentArtifactRef } from '../api/agent-api';
+  import { agentApi, formatAgentApiError, type AgentArtifactRef } from '../api/agent-api';
 
   const props = defineProps<{
     appId: string;
@@ -19,13 +19,7 @@
   const input = ref<HTMLInputElement | null>(null);
   const selectedIds = computed(() => new Set(props.modelValue.map((item) => item.id)));
 
-  const explain = (cause: unknown): string => {
-    if (cause && typeof cause === 'object' && 'response' in cause) {
-      const response = (cause as { response?: { data?: { error?: { message?: string; code?: string } } } }).response;
-      return response?.data?.error?.message || response?.data?.error?.code || 'AGENT_REQUEST_FAILED';
-    }
-    return cause instanceof Error ? cause.message : 'AGENT_REQUEST_FAILED';
-  };
+  const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
   const load = async (): Promise<void> => {
     busy.value = true;

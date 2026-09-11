@@ -3,7 +3,7 @@
   import { connectionService, type Connection } from '@/features/connections/public';
   import AgentConversation from '../../ai/AgentConversation.vue';
   import { agentEvents } from '../../api/agent-events';
-  import { agentApi } from '../../api/agent-api';
+  import { agentApi, formatAgentApiError } from '../../api/agent-api';
   import type {
     AgentApprovalView,
     AgentCheckpointView,
@@ -66,13 +66,7 @@
   });
   const canSend = computed(() => Boolean(definitions.value[0] && providerSelection.value && currentThread.value));
 
-  const explain = (cause: unknown): string => {
-    if (cause && typeof cause === 'object' && 'response' in cause) {
-      const response = (cause as { response?: { data?: { error?: { code?: string; message?: string } } } }).response;
-      return response?.data?.error?.message || response?.data?.error?.code || 'AGENT_REQUEST_FAILED';
-    }
-    return cause instanceof Error ? cause.message : 'AGENT_REQUEST_FAILED';
-  };
+  const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
   const refreshLedger = async (): Promise<void> => {
     const thread = currentThread.value;

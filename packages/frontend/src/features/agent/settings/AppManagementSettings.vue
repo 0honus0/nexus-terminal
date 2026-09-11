@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { ref, watch } from 'vue';
-  import { agentApi, type AgentAppGrantView, type AgentAppSummary } from '../api/agent-api';
+  import { agentApi, formatAgentApiError, type AgentAppGrantView, type AgentAppSummary } from '../api/agent-api';
 
   const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
   const emit = defineEmits<{
@@ -13,13 +13,7 @@
   const grantBusy = ref<Record<string, boolean>>({});
   const grantErrors = ref<Record<string, string>>({});
 
-  const explain = (cause: unknown): string => {
-    if (cause && typeof cause === 'object' && 'response' in cause) {
-      const response = (cause as { response?: { data?: { error?: { message?: string; code?: string } } } }).response;
-      return response?.data?.error?.message || response?.data?.error?.code || 'AGENT_REQUEST_FAILED';
-    }
-    return cause instanceof Error ? cause.message : 'AGENT_REQUEST_FAILED';
-  };
+  const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
   const loadGrant = async (appId: string): Promise<void> => {
     try {

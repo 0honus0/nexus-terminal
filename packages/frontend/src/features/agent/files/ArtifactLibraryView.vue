@@ -7,7 +7,7 @@
     ArtifactCleanupPreview,
     ArtifactStorageSummary,
   } from '../api/agent-api';
-  import { agentApi } from '../api/agent-api';
+  import { agentApi, formatAgentApiError } from '../api/agent-api';
 
   defineProps<{ apps: AgentAppSummary[] }>();
 
@@ -29,13 +29,7 @@
     return `${(value / 1024 / 1024 / 1024).toFixed(2)} GiB`;
   };
 
-  const explain = (cause: unknown): string => {
-    if (cause && typeof cause === 'object' && 'response' in cause) {
-      const response = (cause as { response?: { data?: { error?: { message?: string; code?: string } } } }).response;
-      return response?.data?.error?.message || response?.data?.error?.code || 'AGENT_REQUEST_FAILED';
-    }
-    return cause instanceof Error ? cause.message : 'AGENT_REQUEST_FAILED';
-  };
+  const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
   const filters = () => ({
     ...(query.value.trim() ? { q: query.value.trim() } : {}),

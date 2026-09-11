@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import {
     agentApi,
+    formatAgentApiError,
     type AgentAppSummary,
     type AgentArtifactRef,
     type AgentWorkspaceView,
@@ -12,6 +13,10 @@
     type PluginWorkspacePermission,
     type WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
+  import WorkspaceArtifactTransfer from './WorkspaceArtifactTransfer.vue';
+  import WorkspaceCreateCard from './WorkspaceCreateCard.vue';
+  import WorkspacePluginGrants from './WorkspacePluginGrants.vue';
+  import WorkspaceToolchainCard from './WorkspaceToolchainCard.vue';
 
   const props = defineProps<{ appId: string; runId: string; busy?: boolean }>();
   const { t } = useI18n();
@@ -22,21 +27,8 @@
   const installations = ref<PluginInstallation[]>([]);
   const versions = ref<PluginVersionView[]>([]);
   const artifacts = ref<AgentArtifactRef[]>([]);
-  const selectedRecipeId = ref('');
-  const createToolVersions = ref<Record<string, string>>({});
-  const workspaceToolVersions = ref<Record<string, Record<string, string>>>({});
-  const selectedRunnerPluginIds = ref<string[]>([]);
-  const retained = ref(false);
   const workspaceKey = ref('');
   const grants = ref<PluginWorkspaceGrant[]>([]);
-  const grantPrincipal = ref('');
-  const grantPath = ref('/**');
-  const grantPermissions = ref<PluginWorkspacePermission[]>(['read', 'list']);
-  const exportPath = ref('/');
-  const exportName = ref('workspace.bin');
-  const exportMediaType = ref('application/octet-stream');
-  const importArtifactId = ref('');
-  const importPath = ref('/imported.bin');
   const notice = ref('');
   const error = ref('');
   const loading = ref(false);
@@ -47,31 +39,6 @@
   const activeWorkspace = computed(
     () => workspaceList.value.find((workspace) => !['deleted', 'failed'].includes(workspace.status)) ?? null,
   );
-  const selectedRecipe = computed(
-    () => catalog.value?.recipes.find((recipe) => recipe.id === selectedRecipeId.value) ?? null,
-  );
-  const packsForFamily = (familyId: string) =>
-    (catalog.value?.packs ?? [])
-      .filter((pack) => pack.familyId === familyId && pack.status === 'supported')
-      .sort((a, b) => b.versionId.localeCompare(a.versionId, undefined, { numeric: true }));
-  const selectableFamilies = (recipeId: string): string[] => {
-    const recipe = catalog.value?.recipes.find((candidate) => candidate.id === recipeId);
-    if (!recipe) return [];
-    return recipe.allowedFamilies.filter(
-      (familyId) => !recipe.defaultFamilies.includes(familyId) && packsForFamily(familyId).length > 0,
-    );
-  };
-  const createToolFamilies = computed(() => (selectedRecipe.value ? selectableFamilies(selectedRecipe.value.id) : []));
-  const pinnedVersion = (workspace: AgentWorkspaceView, familyId: string): string =>
-    workspace.profile.toolchain.find((pack) => pack.familyId === familyId)?.versionId ?? '';
-  const changedWorkspaceVersions = (workspace: AgentWorkspaceView): Record<string, string> => {
-    const draft = workspaceToolVersions.value[workspace.id] ?? {};
-    return Object.fromEntries(
-      selectableFamilies(workspace.profile.recipeId)
-        .filter((familyId) => Boolean(draft[familyId]) && draft[familyId] !== pinnedVersion(workspace, familyId))
-        .map((familyId) => [familyId, draft[familyId]!]),
-    );
-  };
   const runnerCandidates = computed(() =>
     installations.value
       .filter((installation) => installation.status === 'installed')
@@ -105,27 +72,14 @@
       ),
   );
   const selectedWorkspace = computed(() => pluginTargets.value.find((item) => item.key === workspaceKey.value) ?? null);
-  const principalCandidates = computed(() => {
-    const selected = selectedWorkspace.value;
-    if (!selected) return [];
-    return selected.workspace.profile.runnerPlugins.filter((target) => target.pluginId !== selected.targetPluginId);
-  });
 
-  const explain = (cause: unknown): string => {
-    if (cause && typeof cause === 'object' && 'response' in cause) {
-      const response = (cause as { response?: { data?: { error?: { message?: string; code?: string } } } }).response;
-      return response?.data?.error?.message || response?.data?.error?.code || t('agent.workspaceRuntime.requestFailed');
-    }
-    return cause instanceof Error ? cause.message : t('agent.workspaceRuntime.requestFailed');
-  };
+  const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.workspaceRuntime.requestFailed'));
 
   const loadGrants = async (): Promise<void> => {
     const selected = selectedWorkspace.value;
     grants.value = [];
-    grantPrincipal.value = '';
     if (!selected) return;
     grants.value = await agentApi.workspaceGrants(props.appId, selected.workspace.id, selected.targetPluginId);
-    grantPrincipal.value = principalCandidates.value[0]?.pluginId ?? '';
   };
 
   const refresh = async (): Promise<void> => {
@@ -152,30 +106,8 @@
         (artifact) => artifact.appId === props.appId && artifact.status === 'ready',
       );
       workspaceList.value = nextWorkspaces;
-      workspaceToolVersions.value = Object.fromEntries(
-        nextWorkspaces.map((workspace) => [
-          workspace.id,
-          Object.fromEntries(workspace.profile.toolchain.map((pack) => [pack.familyId, pack.versionId])),
-        ]),
-      );
-      if (!nextCatalog.recipes.some((recipe) => recipe.id === selectedRecipeId.value)) {
-        selectedRecipeId.value = nextCatalog.recipes[0]?.id ?? '';
-      }
-      createToolVersions.value = Object.fromEntries(
-        Object.entries(createToolVersions.value).filter(
-          ([familyId, versionId]) =>
-            createToolFamilies.value.includes(familyId) &&
-            packsForFamily(familyId).some((pack) => pack.versionId === versionId),
-        ),
-      );
-      selectedRunnerPluginIds.value = selectedRunnerPluginIds.value.filter((pluginId) =>
-        runnerCandidates.value.some((candidate) => candidate.pluginId === pluginId),
-      );
       if (!pluginTargets.value.some((item) => item.key === workspaceKey.value)) {
         workspaceKey.value = pluginTargets.value[0]?.key ?? '';
-      }
-      if (!artifacts.value.some((artifact) => artifact.id === importArtifactId.value)) {
-        importArtifactId.value = artifacts.value[0]?.id ?? '';
       }
       await loadGrants();
     } catch (cause) {
@@ -200,20 +132,19 @@
     }
   };
 
-  const createWorkspace = (): void => {
-    if (!selectedRecipeId.value || activeWorkspace.value || !catalog.value) return;
+  const createWorkspace = (input: {
+    recipeId: string;
+    versions: Record<string, string>;
+    runnerPluginIds: string[];
+    retained: boolean;
+  }): void => {
+    if (activeWorkspace.value || !catalog.value) return;
     void run(async () => {
       await agentApi.createWorkspace(
         props.appId,
         props.runId,
-        {
-          recipeId: selectedRecipeId.value,
-          versions: Object.fromEntries(
-            Object.entries(createToolVersions.value).filter(([, versionId]) => Boolean(versionId)),
-          ),
-          runnerPluginIds: [...selectedRunnerPluginIds.value],
-        },
-        retained.value,
+        { recipeId: input.recipeId, versions: input.versions, runnerPluginIds: input.runnerPluginIds },
+        input.retained,
         catalog.value!.revision,
       );
       await refresh();
@@ -227,8 +158,7 @@
     }, t('agent.workspaceRuntime.actionSubmitted'));
   };
 
-  const switchToolVersions = (workspace: AgentWorkspaceView): void => {
-    const changes = changedWorkspaceVersions(workspace);
+  const switchToolVersions = (workspace: AgentWorkspaceView, changes: Record<string, string>): void => {
     if (!catalog.value || Object.keys(changes).length === 0) return;
     void run(async () => {
       const result = await agentApi.switchWorkspaceToolVersions(
@@ -248,6 +178,11 @@
     }, t('agent.workspaceRuntime.versionSwitched'));
   };
 
+  const switchActiveToolVersions = (changes: Record<string, string>): void => {
+    if (!activeWorkspace.value) return;
+    switchToolVersions(activeWorkspace.value, changes);
+  };
+
   const replaceGrants = async (next: PluginWorkspaceGrant[]): Promise<void> => {
     const selected = selectedWorkspace.value;
     if (!selected) return;
@@ -259,22 +194,20 @@
     );
   };
 
-  const addGrant = (): void => {
+  const addGrant = (input: {
+    principalPluginId: string;
+    path: string;
+    permissions: PluginWorkspacePermission[];
+  }): void => {
     const selected = selectedWorkspace.value;
-    if (!selected || !grantPrincipal.value || !grantPath.value.startsWith('/') || grantPermissions.value.length === 0)
-      return;
+    if (!selected) return;
     void run(async () => {
       const next = grants.value.filter(
-        (grant) => !(grant.principalPluginId === grantPrincipal.value && grant.path === grantPath.value),
+        (grant) => !(grant.principalPluginId === input.principalPluginId && grant.path === input.path),
       );
       await replaceGrants([
         ...next,
-        {
-          targetPluginId: selected.targetPluginId,
-          principalPluginId: grantPrincipal.value,
-          path: grantPath.value,
-          permissions: [...grantPermissions.value],
-        },
+        { targetPluginId: selected.targetPluginId, ...input, permissions: [...input.permissions] },
       ]);
     }, t('agent.workspaceRuntime.grantsSaved'));
   };
@@ -285,31 +218,30 @@
     }, t('agent.workspaceRuntime.grantsSaved'));
   };
 
-  const exportArtifact = (): void => {
+  const exportArtifact = (input: { path: string; name: string; mediaType: string }): void => {
     const selected = selectedWorkspace.value;
-    if (!selected || !exportPath.value.startsWith('/') || !exportName.value || !exportMediaType.value) return;
+    if (!selected) return;
     void run(async () => {
       const artifact = await agentApi.exportWorkspaceArtifact(
         props.appId,
         selected.workspace.id,
         selected.targetPluginId,
-        { path: exportPath.value, name: exportName.value, mediaType: exportMediaType.value },
+        input,
       );
       artifacts.value = [artifact, ...artifacts.value.filter((candidate) => candidate.id !== artifact.id)];
-      importArtifactId.value ||= artifact.id;
       notice.value = t('agent.workspaceRuntime.exported', { id: artifact.id });
     }, '');
   };
 
-  const importArtifact = (): void => {
+  const importArtifact = (input: { artifactId: string; path: string }): void => {
     const selected = selectedWorkspace.value;
-    if (!selected || !importArtifactId.value || !importPath.value.startsWith('/')) return;
+    if (!selected) return;
     void run(async () => {
       const result = await agentApi.importArtifactToWorkspace(
         props.appId,
         selected.workspace.id,
         selected.targetPluginId,
-        { artifactId: importArtifactId.value, path: importPath.value },
+        input,
       );
       notice.value = t('agent.workspaceRuntime.imported', { bytes: result.writtenBytes });
     }, '');
@@ -320,9 +252,6 @@
     () => void refresh(),
     { immediate: true },
   );
-  watch(selectedRecipeId, () => {
-    createToolVersions.value = {};
-  });
   watch(workspaceKey, () => {
     if (!loading.value) void loadGrants().catch((cause) => (error.value = explain(cause)));
   });
@@ -348,63 +277,13 @@
     <p v-if="error" class="mt-2 rounded bg-error/10 px-2 py-1 text-[10px] text-error">{{ error }}</p>
     <p v-if="notice" class="mt-2 rounded bg-header px-2 py-1 text-[10px]">{{ notice }}</p>
 
-    <div v-if="catalog && !activeWorkspace" class="mt-3 rounded bg-background p-2">
-      <div class="grid gap-2 sm:grid-cols-2">
-        <label class="text-[10px] text-text-secondary">
-          {{ $t('agent.workspaceRuntime.recipe') }}
-          <select v-model="selectedRecipeId" class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs">
-            <option v-for="recipe in catalog.recipes" :key="recipe.id" :value="recipe.id">
-              {{ recipe.displayName }}
-            </option>
-          </select>
-        </label>
-        <label class="flex items-end gap-2 pb-1 text-[10px]">
-          <input v-model="retained" type="checkbox" />
-          {{ $t('agent.workspaceRuntime.retained') }}
-        </label>
-      </div>
-      <div v-if="createToolFamilies.length" class="mt-2 rounded border border-border p-2">
-        <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.toolVersions') }}</div>
-        <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.toolVersionsHint') }}</p>
-        <div class="mt-2 grid gap-2 sm:grid-cols-3">
-          <label v-for="familyId in createToolFamilies" :key="familyId" class="text-[10px] text-text-secondary">
-            {{ familyId }}
-            <select
-              v-model="createToolVersions[familyId]"
-              class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
-            >
-              <option value="">{{ $t('agent.workspaceRuntime.toolNotSelected') }}</option>
-              <option v-for="pack in packsForFamily(familyId)" :key="pack.versionId" :value="pack.versionId">
-                {{ pack.versionId }}
-              </option>
-            </select>
-          </label>
-        </div>
-      </div>
-      <div class="mt-2">
-        <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.runnerPlugins') }}</div>
-        <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.runnerPluginsHint') }}</p>
-        <label
-          v-for="plugin in runnerCandidates"
-          :key="plugin.pluginId"
-          class="mt-1 flex items-center gap-2 text-[10px]"
-        >
-          <input v-model="selectedRunnerPluginIds" type="checkbox" :value="plugin.pluginId" />
-          <span>{{ plugin.displayName }} · {{ plugin.pluginId }} · v{{ plugin.version }}</span>
-        </label>
-        <p v-if="runnerCandidates.length === 0" class="mt-1 text-[9px] text-text-secondary">
-          {{ $t('agent.workspaceRuntime.noRunnerPlugins') }}
-        </p>
-      </div>
-      <button
-        type="button"
-        class="mt-3 rounded bg-primary px-2 py-1 text-[11px] text-white disabled:opacity-50"
-        :disabled="locked || !selectedRecipeId"
-        @click="createWorkspace"
-      >
-        {{ $t('agent.workspaceRuntime.create') }}
-      </button>
-    </div>
+    <WorkspaceCreateCard
+      v-if="catalog && !activeWorkspace"
+      :catalog="catalog"
+      :runner-candidates="runnerCandidates"
+      :locked="locked"
+      @create="createWorkspace"
+    />
 
     <div v-if="activeWorkspace" class="mt-3 space-y-2">
       <p class="text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.oneWorkspacePerRuntime') }}</p>
@@ -426,44 +305,13 @@
             })
           }}
         </p>
-        <div
-          v-if="selectableFamilies(activeWorkspace.profile.recipeId).length"
-          class="mt-2 rounded border border-border p-2"
-        >
-          <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.workspaceToolVersions') }}</div>
-          <p class="mt-0.5 text-[9px] text-text-secondary">
-            {{ $t('agent.workspaceRuntime.workspaceToolVersionsHint') }}
-          </p>
-          <div class="mt-2 grid gap-2 sm:grid-cols-3">
-            <label
-              v-for="familyId in selectableFamilies(activeWorkspace.profile.recipeId)"
-              :key="familyId"
-              class="text-[10px] text-text-secondary"
-            >
-              {{ familyId }}
-              <select
-                v-model="workspaceToolVersions[activeWorkspace.id][familyId]"
-                class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
-                :disabled="locked"
-              >
-                <option v-if="!pinnedVersion(activeWorkspace, familyId)" value="">
-                  {{ $t('agent.workspaceRuntime.toolNotSelected') }}
-                </option>
-                <option v-for="pack in packsForFamily(familyId)" :key="pack.versionId" :value="pack.versionId">
-                  {{ pack.versionId }}
-                </option>
-              </select>
-            </label>
-          </div>
-          <button
-            type="button"
-            class="mt-2 rounded border border-border px-2 py-1 text-[10px] disabled:opacity-50"
-            :disabled="locked || Object.keys(changedWorkspaceVersions(activeWorkspace)).length === 0"
-            @click="switchToolVersions(activeWorkspace)"
-          >
-            {{ $t('agent.workspaceRuntime.switchToolVersions') }}
-          </button>
-        </div>
+        <WorkspaceToolchainCard
+          v-if="catalog"
+          :workspace="activeWorkspace"
+          :catalog="catalog"
+          :locked="locked"
+          @switch="switchActiveToolVersions"
+        />
         <div v-if="activeWorkspace.profile.runnerPlugins.length" class="mt-1 space-y-1">
           <div
             v-for="target in activeWorkspace.profile.runnerPlugins"
@@ -526,119 +374,20 @@
       </article>
     </div>
 
-    <div v-if="pluginTargets.length" class="mt-4 border-t border-border pt-3">
-      <h4 class="font-medium">{{ $t('agent.workspaceRuntime.workspaceTitle') }}</h4>
-      <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.workspaceHint') }}</p>
-      <select
-        v-model="workspaceKey"
-        class="mt-2 w-full rounded border border-border bg-background px-2 py-1 text-[10px]"
-      >
-        <option v-for="workspaceTarget in pluginTargets" :key="workspaceTarget.key" :value="workspaceTarget.key">
-          {{ workspaceTarget.label }}
-        </option>
-      </select>
-
-      <div v-if="selectedWorkspace" class="mt-3 rounded bg-background p-2">
-        <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.workspaceAcl') }}</div>
-        <p v-if="grants.length === 0" class="mt-1 text-[9px] text-text-secondary">
-          {{ $t('agent.workspaceRuntime.defaultDeny') }}
-        </p>
-        <div
-          v-for="(grant, index) in grants"
-          :key="`${grant.principalPluginId}:${grant.path}`"
-          class="mt-2 flex items-start justify-between gap-2 rounded border border-border p-2 text-[9px]"
-        >
-          <div class="min-w-0 break-words">
-            <div class="font-medium">{{ grant.principalPluginId }}</div>
-            <div>
-              {{ grant.path }} ·
-              {{
-                grant.permissions.map((permission) => $t(`agent.workspaceRuntime.permission.${permission}`)).join(', ')
-              }}
-            </div>
-          </div>
-          <button type="button" class="text-error" :disabled="locked" @click="removeGrant(index)">
-            {{ $t('agent.workspaceRuntime.revoke') }}
-          </button>
-        </div>
-        <div v-if="principalCandidates.length" class="mt-3 grid gap-2">
-          <select v-model="grantPrincipal" class="rounded border border-border bg-card px-2 py-1 text-[10px]">
-            <option v-for="principal in principalCandidates" :key="principal.pluginId" :value="principal.pluginId">
-              {{ principal.pluginId }}
-            </option>
-          </select>
-          <input
-            v-model.trim="grantPath"
-            class="rounded border border-border bg-card px-2 py-1 text-[10px]"
-            :placeholder="$t('agent.workspaceRuntime.pathPlaceholder')"
-          />
-          <div class="flex flex-wrap gap-2 text-[9px]">
-            <label
-              v-for="permission in ['read', 'write', 'list', 'delete'] as PluginWorkspacePermission[]"
-              :key="permission"
-              class="flex items-center gap-1"
-            >
-              <input v-model="grantPermissions" type="checkbox" :value="permission" />
-              {{ $t(`agent.workspaceRuntime.permission.${permission}`) }}
-            </label>
-          </div>
-          <button
-            type="button"
-            class="w-fit rounded border border-border px-2 py-1 text-[10px]"
-            :disabled="locked || !grantPrincipal || !grantPath.startsWith('/') || grantPermissions.length === 0"
-            @click="addGrant"
-          >
-            {{ $t('agent.workspaceRuntime.grant') }}
-          </button>
-        </div>
-        <p v-else class="mt-2 text-[9px] text-text-secondary">
-          {{ $t('agent.workspaceRuntime.noCrossPluginPrincipal') }}
-        </p>
-      </div>
-
-      <div v-if="selectedWorkspace" class="mt-3 grid gap-3 sm:grid-cols-2">
-        <form class="rounded bg-background p-2" @submit.prevent="exportArtifact">
-          <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.exportTitle') }}</div>
-          <input
-            v-model.trim="exportPath"
-            class="mt-2 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
-            :placeholder="$t('agent.workspaceRuntime.workspacePath')"
-          />
-          <input
-            v-model.trim="exportName"
-            class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
-            :placeholder="$t('agent.workspaceRuntime.artifactName')"
-          />
-          <input
-            v-model.trim="exportMediaType"
-            class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
-            :placeholder="$t('agent.workspaceRuntime.mediaType')"
-          />
-          <button type="submit" class="mt-2 rounded border border-border px-2 py-1 text-[10px]" :disabled="locked">
-            {{ $t('agent.workspaceRuntime.exportAction') }}
-          </button>
-        </form>
-        <form class="rounded bg-background p-2" @submit.prevent="importArtifact">
-          <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.importTitle') }}</div>
-          <select
-            v-model="importArtifactId"
-            class="mt-2 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
-          >
-            <option value="">{{ $t('agent.workspaceRuntime.selectArtifact') }}</option>
-            <option v-for="artifact in artifacts" :key="artifact.id" :value="artifact.id">
-              {{ artifact.originalName }} · {{ artifact.id }}
-            </option>
-          </select>
-          <input
-            v-model.trim="importPath"
-            class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-[10px]"
-            :placeholder="$t('agent.workspaceRuntime.workspacePath')"
-          />
-          <button type="submit" class="mt-2 rounded border border-border px-2 py-1 text-[10px]" :disabled="locked">
-            {{ $t('agent.workspaceRuntime.importAction') }}
-          </button>
-        </form>
-      </div>
-    </div>
+    <WorkspacePluginGrants
+      v-model="workspaceKey"
+      :targets="pluginTargets"
+      :grants="grants"
+      :locked="locked"
+      @add="addGrant"
+      @remove="removeGrant"
+    />
+    <WorkspaceArtifactTransfer
+      v-if="selectedWorkspace"
+      :artifacts="artifacts"
+      :locked="locked"
+      @export="exportArtifact"
+      @import="importArtifact"
+    />
   </section>
 </template>
