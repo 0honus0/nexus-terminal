@@ -21,7 +21,8 @@ const MISE_VERSION = '2026.9.5';
 const MISE_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_MISE_OUTPUT_BYTES = 64 * 1024;
 const MAX_RELOCATABLE_TEXT_BYTES = 8 * 1024 * 1024;
-const INSTALL_STAGING_PATH = '/nexus-staging';
+const INSTALL_OUTPUT_ROOT = '/nexus-output';
+const INSTALL_STAGING_PATH = `${INSTALL_OUTPUT_ROOT}/pack`;
 const INSTALL_MISE_ROOT = '/nexus-mise';
 
 interface PackManifest {
@@ -444,8 +445,12 @@ export class PackInstaller {
         throw new Error('WORKSPACE_TOOLCHAIN_INSTALLER_VERSION_MISMATCH');
       fs.mkdirSync(staging, { recursive: true, mode: 0o700 });
       await this.materializeWithMiseSandbox(miseBin, miseRoot, staging, pack);
-      relocateTextTree(staging, INSTALL_STAGING_PATH, canonicalPackTarget(pack));
-      await this.verifyMiseVersion(staging, pack);
+      const materialized = path.join(staging, 'pack');
+      if (!fs.existsSync(materialized) || !fs.statSync(materialized).isDirectory()) {
+        throw new Error('WORKSPACE_TOOLCHAIN_INSTALL_INVALID');
+      }
+      relocateTextTree(materialized, INSTALL_STAGING_PATH, canonicalPackTarget(pack));
+      await this.verifyMiseVersion(materialized, pack);
       const manifest: PackManifest = {
         schemaVersion: 1,
         familyId: pack.familyId,
@@ -455,13 +460,14 @@ export class PackInstaller {
         runnerApiRange: pack.runnerApiRange,
         dependencies: pack.dependencies.map((dependency) => ({ ...dependency })),
       };
-      fs.writeFileSync(path.join(staging, 'pack.json'), `${JSON.stringify(manifest)}\n`, { mode: 0o644 });
-      this.verifyManifest(staging, pack);
-      const digest = normalizedTreeDigest(staging);
+      fs.writeFileSync(path.join(materialized, 'pack.json'), `${JSON.stringify(manifest)}\n`, { mode: 0o644 });
+      this.verifyManifest(materialized, pack);
+      const digest = normalizedTreeDigest(materialized);
       if (digest !== ref.contentDigest) throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
-      this.store.writeMarker(staging, ref, Math.floor(Date.now() / 1000));
-      lockAndSyncTree(staging);
-      this.store.commit(staging, ref);
+      this.store.writeMarker(materialized, ref, Math.floor(Date.now() / 1000));
+      lockAndSyncTree(materialized);
+      this.store.commit(materialized, ref);
+      this.store.discardStaging(staging);
     } catch (error) {
       this.store.discardStaging(staging);
       throw error;
@@ -502,7 +508,7 @@ export class PackInstaller {
       INSTALL_MISE_ROOT,
       '--bind',
       staging,
-      INSTALL_STAGING_PATH,
+      INSTALL_OUTPUT_ROOT,
       '--dir',
       '/work',
       '--chdir',
