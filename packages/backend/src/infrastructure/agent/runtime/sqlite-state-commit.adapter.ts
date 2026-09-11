@@ -23,6 +23,7 @@ import type {
   DeleteRunCommitResult,
   DurableEventInput,
   IncreaseRunBudgetCommitResult,
+  InterruptUnexpectedRootExecutionCommand,
   PauseModelStepForBudgetCommand,
   PauseRuntimeForBudgetCommand,
   ParkModelStepCommand,
@@ -236,6 +237,60 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
       const run = mapRunRow(updatedRow);
       await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(run), command.now);
       return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
+    });
+  }
+
+  async interruptUnexpectedRootExecution(
+    command: InterruptUnexpectedRootExecutionCommand,
+  ): Promise<StateCommitResult | null> {
+    return this.db.transaction(async (tx) => {
+      const row = await tx.queryOne<RunRow>(
+        `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+        [command.runId, command.scope.userId, command.scope.appId],
+      );
+      if (!row) throw new Error('NOT_FOUND');
+      if (!['created', 'running'].includes(row.status)) return null;
+
+      const unknownMutation = await tx.queryOne<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM agent_tool_calls
+         WHERE run_id = ? AND risk <> 'read' AND status IN ('running','reconciling')`,
+        [row.id],
+      );
+      const needsReconciliation = (unknownMutation?.count ?? 0) > 0;
+      const events: DurableEventInput[] = [
+        { type: 'run.error', payload: { code: command.errorCode } },
+        {
+          type: 'run.interrupted',
+          payload: {
+            reason: 'execution_boundary_error',
+            errorCode: command.errorCode,
+            needsReconciliation,
+          },
+        },
+        { type: 'run.status_changed', payload: { from: row.status, to: 'interrupted' } },
+      ];
+      const committedEvents = await appendEvents(tx, row, events, command.now);
+      const updatedRow = await patchRun(
+        tx,
+        row,
+        { status: 'interrupted', needsReconciliation, completedAt: command.now },
+        events.length,
+        command.now,
+      );
+      await tx.execute(
+        `UPDATE agent_runtimes SET status = 'interrupted', schedule_state = 'finished', updated_at = ?
+         WHERE run_id = ? AND status IN ('created','running','stopping')`,
+        [command.now, row.id],
+      );
+      await tx.execute(
+        `UPDATE agent_scheduler_work SET status = 'cancelled', owner_epoch = NULL, version = version + 1, updated_at = ?
+         WHERE run_id = ? AND status IN ('queued','waiting')`,
+        [command.now, row.id],
+      );
+      if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, command.now);
+      const run = mapRunRow(updatedRow);
+      await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(run), command.now);
+      return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
     });
   }
 

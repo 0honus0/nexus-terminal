@@ -318,6 +318,14 @@ Runtime 其他模块已注入 `ClockPort`，但 Scheduler 直接使用墙上时�
 
 建议：为 `AgentBackendPort.execute()` 定义可恢复/不可恢复错误契约；Scheduler catch 必须调用一个幂等的 `StateCommit.markExecutionInterrupted/failed`，带 expected version、owner epoch 和错误分类。若提交失败，写入 recovery queue，由 lifecycle sweep 重试，而不是仅依赖日志。
 
+> **解决方案（已采用）**
+>
+> 当前源码复核后，业务级 Provider/model/tool 错误本来就主要在 `NativeAgentBackend` 内通过 `settleModelStep` / `failAtSafeBoundary` 等 durable transition 收敛；真正会越过 harness 的是 root runtime lookup、snapshot/StateCommit 基础设施异常或未覆盖的执行边界异常。因此没有把 RunRepository/StateCommit authority 下放给 `AgentScheduler`。`NativeAgentBackend.execute()` 现在增加最外层 execution boundary：`NEW_INPUT` 与 `AGENT_QUIESCE` 保留各自已有控制路径，显式 `CANCELLED` 在最新 snapshot 仍可取消时完成 durable cancel；其余异常调用新的 `StateCommit.interruptUnexpectedRootExecution()`。
+>
+> 该 StateCommit 在同一 SQLite 事务内重读 Run，只对仍为 `created/running` 的事实执行收敛，并检查全 Run 是否存在 `risk <> read` 且 `running/reconciling` 的 ToolCall。有未知 mutation 时写 `interrupted + needsReconciliation=true`，否则写普通 `interrupted`；同时写 `run.error` / `run.interrupted` / `run.status_changed`，关闭 Runtime schedule state，并取消尚未 claim 的 child durable work。这样不会把未知副作用误报为 `failed`，也不会因为 scheduler catch 获得 mutation/Run transition authority。
+>
+> Scheduler 的最后一层 `catch` 仍保留为“连 recovery StateCommit 自身都无法访问持久层”时的日志兜底；它不会重放 backend 或 mutation。SQLite 已配置 5 秒 `busy_timeout`，而进程重启时现有 `interruptNonTerminalRuns()` 仍是第二道 fail-closed 收敛。
+
 ### R5：Backend EventHub 只负责进程内分发，无法单独保证订阅期间的顺序与背压
 
 位置：`packages/backend/src/modules/agent/runtime/events/event-hub.ts`。

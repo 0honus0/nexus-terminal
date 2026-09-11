@@ -58,6 +58,42 @@ export class NativeAgentBackend implements AgentBackendPort {
   ) {}
 
   async *execute(initial: RunView, signal: AbortSignal): AsyncIterable<BackendSignal> {
+    try {
+      yield* this.executePersisted(initial, signal);
+    } catch (error) {
+      const abortReason = signalReason(signal);
+      if (abortReason === 'NEW_INPUT' || abortReason === 'AGENT_QUIESCE') return;
+
+      const scope = { userId: initial.userId, appId: initial.appId };
+      if (abortReason === 'CANCELLED') {
+        const latest = await this.repository.snapshot(scope, initial.id);
+        if (
+          !latest ||
+          ['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'].includes(latest.status)
+        ) {
+          return;
+        }
+        if (latest.status === 'running' || latest.status === 'cancelling') {
+          const cancelled = await this.cancelAtSafeBoundary(latest);
+          yield { type: 'durable', runId: latest.id, cursor: cancelled.eventCursor };
+          yield { type: 'settled', run: cancelled.run };
+        }
+        return;
+      }
+
+      const interrupted = await this.stateCommit.interruptUnexpectedRootExecution({
+        scope,
+        runId: initial.id,
+        errorCode: errorCode(error),
+        now: this.clock.nowUnixSeconds(),
+      });
+      if (!interrupted) return;
+      yield { type: 'durable', runId: initial.id, cursor: interrupted.eventCursor };
+      yield { type: 'settled', run: interrupted.run };
+    }
+  }
+
+  private async *executePersisted(initial: RunView, signal: AbortSignal): AsyncIterable<BackendSignal> {
     const scope = { userId: initial.userId, appId: initial.appId };
     const runtimeId = await this.repository.rootRuntimeId(scope, initial.id);
 

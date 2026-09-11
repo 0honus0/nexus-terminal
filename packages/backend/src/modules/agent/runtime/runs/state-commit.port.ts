@@ -496,6 +496,13 @@ export interface SupersedeModelStepCommand {
   now: number;
 }
 
+export interface InterruptUnexpectedRootExecutionCommand {
+  scope: Scope;
+  runId: string;
+  errorCode: string;
+  now: number;
+}
+
 export interface StateCommitPort {
   createRun(command: AtomicCreateRun): Promise<CreateRunCommitResult>;
   appendInput(command: AtomicAppendInput): Promise<AppendInputCommitResult>;
@@ -526,6 +533,7 @@ export interface StateCommitPort {
   settleMutationTool(command: SettleMutationToolCommand): Promise<StateCommitResult>;
   supersedeModelStep(command: SupersedeModelStepCommand): Promise<StateCommitResult>;
   commit(command: StateCommitCommand): Promise<StateCommitResult>;
+  interruptUnexpectedRootExecution(command: InterruptUnexpectedRootExecutionCommand): Promise<StateCommitResult | null>;
   quiesceApp(appId: string, now: number): Promise<number>;
   interruptNonTerminalRuns(now: number): Promise<number>;
 }
