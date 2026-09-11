@@ -101,21 +101,21 @@
         "limit": "Current limit",
         "hardLimitHint": "Requested storage values remain bounded by the corresponding Hard Limits."
       },
-      "environment": {
+      "workspaceRuntime": {
         "title": "Workspace dev environment",
         "description": "Manage the isolated Agent Runner, Workspace profiles, shared multi-version Tool Packs, storage, and runtime cleanup.",
         "available": "Available",
         "unavailable": "Unavailable",
         "refresh": "Refresh",
         "controllerVersion": "Controller {version}",
-        "requestFailed": "Environment request failed.",
+        "requestFailed": "Workspace Runtime request failed.",
         "selectRecipe": "Select at least one Workspace profile.",
         "setupTitle": "Setup and profiles",
         "setupDescription": "Enable the Workspace dev profile and prepare its exact Tool Packs. Enabled and installed are tracked separately.",
         "previewSetup": "Preview setup",
         "setupImpact": "{count} pack(s) need installation, approximately {bytes}.",
         "confirmSetup": "Confirm setup",
-        "setupSubmitted": "Environment setup submitted.",
+        "setupSubmitted": "Workspace Runtime setup submitted.",
         "storageTitle": "Runner storage",
         "stateBytes": "State",
         "packBytes": "Packs",
@@ -127,7 +127,7 @@
         "previewCleanup": "Preview runtime cleanup",
         "clearCache": "Clear cache",
         "previewReset": "Preview settings reset",
-        "cleanupImpact": "{count} environment(s), about {bytes} reclaimable. Active: {active}; retained: {retained}.",
+        "cleanupImpact": "{count} workspace(s), about {bytes} reclaimable. Active: {active}; retained: {retained}.",
         "confirmCleanup": "Confirm runtime cleanup",
         "resetImpact": "This restores Workspace profile/tool-version/resource/network preferences to release defaults. Artifacts and Providers are not changed.",
         "confirmReset": "Confirm settings reset",
@@ -142,12 +142,12 @@
         "enableVersion": "Enable",
         "makeDefault": "Make default",
         "uninstall": "Uninstall",
-        "preferencesSaved": "Environment version preferences saved.",
+        "preferencesSaved": "Tool version preferences saved.",
         "installSubmitted": "Pack installation submitted.",
         "uninstallSubmitted": "Pack uninstall submitted.",
         "cleanupSubmitted": "Runtime cleanup submitted.",
         "cacheSubmitted": "Cache cleanup submitted.",
-        "resetComplete": "Environment settings restored to defaults.",
+        "resetComplete": "Workspace Runtime settings restored to defaults.",
         "uninstallTitle": "Uninstall {name}",
         "uninstallImpact": "Releases about {bytes}. In use: {inUse}. Replacement default: {replacement}.",
         "yes": "Yes",
@@ -156,7 +156,7 @@
         "confirmUninstall": "Confirm uninstall",
         "cancel": "Cancel",
         "commandStatus": "Last command: {action} · {status}",
-        "egressUnavailable": "Network allowlists are fail-closed on this Runner. Environments that request outbound access will not start until egress enforcement is available."
+        "egressUnavailable": "Network allowlists are fail-closed on this Runner. Workspaces that request outbound access will not start until egress enforcement is available."
       },
       "safety": {
         "title": "Safety and network",
@@ -346,7 +346,7 @@
       "checkpointWatermark": "Ledger #{ledger} · event #{event}",
       "resumeCheckpoint": "Resume as new run"
     },
-    "environments": {
+    "workspaceRuntime": {
       "title": "Workspace dev environment",
       "description": "One Workspace keeps stable project files while each runtime generation composes Node, Python, Go, and Runner Plugin versions.",
       "refresh": "Refresh",
@@ -363,12 +363,11 @@
       "versionSwitchUnknown": "Workspace tool version switch outcome is unknown and must be reconciled before continuing.",
       "generationAndTargets": "Generation {generation} · {count} frozen Runner Plugin target(s)",
       "runnerPlugins": "Runner Plugins",
-      "runnerPluginsHint": "Targets are explicit and frozen into the Environment snapshot. Plugins do not create Docker containers.",
+      "runnerPluginsHint": "Targets are explicit and frozen into the Workspace profile. Plugins do not create Docker containers.",
       "noRunnerPlugins": "No enabled installed Plugin exposes a Runner target.",
-      "create": "Create environment",
-      "created": "Environment group created.",
-      "actionSubmitted": "Environment action submitted.",
-      "oneGroupPerRuntime": "A runtime owns at most one active EnvironmentGroup. Delete it before creating a replacement.",
+      "create": "Create Workspace",
+      "created": "Workspace created.",
+      "actionSubmitted": "Workspace action submitted.",
       "frozenTargets": "{count} frozen Runner Plugin target(s)",
       "targetContract": "Version {version} · SDK {sdk} · protocol {protocol}",
       "targetSource": "{entry} · sha256:{hash}",
@@ -384,7 +383,7 @@
       "grant": "Grant access",
       "revoke": "Revoke",
       "grantsSaved": "Workspace ACL saved.",
-      "noCrossPluginPrincipal": "Add at least two Runner Plugins to this Environment to grant cross-Plugin access.",
+      "noCrossPluginPrincipal": "Add at least two Runner Plugins to this Workspace to grant cross-Plugin access.",
       "exportTitle": "Workspace → Artifact",
       "importTitle": "Artifact → Workspace",
       "workspacePath": "Workspace path",
@@ -413,7 +412,8 @@
       "importAction": "Import",
       "exported": "Exported Artifact {id}.",
       "imported": "Imported {bytes} bytes into the workspace.",
-      "requestFailed": "Environment request failed."
+      "requestFailed": "Workspace Runtime request failed.",
+      "oneWorkspacePerRuntime": "A runtime owns at most one active Workspace. Delete it before creating a replacement."
     },
     "subagents": {
       "title": "Subagents",

@@ -3,8 +3,8 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
-import type { EnvironmentCommand, EnvironmentJobRequest, EnvironmentRecord } from '../types';
-import { EnvironmentCatalog } from './environment-catalog';
+import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, WorkspaceRecord } from '../types';
+import { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import { SandboxEngine } from './sandbox-engine';
 import { RunnerJournal, payloadHash } from './journal';
 import { PackInstaller } from './pack-installer';
@@ -14,6 +14,7 @@ import { CleanupPlanner } from './cleanup-planner';
 import { PluginRunnerRuntime } from './plugin-runner-runtime';
 import { MAX_HOST_WORKSPACE_TRANSFER_BYTES, type WorkspacePermission } from './workspace-broker';
 
+const RUNNER_API_VERSION = '2026-09-11';
 const MAX_BODY_BYTES = 256 * 1024;
 const json = (response: ServerResponse, status: number, body: unknown): void => {
   response.statusCode = status;
@@ -76,7 +77,7 @@ const equalsToken = (candidate: string, expected: string): boolean => {
 export interface RunnerControllerDependencies {
   token: string;
   deploymentId: string;
-  catalog: EnvironmentCatalog;
+  catalog: WorkspaceRuntimeCatalog;
   journal: RunnerJournal;
   sandboxEngine: SandboxEngine;
   installer: PackInstaller;
@@ -99,6 +100,10 @@ export class RunnerControllerServer {
         json(response, 401, { error: 'UNAUTHORIZED' });
         return;
       }
+      if (request.headers['x-nexus-agent-protocol'] !== RUNNER_API_VERSION) {
+        json(response, 426, { error: 'RUNNER_PROTOCOL_UNSUPPORTED', expected: RUNNER_API_VERSION });
+        return;
+      }
       const url = new URL(request.url ?? '/', 'http://runner.internal');
       if (request.method === 'GET' && url.pathname === '/v1/availability') {
         const sandbox = this.dependencies.sandboxEngine.availability();
@@ -116,8 +121,8 @@ export class RunnerControllerServer {
       if (request.method === 'GET' && url.pathname === '/v1/catalog') {
         const catalog = this.dependencies.catalog.load();
         const active = this.dependencies.journal
-          .environments()
-          .filter((environment) => !['deleted', 'failed'].includes(environment.status));
+          .workspaces()
+          .filter((workspace) => !['deleted', 'failed'].includes(workspace.status));
         const packs = catalog.packs.map((pack) => {
           const contentDigest = pack.contentDigestByArch[process.arch] ?? '';
           const ref = { familyId: pack.familyId, versionId: pack.versionId, contentDigest };
@@ -139,8 +144,8 @@ export class RunnerControllerServer {
             enabled: supported && pack.status === 'supported',
             inUse:
               supported &&
-              active.some((environment) =>
-                environment.packs.some(
+              active.some((workspace) =>
+                workspace.toolchain.some(
                   (candidate) =>
                     candidate.familyId === ref.familyId &&
                     candidate.versionId === ref.versionId &&
@@ -161,22 +166,21 @@ export class RunnerControllerServer {
         json(response, 200, this.dependencies.storage.report());
         return;
       }
-      const workspaceFileMatch = url.pathname.match(/^\/v1\/environments\/([^/]+)\/workspaces\/([^/]+)\/file$/);
+      const workspaceFileMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/plugins\/([^/]+)\/file$/);
       if (workspaceFileMatch && (request.method === 'GET' || request.method === 'PUT')) {
-        const environmentId = decodeURIComponent(workspaceFileMatch[1]!);
+        const workspaceId = decodeURIComponent(workspaceFileMatch[1]!);
         const targetPluginId = decodeURIComponent(workspaceFileMatch[2]!);
         const generation = Number(url.searchParams.get('generation'));
         const logicalPath = url.searchParams.get('path') ?? '';
-        const environment = this.dependencies.journal.environment(environmentId);
-        if (!environment || ['deleted', 'failed'].includes(environment.status))
-          throw new Error('ENVIRONMENT_NOT_FOUND');
-        if (generation !== environment.generation) throw new Error('ENVIRONMENT_GENERATION_CONFLICT');
-        if (!(environment.runnerPlugins ?? []).some((target) => target.pluginId === targetPluginId)) {
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('WORKSPACE_NOT_FOUND');
+        if (generation !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        if (!(workspace.runnerPlugins ?? []).some((target) => target.pluginId === targetPluginId)) {
           throw new Error('WORKSPACE_TARGET_NOT_FOUND');
         }
         if (request.method === 'GET') {
           const read = await this.dependencies.pluginRunner.openWorkspaceFileRead(
-            environmentId,
+            workspaceId,
             generation,
             targetPluginId,
             logicalPath,
@@ -190,7 +194,7 @@ export class RunnerControllerServer {
         }
         const expectedBytes = workspaceContentLength(request);
         await this.dependencies.pluginRunner.writeWorkspaceFileStream(
-          environmentId,
+          workspaceId,
           generation,
           targetPluginId,
           logicalPath,
@@ -200,26 +204,26 @@ export class RunnerControllerServer {
         json(response, 200, { writtenBytes: expectedBytes });
         return;
       }
-      const workspaceGrantMatch = url.pathname.match(/^\/v1\/environments\/([^/]+)\/workspaces\/([^/]+)\/grants$/);
+      const workspaceGrantMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/plugins\/([^/]+)\/grants$/);
       if (workspaceGrantMatch && (request.method === 'GET' || request.method === 'POST')) {
-        const environmentId = decodeURIComponent(workspaceGrantMatch[1]!);
+        const workspaceId = decodeURIComponent(workspaceGrantMatch[1]!);
         const targetPluginId = decodeURIComponent(workspaceGrantMatch[2]!);
-        const environment = this.dependencies.journal.environment(environmentId);
-        if (!environment) throw new Error('ENVIRONMENT_NOT_FOUND');
-        const targetIds = new Set((environment.runnerPlugins ?? []).map((target) => target.pluginId));
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
+        const targetIds = new Set((workspace.runnerPlugins ?? []).map((target) => target.pluginId));
         if (!targetIds.has(targetPluginId)) throw new Error('WORKSPACE_TARGET_NOT_FOUND');
         if (request.method === 'GET') {
           const generation = Number(url.searchParams.get('generation'));
-          if (generation !== environment.generation) throw new Error('ENVIRONMENT_GENERATION_CONFLICT');
+          if (generation !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
           json(response, 200, {
             targetPluginId,
-            grants: this.dependencies.pluginRunner.workspaceGrants(environmentId, generation, targetPluginId),
+            grants: this.dependencies.pluginRunner.workspaceGrants(workspaceId, generation, targetPluginId),
           });
           return;
         }
         const input = asRecord(await body(request));
         const generation = Number(input.generation);
-        if (generation !== environment.generation || !Array.isArray(input.grants) || input.grants.length > 256) {
+        if (generation !== workspace.generation || !Array.isArray(input.grants) || input.grants.length > 256) {
           throw new Error('VALIDATION_FAILED');
         }
         const grants = input.grants.map((candidate) => {
@@ -236,10 +240,10 @@ export class RunnerControllerServer {
           const permissions = grant.permissions.map(String) as WorkspacePermission[];
           return { principalPluginId, path: grantPath, permissions };
         });
-        this.dependencies.pluginRunner.replaceWorkspaceGrants(environmentId, generation, targetPluginId, grants);
+        this.dependencies.pluginRunner.replaceWorkspaceGrants(workspaceId, generation, targetPluginId, grants);
         json(response, 200, {
           targetPluginId,
-          grants: this.dependencies.pluginRunner.workspaceGrants(environmentId, generation, targetPluginId),
+          grants: this.dependencies.pluginRunner.workspaceGrants(workspaceId, generation, targetPluginId),
         });
         return;
       }
@@ -253,14 +257,14 @@ export class RunnerControllerServer {
         json(response, 200, command);
         return;
       }
-      const environmentMatch = url.pathname.match(/^\/v1\/environments\/([^/]+)$/);
-      if (request.method === 'GET' && environmentMatch) {
-        const environment = this.dependencies.journal.environment(decodeURIComponent(environmentMatch[1]!));
-        if (!environment) {
-          json(response, 404, { error: 'ENVIRONMENT_NOT_FOUND' });
+      const workspaceMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)$/);
+      if (request.method === 'GET' && workspaceMatch) {
+        const workspace = this.dependencies.journal.workspace(decodeURIComponent(workspaceMatch[1]!));
+        if (!workspace) {
+          json(response, 404, { error: 'WORKSPACE_NOT_FOUND' });
           return;
         }
-        json(response, 200, environment);
+        json(response, 200, workspace);
         return;
       }
       const jobMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)$/);
@@ -273,11 +277,11 @@ export class RunnerControllerServer {
         json(response, 200, job);
         return;
       }
-      const environmentJobsMatch = url.pathname.match(/^\/v1\/environments\/([^/]+)\/jobs$/);
-      if (request.method === 'POST' && environmentJobsMatch) {
-        const environmentId = decodeURIComponent(environmentJobsMatch[1]!);
-        const requestBody = asRecord(await body(request)) as unknown as EnvironmentJobRequest;
-        json(response, 202, this.beginEnvironmentJob(environmentId, requestBody));
+      const workspaceJobsMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/jobs$/);
+      if (request.method === 'POST' && workspaceJobsMatch) {
+        const workspaceId = decodeURIComponent(workspaceJobsMatch[1]!);
+        const requestBody = asRecord(await body(request)) as unknown as WorkspaceJobRequest;
+        json(response, 202, this.beginWorkspaceJob(workspaceId, requestBody));
         return;
       }
       if (request.method === 'POST' && url.pathname === '/v1/setup/preview') {
@@ -341,23 +345,23 @@ export class RunnerControllerServer {
     }
   }
 
-  private beginEnvironmentJob(environmentId: string, request: EnvironmentJobRequest) {
-    const environment = this.dependencies.journal.environment(environmentId);
-    if (!environment || !environment.sandboxId || environment.status !== 'running') {
-      throw new Error('ENVIRONMENT_NOT_RUNNING');
+  private beginWorkspaceJob(workspaceId: string, request: WorkspaceJobRequest) {
+    const workspace = this.dependencies.journal.workspace(workspaceId);
+    if (!workspace || !workspace.sandboxId || workspace.status !== 'running') {
+      throw new Error('WORKSPACE_NOT_RUNNING');
     }
     const now = Math.floor(Date.now() / 1000);
     if (
       !request ||
       typeof request !== 'object' ||
-      request.environmentId !== environmentId ||
+      request.workspaceId !== workspaceId ||
       typeof request.jobId !== 'string' ||
       !/^[A-Za-z0-9-]{8,128}$/.test(request.jobId) ||
-      request.userId !== environment.userId ||
-      request.appId !== environment.appId ||
-      request.runId !== environment.runId ||
-      request.agentRuntimeId !== environment.agentRuntimeId ||
-      request.generation !== environment.generation ||
+      request.userId !== workspace.userId ||
+      request.appId !== workspace.appId ||
+      request.runId !== workspace.runId ||
+      request.agentRuntimeId !== workspace.agentRuntimeId ||
+      request.generation !== workspace.generation ||
       typeof request.operationHash !== 'string' ||
       !/^v1:[a-f0-9]{64}$/.test(request.operationHash) ||
       !Number.isSafeInteger(request.issuedAt) ||
@@ -384,15 +388,15 @@ export class RunnerControllerServer {
       throw new Error('VALIDATION_FAILED');
     }
     const hash = payloadHash(request);
-    const job = this.dependencies.journal.beginJob(request.jobId, hash, environmentId, request.generation);
+    const job = this.dependencies.journal.beginJob(request.jobId, hash, workspaceId, request.generation);
     if (job.status === 'pending') {
       this.dependencies.journal.runningJob(request.jobId);
-      void this.executeEnvironmentJob(environment.sandboxId, request);
+      void this.executeWorkspaceJob(workspace.sandboxId, request);
     }
     return this.dependencies.journal.job(request.jobId)!;
   }
 
-  private async executeEnvironmentJob(sandboxId: string, request: EnvironmentJobRequest): Promise<void> {
+  private async executeWorkspaceJob(sandboxId: string, request: WorkspaceJobRequest): Promise<void> {
     try {
       const result = await this.dependencies.sandboxEngine.executeJob(sandboxId, request);
       this.dependencies.journal.succeedJob(request.jobId, result);
@@ -420,16 +424,16 @@ export class RunnerControllerServer {
         action as 'cacheCleanup' | 'runtimeCleanup' | 'packInstall' | 'packUninstall',
       );
     }
-    const command = record as unknown as EnvironmentCommand;
+    const command = record as unknown as WorkspaceRuntimeCommand;
     this.validateCommand(command);
     const hash = payloadHash(command);
-    const existing = this.dependencies.journal.begin(command.commandId, hash, command.action, command.environmentId);
+    const existing = this.dependencies.journal.begin(command.commandId, hash, command.action, command.workspaceId);
     if (existing.status !== 'pending') return existing;
     this.dependencies.journal.running(command.commandId);
     try {
       let result: unknown;
       if (command.action === 'provision') result = await this.provision(command);
-      else result = await this.environmentAction(command);
+      else result = await this.workspaceAction(command);
       this.dependencies.journal.succeed(command.commandId, result);
     } catch (error) {
       this.dependencies.journal.fail(command.commandId, error instanceof Error ? error.message : String(error));
@@ -469,17 +473,17 @@ export class RunnerControllerServer {
           throw new Error('VALIDATION_FAILED');
         }
         const inUse = this.dependencies.journal
-          .environments()
-          .filter((environment) => !['deleted', 'failed'].includes(environment.status))
-          .some((environment) =>
-            environment.packs.some(
+          .workspaces()
+          .filter((workspace) => !['deleted', 'failed'].includes(workspace.status))
+          .some((workspace) =>
+            workspace.toolchain.some(
               (candidate) =>
                 candidate.familyId === ref.familyId &&
                 candidate.versionId === ref.versionId &&
                 candidate.contentDigest === ref.contentDigest,
             ),
           );
-        if (inUse) throw new Error('ENVIRONMENT_PACK_IN_USE');
+        if (inUse) throw new Error('WORKSPACE_TOOLCHAIN_IN_USE');
         await this.dependencies.installer.uninstall({
           familyId: ref.familyId,
           versionId: ref.versionId,
@@ -518,9 +522,9 @@ export class RunnerControllerServer {
     }
   }
 
-  private validateCommand(command: EnvironmentCommand): void {
+  private validateCommand(command: WorkspaceRuntimeCommand): void {
     this.validateCommonCommand(command as unknown as Record<string, unknown>);
-    if (!command.environmentId || !command.runId || !command.agentRuntimeId || !command.groupId) {
+    if (!command.workspaceId || !command.runId || !command.agentRuntimeId) {
       throw new Error('VALIDATION_FAILED');
     }
     if (!Number.isSafeInteger(command.generation) || command.generation < 1) throw new Error('VALIDATION_FAILED');
@@ -530,8 +534,8 @@ export class RunnerControllerServer {
         throw new Error('CATALOG_REVISION_CONFLICT');
       }
       const recipe = this.dependencies.catalog.recipe(command.recipeId);
-      if (recipe.revision !== command.recipeRevision) throw new Error('ENVIRONMENT_RECIPE_STALE');
-      this.dependencies.catalog.validateSelection(command.recipeId, command.packs);
+      if (recipe.revision !== command.recipeRevision) throw new Error('WORKSPACE_RECIPE_STALE');
+      this.dependencies.catalog.validateSelection(command.recipeId, command.toolchain);
       this.dependencies.quota.validate(command.limits);
       const targets = command.runnerPlugins ?? [];
       if (!Array.isArray(targets) || targets.length > 64) throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
@@ -554,17 +558,16 @@ export class RunnerControllerServer {
     }
   }
 
-  private async provision(command: EnvironmentCommand): Promise<EnvironmentRecord> {
-    const current = this.dependencies.journal.environment(command.environmentId);
+  private async provision(command: WorkspaceRuntimeCommand): Promise<WorkspaceRecord> {
+    const current = this.dependencies.journal.workspace(command.workspaceId);
     if (current && current.generation >= command.generation && current.status !== 'deleted')
-      throw new Error('ENVIRONMENT_GENERATION_CONFLICT');
-    await this.dependencies.installer.ensure(command.packs, command.commandId);
+      throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    await this.dependencies.installer.ensure(command.toolchain, command.commandId);
     const now = Math.floor(Date.now() / 1000);
-    const creating: EnvironmentRecord = {
-      environmentId: command.environmentId,
+    const creating: WorkspaceRecord = {
+      workspaceId: command.workspaceId,
       userId: command.userId,
       appId: command.appId,
-      groupId: command.groupId,
       runId: command.runId,
       agentRuntimeId: command.agentRuntimeId,
       generation: command.generation,
@@ -576,87 +579,81 @@ export class RunnerControllerServer {
       recipeRevision: command.recipeRevision,
       runtimeDigest: command.runtimeDigest,
       catalogRevision: command.catalogRevision,
-      packs: command.packs,
+      toolchain: command.toolchain,
       runnerPlugins: (command.runnerPlugins ?? []).map((target) => ({ ...target })),
       limits: command.limits,
       network: command.network,
       updatedAt: now,
     };
-    this.dependencies.journal.saveEnvironment(creating);
+    this.dependencies.journal.saveWorkspace(creating);
     const sandboxId = await this.dependencies.sandboxEngine.create(command);
-    const ready: EnvironmentRecord = {
+    const ready: WorkspaceRecord = {
       ...creating,
       sandboxId,
       status: 'ready',
       updatedAt: Math.floor(Date.now() / 1000),
     };
-    this.dependencies.pluginRunner.prepareEnvironment(ready);
-    this.dependencies.journal.saveEnvironment(ready);
+    this.dependencies.pluginRunner.prepareWorkspace(ready);
+    this.dependencies.journal.saveWorkspace(ready);
     return ready;
   }
 
-  private async environmentAction(command: EnvironmentCommand): Promise<EnvironmentRecord> {
-    const environment = this.dependencies.journal.environment(command.environmentId);
-    if (!environment || environment.generation !== command.generation || !environment.sandboxId) {
-      throw new Error('ENVIRONMENT_NOT_FOUND');
+  private async workspaceAction(command: WorkspaceRuntimeCommand): Promise<WorkspaceRecord> {
+    const workspace = this.dependencies.journal.workspace(command.workspaceId);
+    if (!workspace || workspace.generation !== command.generation || !workspace.sandboxId) {
+      throw new Error('WORKSPACE_NOT_FOUND');
     }
-    const samePacks = JSON.stringify(environment.packs) === JSON.stringify(command.packs);
+    const samePacks = JSON.stringify(workspace.toolchain) === JSON.stringify(command.toolchain);
     const sameRunnerPlugins =
-      JSON.stringify(environment.runnerPlugins ?? []) === JSON.stringify(command.runnerPlugins ?? []);
+      JSON.stringify(workspace.runnerPlugins ?? []) === JSON.stringify(command.runnerPlugins ?? []);
     if (
-      environment.userId !== command.userId ||
-      environment.appId !== command.appId ||
-      environment.groupId !== command.groupId ||
-      environment.runId !== command.runId ||
-      environment.agentRuntimeId !== command.agentRuntimeId ||
-      environment.recipeId !== command.recipeId ||
-      environment.recipeRevision !== command.recipeRevision ||
-      environment.runtimeDigest !== command.runtimeDigest ||
-      environment.catalogRevision !== command.catalogRevision ||
+      workspace.userId !== command.userId ||
+      workspace.appId !== command.appId ||
+      workspace.runId !== command.runId ||
+      workspace.agentRuntimeId !== command.agentRuntimeId ||
+      workspace.recipeId !== command.recipeId ||
+      workspace.recipeRevision !== command.recipeRevision ||
+      workspace.runtimeDigest !== command.runtimeDigest ||
+      workspace.catalogRevision !== command.catalogRevision ||
       !samePacks ||
       !sameRunnerPlugins
     ) {
-      throw new Error('ENVIRONMENT_IDENTITY_MISMATCH');
+      throw new Error('WORKSPACE_IDENTITY_MISMATCH');
     }
     if (command.action === 'start') {
-      await this.dependencies.sandboxEngine.start(environment.sandboxId);
+      await this.dependencies.sandboxEngine.start(workspace.sandboxId);
       try {
-        await this.dependencies.pluginRunner.activateEnvironment(environment);
+        await this.dependencies.pluginRunner.activateWorkspace(workspace);
       } catch (error) {
-        await this.dependencies.sandboxEngine.stop(environment.sandboxId).catch(() => undefined);
+        await this.dependencies.sandboxEngine.stop(workspace.sandboxId).catch(() => undefined);
         throw error;
       }
-      return this.save(environment, 'running', command.commandId);
+      return this.save(workspace, 'running', command.commandId);
     }
     if (command.action === 'stop') {
-      await this.dependencies.pluginRunner.quiesceEnvironment(environment, Math.floor(Date.now() / 1000) + 10);
-      await this.dependencies.pluginRunner.disposeEnvironment(environment);
-      await this.dependencies.sandboxEngine.stop(environment.sandboxId);
-      return this.save(environment, 'stopped', command.commandId);
+      await this.dependencies.pluginRunner.quiesceWorkspace(workspace, Math.floor(Date.now() / 1000) + 10);
+      await this.dependencies.pluginRunner.disposeWorkspace(workspace);
+      await this.dependencies.sandboxEngine.stop(workspace.sandboxId);
+      return this.save(workspace, 'stopped', command.commandId);
     }
     if (command.action === 'restart') {
-      await this.dependencies.pluginRunner.disposeEnvironment(environment);
-      await this.dependencies.sandboxEngine.restart(environment.sandboxId);
-      await this.dependencies.pluginRunner.activateEnvironment(environment);
-      return this.save(environment, 'running', command.commandId);
+      await this.dependencies.pluginRunner.disposeWorkspace(workspace);
+      await this.dependencies.sandboxEngine.restart(workspace.sandboxId);
+      await this.dependencies.pluginRunner.activateWorkspace(workspace);
+      return this.save(workspace, 'running', command.commandId);
     }
     if (command.action === 'delete') {
-      await this.dependencies.pluginRunner.disposeEnvironment(environment);
-      await this.dependencies.sandboxEngine.remove(environment.sandboxId);
-      return this.save(environment, 'deleted', command.commandId);
+      await this.dependencies.pluginRunner.disposeWorkspace(workspace);
+      await this.dependencies.sandboxEngine.remove(workspace.sandboxId);
+      return this.save(workspace, 'deleted', command.commandId);
     }
-    if (command.action === 'setNetwork' || command.action === 'resize')
-      throw new Error('ENVIRONMENT_RECREATE_REQUIRED');
+    if (command.action === 'setNetwork' || command.action === 'resize') throw new Error('WORKSPACE_RECREATE_REQUIRED');
     throw new Error('VALIDATION_FAILED');
   }
 
-  private save(
-    environment: EnvironmentRecord,
-    status: EnvironmentRecord['status'],
-    commandId: string,
-  ): EnvironmentRecord {
-    const next = { ...environment, status, commandId, updatedAt: Math.floor(Date.now() / 1000) };
-    this.dependencies.journal.saveEnvironment(next);
+  private save(workspace: WorkspaceRecord, status: WorkspaceRecord['status'], commandId: string): WorkspaceRecord {
+    const next = { ...workspace, status, commandId, updatedAt: Math.floor(Date.now() / 1000) };
+    this.dependencies.journal.saveWorkspace(next);
     return next;
   }
 }

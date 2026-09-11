@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SandboxEngine } from './sandbox-engine';
-import type { EnvironmentCatalog } from './environment-catalog';
+import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { RunnerJournal } from './journal';
 
 const size = (root: string): number => {
@@ -35,7 +35,7 @@ export class SpaceReporter {
   constructor(
     private readonly root: string,
     private readonly journal: RunnerJournal,
-    private readonly catalog: EnvironmentCatalog,
+    private readonly catalog: WorkspaceRuntimeCatalog,
     private readonly sandboxEngine: SandboxEngine,
   ) {}
 
@@ -46,22 +46,22 @@ export class SpaceReporter {
     const cacheBytes = size(path.join(this.root, 'cache'));
     const runtimeBytes = size(path.join(this.root, 'runtime'));
     const quarantineBytes = size(path.join(this.root, 'quarantine'));
-    const environments = this.journal.environments();
-    const byEnvironment = environments.map((environment) => ({
-      environmentId: environment.environmentId,
-      runtimeBytes: this.sandboxEngine.runtimeBytes(environment.environmentId, environment.generation),
-      status: environment.status,
+    const workspaces = this.journal.workspaces();
+    const byWorkspace = workspaces.map((workspace) => ({
+      workspaceId: workspace.workspaceId,
+      runtimeBytes: this.sandboxEngine.runtimeBytes(workspace.workspaceId, workspace.generation),
+      status: workspace.status,
     }));
-    const runtimeReclaimableBytes = byEnvironment.reduce((total, item) => {
-      const environment = environments.find((candidate) => candidate.environmentId === item.environmentId);
+    const runtimeReclaimableBytes = byWorkspace.reduce((total, item) => {
+      const workspace = workspaces.find((candidate) => candidate.workspaceId === item.workspaceId);
       return (
         total +
-        (environment && !environment.retained && ['stopped', 'deleted', 'failed'].includes(environment.status)
+        (workspace && !workspace.retained && ['stopped', 'deleted', 'failed'].includes(workspace.status)
           ? item.runtimeBytes
           : 0)
       );
     }, 0);
-    const active = environments.filter((environment) => !['deleted', 'failed'].includes(environment.status));
+    const active = workspaces.filter((workspace) => !['deleted', 'failed'].includes(workspace.status));
     const byPack = this.catalog.load().packs.flatMap((pack) => {
       const digest = pack.contentDigestByArch[process.arch];
       if (!digest) return [];
@@ -72,8 +72,8 @@ export class SpaceReporter {
           familyId: pack.familyId,
           versionId: pack.versionId,
           bytes,
-          inUse: active.some((environment) =>
-            environment.packs.some(
+          inUse: active.some((workspace) =>
+            workspace.toolchain.some(
               (candidate) =>
                 candidate.familyId === pack.familyId &&
                 candidate.versionId === pack.versionId &&
@@ -93,7 +93,7 @@ export class SpaceReporter {
       sandboxOverheadBytes,
       reclaimableBytes: cacheBytes + runtimeReclaimableBytes,
       byPack,
-      byEnvironment,
+      byWorkspace,
       filesystem: { totalBytes: stat.blocks * stat.bsize, freeBytes: stat.bavail * stat.bsize },
     };
   }

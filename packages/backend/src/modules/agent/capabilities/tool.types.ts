@@ -12,7 +12,7 @@ export interface ToolDescriptor {
 }
 
 export interface ToolPrecondition {
-  kind: 'fileHash' | 'metadata' | 'serviceState' | 'environmentGeneration';
+  kind: 'fileHash' | 'metadata' | 'serviceState' | 'workspaceGeneration';
   key: string;
   observedValue: JsonValue;
 }

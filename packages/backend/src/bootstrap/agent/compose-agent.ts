@@ -30,13 +30,8 @@ import { SqliteRunRepository } from '../../infrastructure/agent/repositories/sql
 import { SqliteCheckpointRepository } from '../../infrastructure/agent/repositories/sqlite-checkpoint.repository';
 import { SqliteTargetDenylistRepository } from '../../infrastructure/agent/repositories/sqlite-target-denylist.repository';
 import { SqliteStateCommitAdapter } from '../../infrastructure/agent/runtime/sqlite-state-commit.adapter';
-import { SqliteEnvironmentRepository } from '../../infrastructure/agent/environments/sqlite-environment.repository';
-import { SqliteEnvironmentConfirmationRepository } from '../../infrastructure/agent/environments/sqlite-environment-confirmation.repository';
-import type { EnvironmentControllerPort } from '../../modules/agent/environments/environment-controller.port';
-import type { EnvironmentGatewayPort } from '../../modules/agent/environments/environment-gateway.port';
-import { EnvironmentService } from '../../modules/agent/environments/environment.service';
-import { EnvironmentManagementService } from '../../modules/agent/environments/environment-management.service';
-import { WorkspaceArtifactService } from '../../modules/agent/runtime/exchange/workspace-artifact.service';
+import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
+import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import { AGENT_DEFAULTS } from '../../modules/agent/agent-defaults';
 import { systemClock } from '../../modules/agent/agent.types';
 import { ArtifactService } from '../../modules/agent/ai/artifact.service';
@@ -50,12 +45,12 @@ import { MemoryService } from '../../modules/agent/ai/memory.service';
 import { SkillRegistry } from '../../modules/agent/ai/skill-registry';
 import { OPERATIONS_AGENT_DEFINITIONS } from '../../modules/agent/apps/operations/agent-definitions';
 import { createOperationsAppContribution } from '../../modules/agent/apps/operations/public';
-import { createEnvironmentJobTool } from '../../modules/agent/apps/operations/environment-tools';
+import { createWorkspaceJobTool } from '../../modules/agent/apps/operations/workspace-tools';
 import {
-  createEnvironmentControlTool,
-  createEnvironmentCreateTool,
-  createEnvironmentSwitchVersionsTool,
-} from '../../modules/agent/apps/operations/environment-management-tools';
+  createWorkspaceControlTool,
+  createWorkspaceCreateTool,
+  createWorkspaceSwitchToolVersionsTool,
+} from '../../modules/agent/apps/operations/workspace-runtime-management-tools';
 import { createDiagnosticsTool, createReadFileTool } from '../../modules/agent/apps/operations/tools';
 import { createMcpTools } from '../../modules/agent/apps/operations/mcp-tools';
 import { createCollaborationTools } from '../../modules/agent/apps/operations/collaboration-tools';
@@ -98,6 +93,7 @@ import type { RemoteDockerService } from '../../platform/docker/remote-docker.se
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../shared/security/crypto.port';
 import type { AuditLogService } from '../../modules/audit/audit.service';
+import { composeWorkspaceRuntime } from './compose-workspace-runtime';
 
 export interface ComposeAgentOptions {
   database: RelationalDatabase;
@@ -112,7 +108,7 @@ export interface ComposeAgentOptions {
   executionSessions: ExecutionSessionManager;
   docker: RemoteDockerService;
   leases: LeasePort;
-  environmentController: EnvironmentControllerPort & EnvironmentGatewayPort;
+  workspaceRuntimeController: WorkspaceRuntimeControllerPort & WorkspaceRuntimeGatewayPort;
   audit: AuditLogService;
 }
 
@@ -129,7 +125,7 @@ export const composeAgent = ({
   executionSessions,
   docker,
   leases,
-  environmentController,
+  workspaceRuntimeController,
   audit,
 }: ComposeAgentOptions): AgentServices => {
   const registry = new AppRegistryService();
@@ -240,27 +236,20 @@ export const composeAgent = ({
   const machine = new MachineCapabilityAdapter(connectionResolver, diagnostics, executionSessions, docker);
   const cryptoHash = new NodeCryptoHashAdapter();
   const plans = new PlanService(runRepository, stateCommit, () => systemClock.nowUnixSeconds());
-  const environmentRepository = new SqliteEnvironmentRepository(database);
-  const environmentConfirmations = new SqliteEnvironmentConfirmationRepository(database);
-  const environmentService = new EnvironmentService(
-    environmentController,
-    environmentRepository,
-    plugins,
+  const composedWorkspaceRuntime = composeWorkspaceRuntime({
+    database,
+    controller: workspaceRuntimeController,
+    pluginTargets: plugins,
     settings,
     lifecycle,
-    capabilityBroker,
+    capabilities: capabilityBroker,
     cryptoHash,
-    () => systemClock.nowUnixSeconds(),
-  );
-  const environmentManagement = new EnvironmentManagementService(
-    environmentController,
-    environmentRepository,
-    environmentConfirmations,
-    settings,
-    environmentService,
-    () => systemClock.nowUnixSeconds(),
-  );
-  const workspaceArtifacts = new WorkspaceArtifactService(environmentService, artifacts, capabilityBroker);
+    artifacts,
+    now: () => systemClock.nowUnixSeconds(),
+  });
+  const workspaceRepository = composedWorkspaceRuntime.repository;
+  const workspaceRuntime = composedWorkspaceRuntime.service;
+  const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const toolCatalog = new ToolCatalog();
   toolCatalog.registerContribution({
     schemaVersion: 1,
@@ -294,18 +283,18 @@ export const composeAgent = ({
   });
   toolCatalog.registerContribution({
     schemaVersion: 1,
-    id: 'environment.execute',
-    capability: 'environment.execute',
-    tools: [createEnvironmentJobTool(environmentRepository, environmentController, cryptoHash)],
+    id: 'workspace.runtime.execute',
+    capability: 'workspace.runtime.execute',
+    tools: [createWorkspaceJobTool(workspaceRepository, workspaceRuntimeController, cryptoHash)],
   });
   toolCatalog.registerContribution({
     schemaVersion: 1,
-    id: 'environment.manage',
-    capability: 'environment.manage',
+    id: 'workspace.runtime.manage',
+    capability: 'workspace.runtime.manage',
     tools: [
-      createEnvironmentCreateTool(environmentService, environmentRepository, cryptoHash),
-      createEnvironmentControlTool(environmentService, environmentRepository, cryptoHash),
-      createEnvironmentSwitchVersionsTool(environmentService, environmentRepository, cryptoHash),
+      createWorkspaceCreateTool(workspaceRuntime, workspaceRepository, cryptoHash),
+      createWorkspaceControlTool(workspaceRuntime, workspaceRepository, cryptoHash),
+      createWorkspaceSwitchToolVersionsTool(workspaceRuntime, workspaceRepository, cryptoHash),
     ],
   });
   toolCatalog.registerContribution({
@@ -454,24 +443,24 @@ export const composeAgent = ({
     approvalExpiryTimer = null;
     await approvalExpirySweep.catch(() => undefined);
   };
-  let environmentReconcileTimer: NodeJS.Timeout | null = null;
-  let environmentReconcileSweep = Promise.resolve();
-  const sweepEnvironmentReconciliation = (): void => {
-    environmentReconcileSweep = environmentReconcileSweep
-      .then(() => environmentService.reconcile())
+  let workspaceReconcileTimer: NodeJS.Timeout | null = null;
+  let workspaceReconcileSweep = Promise.resolve();
+  const sweepWorkspaceReconciliation = (): void => {
+    workspaceReconcileSweep = workspaceReconcileSweep
+      .then(() => workspaceRuntime.reconcile())
       .then(() => undefined)
-      .catch((error) => console.error('[Agent] environment reconciliation sweep failed:', error));
+      .catch((error) => console.error('[Agent] workspace reconciliation sweep failed:', error));
   };
-  const startEnvironmentReconciliation = (): void => {
-    if (environmentReconcileTimer) clearInterval(environmentReconcileTimer);
-    sweepEnvironmentReconciliation();
-    environmentReconcileTimer = setInterval(sweepEnvironmentReconciliation, 15_000);
-    environmentReconcileTimer.unref?.();
+  const startWorkspaceReconciliation = (): void => {
+    if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
+    sweepWorkspaceReconciliation();
+    workspaceReconcileTimer = setInterval(sweepWorkspaceReconciliation, 15_000);
+    workspaceReconcileTimer.unref?.();
   };
-  const stopEnvironmentReconciliation = async (): Promise<void> => {
-    if (environmentReconcileTimer) clearInterval(environmentReconcileTimer);
-    environmentReconcileTimer = null;
-    await environmentReconcileSweep.catch(() => undefined);
+  const stopWorkspaceReconciliation = async (): Promise<void> => {
+    if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
+    workspaceReconcileTimer = null;
+    await workspaceReconcileSweep.catch(() => undefined);
   };
 
   const approvalRepository = new SqliteApprovalRepository(database);
@@ -668,44 +657,7 @@ export const composeAgent = ({
         onHostWake: (userId, listener) => eventHub.onHostWake(userId, listener),
         onTransient: (runId, listener) => eventHub.onTransient(runId, listener),
       },
-      environments: {
-        availability: (signal) => environmentService.availability(signal),
-        catalog: (signal) => environmentService.catalog(signal),
-        storage: (signal) => environmentService.storage(signal),
-        listGroups: (scope, runId) => environmentService.listGroups(scope, runId),
-        getGroup: (scope, groupId) => environmentService.getGroup(scope, groupId),
-        workspaceGrants: (scope, environmentId, targetPluginId) =>
-          environmentService.workspaceGrants(scope, environmentId, targetPluginId),
-        replaceWorkspaceGrants: (scope, environmentId, targetPluginId, grants) =>
-          environmentService.replaceWorkspaceGrants(scope, environmentId, targetPluginId, grants),
-        exportWorkspaceArtifact: (scope, input, signal) => workspaceArtifacts.export(scope, input, signal),
-        importArtifactToWorkspace: (scope, input, signal) => workspaceArtifacts.import(scope, input, signal),
-        createGroup: (scope, runId, agentRuntimeId, environments, retained, idempotencyKey) =>
-          environmentService.createGroup(scope, runId, agentRuntimeId, environments, retained, idempotencyKey),
-        action: (scope, environmentId, action, expectedVersion, parameters) =>
-          environmentService.action(scope, environmentId, action, expectedVersion, parameters),
-        switchVersions: (scope, environmentId, versions, expectedVersion, expectedCatalogRevision) =>
-          environmentService.switchVersions(scope, environmentId, versions, expectedVersion, expectedCatalogRevision),
-        getCommand: (scope, commandId) => environmentService.getCommand(scope, commandId),
-        previewSetup: (userId, selections, expectedVersion) =>
-          environmentManagement.previewSetup(userId, selections, expectedVersion),
-        confirmSetup: (userId, confirmationId, expectedVersion) =>
-          environmentManagement.confirmSetup(userId, confirmationId, expectedVersion),
-        installPack: (userId, familyId, versionId) => environmentManagement.installPack(userId, familyId, versionId),
-        previewPackUninstall: (userId, familyId, versionId, expectedVersion) =>
-          environmentManagement.previewPackUninstall(userId, familyId, versionId, expectedVersion),
-        confirmPackUninstall: (userId, confirmationId, expectedVersion) =>
-          environmentManagement.confirmPackUninstall(userId, confirmationId, expectedVersion),
-        previewRuntimeCleanup: (userId, expectedVersion) =>
-          environmentManagement.previewRuntimeCleanup(userId, expectedVersion),
-        confirmRuntimeCleanup: (userId, confirmationId, expectedVersion) =>
-          environmentManagement.confirmRuntimeCleanup(userId, confirmationId, expectedVersion),
-        previewSettingsReset: (userId, expectedVersion) =>
-          environmentManagement.previewSettingsReset(userId, expectedVersion),
-        confirmSettingsReset: (userId, confirmationId, expectedVersion) =>
-          environmentManagement.confirmSettingsReset(userId, confirmationId, expectedVersion),
-        adminAction: (userId, action, payload) => environmentService.adminAction(userId, action, payload),
-      },
+      workspaceRuntime: workspaceRuntimeFacade,
       approvals: {
         get: (scope, approvalId) => approvals.get(scope, approvalId),
         list: (scope, runId) => approvals.list(scope, runId),
@@ -719,7 +671,7 @@ export const composeAgent = ({
       scheduler.resume();
       await subagentScheduler?.initialize();
       startApprovalExpirySweep();
-      startEnvironmentReconciliation();
+      startWorkspaceReconciliation();
     },
     initializeForUser: async (userId) => {
       await settings.get(userId);
@@ -739,7 +691,7 @@ export const composeAgent = ({
     dispose: async () => {
       await Promise.all([
         stopApprovalExpirySweep(),
-        stopEnvironmentReconciliation(),
+        stopWorkspaceReconciliation(),
         subagentScheduler?.dispose() ?? Promise.resolve(),
         mcpRuntime.closeAll(),
       ]);

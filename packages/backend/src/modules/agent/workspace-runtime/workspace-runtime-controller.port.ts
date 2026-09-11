@@ -1,11 +1,11 @@
 import type { JsonValue } from '../agent.types';
 import type {
-  EnvironmentAvailability,
-  EnvironmentCatalog,
-  EnvironmentStorageView,
-  EnvironmentWorkspaceGrant,
-  EnvironmentWorkspaceGrantInput,
-} from './environment.types';
+  PluginWorkspaceGrant,
+  PluginWorkspaceGrantInput,
+  WorkspaceRuntimeAvailability,
+  WorkspaceRuntimeCatalog,
+  WorkspaceRuntimeStorageView,
+} from './workspace-runtime.types';
 
 export interface RunnerCommandRequest {
   commandId: string;
@@ -22,40 +22,40 @@ export interface RunnerCommandResult {
   result: JsonValue | null;
 }
 
-export interface EnvironmentWorkspaceReadHandle {
+export interface AgentWorkspaceReadHandle {
   sizeBytes: number;
   source: AsyncIterable<Uint8Array>;
   close(): Promise<void>;
 }
 
-export interface EnvironmentControllerPort {
-  availability(signal?: AbortSignal): Promise<EnvironmentAvailability>;
-  catalog(signal?: AbortSignal): Promise<EnvironmentCatalog>;
-  storage(signal?: AbortSignal): Promise<EnvironmentStorageView>;
+export interface WorkspaceRuntimeControllerPort {
+  availability(signal?: AbortSignal): Promise<WorkspaceRuntimeAvailability>;
+  catalog(signal?: AbortSignal): Promise<WorkspaceRuntimeCatalog>;
+  storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView>;
   submit(command: RunnerCommandRequest, signal?: AbortSignal): Promise<RunnerCommandResult>;
   query(commandId: string, signal?: AbortSignal): Promise<RunnerCommandResult>;
   workspaceGrants(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     signal?: AbortSignal,
-  ): Promise<EnvironmentWorkspaceGrant[]>;
+  ): Promise<PluginWorkspaceGrant[]>;
   replaceWorkspaceGrants(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
-    grants: readonly EnvironmentWorkspaceGrantInput[],
+    grants: readonly PluginWorkspaceGrantInput[],
     signal?: AbortSignal,
-  ): Promise<EnvironmentWorkspaceGrant[]>;
+  ): Promise<PluginWorkspaceGrant[]>;
   openWorkspaceFileRead(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     path: string,
     signal?: AbortSignal,
-  ): Promise<EnvironmentWorkspaceReadHandle>;
+  ): Promise<AgentWorkspaceReadHandle>;
   writeWorkspaceFileStream(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     path: string,

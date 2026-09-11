@@ -102,12 +102,12 @@ export class PuppeteerBrowserGateway implements BrowserGatewayPort {
     if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
     const binding = await this.endpoints.open(request, signal);
     if (
-      binding.environmentId !== request.environmentId ||
+      binding.workspaceId !== request.workspaceId ||
       !Number.isSafeInteger(binding.generation) ||
       binding.generation < 1
     ) {
       await binding.close().catch(() => undefined);
-      throw new Error('BROWSER_ENVIRONMENT_BINDING_INVALID');
+      throw new Error('BROWSER_WORKSPACE_BINDING_INVALID');
     }
     let browser: Browser | null = null;
     let context: BrowserContext | null = null;
@@ -309,7 +309,7 @@ export class PuppeteerBrowserGateway implements BrowserGatewayPort {
 
   private assertGeneration(active: ActiveBrowserSession): void {
     if (!Number.isSafeInteger(active.binding.generation) || active.binding.generation < 1) {
-      throw new Error('BROWSER_ENVIRONMENT_STALE');
+      throw new Error('BROWSER_WORKSPACE_STALE');
     }
   }
 
@@ -321,7 +321,7 @@ export class PuppeteerBrowserGateway implements BrowserGatewayPort {
   private view(sessionId: string, active: ActiveBrowserSession): BrowserSessionView {
     return {
       sessionId,
-      environmentId: active.binding.environmentId,
+      workspaceId: active.binding.workspaceId,
       generation: active.binding.generation,
       url: active.page.url(),
       createdAt: active.createdAt,

@@ -7,14 +7,14 @@
     type AgentProviderView,
     type AgentSettingsView,
     type ArtifactStorageSummary,
-    type EnvironmentAvailability,
+    type WorkspaceRuntimeAvailability,
     type HardLimitPreview,
     type TargetDenylistView,
   } from '../api/agent-api';
   import AgentFeatureSettings from './AgentFeatureSettings.vue';
   import AppManagementSettings from './AppManagementSettings.vue';
   import BudgetContextSettings from './BudgetContextSettings.vue';
-  import EnvironmentSettings from './EnvironmentSettings.vue';
+  import WorkspaceRuntimeSettings from './WorkspaceRuntimeSettings.vue';
   import HardLimitsSettings from './HardLimitsSettings.vue';
   import ModelProviderSettings from './ModelProviderSettings.vue';
   import PerformanceSettings from './PerformanceSettings.vue';
@@ -28,7 +28,7 @@
   const apps = ref<AgentAppSummary[]>([]);
   const providers = ref<AgentProviderView[]>([]);
   const storage = ref<ArtifactStorageSummary | null>(null);
-  const environment = ref<EnvironmentAvailability | null>(null);
+  const workspaceRuntime = ref<WorkspaceRuntimeAvailability | null>(null);
   const denylist = ref<TargetDenylistView | null>(null);
   const hardLimitPreview = ref<HardLimitPreview | null>(null);
   const loading = ref(true);
@@ -48,19 +48,20 @@
     loading.value = true;
     error.value = '';
     try {
-      const [nextSettings, nextApps, nextProviders, nextStorage, nextEnvironment, nextDenylist] = await Promise.all([
-        agentApi.settings(),
-        agentApi.apps(),
-        agentApi.providers(),
-        agentApi.storage(),
-        agentApi.environmentAvailability(),
-        agentApi.targetDenylist(),
-      ]);
+      const [nextSettings, nextApps, nextProviders, nextStorage, nextWorkspaceRuntime, nextDenylist] =
+        await Promise.all([
+          agentApi.settings(),
+          agentApi.apps(),
+          agentApi.providers(),
+          agentApi.storage(),
+          agentApi.workspaceRuntimeAvailability(),
+          agentApi.targetDenylist(),
+        ]);
       settings.value = nextSettings;
       apps.value = nextApps;
       providers.value = nextProviders;
       storage.value = nextStorage;
-      environment.value = nextEnvironment;
+      workspaceRuntime.value = nextWorkspaceRuntime;
       denylist.value = nextDenylist;
     } catch (cause) {
       error.value = message(cause);
@@ -159,7 +160,7 @@
       {{ $t('agent.settings.loading') }}
     </div>
 
-    <template v-else-if="settings && storage && environment && denylist">
+    <template v-else-if="settings && storage && workspaceRuntime && denylist">
       <AgentFeatureSettings :settings="settings" :busy="busy" @change="changeFeature" />
       <AppManagementSettings :apps="apps" :busy="busy" @toggle="toggleApp" />
       <PluginManagementSettings :apps="apps" :busy="busy" @refresh="load" />
@@ -193,8 +194,8 @@
         :busy="busy"
         @save="(patch) => patchSection('storage', patch)"
       />
-      <EnvironmentSettings
-        :availability="environment"
+      <WorkspaceRuntimeSettings
+        :availability="workspaceRuntime"
         :settings="settings"
         :busy="busy"
         @settings-updated="(updated) => (settings = updated)"

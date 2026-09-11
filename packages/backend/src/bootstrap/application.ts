@@ -43,7 +43,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     agentCollaboration: services.agent.runtime.collaboration,
     agentMemories: services.agent.ai.memories,
     agentEvents: services.agent.runtime.events,
-    agentEnvironments: services.agent.runtime.environments,
+    agentWorkspaceRuntime: services.agent.runtime.workspaceRuntime,
     e2eResetEnabled: config.nodeEnv === 'test' && config.e2eResetEnabled,
     resetForE2E: (mode) =>
       webSockets.quiesce(async () => {

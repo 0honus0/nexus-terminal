@@ -54,9 +54,10 @@ const allowedAgentAreas = {
   host: new Set(['root', 'host']),
   ai: new Set(['root', 'host', 'ai']),
   capabilities: new Set(['root', 'host', 'capabilities']),
-  environments: new Set(['root', 'host', 'environments']),
-  runtime: new Set(['root', 'host', 'ai', 'capabilities', 'environments', 'runtime']),
-  apps: new Set(['root', 'host', 'ai', 'capabilities', 'environments', 'runtime', 'apps']),
+  'workspace-runtime': new Set(['root', 'host', 'workspace-runtime']),
+  exchange: new Set(['root', 'host', 'ai', 'workspace-runtime', 'exchange']),
+  runtime: new Set(['root', 'host', 'ai', 'capabilities', 'runtime']),
+  apps: new Set(['root', 'host', 'ai', 'capabilities', 'workspace-runtime', 'runtime', 'apps']),
 };
 
 const allowedRuntimeSubdomains = new Set([
@@ -112,7 +113,10 @@ for (const file of sourceFiles) {
         const allowedAreas = allowedAgentAreas[fromAgentArea];
         const publicContractTypeImport =
           relativeFile === 'modules/agent/public.ts' &&
-          (targetAgentArea === 'ai' || targetAgentArea === 'runtime' || targetAgentArea === 'environments') &&
+          (targetAgentArea === 'ai' ||
+            targetAgentArea === 'runtime' ||
+            targetAgentArea === 'workspace-runtime' ||
+            targetAgentArea === 'exchange') &&
           isTypeOnlyImport &&
           /(?:\.port|\.types)$/.test(specifier);
         if (!allowedAreas?.has(targetAgentArea) && !publicContractTypeImport) {

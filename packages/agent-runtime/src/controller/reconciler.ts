@@ -9,13 +9,13 @@ export class Reconciler {
     private readonly pluginRunner: PluginRunnerRuntime,
   ) {}
   async reconcile(): Promise<void> {
-    for (const environment of this.journal.environments()) {
+    for (const workspace of this.journal.workspaces()) {
       try {
-        const reconciled = await this.sandboxEngine.reconcile(environment);
-        this.journal.saveEnvironment(reconciled);
-        if (reconciled.status === 'running') await this.pluginRunner.activateEnvironment(reconciled);
+        const reconciled = await this.sandboxEngine.reconcile(workspace);
+        this.journal.saveWorkspace(reconciled);
+        if (reconciled.status === 'running') await this.pluginRunner.activateWorkspace(reconciled);
       } catch {
-        this.journal.saveEnvironment({ ...environment, status: 'failed', updatedAt: Math.floor(Date.now() / 1000) });
+        this.journal.saveWorkspace({ ...workspace, status: 'failed', updatedAt: Math.floor(Date.now() / 1000) });
       }
     }
     for (const command of this.journal.commands()) {

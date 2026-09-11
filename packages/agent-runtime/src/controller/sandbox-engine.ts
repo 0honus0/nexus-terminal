@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { EnvironmentCommand, EnvironmentJobRequest, EnvironmentJobResult, EnvironmentRecord } from '../types';
+import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, WorkspaceJobResult, WorkspaceRecord } from '../types';
 import { JobRunner } from '../worker/job-runner';
 import { SandboxManager, type SandboxAvailability } from './sandbox-manager';
 
@@ -24,7 +24,7 @@ export class SandboxEngine {
     return this.available();
   }
 
-  async create(command: EnvironmentCommand): Promise<string> {
+  async create(command: WorkspaceRuntimeCommand): Promise<string> {
     return this.sandbox.create(command);
   }
 
@@ -47,7 +47,7 @@ export class SandboxEngine {
     this.sandbox.remove(sandboxId);
   }
 
-  async executeJob(sandboxId: string, request: EnvironmentJobRequest): Promise<EnvironmentJobResult> {
+  async executeJob(sandboxId: string, request: WorkspaceJobRequest): Promise<WorkspaceJobResult> {
     const execution = this.sandbox.prepareJob(sandboxId, request);
     const controller = new AbortController();
     let active = this.jobs.get(sandboxId);
@@ -76,7 +76,7 @@ export class SandboxEngine {
     return 0;
   }
 
-  async reconcile(record: EnvironmentRecord): Promise<EnvironmentRecord> {
+  async reconcile(record: WorkspaceRecord): Promise<WorkspaceRecord> {
     if (!record.sandboxId) return record;
     const state = await this.status(record.sandboxId);
     const mapped =
@@ -92,9 +92,9 @@ export class SandboxEngine {
     return { ...record, status: mapped, updatedAt: Math.floor(Date.now() / 1000) };
   }
 
-  runtimeBytes(environmentId: string, generation: number): number {
+  runtimeBytes(workspaceId: string, generation: number): number {
     let total = 0;
-    const stack = [this.sandbox.environmentRoot(environmentId, generation), this.sandbox.workspaceRoot(environmentId)];
+    const stack = [this.sandbox.generationRoot(workspaceId, generation), this.sandbox.workspaceRoot(workspaceId)];
     while (stack.length) {
       const current = stack.pop()!;
       let entries: fs.Dirent[];

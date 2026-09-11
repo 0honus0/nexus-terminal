@@ -12,7 +12,7 @@ export interface CheckpointSnapshot {
   modelConfigurationVersion: number;
   definitionVersion: string;
   policyRevision: number;
-  environmentArtifactManifestRefs: string[];
+  workspaceArtifactManifestRefs: string[];
 }
 
 export interface CheckpointView {

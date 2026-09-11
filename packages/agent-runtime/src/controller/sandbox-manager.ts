@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import type { EnvironmentCommand, EnvironmentJobRequest, PackRef } from '../types';
+import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, ToolchainPackRef } from '../types';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -21,21 +21,21 @@ export interface SandboxAvailability {
 }
 
 interface SandboxMetadata {
-  environmentId: string;
+  workspaceId: string;
   generation: number;
-  packs: PackRef[];
+  toolchain: ToolchainPackRef[];
   networkMode: 'none' | 'allowlist';
-  runtimeDigest?: string;
-  toolchainFingerprint?: string;
+  runtimeDigest: string;
+  toolchainFingerprint: string;
 }
 
-const toolchainFingerprint = (runtimeDigest: string, packs: readonly PackRef[]): string =>
+const toolchainFingerprint = (runtimeDigest: string, toolchain: readonly ToolchainPackRef[]): string =>
   createHash('sha256')
     .update(runtimeDigest)
     .update('\u0000')
     .update(
       JSON.stringify(
-        [...packs]
+        [...toolchain]
           .map((pack) => ({
             familyId: pack.familyId,
             versionId: pack.versionId,
@@ -51,11 +51,11 @@ const toolchainFingerprint = (runtimeDigest: string, packs: readonly PackRef[]):
     .digest('hex');
 
 const safeSegment = (value: string): string => {
-  if (!SAFE_SEGMENT.test(value)) throw new Error('ENVIRONMENT_ID_INVALID');
+  if (!SAFE_SEGMENT.test(value)) throw new Error('WORKSPACE_ID_INVALID');
   return value;
 };
 
-const packTarget = (pack: PackRef): string =>
+const packTarget = (pack: ToolchainPackRef): string =>
   `/opt/nexus/packs/${safeSegment(pack.familyId)}/${safeSegment(pack.versionId)}/${safeSegment(pack.contentDigest.replace(/^sha256:/, ''))}`;
 
 export class SandboxManager {
@@ -142,39 +142,39 @@ export class SandboxManager {
     return this.availability().available;
   }
 
-  create(command: EnvironmentCommand): string {
-    if (command.network.mode !== 'none') throw new Error('ENVIRONMENT_NETWORK_ENFORCEMENT_UNAVAILABLE');
-    const environmentId = safeSegment(command.environmentId);
+  create(command: WorkspaceRuntimeCommand): string {
+    if (command.network.mode !== 'none') throw new Error('WORKSPACE_NETWORK_ENFORCEMENT_UNAVAILABLE');
+    const workspaceId = safeSegment(command.workspaceId);
     const generation = command.generation;
     if (!Number.isSafeInteger(generation) || generation < 1) throw new Error('VALIDATION_FAILED');
-    const root = this.environmentRoot(environmentId, generation);
-    if (fs.existsSync(root)) throw new Error('ENVIRONMENT_GENERATION_CONFLICT');
+    const root = this.generationRoot(workspaceId, generation);
+    if (fs.existsSync(root)) throw new Error('WORKSPACE_GENERATION_CONFLICT');
     fs.mkdirSync(path.join(root, '.control'), { recursive: true, mode: 0o700 });
 
-    // Workspace data is stable across Environment generations. A generation is a
+    // Workspace data is stable across generations. A generation is a
     // runtime/profile boundary (for example after switching Node/Python/Go versions),
     // not a second copy of the project filesystem.
-    const workspace = this.coreWorkspaceRoot(environmentId);
+    const workspace = this.coreWorkspaceRoot(workspaceId);
     for (const relative of ['work', 'deps', 'build', 'browser', 'jobs', 'tmp']) {
       fs.mkdirSync(path.join(workspace, relative), { recursive: true, mode: 0o700 });
     }
-    fs.mkdirSync(path.join(this.workspaceRoot(environmentId), '.control'), { recursive: true, mode: 0o700 });
-    const fingerprint = toolchainFingerprint(command.runtimeDigest, command.packs);
-    const profile = this.toolchainProfileRoot(environmentId, fingerprint);
+    fs.mkdirSync(path.join(this.workspaceRoot(workspaceId), '.control'), { recursive: true, mode: 0o700 });
+    const fingerprint = toolchainFingerprint(command.runtimeDigest, command.toolchain);
+    const profile = this.toolchainProfileRoot(workspaceId, fingerprint);
     for (const relative of ['deps/cache/node', 'deps/cache/python', 'deps/cache/go', 'deps/go/pkg/mod', 'build']) {
       fs.mkdirSync(path.join(profile, relative), { recursive: true, mode: 0o700 });
     }
     const metadata: SandboxMetadata = {
-      environmentId,
+      workspaceId,
       generation,
-      packs: command.packs.map((pack) => ({ ...pack })),
+      toolchain: command.toolchain.map((pack) => ({ ...pack })),
       networkMode: command.network.mode,
       runtimeDigest: command.runtimeDigest,
       toolchainFingerprint: fingerprint,
     };
     this.writeJson(path.join(root, '.control', 'metadata.json'), metadata);
     this.writeState(root, 'ready');
-    return `${environmentId}:${generation}`;
+    return `${workspaceId}:${generation}`;
   }
 
   start(sandboxId: string): void {
@@ -208,18 +208,16 @@ export class SandboxManager {
     }
   }
 
-  prepareJob(sandboxId: string, request: EnvironmentJobRequest): SandboxExecution {
+  prepareJob(sandboxId: string, request: WorkspaceJobRequest): SandboxExecution {
     const root = this.requireRoot(sandboxId);
-    if (this.status(sandboxId) !== 'running') throw new Error('ENVIRONMENT_NOT_RUNNING');
+    if (this.status(sandboxId) !== 'running') throw new Error('WORKSPACE_NOT_RUNNING');
     const metadata = this.readMetadata(root);
-    if (metadata.environmentId !== request.environmentId || metadata.generation !== request.generation) {
-      throw new Error('ENVIRONMENT_IDENTITY_MISMATCH');
+    if (metadata.workspaceId !== request.workspaceId || metadata.generation !== request.generation) {
+      throw new Error('WORKSPACE_IDENTITY_MISMATCH');
     }
-    const workspace = this.coreWorkspaceRoot(metadata.environmentId);
-    const fingerprint =
-      metadata.toolchainFingerprint ??
-      toolchainFingerprint(metadata.runtimeDigest ?? 'legacy-runtime-v0', metadata.packs);
-    const profile = this.toolchainProfileRoot(metadata.environmentId, fingerprint);
+    const workspace = this.coreWorkspaceRoot(metadata.workspaceId);
+    const fingerprint = metadata.toolchainFingerprint;
+    const profile = this.toolchainProfileRoot(metadata.workspaceId, fingerprint);
     for (const relative of ['deps/cache/node', 'deps/cache/python', 'deps/cache/go', 'deps/go/pkg/mod', 'build']) {
       fs.mkdirSync(path.join(profile, relative), { recursive: true, mode: 0o700 });
     }
@@ -228,14 +226,14 @@ export class SandboxManager {
     const packBins: string[] = [];
     const createdDirs = new Set<string>(['/opt', '/opt/nexus', '/opt/nexus/packs']);
 
-    for (const pack of metadata.packs) {
+    for (const pack of metadata.toolchain) {
       const source = path.join(
         this.packsRoot,
         safeSegment(pack.familyId),
         safeSegment(pack.versionId),
         safeSegment(pack.contentDigest.replace(/^sha256:/, '')),
       );
-      if (!fs.existsSync(source)) throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+      if (!fs.existsSync(source)) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
       const target = packTarget(pack);
       const pieces = target.split('/').filter(Boolean);
       let current = '';
@@ -311,21 +309,21 @@ export class SandboxManager {
     };
   }
 
-  environmentRoot(environmentId: string, generation: number): string {
-    return path.join(this.runtimeRoot, 'environments', safeSegment(environmentId), String(generation));
+  generationRoot(workspaceId: string, generation: number): string {
+    return path.join(this.runtimeRoot, 'generations', safeSegment(workspaceId), String(generation));
   }
 
-  workspaceRoot(environmentId: string): string {
-    return path.join(this.runtimeRoot, 'workspaces', safeSegment(environmentId));
+  workspaceRoot(workspaceId: string): string {
+    return path.join(this.runtimeRoot, 'workspaces', safeSegment(workspaceId));
   }
 
-  coreWorkspaceRoot(environmentId: string): string {
-    return path.join(this.workspaceRoot(environmentId), 'core', 'workspace');
+  coreWorkspaceRoot(workspaceId: string): string {
+    return path.join(this.workspaceRoot(workspaceId), 'core', 'workspace');
   }
 
-  toolchainProfileRoot(environmentId: string, fingerprint: string): string {
-    if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('ENVIRONMENT_TOOLCHAIN_FINGERPRINT_INVALID');
-    return path.join(this.workspaceRoot(environmentId), 'core', 'toolchains', fingerprint);
+  toolchainProfileRoot(workspaceId: string, fingerprint: string): string {
+    if (!/^[a-f0-9]{64}$/.test(fingerprint)) throw new Error('WORKSPACE_TOOLCHAIN_FINGERPRINT_INVALID');
+    return path.join(this.workspaceRoot(workspaceId), 'core', 'toolchains', fingerprint);
   }
 
   private isolationArguments(workspace: string, profile?: string): string[] {
@@ -390,20 +388,20 @@ export class SandboxManager {
 
   private rootFromId(sandboxId: string): string {
     const match = SANDBOX_ID.exec(sandboxId);
-    if (!match) throw new Error('ENVIRONMENT_SANDBOX_ID_INVALID');
-    return this.environmentRoot(match[1]!, Number(match[2]));
+    if (!match) throw new Error('WORKSPACE_SANDBOX_ID_INVALID');
+    return this.generationRoot(match[1]!, Number(match[2]));
   }
 
   private requireRoot(sandboxId: string): string {
     const root = this.rootFromId(sandboxId);
-    if (!fs.existsSync(root)) throw new Error('ENVIRONMENT_NOT_FOUND');
+    if (!fs.existsSync(root)) throw new Error('WORKSPACE_NOT_FOUND');
     return root;
   }
 
   private readMetadata(root: string): SandboxMetadata {
     const parsed = JSON.parse(fs.readFileSync(path.join(root, '.control', 'metadata.json'), 'utf8')) as SandboxMetadata;
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.packs))
-      throw new Error('ENVIRONMENT_METADATA_INVALID');
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.toolchain))
+      throw new Error('WORKSPACE_METADATA_INVALID');
     return parsed;
   }
 

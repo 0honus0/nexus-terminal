@@ -1,16 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import type { CommandRecord, EnvironmentJobResult, EnvironmentRecord, JobRecord } from '../types';
+import type { CommandRecord, JobRecord, WorkspaceJobResult, WorkspaceRecord } from '../types';
 
 interface JournalState {
-  schemaVersion: 1;
+  schemaVersion: 2;
   commands: Record<string, CommandRecord>;
-  environments: Record<string, EnvironmentRecord>;
+  workspaces: Record<string, WorkspaceRecord>;
   jobs: Record<string, JobRecord>;
 }
 
-const empty = (): JournalState => ({ schemaVersion: 1, commands: {}, environments: {}, jobs: {} });
+const empty = (): JournalState => ({ schemaVersion: 2, commands: {}, workspaces: {}, jobs: {} });
 
 export const payloadHash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
@@ -20,26 +20,34 @@ export class RunnerJournal {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     try {
       this.state = JSON.parse(fs.readFileSync(filePath, 'utf8')) as JournalState;
-      if (this.state.schemaVersion !== 1) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
+      if (this.state.schemaVersion !== 2) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
       this.state.commands ??= {};
-      this.state.environments ??= {};
+      this.state.workspaces ??= {};
       this.state.jobs ??= {};
-      for (const environment of Object.values(this.state.environments)) environment.runnerPlugins ??= [];
+      for (const workspace of Object.values(this.state.workspaces)) workspace.runnerPlugins ??= [];
     } catch (error) {
-      if (error instanceof Error && error.message === 'JOURNAL_SCHEMA_UNSUPPORTED') throw error;
-      this.state = empty();
+      if (error instanceof Error && error.message === 'JOURNAL_SCHEMA_UNSUPPORTED') {
+        // Unpublished dev model: old execution-plane journals are intentionally discarded.
+        this.state = empty();
+        this.flush();
+      } else {
+        this.state = empty();
+      }
     }
   }
 
   command(id: string): CommandRecord | null {
     return this.state.commands[id] ?? null;
   }
-  environment(id: string): EnvironmentRecord | null {
-    return this.state.environments[id] ?? null;
+
+  workspace(id: string): WorkspaceRecord | null {
+    return this.state.workspaces[id] ?? null;
   }
-  environments(): EnvironmentRecord[] {
-    return Object.values(this.state.environments);
+
+  workspaces(): WorkspaceRecord[] {
+    return Object.values(this.state.workspaces);
   }
+
   commands(): CommandRecord[] {
     return Object.values(this.state.commands);
   }
@@ -47,11 +55,12 @@ export class RunnerJournal {
   job(id: string): JobRecord | null {
     return this.state.jobs[id] ?? null;
   }
+
   jobs(): JobRecord[] {
     return Object.values(this.state.jobs);
   }
 
-  beginJob(jobId: string, hash: string, environmentId: string, generation: number): JobRecord {
+  beginJob(jobId: string, hash: string, workspaceId: string, generation: number): JobRecord {
     const existing = this.state.jobs[jobId];
     if (existing) {
       if (existing.payloadHash !== hash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
@@ -60,7 +69,7 @@ export class RunnerJournal {
     const record: JobRecord = {
       jobId,
       payloadHash: hash,
-      environmentId,
+      workspaceId,
       generation,
       status: 'pending',
       result: null,
@@ -76,7 +85,8 @@ export class RunnerJournal {
   runningJob(jobId: string): void {
     this.patchJob(jobId, { status: 'running' });
   }
-  succeedJob(jobId: string, result: EnvironmentJobResult): void {
+
+  succeedJob(jobId: string, result: WorkspaceJobResult): void {
     this.patchJob(jobId, {
       status: 'succeeded',
       result,
@@ -84,6 +94,7 @@ export class RunnerJournal {
       completedAt: Math.floor(Date.now() / 1000),
     });
   }
+
   failJob(jobId: string, error: string): void {
     this.patchJob(jobId, {
       status: 'failed',
@@ -91,6 +102,7 @@ export class RunnerJournal {
       completedAt: Math.floor(Date.now() / 1000),
     });
   }
+
   unknownJob(jobId: string, error: string): void {
     this.patchJob(jobId, {
       status: 'unknown',
@@ -99,7 +111,7 @@ export class RunnerJournal {
     });
   }
 
-  begin(commandId: string, hash: string, action: string, environmentId: string | null): CommandRecord {
+  begin(commandId: string, hash: string, action: string, workspaceId: string | null): CommandRecord {
     const existing = this.state.commands[commandId];
     if (existing) {
       if (existing.payloadHash !== hash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
@@ -111,7 +123,7 @@ export class RunnerJournal {
       payloadHash: hash,
       status: 'pending',
       action,
-      environmentId,
+      workspaceId,
       result: null,
       error: null,
       createdAt: now,
@@ -125,6 +137,7 @@ export class RunnerJournal {
   running(commandId: string): void {
     this.patchCommand(commandId, { status: 'running' });
   }
+
   succeed(commandId: string, result: unknown): void {
     this.patchCommand(commandId, {
       status: 'succeeded',
@@ -133,6 +146,7 @@ export class RunnerJournal {
       completedAt: Math.floor(Date.now() / 1000),
     });
   }
+
   fail(commandId: string, error: string): void {
     this.patchCommand(commandId, {
       status: 'failed',
@@ -140,6 +154,7 @@ export class RunnerJournal {
       completedAt: Math.floor(Date.now() / 1000),
     });
   }
+
   unknown(commandId: string, error: string): void {
     this.patchCommand(commandId, {
       status: 'unknown',
@@ -148,13 +163,13 @@ export class RunnerJournal {
     });
   }
 
-  saveEnvironment(record: EnvironmentRecord): void {
-    this.state.environments[record.environmentId] = record;
+  saveWorkspace(record: WorkspaceRecord): void {
+    this.state.workspaces[record.workspaceId] = record;
     this.flush();
   }
 
-  deleteEnvironment(id: string): void {
-    delete this.state.environments[id];
+  deleteWorkspace(id: string): void {
+    delete this.state.workspaces[id];
     this.flush();
   }
 

@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { PackRef } from '../types';
+import type { ToolchainPackRef } from '../types';
 
 const safeSegment = (value: string): string => {
-  if (!/^[A-Za-z0-9_.-]{1,128}$/.test(value)) throw new Error('ENVIRONMENT_PACK_REF_INVALID');
+  if (!/^[A-Za-z0-9_.-]{1,128}$/.test(value)) throw new Error('WORKSPACE_TOOLCHAIN_REF_INVALID');
   return value;
 };
 
@@ -37,7 +37,7 @@ export class ToolchainStore {
     fs.mkdirSync(path.join(packsRoot, '.staging'), { recursive: true });
   }
 
-  path(ref: PackRef): string {
+  path(ref: ToolchainPackRef): string {
     return path.join(
       this.packsRoot,
       safeSegment(ref.familyId),
@@ -46,7 +46,7 @@ export class ToolchainStore {
     );
   }
 
-  stagingPath(commandId: string, ref: PackRef): string {
+  stagingPath(commandId: string, ref: ToolchainPackRef): string {
     const digest = safeSegment(ref.contentDigest.replace(/^sha256:/, '')).slice(0, 16);
     return path.join(
       this.packsRoot,
@@ -55,7 +55,7 @@ export class ToolchainStore {
     );
   }
 
-  installed(ref: PackRef): boolean {
+  installed(ref: ToolchainPackRef): boolean {
     const marker = path.join(this.path(ref), markerName);
     try {
       const parsed = JSON.parse(fs.readFileSync(marker, 'utf8')) as Partial<InstallMarker>;
@@ -66,12 +66,12 @@ export class ToolchainStore {
     }
   }
 
-  writeMarker(stagingPath: string, ref: PackRef, installedAt: number): void {
+  writeMarker(stagingPath: string, ref: ToolchainPackRef, installedAt: number): void {
     const marker: InstallMarker = { schemaVersion: 1, contentDigest: ref.contentDigest, installedAt };
     fs.writeFileSync(path.join(stagingPath, markerName), `${JSON.stringify(marker)}\n`, { mode: 0o444 });
   }
 
-  commit(stagingPath: string, ref: PackRef): void {
+  commit(stagingPath: string, ref: ToolchainPackRef): void {
     const target = this.path(ref);
     fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o755 });
     if (this.installed(ref)) {
@@ -93,12 +93,12 @@ export class ToolchainStore {
     const stagingRoot = path.join(this.packsRoot, '.staging') + path.sep;
     const resolved = path.resolve(stagingPath);
     if (!resolved.startsWith(path.resolve(stagingRoot) + path.sep) && resolved !== path.resolve(stagingRoot)) {
-      throw new Error('ENVIRONMENT_PACK_REF_INVALID');
+      throw new Error('WORKSPACE_TOOLCHAIN_REF_INVALID');
     }
     removeManagedTree(resolved);
   }
 
-  remove(ref: PackRef): void {
+  remove(ref: ToolchainPackRef): void {
     removeManagedTree(this.path(ref));
   }
 }

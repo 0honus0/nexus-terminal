@@ -12,7 +12,7 @@ export interface McpIntegrationConfiguration {
 
 export interface AcpIntegrationConfiguration {
   displayName: string;
-  transport: 'environment-profile';
+  transport: 'workspace-profile';
   profileId: string;
   protocolVersion: '1';
 }
@@ -120,11 +120,11 @@ export interface AcpRuntimePort {
 export interface BrowserSessionRequest extends Scope {
   runId: string;
   agentRuntimeId: string;
-  environmentId: string;
+  workspaceId: string;
 }
 
 export interface BrowserEndpointBinding {
-  environmentId: string;
+  workspaceId: string;
   generation: number;
   browserWSEndpoint: string;
   allowedHosts: string[];
@@ -137,7 +137,7 @@ export interface BrowserEndpointPort {
 
 export interface BrowserSessionView {
   sessionId: string;
-  environmentId: string;
+  workspaceId: string;
   generation: number;
   url: string;
   createdAt: number;

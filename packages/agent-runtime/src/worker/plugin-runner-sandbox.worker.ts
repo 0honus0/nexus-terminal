@@ -29,15 +29,15 @@ type WorkspaceRequestInput =
   | { kind: 'workspace.rename'; targetPluginId: string; path: string; destinationPath: string }
   | { kind: 'workspace.remove'; targetPluginId: string; path: string };
 
-const environmentId = process.env.NEXUS_ENVIRONMENT_ID?.trim() ?? '';
-const generation = Number(process.env.NEXUS_ENVIRONMENT_GENERATION);
+const workspaceId = process.env.NEXUS_WORKSPACE_ID?.trim() ?? '';
+const generation = Number(process.env.NEXUS_WORKSPACE_GENERATION);
 const pluginId = process.env.NEXUS_PLUGIN_ID?.trim() ?? '';
 const pluginVersion = process.env.NEXUS_PLUGIN_VERSION?.trim() ?? '';
 const sdkVersion = process.env.NEXUS_PLUGIN_SDK_VERSION?.trim() ?? '';
 const protocolVersion = Number(process.env.NEXUS_PLUGIN_PROTOCOL_VERSION);
 const entry = process.env.NEXUS_PLUGIN_RUNNER_ENTRY?.trim() ?? '';
-if (!/^[A-Za-z0-9_.-]{1,128}$/.test(environmentId) || !Number.isSafeInteger(generation) || generation < 1) {
-  throw new Error('PLUGIN_RUNNER_ENVIRONMENT_INVALID');
+if (!/^[A-Za-z0-9_.-]{1,128}$/.test(workspaceId) || !Number.isSafeInteger(generation) || generation < 1) {
+  throw new Error('PLUGIN_RUNNER_WORKSPACE_INVALID');
 }
 if (
   !/^[A-Za-z0-9_.-]{1,128}$/.test(pluginId) ||
@@ -175,7 +175,7 @@ const startRuntime = async (): Promise<void> => {
   const activationContext = Object.freeze({
     schemaVersion: 1 as const,
     protocolVersion: PLUGIN_RUNNER_PROTOCOL_VERSION,
-    environment: Object.freeze({ environmentId, generation }),
+    workspace: Object.freeze({ workspaceId, generation }),
     plugin: Object.freeze({ pluginId, version: pluginVersion, sdkVersion }),
     sdk,
   });

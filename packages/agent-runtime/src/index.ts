@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { EnvironmentCatalog } from './controller/environment-catalog';
+import { WorkspaceRuntimeCatalog } from './controller/workspace-runtime-catalog';
 import { RunnerJournal } from './controller/journal';
 import { SandboxEngine } from './controller/sandbox-engine';
 import { ToolchainStore } from './controller/toolchain-store';
@@ -23,7 +23,7 @@ const main = async (): Promise<void> => {
   const token = new CertificateManager(process.env.NEXUS_AGENT_RUNNER_TOKEN_FILE).token(
     process.env.NEXUS_AGENT_RUNNER_TOKEN,
   );
-  const catalog = new EnvironmentCatalog(catalogFile);
+  const catalog = new WorkspaceRuntimeCatalog(catalogFile);
   const journal = new RunnerJournal(path.join(root, 'state', 'journal.json'));
   const sandboxEngine = new SandboxEngine(
     path.join(root, 'runtime'),

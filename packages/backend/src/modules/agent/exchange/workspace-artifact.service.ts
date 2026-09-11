@@ -1,9 +1,9 @@
-import type { Scope } from '../../agent.types';
-import type { ArtifactRef } from '../../ai/artifact.port';
-import type { ArtifactService } from '../../ai/artifact.service';
-import type { EnvironmentService } from '../../environments/environment.service';
-import type { AppCapabilityBroker } from '../../host/app-capability-broker';
-import type { AgentCapability } from '../../host/app.types';
+import type { Scope } from '../agent.types';
+import type { ArtifactRef } from '../ai/artifact.port';
+import type { ArtifactService } from '../ai/artifact.service';
+import type { WorkspaceRuntimeService } from '../workspace-runtime/workspace-runtime.service';
+import type { AppCapabilityBroker } from '../host/app-capability-broker';
+import type { AgentCapability } from '../host/app.types';
 import type {
   WorkspaceArtifactExportInput,
   WorkspaceArtifactImportInput,
@@ -14,19 +14,19 @@ const ARTIFACT_READ_CHUNK_BYTES = 8 * 1024 * 1024;
 
 export class WorkspaceArtifactService {
   constructor(
-    private readonly environments: EnvironmentService,
+    private readonly workspaceRuntime: WorkspaceRuntimeService,
     private readonly artifacts: ArtifactService,
     private readonly capabilities: AppCapabilityBroker,
   ) {}
 
   async export(scope: Scope, input: WorkspaceArtifactExportInput, signal: AbortSignal): Promise<ArtifactRef> {
     await Promise.all([
-      this.requireCapability(scope, 'environment.execute'),
+      this.requireCapability(scope, 'workspace.runtime.execute'),
       this.requireCapability(scope, 'artifacts.write'),
     ]);
-    const read = await this.environments.openWorkspaceFileRead(
+    const read = await this.workspaceRuntime.openWorkspaceFileRead(
       scope,
-      input.environmentId,
+      input.workspaceId,
       input.targetPluginId,
       input.path,
       signal,
@@ -49,15 +49,15 @@ export class WorkspaceArtifactService {
     signal: AbortSignal,
   ): Promise<WorkspaceArtifactImportResult> {
     await Promise.all([
-      this.requireCapability(scope, 'environment.execute'),
+      this.requireCapability(scope, 'workspace.runtime.execute'),
       this.requireCapability(scope, 'artifacts.read'),
     ]);
     const artifact = await this.artifacts.get(scope, input.artifactId);
     if (!artifact || artifact.status !== 'ready') throw new Error('ARTIFACT_NOT_READY');
     const source = this.artifactChunks(scope, artifact, signal);
-    await this.environments.writeWorkspaceFileStream(
+    await this.workspaceRuntime.writeWorkspaceFileStream(
       scope,
-      input.environmentId,
+      input.workspaceId,
       input.targetPluginId,
       input.path,
       source,
@@ -66,7 +66,7 @@ export class WorkspaceArtifactService {
     );
     return {
       artifact,
-      environmentId: input.environmentId,
+      workspaceId: input.workspaceId,
       targetPluginId: input.targetPluginId,
       path: input.path,
       writtenBytes: artifact.sizeBytes,

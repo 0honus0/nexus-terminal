@@ -60,10 +60,9 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         [run.id],
       );
       const manifests = await tx.queryAll<{ retained_manifest_ref: string }>(
-        `SELECT e.retained_manifest_ref FROM agent_environments e
-         JOIN agent_environment_groups g ON g.id=e.group_id
-         WHERE g.run_id=? AND g.user_id=? AND g.app_id=? AND e.retained_manifest_ref IS NOT NULL
-         ORDER BY e.retained_manifest_ref`,
+        `SELECT retained_manifest_ref FROM agent_workspaces
+         WHERE run_id=? AND user_id=? AND app_id=? AND retained_manifest_ref IS NOT NULL
+         ORDER BY retained_manifest_ref`,
         [run.id, command.scope.userId, command.scope.appId],
       );
       const artifactRefs = [
@@ -88,7 +87,7 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         modelConfigurationVersion: definition.model.configurationVersion,
         definitionVersion: command.definitionVersion,
         policyRevision: definition.policyRevision,
-        environmentArtifactManifestRefs: manifests.map((row) => row.retained_manifest_ref),
+        workspaceArtifactManifestRefs: manifests.map((row) => row.retained_manifest_ref),
       };
       const eventThrough = run.next_event_sequence - 1;
       await tx.execute(
@@ -137,7 +136,7 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
     const checkpoint = await this.get(scope, checkpointId);
     if (!checkpoint) throw new Error('NOT_FOUND');
     const refs = [
-      ...new Set([...checkpoint.snapshot.evidenceRefs, ...checkpoint.snapshot.environmentArtifactManifestRefs]),
+      ...new Set([...checkpoint.snapshot.evidenceRefs, ...checkpoint.snapshot.workspaceArtifactManifestRefs]),
     ];
     const missing: string[] = [];
     for (const artifactId of refs) {

@@ -1,85 +1,21 @@
 import { httpClient } from '@/client/http';
+import type {
+  AgentArtifactRef,
+  AgentEnvelope,
+  AgentHardLimits,
+  AgentSettingsDocument,
+  AgentSettingsView,
+} from './agent-api.types';
 import type { PluginFrontendRpcMethod } from '../host/plugin-sdk';
+import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
 
-export interface AgentEnvelope<T> {
-  data: T;
-  requestId: string;
-}
-
-export interface AgentHardLimits {
-  maxContextTokens: number;
-  maxOutputTokens: number;
-  maxRunTokens: number;
-  maxRunSteps: number;
-  maxRunCostMicros: number | null;
-  maxActiveExecutionSeconds: number;
-  toolTimeoutSeconds: number;
-  maxToolOutputBytes: number;
-  maxRawToolBytes: number;
-  maxArtifactBytes: number;
-  maxSingleArtifactBytes: number;
-  maxGlobalArtifactBytes: number;
-  maxRecallItems: number;
-  maxRecallBytes: number;
-  maxConcurrentRuntimes: number;
-  maxConcurrentModelCalls: number;
-  maxDelegationDepth: number;
-  maxSubagentMessagesPerRun: number;
-  maxSubagentMessageBytesPerRun: number;
-  maxActiveEnvironments: number;
-  maxEnvironmentsPerGroup: number;
-  unretainedArtifactTtlSeconds: number;
-  environmentIdleTtlSeconds: number;
-}
-
-export interface AgentSettingsDocument {
-  schemaVersion: 1;
-  feature: { enabled: boolean };
-  model: { defaultProviderId: string | null; defaultModelId: string | null };
-  performance: { maxConcurrentRuntimes: number; maxConcurrentModelCalls: number | 'auto' };
-  budget: {
-    maxContextTokens: number;
-    maxOutputTokens: number;
-    maxRunTokens: number;
-    maxRunSteps: number;
-    maxRunCostMicros: number | null;
-    maxActiveExecutionSeconds: number;
-    toolTimeoutSeconds: number;
-    maxToolOutputBytes: number;
-    maxRawToolBytes: number;
-    maxRecallItems: number;
-    maxRecallBytes: number;
-  };
-  hardLimits: AgentHardLimits;
-  subagents: {
-    maxDelegationDepth: number;
-    maxSubagentMessagesPerRun: number;
-    maxSubagentMessageBytesPerRun: number;
-  };
-  storage: {
-    maxArtifactBytes: number;
-    maxSingleArtifactBytes: number;
-    maxGlobalArtifactBytes: number;
-    unretainedArtifactTtlSeconds: number;
-  };
-  environments: {
-    maxActiveEnvironments: number;
-    maxEnvironmentsPerGroup: number;
-    environmentIdleTtlSeconds: number;
-    enabledRecipeIds: string[];
-    packVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
-  };
-  safety: { providerPrivateNetworkExceptions: string[] };
-}
-
-export interface AgentSettingsView {
-  requestedSettings: AgentSettingsDocument;
-  effectiveSettings: AgentSettingsDocument;
-  hardLimits: AgentHardLimits;
-  runtimeCapabilities: { environmentController: boolean };
-  availability: { state: string };
-  revision: number;
-}
+export type {
+  AgentArtifactRef,
+  AgentEnvelope,
+  AgentHardLimits,
+  AgentSettingsDocument,
+  AgentSettingsView,
+} from './agent-api.types';
 
 export interface AgentAppSummary {
   id: string;
@@ -120,6 +56,28 @@ export interface PluginFrontendDescriptor {
 }
 
 export type { PluginFrontendRpcMethod } from '../host/plugin-sdk';
+export type {
+  AgentWorkspaceView,
+  PluginRunnerTargetView,
+  PluginWorkspaceGrant,
+  PluginWorkspacePermission,
+  ToolchainCatalogPack,
+  ToolchainPackRef,
+  ToolchainPackUninstallPreview,
+  WorkspaceArtifactImportResult,
+  WorkspaceNetworkPolicy,
+  WorkspaceProfileView,
+  WorkspaceRecipe,
+  WorkspaceResourceLimits,
+  WorkspaceRuntimeAvailability,
+  WorkspaceRuntimeCatalog,
+  WorkspaceRuntimeCleanupPreview,
+  WorkspaceRuntimeCommandView,
+  WorkspaceRuntimeSettingsResetPreview,
+  WorkspaceRuntimeSetupPreview,
+  WorkspaceRuntimeStorageView,
+  WorkspaceToolchainSwitchView,
+} from './workspace-runtime-api';
 
 export interface PluginPublisherKey {
   userId: number;
@@ -251,22 +209,6 @@ export interface ArtifactStorageSummary {
   limitBytes: number;
 }
 
-export interface AgentArtifactRef {
-  id: string;
-  appId: string;
-  originalName: string;
-  mediaType: string;
-  sha256: string | null;
-  sizeBytes: number;
-  status: 'staging' | 'ready' | 'deleting' | 'deleted' | 'unavailable';
-  retained: boolean;
-  version: number;
-  createdAt: number;
-  readyAt: number | null;
-  expiresAt: number | null;
-  deletedAt: number | null;
-}
-
 export interface AgentArtifactPage {
   items: AgentArtifactRef[];
   nextCursor: string | null;
@@ -307,217 +249,10 @@ export interface HardLimitPreview {
       artifactUsedBytes: number;
       artifactReservedBytes: number;
       executingRuntimes: number;
-      activeEnvironments: number;
+      activeWorkspaces: number;
     };
   };
-  runtimeCapabilities: { environmentController: boolean };
-  expiresAt: number;
-}
-
-export interface EnvironmentAvailability {
-  available: boolean;
-  state: 'unavailable' | 'uninitialized' | 'ready' | 'degraded';
-  reason: string;
-  deploymentId: string | null;
-  controllerVersion: string | null;
-  sandbox: { available: boolean; reason: string | null };
-  capabilities: { egressAllowlist: boolean };
-}
-
-export interface EnvironmentResourceLimits {
-  cpus: number;
-  memoryBytes: number;
-  pids: number;
-  tmpfsBytes: number;
-}
-
-export interface EnvironmentNetworkPolicy {
-  mode: 'none' | 'allowlist';
-  hosts: string[];
-}
-
-export interface EnvironmentPackRef {
-  familyId: string;
-  versionId: string;
-  contentDigest: string;
-}
-
-export interface EnvironmentRecipe {
-  id: string;
-  revision: string;
-  kind: 'shell' | 'code' | 'data' | 'browser';
-  displayName: string;
-  allowedFamilies: string[];
-  requiredCapabilities: string[];
-  defaultFamilies: string[];
-  defaultLimits: EnvironmentResourceLimits;
-  networkDefaults: EnvironmentNetworkPolicy;
-}
-
-export interface EnvironmentCatalogPack extends EnvironmentPackRef {
-  schemaVersion: 1;
-  displayName: string;
-  capabilities: string[];
-  runnerApiRange: string;
-  diskBytes: number;
-  dependencies: Array<{ familyId: string; versionId: string }>;
-  supportedArchitectures: string[];
-  status: 'supported' | 'deprecated' | 'unavailable';
-  sideBySide: boolean;
-  installed: boolean;
-  enabled: boolean;
-  inUse: boolean;
-}
-
-export interface EnvironmentCatalog {
-  revision: string;
-  runtimeDigest: string;
-  recipes: EnvironmentRecipe[];
-  packs: EnvironmentCatalogPack[];
-}
-
-export interface EnvironmentStorageView {
-  stateBytes: number;
-  packBytes: number;
-  cacheBytes: number;
-  runtimeBytes: number;
-  quarantineBytes: number;
-  sandboxOverheadBytes: number;
-  reclaimableBytes: number;
-  byPack: Array<{ familyId: string; versionId: string; bytes: number; inUse: boolean }>;
-  byEnvironment: Array<{ environmentId: string; runtimeBytes: number; status: string }>;
-  filesystem: { totalBytes: number; freeBytes: number };
-}
-
-export interface EnvironmentCommandView {
-  id: string;
-  userId: number;
-  appId: string;
-  environmentId: string | null;
-  groupId: string | null;
-  action: string;
-  operationHash: string;
-  generation: number;
-  status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown';
-  result: unknown;
-  deadlineAt: number;
-  createdAt: number;
-  completedAt: number | null;
-}
-
-export interface PluginRunnerTargetView {
-  pluginId: string;
-  version: string;
-  sdkVersion: string;
-  protocolVersion: 2;
-  packageHash: string;
-  entry: string;
-}
-
-export interface EnvironmentView {
-  id: string;
-  groupId: string;
-  kind: 'shell' | 'code' | 'data' | 'browser';
-  recipeId: string;
-  recipeRevision: string;
-  runtimeDigest: string;
-  catalogRevision: string;
-  packRefs: EnvironmentPackRef[];
-  runnerPlugins: PluginRunnerTargetView[];
-  generation: number;
-  status: 'creating' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'deleting' | 'deleted' | 'failed';
-  limits: EnvironmentResourceLimits;
-  network: EnvironmentNetworkPolicy;
-  retainedManifestRef: string | null;
-  version: number;
-  lastActiveAt: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface EnvironmentGroupView {
-  userId: number;
-  appId: string;
-  id: string;
-  runId: string;
-  agentRuntimeId: string;
-  status: EnvironmentView['status'];
-  retained: boolean;
-  limits: unknown;
-  version: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface EnvironmentGroupDetail extends EnvironmentGroupView {
-  environments: EnvironmentView[];
-}
-
-export interface EnvironmentVersionSwitchView {
-  outcome: 'succeeded' | 'failed' | 'unknown';
-  environment: EnvironmentView;
-  commands: EnvironmentCommandView[];
-}
-
-export type EnvironmentWorkspacePermission = 'read' | 'write' | 'list' | 'delete';
-
-export interface EnvironmentWorkspaceGrant {
-  targetPluginId: string;
-  principalPluginId: string;
-  path: string;
-  permissions: EnvironmentWorkspacePermission[];
-}
-
-export interface WorkspaceArtifactImportResult {
-  artifact: AgentArtifactRef;
-  environmentId: string;
-  targetPluginId: string;
-  path: string;
-  writtenBytes: number;
-}
-
-export interface EnvironmentSetupPreview {
-  confirmationId: string;
-  expectedVersion: number;
-  catalogRevision: string;
-  enabledRecipeIds: string[];
-  packs: EnvironmentPackRef[];
-  missingPacks: EnvironmentPackRef[];
-  installBytes: number;
-  expiresAt: number;
-}
-
-export interface EnvironmentPackUninstallPreview {
-  confirmationId: string;
-  expectedVersion: number;
-  catalogRevision: string;
-  pack: EnvironmentPackRef & { displayName: string; bytes: number };
-  installed: boolean;
-  inUse: boolean;
-  wasEnabled: boolean;
-  wasDefault: boolean;
-  replacementDefaultVersionId: string | null;
-  expiresAt: number;
-}
-
-export interface EnvironmentRuntimeCleanupPreview {
-  confirmationId: string;
-  expectedVersion: number;
-  catalogRevision: string;
-  environmentCount: number;
-  activeCount: number;
-  retainedCount: number;
-  estimatedReclaimableBytes: number;
-  environmentIds: string[];
-  expiresAt: number;
-}
-
-export interface EnvironmentSettingsResetPreview {
-  confirmationId: string;
-  expectedVersion: number;
-  catalogRevision: string;
-  current: unknown;
-  proposed: unknown;
+  runtimeCapabilities: { workspaceRuntimeController: boolean };
   expiresAt: number;
 }
 
@@ -661,7 +396,7 @@ export interface AgentCheckpointView {
     modelConfigurationVersion: number;
     definitionVersion: string;
     policyRevision: number;
-    environmentArtifactManifestRefs: string[];
+    workspaceArtifactManifestRefs: string[];
   };
   createdAt: number;
 }
@@ -1166,284 +901,7 @@ export const agentApi = {
       ).data,
     );
   },
-  async environmentAvailability(): Promise<EnvironmentAvailability> {
-    return unwrap(
-      (await httpClient.get<AgentEnvelope<EnvironmentAvailability>>('/agent/environments/availability')).data,
-    );
-  },
-  async environmentCatalog(): Promise<EnvironmentCatalog> {
-    return unwrap((await httpClient.get<AgentEnvelope<EnvironmentCatalog>>('/agent/environments/catalog')).data);
-  },
-  async environmentStorage(): Promise<EnvironmentStorageView> {
-    return unwrap((await httpClient.get<AgentEnvelope<EnvironmentStorageView>>('/agent/environments/storage')).data);
-  },
-  async previewEnvironmentSetup(
-    recipes: Array<{ recipeId: string; versions?: Record<string, string> }>,
-    expectedVersion: number,
-  ): Promise<EnvironmentSetupPreview> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentSetupPreview>>(
-          '/agent/environments/setup/preview',
-          { recipes, expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmEnvironmentSetup(confirmationId: string, expectedVersion: number): Promise<EnvironmentCommandView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentCommandView>>(
-          '/agent/environments/setup/confirm',
-          { confirmationId, expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async installEnvironmentPack(familyId: string, versionId: string): Promise<EnvironmentCommandView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentCommandView>>(
-          `/agent/environments/packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/install`,
-          {},
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async previewEnvironmentPackUninstall(
-    familyId: string,
-    versionId: string,
-    expectedVersion: number,
-  ): Promise<EnvironmentPackUninstallPreview> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentPackUninstallPreview>>(
-          `/agent/environments/packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/uninstall/preview`,
-          { expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmEnvironmentPackUninstall(
-    familyId: string,
-    versionId: string,
-    confirmationId: string,
-    expectedVersion: number,
-  ): Promise<EnvironmentCommandView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentCommandView>>(
-          `/agent/environments/packs/${encodeURIComponent(familyId)}/${encodeURIComponent(versionId)}/uninstall/confirm`,
-          { confirmationId, expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async previewEnvironmentRuntimeCleanup(expectedVersion: number): Promise<EnvironmentRuntimeCleanupPreview> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentRuntimeCleanupPreview>>(
-          '/agent/environments/runtime-cleanup/preview',
-          { expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmEnvironmentRuntimeCleanup(
-    confirmationId: string,
-    expectedVersion: number,
-  ): Promise<EnvironmentCommandView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentCommandView>>(
-          '/agent/environments/runtime-cleanup/confirm',
-          { confirmationId, expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async cleanupEnvironmentCache(): Promise<EnvironmentCommandView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentCommandView>>(
-          '/agent/environments/cache-cleanup',
-          {},
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async previewEnvironmentSettingsReset(expectedVersion: number): Promise<EnvironmentSettingsResetPreview> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentSettingsResetPreview>>(
-          '/agent/environments/settings/reset/preview',
-          { expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmEnvironmentSettingsReset(confirmationId: string, expectedVersion: number): Promise<AgentSettingsView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<AgentSettingsView>>(
-          '/agent/environments/settings/reset/confirm',
-          { confirmationId, expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async environmentCommand(commandId: string): Promise<EnvironmentCommandView> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<EnvironmentCommandView>>(
-          `/agent/environments/commands/${encodeURIComponent(commandId)}`,
-        )
-      ).data,
-    );
-  },
-  async environmentGroups(appId: string, runId: string, rootOnly = false): Promise<EnvironmentGroupView[]> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<EnvironmentGroupView[]>>(
-          `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/environment-groups`,
-          { params: rootOnly ? { runtime: 'root' } : undefined },
-        )
-      ).data,
-    );
-  },
-  async environmentGroup(appId: string, groupId: string): Promise<EnvironmentGroupDetail> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<EnvironmentGroupDetail>>(
-          `/apps/${encodeURIComponent(appId)}/environment-groups/${encodeURIComponent(groupId)}`,
-        )
-      ).data,
-    );
-  },
-  async createEnvironmentGroup(
-    appId: string,
-    runId: string,
-    environments: Array<{
-      recipeId: string;
-      versions?: Record<string, string>;
-      runnerPluginIds?: string[];
-      limits?: Partial<EnvironmentResourceLimits>;
-      network?: EnvironmentNetworkPolicy;
-    }>,
-    retained = false,
-  ): Promise<EnvironmentGroupDetail> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentGroupDetail>>(
-          `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/environment-groups`,
-          { environments, retained },
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
-        )
-      ).data,
-    );
-  },
-  async environmentAction(
-    appId: string,
-    environment: EnvironmentView,
-    action: 'start' | 'stop' | 'restart' | 'delete',
-  ): Promise<EnvironmentCommandView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentCommandView>>(
-          `/apps/${encodeURIComponent(appId)}/environments/${encodeURIComponent(environment.id)}/actions`,
-          { action, expectedVersion: environment.version, parameters: {} },
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
-        )
-      ).data,
-    );
-  },
-  async switchEnvironmentVersions(
-    appId: string,
-    environment: EnvironmentView,
-    versions: Record<string, string>,
-    catalogRevision: string,
-  ): Promise<EnvironmentVersionSwitchView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<EnvironmentVersionSwitchView>>(
-          `/apps/${encodeURIComponent(appId)}/environments/${encodeURIComponent(environment.id)}/versions`,
-          { versions, expectedVersion: environment.version, catalogRevision },
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
-        )
-      ).data,
-    );
-  },
-  async workspaceGrants(
-    appId: string,
-    environmentId: string,
-    targetPluginId: string,
-  ): Promise<EnvironmentWorkspaceGrant[]> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<EnvironmentWorkspaceGrant[]>>(
-          `/agent/apps/${encodeURIComponent(appId)}/environments/${encodeURIComponent(environmentId)}/workspaces/${encodeURIComponent(targetPluginId)}/grants`,
-        )
-      ).data,
-    );
-  },
-  async replaceWorkspaceGrants(
-    appId: string,
-    environmentId: string,
-    targetPluginId: string,
-    grants: Array<Pick<EnvironmentWorkspaceGrant, 'principalPluginId' | 'path' | 'permissions'>>,
-  ): Promise<EnvironmentWorkspaceGrant[]> {
-    return unwrap(
-      (
-        await httpClient.put<AgentEnvelope<EnvironmentWorkspaceGrant[]>>(
-          `/agent/apps/${encodeURIComponent(appId)}/environments/${encodeURIComponent(environmentId)}/workspaces/${encodeURIComponent(targetPluginId)}/grants`,
-          { grants },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async exportWorkspaceArtifact(
-    appId: string,
-    environmentId: string,
-    targetPluginId: string,
-    input: { path: string; name: string; mediaType: string },
-  ): Promise<AgentArtifactRef> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<AgentArtifactRef>>(
-          `/agent/apps/${encodeURIComponent(appId)}/environments/${encodeURIComponent(environmentId)}/workspaces/${encodeURIComponent(targetPluginId)}/artifacts/export`,
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async importArtifactToWorkspace(
-    appId: string,
-    environmentId: string,
-    targetPluginId: string,
-    input: { artifactId: string; path: string },
-  ): Promise<WorkspaceArtifactImportResult> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<WorkspaceArtifactImportResult>>(
-          `/agent/apps/${encodeURIComponent(appId)}/environments/${encodeURIComponent(environmentId)}/workspaces/${encodeURIComponent(targetPluginId)}/artifacts/import`,
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
+  ...createWorkspaceRuntimeApi(mutationHeaders),
   async targetDenylist(): Promise<TargetDenylistView> {
     return unwrap((await httpClient.get<AgentEnvelope<TargetDenylistView>>('/agent/target-denylist')).data);
   },

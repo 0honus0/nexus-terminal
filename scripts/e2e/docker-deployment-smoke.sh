@@ -161,7 +161,7 @@ runner_pid=$!
 
 runner_listener_ready=0
 for _ in {1..30}; do
-  if curl -fsS -H "Authorization: Bearer $runner_token" "http://127.0.0.1:${runner_port}/v1/availability" >/dev/null; then
+  if curl -fsS -H "Authorization: Bearer $runner_token" -H "X-Nexus-Agent-Protocol: 2026-09-11" "http://127.0.0.1:${runner_port}/v1/availability" >/dev/null; then
     runner_listener_ready=1
     break
   fi
@@ -212,7 +212,7 @@ for _ in {1..60}; do
   if compose exec -T backend node - <<'NODE'
 const token = process.env.AGENT_RUNNER_TOKEN;
 const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
-  headers: { authorization: `Bearer ${token}` },
+  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-11' },
 }).catch(() => null);
 if (!response?.ok) process.exit(1);
 const body = await response.json();
@@ -229,7 +229,7 @@ if [[ "$runner_ready" -ne 1 ]]; then
   compose exec -T backend node - <<'NODE' || true
 const token = process.env.AGENT_RUNNER_TOKEN;
 const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
-  headers: { authorization: `Bearer ${token}` },
+  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-11' },
 }).catch(() => null);
 if (!response) {
   console.error('runner availability: unreachable');
@@ -248,7 +248,7 @@ const { randomUUID } = await import('node:crypto');
 const baseUrl = process.env.AGENT_RUNNER_URL;
 const token = process.env.AGENT_RUNNER_TOKEN;
 const deploymentId = process.env.AGENT_RUNNER_DEPLOYMENT_ID;
-const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-09-11' };
 const get = async (path) => {
   const response = await fetch(`${baseUrl}${path}`, { headers });
   if (!response.ok) throw new Error(`GET ${path} failed: ${response.status} ${await response.text()}`);
@@ -263,25 +263,24 @@ const catalog = await get('/v1/catalog');
 const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 const pack = catalog.packs.find((candidate) => candidate.familyId === 'base-tools' && candidate.enabled);
 if (!recipe || !pack?.contentDigest) {
-  throw new Error('Smoke catalog does not expose the Workspace Dev Environment/base-tools runtime.');
+  throw new Error('Smoke catalog does not expose the Workspace Runtime/base-tools profile.');
 }
 
 const now = () => Math.floor(Date.now() / 1000);
-const environmentId = `smoke-env-${randomUUID()}`;
+const workspaceId = `smoke-workspace-${randomUUID()}`;
 const identity = {
   deploymentId,
   userId: 1,
   appId: 'operations.default',
   runId: 'smoke-run',
   agentRuntimeId: 'smoke-runtime',
-  groupId: 'smoke-group',
-  environmentId,
+  workspaceId,
   generation: 1,
   recipeId: recipe.id,
   recipeRevision: recipe.revision,
   runtimeDigest: catalog.runtimeDigest,
   catalogRevision: catalog.revision,
-  packs: [{ familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest }],
+  toolchain: [{ familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest }],
   runnerPlugins: [],
   limits: recipe.defaultLimits,
   network: { mode: 'none', hosts: [] },
@@ -307,7 +306,7 @@ if (start.status !== 'succeeded') throw new Error(`Runner start failed: ${JSON.s
 const jobId = `smoke-job-${randomUUID()}`;
 const job = {
   jobId,
-  environmentId,
+  workspaceId,
   generation: 1,
   userId: identity.userId,
   appId: identity.appId,
@@ -326,7 +325,7 @@ const job = {
   maxBytes: 4096,
   timeoutMs: 5000,
 };
-await post(`/v1/environments/${encodeURIComponent(environmentId)}/jobs`, job);
+await post(`/v1/workspaces/${encodeURIComponent(workspaceId)}/jobs`, job);
 let result;
 for (let attempt = 0; attempt < 100; attempt += 1) {
   result = await get(`/v1/jobs/${encodeURIComponent(jobId)}`);
@@ -362,7 +361,7 @@ const generationJob = {
     'test "$(cat /workspace/work/.version-switch-marker)" = workspace-stable && test "$(cat /workspace/deps/.toolchain-profile-marker)" = "$NEXUS_TOOLCHAIN_FINGERPRINT" && printf workspace-generation-ok',
   ],
 };
-await post(`/v1/environments/${encodeURIComponent(environmentId)}/jobs`, generationJob);
+await post(`/v1/workspaces/${encodeURIComponent(workspaceId)}/jobs`, generationJob);
 let generationResult;
 for (let attempt = 0; attempt < 100; attempt += 1) {
   generationResult = await get(`/v1/jobs/${encodeURIComponent(generationJobId)}`);

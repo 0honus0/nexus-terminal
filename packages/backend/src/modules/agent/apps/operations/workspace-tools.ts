@@ -8,8 +8,8 @@ import type {
   ToolPrecondition,
   ToolResult,
 } from '../../capabilities/tool.types';
-import type { EnvironmentGatewayPort } from '../../environments/environment-gateway.port';
-import type { EnvironmentRepositoryPort } from '../../environments/environment.repository.port';
+import type { WorkspaceRuntimeGatewayPort } from '../../workspace-runtime/workspace-runtime-gateway.port';
+import type { AgentWorkspaceRepositoryPort } from '../../workspace-runtime/workspace-runtime.repository.port';
 
 const MAX_ARGV_ITEMS = 128;
 const MAX_ARG_BYTES = 8 * 1024;
@@ -39,8 +39,9 @@ const positiveInteger = (value: JsonValue | undefined, fallback?: number): numbe
 };
 
 const argvValue = (value: JsonValue | undefined): string[] => {
-  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_ARGV_ITEMS)
+  if (!Array.isArray(value) || value.length < 1 || value.length > MAX_ARGV_ITEMS) {
     throw new Error('TOOL_ARGUMENTS_INVALID');
+  }
   let total = 0;
   const result = value.map((item) => {
     if (typeof item !== 'string' || item.includes('\0')) throw new Error('TOOL_ARGUMENTS_INVALID');
@@ -64,21 +65,21 @@ const operationHash = (
 ): string =>
   hashOperation(
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
       scope: {
         userId: context.userId,
         appId: context.appId,
         runId: context.runId,
         agentRuntimeId: context.agentRuntimeId,
       },
-      tool: { name: 'environment_execute_argv', version: '1.0.0' },
+      tool: { name: 'workspace_execute_argv', version: '1.0.0' },
       target: {
         kind: target.kind,
         targetIdentity: target.targetIdentity,
         endpoint: target.endpoint,
         loginUser: target.loginUser,
         configurationHash: target.configurationHash,
-        environmentId: target.environmentId ?? null,
+        workspaceId: target.workspaceId ?? null,
         generation: target.generation ?? null,
       },
       arguments: normalizedArguments,
@@ -95,21 +96,21 @@ const operationHash = (
     cryptoHash,
   );
 
-export const createEnvironmentJobTool = (
-  repository: EnvironmentRepositoryPort,
-  gateway: EnvironmentGatewayPort,
+export const createWorkspaceJobTool = (
+  repository: AgentWorkspaceRepositoryPort,
+  gateway: WorkspaceRuntimeGatewayPort,
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
   descriptor: {
-    name: 'environment_execute_argv',
+    name: 'workspace_execute_argv',
     version: '1.0.0',
     description:
-      'Execute an explicit argv command inside an already-running isolated Nexus Agent Environment. Does not invoke a shell. Requires user approval.',
+      'Execute an explicit argv command inside an already-running Nexus Agent Workspace generation. Does not invoke a shell. Requires user approval.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        environmentId: { type: 'string', minLength: 1, maxLength: 128 },
+        workspaceId: { type: 'string', minLength: 1, maxLength: 128 },
         argv: {
           type: 'array',
           minItems: 1,
@@ -119,73 +120,62 @@ export const createEnvironmentJobTool = (
         cwd: { type: 'string', minLength: 1, maxLength: 4096 },
         timeoutSeconds: { type: 'integer', minimum: 1, maximum: 300 },
       },
-      required: ['environmentId', 'argv'],
+      required: ['workspaceId', 'argv'],
     },
     riskClass: 'mutate',
-    capability: 'environment.execute',
+    capability: 'workspace.runtime.execute',
   },
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
-    onlyKeys(args, ['environmentId', 'argv', 'cwd', 'timeoutSeconds', 'groupId', 'generation']);
-    const environmentId = stringValue(args.environmentId, 128);
+    onlyKeys(args, ['workspaceId', 'argv', 'cwd', 'timeoutSeconds', 'generation']);
+    const workspaceId = stringValue(args.workspaceId, 128);
     const argv = argvValue(args.argv);
     const cwd = args.cwd === undefined ? '/workspace/work' : stringValue(args.cwd, 4096);
     const timeoutSeconds = positiveInteger(
       args.timeoutSeconds,
       Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
     );
-    const environment = await repository.getEnvironment(context, environmentId);
-    if (!environment) throw new Error('NOT_FOUND');
-    const group = await repository.getGroup(context, environment.groupId);
-    if (!group || group.runId !== context.runId || group.agentRuntimeId !== context.agentRuntimeId) {
+    const workspace = await repository.getWorkspace(context, workspaceId);
+    if (!workspace) throw new Error('NOT_FOUND');
+    if (workspace.runId !== context.runId || workspace.agentRuntimeId !== context.agentRuntimeId) {
       throw new Error('RESOURCE_FORBIDDEN');
     }
-    if (environment.status !== 'running') throw new Error('ENVIRONMENT_NOT_RUNNING');
+    if (workspace.status !== 'running') throw new Error('WORKSPACE_NOT_RUNNING');
 
     const target: ToolInspection['target'] = {
-      kind: 'environment',
-      environmentId,
-      generation: environment.generation,
-      targetIdentity: `environment:${environmentId}:${environment.generation}`,
-      endpoint: `environment:${environmentId}`,
+      kind: 'workspace',
+      workspaceId,
+      generation: workspace.generation,
+      targetIdentity: `workspace:${workspaceId}:${workspace.generation}`,
+      endpoint: `workspace:${workspaceId}`,
       loginUser: 'runner:65532',
       configurationHash: hashOperation(
         {
-          schemaVersion: 1,
-          environmentId,
-          generation: environment.generation,
-          recipeId: environment.recipeId,
-          recipeRevision: environment.recipeRevision,
-          runtimeDigest: environment.runtimeDigest,
-          catalogRevision: environment.catalogRevision,
-          packRefs: environment.packRefs.map((pack) => ({
-            familyId: pack.familyId,
-            versionId: pack.versionId,
-            contentDigest: pack.contentDigest,
-          })),
-          runnerPlugins: environment.runnerPlugins.map((target) => ({ ...target })),
+          schemaVersion: 2,
+          workspaceId,
+          generation: workspace.generation,
+          profile: JSON.parse(JSON.stringify(workspace.profile)) as JsonValue,
         },
         cryptoHash,
       ),
     };
     const normalizedArguments: JsonValue = {
-      environmentId,
-      groupId: environment.groupId,
-      generation: environment.generation,
+      workspaceId,
+      generation: workspace.generation,
       argv,
       cwd,
       timeoutSeconds,
     };
-    const resourceKeys = [`environment:${environmentId}:${environment.generation}`];
+    const resourceKeys = [`workspace:${workspaceId}:${workspace.generation}`];
     const preconditions: ToolPrecondition[] = [
       {
-        kind: 'environmentGeneration',
-        key: environmentId,
-        observedValue: { generation: environment.generation, status: environment.status },
+        kind: 'workspaceGeneration',
+        key: workspaceId,
+        observedValue: { generation: workspace.generation, version: workspace.version, status: workspace.status },
       },
     ];
     return {
-      toolName: 'environment_execute_argv',
+      toolName: 'workspace_execute_argv',
       toolVersion: '1.0.0',
       normalizedArguments,
       target,
@@ -210,8 +200,7 @@ export const createEnvironmentJobTool = (
   },
   execute: async (inspection, context): Promise<ToolResult> => {
     const args = record(inspection.normalizedArguments);
-    const environmentId = stringValue(args.environmentId, 128);
-    const groupId = stringValue(args.groupId, 128);
+    const workspaceId = stringValue(args.workspaceId, 128);
     const generation = positiveInteger(args.generation);
     const argv = argvValue(args.argv);
     const timeoutSeconds = positiveInteger(args.timeoutSeconds);
@@ -222,8 +211,7 @@ export const createEnvironmentJobTool = (
         appId: context.appId,
         runId: context.runId,
         agentRuntimeId: context.agentRuntimeId,
-        environmentId,
-        groupId,
+        workspaceId,
         generation,
       },
       {
@@ -239,14 +227,14 @@ export const createEnvironmentJobTool = (
     if (job.status === 'unknown' || job.status === 'pending' || job.status === 'running') {
       return {
         ok: false,
-        summary: 'The Environment job outcome could not be confirmed.',
+        summary: 'The Workspace job outcome could not be confirmed.',
         artifactRefs: [],
         truncated: false,
         outcome: 'unknown',
-        errorCode: job.error ?? 'ENVIRONMENT_JOB_OUTCOME_UNKNOWN',
+        errorCode: job.error ?? 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
         verification: {
           status: 'unverified',
-          summary: 'Runner could not prove whether the isolated job completed.',
+          summary: 'Runner could not prove whether the isolated Workspace job completed.',
           evidenceRefs: [],
         },
       };
@@ -254,15 +242,15 @@ export const createEnvironmentJobTool = (
     if (job.status === 'failed' || job.status === 'cancelled' || !job.result) {
       return {
         ok: false,
-        summary: `Environment job ${job.status}.`,
+        summary: `Workspace job ${job.status}.`,
         data: { jobId: job.jobId, errorCode: job.error ?? null },
         artifactRefs: [],
         truncated: false,
         outcome: 'confirmed',
-        errorCode: job.error ?? 'ENVIRONMENT_JOB_FAILED',
+        errorCode: job.error ?? 'WORKSPACE_JOB_FAILED',
         verification: {
           status: 'failed',
-          summary: 'Runner confirmed that the Environment job did not complete successfully.',
+          summary: 'Runner confirmed that the Workspace job did not complete successfully.',
           evidenceRefs: [],
         },
       };
@@ -271,10 +259,10 @@ export const createEnvironmentJobTool = (
     return {
       ok,
       summary: ok
-        ? 'Environment job completed successfully.'
+        ? 'Workspace job completed successfully.'
         : job.result.timedOut
-          ? 'Environment job timed out.'
-          : `Environment job exited with code ${job.result.exitCode}.`,
+          ? 'Workspace job timed out.'
+          : `Workspace job exited with code ${job.result.exitCode}.`,
       data: {
         jobId: job.jobId,
         exitCode: job.result.exitCode,
@@ -282,15 +270,16 @@ export const createEnvironmentJobTool = (
         stdout: job.result.stdout,
         stderr: job.result.stderr,
         timedOut: job.result.timedOut,
-        environmentId,
-        generation,
       },
       artifactRefs: [],
       truncated: job.result.truncated,
       outcome: 'confirmed',
+      ...(ok ? {} : { errorCode: job.result.timedOut ? 'WORKSPACE_JOB_TIMEOUT' : 'WORKSPACE_JOB_NONZERO_EXIT' }),
       verification: {
         status: ok ? 'verified' : 'failed',
-        summary: 'Runner returned a terminal result for the isolated Environment job.',
+        summary: ok
+          ? 'Runner confirmed a zero exit code inside the requested Workspace generation.'
+          : 'Runner confirmed that the Workspace job returned a non-success result.',
         evidenceRefs: [],
       },
     };

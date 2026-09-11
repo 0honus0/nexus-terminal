@@ -49,10 +49,9 @@ export interface AgentSettingsDocument {
     maxDelegationDepth: number;
     maxSubagentMessagesPerRun: number;
     maxSubagentMessageBytesPerRun: number;
-    maxActiveEnvironments: number;
-    maxEnvironmentsPerGroup: number;
+    maxActiveWorkspaces: number;
     unretainedArtifactTtlSeconds: number;
-    environmentIdleTtlSeconds: number;
+    workspaceIdleTtlSeconds: number;
   };
   subagents: {
     maxDelegationDepth: number;
@@ -65,12 +64,11 @@ export interface AgentSettingsDocument {
     maxGlobalArtifactBytes: number;
     unretainedArtifactTtlSeconds: number;
   };
-  environments: {
-    maxActiveEnvironments: number;
-    maxEnvironmentsPerGroup: number;
-    environmentIdleTtlSeconds: number;
+  workspaceRuntime: {
+    maxActiveWorkspaces: number;
+    workspaceIdleTtlSeconds: number;
     enabledRecipeIds: string[];
-    packVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
+    toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
   };
   safety: {
     providerPrivateNetworkExceptions: string[];
@@ -123,10 +121,9 @@ export const AGENT_DEFAULTS = {
       maxDelegationDepth: 3,
       maxSubagentMessagesPerRun: 5_000,
       maxSubagentMessageBytesPerRun: 8_388_608,
-      maxActiveEnvironments: 8,
-      maxEnvironmentsPerGroup: 4,
+      maxActiveWorkspaces: 8,
       unretainedArtifactTtlSeconds: 2_592_000,
-      environmentIdleTtlSeconds: 3_600,
+      workspaceIdleTtlSeconds: 3_600,
     },
     subagents: {
       maxDelegationDepth: 2,
@@ -139,12 +136,11 @@ export const AGENT_DEFAULTS = {
       maxGlobalArtifactBytes: 2_147_483_648,
       unretainedArtifactTtlSeconds: 604_800,
     },
-    environments: {
-      maxActiveEnvironments: 4,
-      maxEnvironmentsPerGroup: 4,
-      environmentIdleTtlSeconds: 900,
+    workspaceRuntime: {
+      maxActiveWorkspaces: 4,
+      workspaceIdleTtlSeconds: 900,
       enabledRecipeIds: [],
-      packVersions: {},
+      toolVersions: {},
     },
     safety: { providerPrivateNetworkExceptions: [] },
   } satisfies AgentSettingsDocument,
@@ -216,7 +212,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   const hardLimits = section(raw, 'hardLimits');
   const subagents = section(raw, 'subagents');
   const storage = section(raw, 'storage');
-  const environments = section(raw, 'environments');
+  const workspaceRuntime = section(raw, 'workspaceRuntime');
   const safety = section(raw, 'safety');
 
   const normalized: AgentSettingsDocument = {
@@ -286,20 +282,15 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         defaults.hardLimits.maxSubagentMessageBytesPerRun,
         1,
       ),
-      maxActiveEnvironments: integer(hardLimits.maxActiveEnvironments, defaults.hardLimits.maxActiveEnvironments, 1),
-      maxEnvironmentsPerGroup: integer(
-        hardLimits.maxEnvironmentsPerGroup,
-        defaults.hardLimits.maxEnvironmentsPerGroup,
-        1,
-      ),
+      maxActiveWorkspaces: integer(hardLimits.maxActiveWorkspaces, defaults.hardLimits.maxActiveWorkspaces, 1),
       unretainedArtifactTtlSeconds: integer(
         hardLimits.unretainedArtifactTtlSeconds,
         defaults.hardLimits.unretainedArtifactTtlSeconds,
         1,
       ),
-      environmentIdleTtlSeconds: integer(
-        hardLimits.environmentIdleTtlSeconds,
-        defaults.hardLimits.environmentIdleTtlSeconds,
+      workspaceIdleTtlSeconds: integer(
+        hardLimits.workspaceIdleTtlSeconds,
+        defaults.hardLimits.workspaceIdleTtlSeconds,
         1,
       ),
     },
@@ -326,24 +317,19 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         1,
       ),
     },
-    environments: {
-      maxActiveEnvironments: integer(
-        environments.maxActiveEnvironments,
-        defaults.environments.maxActiveEnvironments,
+    workspaceRuntime: {
+      maxActiveWorkspaces: integer(
+        workspaceRuntime.maxActiveWorkspaces,
+        defaults.workspaceRuntime.maxActiveWorkspaces,
         1,
       ),
-      maxEnvironmentsPerGroup: integer(
-        environments.maxEnvironmentsPerGroup,
-        defaults.environments.maxEnvironmentsPerGroup,
+      workspaceIdleTtlSeconds: integer(
+        workspaceRuntime.workspaceIdleTtlSeconds,
+        defaults.workspaceRuntime.workspaceIdleTtlSeconds,
         1,
       ),
-      environmentIdleTtlSeconds: integer(
-        environments.environmentIdleTtlSeconds,
-        defaults.environments.environmentIdleTtlSeconds,
-        1,
-      ),
-      enabledRecipeIds: stringList(environments.enabledRecipeIds, defaults.environments.enabledRecipeIds),
-      packVersions: packVersionSettings(environments.packVersions, defaults.environments.packVersions),
+      enabledRecipeIds: stringList(workspaceRuntime.enabledRecipeIds, defaults.workspaceRuntime.enabledRecipeIds),
+      toolVersions: packVersionSettings(workspaceRuntime.toolVersions, defaults.workspaceRuntime.toolVersions),
     },
     safety: {
       providerPrivateNetworkExceptions: Array.isArray(safety.providerPrivateNetworkExceptions)
@@ -421,17 +407,13 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     normalized.storage.unretainedArtifactTtlSeconds,
     normalized.hardLimits.unretainedArtifactTtlSeconds,
   );
-  normalized.environments.maxActiveEnvironments = Math.min(
-    normalized.environments.maxActiveEnvironments,
-    normalized.hardLimits.maxActiveEnvironments,
+  normalized.workspaceRuntime.maxActiveWorkspaces = Math.min(
+    normalized.workspaceRuntime.maxActiveWorkspaces,
+    normalized.hardLimits.maxActiveWorkspaces,
   );
-  normalized.environments.maxEnvironmentsPerGroup = Math.min(
-    normalized.environments.maxEnvironmentsPerGroup,
-    normalized.hardLimits.maxEnvironmentsPerGroup,
-  );
-  normalized.environments.environmentIdleTtlSeconds = Math.min(
-    normalized.environments.environmentIdleTtlSeconds,
-    normalized.hardLimits.environmentIdleTtlSeconds,
+  normalized.workspaceRuntime.workspaceIdleTtlSeconds = Math.min(
+    normalized.workspaceRuntime.workspaceIdleTtlSeconds,
+    normalized.hardLimits.workspaceIdleTtlSeconds,
   );
 
   return normalized;

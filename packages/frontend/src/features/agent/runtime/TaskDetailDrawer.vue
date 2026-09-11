@@ -5,7 +5,7 @@
     AgentSubagentMessage,
     AgentSubagentView,
   } from '../api/agent-api';
-  import EnvironmentWorkspacePanel from './EnvironmentWorkspacePanel.vue';
+  import WorkspaceRuntimePanel from './WorkspaceRuntimePanel.vue';
   import SubagentTree from './SubagentTree.vue';
 
   const props = defineProps<{
@@ -98,7 +98,7 @@
           </article>
         </section>
 
-        <EnvironmentWorkspacePanel :app-id="snapshot.appId" :run-id="snapshot.id" :busy="busy" />
+        <WorkspaceRuntimePanel :app-id="snapshot.appId" :run-id="snapshot.id" :busy="busy" />
 
         <SubagentTree
           :items="subagents"

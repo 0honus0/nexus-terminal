@@ -1,11 +1,11 @@
 export interface ToolTargetFingerprint {
-  kind: 'machine' | 'environment' | 'integration' | 'browser' | 'run';
+  kind: 'machine' | 'workspace' | 'integration' | 'browser' | 'run';
   targetIdentity: string;
   endpoint: string;
   loginUser: string;
   configurationHash: string;
   connectionId?: number;
-  environmentId?: string;
+  workspaceId?: string;
   integrationId?: string;
   schemaHash?: string;
   browserSessionId?: string;

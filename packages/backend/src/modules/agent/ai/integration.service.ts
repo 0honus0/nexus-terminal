@@ -71,7 +71,7 @@ const validateAcp = (raw: unknown): AcpIntegrationConfiguration => {
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (
     !nonEmpty(raw.displayName, 256) ||
-    raw.transport !== 'environment-profile' ||
+    raw.transport !== 'workspace-profile' ||
     !nonEmpty(raw.profileId, 128) ||
     !/^[a-z][a-z0-9_.-]{0,127}$/.test(raw.profileId) ||
     raw.protocolVersion !== '1'
@@ -80,7 +80,7 @@ const validateAcp = (raw: unknown): AcpIntegrationConfiguration => {
   }
   return {
     displayName: raw.displayName.trim(),
-    transport: 'environment-profile',
+    transport: 'workspace-profile',
     profileId: raw.profileId,
     protocolVersion: '1',
   };

@@ -2,36 +2,36 @@ import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type {
-  EnvironmentExecutionGrant,
-  EnvironmentGatewayPort,
-  EnvironmentJobCall,
-  EnvironmentJobView,
-} from '../../../modules/agent/environments/environment-gateway.port';
+  WorkspaceExecutionGrant,
+  WorkspaceRuntimeGatewayPort,
+  WorkspaceJobCall,
+  WorkspaceJobView,
+} from '../../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type {
-  EnvironmentControllerPort,
-  EnvironmentWorkspaceReadHandle,
+  WorkspaceRuntimeControllerPort,
+  AgentWorkspaceReadHandle,
   RunnerCommandRequest,
   RunnerCommandResult,
-} from '../../../modules/agent/environments/environment-controller.port';
+} from '../../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type {
-  EnvironmentAvailability,
-  EnvironmentCatalog,
-  EnvironmentStorageView,
-  EnvironmentWorkspaceGrant,
-  EnvironmentWorkspaceGrantInput,
-} from '../../../modules/agent/environments/environment.types';
+  WorkspaceRuntimeAvailability,
+  WorkspaceRuntimeCatalog,
+  WorkspaceRuntimeStorageView,
+  PluginWorkspaceGrant,
+  PluginWorkspaceGrantInput,
+} from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_HOST_WORKSPACE_TRANSFER_BYTES = 256 * 1024 * 1024;
 const WORKSPACE_TRANSFER_TIMEOUT_MS = 120_000;
-const API_VERSION = '2026-09-01';
+const API_VERSION = '2026-09-11';
 
 const timeoutSignal = (
   parent: AbortSignal | undefined,
   milliseconds: number,
 ): { signal: AbortSignal; dispose(): void } => {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(new Error('ENVIRONMENT_CONTROLLER_TIMEOUT')), milliseconds);
+  const timer = setTimeout(() => controller.abort(new Error('WORKSPACE_RUNTIME_TIMEOUT')), milliseconds);
   const onAbort = () => controller.abort(parent?.reason ?? new Error('ABORTED'));
   if (parent?.aborted) onAbort();
   else parent?.addEventListener('abort', onAbort, { once: true });
@@ -81,7 +81,7 @@ const waitForJob = (milliseconds: number, signal: AbortSignal): Promise<void> =>
     signal.addEventListener('abort', onAbort, { once: true });
   });
 
-export class RunnerHttpAdapter implements EnvironmentControllerPort, EnvironmentGatewayPort {
+export class RunnerHttpAdapter implements WorkspaceRuntimeControllerPort, WorkspaceRuntimeGatewayPort {
   private readonly baseUrl: URL | null;
 
   constructor(
@@ -93,7 +93,7 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
       throw new Error('AGENT_RUNNER_URL_INVALID');
   }
 
-  async availability(signal?: AbortSignal): Promise<EnvironmentAvailability> {
+  async availability(signal?: AbortSignal): Promise<WorkspaceRuntimeAvailability> {
     if (!this.baseUrl || !this.token) {
       return {
         available: false,
@@ -106,7 +106,7 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
       };
     }
     try {
-      return await this.get<EnvironmentAvailability>('/v1/availability', signal);
+      return await this.get<WorkspaceRuntimeAvailability>('/v1/availability', signal);
     } catch (error) {
       return {
         available: false,
@@ -120,11 +120,11 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
     }
   }
 
-  catalog(signal?: AbortSignal): Promise<EnvironmentCatalog> {
+  catalog(signal?: AbortSignal): Promise<WorkspaceRuntimeCatalog> {
     return this.get('/v1/catalog', signal);
   }
 
-  storage(signal?: AbortSignal): Promise<EnvironmentStorageView> {
+  storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView> {
     return this.get('/v1/storage', signal);
   }
 
@@ -158,27 +158,27 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
   }
 
   async workspaceGrants(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     signal?: AbortSignal,
-  ): Promise<EnvironmentWorkspaceGrant[]> {
-    const result = await this.get<{ targetPluginId: string; grants: EnvironmentWorkspaceGrant[] }>(
-      `/v1/environments/${encodeURIComponent(environmentId)}/workspaces/${encodeURIComponent(targetPluginId)}/grants?generation=${generation}`,
+  ): Promise<PluginWorkspaceGrant[]> {
+    const result = await this.get<{ targetPluginId: string; grants: PluginWorkspaceGrant[] }>(
+      `/v1/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/grants?generation=${generation}`,
       signal,
     );
     return result.grants;
   }
 
   async replaceWorkspaceGrants(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
-    grants: readonly EnvironmentWorkspaceGrantInput[],
+    grants: readonly PluginWorkspaceGrantInput[],
     signal?: AbortSignal,
-  ): Promise<EnvironmentWorkspaceGrant[]> {
-    const result = await this.request<{ targetPluginId: string; grants: EnvironmentWorkspaceGrant[] }>(
-      `/v1/environments/${encodeURIComponent(environmentId)}/workspaces/${encodeURIComponent(targetPluginId)}/grants`,
+  ): Promise<PluginWorkspaceGrant[]> {
+    const result = await this.request<{ targetPluginId: string; grants: PluginWorkspaceGrant[] }>(
+      `/v1/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/grants`,
       { method: 'POST', body: { generation, grants } },
       signal,
     );
@@ -186,21 +186,21 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
   }
 
   openWorkspaceFileRead(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     path: string,
     signal?: AbortSignal,
-  ): Promise<EnvironmentWorkspaceReadHandle> {
+  ): Promise<AgentWorkspaceReadHandle> {
     const query = new URLSearchParams({ generation: String(generation), path });
     return this.openWorkspaceRead(
-      `/v1/environments/${encodeURIComponent(environmentId)}/workspaces/${encodeURIComponent(targetPluginId)}/file?${query.toString()}`,
+      `/v1/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/file?${query.toString()}`,
       signal,
     );
   }
 
   async writeWorkspaceFileStream(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     path: string,
@@ -213,28 +213,24 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
       expectedBytes < 0 ||
       expectedBytes > MAX_HOST_WORKSPACE_TRANSFER_BYTES
     ) {
-      throw new Error('ENVIRONMENT_WORKSPACE_FILE_TOO_LARGE');
+      throw new Error('WORKSPACE_FILE_TOO_LARGE');
     }
     const query = new URLSearchParams({ generation: String(generation), path });
     await this.writeWorkspaceStream(
-      `/v1/environments/${encodeURIComponent(environmentId)}/workspaces/${encodeURIComponent(targetPluginId)}/file?${query.toString()}`,
+      `/v1/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/file?${query.toString()}`,
       source,
       expectedBytes,
       signal,
     );
   }
 
-  async invoke(
-    grant: EnvironmentExecutionGrant,
-    call: EnvironmentJobCall,
-    signal: AbortSignal,
-  ): Promise<EnvironmentJobView> {
+  async invoke(grant: WorkspaceExecutionGrant, call: WorkspaceJobCall, signal: AbortSignal): Promise<WorkspaceJobView> {
     const jobId = `job-${call.operationHash.slice(3)}`;
     const issuedAt = Math.floor(Date.now() / 1000);
     const deadlineAt = issuedAt + Math.ceil(call.timeoutMs / 1000) + 15;
     const request = {
       jobId,
-      environmentId: grant.environmentId,
+      workspaceId: grant.workspaceId,
       generation: grant.generation,
       userId: grant.userId,
       appId: grant.appId,
@@ -250,10 +246,10 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
       timeoutMs: call.timeoutMs,
     };
 
-    let current: EnvironmentJobView;
+    let current: WorkspaceJobView;
     try {
-      current = await this.request<EnvironmentJobView>(
-        `/v1/environments/${encodeURIComponent(grant.environmentId)}/jobs`,
+      current = await this.request<WorkspaceJobView>(
+        `/v1/workspaces/${encodeURIComponent(grant.workspaceId)}/jobs`,
         { method: 'POST', body: request },
         signal,
       );
@@ -261,11 +257,11 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
       if (signal.aborted) {
         return {
           jobId,
-          environmentId: grant.environmentId,
+          workspaceId: grant.workspaceId,
           generation: grant.generation,
           status: 'unknown',
           result: null,
-          error: 'ENVIRONMENT_JOB_OUTCOME_UNKNOWN',
+          error: 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
           createdAt: issuedAt,
           completedAt: Math.floor(Date.now() / 1000),
         };
@@ -275,11 +271,11 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
       } catch {
         return {
           jobId,
-          environmentId: grant.environmentId,
+          workspaceId: grant.workspaceId,
           generation: grant.generation,
           status: 'unknown',
           result: null,
-          error: error instanceof Error ? error.message.slice(0, 256) : 'ENVIRONMENT_JOB_OUTCOME_UNKNOWN',
+          error: error instanceof Error ? error.message.slice(0, 256) : 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
           createdAt: issuedAt,
           completedAt: Math.floor(Date.now() / 1000),
         };
@@ -294,7 +290,7 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
           ...current,
           status: 'unknown',
           result: null,
-          error: 'ENVIRONMENT_JOB_OUTCOME_UNKNOWN',
+          error: 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
           completedAt: Math.floor(Date.now() / 1000),
         };
       }
@@ -303,7 +299,7 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
           ...current,
           status: 'unknown',
           result: null,
-          error: 'ENVIRONMENT_JOB_QUERY_TIMEOUT',
+          error: 'WORKSPACE_JOB_QUERY_TIMEOUT',
           completedAt: Math.floor(Date.now() / 1000),
         };
       }
@@ -313,18 +309,15 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
     return current;
   }
 
-  queryJob(jobId: string, signal?: AbortSignal): Promise<EnvironmentJobView> {
+  queryJob(jobId: string, signal?: AbortSignal): Promise<WorkspaceJobView> {
     if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
     return this.get(`/v1/jobs/${encodeURIComponent(jobId)}`, signal);
   }
 
-  private async openWorkspaceRead(
-    pathname: string,
-    parentSignal?: AbortSignal,
-  ): Promise<EnvironmentWorkspaceReadHandle> {
-    if (!this.baseUrl || !this.token) throw new Error('ENVIRONMENT_CONTROLLER_UNAVAILABLE');
+  private async openWorkspaceRead(pathname: string, parentSignal?: AbortSignal): Promise<AgentWorkspaceReadHandle> {
+    if (!this.baseUrl || !this.token) throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
     const target = new URL(pathname, this.baseUrl);
-    if (target.origin !== this.baseUrl.origin) throw new Error('ENVIRONMENT_CONTROLLER_URL_INVALID');
+    if (target.origin !== this.baseUrl.origin) throw new Error('WORKSPACE_RUNTIME_URL_INVALID');
     const scoped = timeoutSignal(parentSignal, WORKSPACE_TRANSFER_TIMEOUT_MS);
     let response: Response | null = null;
     try {
@@ -342,22 +335,22 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
         const text = (await response.text()).slice(0, 4096);
         throw new Error(
           response.status === 401 || response.status === 403
-            ? 'ENVIRONMENT_CONTROLLER_AUTH_FAILED'
+            ? 'WORKSPACE_RUNTIME_AUTH_FAILED'
             : response.status === 413
-              ? 'ENVIRONMENT_WORKSPACE_FILE_TOO_LARGE'
-              : `ENVIRONMENT_CONTROLLER_HTTP_${response.status}${text ? `:${text}` : ''}`,
+              ? 'WORKSPACE_FILE_TOO_LARGE'
+              : `WORKSPACE_RUNTIME_HTTP_${response.status}${text ? `:${text}` : ''}`,
         );
       }
       if (!(response.headers.get('content-type') ?? '').toLowerCase().startsWith('application/octet-stream')) {
-        throw new Error('ENVIRONMENT_WORKSPACE_STREAM_INVALID');
+        throw new Error('WORKSPACE_STREAM_INVALID');
       }
       const rawLength = response.headers.get('content-length');
-      if (!rawLength || !/^\d+$/.test(rawLength)) throw new Error('ENVIRONMENT_WORKSPACE_STREAM_INVALID');
+      if (!rawLength || !/^\d+$/.test(rawLength)) throw new Error('WORKSPACE_STREAM_INVALID');
       const declared = Number(rawLength);
       if (!Number.isSafeInteger(declared) || declared < 0 || declared > MAX_HOST_WORKSPACE_TRANSFER_BYTES) {
-        throw new Error('ENVIRONMENT_WORKSPACE_FILE_TOO_LARGE');
+        throw new Error('WORKSPACE_FILE_TOO_LARGE');
       }
-      if (!response.body && declared !== 0) throw new Error('ENVIRONMENT_WORKSPACE_STREAM_INVALID');
+      if (!response.body && declared !== 0) throw new Error('WORKSPACE_STREAM_INVALID');
       const streamResponse = response;
       let closed = false;
       const close = async (): Promise<void> => {
@@ -376,12 +369,12 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
               if (next.done) break;
               received += next.value.byteLength;
               if (received > declared || received > MAX_HOST_WORKSPACE_TRANSFER_BYTES) {
-                throw new Error('ENVIRONMENT_WORKSPACE_STREAM_INVALID');
+                throw new Error('WORKSPACE_STREAM_INVALID');
               }
               yield next.value;
             }
           }
-          if (received !== declared) throw new Error('ENVIRONMENT_WORKSPACE_STREAM_INVALID');
+          if (received !== declared) throw new Error('WORKSPACE_STREAM_INVALID');
         } finally {
           reader?.releaseLock();
           await close();
@@ -401,9 +394,9 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
     expectedBytes: number,
     parentSignal?: AbortSignal,
   ): Promise<void> {
-    if (!this.baseUrl || !this.token) throw new Error('ENVIRONMENT_CONTROLLER_UNAVAILABLE');
+    if (!this.baseUrl || !this.token) throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
     const target = new URL(pathname, this.baseUrl);
-    if (target.origin !== this.baseUrl.origin) throw new Error('ENVIRONMENT_CONTROLLER_URL_INVALID');
+    if (target.origin !== this.baseUrl.origin) throw new Error('WORKSPACE_RUNTIME_URL_INVALID');
     const scoped = timeoutSignal(parentSignal, WORKSPACE_TRANSFER_TIMEOUT_MS);
     const body = Readable.from(source);
     try {
@@ -425,10 +418,10 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
         const text = (await response.text()).slice(0, 4096);
         throw new Error(
           response.status === 401 || response.status === 403
-            ? 'ENVIRONMENT_CONTROLLER_AUTH_FAILED'
+            ? 'WORKSPACE_RUNTIME_AUTH_FAILED'
             : response.status === 413
-              ? 'ENVIRONMENT_WORKSPACE_FILE_TOO_LARGE'
-              : `ENVIRONMENT_CONTROLLER_HTTP_${response.status}${text ? `:${text}` : ''}`,
+              ? 'WORKSPACE_FILE_TOO_LARGE'
+              : `WORKSPACE_RUNTIME_HTTP_${response.status}${text ? `:${text}` : ''}`,
         );
       }
       const text = (await response.text()).slice(0, 4096);
@@ -437,9 +430,9 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
         try {
           parsed = JSON.parse(text) as { writtenBytes?: unknown };
         } catch {
-          throw new Error('ENVIRONMENT_WORKSPACE_STREAM_INVALID');
+          throw new Error('WORKSPACE_STREAM_INVALID');
         }
-        if (parsed.writtenBytes !== expectedBytes) throw new Error('ENVIRONMENT_WORKSPACE_STREAM_INVALID');
+        if (parsed.writtenBytes !== expectedBytes) throw new Error('WORKSPACE_STREAM_INVALID');
       }
     } finally {
       body.destroy();
@@ -457,9 +450,9 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
     parentSignal?: AbortSignal,
     limits: { timeoutMs?: number; maxResponseBytes?: number } = {},
   ): Promise<T> {
-    if (!this.baseUrl || !this.token) throw new Error('ENVIRONMENT_CONTROLLER_UNAVAILABLE');
+    if (!this.baseUrl || !this.token) throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
     const target = new URL(pathname, this.baseUrl);
-    if (target.origin !== this.baseUrl.origin) throw new Error('ENVIRONMENT_CONTROLLER_URL_INVALID');
+    if (target.origin !== this.baseUrl.origin) throw new Error('WORKSPACE_RUNTIME_URL_INVALID');
     const scoped = timeoutSignal(parentSignal, limits.timeoutMs ?? 10_000);
     try {
       const response = await fetch(target, {
@@ -478,17 +471,16 @@ export class RunnerHttpAdapter implements EnvironmentControllerPort, Environment
         const text = (await response.text()).slice(0, 4096);
         throw new Error(
           response.status === 401 || response.status === 403
-            ? 'ENVIRONMENT_CONTROLLER_AUTH_FAILED'
-            : `ENVIRONMENT_CONTROLLER_HTTP_${response.status}${text ? `:${text}` : ''}`,
+            ? 'WORKSPACE_RUNTIME_AUTH_FAILED'
+            : `WORKSPACE_RUNTIME_HTTP_${response.status}${text ? `:${text}` : ''}`,
         );
       }
       const maxResponseBytes = limits.maxResponseBytes ?? MAX_RESPONSE_BYTES;
       const declared = Number(response.headers.get('content-length') ?? '0');
       if (Number.isFinite(declared) && declared > maxResponseBytes)
-        throw new Error('ENVIRONMENT_CONTROLLER_RESPONSE_TOO_LARGE');
+        throw new Error('WORKSPACE_RUNTIME_RESPONSE_TOO_LARGE');
       const text = await response.text();
-      if (Buffer.byteLength(text, 'utf8') > maxResponseBytes)
-        throw new Error('ENVIRONMENT_CONTROLLER_RESPONSE_TOO_LARGE');
+      if (Buffer.byteLength(text, 'utf8') > maxResponseBytes) throw new Error('WORKSPACE_RUNTIME_RESPONSE_TOO_LARGE');
       return JSON.parse(text) as T;
     } finally {
       scoped.dispose();

@@ -12,17 +12,17 @@ export class QuotaManager {
   validate(limits: ResourceLimits): void {
     const integerValues = [limits.memoryBytes, limits.pids, limits.tmpfsBytes];
     if (typeof limits.cpus !== 'number' || !Number.isFinite(limits.cpus) || limits.cpus <= 0) {
-      throw new Error('ENVIRONMENT_LIMIT_INVALID');
+      throw new Error('WORKSPACE_LIMIT_INVALID');
     }
     const values = integerValues;
-    if (values.some((value) => !Number.isSafeInteger(value) || value < 1)) throw new Error('ENVIRONMENT_LIMIT_INVALID');
+    if (values.some((value) => !Number.isSafeInteger(value) || value < 1)) throw new Error('WORKSPACE_LIMIT_INVALID');
     if (
       limits.memoryBytes > this.hard.maxMemoryBytes ||
       limits.cpus > this.hard.maxCpus ||
       limits.pids > this.hard.maxPids ||
       limits.tmpfsBytes > this.hard.maxTmpfsBytes
     ) {
-      throw new Error('ENVIRONMENT_LIMIT_EXCEEDED');
+      throw new Error('WORKSPACE_LIMIT_EXCEEDED');
     }
   }
 }

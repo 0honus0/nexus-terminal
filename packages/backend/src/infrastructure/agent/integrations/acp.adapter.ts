@@ -14,7 +14,7 @@ const MAX_PROMPT_BYTES = 32 * 1024;
 const MAX_UPDATE_BYTES = 256 * 1024;
 
 const acpConfig = (integration: IntegrationView): AcpIntegrationConfiguration => {
-  if (integration.kind !== 'acp' || integration.configuration.transport !== 'environment-profile') {
+  if (integration.kind !== 'acp' || integration.configuration.transport !== 'workspace-profile') {
     throw new Error('INTEGRATION_KIND_MISMATCH');
   }
   if (integration.configuration.protocolVersion !== String(PROTOCOL_VERSION)) {
@@ -60,7 +60,7 @@ const assertRequest = (request: AcpExecutionRequest): void => {
 
 /**
  * Stable ACP v1 client adapter. The transport is deliberately injected: Nexus
- * only wires transports created inside an isolated Environment profile. This
+ * only wires transports created inside an isolated Workspace profile. This
  * class never spawns an ACP backend in the Backend process and never grants
  * direct filesystem/terminal access to the remote agent.
  */

@@ -1,14 +1,13 @@
 import type { Scope } from '../agent.types';
 
-export interface EnvironmentExecutionGrant extends Scope {
-  environmentId: string;
-  groupId: string;
+export interface WorkspaceExecutionGrant extends Scope {
+  workspaceId: string;
   runId: string;
   agentRuntimeId: string;
   generation: number;
 }
 
-export interface EnvironmentJobCall {
+export interface WorkspaceJobCall {
   operationHash: string;
   argv: string[];
   cwd: string;
@@ -16,9 +15,9 @@ export interface EnvironmentJobCall {
   timeoutMs: number;
 }
 
-export interface EnvironmentJobView {
+export interface WorkspaceJobView {
   jobId: string;
-  environmentId: string;
+  workspaceId: string;
   generation: number;
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
   result: {
@@ -34,7 +33,7 @@ export interface EnvironmentJobView {
   completedAt: number | null;
 }
 
-export interface EnvironmentGatewayPort {
-  invoke(grant: EnvironmentExecutionGrant, call: EnvironmentJobCall, signal: AbortSignal): Promise<EnvironmentJobView>;
-  queryJob(jobId: string, signal?: AbortSignal): Promise<EnvironmentJobView>;
+export interface WorkspaceRuntimeGatewayPort {
+  invoke(grant: WorkspaceExecutionGrant, call: WorkspaceJobCall, signal: AbortSignal): Promise<WorkspaceJobView>;
+  queryJob(jobId: string, signal?: AbortSignal): Promise<WorkspaceJobView>;
 }

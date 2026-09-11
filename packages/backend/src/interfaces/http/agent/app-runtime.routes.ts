@@ -1,11 +1,11 @@
 import { Router, type Request } from 'express';
 import type {
   AgentApprovalFacade,
-  AgentEnvironmentFacade,
+  AgentWorkspaceRuntimeFacade,
   AgentEventFacade,
   AgentRunFacade,
 } from '../../../modules/agent/public';
-import type { EnvironmentCreateSpec } from '../../../modules/agent/environments/environment.types';
+import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { CreateRunCommand, RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
 import { agentData, agentRequestId, agentRoute } from './agent-http';
@@ -23,7 +23,7 @@ export interface AppRuntimeRouterDependencies {
   runs: AgentRunFacade;
   events: AgentEventFacade;
   approvals: AgentApprovalFacade;
-  environments: AgentEnvironmentFacade;
+  workspaceRuntime: AgentWorkspaceRuntimeFacade;
   nodeEnv: string;
   publicOrigin?: string;
 }
@@ -115,48 +115,45 @@ const parseBudgetIncrease = (body: unknown): { increase: RunBudgetIncrease; expe
   };
 };
 
-const parseEnvironmentSpecs = (value: unknown): EnvironmentCreateSpec[] => {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 8) throw new Error('VALIDATION_FAILED');
-  return value.map((item) => {
-    if (!isRecord(item) || !hasOnlyKeys(item, ['recipeId', 'versions', 'runnerPluginIds', 'limits', 'network'])) {
+const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
+  if (!isRecord(value) || !hasOnlyKeys(value, ['recipeId', 'versions', 'runnerPluginIds', 'limits', 'network'])) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (typeof value.recipeId !== 'string' || value.recipeId.length < 1 || value.recipeId.length > 128) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (value.versions !== undefined) {
+    if (!isRecord(value.versions) || Object.keys(value.versions).length > 32) throw new Error('VALIDATION_FAILED');
+    if (Object.entries(value.versions).some(([key, entry]) => !key || typeof entry !== 'string' || !entry)) {
       throw new Error('VALIDATION_FAILED');
     }
-    if (typeof item.recipeId !== 'string' || item.recipeId.length < 1 || item.recipeId.length > 128) {
+  }
+  if (value.runnerPluginIds !== undefined) {
+    if (
+      !Array.isArray(value.runnerPluginIds) ||
+      value.runnerPluginIds.length > 32 ||
+      new Set(value.runnerPluginIds).size !== value.runnerPluginIds.length ||
+      value.runnerPluginIds.some(
+        (pluginId) => typeof pluginId !== 'string' || !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/.test(pluginId),
+      )
+    ) {
       throw new Error('VALIDATION_FAILED');
     }
-    if (item.versions !== undefined) {
-      if (!isRecord(item.versions) || Object.keys(item.versions).length > 32) throw new Error('VALIDATION_FAILED');
-      if (Object.entries(item.versions).some(([key, entry]) => !key || typeof entry !== 'string' || !entry)) {
-        throw new Error('VALIDATION_FAILED');
-      }
+  }
+  if (value.limits !== undefined) {
+    if (!isRecord(value.limits) || !hasOnlyKeys(value.limits, ['cpus', 'memoryBytes', 'pids', 'tmpfsBytes'])) {
+      throw new Error('VALIDATION_FAILED');
     }
-    if (item.runnerPluginIds !== undefined) {
-      if (
-        !Array.isArray(item.runnerPluginIds) ||
-        item.runnerPluginIds.length > 32 ||
-        new Set(item.runnerPluginIds).size !== item.runnerPluginIds.length ||
-        item.runnerPluginIds.some(
-          (pluginId) => typeof pluginId !== 'string' || !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/.test(pluginId),
-        )
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+  }
+  if (value.network !== undefined) {
+    if (!isRecord(value.network) || !hasOnlyKeys(value.network, ['mode', 'hosts']))
+      throw new Error('VALIDATION_FAILED');
+    if ((value.network.mode !== 'none' && value.network.mode !== 'allowlist') || !Array.isArray(value.network.hosts)) {
+      throw new Error('VALIDATION_FAILED');
     }
-    if (item.limits !== undefined) {
-      if (!isRecord(item.limits) || !hasOnlyKeys(item.limits, ['cpus', 'memoryBytes', 'pids', 'tmpfsBytes'])) {
-        throw new Error('VALIDATION_FAILED');
-      }
-    }
-    if (item.network !== undefined) {
-      if (!isRecord(item.network) || !hasOnlyKeys(item.network, ['mode', 'hosts']))
-        throw new Error('VALIDATION_FAILED');
-      if ((item.network.mode !== 'none' && item.network.mode !== 'allowlist') || !Array.isArray(item.network.hosts)) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      if (item.network.hosts.some((host) => typeof host !== 'string')) throw new Error('VALIDATION_FAILED');
-    }
-    return item as unknown as EnvironmentCreateSpec;
-  });
+    if (value.network.hosts.some((host) => typeof host !== 'string')) throw new Error('VALIDATION_FAILED');
+  }
+  return value as unknown as AgentWorkspaceCreateSpec;
 };
 
 const runFrame = (runId: string, event: Awaited<ReturnType<AgentEventFacade['readRun']>>[number]): string =>
@@ -374,63 +371,72 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
   );
 
   router.get(
-    '/runs/:runId/environment-groups',
+    '/runs/:runId/workspaces',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       const runId = pathParam(request.params.runId);
       const runtime = queryString(request.query.runtime);
       if (runtime !== undefined && runtime !== 'root') throw new Error('VALIDATION_FAILED');
-      const groups = await dependencies.environments.listGroups(scope, runId);
+      const workspaces = await dependencies.workspaceRuntime.listWorkspaces(scope, runId);
       if (runtime !== 'root') {
-        agentData(request, response, groups);
+        agentData(request, response, workspaces);
         return;
       }
       const rootRuntimeId = await dependencies.runs.rootRuntimeId(scope, runId);
       agentData(
         request,
         response,
-        groups.filter((group) => group.agentRuntimeId === rootRuntimeId),
+        workspaces.filter((workspace) => workspace.agentRuntimeId === rootRuntimeId),
       );
     }),
   );
 
   router.post(
-    '/runs/:runId/environment-groups',
+    '/runs/:runId/workspaces',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
         !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['environments', 'retained']) ||
-        (request.body.retained !== undefined && typeof request.body.retained !== 'boolean')
+        !hasOnlyKeys(request.body, ['workspace', 'retained', 'catalogRevision']) ||
+        (request.body.retained !== undefined && typeof request.body.retained !== 'boolean') ||
+        (request.body.catalogRevision !== undefined &&
+          (typeof request.body.catalogRevision !== 'string' ||
+            !request.body.catalogRevision ||
+            request.body.catalogRevision.length > 128))
       ) {
         throw new Error('VALIDATION_FAILED');
       }
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       const runId = pathParam(request.params.runId);
       const agentRuntimeId = await dependencies.runs.rootRuntimeId(scope, runId);
-      const group = await dependencies.environments.createGroup(
+      const workspace = await dependencies.workspaceRuntime.createWorkspace(
         scope,
         runId,
         agentRuntimeId,
-        parseEnvironmentSpecs(request.body.environments),
+        parseWorkspaceSpec(request.body.workspace),
         request.body.retained === true,
         idempotencyKey(request),
+        request.body.catalogRevision as string | undefined,
       );
-      response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/environment-groups/${group.id}`);
-      agentData(request, response, group, 202);
+      response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/workspaces/${workspace.id}`);
+      agentData(request, response, workspace, 202);
     }),
   );
 
   router.get(
-    '/environment-groups/:groupId',
+    '/workspaces/:workspaceId',
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(request, response, await dependencies.environments.getGroup(scope, pathParam(request.params.groupId)));
+      agentData(
+        request,
+        response,
+        await dependencies.workspaceRuntime.getWorkspace(scope, pathParam(request.params.workspaceId)),
+      );
     }),
   );
 
   router.post(
-    '/environments/:environmentId/actions',
+    '/workspaces/:workspaceId/actions',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -446,9 +452,9 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       agentData(
         request,
         response,
-        await dependencies.environments.action(
+        await dependencies.workspaceRuntime.action(
           scope,
-          pathParam(request.params.environmentId),
+          pathParam(request.params.workspaceId),
           request.body.action as 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize',
           request.body.expectedVersion,
           parameters,
@@ -459,7 +465,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
   );
 
   router.post(
-    '/environments/:environmentId/versions',
+    '/workspaces/:workspaceId/tool-versions',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -484,9 +490,9 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       agentData(
         request,
         response,
-        await dependencies.environments.switchVersions(
+        await dependencies.workspaceRuntime.switchToolVersions(
           scope,
-          pathParam(request.params.environmentId),
+          pathParam(request.params.workspaceId),
           request.body.versions as Record<string, string>,
           request.body.expectedVersion,
           request.body.catalogRevision as string | undefined,

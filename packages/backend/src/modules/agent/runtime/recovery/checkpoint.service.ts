@@ -195,7 +195,7 @@ export class CheckpointService {
     const refs = [
       ...new Set([
         ...validation.checkpoint.snapshot.evidenceRefs,
-        ...validation.checkpoint.snapshot.environmentArtifactManifestRefs,
+        ...validation.checkpoint.snapshot.workspaceArtifactManifestRefs,
       ]),
     ];
     const request: JsonValue = {

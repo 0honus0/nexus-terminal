@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CatalogPack, EnvironmentRecipe, PackRef, RuntimeCatalog } from '../types';
+import type { CatalogPack, WorkspaceRecipe, ToolchainPackRef, RuntimeCatalog } from '../types';
 
-export class EnvironmentCatalog {
+export class WorkspaceRuntimeCatalog {
   private cached: RuntimeCatalog | null = null;
   constructor(private readonly catalogFile: string) {}
 
@@ -15,9 +15,9 @@ export class EnvironmentCatalog {
     return parsed;
   }
 
-  recipe(id: string): EnvironmentRecipe {
+  recipe(id: string): WorkspaceRecipe {
     const recipe = this.load().recipes.find((candidate) => candidate.id === id);
-    if (!recipe) throw new Error('ENVIRONMENT_RECIPE_UNAVAILABLE');
+    if (!recipe) throw new Error('WORKSPACE_RECIPE_UNAVAILABLE');
     return recipe;
   }
 
@@ -25,16 +25,16 @@ export class EnvironmentCatalog {
     const pack = this.load().packs.find(
       (candidate) => candidate.familyId === familyId && candidate.versionId === versionId,
     );
-    if (!pack || pack.status === 'unavailable') throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+    if (!pack || pack.status === 'unavailable') throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
     return pack;
   }
 
-  resolve(recipeId: string, versions: Record<string, string> = {}): PackRef[] {
+  resolve(recipeId: string, versions: Record<string, string> = {}): ToolchainPackRef[] {
     const recipe = this.recipe(recipeId);
     const architecture = process.arch;
     const requestedFamilies = Object.keys(versions);
     if (requestedFamilies.some((familyId) => !recipe.allowedFamilies.includes(familyId))) {
-      throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+      throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
     }
     const families = [...new Set([...recipe.defaultFamilies, ...requestedFamilies])].sort();
     return families.map((familyId) => {
@@ -43,20 +43,20 @@ export class EnvironmentCatalog {
         ? this.pack(familyId, versions[familyId]!)
         : candidates.sort((a, b) => b.versionId.localeCompare(a.versionId, undefined, { numeric: true }))[0];
       if (!selected || selected.status !== 'supported' || !selected.supportedArchitectures.includes(architecture))
-        throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+        throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
       const digest = selected.contentDigestByArch[architecture];
-      if (!digest) throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+      if (!digest) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
       return { familyId, versionId: selected.versionId, contentDigest: digest };
     });
   }
 
-  validateSelection(recipeId: string, refs: readonly PackRef[]): void {
+  validateSelection(recipeId: string, refs: readonly ToolchainPackRef[]): void {
     const recipe = this.recipe(recipeId);
-    if (!refs.length || refs.length > 32) throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+    if (!refs.length || refs.length > 32) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
     const seen = new Set<string>();
     for (const ref of refs) {
       if (!recipe.allowedFamilies.includes(ref.familyId) || seen.has(ref.familyId)) {
-        throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+        throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
       }
       seen.add(ref.familyId);
       const pack = this.pack(ref.familyId, ref.versionId);
@@ -67,11 +67,11 @@ export class EnvironmentCatalog {
         !digest ||
         digest !== ref.contentDigest
       ) {
-        throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+        throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
       }
     }
     if (recipe.defaultFamilies.some((familyId) => !seen.has(familyId))) {
-      throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
+      throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
     }
   }
 

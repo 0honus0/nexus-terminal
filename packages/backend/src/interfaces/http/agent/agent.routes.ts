@@ -6,7 +6,7 @@ import { AGENT_CAPABILITIES, type AgentCapability } from '../../../modules/agent
 import type {
   AgentArtifactFacade,
   AgentEventFacade,
-  AgentEnvironmentFacade,
+  AgentWorkspaceRuntimeFacade,
   AgentHostFacade,
   AgentPluginFacade,
   AgentProviderFacade,
@@ -29,7 +29,7 @@ export interface AgentRouterDependencies {
   providers: AgentProviderFacade;
   artifacts: AgentArtifactFacade;
   events: AgentEventFacade;
-  environments: AgentEnvironmentFacade;
+  workspaceRuntime: AgentWorkspaceRuntimeFacade;
   nodeEnv: string;
   publicOrigin?: string;
 }
@@ -684,7 +684,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
           state: settings.effectiveSettings.feature.enabled ? 'enabled' : 'disabled',
         },
         runtimeCapabilities: {
-          environmentController: false,
+          workspaceRuntimeController: false,
         },
       });
     }),
@@ -713,7 +713,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
           state: settings.effectiveSettings.feature.enabled ? 'enabled' : 'disabled',
         },
         runtimeCapabilities: {
-          environmentController: false,
+          workspaceRuntimeController: false,
         },
       });
     }),
@@ -739,7 +739,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(request, response, {
         ...preview,
         runtimeCapabilities: {
-          environmentController: false,
+          workspaceRuntimeController: false,
         },
       });
     }),
@@ -768,7 +768,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
           state: settings.effectiveSettings.feature.enabled ? 'enabled' : 'disabled',
         },
         runtimeCapabilities: {
-          environmentController: false,
+          workspaceRuntimeController: false,
         },
       });
     }),
@@ -951,7 +951,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/apps/:appId/environments/:environmentId/workspaces/:targetPluginId/artifacts/export',
+    '/apps/:appId/workspaces/:workspaceId/plugins/:targetPluginId/artifacts/export',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -971,10 +971,10 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.exportWorkspaceArtifact(
+        await dependencies.workspaceRuntime.exportWorkspaceArtifact(
           scope,
           {
-            environmentId: pathParam(request.params.environmentId),
+            workspaceId: pathParam(request.params.workspaceId),
             targetPluginId: pathParam(request.params.targetPluginId),
             path: request.body.path,
             name: request.body.name.trim(),
@@ -988,7 +988,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/apps/:appId/environments/:environmentId/workspaces/:targetPluginId/artifacts/import',
+    '/apps/:appId/workspaces/:workspaceId/plugins/:targetPluginId/artifacts/import',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1005,10 +1005,10 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.importArtifactToWorkspace(
+        await dependencies.workspaceRuntime.importArtifactToWorkspace(
           scope,
           {
-            environmentId: pathParam(request.params.environmentId),
+            workspaceId: pathParam(request.params.workspaceId),
             targetPluginId: pathParam(request.params.targetPluginId),
             path: request.body.path,
             artifactId: request.body.artifactId,
@@ -1020,14 +1020,14 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.get(
-    '/apps/:appId/environments/:environmentId/workspaces/:targetPluginId/grants',
+    '/apps/:appId/workspaces/:workspaceId/plugins/:targetPluginId/grants',
     agentRoute(async (request, response) => {
       agentData(
         request,
         response,
-        await dependencies.environments.workspaceGrants(
+        await dependencies.workspaceRuntime.workspaceGrants(
           { userId: agentUserId(request), appId: pathParam(request.params.appId) },
-          pathParam(request.params.environmentId),
+          pathParam(request.params.workspaceId),
           pathParam(request.params.targetPluginId),
         ),
       );
@@ -1035,7 +1035,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.put(
-    '/apps/:appId/environments/:environmentId/workspaces/:targetPluginId/grants',
+    '/apps/:appId/workspaces/:workspaceId/plugins/:targetPluginId/grants',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['grants']) || !Array.isArray(request.body.grants)) {
@@ -1072,9 +1072,9 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.replaceWorkspaceGrants(
+        await dependencies.workspaceRuntime.replaceWorkspaceGrants(
           { userId: agentUserId(request), appId: pathParam(request.params.appId) },
-          pathParam(request.params.environmentId),
+          pathParam(request.params.workspaceId),
           pathParam(request.params.targetPluginId),
           grants,
         ),
@@ -1083,28 +1083,28 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.get(
-    '/environments/availability',
+    '/workspace-runtime/availability',
     agentRoute(async (request, response) => {
-      agentData(request, response, await dependencies.environments.availability());
+      agentData(request, response, await dependencies.workspaceRuntime.availability());
     }),
   );
 
   router.get(
-    '/environments/catalog',
+    '/workspace-runtime/catalog',
     agentRoute(async (request, response) => {
-      agentData(request, response, await dependencies.environments.catalog());
+      agentData(request, response, await dependencies.workspaceRuntime.catalog());
     }),
   );
 
   router.get(
-    '/environments/storage',
+    '/workspace-runtime/storage',
     agentRoute(async (request, response) => {
-      agentData(request, response, await dependencies.environments.storage());
+      agentData(request, response, await dependencies.workspaceRuntime.storage());
     }),
   );
 
   router.post(
-    '/environments/setup/preview',
+    '/workspace-runtime/setup/preview',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1118,7 +1118,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.previewSetup(
+        await dependencies.workspaceRuntime.previewSetup(
           agentUserId(request),
           request.body.recipes,
           request.body.expectedVersion,
@@ -1128,7 +1128,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/environments/setup/confirm',
+    '/workspace-runtime/setup/confirm',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1142,7 +1142,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.confirmSetup(
+        await dependencies.workspaceRuntime.confirmSetup(
           agentUserId(request),
           request.body.confirmationId,
           request.body.expectedVersion,
@@ -1153,7 +1153,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/environments/packs/:familyId/:versionId/install',
+    '/workspace-runtime/tool-packs/:familyId/:versionId/install',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1166,7 +1166,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.installPack(
+        await dependencies.workspaceRuntime.installPack(
           agentUserId(request),
           pathParam(request.params.familyId),
           pathParam(request.params.versionId),
@@ -1177,7 +1177,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/environments/packs/:familyId/:versionId/uninstall/preview',
+    '/workspace-runtime/tool-packs/:familyId/:versionId/uninstall/preview',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1190,7 +1190,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.previewPackUninstall(
+        await dependencies.workspaceRuntime.previewPackUninstall(
           agentUserId(request),
           pathParam(request.params.familyId),
           pathParam(request.params.versionId),
@@ -1201,7 +1201,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/environments/packs/:familyId/:versionId/uninstall/confirm',
+    '/workspace-runtime/tool-packs/:familyId/:versionId/uninstall/confirm',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1215,7 +1215,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.confirmPackUninstall(
+        await dependencies.workspaceRuntime.confirmPackUninstall(
           agentUserId(request),
           request.body.confirmationId,
           request.body.expectedVersion,
@@ -1226,7 +1226,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/environments/runtime-cleanup/preview',
+    '/workspace-runtime/runtime-cleanup/preview',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1239,13 +1239,13 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.previewRuntimeCleanup(agentUserId(request), request.body.expectedVersion),
+        await dependencies.workspaceRuntime.previewRuntimeCleanup(agentUserId(request), request.body.expectedVersion),
       );
     }),
   );
 
   router.post(
-    '/environments/runtime-cleanup/confirm',
+    '/workspace-runtime/runtime-cleanup/confirm',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1259,7 +1259,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.confirmRuntimeCleanup(
+        await dependencies.workspaceRuntime.confirmRuntimeCleanup(
           agentUserId(request),
           request.body.confirmationId,
           request.body.expectedVersion,
@@ -1270,7 +1270,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/environments/settings/reset/preview',
+    '/workspace-runtime/settings/reset/preview',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1283,13 +1283,13 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.previewSettingsReset(agentUserId(request), request.body.expectedVersion),
+        await dependencies.workspaceRuntime.previewSettingsReset(agentUserId(request), request.body.expectedVersion),
       );
     }),
   );
 
   router.post(
-    '/environments/settings/reset/confirm',
+    '/workspace-runtime/settings/reset/confirm',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1303,7 +1303,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.confirmSettingsReset(
+        await dependencies.workspaceRuntime.confirmSettingsReset(
           agentUserId(request),
           request.body.confirmationId,
           request.body.expectedVersion,
@@ -1313,12 +1313,12 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.get(
-    '/environments/commands/:commandId',
+    '/workspace-runtime/commands/:commandId',
     agentRoute(async (request, response) => {
       agentData(
         request,
         response,
-        await dependencies.environments.getCommand(
+        await dependencies.workspaceRuntime.getCommand(
           { userId: agentUserId(request), appId: 'nexus.host' },
           pathParam(request.params.commandId),
         ),
@@ -1327,7 +1327,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
-    '/environments/cache-cleanup',
+    '/workspace-runtime/cache-cleanup',
     mutationSecurity,
     agentRoute(async (request, response) => {
       if (
@@ -1340,7 +1340,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       agentData(
         request,
         response,
-        await dependencies.environments.adminAction(agentUserId(request), 'cacheCleanup', {}),
+        await dependencies.workspaceRuntime.adminAction(agentUserId(request), 'cacheCleanup', {}),
         202,
       );
     }),

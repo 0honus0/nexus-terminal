@@ -17,8 +17,6 @@ import {
   createAgentArtifactLinksTableSQL,
   createAgentCheckpointsTableSQL,
   createAgentCommandsTableSQL,
-  createAgentEnvironmentCommandsTableSQL,
-  createAgentEnvironmentConfirmationsTableSQL,
   createAgentIntegrationsTableSQL,
   createAgentDelegationsTableSQL,
   createAgentMailboxCursorsTableSQL,
@@ -31,10 +29,11 @@ import {
   createAgentPluginStagesTableSQL,
   createAgentPluginVersionsTableSQL,
   createAgentPluginInstallationsTableSQL,
+  createAgentWorkspacesTableSQL,
+  createAgentWorkspaceRuntimeCommandsTableSQL,
+  createAgentWorkspaceRuntimeConfirmationsTableSQL,
   createAgentAppIntentReceiptsTableSQL,
   createAgentAppIntentArtifactGrantsTableSQL,
-  createAgentEnvironmentGroupsTableSQL,
-  createAgentEnvironmentsTableSQL,
   createAgentEventsTableSQL,
   createAgentHostEventsTableSQL,
   createAgentModelAttemptsTableSQL,
@@ -450,20 +449,6 @@ const definedMigrations: Migration[] = [
     ].join('\n'),
   },
   {
-    id: 30,
-    name: 'Create Agent P2 environment tables',
-    sql: [
-      createAgentEnvironmentGroupsTableSQL,
-      createAgentEnvironmentsTableSQL,
-      createAgentEnvironmentCommandsTableSQL,
-    ].join('\n'),
-  },
-  {
-    id: 31,
-    name: 'Create Agent environment confirmations',
-    sql: createAgentEnvironmentConfirmationsTableSQL,
-  },
-  {
     id: 32,
     name: 'Create Agent P3 integrations',
     sql: createAgentIntegrationsTableSQL,
@@ -577,19 +562,22 @@ const definedMigrations: Migration[] = [
       (await columnExists(db, 'agent_plugin_versions', 'ui_entry')) &&
       !(await columnExists(db, 'agent_plugin_versions', 'frontend_entry')),
   },
+
   {
-    id: 49,
-    name: 'Rename Agent Environment Base Runner digest to sandbox runtime digest',
-    sql: `ALTER TABLE agent_environments RENAME COLUMN base_runner_digest TO runtime_digest;`,
-    check: async (db) =>
-      (await columnExists(db, 'agent_environments', 'base_runner_digest')) &&
-      !(await columnExists(db, 'agent_environments', 'runtime_digest')),
-  },
-  {
-    id: 50,
-    name: 'Persist explicit Runner plugin targets per Agent Environment',
-    sql: `ALTER TABLE agent_environments ADD COLUMN runner_plugins_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(runner_plugins_json));`,
-    check: async (db) => !(await columnExists(db, 'agent_environments', 'runner_plugins_json')),
+    id: 51,
+    name: 'Replace unpublished Agent Environment model with Workspace Runtime',
+    sql: [
+      createAgentWorkspacesTableSQL,
+      createAgentWorkspaceRuntimeCommandsTableSQL,
+      createAgentWorkspaceRuntimeConfirmationsTableSQL,
+      `DELETE FROM agent_commands WHERE command_name='environment.group.create';`,
+      `DELETE FROM agent_app_grants WHERE capability IN ('environment.execute','environment.manage');`,
+      `DELETE FROM agent_settings;`,
+      `DROP TABLE IF EXISTS agent_environment_commands;`,
+      `DROP TABLE IF EXISTS agent_environments;`,
+      `DROP TABLE IF EXISTS agent_environment_groups;`,
+      `DROP TABLE IF EXISTS agent_environment_confirmations;`,
+    ].join('\n'),
   },
 ];
 

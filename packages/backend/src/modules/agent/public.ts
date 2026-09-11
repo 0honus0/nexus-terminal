@@ -1,25 +1,24 @@
 import type { AgentSettingsDocument } from './agent-defaults';
 import type {
-  EnvironmentAvailability,
-  EnvironmentCatalog,
-  EnvironmentCommandView,
-  EnvironmentCreateSpec,
-  EnvironmentGroupDetail,
-  EnvironmentGroupView,
-  EnvironmentPackUninstallPreview,
-  EnvironmentRuntimeCleanupPreview,
-  EnvironmentSettingsResetPreview,
-  EnvironmentSetupPreview,
-  EnvironmentStorageView,
-  EnvironmentVersionSwitchView,
-  EnvironmentWorkspaceGrant,
-  EnvironmentWorkspaceGrantInput,
-} from './environments/environment.types';
+  WorkspaceRuntimeAvailability,
+  WorkspaceRuntimeCatalog,
+  WorkspaceRuntimeCommandView,
+  AgentWorkspaceCreateSpec,
+  AgentWorkspaceView,
+  ToolchainPackUninstallPreview,
+  WorkspaceRuntimeCleanupPreview,
+  WorkspaceRuntimeSettingsResetPreview,
+  WorkspaceRuntimeSetupPreview,
+  WorkspaceRuntimeStorageView,
+  WorkspaceToolchainSwitchView,
+  PluginWorkspaceGrant,
+  PluginWorkspaceGrantInput,
+} from './workspace-runtime/workspace-runtime.types';
 import type {
   WorkspaceArtifactExportInput,
   WorkspaceArtifactImportInput,
   WorkspaceArtifactImportResult,
-} from './runtime/exchange/workspace-artifact.types';
+} from './exchange/workspace-artifact.types';
 import type { JsonValue, Scope } from './agent.types';
 import type {
   ArtifactAttachResult,
@@ -298,71 +297,72 @@ export interface AgentEventFacade {
   onTransient(runId: string, listener: (event: TransientRunEvent) => void): () => void;
 }
 
-export interface AgentEnvironmentFacade {
-  availability(signal?: AbortSignal): Promise<EnvironmentAvailability>;
-  catalog(signal?: AbortSignal): Promise<EnvironmentCatalog>;
-  storage(signal?: AbortSignal): Promise<EnvironmentStorageView>;
-  listGroups(scope: Scope, runId?: string): Promise<EnvironmentGroupView[]>;
-  getGroup(scope: Scope, groupId: string): Promise<EnvironmentGroupDetail>;
-  workspaceGrants(scope: Scope, environmentId: string, targetPluginId: string): Promise<EnvironmentWorkspaceGrant[]>;
+export interface AgentWorkspaceRuntimeFacade {
+  availability(signal?: AbortSignal): Promise<WorkspaceRuntimeAvailability>;
+  catalog(signal?: AbortSignal): Promise<WorkspaceRuntimeCatalog>;
+  storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView>;
+  listWorkspaces(scope: Scope, runId?: string): Promise<AgentWorkspaceView[]>;
+  getWorkspace(scope: Scope, workspaceId: string): Promise<AgentWorkspaceView>;
+  workspaceGrants(scope: Scope, workspaceId: string, targetPluginId: string): Promise<PluginWorkspaceGrant[]>;
   replaceWorkspaceGrants(
     scope: Scope,
-    environmentId: string,
+    workspaceId: string,
     targetPluginId: string,
-    grants: readonly EnvironmentWorkspaceGrantInput[],
-  ): Promise<EnvironmentWorkspaceGrant[]>;
+    grants: readonly PluginWorkspaceGrantInput[],
+  ): Promise<PluginWorkspaceGrant[]>;
   exportWorkspaceArtifact(scope: Scope, input: WorkspaceArtifactExportInput, signal: AbortSignal): Promise<ArtifactRef>;
   importArtifactToWorkspace(
     scope: Scope,
     input: WorkspaceArtifactImportInput,
     signal: AbortSignal,
   ): Promise<WorkspaceArtifactImportResult>;
-  createGroup(
+  createWorkspace(
     scope: Scope,
     runId: string,
     agentRuntimeId: string,
-    environments: EnvironmentCreateSpec[],
+    workspace: AgentWorkspaceCreateSpec,
     retained: boolean,
     idempotencyKey: string,
-  ): Promise<EnvironmentGroupDetail>;
+    expectedCatalogRevision?: string,
+  ): Promise<AgentWorkspaceView>;
   action(
     scope: Scope,
-    environmentId: string,
+    workspaceId: string,
     action: 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize',
     expectedVersion: number,
     parameters: JsonValue,
-  ): Promise<EnvironmentCommandView>;
-  switchVersions(
+  ): Promise<WorkspaceRuntimeCommandView>;
+  switchToolVersions(
     scope: Scope,
-    environmentId: string,
+    workspaceId: string,
     versions: Record<string, string>,
     expectedVersion: number,
     expectedCatalogRevision?: string,
-  ): Promise<EnvironmentVersionSwitchView>;
-  getCommand(scope: Scope, commandId: string): Promise<EnvironmentCommandView>;
-  previewSetup(userId: number, selections: unknown, expectedVersion: number): Promise<EnvironmentSetupPreview>;
-  confirmSetup(userId: number, confirmationId: string, expectedVersion: number): Promise<EnvironmentCommandView>;
-  installPack(userId: number, familyId: string, versionId: string): Promise<EnvironmentCommandView>;
+  ): Promise<WorkspaceToolchainSwitchView>;
+  getCommand(scope: Scope, commandId: string): Promise<WorkspaceRuntimeCommandView>;
+  previewSetup(userId: number, selections: unknown, expectedVersion: number): Promise<WorkspaceRuntimeSetupPreview>;
+  confirmSetup(userId: number, confirmationId: string, expectedVersion: number): Promise<WorkspaceRuntimeCommandView>;
+  installPack(userId: number, familyId: string, versionId: string): Promise<WorkspaceRuntimeCommandView>;
   previewPackUninstall(
     userId: number,
     familyId: string,
     versionId: string,
     expectedVersion: number,
-  ): Promise<EnvironmentPackUninstallPreview>;
+  ): Promise<ToolchainPackUninstallPreview>;
   confirmPackUninstall(
     userId: number,
     confirmationId: string,
     expectedVersion: number,
-  ): Promise<EnvironmentCommandView>;
-  previewRuntimeCleanup(userId: number, expectedVersion: number): Promise<EnvironmentRuntimeCleanupPreview>;
+  ): Promise<WorkspaceRuntimeCommandView>;
+  previewRuntimeCleanup(userId: number, expectedVersion: number): Promise<WorkspaceRuntimeCleanupPreview>;
   confirmRuntimeCleanup(
     userId: number,
     confirmationId: string,
     expectedVersion: number,
-  ): Promise<EnvironmentCommandView>;
-  previewSettingsReset(userId: number, expectedVersion: number): Promise<EnvironmentSettingsResetPreview>;
+  ): Promise<WorkspaceRuntimeCommandView>;
+  previewSettingsReset(userId: number, expectedVersion: number): Promise<WorkspaceRuntimeSettingsResetPreview>;
   confirmSettingsReset(userId: number, confirmationId: string, expectedVersion: number): Promise<AgentSettingsView>;
-  adminAction(userId: number, action: string, payload: JsonValue): Promise<EnvironmentCommandView>;
+  adminAction(userId: number, action: string, payload: JsonValue): Promise<WorkspaceRuntimeCommandView>;
 }
 
 export interface AgentApprovalFacade {
@@ -396,7 +396,7 @@ export interface AgentServices {
     collaboration: AgentCollaborationFacade;
     events: AgentEventFacade;
     approvals: AgentApprovalFacade;
-    environments: AgentEnvironmentFacade;
+    workspaceRuntime: AgentWorkspaceRuntimeFacade;
   };
   initialize(): Promise<void>;
   initializeForUser(userId: number): Promise<void>;

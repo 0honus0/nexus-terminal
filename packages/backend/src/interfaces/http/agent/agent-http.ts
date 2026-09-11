@@ -136,36 +136,54 @@ const mapAgentError = (error: unknown): { status: number; code: string; message:
   ) {
     return { status: 503, code: raw, message: 'The integration endpoint is unavailable or unsafe.' };
   }
-  if (raw === 'ENVIRONMENT_CONFIRMATION_NOT_FOUND') {
-    return { status: 404, code: raw, message: 'Environment confirmation was not found.' };
+  if (raw === 'WORKSPACE_RUNTIME_CONFIRMATION_NOT_FOUND') {
+    return { status: 404, code: raw, message: 'Workspace Runtime confirmation was not found.' };
   }
-  if (raw === 'ENVIRONMENT_CONFIRMATION_EXPIRED') {
-    return { status: 409, code: raw, message: 'Environment confirmation expired; preview again.' };
+  if (raw === 'WORKSPACE_RUNTIME_CONFIRMATION_EXPIRED') {
+    return { status: 409, code: raw, message: 'Workspace Runtime confirmation expired; preview again.' };
   }
   if (raw === 'CATALOG_REVISION_CONFLICT') {
-    return { status: 409, code: raw, message: 'Environment Catalog changed; refresh and preview again.' };
+    return { status: 409, code: raw, message: 'Workspace Runtime Catalog changed; refresh and preview again.' };
   }
-  if (raw === 'ENVIRONMENT_PACK_IN_USE') {
-    return { status: 409, code: raw, message: 'The Environment Pack is still used by an active Environment.' };
+  if (raw === 'WORKSPACE_TOOLCHAIN_IN_USE') {
+    return { status: 409, code: raw, message: 'The Tool Pack is still used by an active Workspace.' };
   }
-  if (raw === 'ENVIRONMENT_NETWORK_ENFORCEMENT_UNAVAILABLE') {
-    return { status: 409, code: raw, message: 'Environment egress allowlists are not available on this Runner.' };
-  }
-  if (raw === 'ENVIRONMENT_CONTROLLER_UNAVAILABLE') {
-    return { status: 503, code: raw, message: 'Environment Controller is unavailable.' };
-  }
-  if (raw === 'RESOURCE_UNAVAILABLE') {
-    return { status: 507, code: raw, message: 'The Environment Runner does not have enough available resources.' };
+  if (raw === 'WORKSPACE_NETWORK_ENFORCEMENT_UNAVAILABLE') {
+    return { status: 409, code: raw, message: 'Workspace egress allowlists are not available on this Runner.' };
   }
   if (
-    raw === 'ENVIRONMENT_LIMIT_EXCEEDED' ||
-    raw === 'ENVIRONMENT_PACK_UNAVAILABLE' ||
-    raw === 'ENVIRONMENT_RECIPE_NOT_FOUND'
+    raw === 'WORKSPACE_RUNTIME_UNAVAILABLE' ||
+    raw === 'WORKSPACE_RUNTIME_TIMEOUT' ||
+    raw === 'WORKSPACE_RUNTIME_AUTH_FAILED' ||
+    raw.startsWith('WORKSPACE_RUNTIME_HTTP_')
   ) {
-    return { status: 422, code: raw, message: 'The requested Environment configuration is unavailable.' };
+    return { status: 503, code: 'WORKSPACE_RUNTIME_UNAVAILABLE', message: 'Workspace Runtime Runner is unavailable.' };
   }
-  if (raw === 'ENVIRONMENT_PACK_FORBIDDEN') {
-    return { status: 403, code: raw, message: 'The requested Environment Pack is not allowed by this recipe.' };
+  if (raw === 'RESOURCE_UNAVAILABLE') {
+    return { status: 507, code: raw, message: 'Workspace Runtime does not have enough available resources.' };
+  }
+  if (raw === 'WORKSPACE_RECIPE_NOT_FOUND') {
+    return { status: 404, code: 'NOT_FOUND', message: 'Workspace recipe was not found.' };
+  }
+  if (raw === 'WORKSPACE_TOOLCHAIN_UNAVAILABLE' || raw === 'WORKSPACE_LIMIT_EXCEEDED') {
+    return { status: 422, code: raw, message: 'The requested Workspace configuration is unavailable.' };
+  }
+  if (raw === 'WORKSPACE_TOOLCHAIN_FORBIDDEN') {
+    return { status: 403, code: raw, message: 'The requested Tool Pack is not allowed by this Workspace recipe.' };
+  }
+  if (raw === 'WORKSPACE_TARGET_NOT_FOUND') {
+    return { status: 404, code: 'NOT_FOUND', message: 'Workspace plugin target was not found.' };
+  }
+  if (
+    raw === 'WORKSPACE_EXISTS' ||
+    raw === 'WORKSPACE_STATE_INVALID' ||
+    raw === 'WORKSPACE_RECONCILIATION_REQUIRED' ||
+    raw === 'WORKSPACE_TOOLCHAIN_NO_CHANGE'
+  ) {
+    return { status: 409, code: raw, message: 'Workspace state changed; refresh and retry.' };
+  }
+  if (raw === 'WORKSPACE_FILE_TOO_LARGE') {
+    return { status: 413, code: raw, message: 'Workspace file exceeds the supported transfer size.' };
   }
   if (
     raw === 'SUBAGENT_PROFILE_NOT_FOUND' ||
@@ -419,34 +437,6 @@ const mapAgentError = (error: unknown): { status: number; code: string; message:
   }
   if (raw === 'ARTIFACT_CROSS_APP_ATTACH_REQUIRED') {
     return { status: 409, code: raw, message: 'Cross-App Artifact use requires an explicit Host attach.' };
-  }
-  if (
-    raw === 'ENVIRONMENT_CONTROLLER_UNAVAILABLE' ||
-    raw === 'ENVIRONMENT_CONTROLLER_TIMEOUT' ||
-    raw === 'ENVIRONMENT_CONTROLLER_AUTH_FAILED' ||
-    raw.startsWith('ENVIRONMENT_CONTROLLER_HTTP_')
-  ) {
-    return {
-      status: 503,
-      code: 'ENVIRONMENT_CONTROLLER_UNAVAILABLE',
-      message: 'Agent Environment Runner is unavailable.',
-    };
-  }
-  if (raw === 'ENVIRONMENT_RECIPE_NOT_FOUND' || raw === 'ENVIRONMENT_RECIPE_UNAVAILABLE') {
-    return { status: 404, code: 'NOT_FOUND', message: 'Environment recipe was not found.' };
-  }
-  if (raw === 'ENVIRONMENT_PACK_UNAVAILABLE') {
-    return { status: 422, code: raw, message: 'The requested Environment Pack is unavailable.' };
-  }
-  if (raw === 'ENVIRONMENT_PACK_FORBIDDEN' || raw === 'ENVIRONMENT_LIMIT_EXCEEDED') {
-    return { status: 422, code: raw, message: 'The requested Environment configuration is not allowed.' };
-  }
-  if (
-    raw === 'ENVIRONMENT_PACK_IN_USE' ||
-    raw === 'ENVIRONMENT_RECONCILIATION_REQUIRED' ||
-    raw === 'ENVIRONMENT_RECREATE_REQUIRED'
-  ) {
-    return { status: 409, code: raw, message: 'Environment state must be reconciled before this action.' };
   }
   if (raw === 'HARD_LIMIT_CONFIRMATION_REQUIRED') {
     return {

@@ -1,7 +1,7 @@
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from './plugin-sdk.types';
 
-export type EnvironmentKind = 'shell' | 'code' | 'data' | 'browser';
-export type EnvironmentStatus =
+export type WorkspaceKind = 'shell' | 'code' | 'data' | 'browser';
+export type WorkspaceStatus =
   'creating' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'deleting' | 'deleted' | 'failed';
 
 export interface ResourceLimits {
@@ -20,7 +20,7 @@ export interface PluginRunnerTarget {
   entry: string;
 }
 
-export interface PackRef {
+export interface ToolchainPackRef {
   familyId: string;
   versionId: string;
   contentDigest: string;
@@ -42,10 +42,10 @@ export interface CatalogPack {
   sideBySide: boolean;
 }
 
-export interface EnvironmentRecipe {
+export interface WorkspaceRecipe {
   id: string;
   revision: string;
-  kind: EnvironmentKind;
+  kind: WorkspaceKind;
   displayName: string;
   allowedFamilies: string[];
   requiredCapabilities: string[];
@@ -58,26 +58,25 @@ export interface RuntimeCatalog {
   schemaVersion: 1;
   revision: string;
   runtimeDigest: string;
-  recipes: EnvironmentRecipe[];
+  recipes: WorkspaceRecipe[];
   packs: CatalogPack[];
 }
 
-export interface EnvironmentCommand {
+export interface WorkspaceRuntimeCommand {
   commandId: string;
   deploymentId: string;
   userId: number;
   appId: string;
   runId: string;
   agentRuntimeId: string;
-  groupId: string;
-  environmentId: string;
+  workspaceId: string;
   generation: number;
   action: 'provision' | 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize';
   recipeId: string;
   recipeRevision: string;
   runtimeDigest: string;
   catalogRevision: string;
-  packs: PackRef[];
+  toolchain: ToolchainPackRef[];
   runnerPlugins?: PluginRunnerTarget[];
   limits: ResourceLimits;
   network: { mode: 'none' | 'allowlist'; hosts: string[] };
@@ -89,15 +88,14 @@ export interface EnvironmentCommand {
   nonce: string;
 }
 
-export interface EnvironmentRecord {
-  environmentId: string;
+export interface WorkspaceRecord {
+  workspaceId: string;
   userId: number;
   appId: string;
-  groupId: string;
   runId: string;
   agentRuntimeId: string;
   generation: number;
-  status: EnvironmentStatus;
+  status: WorkspaceStatus;
   sandboxId: string | null;
   commandId: string;
   retained: boolean;
@@ -105,7 +103,7 @@ export interface EnvironmentRecord {
   recipeRevision: string;
   runtimeDigest: string;
   catalogRevision: string;
-  packs: PackRef[];
+  toolchain: ToolchainPackRef[];
   runnerPlugins?: PluginRunnerTarget[];
   limits: ResourceLimits;
   network: { mode: 'none' | 'allowlist'; hosts: string[] };
@@ -117,16 +115,16 @@ export interface CommandRecord {
   payloadHash: string;
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown';
   action: string;
-  environmentId: string | null;
+  workspaceId: string | null;
   result: unknown | null;
   error: string | null;
   createdAt: number;
   completedAt: number | null;
 }
 
-export interface EnvironmentJobRequest {
+export interface WorkspaceJobRequest {
   jobId: string;
-  environmentId: string;
+  workspaceId: string;
   generation: number;
   userId: number;
   appId: string;
@@ -142,7 +140,7 @@ export interface EnvironmentJobRequest {
   timeoutMs: number;
 }
 
-export interface EnvironmentJobResult {
+export interface WorkspaceJobResult {
   exitCode: number | null;
   signal: string | null;
   stdout: string;
@@ -154,10 +152,10 @@ export interface EnvironmentJobResult {
 export interface JobRecord {
   jobId: string;
   payloadHash: string;
-  environmentId: string;
+  workspaceId: string;
   generation: number;
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
-  result: EnvironmentJobResult | null;
+  result: WorkspaceJobResult | null;
   error: string | null;
   createdAt: number;
   completedAt: number | null;

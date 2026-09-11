@@ -1,7 +1,7 @@
-import type { ArtifactRef } from '../../ai/artifact.port';
+import type { ArtifactRef } from '../ai/artifact.port';
 
 export interface WorkspaceArtifactExportInput {
-  environmentId: string;
+  workspaceId: string;
   targetPluginId: string;
   path: string;
   name: string;
@@ -9,7 +9,7 @@ export interface WorkspaceArtifactExportInput {
 }
 
 export interface WorkspaceArtifactImportInput {
-  environmentId: string;
+  workspaceId: string;
   targetPluginId: string;
   path: string;
   artifactId: string;
@@ -17,7 +17,7 @@ export interface WorkspaceArtifactImportInput {
 
 export interface WorkspaceArtifactImportResult {
   artifact: ArtifactRef;
-  environmentId: string;
+  workspaceId: string;
   targetPluginId: string;
   path: string;
   writtenBytes: number;

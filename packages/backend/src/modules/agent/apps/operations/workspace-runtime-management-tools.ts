@@ -8,8 +8,11 @@ import type {
   ToolPrecondition,
   ToolResult,
 } from '../../capabilities/tool.types';
-import type { EnvironmentRepositoryPort } from '../../environments/environment.repository.port';
-import type { EnvironmentService } from '../../environments/environment.service';
+import type { AgentWorkspaceRepositoryPort } from '../../workspace-runtime/workspace-runtime.repository.port';
+import {
+  resolveWorkspaceToolchain,
+  type WorkspaceRuntimeService,
+} from '../../workspace-runtime/workspace-runtime.service';
 
 const record = (value: JsonValue): Record<string, JsonValue> => {
   if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');
@@ -60,25 +63,25 @@ const runnerPluginIdsValue = (value: JsonValue | undefined): string[] => {
   return ids;
 };
 
-const environmentTarget = (
+const workspaceTarget = (
   cryptoHash: CryptoHashPort,
   input: {
-    environmentId?: string;
+    workspaceId?: string;
     generation?: number;
     runId: string;
     agentRuntimeId: string;
     configuration: JsonValue;
   },
 ): ToolInspection['target'] => {
-  const identity = input.environmentId
-    ? `environment:${input.environmentId}:${input.generation ?? 0}`
-    : `environment-group:${input.runId}:${input.agentRuntimeId}`;
+  const identity = input.workspaceId
+    ? `workspace:${input.workspaceId}:${input.generation ?? 0}`
+    : `workspace:new:${input.runId}:${input.agentRuntimeId}`;
   return {
-    kind: 'environment',
-    ...(input.environmentId ? { environmentId: input.environmentId } : {}),
+    kind: 'workspace',
+    ...(input.workspaceId ? { workspaceId: input.workspaceId } : {}),
     ...(input.generation ? { generation: input.generation } : {}),
     targetIdentity: identity,
-    endpoint: input.environmentId ? `environment:${input.environmentId}` : 'environment:new',
+    endpoint: input.workspaceId ? `workspace:${input.workspaceId}` : 'workspace:new',
     loginUser: 'runner:65532',
     configurationHash: hashOperation(input.configuration, cryptoHash),
   };
@@ -96,7 +99,7 @@ const operation = (
 ): string =>
   hashOperation(
     {
-      schemaVersion: 1,
+      schemaVersion: 2,
       scope: {
         userId: context.userId,
         appId: context.appId,
@@ -109,7 +112,7 @@ const operation = (
         targetIdentity: target.targetIdentity,
         endpoint: target.endpoint,
         configurationHash: target.configurationHash,
-        environmentId: target.environmentId ?? null,
+        workspaceId: target.workspaceId ?? null,
         generation: target.generation ?? null,
       },
       arguments: normalizedArguments,
@@ -126,16 +129,16 @@ const operation = (
     cryptoHash,
   );
 
-export const createEnvironmentCreateTool = (
-  environments: EnvironmentService,
-  repository: EnvironmentRepositoryPort,
+export const createWorkspaceCreateTool = (
+  runtime: WorkspaceRuntimeService,
+  repository: AgentWorkspaceRepositoryPort,
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
   descriptor: {
-    name: 'environment_create',
+    name: 'workspace_create',
     version: '1.0.0',
     description:
-      'Provision one isolated Nexus Agent Environment for this Run using an enabled Environment recipe. Requires user approval.',
+      'Provision one Nexus Agent Workspace for this Run using an enabled Workspace profile and optional tool versions. Requires user approval.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -161,49 +164,45 @@ export const createEnvironmentCreateTool = (
       required: ['recipeId'],
     },
     riskClass: 'mutate',
-    capability: 'environment.manage',
+    capability: 'workspace.runtime.manage',
   },
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
-    onlyKeys(args, ['recipeId', 'versions', 'runnerPluginIds', 'catalogRevision']);
+    onlyKeys(args, ['recipeId', 'versions', 'runnerPluginIds']);
     const recipeId = stringValue(args.recipeId, 128);
     const versions = versionsValue(args.versions);
     const runnerPluginIds = runnerPluginIdsValue(args.runnerPluginIds);
-    const existing = await repository.listGroups(context, context.runId);
-    if (existing.some((group) => group.agentRuntimeId === context.agentRuntimeId && group.status !== 'deleted')) {
-      throw new Error('ENVIRONMENT_GROUP_EXISTS');
+    const existing = await repository.listWorkspaces(context, context.runId);
+    if (
+      existing.some(
+        (workspace) =>
+          workspace.agentRuntimeId === context.agentRuntimeId && !['deleted', 'failed'].includes(workspace.status),
+      )
+    ) {
+      throw new Error('WORKSPACE_EXISTS');
     }
-    const catalog = await environments.catalog(context.signal);
+    const catalog = await runtime.catalog(context.signal);
     const recipe = catalog.recipes.find((candidate) => candidate.id === recipeId);
-    if (!recipe) throw new Error('ENVIRONMENT_RECIPE_NOT_FOUND');
-    for (const [familyId, versionId] of Object.entries(versions)) {
-      if (!recipe.allowedFamilies.includes(familyId)) throw new Error('ENVIRONMENT_PACK_FORBIDDEN');
-      if (
-        !catalog.packs.some(
-          (pack) => pack.familyId === familyId && pack.versionId === versionId && pack.status !== 'unavailable',
-        )
-      ) {
-        throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
-      }
-    }
+    if (!recipe) throw new Error('WORKSPACE_RECIPE_NOT_FOUND');
+    resolveWorkspaceToolchain(catalog, recipeId, versions);
     const normalizedArguments: JsonValue = { recipeId, versions, runnerPluginIds, catalogRevision: catalog.revision };
-    const target = environmentTarget(cryptoHash, {
+    const target = workspaceTarget(cryptoHash, {
       runId: context.runId,
       agentRuntimeId: context.agentRuntimeId,
       configuration: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         catalogRevision: catalog.revision,
         runtimeDigest: catalog.runtimeDigest,
         recipeId: recipe.id,
         recipeRevision: recipe.revision,
       },
     });
-    const resourceKeys = [`environment-group:${context.runId}:${context.agentRuntimeId}`];
+    const resourceKeys = [`workspace:new:${context.runId}:${context.agentRuntimeId}`];
     const preconditions: ToolPrecondition[] = [
-      { kind: 'metadata', key: 'environmentCatalog', observedValue: { revision: catalog.revision } },
+      { kind: 'metadata', key: 'workspaceRuntimeCatalog', observedValue: { revision: catalog.revision } },
     ];
     return {
-      toolName: 'environment_create',
+      toolName: 'workspace_create',
       toolVersion: '1.0.0',
       normalizedArguments,
       target,
@@ -213,7 +212,7 @@ export const createEnvironmentCreateTool = (
       operationHash: operation(
         cryptoHash,
         context,
-        'environment_create',
+        'workspace_create',
         target,
         normalizedArguments,
         resourceKeys,
@@ -229,34 +228,28 @@ export const createEnvironmentCreateTool = (
   },
   execute: async (inspection, context): Promise<ToolResult> => {
     const args = record(inspection.normalizedArguments);
-    const group = await environments.createGroup(
+    const workspace = await runtime.createWorkspace(
       context,
       context.runId,
       context.agentRuntimeId,
-      [
-        {
-          recipeId: stringValue(args.recipeId, 128),
-          versions: versionsValue(args.versions),
-          runnerPluginIds: runnerPluginIdsValue(args.runnerPluginIds),
-        },
-      ],
+      {
+        recipeId: stringValue(args.recipeId, 128),
+        versions: versionsValue(args.versions),
+        runnerPluginIds: runnerPluginIdsValue(args.runnerPluginIds),
+      },
       false,
       inspection.operationHash,
       stringValue(args.catalogRevision, 128),
     );
-    const ready = group.environments.every((environment) => environment.status === 'ready');
+    const ready = workspace.status === 'ready';
     return {
       ok: ready,
-      summary: ready ? 'Environment provisioned and ready.' : `Environment group is ${group.status}.`,
+      summary: ready ? 'Workspace provisioned and ready.' : `Workspace is ${workspace.status}.`,
       data: {
-        groupId: group.id,
-        environments: group.environments.map((environment) => ({
-          environmentId: environment.id,
-          kind: environment.kind,
-          status: environment.status,
-          generation: environment.generation,
-          recipeId: environment.recipeId,
-        })),
+        workspaceId: workspace.id,
+        status: workspace.status,
+        generation: workspace.generation,
+        recipeId: workspace.profile.recipeId,
       },
       artifactRefs: [],
       truncated: false,
@@ -264,7 +257,7 @@ export const createEnvironmentCreateTool = (
       verification: {
         status: ready ? 'verified' : 'failed',
         summary: ready
-          ? 'Runner confirmed provisioning and the Environment is ready to start.'
+          ? 'Runner confirmed provisioning and the Workspace is ready to start.'
           : 'Runner returned a terminal provisioning result that was not ready.',
         evidenceRefs: [],
       },
@@ -272,241 +265,68 @@ export const createEnvironmentCreateTool = (
   },
 });
 
-export const createEnvironmentControlTool = (
-  environments: EnvironmentService,
-  repository: EnvironmentRepositoryPort,
+export const createWorkspaceControlTool = (
+  runtime: WorkspaceRuntimeService,
+  repository: AgentWorkspaceRepositoryPort,
   cryptoHash: CryptoHashPort,
 ): AgentTool => ({
   descriptor: {
-    name: 'environment_control',
+    name: 'workspace_control',
     version: '1.0.0',
-    description: 'Start, stop, restart, or delete this Run’s isolated Agent Environment. Requires user approval.',
+    description: 'Start, stop, restart, or delete one Nexus Agent Workspace generation. Requires user approval.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
       properties: {
-        environmentId: { type: 'string', minLength: 1, maxLength: 128 },
+        workspaceId: { type: 'string', minLength: 1, maxLength: 128 },
         action: { type: 'string', enum: ['start', 'stop', 'restart', 'delete'] },
       },
-      required: ['environmentId', 'action'],
+      required: ['workspaceId', 'action'],
     },
     riskClass: 'mutate',
-    capability: 'environment.manage',
+    capability: 'workspace.runtime.manage',
   },
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
-    onlyKeys(args, ['environmentId', 'action', 'expectedVersion', 'generation', 'groupId']);
-    const environmentId = stringValue(args.environmentId, 128);
-    const action = stringValue(args.action, 16);
+    onlyKeys(args, ['workspaceId', 'action']);
+    const workspaceId = stringValue(args.workspaceId, 128);
+    const action = stringValue(args.action, 32);
     if (!['start', 'stop', 'restart', 'delete'].includes(action)) throw new Error('TOOL_ARGUMENTS_INVALID');
-    const environment = await repository.getEnvironment(context, environmentId);
-    if (!environment) throw new Error('NOT_FOUND');
-    const group = await repository.getGroup(context, environment.groupId);
-    if (!group || group.runId !== context.runId || group.agentRuntimeId !== context.agentRuntimeId) {
+    const workspace = await repository.getWorkspace(context, workspaceId);
+    if (!workspace) throw new Error('NOT_FOUND');
+    if (workspace.runId !== context.runId || workspace.agentRuntimeId !== context.agentRuntimeId) {
       throw new Error('RESOURCE_FORBIDDEN');
     }
     const normalizedArguments: JsonValue = {
-      environmentId,
+      workspaceId,
       action,
-      expectedVersion: environment.version,
-      generation: environment.generation,
-      groupId: environment.groupId,
+      expectedVersion: workspace.version,
+      generation: workspace.generation,
     };
-    const target = environmentTarget(cryptoHash, {
-      environmentId,
-      generation: environment.generation,
+    const target = workspaceTarget(cryptoHash, {
+      workspaceId,
+      generation: workspace.generation,
       runId: context.runId,
       agentRuntimeId: context.agentRuntimeId,
       configuration: {
-        schemaVersion: 1,
-        environmentId,
-        generation: environment.generation,
-        status: environment.status,
-        version: environment.version,
+        schemaVersion: 2,
+        workspaceId,
+        generation: workspace.generation,
+        version: workspace.version,
+        status: workspace.status,
+        profile: JSON.parse(JSON.stringify(workspace.profile)) as JsonValue,
       },
     });
-    const resourceKeys = [`environment:${environmentId}:${environment.generation}`];
+    const resourceKeys = [`workspace:${workspaceId}:${workspace.generation}`];
     const preconditions: ToolPrecondition[] = [
       {
-        kind: 'environmentGeneration',
-        key: environmentId,
-        observedValue: {
-          generation: environment.generation,
-          version: environment.version,
-          status: environment.status,
-        },
+        kind: 'workspaceGeneration',
+        key: workspaceId,
+        observedValue: { generation: workspace.generation, version: workspace.version, status: workspace.status },
       },
     ];
     return {
-      toolName: 'environment_control',
-      toolVersion: '1.0.0',
-      normalizedArguments,
-      target,
-      resourceKeys,
-      risk: action === 'delete' ? 'destructive' : 'mutate',
-      mutation: true,
-      operationHash: operation(
-        cryptoHash,
-        context,
-        'environment_control',
-        target,
-        normalizedArguments,
-        resourceKeys,
-        preconditions,
-        policyRevision,
-      ),
-      operationHashVersion: 1,
-      preconditions,
-      secretRefs: [],
-      policyRevision,
-      inputRevision: context.inputRevision,
-    };
-  },
-  execute: async (inspection, context): Promise<ToolResult> => {
-    const args = record(inspection.normalizedArguments);
-    const environmentId = stringValue(args.environmentId, 128);
-    const action = stringValue(args.action, 16) as 'start' | 'stop' | 'restart' | 'delete';
-    const command = await environments.action(
-      context,
-      environmentId,
-      action,
-      positiveInteger(args.expectedVersion),
-      {},
-    );
-    if (command.status === 'unknown' || command.status === 'pending' || command.status === 'running') {
-      return {
-        ok: false,
-        summary: 'Environment control outcome could not be confirmed.',
-        artifactRefs: [],
-        truncated: false,
-        outcome: 'unknown',
-        errorCode: 'ENVIRONMENT_RECONCILIATION_REQUIRED',
-        verification: {
-          status: 'unverified',
-          summary: 'Runner did not return a confirmed terminal result.',
-          evidenceRefs: [],
-        },
-      };
-    }
-    const current = await repository.getEnvironment(context, environmentId);
-    const ok = command.status === 'succeeded';
-    return {
-      ok,
-      summary: ok ? `Environment ${action} completed.` : `Environment ${action} failed.`,
-      data: {
-        commandId: command.id,
-        environmentId,
-        status: current?.status ?? null,
-        generation: current?.generation ?? positiveInteger(args.generation),
-        error: command.result,
-      },
-      artifactRefs: [],
-      truncated: false,
-      outcome: 'confirmed',
-      errorCode: ok ? undefined : 'ENVIRONMENT_ACTION_FAILED',
-      verification: {
-        status: ok ? 'verified' : 'failed',
-        summary: 'Runner returned a terminal Environment lifecycle result.',
-        evidenceRefs: [],
-      },
-    };
-  },
-});
-
-export const createEnvironmentSwitchVersionsTool = (
-  environments: EnvironmentService,
-  repository: EnvironmentRepositoryPort,
-  cryptoHash: CryptoHashPort,
-): AgentTool => ({
-  descriptor: {
-    name: 'environment_switch_versions',
-    version: '1.0.0',
-    description:
-      'Switch Node, Python, Go, or other allowed tool versions for this Workspace Environment. Recreates only this Workspace runtime generation and requires user approval.',
-    inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        environmentId: { type: 'string', minLength: 1, maxLength: 128 },
-        versions: {
-          type: 'object',
-          minProperties: 1,
-          maxProperties: 32,
-          additionalProperties: { type: 'string', minLength: 1, maxLength: 128 },
-        },
-      },
-      required: ['environmentId', 'versions'],
-    },
-    riskClass: 'mutate',
-    capability: 'environment.manage',
-  },
-  inspect: async (input, context, policyRevision) => {
-    const args = record(input);
-    onlyKeys(args, ['environmentId', 'versions', 'expectedVersion', 'generation', 'groupId', 'catalogRevision']);
-    const environmentId = stringValue(args.environmentId, 128);
-    const versions = versionsValue(args.versions);
-    if (!Object.keys(versions).length) throw new Error('TOOL_ARGUMENTS_INVALID');
-    const environment = await repository.getEnvironment(context, environmentId);
-    if (!environment) throw new Error('NOT_FOUND');
-    if (!['ready', 'running', 'stopped'].includes(environment.status)) throw new Error('ENVIRONMENT_STATE_INVALID');
-    const group = await repository.getGroup(context, environment.groupId);
-    if (!group || group.runId !== context.runId || group.agentRuntimeId !== context.agentRuntimeId) {
-      throw new Error('RESOURCE_FORBIDDEN');
-    }
-    const catalog = await environments.catalog(context.signal);
-    const recipe = catalog.recipes.find((candidate) => candidate.id === environment.recipeId);
-    if (!recipe) throw new Error('ENVIRONMENT_RECIPE_NOT_FOUND');
-    for (const [familyId, versionId] of Object.entries(versions)) {
-      if (!recipe.allowedFamilies.includes(familyId)) throw new Error('ENVIRONMENT_PACK_FORBIDDEN');
-      if (
-        !catalog.packs.some(
-          (pack) => pack.familyId === familyId && pack.versionId === versionId && pack.status !== 'unavailable',
-        )
-      ) {
-        throw new Error('ENVIRONMENT_PACK_UNAVAILABLE');
-      }
-    }
-    const normalizedArguments: JsonValue = {
-      environmentId,
-      versions,
-      expectedVersion: environment.version,
-      generation: environment.generation,
-      groupId: environment.groupId,
-      catalogRevision: catalog.revision,
-    };
-    const target = environmentTarget(cryptoHash, {
-      environmentId,
-      generation: environment.generation,
-      runId: context.runId,
-      agentRuntimeId: context.agentRuntimeId,
-      configuration: {
-        schemaVersion: 1,
-        environmentId,
-        generation: environment.generation,
-        currentPackRefs: environment.packRefs.map((pack) => ({
-          familyId: pack.familyId,
-          versionId: pack.versionId,
-          contentDigest: pack.contentDigest,
-        })),
-        requestedVersions: versions,
-        catalogRevision: catalog.revision,
-      },
-    });
-    const resourceKeys = [`environment:${environmentId}:${environment.generation}`];
-    const preconditions: ToolPrecondition[] = [
-      {
-        kind: 'environmentGeneration',
-        key: environmentId,
-        observedValue: {
-          generation: environment.generation,
-          version: environment.version,
-          status: environment.status,
-        },
-      },
-      { kind: 'metadata', key: 'environmentCatalog', observedValue: { revision: catalog.revision } },
-    ];
-    return {
-      toolName: 'environment_switch_versions',
+      toolName: 'workspace_control',
       toolVersion: '1.0.0',
       normalizedArguments,
       target,
@@ -516,7 +336,7 @@ export const createEnvironmentSwitchVersionsTool = (
       operationHash: operation(
         cryptoHash,
         context,
-        'environment_switch_versions',
+        'workspace_control',
         target,
         normalizedArguments,
         resourceKeys,
@@ -532,46 +352,165 @@ export const createEnvironmentSwitchVersionsTool = (
   },
   execute: async (inspection, context): Promise<ToolResult> => {
     const args = record(inspection.normalizedArguments);
-    const environmentId = stringValue(args.environmentId, 128);
-    const switched = await environments.switchVersions(
+    const workspaceId = stringValue(args.workspaceId, 128);
+    const action = stringValue(args.action, 32) as 'start' | 'stop' | 'restart' | 'delete';
+    const command = await runtime.action(context, workspaceId, action, positiveInteger(args.expectedVersion), {});
+    const confirmed = command.status === 'succeeded' || command.status === 'failed';
+    return {
+      ok: command.status === 'succeeded',
+      summary:
+        command.status === 'succeeded' ? `Workspace ${action} confirmed.` : `Workspace ${action} is ${command.status}.`,
+      data: { workspaceId, generation: command.generation, commandId: command.id, status: command.status },
+      artifactRefs: [],
+      truncated: false,
+      outcome: confirmed ? 'confirmed' : 'unknown',
+      ...(command.status === 'succeeded' ? {} : { errorCode: `WORKSPACE_${command.status.toUpperCase()}` }),
+      verification: {
+        status: command.status === 'succeeded' ? 'verified' : confirmed ? 'failed' : 'unverified',
+        summary:
+          command.status === 'succeeded'
+            ? 'Runner confirmed the Workspace lifecycle transition.'
+            : 'Runner did not confirm a successful Workspace lifecycle transition.',
+        evidenceRefs: [],
+      },
+    };
+  },
+});
+
+export const createWorkspaceSwitchToolVersionsTool = (
+  runtime: WorkspaceRuntimeService,
+  repository: AgentWorkspaceRepositoryPort,
+  cryptoHash: CryptoHashPort,
+): AgentTool => ({
+  descriptor: {
+    name: 'workspace_switch_tool_versions',
+    version: '1.0.0',
+    description:
+      'Switch one or more tool versions for a stable Nexus Agent Workspace by creating its next generation. Requires user approval.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        workspaceId: { type: 'string', minLength: 1, maxLength: 128 },
+        versions: {
+          type: 'object',
+          minProperties: 1,
+          maxProperties: 32,
+          additionalProperties: { type: 'string', minLength: 1, maxLength: 128 },
+        },
+      },
+      required: ['workspaceId', 'versions'],
+    },
+    riskClass: 'mutate',
+    capability: 'workspace.runtime.manage',
+  },
+  inspect: async (input, context, policyRevision) => {
+    const args = record(input);
+    onlyKeys(args, ['workspaceId', 'versions']);
+    const workspaceId = stringValue(args.workspaceId, 128);
+    const versions = versionsValue(args.versions);
+    if (!Object.keys(versions).length) throw new Error('TOOL_ARGUMENTS_INVALID');
+    const workspace = await repository.getWorkspace(context, workspaceId);
+    if (!workspace) throw new Error('NOT_FOUND');
+    if (workspace.runId !== context.runId || workspace.agentRuntimeId !== context.agentRuntimeId) {
+      throw new Error('RESOURCE_FORBIDDEN');
+    }
+    if (!['ready', 'running', 'stopped'].includes(workspace.status)) throw new Error('WORKSPACE_STATE_INVALID');
+    const catalog = await runtime.catalog(context.signal);
+    const currentVersions = Object.fromEntries(
+      workspace.profile.toolchain.map((pack) => [pack.familyId, pack.versionId]),
+    ) as Record<string, string>;
+    resolveWorkspaceToolchain(catalog, workspace.profile.recipeId, { ...currentVersions, ...versions });
+    const normalizedArguments: JsonValue = {
+      workspaceId,
+      versions,
+      expectedVersion: workspace.version,
+      generation: workspace.generation,
+      catalogRevision: catalog.revision,
+    };
+    const target = workspaceTarget(cryptoHash, {
+      workspaceId,
+      generation: workspace.generation,
+      runId: context.runId,
+      agentRuntimeId: context.agentRuntimeId,
+      configuration: {
+        schemaVersion: 2,
+        workspaceId,
+        generation: workspace.generation,
+        currentProfile: JSON.parse(JSON.stringify(workspace.profile)) as JsonValue,
+        requestedVersions: versions,
+        catalogRevision: catalog.revision,
+      },
+    });
+    const resourceKeys = [`workspace:${workspaceId}:${workspace.generation}`];
+    const preconditions: ToolPrecondition[] = [
+      {
+        kind: 'workspaceGeneration',
+        key: workspaceId,
+        observedValue: { generation: workspace.generation, version: workspace.version, status: workspace.status },
+      },
+      { kind: 'metadata', key: 'workspaceRuntimeCatalog', observedValue: { revision: catalog.revision } },
+    ];
+    return {
+      toolName: 'workspace_switch_tool_versions',
+      toolVersion: '1.0.0',
+      normalizedArguments,
+      target,
+      resourceKeys,
+      risk: 'mutate',
+      mutation: true,
+      operationHash: operation(
+        cryptoHash,
+        context,
+        'workspace_switch_tool_versions',
+        target,
+        normalizedArguments,
+        resourceKeys,
+        preconditions,
+        policyRevision,
+      ),
+      operationHashVersion: 1,
+      preconditions,
+      secretRefs: [],
+      policyRevision,
+      inputRevision: context.inputRevision,
+    };
+  },
+  execute: async (inspection, context): Promise<ToolResult> => {
+    const args = record(inspection.normalizedArguments);
+    const workspaceId = stringValue(args.workspaceId, 128);
+    const switched = await runtime.switchToolVersions(
       context,
-      environmentId,
+      workspaceId,
       versionsValue(args.versions),
       positiveInteger(args.expectedVersion),
       stringValue(args.catalogRevision, 128),
     );
-    const ok = switched.outcome === 'succeeded';
     return {
-      ok,
-      summary: ok
-        ? `Workspace tool versions switched; Environment generation is now ${switched.environment.generation}.`
-        : 'Workspace tool version switch did not complete successfully.',
+      ok: switched.outcome === 'succeeded',
+      summary:
+        switched.outcome === 'succeeded'
+          ? `Workspace tool versions switched; generation is now ${switched.workspace.generation}.`
+          : `Workspace tool version switch is ${switched.outcome}.`,
       data: {
-        environmentId,
-        generation: switched.environment.generation,
-        status: switched.environment.status,
-        packRefs: switched.environment.packRefs.map((pack) => ({
-          familyId: pack.familyId,
-          versionId: pack.versionId,
-          contentDigest: pack.contentDigest,
-        })),
+        workspaceId,
+        generation: switched.workspace.generation,
+        status: switched.workspace.status,
+        toolchain: switched.workspace.profile.toolchain.map((pack) => ({ ...pack })),
         commandIds: switched.commands.map((command) => command.id),
       },
       artifactRefs: [],
       truncated: false,
       outcome: switched.outcome === 'unknown' ? 'unknown' : 'confirmed',
-      errorCode:
-        switched.outcome === 'unknown'
-          ? 'ENVIRONMENT_RECONCILIATION_REQUIRED'
-          : switched.outcome === 'failed'
-            ? 'ENVIRONMENT_VERSION_SWITCH_FAILED'
-            : undefined,
+      ...(switched.outcome === 'succeeded'
+        ? {}
+        : { errorCode: `WORKSPACE_TOOLCHAIN_SWITCH_${switched.outcome.toUpperCase()}` }),
       verification: {
         status: switched.outcome === 'succeeded' ? 'verified' : switched.outcome === 'failed' ? 'failed' : 'unverified',
         summary:
           switched.outcome === 'succeeded'
-            ? 'Runner confirmed old-generation deletion, new-generation provisioning, and required restart.'
-            : 'The complete generation transition was not confirmed.',
+            ? 'Runner confirmed provisioning of the next Workspace generation with the requested toolchain.'
+            : 'Runner did not confirm a successful Workspace toolchain switch.',
         evidenceRefs: [],
       },
     };

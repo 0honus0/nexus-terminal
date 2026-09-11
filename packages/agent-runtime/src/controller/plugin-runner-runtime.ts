@@ -10,7 +10,7 @@ import {
   type PluginIpcFrame,
   writePluginFrame,
 } from '../plugin-ipc';
-import type { EnvironmentRecord, PluginRunnerTarget } from '../types';
+import type { WorkspaceRecord, PluginRunnerTarget } from '../types';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 import {
@@ -81,7 +81,7 @@ class RunnerPluginProcess {
 
   constructor(
     private readonly child: ChildProcessWithoutNullStreams,
-    private readonly environmentId: string,
+    private readonly workspaceId: string,
     private readonly generation: number,
     private readonly callerPluginId: string,
     private readonly workspaces: WorkspaceBroker,
@@ -189,7 +189,7 @@ class RunnerPluginProcess {
   private async handleWorkspace(requestId: number, message: WorkspaceRequest): Promise<void> {
     try {
       const target: WorkspaceAccessTarget = {
-        environmentId: this.environmentId,
+        workspaceId: this.workspaceId,
         generation: this.generation,
         callerPluginId: this.callerPluginId,
         targetPluginId: message.targetPluginId,
@@ -297,20 +297,20 @@ export class PluginRunnerRuntime {
     return !result.error && result.status === 0;
   }
 
-  prepareEnvironment(environment: EnvironmentRecord): void {
-    for (const target of environment.runnerPlugins ?? []) {
+  prepareWorkspace(workspace: WorkspaceRecord): void {
+    for (const target of workspace.runnerPlugins ?? []) {
       this.validateTarget(target);
-      this.workspaces.ensurePluginWorkspace(environment.environmentId, environment.generation, target.pluginId);
+      this.workspaces.ensurePluginWorkspace(workspace.workspaceId, workspace.generation, target.pluginId);
     }
   }
 
-  async activateEnvironment(environment: EnvironmentRecord): Promise<void> {
-    this.prepareEnvironment(environment);
-    for (const target of environment.runnerPlugins ?? []) {
-      const key = this.key(environment, target.pluginId);
+  async activateWorkspace(workspace: WorkspaceRecord): Promise<void> {
+    this.prepareWorkspace(workspace);
+    for (const target of workspace.runnerPlugins ?? []) {
+      const key = this.key(workspace, target.pluginId);
       const existing = this.instances.get(key);
       if (existing) continue;
-      const instance = this.start(environment, target);
+      const instance = this.start(workspace, target);
       this.instances.set(key, instance);
       try {
         await instance.ready;
@@ -323,16 +323,16 @@ export class PluginRunnerRuntime {
     }
   }
 
-  async quiesceEnvironment(environment: EnvironmentRecord, deadlineUnixSeconds: number): Promise<void> {
-    for (const target of environment.runnerPlugins ?? []) {
-      const instance = this.instances.get(this.key(environment, target.pluginId));
+  async quiesceWorkspace(workspace: WorkspaceRecord, deadlineUnixSeconds: number): Promise<void> {
+    for (const target of workspace.runnerPlugins ?? []) {
+      const instance = this.instances.get(this.key(workspace, target.pluginId));
       if (instance) await instance.request('lifecycle.quiesce', { deadlineUnixSeconds });
     }
   }
 
-  async disposeEnvironment(environment: EnvironmentRecord): Promise<void> {
-    for (const target of environment.runnerPlugins ?? []) {
-      const key = this.key(environment, target.pluginId);
+  async disposeWorkspace(workspace: WorkspaceRecord): Promise<void> {
+    for (const target of workspace.runnerPlugins ?? []) {
+      const key = this.key(workspace, target.pluginId);
       const instance = this.instances.get(key);
       if (!instance) continue;
       this.instances.delete(key);
@@ -341,26 +341,26 @@ export class PluginRunnerRuntime {
   }
 
   replaceWorkspaceGrants(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     grants: readonly Omit<WorkspaceGrant, 'targetPluginId'>[],
   ): void {
-    this.workspaces.replaceTargetGrants(environmentId, generation, targetPluginId, grants);
+    this.workspaces.replaceTargetGrants(workspaceId, generation, targetPluginId, grants);
   }
 
-  workspaceGrants(environmentId: string, generation: number, targetPluginId: string): WorkspaceGrant[] {
-    return this.workspaces.grantsForTarget(environmentId, generation, targetPluginId);
+  workspaceGrants(workspaceId: string, generation: number, targetPluginId: string): WorkspaceGrant[] {
+    return this.workspaces.grantsForTarget(workspaceId, generation, targetPluginId);
   }
 
   openWorkspaceFileRead(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     logicalPath: string,
   ): Promise<WorkspaceReadHandle> {
     return this.workspaces.openRead({
-      environmentId,
+      workspaceId,
       generation,
       callerPluginId: targetPluginId,
       targetPluginId,
@@ -369,7 +369,7 @@ export class PluginRunnerRuntime {
   }
 
   writeWorkspaceFileStream(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     logicalPath: string,
@@ -378,7 +378,7 @@ export class PluginRunnerRuntime {
   ): Promise<void> {
     return this.workspaces.writeStream(
       {
-        environmentId,
+        workspaceId,
         generation,
         callerPluginId: targetPluginId,
         targetPluginId,
@@ -389,7 +389,7 @@ export class PluginRunnerRuntime {
     );
   }
 
-  private start(environment: EnvironmentRecord, target: PluginRunnerTarget): RunnerPluginProcess {
+  private start(workspace: WorkspaceRecord, target: PluginRunnerTarget): RunnerPluginProcess {
     if (!this.available()) throw new Error('PLUGIN_RUNNER_SANDBOX_UNAVAILABLE');
     this.validateTarget(target);
     const source = path.join(this.pluginSourceRoot, this.safe(target.pluginId), 'versions', target.version);
@@ -397,7 +397,7 @@ export class PluginRunnerRuntime {
     if (!fs.existsSync(marker) || fs.readFileSync(marker, 'utf8').trim() !== target.packageHash) {
       throw new Error('PLUGIN_RUNNER_SOURCE_MISMATCH');
     }
-    this.workspaces.ensurePluginWorkspace(environment.environmentId, environment.generation, target.pluginId);
+    this.workspaces.ensurePluginWorkspace(workspace.workspaceId, workspace.generation, target.pluginId);
     const worker = path.resolve(__dirname, '../worker/plugin-runner-sandbox.worker.js');
     const systemBindings = sandboxSystemRuntimeArguments();
     const args = [
@@ -435,11 +435,11 @@ export class PluginRunnerRuntime {
       'HOME',
       '/tmp',
       '--setenv',
-      'NEXUS_ENVIRONMENT_ID',
-      environment.environmentId,
+      'NEXUS_WORKSPACE_ID',
+      workspace.workspaceId,
       '--setenv',
-      'NEXUS_ENVIRONMENT_GENERATION',
-      String(environment.generation),
+      'NEXUS_WORKSPACE_GENERATION',
+      String(workspace.generation),
       '--setenv',
       'NEXUS_PLUGIN_ID',
       target.pluginId,
@@ -465,8 +465,8 @@ export class PluginRunnerRuntime {
     });
     return new RunnerPluginProcess(
       child,
-      environment.environmentId,
-      environment.generation,
+      workspace.workspaceId,
+      workspace.generation,
       target.pluginId,
       this.workspaces,
       target.sdkVersion,
@@ -489,8 +489,8 @@ export class PluginRunnerRuntime {
     }
   }
 
-  private key(environment: EnvironmentRecord, pluginId: string): string {
-    return `${environment.environmentId}:${environment.generation}:${pluginId}`;
+  private key(workspace: WorkspaceRecord, pluginId: string): string {
+    return `${workspace.workspaceId}:${workspace.generation}:${pluginId}`;
   }
 
   private safe(value: string): string {

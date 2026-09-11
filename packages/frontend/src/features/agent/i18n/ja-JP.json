@@ -101,21 +101,21 @@
         "limit": "現在の上限",
         "hardLimitHint": "要求したストレージ値は対応する Hard Limit の範囲内で有効になります。"
       },
-      "environment": {
+      "workspaceRuntime": {
         "title": "Workspace 開発環境",
         "description": "分離された Agent Runner、Workspace profile、共有マルチバージョン Tool Pack、ストレージ、ランタイムクリーンアップを管理します。",
         "available": "利用可能",
         "unavailable": "利用不可",
         "refresh": "更新",
         "controllerVersion": "Controller {version}",
-        "requestFailed": "Environment リクエストに失敗しました。",
+        "requestFailed": "Workspace Runtime リクエストに失敗しました。",
         "selectRecipe": "少なくとも 1 つの Workspace profile を選択してください。",
         "setupTitle": "セットアップと profile",
         "setupDescription": "Workspace 開発 profile を有効化し、必要な正確な Tool Pack を準備します。有効化状態とインストール状態は別々に管理されます。",
         "previewSetup": "セットアップをプレビュー",
         "setupImpact": "{count} 個の Pack のインストールが必要です。約 {bytes}。",
         "confirmSetup": "セットアップを確認",
-        "setupSubmitted": "Environment セットアップを送信しました。",
+        "setupSubmitted": "Workspace Runtime セットアップを送信しました。",
         "storageTitle": "Runner ストレージ",
         "stateBytes": "状態",
         "packBytes": "Packs",
@@ -127,7 +127,7 @@
         "previewCleanup": "ランタイムクリーンアップをプレビュー",
         "clearCache": "キャッシュを消去",
         "previewReset": "設定リセットをプレビュー",
-        "cleanupImpact": "{count} 個の環境、約 {bytes} を回収可能。アクティブ：{active}、保持：{retained}。",
+        "cleanupImpact": "{count} 個の Workspace、約 {bytes} を回収可能。アクティブ：{active}、保持：{retained}。",
         "confirmCleanup": "ランタイムクリーンアップを確認",
         "resetImpact": "Workspace profile、ツールバージョン、リソース、ネットワーク設定を配布時の既定値に戻します。Artifact と Provider は変更しません。",
         "confirmReset": "設定リセットを確認",
@@ -142,12 +142,12 @@
         "enableVersion": "有効化",
         "makeDefault": "既定に設定",
         "uninstall": "アンインストール",
-        "preferencesSaved": "Environment のバージョン設定を保存しました。",
+        "preferencesSaved": "Tool version 設定を保存しました。",
         "installSubmitted": "Pack インストールを送信しました。",
         "uninstallSubmitted": "Pack アンインストールを送信しました。",
         "cleanupSubmitted": "ランタイムクリーンアップを送信しました。",
         "cacheSubmitted": "キャッシュクリーンアップを送信しました。",
-        "resetComplete": "Environment 設定を既定値に戻しました。",
+        "resetComplete": "Workspace Runtime 設定を既定値に戻しました。",
         "uninstallTitle": "{name} をアンインストール",
         "uninstallImpact": "約 {bytes} を解放します。使用中：{inUse}。代替の既定バージョン：{replacement}。",
         "yes": "はい",
@@ -156,7 +156,7 @@
         "confirmUninstall": "アンインストールを確認",
         "cancel": "キャンセル",
         "commandStatus": "最新コマンド：{action} · {status}",
-        "egressUnavailable": "この Runner ではネットワーク許可リストを fail-closed で扱います。実際の egress enforcement が利用可能になるまで、外向き通信を要求する Environment は起動しません。"
+        "egressUnavailable": "この Runner ではネットワーク許可リストを fail-closed で扱います。実際の egress enforcement が利用可能になるまで、外向き通信を要求する Workspace は起動しません。"
       },
       "safety": {
         "title": "安全とネットワーク",
@@ -346,7 +346,7 @@
       "checkpointWatermark": "Ledger #{ledger} · イベント #{event}",
       "resumeCheckpoint": "新しい Run として再開"
     },
-    "environments": {
+    "workspaceRuntime": {
       "title": "Workspace 開発環境",
       "description": "1 つの Workspace でプロジェクトファイルを安定して共有し、各 runtime generation で Node、Python、Go と Runner Plugin のバージョンを構成します。",
       "refresh": "更新",
@@ -363,12 +363,11 @@
       "versionSwitchUnknown": "Workspace のツールバージョン切り替え結果が不明です。続行前に照合が必要です。",
       "generationAndTargets": "Generation {generation} · 固定済み Runner Plugin target: {count} 件",
       "runnerPlugins": "Runner Plugin",
-      "runnerPluginsHint": "Target は明示的に選択され Environment snapshot に固定されます。Plugin は Docker コンテナを作成しません。",
+      "runnerPluginsHint": "Target は明示的に選択され Workspace profile に固定されます。Plugin は Docker コンテナを作成しません。",
       "noRunnerPlugins": "有効かつインストール済みで Runner target を公開する Plugin はありません。",
-      "create": "Environment を作成",
-      "created": "EnvironmentGroup を作成しました。",
-      "actionSubmitted": "Environment 操作を送信しました。",
-      "oneGroupPerRuntime": "各 runtime が持てるアクティブな EnvironmentGroup は 1 つです。置き換える前に現在の group を削除してください。",
+      "create": "Workspace を作成",
+      "created": "Workspace を作成しました。",
+      "actionSubmitted": "Workspace 操作を送信しました。",
       "frozenTargets": "固定済み Runner Plugin target: {count} 件",
       "targetContract": "バージョン {version} · SDK {sdk} · プロトコル {protocol}",
       "targetSource": "{entry} · sha256:{hash}",
@@ -384,7 +383,7 @@
       "grant": "アクセスを許可",
       "revoke": "取り消す",
       "grantsSaved": "Workspace ACL を保存しました。",
-      "noCrossPluginPrincipal": "Plugin 間アクセスを許可するには、この Environment に 2 つ以上の Runner Plugin が必要です。",
+      "noCrossPluginPrincipal": "Plugin 間アクセスを許可するには、この Workspace に 2 つ以上の Runner Plugin が必要です。",
       "exportTitle": "Workspace → Artifact",
       "importTitle": "Artifact → Workspace",
       "workspacePath": "Workspace パス",
@@ -413,7 +412,8 @@
       "importAction": "インポート",
       "exported": "Artifact {id} をエクスポートしました。",
       "imported": "Workspace に {bytes} バイトをインポートしました。",
-      "requestFailed": "Environment リクエストに失敗しました。"
+      "requestFailed": "Workspace Runtime リクエストに失敗しました。",
+      "oneWorkspacePerRuntime": "各 runtime が持てるアクティブな Workspace は 1 つです。置き換える前に現在の Workspace を削除してください。"
     },
     "subagents": {
       "title": "Subagent",

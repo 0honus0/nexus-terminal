@@ -1,13 +1,13 @@
 import type {
-  EnvironmentConfirmationRecord,
-  EnvironmentConfirmationRepositoryPort,
-} from '../../../modules/agent/environments/environment-confirmation.repository.port';
+  WorkspaceRuntimeConfirmationRecord,
+  WorkspaceRuntimeConfirmationRepositoryPort,
+} from '../../../modules/agent/workspace-runtime/workspace-runtime-confirmation.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 
 interface Row {
   id: string;
   user_id: number;
-  kind: EnvironmentConfirmationRecord['kind'];
+  kind: WorkspaceRuntimeConfirmationRecord['kind'];
   expected_settings_revision: number;
   catalog_revision: string;
   payload_json: string;
@@ -16,24 +16,24 @@ interface Row {
   expires_at: number;
 }
 
-const mapRow = (row: Row): EnvironmentConfirmationRecord => ({
+const mapRow = (row: Row): WorkspaceRuntimeConfirmationRecord => ({
   id: row.id,
   userId: row.user_id,
   kind: row.kind,
   expectedSettingsRevision: row.expected_settings_revision,
   catalogRevision: row.catalog_revision,
-  payload: JSON.parse(row.payload_json) as EnvironmentConfirmationRecord['payload'],
-  snapshot: JSON.parse(row.snapshot_json) as EnvironmentConfirmationRecord['snapshot'],
+  payload: JSON.parse(row.payload_json) as WorkspaceRuntimeConfirmationRecord['payload'],
+  snapshot: JSON.parse(row.snapshot_json) as WorkspaceRuntimeConfirmationRecord['snapshot'],
   createdAt: row.created_at,
   expiresAt: row.expires_at,
 });
 
-export class SqliteEnvironmentConfirmationRepository implements EnvironmentConfirmationRepositoryPort {
+export class SqliteWorkspaceRuntimeConfirmationRepository implements WorkspaceRuntimeConfirmationRepositoryPort {
   constructor(private readonly db: RelationalDatabase) {}
 
-  async save(record: EnvironmentConfirmationRecord): Promise<void> {
+  async save(record: WorkspaceRuntimeConfirmationRecord): Promise<void> {
     await this.db.execute(
-      `INSERT INTO agent_environment_confirmations
+      `INSERT INTO agent_workspace_runtime_confirmations
         (id,user_id,kind,expected_settings_revision,catalog_revision,payload_json,snapshot_json,created_at,expires_at)
        VALUES (?,?,?,?,?,?,?,?,?)`,
       [
@@ -50,23 +50,23 @@ export class SqliteEnvironmentConfirmationRepository implements EnvironmentConfi
     );
   }
 
-  async get(userId: number, confirmationId: string): Promise<EnvironmentConfirmationRecord | null> {
+  async get(userId: number, confirmationId: string): Promise<WorkspaceRuntimeConfirmationRecord | null> {
     const row = await this.db.queryOne<Row>(
       `SELECT id,user_id,kind,expected_settings_revision,catalog_revision,payload_json,snapshot_json,created_at,expires_at
-       FROM agent_environment_confirmations WHERE id=? AND user_id=?`,
+       FROM agent_workspace_runtime_confirmations WHERE id=? AND user_id=?`,
       [confirmationId, userId],
     );
     return row ? mapRow(row) : null;
   }
 
   async delete(userId: number, confirmationId: string): Promise<void> {
-    await this.db.execute('DELETE FROM agent_environment_confirmations WHERE id=? AND user_id=?', [
+    await this.db.execute('DELETE FROM agent_workspace_runtime_confirmations WHERE id=? AND user_id=?', [
       confirmationId,
       userId,
     ]);
   }
 
   async deleteExpired(now: number): Promise<void> {
-    await this.db.execute('DELETE FROM agent_environment_confirmations WHERE expires_at<=?', [now]);
+    await this.db.execute('DELETE FROM agent_workspace_runtime_confirmations WHERE expires_at<=?', [now]);
   }
 }

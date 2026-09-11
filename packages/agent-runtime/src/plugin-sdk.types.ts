@@ -21,7 +21,7 @@ export interface RunnerPluginSdkV1 {
 export interface RunnerPluginActivationContextV1 {
   schemaVersion: 1;
   protocolVersion: typeof PLUGIN_RUNNER_PROTOCOL_VERSION;
-  environment: Readonly<{ environmentId: string; generation: number }>;
+  workspace: Readonly<{ workspaceId: string; generation: number }>;
   plugin: Readonly<{ pluginId: string; version: string; sdkVersion: string }>;
   sdk: RunnerPluginSdkV1;
 }

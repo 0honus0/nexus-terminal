@@ -26,7 +26,7 @@
     'runs.execute',
     'machine.diagnostics.read',
     'machine.files.read',
-    'environment.execute',
+    'workspace.runtime.execute',
     'integration.mcp.invoke',
     'artifacts.read',
     'artifacts.write',

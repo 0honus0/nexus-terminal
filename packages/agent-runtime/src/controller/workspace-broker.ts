@@ -11,7 +11,7 @@ export interface WorkspaceGrant {
 }
 
 export interface WorkspaceAccessTarget {
-  environmentId: string;
+  workspaceId: string;
   generation: number;
   callerPluginId: string;
   targetPluginId: string;
@@ -62,14 +62,14 @@ const pathMatches = (rule: string, candidate: string): boolean => {
 export class WorkspaceBroker {
   constructor(private readonly runtimeRoot: string) {}
 
-  ensurePluginWorkspace(environmentId: string, generation: number, targetPluginId: string): string {
-    const root = this.workspaceRoot(environmentId, generation, targetPluginId);
+  ensurePluginWorkspace(workspaceId: string, generation: number, targetPluginId: string): string {
+    const root = this.workspaceRoot(workspaceId, generation, targetPluginId);
     fs.mkdirSync(root, { recursive: true, mode: 0o700 });
     return root;
   }
 
   replaceTargetGrants(
-    environmentId: string,
+    workspaceId: string,
     generation: number,
     targetPluginId: string,
     grants: readonly Omit<WorkspaceGrant, 'targetPluginId'>[],
@@ -77,14 +77,14 @@ export class WorkspaceBroker {
     const target = explicitPluginId(targetPluginId);
     if (!Array.isArray(grants) || grants.length > 256) throw new Error('WORKSPACE_ACL_INVALID');
     const normalized = grants.map((grant) => this.validateGrant({ ...grant, targetPluginId: target }));
-    const document = this.readAcl(environmentId, generation);
+    const document = this.readAcl(workspaceId, generation);
     document.grants = [...document.grants.filter((grant) => grant.targetPluginId !== target), ...normalized];
-    this.writeAcl(environmentId, generation, document);
+    this.writeAcl(workspaceId, generation, document);
   }
 
-  grantsForTarget(environmentId: string, generation: number, targetPluginId: string): WorkspaceGrant[] {
+  grantsForTarget(workspaceId: string, generation: number, targetPluginId: string): WorkspaceGrant[] {
     const target = explicitPluginId(targetPluginId);
-    return this.readAcl(environmentId, generation)
+    return this.readAcl(workspaceId, generation)
       .grants.filter((grant) => grant.targetPluginId === target)
       .map((grant) => ({ ...grant, permissions: [...grant.permissions] }));
   }
@@ -108,11 +108,7 @@ export class WorkspaceBroker {
       throw new Error('WORKSPACE_FILE_INVALID');
     const file = this.authorizedPath(target, 'write', true);
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-    this.assertNoSymlink(
-      this.workspaceRoot(target.environmentId, target.generation, target.targetPluginId),
-      file,
-      true,
-    );
+    this.assertNoSymlink(this.workspaceRoot(target.workspaceId, target.generation, target.targetPluginId), file, true);
     const temporary = `${file}.tmp-${process.pid}-${Date.now()}`;
     try {
       fs.writeFileSync(temporary, value, { mode: 0o600, flag: 'wx' });
@@ -160,7 +156,7 @@ export class WorkspaceBroker {
     const file = this.authorizedPath(target, 'write', true);
     fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
     this.assertNoSymlink(
-      this.workspaceRoot(target.environmentId, target.generation, target.targetPluginId),
+      this.workspaceRoot(target.workspaceId, target.generation, target.targetPluginId),
       path.dirname(file),
       true,
     );
@@ -200,7 +196,7 @@ export class WorkspaceBroker {
   mkdir(target: WorkspaceAccessTarget): void {
     const directory = this.authorizedPath(target, 'write', true);
     this.assertNoSymlink(
-      this.workspaceRoot(target.environmentId, target.generation, target.targetPluginId),
+      this.workspaceRoot(target.workspaceId, target.generation, target.targetPluginId),
       path.dirname(directory),
       true,
     );
@@ -211,7 +207,7 @@ export class WorkspaceBroker {
     const source = this.authorizedPath(target, 'delete');
     const destinationTarget = { ...target, path: destinationPath };
     const destination = this.authorizedPath(destinationTarget, 'write', true);
-    const root = this.workspaceRoot(target.environmentId, target.generation, target.targetPluginId);
+    const root = this.workspaceRoot(target.workspaceId, target.generation, target.targetPluginId);
     this.assertNoSymlink(root, source);
     this.assertNoSymlink(root, path.dirname(destination), true);
     fs.mkdirSync(path.dirname(destination), { recursive: true, mode: 0o700 });
@@ -246,7 +242,7 @@ export class WorkspaceBroker {
     const owner = explicitPluginId(target.targetPluginId);
     const candidate = logicalPath(target.path);
     if (caller !== owner) {
-      const allowed = this.grantsForTarget(target.environmentId, target.generation, owner).some(
+      const allowed = this.grantsForTarget(target.workspaceId, target.generation, owner).some(
         (grant) =>
           grant.principalPluginId === caller &&
           grant.permissions.includes(permission) &&
@@ -254,7 +250,7 @@ export class WorkspaceBroker {
       );
       if (!allowed) throw new Error('WORKSPACE_ACCESS_DENIED');
     }
-    const root = this.ensurePluginWorkspace(target.environmentId, target.generation, owner);
+    const root = this.ensurePluginWorkspace(target.workspaceId, target.generation, owner);
     const resolved = path.join(root, ...candidate.split('/').filter(Boolean));
     this.assertNoSymlink(root, resolved, allowMissing);
     return resolved;
@@ -293,30 +289,30 @@ export class WorkspaceBroker {
     }
   }
 
-  private workspaceRoot(environmentId: string, generation: number, targetPluginId: string): string {
-    this.requireEnvironmentGeneration(environmentId, generation);
-    return path.join(this.workspaceBase(environmentId), 'plugins', explicitPluginId(targetPluginId), 'workspace');
+  private workspaceRoot(workspaceId: string, generation: number, targetPluginId: string): string {
+    this.requireWorkspaceGeneration(workspaceId, generation);
+    return path.join(this.workspaceBase(workspaceId), 'plugins', explicitPluginId(targetPluginId), 'workspace');
   }
 
-  private requireEnvironmentGeneration(environmentId: string, generation: number): void {
-    if (!SAFE_ID.test(environmentId) || !Number.isSafeInteger(generation) || generation < 1)
-      throw new Error('ENVIRONMENT_ID_INVALID');
-    const root = path.join(this.runtimeRoot, 'environments', environmentId, String(generation));
-    if (!fs.existsSync(root)) throw new Error('ENVIRONMENT_NOT_FOUND');
+  private requireWorkspaceGeneration(workspaceId: string, generation: number): void {
+    if (!SAFE_ID.test(workspaceId) || !Number.isSafeInteger(generation) || generation < 1)
+      throw new Error('WORKSPACE_ID_INVALID');
+    const root = path.join(this.runtimeRoot, 'generations', workspaceId, String(generation));
+    if (!fs.existsSync(root)) throw new Error('WORKSPACE_NOT_FOUND');
   }
 
-  private workspaceBase(environmentId: string): string {
-    if (!SAFE_ID.test(environmentId)) throw new Error('ENVIRONMENT_ID_INVALID');
-    return path.join(this.runtimeRoot, 'workspaces', environmentId);
+  private workspaceBase(workspaceId: string): string {
+    if (!SAFE_ID.test(workspaceId)) throw new Error('WORKSPACE_ID_INVALID');
+    return path.join(this.runtimeRoot, 'workspaces', workspaceId);
   }
 
-  private aclFile(environmentId: string, generation: number): string {
-    this.requireEnvironmentGeneration(environmentId, generation);
-    return path.join(this.workspaceBase(environmentId), '.control', 'workspace-acl.json');
+  private aclFile(workspaceId: string, generation: number): string {
+    this.requireWorkspaceGeneration(workspaceId, generation);
+    return path.join(this.workspaceBase(workspaceId), '.control', 'workspace-acl.json');
   }
 
-  private readAcl(environmentId: string, generation: number): WorkspaceAclDocument {
-    const file = this.aclFile(environmentId, generation);
+  private readAcl(workspaceId: string, generation: number): WorkspaceAclDocument {
+    const file = this.aclFile(workspaceId, generation);
     if (!fs.existsSync(file)) return { schemaVersion: 1, grants: [] };
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as WorkspaceAclDocument;
     if (!parsed || parsed.schemaVersion !== 1 || !Array.isArray(parsed.grants))
@@ -324,8 +320,8 @@ export class WorkspaceBroker {
     return { schemaVersion: 1, grants: parsed.grants.map((grant) => this.validateGrant(grant)) };
   }
 
-  private writeAcl(environmentId: string, generation: number, value: WorkspaceAclDocument): void {
-    const file = this.aclFile(environmentId, generation);
+  private writeAcl(workspaceId: string, generation: number, value: WorkspaceAclDocument): void {
+    const file = this.aclFile(workspaceId, generation);
     const temporary = `${file}.tmp-${process.pid}`;
     fs.writeFileSync(temporary, `${JSON.stringify(value)}\n`, { mode: 0o600 });
     fs.renameSync(temporary, file);

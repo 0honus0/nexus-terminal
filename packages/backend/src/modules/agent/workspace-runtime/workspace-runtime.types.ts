@@ -1,56 +1,56 @@
 import type { PluginRunnerTarget } from '../host/plugin-runner-target.port';
 import type { JsonValue, Scope } from '../agent.types';
 
-export type EnvironmentKind = 'shell' | 'code' | 'data' | 'browser';
-export type EnvironmentStatus =
+export type WorkspaceKind = 'shell' | 'code' | 'data' | 'browser';
+export type WorkspaceStatus =
   'creating' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'deleting' | 'deleted' | 'failed';
 
-export interface EnvironmentPackRef {
+export interface ToolchainPackRef {
   familyId: string;
   versionId: string;
   contentDigest: string;
 }
 
-export interface EnvironmentResourceLimits {
+export interface WorkspaceResourceLimits {
   cpus: number;
   memoryBytes: number;
   pids: number;
   tmpfsBytes: number;
 }
 
-export type EnvironmentWorkspacePermission = 'read' | 'write' | 'list' | 'delete';
+export type PluginWorkspacePermission = 'read' | 'write' | 'list' | 'delete';
 
-export interface EnvironmentWorkspaceGrant {
+export interface PluginWorkspaceGrant {
   targetPluginId: string;
   principalPluginId: string;
   path: string;
-  permissions: EnvironmentWorkspacePermission[];
+  permissions: PluginWorkspacePermission[];
 }
 
-export interface EnvironmentWorkspaceGrantInput {
+export interface PluginWorkspaceGrantInput {
   principalPluginId: string;
   path: string;
-  permissions: EnvironmentWorkspacePermission[];
+  permissions: PluginWorkspacePermission[];
 }
 
-export interface EnvironmentNetworkPolicy {
+export interface WorkspaceNetworkPolicy {
   mode: 'none' | 'allowlist';
   hosts: string[];
 }
 
-export interface EnvironmentRecipe {
+export interface WorkspaceRecipe {
   id: string;
   revision: string;
-  kind: EnvironmentKind;
+  kind: WorkspaceKind;
   displayName: string;
   allowedFamilies: string[];
   requiredCapabilities: string[];
   defaultFamilies: string[];
-  defaultLimits: EnvironmentResourceLimits;
-  networkDefaults: EnvironmentNetworkPolicy;
+  defaultLimits: WorkspaceResourceLimits;
+  networkDefaults: WorkspaceNetworkPolicy;
 }
 
-export interface EnvironmentCatalogPack {
+export interface ToolchainCatalogPack {
   schemaVersion: 1;
   familyId: string;
   versionId: string;
@@ -68,7 +68,7 @@ export interface EnvironmentCatalogPack {
   inUse: boolean;
 }
 
-export interface EnvironmentAvailability {
+export interface WorkspaceRuntimeAvailability {
   available: boolean;
   state: 'unavailable' | 'uninitialized' | 'ready' | 'degraded';
   reason: string;
@@ -78,14 +78,14 @@ export interface EnvironmentAvailability {
   capabilities: { egressAllowlist: boolean };
 }
 
-export interface EnvironmentCatalog {
+export interface WorkspaceRuntimeCatalog {
   revision: string;
   runtimeDigest: string;
-  recipes: EnvironmentRecipe[];
-  packs: EnvironmentCatalogPack[];
+  recipes: WorkspaceRecipe[];
+  packs: ToolchainCatalogPack[];
 }
 
-export interface EnvironmentStorageView {
+export interface WorkspaceRuntimeStorageView {
   stateBytes: number;
   packBytes: number;
   cacheBytes: number;
@@ -94,36 +94,32 @@ export interface EnvironmentStorageView {
   sandboxOverheadBytes: number;
   reclaimableBytes: number;
   byPack: Array<{ familyId: string; versionId: string; bytes: number; inUse: boolean }>;
-  byEnvironment: Array<{ environmentId: string; runtimeBytes: number; status: string }>;
+  byWorkspace: Array<{ workspaceId: string; runtimeBytes: number; status: string }>;
   filesystem: { totalBytes: number; freeBytes: number };
 }
 
-export interface EnvironmentGroupView extends Scope {
-  id: string;
-  runId: string;
-  agentRuntimeId: string;
-  status: EnvironmentStatus;
-  retained: boolean;
-  limits: JsonValue;
-  version: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface EnvironmentView {
-  id: string;
-  groupId: string;
-  kind: EnvironmentKind;
+/** Immutable input used to construct one Workspace generation. */
+export interface WorkspaceProfileView {
+  kind: WorkspaceKind;
   recipeId: string;
   recipeRevision: string;
   runtimeDigest: string;
   catalogRevision: string;
-  packRefs: EnvironmentPackRef[];
+  toolchain: ToolchainPackRef[];
   runnerPlugins: PluginRunnerTarget[];
+  limits: WorkspaceResourceLimits;
+  network: WorkspaceNetworkPolicy;
+}
+
+/** Stable Agent Workspace identity; generation changes when the runtime profile changes. */
+export interface AgentWorkspaceView extends Scope {
+  id: string;
+  runId: string;
+  agentRuntimeId: string;
+  retained: boolean;
+  profile: WorkspaceProfileView;
   generation: number;
-  status: EnvironmentStatus;
-  limits: EnvironmentResourceLimits;
-  network: EnvironmentNetworkPolicy;
+  status: WorkspaceStatus;
   retainedManifestRef: string | null;
   version: number;
   lastActiveAt: number;
@@ -131,14 +127,9 @@ export interface EnvironmentView {
   updatedAt: number;
 }
 
-export interface EnvironmentGroupDetail extends EnvironmentGroupView {
-  environments: EnvironmentView[];
-}
-
-export interface EnvironmentCommandView extends Scope {
+export interface WorkspaceRuntimeCommandView extends Scope {
   id: string;
-  environmentId: string | null;
-  groupId: string | null;
+  workspaceId: string | null;
   action: string;
   operationHash: string;
   generation: number;
@@ -149,40 +140,41 @@ export interface EnvironmentCommandView extends Scope {
   completedAt: number | null;
 }
 
-export interface EnvironmentVersionSwitchView {
+export interface WorkspaceToolchainSwitchView {
   outcome: 'succeeded' | 'failed' | 'unknown';
-  environment: EnvironmentView;
-  commands: EnvironmentCommandView[];
+  workspace: AgentWorkspaceView;
+  commands: WorkspaceRuntimeCommandView[];
 }
 
-export interface EnvironmentCreateSpec {
+export interface AgentWorkspaceCreateSpec {
   recipeId: string;
   versions?: Record<string, string>;
   runnerPluginIds?: string[];
-  limits?: Partial<EnvironmentResourceLimits>;
-  network?: EnvironmentNetworkPolicy;
+  limits?: Partial<WorkspaceResourceLimits>;
+  network?: WorkspaceNetworkPolicy;
 }
-export interface EnvironmentSetupRecipeSelection {
+
+export interface WorkspaceRuntimeSetupRecipeSelection {
   recipeId: string;
   versions?: Record<string, string>;
 }
 
-export interface EnvironmentSetupPreview {
+export interface WorkspaceRuntimeSetupPreview {
   confirmationId: string;
   expectedVersion: number;
   catalogRevision: string;
   enabledRecipeIds: string[];
-  packs: EnvironmentPackRef[];
-  missingPacks: EnvironmentPackRef[];
+  packs: ToolchainPackRef[];
+  missingPacks: ToolchainPackRef[];
   installBytes: number;
   expiresAt: number;
 }
 
-export interface EnvironmentPackUninstallPreview {
+export interface ToolchainPackUninstallPreview {
   confirmationId: string;
   expectedVersion: number;
   catalogRevision: string;
-  pack: EnvironmentPackRef & { displayName: string; bytes: number };
+  pack: ToolchainPackRef & { displayName: string; bytes: number };
   installed: boolean;
   inUse: boolean;
   wasEnabled: boolean;
@@ -191,19 +183,19 @@ export interface EnvironmentPackUninstallPreview {
   expiresAt: number;
 }
 
-export interface EnvironmentRuntimeCleanupPreview {
+export interface WorkspaceRuntimeCleanupPreview {
   confirmationId: string;
   expectedVersion: number;
   catalogRevision: string;
-  environmentCount: number;
+  workspaceCount: number;
   activeCount: number;
   retainedCount: number;
   estimatedReclaimableBytes: number;
-  environmentIds: string[];
+  workspaceIds: string[];
   expiresAt: number;
 }
 
-export interface EnvironmentSettingsResetPreview {
+export interface WorkspaceRuntimeSettingsResetPreview {
   confirmationId: string;
   expectedVersion: number;
   catalogRevision: string;

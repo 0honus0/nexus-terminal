@@ -10,7 +10,7 @@ export type {
   AgentSettingsDocument,
   AgentSettingsView,
   ArtifactStorageSummary,
-  EnvironmentAvailability,
+  WorkspaceRuntimeAvailability,
   HardLimitPreview,
   TargetDenylistView,
 } from './api/agent-api';
