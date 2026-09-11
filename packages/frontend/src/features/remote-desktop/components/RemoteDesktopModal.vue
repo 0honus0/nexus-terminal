@@ -7,6 +7,7 @@
   import { useDeviceCapabilities } from '@/foundation/browser/useDeviceCapabilities';
   import { useDraggablePosition, useResizeHandle } from '@/foundation/interaction';
   import { apiErrorMessage } from '@/client/http';
+  import { logger } from '@/client/logging/logger';
   import { remoteDesktopApi } from '../api/remoteDesktopApi';
   import { attachRemoteTouchInput, type RemoteTouchInput, type RemoteTouchMode } from '../composables/remoteTouchInput';
   import { attachRemoteClipboard, type RemoteClipboardBridge } from '../composables/remoteClipboard';
@@ -190,11 +191,30 @@
     state.value = nextState;
   };
   const disconnect = () => {
+    logger.debug(
+      {
+        connectionId: props.connection?.id,
+        protocol: props.connection?.type,
+        state: state.value,
+        generation: connectGeneration,
+      },
+      'Remote desktop disconnect requested',
+    );
     connectGeneration += 1;
     cleanupClient('disconnected');
   };
   const failConnection = (generation: number, errorMessage: string) => {
     if (generation !== connectGeneration) return;
+    logger.debug(
+      {
+        connectionId: props.connection?.id,
+        protocol: props.connection?.type,
+        state: state.value,
+        generation,
+        reason: errorMessage,
+      },
+      'Remote desktop connection failed',
+    );
     connectGeneration += 1;
     message.value = errorMessage;
     cleanupClient('error');
@@ -244,12 +264,26 @@
     const generation = ++connectGeneration;
     const connectionId = props.connection.id;
     const protocol = props.connection.type;
+    const startedAt = performance.now();
     cleanupClient('disconnected');
     state.value = 'connecting';
     message.value = t('remoteDesktopModal.status.fetchingToken');
     try {
       const spec = currentDisplay();
+      logger.debug(
+        { connectionId, protocol, generation, width: spec.width, height: spec.height, dpi: spec.dpi },
+        'Remote desktop connection attempt started',
+      );
       const session = await props.sessionPort.create(connectionId, protocol, spec);
+      logger.debug(
+        {
+          connectionId,
+          protocol,
+          generation,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        },
+        'Remote desktop session ticket acquired',
+      );
       emit('connected', connectionId, session.lastConnectedAt);
       if (
         generation !== connectGeneration ||
@@ -257,12 +291,27 @@
         props.connection?.id !== connectionId ||
         props.connection.type !== protocol ||
         !display.value
-      )
+      ) {
+        logger.debug(
+          {
+            connectionId,
+            protocol,
+            generation,
+            currentGeneration: connectGeneration,
+            visible: props.visible,
+          },
+          'Remote desktop connection attempt superseded before tunnel open',
+        );
         return;
+      }
 
       const tunnel = new Guacamole.WebSocketTunnel(props.sessionPort.tunnelUrl());
       const nextClient = new Guacamole.Client(tunnel);
       tunnel.onerror = (status: Status) => {
+        logger.debug(
+          { connectionId, protocol, generation, reason: status.message || undefined },
+          'Remote desktop tunnel error event',
+        );
         failConnection(generation, status.message || t('remoteDesktopModal.errors.tunnelError'));
       };
       client = nextClient;
@@ -270,9 +319,22 @@
       display.value.appendChild(nextClient.getDisplay().getElement());
       nextClient.onstatechange = (value: number) => {
         if (generation !== connectGeneration || client !== nextClient) return;
+        logger.debug(
+          { connectionId, protocol, generation, guacamoleState: value, previousState: state.value },
+          'Remote desktop client state changed',
+        );
         if (value === 3) {
           state.value = 'connected';
           message.value = t('remoteDesktopModal.status.connected');
+          logger.debug(
+            {
+              connectionId,
+              protocol,
+              generation,
+              elapsedMs: Math.round(performance.now() - startedAt),
+            },
+            'Remote desktop connection established',
+          );
           setupInput();
           void nextTick(sendSize);
         } else if (value === 1 || value === 2) state.value = 'connecting';
@@ -280,6 +342,10 @@
         else if (value === 0 || value === 5) state.value = 'disconnected';
       };
       nextClient.onerror = (status: Status) => {
+        logger.debug(
+          { connectionId, protocol, generation, reason: status.message || undefined },
+          'Remote desktop client error event',
+        );
         failConnection(generation, status.message || t('remoteDesktopModal.errors.clientError'));
       };
       nextClient.connect(props.sessionPort.tunnelData(session, spec));
@@ -287,6 +353,17 @@
       resizeObserver.observe(display.value);
     } catch (cause) {
       if (generation !== connectGeneration) return;
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      logger.debug(
+        {
+          err: error,
+          connectionId,
+          protocol,
+          generation,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        },
+        'Remote desktop connection attempt threw',
+      );
       failConnection(generation, apiErrorMessage(cause, t('remoteDesktopModal.errors.connectionFailed')));
     }
   };

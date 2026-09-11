@@ -68,9 +68,29 @@ export class WorkspaceRuntimeSession {
       this.socket.onClose((reason) => this.handleTransportClosed(reason)),
       this.socket.onError((message) => {
         if (this.disposed || this.closing) return;
+        logger.debug(
+          {
+            workspaceId: this.id,
+            connectionId: this.connection.id,
+            state: this.state.value,
+            reconnectAttempt: this.reconnectAttempt,
+            reason: message,
+          },
+          'Workspace transport error event',
+        );
         this.statusMessage.value = message;
       }),
       this.socket.on<{ message: string }>('terminal.error', ({ message }) => {
+        logger.debug(
+          {
+            workspaceId: this.id,
+            connectionId: this.connection.id,
+            state: this.state.value,
+            reconnectAttempt: this.reconnectAttempt,
+            reason: message,
+          },
+          'Workspace terminal error event',
+        );
         logger.warn(
           { workspaceId: this.id, connectionId: this.connection.id, reason: message },
           'Workspace terminal error',
@@ -81,11 +101,29 @@ export class WorkspaceRuntimeSession {
       }),
       this.socket.on('terminal.closed', () => {
         if (this.closing) return;
+        logger.debug(
+          {
+            workspaceId: this.id,
+            connectionId: this.connection.id,
+            state: this.state.value,
+            reconnectAttempt: this.reconnectAttempt,
+          },
+          'Workspace terminal closed event',
+        );
         this.markCapabilitiesDisconnected();
         this.state.value = 'disconnected';
       }),
       this.socket.on<{ operation: string; message: string }>('protocol.error', ({ operation, message }) => {
-        logger.debug({ workspaceId: this.id, operation, reason: message }, 'Workspace protocol error event');
+        logger.debug(
+          {
+            workspaceId: this.id,
+            connectionId: this.connection.id,
+            state: this.state.value,
+            operation,
+            reason: message,
+          },
+          'Workspace protocol error event',
+        );
         this.statusMessage.value = `${operation}: ${message}`;
       }),
       this.socket.on<{ suspendedSessionId: string; reason: string }>('suspend.autoTerminated', (event) =>
@@ -99,8 +137,21 @@ export class WorkspaceRuntimeSession {
     if (viewport) this.lastViewport = viewport;
     this.clearReconnectTimer();
     this.closing = false;
-    this.state.value = this.hasConnected.value ? 'reconnecting' : 'connecting';
+    const reconnectAttempt = this.reconnectAttempt;
+    const phase = this.hasConnected.value ? 'reconnect' : 'initial';
+    const startedAt = performance.now();
+    this.state.value = phase === 'reconnect' ? 'reconnecting' : 'connecting';
     this.statusMessage.value = '';
+    logger.debug(
+      {
+        workspaceId: this.id,
+        connectionId: this.connection.id,
+        phase,
+        reconnectAttempt,
+        hasViewport: Boolean(this.lastViewport),
+      },
+      'Workspace connection attempt started',
+    );
     try {
       const result = await this.socket.request<WorkspaceConnectResult>('workspace.connect', {
         workspaceId: this.id,
@@ -112,6 +163,16 @@ export class WorkspaceRuntimeSession {
       this.hasConnected.value = true;
       this.reconnectAttempt = 0;
       this.state.value = 'connected';
+      logger.debug(
+        {
+          workspaceId: this.id,
+          connectionId: this.connection.id,
+          phase,
+          reconnectAttempt,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        },
+        'Workspace connection attempt succeeded',
+      );
       if (result.lastConnectedAt !== undefined) markConnectionConnected(this.connection.id, result.lastConnectedAt);
       void this.filesystemState
         .ensureLoaded()
@@ -134,7 +195,14 @@ export class WorkspaceRuntimeSession {
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
       logger.warn(
-        { err: error, workspaceId: this.id, connectionId: this.connection.id, reconnectAttempt: this.reconnectAttempt },
+        {
+          err: error,
+          workspaceId: this.id,
+          connectionId: this.connection.id,
+          phase,
+          reconnectAttempt,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        },
         'Workspace runtime connection failed',
       );
       this.state.value = 'error';
@@ -149,6 +217,11 @@ export class WorkspaceRuntimeSession {
     this.closing = false;
     this.state.value = 'connecting';
     this.statusMessage.value = '';
+    const startedAt = performance.now();
+    logger.debug(
+      { workspaceId: this.id, connectionId: this.connection.id, suspendedSessionId },
+      'Workspace suspended-session resume started',
+    );
     try {
       const result = await this.socket.request<
         WorkspaceConnectResult & { resumedFrom: string; historyAvailable?: boolean }
@@ -164,6 +237,15 @@ export class WorkspaceRuntimeSession {
       this.markedForSuspend.value = true;
       this.markedForSuspendAt.value = markedAt ?? new Date().toISOString();
       this.state.value = 'connected';
+      logger.debug(
+        {
+          workspaceId: this.id,
+          connectionId: this.connection.id,
+          suspendedSessionId,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        },
+        'Workspace suspended-session resume succeeded',
+      );
       void this.filesystemState
         .ensureLoaded()
         .catch((error) =>
@@ -177,7 +259,13 @@ export class WorkspaceRuntimeSession {
     } catch (cause) {
       const error = cause instanceof Error ? cause : new Error(String(cause));
       logger.warn(
-        { err: error, workspaceId: this.id, suspendedSessionId },
+        {
+          err: error,
+          workspaceId: this.id,
+          connectionId: this.connection.id,
+          suspendedSessionId,
+          elapsedMs: Math.round(performance.now() - startedAt),
+        },
         'Workspace suspended-session resume failed',
       );
       this.state.value = 'error';
@@ -208,12 +296,25 @@ export class WorkspaceRuntimeSession {
       this.reconnectInFlight
     )
       return;
+    logger.debug(
+      {
+        workspaceId: this.id,
+        connectionId: this.connection.id,
+        state: this.state.value,
+        reconnectAttempt: this.reconnectAttempt,
+      },
+      'Workspace reconnect requested immediately',
+    );
     this.clearReconnectTimer();
     void this.reconnect();
   }
 
   close(reason = 'Workspace closed'): void {
     if (this.disposed) return;
+    logger.debug(
+      { workspaceId: this.id, connectionId: this.connection.id, state: this.state.value, reason },
+      'Workspace runtime close requested',
+    );
     this.closing = true;
     this.clearReconnectTimer();
     this.statusController.workspaceDisconnected();
@@ -224,6 +325,10 @@ export class WorkspaceRuntimeSession {
 
   dispose(reason = 'Workspace disposed'): void {
     if (this.disposed) return;
+    logger.debug(
+      { workspaceId: this.id, connectionId: this.connection.id, state: this.state.value, reason },
+      'Workspace runtime dispose requested',
+    );
     this.disposed = true;
     this.closing = true;
     this.clearReconnectTimer();
@@ -239,6 +344,18 @@ export class WorkspaceRuntimeSession {
 
   private handleTransportClosed(reason?: string): void {
     if (this.disposed || this.closing) return;
+    logger.debug(
+      {
+        workspaceId: this.id,
+        connectionId: this.connection.id,
+        state: this.state.value,
+        reason,
+        hasConnected: this.hasConnected.value,
+        reconnectAttempt: this.reconnectAttempt,
+        markedForSuspend: this.markedForSuspend.value,
+      },
+      'Workspace transport closed',
+    );
     this.markCapabilitiesDisconnected();
     this.state.value = 'disconnected';
     if (reason) this.statusMessage.value = reason;
@@ -270,16 +387,34 @@ export class WorkspaceRuntimeSession {
     );
     this.reconnectTimer = window.setTimeout(() => {
       this.reconnectTimer = undefined;
+      logger.debug(
+        {
+          workspaceId: this.id,
+          connectionId: this.connection.id,
+          reconnectAttempt: this.reconnectAttempt,
+        },
+        'Workspace reconnect backoff elapsed',
+      );
       void this.reconnect();
     }, delay);
   }
 
   private async reconnect(): Promise<void> {
     if (this.disposed || this.closing || this.markedForSuspend.value || this.reconnectInFlight) return;
+    const reconnectAttempt = this.reconnectAttempt;
     this.reconnectInFlight = true;
+    logger.debug(
+      { workspaceId: this.id, connectionId: this.connection.id, reconnectAttempt },
+      'Workspace reconnect attempt started',
+    );
     try {
       await this.connect(this.lastViewport);
-    } catch {
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      logger.debug(
+        { err: error, workspaceId: this.id, connectionId: this.connection.id, reconnectAttempt },
+        'Workspace reconnect attempt failed',
+      );
       this.scheduleReconnect();
     } finally {
       this.reconnectInFlight = false;

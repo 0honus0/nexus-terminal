@@ -45,6 +45,7 @@ export class WorkspaceSocket {
     if (this.connected) return;
     if (this.opening) return this.opening;
 
+    logger.debug({ pendingRequests: this.pending.size }, 'Workspace WebSocket opening');
     const socket = openWebSocket('/ws/workspace');
     socket.binaryType = 'arraybuffer';
     this.socket = socket;
@@ -94,9 +95,14 @@ export class WorkspaceSocket {
 
       socket.onopen = () => {
         if (this.socket !== socket) {
+          logger.debug(
+            { pendingRequests: this.pending.size },
+            'Workspace WebSocket open ignored because transport was superseded',
+          );
           settleReject(new Error('Workspace WebSocket connection was superseded.'));
           return;
         }
+        logger.debug({ pendingRequests: this.pending.size }, 'Workspace WebSocket opened');
         settleResolve();
       };
       socket.onmessage = (event) => {
@@ -104,6 +110,10 @@ export class WorkspaceSocket {
       };
       socket.onerror = () => {
         const error = new Error('Workspace WebSocket connection failed.');
+        logger.debug(
+          { pendingRequests: this.pending.size, readyState: socket.readyState },
+          'Workspace WebSocket error event',
+        );
         settleReject(error);
         if (this.socket !== socket) return;
         for (const handler of this.errorHandlers) handler(error.message);
@@ -117,11 +127,16 @@ export class WorkspaceSocket {
         const closeContext = {
           closeCode: event.code,
           reason: event.reason || undefined,
+          wasClean: event.wasClean,
           pendingRequests: this.pending.size,
         };
+        logger.debug(closeContext, 'Workspace WebSocket close event');
         if (event.code !== 1000) logger.warn(closeContext, 'Workspace WebSocket closed unexpectedly');
         settleReject(error);
-        if (this.socket !== socket) return;
+        if (this.socket !== socket) {
+          logger.debug(closeContext, 'Workspace WebSocket stale close ignored');
+          return;
+        }
 
         // Ignore late close/error events from an older socket after a reconnect has already
         // installed a replacement. They must never clear the replacement or reject its requests.
@@ -143,6 +158,15 @@ export class WorkspaceSocket {
   close(reason = 'Workspace closed'): void {
     const error = new Error(reason);
     const socket = this.socket;
+    logger.debug(
+      {
+        reason,
+        readyState: socket?.readyState,
+        pendingRequests: this.pending.size,
+        opening: Boolean(this.opening),
+      },
+      'Workspace WebSocket close requested',
+    );
     this.socket = undefined;
     this.rejectOpening?.(error);
     this.rejectPending(error);
@@ -182,7 +206,12 @@ export class WorkspaceSocket {
       } catch (cause) {
         window.clearTimeout(timer);
         this.pending.delete(requestId);
-        reject(cause instanceof Error ? cause : new Error(String(cause)));
+        const error = cause instanceof Error ? cause : new Error(String(cause));
+        logger.debug(
+          { err: error, operation: type, requestId, pendingRequests: this.pending.size },
+          'Workspace request dispatch failed',
+        );
+        reject(error);
       }
     });
   }

@@ -1,4 +1,5 @@
 import { httpClient } from '@/client/http';
+import { logger } from '@/client/logging/logger';
 import { createWebSocketUrl } from '@/client/websocket';
 import type { DockerChannel, DockerCommand, DockerStats, DockerStatus } from '@/features/docker/public';
 import type {
@@ -445,6 +446,16 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
 
   const failUploadStream = (request: UploadRequest, message: string): void => {
     if (uploads.get(request.id) !== request) return;
+    logger.debug(
+      {
+        workspaceId,
+        uploadId: request.id,
+        workspaceAvailable,
+        workspaceSocketConnected: socket.connected,
+        reason: message,
+      },
+      'Workspace upload stream failed',
+    );
     forgetUpload(request.id);
     closeUploadStream(request.id, 'Upload stream failed');
     emit({ type: 'error', id: request.id, message });
@@ -476,6 +487,10 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     if (!workspaceAvailable || !recoveryPending || recovering || !uploads.size) return;
     recovering = true;
     recoveryPending = false;
+    logger.debug(
+      { workspaceId, uploadCount: uploads.size, prepareCount: prepareRequests.size },
+      'Workspace upload recovery started',
+    );
     try {
       const snapshot = [...uploads.values()];
       const prepareIds = [
@@ -495,10 +510,18 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
           await sendPrepareRequest(prepare);
         } catch (cause) {
           if (!workspaceAvailable) {
+            logger.debug(
+              { workspaceId, prepareId, uploadCount: uploads.size },
+              'Workspace upload recovery paused because workspace disconnected',
+            );
             recoveryPending = true;
             return;
           }
           const message = cause instanceof Error ? cause.message : String(cause);
+          logger.debug(
+            { err: cause, workspaceId, prepareId },
+            'Workspace upload directory preparation recovery failed',
+          );
           for (const request of snapshot.filter((item) => item.prepareId === prepareId)) {
             if (uploads.get(request.id) !== request) continue;
             forgetUpload(request.id);
@@ -518,6 +541,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
         enqueueUpload(request);
       }
       pumpUploadQueue();
+      logger.debug({ workspaceId, uploadCount: uploads.size }, 'Workspace upload recovery queued');
     } finally {
       recovering = false;
     }
@@ -545,6 +569,7 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       void startUploadRequest(request).catch((cause) => {
         if (uploads.get(request.id) !== request) return;
         if (!workspaceAvailable) return;
+        logger.debug({ err: cause, workspaceId, uploadId: request.id }, 'Workspace upload start request failed');
         forgetUpload(request.id);
         closeUploadStream(request.id, 'Upload start failed');
         pumpUploadQueue();
@@ -556,10 +581,22 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
   const streamUpload = async (request: UploadRequest): Promise<void> => {
     const params = new URLSearchParams({ workspaceId, uploadId: request.id, size: String(request.file.size) });
     const uploadSocket = new WebSocket(createWebSocketUrl(`/ws/uploads?${params}`));
+    logger.debug({ workspaceId, uploadId: request.id, size: request.file.size }, 'Workspace upload WebSocket opening');
     uploadSockets.set(request.id, uploadSocket);
     uploadSocket.binaryType = 'arraybuffer';
     uploadSocket.onclose = (event) => {
       if (uploadSockets.get(request.id) === uploadSocket) uploadSockets.delete(request.id);
+      logger.debug(
+        {
+          workspaceId,
+          uploadId: request.id,
+          closeCode: event.code,
+          reason: event.reason || undefined,
+          wasClean: event.wasClean,
+          workspaceAvailable,
+        },
+        'Workspace upload WebSocket closed',
+      );
       if (event.code !== 1000 && workspaceAvailable && uploads.get(request.id) === request) {
         failUploadStream(
           request,
@@ -570,8 +607,17 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
       }
     };
     await new Promise<void>((resolve, reject) => {
-      uploadSocket.onopen = () => resolve();
-      uploadSocket.onerror = () => reject(new Error(`Unable to open upload stream for ${request.file.name}.`));
+      uploadSocket.onopen = () => {
+        logger.debug({ workspaceId, uploadId: request.id }, 'Workspace upload WebSocket opened');
+        resolve();
+      };
+      uploadSocket.onerror = () => {
+        logger.debug(
+          { workspaceId, uploadId: request.id, readyState: uploadSocket.readyState },
+          'Workspace upload WebSocket error event',
+        );
+        reject(new Error(`Unable to open upload stream for ${request.file.name}.`));
+      };
     });
     if (request.file.size === 0) return;
     const chunkSize = 512 * 1024;
@@ -794,11 +840,23 @@ export const createTransferChannel = (socket: WorkspaceSocket, workspaceId: stri
     },
     async workspaceConnected() {
       workspaceAvailable = true;
+      logger.debug(
+        { workspaceId, uploadCount: uploads.size, recoveryPending },
+        'Workspace transfer channel marked connected',
+      );
       await recoverUploads();
       pumpUploadQueue();
     },
     workspaceDisconnected() {
       if (!workspaceAvailable && recoveryPending) return;
+      logger.debug(
+        {
+          workspaceId,
+          uploadCount: uploads.size,
+          activeRemoteOperationCount: activeRemoteOperations.size,
+        },
+        'Workspace transfer channel marked disconnected',
+      );
       workspaceAvailable = false;
       for (const [id, operation] of activeRemoteOperations) {
         emit({ type: 'error', id, message: `Workspace connection closed during ${operation}.` });
