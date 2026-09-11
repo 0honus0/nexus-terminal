@@ -798,6 +798,7 @@ no module cycles
     - `bootstrap/agent/tool-contributions.ts` 只负责把已构造 Port/Service 注册为 Tool contribution，并维护 MCP owned contribution hook；
     - scheduler、StateCommit、Policy/Lease、lifecycle 与 `AgentServices` facade 仍留在真正 composition root，不为缩行数拆成二次业务 facade；
     - Backend architecture checker 禁止 Operations Tool creator、`registerContribution()` / `replaceOwnedContribution()` 重新直接进入 `compose-agent.ts`。
+    - GitHub Actions run `34581381495`（产品代码 HEAD `af04bf7`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。
 
