@@ -98,59 +98,65 @@ composeAgent(options: ComposeAgentOptions): AgentServices
 const subagentRepository = new SqliteSubagentRepository(database);
 ```
 
-被 composition root 显式收窄成 6 个 Port：
+被 composition root 按 consumer authority 显式投影成窄 capability；同一个 SQLite adapter 可以同时实现这些 Port，但每个 consumer 只拿自己实际需要的方法：
 
 ```ts
 const runScopes: RunScopeRepositoryPort = subagentRepository;
 const runtimeParticipants: RuntimeParticipantRepositoryPort = subagentRepository;
+const delegationReader: DelegationReaderPort = subagentRepository;
+const delegationCancellation: DelegationCancellationPort = subagentRepository;
 const delegationRepository: DelegationRepositoryPort = subagentRepository;
+const mailboxReader: MailboxReaderPort = subagentRepository;
+const mailboxConsumer: MailboxConsumerPort = subagentRepository;
 const mailboxRepository: MailboxRepositoryPort = subagentRepository;
-const schedulerWork: SchedulerWorkRepositoryPort = subagentRepository;
+const schedulerClaims: SchedulerWorkClaimPort = subagentRepository;
+const schedulerExecution: SchedulerWorkExecutionPort = subagentRepository;
 const sharedFactRepository: SharedFactRepositoryPort = subagentRepository;
 ```
 
 意义：
 
 - SQLite 可以继续共享一个数据库和事务基础设施；
-- Service 只能看到自己需要的方法；
-- 不再通过一个 30+ 方法的 `SubagentRepositoryPort` 获得不必要权限。
+- Service / executor 只能看到自己需要的方法；
+- Scheduler durable scan/claim authority、claimed-work execution authority、Delegation create/cancel/read、Mailbox read/consume/full service 权限在类型层显式区分；
+- 不为“未来可能使用”保留未使用 API；`claimNextWork()` 已删除，后继若确有需求按当时的 owner/语义重新引入。
 
 具体注入：
 
 ```text
 SubagentService
-  <- DelegationRepositoryPort
+  <- DelegationRepositoryPort            # read + create + cancel
   <- RuntimeParticipantRepositoryPort
 
 MailboxService
-  <- MailboxRepositoryPort
+  <- MailboxRepositoryPort               # send + read + consume + expire
   <- RuntimeParticipantRepositoryPort
-  <- DelegationRepositoryPort
+  <- DelegationReaderPort
 
 SharedFactsService
   <- SharedFactRepositoryPort
 
 SubagentScheduler
   <- RunScopeRepositoryPort
-  <- SchedulerWorkRepositoryPort
+  <- SchedulerWorkClaimPort              # ready/terminal/claim/reset + invalid-claim settle
   <- SubagentParticipantExecutor
 
 SubagentParticipantExecutor
-  <- SchedulerWorkRepositoryPort
-  <- DelegationRepositoryPort
+  <- SchedulerWorkExecutionPort          # enqueue + settle only
+  <- DelegationCancellationPort          # read + cancel, no create
   <- RuntimeParticipantRepositoryPort
-  <- MailboxRepositoryPort
+  <- MailboxConsumerPort                 # consume only
   <- RunRepositoryPort
   <- StateCommitPort
   <- SubagentContextBuilder
 
 SubagentContextBuilder
   <- RuntimeParticipantRepositoryPort
-  <- MailboxRepositoryPort
+  <- MailboxReaderPort
   <- ToolCatalog
 
 NativeAgentBackend
-  <- DelegationRepositoryPort
+  <- DelegationReaderPort
 ```
 
 ---
@@ -176,7 +182,7 @@ modules/agent/runtime/execution/text-budget.ts
 
 ```text
 RunRepositoryPort
-DelegationRepositoryPort
+DelegationReaderPort
 StateCommitPort
 ModelStepRunner
 ToolCallRunner
@@ -190,7 +196,7 @@ ClockPort
 - `ModelStepRunner`：封装 Provider/Context/LanguageModel/ModelCallLimiter 与 model transport retry，不拥有 Run terminal transition；
 - `ToolCallRunner`：封装 ToolCatalog/ToolExecutor/Policy、read lease 与 staged mutation lease；
 - `MutationLeaseGuardPort`：只由 `ToolCallRunner` 使用，底层 Adapter 独占 mutation acquire/renew/active/settled/release/quarantine；
-- `DelegationRepositoryPort`：只读 Root 的 child delegation 状态。
+- `DelegationReaderPort`：只读 Root 的 child delegation 状态；Root 不取得 create/cancel authority。
 
 `NativeAgentBackend` 不再直接依赖 `LeasePort`、`LeaseCoordinator`、`ToolExecutor`、`PolicyService`、Provider/Context/LanguageModel 或 `ModelCallLimiter`。Backend architecture checker 将这些 direct dependency 视为回退。
 
@@ -414,43 +420,53 @@ runtimeToolWork()
 activeRuntimeModelWork()
 ```
 
-#### `DelegationRepositoryPort`
-
-核心方法：
+#### Delegation capabilities
 
 ```text
-delegation()
-listDelegations()
-createDelegation()
-cancelDelegation()
-descendants()
+DelegationReaderPort
+  delegation()
+  listDelegations()
+  descendants()
+
+DelegationCancellationPort extends DelegationReaderPort
+  cancelDelegation()
+
+DelegationRepositoryPort extends DelegationCancellationPort
+  createDelegation()
 ```
 
-#### `MailboxRepositoryPort`
-
-核心方法：
+#### Mailbox capabilities
 
 ```text
-sendMessage()
-readMessages()
-listDelegationMessages()
-consumeMessages()
-expireMessages()
+MailboxReaderPort
+  readMessages()
+  listDelegationMessages()
+
+MailboxConsumerPort
+  consumeMessages()
+
+MailboxRepositoryPort extends MailboxReaderPort + MailboxConsumerPort
+  sendMessage()
+  expireMessages()
 ```
 
-#### `SchedulerWorkRepositoryPort`
-
-核心方法：
+#### Scheduler work capabilities
 
 ```text
-enqueueWork()
-readyWork()
-terminalWork()
-claimWork()
-claimNextWork()
-settleWork()
-resetClaimedWork()
+SchedulerWorkSettlementPort
+  settleWork()
+
+SchedulerWorkClaimPort extends SchedulerWorkSettlementPort
+  readyWork()
+  terminalWork()
+  claimWork()
+  resetClaimedWork()
+
+SchedulerWorkExecutionPort extends SchedulerWorkSettlementPort
+  enqueueWork()
 ```
+
+`claimNextWork()` 不再保留：当前没有 consumer，pre-release 阶段不为假设性后继需求保留额外 claim API。
 
 #### `SharedFactRepositoryPort`
 
@@ -983,13 +999,9 @@ Runtime completion / failure
 Parent wake 所需 durable event/projection
 ```
 
-它们不拥有 Scheduler work claim authority。`SubagentScheduler` 仍通过：
+它们不拥有 Scheduler work claim authority。`SubagentScheduler` 只拿 `SchedulerWorkClaimPort`，通过 `readyWork()/terminalWork()/claimWork()/resetClaimedWork()` 扫描和取得 durable claim，并仅在 claim 已经由自己取得且发现非法 work kind 时使用共享的 `settleWork()` 取消该 claim。
 
-```text
-SchedulerWorkRepositoryPort.claimWork()
-```
-
-取得 durable work claim。已经 claim 的 work 交给 `SubagentParticipantExecutor` 后，executor 可调用 `settleWork()/enqueueWork()` 完成该 claim 的 durable queue 结果或创建后继 work，但不得调用 `readyWork()/terminalWork()/claimWork()/resetClaimedWork()`。StateCommit transition 只提交执行过程中涉及的 Run / Runtime / Delegation / Step / Tool / Event 原子状态。
+已经 claim 的 work 交给 `SubagentParticipantExecutor` 后，executor 只拿 `SchedulerWorkExecutionPort`，可调用 `settleWork()/enqueueWork()` 完成 durable queue 结果或创建后继 work，但类型上无法调用 `readyWork()/terminalWork()/claimWork()/resetClaimedWork()`。Backend architecture checker 同时禁止 claim capability 回流 executor、execution capability 回流 Scheduler。StateCommit transition 只提交执行过程中涉及的 Run / Runtime / Delegation / Step / Tool / Event 原子状态。
 
 ### 8.9 Run lifecycle transitions
 

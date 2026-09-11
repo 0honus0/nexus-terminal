@@ -782,6 +782,7 @@ no module cycles
     - `SubagentContextBuilder` 独立负责 runtime/mailbox/tool-history context、child tool schema 与 context/token limit，避免 context assembly 继续长在 Scheduler 中；
     - 不采用只把五个 Repository Port 包成两个 Store facade 的方案，也不新增会隐藏 StateCommit authority 的 `SubagentWorkCoordinator`；
     - Backend architecture checker 禁止 Provider/Model/Tool/Lease/StateCommit/collaboration repository 回流 `SubagentScheduler`，并禁止 participant executor 获取 `readyWork/terminalWork/claimWork/resetClaimedWork` durable scan/claim authority。
+    - Collaboration persistence 进一步按 consumer authority 收窄：Root 只拿 `DelegationReaderPort`，Participant 拿 `DelegationCancellationPort`、`MailboxConsumerPort` 与 `SchedulerWorkExecutionPort`，Scheduler 拿 `SchedulerWorkClaimPort`，ContextBuilder 只拿 `MailboxReaderPort`；未使用的 `claimNextWork()` 已删除，不为 roadmap 假设保留 API。
     - GitHub Actions run `34576022008`（产品代码 HEAD `15f821b`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
 继续开发时不要为让本机 E2E 变绿而改 `reuseExistingServer`、跳过浏览器项目、降低 sandbox/Capability 门槛或引入 Plugin Docker；环境证据与产品 contract 必须分开处理。

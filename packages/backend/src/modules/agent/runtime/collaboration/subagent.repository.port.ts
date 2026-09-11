@@ -147,7 +147,7 @@ export interface RuntimeParticipantRepositoryPort {
   activeRuntimeModelWork(scope: Scope, runId: string, runtimeId: string): Promise<RuntimeModelWorkView | null>;
 }
 
-export interface DelegationRepositoryPort {
+export interface DelegationReaderPort {
   delegation(scope: Scope, runId: string, delegationId: string): Promise<DelegationView | null>;
   listDelegations(
     scope: Scope,
@@ -156,7 +156,10 @@ export interface DelegationRepositoryPort {
     limit?: number,
     before?: { createdAt: number; id: string },
   ): Promise<DelegationView[]>;
-  createDelegation(record: CreateDelegationRecord): Promise<CreateDelegationResult>;
+  descendants(scope: Scope, runId: string, runtimeId: string): Promise<DelegationView[]>;
+}
+
+export interface DelegationCancellationPort extends DelegationReaderPort {
   cancelDelegation(
     scope: Scope,
     runId: string,
@@ -164,11 +167,13 @@ export interface DelegationRepositoryPort {
     expectedVersion: number,
     now: number,
   ): Promise<DelegationView>;
-  descendants(scope: Scope, runId: string, runtimeId: string): Promise<DelegationView[]>;
 }
 
-export interface MailboxRepositoryPort {
-  sendMessage(record: SendMessageRecord): Promise<MessageReceipt>;
+export interface DelegationRepositoryPort extends DelegationCancellationPort {
+  createDelegation(record: CreateDelegationRecord): Promise<CreateDelegationResult>;
+}
+
+export interface MailboxReaderPort {
   readMessages(scope: Scope, runId: string, runtimeId: string, after: number, limit: number): Promise<AgentMessage[]>;
   listDelegationMessages(
     scope: Scope,
@@ -177,6 +182,9 @@ export interface MailboxRepositoryPort {
     limit: number,
     before?: { createdAt: number; id: string },
   ): Promise<AgentMessage[]>;
+}
+
+export interface MailboxConsumerPort {
   consumeMessages(
     scope: Scope,
     runId: string,
@@ -185,11 +193,23 @@ export interface MailboxRepositoryPort {
     expectedConsumedSequence: number,
     now: number,
   ): Promise<number>;
+}
+
+export interface MailboxRepositoryPort extends MailboxReaderPort, MailboxConsumerPort {
+  sendMessage(record: SendMessageRecord): Promise<MessageReceipt>;
   expireMessages(now: number, limit: number): Promise<number>;
 }
 
-export interface SchedulerWorkRepositoryPort {
-  enqueueWork(record: EnqueueWorkRecord): Promise<SchedulerWorkView>;
+export interface SchedulerWorkSettlementPort {
+  settleWork(
+    workId: string,
+    ownerEpoch: number,
+    status: 'completed' | 'waiting' | 'cancelled',
+    now: number,
+  ): Promise<void>;
+}
+
+export interface SchedulerWorkClaimPort extends SchedulerWorkSettlementPort {
   readyWork(now: number, limit: number, excludedRunIds?: readonly string[]): Promise<SchedulerWorkView[]>;
   terminalWork(now: number, limit: number): Promise<SchedulerWorkView[]>;
   claimWork(
@@ -198,14 +218,11 @@ export interface SchedulerWorkRepositoryPort {
     ownerEpoch: number,
     now: number,
   ): Promise<SchedulerWorkView | null>;
-  claimNextWork(ownerEpoch: number, now: number): Promise<SchedulerWorkView | null>;
-  settleWork(
-    workId: string,
-    ownerEpoch: number,
-    status: 'completed' | 'waiting' | 'cancelled',
-    now: number,
-  ): Promise<void>;
   resetClaimedWork(ownerEpoch: number, now: number): Promise<number>;
+}
+
+export interface SchedulerWorkExecutionPort extends SchedulerWorkSettlementPort {
+  enqueueWork(record: EnqueueWorkRecord): Promise<SchedulerWorkView>;
 }
 
 export interface SharedFactRepositoryPort {

@@ -85,11 +85,16 @@ import { SubagentScheduler } from '../../modules/agent/runtime/collaboration/sub
 import { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
 import { SharedFactsService } from '../../modules/agent/runtime/collaboration/shared-facts.service';
 import type {
+  DelegationCancellationPort,
+  DelegationReaderPort,
   DelegationRepositoryPort,
+  MailboxConsumerPort,
+  MailboxReaderPort,
   MailboxRepositoryPort,
   RunScopeRepositoryPort,
   RuntimeParticipantRepositoryPort,
-  SchedulerWorkRepositoryPort,
+  SchedulerWorkClaimPort,
+  SchedulerWorkExecutionPort,
   SharedFactRepositoryPort,
 } from '../../modules/agent/runtime/collaboration/subagent.repository.port';
 import { PlanService } from '../../modules/agent/runtime/planning/plan.service';
@@ -206,16 +211,21 @@ export const composeAgent = ({
   const subagentRepository = new SqliteSubagentRepository(database);
   const runScopes: RunScopeRepositoryPort = subagentRepository;
   const runtimeParticipants: RuntimeParticipantRepositoryPort = subagentRepository;
+  const delegationReader: DelegationReaderPort = subagentRepository;
+  const delegationCancellation: DelegationCancellationPort = subagentRepository;
   const delegationRepository: DelegationRepositoryPort = subagentRepository;
+  const mailboxReader: MailboxReaderPort = subagentRepository;
+  const mailboxConsumer: MailboxConsumerPort = subagentRepository;
   const mailboxRepository: MailboxRepositoryPort = subagentRepository;
-  const schedulerWork: SchedulerWorkRepositoryPort = subagentRepository;
+  const schedulerClaims: SchedulerWorkClaimPort = subagentRepository;
+  const schedulerExecution: SchedulerWorkExecutionPort = subagentRepository;
   const sharedFactRepository: SharedFactRepositoryPort = subagentRepository;
   const subagentPolicy = new SubagentPolicyService(appStorage, settings, providers);
   let subagentScheduler: SubagentScheduler | null = null;
   const mailbox = new MailboxService(
     mailboxRepository,
     runtimeParticipants,
-    delegationRepository,
+    delegationReader,
     settings,
     systemClock,
     () => subagentScheduler?.wake(),
@@ -353,7 +363,7 @@ export const composeAgent = ({
   const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
   const nativeBackend = new NativeAgentBackend(
     runRepository,
-    delegationRepository,
+    delegationReader,
     stateCommit,
     modelSteps,
     toolCalls,
@@ -366,12 +376,12 @@ export const composeAgent = ({
     (userId) => runRepository.hostCursor(userId),
     (userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
   );
-  const subagentContext = new SubagentContextBuilder(runtimeParticipants, mailboxRepository, toolCatalog);
+  const subagentContext = new SubagentContextBuilder(runtimeParticipants, mailboxReader, toolCatalog);
   const subagentParticipant = new SubagentParticipantExecutor(
-    schedulerWork,
-    delegationRepository,
+    schedulerExecution,
+    delegationCancellation,
     runtimeParticipants,
-    mailboxRepository,
+    mailboxConsumer,
     runRepository,
     providers,
     languageModel,
@@ -394,7 +404,7 @@ export const composeAgent = ({
   subagentScheduler = new SubagentScheduler(
     settings,
     runScopes,
-    schedulerWork,
+    schedulerClaims,
     subagentParticipant,
     {
       get activeCount() {

@@ -5,7 +5,7 @@ import { estimateTokens } from '../execution/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
 import type { RunView } from '../runs/run.types';
 import type {
-  MailboxRepositoryPort,
+  MailboxReaderPort,
   RuntimeParticipantRepositoryPort,
   RuntimeParticipantView,
 } from './subagent.repository.port';
@@ -32,7 +32,7 @@ export type SubagentContextResult =
 export class SubagentContextBuilder {
   constructor(
     private readonly runtimes: RuntimeParticipantRepositoryPort,
-    private readonly mailboxes: MailboxRepositoryPort,
+    private readonly mailboxes: MailboxReaderPort,
     private readonly toolCatalog: ToolCatalog,
   ) {}
 

@@ -7,13 +7,16 @@ import type {
   CreateDelegationResult,
   DelegationRepositoryPort,
   EnqueueWorkRecord,
+  MailboxConsumerPort,
+  MailboxReaderPort,
   MailboxRepositoryPort,
   RunScopeRepositoryPort,
   RuntimeModelWorkView,
   RuntimeParticipantRepositoryPort,
   RuntimeParticipantView,
   RuntimeToolWorkView,
-  SchedulerWorkRepositoryPort,
+  SchedulerWorkClaimPort,
+  SchedulerWorkExecutionPort,
   SendMessageRecord,
   SharedFactRepositoryPort,
   SharedFactView,
@@ -306,8 +309,11 @@ export class SqliteSubagentRepository
     RunScopeRepositoryPort,
     RuntimeParticipantRepositoryPort,
     DelegationRepositoryPort,
+    MailboxReaderPort,
+    MailboxConsumerPort,
     MailboxRepositoryPort,
-    SchedulerWorkRepositoryPort,
+    SchedulerWorkClaimPort,
+    SchedulerWorkExecutionPort,
     SharedFactRepositoryPort
 {
   constructor(private readonly db: RelationalDatabase) {}
@@ -1063,15 +1069,6 @@ export class SqliteSubagentRepository
       const row = await tx.queryOne<WorkRow>(`SELECT ${workColumns} FROM agent_scheduler_work WHERE id = ?`, [workId]);
       return row ? mapWork(row) : null;
     });
-  }
-
-  async claimNextWork(ownerEpoch: number, now: number): Promise<SchedulerWorkView | null> {
-    const candidates = await this.readyWork(now, 32);
-    for (const candidate of candidates) {
-      const claimed = await this.claimWork(candidate.id, candidate.version, ownerEpoch, now);
-      if (claimed) return claimed;
-    }
-    return null;
   }
 
   async settleWork(

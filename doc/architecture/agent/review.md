@@ -29,7 +29,7 @@ RunProgressCoordinator -> RunRepository / StateCommit / Clock
 > ToolCallRunner  -> ToolCatalog / ToolExecutor / Policy / read lease / staged mutation lease
 > ```
 >
-> `NativeAgentBackend` 继续直接持有 `RunRepositoryPort`、`DelegationRepositoryPort`、`StateCommitPort` 与 `ClockPort`，只负责 Run 主循环、阶段顺序、模型步骤 durable transition、cancel/fail safe boundary。构造依赖由 13 项降为 6 项；模型 transport/context 与 Tool/Policy/Lease 不再直接注入 Backend。Backend architecture checker 固定禁止上述低层 execution dependency 重新进入 `NativeAgentBackend`。
+> `NativeAgentBackend` 继续直接持有 `RunRepositoryPort`、`DelegationReaderPort`、`StateCommitPort` 与 `ClockPort`，只负责 Run 主循环、阶段顺序、模型步骤 durable transition、cancel/fail safe boundary。构造依赖由 13 项降为 6 项；模型 transport/context 与 Tool/Policy/Lease 不再直接注入 Backend，Root 也不取得 delegation create/cancel authority。Backend architecture checker 固定禁止上述低层 execution dependency 或宽 `DelegationRepositoryPort` 重新进入 `NativeAgentBackend`。
 
 ### 2. Lease 安全职责出现双重入口
 
@@ -88,7 +88,7 @@ Scheduler 只依赖这两个 capability；adapter 内部再收窄到现有 Repos
 >   -> runtime/mailbox/tool-history context、child tool schema、context/token limits
 > ```
 >
-> `SchedulerWorkRepositoryPort.readyWork/terminalWork/claimWork/resetClaimedWork` 的 durable scan/claim authority 继续只属于 `SubagentScheduler`；executor 只能处理已经 claim 的 work，可使用 `settleWork/enqueueWork` 完成执行结果与后继 work。Backend architecture checker 已固定该 owner，并禁止 model/tool/lease/StateCommit/collaboration repository 重新进入 `SubagentScheduler`。
+> durable scan/claim authority 继续只属于 `SubagentScheduler`，其类型依赖已收窄为 `SchedulerWorkClaimPort`；executor 只能拿 `SchedulerWorkExecutionPort` 处理已经 claim 的 work，可使用 `settleWork/enqueueWork` 完成执行结果与后继 work，但类型上不能 scan/claim/reset。Backend architecture checker 已固定该 owner，并禁止 claim capability 回流 executor、execution capability 回流 Scheduler。
 
 ## P2：建议同步调整
 
@@ -133,9 +133,15 @@ reserved capability    虚线
 
 ## P3：可维护性改进
 
-### 7. Repository capability 命名可进一步按读写语义区分
+### 7. Collaboration Repository capability 的 least-authority 需要在类型层表达
 
-当前 `DelegationRepositoryPort`、`RuntimeParticipantRepositoryPort` 等名称仍可能同时包含 query 和 mutation。建议对长期稳定的 Port 使用 `...Reader`、`...Writer` 或 `...Store` 后缀，至少将 Scheduler 使用的 claim/settle 写能力与 runtime 的只读 participant 查询分开。
+> **解决方案（已采用，按实际 consumer 拆 capability）**
+>
+> 审核确认问题真实，但不做机械的全局 `Reader/Writer/Store` 重命名。`RuntimeParticipantRepositoryPort` 本身已经是纯 read，`SharedFactRepositoryPort.getFact/compareAndSetFact` 也应保持原子 CAS capability，不为命名整齐而拆散。
+>
+> 实际收窄的是存在权限冗余的消费边界：`DelegationReaderPort` 只读，`DelegationCancellationPort` 增加 cancel，只有 `DelegationRepositoryPort` 再增加 create；`MailboxReaderPort`、`MailboxConsumerPort` 与完整 `MailboxRepositoryPort` 分开；Scheduler work 拆成共享 settle、`SchedulerWorkClaimPort` 与 `SchedulerWorkExecutionPort`。`NativeAgentBackend`、`MailboxService`、`SubagentContextBuilder`、`SubagentParticipantExecutor` 与 `SubagentScheduler` 现在分别只拿真实调用所需 capability，同一个 `SqliteSubagentRepository` 继续作为 concrete adapter。
+>
+> 未使用的 `claimNextWork()` 已删除；pre-release 阶段不为假设性后继需求保留 API，未来若出现真实 consumer 再按当时 owner/语义加入。Backend architecture checker 同时阻止宽 capability 或 claim/execution authority 回流。
 
 ### 8. 增加依赖约束的自动化验收项
 

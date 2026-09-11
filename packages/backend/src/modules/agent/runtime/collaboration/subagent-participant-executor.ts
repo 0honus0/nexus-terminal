@@ -18,10 +18,10 @@ import type { StateCommitPort } from '../runs/state-commit.port';
 import type { MailboxService } from './mailbox.service';
 import type { SubagentContextBuilder } from './subagent-context-builder';
 import type {
-  DelegationRepositoryPort,
-  MailboxRepositoryPort,
+  DelegationCancellationPort,
+  MailboxConsumerPort,
   RuntimeParticipantRepositoryPort,
-  SchedulerWorkRepositoryPort,
+  SchedulerWorkExecutionPort,
 } from './subagent.repository.port';
 import type { DelegationView, SchedulerWorkView } from './subagent.types';
 
@@ -53,10 +53,10 @@ export interface SubagentExecutionHost {
 
 export class SubagentParticipantExecutor {
   constructor(
-    private readonly work: SchedulerWorkRepositoryPort,
-    private readonly delegations: DelegationRepositoryPort,
+    private readonly work: SchedulerWorkExecutionPort,
+    private readonly delegations: DelegationCancellationPort,
     private readonly runtimes: RuntimeParticipantRepositoryPort,
-    private readonly mailboxes: MailboxRepositoryPort,
+    private readonly mailboxes: MailboxConsumerPort,
     private readonly runs: RunRepositoryPort,
     private readonly providers: ProviderService,
     private readonly modelPort: LanguageModelPort,

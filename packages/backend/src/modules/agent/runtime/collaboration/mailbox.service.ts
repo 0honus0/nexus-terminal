@@ -3,7 +3,7 @@ import type { JsonValue, Scope, ClockPort } from '../../agent.types';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type {
-  DelegationRepositoryPort,
+  DelegationReaderPort,
   MailboxRepositoryPort,
   RuntimeParticipantRepositoryPort,
 } from './subagent.repository.port';
@@ -99,7 +99,7 @@ export class MailboxService {
   constructor(
     private readonly mailboxes: MailboxRepositoryPort,
     private readonly runtimes: RuntimeParticipantRepositoryPort,
-    private readonly delegations: DelegationRepositoryPort,
+    private readonly delegations: DelegationReaderPort,
     private readonly settings: AgentSettingsService,
     private readonly clock: ClockPort,
     private readonly onWorkAvailable: () => void = () => undefined,
@@ -220,7 +220,7 @@ export class MailboxService {
     senderRuntimeId: string,
     recipientRuntimeId: string,
     delegationId: string,
-    delegations: Awaited<ReturnType<DelegationRepositoryPort['listDelegations']>>,
+    delegations: Awaited<ReturnType<DelegationReaderPort['listDelegations']>>,
   ): void {
     const subject = delegations.find((delegation) => delegation.id === delegationId);
     if (!subject) throw new Error('DELEGATION_NOT_FOUND');

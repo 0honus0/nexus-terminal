@@ -2,7 +2,7 @@ import { randomInt } from 'node:crypto';
 import type { ClockPort, Scope } from '../../agent.types';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import type { SubagentParticipantExecutor } from './subagent-participant-executor';
-import type { RunScopeRepositoryPort, SchedulerWorkRepositoryPort } from './subagent.repository.port';
+import type { RunScopeRepositoryPort, SchedulerWorkClaimPort } from './subagent.repository.port';
 import type { SchedulerWorkView } from './subagent.types';
 
 const CONTROL_POLL_MS = 500;
@@ -39,7 +39,7 @@ export class SubagentScheduler {
   constructor(
     private readonly settings: AgentSettingsService,
     private readonly runScopes: RunScopeRepositoryPort,
-    private readonly work: SchedulerWorkRepositoryPort,
+    private readonly work: SchedulerWorkClaimPort,
     private readonly participant: SubagentParticipantExecutor,
     private readonly roots: RootSchedulerView,
     private readonly clock: ClockPort,

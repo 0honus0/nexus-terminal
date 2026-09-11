@@ -119,6 +119,9 @@ for (const file of sourceFiles) {
     if (/\bmarkMutation(?:Active|Settled)\b/.test(text)) {
       failures.push(`${relativeFile}: mutation lease markers must be owned by the staged mutation lease capability`);
     }
+    if (/\bDelegationRepositoryPort\b/.test(text)) {
+      failures.push(`${relativeFile}: NativeAgentBackend may only depend on DelegationReaderPort`);
+    }
   }
   if (relativeFile === 'modules/agent/runtime/collaboration/subagent-scheduler.ts') {
     const forbiddenSchedulerDependencies = [
@@ -135,6 +138,7 @@ for (const file of sourceFiles) {
       'RunRepositoryPort',
       'MailboxService',
       'AgentEventHub',
+      'SchedulerWorkExecutionPort',
     ];
     for (const symbol of forbiddenSchedulerDependencies) {
       if (new RegExp(`\\b${symbol}\\b`).test(text)) {
@@ -145,8 +149,30 @@ for (const file of sourceFiles) {
     }
   }
   if (relativeFile === 'modules/agent/runtime/collaboration/subagent-participant-executor.ts') {
+    const forbiddenParticipantCapabilities = [
+      'SchedulerWorkClaimPort',
+      'DelegationRepositoryPort',
+      'MailboxRepositoryPort',
+    ];
+    for (const symbol of forbiddenParticipantCapabilities) {
+      if (new RegExp(`\\b${symbol}\\b`).test(text)) {
+        failures.push(
+          `${relativeFile}: participant executor must use the narrow execution capability instead of ${symbol}`,
+        );
+      }
+    }
     if (/\b(?:readyWork|terminalWork|claimWork|resetClaimedWork)\b/.test(text)) {
       failures.push(`${relativeFile}: durable scheduler scan/claim authority must remain in SubagentScheduler`);
+    }
+  }
+  if (relativeFile === 'modules/agent/runtime/collaboration/subagent-context-builder.ts') {
+    if (/\bMailboxRepositoryPort\b/.test(text)) {
+      failures.push(`${relativeFile}: context builder may only depend on MailboxReaderPort`);
+    }
+  }
+  if (relativeFile === 'modules/agent/runtime/collaboration/mailbox.service.ts') {
+    if (/\bDelegationRepositoryPort\b/.test(text)) {
+      failures.push(`${relativeFile}: MailboxService may only depend on DelegationReaderPort`);
     }
   }
   importPattern.lastIndex = 0;
