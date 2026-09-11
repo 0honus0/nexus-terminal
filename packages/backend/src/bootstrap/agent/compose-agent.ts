@@ -77,7 +77,9 @@ import { ToolCallRunner } from '../../modules/agent/runtime/execution/tool-call-
 import { RunService } from '../../modules/agent/runtime/runs/run.service';
 import { CheckpointService } from '../../modules/agent/runtime/recovery/checkpoint.service';
 import { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
+import { SubagentContextBuilder } from '../../modules/agent/runtime/collaboration/subagent-context-builder';
 import { SubagentPolicyService } from '../../modules/agent/runtime/collaboration/subagent-policy';
+import { SubagentParticipantExecutor } from '../../modules/agent/runtime/collaboration/subagent-participant-executor';
 import { SubagentService } from '../../modules/agent/runtime/collaboration/subagent.service';
 import { SubagentScheduler } from '../../modules/agent/runtime/collaboration/subagent-scheduler';
 import { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
@@ -364,9 +366,8 @@ export const composeAgent = ({
     (userId) => runRepository.hostCursor(userId),
     (userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
   );
-  subagentScheduler = new SubagentScheduler(
-    settings,
-    runScopes,
+  const subagentContext = new SubagentContextBuilder(runtimeParticipants, mailboxRepository, toolCatalog);
+  const subagentParticipant = new SubagentParticipantExecutor(
     schedulerWork,
     delegationRepository,
     runtimeParticipants,
@@ -376,11 +377,25 @@ export const composeAgent = ({
     languageModel,
     modelCalls,
     stateCommit,
-    toolCatalog,
+    subagentContext,
     toolExecutor,
     leaseCoordinator,
     mailbox,
     eventHub,
+    {
+      enqueueRootRun: async (runId, scope) => {
+        const run = await runRepository.snapshot(scope, runId);
+        if (run && ['created', 'running'].includes(run.status)) scheduler.enqueue(run);
+      },
+      wakeChildScheduler: () => subagentScheduler?.wake(),
+    },
+    systemClock,
+  );
+  subagentScheduler = new SubagentScheduler(
+    settings,
+    runScopes,
+    schedulerWork,
+    subagentParticipant,
     {
       get activeCount() {
         return scheduler.activeCount;

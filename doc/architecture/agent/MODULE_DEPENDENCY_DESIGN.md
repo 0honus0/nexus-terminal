@@ -133,9 +133,21 @@ SharedFactsService
 SubagentScheduler
   <- RunScopeRepositoryPort
   <- SchedulerWorkRepositoryPort
+  <- SubagentParticipantExecutor
+
+SubagentParticipantExecutor
+  <- SchedulerWorkRepositoryPort
   <- DelegationRepositoryPort
   <- RuntimeParticipantRepositoryPort
   <- MailboxRepositoryPort
+  <- RunRepositoryPort
+  <- StateCommitPort
+  <- SubagentContextBuilder
+
+SubagentContextBuilder
+  <- RuntimeParticipantRepositoryPort
+  <- MailboxRepositoryPort
+  <- ToolCatalog
 
 NativeAgentBackend
   <- DelegationRepositoryPort
@@ -549,16 +561,30 @@ compareAndSet()
 
 ```text
 modules/agent/runtime/collaboration/subagent-scheduler.ts
+modules/agent/runtime/collaboration/subagent-participant-executor.ts
+modules/agent/runtime/collaboration/subagent-context-builder.ts
 ```
 
-持久化能力依赖被显式拆开：
+Owner 被拆成三层：
 
 ```text
-this.runScopes
-this.work
-this.delegations
-this.runtimes
-this.mailboxes
+SubagentScheduler
+  durable ready/terminal scan
+  scope/fairness/capacity
+  claim CAS / ownerEpoch
+  active execution tracking
+  quiesce/wake
+
+SubagentParticipantExecutor
+  already-claimed model/tool work
+  child StateCommit begin/settle
+  read Tool lease/execute
+  completion/failure/cancel coordination
+
+SubagentContextBuilder
+  runtime/mailbox/tool-history reads
+  child messages/tool schemas
+  context/token limits
 ```
 
 ### 7.1 Scheduler 初始化
@@ -582,7 +608,7 @@ work.claimWork()
 
 ### 7.3 Delegation / Runtime lookup
 
-执行 work 时使用：
+这些 lookup 不再属于 Scheduler；由 `SubagentParticipantExecutor` 与 `SubagentContextBuilder` 按用途持有：
 
 ```text
 delegations.delegation()
@@ -597,13 +623,13 @@ runtimes.recentRuntimeToolExchanges()
 
 ### 7.4 Mailbox context
 
-模型上下文读取：
+模型上下文读取与组装由 `SubagentContextBuilder` 负责：
 
 ```ts
 mailboxes.readMessages(...)
 ```
 
-处理完成后：
+处理完成后的 consume 仍由 `SubagentParticipantExecutor` 在成功 durable settle/proposal 路径执行：
 
 ```ts
 mailboxes.consumeMessages(...)
@@ -618,6 +644,8 @@ work.settleWork(...)
 ```
 
 不是靠内存 Map 标记完成。
+
+`SubagentScheduler` 自身不得重新依赖 Provider/LanguageModel/Tool/Lease/StateCommit 或 delegation/runtime/mailbox repository。Backend architecture checker 同时禁止 `SubagentParticipantExecutor` 获取 `readyWork/terminalWork/claimWork/resetClaimedWork`，因此 durable scan/claim authority 不会在拆分后漂移到 execution 层。
 
 ---
 
@@ -959,10 +987,9 @@ Parent wake 所需 durable event/projection
 
 ```text
 SchedulerWorkRepositoryPort.claimWork()
-SchedulerWorkRepositoryPort.settleWork()
 ```
 
-管理 durable work queue；StateCommit transition 只提交执行过程中涉及的 Run / Runtime / Delegation / Step / Tool / Event 原子状态。
+取得 durable work claim。已经 claim 的 work 交给 `SubagentParticipantExecutor` 后，executor 可调用 `settleWork()/enqueueWork()` 完成该 claim 的 durable queue 结果或创建后继 work，但不得调用 `readyWork()/terminalWork()/claimWork()/resetClaimedWork()`。StateCommit transition 只提交执行过程中涉及的 Run / Runtime / Delegation / Step / Tool / Event 原子状态。
 
 ### 8.9 Run lifecycle transitions
 

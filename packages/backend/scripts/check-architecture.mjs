@@ -121,6 +121,35 @@ for (const file of sourceFiles) {
       failures.push(`${relativeFile}: mutation lease markers must be owned by the staged mutation lease capability`);
     }
   }
+  if (relativeFile === 'modules/agent/runtime/collaboration/subagent-scheduler.ts') {
+    const forbiddenSchedulerDependencies = [
+      'ProviderService',
+      'LanguageModelPort',
+      'ModelCallLimiter',
+      'StateCommitPort',
+      'ToolCatalog',
+      'ToolExecutor',
+      'LeaseCoordinator',
+      'DelegationRepositoryPort',
+      'RuntimeParticipantRepositoryPort',
+      'MailboxRepositoryPort',
+      'RunRepositoryPort',
+      'MailboxService',
+      'AgentEventHub',
+    ];
+    for (const symbol of forbiddenSchedulerDependencies) {
+      if (new RegExp(`\\b${symbol}\\b`).test(text)) {
+        failures.push(
+          `${relativeFile}: SubagentScheduler must own scheduling/claim only; participant execution dependency ${symbol} belongs in SubagentParticipantExecutor`,
+        );
+      }
+    }
+  }
+  if (relativeFile === 'modules/agent/runtime/collaboration/subagent-participant-executor.ts') {
+    if (/\b(?:readyWork|terminalWork|claimWork|resetClaimedWork)\b/.test(text)) {
+      failures.push(`${relativeFile}: durable scheduler scan/claim authority must remain in SubagentScheduler`);
+    }
+  }
   importPattern.lastIndex = 0;
   for (let match = importPattern.exec(text); match; match = importPattern.exec(text)) {
     const importPrefix = match[1];

@@ -71,6 +71,25 @@ CollaborationContextStore -> delegation/runtime/mailbox reads
 
 Scheduler 只依赖这两个 capability；adapter 内部再收窄到现有 Repository Port。这样可独立测试调度策略，也可在未来替换 SQLite 查询而不改 Scheduler。
 
+> **解决方案（已采用，与 R9 合并）**
+>
+> 审核后确认五个 Repository Port 本身已经按用途收窄，单纯再包装成 `SchedulerWorkStore / CollaborationContextStore` 只会把依赖藏进 facade，不能减少职责，因此不采用原建议。实际根因是 Scheduler 同时承担 durable scheduling 与 participant execution。
+>
+> 当前改为：
+>
+> ```text
+> SubagentScheduler
+>   -> settings / scope / durable work scan+claim / fairness / capacity / active tracking / quiesce
+>
+> SubagentParticipantExecutor
+>   -> 已 claim work 的 child model/tool execution、StateCommit settle、completion/failure/cancel 协作
+>
+> SubagentContextBuilder
+>   -> runtime/mailbox/tool-history context、child tool schema、context/token limits
+> ```
+>
+> `SchedulerWorkRepositoryPort.readyWork/terminalWork/claimWork/resetClaimedWork` 的 durable scan/claim authority 继续只属于 `SubagentScheduler`；executor 只能处理已经 claim 的 work，可使用 `settleWork/enqueueWork` 完成执行结果与后继 work。Backend architecture checker 已固定该 owner，并禁止 model/tool/lease/StateCommit/collaboration repository 重新进入 `SubagentScheduler`。
+
 ## P2：建议同步调整
 
 ### 4. StateCommit transition 文件与 Runtime execution 的 owner 描述不够一致
@@ -317,6 +336,12 @@ SubagentWorkCoordinator   -> state commit、重试、取消、事件
 ```
 
 其中 `ParticipantExecutor` 应复用 Root 的通用 `ModelStepRunner`/`ToolCallRunner`，差异通过 participant policy 注入；不要继续复制 NativeAgentBackend 的逻辑。
+
+> **解决方案（已采用，与 P1 #3 同一实施）**
+>
+> `subagent-scheduler.ts` 已从接近 1000 行收敛为只负责 durable work scheduling 的窄 Scheduler；新增 `SubagentParticipantExecutor` 与 `SubagentContextBuilder`，分别形成 participant execution 与 collaboration context 的可替换边界。没有新增 `SubagentWorkCoordinator` facade，因为 child durable transition 仍应显式通过现有 `StateCommitPort`，避免把 StateCommit authority 隐藏到新的大协调器中。
+>
+> 当前也没有强行让 child 直接复用 Root `ModelStepRunner`：Root runner 的 `ContextService + RunSnapshot` 输入和 retry/budget durable transition 是 Root-specific，直接复用会改变 child budget/context 语义。共享点保持在已有 `ModelCallLimiter`、model accounting、execution error、lease primitive；后续若抽出 participant-neutral model transport primitive，必须先证明不会改变 Root/child 的 StateCommit ordering。`ToolCallRunner` 同理暂不直接注入 child，因为它包含 Root policy/staged-mutation 语义，而 child 当前只允许 read/control Tool。
 
 ### R10：Subagent 与 Root 的预算/并发/取消语义可能分裂
 

@@ -1350,7 +1350,9 @@ budget reservation分两级：delegation是父余额的分区，model attempt从
 | runtime/collaboration/subagent.types.ts                         | §10 DTO、SubagentStatus、ScheduleState、MessageReceipt                            |
 | runtime/collaboration/subagent.service.ts                       | create/cancel/join/list delegation；每 child 是独立 AgentRuntime participant      |
 | runtime/collaboration/subagent-policy.ts                        | resolvePolicy/validateModel/authorizePeer；约束 profile/model/通信边界            |
-| runtime/collaboration/subagent-scheduler.ts                     | child work/依赖/wait/wake/cancel tree，与 root 共用全局 Runtime permit            |
+| runtime/collaboration/subagent-scheduler.ts                     | child durable work scan/fairness/capacity/claim/active/quiesce；不执行 model/tool |
+| runtime/collaboration/subagent-participant-executor.ts          | 已 claim child work 的 model/tool/StateCommit/completion/failure execution        |
+| runtime/collaboration/subagent-context-builder.ts               | child runtime/mailbox/tool-history context、tool schema 与 token/context limit    |
 | runtime/collaboration/mailbox.service.ts                        | send/read/consume/expire；验 schema/owner/revision/quota，不导出全局 EventEmitter |
 | runtime/collaboration/shared-facts.service.ts                   | get/compareAndSet；同 Run 共享事实的版本化服务                                    |
 | runtime/collaboration/subagent.repository.port.ts               | delegation/mailbox/scheduler/shared-fact 的持久化 port                            |
