@@ -1,7 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
-import type { APIRequestContext, Page, WebSocket as PlaywrightWebSocket } from '@playwright/test';
+import type { APIRequestContext, Page, WebSocket as PlaywrightWebSocket, WebSocketRoute } from '@playwright/test';
 
 type AgentEnvelope<T> = { data: T; requestId: string };
 type AgentErrorEnvelope = { error: { code: string; message: string }; requestId: string };
@@ -222,6 +222,19 @@ const setOperationsEnabledFromPage = async (
 test('Agent Host reconnects automatically and catches up durable Host events', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
 
+  let blockAgentReconnects = false;
+  let connectedAgentRoute: WebSocketRoute | undefined;
+  let agentConnectionAttempts = 0;
+  await page.routeWebSocket('**/ws/agent', async (route) => {
+    agentConnectionAttempts += 1;
+    if (blockAgentReconnects) {
+      await route.close({ code: 1012, reason: 'E2E controlled disconnect' });
+      return;
+    }
+    route.connectToServer();
+    connectedAgentRoute = route;
+  });
+
   const apps = await context.request.get('/api/v1/agent/apps');
   expect(apps.ok(), await apps.text()).toBeTruthy();
   const appsBody = (await apps.json()) as AgentEnvelope<AppSummary[]>;
@@ -245,16 +258,19 @@ test('Agent Host reconnects automatically and catches up durable Host events', a
   await expect(hub).toBeVisible();
 
   try {
-    await context.setOffline(true);
+    blockAgentReconnects = true;
+    expect(connectedAgentRoute).toBeDefined();
+    await connectedAgentRoute!.close({ code: 1012, reason: 'E2E controlled disconnect' });
     await expect.poll(() => initialSocket.isClosed(), { timeout: 5_000 }).toBe(true);
 
     operations = await setOperationsEnabledFromApi(context.request, false, operations.stateVersion, csrf);
     await expect(hub).toBeVisible();
+    await expect.poll(() => agentConnectionAttempts, { timeout: 5_000 }).toBeGreaterThan(1);
 
-    await context.setOffline(false);
+    blockAgentReconnects = false;
     await expect(hub).toHaveCount(0, { timeout: 15_000 });
   } finally {
-    await context.setOffline(false).catch(() => undefined);
+    blockAgentReconnects = false;
     if (operations.enabled !== originalEnabled) {
       operations = await setOperationsEnabledFromApi(context.request, originalEnabled, operations.stateVersion, csrf);
     }
