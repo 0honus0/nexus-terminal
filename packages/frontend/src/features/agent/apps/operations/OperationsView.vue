@@ -138,10 +138,10 @@
           if (controller.signal.aborted || generation !== streamGeneration) return;
           if (event.type === 'transport.disconnected') streamingText.value = '';
           if (event.type === 'message.delta') {
-            const payload = event.payload as { text?: unknown } | undefined;
-            if (payload && typeof payload.text === 'string') streamingText.value += payload.text;
+            if (!event.payload.delegationId) streamingText.value += event.payload.text;
             continue;
           }
+          if (event.type === 'tool.delta') continue;
           if (event.type === 'message.final') streamingText.value = '';
           const durableCursor = event.id === undefined ? 0 : Number(event.id);
           const next = await refreshRun(
@@ -156,7 +156,10 @@
               ? [refreshDetailSubagents(initial.id)]
               : []),
           ]);
-          if (!next || !nonTerminal.has(next.status)) return;
+          if (!next || !nonTerminal.has(next.status)) {
+            streamingText.value = '';
+            return;
+          }
         }
       } catch (cause) {
         if (controller.signal.aborted || generation !== streamGeneration) return;

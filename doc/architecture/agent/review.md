@@ -394,6 +394,12 @@ lastDurableCursor
 
 建议建立 discriminated union：按 `eventType` 为 `run.status_changed`、`tool.*`、`message.*`、`approval.*` 定义 payload schema，解析阶段完成校验和版本兼容；未知事件保留为 `AgentUnknownEvent` 并记录 telemetry，不直接投影到业务状态。
 
+> **解决方案（已采用，同时收口 D4 的前端部分）**
+>
+> `agent-events.ts` 现在保留并校验 Run durable event 的 `schemaVersion`，并把对上层暴露的事件改为 discriminated union。当前会被 UI 直接读取的 `message.delta`、`tool.delta`、`message.final` 与 `run.status_changed/run.error/run.cancelled/run.interrupted/run.cancel_requested` 均在协议边界校验字段类型；其余当前已知 durable v1 事件只投影为无 payload 的 `snapshot.changed` wake，原始 payload 不再泄漏到组件。Host 事件目前后端没有 schemaVersion，因此只校验已知 host event type 与对象边界后投影为 `host.changed`。
+>
+> 未知 eventType、未来 schemaVersion 或已知事件的坏 payload 会变成 `AgentUnknownEvent`，只记录 eventType/schemaVersion/reason 的 debug telemetry，不记录原始 payload；durable sequence 仍保留，因此调用方会按 R7 的 minimum cursor 规则刷新 authoritative snapshot，而不会尝试解释未知字段。Operations 同时移除了 `payload as ...`，Root streaming 只消费不带 delegationId 的 root `message.delta`，避免 child delta 混入主对话；`tool.delta` 不再触发逐 token snapshot GET。
+
 ### R9：`SubagentScheduler` 文件接近 1000 行，调度、模型执行和协作上下文没有形成可替换边界
 
 位置：`packages/backend/src/modules/agent/runtime/collaboration/subagent-scheduler.ts`。
