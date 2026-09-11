@@ -92,16 +92,15 @@ Scheduler 只依赖这两个 capability；adapter 内部再收窄到现有 Repos
 
 ## P2：建议同步调整
 
-### 4. StateCommit transition 文件与 Runtime execution 的 owner 描述不够一致
+### 4. `RunRepositoryPort` 读取接口偏宽，但 StateCommit authority 未分裂（审核后降为 P3）
 
-文档一方面规定 `StateCommitPort` 是唯一 durable transition authority，另一方面又让 `NativeAgentBackend` 直接依赖 `RunRepositoryPort` 读取 pending durable state，并让 Scheduler/Service 分别读取和推进相关状态。若读取的是可变 projection，容易出现“读取快照来自 A、提交版本来自 B”的竞态。
-
-建议明确两类接口：
-
-- `RunSnapshotPort`：只读、带 version/event cursor 的一致快照；
-- `StateCommitPort`：所有状态迁移和带 CAS 的写入。
-
-Runtime、Scheduler、HTTP facade 统一读取 `RunSnapshotPort`，禁止通过通用 Repository 读取会参与迁移的半成品字段。文档中的 `RunRepositoryPort` 应改名或拆分，避免把查询和迁移权限混在一个 Port。
+> **审核结论：原竞态判断不成立；不按原方案重构。**
+>
+> 当前 `RunRepositoryPort` 已经是纯读取 Port，只暴露 `snapshot/list/readEvents/readHostEvents/hostCursor/rootRuntimeId/pendingMutation/createdQueue`，没有 durable mutation 方法。`RunSnapshot` 自带 `version/eventCursor`，`SqliteRunRepository.snapshot()` 在同一数据库 transaction 中读取 Run projection 与 recent entries；所有 Run/Step/Tool/Approval/Subagent durable transition 仍由 `StateCommitPort` 持有，并通过 `expectedRunVersion`、Tool/Step version、work `ownerEpoch/version` 等 CAS 防止旧快照覆盖新状态。因此“读取快照来自 A、提交版本来自 B”属于正常 optimistic concurrency，冲突会 fail closed 为 `STATE_CONFLICT`，不是现存竞态缺陷。
+>
+> 当前真实问题只是 read authority 偏宽：例如 `NativeAgentBackend` 实际只需要 `snapshot/rootRuntimeId/pendingMutation`，却拿到了整个 `RunRepositoryPort`。这是 Interface Segregation / least-read-authority 的结构性改进项，不影响 StateCommit 单一写 authority。
+>
+> 若后续确有维护收益，可按用途渐进拆成 `RunSnapshotPort`、`RunExecutionQueryPort`、`RunEventReaderPort`、`RunQueryPort` 等窄查询接口；不要为了修不存在的 race 做全局改名。`createdQueue()` 目前也可单独排查是否为 dead API。该项从 P2 降为 P3 / 可选清理，当前暂缓。
 
 ### 5. Plugin / Workspace Runtime 的阶段边界在依赖文档中不够显式
 
