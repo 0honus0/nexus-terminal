@@ -147,7 +147,7 @@ Concrete adapters：packages/backend/src/infrastructure/agent/ 下 repositories/
 | Frontend src/features/auth/public.ts                                                       | AgentSurfaceHost 只通过现有 public `useAuthSession` 读取认证状态；Agent 不创建第二套 auth/session store                                                             |
 | Frontend scripts/check-architecture.mjs                                                    | 保持 feature/public 边界和依赖环检查；Agent 新模块继续受同一生产架构门禁                                                                                            |
 | Frontend nginx.conf                                                                        | §7具体Agent prefix location覆盖较宽的^~ /api/；Artifact upload单独body上限，不放大全局                                                                              |
-| 根build.sh、Dockerfile、.github/workflows/publish-ghcr.yml                                 | 应用镜像继续不含 host Docker 控制；Agent Runner 以 host runtime 构建/发布，Tool Pack 保持 digest/version manifest                                                   |
+| scripts/build/build.sh、Dockerfile、.github/workflows/publish-ghcr.yml                     | 应用镜像继续不含 host Docker 控制；Agent Runner 以 host runtime 构建/发布，Tool Pack 保持 digest/version manifest                                                   |
 | docker-compose.yml                                                                         | Backend 通过 host-gateway + Controller token 访问 host `nexus-agent-runner`；不创建高权限 Runner Compose 服务；Plugin Frontend origin 仍复用 frontend 第二 listener |
 | test/e2e组配置、.github/workflows/e2e.yml                                                  | 注册真实产品 spec；部署 smoke 在 GitHub Actions host 启动 Runner/bubblewrap，并验证 Workspace generation 重建后稳定文件仍存在                                       |
 
@@ -1505,7 +1505,7 @@ AppIntent 继续负责**跨 App**的小 JSON/ArtifactRef 交接；它与同一 W
 - npm --prefix packages/backend run check:architecture；npm --prefix packages/frontend run check:architecture。
 - npm --prefix test/e2e exec playwright test tests/agent/<本任务spec>；环境/参数沿用现有E2E配置，不能把本地缺浏览器当通过。
 - npm run test:e2e:groups:check；正式完整浏览器证据在既有GitHub Actions固定runner生成。
-- 部署smoke经生产dist/Compose/Nginx真实入口；二期另验证nexus-agent-runner sandbox runtimeDigest、Pack manifest、Recipe权限及无Docker-socket部署。
+- 部署smoke经生产dist/Compose/Nginx真实入口；二期真实走 Backend → host Runner → Tool Store → Workspace → bubblewrap，双 Workspace 同时验证两组 Node/Python/Go、目标 Workspace 切版隔离、稳定源码、`runtimeDigest + packRefs` fingerprint/cache 分区与切回复用、同一 PackRef 全局仅一个 immutable digest 目录、以及 smoke 前后 `/usr/bin/node|python3|go` 不变；同时验证 Pack manifest、Recipe 权限及无 Docker socket 部署。
 - git diff --check。
 
 质量基准与功能E2E分开解释：固定至少10个任务（诊断、有限日志摘要、文件修改/外部变更冲突、服务重启核验、失败恢复、二期环境协作、三期Browser/Subagent），冻结输入、允许动作、成功证据及最大预算。使用真实模型的同任务对比记录verified成功率、总input/output/cache Tokens、重试、wall time、未知结果率；模型/提示/Skill版本均记录。安全硬门槛是越权/泄密/重复mutation为0；节省Token的变更不得降低已验证成功任务数，绝不只以少花Token通过。没有真实模型凭据只执行产品契约E2E，不伪造模型质量数据。
