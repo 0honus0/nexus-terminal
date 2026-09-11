@@ -13,10 +13,12 @@
     "tests/http/rdp-remoteapp.spec.ts",
     "tests/http/terminal-themes.spec.ts",
     "tests/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "tests/ssh/progress-display-archive.spec.ts",
-    "tests/ssh/docker-manager-ui.spec.ts",
-    "tests/ssh/protocol.spec.ts",
-    "tests/ssh/status-docker-protocol.spec.ts",
-    "tests/ssh/upload-protocol.spec.ts"
+    "tests/ui/captcha-settings.spec.ts",
+    "tests/ui/change-password.spec.ts",
+    "tests/ui/ip-blacklist-settings.spec.ts",
+    "tests/ui/ip-whitelist-settings.spec.ts",
+    "tests/ui/protected-navigation.spec.ts",
+    "tests/ui/ssh-key-management.spec.ts",
+    "tests/ssh/progress-display-archive.spec.ts"
   ]
 }
