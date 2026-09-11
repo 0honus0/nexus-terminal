@@ -1,6 +1,6 @@
 import { ref, type Ref } from 'vue';
 import { logger } from '@/client/logging/logger';
-import type { Connection } from '@/features/connections/public';
+import { refreshConnection, type Connection } from '@/features/connections/public';
 import {
   createTerminalSessionState,
   type TerminalSessionState,
@@ -107,6 +107,12 @@ export class WorkspaceRuntimeSession {
         connectionId: this.connection.id,
         ...(this.lastViewport ? { viewport: this.lastViewport } : {}),
       });
+      await refreshConnection(this.connection.id).catch((error) =>
+        logger.debug(
+          { err: error, workspaceId: this.id, connectionId: this.connection.id },
+          'Workspace connection metadata refresh failed',
+        ),
+      );
       await this.adapters.workspaceConnected();
       await this.filesystemState.ensureLoaded();
       await this.statusController.workspaceConnected();

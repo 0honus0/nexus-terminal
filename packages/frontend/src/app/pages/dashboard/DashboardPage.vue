@@ -202,7 +202,7 @@
     loading.value = true;
     suspended.startPolling();
     const [, , audit] = await Promise.allSettled([
-      connections.load(),
+      connections.load(true),
       tags.load(),
       auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }),
       preferences.load(),
@@ -486,6 +486,7 @@
                   v-for="item in filtered"
                   :key="item.id"
                   :data-testid="`dashboard-connection-row-${item.id}`"
+                  :data-last-connected-at="item.lastConnectedAt ?? ''"
                   class="grid grid-cols-1 items-center gap-3 rounded-lg bg-header/20 px-4 py-4 transition-colors hover:bg-header/30 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-5"
                 >
                   <div class="min-w-0">

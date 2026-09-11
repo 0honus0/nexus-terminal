@@ -5,6 +5,7 @@
   import AppHeader from './shell/AppHeader.vue';
   import { useAuthSession } from '@/features/auth/public';
   import { AppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
+  import { refreshConnection } from '@/features/connections/public';
   import { RemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { usePreferences } from '@/features/preferences/public';
   import DialogHost from '@/shared/feedback/components/DialogHost.vue';
@@ -27,6 +28,12 @@
       ? preferences.values.value.vncModalHeight
       : preferences.values.value.rdpModalHeight,
   );
+  const refreshRemoteDesktopConnection = (connectionId: number) => {
+    void refreshConnection(connectionId).catch((cause) =>
+      logger.debug({ err: cause, connectionId }, 'Remote desktop connection metadata refresh failed'),
+    );
+  };
+
   const saveRemoteDesktopSize = (size: { width: number; height: number }) => {
     const type = remoteDesktopConnection.value?.type;
     if (!type) return;
@@ -68,6 +75,7 @@
       :width="remoteDesktopWidth"
       :height="remoteDesktopHeight"
       @size-change="saveRemoteDesktopSize"
+      @connected="refreshRemoteDesktopConnection"
       @close="remoteDesktopLauncher.close()"
     />
     <AppearanceCustomizerModal :visible="appearanceCustomizerVisible" @close="appearance.closeCustomizer()" />

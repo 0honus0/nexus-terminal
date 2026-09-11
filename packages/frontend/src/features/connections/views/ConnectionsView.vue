@@ -39,7 +39,7 @@
   const testResults = ref(new Map<number, { success: boolean; message: string; latency?: number }>());
   onMounted(async () => {
     try {
-      await data.load();
+      await data.load(true);
     } catch {
       feedback.notifyError(t('connections.loadFailed'));
       return;

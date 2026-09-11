@@ -10,16 +10,22 @@ export const useConnectionsStore = defineStore('connections', {
       this.loaded = true;
       return this.items;
     },
+    upsert(item: Connection) {
+      const i = this.items.findIndex((x) => x.id === item.id);
+      if (i >= 0) this.items[i] = item;
+      else this.items.push(item);
+      return item;
+    },
+    async refresh(id: number) {
+      return this.upsert(await connectionsApi.get(id));
+    },
     async create(input: ConnectionInput) {
       const item = await connectionsApi.create(input);
-      this.items.push(item);
-      return item;
+      return this.upsert(item);
     },
     async update(id: number, input: ConnectionUpdate) {
       const item = await connectionsApi.update(id, input);
-      const i = this.items.findIndex((x) => x.id === id);
-      if (i >= 0) this.items[i] = item;
-      return item;
+      return this.upsert(item);
     },
     async remove(id: number) {
       await connectionsApi.remove(id);
@@ -27,8 +33,7 @@ export const useConnectionsStore = defineStore('connections', {
     },
     async clone(id: number, name: string) {
       const item = await connectionsApi.clone(id, name);
-      this.items.push(item);
-      return item;
+      return this.upsert(item);
     },
   },
 });

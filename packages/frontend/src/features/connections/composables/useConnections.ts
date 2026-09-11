@@ -5,9 +5,12 @@ export function useConnections() {
   return {
     connections: computed(() => store.items),
     load: store.load.bind(store),
+    refresh: store.refresh.bind(store),
     create: store.create.bind(store),
     update: store.update.bind(store),
     remove: store.remove.bind(store),
     clone: store.clone.bind(store),
   };
 }
+
+export const refreshConnection = (id: number) => useConnectionsStore().refresh(id);

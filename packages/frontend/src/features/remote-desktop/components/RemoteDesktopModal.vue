@@ -33,7 +33,11 @@
     }>(),
     { sessionPort: () => remoteDesktopApi, width: 1064, height: 858 },
   );
-  const emit = defineEmits<{ close: []; sizeChange: [size: { width: number; height: number }] }>();
+  const emit = defineEmits<{
+    close: [];
+    sizeChange: [size: { width: number; height: number }];
+    connected: [connectionId: number];
+  }>();
   const { t } = useI18n();
   const device = useDeviceCapabilities();
   const panel = ref<HTMLElement | null>(null);
@@ -246,6 +250,7 @@
     try {
       const spec = currentDisplay();
       const session = await props.sessionPort.create(connectionId, protocol, spec);
+      emit('connected', connectionId);
       if (
         generation !== connectGeneration ||
         !props.visible ||
