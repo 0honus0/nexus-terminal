@@ -12,6 +12,7 @@ import {
 } from '../plugin-ipc';
 import type { EnvironmentRecord, PluginRunnerTarget } from '../types';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
+import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 import {
   WorkspaceBroker,
   type WorkspaceAccessTarget,
@@ -398,7 +399,7 @@ export class PluginRunnerRuntime {
     }
     this.workspaces.ensurePluginWorkspace(environment.environmentId, environment.generation, target.pluginId);
     const worker = path.resolve(__dirname, '../worker/plugin-runner-sandbox.worker.js');
-    const systemBindings = ['/bin', '/usr', '/lib', '/sbin', '/etc'].filter((pathValue) => fs.existsSync(pathValue));
+    const systemBindings = sandboxSystemRuntimeArguments();
     const args = [
       '--die-with-parent',
       '--new-session',
@@ -407,7 +408,7 @@ export class PluginRunnerRuntime {
       '--unshare-ipc',
       '--unshare-uts',
       '--unshare-net',
-      ...systemBindings.flatMap((sourcePath) => ['--ro-bind', sourcePath, sourcePath]),
+      ...systemBindings,
       '--proc',
       '/proc',
       '--dev',

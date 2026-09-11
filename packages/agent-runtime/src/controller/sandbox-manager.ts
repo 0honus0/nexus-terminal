@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { EnvironmentCommand, EnvironmentJobRequest, PackRef } from '../types';
+import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
 const SANDBOX_ID = /^([A-Za-z0-9_.-]{1,128}):(\d+)$/;
@@ -255,10 +256,7 @@ export class SandboxManager {
   }
 
   private isolationArguments(workspace: string): string[] {
-    const systemBindings: string[] = [];
-    for (const source of ['/bin', '/usr', '/lib', '/sbin', '/etc']) {
-      if (fs.existsSync(source)) systemBindings.push('--ro-bind', source, source);
-    }
+    const systemBindings = sandboxSystemRuntimeArguments();
     return [
       '--die-with-parent',
       '--new-session',
