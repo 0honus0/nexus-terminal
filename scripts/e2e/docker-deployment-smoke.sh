@@ -267,10 +267,23 @@ const baseUrl = process.env.AGENT_RUNNER_URL;
 const token = process.env.AGENT_RUNNER_TOKEN;
 const deploymentId = process.env.AGENT_RUNNER_DEPLOYMENT_ID;
 const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-09-11' };
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const get = async (path) => {
-  const response = await fetch(`${baseUrl}${path}`, { headers });
-  if (!response.ok) throw new Error(`GET ${path} failed: ${response.status} ${await response.text()}`);
-  return response.json();
+  for (let attempt = 1; attempt <= 5; attempt += 1) {
+    let response;
+    try {
+      response = await fetch(`${baseUrl}${path}`, { headers });
+    } catch (cause) {
+      const transportFailure = cause instanceof TypeError && cause.message === 'fetch failed';
+      if (!transportFailure || attempt === 5) throw cause;
+      console.error(`GET ${path} transport retry ${attempt}/5: ${cause.cause?.code ?? cause.message}`);
+      await wait(200 * attempt);
+      continue;
+    }
+    if (!response.ok) throw new Error(`GET ${path} failed: ${response.status} ${await response.text()}`);
+    return response.json();
+  }
+  throw new Error(`GET ${path} exhausted transport retries`);
 };
 const post = async (path, body) => {
   const response = await fetch(`${baseUrl}${path}`, { method: 'POST', headers, body: JSON.stringify(body) });
