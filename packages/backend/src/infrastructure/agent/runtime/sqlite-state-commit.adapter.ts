@@ -349,29 +349,59 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
           [row.id],
         );
         const needsReconciliation = (unknownMutation?.count ?? 0) > 0;
+        const events: DurableEventInput[] = [
+          { type: 'run.interrupted', payload: { reason: 'backend_restart', needsReconciliation } },
+          { type: 'run.status_changed', payload: { from: row.status, to: 'interrupted' } },
+        ];
+        await appendEvents(tx, row, events, now);
         const changed = await tx.execute(
           `UPDATE agent_runs SET status = 'interrupted', needs_reconciliation = ?, completed_at = ?, updated_at = ?,
              version = version + 1, executing_runtime_count = 0, active_execution_started_at = NULL,
-             next_event_sequence = next_event_sequence + 1
+             next_event_sequence = next_event_sequence + ?
            WHERE id = ? AND version = ?`,
-          [needsReconciliation ? 1 : 0, now, now, row.id, row.version],
+          [needsReconciliation ? 1 : 0, now, now, events.length, row.id, row.version],
         );
         if (changed.changes !== 1) throw new Error('STATE_CONFLICT');
+
+        const approvalsChanged = await tx.execute(
+          `UPDATE agent_approvals SET status = 'superseded', decided_at = ?, version = version + 1
+           WHERE run_id = ? AND user_id = ? AND app_id = ? AND status = 'requested'`,
+          [now, row.id, row.user_id, row.app_id],
+        );
+        if (approvalsChanged.changes > 0) {
+          await tx.execute(
+            `UPDATE agent_apps SET approval_count = MAX(0, approval_count - ?), updated_at = ?
+             WHERE user_id = ? AND app_id = ?`,
+            [approvalsChanged.changes, now, row.user_id, row.app_id],
+          );
+        }
+        if (row.status === 'awaiting_budget') {
+          await tx.execute(
+            `UPDATE agent_apps SET budget_request_count = MAX(0, budget_request_count - 1), updated_at = ?
+             WHERE user_id = ? AND app_id = ?`,
+            [now, row.user_id, row.app_id],
+          );
+        }
+
         await tx.execute(
-          `UPDATE agent_runtimes SET status = 'interrupted', updated_at = ?
-           WHERE run_id = ? AND status IN ('created','running','stopping')`,
+          `UPDATE agent_tool_calls SET status = 'cancelled', completed_at = ?, version = version + 1
+           WHERE run_id = ? AND status = 'awaiting_approval'`,
           [now, row.id],
         );
         await tx.execute(
-          `INSERT INTO agent_events (event_id, run_id, sequence, schema_version, type, payload_json, occurred_at)
-           VALUES (?, ?, ?, 1, 'run.interrupted', ?, ?)`,
-          [
-            randomUUID(),
-            row.id,
-            row.next_event_sequence,
-            JSON.stringify({ reason: 'backend_restart', needsReconciliation }),
-            now,
-          ],
+          `UPDATE agent_steps SET status = 'cancelled', completed_at = ?
+           WHERE run_id = ? AND kind = 'tool' AND status = 'created'`,
+          [now, row.id],
+        );
+        await tx.execute(
+          `UPDATE agent_runtimes SET status = 'interrupted', schedule_state = 'finished', updated_at = ?
+           WHERE run_id = ? AND status IN ('created','running','stopping','interrupted')`,
+          [now, row.id],
+        );
+        await tx.execute(
+          `UPDATE agent_scheduler_work SET status = 'cancelled', owner_epoch = NULL, version = version + 1, updated_at = ?
+           WHERE run_id = ? AND status IN ('queued','claimed','waiting')`,
+          [now, row.id],
         );
         if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, now);
         const updated = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
