@@ -226,9 +226,15 @@ reserved capability    虚线
 >
 > `ARCHITECTURE.md`、`IMPLEMENTATION.md`、`MODULE_DEPENDENCY_DESIGN.md`、`CURRENT_AGENT_ARCHITECTURE.md` 已统一标记：MCP = **Active / live**，ACP = **Reserved / roadmap-only**，Browser/CDP/Puppeteer = **Reserved / roadmap-only**。Backend architecture checker 已禁止 ACP/Browser reserved adapter/Port 符号进入 `bootstrap/agent/**`，并静态禁止 Operations manifest 声明 `integration.acp.execute` / `browser.operate`；当前 production composition 只实例化 MCP live runtime。ACP/Browser skeleton 继续原位保留，未来只有在 capability、Policy/Approval/Lease/StateCommit、runtime wiring、UI/API、failure/recovery 与产品 E2E 全部完成后才能移除 reserved 状态。
 
-### P3-代码-1：Tool contribution 注册缺少统一的 owner 元数据
+### P3-代码-1：Tool contribution owner 元数据建议过度；公开 API 仍可收窄（审核后已收敛）
 
-当前 `compose-agent.ts` 中 contribution 的 `id`、`capability`、tools 由多处手写，MCP 又通过动态 `replaceOwnedContribution` 管理 owner。建议统一 contribution descriptor，强制包含 `ownerAppId`、`phase`、`lifecycle` 和 `replacePolicy`，由 `ToolCatalog` 校验静态与动态 contribution 不能互相覆盖。
+审核确认原问题的大部分已经被 Tool contribution wiring 重构覆盖：静态 contribution 已集中到 `bootstrap/agent/tool-contributions.ts`；`registerContribution()` 对同名 Tool fail-closed；MCP 动态 contribution 通过 `scope + ownerKey` 调用 `replaceOwnedContribution()`，只能替换同 scope、同 owner 的 Tool，因此静态与动态 contribution、不同 MCP integration 之间都不能互相覆盖。
+
+> **解决方案（已采用）**
+>
+> 不增加 `ownerAppId / phase / lifecycle / replacePolicy`。`ownerAppId` 会把实现 owner 与授权 scope 混淆；`phase` 已明确不作为当前 live 状态；`lifecycle/replacePolicy` 已由 `registerContribution()` 与 `replaceOwnedContribution()/removeOwned()` 两组 fail-closed API 表达，重复元数据会形成第二份真相。
+>
+> 实际剩余问题只做 API least-authority 清理：`registerContribution()` 收窄为仅接受静态 contribution，不再公开可选 `scope/ownerKey`；动态 scoped ownership 只能走 `replaceOwnedContribution()`。无产品 consumer 的 `CapabilityContributionView`、`ToolCatalog.contributions()` 以及随之失去用途的内部 `contributionId` 存储已删除。未来若出现真实 contribution introspection consumer，再按其授权与数据需求重新设计。
 
 ### P3-代码-2：建议把架构违规检查纳入源码门禁
 

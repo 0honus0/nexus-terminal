@@ -796,6 +796,7 @@ no module cycles
 15. Composition Root Tool contribution owner：**已收敛**。
     - `compose-agent.ts` 不再直接 import Operations Tool creator，也不再手写 machine/workspace/runtime/MCP contribution metadata；
     - `bootstrap/agent/tool-contributions.ts` 只负责把已构造 Port/Service 注册为 Tool contribution，并维护 MCP owned contribution hook；
+    - `ToolCatalog.registerContribution()` 只接受静态 contribution；动态 scoped ownership 只能走 `replaceOwnedContribution()/removeOwned()`，避免公开 API 暗含 scope/owner 双重语义；无 consumer 的 contribution introspection API 已删除；
     - scheduler、StateCommit、Policy/Lease、lifecycle 与 `AgentServices` facade 仍留在真正 composition root，不为缩行数拆成二次业务 facade；
     - Backend architecture checker 禁止 Operations Tool creator、`registerContribution()` / `replaceOwnedContribution()` 重新直接进入 `compose-agent.ts`。
     - GitHub Actions run `34581381495`（产品代码 HEAD `af04bf7`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。

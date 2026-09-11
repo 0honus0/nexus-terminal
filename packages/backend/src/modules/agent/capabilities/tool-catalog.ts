@@ -16,18 +16,10 @@ export interface CapabilityContribution {
   tools: readonly AgentTool[];
 }
 
-export interface CapabilityContributionView {
-  schemaVersion: 1;
-  id: string;
-  capability: AgentCapability;
-  tools: ToolDescriptor[];
-}
-
 interface RegisteredTool {
   tool: AgentTool;
   scope: Scope | null;
   ownerKey: string | null;
-  contributionId: string | null;
 }
 
 const sameScope = (left: Scope, right: Scope): boolean => left.userId === right.userId && left.appId === right.appId;
@@ -35,9 +27,9 @@ const sameScope = (left: Scope, right: Scope): boolean => left.userId === right.
 export class ToolCatalog {
   private readonly tools = new Map<string, RegisteredTool>();
 
-  registerContribution(contribution: CapabilityContribution, scope?: Scope, ownerKey?: string): void {
+  registerContribution(contribution: CapabilityContribution): void {
     this.validateContribution(contribution, () => false);
-    this.installContribution(contribution, scope, ownerKey);
+    this.installContribution(contribution);
   }
 
   replaceOwnedContribution(scope: Scope, ownerKey: string, contribution: CapabilityContribution): void {
@@ -79,32 +71,6 @@ export class ToolCatalog {
       }));
   }
 
-  contributions(scope: Scope): CapabilityContributionView[] {
-    const grouped = new Map<string, CapabilityContributionView>();
-    for (const registered of this.tools.values()) {
-      if (!registered.contributionId || (registered.scope && !sameScope(registered.scope, scope))) continue;
-      const current = grouped.get(registered.contributionId) ?? {
-        schemaVersion: 1 as const,
-        id: registered.contributionId,
-        capability: registered.tool.descriptor.capability,
-        tools: [],
-      };
-      if (current.capability !== registered.tool.descriptor.capability)
-        throw new Error('CAPABILITY_CONTRIBUTION_MISMATCH');
-      current.tools.push({
-        ...registered.tool.descriptor,
-        inputSchema: JSON.parse(JSON.stringify(registered.tool.descriptor.inputSchema)) as JsonValue,
-      });
-      grouped.set(current.id, current);
-    }
-    return [...grouped.values()]
-      .map((contribution) => ({
-        ...contribution,
-        tools: contribution.tools.sort((a, b) => a.name.localeCompare(b.name)),
-      }))
-      .sort((a, b) => a.id.localeCompare(b.id));
-  }
-
   schemas(scope: Scope): CatalogToolSchema[] {
     return this.discover(scope, '', 256).map((descriptor) => ({
       name: descriptor.name,
@@ -143,7 +109,6 @@ export class ToolCatalog {
         tool,
         scope: scope ?? null,
         ownerKey: ownerKey ?? null,
-        contributionId: contribution.id,
       });
     }
   }
