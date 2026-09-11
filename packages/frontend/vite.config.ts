@@ -69,6 +69,11 @@ export default defineConfig({
         ws: true,
         changeOrigin: false,
       },
+      '/ws/agent': {
+        target: devBackendWebSocketOrigin,
+        ws: true,
+        changeOrigin: false,
+      },
     },
   },
 });

@@ -228,6 +228,21 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
     expect(JSON.stringify(body)).not.toContain('app.manifest.json');
   });
 
+  await step('roadmap-only ACP and Browser capabilities are neither declared nor granted', async () => {
+    const response = await request.get('/api/v1/agent/apps/nexus.operations/grants');
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const body = (await response.json()) as AgentEnvelope<{
+      declaredCapabilities: string[];
+      grants: Array<{ capability: string }>;
+    }>;
+    const grantedCapabilities = body.data.grants.map((grant) => grant.capability);
+    expect(body.data.declaredCapabilities).toContain('integration.mcp.invoke');
+    expect(body.data.declaredCapabilities).not.toContain('integration.acp.execute');
+    expect(body.data.declaredCapabilities).not.toContain('browser.operate');
+    expect(grantedCapabilities).not.toContain('integration.acp.execute');
+    expect(grantedCapabilities).not.toContain('browser.operate');
+  });
+
   await step('Agent mutations reject missing CSRF and stale CAS versions', async () => {
     const missingCsrf = await request.patch('/api/v1/agent/apps/nexus.operations', {
       data: { enabled: false, expectedVersion: operations.stateVersion },

@@ -1439,10 +1439,10 @@ AcpAdapter
 AcpRuntimePort
 AcpTransportPort
 ACP Integration schema
-integration.acp.execute capability
+integration.acp.execute capability type (roadmap only)
 ```
 
-当前不宣称 live ACP execution 已完成。
+当前不宣称 live ACP execution 已完成；`nexus.operations` manifest 不声明该 capability，也不会创建默认 grant。
 
 未来调用方向应保持：
 
@@ -1463,9 +1463,11 @@ PuppeteerBrowserGateway
 BrowserGatewayPort
 BrowserEndpointPort
 browser Workspace kind
-browser.operate capability
+browser.operate capability type (roadmap only)
 puppeteer-core
 ```
+
+当前 `nexus.operations` manifest 不声明 `browser.operate`，也不会创建默认 grant；Browser/CDP/Puppeteer 代码只保留后继接线骨架。
 
 未来方向：
 
