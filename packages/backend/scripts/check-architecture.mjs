@@ -231,6 +231,17 @@ for (const file of sourceFiles) {
       }
     }
   }
+  if (
+    relativeFile === 'interfaces/http/agent/app-runtime.routes.ts' ||
+    relativeFile === 'interfaces/http/agent/app-approvals.routes.ts'
+  ) {
+    if (!text.includes('./agent-runtime-route-input')) {
+      failures.push(`${relativeFile}: versioned Agent Runtime mutation bodies must use agent-runtime-route-input`);
+    }
+    if (/request\.body\s*(?:\.|\[)/.test(text)) {
+      failures.push(`${relativeFile}: route handlers may not inspect Runtime mutation body fields directly`);
+    }
+  }
   if (relativeFile.startsWith('bootstrap/agent/')) {
     const reservedProductionSymbols = [
       'AcpAdapter',

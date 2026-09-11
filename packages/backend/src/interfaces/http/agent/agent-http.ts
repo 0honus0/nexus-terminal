@@ -41,6 +41,7 @@ export const agentRoute =
     void Promise.resolve(handler(request, response, next)).catch((error) => {
       const mapped = mapAgentError(error);
       if (mapped.status === 500) console.error('[Agent HTTP] Unhandled route error:', error);
-      if (!response.headersSent) agentError(request, response, mapped.status, mapped.code, mapped.message);
+      if (!response.headersSent)
+        agentError(request, response, mapped.status, mapped.code, mapped.message, mapped.details);
     });
   };

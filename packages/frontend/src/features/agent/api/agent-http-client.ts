@@ -2,6 +2,11 @@ import type { AxiosRequestConfig, AxiosResponse } from 'axios';
 import { httpClient } from '@/client/http';
 import { toAgentApiError } from './agent-api-error';
 
+export const agentRuntimeRequest = <T extends Record<string, unknown>>(body: T): T & { schemaVersion: 1 } => ({
+  schemaVersion: 1,
+  ...body,
+});
+
 const normalizeAgentRequest = async <T>(request: Promise<AxiosResponse<T>>): Promise<AxiosResponse<T>> => {
   try {
     return await request;

@@ -11,6 +11,7 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     ['IDEMPOTENCY_PAYLOAD_MISMATCH', 'IDEMPOTENCY_IN_PROGRESS', 'RECONCILIATION_REQUIRED'],
     rawCode(409, 'The idempotent Agent command cannot be applied in its current state.'),
   ),
+  onCodes(['APPROVAL_STALE'], rawCode(409, 'The approval changed; refresh and retry.')),
   onCodes(['BUDGET_INCREASE_INVALID'], rawCode(400, 'Run budget increases must strictly raise the current budget.')),
   onCodes(
     ['BUDGET_HARD_LIMIT_EXCEEDED'],

@@ -1,4 +1,4 @@
-import { agentHttpClient as httpClient } from './agent-http-client';
+import { agentHttpClient as httpClient, agentRuntimeRequest } from './agent-http-client';
 import type {
   AgentArtifactRef,
   AgentEnvelope,
@@ -1059,7 +1059,7 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentApprovalView>>(
           `/apps/${encodeURIComponent(appId)}/approvals/${encodeURIComponent(approval.id)}/resolve`,
-          { decision, operationHash: approval.operationHash, expectedVersion: approval.version },
+          agentRuntimeRequest({ decision, operationHash: approval.operationHash, expectedVersion: approval.version }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -1080,13 +1080,13 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs`,
-          {
+          agentRuntimeRequest({
             threadId: input.threadId,
             input: { text: input.text, artifactRefs: input.artifactRefs ?? [] },
             agentDefinitionId: input.agentDefinitionId,
             model: input.model,
             connectionIds: input.connectionIds ?? [],
-          },
+          }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -1095,7 +1095,7 @@ export const agentApi = {
   async appendRunInput(appId: string, run: AgentRunView, text: string, artifactRefs: string[] = []): Promise<void> {
     await httpClient.post(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/inputs`,
-      { text, artifactRefs, expectedVersion: run.version },
+      agentRuntimeRequest({ text, artifactRefs, expectedVersion: run.version }),
       { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
     );
   },
@@ -1115,7 +1115,7 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/budget`,
-          { scope: 'run', increase, expectedVersion: run.version },
+          agentRuntimeRequest({ scope: 'run', increase, expectedVersion: run.version }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -1135,7 +1135,7 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentCheckpointView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/checkpoints`,
-          { expectedVersion: run.version },
+          agentRuntimeRequest({ expectedVersion: run.version }),
           { headers: await mutationHeaders() },
         )
       ).data,
@@ -1146,7 +1146,7 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/resume`,
-          { checkpointId, expectedVersion: run.version },
+          agentRuntimeRequest({ checkpointId, expectedVersion: run.version }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -1157,7 +1157,7 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/cancel`,
-          { expectedVersion: run.version },
+          agentRuntimeRequest({ expectedVersion: run.version }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,

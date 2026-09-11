@@ -1,10 +1,18 @@
 import { Router, type Request } from 'express';
 import type { AgentApprovalFacade, AgentWorkspaceRuntimeFacade, AgentRunFacade } from '../../../modules/agent/public';
-import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
-import type { CreateRunCommand, RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
 import { agentData, agentRequestId, agentRoute } from './agent-http';
-import { hasOnlyKeys, isJsonValue, isRecord, pathParam, positiveInteger } from './agent-route-input';
+import { pathParam, positiveInteger, withVersionConflictDetails } from './agent-route-input';
 import { agentUserId, createAgentMutationSecurity, requireAgentAuthenticated } from './agent-security';
+import {
+  parseAppendInputRequest,
+  parseBudgetIncreaseRequest,
+  parseCreateRunRequest,
+  parseExpectedVersionRequest,
+  parseResumeRunRequest,
+  parseWorkspaceActionRequest,
+  parseWorkspaceCreateRequest,
+  parseWorkspaceToolVersionsRequest,
+} from './agent-runtime-route-input';
 
 export interface AppRuntimeRouterDependencies {
   runs: AgentRunFacade;
@@ -25,107 +33,6 @@ const idempotencyKey = (request: Request): string => {
   const value = request.header('idempotency-key');
   if (!value) throw new Error('IDEMPOTENCY_KEY_INVALID');
   return value;
-};
-
-const parseUserInput = (value: unknown): UserInputData => {
-  if (!isRecord(value) || !hasOnlyKeys(value, ['text', 'artifactRefs'])) throw new Error('VALIDATION_FAILED');
-  if (typeof value.text !== 'string' || !Array.isArray(value.artifactRefs)) throw new Error('VALIDATION_FAILED');
-  if (value.artifactRefs.some((item) => typeof item !== 'string')) throw new Error('VALIDATION_FAILED');
-  return { text: value.text, artifactRefs: value.artifactRefs as string[] };
-};
-
-const parseCreateCommand = (request: Request, requestId: string): CreateRunCommand => {
-  if (
-    !isRecord(request.body) ||
-    !hasOnlyKeys(request.body, ['threadId', 'input', 'agentDefinitionId', 'model', 'connectionIds'])
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  const model = request.body.model;
-  if (!isRecord(model) || !hasOnlyKeys(model, ['providerId', 'modelId', 'configurationVersion'])) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (
-    typeof request.body.threadId !== 'string' ||
-    typeof request.body.agentDefinitionId !== 'string' ||
-    typeof model.providerId !== 'string' ||
-    typeof model.modelId !== 'string' ||
-    !positiveInteger(model.configurationVersion) ||
-    !Array.isArray(request.body.connectionIds) ||
-    request.body.connectionIds.some((value) => !positiveInteger(value))
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return {
-    threadId: request.body.threadId,
-    input: parseUserInput(request.body.input),
-    agentDefinitionId: request.body.agentDefinitionId,
-    model: {
-      providerId: model.providerId,
-      modelId: model.modelId,
-      configurationVersion: model.configurationVersion,
-    },
-    connectionIds: request.body.connectionIds as number[],
-    command: { key: idempotencyKey(request), requestId },
-  };
-};
-
-const parseBudgetIncrease = (body: unknown): { increase: RunBudgetIncrease; expectedVersion: number } => {
-  if (!isRecord(body) || !hasOnlyKeys(body, ['scope', 'refId', 'increase', 'expectedVersion'])) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if ((body.scope !== undefined && body.scope !== 'run') || body.refId !== undefined) {
-    throw new Error('CAPABILITY_UNAVAILABLE');
-  }
-  if (!isRecord(body.increase) || !positiveInteger(body.expectedVersion)) throw new Error('VALIDATION_FAILED');
-  if (!hasOnlyKeys(body.increase, ['maxRunTokens', 'maxRunSteps', 'maxActiveExecutionSeconds', 'maxCostMicros'])) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return {
-    increase: body.increase as RunBudgetIncrease,
-    expectedVersion: body.expectedVersion,
-  };
-};
-
-const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
-  if (!isRecord(value) || !hasOnlyKeys(value, ['recipeId', 'versions', 'runnerPluginIds', 'limits', 'network'])) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (typeof value.recipeId !== 'string' || value.recipeId.length < 1 || value.recipeId.length > 128) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (value.versions !== undefined) {
-    if (!isRecord(value.versions) || Object.keys(value.versions).length > 32) throw new Error('VALIDATION_FAILED');
-    if (Object.entries(value.versions).some(([key, entry]) => !key || typeof entry !== 'string' || !entry)) {
-      throw new Error('VALIDATION_FAILED');
-    }
-  }
-  if (value.runnerPluginIds !== undefined) {
-    if (
-      !Array.isArray(value.runnerPluginIds) ||
-      value.runnerPluginIds.length > 32 ||
-      new Set(value.runnerPluginIds).size !== value.runnerPluginIds.length ||
-      value.runnerPluginIds.some(
-        (pluginId) => typeof pluginId !== 'string' || !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/.test(pluginId),
-      )
-    ) {
-      throw new Error('VALIDATION_FAILED');
-    }
-  }
-  if (value.limits !== undefined) {
-    if (!isRecord(value.limits) || !hasOnlyKeys(value.limits, ['cpus', 'memoryBytes', 'pids', 'tmpfsBytes'])) {
-      throw new Error('VALIDATION_FAILED');
-    }
-  }
-  if (value.network !== undefined) {
-    if (!isRecord(value.network) || !hasOnlyKeys(value.network, ['mode', 'hosts']))
-      throw new Error('VALIDATION_FAILED');
-    if ((value.network.mode !== 'none' && value.network.mode !== 'allowlist') || !Array.isArray(value.network.hosts)) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    if (value.network.hosts.some((host) => typeof host !== 'string')) throw new Error('VALIDATION_FAILED');
-  }
-  return value as unknown as AgentWorkspaceCreateSpec;
 };
 
 export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencies): Router => {
@@ -170,8 +77,11 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     mutationSecurity,
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const command = parseCreateCommand(request, agentRequestId(request, response));
-      const run = await dependencies.runs.create(scope, command);
+      const input = parseCreateRunRequest(request.body);
+      const run = await dependencies.runs.create(scope, {
+        ...input,
+        command: { key: idempotencyKey(request), requestId: agentRequestId(request, response) },
+      });
       response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/runs/${run.id}`);
       agentData(request, response, run, 201);
     }),
@@ -205,18 +115,13 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/checkpoints',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['expectedVersion']) ||
-        !positiveInteger(request.body.expectedVersion)
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+      const expectedVersion = parseExpectedVersionRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const checkpoint = await dependencies.runs.saveCheckpoint(
-        scope,
-        pathParam(request.params.runId),
-        request.body.expectedVersion,
+      const runId = pathParam(request.params.runId);
+      const checkpoint = await withVersionConflictDetails(
+        expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () => dependencies.runs.saveCheckpoint(scope, runId, expectedVersion),
       );
       response.setHeader(
         'Location',
@@ -230,22 +135,14 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/resume',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['checkpointId', 'expectedVersion']) ||
-        typeof request.body.checkpointId !== 'string' ||
-        request.body.checkpointId.length < 1 ||
-        !positiveInteger(request.body.expectedVersion)
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+      const input = parseResumeRunRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const run = await dependencies.runs.resume(
-        scope,
-        pathParam(request.params.runId),
-        request.body.checkpointId,
-        request.body.expectedVersion,
-        idempotencyKey(request),
+      const runId = pathParam(request.params.runId);
+      const run = await withVersionConflictDetails(
+        input.expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () =>
+          dependencies.runs.resume(scope, runId, input.checkpointId, input.expectedVersion, idempotencyKey(request)),
       );
       response.setHeader(
         'Location',
@@ -259,24 +156,15 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/inputs',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['text', 'artifactRefs', 'expectedVersion'])) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      if (!positiveInteger(request.body.expectedVersion)) throw new Error('VALIDATION_FAILED');
-      const input = parseUserInput({ text: request.body.text, artifactRefs: request.body.artifactRefs });
+      const input = parseAppendInputRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        await dependencies.runs.appendInput(
-          scope,
-          pathParam(request.params.runId),
-          input,
-          request.body.expectedVersion,
-          idempotencyKey(request),
-        ),
-        202,
+      const runId = pathParam(request.params.runId);
+      const result = await withVersionConflictDetails(
+        input.expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () => dependencies.runs.appendInput(scope, runId, input.input, input.expectedVersion, idempotencyKey(request)),
       );
+      agentData(request, response, result, 202);
     }),
   );
 
@@ -284,19 +172,15 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/budget',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      const { increase, expectedVersion } = parseBudgetIncrease(request.body);
+      const { increase, expectedVersion } = parseBudgetIncreaseRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        await dependencies.runs.increaseBudget(
-          scope,
-          pathParam(request.params.runId),
-          increase,
-          expectedVersion,
-          idempotencyKey(request),
-        ),
+      const runId = pathParam(request.params.runId);
+      const run = await withVersionConflictDetails(
+        expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () => dependencies.runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey(request)),
       );
+      agentData(request, response, run);
     }),
   );
 
@@ -304,19 +188,13 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/cancel',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['expectedVersion']) ||
-        !positiveInteger(request.body.expectedVersion)
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+      const expectedVersion = parseExpectedVersionRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      const run = await dependencies.runs.cancel(
-        scope,
-        pathParam(request.params.runId),
-        request.body.expectedVersion,
-        idempotencyKey(request),
+      const runId = pathParam(request.params.runId);
+      const run = await withVersionConflictDetails(
+        expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () => dependencies.runs.cancel(scope, runId, expectedVersion, idempotencyKey(request)),
       );
       agentData(request, response, run, run.status === 'cancelled' ? 200 : 202);
     }),
@@ -331,7 +209,11 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       if (!positiveInteger(expectedVersion)) throw new Error('VALIDATION_FAILED');
       const runId = pathParam(request.params.runId);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      await dependencies.runs.delete(scope, runId, expectedVersion, idempotencyKey(request));
+      await withVersionConflictDetails(
+        expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () => dependencies.runs.delete(scope, runId, expectedVersion, idempotencyKey(request)),
+      );
       agentData(request, response, { runId, deleted: true }, 202);
     }),
   );
@@ -361,17 +243,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/runs/:runId/workspaces',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['workspace', 'retained', 'catalogRevision']) ||
-        (request.body.retained !== undefined && typeof request.body.retained !== 'boolean') ||
-        (request.body.catalogRevision !== undefined &&
-          (typeof request.body.catalogRevision !== 'string' ||
-            !request.body.catalogRevision ||
-            request.body.catalogRevision.length > 128))
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+      const input = parseWorkspaceCreateRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       const runId = pathParam(request.params.runId);
       const agentRuntimeId = await dependencies.runs.rootRuntimeId(scope, runId);
@@ -379,10 +251,10 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         scope,
         runId,
         agentRuntimeId,
-        parseWorkspaceSpec(request.body.workspace),
-        request.body.retained === true,
+        input.workspace,
+        input.retained,
         idempotencyKey(request),
-        request.body.catalogRevision as string | undefined,
+        input.catalogRevision,
       );
       response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/workspaces/${workspace.id}`);
       agentData(request, response, workspace, 202);
@@ -405,29 +277,22 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/workspaces/:workspaceId/actions',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['action', 'expectedVersion', 'parameters']) ||
-        !['start', 'stop', 'restart', 'delete', 'setNetwork', 'resize'].includes(String(request.body.action)) ||
-        !positiveInteger(request.body.expectedVersion)
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      const parameters = request.body.parameters === undefined ? {} : request.body.parameters;
-      if (!isJsonValue(parameters)) throw new Error('VALIDATION_FAILED');
+      const input = parseWorkspaceActionRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        await dependencies.workspaceRuntime.action(
-          scope,
-          pathParam(request.params.workspaceId),
-          request.body.action as 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize',
-          request.body.expectedVersion,
-          parameters,
-        ),
-        202,
+      const workspaceId = pathParam(request.params.workspaceId);
+      const command = await withVersionConflictDetails(
+        input.expectedVersion,
+        async () => (await dependencies.workspaceRuntime.getWorkspace(scope, workspaceId)).version,
+        () =>
+          dependencies.workspaceRuntime.action(
+            scope,
+            workspaceId,
+            input.action,
+            input.expectedVersion,
+            input.parameters,
+          ),
       );
+      agentData(request, response, command, 202);
     }),
   );
 
@@ -435,37 +300,22 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     '/workspaces/:workspaceId/tool-versions',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['versions', 'expectedVersion', 'catalogRevision']) ||
-        !isRecord(request.body.versions) ||
-        Object.keys(request.body.versions).length < 1 ||
-        Object.keys(request.body.versions).length > 32 ||
-        Object.entries(request.body.versions).some(
-          ([familyId, versionId]) =>
-            !familyId || familyId.length > 128 || typeof versionId !== 'string' || !versionId || versionId.length > 128,
-        ) ||
-        !positiveInteger(request.body.expectedVersion) ||
-        (request.body.catalogRevision !== undefined &&
-          (typeof request.body.catalogRevision !== 'string' ||
-            !request.body.catalogRevision ||
-            request.body.catalogRevision.length > 128))
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
+      const input = parseWorkspaceToolVersionsRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        await dependencies.workspaceRuntime.switchToolVersions(
-          scope,
-          pathParam(request.params.workspaceId),
-          request.body.versions as Record<string, string>,
-          request.body.expectedVersion,
-          request.body.catalogRevision as string | undefined,
-        ),
-        202,
+      const workspaceId = pathParam(request.params.workspaceId);
+      const switched = await withVersionConflictDetails(
+        input.expectedVersion,
+        async () => (await dependencies.workspaceRuntime.getWorkspace(scope, workspaceId)).version,
+        () =>
+          dependencies.workspaceRuntime.switchToolVersions(
+            scope,
+            workspaceId,
+            input.versions,
+            input.expectedVersion,
+            input.catalogRevision,
+          ),
       );
+      agentData(request, response, switched, 202);
     }),
   );
 

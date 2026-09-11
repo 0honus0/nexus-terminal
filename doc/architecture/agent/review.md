@@ -492,6 +492,12 @@ inputWatermark
 
 建议为 Run、Approval、Checkpoint、Workspace command 定义 versioned DTO schema（可用 AJV adapter），HTTP 层一次完成：unknown key 拒绝、大小/深度限制、枚举校验和 schemaVersion 检查；Service 只接收已解析的 domain command。错误响应统一返回 `code、field、expectedVersion、currentVersion?`，便于前端冲突处理。
 
+> **解决方案（已采用，保持 `/api/v1` 向后兼容）**
+>
+> 新增 `agent-runtime-route-input.ts` 作为 Run、Approval、Checkpoint 与 per-Run Workspace mutation 的统一 DTO 边界。所有 JSON mutation body 统一拒绝 unknown key；`schemaVersion` 省略时按当前 v1 解释，显式提供时只接受 `1`，未来版本返回 `SCHEMA_VERSION_UNSUPPORTED` 并携带 field/expected/actual version details。前端的新请求统一通过 `agentRuntimeRequest(...)` 显式发送 `schemaVersion: 1`，旧客户端无需同步升级。全局 `express.json({ limit: '1mb' })` 已提供 body 上限；自由 JSON 参数继续通过 `isJsonValue` 的 64 层深度限制，其余 DTO 是固定浅层结构与有界数组/字典。Backend architecture checker 禁止 Runtime/Approval route 重新直接读取 `request.body.*`。
+>
+> `STATE_CONFLICT`/`APPROVAL_STALE` 的 HTTP 边界现在只在重新读取 authoritative resource 后确认 `currentVersion !== expectedVersion` 时附加 `{ field: 'expectedVersion', expectedVersion, currentVersion }`，避免把普通“当前状态不可操作”误标成版本冲突；`APPROVAL_STALE` 同时补为明确 409 而不是落入 500。集中 budget parser 也覆盖了 domain 已支持的 `maxSubagentMessages/maxSubagentMessageBytes`。自动 conflict recovery/UX 仍留给 R17，本项只定义协议与机器可读元数据。
+
 ### R14：Checkpoint resume 需要显式防重放与副作用状态检查
 
 位置：`packages/backend/src/modules/agent/runtime/recovery/checkpoint.service.ts`。

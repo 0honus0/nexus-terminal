@@ -17,6 +17,30 @@ export const hasOnlyKeys = (value: Record<string, unknown>, keys: readonly strin
   return Object.keys(value).every((key) => allowed.has(key));
 };
 
+export class AgentRequestError extends Error {
+  readonly details: unknown;
+
+  constructor(code: string, details: unknown) {
+    super(code);
+    this.name = 'AgentRequestError';
+    this.details = details;
+  }
+}
+
+export const versionedRecord = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
+  if (!isRecord(value) || !hasOnlyKeys(value, [...keys, 'schemaVersion'])) throw new Error('VALIDATION_FAILED');
+  const schemaVersion = value.schemaVersion ?? 1;
+  if (schemaVersion !== 1) {
+    throw new AgentRequestError('SCHEMA_VERSION_UNSUPPORTED', {
+      field: 'schemaVersion',
+      expectedVersion: 1,
+      actualVersion: Number.isSafeInteger(schemaVersion) ? schemaVersion : null,
+      actualType: schemaVersion === null ? 'null' : Array.isArray(schemaVersion) ? 'array' : typeof schemaVersion,
+    });
+  }
+  return value;
+};
+
 export const positiveInteger = (value: unknown): value is number =>
   Number.isSafeInteger(value) && (value as number) > 0;
 
@@ -30,4 +54,31 @@ export const queryString = (value: unknown): string | undefined => {
 export const pathParam = (value: string | string[] | undefined): string => {
   if (typeof value !== 'string' || value.length === 0) throw new Error('VALIDATION_FAILED');
   return value;
+};
+
+export const withVersionConflictDetails = async <T>(
+  expectedVersion: number,
+  readCurrentVersion: () => Promise<number>,
+  action: () => Promise<T>,
+  conflictCodes: readonly string[] = ['STATE_CONFLICT'],
+): Promise<T> => {
+  try {
+    return await action();
+  } catch (error) {
+    const code = error instanceof Error ? error.message : String(error);
+    if (!conflictCodes.includes(code)) throw error;
+    try {
+      const currentVersion = await readCurrentVersion();
+      if (currentVersion !== expectedVersion) {
+        throw new AgentRequestError(code, {
+          field: 'expectedVersion',
+          expectedVersion,
+          currentVersion,
+        });
+      }
+    } catch (readError) {
+      if (readError instanceof AgentRequestError) throw readError;
+    }
+    throw error;
+  }
 };

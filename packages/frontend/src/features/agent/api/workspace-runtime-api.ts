@@ -1,4 +1,4 @@
-import { agentHttpClient as httpClient } from './agent-http-client';
+import { agentHttpClient as httpClient, agentRuntimeRequest } from './agent-http-client';
 import type { AgentArtifactRef, AgentEnvelope, AgentSettingsView } from './agent-api.types';
 
 const unwrap = <T>(envelope: AgentEnvelope<T>): T => envelope.data;
@@ -391,7 +391,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
       (
         await httpClient.post<AgentEnvelope<AgentWorkspaceView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/workspaces`,
-          { workspace, retained, ...(catalogRevision ? { catalogRevision } : {}) },
+          agentRuntimeRequest({ workspace, retained, ...(catalogRevision ? { catalogRevision } : {}) }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -406,7 +406,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
       (
         await httpClient.post<AgentEnvelope<WorkspaceRuntimeCommandView>>(
           `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspace.id)}/actions`,
-          { action, expectedVersion: workspace.version, parameters: {} },
+          agentRuntimeRequest({ action, expectedVersion: workspace.version, parameters: {} }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -422,7 +422,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
       (
         await httpClient.post<AgentEnvelope<WorkspaceToolchainSwitchView>>(
           `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspace.id)}/tool-versions`,
-          { versions, expectedVersion: workspace.version, catalogRevision },
+          agentRuntimeRequest({ versions, expectedVersion: workspace.version, catalogRevision }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
