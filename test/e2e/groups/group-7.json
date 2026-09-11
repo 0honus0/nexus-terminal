@@ -3,12 +3,11 @@
   "group": 7,
   "workers": 8,
   "specs": [
+    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/command-history-management.spec.ts",
     "tests/ssh/quick-command-collapsible-search.spec.ts",
     "tests/ssh/quick-command-management.spec.ts",
     "tests/ssh/quick-command-tags-variables.spec.ts",
-    "tests/ssh/sftp-download.spec.ts",
-    "tests/ssh/status-history-time-axis.spec.ts",
     "tests/ssh/progress-display-baseline.spec.ts",
     "tests/ssh/panel-wheel-scaling.spec.ts",
     "tests/ssh/terminal-protocol.spec.ts",
