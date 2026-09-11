@@ -65,7 +65,6 @@ const allowedRuntimeSubdomains = new Set([
   'collaboration',
   'definitions',
   'events',
-  'exchange',
   'execution',
   'planning',
   'recovery',

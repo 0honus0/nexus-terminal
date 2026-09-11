@@ -92,7 +92,7 @@ Thread 可为空；同一 Thread 同时只有一个非终态 Run。Run 是预算
 
 `PlanItem` 与 Runtime `Step` 明确分离：PlanItem 是用户可见、可持久化的计划投影，拥有稳定 id、status、dependsOn 与 evidenceRefs，可投影成 Execution Graph；Step 只表示 Agent loop 的 durable progression boundary（一次模型/工具/验证推进），不能拿用户计划项充当执行状态机节点。产品 UI 可称“Task”，但不再新增 `Task → Run` 一级领域实体。
 
-Runtime 实现也不继续在一级目录堆服务；当前按职责拆为 `definitions / runs / execution / planning / scheduling / approvals / recovery / events / collaboration / exchange`。这些是实现子域而非新的业务层级：外层负责 durable/control，内层 Agent Loop 保持 `context → model → tool/result → next step` 的轻循环。
+Runtime 实现也不继续在一级目录堆服务；当前按职责拆为 `definitions / runs / execution / planning / scheduling / approvals / recovery / events / collaboration`。这些是 Runtime 实现子域而非新的业务层级：外层负责 durable/control，内层 Agent Loop 保持 `context → model → tool/result → next step` 的轻循环。跨资源协调不属于 Runtime 子域；Workspace↔Artifact 等 bridge 固定放在独立 `modules/agent/exchange`。
 
 一个 AgentRuntime 当前最多关联一个状态非 `deleted/failed` 的 root Workspace；Workspace 保存稳定项目文件和 ownership，Profile 冻结 recipe/tool refs/Runner Plugin/resource/network，Generation 是可替换的运行实例。Harness 在 Backend，不创建“control workspace”。参与者通过显式 Artifact grant、Workspace Runtime Gateway 或 Runner Plugin Workspace Broker 交换结果，不能直接获得 sandbox/process/PTY handle。
 

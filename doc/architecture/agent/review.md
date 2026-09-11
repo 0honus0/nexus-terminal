@@ -121,19 +121,15 @@ reserved capability    虚线
 >
 > `MODULE_DEPENDENCY_DESIGN.md` 现在统一使用 **Active / live** 与 **Reserved / roadmap-only** 两类状态：Plugin Runtime、Workspace Runtime、MCP 标为 Active/live；ACP、Browser/CDP/Puppeteer 继续标为 Reserved/roadmap-only。原“ACP / Browser / MCP 保留边界”标题已改为中性的 execution 状态边界，避免把已 live 的 MCP 误读为 reserved。P1/P2/P3 明确只作为历史实施/验收分组，不作为当前交付状态。
 
-### 6. 文档存在目录和 owner 的潜在漂移
+### 6. `exchange` 目录边界与 architecture checker 曾存在实际漂移
 
-架构总览规定 Runtime 按 `definitions / runs / execution / planning / scheduling / approvals / recovery / events / collaboration / exchange` 拆分；依赖文档则把部分职责描述为 `modules/agent/runtime/execution` 下的 backend，同时将 StateCommit implementation 放在 infrastructure。两者本身不冲突，但缺少“public port owner / concrete adapter owner / orchestration owner”的固定表，后续很容易重新把逻辑堆回 runtime 一级目录。
-
-建议新增一张 owner 表，每个能力只列三项：
-
-```text
-Public Port      modules/...
-Orchestrator     modules/...
-Concrete Adapter infrastructure/...
-```
-
-架构 checker 和 review 以后按此表检查，而不是依赖文件名猜测边界。
+> **解决方案（已采用，按审核结论修订）**
+>
+> 审核后确认，真实问题不是缺少一张覆盖所有能力的 owner 总表，而是 canonical docs 与静态 guard 对 `exchange` 的物理 owner 已发生具体漂移：当前实现与 `IMPLEMENTATION.md` 都把 Workspace↔Artifact 等跨资源 bridge 固定在独立 `modules/agent/exchange`，但 `ARCHITECTURE.md` 曾把 `exchange` 误列为 Runtime 子域，Backend architecture checker 的 `allowedRuntimeSubdomains` 也曾继续允许 `runtime/exchange/*`。
+>
+> 当前已统一为：Runtime 子域仅包含 `definitions / runs / execution / planning / scheduling / approvals / recovery / events / collaboration`；跨资源协调固定放在独立 `modules/agent/exchange`。Backend architecture checker 已从 Runtime allowlist 删除 `exchange`，未来若重新创建 `modules/agent/runtime/exchange/*` 会直接失败。
+>
+> 不新增一张需要人工同步的全局 `Public Port / Orchestrator / Concrete Adapter` registry；真实源码 import graph、目录 guard 与显式 source rule 继续作为硬约束，文档按能力章节记录 owner。
 
 ## P3：可维护性改进
 
