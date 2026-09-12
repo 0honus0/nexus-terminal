@@ -266,6 +266,7 @@ export class SandboxManager {
       `${WORKSPACE_TERMINAL_USER}:x:${WORKSPACE_TERMINAL_UID}:${WORKSPACE_TERMINAL_GID}:Nexus Workspace:/run/nexus-terminal/home:/bin/sh\n`,
       { mode: 0o600 },
     );
+    fs.writeFileSync(path.join(sessionRoot, 'group'), 'root:x:0:\ntty:x:0:\n', { mode: 0o600 });
     const hostKey = path.join(sessionRoot, 'dropbear_ed25519_host_key');
     const generated = spawnSync('dropbearkey', ['-t', 'ed25519', '-f', hostKey], {
       encoding: 'utf8',
@@ -324,6 +325,9 @@ export class SandboxManager {
         '--ro-bind',
         path.join(sessionRoot, 'passwd'),
         '/etc/passwd',
+        '--ro-bind',
+        path.join(sessionRoot, 'group'),
+        '/etc/group',
         '--',
         '/bin/sh',
         '-c',
