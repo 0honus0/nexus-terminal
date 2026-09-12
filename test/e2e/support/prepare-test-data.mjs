@@ -7,6 +7,18 @@ if (!dataDir) {
 }
 
 const resolvedDataDir = path.resolve(dataDir);
+const unlockForRemoval = (target) => {
+  if (!fs.existsSync(target)) return;
+  const stat = fs.lstatSync(target);
+  if (stat.isSymbolicLink()) return;
+  if (stat.isDirectory()) {
+    fs.chmodSync(target, 0o700);
+    for (const name of fs.readdirSync(target)) unlockForRemoval(path.join(target, name));
+    return;
+  }
+  if (stat.isFile()) fs.chmodSync(target, 0o600);
+};
+unlockForRemoval(resolvedDataDir);
 fs.rmSync(resolvedDataDir, { recursive: true, force: true });
 fs.mkdirSync(resolvedDataDir, { recursive: true });
 

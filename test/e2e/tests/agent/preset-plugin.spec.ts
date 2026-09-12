@@ -57,11 +57,7 @@ const waitForTerminalRun = async (request: APIRequestContext, runId: string): Pr
   throw new Error(`Preset Agent Run did not reach a terminal state: ${JSON.stringify(latest)}`);
 };
 
-test('remote signed Developer preset installs, registers an Agent definition, runs, and uses the host Agent surface', async ({
-  page,
-  context,
-}) => {
-  const request = context.request;
+const installAndRunDeveloperPreset = async (request: APIRequestContext): Promise<{ threadId: string }> => {
   await loginAsInitialAdmin(request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
@@ -242,6 +238,51 @@ test('remote signed Developer preset installs, registers an Agent definition, ru
     expect(JSON.stringify(await ledger.json())).toContain('OK');
   });
 
+  return { threadId };
+};
+
+test('unsafe remote plugin archive fails validation without terminating the Backend', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const csrf = await csrfToken(request);
+  const headers = { 'X-Nexus-CSRF': csrf };
+  const before = await request.get('/api/v1/agent/settings');
+  expect(before.ok(), await before.text()).toBeTruthy();
+  const settings = ((await before.json()) as Envelope<SettingsView>).data;
+  const patched = await request.patch('/api/v1/agent/settings', {
+    headers,
+    data: {
+      patch: { plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] } },
+      expectedVersion: settings.revision,
+    },
+  });
+  expect(patched.ok(), await patched.text()).toBeTruthy();
+
+  const staged = await request.post('/api/v1/agent/plugins/remote/stage', {
+    headers,
+    data: { repositoryUrl, appId: 'nexus.unsafe', version: '1.0.0' },
+  });
+  expect(staged.status(), await staged.text()).toBe(201);
+  const stageId = ((await staged.json()) as Envelope<{ id: string }>).data.id;
+  const verified = await request.post('/api/v1/agent/plugins/verify', { headers, data: { stageId } });
+  expect(verified.status(), await verified.text()).toBe(422);
+  await expect(verified.json()).resolves.toMatchObject({ error: { code: 'PLUGIN_ARCHIVE_UNSAFE' } });
+
+  const health = await request.get('/api/v1/agent/apps');
+  expect(health.ok(), await health.text()).toBeTruthy();
+});
+
+test('remote signed Developer preset installs, registers an Agent definition, and completes a real Run', async ({
+  request,
+}) => {
+  await installAndRunDeveloperPreset(request);
+});
+
+test('installed Developer preset uses the host-owned Agent surface and captures functional evidence', async ({
+  page,
+  context,
+}) => {
+  const { threadId } = await installAndRunDeveloperPreset(context.request);
+  expect(threadId).not.toBe('');
   await step('the installed preset renders through the host-owned generic Agent surface', async () => {
     await page.goto('/connections');
     await page.getByRole('button', { name: 'Open Agent', exact: true }).click();

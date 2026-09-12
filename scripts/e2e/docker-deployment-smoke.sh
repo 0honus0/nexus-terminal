@@ -211,7 +211,7 @@ browser_page_script="$workspace/direct-browser-page.cjs"
 cat > "$browser_page_script" <<'NODE'
 const http = require('node:http');
 const port = Number(process.env.NEXUS_BROWSER_PAGE_PORT);
-const html = '<!doctype html><title>Nexus Browser Smoke</title><input aria-label="Name"><button onclick="document.querySelector('#status').textContent=document.querySelector('input').value">Apply</button><div id="status">idle</div>';
+const html = `<!doctype html><title>Nexus Browser Smoke</title><input aria-label="Name"><button onclick="document.querySelector('#status').textContent=document.querySelector('input').value">Apply</button><div id="status">idle</div>`;
 const server = http.createServer((request, response) => {
   if (request.url !== '/') { response.writeHead(404).end(); return; }
   response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });

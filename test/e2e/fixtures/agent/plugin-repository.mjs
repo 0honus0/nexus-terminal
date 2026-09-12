@@ -1,4 +1,4 @@
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
@@ -15,6 +15,7 @@ if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-e2e-plugin-repo-'));
 const keyPath = path.join(temp, 'publisher.pem');
 const packagePath = path.join(temp, 'nexus.developer-1.0.0.tar');
+const unsafePackagePath = path.join(temp, 'nexus.unsafe-1.0.0.tar');
 const { privateKey } = generateKeyPairSync('ed25519');
 fs.writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }));
 const metadata = JSON.parse(
@@ -30,6 +31,12 @@ const metadata = JSON.parse(
   ),
 );
 const packageBytes = fs.readFileSync(packagePath);
+const unsafeRoot = path.join(temp, 'unsafe-package');
+fs.mkdirSync(unsafeRoot, { recursive: true });
+fs.symlinkSync('/etc/passwd', path.join(unsafeRoot, 'escape'));
+execFileSync('tar', ['--format=ustar', '-cf', unsafePackagePath, '-C', unsafeRoot, '.']);
+const unsafePackageBytes = fs.readFileSync(unsafePackagePath);
+const unsafePackageHash = createHash('sha256').update(unsafePackageBytes).digest('hex');
 const catalog = {
   schemaVersion: 1,
   publishers: [
@@ -48,6 +55,16 @@ const catalog = {
       packageUrl: `http://${host}:${port}/packages/nexus.developer-1.0.0.tar`,
       sha256: metadata.sha256,
       sizeBytes: metadata.sizeBytes,
+      publisherKeyId: metadata.publisherKeyId,
+    },
+    {
+      appId: 'nexus.unsafe',
+      version: '1.0.0',
+      displayName: 'Unsafe Archive Fixture',
+      description: 'E2E-only package containing a symbolic link and no trusted payload.',
+      packageUrl: `http://${host}:${port}/packages/nexus.unsafe-1.0.0.tar`,
+      sha256: unsafePackageHash,
+      sizeBytes: unsafePackageBytes.byteLength,
       publisherKeyId: metadata.publisherKeyId,
     },
   ],
@@ -76,6 +93,15 @@ const server = http.createServer((request, response) => {
       'Cache-Control': 'no-store',
     });
     response.end(packageBytes);
+    return;
+  }
+  if (request.method === 'GET' && request.url === '/packages/nexus.unsafe-1.0.0.tar') {
+    response.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': String(unsafePackageBytes.byteLength),
+      'Cache-Control': 'no-store',
+    });
+    response.end(unsafePackageBytes);
     return;
   }
   response.writeHead(404).end();

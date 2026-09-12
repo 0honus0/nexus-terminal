@@ -69,6 +69,8 @@
   const catalogVisible = ref(false);
   const searchExpanded = ref(false);
   const pathDraft = ref(props.initialPath ?? '/');
+  const pathDraftEditing = ref(false);
+  let pathDraftRevision = 0;
   const pathHistoryOpen = ref(false);
   const pathHistoryIndex = ref(-1);
   let pathHistoryCloseTimer: number | undefined;
@@ -204,14 +206,19 @@
     navigationQueue = next.catch(() => undefined);
     return next;
   };
-  const loadPath = async (path: string): Promise<void> => {
+  const loadPath = async (path: string, draftRevision = pathDraftRevision): Promise<void> => {
     const loaded = await browser.load(path);
-    if (loaded) pathDraft.value = browser.path.value;
+    if (loaded && (!pathDraftEditing.value || pathDraftRevision === draftRevision)) {
+      pathDraft.value = browser.path.value;
+    }
   };
   const refresh = async (): Promise<void> => {
+    const draftRevision = pathDraftRevision;
     await enqueueNavigation(async () => {
       await browser.refresh();
-      if (!browser.error.value) pathDraft.value = browser.path.value;
+      if (!browser.error.value && (!pathDraftEditing.value || pathDraftRevision === draftRevision)) {
+        pathDraft.value = browser.path.value;
+      }
     });
   };
 
@@ -505,7 +512,7 @@
     }
   });
   watch(browser.path, (path) => {
-    pathDraft.value = path;
+    if (!pathDraftEditing.value) pathDraft.value = path;
     keyboardCursor.value = null;
     resetListScroll();
   });
@@ -936,8 +943,17 @@
     if (restore) pathDraft.value = browser.path.value;
   };
   const updatePathHistorySearch = () => {
+    pathDraftRevision += 1;
     catalog.historySearch.value = pathDraft.value;
     pathHistoryIndex.value = -1;
+  };
+  const beginPathEditing = () => {
+    pathDraftEditing.value = true;
+    void openPathHistory();
+  };
+  const endPathEditing = () => {
+    pathDraftEditing.value = false;
+    deferClosePathHistory();
   };
   const deferClosePathHistory = () => {
     if (pathHistoryCloseTimer !== undefined) window.clearTimeout(pathHistoryCloseTimer);
@@ -948,8 +964,9 @@
   };
   const navigatePathDraft = async (path = pathDraft.value) => {
     if (!path.trim()) return;
+    const draftRevision = pathDraftRevision;
     closePathHistory();
-    await enqueueNavigation(() => loadPath(path));
+    await enqueueNavigation(() => loadPath(path, draftRevision));
   };
   const handlePathInputKeydown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
@@ -994,11 +1011,12 @@
   const syncFromTerminal = async () => {
     if (!props.terminalDirectory || syncingTerminalPath.value) return;
     syncingTerminalPath.value = true;
+    const draftRevision = pathDraftRevision;
     try {
       const terminalDirectory = props.terminalDirectory;
       await enqueueNavigation(async () => {
         const path = await terminalDirectory.readCurrentDirectory();
-        if (path) await loadPath(path);
+        if (path) await loadPath(path, draftRevision);
       });
     } catch (cause) {
       feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
@@ -1007,7 +1025,8 @@
     }
   };
   const navigate = async (path: string) => {
-    await enqueueNavigation(() => loadPath(path));
+    const draftRevision = pathDraftRevision;
+    await enqueueNavigation(() => loadPath(path, draftRevision));
   };
   const sendPathToTerminal = async (path: string) => {
     if (!props.terminalDirectory || changingTerminalPath.value) return;
@@ -1302,11 +1321,11 @@
           type="text"
           class="min-w-0 flex-1 border-0 bg-transparent p-0.5 font-medium text-link outline-none"
           :title="t('fileManager.editPathTooltip')"
-          @focus="openPathHistory"
+          @focus="beginPathEditing"
           @click="openPathHistory"
           @input="updatePathHistorySearch"
           @keydown="handlePathInputKeydown"
-          @blur="deferClosePathHistory"
+          @blur="endPathEditing"
         />
         <PathHistoryDropdown
           :visible="pathHistoryOpen"

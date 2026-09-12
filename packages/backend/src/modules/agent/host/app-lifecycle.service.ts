@@ -7,6 +7,8 @@ import type { AgentAppDefinition, AppRecord, AppStatePatch, AppView } from './ap
 const QUIESCE_SECONDS = 10;
 
 export class AppLifecycleService {
+  private readonly initializationByUser = new Map<number, Promise<void>>();
+
   constructor(
     private readonly registry: AppRegistryService,
     private readonly states: AppStateRepositoryPort,
@@ -15,8 +17,19 @@ export class AppLifecycleService {
     private readonly onHostStateCommitted: (userId: number) => void = () => undefined,
   ) {}
 
-  async initializeDefaults(userId: number): Promise<void> {
-    for (const definition of this.registry.list()) await this.ensureDefault(userId, definition);
+  initializeDefaults(userId: number): Promise<void> {
+    const active = this.initializationByUser.get(userId);
+    if (active) return active;
+
+    const initialization = (async () => {
+      for (const definition of this.registry.list()) await this.ensureDefault(userId, definition);
+    })();
+    let shared!: Promise<void>;
+    shared = initialization.finally(() => {
+      if (this.initializationByUser.get(userId) === shared) this.initializationByUser.delete(userId);
+    });
+    this.initializationByUser.set(userId, shared);
+    return shared;
   }
 
   async list(userId: number): Promise<AppView[]> {

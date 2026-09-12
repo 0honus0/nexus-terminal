@@ -266,7 +266,7 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
     await this.db.execute(
       `INSERT INTO agent_plugin_versions
        (app_id,version,package_hash,publisher_key_id,manifest_json,frontend_entry,backend_entry,runner_entry,skill_files_json,status,installed_at,updated_at)
-       VALUES(?,?,?,?,?,?,?,?,?,?,?)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?)
        ON CONFLICT(app_id,version) DO UPDATE SET
          status=CASE
            WHEN agent_plugin_versions.status='installed' AND excluded.status='verified' THEN 'installed'

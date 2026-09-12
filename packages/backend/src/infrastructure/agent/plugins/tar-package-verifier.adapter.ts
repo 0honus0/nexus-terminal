@@ -33,11 +33,13 @@ const safeSegment = (value: string): string => {
   return value;
 };
 
-const safeArchivePath = (raw: string): string => {
+const safeArchivePath = (raw: string, directory = false): string => {
   if (!raw || raw.includes('\0') || raw.includes('\\') || path.posix.isAbsolute(raw) || /^[A-Za-z]:/.test(raw)) {
     throw new Error('PLUGIN_ARCHIVE_UNSAFE');
   }
-  const normalized = path.posix.normalize(raw.replace(/^\.\//, ''));
+  let canonical = raw.replace(/^\.\//, '');
+  if (directory && canonical.endsWith('/')) canonical = canonical.slice(0, -1);
+  const normalized = path.posix.normalize(canonical);
   if (normalized === '.' || normalized === '') return '.';
   const segments = normalized.split('/');
   if (normalized === '..' || normalized.startsWith('../') || segments.some((segment) => segment === '..' || !segment)) {
@@ -46,6 +48,8 @@ const safeArchivePath = (raw: string): string => {
   if (segments.length > MAX_DEPTH) throw new Error('PLUGIN_ARCHIVE_TOO_DEEP');
   return normalized;
 };
+
+const verifierError = (error: unknown): Error => (error instanceof Error ? error : new Error('PLUGIN_PACKAGE_INVALID'));
 
 const hashFile = async (filePath: string): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -226,28 +230,35 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
     const archiveFiles = new Set<string>();
     let entries = 0;
     let expandedBytes = 0;
+    let archiveValidationError: Error | null = null;
     try {
       await tar.t({
         file: archive,
         strict: true,
         maxDecompressionRatio: 100,
         onentry: (entry) => {
-          entries += 1;
-          if (entries > MAX_ENTRIES) throw new Error('PLUGIN_ARCHIVE_TOO_MANY_FILES');
-          const normalized = safeArchivePath(entry.path);
-          if (normalized !== '.' && archiveFiles.has(normalized)) throw new Error('PLUGIN_ARCHIVE_DUPLICATE_PATH');
-          if (normalized !== '.') archiveFiles.add(normalized);
-          if (entry.type !== 'File' && entry.type !== 'Directory') throw new Error('PLUGIN_ARCHIVE_UNSAFE');
-          if (entry.linkpath) throw new Error('PLUGIN_ARCHIVE_UNSAFE');
-          if (entry.type === 'File') {
-            if (!Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > MAX_SINGLE_FILE_BYTES) {
-              throw new Error('PLUGIN_ARCHIVE_FILE_TOO_LARGE');
+          if (archiveValidationError) return;
+          try {
+            entries += 1;
+            if (entries > MAX_ENTRIES) throw new Error('PLUGIN_ARCHIVE_TOO_MANY_FILES');
+            if (entry.type !== 'File' && entry.type !== 'Directory') throw new Error('PLUGIN_ARCHIVE_UNSAFE');
+            const normalized = safeArchivePath(entry.path, entry.type === 'Directory');
+            if (normalized !== '.' && archiveFiles.has(normalized)) throw new Error('PLUGIN_ARCHIVE_DUPLICATE_PATH');
+            if (normalized !== '.') archiveFiles.add(normalized);
+            if (entry.linkpath) throw new Error('PLUGIN_ARCHIVE_UNSAFE');
+            if (entry.type === 'File') {
+              if (!Number.isSafeInteger(entry.size) || entry.size < 0 || entry.size > MAX_SINGLE_FILE_BYTES) {
+                throw new Error('PLUGIN_ARCHIVE_FILE_TOO_LARGE');
+              }
+              expandedBytes += entry.size;
+              if (expandedBytes > MAX_EXPANDED_BYTES) throw new Error('PLUGIN_ARCHIVE_TOO_LARGE');
             }
-            expandedBytes += entry.size;
-            if (expandedBytes > MAX_EXPANDED_BYTES) throw new Error('PLUGIN_ARCHIVE_TOO_LARGE');
+          } catch (error) {
+            archiveValidationError = verifierError(error);
           }
         },
       });
+      if (archiveValidationError) throw archiveValidationError;
       for (const required of CONTROL_FILES) {
         if (!archiveFiles.has(required)) throw new Error('PLUGIN_CONTROL_FILE_MISSING');
       }
