@@ -298,7 +298,10 @@
       "maximize": "Agent を最大化または復元",
       "close": "Agent を閉じる",
       "resize": "Agent ウィンドウのサイズを変更",
-      "noSurface": "この Agent App には操作画面がありません。"
+      "noSurface": "この Agent App には操作画面がありません。",
+      "workspace": "Agent ワークスペース",
+      "views": "Agent ビュー",
+      "approvals": "承認待ち {count} 件"
     },
     "pluginFrontend": {
       "frameTitle": "Agent プラグイン UI",
@@ -313,7 +316,10 @@
       "targets": "SSH ターゲット",
       "targetsHint": "新しい Run を開始する前にターゲットを選択してください。サーバー側では Agent grant と denylist を引き続き強制します。",
       "noTargets": "利用可能な SSH 接続がありません。",
-      "reconciliationRequired": "この Run は、別の変更操作を送信する前に照合が必要です。"
+      "reconciliationRequired": "この Run は、別の変更操作を送信する前に照合が必要です。",
+      "untitledThread": "無題のスレッド",
+      "providerMissing": "モデル未設定",
+      "targetCount": "ターゲット {count} 件"
     },
     "files": {
       "search": "ファイルを検索",
@@ -332,7 +338,9 @@
       "retain": "保持",
       "unretain": "保持を解除",
       "download": "ダウンロード",
-      "loadMore": "さらに読み込む"
+      "loadMore": "さらに読み込む",
+      "libraryHint": "Agent Run で使用する永続ファイル、証拠、成果物を管理します。",
+      "empty": "現在のフィルターに一致するファイルはありません。"
     },
     "conversation": {
       "loadOlder": "以前のメッセージを読み込む",
@@ -346,7 +354,13 @@
         "assistant_message": "Assistant",
         "tool_result": "ツール結果",
         "system_notice": "システム"
-      }
+      },
+      "emptyTitle": "画面ではなく、成果から始める",
+      "emptyDescription": "達成したい結果を伝えてください。Agent は現在のコンテキスト、許可済みツール、検証可能な証拠を使って進めます。",
+      "capabilityContext": "コンテキスト認識",
+      "capabilityTools": "制御されたツール",
+      "capabilityEvidence": "結果を検証",
+      "sendHint": "Enter で送信"
     },
     "attachments": {
       "button": "ファイル ({count})",
@@ -404,7 +418,11 @@
       "saveCheckpoint": "チェックポイントを保存",
       "noCheckpoints": "保存済みチェックポイントはありません。",
       "checkpointWatermark": "Ledger #{ledger} · イベント #{event}",
-      "resumeCheckpoint": "新しい Run として再開"
+      "resumeCheckpoint": "新しい Run として再開",
+      "activity": "実行状態",
+      "openDetail": "詳細",
+      "closeDetail": "Run 詳細を閉じる",
+      "runOverview": "Run 概要"
     },
     "workspaceRuntime": {
       "title": "Workspace 開発環境",

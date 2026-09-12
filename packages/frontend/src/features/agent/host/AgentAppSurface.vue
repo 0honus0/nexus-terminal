@@ -503,90 +503,197 @@
 </script>
 
 <template>
-  <div class="relative grid h-full min-h-0 grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[220px_minmax(0,1fr)_270px]">
-    <aside class="min-h-0 overflow-y-auto border-r border-border bg-card p-3">
-      <div class="mb-3 flex items-center justify-between gap-2">
-        <strong class="text-sm">{{ $t('agent.operations.threads') }}</strong>
-        <button type="button" class="rounded px-2 py-1 text-xs hover:bg-header" :disabled="busy" @click="createThread">
-          {{ $t('agent.operations.newThread') }}
+  <div class="relative grid h-full min-h-0 grid-cols-[236px_minmax(0,1fr)] xl:grid-cols-[236px_minmax(0,1fr)_296px]">
+    <aside class="flex min-h-0 flex-col border-r border-border/80 bg-card/60">
+      <div class="flex h-12 shrink-0 items-center justify-between border-b border-border/70 px-3">
+        <div class="flex items-center gap-2">
+          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-[10px] text-primary">
+            <i class="fa-regular fa-comments" aria-hidden="true"></i>
+          </div>
+          <div>
+            <strong class="block text-xs leading-none">{{ $t('agent.operations.threads') }}</strong>
+            <span class="mt-1 block text-[9px] text-text-secondary">{{ threads.length }}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="flex h-7 w-7 items-center justify-center rounded-lg border border-border bg-background text-[10px] text-text-secondary hover:bg-header hover:text-foreground disabled:opacity-50"
+          :aria-label="$t('agent.operations.newThread')"
+          :title="$t('agent.operations.newThread')"
+          :disabled="busy"
+          @click="createThread"
+        >
+          <i class="fa-solid fa-plus" aria-hidden="true"></i>
         </button>
       </div>
-      <button
-        v-for="thread in threads"
-        :key="thread.id"
-        type="button"
-        class="mb-1 w-full truncate rounded-md px-2 py-2 text-left text-xs hover:bg-header"
-        :class="currentThread?.id === thread.id ? 'bg-header font-medium' : ''"
-        @click="selectThread(thread)"
-      >
-        {{ thread.title }}
-      </button>
-      <div class="mt-4 border-t border-border pt-3">
-        <strong class="text-xs">{{ $t('agent.operations.targets') }}</strong>
-        <p class="mt-1 text-[11px] text-text-secondary">{{ $t('agent.operations.targetsHint') }}</p>
-        <label
-          v-for="connection in connections"
-          :key="connection.id"
-          class="mt-2 flex cursor-pointer items-start gap-2 rounded px-1 py-1 text-xs hover:bg-header"
+
+      <div class="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <button
+          v-for="thread in threads"
+          :key="thread.id"
+          type="button"
+          class="group mb-1 flex w-full items-center gap-2 rounded-xl border px-2 py-2.5 text-left transition-colors"
+          :class="
+            currentThread?.id === thread.id
+              ? 'border-primary/20 bg-primary/10 text-foreground'
+              : 'border-transparent text-text-secondary hover:border-border hover:bg-background hover:text-foreground'
+          "
+          @click="selectThread(thread)"
         >
-          <input
-            v-model="selectedConnectionIds"
-            type="checkbox"
-            :value="connection.id"
-            :disabled="Boolean(run && nonTerminal.has(run.status))"
-          />
-          <span class="min-w-0">
-            <span class="block truncate">{{ connection.name || connection.host }}</span>
-            <span class="block truncate text-[10px] text-text-secondary"
-              >{{ connection.host }}:{{ connection.port }}</span
-            >
+          <span
+            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold"
+            :class="currentThread?.id === thread.id ? 'bg-primary text-white' : 'bg-header text-text-secondary'"
+          >
+            {{ (thread.title || $t('agent.operations.untitledThread')).slice(0, 1).toUpperCase() }}
           </span>
-        </label>
-        <p v-if="connections.length === 0" class="mt-2 text-[11px] text-text-secondary">
-          {{ $t('agent.operations.noTargets') }}
-        </p>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[11px] font-medium">{{
+              thread.title || $t('agent.operations.untitledThread')
+            }}</span>
+            <span class="mt-0.5 block truncate text-[8px] opacity-70">{{ thread.id }}</span>
+          </span>
+          <i
+            v-if="currentThread?.id === thread.id"
+            class="fa-solid fa-chevron-right text-[8px] text-primary"
+            aria-hidden="true"
+          ></i>
+        </button>
+      </div>
+
+      <div class="shrink-0 border-t border-border/70 p-3">
+        <div class="flex items-center gap-1.5 text-[10px] font-medium">
+          <i class="fa-solid fa-server text-[9px] text-text-secondary" aria-hidden="true"></i>
+          {{ $t('agent.operations.targets') }}
+          <span class="ml-auto rounded-full bg-header px-1.5 py-0.5 text-[8px] text-text-secondary">
+            {{ selectedConnectionIds.length }}/{{ connections.length }}
+          </span>
+        </div>
+        <p class="mt-1 text-[9px] leading-4 text-text-secondary">{{ $t('agent.operations.targetsHint') }}</p>
+        <div class="mt-2 max-h-36 space-y-1 overflow-y-auto">
+          <label
+            v-for="connection in connections"
+            :key="connection.id"
+            class="flex cursor-pointer items-start gap-2 rounded-lg border border-transparent px-2 py-1.5 text-[10px] hover:border-border hover:bg-background"
+          >
+            <input
+              v-model="selectedConnectionIds"
+              type="checkbox"
+              class="mt-0.5"
+              :value="connection.id"
+              :disabled="Boolean(run && nonTerminal.has(run.status))"
+            />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate font-medium">{{ connection.name || connection.host }}</span>
+              <span class="mt-0.5 block truncate text-[8px] text-text-secondary"
+                >{{ connection.host }}:{{ connection.port }}</span
+              >
+            </span>
+          </label>
+          <p v-if="connections.length === 0" class="rounded-lg bg-background px-2 py-2 text-[9px] text-text-secondary">
+            {{ $t('agent.operations.noTargets') }}
+          </p>
+        </div>
       </div>
     </aside>
 
-    <main class="min-h-0 min-w-0">
-      <div v-if="loading" class="flex h-full items-center justify-center text-sm text-text-secondary">
-        {{ $t('agent.operations.loading') }}
-      </div>
-      <div
-        v-else-if="error && entries.length === 0"
-        class="flex h-full items-center justify-center p-6 text-sm text-error"
-      >
-        {{ error }}
-      </div>
-      <div v-else class="relative h-full min-h-0">
-        <div
-          v-if="error"
-          class="absolute left-4 right-4 top-3 z-10 rounded-md border border-error/30 bg-error/10 px-3 py-2 text-xs text-error"
-        >
-          {{ error }}
+    <main class="flex min-h-0 min-w-0 flex-col bg-background">
+      <header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-card/30 px-3">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <strong class="truncate text-[11px]">{{
+              currentThread?.title || $t('agent.operations.untitledThread')
+            }}</strong>
+            <span
+              v-if="run"
+              class="shrink-0 rounded-full px-2 py-0.5 text-[8px] font-medium"
+              :class="
+                run.status === 'running'
+                  ? 'bg-success/10 text-success'
+                  : run.status === 'awaiting_approval' || run.status === 'awaiting_budget'
+                    ? 'bg-warning/10 text-warning'
+                    : run.status === 'failed'
+                      ? 'bg-error/10 text-error'
+                      : 'bg-header text-text-secondary'
+              "
+            >
+              {{ $t(`agent.tasks.runStatus.${run.status}`) }}
+            </span>
+          </div>
+          <div class="mt-1 flex items-center gap-2 text-[8px] text-text-secondary">
+            <span v-if="providerSelection" class="truncate">
+              {{ providerSelection.provider.displayName }} · {{ providerSelection.model.id }}
+            </span>
+            <span v-else>{{ $t('agent.operations.providerMissing') }}</span>
+            <span v-if="selectedConnectionIds.length"
+              >· {{ $t('agent.operations.targetCount', { count: selectedConnectionIds.length }) }}</span
+            >
+          </div>
+        </div>
+        <div class="flex shrink-0 items-center gap-1.5">
+          <button
+            v-if="run"
+            type="button"
+            class="flex h-7 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[9px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
+            @click="openRunDetail(run)"
+          >
+            <i class="fa-solid fa-bars-progress text-[8px]" aria-hidden="true"></i>
+            {{ $t('agent.tasks.openDetail') }}
+          </button>
+          <span
+            v-if="attachments.length"
+            class="hidden rounded-full bg-primary/10 px-2 py-1 text-[8px] font-medium text-primary sm:inline"
+          >
+            <i class="fa-solid fa-paperclip mr-1" aria-hidden="true"></i>{{ attachments.length }}
+          </span>
+        </div>
+      </header>
+
+      <div class="relative min-h-0 flex-1">
+        <div v-if="loading" class="flex h-full items-center justify-center">
+          <div class="flex flex-col items-center gap-3 text-text-secondary">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i>
+            </div>
+            <span class="text-[10px]">{{ $t('agent.operations.loading') }}</span>
+          </div>
         </div>
         <div
-          v-if="run?.needsReconciliation || runtimeOperation.phase.value === 'reconciling'"
-          class="absolute left-4 right-4 top-14 z-10 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning"
+          v-else-if="error && entries.length === 0"
+          class="flex h-full items-center justify-center p-6 text-center text-sm text-error"
         >
-          {{ $t('agent.operations.reconciliationRequired') }}
+          <div class="max-w-sm rounded-xl border border-error/30 bg-error/10 px-4 py-3">{{ error }}</div>
         </div>
-        <AgentConversation
-          :app-id="appId"
-          :entries="entries"
-          :next-cursor="nextCursor"
-          :run="run"
-          :streaming-text="streamingText"
-          :draft="draft"
-          :busy="mutationLocked"
-          :can-send="canSend"
-          :attachments="attachments"
-          @load-older="loadOlder"
-          @send="send"
-          @cancel="cancel"
-          @update-draft="updateDraft"
-          @update-attachments="attachments = $event"
-        />
+        <div v-else class="relative h-full min-h-0">
+          <div
+            v-if="error"
+            class="absolute left-4 right-4 top-3 z-10 rounded-xl border border-error/30 bg-background/95 px-3 py-2 text-[10px] text-error shadow-lg"
+          >
+            <i class="fa-solid fa-circle-exclamation mr-1.5" aria-hidden="true"></i>{{ error }}
+          </div>
+          <div
+            v-if="run?.needsReconciliation || runtimeOperation.phase.value === 'reconciling'"
+            class="absolute left-4 right-4 top-14 z-10 rounded-xl border border-warning/40 bg-background/95 px-3 py-2 text-[10px] text-warning shadow-lg"
+          >
+            <i class="fa-solid fa-triangle-exclamation mr-1.5" aria-hidden="true"></i>
+            {{ $t('agent.operations.reconciliationRequired') }}
+          </div>
+          <AgentConversation
+            :app-id="appId"
+            :entries="entries"
+            :next-cursor="nextCursor"
+            :run="run"
+            :streaming-text="streamingText"
+            :draft="draft"
+            :busy="mutationLocked"
+            :can-send="canSend"
+            :attachments="attachments"
+            @load-older="loadOlder"
+            @send="send"
+            @cancel="cancel"
+            @update-draft="updateDraft"
+            @update-attachments="attachments = $event"
+          />
+        </div>
       </div>
     </main>
 

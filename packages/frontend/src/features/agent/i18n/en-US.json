@@ -298,7 +298,10 @@
       "maximize": "Maximize or restore Agent",
       "close": "Close Agent",
       "resize": "Resize Agent",
-      "noSurface": "This Agent App does not provide an interactive surface."
+      "noSurface": "This Agent App does not provide an interactive surface.",
+      "workspace": "Agent workspace",
+      "views": "Agent views",
+      "approvals": "{count} approvals"
     },
     "pluginFrontend": {
       "frameTitle": "Agent plugin UI",
@@ -313,7 +316,10 @@
       "targets": "SSH targets",
       "targetsHint": "Choose targets before starting a new Run. The server still enforces Agent grants and the denylist.",
       "noTargets": "No SSH connections are available.",
-      "reconciliationRequired": "This Run requires reconciliation before another mutation can be sent."
+      "reconciliationRequired": "This Run requires reconciliation before another mutation can be sent.",
+      "untitledThread": "Untitled thread",
+      "providerMissing": "No model configured",
+      "targetCount": "{count} targets"
     },
     "files": {
       "search": "Search files",
@@ -332,7 +338,9 @@
       "retain": "Retain",
       "unretain": "Release retention",
       "download": "Download",
-      "loadMore": "Load more"
+      "loadMore": "Load more",
+      "libraryHint": "Durable artifacts, evidence, and files shared with Agent runs.",
+      "empty": "No files match the current filters."
     },
     "conversation": {
       "loadOlder": "Load older messages",
@@ -346,7 +354,13 @@
         "assistant_message": "Assistant",
         "tool_result": "Tool result",
         "system_notice": "System"
-      }
+      },
+      "emptyTitle": "Start with the outcome, not the interface",
+      "emptyDescription": "Describe the result you want. Agent will work with the current context, authorized tools, and verifiable evidence.",
+      "capabilityContext": "Context aware",
+      "capabilityTools": "Controlled tools",
+      "capabilityEvidence": "Verified outcomes",
+      "sendHint": "Enter to send"
     },
     "attachments": {
       "button": "Files ({count})",
@@ -404,7 +418,11 @@
       "saveCheckpoint": "Save checkpoint",
       "noCheckpoints": "No saved checkpoints.",
       "checkpointWatermark": "Ledger #{ledger} · event #{event}",
-      "resumeCheckpoint": "Resume as new run"
+      "resumeCheckpoint": "Resume as new run",
+      "activity": "Execution state",
+      "openDetail": "Details",
+      "closeDetail": "Close run details",
+      "runOverview": "Run overview"
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",

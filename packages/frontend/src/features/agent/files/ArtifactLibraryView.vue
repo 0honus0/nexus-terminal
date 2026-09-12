@@ -122,22 +122,76 @@
 
 <template>
   <section class="flex h-full min-h-0 flex-col bg-background">
-    <header class="shrink-0 border-b border-border bg-card p-3">
-      <div class="flex flex-wrap items-center gap-2">
-        <input
-          v-model="query"
-          type="search"
-          class="min-w-48 flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
-          :placeholder="$t('agent.files.search')"
-          @keydown.enter="load"
-        />
-        <select v-model="appId" class="rounded-md border border-border bg-background px-2 py-2 text-sm" @change="load">
+    <header class="shrink-0 border-b border-border/70 bg-card/60 px-4 py-3">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-[11px] text-primary">
+              <i class="fa-regular fa-folder-open" aria-hidden="true"></i>
+            </div>
+            <div>
+              <h2 class="text-sm font-semibold">{{ $t('agent.hub.files') }}</h2>
+              <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.files.libraryHint') }}</p>
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          class="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[10px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
+          :disabled="busy"
+          @click="previewCleanup"
+        >
+          <i class="fa-solid fa-broom text-[9px]" aria-hidden="true"></i>
+          {{ $t('agent.files.cleanup') }}
+        </button>
+      </div>
+
+      <div v-if="storage" class="mt-3 grid grid-cols-3 gap-2">
+        <div class="rounded-xl border border-border/70 bg-background px-3 py-2">
+          <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+            {{ $t('agent.files.used') }}
+          </div>
+          <div class="mt-1 text-xs font-semibold">{{ bytes(storage.totalBytes) }}</div>
+        </div>
+        <div class="rounded-xl border border-border/70 bg-background px-3 py-2">
+          <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+            {{ $t('agent.files.protected') }}
+          </div>
+          <div class="mt-1 text-xs font-semibold">{{ bytes(storage.protectedBytes) }}</div>
+        </div>
+        <div class="rounded-xl border border-border/70 bg-background px-3 py-2">
+          <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+            {{ $t('agent.files.reclaimable') }}
+          </div>
+          <div class="mt-1 text-xs font-semibold">{{ bytes(storage.reclaimableBytes) }}</div>
+        </div>
+      </div>
+
+      <div class="mt-3 flex flex-wrap items-center gap-2">
+        <div class="relative min-w-52 flex-1">
+          <i
+            class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[9px] text-text-secondary"
+            aria-hidden="true"
+          ></i>
+          <input
+            v-model="query"
+            type="search"
+            class="w-full rounded-xl border border-border bg-background py-2 pl-8 pr-3 text-[11px] outline-none focus:border-primary"
+            :placeholder="$t('agent.files.search')"
+            @keydown.enter="load"
+          />
+        </div>
+        <select
+          v-model="appId"
+          class="rounded-xl border border-border bg-background px-2.5 py-2 text-[10px]"
+          @change="load"
+        >
           <option value="">{{ $t('agent.files.allApps') }}</option>
           <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.displayName }}</option>
         </select>
         <select
           v-model="retained"
-          class="rounded-md border border-border bg-background px-2 py-2 text-sm"
+          class="rounded-xl border border-border bg-background px-2.5 py-2 text-[10px]"
           @change="load"
         >
           <option value="all">{{ $t('agent.files.allRetention') }}</option>
@@ -146,29 +200,19 @@
         </select>
         <button
           type="button"
-          class="rounded-md border border-border px-3 py-2 text-sm hover:bg-header"
+          class="rounded-xl bg-primary px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-50"
           :disabled="busy"
           @click="load"
         >
           {{ $t('agent.files.searchAction') }}
         </button>
-        <button
-          type="button"
-          class="rounded-md border border-border px-3 py-2 text-sm hover:bg-header"
-          :disabled="busy"
-          @click="previewCleanup"
-        >
-          {{ $t('agent.files.cleanup') }}
-        </button>
       </div>
-      <div v-if="storage" class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-text-secondary">
-        <span>{{ $t('agent.files.used') }} {{ bytes(storage.totalBytes) }}</span>
-        <span>{{ $t('agent.files.protected') }} {{ bytes(storage.protectedBytes) }}</span>
-        <span>{{ $t('agent.files.reclaimable') }} {{ bytes(storage.reclaimableBytes) }}</span>
-      </div>
-      <p v-if="error" class="mt-2 text-xs text-error">{{ error }}</p>
-      <p v-if="notice" class="mt-2 text-xs text-success">{{ $t('agent.files.cleanupDone', { count: notice }) }}</p>
-      <div v-if="cleanupPreview" class="mt-3 rounded-md border border-warning/40 bg-warning/10 p-3 text-sm">
+
+      <p v-if="error" class="mt-2 rounded-lg bg-error/10 px-3 py-2 text-[10px] text-error">{{ error }}</p>
+      <p v-if="notice" class="mt-2 rounded-lg bg-success/10 px-3 py-2 text-[10px] text-success">
+        {{ $t('agent.files.cleanupDone', { count: notice }) }}
+      </p>
+      <div v-if="cleanupPreview" class="mt-3 rounded-xl border border-warning/40 bg-warning/10 p-3 text-[10px]">
         <p>
           {{
             $t('agent.files.cleanupPreview', {
@@ -179,12 +223,12 @@
           }}
         </p>
         <div class="mt-2 flex justify-end gap-2">
-          <button type="button" class="rounded px-3 py-1.5 text-sm hover:bg-header" @click="cleanupPreview = null">
+          <button type="button" class="rounded-lg px-2.5 py-1.5 hover:bg-header" @click="cleanupPreview = null">
             {{ $t('common.cancel') }}
           </button>
           <button
             type="button"
-            class="rounded bg-error px-3 py-1.5 text-sm text-white disabled:opacity-50"
+            class="rounded-lg bg-error px-2.5 py-1.5 font-semibold text-white disabled:opacity-50"
             :disabled="busy"
             @click="confirmCleanup"
           >
@@ -194,39 +238,70 @@
       </div>
     </header>
 
-    <RecycleScroller class="min-h-0 flex-1 overflow-y-auto" :items="items" :item-size="68" key-field="id">
+    <div
+      v-if="items.length === 0 && !busy"
+      class="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center"
+    >
+      <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-header text-text-secondary">
+        <i class="fa-regular fa-file-lines" aria-hidden="true"></i>
+      </div>
+      <p class="mt-3 text-[10px] text-text-secondary">{{ $t('agent.files.empty') }}</p>
+    </div>
+
+    <RecycleScroller
+      v-else
+      class="min-h-0 flex-1 overflow-y-auto px-3 py-2"
+      :items="items"
+      :item-size="76"
+      key-field="id"
+    >
       <template #default="{ item }">
-        <article class="flex h-[68px] items-center gap-3 border-b border-border px-4">
-          <i class="fa-regular fa-file shrink-0 text-text-secondary" aria-hidden="true"></i>
+        <article
+          class="my-1 flex h-[68px] items-center gap-3 rounded-xl border border-border/70 bg-card/60 px-3 transition-colors hover:bg-card"
+        >
+          <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-header text-text-secondary">
+            <i class="fa-regular fa-file-lines" aria-hidden="true"></i>
+          </div>
           <div class="min-w-0 flex-1">
-            <div class="truncate text-sm font-medium">{{ item.originalName }}</div>
-            <div class="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-text-secondary">
-              <span>{{ item.appId }}</span>
-              <span>{{ bytes(item.sizeBytes) }}</span>
-              <span>{{ item.mediaType }}</span>
-              <span>{{ item.status }}</span>
+            <div class="truncate text-[11px] font-semibold">{{ item.originalName }}</div>
+            <div class="mt-1 flex flex-wrap items-center gap-x-2 text-[8px] text-text-secondary">
+              <span class="rounded bg-header px-1.5 py-0.5">{{ item.appId }}</span>
+              <span>{{ bytes(item.sizeBytes) }}</span
+              ><span>{{ item.mediaType }}</span
+              ><span>{{ item.status }}</span>
             </div>
           </div>
           <button
             type="button"
-            class="rounded px-2 py-1 text-xs hover:bg-header"
+            class="rounded-lg border border-border px-2.5 py-1.5 text-[9px] font-medium hover:bg-header disabled:opacity-40"
             :disabled="busy || item.status !== 'ready'"
             @click="toggleRetain(item)"
           >
-            {{ item.retained ? $t('agent.files.unretain') : $t('agent.files.retain') }}
+            <i
+              :class="item.retained ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'"
+              class="mr-1"
+              aria-hidden="true"
+            ></i
+            >{{ item.retained ? $t('agent.files.unretain') : $t('agent.files.retain') }}
           </button>
           <a
-            class="rounded px-2 py-1 text-xs hover:bg-header"
+            class="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary hover:bg-header hover:text-foreground"
             :class="item.status === 'ready' ? '' : 'pointer-events-none opacity-40'"
             :href="downloadUrl(item)"
-            >{{ $t('agent.files.download') }}</a
-          >
+            :title="$t('agent.files.download')"
+            ><i class="fa-solid fa-download text-[9px]" aria-hidden="true"></i
+          ></a>
         </article>
       </template>
     </RecycleScroller>
 
-    <footer v-if="nextCursor" class="shrink-0 border-t border-border p-2 text-center">
-      <button type="button" class="rounded-md px-3 py-1.5 text-xs hover:bg-header" :disabled="busy" @click="loadMore">
+    <footer v-if="nextCursor" class="shrink-0 border-t border-border/70 p-2 text-center">
+      <button
+        type="button"
+        class="rounded-lg px-3 py-1.5 text-[10px] hover:bg-header"
+        :disabled="busy"
+        @click="loadMore"
+      >
         {{ $t('agent.files.loadMore') }}
       </button>
     </footer>

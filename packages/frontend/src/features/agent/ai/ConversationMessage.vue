@@ -13,22 +13,46 @@
     }
     return typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
   });
-  const roleClass = computed(() =>
-    props.entry.kind === 'user_input'
-      ? 'ml-auto bg-primary text-white'
-      : props.entry.kind === 'tool_result'
-        ? 'bg-header text-foreground'
-        : 'bg-card text-foreground',
-  );
+  const isUser = computed(() => props.entry.kind === 'user_input');
+  const icon = computed(() => {
+    if (props.entry.kind === 'user_input') return 'fa-solid fa-user';
+    if (props.entry.kind === 'tool_result') return 'fa-solid fa-terminal';
+    if (props.entry.kind === 'system_notice') return 'fa-solid fa-circle-info';
+    return 'fa-solid fa-wand-magic-sparkles';
+  });
 </script>
 
 <template>
-  <article class="flex" :class="entry.kind === 'user_input' ? 'justify-end' : 'justify-start'">
-    <div class="max-w-[88%] rounded-xl border border-border/60 px-3 py-2 text-sm shadow-sm" :class="roleClass">
-      <div class="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-70">
-        {{ $t(`agent.conversation.kind.${entry.kind}`) }}
+  <article class="mx-auto flex w-full max-w-3xl gap-3" :class="isUser ? 'flex-row-reverse' : ''">
+    <div
+      class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10px]"
+      :class="isUser ? 'bg-primary text-white' : 'border border-border bg-card text-text-secondary'"
+    >
+      <i :class="icon" aria-hidden="true"></i>
+    </div>
+    <div class="min-w-0" :class="isUser ? 'max-w-[82%]' : 'max-w-[calc(100%-40px)] flex-1'">
+      <div
+        class="mb-1 flex items-center gap-2 text-[10px] font-semibold text-text-secondary"
+        :class="isUser ? 'justify-end' : ''"
+      >
+        <span>{{ $t(`agent.conversation.kind.${entry.kind}`) }}</span>
+        <span class="h-1 w-1 rounded-full bg-border"></span>
+        <span class="font-normal">#{{ entry.sequence }}</span>
       </div>
-      <pre class="whitespace-pre-wrap break-words font-sans">{{ text }}</pre>
+      <div
+        class="text-sm leading-6"
+        :class="
+          isUser
+            ? 'rounded-2xl rounded-tr-md bg-primary px-3.5 py-2.5 text-white shadow-sm'
+            : entry.kind === 'tool_result'
+              ? 'rounded-xl border border-border bg-card/60 px-3.5 py-2.5 font-mono text-[12px]'
+              : entry.kind === 'system_notice'
+                ? 'rounded-xl border border-border/70 bg-header/40 px-3.5 py-2.5 text-text-secondary'
+                : 'px-1 py-1 text-foreground'
+        "
+      >
+        <pre class="whitespace-pre-wrap break-words font-sans">{{ text }}</pre>
+      </div>
     </div>
   </article>
 </template>

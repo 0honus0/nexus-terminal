@@ -291,6 +291,55 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.developer');
     await expect(hub.getByText('Preset E2E thread', { exact: true })).toBeVisible();
     await expect(hub.getByText('OK', { exact: true })).toBeVisible();
+    await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
+    await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
+
+    const composer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
+    await composer.fill('Confirm the Agent composer can start the next Run from the current thread.');
+    await hub.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(
+      hub.getByText('Confirm the Agent composer can start the next Run from the current thread.', { exact: true }),
+    ).toBeVisible();
+    await expect(hub.getByText('OK', { exact: true })).toHaveCount(2, { timeout: 30_000 });
     await captureFunctionalScreenshot(page, 'agent-developer-preset.png', { viewport: { width: 1440, height: 900 } });
+
+    await step('completed Runs expose details, checkpoints, Workspace Runtime, and Subagent surfaces', async () => {
+      await hub.getByRole('button', { name: 'Details', exact: true }).first().click();
+      const drawer = hub.getByLabel('Run details', { exact: true });
+      await expect(drawer).toBeVisible();
+      await expect(drawer.getByText('Run overview', { exact: true })).toBeVisible();
+      await expect(drawer.getByText('Checkpoints', { exact: true })).toBeVisible();
+      await expect(drawer.getByText('Workspace dev environment', { exact: true })).toBeVisible();
+      await expect(drawer.getByText('Subagent', { exact: true })).toBeVisible();
+      await captureFunctionalScreenshot(page, 'agent-run-details.png', { viewport: { width: 1440, height: 900 } });
+
+      await drawer.getByRole('button', { name: 'Save checkpoint', exact: true }).click();
+      await expect(drawer.getByRole('button', { name: 'Resume as new run', exact: true })).toBeVisible();
+      await captureFunctionalScreenshot(page, 'agent-checkpoint-recovery.png', {
+        viewport: { width: 1440, height: 900 },
+      });
+      await drawer.getByRole('button', { name: 'Close run details', exact: true }).click();
+      await expect(drawer).toHaveCount(0);
+    });
+
+    await step('Artifact upload flows into the unified Agent file library', async () => {
+      await hub.getByRole('button', { name: 'Files (0)', exact: true }).click();
+      await hub.locator('input[type="file"]').setInputFiles({
+        name: 'agent-ui-evidence.txt',
+        mimeType: 'text/plain',
+        buffer: Buffer.from('Agent UI functional evidence\n'),
+      });
+      await expect(hub.getByRole('button', { name: 'Files (1)', exact: true })).toBeVisible();
+      await hub.getByRole('button', { name: 'Files (1)', exact: true }).click();
+      await hub
+        .getByRole('navigation', { name: 'Agent views' })
+        .getByRole('button', { name: 'Files', exact: true })
+        .click();
+      await expect(hub.getByText('agent-ui-evidence.txt', { exact: true })).toBeVisible();
+      const artifactRow = hub.getByText('agent-ui-evidence.txt', { exact: true }).locator('..').locator('..');
+      await artifactRow.getByRole('button', { name: 'Retain', exact: true }).click();
+      await expect(artifactRow.getByRole('button', { name: 'Release retention', exact: true })).toBeVisible();
+      await captureFunctionalScreenshot(page, 'agent-artifact-library.png', { viewport: { width: 1440, height: 900 } });
+    });
   });
 });

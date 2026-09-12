@@ -1,6 +1,7 @@
 import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
+import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import type { APIRequestContext, Page, WebSocket as PlaywrightWebSocket, WebSocketRoute } from '@playwright/test';
 
 type AgentEnvelope<T> = { data: T; requestId: string };
@@ -33,6 +34,55 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
 
   await launcher.click();
   await expect(hub).toBeVisible();
+});
+
+test('Agent settings surface exposes the production control plane and captures functional evidence', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+
+  const panel = page.locator('#settings-panel-agent');
+  await expect(panel).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Agent feature', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
+  const providersHeading = panel.getByRole('heading', { name: 'Model providers', exact: true });
+  await expect(providersHeading).toBeVisible();
+  const providersSection = providersHeading.locator('xpath=ancestor::section[1]');
+  await providersSection.getByRole('button', { name: 'Add provider', exact: true }).click();
+  await providersSection.getByLabel('Display name', { exact: true }).fill('Settings UI Provider');
+  await providersSection.getByLabel('Base URL', { exact: true }).fill('http://127.0.0.1:29091/v1');
+  await providersSection.getByLabel('Credential', { exact: true }).fill('e2e-provider-secret');
+  await providersSection.getByLabel('Model ID', { exact: true }).fill('e2e-model');
+  await providersSection.getByLabel('Private host:port exceptions', { exact: true }).fill('127.0.0.1:29091');
+  await providersSection.getByRole('button', { name: 'Create provider', exact: true }).click();
+  await expect(providersSection.getByText('Settings UI Provider', { exact: true })).toBeVisible();
+  await providersSection.getByRole('button', { name: 'e2e-model · Test', exact: true }).click();
+  await expect(panel.getByText(/Provider OK/)).toBeVisible();
+  await captureFunctionalScreenshot(page, 'agent-settings-overview.png', { viewport: { width: 1440, height: 900 } });
+
+  const subagents = panel.getByRole('heading', { name: 'Subagents', exact: true });
+  await subagents.scrollIntoViewIfNeeded();
+  await expect(subagents).toBeVisible();
+  await expect(panel.getByText('Phase 3', { exact: true })).toBeVisible();
+  const subagentSection = subagents.locator('xpath=ancestor::section[1]');
+  await subagentSection.getByRole('button', { name: 'Add profile', exact: true }).click();
+  await expect(subagentSection.getByDisplayValue('worker-1')).toBeVisible();
+  await expect(subagentSection.getByDisplayValue('Bounded child agent')).toBeVisible();
+  await subagentSection.getByRole('button', { name: 'Save profiles', exact: true }).click();
+  await expect(subagentSection.getByDisplayValue('worker-1')).toBeVisible();
+  await captureFunctionalScreenshot(page, 'agent-settings-subagents.png', { viewport: { width: 1440, height: 900 } });
+
+  const workspace = panel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
+  await workspace.scrollIntoViewIfNeeded();
+  await expect(workspace).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Browser Runtime', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'ACP Runtime', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'Safety and network', exact: true })).toBeAttached();
+  await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 });
 
 const csrfToken = async (request: import('@playwright/test').APIRequestContext): Promise<string> => {

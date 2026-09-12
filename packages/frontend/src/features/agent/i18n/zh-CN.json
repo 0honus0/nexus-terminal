@@ -298,7 +298,10 @@
       "maximize": "最大化或还原 Agent",
       "close": "关闭 Agent",
       "resize": "调整 Agent 窗口大小",
-      "noSurface": "此 Agent App 未提供可交互界面。"
+      "noSurface": "此 Agent App 未提供可交互界面。",
+      "workspace": "Agent 工作区",
+      "views": "Agent 视图",
+      "approvals": "{count} 个待审批"
     },
     "pluginFrontend": {
       "frameTitle": "Agent 插件界面",
@@ -313,7 +316,10 @@
       "targets": "SSH 目标",
       "targetsHint": "请在新 Run 启动前选择目标；服务端仍会强制检查 Agent grant 与 denylist。",
       "noTargets": "当前没有可用的 SSH 连接。",
-      "reconciliationRequired": "此 Run 需要先完成对账，才能发送新的修改操作。"
+      "reconciliationRequired": "此 Run 需要先完成对账，才能发送新的修改操作。",
+      "untitledThread": "未命名会话",
+      "providerMissing": "尚未配置模型",
+      "targetCount": "{count} 个目标"
     },
     "files": {
       "search": "搜索文件",
@@ -332,7 +338,9 @@
       "retain": "保留",
       "unretain": "解除保留",
       "download": "下载",
-      "loadMore": "加载更多"
+      "loadMore": "加载更多",
+      "libraryHint": "管理 Agent Run 使用的持久文件、证据与产物。",
+      "empty": "当前筛选条件下没有文件。"
     },
     "conversation": {
       "loadOlder": "加载更早消息",
@@ -346,7 +354,13 @@
         "assistant_message": "Assistant",
         "tool_result": "工具结果",
         "system_notice": "系统"
-      }
+      },
+      "emptyTitle": "从目标开始，而不是从界面开始",
+      "emptyDescription": "描述你希望完成的结果。Agent 会使用当前上下文、已授权工具和可验证证据推进任务。",
+      "capabilityContext": "上下文感知",
+      "capabilityTools": "受控工具",
+      "capabilityEvidence": "结果验证",
+      "sendHint": "Enter 发送"
     },
     "attachments": {
       "button": "文件（{count}）",
@@ -404,7 +418,11 @@
       "saveCheckpoint": "保存检查点",
       "noCheckpoints": "暂无已保存检查点。",
       "checkpointWatermark": "Ledger #{ledger} · 事件 #{event}",
-      "resumeCheckpoint": "恢复为新 Run"
+      "resumeCheckpoint": "恢复为新 Run",
+      "activity": "执行状态",
+      "openDetail": "详情",
+      "closeDetail": "关闭 Run 详情",
+      "runOverview": "Run 概览"
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",
