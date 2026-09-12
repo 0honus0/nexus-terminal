@@ -13,11 +13,11 @@
     "tests/ui/ip-whitelist-settings.spec.ts",
     "tests/ui/protected-navigation.spec.ts",
     "tests/ui/ssh-key-management.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts",
-    "tests/ssh/panel-wheel-scaling.spec.ts",
-    "tests/ssh/terminal-protocol.spec.ts",
-    "tests/ssh/terminal-tools-ui.spec.ts",
-    "tests/ssh/terminal-ui.spec.ts"
+    "tests/websocket/authenticated-session.spec.ts",
+    "tests/ssh/connection-edit-delete.spec.ts",
+    "tests/ssh/connection-list-search.spec.ts",
+    "tests/ssh/connection.spec.ts",
+    "tests/ssh/reconnect-ui.spec.ts",
+    "tests/ssh/progress-display-archive-cancel.spec.ts"
   ]
 }
