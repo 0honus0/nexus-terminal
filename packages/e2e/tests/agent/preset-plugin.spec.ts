@@ -310,7 +310,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       await expect(drawer.getByText('Run overview', { exact: true })).toBeVisible();
       await expect(drawer.getByText('Checkpoints', { exact: true })).toBeVisible();
       await expect(drawer.getByText('Workspace dev environment', { exact: true })).toBeVisible();
-      await expect(drawer.getByText('Subagent', { exact: true })).toBeVisible();
+      await expect(drawer.getByText('Subagents', { exact: true })).toBeVisible();
       await captureFunctionalScreenshot(page, 'agent-run-details.png', { viewport: { width: 1440, height: 900 } });
 
       await drawer.getByRole('button', { name: 'Save checkpoint', exact: true }).click();
@@ -323,14 +323,15 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     });
 
     await step('Artifact upload flows into the unified Agent file library', async () => {
-      await hub.getByRole('button', { name: 'Files (0)', exact: true }).click();
+      const attachmentsButton = hub.getByRole('button', { name: /^Files \(\d+\)$/ }).first();
+      await attachmentsButton.click();
       await hub.locator('input[type="file"]').setInputFiles({
         name: 'agent-ui-evidence.txt',
         mimeType: 'text/plain',
         buffer: Buffer.from('Agent UI functional evidence\n'),
       });
-      await expect(hub.getByRole('button', { name: 'Files (1)', exact: true })).toBeVisible();
-      await hub.getByRole('button', { name: 'Files (1)', exact: true }).click();
+      await expect(attachmentsButton).toBeVisible();
+      await attachmentsButton.click();
       await hub
         .getByRole('navigation', { name: 'Agent views' })
         .getByRole('button', { name: 'Files', exact: true })

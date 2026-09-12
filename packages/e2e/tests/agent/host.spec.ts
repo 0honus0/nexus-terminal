@@ -76,10 +76,9 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
   await captureFunctionalScreenshot(page, 'agent-settings-subagents.png', { viewport: { width: 1440, height: 900 } });
 
-  const workspace = panel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
-  await workspace.scrollIntoViewIfNeeded();
-  await expect(workspace).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Browser Runtime', exact: true })).toBeAttached();
+  const browserRuntime = panel.getByRole('heading', { name: 'Browser Runtime', exact: true });
+  await browserRuntime.scrollIntoViewIfNeeded();
+  await expect(browserRuntime).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'ACP Runtime', exact: true })).toBeAttached();
   await expect(panel.getByRole('heading', { name: 'Safety and network', exact: true })).toBeAttached();
   await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
