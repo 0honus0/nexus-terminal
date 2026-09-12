@@ -180,7 +180,11 @@
     return availability.runtime.available ? 'bg-success' : 'bg-warning';
   });
   const mutationLocked = computed(
-    () => busy.value || runtimeOperation.mutationBlocked.value || run.value?.needsReconciliation === true,
+    () =>
+      busy.value ||
+      runtimeOperation.phase.value === 'conflict' ||
+      runtimeOperation.phase.value === 'reconciling' ||
+      run.value?.needsReconciliation === true,
   );
   const canSend = computed(() => {
     if (!currentThread.value || mutationLocked.value) return false;

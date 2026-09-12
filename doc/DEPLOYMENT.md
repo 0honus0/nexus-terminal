@@ -44,7 +44,7 @@ ghcr.io/0honus0/nexus-agent-runner:latest
 ghcr.io/0honus0/nexus-agent-runner:dev
 ```
 
-`docker-compose.yml` 已提供**默认整段注释掉**的 `agent-runner` service。需要容器模式时，取消该段注释，并在 `.env` 把 `NEXUS_AGENT_RUNNER_URL` 改为 `http://agent-runner:8790`，同时取消 Backend 对 Runner 的 `depends_on` 注释。独立镜像包含固定版本 `mise`、Tool Pack 解包工具与 `script/stty`，HEALTHCHECK 调用 `/v1/availability` 验证 `native + logical` Workspace Runtime。
+`docker-compose.yml` 已提供**默认整段注释掉**的 `agent-runner` service。需要容器模式时，取消该段注释，并在 `.env` 把 `NEXUS_AGENT_RUNNER_URL` 改为 `http://agent-runner:8790`，同时取消 Backend 对 Runner 的 `depends_on` 注释。独立镜像包含固定版本 `mise`、Tool Pack 解包工具与 `script/stty`；容器入口使用发行版 `tini` 作为 PID 1，只负责转发终止信号并回收 Runner 子进程产生的孤儿/zombie 进程，不参与 Workspace 隔离。HEALTHCHECK 调用 `/v1/availability` 验证 `native + logical` Workspace Runtime。
 
 容器 Runner 使用 Docker 默认 capability/seccomp/AppArmor 即可；Compose 示例**不需要** `privileged`、`SYS_ADMIN`、`seccomp=unconfined`、`apparmor=unconfined`、Docker socket 或 nested Docker。这里不要把“容器边界”和“Workspace 边界”混为一谈：容器可以隔离整个 Runner 服务，但容器内多个 Workspace 仍属于同一个 Nexus 用户并共享 Runner 进程权限、内核网络与 Tool Store。
 

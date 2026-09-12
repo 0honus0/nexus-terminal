@@ -155,7 +155,7 @@ Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/apps
 - 平台管理的逻辑 `/workspace/deps`、`/workspace/build` 与 npm/pip/Go cache 按精确 `runtimeDigest + packRefs` 的 `toolchainFingerprint` 分区；不同 ABI 工具组合不共享依赖状态，切回相同组合可复用，项目源码仍保持稳定；native Runner 会把这些逻辑路径解析到真实 Runner data root；
 - Workspace job、ACP process、Workspace local Terminal 和 Runner Plugin 都作为 Runner 子进程在对应 Workspace/runtime profile 下运行；job/ACP/Runner Plugin 使用 Runner-managed process group，生命周期结束时整组回收；Terminal 使用系统 `script(1)` 创建真实 PTY，并按 PTY foreground process group 处理 signal；
 - **Workspace 之间只有逻辑隔离，不是安全隔离**：不创建 per-Workspace mount/PID/network namespace；Workspace Profile 的 limits/network 是产品配置，不进入 native Runner 的执行命令，也不声称为内核级强制边界；Host Runner 与其子进程共享宿主安全上下文，容器 Runner 则共享同一个 Runner 容器安全上下文；
-- Runner 不持 host Docker socket、不启动 dockerd、不使用 nested Docker。独立 Runner 容器不需要 `privileged`、`SYS_ADMIN` 或 unconfined seccomp/AppArmor；Docker 容器本身可以作为整个 Runner 服务的操作系统边界，但容器内 Workspace 仍属于同一 Nexus 用户；
+- Runner 不持 host Docker socket、不启动 dockerd、不使用 nested Docker。独立 Runner 容器不需要 `privileged`、`SYS_ADMIN` 或 unconfined seccomp/AppArmor；镜像仅用 `tini` 作为 PID 1 做信号转发和孤儿进程回收。Docker 容器本身可以作为整个 Runner 服务的操作系统边界，但容器内 Workspace 仍属于同一 Nexus 用户；
 - Runner Plugin 按 Workspace generation 显式选择并冻结 `{pluginId, version, sdkVersion, protocolVersion, packageHash, entry}`。由于 Runner 采用单用户 native trust model，用户安装并启用的 Runner Plugin 代码与其他 Workspace 子进程使用同一 Runner OS 权限；Workspace Broker/ACL 继续约束其通过 SDK 访问的逻辑 Plugin workspace，但**不是 OS sandbox**；
 - Host Runner 与独立 `nexus-agent-runner` 镜像使用相同 runtime contract。Compose 中的 Runner service 默认保持注释以兼容现有部署，需要时可直接启用，不再有 container capability 放宽要求。
 

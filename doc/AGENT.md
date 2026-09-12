@@ -507,7 +507,7 @@ Runner 提供：
 - cleanup planning/execution；
 - journal/reconcile。
 
-Runner 永远不获得 host Docker socket、不启动 dockerd、不使用 nested Docker。独立 Runner 容器也不需要 `privileged`、`SYS_ADMIN` 或 unconfined seccomp/AppArmor。
+Runner 永远不获得 host Docker socket、不启动 dockerd、不使用 nested Docker。独立 Runner 容器也不需要 `privileged`、`SYS_ADMIN` 或 unconfined seccomp/AppArmor；镜像只使用 `tini` 作为 PID 1 负责信号转发与孤儿进程回收，不把它当成 Workspace 隔离层。
 
 ### 12.4 单用户 native Workspace Runtime
 
