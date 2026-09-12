@@ -90,28 +90,28 @@
 </script>
 
 <template>
-  <aside class="flex h-full min-h-0 flex-col border-l border-border/80 bg-card/70">
-    <header class="flex h-12 shrink-0 items-center justify-between border-b border-border/70 px-3">
+  <aside class="flex h-full min-h-0 flex-col border-l border-border/60 bg-card/45">
+    <header class="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-3.5">
       <div class="flex items-center gap-2">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-[10px] text-primary">
+        <div class="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-[11px] text-primary">
           <i class="fa-solid fa-list-check" aria-hidden="true"></i>
         </div>
         <div>
           <strong class="block text-xs leading-none">{{ $t('agent.tasks.title') }}</strong>
-          <span class="mt-1 block text-[9px] text-text-secondary">{{ $t('agent.tasks.activity') }}</span>
+          <span class="mt-1 block text-[10px] text-text-secondary">{{ $t('agent.tasks.activity') }}</span>
         </div>
       </div>
-      <span v-if="backgroundRuns.length" class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary">
+      <span v-if="backgroundRuns.length" class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary">
         +{{ backgroundRuns.length }}
       </span>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-y-auto p-3">
+    <div class="min-h-0 flex-1 overflow-y-auto p-3.5">
       <div v-if="current" class="space-y-3">
-        <section class="rounded-xl border border-border bg-background p-3 shadow-sm">
+        <section class="rounded-2xl border border-border/60 bg-background/70 p-3.5 shadow-sm">
           <div class="flex items-start justify-between gap-2">
             <div class="min-w-0">
-              <div class="text-[9px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+              <div class="text-[10px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
                 {{ $t('agent.tasks.current') }}
               </div>
               <div class="mt-1 flex items-center gap-1.5">
@@ -132,16 +132,16 @@
             </div>
             <button
               type="button"
-              class="flex h-7 items-center gap-1 rounded-lg border border-border px-2 text-[9px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
+              class="flex h-8 items-center gap-1.5 rounded-lg border border-border/70 px-2.5 text-[10px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
               @click="emit('openRun', current)"
             >
               {{ $t('agent.tasks.openDetail') }}
-              <i class="fa-solid fa-chevron-right text-[8px]" aria-hidden="true"></i>
+              <i class="fa-solid fa-chevron-right text-[9px]" aria-hidden="true"></i>
             </button>
           </div>
 
-          <div v-if="planItems.length" class="mt-3 rounded-lg border border-border/70 bg-card px-2.5 py-2.5">
-            <div class="flex items-center justify-between gap-2 text-[9px]">
+          <div v-if="planItems.length" class="mt-3 rounded-xl bg-card/70 px-3 py-3">
+            <div class="flex items-center justify-between gap-2 text-[10px]">
               <span class="font-medium">{{ $t('agent.tasks.progress') }}</span>
               <span class="text-text-secondary"
                 >{{ completedPlanItems }}/{{ planItems.length }} · {{ planPercent }}%</span
@@ -156,28 +156,28 @@
                 :class="currentPlanItem.status === 'blocked' ? 'bg-warning' : 'bg-primary'"
               ></span>
               <div class="min-w-0">
-                <div class="text-[8px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
+                <div class="text-[9px] font-semibold uppercase tracking-[0.1em] text-text-secondary">
                   {{ $t('agent.tasks.currentFocus') }}
                 </div>
-                <div class="mt-0.5 truncate text-[10px] font-medium">{{ currentPlanItem.title }}</div>
+                <div class="mt-0.5 truncate text-[11px] font-medium">{{ currentPlanItem.title }}</div>
               </div>
             </div>
-            <div v-else class="mt-2 text-[9px] text-success">
-              <i class="fa-solid fa-check mr-1 text-[8px]" aria-hidden="true"></i>{{ $t('agent.tasks.planComplete') }}
+            <div v-else class="mt-2 text-[10px] text-success">
+              <i class="fa-solid fa-check mr-1 text-[9px]" aria-hidden="true"></i>{{ $t('agent.tasks.planComplete') }}
             </div>
           </div>
 
           <div
             v-if="attentionKey"
-            class="mt-3 rounded-lg border border-warning/40 bg-warning/5 px-2.5 py-2 text-[9px] leading-4 text-warning"
+            class="mt-3 rounded-xl border border-warning/30 bg-warning/5 px-3 py-2.5 text-[10px] leading-4 text-warning"
           >
-            <i class="fa-solid fa-triangle-exclamation mr-1 text-[8px]" aria-hidden="true"></i>
+            <i class="fa-solid fa-triangle-exclamation mr-1 text-[9px]" aria-hidden="true"></i>
             {{ $t(`agent.tasks.attention.${attentionKey}`) }}
           </div>
 
           <div class="mt-3 space-y-2.5">
             <div>
-              <div class="mb-1 flex items-center justify-between text-[9px] text-text-secondary">
+              <div class="mb-1.5 flex items-center justify-between text-[10px] text-text-secondary">
                 <span>{{ $t('agent.tasks.tokens') }}</span>
                 <span>{{ tokenUsage }} / {{ current.budget.maxRunTokens }}</span>
               </div>
@@ -186,7 +186,7 @@
               </div>
             </div>
             <div>
-              <div class="mb-1 flex items-center justify-between text-[9px] text-text-secondary">
+              <div class="mb-1.5 flex items-center justify-between text-[10px] text-text-secondary">
                 <span>{{ $t('agent.tasks.steps') }}</span>
                 <span>{{ current.usage.steps }} / {{ current.budget.maxRunSteps }}</span>
               </div>
@@ -196,14 +196,14 @@
             </div>
           </div>
 
-          <div class="mt-3 grid grid-cols-2 gap-2 border-t border-border/70 pt-2.5 text-[9px]">
-            <div class="rounded-lg bg-card px-2 py-1.5">
+          <div class="mt-3 grid grid-cols-2 gap-3 border-t border-border/60 pt-3 text-[10px]">
+            <div class="px-1 py-0.5">
               <div class="text-text-secondary">{{ $t('agent.tasks.verification') }}</div>
               <div class="mt-0.5 truncate font-medium">
                 {{ $t(`agent.tasks.verificationStatus.${current.verificationStatus}`) }}
               </div>
             </div>
-            <div class="rounded-lg bg-card px-2 py-1.5">
+            <div class="px-1 py-0.5">
               <div class="text-text-secondary">{{ $t('agent.tasks.activeTime') }}</div>
               <div class="mt-0.5 font-medium">{{ current.activeExecutionSeconds }}s</div>
             </div>
@@ -212,7 +212,7 @@
           <button
             v-if="current.status === 'awaiting_budget'"
             type="button"
-            class="mt-3 w-full rounded-lg bg-primary px-3 py-2 text-[10px] font-semibold text-white shadow-sm disabled:opacity-50"
+            class="mt-3 w-full rounded-xl bg-primary px-3 py-2.5 text-[11px] font-semibold text-white shadow-sm disabled:opacity-50"
             :disabled="busy || !hardLimits"
             @click="increase"
           >
@@ -227,17 +227,17 @@
           @resolve="(approval, decision) => emit('resolveApproval', approval, decision)"
         />
 
-        <section v-if="planItems.length" class="rounded-xl border border-border bg-background p-3">
+        <section v-if="planItems.length" class="rounded-2xl bg-background/70 p-3.5">
           <div class="flex items-center justify-between gap-2">
             <div>
-              <strong class="text-[11px]">{{ $t('agent.tasks.plan') }}</strong>
-              <div class="mt-0.5 text-[9px] text-text-secondary">r{{ current.plan.revision }}</div>
+              <strong class="text-xs">{{ $t('agent.tasks.plan') }}</strong>
+              <div class="mt-0.5 text-[10px] text-text-secondary">r{{ current.plan.revision }}</div>
             </div>
             <div class="flex items-center gap-1.5">
-              <span v-if="blockedPlanItems" class="rounded-full bg-warning/10 px-2 py-0.5 text-[9px] text-warning">
+              <span v-if="blockedPlanItems" class="rounded-full bg-warning/10 px-2 py-0.5 text-[10px] text-warning">
                 {{ $t('agent.tasks.blockedCount', { count: blockedPlanItems }) }}
               </span>
-              <span class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary">
+              <span class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary">
                 {{ completedPlanItems }}/{{ planItems.length }}
               </span>
             </div>
@@ -245,7 +245,7 @@
           <ol class="mt-3 space-y-2">
             <li v-for="item in planItems" :key="item.id" class="relative pl-5">
               <span
-                class="absolute left-0 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border text-[7px]"
+                class="absolute left-0 top-0.5 flex h-4 w-4 items-center justify-center rounded-full border text-[8px]"
                 :class="
                   item.status === 'completed'
                     ? 'border-success/40 bg-success/10 text-success'
@@ -261,27 +261,24 @@
                   aria-hidden="true"
                 ></i>
               </span>
-              <div class="text-[10px] font-medium leading-4">{{ item.title }}</div>
-              <p v-if="item.detail" class="mt-0.5 line-clamp-2 text-[9px] leading-4 text-text-secondary">
+              <div class="text-[11px] font-medium leading-4">{{ item.title }}</div>
+              <p v-if="item.detail" class="mt-0.5 line-clamp-2 text-[10px] leading-4 text-text-secondary">
                 {{ item.detail }}
               </p>
             </li>
           </ol>
         </section>
 
-        <section
-          v-if="current.definition.connectionIds.length"
-          class="rounded-xl border border-border bg-background p-3"
-        >
-          <div class="flex items-center gap-1.5 text-[10px] font-medium">
-            <i class="fa-solid fa-server text-[9px] text-text-secondary" aria-hidden="true"></i>
+        <section v-if="current.definition.connectionIds.length" class="rounded-2xl bg-background/70 p-3.5">
+          <div class="flex items-center gap-1.5 text-[11px] font-medium">
+            <i class="fa-solid fa-server text-[10px] text-text-secondary" aria-hidden="true"></i>
             {{ $t('agent.tasks.targets') }}
           </div>
           <div class="mt-2 flex flex-wrap gap-1">
             <span
               v-for="id in current.definition.connectionIds"
               :key="id"
-              class="rounded-md bg-header px-2 py-1 text-[9px] text-text-secondary"
+              class="rounded-md bg-header px-2 py-1 text-[10px] text-text-secondary"
               >#{{ id }}</span
             >
           </div>
@@ -292,19 +289,19 @@
         <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-header text-text-secondary">
           <i class="fa-regular fa-circle-play" aria-hidden="true"></i>
         </div>
-        <p class="mt-3 text-[10px] leading-4 text-text-secondary">{{ $t('agent.tasks.empty') }}</p>
+        <p class="mt-3 text-[11px] leading-5 text-text-secondary">{{ $t('agent.tasks.empty') }}</p>
       </div>
 
       <section v-if="historyRuns.length" class="mt-4 border-t border-border/70 pt-3">
         <div class="mb-2 flex items-center justify-between">
-          <strong class="text-[10px]">{{ $t('agent.tasks.history') }}</strong>
-          <span class="text-[9px] text-text-secondary">{{ historyRuns.length }}</span>
+          <strong class="text-[11px]">{{ $t('agent.tasks.history') }}</strong>
+          <span class="text-[10px] text-text-secondary">{{ historyRuns.length }}</span>
         </div>
         <button
           v-for="item in historyRuns"
           :key="item.id"
           type="button"
-          class="mb-1.5 flex w-full items-center gap-2 rounded-lg border border-transparent bg-background px-2.5 py-2 text-left hover:border-border hover:bg-header"
+          class="mb-1 flex w-full items-center gap-2.5 rounded-xl bg-transparent px-2.5 py-2.5 text-left hover:bg-header/70"
           @click="emit('openRun', item)"
         >
           <span
@@ -318,35 +315,35 @@
             "
           ></span>
           <span class="min-w-0 flex-1">
-            <span class="block truncate text-[10px] font-medium">{{ $t(`agent.tasks.runStatus.${item.status}`) }}</span>
-            <span class="mt-0.5 block truncate text-[8px] text-text-secondary">
+            <span class="block truncate text-[11px] font-medium">{{ $t(`agent.tasks.runStatus.${item.status}`) }}</span>
+            <span class="mt-0.5 block truncate text-[10px] text-text-secondary">
               {{ item.definition.model.modelId }} · {{ item.usage.steps }} {{ $t('agent.tasks.steps').toLowerCase() }}
             </span>
           </span>
-          <i class="fa-solid fa-chevron-right text-[8px] text-text-secondary" aria-hidden="true"></i>
+          <i class="fa-solid fa-chevron-right text-[9px] text-text-secondary" aria-hidden="true"></i>
         </button>
       </section>
 
       <section v-if="backgroundRuns.length" class="mt-4 border-t border-border/70 pt-3">
         <div class="mb-2 flex items-center justify-between">
-          <strong class="text-[10px]">{{ $t('agent.tasks.background') }}</strong>
-          <span class="text-[9px] text-text-secondary">{{ backgroundRuns.length }}</span>
+          <strong class="text-[11px]">{{ $t('agent.tasks.background') }}</strong>
+          <span class="text-[10px] text-text-secondary">{{ backgroundRuns.length }}</span>
         </div>
         <button
           v-for="item in backgroundRuns"
           :key="item.id"
           type="button"
-          class="mb-1.5 flex w-full items-center gap-2 rounded-lg border border-transparent bg-background px-2.5 py-2 text-left hover:border-border hover:bg-header"
+          class="mb-1 flex w-full items-center gap-2.5 rounded-xl bg-transparent px-2.5 py-2.5 text-left hover:bg-header/70"
           @click="emit('openRun', item)"
         >
           <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"></span>
           <span class="min-w-0 flex-1">
-            <span class="block truncate text-[10px] font-medium">{{ $t(`agent.tasks.runStatus.${item.status}`) }}</span>
-            <span class="mt-0.5 block truncate text-[8px] text-text-secondary">
+            <span class="block truncate text-[11px] font-medium">{{ $t(`agent.tasks.runStatus.${item.status}`) }}</span>
+            <span class="mt-0.5 block truncate text-[10px] text-text-secondary">
               {{ threadTitles[item.threadId] || item.threadId }} · {{ item.definition.model.modelId }}
             </span>
           </span>
-          <i class="fa-solid fa-chevron-right text-[8px] text-text-secondary" aria-hidden="true"></i>
+          <i class="fa-solid fa-chevron-right text-[9px] text-text-secondary" aria-hidden="true"></i>
         </button>
       </section>
     </div>

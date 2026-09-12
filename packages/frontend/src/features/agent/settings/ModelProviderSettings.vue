@@ -77,12 +77,12 @@
 </script>
 
 <template>
-  <section class="rounded-xl border border-border bg-card p-5">
+  <section class="rounded-2xl border border-border/60 bg-card/65 p-5 shadow-sm">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <div class="flex items-center gap-2">
           <h2 class="text-base font-semibold">{{ $t('agent.settings.providers.title') }}</h2>
-          <span class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary">
+          <span class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary">
             {{ $t('agent.settings.providers.counts', { providers: providers.length, models: modelCount }) }}
           </span>
         </div>
@@ -98,7 +98,7 @@
       </button>
     </div>
 
-    <div class="mt-4 rounded-xl border border-border/80 bg-background p-3.5">
+    <div class="mt-4 rounded-2xl bg-primary/5 p-4">
       <div class="flex flex-wrap items-end justify-between gap-3">
         <label class="min-w-0 flex-1">
           <span class="mb-1 block text-xs font-medium">{{ $t('agent.settings.providers.defaultModel') }}</span>
@@ -115,7 +115,7 @@
             </option>
           </select>
         </label>
-        <div class="max-w-sm text-[11px] leading-4 text-text-secondary">
+        <div class="max-w-sm text-xs leading-5 text-text-secondary">
           {{ $t('agent.settings.providers.defaultModelHint') }}
         </div>
       </div>
@@ -191,21 +191,21 @@
       <article
         v-for="provider in providers"
         :key="provider.id"
-        class="rounded-xl border border-border/70 bg-background p-4"
+        class="rounded-2xl border border-border/50 bg-background/70 p-4"
       >
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <span class="font-medium">{{ provider.displayName }}</span>
               <span
-                class="rounded-full px-2 py-0.5 text-[10px]"
+                class="rounded-full px-2 py-0.5 text-[11px]"
                 :class="provider.enabled ? 'bg-success/10 text-success' : 'bg-header text-text-secondary'"
               >
                 {{
                   provider.enabled ? $t('agent.settings.providers.enabled') : $t('agent.settings.providers.disabled')
                 }}
               </span>
-              <span class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary">
+              <span class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary">
                 {{ $t('agent.settings.providers.modelCount', { count: provider.models.length }) }}
               </span>
             </div>
@@ -229,23 +229,19 @@
         </div>
 
         <div class="mt-3 grid gap-2 xl:grid-cols-2">
-          <div
-            v-for="model in provider.models"
-            :key="model.id"
-            class="rounded-lg border border-border/70 bg-card px-3 py-2.5"
-          >
+          <div v-for="model in provider.models" :key="model.id" class="rounded-xl bg-card/80 px-3.5 py-3">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-1.5">
                   <span class="truncate text-xs font-semibold">{{ model.id }}</span>
                   <span
                     v-if="provider.id === defaultProviderId && model.id === defaultModelId"
-                    class="rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary"
+                    class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary"
                   >
                     {{ $t('agent.settings.providers.defaultBadge') }}
                   </span>
                 </div>
-                <div class="mt-1 flex flex-wrap gap-1 text-[9px] text-text-secondary">
+                <div class="mt-1.5 flex flex-wrap gap-1.5 text-[10px] text-text-secondary">
                   <span class="rounded bg-header px-1.5 py-0.5">
                     {{ $t('agent.settings.providers.contextShort', { value: compactTokens(model.contextWindow) }) }}
                   </span>
@@ -263,11 +259,12 @@
               </div>
               <button
                 type="button"
-                class="shrink-0 rounded border border-border px-2 py-1 text-[10px] hover:bg-header disabled:opacity-50"
+                class="shrink-0 rounded-lg border border-border/70 px-2.5 py-1.5 text-[11px] font-medium hover:bg-header disabled:opacity-50"
                 :disabled="busy || !provider.enabled"
+                :aria-label="`${model.id} · ${$t('agent.settings.providers.test')}`"
                 @click="emit('test', provider, model.id)"
               >
-                {{ model.id }} · {{ $t('agent.settings.providers.test') }}
+                {{ $t('agent.settings.providers.test') }}
               </button>
             </div>
           </div>

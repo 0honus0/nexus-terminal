@@ -665,16 +665,16 @@
 </script>
 
 <template>
-  <div class="relative grid h-full min-h-0 grid-cols-[236px_minmax(0,1fr)] xl:grid-cols-[236px_minmax(0,1fr)_296px]">
-    <aside class="flex min-h-0 flex-col border-r border-border/80 bg-card/60">
-      <div class="flex h-12 shrink-0 items-center justify-between border-b border-border/70 px-3">
+  <div class="relative grid h-full min-h-0 grid-cols-[224px_minmax(0,1fr)] xl:grid-cols-[224px_minmax(0,1fr)_280px]">
+    <aside class="flex min-h-0 flex-col border-r border-border/60 bg-card/45">
+      <div class="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <div class="flex items-center gap-2">
           <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-[10px] text-primary">
             <i class="fa-regular fa-comments" aria-hidden="true"></i>
           </div>
           <div>
             <strong class="block text-xs leading-none">{{ $t('agent.operations.threads') }}</strong>
-            <span class="mt-1 block text-[9px] text-text-secondary">
+            <span class="mt-1 block text-[10px] text-text-secondary">
               {{ $t('agent.operations.threadCounts', { total: threads.length, active: activeThreadCount }) }}
             </span>
           </div>
@@ -709,7 +709,7 @@
         <div class="mt-2 flex justify-end gap-1.5">
           <button
             type="button"
-            class="rounded-lg px-2.5 py-1.5 text-[9px] text-text-secondary hover:bg-header"
+            class="rounded-lg px-2.5 py-1.5 text-[10px] text-text-secondary hover:bg-header"
             :disabled="busy"
             @click="cancelThreadCreation"
           >
@@ -717,7 +717,7 @@
           </button>
           <button
             type="submit"
-            class="rounded-lg bg-primary px-2.5 py-1.5 text-[9px] font-semibold text-white disabled:opacity-40"
+            class="rounded-lg bg-primary px-2.5 py-1.5 text-[10px] font-semibold text-white disabled:opacity-40"
             :disabled="busy || !newThreadTitle.trim()"
           >
             {{ $t('agent.operations.createThread') }}
@@ -729,13 +729,13 @@
         <label class="relative block">
           <span class="sr-only">{{ $t('agent.operations.searchThreads') }}</span>
           <i
-            class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[8px] text-text-secondary"
+            class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[9px] text-text-secondary"
             aria-hidden="true"
           ></i>
           <input
             v-model="threadQuery"
             type="search"
-            class="h-8 w-full rounded-lg border border-border bg-background pl-7 pr-2 text-[10px] outline-none focus:border-primary/60"
+            class="h-9 w-full rounded-lg border border-border/70 bg-background pl-7 pr-2 text-[11px] outline-none focus:border-primary/60"
             :placeholder="$t('agent.operations.searchThreads')"
           />
         </label>
@@ -746,16 +746,16 @@
           v-for="thread in visibleThreads"
           :key="thread.id"
           type="button"
-          class="group mb-1 flex w-full items-center gap-2 rounded-xl border px-2 py-2.5 text-left transition-colors"
+          class="group mb-1 flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors"
           :class="
             currentThread?.id === thread.id
-              ? 'border-primary/20 bg-primary/10 text-foreground'
-              : 'border-transparent text-text-secondary hover:border-border hover:bg-background hover:text-foreground'
+              ? 'border-primary/15 bg-primary/10 text-foreground'
+              : 'border-transparent text-text-secondary hover:bg-background/80 hover:text-foreground'
           "
           @click="selectThread(thread)"
         >
           <span
-            class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold"
+            class="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold"
             :class="currentThread?.id === thread.id ? 'bg-primary text-white' : 'bg-header text-text-secondary'"
           >
             {{ (thread.title || $t('agent.operations.untitledThread')).slice(0, 1).toUpperCase() }}
@@ -770,10 +770,10 @@
             ></span>
           </span>
           <span class="min-w-0 flex-1">
-            <span class="block truncate text-[11px] font-medium">{{
+            <span class="block truncate text-xs font-medium">{{
               thread.title || $t('agent.operations.untitledThread')
             }}</span>
-            <span class="mt-0.5 flex items-center gap-1.5 truncate text-[8px] opacity-70">
+            <span class="mt-1 flex items-center gap-1.5 truncate text-[10px] text-text-secondary">
               <span v-if="threadStatus(thread.id)">{{ $t(`agent.tasks.runStatus.${threadStatus(thread.id)}`) }}</span>
               <span v-if="threadStatus(thread.id)">·</span>
               <span>{{ formatThreadUpdatedAt(thread.updatedAt) }}</span>
@@ -781,32 +781,32 @@
           </span>
           <i
             v-if="currentThread?.id === thread.id"
-            class="fa-solid fa-chevron-right text-[8px] text-primary"
+            class="fa-solid fa-chevron-right text-[9px] text-primary"
             aria-hidden="true"
           ></i>
         </button>
         <p
           v-if="visibleThreads.length === 0"
-          class="rounded-lg bg-background px-3 py-4 text-center text-[9px] text-text-secondary"
+          class="rounded-lg bg-background px-3 py-4 text-center text-[10px] text-text-secondary"
         >
           {{ $t('agent.operations.noThreadsFound') }}
         </p>
       </div>
 
       <div class="shrink-0 border-t border-border/70 p-3">
-        <div class="flex items-center gap-1.5 text-[10px] font-medium">
-          <i class="fa-solid fa-server text-[9px] text-text-secondary" aria-hidden="true"></i>
+        <div class="flex items-center gap-1.5 text-[11px] font-medium">
+          <i class="fa-solid fa-server text-[10px] text-text-secondary" aria-hidden="true"></i>
           {{ $t('agent.operations.targets') }}
-          <span class="ml-auto rounded-full bg-header px-1.5 py-0.5 text-[8px] text-text-secondary">
+          <span class="ml-auto rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary">
             {{ selectedConnectionIds.length }}/{{ connections.length }}
           </span>
         </div>
-        <p class="mt-1 text-[9px] leading-4 text-text-secondary">{{ $t('agent.operations.targetsHint') }}</p>
+        <p class="mt-1 text-[10px] leading-4 text-text-secondary">{{ $t('agent.operations.targetsHint') }}</p>
         <div class="mt-2 max-h-36 space-y-1 overflow-y-auto">
           <label
             v-for="connection in connections"
             :key="connection.id"
-            class="flex cursor-pointer items-start gap-2 rounded-lg border border-transparent px-2 py-1.5 text-[10px] hover:border-border hover:bg-background"
+            class="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-[11px] hover:bg-background/80"
           >
             <input
               v-model="selectedConnectionIds"
@@ -817,12 +817,15 @@
             />
             <span class="min-w-0 flex-1">
               <span class="block truncate font-medium">{{ connection.name || connection.host }}</span>
-              <span class="mt-0.5 block truncate text-[8px] text-text-secondary"
+              <span class="mt-0.5 block truncate text-[10px] text-text-secondary"
                 >{{ connection.host }}:{{ connection.port }}</span
               >
             </span>
           </label>
-          <p v-if="connections.length === 0" class="rounded-lg bg-background px-2 py-2 text-[9px] text-text-secondary">
+          <p
+            v-if="connections.length === 0"
+            class="rounded-lg bg-background px-2.5 py-2.5 text-[10px] text-text-secondary"
+          >
             {{ $t('agent.operations.noTargets') }}
           </p>
         </div>
@@ -830,15 +833,15 @@
     </aside>
 
     <main class="flex min-h-0 min-w-0 flex-col bg-background">
-      <header class="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border/70 bg-card/30 px-3">
+      <header class="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-card/25 px-3.5">
         <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <strong class="truncate text-[11px]">{{
+            <strong class="truncate text-xs">{{
               currentThread?.title || $t('agent.operations.untitledThread')
             }}</strong>
             <span
               v-if="run"
-              class="shrink-0 rounded-full px-2 py-0.5 text-[8px] font-medium"
+              class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
               :class="
                 run.status === 'running'
                   ? 'bg-success/10 text-success'
@@ -852,10 +855,10 @@
               {{ $t(`agent.tasks.runStatus.${run.status}`) }}
             </span>
           </div>
-          <div class="mt-1 flex min-w-0 items-center gap-1.5 text-[8px] text-text-secondary">
+          <div class="mt-1.5 flex min-w-0 items-center gap-1.5 text-[10px] text-text-secondary">
             <template v-if="modelSelectionLocked && run">
               <span class="flex shrink-0 items-center gap-1 font-medium text-foreground/80">
-                <i class="fa-solid fa-lock text-[7px]" aria-hidden="true"></i>
+                <i class="fa-solid fa-lock text-[8px]" aria-hidden="true"></i>
                 {{ $t('agent.operations.activeRunModel') }}
               </span>
               <span class="truncate">{{ activeRunProviderName }} · {{ run.definition.model.modelId }}</span>
@@ -864,7 +867,7 @@
               <span class="shrink-0 font-medium text-foreground/70">{{ $t('agent.operations.nextRunModel') }}</span>
               <select
                 :value="selectedModelKey"
-                class="min-w-0 max-w-56 truncate rounded-md border border-border/70 bg-card px-1.5 py-0.5 text-[9px] text-foreground outline-none hover:bg-header focus:border-primary/50"
+                class="min-w-0 max-w-56 truncate rounded-lg border border-border/70 bg-card px-2 py-1 text-[10px] text-foreground outline-none hover:bg-header focus:border-primary/50"
                 :aria-label="$t('agent.operations.runModel')"
                 :title="$t('agent.operations.runModelHint')"
                 :disabled="busy"
@@ -897,7 +900,7 @@
           <select
             v-if="threadRuns.length > 1 && run"
             :value="run.id"
-            class="hidden h-7 max-w-36 rounded-lg border border-border bg-card px-2 text-[9px] text-text-secondary outline-none hover:bg-header md:block"
+            class="hidden h-8 max-w-40 rounded-lg border border-border/70 bg-card px-2.5 text-[10px] text-text-secondary outline-none hover:bg-header md:block"
             :aria-label="$t('agent.tasks.history')"
             @change="openRunFromHistory(($event.target as HTMLSelectElement).value)"
           >
@@ -908,7 +911,7 @@
           <button
             v-if="run && pendingApprovals.length"
             type="button"
-            class="flex h-7 items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-2.5 text-[9px] font-semibold text-warning hover:bg-warning/15"
+            class="flex h-8 items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-2.5 text-[10px] font-semibold text-warning hover:bg-warning/15"
             :aria-label="$t('agent.approvals.openPending', { count: pendingApprovals.length })"
             @click="openRunDetail(run)"
           >
@@ -918,7 +921,7 @@
           <button
             v-if="run"
             type="button"
-            class="flex h-7 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 text-[9px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
+            class="flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-card px-2.5 text-[10px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
             @click="openRunDetail(run)"
           >
             <i class="fa-solid fa-bars-progress text-[8px]" aria-hidden="true"></i>
@@ -926,7 +929,7 @@
           </button>
           <span
             v-if="attachments.length"
-            class="hidden rounded-full bg-primary/10 px-2 py-1 text-[8px] font-medium text-primary sm:inline"
+            class="hidden rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary sm:inline"
           >
             <i class="fa-solid fa-paperclip mr-1" aria-hidden="true"></i>{{ attachments.length }}
           </span>
@@ -939,7 +942,7 @@
             <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
               <i class="fa-solid fa-circle-notch fa-spin" aria-hidden="true"></i>
             </div>
-            <span class="text-[10px]">{{ $t('agent.operations.loading') }}</span>
+            <span class="text-[11px]">{{ $t('agent.operations.loading') }}</span>
           </div>
         </div>
         <div
@@ -951,13 +954,13 @@
         <div v-else class="relative h-full min-h-0">
           <div
             v-if="error"
-            class="absolute left-4 right-4 top-3 z-10 rounded-xl border border-error/30 bg-background/95 px-3 py-2 text-[10px] text-error shadow-lg"
+            class="absolute left-4 right-4 top-3 z-10 rounded-xl border border-error/30 bg-background/95 px-3.5 py-2.5 text-[11px] text-error shadow-lg"
           >
             <i class="fa-solid fa-circle-exclamation mr-1.5" aria-hidden="true"></i>{{ error }}
           </div>
           <div
             v-if="run?.needsReconciliation || runtimeOperation.phase.value === 'reconciling'"
-            class="absolute left-4 right-4 top-14 z-10 rounded-xl border border-warning/40 bg-background/95 px-3 py-2 text-[10px] text-warning shadow-lg"
+            class="absolute left-4 right-4 top-14 z-10 rounded-xl border border-warning/40 bg-background/95 px-3.5 py-2.5 text-[11px] text-warning shadow-lg"
           >
             <i class="fa-solid fa-triangle-exclamation mr-1.5" aria-hidden="true"></i>
             {{ $t('agent.operations.reconciliationRequired') }}

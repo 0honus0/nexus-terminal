@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted } from 'vue';
-  import type { AgentAppSummary, HostSummaryView } from '../api/agent-api';
+  import type { HostSummaryView } from '../api/agent-api';
   import AgentAppSurface from './AgentAppSurface.vue';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
@@ -16,8 +16,6 @@
   const activeBuiltinView = computed(() => (activeApp.value ? builtinAppView(activeApp.value.id) : null));
   const visible = computed(() => state.status === 'visible');
   const enabledApps = computed(() => props.summary.apps.filter((app) => app.enabled));
-  const appActivity = (app: AgentAppSummary): number =>
-    app.runningRuns + app.pendingApprovals + app.pendingBudgetRequests;
   const activityCount = computed(
     () =>
       props.summary.totalRunningRuns + props.summary.totalPendingApprovals + props.summary.totalPendingBudgetRequests,
@@ -83,12 +81,12 @@
 <template>
   <section
     v-if="visible"
-    class="fixed z-30 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/80 bg-background shadow-2xl"
+    class="fixed z-30 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl"
     :style="style"
     :aria-label="$t('agent.hub.title')"
   >
     <header
-      class="flex h-14 shrink-0 touch-none select-none items-center justify-between gap-3 border-b border-border/80 bg-card/95 px-3"
+      class="flex h-14 shrink-0 touch-none select-none items-center justify-between gap-3 border-b border-border/60 bg-card/90 px-3.5"
       :class="state.maximized ? '' : 'cursor-move'"
       @pointerdown="begin($event, 'move')"
       @pointermove="move"
@@ -96,7 +94,7 @@
       @pointercancel="finish"
     >
       <div class="flex min-w-0 items-center gap-2.5" @pointerdown.stop>
-        <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm text-primary">
           <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
         </div>
         <div class="hidden min-w-0 sm:block">
@@ -104,12 +102,12 @@
             <span class="text-sm font-semibold leading-none">{{ $t('agent.hub.title') }}</span>
             <span
               v-if="activityCount > 0"
-              class="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-semibold text-primary"
+              class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
             >
               {{ activityCount }}
             </span>
           </div>
-          <div class="mt-1 text-[9px] text-text-secondary">{{ $t('agent.hub.workspace') }}</div>
+          <div class="mt-1 text-[10px] text-text-secondary">{{ $t('agent.hub.workspace') }}</div>
         </div>
         <AgentAppSwitcher :apps="summary.apps" :active-app-id="state.activeAppId" @switch="switchApp" />
       </div>
@@ -184,22 +182,22 @@
 
     <div
       v-if="enabledApps.length > 1"
-      class="hidden h-9 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/70 bg-card/55 px-3 sm:flex"
+      class="hidden h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/50 bg-card/35 px-3.5 sm:flex"
       :aria-label="$t('agent.hub.appActivity')"
       @pointerdown.stop
     >
-      <span class="mr-1 shrink-0 text-[8px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+      <span class="mr-1 shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
         {{ $t('agent.hub.apps') }}
       </span>
       <button
         v-for="app in enabledApps"
         :key="app.id"
         type="button"
-        class="flex h-6 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-[9px] transition-colors"
+        class="flex h-7 shrink-0 items-center gap-2 rounded-lg border px-2.5 text-[10px] transition-colors"
         :class="
           app.id === state.activeAppId
-            ? 'border-primary/30 bg-primary/10 font-semibold text-foreground'
-            : 'border-transparent bg-background/70 text-text-secondary hover:border-border hover:text-foreground'
+            ? 'border-primary/20 bg-primary/10 font-semibold text-foreground'
+            : 'border-transparent bg-transparent text-text-secondary hover:bg-header/70 hover:text-foreground'
         "
         :aria-label="$t('agent.hub.switchToApp', { app: app.displayName })"
         @click="switchApp(app.id)"
@@ -213,28 +211,25 @@
         <span class="max-w-32 truncate">{{ app.displayName }}</span>
         <span
           v-if="app.runningRuns"
-          class="rounded bg-primary/10 px-1 text-[8px] text-primary"
+          class="rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] text-primary"
           :title="$t('agent.hub.runningRuns')"
         >
           <i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.runningRuns }}
         </span>
         <span
           v-if="app.pendingApprovals"
-          class="rounded bg-warning/10 px-1 text-[8px] text-warning"
+          class="rounded-md bg-warning/10 px-1.5 py-0.5 text-[9px] text-warning"
           :title="$t('agent.hub.pendingApprovals')"
         >
           <i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingApprovals }}
         </span>
         <span
           v-if="app.pendingBudgetRequests"
-          class="rounded bg-warning/10 px-1 text-[8px] text-warning"
+          class="rounded-md bg-warning/10 px-1.5 py-0.5 text-[9px] text-warning"
           :title="$t('agent.hub.pendingBudget')"
         >
           <i class="fa-solid fa-coins mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingBudgetRequests }}
         </span>
-        <span v-if="appActivity(app) === 0 && app.id !== state.activeAppId" class="text-[8px] opacity-60">{{
-          $t('agent.hub.idle')
-        }}</span>
       </button>
     </div>
 

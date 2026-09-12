@@ -81,16 +81,16 @@
 </script>
 
 <template>
-  <section class="rounded-lg border border-border bg-card p-5">
+  <section class="rounded-2xl border border-border/60 bg-card/65 p-5 shadow-sm">
     <h2 class="text-base font-semibold">{{ $t('agent.settings.apps.title') }}</h2>
     <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.apps.description') }}</p>
     <div class="mt-4 space-y-3">
-      <div v-for="app in apps" :key="app.id" class="rounded-md bg-background p-3">
+      <div v-for="app in apps" :key="app.id" class="rounded-xl bg-background/70 p-4">
         <div class="flex items-center justify-between gap-4">
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <span class="font-medium">{{ app.displayName }}</span>
-              <span class="rounded bg-header px-2 py-0.5 text-xs text-text-secondary">{{ app.health }}</span>
+              <span class="rounded-full bg-header px-2 py-0.5 text-xs text-text-secondary">{{ app.health }}</span>
             </div>
             <p class="mt-1 truncate text-xs text-text-secondary">{{ app.id }} · v{{ app.version }}</p>
             <p class="mt-1 text-xs text-text-secondary">
@@ -114,7 +114,7 @@
           </button>
         </div>
 
-        <details class="group mt-3 border-t border-border pt-3">
+        <details class="group mt-3 border-t border-border/60 pt-3">
           <summary
             class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 py-1.5 hover:bg-header/60"
           >
@@ -123,7 +123,7 @@
                 <p class="text-xs font-medium">{{ $t('agent.settings.apps.permissions') }}</p>
                 <span
                   v-if="grantViews[app.id]"
-                  class="rounded-full bg-header px-1.5 py-0.5 text-[9px] text-text-secondary"
+                  class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary"
                 >
                   {{ grantViews[app.id].grants.length }}/{{ grantViews[app.id].declaredCapabilities.length }}
                 </span>
@@ -131,18 +131,18 @@
               <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.apps.permissionsCollapsedHint') }}</p>
             </div>
             <i
-              class="fa-solid fa-chevron-down text-[9px] text-text-secondary transition-transform group-open:rotate-180"
+              class="fa-solid fa-chevron-down text-[10px] text-text-secondary transition-transform group-open:rotate-180"
               aria-hidden="true"
             ></i>
           </summary>
 
-          <div class="mt-3 rounded-lg bg-card p-3">
+          <div class="mt-3 rounded-xl bg-card/70 p-3.5">
             <div class="flex flex-wrap items-start justify-between gap-3">
               <p class="max-w-xl text-xs text-text-secondary">{{ $t('agent.settings.apps.permissionsHint') }}</p>
               <button
                 v-if="grantViews[app.id]"
                 type="button"
-                class="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-header disabled:opacity-50"
+                class="rounded-lg border border-border/70 px-3 py-1.5 text-xs font-medium hover:bg-header disabled:opacity-50"
                 :disabled="busy || grantBusy[app.id] || !grantChanged(app.id)"
                 @click="saveGrants(app.id)"
               >
@@ -159,7 +159,7 @@
                 <label
                   v-for="capability in grantViews[app.id].declaredCapabilities"
                   :key="capability"
-                  class="flex items-center gap-2 rounded border border-border bg-background px-2.5 py-2 text-xs"
+                  class="flex items-center gap-2 rounded-lg bg-background/80 px-2.5 py-2 text-xs"
                 >
                   <input
                     type="checkbox"

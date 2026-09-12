@@ -168,10 +168,14 @@
 </script>
 
 <template>
-  <section id="settings-panel-agent" class="space-y-5" aria-labelledby="settings-agent-title">
+  <section
+    id="settings-panel-agent"
+    class="mx-auto w-full max-w-[1240px] space-y-6 pb-8"
+    aria-labelledby="settings-agent-title"
+  >
     <div>
-      <h1 id="settings-agent-title" class="text-xl font-semibold">{{ $t('agent.settings.title') }}</h1>
-      <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.description') }}</p>
+      <h1 id="settings-agent-title" class="text-2xl font-semibold tracking-tight">{{ $t('agent.settings.title') }}</h1>
+      <p class="mt-1.5 max-w-3xl text-sm leading-6 text-text-secondary">{{ $t('agent.settings.description') }}</p>
     </div>
 
     <div v-if="error" class="rounded-md border border-error/40 bg-error/10 px-4 py-3 text-sm text-error">
@@ -185,14 +189,14 @@
     </div>
 
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
-      <div class="grid gap-5 lg:grid-cols-[210px_minmax(0,1fr)]">
+      <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
         <aside class="min-w-0">
           <nav
-            class="sticky top-3 rounded-xl border border-border bg-card p-2 shadow-sm"
+            class="sticky top-4 rounded-2xl border border-border/60 bg-card/70 p-2.5 shadow-sm"
             :aria-label="$t('agent.settings.navigation')"
           >
-            <div class="border-b border-border/70 px-2 pb-2 pt-1">
-              <div class="text-[10px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+            <div class="border-b border-border/60 px-2 pb-2.5 pt-1">
+              <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
                 {{ $t('agent.settings.controlPlane') }}
               </div>
               <div class="mt-2 flex items-center gap-2 text-xs">
@@ -209,12 +213,12 @@
                 </span>
               </div>
             </div>
-            <div class="mt-1 space-y-0.5">
+            <div class="mt-1.5 space-y-1">
               <button
                 v-for="group in groups"
                 :key="group.id"
                 type="button"
-                class="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs text-text-secondary hover:bg-header hover:text-foreground"
+                class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left text-xs text-text-secondary transition-colors hover:bg-header/80 hover:text-foreground"
                 @click="scrollToGroup(group.id)"
               >
                 <i :class="`${group.icon} w-4 text-center text-[10px]`" aria-hidden="true"></i>
@@ -224,39 +228,41 @@
           </nav>
         </aside>
 
-        <div class="min-w-0 space-y-8">
-          <section id="agent-settings-overview" class="scroll-mt-4 space-y-4">
-            <div>
-              <h2 class="text-sm font-semibold">{{ $t('agent.settings.groups.overview') }}</h2>
-              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.groupDescriptions.overview') }}</p>
+        <div class="min-w-0 space-y-10">
+          <section id="agent-settings-overview" class="scroll-mt-4 space-y-5">
+            <div class="border-b border-border/60 pb-3">
+              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.overview') }}</h2>
+              <p class="mt-1 text-sm leading-5 text-text-secondary">
+                {{ $t('agent.settings.groupDescriptions.overview') }}
+              </p>
             </div>
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <div class="rounded-xl border border-border bg-card p-3.5">
-                <div class="text-[10px] text-text-secondary">{{ $t('agent.settings.summary.apps') }}</div>
-                <div class="mt-1 text-lg font-semibold">{{ enabledApps }}/{{ apps.length }}</div>
+              <div class="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm">
+                <div class="text-xs text-text-secondary">{{ $t('agent.settings.summary.apps') }}</div>
+                <div class="mt-1 text-xl font-semibold tracking-tight">{{ enabledApps }}/{{ apps.length }}</div>
                 <div class="mt-1 text-[10px] text-text-secondary">{{ $t('agent.settings.summary.enabled') }}</div>
               </div>
-              <div class="rounded-xl border border-border bg-card p-3.5">
-                <div class="text-[10px] text-text-secondary">{{ $t('agent.settings.summary.models') }}</div>
-                <div class="mt-1 text-lg font-semibold">{{ modelCount }}</div>
+              <div class="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm">
+                <div class="text-xs text-text-secondary">{{ $t('agent.settings.summary.models') }}</div>
+                <div class="mt-1 text-xl font-semibold tracking-tight">{{ modelCount }}</div>
                 <div class="mt-1 text-[10px] text-text-secondary">
                   {{ $t('agent.settings.summary.providers', { count: enabledProviders }) }}
                 </div>
               </div>
-              <div class="rounded-xl border border-border bg-card p-3.5">
-                <div class="text-[10px] text-text-secondary">{{ $t('agent.settings.summary.runtime') }}</div>
-                <div class="mt-1 text-sm font-semibold">
+              <div class="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm">
+                <div class="text-xs text-text-secondary">{{ $t('agent.settings.summary.runtime') }}</div>
+                <div class="mt-1 text-base font-semibold">
                   {{
                     workspaceRuntime.available
                       ? $t('agent.settings.workspaceRuntime.available')
                       : $t('agent.settings.workspaceRuntime.unavailable')
                   }}
                 </div>
-                <div class="mt-1 truncate text-[10px] text-text-secondary">{{ workspaceRuntime.reason }}</div>
+                <div class="mt-1 truncate text-xs text-text-secondary">{{ workspaceRuntime.reason }}</div>
               </div>
-              <div class="rounded-xl border border-border bg-card p-3.5">
-                <div class="text-[10px] text-text-secondary">{{ $t('agent.settings.summary.storage') }}</div>
-                <div class="mt-1 text-sm font-semibold">{{ formatBytes(storage.totalBytes) }}</div>
+              <div class="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm">
+                <div class="text-xs text-text-secondary">{{ $t('agent.settings.summary.storage') }}</div>
+                <div class="mt-1 text-base font-semibold">{{ formatBytes(storage.totalBytes) }}</div>
                 <div class="mt-1 text-[10px] text-text-secondary">
                   {{ $t('agent.settings.summary.storageLimit', { value: formatBytes(storage.limitBytes) }) }}
                 </div>
@@ -266,10 +272,12 @@
             <AppManagementSettings :apps="apps" :busy="busy" @toggle="toggleApp" />
           </section>
 
-          <section id="agent-settings-models" class="scroll-mt-4 space-y-4">
-            <div>
-              <h2 class="text-sm font-semibold">{{ $t('agent.settings.groups.models') }}</h2>
-              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.groupDescriptions.models') }}</p>
+          <section id="agent-settings-models" class="scroll-mt-4 space-y-5">
+            <div class="border-b border-border/60 pb-3">
+              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.models') }}</h2>
+              <p class="mt-1 text-sm leading-5 text-text-secondary">
+                {{ $t('agent.settings.groupDescriptions.models') }}
+              </p>
             </div>
             <ModelProviderSettings
               :providers="providers"
@@ -292,10 +300,12 @@
             />
           </section>
 
-          <section id="agent-settings-execution" class="scroll-mt-4 space-y-4">
-            <div>
-              <h2 class="text-sm font-semibold">{{ $t('agent.settings.groups.execution') }}</h2>
-              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.groupDescriptions.execution') }}</p>
+          <section id="agent-settings-execution" class="scroll-mt-4 space-y-5">
+            <div class="border-b border-border/60 pb-3">
+              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.execution') }}</h2>
+              <p class="mt-1 text-sm leading-5 text-text-secondary">
+                {{ $t('agent.settings.groupDescriptions.execution') }}
+              </p>
             </div>
             <PerformanceSettings
               :settings="settings"
@@ -311,10 +321,12 @@
             />
           </section>
 
-          <section id="agent-settings-environments" class="scroll-mt-4 space-y-4">
-            <div>
-              <h2 class="text-sm font-semibold">{{ $t('agent.settings.groups.environments') }}</h2>
-              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.groupDescriptions.environments') }}</p>
+          <section id="agent-settings-environments" class="scroll-mt-4 space-y-5">
+            <div class="border-b border-border/60 pb-3">
+              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.environments') }}</h2>
+              <p class="mt-1 text-sm leading-5 text-text-secondary">
+                {{ $t('agent.settings.groupDescriptions.environments') }}
+              </p>
             </div>
             <WorkspaceRuntimeSettings
               :availability="workspaceRuntime"
@@ -334,10 +346,12 @@
             />
           </section>
 
-          <section id="agent-settings-storage" class="scroll-mt-4 space-y-4">
-            <div>
-              <h2 class="text-sm font-semibold">{{ $t('agent.settings.groups.storage') }}</h2>
-              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.groupDescriptions.storage') }}</p>
+          <section id="agent-settings-storage" class="scroll-mt-4 space-y-5">
+            <div class="border-b border-border/60 pb-3">
+              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.storage') }}</h2>
+              <p class="mt-1 text-sm leading-5 text-text-secondary">
+                {{ $t('agent.settings.groupDescriptions.storage') }}
+              </p>
             </div>
             <StorageArtifactSettings
               :settings="settings"
@@ -347,10 +361,12 @@
             />
           </section>
 
-          <section id="agent-settings-extensions" class="scroll-mt-4 space-y-4">
-            <div>
-              <h2 class="text-sm font-semibold">{{ $t('agent.settings.groups.extensions') }}</h2>
-              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.groupDescriptions.extensions') }}</p>
+          <section id="agent-settings-extensions" class="scroll-mt-4 space-y-5">
+            <div class="border-b border-border/60 pb-3">
+              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.extensions') }}</h2>
+              <p class="mt-1 text-sm leading-5 text-text-secondary">
+                {{ $t('agent.settings.groupDescriptions.extensions') }}
+              </p>
             </div>
             <PluginManagementSettings
               :apps="apps"
@@ -361,10 +377,12 @@
             />
           </section>
 
-          <section id="agent-settings-safety" class="scroll-mt-4 space-y-4">
-            <div>
-              <h2 class="text-sm font-semibold">{{ $t('agent.settings.groups.safety') }}</h2>
-              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.groupDescriptions.safety') }}</p>
+          <section id="agent-settings-safety" class="scroll-mt-4 space-y-5">
+            <div class="border-b border-border/60 pb-3">
+              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.safety') }}</h2>
+              <p class="mt-1 text-sm leading-5 text-text-secondary">
+                {{ $t('agent.settings.groupDescriptions.safety') }}
+              </p>
             </div>
             <SafetyNetworkSettings :denylist="denylist" :busy="busy" @save="saveDenylist" />
             <SystemGuardrails />
