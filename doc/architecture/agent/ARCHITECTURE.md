@@ -511,4 +511,4 @@ Agent Browser 事件统一使用独立 `/ws/agent` WebSocket，不修改全局 A
 
 reset/restore先quiesce：关闭入口、递增generation、abort作业、等待有界inflight提交、关闭 Agent WebSocket subscription/timer、处理执行owner/容器，再重置DB；旧回调不能写入新库。超时reset失败，不在仍有写者时清库。shutdown同序，30秒总期限，未知远端结果持久化以便reconcile。
 
-验收包括：生产dist启动、空库/升级、授权/串App、输入调度、重复请求、`/ws/agent` 断线重连/sequence replay/慢客户端、审批竞争、lease丢失/未知结果、Artifact中途失败、Runner/sandbox unavailable降级、停机/reset、已有Workspace/RDP交互与隔离。自动行为测试仅按EC-E2E放test/e2e并从真实产品API/UI/ingress断言；build/architecture guard验证内部边界。三期扩展用同一基准测质量和成本，不能以“模型说完成”作为通过条件。
+验收包括：生产dist启动、空库/升级、授权/串App、输入调度、重复请求、`/ws/agent` 断线重连/sequence replay/慢客户端、审批竞争、lease丢失/未知结果、Artifact中途失败、Runner/sandbox unavailable降级、停机/reset、已有Workspace/RDP交互与隔离。自动行为测试仅按EC-E2E放packages/e2e并从真实产品API/UI/ingress断言；build/architecture guard验证内部边界。三期扩展用同一基准测质量和成本，不能以“模型说完成”作为通过条件。

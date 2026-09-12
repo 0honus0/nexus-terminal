@@ -142,7 +142,7 @@ dist
 /packages/data
 *.db
 *.db
-!/test/e2e/fixtures/seeded-data/nexus-terminal.db
+!/packages/e2e/fixtures/seeded-data/nexus-terminal.db
 *.jpg
 /packages/backend/uploads/backgrounds
 /temp_iterm_schemes
@@ -171,22 +171,19 @@ electron-app/node_modules/
 electron-app/dist_electron/
 
 # Playwright E2E runtime artifacts
-/test-results/
-/playwright-report/
-/blob-report/
-/test/e2e/node_modules/
-/test/e2e/.tmp/
-/test/e2e/.cache/
-/test/e2e/.auth/
-/test/e2e/playwright-report/
-/test/e2e/blob-report/
-/test/e2e/test-results/
-/test/e2e/logs/
-/test/e2e/*.log
-/test/e2e/*.pid
-/test/e2e/*.db
-/test/e2e/*.sqlite
-/test/e2e/*.sqlite3
+/packages/e2e/node_modules/
+/packages/e2e/.tmp/
+/packages/e2e/.cache/
+/packages/e2e/.auth/
+/packages/e2e/playwright-report/
+/packages/e2e/blob-report/
+/packages/e2e/test-results/
+/packages/e2e/logs/
+/packages/e2e/*.log
+/packages/e2e/*.pid
+/packages/e2e/*.db
+/packages/e2e/*.sqlite
+/packages/e2e/*.sqlite3
 
 !scripts/format-changed.mjs
 

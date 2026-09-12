@@ -16,7 +16,7 @@ const listed = execFileSync('git', ['ls-files', '--cached', '--others', '--exclu
   .map((file) => file.replace(/\\/g, '/'))
   .filter((file) => fs.existsSync(path.join(repoRoot, file)));
 
-const isE2e = (file) => file.startsWith('test/e2e/');
+const isE2e = (file) => file.startsWith('packages/e2e/');
 const testFilePatterns = [
   /(?:^|\/)[^/]+\.(?:spec|test)\.[cm]?[jt]sx?$/i,
   /(?:^|\/)test_[^/]+\.py$/i,
@@ -27,15 +27,20 @@ const testFilePatterns = [
 
 for (const file of listed) {
   if (!isE2e(file) && testFilePatterns.some((pattern) => pattern.test(file))) {
-    failures.push(`${file}: automated test cases are only allowed under test/e2e`);
+    failures.push(`${file}: automated test cases are only allowed under packages/e2e`);
   }
 }
 
 const frameworkPattern = /(?:^|[/@-])(jest|vitest|mocha|chai|ava|supertest|testing-library)(?:$|[/@-])/i;
 for (const file of listed.filter((item) => item === 'package.json' || /^packages\/[^/]+\/package\.json$/.test(item))) {
   const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, file), 'utf8'));
+  const isE2eManifest = file === 'packages/e2e/package.json';
   for (const [name] of Object.entries(manifest.scripts ?? {})) {
-    if ((name === 'test' || name.startsWith('test:')) && !(file === 'package.json' && name.startsWith('test:e2e'))) {
+    if (
+      (name === 'test' || name.startsWith('test:')) &&
+      !isE2eManifest &&
+      !(file === 'package.json' && name.startsWith('test:e2e'))
+    ) {
       failures.push(`${file}: script "${name}" is a non-E2E test entrypoint`);
     }
   }
@@ -114,12 +119,12 @@ for (const file of specFiles) {
   }
 }
 
-const timingsPath = path.join(repoRoot, 'test/e2e/groups/timings.json');
+const timingsPath = path.join(repoRoot, 'packages/e2e/groups/timings.json');
 if (fs.existsSync(timingsPath)) {
   const timings = JSON.parse(fs.readFileSync(timingsPath, 'utf8'));
   for (const spec of Object.keys(timings.specs ?? {})) {
-    if (!fs.existsSync(path.join(repoRoot, 'test/e2e', spec))) {
-      failures.push(`test/e2e/groups/timings.json: stale timing entry for missing spec ${spec}`);
+    if (!fs.existsSync(path.join(repoRoot, 'packages/e2e', spec))) {
+      failures.push(`packages/e2e/groups/timings.json: stale timing entry for missing spec ${spec}`);
     }
   }
 }

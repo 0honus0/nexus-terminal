@@ -7,6 +7,7 @@ const supported = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.css'
 const generatedDirectories = new Set(['dist', 'build', 'coverage', 'playwright-report', 'test-results', '.tmp']);
 
 const isGeneratedArtifact = (file) =>
+  /^packages\/e2e\/groups\/(?:group-\d+|timings)\.json$/.test(file) ||
   file.split('/').some((segment) => generatedDirectories.has(segment) || segment.includes('.root-preserved-'));
 
 function gitFiles(args) {

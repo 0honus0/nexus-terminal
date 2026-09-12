@@ -15,7 +15,7 @@ const canonicalRoot = path.resolve(process.argv[4] || path.join(repoRoot, 'doc',
 
 const git = (...args) => execFileSync('git', args, { cwd: repoRoot, encoding: 'utf8' }).trim();
 const sourceSha = git('rev-parse', 'HEAD');
-const specFiles = git('ls-tree', '-r', '--name-only', 'HEAD', 'test/e2e/tests')
+const specFiles = git('ls-tree', '-r', '--name-only', 'HEAD', 'packages/e2e/tests')
   .split('\n')
   .filter((file) => /\.spec\.[cm]?[jt]sx?$/.test(file));
 

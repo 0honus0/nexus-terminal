@@ -6,7 +6,7 @@
 
 先读架构 §1～3；P1-A→P1-B→P1-C→P1-D→P2-A→P2-B→P2-C→P3-A→P3-B→P3-C 继续作为实现依赖和历史验收分组，而不再代表“尚未开工”。软件需求、FR、特殊设计和总架构索引已经进入正式 Agent 实现基线；后续变更必须同时维护规范、当前实现快照和需求追溯，避免阶段编号被误读成当前交付状态。
 
-| 任务 | 边界 / 可见成果                                                                                                                                                                 | 依赖 / E2E spec（均在 test/e2e/tests/agent/）                                                        |
+| 任务 | 边界 / 可见成果                                                                                                                                                                 | 依赖 / E2E spec（均在 packages/e2e/tests/agent/）                                                    |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | P1-A | Host、scope、App/grant/settings持久化、生产manifest、architecture guard                                                                                                         | 需求/本文契约；host.spec.ts                                                                          |
 | P1-B | Provider/Secret/出站策略、Artifact与文件库后端、Ledger、Context、内置Skill/Recall                                                                                               | P1-A；provider.spec.ts、artifacts.spec.ts                                                            |
@@ -161,7 +161,7 @@ Concrete adapters：packages/backend/src/infrastructure/agent/ 下 repositories/
 | Frontend nginx.conf                                                                        | §7具体Agent prefix location覆盖较宽的^~ /api/；Artifact upload单独body上限，不放大全局                                                                              |
 | scripts/build/build.sh、Dockerfile、.github/workflows/publish-ghcr.yml                     | 应用镜像继续不含 host Docker 控制；Agent Runner 以 host runtime 构建/发布，Tool Pack 保持 digest/version manifest                                                   |
 | docker-compose.yml                                                                         | Backend 通过 host-gateway + Controller token 访问 host `nexus-agent-runner`；不创建高权限 Runner Compose 服务；Plugin Frontend origin 仍复用 frontend 第二 listener |
-| test/e2e组配置、.github/workflows/e2e.yml                                                  | 注册真实产品 spec；部署 smoke 在 GitHub Actions host 启动 Runner/bubblewrap，并验证 Workspace generation 重建后稳定文件仍存在                                       |
+| packages/e2e组配置、.github/workflows/e2e.yml                                              | 注册真实产品 spec；部署 smoke 在 GitHub Actions host 启动 Runner/bubblewrap，并验证 Workspace generation 重建后稳定文件仍存在                                       |
 
 ### 1.3 import/public约束与生产构建
 
@@ -1492,7 +1492,7 @@ AppIntent 继续负责**跨 App**的小 JSON/ArtifactRef 交接；它与同一 W
 | 通信/调度              | Mailbox重复/乱序恢复/TTL/背压、跨Run拒绝、join释放slot、等待图防环、parent request唤醒、递归取消、failFast/隔离模式                                                                                                                                                                                                | P3-B agent-messages.spec.ts                                                  |
 | 插件/Memory            | 签名/路径炸弹拒绝、升级失败恢复AppStorage、iframe不能访问Nexus cookie、bridge错source/nonce拒绝、Memory只经用户发布生效                                                                                                                                                                                            | P3-C plugins.spec.ts、P3-B memory.spec.ts                                    |
 
-产品E2E fixture放test/e2e/fixtures/agent/，用于模拟Provider/MCP/ACP的延迟、错误、截断等下游条件；不要读取fixture内部计数/日志作为唯一断言，调用次数/重复副作用通过Nexus事件与真实产品目标结果验证。不能为了断言加test-only DOM属性；使用真实accessible role/name。每spec独立reset，CI组清单唯一分配，新增/删除spec同步groups generator。截图通过现有captureFunctionalScreenshot在业务checkpoint声明，不新增历史截图manifest。
+产品E2E fixture放packages/e2e/fixtures/agent/，用于模拟Provider/MCP/ACP的延迟、错误、截断等下游条件；不要读取fixture内部计数/日志作为唯一断言，调用次数/重复副作用通过Nexus事件与真实产品目标结果验证。不能为了断言加test-only DOM属性；使用真实accessible role/name。每spec独立reset，CI组清单唯一分配，新增/删除spec同步groups generator。截图通过现有captureFunctionalScreenshot在业务checkpoint声明，不新增历史截图manifest。
 
 发布与验证命令沿用工程约束，不随文档复制出第二套规则：
 

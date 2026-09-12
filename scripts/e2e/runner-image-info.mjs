@@ -16,7 +16,7 @@ if (!/^\d+\.\d+\.\d+/.test(String(versions.playwright))) {
 }
 
 const definitionFiles = [
-  'test/e2e/Dockerfile.runner',
+  'packages/e2e/Dockerfile.runner',
   'scripts/e2e/build-runner-image.sh',
   'scripts/e2e/runner-image-info.mjs',
 ];

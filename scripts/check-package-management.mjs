@@ -15,12 +15,12 @@ if (!exists('pnpm-workspace.yaml')) failures.push('pnpm-workspace.yaml is requir
 if (!exists('pnpm-lock.yaml')) failures.push('pnpm-lock.yaml is required at repository root');
 
 const workspaceText = exists('pnpm-workspace.yaml') ? read('pnpm-workspace.yaml') : '';
-for (const pattern of ['packages/*', 'test/e2e']) {
+for (const pattern of ['packages/*']) {
   if (!workspaceText.includes(`- ${pattern}`))
     failures.push(`pnpm-workspace.yaml: missing workspace member pattern ${pattern}`);
 }
 
-const packageRoots = ['.', 'packages/agent-runtime', 'packages/backend', 'packages/frontend', 'test/e2e'];
+const packageRoots = ['.', 'packages/agent-runtime', 'packages/backend', 'packages/frontend', 'packages/e2e'];
 for (const relative of packageRoots) {
   for (const lockName of ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock']) {
     const candidate = relative === '.' ? lockName : `${relative}/${lockName}`;
@@ -33,10 +33,10 @@ for (const relative of packageRoots) {
 }
 
 const pnpmVersion = /^pnpm@(\d+\.\d+\.\d+)$/.exec(String(rootPackage.packageManager ?? ''))?.[1];
-if (pnpmVersion && exists('test/e2e/Dockerfile.runner')) {
-  const runner = read('test/e2e/Dockerfile.runner');
+if (pnpmVersion && exists('packages/e2e/Dockerfile.runner')) {
+  const runner = read('packages/e2e/Dockerfile.runner');
   if (!runner.includes(`ARG PNPM_VERSION=${pnpmVersion}`)) {
-    failures.push('test/e2e/Dockerfile.runner: PNPM_VERSION default must match root packageManager');
+    failures.push('packages/e2e/Dockerfile.runner: PNPM_VERSION default must match root packageManager');
   }
 }
 
@@ -48,10 +48,10 @@ const engineeringFiles = [
   'scripts/e2e/docker-deployment-smoke.sh',
   'scripts/e2e/resolve-latest-test-environment.mjs',
   'scripts/e2e/sync-test-environment.mjs',
-  'test/e2e/Dockerfile.runner',
-  'test/e2e/playwright.config.ts',
-  'test/e2e/support/groups.mjs',
-  'test/e2e/support/run-functional-screenshots.mjs',
+  'packages/e2e/Dockerfile.runner',
+  'packages/e2e/playwright.config.ts',
+  'packages/e2e/support/groups.mjs',
+  'packages/e2e/support/run-functional-screenshots.mjs',
   '.github/workflows/e2e.yml',
   '.github/workflows/publish-ghcr.yml',
   '.github/workflows/update-dependencies.yml',
@@ -78,7 +78,7 @@ for (const relative of [
   'packages/agent-runtime/package.json',
   'packages/backend/package.json',
   'packages/frontend/package.json',
-  'test/e2e/package.json',
+  'packages/e2e/package.json',
 ]) {
   const manifest = JSON.parse(read(relative));
   for (const [name, command] of Object.entries(manifest.scripts ?? {})) {

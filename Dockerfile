@@ -33,7 +33,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/agent-runtime/package.json ./packages/agent-runtime/package.json
 COPY packages/backend/package.json ./packages/backend/package.json
 COPY packages/frontend/package.json ./packages/frontend/package.json
-COPY test/e2e/package.json ./test/e2e/package.json
+COPY packages/e2e/package.json ./packages/e2e/package.json
 
 FROM workspace-base AS backend-builder
 RUN apk add --no-cache python3 py3-setuptools make g++

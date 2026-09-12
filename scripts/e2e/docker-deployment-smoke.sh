@@ -197,7 +197,7 @@ networks:
     name: nexus-e2e-network-$suffix
 EOF
 mkdir -p "$data_dir"
-cp "$repo_root/test/e2e/fixtures/seeded-data/nexus-terminal.db" "$data_dir/nexus-terminal.db"
+cp "$repo_root/packages/e2e/fixtures/seeded-data/nexus-terminal.db" "$data_dir/nexus-terminal.db"
 cat > "$data_dir/.env" <<EOF
 SESSION_SECRET=$session_secret
 ENCRYPTION_KEY=$encryption_key
@@ -1148,7 +1148,7 @@ curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
 curl -fsS "http://127.0.0.1:${http_port}/api/v1/status" | grep -q '"status"'
 curl -fsS -H "Host: ssh.honus.top" "http://127.0.0.1:${http_port}/.well-known/webauthn" >/dev/null
 
-NEXUS_PRODUCTION_BASE_URL="http://127.0.0.1:${http_port}" pnpm --dir "$repo_root/test/e2e" run test:ingress
+NEXUS_PRODUCTION_BASE_URL="http://127.0.0.1:${http_port}" pnpm --dir "$repo_root/packages/e2e" run test:ingress
 
 login_body='{"username":"e2e-admin","password":"E2e-Admin-Password-2026!","rememberMe":false}'
 curl -fsS \

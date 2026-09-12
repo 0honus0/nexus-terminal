@@ -18,7 +18,7 @@ Playwright is used for browser UI, HTTP API, WebSocket, SSH, and SFTP end-to-end
 
 The main E2E projects do not depend on `auth` to create shared state. Normal specs start from the committed seeded database, while the first-run setup regression explicitly requests an empty database. This keeps project and spec scheduling independent from first-run setup order.
 
-The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP filesystem is isolated under `test/e2e/.tmp/ssh-root`, so GitHub Actions does not depend on any external SSH host.
+The SSH project starts a real `ssh2.Server` on `127.0.0.1:22222`. Its SFTP filesystem is isolated under `packages/e2e/.tmp/ssh-root`, so GitHub Actions does not depend on any external SSH host.
 
 Test support HTTP controls are limited to deterministic fixture setup and fault injection (for example remote file creation, artificial latency, or SSH availability). Test assertions use the Nexus HTTP/WebSocket/UI/ingress surfaces. Fake external services validate incoming requests directly and return success/failure instead of exposing captured internal request logs to specs.
 
@@ -62,7 +62,7 @@ GitHub Actions provides the canonical complete browser E2E environment with the 
 
 ## Parallel groups
 
-`test/e2e/groups/settings.json` defines the default number of CI group workers. `workers` means independent GitHub Actions runners, not Playwright workers inside one process. Each group still runs Playwright with `workers: 1`; the parallelism comes from running multiple isolated group jobs at the same time.
+`packages/e2e/groups/settings.json` defines the default number of CI group workers. `workers` means independent GitHub Actions runners, not Playwright workers inside one process. Each group still runs Playwright with `workers: 1`; the parallelism comes from running multiple isolated group jobs at the same time.
 
 Generating groups with another worker count creates exactly that many `group-N.json` files:
 
@@ -73,7 +73,7 @@ pnpm run test:e2e:groups:check --workers 3
 
 The generator discovers all main specs under `auth`, `http`, `websocket`, `ui`, `ssh`, and `mobile`, keeps a whole spec as the smallest scheduling unit, and uses stable semantic families such as SSH file-manager, transfer, progress, terminal, connection, and UI security/settings/data. Related specs are kept together when doing so does not create an excessive load imbalance.
 
-`test/e2e/groups/timings.json` stores a rolling timing history. The mirrored reporter writes one machine-readable duration per spec, group jobs upload those timing files, and a successful non-PR run merges them back into the history before the default grouping is reconsidered. The effective duration is the median of the most recent samples, so one unusually slow runner does not immediately reshuffle the groups.
+`packages/e2e/groups/timings.json` stores a rolling timing history. The mirrored reporter writes one machine-readable duration per spec, group jobs upload those timing files, and a successful non-PR run merges them back into the history before the default grouping is reconsidered. The effective duration is the median of the most recent samples, so one unusually slow runner does not immediately reshuffle the groups.
 
 Rebalancing is intentionally sticky. Existing assignments are retained unless the predicted longest-group improvement reaches the configured percentage threshold or the current longest/shortest gap exceeds the configured duration threshold. With identical specs and timing history, generation is deterministic and produces byte-for-byte stable group files.
 
@@ -83,7 +83,7 @@ The group generator accepts up to one worker per discovered spec. GitHub-hosted 
 
 Group jobs run inside `ghcr.io/0honus0/nexus-terminal-e2e-runner:playwright-1.63.0-node24`. The image is built from `Dockerfile.runner` and contains Node 24, the exact Playwright Chromium runtime, browser system dependencies, and archive tools used by SSH/SFTP tests. The workflow verifies that the image Playwright version matches `pnpm-lock.yaml` before executing tests.
 
-On successful non-PR runs (`push`, scheduled, or `workflow_dispatch`), the workflow collects all group timing artifacts, refreshes the rolling history, reruns the **default** grouping algorithm, and commits changed `test/e2e/groups/` assignments back to the triggering branch. A manual `workers` override controls only that run’s matrix; rebalance still regenerates the repository default grouping from the collected timings. Pull requests skip the rebalance job and never write grouping state.
+On successful non-PR runs (`push`, scheduled, or `workflow_dispatch`), the workflow collects all group timing artifacts, refreshes the rolling history, reruns the **default** grouping algorithm, and commits changed `packages/e2e/groups/` assignments back to the triggering branch. A manual `workers` override controls only that run’s matrix; rebalance still regenerates the repository default grouping from the collected timings. Pull requests skip the rebalance job and never write grouping state.
 
 ## Test environment maintenance
 
@@ -156,9 +156,9 @@ On Linux hosts that do not already contain Chromium system libraries, Playwright
 
 ## Test reset baseline
 
-Each run uses `test/e2e/.tmp/backend-data` through `NEXUS_DATA_DIR`. The backend database, generated environment data, and file-backed sessions therefore never touch `packages/backend/data`.
+Each run uses `packages/e2e/.tmp/backend-data` through `NEXUS_DATA_DIR`. The backend database, generated environment data, and file-backed sessions therefore never touch `packages/backend/data`.
 
-Normal E2E specs use `test/e2e/fixtures/seeded-data/nexus-terminal.db` as their known baseline. In GitHub Actions, every matrix group runs in its own isolated runner/container and copies this committed seed into that runner's `.tmp/backend-data`, so groups never share a runtime database. The backend exposes the E2E reset endpoint only when both `NODE_ENV=test` and `NEXUS_E2E_RESET_ENABLED=1` are set. Before every E2E test case, the fixture restores the database from the declared baseline, clears file-backed sessions, and resets the isolated SSH test server state. Normal cases use the committed seeded database; the first-run setup case explicitly selects an empty database. No test case depends on database state produced by another case, so any case can be selected directly and every CI group can start independently.
+Normal E2E specs use `packages/e2e/fixtures/seeded-data/nexus-terminal.db` as their known baseline. In GitHub Actions, every matrix group runs in its own isolated runner/container and copies this committed seed into that runner's `.tmp/backend-data`, so groups never share a runtime database. The backend exposes the E2E reset endpoint only when both `NODE_ENV=test` and `NEXUS_E2E_RESET_ENABLED=1` are set. Before every E2E test case, the fixture restores the database from the declared baseline, clears file-backed sessions, and resets the isolated SSH test server state. Normal cases use the committed seeded database; the first-run setup case explicitly selects an empty database. No test case depends on database state produced by another case, so any case can be selected directly and every CI group can start independently.
 
 Vite also uses an E2E-specific cache directory so local dependency-cache permissions do not affect the test server.
 

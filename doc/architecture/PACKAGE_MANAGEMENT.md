@@ -9,7 +9,7 @@ The workspace root is the only lockfile owner:
 - `packages/backend` — Backend runtime package;
 - `packages/frontend` — Browser application package;
 - `packages/agent-runtime` — Agent Runner/Controller package;
-- `test/e2e` — Playwright E2E package;
+- `packages/e2e` — Playwright E2E package;
 - repository root — engineering scripts and shared formatting tooling.
 
 These packages stay separate because they have different runtime/deployment lifecycles. Do not merge them merely to share dependencies, and do not create a shared package for configuration that does not contain a real reusable runtime/build API.
