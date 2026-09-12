@@ -51,8 +51,8 @@ test('connections page remains usable when connection tags fail to load', async 
 });
 
 test('direct connection form remains usable when the proxy catalog fails to load', async ({ page }) => {
-  await page.goto('/connections');
   await page.route('**/api/v1/proxies', (route) => route.abort('failed'));
+  await page.goto('/connections');
   await page.getByTestId('connections-add-button').click();
 
   const form = page.getByTestId('connection-form');
