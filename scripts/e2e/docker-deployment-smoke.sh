@@ -1111,8 +1111,62 @@ await runWorkspaceJob(
 await requireLifecycle(aNew3, 'delete');
 await requireLifecycle(bOld1, 'delete');
 
+// Runtime cleanup is confirmation-scoped by the Backend. Runner must delete only the
+// explicitly authorized Workspace ids and must not rescan unrelated reclaimable state.
+const cleanupWorkspaceA = `smoke-cleanup-a-${randomUUID()}`;
+const cleanupWorkspaceB = `smoke-cleanup-b-${randomUUID()}`;
+const cleanupA = makeIdentity(cleanupWorkspaceA, 1, oldToolchain);
+const cleanupB = makeIdentity(cleanupWorkspaceB, 1, oldToolchain);
+await requireLifecycle(cleanupA, 'provision');
+await requireLifecycle(cleanupB, 'provision');
+const cleanupCommand = await submitCommand({
+  commandId: `smoke-runtime-cleanup-${randomUUID()}`,
+  deploymentId,
+  userId: 1,
+  appId: 'nexus.host',
+  action: 'runtimeCleanup',
+  generation: 1,
+  operationHash: `v1:${'5'.repeat(64)}`,
+  issuedAt: now(),
+  deadlineAt: now() + 60,
+  nonce: randomUUID(),
+  workspaceIds: [cleanupWorkspaceA],
+});
+if (
+  cleanupCommand.status !== 'succeeded' ||
+  JSON.stringify(cleanupCommand.result?.deleted) !== JSON.stringify([cleanupWorkspaceA]) ||
+  (cleanupCommand.result?.skipped?.length ?? 0) !== 0
+) {
+  throw new Error(`Runner scoped runtime cleanup failed: ${JSON.stringify(cleanupCommand)}`);
+}
+const removedCleanupWorkspace = await fetch(`${baseUrl}/v1/workspaces/${encodeURIComponent(cleanupWorkspaceA)}`, { headers });
+if (removedCleanupWorkspace.status !== 404) {
+  throw new Error(`Runtime cleanup kept confirmed Workspace: ${removedCleanupWorkspace.status}`);
+}
+const preservedCleanupWorkspace = await get(`/v1/workspaces/${encodeURIComponent(cleanupWorkspaceB)}`);
+if (preservedCleanupWorkspace.status !== 'ready') {
+  throw new Error(`Runtime cleanup removed an unconfirmed Workspace: ${JSON.stringify(preservedCleanupWorkspace)}`);
+}
+await requireLifecycle(cleanupB, 'delete');
+const cleanupBCommand = await submitCommand({
+  commandId: `smoke-runtime-cleanup-${randomUUID()}`,
+  deploymentId,
+  userId: 1,
+  appId: 'nexus.host',
+  action: 'runtimeCleanup',
+  generation: 1,
+  operationHash: `v1:${'6'.repeat(64)}`,
+  issuedAt: now(),
+  deadlineAt: now() + 60,
+  nonce: randomUUID(),
+  workspaceIds: [cleanupWorkspaceB],
+});
+if (cleanupBCommand.status !== 'succeeded' || cleanupBCommand.result?.deleted?.[0] !== cleanupWorkspaceB) {
+  throw new Error(`Runner cleanup teardown failed: ${JSON.stringify(cleanupBCommand)}`);
+}
+
 console.log(
-  'agent runner: sandbox job + ACP stream + SSH/PTTY terminal + Browser tunnel ok; stable workspace generation ok; multi-version node/python/go switch isolated',
+  'agent runner: sandbox job + ACP stream + SSH/PTTY terminal + Browser tunnel ok; stable workspace generation ok; multi-version node/python/go switch isolated; runtime cleanup scoped',
 );
 NODE
 
@@ -1144,6 +1198,46 @@ host_tool_snapshot_after="$(host_tool_snapshot)"
   exit 1
 }
 
+# A damaged execution journal must fail closed and preserve evidence instead of silently
+# booting with an empty control plane while runtime directories still exist.
+corrupt_runner_root="$workspace/agent-runner-corrupt"
+corrupt_runner_log="$workspace/agent-runner-corrupt.log"
+mkdir -p "$corrupt_runner_root/state"
+printf '{not-json' > "$corrupt_runner_root/state/journal.json"
+if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
+  PORT=0 \
+  NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
+  NEXUS_AGENT_DEPLOYMENT_ID="nexus-e2e-corrupt-$suffix" \
+  NEXUS_AGENT_RUNNER_ROOT="$corrupt_runner_root" \
+  NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
+  node "$repo_root/packages/agent-runner/dist/index.js" >"$corrupt_runner_log" 2>&1; then
+  echo 'Agent Runner accepted a corrupt journal.' >&2
+  exit 1
+fi
+grep -Fq 'RUNNER_JOURNAL_INVALID' "$corrupt_runner_log"
+grep -Fq '{not-json' "$corrupt_runner_root/state/journal.json" || {
+  echo 'Agent Runner replaced the corrupt journal instead of failing closed.' >&2
+  exit 1
+}
+compgen -G "$corrupt_runner_root/state/journal.json.corrupt.*" >/dev/null || {
+  echo 'Agent Runner did not preserve the corrupt journal evidence.' >&2
+  exit 1
+}
+if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
+  PORT=0 \
+  NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
+  NEXUS_AGENT_DEPLOYMENT_ID="nexus-e2e-corrupt-retry-$suffix" \
+  NEXUS_AGENT_RUNNER_ROOT="$corrupt_runner_root" \
+  NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
+  node "$repo_root/packages/agent-runner/dist/index.js" >>"$corrupt_runner_log" 2>&1; then
+  echo 'Agent Runner accepted the same corrupt journal on a retry.' >&2
+  exit 1
+fi
+grep -Fq '{not-json' "$corrupt_runner_root/state/journal.json" || {
+  echo 'Agent Runner changed corrupt journal state after a retry.' >&2
+  exit 1
+}
+
 curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
 curl -fsS "http://127.0.0.1:${http_port}/api/v1/status" | grep -q '"status"'
 curl -fsS -H "Host: ssh.honus.top" "http://127.0.0.1:${http_port}/.well-known/webauthn" >/dev/null
@@ -1159,6 +1253,178 @@ curl -fsS \
 
 cookie="$(awk 'BEGIN { first=1 } (!/^#/ || /^#HttpOnly_/) && NF >= 7 { if (!first) printf "; "; printf "%s=%s", $6, $7; first=0 }' "$cookie_jar")"
 [[ -n "$cookie" ]] || { echo "Login succeeded without producing a session cookie." >&2; exit 1; }
+
+# Destructive Agent lifecycle smoke through the real authenticated HTTP API and host Runner.
+# This fixes two regressions that static architecture checks cannot observe: Run deletion must
+# refuse attached Workspaces, and runtime-cleanup confirmation must not expand after preview.
+COOKIE="$cookie" PORT="$http_port" node <<'NODE'
+const { randomUUID } = require('node:crypto');
+const port = Number(process.env.PORT);
+const baseUrl = `http://127.0.0.1:${port}`;
+const cookie = process.env.COOKIE;
+const origin = baseUrl;
+const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const call = async (method, path, body, headers = {}) => {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method,
+    headers: {
+      Cookie: cookie,
+      Origin: origin,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...headers,
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const text = await response.text();
+  let json = null;
+  if (text) {
+    try { json = JSON.parse(text); } catch { json = text; }
+  }
+  return { response, json, text };
+};
+const ok = async (method, path, body, headers = {}, expectedStatus) => {
+  const result = await call(method, path, body, headers);
+  if (expectedStatus !== undefined ? result.response.status !== expectedStatus : !result.response.ok) {
+    throw new Error(`${method} ${path} failed: ${result.response.status} ${result.text}`);
+  }
+  return result.json?.data;
+};
+const csrf = (await ok('GET', '/api/v1/agent/security/csrf')).token;
+const mutationHeaders = { 'X-Nexus-CSRF': csrf };
+const provider = await ok(
+  'POST',
+  '/api/v1/agent/ai/providers',
+  {
+    kind: 'openai-compatible',
+    displayName: 'Docker lifecycle smoke provider',
+    baseUrl: 'http://host.docker.internal:1/v1',
+    credential: 'docker-lifecycle-smoke-secret',
+    models: [{ id: 'smoke-model', contextWindow: 8192, maxOutputTokens: 64, supportsTools: true }],
+    privateHostExceptions: ['host.docker.internal:1'],
+    enabled: true,
+  },
+  mutationHeaders,
+  201,
+);
+const definitions = await ok('GET', '/api/v1/apps/nexus.operations/agent-definitions');
+const definition = definitions[0];
+if (!definition?.id) throw new Error('Operations Agent definition unavailable in deployment smoke.');
+const catalog = await ok('GET', '/api/v1/agent/workspace-runtime/catalog');
+const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
+if (!recipe) throw new Error('Workspace dev recipe unavailable through Backend API.');
+
+const createTerminalRun = async (title) => {
+  const thread = await ok('POST', '/api/v1/apps/nexus.operations/threads', { title }, mutationHeaders, 201);
+  const created = await ok(
+    'POST',
+    '/api/v1/apps/nexus.operations/runs',
+    {
+      schemaVersion: 1,
+      threadId: thread.id,
+      input: { text: 'deployment lifecycle smoke', artifactRefs: [] },
+      agentDefinitionId: definition.id,
+      model: { providerId: provider.id, modelId: 'smoke-model', configurationVersion: provider.version },
+      connectionIds: [],
+    },
+    { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+    201,
+  );
+  let current = created;
+  const deadline = Date.now() + 45_000;
+  while (!['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
+    if (Date.now() >= deadline) throw new Error(`Run did not become terminal: ${JSON.stringify(current)}`);
+    await wait(250);
+    current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${created.id}`);
+  }
+  return current;
+};
+
+const createReadyWorkspace = async (run, title) => {
+  const created = await ok(
+    'POST',
+    `/api/v1/apps/nexus.operations/runs/${run.id}/workspaces`,
+    { schemaVersion: 1, workspace: { recipeId: recipe.id }, retained: false, catalogRevision: catalog.revision },
+    { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+    202,
+  );
+  let current = created;
+  const deadline = Date.now() + 45_000;
+  while (current.status === 'creating') {
+    if (Date.now() >= deadline) throw new Error(`${title} Workspace did not provision: ${JSON.stringify(current)}`);
+    await wait(500);
+    current = await ok('GET', `/api/v1/apps/nexus.operations/workspaces/${created.id}`);
+  }
+  if (current.status !== 'ready') throw new Error(`${title} Workspace is not ready: ${JSON.stringify(current)}`);
+  return current;
+};
+
+const runA = await createTerminalRun('Docker lifecycle smoke A');
+const workspaceA = await createReadyWorkspace(runA, 'A');
+const blockedDelete = await call(
+  'DELETE',
+  `/api/v1/apps/nexus.operations/runs/${runA.id}?expectedVersion=${runA.version}`,
+  undefined,
+  { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+);
+if (blockedDelete.response.status !== 409 || blockedDelete.json?.error?.code !== 'RUN_DELETE_WORKSPACE_ATTACHED') {
+  throw new Error(`Run deletion did not reject attached Workspace: ${blockedDelete.response.status} ${blockedDelete.text}`);
+}
+
+const runB = await createTerminalRun('Docker lifecycle smoke B');
+const workspaceB = await createReadyWorkspace(runB, 'B');
+const settings = await ok('GET', '/api/v1/agent/settings');
+const cleanupPreview = await ok(
+  'POST',
+  '/api/v1/agent/workspace-runtime/runtime-cleanup/preview',
+  { expectedVersion: settings.revision },
+  mutationHeaders,
+);
+if (!cleanupPreview.workspaceIds.includes(workspaceA.id) || !cleanupPreview.workspaceIds.includes(workspaceB.id)) {
+  throw new Error(`Runtime cleanup preview omitted reclaimable Workspaces: ${JSON.stringify(cleanupPreview)}`);
+}
+
+// This Workspace becomes reclaimable only after preview and therefore must not be authorized
+// by the existing confirmation even though Runner sees it by the time confirm executes.
+const runC = await createTerminalRun('Docker lifecycle smoke C');
+const workspaceC = await createReadyWorkspace(runC, 'C');
+if (cleanupPreview.workspaceIds.includes(workspaceC.id)) throw new Error('Cleanup preview unexpectedly included future Workspace.');
+
+let cleanupCommand = await ok(
+  'POST',
+  '/api/v1/agent/workspace-runtime/runtime-cleanup/confirm',
+  { confirmationId: cleanupPreview.confirmationId, expectedVersion: settings.revision },
+  mutationHeaders,
+  202,
+);
+const cleanupDeadline = Date.now() + 45_000;
+while (['pending', 'running', 'unknown'].includes(cleanupCommand.status)) {
+  if (Date.now() >= cleanupDeadline) throw new Error(`Runtime cleanup command did not settle: ${JSON.stringify(cleanupCommand)}`);
+  await wait(500);
+  cleanupCommand = await ok('GET', `/api/v1/agent/workspace-runtime/commands/${cleanupCommand.id}`);
+}
+if (cleanupCommand.status !== 'succeeded') throw new Error(`Runtime cleanup failed: ${JSON.stringify(cleanupCommand)}`);
+if (!cleanupCommand.result?.deleted?.includes(workspaceA.id) || !cleanupCommand.result?.deleted?.includes(workspaceB.id)) {
+  throw new Error(`Runtime cleanup did not delete previewed Workspaces: ${JSON.stringify(cleanupCommand)}`);
+}
+if (cleanupCommand.result.deleted.includes(workspaceC.id)) {
+  throw new Error(`Runtime cleanup expanded beyond preview scope: ${JSON.stringify(cleanupCommand)}`);
+}
+const afterA = await ok('GET', `/api/v1/apps/nexus.operations/workspaces/${workspaceA.id}`);
+const afterB = await ok('GET', `/api/v1/apps/nexus.operations/workspaces/${workspaceB.id}`);
+const afterC = await ok('GET', `/api/v1/apps/nexus.operations/workspaces/${workspaceC.id}`);
+if (afterA.status !== 'deleted' || afterB.status !== 'deleted' || afterC.status !== 'ready') {
+  throw new Error(`Backend Workspace projection did not match Runner cleanup: ${JSON.stringify({ afterA, afterB, afterC })}`);
+}
+const refreshedRunA = await ok('GET', `/api/v1/apps/nexus.operations/runs/${runA.id}`);
+await ok(
+  'DELETE',
+  `/api/v1/apps/nexus.operations/runs/${runA.id}?expectedVersion=${refreshedRunA.version}`,
+  undefined,
+  { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+  202,
+);
+console.log('agent lifecycle HTTP: Run delete guard + scoped runtime cleanup + Backend projection sync ok');
+NODE
 
 COOKIE="$cookie" PORT="$http_port" node <<'NODE'
 const net = require('node:net');

@@ -11,6 +11,29 @@ interface JournalState {
 }
 
 const empty = (): JournalState => ({ schemaVersion: 2, commands: {}, workspaces: {}, jobs: {} });
+const TERMINAL_HISTORY_LIMIT = 4096;
+const TERMINAL_HISTORY_MIN_AGE_SECONDS = 24 * 60 * 60;
+
+const isMissingFile = (error: unknown): boolean =>
+  error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT';
+
+const fsyncFile = (filePath: string): void => {
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+};
+
+const fsyncDirectory = (directory: string): void => {
+  const fd = fs.openSync(directory, 'r');
+  try {
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+};
 
 export const payloadHash = (value: unknown): string => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
@@ -21,21 +44,36 @@ export class RunnerJournal {
     try {
       this.state = JSON.parse(fs.readFileSync(filePath, 'utf8')) as JournalState;
       if (this.state.schemaVersion !== 2) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
-      this.state.commands ??= {};
-      this.state.workspaces ??= {};
-      this.state.jobs ??= {};
+      if (
+        !this.state.commands ||
+        typeof this.state.commands !== 'object' ||
+        Array.isArray(this.state.commands) ||
+        !this.state.workspaces ||
+        typeof this.state.workspaces !== 'object' ||
+        Array.isArray(this.state.workspaces) ||
+        !this.state.jobs ||
+        typeof this.state.jobs !== 'object' ||
+        Array.isArray(this.state.jobs)
+      ) {
+        throw new Error('JOURNAL_STATE_INVALID');
+      }
       for (const workspace of Object.values(this.state.workspaces)) {
         workspace.runnerPlugins ??= [];
         workspace.acpProfiles ??= [];
         workspace.browserTarget ??= null;
       }
     } catch (error) {
-      if (error instanceof Error && error.message === 'JOURNAL_SCHEMA_UNSUPPORTED') {
-        // Unpublished dev model: old execution-plane journals are intentionally discarded.
+      if (isMissingFile(error)) {
+        this.state = empty();
+        this.flush();
+      } else if (error instanceof Error && error.message === 'JOURNAL_SCHEMA_UNSUPPORTED') {
+        // Pre-release schema replacement is explicit: preserve the old journal before starting fresh.
+        this.quarantineCurrent('schema-unsupported');
         this.state = empty();
         this.flush();
       } else {
-        this.state = empty();
+        this.quarantineCurrent('corrupt');
+        throw new Error('RUNNER_JOURNAL_INVALID');
       }
     }
   }
@@ -177,6 +215,40 @@ export class RunnerJournal {
     this.flush();
   }
 
+  compact(now = Math.floor(Date.now() / 1000)): void {
+    const prune = <T extends { status: string; completedAt: number | null; createdAt: number }>(
+      values: Record<string, T>,
+      terminalStatuses: ReadonlySet<string>,
+    ): void => {
+      const terminal = Object.entries(values)
+        .filter(([, value]) => terminalStatuses.has(value.status) && value.completedAt !== null)
+        .sort((a, b) => (b[1].completedAt ?? b[1].createdAt) - (a[1].completedAt ?? a[1].createdAt));
+      for (const [id, value] of terminal.slice(TERMINAL_HISTORY_LIMIT)) {
+        const completedAt = value.completedAt ?? value.createdAt;
+        if (completedAt <= now - TERMINAL_HISTORY_MIN_AGE_SECONDS) delete values[id];
+      }
+    };
+    const commandCount = Object.keys(this.state.commands).length;
+    const jobCount = Object.keys(this.state.jobs).length;
+    prune(this.state.commands, new Set(['succeeded', 'failed']));
+    prune(this.state.jobs, new Set(['succeeded', 'failed', 'cancelled']));
+    if (commandCount !== Object.keys(this.state.commands).length || jobCount !== Object.keys(this.state.jobs).length) {
+      this.flush();
+    }
+  }
+
+  private quarantineCurrent(reason: 'schema-unsupported' | 'corrupt'): void {
+    if (!fs.existsSync(this.filePath)) return;
+    const target = `${this.filePath}.${reason}.${Date.now()}-${process.pid}`;
+    if (reason === 'corrupt') {
+      fs.copyFileSync(this.filePath, target, fs.constants.COPYFILE_EXCL);
+      fsyncFile(target);
+    } else {
+      fs.renameSync(this.filePath, target);
+    }
+    fsyncDirectory(path.dirname(this.filePath));
+  }
+
   private patchJob(id: string, patch: Partial<JobRecord>): void {
     const current = this.state.jobs[id];
     if (!current) throw new Error('JOB_NOT_FOUND');
@@ -193,7 +265,14 @@ export class RunnerJournal {
 
   private flush(): void {
     const temp = `${this.filePath}.tmp`;
-    fs.writeFileSync(temp, JSON.stringify(this.state), { mode: 0o600 });
-    fs.renameSync(temp, this.filePath);
+    try {
+      fs.writeFileSync(temp, JSON.stringify(this.state), { mode: 0o600 });
+      fsyncFile(temp);
+      fs.renameSync(temp, this.filePath);
+      fsyncDirectory(path.dirname(this.filePath));
+    } catch (error) {
+      fs.rmSync(temp, { force: true });
+      throw error;
+    }
   }
 }

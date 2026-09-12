@@ -18,8 +18,13 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     rawCode(422, 'The requested Run budget exceeds the current Agent Hard Limit.'),
   ),
   onCodes(
-    ['RUN_DELETE_ACTIVE', 'RUN_DELETE_REFERENCED', 'RUN_DELETE_RECONCILIATION_REQUIRED'],
-    rawCode(409, 'The Run cannot be deleted while it is active or still referenced.'),
+    [
+      'RUN_DELETE_ACTIVE',
+      'RUN_DELETE_REFERENCED',
+      'RUN_DELETE_RECONCILIATION_REQUIRED',
+      'RUN_DELETE_WORKSPACE_ATTACHED',
+    ],
+    rawCode(409, 'The Run cannot be deleted while it is active or still referenced by a Workspace.'),
   ),
   onCodes(
     [

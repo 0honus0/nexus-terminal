@@ -267,7 +267,6 @@
     <button
       v-if="!state.maximized"
       type="button"
-      data-testid="agent-resize-handle"
       class="group absolute bottom-0 right-0 z-40 h-8 w-8 cursor-nwse-resize touch-none rounded-tl-xl bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       :aria-label="$t('agent.hub.resize')"
       @pointerdown.stop="begin($event, 'resize')"

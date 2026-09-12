@@ -649,7 +649,7 @@ CREATE TABLE agent_integrations (
 
 Workspace Profile/Generation 的 Runner command 只保存可公开到控制面的冻结事实；宿主路径与 process handle 不进入 Frontend DTO。资源 quota 由 Agent Settings Hard Limits 定义；Controller journal 记录实际 reserve/usage，不维护另一套隐藏资源上限。Controller 只声明当前部署真实具备的 sandbox/resource capability；现实现已强制 filesystem/process/network namespace 与 timeout 边界，但 CPU/memory/PID 硬内核限制未接入前不得宣称已由 cgroup 执行。
 
-删除API不是任意表cascade：只接受终态且无quarantine/未决job的Run；有未 deleted Workspace 或 retained Workspace 时拒绝删除，用户须先明确处理 Workspace，不能顺带删除稳定项目数据。然后标 delete command pending→清理/脱链 Artifact 并保留 retain 对象→清 tool/approval/checkpoint/step/attempt/已 deleted Workspace 历史→删除该 Run 的 ledger entries 及 Run；Thread next_sequence不回退，ledger分页允许删除造成的缺口。parentRunId被引用时默认保留原Run只隐藏内容，禁止FK破坏恢复链。删除Thread逐个处理Run；用户明确清数据才做此操作。App uninstall默认不删这些表。所有单行/列表写须在repository检查scope；跨App Artifact grant是唯一例外，必须同事务验证有效grant后建link。
+删除API不是任意表cascade：只接受终态且无quarantine/未决job的Run；`deleteRunTransition()` 在同一 StateCommit 事务删除 Run 前查询 `agent_workspaces`，只要仍有 `status <> 'deleted'` 或 `retained=1` 的关联 Workspace 就返回 `RUN_DELETE_WORKSPACE_ATTACHED`，用户须先明确处理 Workspace，不能让 FK cascade 顺带删除稳定项目控制记录。然后标 delete command pending→清理/脱链 Artifact 并保留 retain 对象→清 tool/approval/checkpoint/step/attempt/已 deleted Workspace 历史→删除该 Run 的 ledger entries 及 Run；Thread next_sequence不回退，ledger分页允许删除造成的缺口。parentRunId被引用时默认保留原Run只隐藏内容，禁止FK破坏恢复链。删除Thread逐个处理Run；用户明确清数据才做此操作。App uninstall默认不删这些表。所有单行/列表写须在repository检查scope；跨App Artifact grant是唯一例外，必须同事务验证有效grant后建link。
 
 ### 4.3 StateCommitPort：一次事务保证事实/投影/ledger/summary
 
@@ -1268,9 +1268,9 @@ type RunnerStorageView = {
 
 `start`：当前 generation 标 running，并为冻结 target 启动 Runner Plugin process sandbox；`stop`：先 quiesce/dispose Runner Plugin，再终止该 generation 的活跃 job/process tree，保留稳定 Workspace；`restart`：终止旧 process 后按同一 generation 的冻结 tool profile 重建 sandbox；工具版本切换必须创建下一 generation，新 session 使用新 PATH/只读 Tool Pack，旧 session 终止；`delete generation`：dispose 插件、停止 jobs、只删除该 generation runtime。稳定 Workspace 只由显式 Workspace/runtime cleanup 回收，AppStorage/Artifact 不随 generation 删除。
 
-`cleanup-planner.ts` 的“清运行残余”流程改为 freeze new env/jobs → inventory → quiesce/terminate owned process trees → reconcile unknown → remove owned runtime trees → revoke short-lived control data → release quota → compact terminal journal → second inventory。没有 container/network/volume cleanup。任何无法确认 ownership/side effect 的内容进入 `quarantine/` 并返回 partial/reconciliation 状态。
+`cleanup-planner.ts` 的“清运行残余”只接受 Backend preview/confirm 固化的 `workspaceIds`，不重新扫描并扩大 destructive scope；Runner 对每个 confirmed id 再校验 user、retained、active status 与 active job，执行期已重新活跃/受保护的项进入 `skipped[]`。成功 `deleted[]` 返回后 Backend 将同一批 Workspace 投影同步为 `deleted`；随后 remove owned runtime trees → revoke short-lived control data → release quota → compact terminal journal → second inventory。没有 container/network/volume cleanup。任何无法确认 ownership/side effect 的内容进入 `quarantine/` 并返回 partial/reconciliation 状态。
 
-Runner startup reconcile 按 journal 处理 Workspace/command/job；running Workspace 按其冻结 `runnerPlugins` 恢复目标 runtime。中断中的 command/job 标 unknown，不伪造成功。旧 generation 回调不得影响新 generation。
+Runner startup reconcile 按 journal 处理 Workspace/command/job；running Workspace 按其冻结 `runnerPlugins` 恢复目标 runtime。中断中的 command/job 标 unknown，不伪造成功。journal 使用 fsync + rename 持久化，并在启动/cleanup 时显式 compact terminal history；journal JSON/结构损坏会保留 `journal.json.corrupt.*` evidence 并以 `RUNNER_JOURNAL_INVALID` fail closed，不允许静默回到空状态。旧 generation 回调不得影响新 generation。
 
 Pack uninstall 与 runtime cleanup 完全分开；active Workspace 引用 Pack 时仍拒绝卸载。`cache/` 可独立清理，`state/` 只 compaction，`quarantine/` 只在 reconcile/用户确认后释放，`packs/` 只受安装/卸载修改。
 

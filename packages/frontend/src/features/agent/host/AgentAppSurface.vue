@@ -989,7 +989,7 @@
             >
               <span class="h-1.5 w-1.5 rounded-full" :class="environmentStatusClass"></span>
               <span class="agent-config-label text-[9px] font-medium text-text-secondary">{{
-                $t('agent.operations.environment')
+                $t('agent.operations.environmentDefaults')
               }}</span>
               <span class="max-w-36 truncate font-medium">{{ environmentLabel }}</span>
               <i class="fa-solid fa-chevron-down text-[7px] text-text-secondary" aria-hidden="true"></i>
@@ -999,9 +999,9 @@
             >
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <div class="text-[11px] font-semibold">{{ $t('agent.operations.environment') }}</div>
+                  <div class="text-[11px] font-semibold">{{ $t('agent.operations.environmentDefaults') }}</div>
                   <p class="mt-1 text-[10px] leading-4 text-text-secondary">
-                    {{ $t('agent.operations.environmentHint') }}
+                    {{ $t('agent.operations.environmentDefaultsHint') }}
                   </p>
                 </div>
                 <span

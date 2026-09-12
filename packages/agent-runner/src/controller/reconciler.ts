@@ -24,5 +24,6 @@ export class Reconciler {
     for (const job of this.journal.jobs()) {
       if (job.status === 'running') this.journal.unknownJob(job.jobId, 'controller_restarted_during_job');
     }
+    this.journal.compact();
   }
 }

@@ -669,9 +669,18 @@ export class RunnerControllerServer {
     try {
       let result: unknown;
       if (action === 'cacheCleanup') result = this.dependencies.cleanup.cacheCleanup();
-      else if (action === 'runtimeCleanup')
-        result = await this.dependencies.cleanup.runtimeCleanup(command.userId as number);
-      else if (action === 'packInstall') {
+      else if (action === 'runtimeCleanup') {
+        const workspaceIds = command.workspaceIds;
+        if (
+          !Array.isArray(workspaceIds) ||
+          workspaceIds.length > 4096 ||
+          workspaceIds.some((value) => typeof value !== 'string' || !/^[A-Za-z0-9_.-]{1,128}$/.test(value)) ||
+          new Set(workspaceIds).size !== workspaceIds.length
+        ) {
+          throw new Error('VALIDATION_FAILED');
+        }
+        result = await this.dependencies.cleanup.runtimeCleanup(command.userId as number, workspaceIds as string[]);
+      } else if (action === 'packInstall') {
         const packs = Array.isArray(command.packs) ? command.packs : [];
         if (!packs.length || packs.length > 32) throw new Error('VALIDATION_FAILED');
         await this.dependencies.installer.ensure(packs as never[], commandId);

@@ -252,6 +252,27 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
     return result;
   }
 
+  async markRuntimeCleanupDeleted(userId: number, workspaceIds: readonly string[], now: number): Promise<void> {
+    if (
+      !Number.isSafeInteger(userId) ||
+      userId < 1 ||
+      workspaceIds.length > 4096 ||
+      new Set(workspaceIds).size !== workspaceIds.length
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    await this.db.transaction(async (tx) => {
+      for (const workspaceId of workspaceIds) {
+        await tx.execute(
+          `UPDATE agent_workspaces
+           SET status='deleted',version=version+1,last_active_at=?,updated_at=?
+           WHERE id=? AND user_id=? AND status<>'deleted'`,
+          [now, now, workspaceId, userId],
+        );
+      }
+    });
+  }
+
   async reconfigureWorkspace(record: ReconfigureWorkspaceRecord): Promise<AgentWorkspaceView> {
     if (record.generation !== record.expectedGeneration + 1) throw new Error('VALIDATION_FAILED');
     const changed = await this.db.execute(

@@ -390,6 +390,8 @@
       "model": "模型",
       "environment": "执行环境",
       "environmentHint": "此 Agent 当前可用的 Workspace Runtime 能力。",
+      "environmentDefaults": "Runtime 默认值",
+      "environmentDefaultsHint": "当前 Workspace Runtime 的可用性与默认配置；活跃 Run 只有在创建 Workspace 后才会冻结环境事实，并在 Run 详情中展示。",
       "environmentUnknown": "Runtime 状态未知",
       "environmentUnavailable": "Runner 不可用",
       "environmentRunnerReady": "Runner 已就绪",

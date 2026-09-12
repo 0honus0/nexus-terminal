@@ -531,11 +531,14 @@ export class WorkspaceRuntimeService {
   async getCommand(scope: Scope, commandId: string): Promise<WorkspaceRuntimeCommandView> {
     const local = await this.repository.getCommand(scope, commandId);
     if (!local) throw new Error('NOT_FOUND');
-    if (!['pending', 'running', 'unknown'].includes(local.status)) return local;
+    if (!['pending', 'running', 'unknown'].includes(local.status)) {
+      await this.syncCommandProjection(scope, local);
+      return local;
+    }
     try {
       const remote = await this.controller.query(commandId);
       const updated = await this.repository.completeCommand(scope, commandId, remote.status, remote.result, this.now());
-      await this.syncWorkspaceStatus(scope, updated);
+      await this.syncCommandProjection(scope, updated);
       return updated;
     } catch {
       return local;
@@ -565,7 +568,7 @@ export class WorkspaceRuntimeService {
           remote.status !== command.status || JSON.stringify(remote.result) !== JSON.stringify(command.result)
             ? await this.repository.completeCommand(scope, command.id, remote.status, remote.result, this.now())
             : command;
-        await this.syncWorkspaceStatus(scope, updated);
+        await this.syncCommandProjection(scope, updated);
         if (['succeeded', 'failed', 'unknown'].includes(remote.status)) completed += 1;
       } catch {
         if (command.deadlineAt <= this.now()) {
@@ -576,7 +579,7 @@ export class WorkspaceRuntimeService {
             { errorCode: 'WORKSPACE_RECONCILIATION_REQUIRED' },
             this.now(),
           );
-          await this.syncWorkspaceStatus(scope, updated);
+          await this.syncCommandProjection(scope, updated);
           completed += 1;
         }
       }
@@ -647,7 +650,7 @@ export class WorkspaceRuntimeService {
     });
     if (command.id !== commandId) {
       if (!['pending', 'running'].includes(command.status)) {
-        if (syncWorkspace) await this.syncWorkspaceStatus(scope, command);
+        if (syncWorkspace) await this.syncCommandProjection(scope, command);
         return command;
       }
       if (syncWorkspace) return this.getCommand(scope, command.id);
@@ -667,7 +670,7 @@ export class WorkspaceRuntimeService {
         remote = await this.awaitRemoteCommand(commandId, deadlineAt);
       }
       const updated = await this.repository.completeCommand(scope, commandId, remote.status, remote.result, this.now());
-      if (syncWorkspace) await this.syncWorkspaceStatus(scope, updated);
+      if (syncWorkspace) await this.syncCommandProjection(scope, updated);
       return updated;
     } catch (error) {
       const updated = await this.repository.completeCommand(
@@ -677,7 +680,7 @@ export class WorkspaceRuntimeService {
         { errorCode: error instanceof Error ? error.message.slice(0, 200) : 'WORKSPACE_RUNTIME_UNAVAILABLE' },
         this.now(),
       );
-      if (syncWorkspace) await this.syncWorkspaceStatus(scope, updated);
+      if (syncWorkspace) await this.syncCommandProjection(scope, updated);
       return updated;
     }
   }
@@ -713,6 +716,21 @@ export class WorkspaceRuntimeService {
     const workspace = await this.repository.getWorkspace(scope, workspaceId);
     if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('NOT_FOUND');
     return workspace;
+  }
+
+  private async syncCommandProjection(scope: Scope, command: WorkspaceRuntimeCommandView): Promise<void> {
+    await this.syncWorkspaceStatus(scope, command);
+    await this.syncRuntimeCleanupProjection(scope.userId, command);
+  }
+
+  private async syncRuntimeCleanupProjection(userId: number, command: WorkspaceRuntimeCommandView): Promise<void> {
+    if (command.action !== 'runtimeCleanup' || command.status !== 'succeeded') return;
+    if (!command.result || typeof command.result !== 'object' || Array.isArray(command.result)) return;
+    const deleted = (command.result as Record<string, JsonValue>).deleted;
+    if (!Array.isArray(deleted)) return;
+    const deletedIds = [...new Set(deleted.filter((value): value is string => typeof value === 'string'))];
+    if (!deletedIds.length) return;
+    await this.repository.markRuntimeCleanupDeleted(userId, deletedIds, this.now());
   }
 
   private async syncWorkspaceStatus(scope: Scope, command: WorkspaceRuntimeCommandView): Promise<void> {

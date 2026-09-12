@@ -425,9 +425,9 @@ provision：验证命令 → ensure Tool Pack → 创建/复用稳定 Workspace 
 
 start：Workspace generation 转 running，并按冻结 target 启动 Runner Plugin sandboxes。stop：先 quiesce/dispose Runner Plugin，再终止该 generation 活跃 job/process tree，保留稳定 Workspace。restart：终止旧 process tree，按同一 generation 冻结事实重新建立 sandbox。version-switch/recreate：先停止旧 generation，再使用新的 tool refs 创建下一 generation；稳定 Workspace 不移动、不复制。delete generation：dispose 插件、终止 job、删除该 generation runtime；长期 AppStorage/Artifact 与稳定 Workspace 不因 generation 删除而自动消失。
 
-Runner startup reconcile 遍历 journal：running Workspace 检查 generation sandbox runtime 事实并重新激活其冻结 Runner Plugin；中断中的 command/job 标记 unknown/reconciliation-required，不假装成功。旧 generation 的回调不得写新 generation。
+Runner startup reconcile 遍历 journal：running Workspace 检查 generation sandbox runtime 事实并重新激活其冻结 Runner Plugin；中断中的 command/job 标记 unknown/reconciliation-required，不假装成功。journal 写入采用临时文件 + file/directory fsync + 原子 rename；JSON/结构损坏时保留 corrupt evidence 并 fail closed，不能清空 execution-plane 状态后继续启动。旧 generation 的回调不得写新 generation。
 
-“清运行残余”不再删除 Docker resource，而是：freeze new workspace/jobs → quiesce/terminate owned process trees → reconcile unknown → 删除确认归属的 generation runtime；只有在明确执行 Workspace runtime cleanup 且不存在受保护/活跃 generation 时才删除 `runtime/workspaces/<workspaceId>` → 清短期控制面数据 → release quota → compact journal → second inventory。无法确认 ownership/side effect 的数据进入 `quarantine/`。Tool Pack uninstall 与 runtime cleanup 分开；停止/切换 Workspace generation 都不会自动卸载 Tool Pack。
+“清运行残余”不再删除 Docker resource，而是：preview 在 Backend 固化本次允许回收的 Workspace ids → confirm 只把该 id 集合交给 Runner → Runner 对每个 id 再检查 user/retained/active job/active status → quiesce/terminate owned process trees → reconcile unknown → 删除确认归属的 generation/stable runtime → Backend 只依据 Runner 明确返回的 `deleted[]` 把对应 Workspace 投影标为 `deleted` → release quota → compact journal → second inventory。Preview 之后才变成可回收的其他 Workspace 不属于本次确认范围；无法确认 ownership/side effect 的数据进入 `quarantine/`。Tool Pack uninstall 与 runtime cleanup 分开；停止/切换 Workspace generation 都不会自动卸载 Tool Pack。
 
 Runner 备份默认不包含 Packs/runtime/cache，只保存 Nexus DB 中 Settings、PackRef、Workspace Profile/Runner target snapshot 和 Run/Checkpoint 事实。恢复后 Runner 根据 Catalog/Settings 重新核对所需 Pack；缺失明确显示，不伪装旧 sandbox 仍存在。
 

@@ -678,6 +678,12 @@ export const deleteRunTransition = async (
   if (row.version !== command.expectedRunVersion) throw new Error('STATE_CONFLICT');
   if (NON_TERMINAL.has(row.status)) throw new Error('RUN_DELETE_ACTIVE');
   if (row.needs_reconciliation === 1) throw new Error('RUN_DELETE_RECONCILIATION_REQUIRED');
+  const workspace = await tx.queryOne<{ id: string }>(
+    `SELECT id FROM agent_workspaces
+     WHERE run_id = ? AND user_id = ? AND app_id = ? AND (status <> 'deleted' OR retained = 1) LIMIT 1`,
+    [row.id, row.user_id, row.app_id],
+  );
+  if (workspace) throw new Error('RUN_DELETE_WORKSPACE_ATTACHED');
   const child = await tx.queryOne<{ id: string }>(
     `SELECT id FROM agent_runs
      WHERE parent_run_id = ? AND user_id = ? AND app_id = ? LIMIT 1`,

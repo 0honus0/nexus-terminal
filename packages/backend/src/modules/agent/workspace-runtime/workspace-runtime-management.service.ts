@@ -303,9 +303,9 @@ export class WorkspaceRuntimeManagementService {
     if (settings.revision !== expectedVersion) throw new Error('SETTINGS_VERSION_CONFLICT');
     const active = owned.filter((workspace) => ACTIVE_WORKSPACE_STATUSES.has(workspace.status));
     const retained = owned.filter((workspace) => workspace.retained);
-    const candidates = owned.filter(
-      (workspace) => !workspace.retained && !ACTIVE_WORKSPACE_STATUSES.has(workspace.status),
-    );
+    const candidates = owned
+      .filter((workspace) => !workspace.retained && !ACTIVE_WORKSPACE_STATUSES.has(workspace.status))
+      .slice(0, 4096);
     const bytes = new Map(storage.byWorkspace.map((item) => [item.workspaceId, item.runtimeBytes] as const));
     const now = this.now();
     const preview: WorkspaceRuntimeCleanupPreview = {
@@ -347,8 +347,15 @@ export class WorkspaceRuntimeManagementService {
       confirmation.expectedSettingsRevision,
       confirmation.catalogRevision,
     );
+    const payload = record(confirmation.payload);
+    const workspaceIds = Array.isArray(payload.workspaceIds)
+      ? payload.workspaceIds.filter((value): value is string => typeof value === 'string')
+      : [];
+    if (workspaceIds.length > 4096 || new Set(workspaceIds).size !== workspaceIds.length) {
+      throw new Error('VALIDATION_FAILED');
+    }
     await this.confirmations.delete(userId, confirmationId);
-    return this.runtime.adminAction(userId, 'runtimeCleanup', {});
+    return this.runtime.adminAction(userId, 'runtimeCleanup', asJson({ workspaceIds }));
   }
 
   async previewSettingsReset(userId: number, expectedVersion: number): Promise<WorkspaceRuntimeSettingsResetPreview> {

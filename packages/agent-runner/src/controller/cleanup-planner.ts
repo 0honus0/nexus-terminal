@@ -9,10 +9,18 @@ export class CleanupPlanner {
     private readonly journal: RunnerJournal,
     private readonly sandboxEngine: SandboxEngine,
   ) {}
-  async runtimeCleanup(userId: number): Promise<{ deleted: string[]; quarantined: string[] }> {
-    if (!Number.isSafeInteger(userId) || userId < 1) throw new Error('VALIDATION_FAILED');
+  async runtimeCleanup(
+    userId: number,
+    workspaceIds: readonly string[],
+  ): Promise<{ deleted: string[]; quarantined: string[]; skipped: string[] }> {
+    if (!Number.isSafeInteger(userId) || userId < 1 || workspaceIds.length > 4096) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const requested = new Set(workspaceIds);
+    if (requested.size !== workspaceIds.length) throw new Error('VALIDATION_FAILED');
     const deleted: string[] = [],
-      quarantined: string[] = [];
+      quarantined: string[] = [],
+      skipped: string[] = [];
     const activeStatuses = new Set(['creating', 'starting', 'running', 'stopping', 'deleting']);
     const activeWorkspaceIds = new Set(
       this.journal
@@ -20,13 +28,17 @@ export class CleanupPlanner {
         .filter((job) => job.status === 'pending' || job.status === 'running')
         .map((job) => job.workspaceId),
     );
-    for (const workspace of this.journal.workspaces()) {
+    const byId = new Map(this.journal.workspaces().map((workspace) => [workspace.workspaceId, workspace] as const));
+    for (const workspaceId of workspaceIds) {
+      const workspace = byId.get(workspaceId);
       if (
+        !workspace ||
         workspace.userId !== userId ||
         workspace.retained ||
         activeStatuses.has(workspace.status) ||
         activeWorkspaceIds.has(workspace.workspaceId)
       ) {
+        skipped.push(workspaceId);
         continue;
       }
       try {
@@ -58,7 +70,8 @@ export class CleanupPlanner {
         quarantined.push(workspace.workspaceId);
       }
     }
-    return { deleted, quarantined };
+    this.journal.compact();
+    return { deleted, quarantined, skipped };
   }
   cacheCleanup(): { cleared: true } {
     const cache = path.join(this.root, 'cache');

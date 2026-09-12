@@ -324,7 +324,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     });
 
     await step('the resize grip drives container-responsive Agent layout and persists bounds', async () => {
-      const resizeHandle = hub.getByTestId('agent-resize-handle');
+      const resizeHandle = hub.getByRole('button', { name: 'Resize Agent', exact: true });
       await expect(resizeHandle).toBeVisible();
       const initialBounds = await hub.boundingBox();
       const initialHandle = await resizeHandle.boundingBox();
@@ -358,7 +358,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       expect(Math.abs(restoredBounds!.width - narrowBounds!.width)).toBeLessThan(2);
       await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeVisible();
 
-      const restoredHandle = await hub.getByTestId('agent-resize-handle').boundingBox();
+      const restoredHandle = await hub.getByRole('button', { name: 'Resize Agent', exact: true }).boundingBox();
       expect(restoredHandle).not.toBeNull();
       await page.mouse.move(
         restoredHandle!.x + restoredHandle!.width / 2,

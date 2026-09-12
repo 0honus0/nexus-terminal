@@ -390,6 +390,8 @@
       "model": "モデル",
       "environment": "実行環境",
       "environmentHint": "この Agent で現在利用できる Workspace Runtime 機能です。",
+      "environmentDefaults": "Runtime の既定値",
+      "environmentDefaultsHint": "現在の Workspace Runtime の可用性と既定値です。Active Run の環境情報は Workspace 作成時に初めて固定され、Run 詳細に表示されます。",
       "environmentUnknown": "Runtime 状態不明",
       "environmentUnavailable": "Runner は利用できません",
       "environmentRunnerReady": "Runner 準備完了",

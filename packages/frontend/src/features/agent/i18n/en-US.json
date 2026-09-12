@@ -390,6 +390,8 @@
       "model": "Model",
       "environment": "Environment",
       "environmentHint": "Workspace Runtime capability available to this Agent.",
+      "environmentDefaults": "Runtime defaults",
+      "environmentDefaultsHint": "Current Workspace Runtime availability and defaults. Active Run environment facts are frozen only after a Workspace is created and are shown in Run details.",
       "environmentUnknown": "Runtime status unknown",
       "environmentUnavailable": "Runner unavailable",
       "environmentRunnerReady": "Runner ready",

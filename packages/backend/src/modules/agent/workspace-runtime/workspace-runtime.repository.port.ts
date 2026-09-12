@@ -59,6 +59,7 @@ export interface AgentWorkspaceRepositoryPort {
     status: WorkspaceStatus,
     now: number,
   ): Promise<AgentWorkspaceView>;
+  markRuntimeCleanupDeleted(userId: number, workspaceIds: readonly string[], now: number): Promise<void>;
   reconfigureWorkspace(record: ReconfigureWorkspaceRecord): Promise<AgentWorkspaceView>;
   createCommand(record: CreateWorkspaceRuntimeCommandRecord): Promise<WorkspaceRuntimeCommandView>;
   getCommand(scope: Scope, commandId: string): Promise<WorkspaceRuntimeCommandView | null>;
