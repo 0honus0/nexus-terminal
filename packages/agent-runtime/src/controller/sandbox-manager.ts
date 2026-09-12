@@ -5,9 +5,9 @@ import { spawnSync } from 'node:child_process';
 import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, ToolchainPackRef } from '../types';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
-const WORKSPACE_TERMINAL_USER = 'root';
-const WORKSPACE_TERMINAL_UID = 0;
-const WORKSPACE_TERMINAL_GID = 0;
+const WORKSPACE_TERMINAL_USER = 'nexus';
+const WORKSPACE_TERMINAL_UID = 1000;
+const WORKSPACE_TERMINAL_GID = 1000;
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
 const SANDBOX_ID = /^([A-Za-z0-9_.-]{1,128}):(\d+)$/;
@@ -266,7 +266,16 @@ export class SandboxManager {
       `${WORKSPACE_TERMINAL_USER}:x:${WORKSPACE_TERMINAL_UID}:${WORKSPACE_TERMINAL_GID}:Nexus Workspace:/run/nexus-terminal/home:/bin/sh\n`,
       { mode: 0o600 },
     );
-    fs.writeFileSync(path.join(sessionRoot, 'group'), 'root:x:0:\ntty:x:0:\n', { mode: 0o600 });
+    // Bubblewrap's private devpts uses the PTY creator's uid/gid when no
+    // explicit devpts uid/gid is supplied. Dropbear consults the `tty` group
+    // before accepting a PTY and otherwise tries to chown the slave device.
+    // Keep `tty` on the sandbox user's mapped gid so PTY setup needs no
+    // CAP_CHOWN and remains compatible with the sandbox's --cap-drop ALL.
+    fs.writeFileSync(
+      path.join(sessionRoot, 'group'),
+      `${WORKSPACE_TERMINAL_USER}:x:${WORKSPACE_TERMINAL_GID}:\ntty:x:${WORKSPACE_TERMINAL_GID}:${WORKSPACE_TERMINAL_USER}\n`,
+      { mode: 0o600 },
+    );
     const hostKey = path.join(sessionRoot, 'dropbear_ed25519_host_key');
     const generated = spawnSync('dropbearkey', ['-t', 'ed25519', '-f', hostKey], {
       encoding: 'utf8',
@@ -308,9 +317,9 @@ export class SandboxManager {
       sessionId,
       argv: [
         ...beforeCommand,
-        // Ubuntu Noble ships Dropbear 2022.83, whose non-root server cannot
-        // reliably allocate PTYs. Become uid/gid 0 only inside the private user
-        // namespace while retaining the sandbox's explicit --cap-drop ALL.
+        // Run Dropbear as a stable unprivileged identity inside the private
+        // user namespace. Its synthetic tty group matches this gid, so PTY
+        // allocation does not require restoring CHOWN/SETUID/SETGID caps.
         '--uid',
         String(WORKSPACE_TERMINAL_UID),
         '--gid',
