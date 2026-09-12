@@ -1314,9 +1314,10 @@ const catalog = await ok('GET', '/api/v1/agent/workspace-runtime/catalog');
 const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 if (!recipe) throw new Error('Workspace dev recipe unavailable through Backend API.');
 
-const createTerminalRun = async (title) => {
+const terminalRunStatuses = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
+const createRun = async (title) => {
   const thread = await ok('POST', '/api/v1/apps/nexus.operations/threads', { title }, mutationHeaders, 201);
-  const created = await ok(
+  return ok(
     'POST',
     '/api/v1/apps/nexus.operations/runs',
     {
@@ -1330,12 +1331,14 @@ const createTerminalRun = async (title) => {
     { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     201,
   );
-  let current = created;
-  const terminal = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
-  for (let attempt = 0; attempt < 8 && !terminal.has(current.status); attempt += 1) {
+};
+
+const cancelToTerminal = async (run) => {
+  let current = run;
+  for (let attempt = 0; attempt < 8 && !terminalRunStatuses.has(current.status); attempt += 1) {
     const cancelled = await call(
       'POST',
-      `/api/v1/apps/nexus.operations/runs/${created.id}/cancel`,
+      `/api/v1/apps/nexus.operations/runs/${run.id}/cancel`,
       { expectedVersion: current.version },
       { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     );
@@ -1343,16 +1346,16 @@ const createTerminalRun = async (title) => {
     else if (cancelled.response.status !== 409) {
       throw new Error(`Run cancellation failed: ${cancelled.response.status} ${cancelled.text}`);
     }
-    if (!terminal.has(current.status)) {
+    if (!terminalRunStatuses.has(current.status)) {
       await wait(150);
-      current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${created.id}`);
+      current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${run.id}`);
     }
   }
   const deadline = Date.now() + 45_000;
-  while (!terminal.has(current.status)) {
+  while (!terminalRunStatuses.has(current.status)) {
     if (Date.now() >= deadline) throw new Error(`Run did not become terminal: ${JSON.stringify(current)}`);
     await wait(250);
-    current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${created.id}`);
+    current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${run.id}`);
   }
   return current;
 };
@@ -1376,8 +1379,9 @@ const createReadyWorkspace = async (run, title) => {
   return current;
 };
 
-const runA = await createTerminalRun('Docker lifecycle smoke A');
+let runA = await createRun('Docker lifecycle smoke A');
 const workspaceA = await createReadyWorkspace(runA, 'A');
+runA = await cancelToTerminal(runA);
 const blockedDelete = await call(
   'DELETE',
   `/api/v1/apps/nexus.operations/runs/${runA.id}?expectedVersion=${runA.version}`,
@@ -1388,8 +1392,9 @@ if (blockedDelete.response.status !== 409 || blockedDelete.json?.error?.code !==
   throw new Error(`Run deletion did not reject attached Workspace: ${blockedDelete.response.status} ${blockedDelete.text}`);
 }
 
-const runB = await createTerminalRun('Docker lifecycle smoke B');
+let runB = await createRun('Docker lifecycle smoke B');
 const workspaceB = await createReadyWorkspace(runB, 'B');
+runB = await cancelToTerminal(runB);
 const settings = await ok('GET', '/api/v1/agent/settings');
 const cleanupPreview = await ok(
   'POST',
@@ -1403,8 +1408,9 @@ if (!cleanupPreview.workspaceIds.includes(workspaceA.id) || !cleanupPreview.work
 
 // This Workspace becomes reclaimable only after preview and therefore must not be authorized
 // by the existing confirmation even though Runner sees it by the time confirm executes.
-const runC = await createTerminalRun('Docker lifecycle smoke C');
+let runC = await createRun('Docker lifecycle smoke C');
 const workspaceC = await createReadyWorkspace(runC, 'C');
+runC = await cancelToTerminal(runC);
 if (cleanupPreview.workspaceIds.includes(workspaceC.id)) throw new Error('Cleanup preview unexpectedly included future Workspace.');
 
 let cleanupCommand = await ok(
@@ -1441,6 +1447,7 @@ await ok(
   { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
   202,
 );
+
 console.log('agent lifecycle HTTP: Run delete guard + scoped runtime cleanup + Backend projection sync ok');
 })().catch((error) => {
   console.error(error);
