@@ -1,6 +1,6 @@
 # Nexus Terminal 软件需求
 
-本目录是 Nexus Terminal 当前软件需求规格与历史追溯入口。当前内容以重构 PR #9 的最终目录、协议、UI 行为和 E2E 约束为基线，并持续纳入之后经回归验证确认的需求；当前 SRS v1.9 已同时覆盖后续 Workspace/File Manager/Preview/Remote Desktop 回归约束与 Agent implementation baseline，并根据当前源码审核区分“实现基线已存在 / live composition / 部分实现 / 完整 E2E 验收”。全局当前架构入口见 [`../architecture/CURRENT_ARCHITECTURE.md`](../architecture/CURRENT_ARCHITECTURE.md)；重构计划文档完成使命后不再作为需求来源。
+本目录是 Nexus Terminal 当前软件需求规格与历史追溯入口。当前内容以重构 PR #9 的最终目录、协议、UI 行为和 E2E 约束为基线，并持续纳入之后经回归验证确认的需求；当前 SRS v1.10 已覆盖 Workspace/File Manager/Preview/Remote Desktop 回归约束与 Agent live runtime baseline；Agent 的架构规范已经收口为 `doc/agent.md`，需求状态按当前代码与 production E2E 事实区分已交付与待实现。全局当前架构入口见 [`../architecture/CURRENT_ARCHITECTURE.md`](../architecture/CURRENT_ARCHITECTURE.md)；重构计划文档完成使命后不再作为需求来源。
 
 ## 阅读顺序
 

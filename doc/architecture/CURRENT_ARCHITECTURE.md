@@ -2,11 +2,11 @@
 
 > 状态：Current implementation snapshot
 >
-> 日期：2026-09-10
+> 日期：2026-09-12
 >
 > 分支：`dev`
 >
-> 本文件是当前源码架构的单入口快照，不替代详细规范。Backend 放置规则见 [BACKEND.md](BACKEND.md)，Frontend 放置规则见 [FRONTEND.md](FRONTEND.md)，Agent 长期规范见 [agent/ARCHITECTURE.md](agent/ARCHITECTURE.md) / [agent/IMPLEMENTATION.md](agent/IMPLEMENTATION.md)，Agent 当前接线与验证细节见 [agent/CURRENT_AGENT_ARCHITECTURE.md](agent/CURRENT_AGENT_ARCHITECTURE.md)。强制工程约束仍以 [Engineering Constraints](../software-requirements/engineering-constraints.md) 为准。
+> 本文件是当前源码架构的单入口快照，不替代详细规范。Backend 放置规则见 [BACKEND.md](BACKEND.md)，Frontend 放置规则见 [FRONTEND.md](FRONTEND.md)，Agent 架构与当前接线规范见 [../agent.md](../agent.md)。强制工程约束仍以 [Engineering Constraints](../software-requirements/engineering-constraints.md) 为准。
 
 ## 1. 整体结构
 
@@ -243,21 +243,22 @@ Secrets 不进入浏览器 view、Artifact、Plugin activation plain payload 或
 
 ## 10. 当前 Agent capability 接线状态
 
-当前 live composition 已包含 Host/Provider/Conversation/Run/Artifact/Context/Capability/Approval/Lease/Workspace Runtime、MCP、Subagent/Memory、Plugin install/runtime 等主体链路。需要特别区分：
+Agent 的详细当前架构统一见 [`../agent.md`](../agent.md)。当前 production wiring 已包含：
 
-- **MCP 已接线**：`McpAdapter` 由 composition root 创建，refresh 后按 scope 动态写入 Tool Catalog；
-- **Subagent / Memory 已接线**：scheduler、mailbox、shared facts、review/import service 已进入 facade；
-- **Plugin 已接线**：安装/升级/卸载、Frontend isolated UI、Backend sandbox、Runner target 均存在当前 Host/Runner 路径；
-- **ACP 部分实现**：配置模型/持久化与 `AcpAdapter` 存在，但当前 composition root 未实例化/注入 ACP runtime；
-- **Browser/CDP 部分实现**：`PuppeteerBrowserGateway`/ports 已存在，但尚未由 composition root / Tool Catalog 暴露为 live Agent 执行能力。
+- root-mounted global floating Agent Host、Provider、Conversation、Thread/Run/Ledger、typed Plan、append-input interruption；
+- Artifact、Context、Capability、Policy/Approval/Lease、Checkpoint/Resume；
+- Workspace Runtime + `@nexus-terminal/agent-runner`，包括 sandbox job、多版本 Toolchain、cleanup/reconcile；
+- MCP tool catalog；
+- ACP live stream、Browser tunnel/CDP gateway、Workspace local SSH/PTTY Terminal；
+- Subagent durable mailbox/shared facts/work queue 与 reviewed Memory；
+- signed installable Plugin、versioned AgentDefinition、isolated Frontend/Backend/Runner target；
+- Frontend/Backend/Runner 结构化诊断日志。
 
-因此 Phase 3 不能整体标记为完成；“源码 class 存在”和“已进入 live product capability”必须分开记录。
+仍未交付的产品合同必须明确标记为 roadmap，而不能靠前端制造状态：用户可编辑 durable Goal 文本和 slash-command、用户可见 pending-input queue，以及冻结进 RunDefinition 的 Next Run Environment selector。
 
 ## 11. 当前验证状态
 
-本轮架构审核后的当前证据：root build 通过；Backend architecture 通过（374 files）；Frontend architecture 通过（300 source files，包含新增 Agent 子域 guard）；format check、`git diff --check`、test policy（70 E2E spec files）与 E2E group consistency（68 grouped specs）通过。Agent host/provider 2 个 E2E 串行通过；SSH protocol+upload 13 个现有/扩展用例的选择运行 exit 0，其中包含 129-byte requestId 在业务 route 前被 `1003 Invalid requestId` 拒绝，以及 700 KiB raw upload→SFTP→`NXW1` 多帧 binary read；另选 4 个 suspend/resume history 用例运行 exit 0。由此确认 request-scoped binary reassembly 跨 256 KiB frame boundary、terminal/history framing 和 requestId guard 当前一致。
-
-当前宿主 Chromium 因缺少 `libglib-2.0.so.0` 无法启动，完整浏览器 UI E2E 不能记为通过；当前宿主也没有 production `bwrap` 运行证据。因此架构评审必须区分“代码/静态边界通过”“request-level E2E 通过”和“canonical browser/sandbox E2E 尚缺环境证据”。
+Canonical GitHub E2E 在 2026-09-12 已验证当前 Agent/Runner 主链：Docker deployment smoke、8/8 Playwright groups、Host Runner sandbox prerequisites、sandbox job、ACP stream、Workspace SSH/PTTY Terminal、Browser tunnel、stable Workspace generation、Node/Python/Go multi-version switching、runtime cleanup scope、Run deletion Workspace guard、全局 floating Agent 跨路由行为以及 66/66 functional screenshots。宿主本地 Chromium 缺少动态库时的单机执行限制不作为代码失败；远程 canonical CI 是浏览器与 Runner 生产验收事实源。
 
 ## 12. 当前不可破坏的架构约束
 

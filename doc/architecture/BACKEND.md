@@ -328,7 +328,7 @@ A practical ownership guide for locating code:
 
 ## Agent App Platform and AI applications
 
-Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,workspace-runtime,runtime,apps/operations}`, concrete adapters under `infrastructure/agent`, HTTP boundaries under `interfaces/http/agent`, the Browser Agent event boundary under `interfaces/websocket/agent-protocol.session.ts` (`/ws/agent`), and composition under `bootstrap/agent`. The plugin host, shared AI capabilities and built-in Operations App are defined in [Agent Architecture](./agent/ARCHITECTURE.md), with implementation details in [Agent Implementation](./agent/IMPLEMENTATION.md) and current delivery state in [Current Agent Architecture](./agent/CURRENT_AGENT_ARCHITECTURE.md).
+Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,workspace-runtime,runtime,apps/operations}`, concrete adapters under `infrastructure/agent`, HTTP boundaries under `interfaces/http/agent`, the Browser Agent event boundary under `interfaces/websocket/agent-protocol.session.ts` (`/ws/agent`), and composition under `bootstrap/agent`. The plugin host, shared AI capabilities and built-in Operations App are defined in [Agent Architecture](../agent.md).
 
 Target composition:
 
