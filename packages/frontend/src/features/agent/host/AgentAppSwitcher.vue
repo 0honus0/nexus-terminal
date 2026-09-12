@@ -6,33 +6,44 @@
   const emit = defineEmits<{ switch: [appId: string] }>();
   const query = ref('');
   const enabledApps = computed(() => props.apps.filter((app) => app.enabled));
-  const filtered = computed(() => {
+  const filteredApps = computed(() => {
     const needle = query.value.trim().toLowerCase();
-    return enabledApps.value.filter((app) => !needle || `${app.displayName} ${app.id}`.toLowerCase().includes(needle));
+    if (!needle) return enabledApps.value;
+    return enabledApps.value.filter(
+      (app) => app.id === props.activeAppId || `${app.displayName} ${app.id}`.toLowerCase().includes(needle),
+    );
   });
-  const showSearch = computed(() => enabledApps.value.length > 4);
+  const showSearch = computed(() => enabledApps.value.length > 5);
+  const activityCount = (app: AgentAppSummary): number =>
+    app.runningRuns + app.pendingApprovals + app.pendingBudgetRequests;
 </script>
 
 <template>
   <div class="flex min-w-0 items-center gap-1.5">
-    <label class="sr-only" for="agent-app-search">{{ $t('agent.hub.searchApps') }}</label>
-    <input
-      v-if="showSearch"
-      id="agent-app-search"
-      v-model="query"
-      type="search"
-      class="hidden w-32 rounded-lg border border-border bg-background px-2 py-1.5 text-[10px] outline-none focus:border-primary md:block"
-      :placeholder="$t('agent.hub.searchApps')"
-    />
+    <label v-if="showSearch" class="relative hidden md:block">
+      <span class="sr-only">{{ $t('agent.hub.searchApps') }}</span>
+      <i
+        class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[7px] text-text-secondary"
+        aria-hidden="true"
+      ></i>
+      <input
+        v-model="query"
+        type="search"
+        class="h-7 w-28 rounded-lg border border-border bg-background pl-6 pr-2 text-[9px] outline-none focus:border-primary"
+        :placeholder="$t('agent.hub.searchApps')"
+      />
+    </label>
     <div class="relative min-w-0">
       <select
-        class="max-w-48 appearance-none rounded-lg border border-border bg-background py-1.5 pl-2.5 pr-7 text-[11px] font-medium outline-none focus:border-primary"
+        class="max-w-52 appearance-none rounded-lg border border-border bg-background py-1.5 pl-2.5 pr-7 text-[11px] font-medium outline-none focus:border-primary"
         :value="activeAppId ?? ''"
         :aria-label="$t('agent.hub.appSwitcher')"
         @change="emit('switch', ($event.target as HTMLSelectElement).value)"
       >
         <option value="" disabled>{{ $t('agent.hub.chooseApp') }}</option>
-        <option v-for="app in filtered" :key="app.id" :value="app.id">{{ app.displayName }} · {{ app.health }}</option>
+        <option v-for="app in filteredApps" :key="app.id" :value="app.id">
+          {{ app.displayName }} · {{ app.health }}{{ activityCount(app) ? ` · ${activityCount(app)}` : '' }}
+        </option>
       </select>
       <i
         class="fa-solid fa-chevron-down pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[8px] text-text-secondary"

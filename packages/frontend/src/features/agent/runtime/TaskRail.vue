@@ -7,6 +7,7 @@
     current: AgentRunView | null;
     backgroundRuns: AgentRunView[];
     threadRuns: AgentRunView[];
+    threadTitles: Record<string, string>;
     hardLimits: AgentHardLimits | null;
     approvals: AgentApprovalView[];
     approvalClock: AgentServerClockAnchor | null;
@@ -40,6 +41,24 @@
   );
   const planItems = computed(() => props.current?.plan.items ?? []);
   const completedPlanItems = computed(() => planItems.value.filter((item) => item.status === 'completed').length);
+  const planPercent = computed(() =>
+    planItems.value.length ? Math.round((completedPlanItems.value / planItems.value.length) * 100) : 0,
+  );
+  const currentPlanItem = computed(
+    () =>
+      planItems.value.find((item) => item.status === 'in_progress') ??
+      planItems.value.find((item) => item.status === 'blocked') ??
+      planItems.value.find((item) => item.status === 'pending') ??
+      null,
+  );
+  const blockedPlanItems = computed(() => planItems.value.filter((item) => item.status === 'blocked').length);
+  const attentionKey = computed(() => {
+    if (!props.current) return null;
+    if (props.current.needsReconciliation) return 'reconciliation';
+    if (props.current.status === 'awaiting_approval') return 'approval';
+    if (props.current.status === 'awaiting_budget') return 'budget';
+    return null;
+  });
   const historyRuns = computed(() => props.threadRuns.filter((item) => item.id !== props.current?.id).slice(0, 8));
 
   const increase = (): void => {
@@ -121,6 +140,41 @@
             </button>
           </div>
 
+          <div v-if="planItems.length" class="mt-3 rounded-lg border border-border/70 bg-card px-2.5 py-2.5">
+            <div class="flex items-center justify-between gap-2 text-[9px]">
+              <span class="font-medium">{{ $t('agent.tasks.progress') }}</span>
+              <span class="text-text-secondary"
+                >{{ completedPlanItems }}/{{ planItems.length }} · {{ planPercent }}%</span
+              >
+            </div>
+            <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-header">
+              <div class="h-full rounded-full bg-primary" :style="{ width: `${planPercent}%` }"></div>
+            </div>
+            <div v-if="currentPlanItem" class="mt-2 flex items-start gap-2">
+              <span
+                class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full"
+                :class="currentPlanItem.status === 'blocked' ? 'bg-warning' : 'bg-primary'"
+              ></span>
+              <div class="min-w-0">
+                <div class="text-[8px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
+                  {{ $t('agent.tasks.currentFocus') }}
+                </div>
+                <div class="mt-0.5 truncate text-[10px] font-medium">{{ currentPlanItem.title }}</div>
+              </div>
+            </div>
+            <div v-else class="mt-2 text-[9px] text-success">
+              <i class="fa-solid fa-check mr-1 text-[8px]" aria-hidden="true"></i>{{ $t('agent.tasks.planComplete') }}
+            </div>
+          </div>
+
+          <div
+            v-if="attentionKey"
+            class="mt-3 rounded-lg border border-warning/40 bg-warning/5 px-2.5 py-2 text-[9px] leading-4 text-warning"
+          >
+            <i class="fa-solid fa-triangle-exclamation mr-1 text-[8px]" aria-hidden="true"></i>
+            {{ $t(`agent.tasks.attention.${attentionKey}`) }}
+          </div>
+
           <div class="mt-3 space-y-2.5">
             <div>
               <div class="mb-1 flex items-center justify-between text-[9px] text-text-secondary">
@@ -179,9 +233,14 @@
               <strong class="text-[11px]">{{ $t('agent.tasks.plan') }}</strong>
               <div class="mt-0.5 text-[9px] text-text-secondary">r{{ current.plan.revision }}</div>
             </div>
-            <span class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary">
-              {{ completedPlanItems }}/{{ planItems.length }}
-            </span>
+            <div class="flex items-center gap-1.5">
+              <span v-if="blockedPlanItems" class="rounded-full bg-warning/10 px-2 py-0.5 text-[9px] text-warning">
+                {{ $t('agent.tasks.blockedCount', { count: blockedPlanItems }) }}
+              </span>
+              <span class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary">
+                {{ completedPlanItems }}/{{ planItems.length }}
+              </span>
+            </div>
           </div>
           <ol class="mt-3 space-y-2">
             <li v-for="item in planItems" :key="item.id" class="relative pl-5">
@@ -283,7 +342,9 @@
           <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary"></span>
           <span class="min-w-0 flex-1">
             <span class="block truncate text-[10px] font-medium">{{ $t(`agent.tasks.runStatus.${item.status}`) }}</span>
-            <span class="mt-0.5 block truncate text-[8px] text-text-secondary">{{ item.threadId }}</span>
+            <span class="mt-0.5 block truncate text-[8px] text-text-secondary">
+              {{ threadTitles[item.threadId] || item.threadId }} · {{ item.definition.model.modelId }}
+            </span>
           </span>
           <i class="fa-solid fa-chevron-right text-[8px] text-text-secondary" aria-hidden="true"></i>
         </button>

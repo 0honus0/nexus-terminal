@@ -314,14 +314,37 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       await hub.getByLabel('Conversation title', { exact: true }).fill('UI named thread');
       await hub.getByRole('button', { name: 'Create', exact: true }).click();
       await expect(hub.getByText('UI named thread', { exact: true })).toHaveCount(2);
+      const conversationSearch = hub.getByPlaceholder('Search conversations', { exact: true });
+      await conversationSearch.fill('UI named');
+      await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toHaveCount(0);
+      await expect(hub.getByRole('button').filter({ hasText: 'UI named thread' })).toBeVisible();
+      await conversationSearch.fill('');
       await hub.getByRole('button').filter({ hasText: 'Preset E2E thread' }).click();
       await expect(hub.getByText('Preset E2E thread', { exact: true })).toHaveCount(2);
     });
 
     const modelSelect = hub.getByLabel('Run model', { exact: true });
     await modelSelect.selectOption({ label: 'Preset E2E Provider · e2e-model-alt' });
+    const selectedAltModelKey = await modelSelect.inputValue();
     const composer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
-    await composer.fill('Confirm the Agent composer can start the next Run from the current thread.');
+
+    await step('multi-App switching preserves the Developer conversation, draft, and next-Run model', async () => {
+      await composer.fill('Draft survives App switching');
+      const appActivity = hub.getByLabel('Agent app activity', { exact: true });
+      await expect(appActivity).toBeVisible();
+      await appActivity.getByRole('button', { name: 'Switch to Operations', exact: true }).click();
+      await expect(hub.getByLabel('Agent app', { exact: true })).toHaveValue('nexus.operations');
+      await appActivity.getByRole('button', { name: 'Switch to Developer Agent', exact: true }).click();
+      await expect(hub.getByLabel('Agent app', { exact: true })).toHaveValue('nexus.developer');
+      await expect(hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...')).toHaveValue(
+        'Draft survives App switching',
+      );
+      await expect(hub.getByLabel('Run model', { exact: true })).toHaveValue(selectedAltModelKey);
+      await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toBeVisible();
+    });
+
+    const restoredComposer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
+    await restoredComposer.fill('Confirm the Agent composer can start the next Run from the current thread.');
     await hub.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(
       hub.getByText('Confirm the Agent composer can start the next Run from the current thread.', { exact: true }),
@@ -369,7 +392,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     await step('pending mutation approval remains actionable when the TaskRail is hidden', async () => {
       const targetRow = hub.getByText('E2E SSH', { exact: true }).locator('..').locator('..');
       await targetRow.getByRole('checkbox').check();
-      await composer.fill(
+      await restoredComposer.fill(
         `Request the bounded shell approval exactly once. E2E_APPROVAL_CONNECTION_ID=${connectionId}`,
       );
       await hub.getByRole('button', { name: 'Send', exact: true }).click();

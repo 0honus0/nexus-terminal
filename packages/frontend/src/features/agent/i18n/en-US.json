@@ -24,7 +24,8 @@
         "savingPermissions": "Saving...",
         "permissionsLoading": "Loading current capabilities...",
         "noCapabilities": "This app does not declare any grantable capabilities.",
-        "empty": "No Agent apps are available."
+        "empty": "No Agent apps are available.",
+        "permissionsCollapsedHint": "Expand to review and edit this app’s capability grants."
       },
       "plugins": {
         "title": "Installable apps and skills",
@@ -195,7 +196,17 @@
         "disable": "Disable",
         "enable": "Enable",
         "test": "Test",
-        "empty": "No model providers are configured."
+        "empty": "No model providers are configured.",
+        "counts": "{providers} providers · {models} models",
+        "defaultModel": "Default model for new runs",
+        "chooseDefault": "Choose a default model",
+        "defaultModelHint": "This initializes the model picker for a new Run. Each started Run still freezes its own model snapshot.",
+        "modelCount": "{count} models",
+        "defaultBadge": "Default",
+        "contextShort": "{value} context",
+        "outputShort": "{value} output",
+        "toolCapable": "Tools",
+        "modelOnly": "Model only"
       },
       "guardrails": {
         "title": "System guardrails",
@@ -281,6 +292,37 @@
         "loading": "Loading ACP integrations…",
         "noIntegrations": "No ACP integrations configured.",
         "deleteIntegration": "Delete"
+      },
+      "navigation": "Agent settings sections",
+      "controlPlane": "Control plane",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "groups": {
+        "overview": "Overview",
+        "models": "Models and budget",
+        "execution": "Execution and agents",
+        "environments": "Runtime environments",
+        "storage": "Files and storage",
+        "extensions": "Apps and extensions",
+        "safety": "Safety and system"
+      },
+      "groupDescriptions": {
+        "overview": "Feature state, installed Agent apps, app activity, and capability grants.",
+        "models": "Default model, providers, context budgets, and instance ceilings.",
+        "execution": "Concurrency, performance, and Subagent profiles for delegated work.",
+        "environments": "Workspace Runner, browser targets, and ACP process integrations.",
+        "storage": "Artifact quotas, retention, and current storage pressure.",
+        "extensions": "Signed Agent apps, plugin repositories, packages, and publisher trust.",
+        "safety": "Target deny rules and read-only system guardrails."
+      },
+      "summary": {
+        "apps": "Agent apps",
+        "enabled": "enabled",
+        "models": "Models",
+        "providers": "{count} enabled providers",
+        "runtime": "Workspace runtime",
+        "storage": "Artifact storage",
+        "storageLimit": "Limit {value}"
       }
     },
     "launcher": {
@@ -301,7 +343,14 @@
       "noSurface": "This Agent App does not provide an interactive surface.",
       "workspace": "Agent workspace",
       "views": "Agent views",
-      "approvals": "{count} approvals"
+      "approvals": "{count} approvals",
+      "appActivity": "Agent app activity",
+      "apps": "Apps",
+      "switchToApp": "Switch to {app}",
+      "runningRuns": "Running runs",
+      "pendingApprovals": "Pending approvals",
+      "pendingBudget": "Pending budget requests",
+      "idle": "idle"
     },
     "pluginFrontend": {
       "frameTitle": "Agent plugin UI",
@@ -325,7 +374,15 @@
       "createThread": "Create",
       "runModel": "Run model",
       "runModelHint": "Choose the model for the next Run.",
-      "runModelLocked": "The model is frozen while the current Run is active."
+      "runModelLocked": "The model is frozen while the current Run is active.",
+      "threadCounts": "{total} conversations · {active} active",
+      "searchThreads": "Search conversations",
+      "noThreadsFound": "No conversations match this search.",
+      "activeRunModel": "Run model",
+      "nextRunModel": "Next run",
+      "toolsOn": "Tools",
+      "modelOnly": "Model only",
+      "contextShort": "{value} ctx"
     },
     "files": {
       "search": "Search files",
@@ -432,7 +489,16 @@
       "history": "Run history",
       "deleteRun": "Delete run",
       "confirmDeleteRun": "Confirm delete",
-      "deleteRunHint": "Remove this terminal Run from Agent history. This cannot be undone."
+      "deleteRunHint": "Remove this terminal Run from Agent history. This cannot be undone.",
+      "progress": "Plan progress",
+      "currentFocus": "Current focus",
+      "planComplete": "Plan complete",
+      "blockedCount": "{count} blocked",
+      "attention": {
+        "reconciliation": "Reconciliation is required before the next mutation.",
+        "approval": "This run is waiting for your approval.",
+        "budget": "This run is paused until its budget is increased."
+      }
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",

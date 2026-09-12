@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted } from 'vue';
-  import type { HostSummaryView } from '../api/agent-api';
+  import type { AgentAppSummary, HostSummaryView } from '../api/agent-api';
   import AgentAppSurface from './AgentAppSurface.vue';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
@@ -15,6 +15,9 @@
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
   const activeBuiltinView = computed(() => (activeApp.value ? builtinAppView(activeApp.value.id) : null));
   const visible = computed(() => state.status === 'visible');
+  const enabledApps = computed(() => props.summary.apps.filter((app) => app.enabled));
+  const appActivity = (app: AgentAppSummary): number =>
+    app.runningRuns + app.pendingApprovals + app.pendingBudgetRequests;
   const activityCount = computed(
     () =>
       props.summary.totalRunningRuns + props.summary.totalPendingApprovals + props.summary.totalPendingBudgetRequests,
@@ -178,6 +181,62 @@
         </button>
       </div>
     </header>
+
+    <div
+      v-if="enabledApps.length > 1"
+      class="hidden h-9 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/70 bg-card/55 px-3 sm:flex"
+      :aria-label="$t('agent.hub.appActivity')"
+      @pointerdown.stop
+    >
+      <span class="mr-1 shrink-0 text-[8px] font-semibold uppercase tracking-[0.14em] text-text-secondary">
+        {{ $t('agent.hub.apps') }}
+      </span>
+      <button
+        v-for="app in enabledApps"
+        :key="app.id"
+        type="button"
+        class="flex h-6 shrink-0 items-center gap-1.5 rounded-lg border px-2 text-[9px] transition-colors"
+        :class="
+          app.id === state.activeAppId
+            ? 'border-primary/30 bg-primary/10 font-semibold text-foreground'
+            : 'border-transparent bg-background/70 text-text-secondary hover:border-border hover:text-foreground'
+        "
+        :aria-label="$t('agent.hub.switchToApp', { app: app.displayName })"
+        @click="switchApp(app.id)"
+      >
+        <span
+          class="h-1.5 w-1.5 rounded-full"
+          :class="
+            app.health === 'healthy' ? 'bg-success' : app.health === 'degraded' ? 'bg-warning' : 'bg-text-secondary/50'
+          "
+        ></span>
+        <span class="max-w-32 truncate">{{ app.displayName }}</span>
+        <span
+          v-if="app.runningRuns"
+          class="rounded bg-primary/10 px-1 text-[8px] text-primary"
+          :title="$t('agent.hub.runningRuns')"
+        >
+          <i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.runningRuns }}
+        </span>
+        <span
+          v-if="app.pendingApprovals"
+          class="rounded bg-warning/10 px-1 text-[8px] text-warning"
+          :title="$t('agent.hub.pendingApprovals')"
+        >
+          <i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingApprovals }}
+        </span>
+        <span
+          v-if="app.pendingBudgetRequests"
+          class="rounded bg-warning/10 px-1 text-[8px] text-warning"
+          :title="$t('agent.hub.pendingBudget')"
+        >
+          <i class="fa-solid fa-coins mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingBudgetRequests }}
+        </span>
+        <span v-if="appActivity(app) === 0 && app.id !== state.activeAppId" class="text-[8px] opacity-60">{{
+          $t('agent.hub.idle')
+        }}</span>
+      </button>
+    </div>
 
     <div class="min-h-0 flex-1 bg-background">
       <ArtifactLibraryView v-if="state.hubView === 'files'" :apps="summary.apps" />

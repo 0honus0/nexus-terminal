@@ -24,7 +24,8 @@
         "savingPermissions": "保存中...",
         "permissionsLoading": "正在加载当前授权...",
         "noCapabilities": "此 App 未声明可授权能力。",
-        "empty": "当前没有可用的 Agent App。"
+        "empty": "当前没有可用的 Agent App。",
+        "permissionsCollapsedHint": "展开后查看并编辑此 App 的能力授权。"
       },
       "plugins": {
         "title": "可安装 App 与 Skill",
@@ -195,7 +196,17 @@
         "disable": "停用",
         "enable": "启用",
         "test": "测试",
-        "empty": "尚未配置模型 Provider。"
+        "empty": "尚未配置模型 Provider。",
+        "counts": "{providers} 个 Provider · {models} 个模型",
+        "defaultModel": "新 Run 默认模型",
+        "chooseDefault": "选择默认模型",
+        "defaultModelHint": "用于初始化新 Run 的模型选择器；Run 一旦开始，仍会冻结自己的模型快照。",
+        "modelCount": "{count} 个模型",
+        "defaultBadge": "默认",
+        "contextShort": "{value} 上下文",
+        "outputShort": "{value} 输出",
+        "toolCapable": "支持 Tools",
+        "modelOnly": "仅模型"
       },
       "guardrails": {
         "title": "系统保护边界",
@@ -281,6 +292,37 @@
         "loading": "正在加载 ACP Integrations…",
         "noIntegrations": "尚未配置 ACP Integration。",
         "deleteIntegration": "删除"
+      },
+      "navigation": "Agent 设置分区",
+      "controlPlane": "控制面",
+      "enabled": "已启用",
+      "disabled": "已停用",
+      "groups": {
+        "overview": "概览",
+        "models": "模型与预算",
+        "execution": "执行与 Agent",
+        "environments": "运行环境",
+        "storage": "文件与存储",
+        "extensions": "App 与扩展",
+        "safety": "安全与系统"
+      },
+      "groupDescriptions": {
+        "overview": "查看功能状态、Agent App、活动情况与能力授权。",
+        "models": "管理默认模型、Provider、上下文预算和实例上限。",
+        "execution": "配置并发、性能与用于委派工作的 Subagent Profile。",
+        "environments": "管理 Workspace Runner、浏览器目标与 ACP 进程集成。",
+        "storage": "管理 Artifact 配额、保留策略和当前存储压力。",
+        "extensions": "管理签名 Agent App、插件仓库、安装包与发布者信任。",
+        "safety": "管理目标 deny 规则与只读系统保护边界。"
+      },
+      "summary": {
+        "apps": "Agent App",
+        "enabled": "已启用",
+        "models": "模型",
+        "providers": "{count} 个已启用 Provider",
+        "runtime": "Workspace Runtime",
+        "storage": "Artifact 存储",
+        "storageLimit": "上限 {value}"
       }
     },
     "launcher": {
@@ -301,7 +343,14 @@
       "noSurface": "此 Agent App 未提供可交互界面。",
       "workspace": "Agent 工作区",
       "views": "Agent 视图",
-      "approvals": "{count} 个待审批"
+      "approvals": "{count} 个待审批",
+      "appActivity": "Agent App 活动",
+      "apps": "App",
+      "switchToApp": "切换到 {app}",
+      "runningRuns": "运行中的 Run",
+      "pendingApprovals": "待审批",
+      "pendingBudget": "待处理预算请求",
+      "idle": "空闲"
     },
     "pluginFrontend": {
       "frameTitle": "Agent 插件界面",
@@ -325,7 +374,15 @@
       "createThread": "创建",
       "runModel": "Run 模型",
       "runModelHint": "为下一次 Run 选择模型。",
-      "runModelLocked": "当前 Run 活跃期间模型已冻结。"
+      "runModelLocked": "当前 Run 活跃期间模型已冻结。",
+      "threadCounts": "{total} 个会话 · {active} 个活跃",
+      "searchThreads": "搜索会话",
+      "noThreadsFound": "没有匹配的会话。",
+      "activeRunModel": "当前 Run 模型",
+      "nextRunModel": "下一次 Run",
+      "toolsOn": "支持 Tools",
+      "modelOnly": "仅模型",
+      "contextShort": "{value} 上下文"
     },
     "files": {
       "search": "搜索文件",
@@ -432,7 +489,16 @@
       "history": "Run 历史",
       "deleteRun": "删除 Run",
       "confirmDeleteRun": "确认删除",
-      "deleteRunHint": "从 Agent 历史中删除这个已结束的 Run。此操作无法撤销。"
+      "deleteRunHint": "从 Agent 历史中删除这个已结束的 Run。此操作无法撤销。",
+      "progress": "计划进度",
+      "currentFocus": "当前步骤",
+      "planComplete": "计划已完成",
+      "blockedCount": "{count} 个受阻",
+      "attention": {
+        "reconciliation": "下一次修改操作前需要先完成对账。",
+        "approval": "此 Run 正在等待你的审批。",
+        "budget": "此 Run 已暂停，需要增加预算后继续。"
+      }
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",

@@ -26,7 +26,7 @@
   import TaskRail from '../runtime/TaskRail.vue';
 
   const props = defineProps<{ appId: string }>();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const facade = createAgentRunFacade(props.appId);
   facade.start();
   const runtimeOperation = createRuntimeOperationState();
@@ -56,6 +56,7 @@
   const selectedModelKey = ref('');
   const newThreadEditorVisible = ref(false);
   const newThreadTitle = ref('');
+  const threadQuery = ref('');
   const streamingText = ref('');
   const busy = ref(false);
   const loading = ref(true);
@@ -70,6 +71,44 @@
   let subagentMessagesGeneration = 0;
 
   const nonTerminal = new Set(['created', 'running', 'awaiting_approval', 'awaiting_budget', 'cancelling']);
+  const threadStatus = (threadId: string): AgentRunView['status'] | null => {
+    if (currentThread.value?.id === threadId && run.value) return run.value.status;
+    return backgroundRuns.value.find((candidate) => candidate.threadId === threadId)?.status ?? null;
+  };
+  const activeThreadCount = computed(
+    () =>
+      threads.value.filter((thread) => {
+        const status = threadStatus(thread.id);
+        return status !== null && nonTerminal.has(status);
+      }).length,
+  );
+  const visibleThreads = computed(() => {
+    const needle = threadQuery.value.trim().toLowerCase();
+    return threads.value
+      .filter((thread) => !needle || `${thread.title} ${thread.id}`.toLowerCase().includes(needle))
+      .slice()
+      .sort((left, right) => {
+        const leftSelected = left.id === currentThread.value?.id;
+        const rightSelected = right.id === currentThread.value?.id;
+        if (leftSelected !== rightSelected) return leftSelected ? -1 : 1;
+        const leftActive = nonTerminal.has(threadStatus(left.id) ?? '');
+        const rightActive = nonTerminal.has(threadStatus(right.id) ?? '');
+        if (leftActive !== rightActive) return leftActive ? -1 : 1;
+        return right.updatedAt - left.updatedAt;
+      });
+  });
+  const threadTitles = computed<Record<string, string>>(() =>
+    Object.fromEntries(
+      threads.value.map((thread) => [thread.id, thread.title || t('agent.operations.untitledThread')]),
+    ),
+  );
+  const formatThreadUpdatedAt = (updatedAt: number): string =>
+    new Intl.DateTimeFormat(locale.value, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    }).format(new Date(updatedAt * 1000));
   const modelOptions = computed(() =>
     providers.value
       .filter((provider) => provider.enabled)
@@ -86,6 +125,15 @@
       modelOptions.value.find((candidate) => candidate.key === selectedModelKey.value) ?? modelOptions.value[0] ?? null,
   );
   const modelSelectionLocked = computed(() => Boolean(run.value && nonTerminal.has(run.value.status)));
+  const activeRunProviderName = computed(() => {
+    const providerId = run.value?.definition.model.providerId;
+    return providers.value.find((provider) => provider.id === providerId)?.displayName ?? providerId ?? '';
+  });
+  const compactTokens = (value: number): string => {
+    if (value >= 1_000_000) return `${Math.round(value / 100_000) / 10}m`;
+    if (value >= 1_000) return `${Math.round(value / 100) / 10}k`;
+    return String(value);
+  };
   const mutationLocked = computed(
     () => busy.value || runtimeOperation.mutationBlocked.value || run.value?.needsReconciliation === true,
   );
@@ -626,7 +674,9 @@
           </div>
           <div>
             <strong class="block text-xs leading-none">{{ $t('agent.operations.threads') }}</strong>
-            <span class="mt-1 block text-[9px] text-text-secondary">{{ threads.length }}</span>
+            <span class="mt-1 block text-[9px] text-text-secondary">
+              {{ $t('agent.operations.threadCounts', { total: threads.length, active: activeThreadCount }) }}
+            </span>
           </div>
         </div>
         <button
@@ -675,9 +725,25 @@
         </div>
       </form>
 
+      <div class="shrink-0 border-b border-border/70 px-2 py-2">
+        <label class="relative block">
+          <span class="sr-only">{{ $t('agent.operations.searchThreads') }}</span>
+          <i
+            class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[8px] text-text-secondary"
+            aria-hidden="true"
+          ></i>
+          <input
+            v-model="threadQuery"
+            type="search"
+            class="h-8 w-full rounded-lg border border-border bg-background pl-7 pr-2 text-[10px] outline-none focus:border-primary/60"
+            :placeholder="$t('agent.operations.searchThreads')"
+          />
+        </label>
+      </div>
+
       <div class="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         <button
-          v-for="thread in threads"
+          v-for="thread in visibleThreads"
           :key="thread.id"
           type="button"
           class="group mb-1 flex w-full items-center gap-2 rounded-xl border px-2 py-2.5 text-left transition-colors"
@@ -689,16 +755,29 @@
           @click="selectThread(thread)"
         >
           <span
-            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold"
+            class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[10px] font-semibold"
             :class="currentThread?.id === thread.id ? 'bg-primary text-white' : 'bg-header text-text-secondary'"
           >
             {{ (thread.title || $t('agent.operations.untitledThread')).slice(0, 1).toUpperCase() }}
+            <span
+              v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
+              class="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full border border-card"
+              :class="
+                threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
+                  ? 'bg-warning'
+                  : 'bg-success'
+              "
+            ></span>
           </span>
           <span class="min-w-0 flex-1">
             <span class="block truncate text-[11px] font-medium">{{
               thread.title || $t('agent.operations.untitledThread')
             }}</span>
-            <span class="mt-0.5 block truncate text-[8px] opacity-70">{{ thread.id }}</span>
+            <span class="mt-0.5 flex items-center gap-1.5 truncate text-[8px] opacity-70">
+              <span v-if="threadStatus(thread.id)">{{ $t(`agent.tasks.runStatus.${threadStatus(thread.id)}`) }}</span>
+              <span v-if="threadStatus(thread.id)">·</span>
+              <span>{{ formatThreadUpdatedAt(thread.updatedAt) }}</span>
+            </span>
           </span>
           <i
             v-if="currentThread?.id === thread.id"
@@ -706,6 +785,12 @@
             aria-hidden="true"
           ></i>
         </button>
+        <p
+          v-if="visibleThreads.length === 0"
+          class="rounded-lg bg-background px-3 py-4 text-center text-[9px] text-text-secondary"
+        >
+          {{ $t('agent.operations.noThreadsFound') }}
+        </p>
       </div>
 
       <div class="shrink-0 border-t border-border/70 p-3">
@@ -767,26 +852,45 @@
               {{ $t(`agent.tasks.runStatus.${run.status}`) }}
             </span>
           </div>
-          <div class="mt-1 flex items-center gap-2 text-[8px] text-text-secondary">
-            <select
-              v-if="modelOptions.length"
-              :value="selectedModelKey"
-              class="min-w-0 max-w-60 truncate rounded-md border border-transparent bg-transparent py-0 text-[8px] text-text-secondary outline-none hover:border-border focus:border-primary/50 disabled:opacity-60"
-              :aria-label="$t('agent.operations.runModel')"
-              :title="
-                modelSelectionLocked ? $t('agent.operations.runModelLocked') : $t('agent.operations.runModelHint')
-              "
-              :disabled="modelSelectionLocked || busy"
-              @change="setModelSelection(($event.target as HTMLSelectElement).value)"
-            >
-              <option v-for="option in modelOptions" :key="option.key" :value="option.key">
-                {{ option.provider.displayName }} · {{ option.model.id }}
-              </option>
-            </select>
+          <div class="mt-1 flex min-w-0 items-center gap-1.5 text-[8px] text-text-secondary">
+            <template v-if="modelSelectionLocked && run">
+              <span class="flex shrink-0 items-center gap-1 font-medium text-foreground/80">
+                <i class="fa-solid fa-lock text-[7px]" aria-hidden="true"></i>
+                {{ $t('agent.operations.activeRunModel') }}
+              </span>
+              <span class="truncate">{{ activeRunProviderName }} · {{ run.definition.model.modelId }}</span>
+            </template>
+            <template v-else-if="modelOptions.length">
+              <span class="shrink-0 font-medium text-foreground/70">{{ $t('agent.operations.nextRunModel') }}</span>
+              <select
+                :value="selectedModelKey"
+                class="min-w-0 max-w-56 truncate rounded-md border border-border/70 bg-card px-1.5 py-0.5 text-[9px] text-foreground outline-none hover:bg-header focus:border-primary/50"
+                :aria-label="$t('agent.operations.runModel')"
+                :title="$t('agent.operations.runModelHint')"
+                :disabled="busy"
+                @change="setModelSelection(($event.target as HTMLSelectElement).value)"
+              >
+                <option v-for="option in modelOptions" :key="option.key" :value="option.key">
+                  {{ option.provider.displayName }} · {{ option.model.id }}
+                </option>
+              </select>
+              <span v-if="providerSelection" class="hidden shrink-0 items-center gap-1 lg:flex">
+                <span class="rounded bg-header px-1.5 py-0.5">{{
+                  $t('agent.operations.contextShort', { value: compactTokens(providerSelection.model.contextWindow) })
+                }}</span>
+                <span class="rounded bg-header px-1.5 py-0.5">
+                  {{
+                    providerSelection.model.supportsTools
+                      ? $t('agent.operations.toolsOn')
+                      : $t('agent.operations.modelOnly')
+                  }}
+                </span>
+              </span>
+            </template>
             <span v-else>{{ $t('agent.operations.providerMissing') }}</span>
-            <span v-if="selectedConnectionIds.length"
-              >· {{ $t('agent.operations.targetCount', { count: selectedConnectionIds.length }) }}</span
-            >
+            <span v-if="selectedConnectionIds.length" class="shrink-0">
+              · {{ $t('agent.operations.targetCount', { count: selectedConnectionIds.length }) }}
+            </span>
           </div>
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
@@ -883,6 +987,7 @@
         :current="run"
         :background-runs="backgroundRuns"
         :thread-runs="threadRuns"
+        :thread-titles="threadTitles"
         :hard-limits="hardLimits"
         :approvals="approvals"
         :approval-clock="approvalBatch?.clock ?? null"

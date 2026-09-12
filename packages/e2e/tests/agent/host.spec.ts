@@ -46,6 +46,11 @@ test('Agent settings surface exposes the production control plane and captures f
 
   const panel = page.locator('#settings-panel-agent');
   await expect(panel).toBeVisible();
+  const settingsNavigation = panel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
+  await expect(settingsNavigation).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Overview', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Models and budget', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Runtime environments', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Agent feature', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
@@ -60,6 +65,18 @@ test('Agent settings surface exposes the production control plane and captures f
   await providersSection.getByLabel('Private host:port exceptions', { exact: true }).fill('127.0.0.1:29091');
   await providersSection.getByRole('button', { name: 'Create provider', exact: true }).click();
   await expect(providersSection.getByText('Settings UI Provider', { exact: true })).toBeVisible();
+  const defaultModel = providersSection.getByLabel('Default model for new runs', { exact: true });
+  await expect(defaultModel).toBeEnabled();
+  const defaultModelSaved = page.waitForResponse(
+    (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
+  );
+  await defaultModel.selectOption({ label: 'Settings UI Provider · e2e-model' });
+  expect((await defaultModelSaved).ok()).toBeTruthy();
+  const savedSettings = await context.request.get('/api/v1/agent/settings');
+  expect(savedSettings.ok(), await savedSettings.text()).toBeTruthy();
+  await expect(savedSettings.json()).resolves.toMatchObject({
+    data: { requestedSettings: { model: { defaultModelId: 'e2e-model' } } },
+  });
   await providersSection.getByRole('button', { name: 'e2e-model · Test', exact: true }).click();
   await expect(panel.getByText(/Provider OK/)).toBeVisible();
   await captureFunctionalScreenshot(page, 'agent-settings-overview.png', { viewport: { width: 1440, height: 900 } });
@@ -79,6 +96,10 @@ test('Agent settings surface exposes the production control plane and captures f
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Agent', exact: true }).click();
   const runtimePanel = page.locator('#settings-panel-agent');
+  await runtimePanel
+    .getByRole('navigation', { name: 'Agent settings sections', exact: true })
+    .getByRole('button', { name: 'Runtime environments', exact: true })
+    .click();
   const workspaceRuntime = runtimePanel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
   await expect(workspaceRuntime).toBeAttached();
   await workspaceRuntime.scrollIntoViewIfNeeded();

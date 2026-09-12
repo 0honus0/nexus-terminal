@@ -114,51 +114,71 @@
           </button>
         </div>
 
-        <div class="mt-3 border-t border-border pt-3">
-          <div class="flex flex-wrap items-start justify-between gap-3">
+        <details class="group mt-3 border-t border-border pt-3">
+          <summary
+            class="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-1 py-1.5 hover:bg-header/60"
+          >
             <div>
-              <p class="text-xs font-medium">{{ $t('agent.settings.apps.permissions') }}</p>
-              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.apps.permissionsHint') }}</p>
+              <div class="flex items-center gap-2">
+                <p class="text-xs font-medium">{{ $t('agent.settings.apps.permissions') }}</p>
+                <span
+                  v-if="grantViews[app.id]"
+                  class="rounded-full bg-header px-1.5 py-0.5 text-[9px] text-text-secondary"
+                >
+                  {{ grantViews[app.id].grants.length }}/{{ grantViews[app.id].declaredCapabilities.length }}
+                </span>
+              </div>
+              <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.apps.permissionsCollapsedHint') }}</p>
             </div>
-            <button
-              v-if="grantViews[app.id]"
-              type="button"
-              class="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-header disabled:opacity-50"
-              :disabled="busy || grantBusy[app.id] || !grantChanged(app.id)"
-              @click="saveGrants(app.id)"
-            >
-              {{
-                grantBusy[app.id]
-                  ? $t('agent.settings.apps.savingPermissions')
-                  : $t('agent.settings.apps.savePermissions')
-              }}
-            </button>
-          </div>
+            <i
+              class="fa-solid fa-chevron-down text-[9px] text-text-secondary transition-transform group-open:rotate-180"
+              aria-hidden="true"
+            ></i>
+          </summary>
 
-          <div v-if="grantViews[app.id]" class="mt-2">
-            <div v-if="grantViews[app.id].declaredCapabilities.length" class="grid gap-2 sm:grid-cols-2">
-              <label
-                v-for="capability in grantViews[app.id].declaredCapabilities"
-                :key="capability"
-                class="flex items-center gap-2 rounded border border-border bg-card px-2.5 py-2 text-xs"
+          <div class="mt-3 rounded-lg bg-card p-3">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <p class="max-w-xl text-xs text-text-secondary">{{ $t('agent.settings.apps.permissionsHint') }}</p>
+              <button
+                v-if="grantViews[app.id]"
+                type="button"
+                class="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-header disabled:opacity-50"
+                :disabled="busy || grantBusy[app.id] || !grantChanged(app.id)"
+                @click="saveGrants(app.id)"
               >
-                <input
-                  type="checkbox"
-                  class="h-4 w-4 accent-primary"
-                  :checked="checked(app.id, capability)"
-                  :disabled="busy || grantBusy[app.id]"
-                  @change="onCapabilityChange(app.id, capability, $event)"
-                />
-                <span class="break-all font-mono">{{ capability }}</span>
-              </label>
+                {{
+                  grantBusy[app.id]
+                    ? $t('agent.settings.apps.savingPermissions')
+                    : $t('agent.settings.apps.savePermissions')
+                }}
+              </button>
             </div>
-            <p v-else class="text-xs text-text-secondary">{{ $t('agent.settings.apps.noCapabilities') }}</p>
+
+            <div v-if="grantViews[app.id]" class="mt-3">
+              <div v-if="grantViews[app.id].declaredCapabilities.length" class="grid gap-2 sm:grid-cols-2">
+                <label
+                  v-for="capability in grantViews[app.id].declaredCapabilities"
+                  :key="capability"
+                  class="flex items-center gap-2 rounded border border-border bg-background px-2.5 py-2 text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 accent-primary"
+                    :checked="checked(app.id, capability)"
+                    :disabled="busy || grantBusy[app.id]"
+                    @change="onCapabilityChange(app.id, capability, $event)"
+                  />
+                  <span class="break-all font-mono">{{ capability }}</span>
+                </label>
+              </div>
+              <p v-else class="text-xs text-text-secondary">{{ $t('agent.settings.apps.noCapabilities') }}</p>
+            </div>
+            <p v-else-if="!grantErrors[app.id]" class="mt-2 text-xs text-text-secondary">
+              {{ $t('agent.settings.apps.permissionsLoading') }}
+            </p>
+            <p v-if="grantErrors[app.id]" class="mt-2 text-xs text-error">{{ grantErrors[app.id] }}</p>
           </div>
-          <p v-else-if="!grantErrors[app.id]" class="mt-2 text-xs text-text-secondary">
-            {{ $t('agent.settings.apps.permissionsLoading') }}
-          </p>
-          <p v-if="grantErrors[app.id]" class="mt-2 text-xs text-error">{{ grantErrors[app.id] }}</p>
-        </div>
+        </details>
       </div>
       <p v-if="apps.length === 0" class="text-sm text-text-secondary">{{ $t('agent.settings.apps.empty') }}</p>
     </div>

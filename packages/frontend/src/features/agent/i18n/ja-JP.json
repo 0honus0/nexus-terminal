@@ -24,7 +24,8 @@
         "savingPermissions": "保存中...",
         "permissionsLoading": "現在の権限を読み込み中...",
         "noCapabilities": "この App には付与可能な capability が宣言されていません。",
-        "empty": "利用可能な Agent App はありません。"
+        "empty": "利用可能な Agent App はありません。",
+        "permissionsCollapsedHint": "展開してこの App の Capability grant を確認・編集します。"
       },
       "plugins": {
         "title": "インストール可能な App と Skill",
@@ -195,7 +196,17 @@
         "disable": "無効化",
         "enable": "有効化",
         "test": "テスト",
-        "empty": "モデル Provider はまだ設定されていません。"
+        "empty": "モデル Provider はまだ設定されていません。",
+        "counts": "Provider {providers} 件 · モデル {models} 件",
+        "defaultModel": "新しい Run の既定モデル",
+        "chooseDefault": "既定モデルを選択",
+        "defaultModelHint": "新しい Run のモデル選択初期値です。Run 開始後はその Run 固有のモデル snapshot が固定されます。",
+        "modelCount": "モデル {count} 件",
+        "defaultBadge": "既定",
+        "contextShort": "コンテキスト {value}",
+        "outputShort": "出力 {value}",
+        "toolCapable": "Tools 対応",
+        "modelOnly": "モデルのみ"
       },
       "guardrails": {
         "title": "システムガードレール",
@@ -281,6 +292,37 @@
         "loading": "ACP Integrations を読み込み中…",
         "noIntegrations": "ACP Integration は未設定です。",
         "deleteIntegration": "削除"
+      },
+      "navigation": "Agent 設定セクション",
+      "controlPlane": "コントロールプレーン",
+      "enabled": "有効",
+      "disabled": "無効",
+      "groups": {
+        "overview": "概要",
+        "models": "モデルと予算",
+        "execution": "実行と Agent",
+        "environments": "ランタイム環境",
+        "storage": "ファイルとストレージ",
+        "extensions": "App と拡張",
+        "safety": "安全とシステム"
+      },
+      "groupDescriptions": {
+        "overview": "機能状態、Agent App、アクティビティ、Capability grant を確認します。",
+        "models": "既定モデル、Provider、コンテキスト予算、インスタンス上限を管理します。",
+        "execution": "並列数、性能、委任用 Subagent profile を設定します。",
+        "environments": "Workspace Runner、ブラウザターゲット、ACP プロセス連携を管理します。",
+        "storage": "Artifact quota、保持、現在のストレージ使用状況を管理します。",
+        "extensions": "署名済み Agent App、プラグインリポジトリ、パッケージ、publisher trust を管理します。",
+        "safety": "ターゲット deny ルールと読み取り専用のシステム guardrail を管理します。"
+      },
+      "summary": {
+        "apps": "Agent App",
+        "enabled": "有効",
+        "models": "モデル",
+        "providers": "有効な Provider {count} 件",
+        "runtime": "Workspace Runtime",
+        "storage": "Artifact ストレージ",
+        "storageLimit": "上限 {value}"
       }
     },
     "launcher": {
@@ -301,7 +343,14 @@
       "noSurface": "この Agent App には操作画面がありません。",
       "workspace": "Agent ワークスペース",
       "views": "Agent ビュー",
-      "approvals": "承認待ち {count} 件"
+      "approvals": "承認待ち {count} 件",
+      "appActivity": "Agent App アクティビティ",
+      "apps": "App",
+      "switchToApp": "{app} に切り替え",
+      "runningRuns": "実行中の Run",
+      "pendingApprovals": "承認待ち",
+      "pendingBudget": "予算要求待ち",
+      "idle": "アイドル"
     },
     "pluginFrontend": {
       "frameTitle": "Agent プラグイン UI",
@@ -325,7 +374,15 @@
       "createThread": "作成",
       "runModel": "Run モデル",
       "runModelHint": "次の Run で使うモデルを選択します。",
-      "runModelLocked": "現在の Run が実行中の間、モデルは固定されています。"
+      "runModelLocked": "現在の Run が実行中の間、モデルは固定されています。",
+      "threadCounts": "会話 {total} 件 · アクティブ {active} 件",
+      "searchThreads": "会話を検索",
+      "noThreadsFound": "一致する会話はありません。",
+      "activeRunModel": "現在の Run モデル",
+      "nextRunModel": "次の Run",
+      "toolsOn": "Tools 対応",
+      "modelOnly": "モデルのみ",
+      "contextShort": "コンテキスト {value}"
     },
     "files": {
       "search": "ファイルを検索",
@@ -432,7 +489,16 @@
       "history": "Run 履歴",
       "deleteRun": "Run を削除",
       "confirmDeleteRun": "削除を確認",
-      "deleteRunHint": "この終了済み Run を Agent 履歴から削除します。この操作は元に戻せません。"
+      "deleteRunHint": "この終了済み Run を Agent 履歴から削除します。この操作は元に戻せません。",
+      "progress": "計画の進捗",
+      "currentFocus": "現在のステップ",
+      "planComplete": "計画完了",
+      "blockedCount": "ブロック {count} 件",
+      "attention": {
+        "reconciliation": "次の変更操作の前に照合が必要です。",
+        "approval": "この Run は承認を待っています。",
+        "budget": "この Run は予算の増額待ちで一時停止しています。"
+      }
     },
     "workspaceRuntime": {
       "title": "Workspace 開発環境",
