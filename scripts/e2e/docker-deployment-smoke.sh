@@ -1264,6 +1264,7 @@ const baseUrl = `http://127.0.0.1:${port}`;
 const cookie = process.env.COOKIE;
 const origin = baseUrl;
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+void (async () => {
 const call = async (method, path, body, headers = {}) => {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
@@ -1424,6 +1425,10 @@ await ok(
   202,
 );
 console.log('agent lifecycle HTTP: Run delete guard + scoped runtime cleanup + Backend projection sync ok');
+})().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});
 NODE
 
 COOKIE="$cookie" PORT="$http_port" node <<'NODE'
