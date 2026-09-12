@@ -3,9 +3,6 @@
   "group": 5,
   "workers": 8,
   "specs": [
-    "tests/agent/host.spec.ts",
-    "tests/agent/preset-plugin.spec.ts",
-    "tests/agent/provider.spec.ts",
     "tests/http/auth-2fa.spec.ts",
     "tests/http/auth-api.spec.ts",
     "tests/http/backup.spec.ts",
@@ -17,8 +14,11 @@
     "tests/http/terminal-themes.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/login-passkey-surface.spec.ts",
-    "tests/ssh/sftp-download.spec.ts",
-    "tests/ssh/status-history-time-axis.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts"
+    "tests/websocket/authenticated-session.spec.ts",
+    "tests/ssh/progress-display-upload-copy.spec.ts",
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/upload-protocol.spec.ts"
   ]
 }
