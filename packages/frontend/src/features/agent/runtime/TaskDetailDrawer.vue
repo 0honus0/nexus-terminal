@@ -1,16 +1,22 @@
 <script setup lang="ts">
+  import { ref, watch } from 'vue';
   import type {
+    AgentApprovalView,
     AgentCheckpointView,
     AgentRunSnapshot,
+    AgentServerClockAnchor,
     AgentSubagentMessage,
     AgentSubagentView,
   } from '../api/agent-api';
   import WorkspaceRuntimePanel from './WorkspaceRuntimePanel.vue';
   import SubagentTree from './SubagentTree.vue';
+  import ToolTimeline from './ToolTimeline.vue';
 
   const props = defineProps<{
     snapshot: AgentRunSnapshot | null;
     checkpoints: AgentCheckpointView[];
+    approvals: AgentApprovalView[];
+    approvalClock: AgentServerClockAnchor | null;
     subagents: AgentSubagentView[];
     selectedSubagentId: string | null;
     subagentMessages: AgentSubagentMessage[];
@@ -23,7 +29,17 @@
     resumeCheckpoint: [snapshot: AgentRunSnapshot, checkpoint: AgentCheckpointView];
     selectSubagent: [delegation: AgentSubagentView];
     cancelSubagent: [delegation: AgentSubagentView];
+    resolveApproval: [approval: AgentApprovalView, decision: 'approved' | 'denied'];
+    deleteRun: [snapshot: AgentRunSnapshot];
   }>();
+
+  const deleteArmed = ref(false);
+  watch(
+    () => [props.visible, props.snapshot?.id] as const,
+    () => {
+      deleteArmed.value = false;
+    },
+  );
 
   const terminal = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
   const canSave = () =>
@@ -97,7 +113,41 @@
               <div class="mt-1 text-[10px] font-medium">{{ snapshot.activeExecutionSeconds }}s</div>
             </div>
           </div>
+          <div
+            v-if="terminal.has(snapshot.status)"
+            class="mt-3 flex items-center justify-between gap-3 border-t border-border/70 pt-3"
+          >
+            <p class="max-w-72 text-[9px] leading-4 text-text-secondary">{{ $t('agent.tasks.deleteRunHint') }}</p>
+            <div class="flex shrink-0 items-center gap-1.5">
+              <button
+                v-if="deleteArmed"
+                type="button"
+                class="rounded-lg border border-border px-2.5 py-1.5 text-[9px] font-medium text-text-secondary hover:bg-header"
+                :disabled="busy"
+                @click="deleteArmed = false"
+              >
+                {{ $t('common.cancel') }}
+              </button>
+              <button
+                type="button"
+                class="rounded-lg border border-error/40 px-2.5 py-1.5 text-[9px] font-semibold text-error hover:bg-error/10 disabled:opacity-50"
+                :disabled="busy"
+                @click="deleteArmed ? $emit('deleteRun', snapshot) : (deleteArmed = true)"
+              >
+                {{ deleteArmed ? $t('agent.tasks.confirmDeleteRun') : $t('agent.tasks.deleteRun') }}
+              </button>
+            </div>
+          </div>
         </section>
+
+        <ToolTimeline
+          v-if="approvals.length"
+          class="mt-4 rounded-xl border border-border bg-background p-3"
+          :approvals="approvals"
+          :clock="approvalClock"
+          :busy="busy"
+          @resolve="(approval, decision) => $emit('resolveApproval', approval, decision)"
+        />
 
         <section class="mt-4 rounded-xl border border-border bg-background p-3">
           <div class="flex items-center justify-between gap-2">

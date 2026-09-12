@@ -129,6 +129,7 @@ export const createAgentRunFacade = (appId: string) => {
     resumeRun: async (run: AgentRunView, checkpointId: string) =>
       runStore.accept(await agentApi.resumeRun(appId, currentRun(run), checkpointId)),
     cancelRun: async (run: AgentRunView) => runStore.accept(await agentApi.cancelRun(appId, currentRun(run))),
+    deleteRun: (run: AgentRunView) => agentApi.deleteRun(appId, currentRun(run)),
   };
 };
 

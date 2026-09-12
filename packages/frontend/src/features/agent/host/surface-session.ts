@@ -5,6 +5,7 @@ export interface AgentAppViewState {
   draft: string;
   scrollAnchor?: string;
   selectedTaskId?: string;
+  modelKey?: string;
   hubView: 'conversation' | 'files';
 }
 
@@ -42,6 +43,14 @@ export const agentSurfaceSession = {
   },
   setDraft(appId: string, draft: string): void {
     ensure(appId).draft = draft;
+  },
+  restoreModelKey(appId: string): string | undefined {
+    return ensure(appId).modelKey;
+  },
+  setModelKey(appId: string, modelKey?: string): void {
+    const state = ensure(appId);
+    if (modelKey) state.modelKey = modelKey;
+    else delete state.modelKey;
   },
   pauseDetail(_appId: string): void {
     navigationGeneration += 1;

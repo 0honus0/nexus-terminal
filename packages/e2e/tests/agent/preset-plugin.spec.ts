@@ -3,6 +3,7 @@ import { expect, test, type APIRequestContext } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
+import { ensureTestSshConnection } from '../../support/ssh';
 import { E2E_URLS } from '../../support/test-env';
 
 type Envelope<T> = { data: T; requestId: string };
@@ -21,7 +22,12 @@ type AppSummary = {
   health: string;
 };
 type ProviderView = { id: string; version: number };
-type RunView = { id: string; status: string; version: number; definition: { agentDefinitionId: string } };
+type RunView = {
+  id: string;
+  status: string;
+  version: number;
+  definition: { agentDefinitionId: string; model?: { modelId: string } };
+};
 
 const repositoryUrl = `${E2E_URLS.pluginRepositoryOrigin}/catalog.json`;
 const repositoryException = `127.0.0.1:${new URL(E2E_URLS.pluginRepositoryOrigin).port}`;
@@ -57,10 +63,13 @@ const waitForTerminalRun = async (request: APIRequestContext, runId: string): Pr
   throw new Error(`Preset Agent Run did not reach a terminal state: ${JSON.stringify(latest)}`);
 };
 
-const installAndRunDeveloperPreset = async (request: APIRequestContext): Promise<{ threadId: string }> => {
+const installAndRunDeveloperPreset = async (
+  request: APIRequestContext,
+): Promise<{ threadId: string; connectionId: number }> => {
   await loginAsInitialAdmin(request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
+  const connectionId = await ensureTestSshConnection(request);
 
   await step('configure the remote repository without installing a Runner', async () => {
     const before = await request.get('/api/v1/agent/settings');
@@ -146,7 +155,7 @@ const installAndRunDeveloperPreset = async (request: APIRequestContext): Promise
     });
   });
 
-  await step('grant only model/run authority and enable the installed preset', async () => {
+  await step('grant model/run and bounded SSH mutation authority, then enable the installed preset', async () => {
     const grants = await request.get('/api/v1/agent/apps/nexus.developer/grants');
     expect(grants.ok(), await grants.text()).toBeTruthy();
     const grantView = (await grants.json()) as Envelope<{
@@ -160,7 +169,10 @@ const installAndRunDeveloperPreset = async (request: APIRequestContext): Promise
     expect(grantView.data.grants).toHaveLength(0);
     const replaced = await request.put('/api/v1/agent/apps/nexus.developer/grants', {
       headers,
-      data: { capabilities: ['ai.model.use', 'runs.execute'], expectedPolicyRevision: grantView.data.policyRevision },
+      data: {
+        capabilities: ['ai.model.use', 'runs.execute', 'machine.shell.execute'],
+        expectedPolicyRevision: grantView.data.policyRevision,
+      },
     });
     expect(replaced.ok(), await replaced.text()).toBeTruthy();
 
@@ -184,7 +196,10 @@ const installAndRunDeveloperPreset = async (request: APIRequestContext): Promise
         displayName: 'Preset E2E Provider',
         baseUrl: providerBase,
         credential: providerSecret,
-        models: [{ id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true }],
+        models: [
+          { id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true },
+          { id: 'e2e-model-alt', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true },
+        ],
         privateHostExceptions: [providerException],
         enabled: true,
       },
@@ -238,7 +253,7 @@ const installAndRunDeveloperPreset = async (request: APIRequestContext): Promise
     expect(JSON.stringify(await ledger.json())).toContain('OK');
   });
 
-  return { threadId };
+  return { threadId, connectionId };
 };
 
 test('unsafe remote plugin archive fails validation without terminating the Backend', async ({ request }) => {
@@ -281,7 +296,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
   page,
   context,
 }) => {
-  const { threadId } = await installAndRunDeveloperPreset(context.request);
+  const { threadId, connectionId } = await installAndRunDeveloperPreset(context.request);
   expect(threadId).not.toBe('');
   await step('the installed preset renders through the host-owned generic Agent surface', async () => {
     await page.goto('/connections');
@@ -294,6 +309,17 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
     await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
 
+    await step('users can name a new conversation and return to the existing thread', async () => {
+      await hub.getByRole('button', { name: 'New', exact: true }).click();
+      await hub.getByLabel('Conversation title', { exact: true }).fill('UI named thread');
+      await hub.getByRole('button', { name: 'Create', exact: true }).click();
+      await expect(hub.getByText('UI named thread', { exact: true })).toHaveCount(2);
+      await hub.getByRole('button').filter({ hasText: 'Preset E2E thread' }).click();
+      await expect(hub.getByText('Preset E2E thread', { exact: true })).toHaveCount(2);
+    });
+
+    const modelSelect = hub.getByLabel('Run model', { exact: true });
+    await modelSelect.selectOption({ label: 'Preset E2E Provider · e2e-model-alt' });
     const composer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
     await composer.fill('Confirm the Agent composer can start the next Run from the current thread.');
     await hub.getByRole('button', { name: 'Send', exact: true }).click();
@@ -301,6 +327,13 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       hub.getByText('Confirm the Agent composer can start the next Run from the current thread.', { exact: true }),
     ).toBeVisible();
     await expect(hub.getByText('OK', { exact: true })).toHaveCount(2, { timeout: 30_000 });
+    const runsResponse = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
+    expect(runsResponse.ok(), await runsResponse.text()).toBeTruthy();
+    const runPage = (await runsResponse.json()) as Envelope<{ items: RunView[] }>;
+    expect(runPage.data.items[0]?.definition).toMatchObject({ agentDefinitionId: 'developer.default' });
+    expect(runPage.data.items.some((item) => item.definition.model?.modelId === 'e2e-model-alt')).toBeTruthy();
+    await expect(hub.getByLabel('Run history', { exact: true })).toBeVisible();
+    await captureFunctionalScreenshot(page, 'agent-run-history.png', { viewport: { width: 1440, height: 900 } });
     await captureFunctionalScreenshot(page, 'agent-developer-preset.png', { viewport: { width: 1440, height: 900 } });
 
     await step('completed Runs expose details, checkpoints, Workspace Runtime, and Subagent surfaces', async () => {
@@ -320,6 +353,45 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       });
       await drawer.getByRole('button', { name: 'Close run details', exact: true }).click();
       await expect(drawer).toHaveCount(0);
+    });
+
+    await step('Run history can open and delete a terminal historical Run', async () => {
+      const history = hub.getByLabel('Run history', { exact: true });
+      await history.selectOption({ index: 1 });
+      const historicalDrawer = hub.getByLabel('Run details', { exact: true });
+      await expect(historicalDrawer).toBeVisible();
+      await historicalDrawer.getByRole('button', { name: 'Delete run', exact: true }).click();
+      await historicalDrawer.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+      await expect(historicalDrawer).toHaveCount(0);
+      await expect(hub.getByLabel('Run history', { exact: true })).toHaveCount(0);
+    });
+
+    await step('pending mutation approval remains actionable when the TaskRail is hidden', async () => {
+      const targetRow = hub.getByText('E2E SSH', { exact: true }).locator('..').locator('..');
+      await targetRow.getByRole('checkbox').check();
+      await composer.fill(
+        `Request the bounded shell approval exactly once. E2E_APPROVAL_CONNECTION_ID=${connectionId}`,
+      );
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(hub.getByText('Awaiting approval', { exact: true })).toBeVisible({ timeout: 30_000 });
+
+      const approvalRunsResponse = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
+      expect(approvalRunsResponse.ok(), await approvalRunsResponse.text()).toBeTruthy();
+      const approvalRunPage = (await approvalRunsResponse.json()) as Envelope<{ items: RunView[] }>;
+      const approvalRun = approvalRunPage.data.items.find((item) => item.status === 'awaiting_approval');
+      expect(approvalRun).toBeDefined();
+
+      await page.setViewportSize({ width: 1000, height: 800 });
+      await hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true }).click();
+      const approvalDrawer = hub.getByLabel('Run details', { exact: true });
+      await expect(approvalDrawer.getByText('Pending approvals', { exact: true })).toBeVisible();
+      await captureFunctionalScreenshot(page, 'agent-approval-narrow.png', { viewport: { width: 1000, height: 800 } });
+      await approvalDrawer.getByRole('button', { name: 'Approve and run', exact: true }).click();
+      const terminal = await waitForTerminalRun(context.request, approvalRun!.id);
+      expect(['completed', 'completed_unverified']).toContain(terminal.status);
+      await expect(approvalDrawer.getByText('Approval status: approved', { exact: true })).toBeVisible();
+      await approvalDrawer.getByRole('button', { name: 'Close run details', exact: true }).click();
+      await page.setViewportSize({ width: 1440, height: 900 });
     });
 
     await step('Artifact upload flows into the unified Agent file library', async () => {

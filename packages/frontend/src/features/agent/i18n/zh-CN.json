@@ -319,7 +319,13 @@
       "reconciliationRequired": "此 Run 需要先完成对账，才能发送新的修改操作。",
       "untitledThread": "未命名会话",
       "providerMissing": "尚未配置模型",
-      "targetCount": "{count} 个目标"
+      "targetCount": "{count} 个目标",
+      "threadTitle": "会话标题",
+      "threadTitlePlaceholder": "给这个会话起个名字",
+      "createThread": "创建",
+      "runModel": "Run 模型",
+      "runModelHint": "为下一次 Run 选择模型。",
+      "runModelLocked": "当前 Run 活跃期间模型已冻结。"
     },
     "files": {
       "search": "搜索文件",
@@ -422,7 +428,11 @@
       "activity": "执行状态",
       "openDetail": "详情",
       "closeDetail": "关闭 Run 详情",
-      "runOverview": "Run 概览"
+      "runOverview": "Run 概览",
+      "history": "Run 历史",
+      "deleteRun": "删除 Run",
+      "confirmDeleteRun": "确认删除",
+      "deleteRunHint": "从 Agent 历史中删除这个已结束的 Run。此操作无法撤销。"
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",
@@ -529,7 +539,8 @@
       "approve": "批准并执行",
       "deny": "拒绝",
       "expired": "此审批已过期。",
-      "resolved": "审批状态：{state}"
+      "resolved": "审批状态：{state}",
+      "openPending": "打开 {count} 个待审批操作"
     }
   }
 }

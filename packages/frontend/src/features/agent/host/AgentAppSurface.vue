@@ -35,6 +35,7 @@
   const entries = ref<AgentLedgerEntry[]>([]);
   const nextCursor = ref<string | null>(null);
   const run = ref<AgentRunView | null>(null);
+  const threadRuns = ref<AgentRunView[]>([]);
   const definitions = ref<AgentDefinitionView[]>([]);
   const providers = ref<AgentProviderView[]>([]);
   const connections = ref<Connection[]>([]);
@@ -42,16 +43,19 @@
   const attachments = ref<AgentArtifactRef[]>([]);
   const approvalBatch = ref<AgentApprovalBatch | null>(null);
   const approvals = computed(() => approvalBatch.value?.items ?? []);
+  const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'requested'));
   const hardLimits = ref<AgentHardLimits | null>(null);
   const backgroundRuns = ref<AgentRunView[]>([]);
   const detailSnapshot = ref<AgentRunSnapshot | null>(null);
   const detailCheckpoints = ref<AgentCheckpointView[]>([]);
+  const detailApprovalBatch = ref<AgentApprovalBatch | null>(null);
   const detailSubagents = ref<AgentSubagentView[]>([]);
   const selectedSubagentId = ref<string | null>(null);
   const detailSubagentMessages = ref<AgentSubagentMessage[]>([]);
   const detailVisible = ref(false);
-  const defaultProviderId = ref<string | null>(null);
-  const defaultModelId = ref<string | null>(null);
+  const selectedModelKey = ref('');
+  const newThreadEditorVisible = ref(false);
+  const newThreadTitle = ref('');
   const streamingText = ref('');
   const busy = ref(false);
   const loading = ref(true);
@@ -66,15 +70,22 @@
   let subagentMessagesGeneration = 0;
 
   const nonTerminal = new Set(['created', 'running', 'awaiting_approval', 'awaiting_budget', 'cancelling']);
-  const providerSelection = computed(() => {
-    const enabled = providers.value.filter((provider) => provider.enabled);
-    const configured = enabled.find((provider) => provider.id === defaultProviderId.value);
-    const provider = configured ?? enabled[0];
-    if (!provider) return null;
-    const configuredModel = provider.models.find((model) => model.id === defaultModelId.value);
-    const model = configuredModel ?? provider.models[0];
-    return model ? { provider, model } : null;
-  });
+  const modelOptions = computed(() =>
+    providers.value
+      .filter((provider) => provider.enabled)
+      .flatMap((provider) =>
+        provider.models.map((model) => ({
+          key: `${provider.id}\u0000${model.id}\u0000${provider.version}`,
+          provider,
+          model,
+        })),
+      ),
+  );
+  const providerSelection = computed(
+    () =>
+      modelOptions.value.find((candidate) => candidate.key === selectedModelKey.value) ?? modelOptions.value[0] ?? null,
+  );
+  const modelSelectionLocked = computed(() => Boolean(run.value && nonTerminal.has(run.value.status)));
   const mutationLocked = computed(
     () => busy.value || runtimeOperation.mutationBlocked.value || run.value?.needsReconciliation === true,
   );
@@ -83,6 +94,26 @@
   );
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
+
+  const rememberThreadRun = (candidate: AgentRunView): void => {
+    if (currentThread.value?.id !== candidate.threadId) return;
+    threadRuns.value = [candidate, ...threadRuns.value.filter((item) => item.id !== candidate.id)].sort(
+      (left, right) => right.updatedAt - left.updatedAt,
+    );
+  };
+
+  const setModelSelection = (key: string): void => {
+    if (modelSelectionLocked.value) return;
+    const option = modelOptions.value.find((candidate) => candidate.key === key);
+    if (!option) return;
+    selectedModelKey.value = option.key;
+    agentSurfaceSession.setModelKey(props.appId, option.key);
+  };
+
+  const openRunFromHistory = (runId: string): void => {
+    const candidate = threadRuns.value.find((item) => item.id === runId);
+    if (candidate) void openRunDetail(candidate);
+  };
 
   const refreshLedger = async (): Promise<void> => {
     const thread = currentThread.value;
@@ -99,6 +130,7 @@
       const snapshot = await facade.getRun(runId, minimumEventCursor);
       if (currentThread.value?.id !== snapshot.threadId || (run.value !== null && run.value.id !== runId)) return null;
       run.value = snapshot;
+      rememberThreadRun(snapshot);
       if (snapshot.needsReconciliation) {
         runtimeOperation.markReconciling('RECONCILIATION_REQUIRED', t('agent.operations.reconciliationRequired'));
       }
@@ -177,7 +209,7 @@
           refreshApprovals(initial.id),
           refreshBackgroundRuns(),
           ...(detailVisible.value && detailSnapshot.value?.id === initial.id
-            ? [refreshDetailSubagents(initial.id)]
+            ? [refreshDetailSubagents(initial.id), refreshDetailApprovalBatch(initial.id)]
             : []),
         ]);
         if (signal.aborted) return;
@@ -202,6 +234,7 @@
     if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
     const runs = await facade.listRuns(thread.id);
     if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
+    threadRuns.value = runs.items;
     const active = runs.items.find((candidate) => nonTerminal.has(candidate.status)) ?? runs.items[0] ?? null;
     run.value = active;
     await refreshApprovals(active?.id);
@@ -210,10 +243,32 @@
     await refreshBackgroundRuns();
   };
 
-  const createThread = async (): Promise<void> => {
-    const thread = await facade.createThread();
-    threads.value = [thread, ...threads.value];
-    await selectThread(thread);
+  const createThread = async (title?: string): Promise<void> => {
+    if (busy.value) return;
+    busy.value = true;
+    error.value = '';
+    try {
+      const normalizedTitle = title?.trim();
+      const thread = await facade.createThread(normalizedTitle || undefined);
+      threads.value = [thread, ...threads.value.filter((item) => item.id !== thread.id)];
+      newThreadEditorVisible.value = false;
+      newThreadTitle.value = '';
+      await selectThread(thread);
+    } catch (cause) {
+      error.value = explain(cause);
+    } finally {
+      busy.value = false;
+    }
+  };
+
+  const beginThreadCreation = (): void => {
+    newThreadTitle.value = '';
+    newThreadEditorVisible.value = true;
+  };
+
+  const cancelThreadCreation = (): void => {
+    newThreadTitle.value = '';
+    newThreadEditorVisible.value = false;
   };
 
   const load = async (): Promise<void> => {
@@ -230,8 +285,16 @@
       threads.value = threadPage.items;
       definitions.value = nextDefinitions;
       providers.value = nextProviders;
-      defaultProviderId.value = settings.effectiveSettings.model.defaultProviderId;
-      defaultModelId.value = settings.effectiveSettings.model.defaultModelId;
+      const restoredModelKey = agentSurfaceSession.restoreModelKey(props.appId);
+      const restoredModel = modelOptions.value.find((candidate) => candidate.key === restoredModelKey);
+      const preferredModel = modelOptions.value.find(
+        (candidate) =>
+          candidate.provider.id === settings.effectiveSettings.model.defaultProviderId &&
+          candidate.model.id === settings.effectiveSettings.model.defaultModelId,
+      );
+      const selectedModel = restoredModel ?? preferredModel ?? modelOptions.value[0] ?? null;
+      selectedModelKey.value = selectedModel?.key ?? '';
+      agentSurfaceSession.setModelKey(props.appId, selectedModel?.key);
       hardLimits.value = settings.hardLimits;
       connections.value = nextConnections.filter((connection) => connection.type === 'SSH');
       const restored = agentSurfaceSession.restoreThread(props.appId);
@@ -305,6 +368,7 @@
         connectionIds: selectedConnectionIds.value,
       });
       run.value = created;
+      rememberThreadRun(created);
       draft.value = '';
       attachments.value = [];
       agentSurfaceSession.setDraft(props.appId, '');
@@ -324,6 +388,7 @@
     const runId = run.value.id;
     try {
       run.value = await facade.cancelRun(run.value);
+      rememberThreadRun(run.value);
       await Promise.all([refreshLedger(), refreshApprovals(run.value.id), refreshBackgroundRuns()]);
       runtimeOperation.succeed();
     } catch (cause) {
@@ -338,6 +403,7 @@
     const runId = run.value.id;
     try {
       run.value = await facade.increaseBudget(run.value, increase);
+      rememberThreadRun(run.value);
       await Promise.all([refreshLedger(), refreshApprovals(run.value.id), refreshBackgroundRuns()]);
       if (run.value && nonTerminal.has(run.value.status)) startRunStream(run.value);
       runtimeOperation.succeed();
@@ -353,13 +419,31 @@
     try {
       await facade.resolveApproval(approval, decision);
       const next = await refreshRun(approval.runId);
-      await Promise.all([refreshApprovals(approval.runId), refreshLedger(), refreshBackgroundRuns()]);
+      await Promise.all([
+        refreshApprovals(approval.runId),
+        refreshLedger(),
+        refreshBackgroundRuns(),
+        ...(detailVisible.value && detailSnapshot.value?.id === approval.runId
+          ? [refreshDetailApprovalBatch(approval.runId)]
+          : []),
+      ]);
       if (next && nonTerminal.has(next.status)) startRunStream(next);
       runtimeOperation.succeed();
     } catch (cause) {
       await recoverRuntimeFailure(cause, approval.runId);
     } finally {
       finishRuntimeMutation();
+    }
+  };
+
+  const refreshDetailApprovalBatch = async (runId: string): Promise<void> => {
+    try {
+      const [next, snapshot] = await Promise.all([facade.listApprovals(runId), facade.getRun(runId)]);
+      if (!detailVisible.value || detailSnapshot.value?.id !== runId) return;
+      detailApprovalBatch.value = next;
+      detailSnapshot.value = snapshot;
+    } catch {
+      // Detail refresh is best-effort; authoritative current-run refresh still drives mutation state.
     }
   };
 
@@ -417,14 +501,16 @@
     detailSubagentsGeneration += 1;
     subagentMessagesGeneration += 1;
     try {
-      const [snapshot, checkpoints, subagents] = await Promise.all([
+      const [snapshot, checkpoints, detailApprovals, subagents] = await Promise.all([
         facade.getRun(candidate.id),
         facade.listCheckpoints(candidate.id),
+        facade.listApprovals(candidate.id),
         facade.listSubagents(candidate.id),
       ]);
       if (requestGeneration !== detailOpenGeneration) return;
       detailSnapshot.value = snapshot;
       detailCheckpoints.value = checkpoints;
+      detailApprovalBatch.value = detailApprovals;
       detailSubagents.value = subagents.items;
       selectedSubagentId.value = null;
       detailSubagentMessages.value = [];
@@ -440,6 +526,7 @@
     detailSubagentsGeneration += 1;
     subagentMessagesGeneration += 1;
     detailVisible.value = false;
+    detailApprovalBatch.value = null;
   };
 
   const saveCheckpoint = async (snapshot: AgentRunSnapshot): Promise<void> => {
@@ -460,6 +547,7 @@
     try {
       const resumed = await facade.resumeRun(snapshot, checkpoint.id);
       run.value = resumed;
+      rememberThreadRun(resumed);
       detailSnapshot.value = await facade.getRun(resumed.id);
       detailCheckpoints.value = [];
       detailVisible.value = false;
@@ -468,6 +556,32 @@
       runtimeOperation.succeed();
     } catch (cause) {
       await recoverRuntimeFailure(cause, snapshot.id);
+    } finally {
+      finishRuntimeMutation();
+    }
+  };
+
+  const deleteRun = async (snapshot: AgentRunSnapshot): Promise<void> => {
+    if (!beginRuntimeMutation()) return;
+    try {
+      await facade.deleteRun(snapshot);
+      if (detailSnapshot.value?.id === snapshot.id) closeRunDetail();
+      if (currentThread.value?.id === snapshot.threadId) {
+        const page = await facade.listRuns(snapshot.threadId);
+        threadRuns.value = page.items;
+        if (run.value?.id === snapshot.id) {
+          stopRunStream();
+          run.value = page.items.find((candidate) => nonTerminal.has(candidate.status)) ?? page.items[0] ?? null;
+          await refreshApprovals(run.value?.id);
+          if (run.value && nonTerminal.has(run.value.status)) startRunStream(run.value);
+        }
+        await refreshLedger();
+      }
+      await refreshBackgroundRuns();
+      runtimeOperation.succeed();
+    } catch (cause) {
+      error.value = explain(cause);
+      runtimeOperation.fail(cause);
     } finally {
       finishRuntimeMutation();
     }
@@ -521,11 +635,45 @@
           :aria-label="$t('agent.operations.newThread')"
           :title="$t('agent.operations.newThread')"
           :disabled="busy"
-          @click="createThread"
+          @click="beginThreadCreation"
         >
           <i class="fa-solid fa-plus" aria-hidden="true"></i>
         </button>
       </div>
+
+      <form
+        v-if="newThreadEditorVisible"
+        class="shrink-0 border-b border-border/70 bg-background/60 p-2"
+        @submit.prevent="createThread(newThreadTitle)"
+      >
+        <label class="sr-only" for="agent-new-thread-title">{{ $t('agent.operations.threadTitle') }}</label>
+        <input
+          id="agent-new-thread-title"
+          v-model="newThreadTitle"
+          autofocus
+          maxlength="200"
+          class="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-[11px] outline-none focus:border-primary/60"
+          :placeholder="$t('agent.operations.threadTitlePlaceholder')"
+          @keydown.esc.prevent="cancelThreadCreation"
+        />
+        <div class="mt-2 flex justify-end gap-1.5">
+          <button
+            type="button"
+            class="rounded-lg px-2.5 py-1.5 text-[9px] text-text-secondary hover:bg-header"
+            :disabled="busy"
+            @click="cancelThreadCreation"
+          >
+            {{ $t('common.cancel') }}
+          </button>
+          <button
+            type="submit"
+            class="rounded-lg bg-primary px-2.5 py-1.5 text-[9px] font-semibold text-white disabled:opacity-40"
+            :disabled="busy || !newThreadTitle.trim()"
+          >
+            {{ $t('agent.operations.createThread') }}
+          </button>
+        </div>
+      </form>
 
       <div class="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         <button
@@ -620,9 +768,21 @@
             </span>
           </div>
           <div class="mt-1 flex items-center gap-2 text-[8px] text-text-secondary">
-            <span v-if="providerSelection" class="truncate">
-              {{ providerSelection.provider.displayName }} · {{ providerSelection.model.id }}
-            </span>
+            <select
+              v-if="modelOptions.length"
+              :value="selectedModelKey"
+              class="min-w-0 max-w-60 truncate rounded-md border border-transparent bg-transparent py-0 text-[8px] text-text-secondary outline-none hover:border-border focus:border-primary/50 disabled:opacity-60"
+              :aria-label="$t('agent.operations.runModel')"
+              :title="
+                modelSelectionLocked ? $t('agent.operations.runModelLocked') : $t('agent.operations.runModelHint')
+              "
+              :disabled="modelSelectionLocked || busy"
+              @change="setModelSelection(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="option in modelOptions" :key="option.key" :value="option.key">
+                {{ option.provider.displayName }} · {{ option.model.id }}
+              </option>
+            </select>
             <span v-else>{{ $t('agent.operations.providerMissing') }}</span>
             <span v-if="selectedConnectionIds.length"
               >· {{ $t('agent.operations.targetCount', { count: selectedConnectionIds.length }) }}</span
@@ -630,6 +790,27 @@
           </div>
         </div>
         <div class="flex shrink-0 items-center gap-1.5">
+          <select
+            v-if="threadRuns.length > 1 && run"
+            :value="run.id"
+            class="hidden h-7 max-w-36 rounded-lg border border-border bg-card px-2 text-[9px] text-text-secondary outline-none hover:bg-header md:block"
+            :aria-label="$t('agent.tasks.history')"
+            @change="openRunFromHistory(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="item in threadRuns" :key="item.id" :value="item.id">
+              {{ $t(`agent.tasks.runStatus.${item.status}`) }} · {{ item.definition.model.modelId }}
+            </option>
+          </select>
+          <button
+            v-if="run && pendingApprovals.length"
+            type="button"
+            class="flex h-7 items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-2.5 text-[9px] font-semibold text-warning hover:bg-warning/15"
+            :aria-label="$t('agent.approvals.openPending', { count: pendingApprovals.length })"
+            @click="openRunDetail(run)"
+          >
+            <i class="fa-solid fa-shield-halved text-[8px]" aria-hidden="true"></i>
+            {{ pendingApprovals.length }}
+          </button>
           <button
             v-if="run"
             type="button"
@@ -701,6 +882,7 @@
       <TaskRail
         :current="run"
         :background-runs="backgroundRuns"
+        :thread-runs="threadRuns"
         :hard-limits="hardLimits"
         :approvals="approvals"
         :approval-clock="approvalBatch?.clock ?? null"
@@ -714,6 +896,8 @@
     <TaskDetailDrawer
       :snapshot="detailSnapshot"
       :checkpoints="detailCheckpoints"
+      :approvals="detailApprovalBatch?.items ?? []"
+      :approval-clock="detailApprovalBatch?.clock ?? null"
       :subagents="detailSubagents"
       :selected-subagent-id="selectedSubagentId"
       :subagent-messages="detailSubagentMessages"
@@ -724,6 +908,8 @@
       @resume-checkpoint="resumeCheckpoint"
       @select-subagent="selectSubagent"
       @cancel-subagent="cancelSubagent"
+      @resolve-approval="resolveApproval"
+      @delete-run="deleteRun"
     />
   </div>
 </template>

@@ -6,6 +6,7 @@
   const props = defineProps<{
     current: AgentRunView | null;
     backgroundRuns: AgentRunView[];
+    threadRuns: AgentRunView[];
     hardLimits: AgentHardLimits | null;
     approvals: AgentApprovalView[];
     approvalClock: AgentServerClockAnchor | null;
@@ -39,6 +40,7 @@
   );
   const planItems = computed(() => props.current?.plan.items ?? []);
   const completedPlanItems = computed(() => planItems.value.filter((item) => item.status === 'completed').length);
+  const historyRuns = computed(() => props.threadRuns.filter((item) => item.id !== props.current?.id).slice(0, 8));
 
   const increase = (): void => {
     const run = props.current;
@@ -233,6 +235,38 @@
         </div>
         <p class="mt-3 text-[10px] leading-4 text-text-secondary">{{ $t('agent.tasks.empty') }}</p>
       </div>
+
+      <section v-if="historyRuns.length" class="mt-4 border-t border-border/70 pt-3">
+        <div class="mb-2 flex items-center justify-between">
+          <strong class="text-[10px]">{{ $t('agent.tasks.history') }}</strong>
+          <span class="text-[9px] text-text-secondary">{{ historyRuns.length }}</span>
+        </div>
+        <button
+          v-for="item in historyRuns"
+          :key="item.id"
+          type="button"
+          class="mb-1.5 flex w-full items-center gap-2 rounded-lg border border-transparent bg-background px-2.5 py-2 text-left hover:border-border hover:bg-header"
+          @click="emit('openRun', item)"
+        >
+          <span
+            class="h-1.5 w-1.5 shrink-0 rounded-full"
+            :class="
+              item.status === 'completed' || item.status === 'completed_unverified'
+                ? 'bg-success'
+                : item.status === 'failed'
+                  ? 'bg-error'
+                  : 'bg-text-secondary/50'
+            "
+          ></span>
+          <span class="min-w-0 flex-1">
+            <span class="block truncate text-[10px] font-medium">{{ $t(`agent.tasks.runStatus.${item.status}`) }}</span>
+            <span class="mt-0.5 block truncate text-[8px] text-text-secondary">
+              {{ item.definition.model.modelId }} · {{ item.usage.steps }} {{ $t('agent.tasks.steps').toLowerCase() }}
+            </span>
+          </span>
+          <i class="fa-solid fa-chevron-right text-[8px] text-text-secondary" aria-hidden="true"></i>
+        </button>
+      </section>
 
       <section v-if="backgroundRuns.length" class="mt-4 border-t border-border/70 pt-3">
         <div class="mb-2 flex items-center justify-between">

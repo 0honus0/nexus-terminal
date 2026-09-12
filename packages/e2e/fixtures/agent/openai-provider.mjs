@@ -43,17 +43,61 @@ const server = http.createServer(async (request, response) => {
     response.writeHead(400).end();
     return;
   }
-  if (body?.model !== 'e2e-model' || body?.stream !== true || body?.max_tokens !== 16) {
+  if (!['e2e-model', 'e2e-model-alt'].includes(body?.model) || body?.stream !== true || body?.max_tokens !== 16) {
     response.writeHead(422, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ error: { message: 'unexpected test request' } }));
     return;
   }
+
+  const messages = Array.isArray(body?.messages) ? body.messages : [];
+  const serializedMessages = JSON.stringify(messages);
+  const approvalConnection = /E2E_APPROVAL_CONNECTION_ID=(\d+)/.exec(serializedMessages);
+  const approvalToolResult = messages.some(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_approval',
+  );
+  const shellToolOffered =
+    Array.isArray(body?.tools) &&
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_execute_shell');
 
   response.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-store',
     Connection: 'keep-alive',
   });
+  if (approvalConnection && !approvalToolResult && shellToolOffered) {
+    sendSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_e2e_approval',
+                type: 'function',
+                function: {
+                  name: 'machine_execute_shell',
+                  arguments: JSON.stringify({
+                    connectionId: Number(approvalConnection[1]),
+                    command: 'printf approval-e2e',
+                    timeoutSeconds: 10,
+                  }),
+                },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+    sendSse(response, {
+      choices: [],
+      usage: { prompt_tokens: 7, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 0 } },
+    });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
+
   sendSse(response, { choices: [{ delta: { content: 'OK' }, finish_reason: null }] });
   sendSse(response, {
     choices: [],

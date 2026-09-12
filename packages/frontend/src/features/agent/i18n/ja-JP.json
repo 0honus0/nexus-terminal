@@ -319,7 +319,13 @@
       "reconciliationRequired": "この Run は、別の変更操作を送信する前に照合が必要です。",
       "untitledThread": "無題のスレッド",
       "providerMissing": "モデル未設定",
-      "targetCount": "ターゲット {count} 件"
+      "targetCount": "ターゲット {count} 件",
+      "threadTitle": "会話タイトル",
+      "threadTitlePlaceholder": "この会話に名前を付ける",
+      "createThread": "作成",
+      "runModel": "Run モデル",
+      "runModelHint": "次の Run で使うモデルを選択します。",
+      "runModelLocked": "現在の Run が実行中の間、モデルは固定されています。"
     },
     "files": {
       "search": "ファイルを検索",
@@ -422,7 +428,11 @@
       "activity": "実行状態",
       "openDetail": "詳細",
       "closeDetail": "Run 詳細を閉じる",
-      "runOverview": "Run 概要"
+      "runOverview": "Run 概要",
+      "history": "Run 履歴",
+      "deleteRun": "Run を削除",
+      "confirmDeleteRun": "削除を確認",
+      "deleteRunHint": "この終了済み Run を Agent 履歴から削除します。この操作は元に戻せません。"
     },
     "workspaceRuntime": {
       "title": "Workspace 開発環境",
@@ -529,7 +539,8 @@
       "approve": "承認して実行",
       "deny": "拒否",
       "expired": "この承認は期限切れです。",
-      "resolved": "承認状態: {state}"
+      "resolved": "承認状態: {state}",
+      "openPending": "承認待ち {count} 件を開く"
     }
   }
 }

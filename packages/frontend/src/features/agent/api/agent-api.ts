@@ -1328,4 +1328,10 @@ export const agentApi = {
       ).data,
     );
   },
+  async deleteRun(appId: string, run: AgentRunView): Promise<void> {
+    await httpClient.delete(`/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}`, {
+      params: { expectedVersion: run.version },
+      headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() },
+    });
+  },
 };

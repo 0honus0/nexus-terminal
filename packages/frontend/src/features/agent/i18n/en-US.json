@@ -319,7 +319,13 @@
       "reconciliationRequired": "This Run requires reconciliation before another mutation can be sent.",
       "untitledThread": "Untitled thread",
       "providerMissing": "No model configured",
-      "targetCount": "{count} targets"
+      "targetCount": "{count} targets",
+      "threadTitle": "Conversation title",
+      "threadTitlePlaceholder": "Name this conversation",
+      "createThread": "Create",
+      "runModel": "Run model",
+      "runModelHint": "Choose the model for the next Run.",
+      "runModelLocked": "The model is frozen while the current Run is active."
     },
     "files": {
       "search": "Search files",
@@ -422,7 +428,11 @@
       "activity": "Execution state",
       "openDetail": "Details",
       "closeDetail": "Close run details",
-      "runOverview": "Run overview"
+      "runOverview": "Run overview",
+      "history": "Run history",
+      "deleteRun": "Delete run",
+      "confirmDeleteRun": "Confirm delete",
+      "deleteRunHint": "Remove this terminal Run from Agent history. This cannot be undone."
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",
@@ -529,7 +539,8 @@
       "approve": "Approve and run",
       "deny": "Deny",
       "expired": "This approval has expired.",
-      "resolved": "Approval status: {state}"
+      "resolved": "Approval status: {state}",
+      "openPending": "Open {count} pending approvals"
     }
   }
 }
