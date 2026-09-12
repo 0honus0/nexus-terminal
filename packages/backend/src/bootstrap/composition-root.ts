@@ -248,12 +248,7 @@ export const createCompositionRoot = (
   const credentials = new ConnectionCredentialService(cipher, sshKeys);
   const connections = new ConnectionService(connectionRepository, credentials, audit);
 
-  let connectedHookService: ConnectionService | undefined = connections;
-  const sshTransport = new SshTransportAdapter({
-    onConnected: async (connection) => {
-      await connectedHookService?.markConnected(connection.connectionId);
-    },
-  });
+  const sshTransport = new SshTransportAdapter();
   const executionSessions = new ExecutionSessionManager(sshTransport);
   const sshResolver = new SshConnectionResolver(connectionRepository, credentials, proxies);
   const sshConnectionTest = new SshConnectionTestService(sshResolver, sshTransport);
@@ -520,7 +515,6 @@ export const createCompositionRoot = (
       await agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
       await agent.dispose().catch(() => undefined);
       transferTasks.cancelAll();
-      connectedHookService = undefined;
       await workspaceSuspend.dispose().catch(() => undefined);
       await sshSuspend.dispose().catch(() => undefined);
       await executionSessions.closeAll();

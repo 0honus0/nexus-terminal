@@ -53,7 +53,13 @@ const add = (session: WorkspaceRuntimeSession, index = order.value.length): Work
 
 const removeRuntime = (id: string, reason: string): void => {
   const session = sessions.get(id);
-  if (!session) return;
+  if (!session) {
+    logger.debug(
+      { workspaceId: id, reason, failureKind: 'workspace_runtime_not_found', sessionCount: sessions.size },
+      'Workspace runtime removal ignored because session was not found',
+    );
+    return;
+  }
   const ids = [...order.value];
   const index = ids.indexOf(id);
   const shouldRefreshSuspendHandoff = session.markedForSuspend.value && session.state.value === 'connected';
@@ -90,6 +96,27 @@ const runResume = (
     const previousActiveId = activeId.value;
     const replaceIndex = replaceWorkspaceId ? order.value.indexOf(replaceWorkspaceId) : -1;
     const oldSession = replaceWorkspaceId ? sessions.get(replaceWorkspaceId) : undefined;
+    if (replaceWorkspaceId && !oldSession) {
+      logger.debug(
+        {
+          workspaceId: replaceWorkspaceId,
+          suspendedSessionId: suspended.id,
+          failureKind: 'workspace_runtime_not_found',
+          sessionCount: sessions.size,
+        },
+        'Workspace resume replacement target was not found',
+      );
+    } else if (replaceWorkspaceId && replaceIndex < 0) {
+      logger.debug(
+        {
+          workspaceId: replaceWorkspaceId,
+          suspendedSessionId: suspended.id,
+          failureKind: 'workspace_order_stale',
+          sessionCount: sessions.size,
+        },
+        'Workspace resume replacement target was missing from tab order',
+      );
+    }
     const shouldRestorePrevious = Boolean(previousActiveId && oldSession && previousActiveId !== oldSession.id);
     const session = new WorkspaceRuntimeSession(connection, {
       onSuspendedAutoTerminated: handleSuspendedAutoTerminated,
@@ -118,6 +145,16 @@ const runResume = (
       else activeId.value = session.id;
       return session;
     } catch (error) {
+      logger.debug(
+        {
+          err: error,
+          workspaceId: session.id,
+          suspendedSessionId: suspended.id,
+          replaceWorkspaceId,
+          failureKind: 'workspace_resume_failed',
+        },
+        'Workspace resume registry transaction failed',
+      );
       removeRuntime(session.id, 'Suspended session resume failed');
       if (replacingVisibleSlot && oldSession && sessions.get(oldSession.id) === oldSession) {
         const next = [...order.value];
@@ -172,11 +209,31 @@ export const workspaceRuntimeRegistry = {
   },
 
   activate(id: string): void {
-    if (sessions.has(id)) activeId.value = id;
+    if (sessions.has(id)) {
+      activeId.value = id;
+      return;
+    }
+    logger.debug(
+      { workspaceId: id, failureKind: 'workspace_runtime_not_found', sessionCount: sessions.size },
+      'Workspace activation ignored because session was not found',
+    );
   },
 
   move(id: string, targetId: string, placement: 'before' | 'after' = 'before'): void {
-    if (id === targetId || !sessions.has(id) || !sessions.has(targetId)) return;
+    if (id === targetId) return;
+    if (!sessions.has(id) || !sessions.has(targetId)) {
+      logger.debug(
+        {
+          workspaceId: id,
+          targetWorkspaceId: targetId,
+          sourceExists: sessions.has(id),
+          targetExists: sessions.has(targetId),
+          failureKind: 'workspace_runtime_not_found',
+        },
+        'Workspace move ignored because a session was not found',
+      );
+      return;
+    }
     const next = order.value.filter((sessionId) => sessionId !== id);
     const targetIndex = next.indexOf(targetId);
     if (targetIndex < 0) return;
@@ -197,14 +254,26 @@ export const workspaceRuntimeRegistry = {
   closeToRight(id: string): void {
     const ids = [...order.value];
     const index = ids.indexOf(id);
-    if (index < 0) return;
+    if (index < 0) {
+      logger.debug(
+        { workspaceId: id, failureKind: 'workspace_order_stale', sessionCount: sessions.size },
+        'Workspace close-to-right ignored because session was missing from tab order',
+      );
+      return;
+    }
     for (const sessionId of ids.slice(index + 1)) removeRuntime(sessionId, 'Workspace tab closed');
   },
 
   closeToLeft(id: string): void {
     const ids = [...order.value];
     const index = ids.indexOf(id);
-    if (index < 0) return;
+    if (index < 0) {
+      logger.debug(
+        { workspaceId: id, failureKind: 'workspace_order_stale', sessionCount: sessions.size },
+        'Workspace close-to-left ignored because session was missing from tab order',
+      );
+      return;
+    }
     for (const sessionId of ids.slice(0, index)) removeRuntime(sessionId, 'Workspace tab closed');
   },
 

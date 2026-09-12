@@ -56,6 +56,11 @@ test('adds, tests, and connects to a real SSH server', async ({ page, context })
       const row = page.getByText(E2E_SSH.name, { exact: true }).first().locator('xpath=ancestor::li');
       await row.getByRole('button', { name: 'Connect', exact: true }).click();
       await expect(page).toHaveURL(/\/workspace$/);
+      await expect(page.getByTestId('terminal-tab-bar').getByRole('tab', { selected: true })).toHaveAttribute(
+        'data-session-state',
+        'connected',
+        { timeout: 10_000 },
+      );
 
       const initialLoading = page.locator('[data-testid="file-manager-loading-state"]:visible');
       await expect(initialLoading).toHaveCount(1);
@@ -145,6 +150,21 @@ test('Connect All waits for each Workspace binding before mounted file managers 
     await expect
       .poll(() => tabs.evaluateAll((items) => items.map((item) => item.getAttribute('data-session-status') ?? '')))
       .toEqual(['', '']);
+
+    const firstTab = tabs.filter({ hasText: `${prefix} A` });
+    const secondTab = tabs.filter({ hasText: `${prefix} B` });
+    await firstTab.click();
+    const commandInput = page.getByTestId('command-input').filter({ visible: true });
+    await commandInput.fill('for i in $(seq 1 80); do echo NEXUS_BACKGROUND_BATCH_$i; sleep 0.03; done');
+    await commandInput.press('Enter');
+    await page.waitForTimeout(120);
+    await secondTab.click();
+    await page.waitForTimeout(2_800);
+    await firstTab.click();
+    await expect
+      .poll(() => page.locator('[data-testid="terminal"]:visible .xterm-rows').innerText(), { timeout: 10_000 })
+      .toContain('NEXUS_BACKGROUND_BATCH_80');
+
     expect(
       protocolErrors.filter((message) => message.includes('Workspace session') && message.includes('was not found')),
     ).toEqual([]);

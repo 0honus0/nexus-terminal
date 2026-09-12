@@ -2,6 +2,7 @@
   import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
+  import { logger } from '@/client/logging/logger';
   import { OverlayPanel } from '@/foundation/ui';
   import { useDeviceCapabilities } from '@/foundation/browser';
   import { createLatestValueSaver } from '@/foundation/async';
@@ -470,7 +471,13 @@
   };
   const toggleSuspendMark = async (id: string) => {
     const session = registry.sessions.get(id);
-    if (!session) return;
+    if (!session) {
+      logger.debug(
+        { workspaceId: id, failureKind: 'workspace_runtime_not_found' },
+        'Workspace suspend toggle ignored because runtime was not found',
+      );
+      return;
+    }
     try {
       if (session.markedForSuspend.value) {
         await session.unmarkSuspend();
@@ -508,6 +515,17 @@
         );
       return true;
     } catch (cause) {
+      logger.debug(
+        {
+          err: cause,
+          suspendedSessionId: suspended.id,
+          originalWorkspaceId: suspended.originalWorkspaceId,
+          connectionId: suspended.connectionId,
+          silent: Boolean(options.silent),
+          failureKind: 'suspended_resume_failed',
+        },
+        'Workspace suspended-session resume failed in view',
+      );
       if (!options.silent) feedback.notifyError(cause instanceof Error ? cause.message : String(cause));
       return false;
     }
@@ -515,16 +533,44 @@
 
   const resumeMarkedSession = async (workspaceId: string) => {
     const session = registry.sessions.get(workspaceId);
-    if (!session?.markedForSuspend.value) return;
+    if (!session) {
+      logger.debug(
+        { workspaceId, failureKind: 'workspace_runtime_not_found' },
+        'Marked Workspace resume ignored because runtime was not found',
+      );
+      return;
+    }
+    if (!session.markedForSuspend.value) {
+      logger.debug(
+        { workspaceId, state: session.state.value, failureKind: 'workspace_not_marked_for_suspend' },
+        'Marked Workspace resume ignored because runtime is not marked for suspend',
+      );
+      return;
+    }
     if (session.state.value === 'connected') {
       registry.activate(workspaceId);
       suspendedVisible.value = false;
       return;
     }
     const refreshed = await refreshSuspendedSessionsCatalog();
-    if (!refreshed.ok) return;
+    if (!refreshed.ok) {
+      logger.debug(
+        { workspaceId, status: refreshed.status, failureKind: 'suspended_catalog_refresh_failed' },
+        'Marked Workspace resume stopped because suspended catalog refresh failed',
+      );
+      return;
+    }
     const suspended = findSuspendedSessionByOriginalWorkspace(workspaceId);
     if (!suspended) {
+      logger.debug(
+        {
+          workspaceId,
+          connectionId: session.connection.id,
+          state: session.state.value,
+          failureKind: 'suspended_session_not_found',
+        },
+        'Marked Workspace could not find a matching suspended session',
+      );
       registry.remove(workspaceId, 'Marked suspended session could not be recovered');
       return;
     }
@@ -589,6 +635,15 @@
           await resumeSuspended(suspended, { silent: true });
           continue;
         }
+        logger.debug(
+          {
+            workspaceId,
+            connectionId: session.connection.id,
+            state: session.state.value,
+            failureKind: 'suspended_session_not_found',
+          },
+          'Foreground recovery could not find a matching suspended session',
+        );
         // A suspend mark is explicit user intent. If takeover never produced a recoverable
         // hanging session, close the stale local tab instead of silently opening a fresh SSH login.
         registry.remove(workspaceId, 'Marked suspended session could not be recovered');
@@ -849,6 +904,7 @@
             : ''
         "
         :aria-hidden="session.id !== registry.activeId.value"
+        :active="session.id === registry.activeId.value"
         :session="session"
         :layout="workspaceLayout.tree.value"
         :sidebars="workspaceLayout.sidebars.value"

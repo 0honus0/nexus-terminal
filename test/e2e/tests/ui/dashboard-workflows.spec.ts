@@ -233,7 +233,7 @@ test('desktop dashboard exposes suspended sessions without changing the main wor
   }
 });
 
-test('dashboard reconnect completion does not navigate back to Workspace after the user returns home', async ({
+test('dashboard reconnect completion refreshes recent connection without navigating back to Workspace', async ({
   page,
   context,
 }) => {
@@ -275,7 +275,14 @@ test('dashboard reconnect completion does not navigate back to Workspace after t
   try {
     await page.goto('/');
     const reconnect = page.getByRole('button', { name: 'Reconnect', exact: true });
+    const connectionRow = page.getByTestId(`dashboard-connection-row-${connectionId}`);
     await expect(reconnect).toBeVisible();
+    await expect(connectionRow).toBeVisible();
+    const previousLastConnectedAt = Number(await connectionRow.getAttribute('data-last-connected-at'));
+    expect(previousLastConnectedAt).toBeGreaterThan(0);
+
+    // lastConnectedAt has one-second precision. Ensure the reconnect writes a distinguishable value.
+    await page.waitForTimeout(1_100);
     await reconnect.click();
     await connectionDetailStarted;
 
@@ -298,7 +305,10 @@ test('dashboard reconnect completion does not navigate back to Workspace after t
       )
       .toBeGreaterThan(beforeSuccessCount);
 
-    // Successful background completion updates the session only; it must not route the user away.
+    // Successful background completion must update the already-mounted Dashboard store without a page reload.
+    await expect
+      .poll(async () => Number(await connectionRow.getAttribute('data-last-connected-at')), { timeout: 10_000 })
+      .toBeGreaterThan(previousLastConnectedAt);
     await expect(page).toHaveURL(/\/$/);
 
     // The connected session is still available when the user later opens Workspace explicitly.

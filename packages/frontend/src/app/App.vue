@@ -1,17 +1,20 @@
 <script setup lang="ts">
-  import { computed, watch } from 'vue';
+  import { computed, defineAsyncComponent, watch } from 'vue';
   import { RouterView } from 'vue-router';
   import { logger } from '@/client/logging/logger';
   import AppHeader from './shell/AppHeader.vue';
   import { useAuthSession } from '@/features/auth/public';
-  import { AppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
+  import { loadAppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
   import { AgentSurfaceHost } from '@/features/agent/public';
-  import { RemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
+  import { markConnectionConnected } from '@/features/connections/public';
+  import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
   import { usePreferences } from '@/features/preferences/public';
   import DialogHost from '@/shared/feedback/components/DialogHost.vue';
   import NotificationHost from '@/shared/feedback/components/NotificationHost.vue';
   import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
+  const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
+  const AppearanceCustomizerModal = defineAsyncComponent(loadAppearanceCustomizerModal);
   const auth = useAuthSession();
   const appearance = useAppearance();
   const appearanceCustomizerVisible = appearance.customizerVisible;
@@ -28,6 +31,10 @@
       ? preferences.values.value.vncModalHeight
       : preferences.values.value.rdpModalHeight,
   );
+  const updateRemoteDesktopConnection = (connectionId: number, lastConnectedAt: number) => {
+    markConnectionConnected(connectionId, lastConnectedAt);
+  };
+
   const saveRemoteDesktopSize = (size: { width: number; height: number }) => {
     const type = remoteDesktopConnection.value?.type;
     if (!type) return;
@@ -65,14 +72,20 @@
     </div>
     <AgentSurfaceHost v-if="auth.isAuthenticated.value" />
     <RemoteDesktopModal
-      :visible="remoteDesktopVisible"
+      v-if="remoteDesktopVisible"
+      :visible="true"
       :connection="remoteDesktopConnection"
       :width="remoteDesktopWidth"
       :height="remoteDesktopHeight"
       @size-change="saveRemoteDesktopSize"
+      @connected="updateRemoteDesktopConnection"
       @close="remoteDesktopLauncher.close()"
     />
-    <AppearanceCustomizerModal :visible="appearanceCustomizerVisible" @close="appearance.closeCustomizer()" />
+    <AppearanceCustomizerModal
+      v-if="appearanceCustomizerVisible"
+      :visible="true"
+      @close="appearance.closeCustomizer()"
+    />
     <NotificationHost />
     <DialogHost />
   </div>

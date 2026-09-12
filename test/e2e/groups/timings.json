@@ -1,26 +1,6 @@
 {
   "version": 1,
   "specs": {
-    "tests/agent/host.spec.ts": {
-      "samplesMs": [
-        7407,
-        9964,
-        8384,
-        8368,
-        8473
-      ],
-      "medianMs": 8384
-    },
-    "tests/agent/provider.spec.ts": {
-      "samplesMs": [
-        355,
-        367,
-        327,
-        323,
-        334
-      ],
-      "medianMs": 334
-    },
     "tests/auth/setup-login.spec.ts": {
       "samplesMs": [
         6477,
@@ -690,6 +670,26 @@
         2308
       ],
       "medianMs": 2392
+    },
+    "tests/agent/host.spec.ts": {
+      "samplesMs": [
+        7407,
+        9964,
+        8384,
+        8368,
+        8473
+      ],
+      "medianMs": 8384
+    },
+    "tests/agent/provider.spec.ts": {
+      "samplesMs": [
+        355,
+        367,
+        327,
+        323,
+        334
+      ],
+      "medianMs": 334
     }
   }
 }

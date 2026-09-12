@@ -65,6 +65,7 @@
   }
 
   const props = defineProps<{
+    active?: boolean;
     session: WorkspaceRuntimeSession;
     layout: WorkspaceLayoutNode;
     sidebars: WorkspaceSidebarConfig;
@@ -960,6 +961,7 @@
         <span aria-hidden="true">&times;</span>
       </button>
       <WorkspaceLayoutRenderer
+        :active="active !== false"
         class="box-border h-full min-h-0 !border-0 pt-10"
         :node="sidebarNode(activeLeftSidebar, 'left')"
         :session="session"
@@ -1046,6 +1048,7 @@
 
     <div class="relative min-h-0 min-w-0 flex-1">
       <WorkspaceLayoutRenderer
+        :active="active !== false"
         :node="mobile ? sidebarNode(mobilePane, 'left') : layout"
         :session="session"
         :document-mode="documentMode"
@@ -1147,6 +1150,7 @@
         <span aria-hidden="true">&times;</span>
       </button>
       <WorkspaceLayoutRenderer
+        :active="active !== false"
         class="box-border h-full min-h-0 !border-0 pt-10"
         :node="sidebarNode(activeRightSidebar, 'right')"
         :session="session"

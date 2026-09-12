@@ -18,4 +18,5 @@ export interface WorkspaceConnectResult {
   connectionId: number;
   connectionName: string;
   binaryProtocolVersion: number;
+  lastConnectedAt?: number;
 }

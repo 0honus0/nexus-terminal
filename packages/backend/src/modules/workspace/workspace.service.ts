@@ -84,12 +84,13 @@ export class WorkspaceService {
         ip: request.clientIp,
         reason: error instanceof Error ? error.message : String(error),
       };
-      await this.audit.logAction('SSH_CONNECT_FAILURE', details).catch(() => undefined);
-      await this.notifications.publish('SSH_CONNECT_FAILURE', details).catch(() => undefined);
+      void this.audit.logAction('SSH_CONNECT_FAILURE', details).catch(() => undefined);
+      void this.notifications.publish('SSH_CONNECT_FAILURE', details).catch(() => undefined);
       throw error;
     }
     try {
       const shell = await execution.openShell({ columns: request.columns, rows: request.rows });
+      const lastConnectedAt = Math.floor(Date.now() / 1000);
       const session: WorkspaceSession = {
         id: request.workspaceId,
         userId: request.userId,
@@ -98,9 +99,10 @@ export class WorkspaceService {
         executionSessionId: execution.id,
         shell,
         createdAt: Date.now(),
+        lastConnectedAt,
       };
       this.sessions.set(session);
-      await this.connections.markConnected(request.connectionId).catch(() => false);
+      await this.connections.markConnected(request.connectionId, lastConnectedAt).catch(() => false);
       const details = {
         userId: request.userId,
         username: request.actorUsername,
@@ -109,8 +111,8 @@ export class WorkspaceService {
         sessionId: session.id,
         ip: request.clientIp,
       };
-      await this.audit.logAction('SSH_CONNECT_SUCCESS', details).catch(() => undefined);
-      await this.notifications.publish('SSH_CONNECT_SUCCESS', details).catch(() => undefined);
+      void this.audit.logAction('SSH_CONNECT_SUCCESS', details).catch(() => undefined);
+      void this.notifications.publish('SSH_CONNECT_SUCCESS', details).catch(() => undefined);
       return session;
     } catch (error) {
       await this.executionSessions.close(execution.id).catch(() => undefined);
@@ -127,8 +129,8 @@ export class WorkspaceService {
         { err: error, workspaceId: request.workspaceId, connectionId: request.connectionId },
         'Workspace shell initialization failed',
       );
-      await this.audit.logAction('SSH_SHELL_FAILURE', details).catch(() => undefined);
-      await this.notifications.publish('SSH_SHELL_FAILURE', details).catch(() => undefined);
+      void this.audit.logAction('SSH_SHELL_FAILURE', details).catch(() => undefined);
+      void this.notifications.publish('SSH_SHELL_FAILURE', details).catch(() => undefined);
       throw error;
     }
   }

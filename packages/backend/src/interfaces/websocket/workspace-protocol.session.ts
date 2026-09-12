@@ -365,6 +365,7 @@ export class WorkspaceProtocolSession {
         connectionId: session.connectionId,
         connectionName: session.connectionName,
         binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
+        lastConnectedAt: session.lastConnectedAt,
       };
     } catch (error) {
       this.unbindWorkspace();

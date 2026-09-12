@@ -1,12 +1,14 @@
 <script setup lang="ts">
-  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseContextMenu, BaseSpinner } from '@/foundation/ui';
-  import { ConnectionEditorModal, useConnections, type Connection } from '@/features/connections/public';
+  import { loadConnectionEditorModal, useConnections, type Connection } from '@/features/connections/public';
   import { useConnectionTags, type ConnectionTag } from '@/features/tags/public';
   import { useFeedback } from '@/shared/feedback/public';
   import WorkspaceTagGroupManager from './WorkspaceTagGroupManager.vue';
   import { focusRegistry } from '@/shared/focus/public';
+
+  const ConnectionEditorModal = defineAsyncComponent(loadConnectionEditorModal);
   const props = withDefaults(defineProps<{ showTags?: boolean; activeConnectionId?: number | null }>(), {
     showTags: true,
     activeConnectionId: null,
@@ -401,7 +403,8 @@
     </BaseContextMenu>
 
     <ConnectionEditorModal
-      :visible="editorVisible"
+      v-if="editorVisible"
+      :visible="true"
       :connection="editorConnection"
       @close="
         editorVisible = false;

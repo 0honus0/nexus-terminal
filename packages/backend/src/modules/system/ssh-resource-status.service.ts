@@ -72,12 +72,40 @@ export class SshResourceStatusService {
         if (entry) results[index] = await this.collectHost(entry[0], entry[1]);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(4, entries.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(2, entries.length) }, worker));
     return results.sort((a, b) => a.name.localeCompare(b.name) || a.host.localeCompare(b.host) || a.port - b.port);
   }
   private async collectHost(key: string, candidates: Awaited<ReturnType<ConnectionService['list']>>) {
     const representative = candidates[0]!;
     let lastError = 'Unable to collect SSH resource status.';
+    const activeWorkspaceSessions = this.sessions
+      .snapshot()
+      .filter((session) => session.ownerType === 'workspace' && session.status === 'ready');
+    for (const candidate of candidates) {
+      const identity = activeWorkspaceSessions.find((session) => session.connectionId === candidate.id);
+      const session = identity ? this.sessions.get(identity.id) : undefined;
+      if (!session?.isReady) continue;
+      try {
+        let status = await this.collector.collect(session, key);
+        if (!this.bootstrappedKeys.has(key)) {
+          await wait(RESOURCE_BOOTSTRAP_SAMPLE_DELAY_MS);
+          status = await this.collector.collect(session, key);
+          this.bootstrappedKeys.add(key);
+        }
+        return {
+          key,
+          connectionId: candidate.id,
+          name: candidate.name || candidate.host,
+          username: candidate.username,
+          host: candidate.host,
+          port: candidate.port,
+          status,
+          checkedAt: Date.now(),
+        };
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : String(error);
+      }
+    }
     for (const candidate of candidates) {
       let sessionId: string | undefined;
       try {

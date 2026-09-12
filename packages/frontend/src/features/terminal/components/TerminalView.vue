@@ -18,6 +18,7 @@
   const props = withDefaults(
     defineProps<{
       channel: TerminalChannel;
+      active?: boolean;
       fontFamily?: string;
       fontSize?: number;
       theme?: Record<string, string>;
@@ -26,7 +27,7 @@
       visual?: TerminalVisualOptions;
       state?: TerminalSessionState;
     }>(),
-    { fontSize: 14, scrollback: 5000, rightClickCopyPaste: true },
+    { active: true, fontSize: 14, scrollback: 5000, rightClickCopyPaste: true },
   );
   const emit = defineEmits<{
     ready: [];
@@ -876,6 +877,58 @@
     else syncSearchDecorations();
   });
 
+  const INACTIVE_OUTPUT_BATCH_MS = 80;
+  const INACTIVE_OUTPUT_MAX_BATCH_BYTES = 512 * 1024;
+  let pendingOutput: Uint8Array[] = [];
+  let pendingOutputBytes = 0;
+  let outputFrame: number | undefined;
+  let outputTimer: number | undefined;
+  const outputEncoder = new TextEncoder();
+  const clearOutputSchedule = (): void => {
+    if (outputFrame !== undefined) window.cancelAnimationFrame(outputFrame);
+    if (outputTimer !== undefined) window.clearTimeout(outputTimer);
+    outputFrame = undefined;
+    outputTimer = undefined;
+  };
+  const flushPendingOutput = (): void => {
+    clearOutputSchedule();
+    if (!terminal || !pendingOutput.length) return;
+    const batch = new Uint8Array(pendingOutputBytes);
+    let offset = 0;
+    for (const chunk of pendingOutput) {
+      batch.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    pendingOutput = [];
+    pendingOutputBytes = 0;
+    terminal.write(batch);
+  };
+  const scheduleOutputFlush = (): void => {
+    if (outputFrame !== undefined || outputTimer !== undefined) return;
+    if (props.active) outputFrame = window.requestAnimationFrame(flushPendingOutput);
+    else outputTimer = window.setTimeout(flushPendingOutput, INACTIVE_OUTPUT_BATCH_MS);
+  };
+  const handleTerminalOutput = ({ data }: { data: string | Uint8Array }): void => {
+    activatePagedHistoryMode();
+    if (historyBrowsing || historyRebuilding) {
+      const shouldRestore = appendDeferredTerminalOutput(data);
+      if (shouldRestore && historyBrowsing && !historyRebuilding) void restoreLatestOutput();
+      return;
+    }
+    const bytes = typeof data === 'string' ? outputEncoder.encode(data) : data.slice();
+    pendingOutput.push(bytes);
+    pendingOutputBytes += bytes.byteLength;
+    if (!props.active && pendingOutputBytes >= INACTIVE_OUTPUT_MAX_BATCH_BYTES) flushPendingOutput();
+    else scheduleOutputFlush();
+  };
+  watch(
+    () => props.active,
+    (active) => {
+      if (active && pendingOutput.length) flushPendingOutput();
+    },
+    { flush: 'post' },
+  );
+
   onMounted(() => {
     terminal = new Terminal({
       convertEol: true,
@@ -948,15 +1001,7 @@
         }
         void props.channel.sendInput(data);
       }).dispose,
-      props.channel.onOutput(({ data }) => {
-        activatePagedHistoryMode();
-        if (historyBrowsing || historyRebuilding) {
-          const shouldRestore = appendDeferredTerminalOutput(data);
-          if (shouldRestore && historyBrowsing && !historyRebuilding) void restoreLatestOutput();
-          return;
-        }
-        terminal?.write(data);
-      }),
+      props.channel.onOutput(handleTerminalOutput),
       props.channel.onClose((reason) => emit('closed', reason)),
       props.channel.onError((message) => emit('error', message)),
     );
@@ -1001,6 +1046,7 @@
   );
 
   onBeforeUnmount(() => {
+    flushPendingOutput();
     if (terminal && serializeAddon) terminalState.replaceSnapshot(liveReplaySnapshot());
     if (historyBrowsing) void props.channel.resetPreviousOutput?.().catch(() => false);
     if (root.value) {
@@ -1019,6 +1065,7 @@
     }
     hideMobileSelectionHandles();
     restoreMobileSoftKeyboard(false);
+    clearOutputSchedule();
     resizeObserver?.disconnect();
     for (const stop of cleanup) stop();
     terminal?.dispose();

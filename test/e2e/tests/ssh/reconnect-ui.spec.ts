@@ -118,9 +118,30 @@ async function captureWorkspaceEvidence(page: Page, testInfo: TestInfo, name: 'b
 test('disconnected SSH retries periodically and any key reconnects immediately', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
+  const settingsResponse = await context.request.get('/api/v1/settings');
+  expect(settingsResponse.ok()).toBeTruthy();
+  const originalFrontendLogLevel =
+    ((await settingsResponse.json()) as { frontendLogLevel?: string }).frontendLogLevel ?? 'info';
+  const debugSettings = await context.request.put('/api/v1/settings', { data: { frontendLogLevel: 'debug' } });
+  expect(debugSettings.ok()).toBeTruthy();
   await setTestSshOnline(true);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
+
+  const frontendDebugLogs: Array<Record<string, unknown>> = [];
+  page.on('console', (message) => {
+    if (message.type() !== 'debug' && message.type() !== 'log') return;
+    for (const argument of message.args()) {
+      void argument
+        .jsonValue()
+        .then((value) => {
+          if (value && typeof value === 'object' && typeof (value as { msg?: unknown }).msg === 'string') {
+            frontendDebugLogs.push(value as Record<string, unknown>);
+          }
+        })
+        .catch(() => undefined);
+    }
+  });
 
   let openedWebSockets = 0;
   let workspaceConnectRequests = 0;
@@ -163,22 +184,22 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
     });
   });
 
-  await connectTestSshFromConnectionsPage(page, connectionId);
-  const terminal = page.getByTestId('terminal');
-  const xtermInput = terminal.locator('.xterm-helper-textarea');
-  const commandInput = page.getByTestId('command-input');
-
-  await step('initial SSH session is connected', async () => {
-    await expect(terminal).toBeVisible({ timeout: 20_000 });
-    await expect(xtermInput).toBeAttached();
-    await expect.poll(() => openedWebSockets).toBeGreaterThanOrEqual(1);
-    await expect.poll(() => workspaceConnectResponses, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
-  });
-
-  const initialConnectRequestCount = workspaceConnectRequests;
-  const initialConnectedCount = workspaceConnectResponses;
-
   try {
+    await connectTestSshFromConnectionsPage(page, connectionId);
+    const terminal = page.getByTestId('terminal');
+    const xtermInput = terminal.locator('.xterm-helper-textarea');
+    const commandInput = page.getByTestId('command-input');
+
+    await step('initial SSH session is connected', async () => {
+      await expect(terminal).toBeVisible({ timeout: 20_000 });
+      await expect(xtermInput).toBeAttached();
+      await expect.poll(() => openedWebSockets).toBeGreaterThanOrEqual(1);
+      await expect.poll(() => workspaceConnectResponses, { timeout: 20_000 }).toBeGreaterThanOrEqual(1);
+    });
+
+    const initialConnectRequestCount = workspaceConnectRequests;
+    const initialConnectedCount = workspaceConnectResponses;
+
     await step('SSH outage triggers more than one automatic reconnect cycle', async () => {
       await setTestSshOnline(false);
 
@@ -189,6 +210,12 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
       await expect
         .poll(() => workspaceConnectRequests, { timeout: 12_000 })
         .toBeGreaterThanOrEqual(initialConnectRequestCount + 2);
+      await expect
+        .poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect scheduled'))
+        .toBeTruthy();
+      await expect
+        .poll(() => frontendDebugLogs.some((entry) => entry.msg === 'Workspace reconnect attempt failed'))
+        .toBeTruthy();
     });
 
     await step('any terminal key interrupts backoff and reconnects immediately', async () => {
@@ -209,9 +236,24 @@ test('disconnected SSH retries periodically and any key reconnects immediately',
       await expect
         .poll(async () => terminal.locator('.xterm-rows').innerText(), { timeout: 10_000 })
         .toContain('NEXUS_RECONNECTED_E2E');
+      await expect
+        .poll(() =>
+          frontendDebugLogs.some(
+            (entry) =>
+              entry.msg === 'Workspace connection attempt succeeded' &&
+              entry.connectionId === connectionId &&
+              entry.phase === 'reconnect',
+          ),
+        )
+        .toBeTruthy();
+      expect(JSON.stringify(frontendDebugLogs)).not.toContain(E2E_SSH.password);
     });
   } finally {
     await setTestSshOnline(true);
+    const restoreSettings = await context.request.put('/api/v1/settings', {
+      data: { frontendLogLevel: originalFrontendLogLevel },
+    });
+    expect(restoreSettings.ok()).toBeTruthy();
   }
 });
 

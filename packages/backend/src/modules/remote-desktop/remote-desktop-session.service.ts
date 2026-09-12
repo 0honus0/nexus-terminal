@@ -28,8 +28,11 @@ export class RemoteDesktopSessionService {
     if (stored.connection.type !== protocol) throw new Error(`此连接类型不是 ${protocol}。`);
     // Preserve the historical user-visible "recent connection" semantics: opening RDP/VNC
     // counts as a connection attempt once the stored connection type is valid, even if
-    // credential validation or the Guacamole runtime fails afterwards.
-    await this.connections.markConnected(connectionId).catch(() => false);
+    // credential validation or the Guacamole runtime fails afterwards. Keep that persistence
+    // off the ticket critical path; the timestamp is returned on successful ticket issuance so
+    // the UI can update immediately without an extra GET.
+    const lastConnectedAt = Math.floor(Date.now() / 1000);
+    void this.connections.markConnected(connectionId, lastConnectedAt).catch(() => false);
     const password = stored.credentials.password;
     if (!password) throw new Error(`${protocol} 连接需要使用密码认证，或密码解密失败。`);
     this.validateDisplay(options);
@@ -54,7 +57,7 @@ export class RemoteDesktopSessionService {
           }
         : {}),
     });
-    return result;
+    return { ...result, lastConnectedAt };
   }
 
   private validateDisplay(options: RemoteDesktopSessionOptions): void {

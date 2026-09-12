@@ -11,5 +11,6 @@ export interface RemoteDesktopDisplay {
 }
 export interface RemoteDesktopSession {
   ticket: string;
+  lastConnectedAt: number;
 }
 export type RemoteDesktopState = 'idle' | 'connecting' | 'connected' | 'disconnecting' | 'disconnected' | 'error';
