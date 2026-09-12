@@ -13,6 +13,7 @@
     "tests/ui/ip-whitelist-settings.spec.ts",
     "tests/ui/protected-navigation.spec.ts",
     "tests/ui/ssh-key-management.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/connection-edit-delete.spec.ts",
     "tests/ssh/connection-list-search.spec.ts",
     "tests/ssh/connection.spec.ts",
