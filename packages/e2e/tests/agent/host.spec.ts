@@ -763,12 +763,9 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
     await expect(response.json()).resolves.toMatchObject({
       data: {
         available: false,
-        state: 'unavailable',
         reason: 'runner_not_configured',
-        deploymentId: null,
-        controllerVersion: null,
-        runtime: { available: false, reason: 'runner_not_configured', mode: 'native', isolation: 'logical' },
-        capabilities: { egressAllowlist: false },
+        mode: 'native',
+        isolation: 'logical',
       },
     });
   });
