@@ -5,6 +5,6 @@
   "specs": [
     "tests/ssh/file-manager-navigation.spec.ts",
     "tests/ssh/file-preview-editor.spec.ts",
-    "tests/ssh/progress-display-archive-cancel.spec.ts"
+    "tests/ssh/progress-display-copy-cancel.spec.ts"
   ]
 }
