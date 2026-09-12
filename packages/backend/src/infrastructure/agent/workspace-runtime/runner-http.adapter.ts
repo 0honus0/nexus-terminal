@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
+import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type {
@@ -33,7 +34,15 @@ import type {
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_HOST_WORKSPACE_TRANSFER_BYTES = 256 * 1024 * 1024;
 const WORKSPACE_TRANSFER_TIMEOUT_MS = 120_000;
-const API_VERSION = '2026-09-11';
+const API_VERSION = '2026-09-12';
+
+const retryableRunnerGetTransportError = (error: unknown): boolean => {
+  if (!(error instanceof TypeError)) return false;
+  const cause = (error as TypeError & { cause?: unknown }).cause;
+  if (!cause || typeof cause !== 'object') return false;
+  const code = 'code' in cause ? String((cause as { code?: unknown }).code ?? '') : '';
+  return ['UND_ERR_SOCKET', 'ECONNRESET', 'ECONNREFUSED', 'EPIPE'].includes(code);
+};
 const MAX_WEBSOCKET_FRAME_BYTES = 256 * 1024;
 const MAX_WEBSOCKET_BUFFER_BYTES = 1024 * 1024;
 
@@ -175,18 +184,27 @@ export class RunnerHttpAdapter
   async openTerminalWebSocket(
     workspaceId: string,
     generation: number,
-    publicKey: string,
+    columns: number,
+    rows: number,
     signal?: AbortSignal,
   ): Promise<WebSocket> {
-    if (!workspaceId || workspaceId.length > 128 || !Number.isSafeInteger(generation) || generation < 1) {
+    if (
+      !workspaceId ||
+      workspaceId.length > 128 ||
+      !Number.isSafeInteger(generation) ||
+      generation < 1 ||
+      !Number.isSafeInteger(columns) ||
+      columns < 2 ||
+      columns > 1000 ||
+      !Number.isSafeInteger(rows) ||
+      rows < 1 ||
+      rows > 500
+    ) {
       throw new Error('VALIDATION_FAILED');
     }
-    if (!publicKey.startsWith('ssh-ed25519 ') || publicKey.length > 4096 || /[\r\n\0]/.test(publicKey)) {
-      throw new Error('WORKSPACE_TERMINAL_PUBLIC_KEY_INVALID');
-    }
     return this.openWebSocket(
-      `/v1/workspaces/${encodeURIComponent(workspaceId)}/terminal/stream?generation=${generation}`,
-      { 'X-Nexus-Terminal-Public-Key': publicKey },
+      `/v1/workspaces/${encodeURIComponent(workspaceId)}/terminal/stream?generation=${generation}&columns=${columns}&rows=${rows}`,
+      {},
       signal,
     );
   }
@@ -270,7 +288,7 @@ export class RunnerHttpAdapter
         reason: 'runner_not_configured',
         deploymentId: null,
         controllerVersion: null,
-        sandbox: { available: false, reason: 'runner_not_configured' },
+        runtime: { available: false, reason: 'runner_not_configured', mode: 'native', isolation: 'logical' },
         capabilities: { egressAllowlist: false },
       };
     }
@@ -283,7 +301,7 @@ export class RunnerHttpAdapter
         reason: error instanceof Error ? error.message : 'runner_unavailable',
         deploymentId: null,
         controllerVersion: null,
-        sandbox: { available: false, reason: 'runner_unavailable' },
+        runtime: { available: false, reason: 'runner_unavailable', mode: 'native', isolation: 'logical' },
         capabilities: { egressAllowlist: false },
       };
     }
@@ -680,44 +698,61 @@ export class RunnerHttpAdapter
     const target = new URL(pathname, this.baseUrl);
     if (target.origin !== this.baseUrl.origin) throw new Error('WORKSPACE_RUNTIME_URL_INVALID');
     const scoped = timeoutSignal(parentSignal, limits.timeoutMs ?? 10_000);
+    const attempts = input.method === 'GET' ? 3 : 1;
     try {
-      const response = await fetch(target, {
-        method: input.method,
-        headers: {
-          Accept: 'application/json',
-          'X-Nexus-Agent-Protocol': API_VERSION,
-          Authorization: `Bearer ${this.token}`,
-          ...(input.body === undefined ? {} : { 'Content-Type': 'application/json' }),
-        },
-        ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
-        signal: scoped.signal,
-        redirect: 'error',
-      });
-      if (!response.ok) {
-        const text = (await response.text()).slice(0, 4096);
-        if (response.status === 409) {
-          try {
-            const parsed = JSON.parse(text) as { error?: unknown };
-            if (typeof parsed.error === 'string' && /^[A-Z][A-Z0-9_]+$/.test(parsed.error)) {
-              throw new Error(parsed.error);
+      for (let attempt = 1; attempt <= attempts; attempt += 1) {
+        try {
+          const response = await fetch(target, {
+            method: input.method,
+            headers: {
+              Accept: 'application/json',
+              'X-Nexus-Agent-Protocol': API_VERSION,
+              Authorization: `Bearer ${this.token}`,
+              ...(input.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+            },
+            ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
+            signal: scoped.signal,
+            redirect: 'error',
+          });
+          if (!response.ok) {
+            const text = (await response.text()).slice(0, 4096);
+            if (response.status === 409) {
+              try {
+                const parsed = JSON.parse(text) as { error?: unknown };
+                if (typeof parsed.error === 'string' && /^[A-Z][A-Z0-9_]+$/.test(parsed.error)) {
+                  throw new Error(parsed.error);
+                }
+              } catch (error) {
+                if (error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message)) throw error;
+              }
             }
-          } catch (error) {
-            if (error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message)) throw error;
+            throw new Error(
+              response.status === 401 || response.status === 403
+                ? 'WORKSPACE_RUNTIME_AUTH_FAILED'
+                : `WORKSPACE_RUNTIME_HTTP_${response.status}${text ? `:${text}` : ''}`,
+            );
           }
+          const maxResponseBytes = limits.maxResponseBytes ?? MAX_RESPONSE_BYTES;
+          const declared = Number(response.headers.get('content-length') ?? '0');
+          if (Number.isFinite(declared) && declared > maxResponseBytes)
+            throw new Error('WORKSPACE_RUNTIME_RESPONSE_TOO_LARGE');
+          const text = await response.text();
+          if (Buffer.byteLength(text, 'utf8') > maxResponseBytes)
+            throw new Error('WORKSPACE_RUNTIME_RESPONSE_TOO_LARGE');
+          return JSON.parse(text) as T;
+        } catch (error) {
+          if (
+            input.method !== 'GET' ||
+            attempt === attempts ||
+            scoped.signal.aborted ||
+            !retryableRunnerGetTransportError(error)
+          ) {
+            throw error;
+          }
+          await delay(100 * attempt, undefined, { signal: scoped.signal });
         }
-        throw new Error(
-          response.status === 401 || response.status === 403
-            ? 'WORKSPACE_RUNTIME_AUTH_FAILED'
-            : `WORKSPACE_RUNTIME_HTTP_${response.status}${text ? `:${text}` : ''}`,
-        );
       }
-      const maxResponseBytes = limits.maxResponseBytes ?? MAX_RESPONSE_BYTES;
-      const declared = Number(response.headers.get('content-length') ?? '0');
-      if (Number.isFinite(declared) && declared > maxResponseBytes)
-        throw new Error('WORKSPACE_RUNTIME_RESPONSE_TOO_LARGE');
-      const text = await response.text();
-      if (Buffer.byteLength(text, 'utf8') > maxResponseBytes) throw new Error('WORKSPACE_RUNTIME_RESPONSE_TOO_LARGE');
-      return JSON.parse(text) as T;
+      throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
     } finally {
       scoped.dispose();
     }

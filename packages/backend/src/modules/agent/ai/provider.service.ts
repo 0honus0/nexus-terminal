@@ -200,6 +200,17 @@ export class ProviderService {
     await this.onChanged(userId);
   }
 
+  async discoverModels(userId: number, providerId: string) {
+    await this.get(userId, providerId);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(new Error('PROVIDER_DISCOVERY_TIMEOUT')), 10_000);
+    try {
+      return await this.languageModel.discoverModels(userId, providerId, controller.signal);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async test(userId: number, providerId: string, modelId: string): Promise<ProviderTestResult> {
     const provider = await this.get(userId, providerId);
     const model = provider.models.find((candidate) => candidate.id === modelId);

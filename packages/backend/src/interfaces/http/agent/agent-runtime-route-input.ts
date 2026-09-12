@@ -11,6 +11,7 @@ export interface CreateRunRequestDto {
   agentDefinitionId: string;
   model: { providerId: string; modelId: string; configurationVersion: number };
   connectionIds: number[];
+  initialGoal?: string;
 }
 
 export interface ApprovalResolveRequestDto {
@@ -26,9 +27,8 @@ export interface WorkspaceCreateRequestDto {
 }
 
 export interface WorkspaceActionRequestDto {
-  action: 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize';
+  action: 'start' | 'stop' | 'restart' | 'delete';
   expectedVersion: number;
-  parameters: JsonValue;
 }
 
 export interface WorkspaceToolVersionsRequestDto {
@@ -52,7 +52,14 @@ const parseUserInput = (value: unknown): UserInputData => {
 };
 
 export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
-  const value = versionedRecord(body, ['threadId', 'input', 'agentDefinitionId', 'model', 'connectionIds']);
+  const value = versionedRecord(body, [
+    'threadId',
+    'input',
+    'agentDefinitionId',
+    'model',
+    'connectionIds',
+    'initialGoal',
+  ]);
   const model = value.model;
   if (!isRecord(model) || !hasOnlyKeys(model, ['providerId', 'modelId', 'configurationVersion'])) {
     throw new Error('VALIDATION_FAILED');
@@ -65,7 +72,11 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     !positiveInteger(model.configurationVersion) ||
     !Array.isArray(value.connectionIds) ||
     value.connectionIds.length > 50 ||
-    value.connectionIds.some((connectionId) => !positiveInteger(connectionId))
+    value.connectionIds.some((connectionId) => !positiveInteger(connectionId)) ||
+    (value.initialGoal !== undefined &&
+      (typeof value.initialGoal !== 'string' ||
+        !value.initialGoal.trim() ||
+        Buffer.byteLength(value.initialGoal.trim(), 'utf8') > 4096))
   ) {
     throw new Error('VALIDATION_FAILED');
   }
@@ -79,6 +90,9 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
       configurationVersion: model.configurationVersion,
     },
     connectionIds: value.connectionIds as number[],
+    ...(typeof value.initialGoal === 'string' && value.initialGoal.trim()
+      ? { initialGoal: value.initialGoal.trim() }
+      : {}),
   };
 };
 
@@ -95,6 +109,19 @@ export const parseAppendInputRequest = (body: unknown): { input: UserInputData; 
     input: parseUserInput({ text: value.text, artifactRefs: value.artifactRefs }),
     expectedVersion: value.expectedVersion,
   };
+};
+
+export const parseSetGoalRequest = (body: unknown): { text: string; expectedVersion: number } => {
+  const value = versionedRecord(body, ['text', 'expectedVersion']);
+  if (
+    typeof value.text !== 'string' ||
+    !value.text.trim() ||
+    Buffer.byteLength(value.text.trim(), 'utf8') > 4096 ||
+    !positiveInteger(value.expectedVersion)
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return { text: value.text.trim(), expectedVersion: value.expectedVersion };
 };
 
 export const parseResumeRunRequest = (body: unknown): { checkpointId: string; expectedVersion: number } => {
@@ -204,19 +231,16 @@ export const parseWorkspaceCreateRequest = (body: unknown): WorkspaceCreateReque
 };
 
 export const parseWorkspaceActionRequest = (body: unknown): WorkspaceActionRequestDto => {
-  const value = versionedRecord(body, ['action', 'expectedVersion', 'parameters']);
+  const value = versionedRecord(body, ['action', 'expectedVersion']);
   if (
-    !['start', 'stop', 'restart', 'delete', 'setNetwork', 'resize'].includes(String(value.action)) ||
+    !['start', 'stop', 'restart', 'delete'].includes(String(value.action)) ||
     !positiveInteger(value.expectedVersion)
   ) {
     throw new Error('VALIDATION_FAILED');
   }
-  const parameters = value.parameters === undefined ? {} : value.parameters;
-  if (!isJsonValue(parameters)) throw new Error('VALIDATION_FAILED');
   return {
     action: value.action as WorkspaceActionRequestDto['action'],
     expectedVersion: value.expectedVersion,
-    parameters,
   };
 };
 

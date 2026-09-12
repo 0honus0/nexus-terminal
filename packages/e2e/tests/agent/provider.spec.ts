@@ -94,6 +94,21 @@ test('Provider configuration protects credentials and enforces outbound policy',
     expect(await operationsHealth(request)).toEqual({ health: 'healthy', healthReason: null });
   });
 
+  await step('model discovery reads the upstream catalog without inventing capabilities', async () => {
+    const discovered = await request.post(`/api/v1/agent/ai/providers/${provider.id}/discover-models`, {
+      headers,
+      data: {},
+    });
+    expect(discovered.ok(), await discovered.text()).toBeTruthy();
+    await expect(discovered.json()).resolves.toMatchObject({
+      data: [
+        { id: 'e2e-model', ownedBy: 'nexus-e2e', createdAt: 1700000000 },
+        { id: 'e2e-model-alt', ownedBy: 'nexus-e2e', createdAt: 1700000001 },
+      ],
+    });
+    expect(JSON.stringify(await discovered.json())).not.toContain('contextWindow');
+  });
+
   await step('minimal provider test streams through the pinned endpoint and reports usage', async () => {
     const tested = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
       headers,

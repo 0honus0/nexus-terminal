@@ -83,16 +83,23 @@ export const beginModelStepTransition = async (
     { type: 'model.started', payload: { stepId, attemptId, attemptIndex: 1 } },
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
+  const latestInput = await tx.queryOne<{ sequence: number | null }>(
+    `SELECT MAX(sequence) AS sequence FROM ai_thread_entries WHERE run_id = ? AND kind = 'user_input'`,
+    [command.runId],
+  );
+  const consumedInputSequence = latestInput?.sequence ?? row.consumed_input_sequence;
   const updated = await tx.execute(
     `UPDATE agent_runs SET
        status = 'running', goal_status = 'in_progress', started_at = COALESCE(started_at, ?),
        active_execution_started_at = CASE WHEN executing_runtime_count = 0 THEN ? ELSE active_execution_started_at END,
        executing_runtime_count = executing_runtime_count + 1,
+       consumed_input_sequence = MAX(consumed_input_sequence, ?),
        next_event_sequence = next_event_sequence + ?, version = version + 1, updated_at = ?
      WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
     [
       command.now,
       command.now,
+      consumedInputSequence,
       events.length,
       command.now,
       command.runId,
@@ -578,7 +585,10 @@ export const supersedeModelStepTransition = async (
   );
   if (!row) throw new Error('NOT_FOUND');
   if (row.status !== 'running') throw new Error('STATE_CONFLICT');
-  if (row.input_revision <= command.expectedInputRevision) throw new Error('INPUT_REVISION_CONFLICT');
+  if (command.reason === 'new_input' && row.input_revision <= command.expectedInputRevision)
+    throw new Error('INPUT_REVISION_CONFLICT');
+  if (command.reason === 'goal_updated' && row.goal_revision <= command.expectedGoalRevision)
+    throw new Error('GOAL_REVISION_CONFLICT');
   const step = await tx.queryOne<{ status: string; input_watermark: number }>(
     `SELECT status, input_watermark FROM agent_steps
      WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'model'`,
@@ -598,7 +608,7 @@ export const supersedeModelStepTransition = async (
   const attemptChanged = await tx.execute(
     `UPDATE agent_model_attempts SET status = 'aborted', input_tokens = ?, output_tokens = ?,
        cached_input_tokens = ?, cost_micros = ?, price_version = ?, estimated = ?,
-       error_code = 'NEW_INPUT', completed_at = ?
+       error_code = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens ?? null,
@@ -607,6 +617,7 @@ export const supersedeModelStepTransition = async (
       command.costMicros ?? null,
       command.priceVersion ?? null,
       command.estimatedUsage ? 1 : 0,
+      command.reason === 'new_input' ? 'NEW_INPUT' : 'GOAL_UPDATED',
       command.now,
       command.attemptId,
     ],
@@ -617,6 +628,12 @@ export const supersedeModelStepTransition = async (
     [command.now, command.stepId, command.runId],
   );
   if (attemptChanged.changes !== 1 || stepChanged.changes !== 1) throw new Error('ATTEMPT_STATE_CONFLICT');
+  const runtimeChanged = await tx.execute(
+    `UPDATE agent_runtimes SET schedule_state = 'runnable', updated_at = ?
+     WHERE id = ? AND run_id = ? AND status = 'running' AND schedule_state = 'executing'`,
+    [command.now, command.runtimeId, command.runId],
+  );
+  if (runtimeChanged.changes !== 1) throw new Error('RUNTIME_NOT_SCHEDULABLE');
 
   const events: DurableEventInput[] = [
     {
@@ -624,9 +641,11 @@ export const supersedeModelStepTransition = async (
       payload: {
         stepId: command.stepId,
         attemptId: command.attemptId,
-        reason: 'new_input',
+        reason: command.reason,
         previousInputRevision: command.expectedInputRevision,
         currentInputRevision: row.input_revision,
+        previousGoalRevision: command.expectedGoalRevision,
+        currentGoalRevision: row.goal_revision,
       },
     },
   ];
@@ -638,7 +657,32 @@ export const supersedeModelStepTransition = async (
     costMicros: command.costMicros,
     steps: 1,
   });
-  const updatedRow = await patchRun(tx, row, { usage: mergedUsage }, events.length, command.now);
+  const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
+  const activeDelta =
+    nextExecuting === 0 && row.active_execution_started_at !== null
+      ? Math.max(0, command.now - row.active_execution_started_at)
+      : 0;
+  const changedRun = await tx.execute(
+    `UPDATE agent_runs SET usage_json = ?, active_execution_seconds = active_execution_seconds + ?,
+     active_execution_started_at = CASE WHEN ? = 0 THEN NULL ELSE active_execution_started_at END,
+     executing_runtime_count = ?, next_event_sequence = next_event_sequence + ?, version = version + 1, updated_at = ?
+     WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND status = 'running'`,
+    [
+      JSON.stringify(mergedUsage),
+      activeDelta,
+      nextExecuting,
+      nextExecuting,
+      events.length,
+      command.now,
+      row.id,
+      row.user_id,
+      row.app_id,
+      row.version,
+    ],
+  );
+  if (changedRun.changes !== 1) throw new Error('STATE_CONFLICT');
+  const updatedRow = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
+  if (!updatedRow) throw new Error('NOT_FOUND');
   const run = mapRunRow(updatedRow);
   await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
   return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };

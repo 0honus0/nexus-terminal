@@ -95,10 +95,26 @@ export class ContextService {
     const inputTokens = estimateTokens(input.currentInput);
     if (safetyTokens + inputTokens > availableTokens) throw new Error('CONTEXT_BUDGET_EXCEEDED');
 
-    const sourceRanges: ContextSourceRange[] = [{ kind: 'safety' }, { kind: 'current_input' }];
+    const sourceRanges: ContextSourceRange[] = [
+      { kind: 'safety' },
+      { kind: 'current_input', ...(input.currentInputEntryId ? { id: input.currentInputEntryId } : {}) },
+    ];
     const droppedSections: string[] = [];
     const messages: ModelMessage[] = [{ role: 'system', content: SAFETY_MESSAGE }];
     let usedTokens = safetyTokens + inputTokens;
+
+    if (input.goal?.trim()) {
+      const goal = input.goal.trim();
+      const content = `[Current goal]\n${goal}`;
+      const tokens = estimateTokens(content);
+      if (usedTokens + tokens <= availableTokens) {
+        messages.push({ role: 'system', content });
+        sourceRanges.push({ kind: 'goal' });
+        usedTokens += tokens;
+      } else {
+        droppedSections.push('goal');
+      }
+    }
 
     if (input.taskPlan?.trim()) {
       const plan = input.taskPlan.trim();
@@ -137,7 +153,7 @@ export class ContextService {
     ]);
 
     const ledgerCandidates = ledgerPage.items
-      .filter((entry) => entry.kind !== 'system_notice')
+      .filter((entry) => entry.kind !== 'system_notice' && entry.id !== input.currentInputEntryId)
       .map((entry) => {
         const message = ledgerMessage(entry);
         return message

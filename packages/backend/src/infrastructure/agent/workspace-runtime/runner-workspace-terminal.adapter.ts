@@ -1,25 +1,23 @@
 import { EventEmitter } from 'node:events';
-import { Client, type ClientChannel, utils } from 'ssh2';
+import WebSocket from 'ws';
 import type {
   WorkspaceRuntimeInteractiveSession,
   WorkspaceRuntimeInteractiveSessionPort,
   WorkspaceRuntimeInteractiveSessionRequest,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
-import { SshShellSessionAdapter } from '../../ssh/execution/ssh-shell-session.adapter';
 import { RunnerWebSocketDuplex } from './runner-websocket-duplex';
-import type WebSocket from 'ws';
 
-const READY_TIMEOUT_MS = 15_000;
+const ALLOWED_SIGNALS = new Set(['INT', 'TERM', 'HUP', 'QUIT', 'KILL', 'USR1', 'USR2']);
+
 interface RunnerTerminalTunnel {
   openTerminalWebSocket(
     workspaceId: string,
     generation: number,
-    publicKey: string,
+    columns: number,
+    rows: number,
     signal?: AbortSignal,
   ): Promise<WebSocket>;
 }
-
-const ALLOWED_SIGNALS = new Set(['INT', 'TERM', 'HUP', 'QUIT', 'KILL', 'USR1', 'USR2']);
 
 class RunnerWorkspaceTerminalSession implements WorkspaceRuntimeInteractiveSession {
   private readonly events = new EventEmitter();
@@ -28,48 +26,67 @@ class RunnerWorkspaceTerminalSession implements WorkspaceRuntimeInteractiveSessi
   constructor(
     readonly workspaceId: string,
     readonly generation: number,
-    private readonly client: Client,
+    private readonly socket: WebSocket,
     private readonly tunnel: RunnerWebSocketDuplex,
-    private readonly shell: SshShellSessionAdapter,
   ) {
-    shell.onClose(() => this.events.emit('close'));
-    shell.onError((error) => this.events.emit('error', error));
+    socket.once('close', () => this.finish());
+    socket.once('error', (error) => this.events.emit('error', error));
+    tunnel.once('close', () => this.finish());
+    tunnel.once('error', (error) =>
+      this.events.emit('error', error instanceof Error ? error : new Error(String(error))),
+    );
   }
 
   get isOpen(): boolean {
-    return !this.closed && this.shell.isOpen;
+    return !this.closed && this.socket.readyState === WebSocket.OPEN && !this.tunnel.destroyed;
   }
 
   write(data: string | Uint8Array): boolean {
-    return this.shell.write(data);
+    if (!this.isOpen) return false;
+    return this.tunnel.write(typeof data === 'string' ? Buffer.from(data) : Buffer.from(data));
   }
+
   resize(columns: number, rows: number): void {
-    this.shell.resize(columns, rows);
+    if (!this.isOpen) return;
+    this.socket.send(JSON.stringify({ type: 'resize', columns, rows }));
   }
+
   signal(signal: string): void {
+    if (!this.isOpen) return;
     const normalized = signal.toUpperCase().replace(/^SIG/, '');
     if (!ALLOWED_SIGNALS.has(normalized)) throw new Error('VALIDATION_FAILED');
-    this.shell.signal(normalized);
+    this.socket.send(JSON.stringify({ type: 'signal', signal: normalized }));
   }
+
   pause(): void {
-    this.shell.pause();
+    this.tunnel.pause();
   }
+
   resume(): void {
-    this.shell.resume();
+    this.tunnel.resume();
   }
+
   onDrain(listener: () => void): () => void {
-    return this.shell.onDrain(listener);
+    this.tunnel.on('drain', listener);
+    return () => this.tunnel.off('drain', listener);
   }
+
   onData(listener: (data: Uint8Array) => void): () => void {
-    return this.shell.onData(listener);
+    const next = (data: Buffer) => listener(data);
+    this.tunnel.on('data', next);
+    return () => this.tunnel.off('data', next);
   }
-  onStderr(listener: (data: Uint8Array) => void): () => void {
-    return this.shell.onStderr(listener);
+
+  onStderr(_listener: (data: Uint8Array) => void): () => void {
+    // PTY 会合并 shell 的 stdout/stderr；helper 自己的 stderr 仅用于 Runner 诊断。
+    return () => undefined;
   }
+
   onClose(listener: () => void): () => void {
     this.events.on('close', listener);
     return () => this.events.off('close', listener);
   }
+
   onError(listener: (error: Error) => void): () => void {
     this.events.on('error', listener);
     return () => this.events.off('error', listener);
@@ -77,27 +94,17 @@ class RunnerWorkspaceTerminalSession implements WorkspaceRuntimeInteractiveSessi
 
   async close(): Promise<void> {
     if (this.closed) return;
-    this.closed = true;
-    this.shell.close();
-    await new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        this.client.removeListener('close', finish);
-        resolve();
-      };
-      const timer = setTimeout(finish, 750);
-      timer.unref?.();
-      this.client.once('close', finish);
-      try {
-        this.client.end();
-      } catch {
-        finish();
-      }
-    });
+    if (this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify({ type: 'close' }));
+      this.socket.close(1000, 'Workspace terminal closed');
+    }
     this.tunnel.destroy();
+    this.finish();
+  }
+
+  private finish(): void {
+    if (this.closed) return;
+    this.closed = true;
     this.events.emit('close');
     this.events.removeAllListeners();
   }
@@ -113,69 +120,18 @@ export class RunnerWorkspaceTerminalAdapter implements WorkspaceRuntimeInteracti
     signal?: AbortSignal,
   ): Promise<WorkspaceRuntimeInteractiveSession> {
     if (signal?.aborted) throw signal.reason ?? new Error('ABORTED');
-    const keys = utils.generateKeyPairSync('ed25519');
     const socket = await this.tunnels.openTerminalWebSocket(
       request.workspaceId,
       request.generation,
-      keys.public.trim(),
+      request.columns,
+      request.rows,
       signal,
     );
     const tunnel = new RunnerWebSocketDuplex(socket);
-    const client = new Client();
-    let shell: SshShellSessionAdapter | null = null;
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const onAbort = () => {
-          client.end();
-          reject(signal?.reason ?? new Error('ABORTED'));
-        };
-        if (signal) signal.addEventListener('abort', onAbort, { once: true });
-        const cleanup = () => signal?.removeEventListener('abort', onAbort);
-        client.once('ready', () => {
-          cleanup();
-          resolve();
-        });
-        client.once('error', (error) => {
-          cleanup();
-          reject(error);
-        });
-        client.connect({
-          sock: tunnel,
-          username: 'nexus',
-          privateKey: keys.private,
-          hostVerifier: () => true,
-          readyTimeout: READY_TIMEOUT_MS,
-          keepaliveInterval: 15_000,
-          keepaliveCountMax: 2,
-        });
-      });
-      const channel = await new Promise<ClientChannel>((resolve, reject) => {
-        client.shell(
-          {
-            term: 'xterm-256color',
-            cols: request.columns,
-            rows: request.rows,
-          },
-          (error, next) => (error ? reject(error) : resolve(next)),
-        );
-      });
-      shell = new SshShellSessionAdapter(channel);
-      const session = new RunnerWorkspaceTerminalSession(
-        request.workspaceId,
-        request.generation,
-        client,
-        tunnel,
-        shell,
-      );
-      this.active.add(session);
-      session.onClose(() => this.active.delete(session));
-      return session;
-    } catch (error) {
-      shell?.close();
-      client.end();
-      tunnel.destroy();
-      throw error;
-    }
+    const session = new RunnerWorkspaceTerminalSession(request.workspaceId, request.generation, socket, tunnel);
+    this.active.add(session);
+    session.onClose(() => this.active.delete(session));
+    return session;
   }
 
   async closeAll(): Promise<void> {

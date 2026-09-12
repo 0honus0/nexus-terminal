@@ -767,7 +767,7 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
         reason: 'runner_not_configured',
         deploymentId: null,
         controllerVersion: null,
-        sandbox: { available: false, reason: 'runner_not_configured' },
+        runtime: { available: false, reason: 'runner_not_configured', mode: 'native', isolation: 'logical' },
         capabilities: { egressAllowlist: false },
       },
     });

@@ -12,6 +12,8 @@ export interface ContextRequest {
   runId?: string;
   historyBoundary?: ContextHistoryBoundary;
   currentInput: string;
+  currentInputEntryId?: string;
+  goal?: string;
   taskPlan?: string;
   collaborationContext?: string;
   modelContextWindow: number;
@@ -23,7 +25,7 @@ export interface ContextRequest {
 }
 
 export interface ContextSourceRange {
-  kind: 'ledger' | 'recall' | 'skill' | 'task_plan' | 'collaboration' | 'current_input' | 'safety';
+  kind: 'ledger' | 'recall' | 'skill' | 'goal' | 'task_plan' | 'collaboration' | 'current_input' | 'safety';
   id?: string;
   fromSequence?: number;
   toSequence?: number;

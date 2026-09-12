@@ -11,6 +11,7 @@ import { requestHash, requireIdempotencyKey } from './idempotency';
 import type { RunCommandCommitPort } from './state-commit.port';
 import type {
   CreateRunCommand,
+  PendingRunInputPage,
   RunBudget,
   RunBudgetIncrease,
   RunDefinitionSnapshot,
@@ -30,6 +31,13 @@ const validateInput = (input: UserInputData): UserInputData => {
     throw new Error('VALIDATION_FAILED');
   }
   return { text: input.text, artifactRefs: [...new Set(input.artifactRefs.map((id) => id.toLowerCase()))] };
+};
+
+const normalizeGoalText = (value: unknown): string => {
+  if (typeof value !== 'string') throw new Error('VALIDATION_FAILED');
+  const normalized = value.trim();
+  if (!normalized || Buffer.byteLength(normalized, 'utf8') > 4096) throw new Error('VALIDATION_FAILED');
+  return normalized;
 };
 
 const validateConnectionIds = (values: number[]): number[] => {
@@ -137,6 +145,7 @@ export class RunService {
     private readonly onCreated: (run: RunView) => void = () => undefined,
     private readonly onCommitted: (run: RunView) => void = () => undefined,
     private readonly onInputAppended: (run: RunView) => void = () => undefined,
+    private readonly onGoalUpdated: (run: RunView) => void = () => undefined,
     private readonly onCancelRequested: (runId: string) => void = () => undefined,
     private readonly onDeleted: (userId: number, hostEventCursor: number) => void = () => undefined,
   ) {}
@@ -159,6 +168,7 @@ export class RunService {
     }
     const input = validateInput(command.input);
     const connectionIds = validateConnectionIds(command.connectionIds);
+    const initialGoal = command.initialGoal === undefined ? undefined : normalizeGoalText(command.initialGoal);
     if (Buffer.byteLength(JSON.stringify({ ...command, input, connectionIds }), 'utf8') > 1024 * 1024) {
       throw new Error('PAYLOAD_TOO_LARGE');
     }
@@ -208,6 +218,7 @@ export class RunService {
         configurationVersion: command.model.configurationVersion,
       },
       connectionIds,
+      ...(initialGoal ? { initialGoal } : {}),
     };
     const committed = await this.stateCommit.createRun({
       scope,
@@ -216,6 +227,9 @@ export class RunService {
       threadId: command.threadId,
       inputEntryId: randomUUID(),
       input,
+      ...(initialGoal
+        ? { initialGoal: { text: initialGoal, revision: 1, updatedAt: this.clock.nowUnixSeconds() } }
+        : {}),
       agentDefinitionId: command.agentDefinitionId,
       model: command.model,
       connectionIds,
@@ -270,6 +284,7 @@ export class RunService {
       runId,
       inputEntryId: randomUUID(),
       input: normalizedInput,
+      mode: 'append',
       expectedRunVersion: expectedVersion,
       idempotencyKey: key,
       requestHash: hash,
@@ -281,6 +296,76 @@ export class RunService {
       else if (committed.shouldReschedule) this.onCreated(committed.run);
     }
     return { inputId: committed.inputId, sequence: committed.sequence, runVersion: committed.runVersion };
+  }
+
+  async interrupt(
+    scope: Scope,
+    runId: string,
+    input: UserInputData,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Promise<{ inputId: string; sequence: number; runVersion: number }> {
+    if (!isAgentUuid(runId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1)
+      throw new Error('VALIDATION_FAILED');
+    const normalizedInput = validateInput(input);
+    if (normalizedInput.artifactRefs.length > 0) throw new Error('VALIDATION_FAILED');
+    const key = requireIdempotencyKey(idempotencyKey);
+    const hash = requestHash(1, {
+      runId,
+      input: { text: normalizedInput.text, artifactRefs: [] },
+      expectedVersion,
+      mode: 'interrupt',
+    });
+    const committed = await this.stateCommit.appendInput({
+      scope,
+      runId,
+      inputEntryId: randomUUID(),
+      input: { text: normalizedInput.text, artifactRefs: [] },
+      mode: 'interrupt',
+      expectedRunVersion: expectedVersion,
+      idempotencyKey: key,
+      requestHash: hash,
+      now: this.clock.nowUnixSeconds(),
+    });
+    if (!committed.replayed) {
+      this.onCommitted(committed.run);
+      this.onInputAppended(committed.run);
+    }
+    return { inputId: committed.inputId, sequence: committed.sequence, runVersion: committed.runVersion };
+  }
+
+  async setGoal(
+    scope: Scope,
+    runId: string,
+    text: string,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Promise<RunView> {
+    if (!isAgentUuid(runId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const normalized = normalizeGoalText(text);
+    const key = requireIdempotencyKey(idempotencyKey);
+    const committed = await this.stateCommit.setRunGoal({
+      scope,
+      runId,
+      text: normalized,
+      expectedRunVersion: expectedVersion,
+      idempotencyKey: key,
+      requestHash: requestHash(1, { runId, text: normalized, expectedVersion }),
+      now: this.clock.nowUnixSeconds(),
+    });
+    if (!committed.replayed) {
+      this.onCommitted(committed.run);
+      if (committed.shouldInterruptModel) this.onGoalUpdated(committed.run);
+      else if (committed.shouldReschedule) this.onCreated(committed.run);
+    }
+    return committed.run;
+  }
+
+  async pendingInputs(scope: Scope, runId: string): Promise<PendingRunInputPage> {
+    if (!isAgentUuid(runId)) throw new Error('VALIDATION_FAILED');
+    return this.repository.pendingInputs(scope, runId, 50);
   }
 
   async increaseBudget(

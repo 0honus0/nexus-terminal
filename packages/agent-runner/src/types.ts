@@ -94,15 +94,13 @@ export interface WorkspaceRuntimeCommand {
   agentRuntimeId: string;
   workspaceId: string;
   generation: number;
-  action: 'provision' | 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize';
+  action: 'provision' | 'start' | 'stop' | 'restart' | 'delete';
   recipeId: string;
   recipeRevision: string;
   runtimeDigest: string;
   catalogRevision: string;
   toolchain: ToolchainPackRef[];
   runnerPlugins?: PluginRunnerTarget[];
-  limits: ResourceLimits;
-  network: { mode: 'none' | 'allowlist'; hosts: string[] };
   acpProfiles: WorkspaceAcpProfile[];
   browserTarget: WorkspaceBrowserTarget | null;
   retained: boolean;
@@ -121,7 +119,6 @@ export interface WorkspaceRecord {
   agentRuntimeId: string;
   generation: number;
   status: WorkspaceStatus;
-  sandboxId: string | null;
   commandId: string;
   retained: boolean;
   recipeId: string;
@@ -130,8 +127,6 @@ export interface WorkspaceRecord {
   catalogRevision: string;
   toolchain: ToolchainPackRef[];
   runnerPlugins?: PluginRunnerTarget[];
-  limits: ResourceLimits;
-  network: { mode: 'none' | 'allowlist'; hosts: string[] };
   acpProfiles: WorkspaceAcpProfile[];
   browserTarget: WorkspaceBrowserTarget | null;
   updatedAt: number;

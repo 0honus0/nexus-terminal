@@ -186,6 +186,7 @@ jobs:
           release_version="${RELEASE_TAG#v}"
           manifests=(
             package.json
+            packages/agent-runner/package.json
             packages/backend/package.json
             packages/frontend/package.json
           )
@@ -246,3 +247,53 @@ jobs:
             org.opencontainers.image.version=${{ needs.prepare.outputs.image_tag }}
           cache-from: type=gha,scope=unified-image
           cache-to: type=gha,mode=max,scope=unified-image
+
+  # Agent Runner 使用独立镜像发布，tag 与主镜像保持一致，便于 Compose/宿主部署锁定同一版本。
+  publish-runner:
+    name: Publish Agent Runner image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
+    needs: prepare
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.source_ref }}
+
+      - name: Set Runner image name
+        id: image
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "name=ghcr.io/${owner}/nexus-agent-runner" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        if: needs.prepare.outputs.architecture != 'amd'
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Agent Runner image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: scripts/docker/agent-runner/Dockerfile
+          platforms: ${{ needs.prepare.outputs.platforms }}
+          push: true
+          tags: |
+            ${{ steps.image.outputs.name }}:${{ needs.prepare.outputs.channel_tag }}
+            ${{ steps.image.outputs.name }}:${{ needs.prepare.outputs.image_tag }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.prepare.outputs.source_sha }}
+            org.opencontainers.image.version=${{ needs.prepare.outputs.image_tag }}
+          cache-from: type=gha,scope=agent-runner-image
+          cache-to: type=gha,mode=max,scope=agent-runner-image

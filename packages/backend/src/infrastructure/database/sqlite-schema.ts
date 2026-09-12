@@ -420,6 +420,9 @@ CREATE TABLE IF NOT EXISTS agent_runs (
       'completed','completed_unverified','failed','cancelled','interrupted'
     )),
     goal_status TEXT NOT NULL CHECK(goal_status IN ('unknown','in_progress','satisfied','not_satisfied')),
+    goal_text TEXT,
+    goal_revision INTEGER NOT NULL DEFAULT 0 CHECK(goal_revision >= 0),
+    goal_updated_at INTEGER,
     verification_status TEXT NOT NULL CHECK(verification_status IN ('not_started','verified','unverified','failed')),
     needs_reconciliation INTEGER NOT NULL DEFAULT 0 CHECK(needs_reconciliation IN (0,1)),
     budget_json TEXT NOT NULL CHECK(json_valid(budget_json)),

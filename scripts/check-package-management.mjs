@@ -46,6 +46,7 @@ const engineeringFiles = [
   'scripts/docker/agent-runner/Dockerfile',
   'scripts/e2e/build-runner-image.sh',
   'scripts/e2e/docker-deployment-smoke.sh',
+  'scripts/e2e/standalone-runner-image-smoke.sh',
   'scripts/e2e/resolve-latest-test-environment.mjs',
   'scripts/e2e/sync-test-environment.mjs',
   'packages/e2e/Dockerfile.runner',

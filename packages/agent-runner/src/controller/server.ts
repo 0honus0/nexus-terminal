@@ -6,10 +6,9 @@ import { pipeline } from 'node:stream/promises';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
 import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, WorkspaceRecord } from '../types';
 import { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
-import { SandboxEngine } from './sandbox-engine';
+import { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 import { RunnerJournal, payloadHash } from './journal';
 import { PackInstaller } from './pack-installer';
-import { QuotaManager } from './quota-manager';
 import { SpaceReporter } from './space-reporter';
 import { CleanupPlanner } from './cleanup-planner';
 import { PluginRunnerRuntime } from './plugin-runner-runtime';
@@ -20,7 +19,7 @@ import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
 import type { WorkspaceBrowserEndpoint } from '../types';
 import { runnerLog } from '../logging';
 
-const RUNNER_API_VERSION = '2026-09-11';
+const RUNNER_API_VERSION = '2026-09-12';
 const MAX_BODY_BYTES = 256 * 1024;
 const json = (response: ServerResponse, status: number, body: unknown): void => {
   response.statusCode = status;
@@ -84,7 +83,7 @@ const validBrowserUrlPattern = (value: string): boolean => {
   return !rawPath || !rawPath.includes('*') || rawPath.endsWith('*');
 };
 
-const validateFrozenRuntimeResources = (command: WorkspaceRuntimeCommand): void => {
+const validateWorkspaceBindings = (command: WorkspaceRuntimeCommand): void => {
   if (!Array.isArray(command.acpProfiles) || command.acpProfiles.length > 16) {
     throw new Error('ACP_PROFILE_INVALID');
   }
@@ -186,9 +185,8 @@ export interface RunnerControllerDependencies {
   deploymentId: string;
   catalog: WorkspaceRuntimeCatalog;
   journal: RunnerJournal;
-  sandboxEngine: SandboxEngine;
+  runtimeEngine: WorkspaceRuntimeEngine;
   installer: PackInstaller;
-  quota: QuotaManager;
   storage: SpaceReporter;
   cleanup: CleanupPlanner;
   pluginRunner: PluginRunnerRuntime;
@@ -241,16 +239,28 @@ export class RunnerControllerServer {
       const terminal = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/terminal\/stream$/);
       if (terminal) {
         const generation = Number(url.searchParams.get('generation'));
-        if (!Number.isSafeInteger(generation) || generation < 1) throw new Error('VALIDATION_FAILED');
-        const publicKey = request.headers['x-nexus-terminal-public-key'];
-        if (typeof publicKey !== 'string') throw new Error('WORKSPACE_TERMINAL_PUBLIC_KEY_INVALID');
+        const columns = Number(url.searchParams.get('columns'));
+        const rows = Number(url.searchParams.get('rows'));
+        if (
+          !Number.isSafeInteger(generation) ||
+          generation < 1 ||
+          !Number.isSafeInteger(columns) ||
+          columns < 2 ||
+          columns > 1000 ||
+          !Number.isSafeInteger(rows) ||
+          rows < 1 ||
+          rows > 500
+        ) {
+          throw new Error('VALIDATION_FAILED');
+        }
         this.dependencies.terminalRuntime.handleUpgrade(
           request,
           socket,
           head,
           decodeURIComponent(terminal[1]!),
           generation,
-          publicKey,
+          columns,
+          rows,
         );
         return;
       }
@@ -317,14 +327,19 @@ export class RunnerControllerServer {
       }
       const url = new URL(request.url ?? '/', 'http://runner.internal');
       if (request.method === 'GET' && url.pathname === '/v1/availability') {
-        const sandbox = this.dependencies.sandboxEngine.availability();
+        const runtime = this.dependencies.runtimeEngine.availability();
         json(response, 200, {
-          available: sandbox.available,
-          state: sandbox.available ? 'ready' : 'degraded',
-          reason: sandbox.available ? 'ready' : (sandbox.reason ?? 'sandbox_unavailable'),
+          available: runtime.available,
+          state: runtime.available ? 'ready' : 'degraded',
+          reason: runtime.available ? 'ready' : (runtime.reason ?? 'runtime_unavailable'),
           deploymentId: this.dependencies.deploymentId,
           controllerVersion: '1.0.0',
-          sandbox,
+          runtime: {
+            available: runtime.available,
+            reason: runtime.reason,
+            mode: 'native',
+            isolation: runtime.isolation,
+          },
           capabilities: { egressAllowlist: false },
         });
         return;
@@ -549,7 +564,7 @@ export class RunnerControllerServer {
 
   private beginWorkspaceJob(workspaceId: string, request: WorkspaceJobRequest) {
     const workspace = this.dependencies.journal.workspace(workspaceId);
-    if (!workspace || !workspace.sandboxId || workspace.status !== 'running') {
+    if (!workspace || workspace.status !== 'running') {
       throw new Error('WORKSPACE_NOT_RUNNING');
     }
     const now = Math.floor(Date.now() / 1000);
@@ -603,14 +618,14 @@ export class RunnerControllerServer {
     });
     if (job.status === 'pending') {
       this.dependencies.journal.runningJob(request.jobId);
-      void this.executeWorkspaceJob(workspace.sandboxId, request);
+      void this.executeWorkspaceJob(request);
     }
     return this.dependencies.journal.job(request.jobId)!;
   }
 
-  private async executeWorkspaceJob(sandboxId: string, request: WorkspaceJobRequest): Promise<void> {
+  private async executeWorkspaceJob(request: WorkspaceJobRequest): Promise<void> {
     try {
-      const result = await this.dependencies.sandboxEngine.executeJob(sandboxId, request);
+      const result = await this.dependencies.runtimeEngine.executeJob(request);
       this.dependencies.journal.succeedJob(request.jobId, result);
       runnerLog('debug', 'Agent Runner Workspace job completed', {
         jobId: request.jobId,
@@ -830,7 +845,7 @@ export class RunnerControllerServer {
       throw new Error('VALIDATION_FAILED');
     }
     if (!Number.isSafeInteger(command.generation) || command.generation < 1) throw new Error('VALIDATION_FAILED');
-    validateFrozenRuntimeResources(command);
+    validateWorkspaceBindings(command);
     if (command.action === 'provision') {
       const catalog = this.dependencies.catalog.load();
       if (command.catalogRevision !== catalog.revision || command.runtimeDigest !== catalog.runtimeDigest) {
@@ -839,7 +854,6 @@ export class RunnerControllerServer {
       const recipe = this.dependencies.catalog.recipe(command.recipeId);
       if (recipe.revision !== command.recipeRevision) throw new Error('WORKSPACE_RECIPE_STALE');
       this.dependencies.catalog.validateSelection(command.recipeId, command.toolchain);
-      this.dependencies.quota.validate(command.limits);
       const targets = command.runnerPlugins ?? [];
       if (!Array.isArray(targets) || targets.length > 64) throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
       const targetIds = new Set<string>();
@@ -875,7 +889,6 @@ export class RunnerControllerServer {
       agentRuntimeId: command.agentRuntimeId,
       generation: command.generation,
       status: 'creating',
-      sandboxId: null,
       commandId: command.commandId,
       retained: command.retained === true,
       recipeId: command.recipeId,
@@ -884,8 +897,6 @@ export class RunnerControllerServer {
       catalogRevision: command.catalogRevision,
       toolchain: command.toolchain,
       runnerPlugins: (command.runnerPlugins ?? []).map((target) => ({ ...target })),
-      limits: command.limits,
-      network: command.network,
       acpProfiles: command.acpProfiles.map((profile) => ({ ...profile, argv: [...profile.argv] })),
       browserTarget: command.browserTarget
         ? {
@@ -897,10 +908,9 @@ export class RunnerControllerServer {
       updatedAt: now,
     };
     this.dependencies.journal.saveWorkspace(creating);
-    const sandboxId = await this.dependencies.sandboxEngine.create(command);
+    await this.dependencies.runtimeEngine.create(command);
     const ready: WorkspaceRecord = {
       ...creating,
-      sandboxId,
       status: 'ready',
       updatedAt: Math.floor(Date.now() / 1000),
     };
@@ -911,7 +921,7 @@ export class RunnerControllerServer {
 
   private async workspaceAction(command: WorkspaceRuntimeCommand): Promise<WorkspaceRecord> {
     const workspace = this.dependencies.journal.workspace(command.workspaceId);
-    if (!workspace || workspace.generation !== command.generation || !workspace.sandboxId) {
+    if (!workspace || workspace.generation !== command.generation) {
       throw new Error('WORKSPACE_NOT_FOUND');
     }
     const samePacks = JSON.stringify(workspace.toolchain) === JSON.stringify(command.toolchain);
@@ -936,11 +946,11 @@ export class RunnerControllerServer {
       throw new Error('WORKSPACE_IDENTITY_MISMATCH');
     }
     if (command.action === 'start') {
-      await this.dependencies.sandboxEngine.start(workspace.sandboxId);
+      await this.dependencies.runtimeEngine.start(workspace.workspaceId, workspace.generation);
       try {
         await this.dependencies.pluginRunner.activateWorkspace(workspace);
       } catch (error) {
-        await this.dependencies.sandboxEngine.stop(workspace.sandboxId).catch(() => undefined);
+        await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation).catch(() => undefined);
         throw error;
       }
       return this.save(workspace, 'running', command.commandId);
@@ -951,7 +961,7 @@ export class RunnerControllerServer {
       this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.quiesceWorkspace(workspace, Math.floor(Date.now() / 1000) + 10);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
-      await this.dependencies.sandboxEngine.stop(workspace.sandboxId);
+      await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation);
       return this.save(workspace, 'stopped', command.commandId);
     }
     if (command.action === 'restart') {
@@ -959,7 +969,7 @@ export class RunnerControllerServer {
       this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
       this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
-      await this.dependencies.sandboxEngine.restart(workspace.sandboxId);
+      await this.dependencies.runtimeEngine.restart(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.activateWorkspace(workspace);
       return this.save(workspace, 'running', command.commandId);
     }
@@ -968,10 +978,9 @@ export class RunnerControllerServer {
       this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
       this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
-      await this.dependencies.sandboxEngine.remove(workspace.sandboxId);
+      await this.dependencies.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
       return this.save(workspace, 'deleted', command.commandId);
     }
-    if (command.action === 'setNetwork' || command.action === 'resize') throw new Error('WORKSPACE_RECREATE_REQUIRED');
     throw new Error('VALIDATION_FAILED');
   }
 

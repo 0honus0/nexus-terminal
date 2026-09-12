@@ -6,7 +6,7 @@
 
 ## 1. 文档目的
 
-本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。v1.5～v1.7 收紧 Workspace/File Manager/Preview/Remote Desktop 等 UI 与交互回归约束；v1.8 在 Owner 明确放行后把冻结的 Agent 设计同步为正式分期研发需求；v1.9 根据源码复核更新 Agent 实现基线；v1.10 进一步以当前 `dev` 为事实源，把全局悬浮 Agent Host、运行中输入打断、Workspace Runtime/Host Runner、ACP/Browser/Workspace Terminal live execution、插件 AgentDefinition、Runner cleanup/journal 安全语义写回正式需求，并把 Agent 架构文档收口为 `doc/agent.md`。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
+本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。v1.5～v1.7 收紧 Workspace/File Manager/Preview/Remote Desktop 等 UI 与交互回归约束；v1.8 在 Owner 明确放行后把冻结的 Agent 设计同步为正式分期研发需求；v1.9 根据源码复核更新 Agent 实现基线；v1.10 进一步以当前 `dev` 为事实源，把全局悬浮 Agent Host、运行中输入打断、Workspace Runtime/Host Runner、ACP/Browser/Workspace Terminal live execution、插件 AgentDefinition、Runner cleanup/journal 安全语义写回正式需求，并把 Agent 架构文档收口为 `doc/AGENT.md`。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
 
 ## 2. 需求解释规则
 
@@ -60,7 +60,7 @@
 
 ## 6. 当前范围说明
 
-本需求基线覆盖当前 Nexus Terminal 用户可达能力与已经确认的 clean architecture 行为。Agent 正式需求见 [Agent Platform](requirements/agent.md)，唯一架构规范为 [`doc/agent.md`](../agent.md)。当前 Agent 已进入 live product baseline：全局 floating Host、Thread/Run/Ledger、typed Plan、运行中 append-input interruption、Artifact、Policy/Approval/Lease、Workspace Runtime/Host Runner、MCP、ACP、Browser tunnel、Workspace local Terminal、Subagent 与 installable Agent plugin 均已有 production wiring；具体“已实现/待实现”只按 Agent SRS 状态解释。当前仍未交付的是用户可编辑 Goal 文本/slash-command 与用户可见 pending-input queue，以及真正冻结在 RunDefinition 中的 Next Run Environment selector。既有非 Agent 功能仍以当前已实现基线为准。
+本需求基线覆盖当前 Nexus Terminal 用户可达能力与已经确认的 clean architecture 行为。Agent 正式需求见 [Agent Platform](requirements/agent.md)，唯一架构规范为 [`doc/AGENT.md`](../AGENT.md)。当前 Agent 已进入 live product baseline：全局 floating Host、Thread/Run/Ledger、typed Plan、运行中 append-input interruption、Artifact、Policy/Approval/Lease、Workspace Runtime/Host Runner、MCP、ACP、Browser tunnel、Workspace local Terminal、Subagent 与 installable Agent plugin 均已有 production wiring；具体“已实现/待实现”只按 Agent SRS 状态解释。当前用户可编辑 durable Goal、Conversation slash-command 与基于 Ledger/watermark 的 `/queue` inspection 已交付；仍未交付的是 pending-input remove/reorder mutation（如后续确有产品需求），以及真正冻结在 RunDefinition 中的 Next Run Environment selector。既有非 Agent 功能仍以当前已实现基线为准。
 
 ## 7. v1.5–v1.7 UI / 交互回归需求索引
 

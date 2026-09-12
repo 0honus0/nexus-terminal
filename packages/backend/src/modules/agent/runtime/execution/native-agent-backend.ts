@@ -62,7 +62,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       yield* this.executePersisted(initial, signal);
     } catch (error) {
       const abortReason = signalReason(signal);
-      if (abortReason === 'NEW_INPUT' || abortReason === 'AGENT_QUIESCE') return;
+      if (abortReason === 'NEW_INPUT' || abortReason === 'GOAL_UPDATED' || abortReason === 'AGENT_QUIESCE') return;
 
       const scope = { userId: initial.userId, appId: initial.appId };
       if (abortReason === 'CANCELLED') {
@@ -477,7 +477,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         }
       } catch (error) {
         const abortReason = signalReason(signal);
-        if (abortReason === 'NEW_INPUT' && !modelStepClosed) {
+        if ((abortReason === 'NEW_INPUT' || abortReason === 'GOAL_UPDATED') && !modelStepClosed) {
           const supersededUsage: TokenUsage =
             usage ??
             ({
@@ -492,6 +492,8 @@ export class NativeAgentBackend implements AgentBackendPort {
             stepId: begun.stepId,
             attemptId: currentAttemptId,
             expectedInputRevision: snapshot.inputRevision,
+            expectedGoalRevision: snapshot.goal.revision,
+            reason: abortReason === 'GOAL_UPDATED' ? 'goal_updated' : 'new_input',
             usage: usageWithModel(currentRun.usage, supersededUsage, modelCost(model, supersededUsage)),
             inputTokens: supersededUsage.inputTokens,
             outputTokens: supersededUsage.outputTokens,

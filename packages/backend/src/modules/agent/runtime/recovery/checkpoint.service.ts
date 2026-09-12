@@ -279,6 +279,7 @@ export class CheckpointService {
         artifactRefs: refs,
       },
       initialPlan: validation.checkpoint.snapshot.plan,
+      initialGoal: validation.checkpoint.snapshot.goal ?? source.goal,
       agentDefinitionId: source.definition.agentDefinitionId,
       model: source.definition.model,
       connectionIds: [...source.definition.connectionIds],

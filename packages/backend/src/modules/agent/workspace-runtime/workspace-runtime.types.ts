@@ -102,7 +102,7 @@ export interface WorkspaceRuntimeAvailability {
   reason: string;
   deploymentId: string | null;
   controllerVersion: string | null;
-  sandbox: { available: boolean; reason: string | null };
+  runtime: { available: boolean; reason: string | null; mode: 'native'; isolation: 'logical' };
   capabilities: { egressAllowlist: boolean };
 }
 
@@ -119,7 +119,6 @@ export interface WorkspaceRuntimeStorageView {
   cacheBytes: number;
   runtimeBytes: number;
   quarantineBytes: number;
-  sandboxOverheadBytes: number;
   reclaimableBytes: number;
   byPack: Array<{ familyId: string; versionId: string; bytes: number; inUse: boolean }>;
   byWorkspace: Array<{ workspaceId: string; runtimeBytes: number; status: string }>;

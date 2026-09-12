@@ -123,6 +123,10 @@ export const createAgentRunFacade = (appId: string) => {
       runStore.accept(await agentApi.createRun(appId, input)),
     appendInput: (run: AgentRunView, text: string, artifactRefs: string[] = []) =>
       agentApi.appendRunInput(appId, currentRun(run), text, artifactRefs),
+    interrupt: (run: AgentRunView, text: string) => agentApi.interruptRun(appId, currentRun(run), text),
+    setGoal: async (run: AgentRunView, text: string) =>
+      runStore.accept(await agentApi.setRunGoal(appId, currentRun(run), text)),
+    pendingInputs: (runId: string) => agentApi.pendingRunInputs(appId, runId),
     increaseBudget: async (run: AgentRunView, increase: Parameters<typeof agentApi.increaseRunBudget>[2]) =>
       runStore.accept(await agentApi.increaseRunBudget(appId, currentRun(run), increase)),
     saveCheckpoint: (run: AgentRunView) => agentApi.saveCheckpoint(appId, currentRun(run)),

@@ -15,6 +15,9 @@ export interface RunRow {
   parent_run_id: string | null;
   status: RunStatus;
   goal_status: RunView['goalStatus'];
+  goal_text: string | null;
+  goal_revision: number;
+  goal_updated_at: number | null;
   verification_status: RunView['verificationStatus'];
   needs_reconciliation: number;
   budget_json: string;
@@ -48,7 +51,7 @@ export const persistedPlan = (raw: string): RunPlan => {
 };
 
 export const RUN_COLUMNS = `
-  id, user_id, app_id, thread_id, parent_run_id, status, goal_status, verification_status,
+  id, user_id, app_id, thread_id, parent_run_id, status, goal_status, goal_text, goal_revision, goal_updated_at, verification_status,
   needs_reconciliation, budget_json, definition_json, plan_json, usage_json,
   active_execution_seconds, active_execution_started_at, executing_runtime_count,
   consumed_input_sequence, input_revision, next_event_sequence,
@@ -63,6 +66,7 @@ export const mapRunRow = (row: RunRow): RunView => ({
   parentRunId: row.parent_run_id,
   status: row.status,
   goalStatus: row.goal_status,
+  goal: { text: row.goal_text, revision: row.goal_revision, updatedAt: row.goal_updated_at },
   verificationStatus: row.verification_status,
   needsReconciliation: row.needs_reconciliation === 1,
   budget: JSON.parse(row.budget_json) as RunBudget,

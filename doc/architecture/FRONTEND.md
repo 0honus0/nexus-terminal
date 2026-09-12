@@ -485,7 +485,7 @@ Store rules：
 
 ## 10. Workspace, App Platform and App frontend ownership
 
-这是长期架构中的核心边界。完整产品体验通过 App Platform 注册；共享 AI/Conversation 能力属于 feature/public surface；Operations Agent 是第一个 built-in App，Workspace 仍然是独立 runtime owner 而不是 App host。详细边界见 [Agent 架构](../agent.md)。
+这是长期架构中的核心边界。完整产品体验通过 App Platform 注册；共享 AI/Conversation 能力属于 feature/public surface；Operations Agent 是第一个 built-in App，Workspace 仍然是独立 runtime owner 而不是 App host。详细边界见 [Agent 架构](../AGENT.md)。
 
 ### 10.1 Workspace owns
 

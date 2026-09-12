@@ -321,7 +321,7 @@ const downgradePluginStagesToV52 = (databasePath: string): void => {
       1024,NULL,NULL,NULL,NULL,'staged',NULL,1700000000,1700000001,3
     );
     DROP TABLE agent_plugin_stages_current;
-    DELETE FROM migrations WHERE id = 53;
+    DELETE FROM migrations WHERE id >= 53;
     PRAGMA foreign_keys = ON;
   `;
   const script = `

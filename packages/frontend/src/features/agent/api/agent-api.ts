@@ -248,6 +248,12 @@ export interface ProviderModel {
   priceVersion?: string;
 }
 
+export interface AgentDiscoveredProviderModel {
+  id: string;
+  ownedBy?: string;
+  createdAt?: number;
+}
+
 export interface AgentProviderView {
   id: string;
   kind: 'openai-compatible';
@@ -396,6 +402,7 @@ export interface AgentRunView {
   parentRunId: string | null;
   status: AgentRunStatus;
   goalStatus: string;
+  goal: { text: string | null; revision: number; updatedAt: number | null };
   verificationStatus: string;
   needsReconciliation: boolean;
   budget: {
@@ -434,6 +441,7 @@ export interface AgentRunView {
     subagentMessageBytes: number;
   };
   activeExecutionSeconds: number;
+  consumedInputSequence: number;
   inputRevision: number;
   eventCursor: number;
   version: number;
@@ -441,6 +449,20 @@ export interface AgentRunView {
   startedAt: number | null;
   completedAt: number | null;
   updatedAt: number;
+}
+
+export interface AgentPendingRunInput {
+  id: string;
+  sequence: number;
+  text: string;
+  artifactRefs: string[];
+  createdAt: number;
+}
+
+export interface AgentPendingRunInputPage {
+  items: AgentPendingRunInput[];
+  total: number;
+  hasMore: boolean;
 }
 
 export interface AgentCheckpointView {
@@ -455,6 +477,7 @@ export interface AgentCheckpointView {
     ledgerThrough: number;
     planVersion: number;
     plan: AgentRunPlan;
+    goal?: { text: string | null; revision: number; updatedAt: number | null };
     completedStepIds: string[];
     evidenceRefs: string[];
     modelConfigurationVersion: number;
@@ -901,6 +924,17 @@ export const agentApi = {
       ).data,
     );
   },
+  async discoverProviderModels(providerId: string): Promise<AgentDiscoveredProviderModel[]> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentDiscoveredProviderModel[]>>(
+          `/agent/ai/providers/${encodeURIComponent(providerId)}/discover-models`,
+          {},
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
   async testProvider(providerId: string, modelId: string): Promise<{ ok: boolean; latencyMs: number }> {
     return unwrap(
       (
@@ -1239,6 +1273,7 @@ export const agentApi = {
       agentDefinitionId: string;
       model: { providerId: string; modelId: string; configurationVersion: number };
       connectionIds?: number[];
+      initialGoal?: string;
     },
   ): Promise<AgentRunView> {
     return unwrap(
@@ -1251,6 +1286,7 @@ export const agentApi = {
             agentDefinitionId: input.agentDefinitionId,
             model: input.model,
             connectionIds: input.connectionIds ?? [],
+            ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),
           }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
@@ -1263,6 +1299,29 @@ export const agentApi = {
       agentRuntimeRequest({ text, artifactRefs, expectedVersion: run.version }),
       { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
     );
+  },
+  async interruptRun(appId: string, run: AgentRunView, text: string): Promise<void> {
+    await httpClient.post(
+      `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/interrupt`,
+      agentRuntimeRequest({ text, artifactRefs: [], expectedVersion: run.version }),
+      { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+    );
+  },
+  async setRunGoal(appId: string, run: AgentRunView, text: string): Promise<AgentRunView> {
+    const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(run.id) + '/goal';
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentRunView>>(
+          path,
+          agentRuntimeRequest({ text, expectedVersion: run.version }),
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+        )
+      ).data,
+    );
+  },
+  async pendingRunInputs(appId: string, runId: string): Promise<AgentPendingRunInputPage> {
+    const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(runId) + '/pending-inputs';
+    return unwrap((await httpClient.get<AgentEnvelope<AgentPendingRunInputPage>>(path)).data);
   },
   async increaseRunBudget(
     appId: string,

@@ -8,61 +8,18 @@ fi
 
 if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
   SUDO=()
+  runner_owner=${NEXUS_AGENT_RUNNER_USER:-root}
 elif command -v sudo >/dev/null 2>&1; then
   SUDO=(sudo)
+  runner_owner=${NEXUS_AGENT_RUNNER_USER:-$(id -un)}
 else
-  echo 'Root privileges or sudo are required to install the host sandbox prerequisite.' >&2
+  echo 'Root privileges or sudo are required to install the host Runner prerequisites.' >&2
   exit 2
 fi
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-
 "${SUDO[@]}" apt-get update
 "${SUDO[@]}" apt-get install -y \
-  apparmor apparmor-utils ca-certificates curl dropbear-bin gcc libcap-dev meson ninja-build pkg-config socat xz-utils
-
-# Ubuntu 24.04 still ships bubblewrap 0.9.x. Versions before 0.12.0 are affected by
-# GHSA-pxhw-h44j-8pfx, a setup-time symlink traversal that is directly relevant when
-# constructing a sandbox around downloaded tool content. Build the patched upstream
-# release into a Nexus-owned root-only path instead of replacing /usr/bin/bwrap.
-BWRAP_VERSION=0.12.0
-BWRAP_SHA256=9760d007363e3abba7c747489910f9f82d9fca53ba3bd3282e396fa3c97a3314
-bwrap_root="/usr/local/lib/nexus-agent-runner/bubblewrap/$BWRAP_VERSION"
-bwrap_release_bin="$bwrap_root/bin/bwrap"
-bwrap_bin=/usr/local/bin/bwrap
-if [[ ! -x "$bwrap_release_bin" ]] || [[ $("$bwrap_release_bin" --version 2>/dev/null) != "bubblewrap $BWRAP_VERSION" ]]; then
-  bwrap_tmp=$(mktemp -d)
-  trap 'rm -rf "$bwrap_tmp"' EXIT
-  bwrap_archive="$bwrap_tmp/bubblewrap.tar.xz"
-  curl --fail --location --proto '=https' --tlsv1.2 \
-    "https://github.com/containers/bubblewrap/releases/download/v$BWRAP_VERSION/bubblewrap-$BWRAP_VERSION.tar.xz" \
-    --output "$bwrap_archive"
-  printf '%s  %s\n' "$BWRAP_SHA256" "$bwrap_archive" | sha256sum -c -
-  tar -xJf "$bwrap_archive" -C "$bwrap_tmp"
-  meson setup "$bwrap_tmp/build" "$bwrap_tmp/bubblewrap-$BWRAP_VERSION" \
-    -Dselinux=disabled \
-    -Dman=disabled \
-    -Dtests=false \
-    -Dbash_completion=disabled \
-    -Dzsh_completion=disabled
-  meson compile -C "$bwrap_tmp/build"
-  [[ -f "$bwrap_tmp/build/bwrap" ]] || { echo 'Pinned bubblewrap build did not produce bwrap.' >&2; exit 9; }
-  "${SUDO[@]}" install -d -m 0755 "$bwrap_root/bin"
-  "${SUDO[@]}" install -o root -g root -m 0755 "$bwrap_tmp/build/bwrap" "$bwrap_release_bin"
-  rm -rf "$bwrap_tmp"
-  trap - EXIT
-fi
-if [[ $("$bwrap_release_bin" --version 2>/dev/null) != "bubblewrap $BWRAP_VERSION" ]]; then
-  echo 'Pinned bubblewrap version verification failed.' >&2
-  exit 10
-fi
-"${SUDO[@]}" install -o root -g root -m 0755 "$bwrap_release_bin" "$bwrap_bin"
-bwrap_mode=$(stat -Lc '%a' "$bwrap_bin")
-bwrap_uid=$(stat -Lc '%u' "$bwrap_bin")
-if [[ "$bwrap_uid" != 0 ]] || (( (8#$bwrap_mode & 8#022) != 0 )); then
-  echo 'Pinned bubblewrap must be root-owned and not group/world writable.' >&2
-  exit 11
-fi
+  bsdutils bzip2 ca-certificates curl gzip tar unzip xz-utils zstd
 
 MISE_VERSION=2026.9.5
 case "$(uname -m)" in
@@ -104,41 +61,10 @@ fi
 }
 mise_stable_bin=/usr/local/bin/mise
 "${SUDO[@]}" install -o root -g root -m 0755 "$mise_bin" "$mise_stable_bin"
-mise_mode=$(stat -Lc '%a' "$mise_stable_bin")
-mise_uid=$(stat -Lc '%u' "$mise_stable_bin")
-if [[ "$mise_uid" != 0 ]] || (( (8#$mise_mode & 8#022) != 0 )); then
-  echo 'Pinned mise must be root-owned and not group/world writable.' >&2
-  exit 12
-fi
 
-if [[ -r /proc/sys/kernel/unprivileged_userns_clone ]] && [[ $(cat /proc/sys/kernel/unprivileged_userns_clone) != 1 ]]; then
-  echo 'Unprivileged user namespaces are disabled by the kernel; refusing to weaken the host security policy automatically.' >&2
-  exit 3
-fi
+# Tool Pack 会以 canonical path 暴露给多个 Workspace；目录归 Runner 服务用户所有。
+"${SUDO[@]}" install -d -m 0755 -o "$runner_owner" /opt/nexus /opt/nexus/packs
+command -v script >/dev/null 2>&1 || { echo 'script(1) is required for Workspace Terminal PTY sessions.' >&2; exit 13; }
+command -v stty >/dev/null 2>&1 || { echo 'stty is required for Workspace Terminal resize support.' >&2; exit 13; }
 
-profile_source="$script_dir/apparmor/nexus-bwrap-userns-restrict"
-profile=/etc/apparmor.d/nexus-bwrap-userns-restrict
-[[ -f "$profile_source" ]] || { echo 'Nexus bubblewrap AppArmor profile is missing.' >&2; exit 4; }
-"${SUDO[@]}" install -o root -g root -m 0644 "$profile_source" "$profile"
-"${SUDO[@]}" apparmor_parser -r "$profile"
-
-# Validate exactly the capability that Nexus requires: an unprivileged user namespace
-# containing a private network namespace. This intentionally does not relax the host-wide
-# AppArmor/sysctl policy, and the sandbox payload still drops all capabilities.
-"$bwrap_bin" \
-  --die-with-parent \
-  --new-session \
-  --unshare-user \
-  --unshare-pid \
-  --unshare-ipc \
-  --unshare-uts \
-  --unshare-net \
-  --ro-bind / / \
-  --cap-drop ALL \
-  -- /bin/true
-
-command -v dropbear >/dev/null 2>&1 || { echo 'Dropbear server is required for Workspace Terminal sessions.' >&2; exit 13; }
-command -v dropbearkey >/dev/null 2>&1 || { echo 'dropbearkey is required for ephemeral Workspace Terminal host keys.' >&2; exit 13; }
-command -v socat >/dev/null 2>&1 || { echo 'socat is required for Workspace Terminal loopback transport.' >&2; exit 13; }
-
-echo "Nexus Agent Runner prerequisites are ready (bubblewrap $BWRAP_VERSION + mise $MISE_VERSION + Dropbear/socat)."
+echo "Nexus Agent Runner prerequisites are ready (mise $MISE_VERSION + script/stty; native Workspace runtime)."

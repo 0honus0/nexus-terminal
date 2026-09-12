@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { SandboxEngine } from './sandbox-engine';
+import type { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { RunnerJournal } from './journal';
 
@@ -36,7 +36,7 @@ export class SpaceReporter {
     private readonly root: string,
     private readonly journal: RunnerJournal,
     private readonly catalog: WorkspaceRuntimeCatalog,
-    private readonly sandboxEngine: SandboxEngine,
+    private readonly runtimeEngine: WorkspaceRuntimeEngine,
   ) {}
 
   async report() {
@@ -49,7 +49,7 @@ export class SpaceReporter {
     const workspaces = this.journal.workspaces();
     const byWorkspace = workspaces.map((workspace) => ({
       workspaceId: workspace.workspaceId,
-      runtimeBytes: this.sandboxEngine.runtimeBytes(workspace.workspaceId, workspace.generation),
+      runtimeBytes: this.runtimeEngine.runtimeBytes(workspace.workspaceId, workspace.generation),
       status: workspace.status,
     }));
     const runtimeReclaimableBytes = byWorkspace.reduce((total, item) => {
@@ -83,14 +83,12 @@ export class SpaceReporter {
         },
       ];
     });
-    const sandboxOverheadBytes = await this.sandboxEngine.overheadBytes(this.catalog.load().runtimeDigest);
     return {
       stateBytes,
       packBytes,
       cacheBytes,
       runtimeBytes,
       quarantineBytes,
-      sandboxOverheadBytes,
       reclaimableBytes: cacheBytes + runtimeReclaimableBytes,
       byPack,
       byWorkspace,

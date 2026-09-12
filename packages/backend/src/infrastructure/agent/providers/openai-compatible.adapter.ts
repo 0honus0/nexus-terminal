@@ -3,7 +3,12 @@ import https from 'node:https';
 import net from 'node:net';
 import { createParser, type EventSourceMessage } from 'eventsource-parser';
 import type { LanguageModelPort } from '../../../modules/agent/ai/language-model.port';
-import type { ModelEvent, ModelRequest, TokenUsage } from '../../../modules/agent/ai/model.types';
+import type {
+  DiscoveredProviderModel,
+  ModelEvent,
+  ModelRequest,
+  TokenUsage,
+} from '../../../modules/agent/ai/model.types';
 import type { OutboundPolicyPort, ResolvedEndpoint } from '../../../modules/agent/ai/outbound-policy.port';
 import type { ProviderRepositoryPort } from '../../../modules/agent/ai/provider.repository.port';
 import type { ProviderSecretPort } from '../../../modules/agent/ai/provider-secret.port';
@@ -13,6 +18,7 @@ const MAX_TOOL_ARGUMENT_BYTES = 32 * 1024;
 const HEADERS_TIMEOUT_MS = 30_000;
 const IDLE_TIMEOUT_MS = 60_000;
 const MAX_RETRY_AFTER_MS = 30_000;
+const MAX_MODELS_RESPONSE_BYTES = 1024 * 1024;
 
 const retryAfterMs = (value: string | string[] | undefined): number | undefined => {
   const scalar = Array.isArray(value) ? value[0] : value;
@@ -50,10 +56,12 @@ interface OpenAiChunk {
   };
 }
 
-const chatCompletionsUrl = (baseUrl: string): string => {
+const providerUrl = (baseUrl: string, path: string): string => {
   const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  return new URL('chat/completions', base).toString();
+  return new URL(path, base).toString();
 };
+
+const chatCompletionsUrl = (baseUrl: string): string => providerUrl(baseUrl, 'chat/completions');
 
 const usageFromChunk = (chunk: OpenAiChunk): TokenUsage | null => {
   if (!chunk.usage) return null;
@@ -70,6 +78,55 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
     private readonly secrets: ProviderSecretPort,
     private readonly outboundPolicy: OutboundPolicyPort,
   ) {}
+
+  async discoverModels(userId: number, providerId: string, signal: AbortSignal): Promise<DiscoveredProviderModel[]> {
+    const provider = await this.providers.get(userId, providerId);
+    if (!provider) throw new Error('PROVIDER_UNAVAILABLE');
+    const endpoint = await this.outboundPolicy.resolve(
+      providerUrl(provider.baseUrl, 'models'),
+      provider.privateHostExceptions,
+    );
+    const response = await this.secrets.withCredential(userId, provider.id, provider.credentialRevision, (credential) =>
+      this.openJsonGet(endpoint, credential, signal),
+    );
+    response.socket?.setTimeout(IDLE_TIMEOUT_MS, () => response.destroy(new Error('PROVIDER_IDLE_TIMEOUT')));
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    for await (const chunk of response) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += buffer.length;
+      if (bytes > MAX_MODELS_RESPONSE_BYTES) {
+        response.destroy();
+        throw new Error('PROVIDER_MODELS_RESPONSE_TOO_LARGE');
+      }
+      chunks.push(buffer);
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    } catch {
+      throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+      throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
+    const data = (payload as { data?: unknown }).data;
+    if (!Array.isArray(data)) throw new Error('PROVIDER_MODELS_RESPONSE_INVALID');
+    const discovered = new Map<string, DiscoveredProviderModel>();
+    for (const raw of data.slice(0, 1000)) {
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+      const record = raw as { id?: unknown; owned_by?: unknown; created?: unknown };
+      if (typeof record.id !== 'string' || !record.id.trim()) continue;
+      const id = record.id.trim();
+      discovered.set(id, {
+        id,
+        ...(typeof record.owned_by === 'string' && record.owned_by.trim() ? { ownedBy: record.owned_by.trim() } : {}),
+        ...(Number.isSafeInteger(record.created) && (record.created as number) >= 0
+          ? { createdAt: record.created as number }
+          : {}),
+      });
+    }
+    return [...discovered.values()].sort((left, right) => left.id.localeCompare(right.id));
+  }
 
   async *stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
     const provider = await this.providers.get(request.userId, request.providerId);
@@ -194,6 +251,63 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
     }
 
     if (!completed) throw new Error('PROVIDER_STREAM_TRUNCATED');
+  }
+
+  private openJsonGet(
+    endpoint: ResolvedEndpoint,
+    credential: string | null,
+    signal: AbortSignal,
+  ): Promise<IncomingMessage> {
+    const address = endpoint.addresses[0];
+    if (!address) return Promise.reject(new Error('PROVIDER_DNS_RESOLUTION_FAILED'));
+    const url = new URL(endpoint.url);
+    const headers: Record<string, string> = { Host: endpoint.authority, Accept: 'application/json' };
+    if (credential) headers.Authorization = `Bearer ${credential}`;
+    const options: RequestOptions = {
+      protocol: endpoint.protocol,
+      hostname: address,
+      port: endpoint.port,
+      path: `${url.pathname}${url.search}`,
+      method: 'GET',
+      headers,
+      family: net.isIP(address),
+      signal,
+      ...(endpoint.protocol === 'https:' && net.isIP(endpoint.hostname) === 0
+        ? { servername: endpoint.tlsServerName }
+        : {}),
+    };
+    return new Promise<IncomingMessage>((resolve, reject) => {
+      const transport = endpoint.protocol === 'https:' ? https : http;
+      const outgoing = transport.request(options, (response) => {
+        clearTimeout(headersTimer);
+        const status = response.statusCode ?? 0;
+        if (status >= 300 && status < 400) {
+          response.resume();
+          reject(new Error('PROVIDER_REDIRECT_DENIED'));
+          return;
+        }
+        if (status === 401 || status === 403) {
+          response.resume();
+          reject(new Error('PROVIDER_AUTH_FAILED'));
+          return;
+        }
+        if (status < 200 || status >= 300) {
+          response.resume();
+          reject(providerHttpError(status, response.headers['retry-after']));
+          return;
+        }
+        resolve(response);
+      });
+      const headersTimer = setTimeout(
+        () => outgoing.destroy(new Error('PROVIDER_HEADERS_TIMEOUT')),
+        HEADERS_TIMEOUT_MS,
+      );
+      outgoing.once('error', (error) => {
+        clearTimeout(headersTimer);
+        reject(error);
+      });
+      outgoing.end();
+    });
   }
 
   private openStream(

@@ -45,10 +45,10 @@ export class AgentScheduler {
     void this.pump();
   }
 
-  signalInput(run: RunView): boolean {
+  signalInput(run: RunView, reason: 'NEW_INPUT' | 'GOAL_UPDATED' = 'NEW_INPUT'): boolean {
     const active = this.active.get(run.id);
     if (!active) return false;
-    active.controller.abort(new Error('NEW_INPUT'));
+    active.controller.abort(new Error(reason));
     void active.done.finally(() => this.enqueue(run));
     return true;
   }

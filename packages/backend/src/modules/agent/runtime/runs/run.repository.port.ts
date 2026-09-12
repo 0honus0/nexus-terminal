@@ -1,6 +1,6 @@
 import type { Scope } from '../../agent.types';
 import type { ToolInspection } from '../../capabilities/tool.types';
-import type { HostEvent, RunEvent, RunSnapshot, RunView } from './run.types';
+import type { HostEvent, PendingRunInputPage, RunEvent, RunSnapshot, RunView } from './run.types';
 
 export interface RunPage {
   items: RunView[];
@@ -25,7 +25,9 @@ export interface RunListReaderPort {
   list(scope: Scope, threadId: string | undefined, limit: number, before?: string): Promise<RunPage>;
 }
 
-export interface RunQueryPort extends RunSnapshotReaderPort, RunListReaderPort {}
+export interface RunQueryPort extends RunSnapshotReaderPort, RunListReaderPort {
+  pendingInputs(scope: Scope, runId: string, limit: number): Promise<PendingRunInputPage>;
+}
 
 export interface RunEventReaderPort {
   readEvents(scope: Scope, runId: string, after: number, limit: number): Promise<RunEvent[]>;

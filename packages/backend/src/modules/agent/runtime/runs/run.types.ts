@@ -17,6 +17,26 @@ export type RunStatus =
 export type GoalStatus = 'unknown' | 'in_progress' | 'satisfied' | 'not_satisfied';
 export type VerificationStatus = 'not_started' | 'verified' | 'unverified' | 'failed';
 
+export interface RunGoal {
+  text: string | null;
+  revision: number;
+  updatedAt: number | null;
+}
+
+export interface PendingRunInput {
+  id: string;
+  sequence: number;
+  text: string;
+  artifactRefs: string[];
+  createdAt: number;
+}
+
+export interface PendingRunInputPage {
+  items: PendingRunInput[];
+  total: number;
+  hasMore: boolean;
+}
+
 export interface UserInputData {
   text: string;
   artifactRefs: string[];
@@ -33,6 +53,7 @@ export interface CreateRunCommand {
   agentDefinitionId: string;
   model: ModelRef;
   connectionIds: number[];
+  initialGoal?: string;
   command: CommandIdentity;
 }
 
@@ -93,6 +114,7 @@ export interface RunView extends Scope {
   parentRunId: string | null;
   status: RunStatus;
   goalStatus: GoalStatus;
+  goal: RunGoal;
   verificationStatus: VerificationStatus;
   needsReconciliation: boolean;
   budget: RunBudget;

@@ -1,13 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { createHash } from 'node:crypto';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
 const expected = {
-  bubblewrap: {
-    version: '0.12.0',
-    sha256: '9760d007363e3abba7c747489910f9f82d9fca53ba3bd3282e396fa3c97a3314',
+  mise: {
+    version: '2026.9.5',
+    amd64Sha256: 'd71e94e1ed59d4d0ca4ac847fa321d6d6615a8e613e9b468c9fb39f0dddd06d5',
+    arm64Sha256: '3a52c7c7c58d21a0791516950ebf4bc915f403277b49c93d657fc585259625ec',
   },
 };
 
@@ -29,95 +29,94 @@ if (miseVersions.size !== 1) {
   failures.push('scripts/docker/agent-runner/catalog/catalog.json: all mise Tool Packs must pin one installer version');
 }
 const [miseVersion = ''] = [...miseVersions];
-if (miseVersion) {
-  requireText(
-    'scripts/agent-runner/prepare-ubuntu-host.sh',
-    `MISE_VERSION=${miseVersion}`,
-    'host mise version must match the Tool Catalog installer pin',
-  );
-  requireText(
-    'scripts/agent-runner/prepare-ubuntu-host.sh',
-    'mise_stable_bin=/usr/local/bin/mise',
-    'host must publish the checked mise binary at the stable command path',
-  );
-  forbidText(
-    'packages/agent-runner/src/controller/pack-installer.ts',
-    miseVersion,
-    'mise release policy belongs in Catalog/prepare/check, not Runner runtime code',
+if (miseVersion && miseVersion !== expected.mise.version) {
+  failures.push(
+    `scripts/docker/agent-runner/catalog/catalog.json: mise pin ${miseVersion} does not match checked release ${expected.mise.version}`,
   );
 }
 
-const { version, sha256 } = expected.bubblewrap;
-for (const relative of ['Dockerfile', 'scripts/docker/agent-runner/Dockerfile']) {
-  requireText(relative, `ARG BWRAP_VERSION=${version}`, `Bubblewrap version must be ${version}`);
-  requireText(relative, `ARG BWRAP_SHA256=${sha256}`, 'Bubblewrap release SHA-256 is out of sync');
-  requireText(
-    relative,
-    "CFLAGS='-include linux/limits.h'",
-    'Alpine builder must expose PATH_MAX for upstream bubblewrap',
-  );
+requireText(
+  'scripts/agent-runner/prepare-ubuntu-host.sh',
+  `MISE_VERSION=${expected.mise.version}`,
+  'host mise version must match the Tool Catalog installer pin',
+);
+requireText(
+  'scripts/docker/agent-runner/Dockerfile',
+  `ARG MISE_VERSION=${expected.mise.version}`,
+  'Runner image mise version must match the Tool Catalog installer pin',
+);
+requireText(
+  'scripts/docker/agent-runner/Dockerfile',
+  `ARG MISE_AMD64_SHA256=${expected.mise.amd64Sha256}`,
+  'Runner image amd64 mise SHA-256 is out of sync',
+);
+requireText(
+  'scripts/docker/agent-runner/Dockerfile',
+  `ARG MISE_ARM64_SHA256=${expected.mise.arm64Sha256}`,
+  'Runner image arm64 mise SHA-256 is out of sync',
+);
+requireText(
+  'scripts/agent-runner/prepare-ubuntu-host.sh',
+  'mise_stable_bin=/usr/local/bin/mise',
+  'host must publish the checked mise binary at the stable command path',
+);
+for (const relative of ['scripts/agent-runner/prepare-ubuntu-host.sh', 'scripts/docker/agent-runner/Dockerfile']) {
+  requireText(relative, 'command -v script', 'native Runner requires util-linux script(1) for Workspace PTY sessions');
+  requireText(relative, 'command -v stty', 'native Runner requires stty for Workspace PTY resize support');
 }
 requireText(
-  'scripts/agent-runner/prepare-ubuntu-host.sh',
-  `BWRAP_VERSION=${version}`,
-  'host Bubblewrap version is out of sync',
+  'scripts/docker/agent-runner/Dockerfile',
+  'command -v tini',
+  'standalone Runner image requires tini as PID 1 for orphan process reaping',
 );
 requireText(
-  'scripts/agent-runner/prepare-ubuntu-host.sh',
-  `BWRAP_SHA256=${sha256}`,
-  'host Bubblewrap SHA-256 is out of sync',
+  'scripts/docker/agent-runner/Dockerfile',
+  'ENTRYPOINT ["/usr/bin/tini", "--"]',
+  'standalone Runner image must launch through tini',
 );
-requireText(
-  'scripts/agent-runner/prepare-ubuntu-host.sh',
-  'bwrap_bin=/usr/local/bin/bwrap',
-  'host must install the checked binary at the stable command path',
-);
-requireText(
-  'scripts/agent-runner/apparmor/nexus-bwrap-userns-restrict',
-  'profile nexus_bwrap /usr/local/bin/bwrap ',
-  'AppArmor profile must target the stable checked binary path',
-);
-
-for (const relative of [
-  'packages/agent-runner/src/controller/sandbox-manager.ts',
-  'packages/agent-runner/src/controller/plugin-runner-runtime.ts',
+forbidText(
   'packages/agent-runner/src/controller/pack-installer.ts',
+  expected.mise.version,
+  'mise release policy belongs in Catalog/prepare/check, not Runner runtime code',
+);
+
+// 单用户 native Runner 不允许重新引入内部 sandbox、nested container 或自编译 PTY helper。
+for (const relative of [
+  'scripts/docker/agent-runner/Dockerfile',
+  'scripts/agent-runner/prepare-ubuntu-host.sh',
   'packages/agent-runner/src/index.ts',
-  'packages/backend/src/infrastructure/agent/plugins/local-plugin-backend-runtime.adapter.ts',
+  'packages/agent-runner/src/types.ts',
+  'packages/agent-runner/src/controller/workspace-runtime-manager.ts',
+  'packages/agent-runner/src/controller/workspace-runtime-engine.ts',
+  'packages/agent-runner/src/controller/workspace-terminal-runtime.ts',
+  'packages/agent-runner/src/controller/pack-installer.ts',
+  'packages/agent-runner/src/controller/plugin-runner-runtime.ts',
 ]) {
-  forbidText(relative, version, 'sandbox release policy belongs in build/check scripts, not runtime code');
-  forbidText(relative, 'BUBBLEWRAP_MINIMUM_VERSION', 'sandbox minimum-version policy belongs in build/check scripts');
-  forbidText(relative, 'MINIMUM_BUBBLEWRAP_VERSION', 'sandbox minimum-version policy belongs in build/check scripts');
+  forbidText(relative, 'bwrap', 'native Agent Runner must not depend on bubblewrap');
+  forbidText(relative, 'bubblewrap', 'native Agent Runner must not depend on bubblewrap');
+  forbidText(relative, 'dropbear', 'native Agent Runner must not depend on Dropbear');
+  forbidText(relative, 'socat', 'native Agent Runner must not depend on socat');
+}
+for (const compiler of ['gcc ', 'g++ ', 'clang ', 'node-gyp']) {
+  forbidText(
+    'scripts/docker/agent-runner/Dockerfile',
+    compiler,
+    'standalone Runner image must not compile or install a custom native helper',
+  );
+}
+for (const capability of ['SYS_ADMIN', 'privileged', 'seccomp=unconfined', 'apparmor=unconfined']) {
+  forbidText(
+    'scripts/docker/agent-runner/Dockerfile',
+    capability,
+    'standalone Runner image must not require elevated container privileges',
+  );
 }
 
 if (failures.length) {
-  console.error(`Agent sandbox prerequisite check failed:\n- ${failures.join('\n- ')}`);
+  console.error(`Agent Runner prerequisite check failed:\n- ${failures.join('\n- ')}`);
   process.exit(1);
 }
 
-if (process.argv.includes('--verify-latest')) {
-  const response = await fetch('https://api.github.com/repos/containers/bubblewrap/releases/latest', {
-    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'nexus-terminal-ci' },
-  });
-  if (!response.ok) throw new Error(`Unable to resolve latest Bubblewrap release: HTTP ${response.status}`);
-  const release = await response.json();
-  const tag = String(release.tag_name ?? '');
-  if (tag !== `v${version}`) {
-    throw new Error(
-      `Bubblewrap pin ${version} is not latest stable (${tag || 'unknown'}). Update the prerequisite pin before merging.`,
-    );
-  }
-  const assetName = `bubblewrap-${version}.tar.xz`;
-  const asset = Array.isArray(release.assets) ? release.assets.find((value) => value?.name === assetName) : null;
-  if (!asset?.browser_download_url) throw new Error(`Latest Bubblewrap release is missing ${assetName}`);
-  const assetResponse = await fetch(asset.browser_download_url, { headers: { 'User-Agent': 'nexus-terminal-ci' } });
-  if (!assetResponse.ok) throw new Error(`Unable to download ${assetName}: HTTP ${assetResponse.status}`);
-  const digest = createHash('sha256')
-    .update(Buffer.from(await assetResponse.arrayBuffer()))
-    .digest('hex');
-  if (digest !== sha256) throw new Error(`Bubblewrap ${version} SHA-256 mismatch: expected ${sha256}, got ${digest}`);
-}
-
 console.log(
-  `Agent sandbox prerequisite check passed: bubblewrap ${version}${process.argv.includes('--verify-latest') ? ' is latest stable and SHA-256 verified' : ' pins are consistent'}.`,
+  `Agent Runner prerequisite check passed: native Workspace runtime uses mise ${expected.mise.version} + script/stty; standalone image uses tini PID 1 with no internal sandbox or custom native compilation.`,
 );

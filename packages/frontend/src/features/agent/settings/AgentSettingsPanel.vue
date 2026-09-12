@@ -4,6 +4,7 @@
     agentApi,
     formatAgentApiError,
     type AgentAppSummary,
+    type AgentDiscoveredProviderModel,
     type AgentHardLimits,
     type AgentProviderView,
     type AgentSettingsView,
@@ -30,6 +31,7 @@
   const settings = ref<AgentSettingsView | null>(null);
   const apps = ref<AgentAppSummary[]>([]);
   const providers = ref<AgentProviderView[]>([]);
+  const discoveredModels = ref<Record<string, AgentDiscoveredProviderModel[]>>({});
   const storage = ref<ArtifactStorageSummary | null>(null);
   const workspaceRuntime = ref<WorkspaceRuntimeAvailability | null>(null);
   const denylist = ref<TargetDenylistView | null>(null);
@@ -146,6 +148,21 @@
 
   const setDefaultModel = (providerId: string, modelId: string) =>
     patchSection('model', { defaultProviderId: providerId, defaultModelId: modelId });
+
+  const discoverProviderModels = (provider: AgentProviderView) =>
+    execute(async () => {
+      discoveredModels.value = {
+        ...discoveredModels.value,
+        [provider.id]: await agentApi.discoverProviderModels(provider.id),
+      };
+    });
+
+  const addProviderModel = (provider: AgentProviderView, model: AgentProviderView['models'][number]) =>
+    execute(async () => {
+      if (provider.models.some((candidate) => candidate.id === model.id)) return;
+      const updated = await agentApi.updateProvider(provider, { models: [...provider.models, model] });
+      providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
+    });
 
   const testProvider = (provider: AgentProviderView, modelId: string) =>
     execute(async () => {
@@ -282,11 +299,14 @@
             <ModelProviderSettings
               :providers="providers"
               :busy="busy"
+              :discoveries="discoveredModels"
               :default-provider-id="settings.requestedSettings.model.defaultProviderId"
               :default-model-id="settings.requestedSettings.model.defaultModelId"
               @create="createProvider"
               @toggle="toggleProvider"
               @test="testProvider"
+              @discover="discoverProviderModels"
+              @add-model="addProviderModel"
               @default-model="setDefaultModel"
             />
             <BudgetContextSettings :settings="settings" :busy="busy" @save="(patch) => patchSection('budget', patch)" />

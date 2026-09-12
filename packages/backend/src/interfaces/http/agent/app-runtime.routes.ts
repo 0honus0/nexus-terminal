@@ -9,6 +9,7 @@ import {
   parseCreateRunRequest,
   parseExpectedVersionRequest,
   parseResumeRunRequest,
+  parseSetGoalRequest,
   parseWorkspaceActionRequest,
   parseWorkspaceCreateRequest,
   parseWorkspaceToolVersionsRequest,
@@ -180,6 +181,47 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
   );
 
   router.post(
+    '/runs/:runId/interrupt',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      const input = parseAppendInputRequest(request.body);
+      if (input.input.artifactRefs.length > 0) throw new Error('VALIDATION_FAILED');
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      const runId = pathParam(request.params.runId);
+      const result = await withVersionConflictDetails(
+        input.expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () => dependencies.runs.interrupt(scope, runId, input.input, input.expectedVersion, idempotencyKey(request)),
+      );
+      agentData(request, response, result, 202);
+    }),
+  );
+
+  router.get(
+    '/runs/:runId/pending-inputs',
+    agentRoute(async (request, response) => {
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(request, response, await dependencies.runs.pendingInputs(scope, pathParam(request.params.runId)));
+    }),
+  );
+
+  router.post(
+    '/runs/:runId/goal',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      const input = parseSetGoalRequest(request.body);
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      const runId = pathParam(request.params.runId);
+      const run = await withVersionConflictDetails(
+        input.expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () => dependencies.runs.setGoal(scope, runId, input.text, input.expectedVersion, idempotencyKey(request)),
+      );
+      agentData(request, response, run);
+    }),
+  );
+
+  router.post(
     '/runs/:runId/budget',
     mutationSecurity,
     agentRoute(async (request, response) => {
@@ -294,14 +336,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       const command = await withVersionConflictDetails(
         input.expectedVersion,
         async () => (await dependencies.workspaceRuntime.getWorkspace(scope, workspaceId)).version,
-        () =>
-          dependencies.workspaceRuntime.action(
-            scope,
-            workspaceId,
-            input.action,
-            input.expectedVersion,
-            input.parameters,
-          ),
+        () => dependencies.workspaceRuntime.action(scope, workspaceId, input.action, input.expectedVersion),
       );
       agentData(request, response, command, 202);
     }),

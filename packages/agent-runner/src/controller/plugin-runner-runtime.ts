@@ -1,4 +1,5 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { MANAGED_PROCESS_DETACHED, signalManagedProcess, terminateManagedProcess } from '../managed-process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { valid as validSemver } from 'semver';
@@ -12,7 +13,6 @@ import {
 } from '../plugin-ipc';
 import type { WorkspaceRecord, PluginRunnerTarget } from '../types';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
-import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 import {
   WorkspaceBroker,
   type WorkspaceAccessTarget,
@@ -111,15 +111,17 @@ class RunnerPluginProcess {
       stderr = `${stderr}${chunk.toString('utf8')}`.slice(-8192);
     });
     child.once('error', (error) => this.failAll(error));
-    child.once('exit', (code, signal) =>
-      this.failAll(new Error(`PLUGIN_RUNNER_EXITED:${code ?? 'null'}:${signal ?? 'none'}:${stderr.slice(-1024)}`)),
-    );
+    child.once('exit', (code, signal) => {
+      signalManagedProcess(child, 'SIGKILL');
+      this.failAll(new Error(`PLUGIN_RUNNER_EXITED:${code ?? 'null'}:${signal ?? 'none'}:${stderr.slice(-1024)}`));
+    });
   }
 
   request(kind: 'lifecycle.activate' | 'lifecycle.health' | 'lifecycle.dispose'): Promise<unknown>;
   request(kind: 'lifecycle.quiesce', payload: { deadlineUnixSeconds: number }): Promise<unknown>;
   request(kind: string, payload: Record<string, unknown> = {}): Promise<unknown> {
-    if (this.child.killed || !this.child.stdin.writable) throw new Error('PLUGIN_RUNNER_NOT_RUNNING');
+    if (this.child.exitCode !== null || this.child.signalCode !== null || !this.child.stdin.writable)
+      throw new Error('PLUGIN_RUNNER_NOT_RUNNING');
     const requestId = this.nextRequestId();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -139,8 +141,10 @@ class RunnerPluginProcess {
   }
 
   async close(): Promise<void> {
-    if (!this.child.killed && this.child.stdin.writable) await this.request('lifecycle.dispose').catch(() => undefined);
-    this.child.kill('SIGTERM');
+    if (this.child.exitCode === null && this.child.signalCode === null && this.child.stdin.writable) {
+      await this.request('lifecycle.dispose').catch(() => undefined);
+    }
+    await terminateManagedProcess(this.child);
   }
 
   private async handleFrame(frame: PluginIpcFrame): Promise<void> {
@@ -153,7 +157,7 @@ class RunnerPluginProcess {
       if (frame.requestId !== 0) throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
       if (message.protocolVersion !== this.protocolVersion || message.sdkVersion !== this.sdkVersion) {
         this.failAll(new Error('PLUGIN_RUNNER_PROTOCOL_VERSION_MISMATCH'));
-        this.child.kill('SIGKILL');
+        signalManagedProcess(this.child, 'SIGKILL');
         return;
       }
       this.readyResolve();
@@ -266,7 +270,7 @@ class RunnerPluginProcess {
   private protocolFailure(error: unknown): void {
     const failure = error instanceof Error ? error : new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
     this.failAll(failure);
-    if (!this.child.killed) this.child.kill('SIGKILL');
+    if (this.child.exitCode === null && this.child.signalCode === null) signalManagedProcess(this.child, 'SIGKILL');
   }
 
   private failAll(error: Error): void {
@@ -286,16 +290,14 @@ export class PluginRunnerRuntime {
   private readonly instances = new Map<string, RunnerPluginProcess>();
 
   constructor(
-    runtimeRoot: string,
+    private readonly runtimeRoot: string,
     private readonly pluginSourceRoot: string,
-    private readonly sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || 'bwrap',
   ) {
     this.workspaces = new WorkspaceBroker(runtimeRoot);
   }
 
   available(): boolean {
-    const result = spawnSync(this.sandboxBinary, ['--version'], { stdio: 'ignore', timeout: 2_000 });
-    return !result.error && result.status === 0;
+    return true;
   }
 
   prepareWorkspace(workspace: WorkspaceRecord): void {
@@ -392,7 +394,6 @@ export class PluginRunnerRuntime {
   }
 
   private start(workspace: WorkspaceRecord, target: PluginRunnerTarget): RunnerPluginProcess {
-    if (!this.available()) throw new Error('PLUGIN_RUNNER_SANDBOX_UNAVAILABLE');
     this.validateTarget(target);
     const source = path.join(this.pluginSourceRoot, this.safe(target.pluginId), 'versions', target.version);
     const marker = path.join(source, '.nexus-package-hash');
@@ -400,70 +401,32 @@ export class PluginRunnerRuntime {
       throw new Error('PLUGIN_RUNNER_SOURCE_MISMATCH');
     }
     this.workspaces.ensurePluginWorkspace(workspace.workspaceId, workspace.generation, target.pluginId);
-    const worker = path.resolve(__dirname, '../worker/plugin-runner-sandbox.worker.js');
-    const systemBindings = sandboxSystemRuntimeArguments();
-    const args = [
-      '--die-with-parent',
-      '--new-session',
-      '--unshare-user',
-      '--unshare-pid',
-      '--unshare-ipc',
-      '--unshare-uts',
-      '--unshare-net',
-      ...systemBindings,
-      '--proc',
-      '/proc',
-      '--dev',
-      '/dev',
-      '--tmpfs',
-      '/tmp',
-      '--dir',
-      '/nexus',
-      '--ro-bind',
-      worker,
-      '/nexus/plugin-runner-sandbox.worker.js',
-      '--dir',
-      '/plugin',
-      '--ro-bind',
-      source,
-      '/plugin',
-      '--chdir',
-      '/tmp',
-      '--clearenv',
-      '--setenv',
-      'PATH',
-      '/usr/local/bin:/usr/bin:/bin',
-      '--setenv',
-      'HOME',
-      '/tmp',
-      '--setenv',
-      'NEXUS_WORKSPACE_ID',
-      workspace.workspaceId,
-      '--setenv',
-      'NEXUS_WORKSPACE_GENERATION',
+    const worker = path.resolve(__dirname, '../worker/plugin-runner.worker.js');
+    if (!fs.existsSync(worker)) throw new Error('PLUGIN_RUNNER_RUNTIME_UNAVAILABLE');
+    const home = path.join(
+      this.runtimeRoot,
+      'plugin-processes',
+      this.safe(workspace.workspaceId),
       String(workspace.generation),
-      '--setenv',
-      'NEXUS_PLUGIN_ID',
-      target.pluginId,
-      '--setenv',
-      'NEXUS_PLUGIN_VERSION',
-      target.version,
-      '--setenv',
-      'NEXUS_PLUGIN_SDK_VERSION',
-      target.sdkVersion,
-      '--setenv',
-      'NEXUS_PLUGIN_PROTOCOL_VERSION',
-      String(target.protocolVersion),
-      '--setenv',
-      'NEXUS_PLUGIN_RUNNER_ENTRY',
-      target.entry,
-      '--',
-      process.execPath,
-      '/nexus/plugin-runner-sandbox.worker.js',
-    ];
-    const child = spawn(this.sandboxBinary, args, {
+      this.safe(target.pluginId),
+    );
+    fs.mkdirSync(home, { recursive: true, mode: 0o700 });
+    const child = spawn(process.execPath, [worker], {
+      cwd: source,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin' },
+      detached: MANAGED_PROCESS_DETACHED,
+      env: {
+        PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin',
+        HOME: home,
+        NEXUS_WORKSPACE_ID: workspace.workspaceId,
+        NEXUS_WORKSPACE_GENERATION: String(workspace.generation),
+        NEXUS_PLUGIN_ID: target.pluginId,
+        NEXUS_PLUGIN_VERSION: target.version,
+        NEXUS_PLUGIN_SDK_VERSION: target.sdkVersion,
+        NEXUS_PLUGIN_PROTOCOL_VERSION: String(target.protocolVersion),
+        NEXUS_PLUGIN_RUNNER_ENTRY: target.entry,
+        NEXUS_PLUGIN_SOURCE_ROOT: source,
+      },
     });
     return new RunnerPluginProcess(
       child,

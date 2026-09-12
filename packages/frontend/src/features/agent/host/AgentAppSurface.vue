@@ -3,6 +3,11 @@
   import { useI18n } from 'vue-i18n';
   import { connectionService, type Connection } from '@/features/connections/public';
   import AgentConversation from '../ai/AgentConversation.vue';
+  import {
+    createConversationCommandExecutor,
+    type ConversationCommandResult,
+  } from '../ai/conversation-command-executor';
+  import { parseConversationSubmission } from '../ai/conversation-commands';
   import { agentApi, formatAgentApiError } from '../api/agent-api';
   import type {
     AgentApprovalBatch,
@@ -69,6 +74,7 @@
   const loading = ref(true);
   const error = ref('');
   const draft = ref(agentSurfaceSession.state(props.appId).draft);
+  const commandResult = ref<ConversationCommandResult | null>(null);
   let threadSelectionGeneration = 0;
   let ledgerGeneration = 0;
   let approvalsGeneration = 0;
@@ -171,14 +177,24 @@
     const availability = workspaceRuntimeAvailability.value;
     if (!availability) return 'bg-text-secondary/40';
     if (!availability.available) return 'bg-text-secondary/50';
-    return availability.sandbox.available ? 'bg-success' : 'bg-warning';
+    return availability.runtime.available ? 'bg-success' : 'bg-warning';
   });
   const mutationLocked = computed(
     () => busy.value || runtimeOperation.mutationBlocked.value || run.value?.needsReconciliation === true,
   );
-  const canSend = computed(
-    () => Boolean(definitions.value[0] && providerSelection.value && currentThread.value) && !mutationLocked.value,
-  );
+  const canSend = computed(() => {
+    if (!currentThread.value || mutationLocked.value) return false;
+    const submission = parseConversationSubmission(draft.value);
+    if (submission.kind === 'invalid_command') return true;
+    if (submission.kind === 'command') {
+      if (submission.command.kind === 'help') return true;
+      if (run.value) return true;
+      return submission.command.kind === 'goal.set' ? Boolean(definitions.value[0] && providerSelection.value) : true;
+    }
+    return Boolean(
+      (run.value && nonTerminal.has(run.value.status)) || (definitions.value[0] && providerSelection.value),
+    );
+  });
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
@@ -325,6 +341,7 @@
     const selectionGeneration = ++threadSelectionGeneration;
     stopRunStream();
     currentThread.value = thread;
+    commandResult.value = null;
     agentSurfaceSession.setThread(props.appId, thread.id);
     await refreshLedger();
     if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
@@ -437,16 +454,114 @@
     return artifacts.map((artifact) => artifact.id);
   };
 
+  const createNewRun = async (
+    text: string,
+    selectedArtifacts: AgentArtifactRef[] = [],
+    initialGoal?: string,
+  ): Promise<AgentRunView> => {
+    const thread = currentThread.value;
+    const selection = providerSelection.value;
+    const definition = definitions.value[0];
+    if (!thread) throw new Error('NOT_FOUND');
+    if (!selection || !definition) throw new Error('AGENT_PROVIDER_REQUIRED');
+    const artifactRefs = await resolveArtifactRefs(selectedArtifacts);
+    const created = await facade.createRun({
+      threadId: thread.id,
+      text,
+      artifactRefs,
+      agentDefinitionId: definition.id,
+      model: {
+        providerId: selection.provider.id,
+        modelId: selection.model.id,
+        configurationVersion: selection.provider.version,
+      },
+      connectionIds: selectedConnectionIds.value,
+      ...(initialGoal ? { initialGoal } : {}),
+    });
+    run.value = created;
+    rememberThreadRun(created);
+    clearComposer(true);
+    await refreshLedger();
+    await Promise.all([refreshApprovals(created.id), refreshBackgroundRuns()]);
+    startRunStream(created);
+    return created;
+  };
+
+  const clearComposer = (clearAttachments = false): void => {
+    draft.value = '';
+    agentSurfaceSession.setDraft(props.appId, '');
+    if (clearAttachments) attachments.value = [];
+  };
+
+  const commandError = (title: string, message: string): void => {
+    commandResult.value = { title, lines: [message], tone: 'error' };
+  };
+
+  const adoptCommandRun = (candidate: AgentRunView): void => {
+    if (currentThread.value?.id !== candidate.threadId || run.value?.id !== candidate.id) return;
+    run.value = candidate;
+    rememberThreadRun(candidate);
+  };
+
+  const executeSlashCommand = createConversationCommandExecutor({
+    t: (key, values) => (values ? t(key, values) : t(key)),
+    getRun: () => run.value,
+    isActiveRun: (candidate) => nonTerminal.has(candidate.status) && candidate.status !== 'cancelling',
+    beginMutation: beginRuntimeMutation,
+    finishMutation: finishRuntimeMutation,
+    succeedMutation: runtimeOperation.succeed,
+    recoverFailure: recoverRuntimeFailure,
+    setResult: (result) => {
+      commandResult.value = result;
+    },
+    clearComposer: () => clearComposer(),
+    createGoalRun: (text) => createNewRun(text, [], text),
+    getRunSnapshot: (runId) => facade.getRun(runId),
+    setGoal: (candidate, text) => facade.setGoal(candidate, text),
+    pendingInputs: (runId) => facade.pendingInputs(runId),
+    adoptRun: adoptCommandRun,
+    refreshBackgroundRuns,
+    interruptAndRefresh: async (candidate, text) => {
+      await facade.interrupt(candidate, text);
+      await refreshLedger();
+      const next = await refreshRun(candidate.id);
+      await Promise.all([refreshApprovals(candidate.id), refreshBackgroundRuns()]);
+      if (next) startRunStream(next);
+    },
+    cancelAndRefresh: async (candidate) => {
+      run.value = await facade.cancelRun(candidate);
+      rememberThreadRun(run.value);
+      await Promise.all([refreshLedger(), refreshApprovals(candidate.id), refreshBackgroundRuns()]);
+    },
+  });
+
   const send = async (text: string, selectedArtifacts: AgentArtifactRef[]): Promise<void> => {
+    const submission = parseConversationSubmission(text);
+    if (submission.kind === 'invalid_command') {
+      const reasonKey =
+        submission.reason === 'unknown'
+          ? 'unknown'
+          : submission.reason === 'missing_argument'
+            ? 'missingArgument'
+            : 'unexpectedArgument';
+      commandError(
+        t('agent.conversation.commands.errorTitle'),
+        t(`agent.conversation.commands.${reasonKey}`, { command: submission.commandName }),
+      );
+      return;
+    }
+    if (submission.kind === 'command') {
+      await executeSlashCommand(submission.command, selectedArtifacts);
+      return;
+    }
+    commandResult.value = null;
     if (!currentThread.value || !beginRuntimeMutation()) return;
     try {
       const active = run.value;
       if (active && nonTerminal.has(active.status)) {
         const artifactRefs = await resolveArtifactRefs(selectedArtifacts, active);
-        await facade.appendInput(active, text, artifactRefs);
-        draft.value = '';
-        attachments.value = [];
-        agentSurfaceSession.setDraft(props.appId, '');
+        await facade.appendInput(active, submission.text, artifactRefs);
+        clearComposer(true);
         await refreshLedger();
         const next = await refreshRun(active.id);
         await Promise.all([refreshApprovals(active.id), refreshBackgroundRuns()]);
@@ -454,30 +569,7 @@
         runtimeOperation.succeed();
         return;
       }
-      const selection = providerSelection.value;
-      const definition = definitions.value[0];
-      if (!selection || !definition) throw new Error('AGENT_PROVIDER_REQUIRED');
-      const artifactRefs = await resolveArtifactRefs(selectedArtifacts);
-      const created = await facade.createRun({
-        threadId: currentThread.value.id,
-        text,
-        artifactRefs,
-        agentDefinitionId: definition.id,
-        model: {
-          providerId: selection.provider.id,
-          modelId: selection.model.id,
-          configurationVersion: selection.provider.version,
-        },
-        connectionIds: selectedConnectionIds.value,
-      });
-      run.value = created;
-      rememberThreadRun(created);
-      draft.value = '';
-      attachments.value = [];
-      agentSurfaceSession.setDraft(props.appId, '');
-      await refreshLedger();
-      await Promise.all([refreshApprovals(created.id), refreshBackgroundRuns()]);
-      startRunStream(created);
+      await createNewRun(submission.text, selectedArtifacts);
       runtimeOperation.succeed();
     } catch (cause) {
       await recoverRuntimeFailure(cause, run.value?.id);
@@ -1166,11 +1258,13 @@
             :busy="mutationLocked"
             :can-send="canSend"
             :attachments="attachments"
+            :command-result="commandResult"
             @load-older="loadOlder"
             @send="send"
             @cancel="cancel"
             @update-draft="updateDraft"
             @update-attachments="attachments = $event"
+            @dismiss-command-result="commandResult = null"
           />
         </div>
       </div>

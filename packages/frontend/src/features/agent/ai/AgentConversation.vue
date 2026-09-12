@@ -1,10 +1,12 @@
 <script setup lang="ts">
-  import { nextTick, ref, watch } from 'vue';
+  import { computed, nextTick, ref, watch } from 'vue';
   import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
   import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
   import type { AgentArtifactRef, AgentLedgerEntry, AgentRunView } from '../api/agent-api';
+  import type { ConversationCommandResult } from './conversation-command-executor';
   import ArtifactPicker from '../files/ArtifactPicker.vue';
   import ConversationMessage from './ConversationMessage.vue';
+  import { conversationCommandSuggestions, type ConversationCommandSuggestion } from './conversation-commands';
 
   const props = defineProps<{
     appId: string;
@@ -16,6 +18,7 @@
     busy: boolean;
     canSend: boolean;
     attachments: AgentArtifactRef[];
+    commandResult: ConversationCommandResult | null;
   }>();
   const emit = defineEmits<{
     loadOlder: [];
@@ -23,9 +26,15 @@
     cancel: [];
     updateDraft: [value: string];
     updateAttachments: [value: AgentArtifactRef[]];
+    dismissCommandResult: [];
   }>();
 
   const scroller = ref<{ scrollToBottom?: () => void } | null>(null);
+  const commandSuggestions = computed(() => conversationCommandSuggestions(props.draft));
+  const applyCommandSuggestion = (suggestion: ConversationCommandSuggestion): void => {
+    const needsArgument = suggestion.command === '/goal' || suggestion.command === '/interrupt';
+    emit('updateDraft', needsArgument ? `${suggestion.command} ` : suggestion.command);
+  };
   const send = () => {
     const text = props.draft.trim();
     if (!text || !props.canSend || props.busy) return;
@@ -108,6 +117,54 @@
 
     <footer class="shrink-0 border-t border-border/50 bg-card/45 px-3.5 pb-3.5 pt-2.5">
       <div class="mx-auto max-w-3xl">
+        <div
+          v-if="commandResult"
+          class="mb-2 rounded-xl border px-3 py-2.5 text-[11px] shadow-sm"
+          :class="
+            commandResult.tone === 'error'
+              ? 'border-error/30 bg-error/5 text-error'
+              : 'border-primary/20 bg-primary/5 text-foreground'
+          "
+          :role="commandResult.tone === 'error' ? 'alert' : 'status'"
+          :aria-label="$t('agent.conversation.commands.resultLabel')"
+          aria-live="polite"
+        >
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <strong class="block font-semibold">{{ commandResult.title }}</strong>
+              <div v-for="(line, index) in commandResult.lines" :key="index" class="mt-1 break-words leading-4">
+                {{ line }}
+              </div>
+            </div>
+            <button
+              type="button"
+              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-text-secondary hover:bg-header hover:text-foreground"
+              :aria-label="$t('agent.conversation.commands.dismiss')"
+              @click="emit('dismissCommandResult')"
+            >
+              <i class="fa-solid fa-xmark text-[9px]" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+
+        <div
+          v-if="commandSuggestions.length"
+          class="mb-2 overflow-hidden rounded-xl border border-border/70 bg-background shadow-sm"
+          role="listbox"
+          :aria-label="$t('agent.conversation.commands.suggestionsLabel')"
+        >
+          <button
+            v-for="suggestion in commandSuggestions"
+            :key="suggestion.command"
+            type="button"
+            class="flex w-full items-center gap-3 border-b border-border/40 px-3 py-2 text-left last:border-b-0 hover:bg-header/70"
+            @click="applyCommandSuggestion(suggestion)"
+          >
+            <code class="shrink-0 text-[11px] font-semibold text-primary">{{ suggestion.usage }}</code>
+            <span class="truncate text-[10px] text-text-secondary">{{ $t(suggestion.descriptionKey) }}</span>
+          </button>
+        </div>
+
         <div v-if="attachments.length" class="mb-2 flex flex-wrap gap-1.5">
           <button
             v-for="artifact in attachments"

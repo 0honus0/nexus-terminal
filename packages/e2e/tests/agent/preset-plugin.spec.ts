@@ -26,6 +26,9 @@ type RunView = {
   id: string;
   status: string;
   version: number;
+  goal: { text: string | null; revision: number };
+  plan: { revision: number; items: Array<{ id: string; title: string; status: string }> };
+  consumedInputSequence: number;
   definition: { agentDefinitionId: string; model?: { modelId: string }; connectionIds: number[] };
 };
 
@@ -237,7 +240,10 @@ const installAndRunDeveloperPreset = async (
       data: {
         schemaVersion: 1,
         threadId,
-        input: { text: 'Reply with a short confirmation that the Developer Agent is running.', artifactRefs: [] },
+        input: {
+          text: 'E2E_GOAL_UPDATE_HOLD Reply with a short confirmation that the Developer Agent is running.',
+          artifactRefs: [],
+        },
         agentDefinitionId: 'developer.default',
         model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
         connectionIds: [],
@@ -246,11 +252,85 @@ const installAndRunDeveloperPreset = async (
     expect(created.status(), await created.text()).toBe(201);
     const run = ((await created.json()) as Envelope<RunView>).data;
     expect(run.definition.agentDefinitionId).toBe('developer.default');
+
+    const runningDeadline = Date.now() + 10_000;
+    let running = run;
+    while (running.status !== 'running' && Date.now() < runningDeadline) {
+      const response = await request.get(`/api/v1/apps/nexus.developer/runs/${run.id}`);
+      expect(response.ok(), await response.text()).toBeTruthy();
+      running = ((await response.json()) as Envelope<RunView>).data;
+      if (running.status !== 'running') await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(running.status).toBe('running');
+
+    const durableGoal = 'Confirm the Developer Agent preset goal remains durable.';
+    const goalUpdated = await request.post(`/api/v1/apps/nexus.developer/runs/${run.id}/goal`, {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: { schemaVersion: 1, text: durableGoal, expectedVersion: running.version },
+    });
+    expect(goalUpdated.ok(), await goalUpdated.text()).toBeTruthy();
+    const goalRun = ((await goalUpdated.json()) as Envelope<RunView>).data;
+    expect(goalRun.goal).toMatchObject({ text: durableGoal, revision: 1 });
+
     const terminal = await waitForTerminalRun(request, run.id);
     expect(['completed', 'completed_unverified']).toContain(terminal.status);
+    expect(terminal.goal).toMatchObject({ text: durableGoal, revision: 1 });
     const ledger = await request.get(`/api/v1/apps/nexus.developer/threads/${threadId}/entries?limit=50`);
     expect(ledger.ok(), await ledger.text()).toBeTruthy();
     expect(JSON.stringify(await ledger.json())).toContain('OK');
+  });
+
+  await step('strict interrupt supersedes only a streaming model and drains the durable input queue', async () => {
+    const thread = await request.post('/api/v1/apps/nexus.developer/threads', {
+      headers,
+      data: { title: 'Preset interrupt E2E thread' },
+    });
+    expect(thread.status(), await thread.text()).toBe(201);
+    const interruptThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
+    const created = await request.post('/api/v1/apps/nexus.developer/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: interruptThreadId,
+        input: { text: 'E2E_INTERRUPT_HOLD Confirm strict interrupt rescheduling.', artifactRefs: [] },
+        agentDefinitionId: 'developer.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        connectionIds: [],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const run = ((await created.json()) as Envelope<RunView>).data;
+
+    const runningDeadline = Date.now() + 10_000;
+    let running = run;
+    while (running.status !== 'running' && Date.now() < runningDeadline) {
+      const response = await request.get(`/api/v1/apps/nexus.developer/runs/${run.id}`);
+      expect(response.ok(), await response.text()).toBeTruthy();
+      running = ((await response.json()) as Envelope<RunView>).data;
+      if (running.status !== 'running') await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(running.status).toBe('running');
+
+    const interrupted = await request.post(`/api/v1/apps/nexus.developer/runs/${run.id}/interrupt`, {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        text: 'E2E_INTERRUPT_RESUME Continue from the new user input.',
+        artifactRefs: [],
+        expectedVersion: running.version,
+      },
+    });
+    expect(interrupted.status(), await interrupted.text()).toBe(202);
+
+    const terminal = await waitForTerminalRun(request, run.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+    const pending = await request.get(`/api/v1/apps/nexus.developer/runs/${run.id}/pending-inputs`);
+    expect(pending.ok(), await pending.text()).toBeTruthy();
+    await expect(pending.json()).resolves.toMatchObject({ data: { items: [], total: 0, hasMore: false } });
+
+    const ledger = await request.get(`/api/v1/apps/nexus.developer/threads/${interruptThreadId}/entries?limit=50`);
+    expect(ledger.ok(), await ledger.text()).toBeTruthy();
+    expect(JSON.stringify(await ledger.json())).toContain('E2E_INTERRUPT_RESUME');
   });
 
   return { threadId, connectionId };
@@ -379,6 +459,16 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       await hub.getByLabel('Conversation title', { exact: true }).fill('UI named thread');
       await hub.getByRole('button', { name: 'Create', exact: true }).click();
       await expect(hub.getByText('UI named thread', { exact: true })).toHaveCount(2);
+
+      const namedComposer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
+      await namedComposer.fill('/goal UI named durable goal');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(hub.getByLabel('Command result', { exact: true })).toContainText('UI named durable goal');
+      await expect(hub.getByLabel('Command result', { exact: true })).toContainText(
+        'Started a new Run with durable Goal revision 1',
+      );
+      await expect(hub.getByText('OK', { exact: true }).last()).toBeVisible({ timeout: 30_000 });
+
       const conversationSearch = hub.getByPlaceholder('Search conversations', { exact: true });
       await conversationSearch.fill('UI named');
       await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toHaveCount(0);
@@ -386,6 +476,45 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       await conversationSearch.fill('');
       await hub.getByRole('button').filter({ hasText: 'Preset E2E thread' }).click();
       await expect(hub.getByText('Preset E2E thread', { exact: true })).toHaveCount(2);
+    });
+
+    await step('conversation slash commands project durable Run state and reject unknown prompts', async () => {
+      const commandComposer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
+      const commandResult = hub.getByLabel('Command result', { exact: true });
+
+      await commandComposer.fill('/help');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(commandResult).toContainText('/goal [text]');
+      await expect(commandResult).toContainText('//');
+
+      await commandComposer.fill('/goal');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(commandResult).toContainText('Confirm the Developer Agent preset goal remains durable.');
+      await expect(commandResult).toContainText('Goal revision 1');
+
+      await commandComposer.fill('/plan');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(commandResult).toContainText(/Plan revision \d+/);
+
+      await commandComposer.fill('/queue');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(commandResult).toContainText('0 pending');
+      await expect(commandResult).toContainText('No pending user inputs.');
+
+      const unknown = '/definitely-not-an-agent-command';
+      await commandComposer.fill(unknown);
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(commandResult).toContainText(`Unknown command: ${unknown}`);
+
+      const ledger = await context.request.get(`/api/v1/apps/nexus.developer/threads/${threadId}/entries?limit=50`);
+      expect(ledger.ok(), await ledger.text()).toBeTruthy();
+      expect(JSON.stringify(await ledger.json())).not.toContain(unknown);
+
+      const escapedSlash = '/' + '/literal slash prompt';
+      await commandComposer.fill(escapedSlash);
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(hub.getByText('/literal slash prompt', { exact: true })).toBeVisible();
+      await expect(hub.getByText('OK', { exact: true })).toHaveCount(2, { timeout: 30_000 });
     });
 
     const modelSelect = hub.getByLabel('Run model', { exact: true });
@@ -414,7 +543,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     await expect(
       hub.getByText('Confirm the Agent composer can start the next Run from the current thread.', { exact: true }),
     ).toBeVisible();
-    await expect(hub.getByText('OK', { exact: true })).toHaveCount(2, { timeout: 30_000 });
+    await expect(hub.getByText('OK', { exact: true })).toHaveCount(3, { timeout: 30_000 });
     const runsResponse = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
     expect(runsResponse.ok(), await runsResponse.text()).toBeTruthy();
     const runPage = (await runsResponse.json()) as Envelope<{ items: RunView[] }>;
@@ -444,14 +573,29 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     });
 
     await step('Run history can open and delete a terminal historical Run', async () => {
+      const beforeDeleteResponse = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
+      expect(beforeDeleteResponse.ok(), await beforeDeleteResponse.text()).toBeTruthy();
+      const beforeDelete = (await beforeDeleteResponse.json()) as Envelope<{ items: RunView[] }>;
       const history = hub.getByLabel('Run history', { exact: true });
       await history.selectOption({ index: 1 });
+      const deletedRunId = await history.inputValue();
+      expect(beforeDelete.data.items.some((item) => item.id === deletedRunId)).toBeTruthy();
+
       const historicalDrawer = hub.getByLabel('Run details', { exact: true });
       await expect(historicalDrawer).toBeVisible();
       await historicalDrawer.getByRole('button', { name: 'Delete run', exact: true }).click();
       await historicalDrawer.getByRole('button', { name: 'Confirm delete', exact: true }).click();
       await expect(historicalDrawer).toHaveCount(0);
-      await expect(hub.getByLabel('Run history', { exact: true })).toHaveCount(0);
+
+      await expect
+        .poll(async () => {
+          const response = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
+          expect(response.ok(), await response.text()).toBeTruthy();
+          const page = (await response.json()) as Envelope<{ items: RunView[] }>;
+          return page.data.items.map((item) => item.id);
+        })
+        .not.toContain(deletedRunId);
+      await expect(hub.locator(`select[aria-label="Run history"] option[value="${deletedRunId}"]`)).toHaveCount(0);
     });
 
     await step('pending mutation approval remains actionable when the TaskRail is hidden', async () => {
@@ -474,6 +618,18 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       const approvalRun = approvalRunPage.data.items.find((item) => item.status === 'awaiting_approval');
       expect(approvalRun).toBeDefined();
       expect(approvalRun!.definition.connectionIds).toEqual([connectionId]);
+
+      await restoredComposer.fill('/goal Keep the pending approval and use this updated goal afterward.');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(hub.getByLabel('Command result', { exact: true })).toContainText('Goal updated at revision');
+      await expect(hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true })).toBeVisible();
+
+      await restoredComposer.fill('/interrupt This must not supersede the pending approval.');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(hub.getByLabel('Command result', { exact: true })).toContainText(
+        '/interrupt only works while the Root model is actively streaming.',
+      );
+      await expect(hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true })).toBeVisible();
 
       await page.setViewportSize({ width: 1000, height: 800 });
       await hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true }).click();

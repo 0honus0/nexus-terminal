@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   decodePluginJson,
@@ -36,6 +37,7 @@ const pluginVersion = process.env.NEXUS_PLUGIN_VERSION?.trim() ?? '';
 const sdkVersion = process.env.NEXUS_PLUGIN_SDK_VERSION?.trim() ?? '';
 const protocolVersion = Number(process.env.NEXUS_PLUGIN_PROTOCOL_VERSION);
 const entry = process.env.NEXUS_PLUGIN_RUNNER_ENTRY?.trim() ?? '';
+const sourceRoot = process.env.NEXUS_PLUGIN_SOURCE_ROOT?.trim() ?? '';
 if (!/^[A-Za-z0-9_.-]{1,128}$/.test(workspaceId) || !Number.isSafeInteger(generation) || generation < 1) {
   throw new Error('PLUGIN_RUNNER_WORKSPACE_INVALID');
 }
@@ -53,6 +55,9 @@ if (
 }
 if (!/^runner\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:m?js|cjs)$/.test(entry) || entry.includes('..')) {
   throw new Error('PLUGIN_RUNNER_ENTRY_INVALID');
+}
+if (!sourceRoot || !path.isAbsolute(sourceRoot) || sourceRoot.includes('\0')) {
+  throw new Error('PLUGIN_RUNNER_SOURCE_INVALID');
 }
 
 console.log = (...args: unknown[]) => console.error('[runner-plugin]', ...args);
@@ -169,7 +174,11 @@ const sdk: RunnerPluginSdkV1 = Object.freeze({
 });
 
 const startRuntime = async (): Promise<void> => {
-  const imported = await import(pathToFileURL(`/plugin/${entry}`).href);
+  const entryPath = path.resolve(sourceRoot, entry);
+  if (entryPath !== sourceRoot && !entryPath.startsWith(`${sourceRoot}${path.sep}`)) {
+    throw new Error('PLUGIN_RUNNER_ENTRY_INVALID');
+  }
+  const imported = await import(pathToFileURL(entryPath).href);
   const candidate = imported.default && typeof imported.default === 'object' ? imported.default : imported;
   const plugin = candidate as RunnerPluginModuleV1;
   const activationContext = Object.freeze({

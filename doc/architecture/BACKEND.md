@@ -328,7 +328,7 @@ A practical ownership guide for locating code:
 
 ## Agent App Platform and AI applications
 
-Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,workspace-runtime,runtime,apps/operations}`, concrete adapters under `infrastructure/agent`, HTTP boundaries under `interfaces/http/agent`, the Browser Agent event boundary under `interfaces/websocket/agent-protocol.session.ts` (`/ws/agent`), and composition under `bootstrap/agent`. The plugin host, shared AI capabilities and built-in Operations App are defined in [Agent Architecture](../agent.md).
+Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,workspace-runtime,runtime,apps/operations}`, concrete adapters under `infrastructure/agent`, HTTP boundaries under `interfaces/http/agent`, the Browser Agent event boundary under `interfaces/websocket/agent-protocol.session.ts` (`/ws/agent`), and composition under `bootstrap/agent`. The plugin host, shared AI capabilities and built-in Operations App are defined in [Agent Architecture](../AGENT.md).
 
 Target composition:
 
@@ -361,7 +361,7 @@ The built-in Operations contribution lives at `modules/agent/apps/operations/`. 
 
 ### Built-in vs installable Apps
 
-Built-in Apps are trusted compile-time contributions registered by Bootstrap. Installable packages follow the Agent Plugin contract: package staging/signature/file-list verification occurs before activation; Backend target code runs through the Backend-owned process sandbox, Runner target code runs only inside an explicitly selected Environment sandbox, and Frontend target assets are served from a separate origin into a sandboxed iframe. Plugin code does not create its own Docker container and never receives raw database, Workspace, Docker socket or other Host object.
+Built-in Apps are trusted compile-time contributions registered by Bootstrap. Installable packages follow the Agent Plugin contract: package staging/signature/file-list verification occurs before activation; Backend target code runs through the Backend-owned process sandbox, Runner target code runs as a generation-scoped native Runner child process under the single-user trust model, and Frontend target assets are served from a separate origin into a sandboxed iframe. Plugin code does not create its own Docker container and never receives raw database, Workspace, Docker socket or other Host object.
 
 Plugin package bytes, immutable installed versions, AppStorage and runtime workspace/Artifact data remain separate lifecycle owners. Upgrade is stage→validate→quiesce/snapshot→activate/health; migration failure may restore package/version state but cannot claim rollback of already executed remote side effects.
 

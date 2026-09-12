@@ -200,6 +200,7 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         ledgerThrough: currentRunThrough,
         planVersion: run.version,
         plan: persistedPlan(run.plan_json),
+        goal: { text: run.goal_text, revision: run.goal_revision, updatedAt: run.goal_updated_at },
         completedStepIds: completed.map((row) => row.id),
         evidenceRefs: evidence.map((row) => row.artifact_id),
         modelConfigurationVersion: definition.model.configurationVersion,

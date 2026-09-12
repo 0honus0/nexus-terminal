@@ -14,6 +14,7 @@ interface InstallMarker {
 }
 
 const markerName = '.nexus-install.json';
+const canonicalRoot = '/opt/nexus/packs';
 
 const removeManagedTree = (target: string): void => {
   if (!fs.existsSync(target)) return;
@@ -44,6 +45,34 @@ export class ToolchainStore {
       safeSegment(ref.versionId),
       safeSegment(ref.contentDigest.replace(/^sha256:/, '')),
     );
+  }
+
+  canonicalPath(ref: Pick<ToolchainPackRef, 'familyId' | 'versionId'>): string {
+    return path.join(canonicalRoot, safeSegment(ref.familyId), safeSegment(ref.versionId));
+  }
+
+  activate(ref: ToolchainPackRef): void {
+    if (!this.installed(ref)) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
+    const target = this.path(ref);
+    const canonical = this.canonicalPath(ref);
+    fs.mkdirSync(path.dirname(canonical), { recursive: true, mode: 0o755 });
+    const temporary = `${canonical}.nexus-${process.pid}-${Date.now()}`;
+    fs.rmSync(temporary, { force: true, recursive: true });
+    fs.symlinkSync(target, temporary, 'dir');
+    try {
+      const stat = fs.lstatSync(canonical);
+      if (stat.isDirectory() && !stat.isSymbolicLink()) {
+        fs.rmSync(temporary, { force: true });
+        throw new Error('WORKSPACE_TOOLCHAIN_CANONICAL_PATH_CONFLICT');
+      }
+      fs.rmSync(canonical, { force: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        fs.rmSync(temporary, { force: true });
+        throw error;
+      }
+    }
+    fs.renameSync(temporary, canonical);
   }
 
   stagingPath(commandId: string, ref: ToolchainPackRef): string {
@@ -99,6 +128,15 @@ export class ToolchainStore {
   }
 
   remove(ref: ToolchainPackRef): void {
-    removeManagedTree(this.path(ref));
+    const target = this.path(ref);
+    const canonical = this.canonicalPath(ref);
+    try {
+      if (fs.lstatSync(canonical).isSymbolicLink() && fs.realpathSync(canonical) === fs.realpathSync(target)) {
+        fs.rmSync(canonical, { force: true });
+      }
+    } catch {
+      // canonical link may already be absent or broken.
+    }
+    removeManagedTree(target);
   }
 }

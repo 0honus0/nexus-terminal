@@ -6,6 +6,7 @@ import type {
   AtomicCreateRun,
   AtomicDeleteRun,
   AtomicIncreaseRunBudget,
+  AtomicSetRunGoal,
   BeginModelStepCommand,
   BeginModelStepResult,
   BeginSubagentModelStepCommand,
@@ -23,6 +24,7 @@ import type {
   DeleteRunCommitResult,
   DurableEventInput,
   IncreaseRunBudgetCommitResult,
+  SetRunGoalCommitResult,
   InterruptUnexpectedRootExecutionCommand,
   PauseModelStepForBudgetCommand,
   PauseRuntimeForBudgetCommand,
@@ -68,12 +70,13 @@ import {
   validateEvents,
 } from './state-commit/transaction-primitives';
 import {
-  appendInputTransition,
   cancelRunTransition,
   createRunTransition,
   deleteRunTransition,
   increaseRunBudgetTransition,
 } from './state-commit/run-transitions';
+import { setRunGoalTransition } from './state-commit/goal-transitions';
+import { appendInputTransition } from './state-commit/input-transitions';
 import {
   beginSubagentModelStepTransition,
   beginSubagentToolTransition,
@@ -102,6 +105,10 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
 
   async appendInput(command: AtomicAppendInput): Promise<AppendInputCommitResult> {
     return this.db.transaction((tx) => appendInputTransition(tx, command));
+  }
+
+  async setRunGoal(command: AtomicSetRunGoal): Promise<SetRunGoalCommitResult> {
+    return this.db.transaction((tx) => setRunGoalTransition(tx, command));
   }
 
   async cancelRun(command: AtomicCancelRun): Promise<CancelRunCommitResult> {

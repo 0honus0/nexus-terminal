@@ -41,9 +41,11 @@ services:
       AGENT_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
       AGENT_PLUGIN_FRONTEND_ORIGIN: ${NEXUS_PLUGIN_FRONTEND_ORIGIN:-http://localhost:18112}
       AGENT_PLUGIN_FRONTEND_PORT: 3002
+      # 默认连接宿主机 Runner；若启用下方注释掉的 agent-runner 服务，
+      # 请在 .env 中改为 NEXUS_AGENT_RUNNER_URL=http://agent-runner:8790。
+      # Nexus 当前是单用户应用，Workspace 是工作目录/运行环境边界，不是多租户安全沙箱。
       AGENT_RUNNER_URL: ${NEXUS_AGENT_RUNNER_URL:-http://host.docker.internal:8790}
       AGENT_RUNNER_TOKEN: ${NEXUS_AGENT_RUNNER_TOKEN:-}
-      AGENT_RUNNER_DEPLOYMENT_ID: ${NEXUS_AGENT_DEPLOYMENT_ID:-nexus-local}
     extra_hosts:
       - 'host.docker.internal:host-gateway'
     volumes:
@@ -51,6 +53,9 @@ services:
     depends_on:
       guacd:
         condition: service_started
+      # 启用下方 agent-runner 服务后，再取消这两行注释，让 Backend 等待 Runner runtime 可用。
+      # agent-runner:
+      #   condition: service_healthy
     healthcheck:
       test: ['CMD-SHELL', 'wget -q -O /dev/null http://127.0.0.1:$${PORT:-3001}/api/v1/status']
       interval: 10s
@@ -64,6 +69,35 @@ services:
     restart: unless-stopped
     networks:
       - nexus-terminal-network
+
+  # Agent Runner 默认不随 Compose 启动，保持现有部署兼容；需要时可直接启用下面的独立容器。
+  # Nexus 当前是单用户应用，因此 Runner 只负责多个持久 Workspace、共享 Tool Pack 和运行环境管理，
+  # Workspace 之间只有工作目录与运行环境的逻辑隔离，不创建 per-Workspace namespace 安全沙箱。
+  #
+  # 启用方法：
+  # 1. 在 .env 中设置至少 32 字符的 NEXUS_AGENT_RUNNER_TOKEN；
+  # 2. 将 NEXUS_AGENT_RUNNER_URL 改为 http://agent-runner:8790；
+  # 3. 取消下面 agent-runner 整段注释；
+  # 4. 取消 backend.depends_on 中 agent-runner 的两行注释。
+  #
+  # 该容器不需要 privileged、SYS_ADMIN、unconfined seccomp/AppArmor、Docker socket 或 nested Docker。
+  # 如果使用容器部署，容器本身就是 Runner 进程的操作系统边界；不同 Workspace 之间只有逻辑隔离，
+  # 会共享同一个 Runner 容器/宿主的内核、网络和已安装 Tool Pack。
+  # agent-runner:
+  #   image: ${NEXUS_AGENT_RUNNER_IMAGE_REPOSITORY:-ghcr.io/0honus0/nexus-agent-runner}:${NEXUS_AGENT_RUNNER_IMAGE_TAG:-latest}
+  #   container_name: nexus-agent-runner
+  #   restart: unless-stopped
+  #   networks:
+  #     - nexus-terminal-network
+  #   env_file:
+  #     - path: .env
+  #       required: false
+  #   environment:
+  #     NEXUS_AGENT_RUNNER_TOKEN: ${NEXUS_AGENT_RUNNER_TOKEN:-}
+  #     NEXUS_AGENT_DEPLOYMENT_ID: ${NEXUS_AGENT_DEPLOYMENT_ID:-nexus-local}
+  #   volumes:
+  #     - ${NEXUS_AGENT_RUNNER_DATA_DIR:-./agent-runner-data}:/var/lib/nexus-agent-runner
+  #     - ./data/agent/plugins:/var/lib/nexus-agent-runner/plugin-source:ro
 
 networks:
   nexus-terminal-network:

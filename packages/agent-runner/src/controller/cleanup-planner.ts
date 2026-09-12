@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { SandboxEngine } from './sandbox-engine';
+import type { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 import type { RunnerJournal } from './journal';
 import { runnerLog } from '../logging';
 
@@ -8,7 +8,7 @@ export class CleanupPlanner {
   constructor(
     private readonly root: string,
     private readonly journal: RunnerJournal,
-    private readonly sandboxEngine: SandboxEngine,
+    private readonly runtimeEngine: WorkspaceRuntimeEngine,
   ) {}
   async runtimeCleanup(
     userId: number,
@@ -44,7 +44,7 @@ export class CleanupPlanner {
         continue;
       }
       try {
-        if (workspace.sandboxId) await this.sandboxEngine.remove(workspace.sandboxId);
+        await this.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
         fs.rmSync(path.join(this.root, 'runtime', 'generations', workspace.workspaceId), {
           recursive: true,
           force: true,

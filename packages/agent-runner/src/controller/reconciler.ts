@@ -1,4 +1,4 @@
-import type { SandboxEngine } from './sandbox-engine';
+import type { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 import type { RunnerJournal } from './journal';
 import type { PluginRunnerRuntime } from './plugin-runner-runtime';
 import { runnerLog } from '../logging';
@@ -6,7 +6,7 @@ import { runnerLog } from '../logging';
 export class Reconciler {
   constructor(
     private readonly journal: RunnerJournal,
-    private readonly sandboxEngine: SandboxEngine,
+    private readonly runtimeEngine: WorkspaceRuntimeEngine,
     private readonly pluginRunner: PluginRunnerRuntime,
   ) {}
   async reconcile(): Promise<void> {
@@ -23,7 +23,7 @@ export class Reconciler {
     });
     for (const workspace of workspaces) {
       try {
-        const reconciled = await this.sandboxEngine.reconcile(workspace);
+        const reconciled = await this.runtimeEngine.reconcile(workspace);
         this.journal.saveWorkspace(reconciled);
         if (reconciled.status === 'running') await this.pluginRunner.activateWorkspace(reconciled);
       } catch (error) {

@@ -602,6 +602,17 @@ const definedMigrations: Migration[] = [
     ].join('\n'),
     check: async (db) => !(await columnExists(db, 'agent_plugin_stages', 'source_kind')),
   },
+
+  {
+    id: 54,
+    name: 'Add durable Agent Run goal projection',
+    sql: [
+      `ALTER TABLE agent_runs ADD COLUMN goal_text TEXT;`,
+      `ALTER TABLE agent_runs ADD COLUMN goal_revision INTEGER NOT NULL DEFAULT 0 CHECK(goal_revision >= 0);`,
+      `ALTER TABLE agent_runs ADD COLUMN goal_updated_at INTEGER;`,
+    ].join('\n'),
+    check: async (db) => !(await columnExists(db, 'agent_runs', 'goal_text')),
+  },
 ];
 
 /**

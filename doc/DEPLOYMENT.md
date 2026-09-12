@@ -21,34 +21,58 @@ docker compose up -d
 
 默认对外 HTTP 端口为 `18111`，可通过 `.env` 中的 `NEXUS_HTTP_PORT` 修改。
 
-### 可选 Agent Runner host service
+### 可选 Agent Runner
 
-Agent 的 Workspace Dev Environment 使用宿主 `nexus-agent-runner` + bubblewrap，不在 Compose 中启动高权限 Runner 容器。Ubuntu/Debian host 首次启用前，从源码 checkout 执行：
+Agent Workspace Runtime 使用独立的 `nexus-agent-runner` 执行平面。Nexus 当前是**单用户应用**，因此 Runner 的职责是管理多个持久 Workspace、共享 Tool Pack 与 Workspace generation，而不是在同一用户内部再构造一层安全沙箱。
+
+Workspace 是工作目录与运行环境边界：不同 Workspace 有独立项目文件；同一个 Workspace 可以选择不同的 Node/Python/Go Tool Pack 组合并生成新的 generation。Workspace 之间**不承诺** Linux namespace、network namespace、cgroup 或文件系统安全隔离。使用宿主 Runner 时，Runner 进程与其 Workspace 命令共享宿主系统安全上下文；使用容器 Runner 时，Docker 容器本身是 Runner 进程的操作系统边界。
+
+Ubuntu/Debian host 首次启用前，从源码 checkout 执行：
 
 ```bash
 ./scripts/agent-runner/prepare-ubuntu-host.sh
 ```
 
-该脚本从 bubblewrap 上游 release 安装 Nexus 当前固定的最新稳定版 `0.12.0`（release archive SHA-256 校验），保留 versioned release copy 并将受检二进制安装到稳定 `/usr/local/bin/bwrap`，不覆盖系统 `/usr/bin/bwrap`；随后加载仅匹配该稳定 Nexus-owned binary 的 path-scoped AppArmor profile，并执行真实 user/network namespace probe。版本/SHA/最新稳定状态由 `pnpm run check:sandbox-prerequisites --verify-latest` 与构建脚本统一检查，Runtime 代码只做能力可用性检查。脚本不会把 Runner 设为 privileged、不会关闭 AppArmor，也不会修改 `kernel.apparmor_restrict_unprivileged_userns`。如果宿主明确禁用了 unprivileged user namespaces 或缺少受支持的 profile，脚本 fail closed。
+该脚本只安装与 Toolchain Catalog 一致、SHA-256 固定的 `mise 2026.9.5`、Tool Pack 解包工具以及 Workspace Terminal 使用的系统 `script(1)` / `stty`，不编译或安装 Nexus 自定义 native helper。Tool Pack 仍执行版本校验与 Nexus canonical tree digest 校验，并通过 `/opt/nexus/packs/<family>/<version>` 暴露精确版本；多个 Workspace 复用同一份不可变 Tool Pack。
 
-Runner 默认监听 `127.0.0.1:8790`。当 Backend 运行在 Compose 中时，应把 Runner 绑定到仅 Docker host-gateway 可达的宿主接口，并在 `.env` 配置相同的 `NEXUS_AGENT_RUNNER_TOKEN` / `NEXUS_AGENT_DEPLOYMENT_ID`；Compose 默认通过 `host.docker.internal:8790` 访问。不要把 Runner Controller 直接暴露到公网。
+Runner 默认监听 `127.0.0.1:8790`。当 Backend 运行在 Compose 中时，应把宿主 Runner 绑定到 Docker host-gateway 可达的宿主地址，并在 `.env` 设置同一个 `NEXUS_AGENT_RUNNER_TOKEN`；Compose 默认通过 `http://host.docker.internal:8790` 访问。Controller token 至少 32 字符，推荐使用 `openssl rand -hex 32` 生成。不要把 Runner Controller 直接暴露到公网。
+
+仓库同时提供独立 Runner 镜像发布流程：
+
+```text
+ghcr.io/0honus0/nexus-agent-runner:latest
+ghcr.io/0honus0/nexus-agent-runner:dev
+```
+
+`docker-compose.yml` 已提供**默认整段注释掉**的 `agent-runner` service。需要容器模式时，取消该段注释，并在 `.env` 把 `NEXUS_AGENT_RUNNER_URL` 改为 `http://agent-runner:8790`，同时取消 Backend 对 Runner 的 `depends_on` 注释。独立镜像包含固定版本 `mise`、Tool Pack 解包工具与 `script/stty`，HEALTHCHECK 调用 `/v1/availability` 验证 `native + logical` Workspace Runtime。
+
+容器 Runner 使用 Docker 默认 capability/seccomp/AppArmor 即可；Compose 示例**不需要** `privileged`、`SYS_ADMIN`、`seccomp=unconfined`、`apparmor=unconfined`、Docker socket 或 nested Docker。这里不要把“容器边界”和“Workspace 边界”混为一谈：容器可以隔离整个 Runner 服务，但容器内多个 Workspace 仍属于同一个 Nexus 用户并共享 Runner 进程权限、内核网络与 Tool Store。
+
+Runner 状态、Tool Pack、缓存和 Workspace runtime 默认持久化到 `NEXUS_AGENT_RUNNER_DATA_DIR`（默认 `./agent-runner-data`）。Runner Plugin 源码只读挂载 Backend 的 `./data/agent/plugins`。Workspace Profile 仍可以保存产品层的 limits/network 配置，但 native Runner 不接收这些字段，也不把它们描述成 per-Workspace cgroup、tmpfs 或 network namespace 强制隔离。
+
+Workspace local Terminal 由 Runner 通过系统 `script(1)` 创建 PTY，Backend/Frontend 继续使用 terminal session attach/detach/bounded replay；resize 写入真实 PTY size，显式 signal 发送到当前 PTY foreground process group。Workspace job、ACP 与 Runner Plugin 作为独立 Runner-managed process group 运行，timeout/stop/restart/delete 会清理整个进程组，避免留下后台孤儿进程。
+
+当前 Runner 镜像可构建 `linux/amd64` 和 `linux/arm64`；Catalog 的 `base-tools` 已支持两种架构，但当前 Node/Python/Go 多版本 Tool Pack 仍只发布 x64，因此 arm64 上这些额外语言版本会按 Catalog 正确显示为 unavailable，而不会错误回退。
 
 ## 容器与镜像结构
 
-Frontend 与 Backend 共用同一个镜像。发布仓库提供两个滚动通道：
+Frontend 与 Backend 共用同一个主镜像；Agent Runner 使用独立镜像。两者由同一个发布 workflow 生成完全一致的 channel/version tag：
 
 ```text
-ghcr.io/0honus0/nexus-terminal:latest  # 稳定 / Release
-ghcr.io/0honus0/nexus-terminal:dev     # 最近一次手动 Dev 发布
+ghcr.io/0honus0/nexus-terminal:latest       # 稳定 / Release
+ghcr.io/0honus0/nexus-terminal:dev          # 最近一次手动 Dev 发布
+ghcr.io/0honus0/nexus-agent-runner:latest  # 对应稳定 Runner
+ghcr.io/0honus0/nexus-agent-runner:dev     # 对应 Dev Runner
 ```
 
 `docker-compose.yml` / `.env.example` 默认仍使用 `:latest`。需要跟随开发镜像时，将 `.env` 中 `NEXUS_IMAGE_TAG=dev` 后再执行 `docker compose pull && docker compose up -d`。
 
-Compose 以三个服务运行：
+Compose 默认以三个服务运行：
 
 - `frontend`：Web 静态资源与反向代理入口。
 - `backend`：认证、SSH/SFTP、设置、审计以及内置 RDP/VNC Guacamole runtime。
 - `guacd`：Guacamole 协议代理。
+- `agent-runner`：可选，默认整段注释；启用后使用独立 `nexus-agent-runner` 镜像。
 
 `frontend` 与 `backend` 使用同一 Nexus 镜像，镜像层由 Docker 复用；`guacd` 使用独立上游镜像。
 

@@ -595,6 +595,18 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.post(
+    '/ai/providers/:providerId/discover-models',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      agentData(
+        request,
+        response,
+        await dependencies.providers.discoverModels(agentUserId(request), pathParam(request.params.providerId)),
+      );
+    }),
+  );
+
+  router.post(
     '/ai/providers/:providerId/test',
     mutationSecurity,
     agentRoute(async (request, response) => {

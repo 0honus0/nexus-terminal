@@ -277,10 +277,30 @@ for _ in {1..60}; do
 done
 [[ "$cdp_browser_ready" -eq 1 ]] || { echo 'Direct CDP Chromium did not start.' >&2; exit 1; }
 
-socat \
-  TCP-LISTEN:"$cdp_browser_proxy_port",bind=0.0.0.0,reuseaddr,fork \
-  TCP:127.0.0.1:"$cdp_browser_port" \
-  >"$cdp_browser_proxy_log" 2>&1 &
+cdp_proxy_script="$workspace/direct-cdp-proxy.cjs"
+cat > "$cdp_proxy_script" <<'PROXY_NODE'
+const net = require('node:net');
+const listenPort = Number(process.env.NEXUS_CDP_PROXY_PORT);
+const targetPort = Number(process.env.NEXUS_CDP_TARGET_PORT);
+const server = net.createServer((client) => {
+  const upstream = net.connect({ host: '127.0.0.1', port: targetPort });
+  client.pipe(upstream);
+  upstream.pipe(client);
+  const close = () => {
+    client.destroy();
+    upstream.destroy();
+  };
+  client.on('error', close);
+  upstream.on('error', close);
+});
+const shutdown = () => server.close(() => process.exit(0));
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+server.listen(listenPort, '0.0.0.0');
+PROXY_NODE
+NEXUS_CDP_PROXY_PORT="$cdp_browser_proxy_port" \
+NEXUS_CDP_TARGET_PORT="$cdp_browser_port" \
+node "$cdp_proxy_script" >"$cdp_browser_proxy_log" 2>&1 &
 cdp_browser_proxy_pid=$!
 cdp_browser_proxy_ready=0
 for _ in {1..40}; do
@@ -317,10 +337,8 @@ browser_probe_pid=$!
 sleep 0.2
 kill -0 "$browser_probe_pid" 2>/dev/null || { echo 'Browser CDP probe did not start.' >&2; exit 1; }
 
-# The canonical Linux Agent Runner is a dedicated host service. bubblewrap therefore
-# constructs namespaces/mounts outside Docker's container AppArmor boundary instead of
-# granting broad mount privileges to a long-lived Runner container. The Runner still has
-# no Docker socket/dockerd/nested Docker, and sandbox availability remains fail closed.
+# Host Runner 与独立容器 Runner 使用同一套单用户 native Workspace Runtime。
+# Workspace 是持久工作目录与运行环境选择边界，不创建额外 namespace/sandbox。
 NEXUS_AGENT_RUNNER_HOST=0.0.0.0 \
 PORT="$runner_port" \
 NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
@@ -328,13 +346,12 @@ NEXUS_AGENT_DEPLOYMENT_ID="nexus-e2e-$suffix" \
 NEXUS_AGENT_RUNNER_ROOT="$runner_root" \
 NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
 NEXUS_AGENT_PLUGIN_SOURCE_ROOT="$data_dir/agent/plugins" \
-NEXUS_AGENT_SANDBOX_DIAGNOSTICS=1 \
 node "$repo_root/packages/agent-runner/dist/index.js" >"$runner_log" 2>&1 &
 runner_pid=$!
 
 runner_listener_ready=0
 for _ in {1..30}; do
-  if curl -fsS -H "Authorization: Bearer $runner_token" -H "X-Nexus-Agent-Protocol: 2026-09-11" "http://127.0.0.1:${runner_port}/v1/availability" >/dev/null; then
+  if curl -fsS -H "Authorization: Bearer $runner_token" -H "X-Nexus-Agent-Protocol: 2026-09-12" "http://127.0.0.1:${runner_port}/v1/availability" >/dev/null; then
     runner_listener_ready=1
     break
   fi
@@ -385,11 +402,11 @@ for _ in {1..60}; do
   if compose exec -T backend node - <<'NODE'
 const token = process.env.AGENT_RUNNER_TOKEN;
 const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
-  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-11' },
+  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-12' },
 }).catch(() => null);
 if (!response?.ok) process.exit(1);
 const body = await response.json();
-if (body.available !== true || body.state !== 'ready' || body.sandbox?.available !== true) process.exit(1);
+if (body.available !== true || body.state !== 'ready' || body.runtime?.mode !== 'native' || body.runtime?.isolation !== 'logical') process.exit(1);
 NODE
   then
     runner_ready=1
@@ -398,11 +415,11 @@ NODE
   sleep 1
 done
 if [[ "$runner_ready" -ne 1 ]]; then
-  echo "Agent Runner did not report a usable sandbox." >&2
+  echo "Agent Runner did not report a usable native runtime." >&2
   compose exec -T backend node - <<'NODE' || true
 const token = process.env.AGENT_RUNNER_TOKEN;
 const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
-  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-11' },
+  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-12' },
 }).catch(() => null);
 if (!response) {
   console.error('runner availability: unreachable');
@@ -430,16 +447,16 @@ host_tool_snapshot() {
 }
 host_tool_snapshot_before="$(host_tool_snapshot)"
 
-# Exercise the actual Controller -> Tool Store -> Workspace Dev Environment -> bubblewrap
-# job path, not only binary presence or HTTP health. The probe originates from Backend
+# Exercise the actual Controller -> Tool Store -> native Workspace Dev Environment -> job
+# path, not only binary presence or HTTP health. The probe originates from Backend
 # through the host-gateway path using the same shared Controller token as production.
-compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" backend node - <<'NODE'
+compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" -e NEXUS_E2E_RUNNER_DEPLOYMENT_ID="nexus-e2e-$suffix" backend node - <<'NODE'
 const { randomUUID } = await import('node:crypto');
 const { lookup } = await import('node:dns/promises');
 const baseUrl = process.env.AGENT_RUNNER_URL;
 const token = process.env.AGENT_RUNNER_TOKEN;
-const deploymentId = process.env.AGENT_RUNNER_DEPLOYMENT_ID;
-const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-09-11' };
+const deploymentId = process.env.NEXUS_E2E_RUNNER_DEPLOYMENT_ID;
+const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-09-12' };
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const get = async (path) => {
   for (let attempt = 1; attempt <= 5; attempt += 1) {
@@ -578,8 +595,6 @@ const identity = {
     { familyId: nodePack.familyId, versionId: nodePack.versionId, contentDigest: nodePack.contentDigest },
   ],
   runnerPlugins: [],
-  limits: recipe.defaultLimits,
-  network: { mode: 'none', hosts: [] },
   acpProfiles: [
     {
       id: 'smoke-acp',
@@ -615,7 +630,7 @@ const { RunnerWorkspaceTerminalAdapter } = await import(
 const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
 
 // ACP live smoke: run the exact production acp_execute tool over the exact production
-// AcpAdapter -> authenticated Runner stream -> read-only Workspace ACP process. The smoke
+// AcpAdapter -> authenticated Runner stream -> native Workspace ACP process. The smoke
 // agent requests a sensitive permission and refuses to finish unless Nexus selects reject_once.
 {
   const { AcpAdapter } = await import('/app/dist/infrastructure/agent/integrations/acp.adapter.js');
@@ -713,13 +728,21 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
     const timer = setTimeout(() => reject(new Error(`Workspace Terminal first marker timed out: ${JSON.stringify(firstOutput)}`)), 10_000);
     const off = first.onData((chunk) => {
       firstOutput += Buffer.from(chunk).toString('utf8');
-      if (!firstOutput.includes('workspace-terminal-first-ok')) return;
+      if (
+        !firstOutput.includes('workspace-terminal-size-40 120') ||
+        !firstOutput.includes('workspace-terminal-first-ok')
+      ) return;
       clearTimeout(timer);
       off();
       resolve();
     });
   });
-  first.write("export NEXUS_TERMINAL_RECONNECT=preserved; printf 'workspace-terminal-first-ok\\n'; sleep 0.2; printf 'workspace-terminal-detached-output\\n'\n");
+  first.write(
+    "for i in $(seq 1 40); do size=$(stty size); [ \"$size\" = \"40 120\" ] && break; sleep 0.05; done; " +
+    "printf 'workspace-terminal-size-%s\\n' \"$size\"; " +
+    "export NEXUS_TERMINAL_RECONNECT=preserved; printf 'workspace-terminal-first-%s\\n' ok; " +
+    "sleep 0.2; printf 'workspace-terminal-detached-%s\\n' output\n",
+  );
   await firstMarker;
   const terminalSessionId = first.sessionId;
   first.detach();
@@ -760,6 +783,57 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
   });
   second.write("printf 'workspace-terminal-reconnect-%s\\n' \"$NEXUS_TERMINAL_RECONNECT\"\n");
   await stateMarker;
+
+  // Programmatic signal must target the PTY foreground process group, not only the shell PID.
+  // This catches the native-runtime failure mode where a foreground child survives or the shell is killed instead.
+  const signalReady = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Workspace Terminal signal setup timed out: ${JSON.stringify(secondOutput)}`)), 10_000);
+    const off = second.onData((chunk) => {
+      secondOutput += Buffer.from(chunk).toString('utf8');
+      if (!secondOutput.includes('workspace-terminal-signal-ready')) return;
+      clearTimeout(timer);
+      off();
+      resolve();
+    });
+  });
+  second.write("printf 'workspace-terminal-signal-%s\\n' ready; sleep 30; printf 'workspace-terminal-signal-%s\\n' missed\n");
+  await signalReady;
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  second.signal('INT');
+  const signalDone = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Workspace Terminal foreground signal timed out: ${JSON.stringify(secondOutput)}`)), 10_000);
+    const off = second.onData((chunk) => {
+      secondOutput += Buffer.from(chunk).toString('utf8');
+      if (!secondOutput.includes('workspace-terminal-signal-ok')) return;
+      clearTimeout(timer);
+      off();
+      resolve();
+    });
+  });
+  second.write("printf 'workspace-terminal-signal-%s\\n' ok\n");
+  await signalDone;
+  if (secondOutput.includes('workspace-terminal-signal-missed')) {
+    throw new Error(`Workspace Terminal foreground process ignored SIGINT: ${JSON.stringify(secondOutput)}`);
+  }
+
+  // Closing a PTY session must also reap background/disowned descendants from that terminal session.
+  const backgroundReady = new Promise((resolve, reject) => {
+    const timer = setTimeout(() =>
+      reject(new Error(`Workspace Terminal background setup timed out: ${JSON.stringify(secondOutput)}`)), 10_000);
+    const off = second.onData((chunk) => {
+      secondOutput += Buffer.from(chunk).toString('utf8');
+      if (!secondOutput.includes('workspace-terminal-background-ready')) return;
+      clearTimeout(timer);
+      off();
+      resolve();
+    });
+  });
+  second.write(
+    "nohup sleep 300 </dev/null >/dev/null 2>&1 & " +
+    "printf '%s' \"$!\" > \"$NEXUS_WORKSPACE_ROOT/work/.terminal-background-pid\"; " +
+    "printf 'workspace-terminal-background-%s\\n' ready\n",
+  );
+  await backgroundReady;
   await second.close();
   await terminalService.closeAll();
   await terminalAdapter.closeAll();
@@ -886,7 +960,7 @@ const job = {
   argv: [
     'nexus-sh',
     '-c',
-    'printf workspace-stable > /workspace/work/.version-switch-marker; printf "%s" "$NEXUS_TOOLCHAIN_FINGERPRINT" > /workspace/deps/.toolchain-profile-marker; printf runner-sandbox-ok',
+    'terminal_pid=$(cat "$NEXUS_WORKSPACE_ROOT/work/.terminal-background-pid"); terminal_alive=1; terminal_check=0; while [ "$terminal_check" -lt 40 ]; do if ! kill -0 "$terminal_pid" 2>/dev/null; then terminal_alive=0; break; fi; terminal_state=$(awk "{print \$3}" "/proc/$terminal_pid/stat" 2>/dev/null || true); if [ "$terminal_state" = Z ]; then terminal_alive=0; break; fi; terminal_check=$((terminal_check + 1)); sleep 0.05; done; if [ "$terminal_alive" -ne 0 ]; then printf terminal-process-leaked >&2; exit 41; fi; sleep 300 & printf "%s" "$!" > "$NEXUS_WORKSPACE_ROOT/work/.background-pid"; printf workspace-stable > "$NEXUS_WORKSPACE_ROOT/work/.version-switch-marker"; printf "%s" "$NEXUS_TOOLCHAIN_FINGERPRINT" > "$NEXUS_DEPS_ROOT/.toolchain-profile-marker"; printf runner-runtime-ok',
   ],
   cwd: '/workspace',
   maxBytes: 4096,
@@ -899,8 +973,37 @@ for (let attempt = 0; attempt < 100; attempt += 1) {
   if (!['pending', 'running'].includes(result.status)) break;
   await new Promise((resolve) => setTimeout(resolve, 100));
 }
-if (result?.status !== 'succeeded' || result.result?.stdout !== 'runner-sandbox-ok' || result.result?.exitCode !== 0) {
-  throw new Error(`Runner sandbox job failed: ${JSON.stringify(result)}`);
+if (result?.status !== 'succeeded' || result.result?.stdout !== 'runner-runtime-ok' || result.result?.exitCode !== 0) {
+  throw new Error(`Runner native runtime job failed: ${JSON.stringify(result)}`);
+}
+
+// One-shot jobs must not leak daemon/background descendants after their leader exits.
+const processTreeJobId = `smoke-process-tree-${randomUUID()}`;
+await post(`/v1/workspaces/${encodeURIComponent(workspaceId)}/jobs`, {
+  ...job,
+  jobId: processTreeJobId,
+  operationHash: `v1:${'7'.repeat(64)}`,
+  issuedAt: now(),
+  deadlineAt: now() + 30,
+  nonce: randomUUID(),
+  argv: [
+    'nexus-sh',
+    '-c',
+    'pid=$(cat "$NEXUS_WORKSPACE_ROOT/work/.background-pid"); ! kill -0 "$pid" 2>/dev/null && printf workspace-process-tree-clean-ok',
+  ],
+});
+let processTreeResult;
+for (let attempt = 0; attempt < 100; attempt += 1) {
+  processTreeResult = await get(`/v1/jobs/${encodeURIComponent(processTreeJobId)}`);
+  if (!['pending', 'running'].includes(processTreeResult.status)) break;
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+if (
+  processTreeResult?.status !== 'succeeded' ||
+  processTreeResult.result?.stdout !== 'workspace-process-tree-clean-ok' ||
+  processTreeResult.result?.exitCode !== 0
+) {
+  throw new Error(`Runner Workspace job leaked a descendant process: ${JSON.stringify(processTreeResult)}`);
 }
 const remove = await submitCommand(command('delete'));
 if (remove.status !== 'succeeded') throw new Error(`Runner delete failed: ${JSON.stringify(remove)}`);
@@ -925,7 +1028,7 @@ const generationJob = {
   argv: [
     'nexus-sh',
     '-c',
-    'test "$(cat /workspace/work/.version-switch-marker)" = workspace-stable && test "$(cat /workspace/deps/.toolchain-profile-marker)" = "$NEXUS_TOOLCHAIN_FINGERPRINT" && printf workspace-generation-ok',
+    'test "$(cat "$NEXUS_WORKSPACE_ROOT/work/.version-switch-marker")" = workspace-stable && test "$(cat "$NEXUS_DEPS_ROOT/.toolchain-profile-marker")" = "$NEXUS_TOOLCHAIN_FINGERPRINT" && printf workspace-generation-ok',
   ],
 };
 await post(`/v1/workspaces/${encodeURIComponent(workspaceId)}/jobs`, generationJob);
@@ -971,8 +1074,6 @@ const makeIdentity = (workspaceId, generation, toolchain) => ({
   catalogRevision: catalog.revision,
   toolchain,
   runnerPlugins: [],
-  limits: recipe.defaultLimits,
-  network: { mode: 'none', hosts: [] },
   acpProfiles: [],
   browserTarget: null,
   retained: false,
@@ -1038,10 +1139,10 @@ await runWorkspaceJob(
     'test "$(node --version)" = v24.21.0',
     'test "$(python3 --version)" = "Python 3.14.7"',
     'test "$(go version | awk \'{print $3}\')" = go1.27.1',
-    'test ! -e /workspace/deps/.profile-marker',
-    'printf A-stable > /workspace/work/.workspace-marker',
-    'printf A-new > /workspace/deps/.profile-marker',
-    'printf "%s" "$NEXUS_TOOLCHAIN_FINGERPRINT" > /workspace/work/.new-fingerprint',
+    'test ! -e "$NEXUS_DEPS_ROOT/.profile-marker"',
+    'printf A-stable > "$NEXUS_WORKSPACE_ROOT/work/.workspace-marker"',
+    'printf A-new > "$NEXUS_DEPS_ROOT/.profile-marker"',
+    'printf "%s" "$NEXUS_TOOLCHAIN_FINGERPRINT" > "$NEXUS_WORKSPACE_ROOT/work/.new-fingerprint"',
     'printf A-new-ok',
   ].join(' && '),
   'A-new-ok',
@@ -1052,9 +1153,9 @@ await runWorkspaceJob(
     'test "$(node --version)" = v22.23.2',
     'test "$(python3 --version)" = "Python 3.13.15"',
     'test "$(go version | awk \'{print $3}\')" = go1.26.8',
-    'test ! -e /workspace/deps/.profile-marker',
-    'printf B-stable > /workspace/work/.workspace-marker',
-    'printf B-old > /workspace/deps/.profile-marker',
+    'test ! -e "$NEXUS_DEPS_ROOT/.profile-marker"',
+    'printf B-stable > "$NEXUS_WORKSPACE_ROOT/work/.workspace-marker"',
+    'printf B-old > "$NEXUS_DEPS_ROOT/.profile-marker"',
     'printf B-old-ok',
   ].join(' && '),
   'B-old-ok',
@@ -1067,13 +1168,13 @@ await requireLifecycle(aOld2, 'start');
 await runWorkspaceJob(
   aOld2,
   [
-    'test "$(cat /workspace/work/.workspace-marker)" = A-stable',
+    'test "$(cat "$NEXUS_WORKSPACE_ROOT/work/.workspace-marker")" = A-stable',
     'test "$(node --version)" = v22.23.2',
     'test "$(python3 --version)" = "Python 3.13.15"',
     'test "$(go version | awk \'{print $3}\')" = go1.26.8',
-    'test ! -e /workspace/deps/.profile-marker',
-    'test "$(cat /workspace/work/.new-fingerprint)" != "$NEXUS_TOOLCHAIN_FINGERPRINT"',
-    'printf A-old > /workspace/deps/.profile-marker',
+    'test ! -e "$NEXUS_DEPS_ROOT/.profile-marker"',
+    'test "$(cat "$NEXUS_WORKSPACE_ROOT/work/.new-fingerprint")" != "$NEXUS_TOOLCHAIN_FINGERPRINT"',
+    'printf A-old > "$NEXUS_DEPS_ROOT/.profile-marker"',
     'printf A-old-ok',
   ].join(' && '),
   'A-old-ok',
@@ -1081,8 +1182,8 @@ await runWorkspaceJob(
 await runWorkspaceJob(
   bOld1,
   [
-    'test "$(cat /workspace/work/.workspace-marker)" = B-stable',
-    'test "$(cat /workspace/deps/.profile-marker)" = B-old',
+    'test "$(cat "$NEXUS_WORKSPACE_ROOT/work/.workspace-marker")" = B-stable',
+    'test "$(cat "$NEXUS_DEPS_ROOT/.profile-marker")" = B-old',
     'test "$(node --version)" = v22.23.2',
     'test "$(python3 --version)" = "Python 3.13.15"',
     'test "$(go version | awk \'{print $3}\')" = go1.26.8',
@@ -1098,9 +1199,9 @@ await requireLifecycle(aNew3, 'start');
 await runWorkspaceJob(
   aNew3,
   [
-    'test "$(cat /workspace/work/.workspace-marker)" = A-stable',
-    'test "$(cat /workspace/deps/.profile-marker)" = A-new',
-    'test "$(cat /workspace/work/.new-fingerprint)" = "$NEXUS_TOOLCHAIN_FINGERPRINT"',
+    'test "$(cat "$NEXUS_WORKSPACE_ROOT/work/.workspace-marker")" = A-stable',
+    'test "$(cat "$NEXUS_DEPS_ROOT/.profile-marker")" = A-new',
+    'test "$(cat "$NEXUS_WORKSPACE_ROOT/work/.new-fingerprint")" = "$NEXUS_TOOLCHAIN_FINGERPRINT"',
     'test "$(node --version)" = v24.21.0',
     'test "$(python3 --version)" = "Python 3.14.7"',
     'test "$(go version | awk \'{print $3}\')" = go1.27.1',
@@ -1166,7 +1267,7 @@ if (cleanupBCommand.status !== 'succeeded' || cleanupBCommand.result?.deleted?.[
 }
 
 console.log(
-  'agent runner: sandbox job + ACP stream + SSH/PTTY terminal + Browser tunnel ok; stable workspace generation ok; multi-version node/python/go switch isolated; runtime cleanup scoped',
+  'agent runner: native job + ACP stream + direct PTY terminal + Browser tunnel ok; stable workspace generation ok; multi-version node/python/go runtime profiles reusable; runtime cleanup scoped',
 );
 NODE
 

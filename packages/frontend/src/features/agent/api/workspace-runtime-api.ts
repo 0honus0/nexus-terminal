@@ -9,7 +9,7 @@ export interface WorkspaceRuntimeAvailability {
   reason: string;
   deploymentId: string | null;
   controllerVersion: string | null;
-  sandbox: { available: boolean; reason: string | null };
+  runtime: { available: boolean; reason: string | null; mode: 'native'; isolation: 'logical' };
   capabilities: { egressAllowlist: boolean };
 }
 
@@ -94,7 +94,6 @@ export interface WorkspaceRuntimeStorageView {
   cacheBytes: number;
   runtimeBytes: number;
   quarantineBytes: number;
-  sandboxOverheadBytes: number;
   reclaimableBytes: number;
   byPack: Array<{ familyId: string; versionId: string; bytes: number; inUse: boolean }>;
   byWorkspace: Array<{ workspaceId: string; runtimeBytes: number; status: string }>;
@@ -438,7 +437,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
       (
         await httpClient.post<AgentEnvelope<WorkspaceRuntimeCommandView>>(
           `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspace.id)}/actions`,
-          agentRuntimeRequest({ action, expectedVersion: workspace.version, parameters: {} }),
+          agentRuntimeRequest({ action, expectedVersion: workspace.version }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,

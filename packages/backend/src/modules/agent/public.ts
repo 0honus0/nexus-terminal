@@ -42,7 +42,7 @@ import type {
 import type { ContextPlan, ContextRequest } from './ai/context.types';
 import type { LanguageModelPort } from './ai/language-model.port';
 import type { IntegrationKind, IntegrationRefreshView, IntegrationView } from './ai/integrations.types';
-import type { ProviderTestResult, ProviderView } from './ai/model.types';
+import type { DiscoveredProviderModel, ProviderTestResult, ProviderView } from './ai/model.types';
 import type { MemoryImportConfirmation, MemoryStatus, MemoryView } from './ai/memory.repository.port';
 import type { ApprovalView } from './runtime/approvals/approval.repository.port';
 import type { CheckpointView } from './runtime/recovery/checkpoint.repository.port';
@@ -52,6 +52,7 @@ import type { RunPage } from './runtime/runs/run.repository.port';
 import type {
   CreateRunCommand,
   HostEvent,
+  PendingRunInputPage,
   RunBudgetIncrease,
   RunEvent,
   RunSnapshot,
@@ -157,6 +158,7 @@ export interface AgentProviderFacade {
   create(userId: number, input: unknown): Promise<ProviderView>;
   update(userId: number, providerId: string, expectedVersion: number, input: unknown): Promise<ProviderView>;
   remove(userId: number, providerId: string, expectedVersion: number): Promise<void>;
+  discoverModels(userId: number, providerId: string): Promise<DiscoveredProviderModel[]>;
   test(userId: number, providerId: string, modelId: string): Promise<ProviderTestResult>;
 }
 
@@ -273,6 +275,15 @@ export interface AgentRunFacade {
     expectedVersion: number,
     idempotencyKey: string,
   ): Promise<{ inputId: string; sequence: number; runVersion: number }>;
+  interrupt(
+    scope: Scope,
+    runId: string,
+    input: UserInputData,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Promise<{ inputId: string; sequence: number; runVersion: number }>;
+  setGoal(scope: Scope, runId: string, text: string, expectedVersion: number, idempotencyKey: string): Promise<RunView>;
+  pendingInputs(scope: Scope, runId: string): Promise<PendingRunInputPage>;
   increaseBudget(
     scope: Scope,
     runId: string,
@@ -343,9 +354,8 @@ export interface AgentWorkspaceRuntimeFacade {
   action(
     scope: Scope,
     workspaceId: string,
-    action: 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize',
+    action: 'start' | 'stop' | 'restart' | 'delete',
     expectedVersion: number,
-    parameters: JsonValue,
   ): Promise<WorkspaceRuntimeCommandView>;
   switchToolVersions(
     scope: Scope,

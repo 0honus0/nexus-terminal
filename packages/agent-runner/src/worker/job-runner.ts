@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { MANAGED_PROCESS_DETACHED, signalManagedProcess } from '../managed-process';
 
 export interface JobResult {
   exitCode: number | null;
@@ -31,7 +32,7 @@ export class JobRunner {
   ): Promise<JobResult> {
     if (
       !Array.isArray(argv) ||
-      argv.length < 1 ||
+      (!options.executable && argv.length < 1) ||
       argv.length > MAX_ARGV_ITEMS ||
       argv.some(
         (value) =>
@@ -49,12 +50,16 @@ export class JobRunner {
     }
 
     const executable = options.executable ?? argv[0]!;
+    if (!executable || executable.includes('\0') || Buffer.byteLength(executable, 'utf8') > MAX_ARG_BYTES) {
+      throw new Error('JOB_INVALID');
+    }
     const args = options.executable ? [...argv] : argv.slice(1);
     return new Promise((resolve, reject) => {
       const child = spawn(executable, args, {
         cwd,
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe'],
+        detached: MANAGED_PROCESS_DETACHED,
         env: options.env ?? {
           PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin',
           LANG: process.env.LANG ?? 'C.UTF-8',
@@ -70,8 +75,8 @@ export class JobRunner {
 
       const terminate = (): void => {
         if (child.exitCode !== null || child.signalCode !== null) return;
-        child.kill('SIGTERM');
-        killTimer = setTimeout(() => child.kill('SIGKILL'), 2_000);
+        signalManagedProcess(child, 'SIGTERM');
+        killTimer = setTimeout(() => signalManagedProcess(child, 'SIGKILL'), 2_000);
         killTimer.unref?.();
       };
       const onAbort = (): void => terminate();
@@ -96,6 +101,10 @@ export class JobRunner {
         if (killTimer) clearTimeout(killTimer);
         options.signal?.removeEventListener('abort', onAbort);
         reject(error);
+      });
+      child.once('exit', () => {
+        // close 会等待所有继承 stdio 的 descendants；leader 一退出就先清组，避免后台进程卡住 job 完成。
+        signalManagedProcess(child, 'SIGKILL');
       });
       child.once('close', (exitCode, signal) => {
         if (settled) return;

@@ -4,7 +4,7 @@ import WebSocket from 'ws';
 const MAX_FRAME_BYTES = 256 * 1024;
 const MAX_BUFFERED_BYTES = 4 * 1024 * 1024;
 
-/** Byte-preserving duplex bridge used to run ssh2 over an authenticated Runner WebSocket. */
+/** Byte-preserving duplex bridge for an authenticated native Runner PTY WebSocket. */
 export class RunnerWebSocketDuplex extends Duplex {
   private ended = false;
 

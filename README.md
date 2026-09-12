@@ -24,6 +24,8 @@ docker compose up -d
 
 访问 `http://localhost:18111` · [部署与更新](./doc/DEPLOYMENT.md)
 
+Agent Workspace Runtime 使用独立 `nexus-agent-runner` 执行平面；Nexus 当前按单用户应用设计，Runner 管理多个持久 Workspace 与可切换 Toolchain，不再为 Workspace 构造额外安全沙箱。支持宿主 Runner，也提供 `ghcr.io/0honus0/nexus-agent-runner` 独立镜像和默认注释掉的 Compose 配置。
+
 ## 功能
 
 浏览器中的 SSH / SFTP / RDP / VNC 远程连接工具，支持终端、文件管理、在线编辑、远程桌面、安全认证、移动端和界面定制。
@@ -68,7 +70,7 @@ docker compose up -d
 - [Frontend 架构](./doc/architecture/FRONTEND.md)
 - [Backend 架构](./doc/architecture/BACKEND.md)
 - [Package Management 架构](./doc/architecture/PACKAGE_MANAGEMENT.md)
-- [Agent 架构](./doc/agent.md)
+- [Agent 架构](./doc/AGENT.md)
 - [远程桌面网关架构](./doc/architecture/REMOTE_DESKTOP.md)
 - [E2E 测试与诊断](./doc/testing/E2E.md)
 

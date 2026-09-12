@@ -19,6 +19,25 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === 'GET' && request.url === '/v1/models') {
+    if (request.headers.authorization !== `Bearer ${expectedCredential}`) {
+      response.writeHead(401, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'invalid credential' } }));
+      return;
+    }
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    response.end(
+      JSON.stringify({
+        object: 'list',
+        data: [
+          { id: 'e2e-model', object: 'model', owned_by: 'nexus-e2e', created: 1700000000 },
+          { id: 'e2e-model-alt', object: 'model', owned_by: 'nexus-e2e', created: 1700000001 },
+        ],
+      }),
+    );
+    return;
+  }
+
   if (request.method === 'POST' && request.url === '/redirect/chat/completions') {
     response.writeHead(302, { Location: `http://${host}:${port}/v1/chat/completions` });
     response.end();
@@ -51,6 +70,12 @@ const server = http.createServer(async (request, response) => {
 
   const messages = Array.isArray(body?.messages) ? body.messages : [];
   const serializedMessages = JSON.stringify(messages);
+  const markerOccurrences = (marker) => serializedMessages.split(marker).length - 1;
+  if (markerOccurrences('E2E_GOAL_UPDATE_HOLD') > 1 || markerOccurrences('E2E_INTERRUPT_HOLD') > 1) {
+    response.writeHead(422, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ error: { message: 'repeated current input marker' } }));
+    return;
+  }
   const approvalConnection = /E2E_APPROVAL_CONNECTION_ID=(\d+)/.exec(serializedMessages);
   const approvalToolResult = messages.some(
     (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_approval',
@@ -58,6 +83,15 @@ const server = http.createServer(async (request, response) => {
   const shellToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_execute_shell');
+  const holdForGoalUpdate =
+    serializedMessages.includes('E2E_GOAL_UPDATE_HOLD') && !serializedMessages.includes('[Current goal]');
+  const holdForInterrupt =
+    serializedMessages.includes('E2E_INTERRUPT_HOLD') && !serializedMessages.includes('E2E_INTERRUPT_RESUME');
+
+  if (holdForGoalUpdate || holdForInterrupt) {
+    await new Promise((resolve) => setTimeout(resolve, 5_000));
+    if (response.destroyed) return;
+  }
 
   response.writeHead(200, {
     'Content-Type': 'text/event-stream',

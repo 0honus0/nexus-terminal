@@ -1,6 +1,6 @@
 import type { JsonValue, Scope } from '../../agent.types';
 import type { RunPlan } from '../planning/plan.types';
-import type { RunContextBoundary } from '../runs/run.types';
+import type { RunContextBoundary, RunGoal } from '../runs/run.types';
 
 export type CheckpointToolStatus =
   | 'proposed'
@@ -43,6 +43,7 @@ export interface CheckpointSnapshot {
   ledgerThrough: number;
   planVersion: number;
   plan: RunPlan;
+  goal?: RunGoal;
   completedStepIds: string[];
   evidenceRefs: string[];
   modelConfigurationVersion: number;

@@ -106,8 +106,8 @@ export const composeWorkspaceRuntime = ({
     importArtifactToWorkspace: (scope, input, signal) => workspaceArtifacts.import(scope, input, signal),
     createWorkspace: (scope, runId, agentRuntimeId, workspace, retained, idempotencyKey, catalogRevision) =>
       service.createWorkspace(scope, runId, agentRuntimeId, workspace, retained, idempotencyKey, catalogRevision),
-    action: (scope, workspaceId, action, expectedVersion, parameters) =>
-      service.action(scope, workspaceId, action, expectedVersion, parameters),
+    action: (scope, workspaceId, action, expectedVersion) =>
+      service.action(scope, workspaceId, action, expectedVersion),
     switchToolVersions: (scope, workspaceId, versions, expectedVersion, expectedCatalogRevision) =>
       service.switchToolVersions(scope, workspaceId, versions, expectedVersion, expectedCatalogRevision),
     getCommand: (scope, commandId) => service.getCommand(scope, commandId),

@@ -1,10 +1,11 @@
 <script setup lang="ts">
   import { computed, reactive, ref } from 'vue';
-  import type { AgentProviderView } from '../api/agent-api';
+  import type { AgentDiscoveredProviderModel, AgentProviderView } from '../api/agent-api';
 
   const props = defineProps<{
     providers: AgentProviderView[];
     busy: boolean;
+    discoveries: Record<string, AgentDiscoveredProviderModel[]>;
     defaultProviderId: string | null;
     defaultModelId: string | null;
   }>();
@@ -12,10 +13,57 @@
     create: [input: Record<string, unknown>];
     toggle: [provider: AgentProviderView, enabled: boolean];
     test: [provider: AgentProviderView, modelId: string];
+    discover: [provider: AgentProviderView];
+    addModel: [provider: AgentProviderView, model: AgentProviderView['models'][number]];
     defaultModel: [providerId: string, modelId: string];
   }>();
 
   const showCreate = ref(false);
+  const discoveryDrafts = reactive<
+    Record<
+      string,
+      { modelId: string; contextWindow: number | null; maxOutputTokens: number | null; supportsTools: boolean }
+    >
+  >({});
+
+  const discoveryDraft = (provider: AgentProviderView) => {
+    const existing = discoveryDrafts[provider.id];
+    if (existing) return existing;
+    const created = { modelId: '', contextWindow: null, maxOutputTokens: null, supportsTools: false };
+    discoveryDrafts[provider.id] = created;
+    return created;
+  };
+
+  const availableDiscoveries = (provider: AgentProviderView): AgentDiscoveredProviderModel[] => {
+    const configured = new Set(provider.models.map((model) => model.id));
+    return (props.discoveries[provider.id] ?? []).filter((model) => !configured.has(model.id));
+  };
+
+  const addDiscoveredModel = (provider: AgentProviderView): void => {
+    const draft = discoveryDraft(provider);
+    if (
+      !draft.modelId ||
+      draft.contextWindow === null ||
+      draft.maxOutputTokens === null ||
+      !Number.isSafeInteger(draft.contextWindow) ||
+      !Number.isSafeInteger(draft.maxOutputTokens) ||
+      draft.contextWindow < 1 ||
+      draft.maxOutputTokens < 1 ||
+      draft.maxOutputTokens > draft.contextWindow
+    ) {
+      return;
+    }
+    emit('addModel', provider, {
+      id: draft.modelId,
+      contextWindow: draft.contextWindow,
+      maxOutputTokens: draft.maxOutputTokens,
+      supportsTools: draft.supportsTools,
+    });
+    draft.modelId = '';
+    draft.contextWindow = null;
+    draft.maxOutputTokens = null;
+    draft.supportsTools = false;
+  };
   const form = reactive({
     displayName: '',
     baseUrl: 'https://api.openai.com/v1',
@@ -218,14 +266,108 @@
               }}
             </p>
           </div>
-          <button
-            type="button"
-            class="rounded-md px-3 py-1.5 text-sm hover:bg-header disabled:opacity-50"
-            :disabled="busy"
-            @click="emit('toggle', provider, !provider.enabled)"
-          >
-            {{ provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable') }}
-          </button>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="rounded-md border border-border/70 px-3 py-1.5 text-sm hover:bg-header disabled:opacity-50"
+              :disabled="busy"
+              @click="
+                discoveryDraft(provider);
+                emit('discover', provider);
+              "
+            >
+              {{ $t('agent.settings.providers.discover') }}
+            </button>
+            <button
+              type="button"
+              class="rounded-md px-3 py-1.5 text-sm hover:bg-header disabled:opacity-50"
+              :disabled="busy"
+              @click="emit('toggle', provider, !provider.enabled)"
+            >
+              {{ provider.enabled ? $t('agent.settings.providers.disable') : $t('agent.settings.providers.enable') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="discoveries[provider.id]" class="mt-3 rounded-xl border border-border/60 bg-card/55 p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div class="text-xs font-semibold">{{ $t('agent.settings.providers.discoveryTitle') }}</div>
+              <p class="mt-0.5 text-[10px] text-text-secondary">
+                {{ $t('agent.settings.providers.discoveryHint') }}
+              </p>
+            </div>
+            <span class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary">
+              {{ $t('agent.settings.providers.discoveryCount', { count: availableDiscoveries(provider).length }) }}
+            </span>
+          </div>
+          <div v-if="availableDiscoveries(provider).length" class="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            <label class="xl:col-span-2">
+              <span class="mb-1 block text-[10px] text-text-secondary">{{ $t('agent.settings.providers.model') }}</span>
+              <select
+                :value="discoveryDraft(provider).modelId"
+                class="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-xs"
+                @change="discoveryDraft(provider).modelId = ($event.target as HTMLSelectElement).value"
+              >
+                <option value="">{{ $t('agent.settings.providers.discoveryChoose') }}</option>
+                <option v-for="model in availableDiscoveries(provider)" :key="model.id" :value="model.id">
+                  {{ model.id }}{{ model.ownedBy ? ` · ${model.ownedBy}` : '' }}
+                </option>
+              </select>
+            </label>
+            <label>
+              <span class="mb-1 block text-[10px] text-text-secondary">{{
+                $t('agent.settings.providers.contextWindow')
+              }}</span>
+              <input
+                :value="discoveryDraft(provider).contextWindow ?? ''"
+                type="number"
+                min="1"
+                class="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-xs"
+                @input="
+                  discoveryDraft(provider).contextWindow = Number(($event.target as HTMLInputElement).value) || null
+                "
+              />
+            </label>
+            <label>
+              <span class="mb-1 block text-[10px] text-text-secondary">{{
+                $t('agent.settings.providers.maxOutputTokens')
+              }}</span>
+              <input
+                :value="discoveryDraft(provider).maxOutputTokens ?? ''"
+                type="number"
+                min="1"
+                class="h-9 w-full rounded-lg border border-border bg-background px-2.5 text-xs"
+                @input="
+                  discoveryDraft(provider).maxOutputTokens = Number(($event.target as HTMLInputElement).value) || null
+                "
+              />
+            </label>
+            <div class="flex items-end gap-2">
+              <label class="flex h-9 items-center gap-1.5 text-[10px] text-text-secondary">
+                <input
+                  :checked="discoveryDraft(provider).supportsTools"
+                  type="checkbox"
+                  @change="discoveryDraft(provider).supportsTools = ($event.target as HTMLInputElement).checked"
+                />
+                {{ $t('agent.settings.providers.tools') }}
+              </label>
+              <button
+                type="button"
+                class="ml-auto h-9 rounded-lg bg-primary px-3 text-xs font-medium text-white disabled:opacity-50"
+                :disabled="
+                  busy ||
+                  !discoveryDraft(provider).modelId ||
+                  !discoveryDraft(provider).contextWindow ||
+                  !discoveryDraft(provider).maxOutputTokens
+                "
+                @click="addDiscoveredModel(provider)"
+              >
+                {{ $t('agent.settings.providers.discoveryAdd') }}
+              </button>
+            </div>
+          </div>
+          <p v-else class="mt-3 text-xs text-text-secondary">{{ $t('agent.settings.providers.discoveryEmpty') }}</p>
         </div>
 
         <div class="mt-3 grid gap-2 xl:grid-cols-2">

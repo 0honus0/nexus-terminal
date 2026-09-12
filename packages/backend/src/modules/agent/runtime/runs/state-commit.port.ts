@@ -3,7 +3,15 @@ import type { ModelRef } from '../../ai/model.types';
 import type { LedgerEntryKind } from '../../ai/conversation.repository.port';
 import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type { RunPlan } from '../planning/plan.types';
-import type { RunBudget, RunDefinitionSnapshot, RunEvent, RunUsage, RunView, UserInputData } from './run.types';
+import type {
+  RunBudget,
+  RunDefinitionSnapshot,
+  RunEvent,
+  RunGoal,
+  RunUsage,
+  RunView,
+  UserInputData,
+} from './run.types';
 
 export interface AtomicCreateRun {
   scope: Scope;
@@ -15,6 +23,7 @@ export interface AtomicCreateRun {
   parentRunId?: string | null;
   initialEntry?: { kind: LedgerEntryKind; payload: JsonValue; artifactRefs: string[] };
   initialPlan?: RunPlan;
+  initialGoal?: RunGoal;
   agentDefinitionId: string;
   model: ModelRef;
   connectionIds: number[];
@@ -304,6 +313,7 @@ export interface AtomicAppendInput {
   runId: string;
   inputEntryId: string;
   input: UserInputData;
+  mode: 'append' | 'interrupt';
   expectedRunVersion: number;
   idempotencyKey: string;
   requestHash: string;
@@ -314,6 +324,23 @@ export interface AppendInputCommitResult {
   inputId: string;
   sequence: number;
   runVersion: number;
+  run: RunView;
+  replayed: boolean;
+  shouldInterruptModel: boolean;
+  shouldReschedule: boolean;
+}
+
+export interface AtomicSetRunGoal {
+  scope: Scope;
+  runId: string;
+  text: string;
+  expectedRunVersion: number;
+  idempotencyKey: string;
+  requestHash: string;
+  now: number;
+}
+
+export interface SetRunGoalCommitResult {
   run: RunView;
   replayed: boolean;
   shouldInterruptModel: boolean;
@@ -486,6 +513,8 @@ export interface SupersedeModelStepCommand {
   stepId: string;
   attemptId: string;
   expectedInputRevision: number;
+  expectedGoalRevision: number;
+  reason: 'new_input' | 'goal_updated';
   usage: RunUsage;
   inputTokens?: number;
   outputTokens?: number;
@@ -506,6 +535,7 @@ export interface InterruptUnexpectedRootExecutionCommand {
 export interface StateCommitPort {
   createRun(command: AtomicCreateRun): Promise<CreateRunCommitResult>;
   appendInput(command: AtomicAppendInput): Promise<AppendInputCommitResult>;
+  setRunGoal(command: AtomicSetRunGoal): Promise<SetRunGoalCommitResult>;
   cancelRun(command: AtomicCancelRun): Promise<CancelRunCommitResult>;
   increaseRunBudget(command: AtomicIncreaseRunBudget): Promise<IncreaseRunBudgetCommitResult>;
   deleteRun(command: AtomicDeleteRun): Promise<DeleteRunCommitResult>;
@@ -540,7 +570,7 @@ export interface StateCommitPort {
 
 export type RunCommandCommitPort = Pick<
   StateCommitPort,
-  'createRun' | 'appendInput' | 'cancelRun' | 'increaseRunBudget' | 'deleteRun'
+  'createRun' | 'appendInput' | 'setRunGoal' | 'cancelRun' | 'increaseRunBudget' | 'deleteRun'
 >;
 
 export type RunCreationCommitPort = Pick<StateCommitPort, 'createRun'>;

@@ -363,10 +363,6 @@
               {{ $t('agent.settings.workspaceRuntime.quarantineBytes')
               }}<strong class="block">{{ formatBytes(storage.quarantineBytes) }}</strong>
             </div>
-            <div class="rounded bg-background p-2">
-              {{ $t('agent.settings.workspaceRuntime.engineBytes')
-              }}<strong class="block">{{ formatBytes(storage.sandboxOverheadBytes) }}</strong>
-            </div>
           </div>
           <p class="mt-2 text-xs text-text-secondary">
             {{ $t('agent.settings.workspaceRuntime.reclaimable', { bytes: formatBytes(storage.reclaimableBytes) }) }}

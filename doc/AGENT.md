@@ -200,7 +200,7 @@ Run 还持有：
 
 ### 5.1 当前 Goal 模型
 
-当前代码已经有 durable `GoalStatus`：
+当前代码同时保存两类分离的 durable Goal 事实。`GoalStatus` 表达执行结果状态：
 
 ```text
 unknown
@@ -209,9 +209,9 @@ satisfied
 not_satisfied
 ```
 
-它表达执行目标的**结果状态**，不是用户可编辑的 Goal 文本。
+用户可编辑 Goal 则由 Run 上独立的 `goal.text / goal.revision / goal.updatedAt` 表达，并通过 versioned `run.goal.set` command 修改。两者不能混用：Goal 文本描述“要达到什么”，`GoalStatus` 描述“是否已经达到”。
 
-Root model step 开始时进入 `in_progress`；成功验证后可进入 `satisfied`；失败终止可进入 `not_satisfied`。
+Root model step 开始时 `GoalStatus` 进入 `in_progress`；成功验证后可进入 `satisfied`；失败终止可进入 `not_satisfied`。Goal 更新会重置 verification：Root model 正在 streaming 时 supersede 当前 model step 并以新 Goal 重调度；Tool/Approval 已进入安全边界后则只持久化 Goal，不回滚副作用或 supersede approval，下一次 model context 使用新的 durable Goal。
 
 ### 5.2 Plan
 
@@ -257,9 +257,7 @@ TaskRail 直接展示 typed Plan、完成比例、current focus、blocked 数、
 
 ### 5.4 Goal 文本与 slash command
 
-用户可编辑 Goal 文本目前**尚未成为正式持久合同**。
-
-近期已决定采用 Conversation slash command 入口，而不是新增独立设置页：
+用户可编辑 Goal 文本与 Conversation slash command 已进入正式产品合同，并继续使用 Conversation Composer 作为控制入口，而不是新增独立设置页：
 
 ```text
 /goal <text>      set/update current Run goal
@@ -268,9 +266,12 @@ TaskRail 直接展示 typed Plan、完成比例、current focus、blocked 数、
 /interrupt <text> explicitly interrupt current model generation
 /queue            inspect pending user inputs
 /stop             cancel current Run
+/help             show command reference
 ```
 
-其中 `/goal` 是第一优先实现项。命令必须落到正式 Backend contract / durable fact，不能只在前端替换文本或维护 local-only state。
+命令 dispatch 在 parser 层与普通对话严格分离；未知命令直接返回用户可理解错误，绝不能退化为普通 prompt。`//...` 明确逃逸为以 `/` 开头的普通用户输入，Composer 提供 slash suggestion 与 `/help`。已有 Run 时 `/goal <text>` 走 versioned/idempotent `run.goal.set`；空 Thread 上 `/goal <text>` 通过 `run.create` 的 `initialGoal` 直接建立 revision 1 的 durable Goal 并启动 Run。`/plan` 从最新 Run projection 读取 typed durable Plan，`/queue` 从 `consumedInputSequence + Ledger sequence` 派生 pending inputs，`/stop` 复用正式 cancel contract。`/interrupt <text>` 使用独立 `run.interrupt` command：只有事务内确认 Root model 正在 streaming 才会追加输入并 supersede model step，否则返回状态冲突；它不会借“interrupt”名义取消已经开始的 mutation 或 supersede approval。
+
+命令结果是这些 durable Backend 事实的 UI projection，不是新的 frontend authority，也不会伪装成 Ledger 消息或模型隐藏推理。
 
 ## 6. 对话输入、打断与待处理输入
 
@@ -296,19 +297,17 @@ Backend 在安全边界将当前 model step 标记为 superseded，然后以新 
 - 已开始 mutation 的远端副作用不能通过“打断”假装回滚；unknown outcome 仍进入 reconciliation / quarantine。
 - tool execution 的取消与模型 streaming interruption 是不同语义，必须保持安全边界。
 
-### 6.3 队列方向
+### 6.3 Pending-input queue
 
-当前持久事实已经有 `inputRevision + consumedInputSequence + Ledger sequence`，因此未来 Conversation Queue 应复用这套 durable input stream，而不是新增前端数组作为第二事实源。
+Conversation `/queue` 已复用现有 `inputRevision + consumedInputSequence + Ledger sequence` durable input stream：Backend 统计当前 Run 中 `sequence > consumedInputSequence` 的全部 `user_input`，并返回有上限的明细页、authoritative `total` 与 `hasMore`；Frontend 不维护第二套 local-only queue，也不会把第一页长度冒充总数。
 
-产品层计划支持：
+当前边界：
 
-- Agent 运行时继续输入；
-- 普通输入可排队到当前 Run 的 pending input stream；
-- 显式 `/interrupt` 才强制 supersede 当前 streaming model step；
-- `/queue` 查看尚未消费输入；
-- 后续可增加 remove/reorder，但任何重排都必须成为 versioned Backend mutation。
-
-在这些命令正式实现前，UI 不得显示伪造的 durable queue 状态。
+- Agent 运行时仍可通过正式 append-input 追加输入；
+- 普通 append-input 维持现有 `NEW_INPUT` 语义：Root model 正在 streaming 时会 supersede 当前 model step；
+- `/interrupt <text>` 使用更严格的 `run.interrupt`：仅 streaming model 可接受，否则 409；
+- `/queue` 只做 durable inspection；
+- remove/reorder 尚未交付；如果未来增加，必须是 versioned Backend mutation，不能只改前端数组。
 
 ## 7. Root Scheduler 与崩溃语义
 
@@ -383,7 +382,7 @@ Frontend event stream 使用 reconnect/backoff/cursor replay；慢消费者有�
 
 ## 9. Context、Provider 与 Budget
 
-Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 不回填明文。
+Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 不回填明文。Backend 支持通过受现有 outbound policy/credential policy 保护的 Provider discovery 请求读取上游 `GET <baseUrl>/models`；discovery 只把 model id（以及可选 owner/created metadata）当作候选事实，不推测 context window、max output、tool capability 或 pricing，用户必须确认能力后才写入 Provider 配置。
 
 每个 Run 冻结 Provider configuration version。Provider 被修改后，已存在 Run 继续引用创建时 snapshot；下一次 Run 才使用新设置。
 
@@ -492,36 +491,38 @@ Model · Environment · Targets
 
 ### 12.3 Runner
 
-Host Runner：`packages/agent-runner`。
+Runner package：`packages/agent-runner`。Host 与独立 Docker 镜像使用同一套 runtime contract。
 
 Runner 提供：
 
 - availability/catalog；
 - Workspace provision/start/stop/delete；
-- sandbox job；
+- native Workspace job；
 - Tool Store materialization；
-- multi-version Node/Python/Go switching；
+- multi-version Node/Python/Go runtime switching；
 - ACP stream；
-- Workspace local SSH/PTTY terminal；
+- Workspace local direct PTY terminal；
 - Browser tunnel；
 - storage report；
 - cleanup planning/execution；
 - journal/reconcile。
 
-Runner/Backend/Workspace sandbox 都不能获得 Docker socket，也不能通过 nested Docker / privileged Runner 容器替代 sandbox 边界。
+Runner 永远不获得 host Docker socket、不启动 dockerd、不使用 nested Docker。独立 Runner 容器也不需要 `privileged`、`SYS_ADMIN` 或 unconfined seccomp/AppArmor。
 
-### 12.4 Sandbox
+### 12.4 单用户 native Workspace Runtime
 
-Linux sandbox primitive 不可用时必须明确 unavailable/degraded，并 fail closed；不能静默退化为宿主裸进程执行。
+Nexus 当前是单用户应用。Workspace/Generation/Toolchain 的职责是组织项目数据和运行环境，而不是在同一个 Nexus 用户内部构造 OS 安全沙箱：
 
-隔离边界至少覆盖：
+- Workspace 项目文件持久且彼此独立；
+- Generation 冻结一次 Workspace Profile/runtime 选择；
+- Node/Python/Go Tool Pack 全局不可变共享，通过当前 generation 的 PATH 选择；
+- `/workspace/deps`、`/workspace/build` 等逻辑路径映射到按 toolchain fingerprint 分区的 Runner data root；
+- job、ACP、Terminal 和 Runner Plugin 都是 Runner 原生子进程；job/ACP/Runner Plugin 由独立 process group 管理并随 owner 生命周期整组回收，Terminal 使用真实 PTY foreground process group 处理交互 signal；
+- Host Runner 子进程共享宿主安全上下文；Docker Runner 子进程共享同一个 Runner 容器安全上下文；
+- resource/network 配置保留在 Backend Workspace Profile 作为产品配置，不进入 native Runner command，不宣称为 per-Workspace cgroup/network namespace 强制隔离；
+- 用户安装并启用 Runner Plugin，等价于允许该代码以 Runner OS 权限执行。Workspace Broker/ACL 约束 Plugin SDK 的逻辑 workspace 访问，但不是 OS sandbox。
 
-- filesystem；
-- process；
-- PID/IPC/UTS；
-- network policy；
-- resource limits；
-- runtime generation。
+因此安全边界必须表述准确：Backend capability/policy/approval/lease 仍决定 Nexus 是否允许某个操作；Runner 负责把已允许的操作放到正确 Workspace/runtime profile 中执行，但不再声称它能隔离同一用户自己的代码。
 
 ### 12.5 Generation 与版本切换
 
@@ -580,7 +581,7 @@ Browser target 由 Workspace profile 冻结。Browser execution 通过受控 Bro
 
 ### 13.3 Workspace local Terminal
 
-Workspace local Terminal 通过 Runner 管理的 SSH/PTTY lifecycle：
+Workspace local Terminal 通过 Runner 管理的 direct PTY lifecycle：
 
 - open；
 - resize；
@@ -589,7 +590,7 @@ Workspace local Terminal 通过 Runner 管理的 SSH/PTTY lifecycle：
 - reattach；
 - bounded replay。
 
-它不是 Nexus Remote SSH Workspace 的 live session 复用，也不把浏览器直接连到 sandbox PTY。
+它不是 Nexus Remote SSH Workspace 的 live session 复用。Runner 用系统 `script(1)` 分配 PTY，Backend 保持 session attach/detach/replay，浏览器仍只连接 Nexus 的受认证 terminal WebSocket。
 
 ## 14. MCP 与网络集成
 
@@ -824,14 +825,14 @@ Agent 用户可达行为必须由 production-style E2E 验收，不以 unit test
 当前 canonical CI 覆盖包括：
 
 - Docker deployment smoke；
-- Host Runner sandbox prerequisites；
+- Host Runner native runtime prerequisites；
 - Runner build；
-- sandbox job；
+- native Workspace job；
 - ACP stream；
-- Workspace SSH/PTTY terminal；
+- Workspace direct PTY terminal；
 - Browser tunnel；
 - stable Workspace generation；
-- isolated Node/Python/Go multi-version switching；
+- Node/Python/Go multi-version runtime profile switching；
 - runtime cleanup scope；
 - Run deletion Workspace guard；
 - global floating Agent across routes；
@@ -848,6 +849,9 @@ E2E 不得为了定位新增 product-only `data-testid` 等测试 seam；优先�
 - App/Thread/Run/Ledger；
 - Provider/model snapshot；
 - typed durable Plan；
+- durable Goal text/revision + GoalStatus 分离；
+- Conversation slash-command dispatch：`/goal`、`/plan`、`/interrupt`、`/queue`、`/stop`、`/help` 与 `//` literal escape；
+- durable pending-input queue inspection；
 - appendInput + streaming model interruption；
 - approval supersede on newer input；
 - budget/cancel/checkpoint/resume；
@@ -861,12 +865,9 @@ E2E 不得为了定位新增 product-only `data-testid` 等测试 seam；优先�
 
 ### 已决定、待实现
 
-1. Conversation slash-command framework，第一项 `/goal`。
-2. 用户可编辑 durable Goal text/revision，与现有 GoalStatus 分离。
-3. `/plan`、`/interrupt`、`/queue`、`/stop` 等统一 command dispatch。
-4. 基于现有 inputRevision / consumedInputSequence 的用户可见 pending-input queue。
-5. 真正的 Next Run Environment selector：需要扩 RunDefinition / Workspace profile contract，不允许 frontend-only selector。
-6. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
+1. Pending-input queue 的 remove/reorder mutation（如产品确有需要）；任何实现都必须 versioned、durable。
+2. 真正的 Next Run Environment selector：需要扩 RunDefinition / Workspace profile contract，不允许 frontend-only selector。
+3. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
 
 ## 24. 修改规则
 

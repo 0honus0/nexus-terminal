@@ -1,13 +1,13 @@
 import { spawn } from 'node:child_process';
+import { MANAGED_PROCESS_DETACHED, signalManagedProcess, terminateManagedProcess } from '../managed-process';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
 import type { RunnerJournal } from './journal';
-import type { SandboxEngine } from './sandbox-engine';
+import type { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 
 const MAX_FRAME_BYTES = 256 * 1024;
 const MAX_SOCKET_BUFFER_BYTES = 1024 * 1024;
-const MAX_STDERR_BYTES = 4096;
 
 interface ActiveProcess {
   workspaceId: string;
@@ -21,7 +21,7 @@ export class AcpProcessRuntime {
 
   constructor(
     private readonly journal: RunnerJournal,
-    private readonly sandbox: SandboxEngine,
+    private readonly runtime: WorkspaceRuntimeEngine,
   ) {}
 
   handleUpgrade(
@@ -33,17 +33,11 @@ export class AcpProcessRuntime {
     profileId: string,
   ): void {
     const workspace = this.journal.workspace(workspaceId);
-    if (!workspace || !workspace.sandboxId || workspace.status !== 'running') throw new Error('WORKSPACE_NOT_RUNNING');
+    if (!workspace || workspace.status !== 'running') throw new Error('WORKSPACE_NOT_RUNNING');
     if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
     const profile = workspace.acpProfiles.find((candidate) => candidate.id === profileId);
     if (!profile) throw new Error('ACP_PROFILE_NOT_FOUND');
-    const execution = this.sandbox.prepareAcpProcess(
-      workspace.sandboxId,
-      workspaceId,
-      generation,
-      profile.argv,
-      profile.cwd,
-    );
+    const execution = this.runtime.prepareAcpProcess(workspaceId, generation, profile.argv, profile.cwd);
     this.server.handleUpgrade(request, socket, head, (websocket) =>
       this.attach(websocket, execution, workspaceId, generation),
     );
@@ -70,9 +64,9 @@ export class AcpProcessRuntime {
       cwd: execution.cwd,
       env: execution.env,
       stdio: ['pipe', 'pipe', 'pipe'],
+      detached: MANAGED_PROCESS_DETACHED,
     });
     let closed = false;
-    let stderr = Buffer.alloc(0);
     const active: ActiveProcess = {
       workspaceId,
       generation,
@@ -80,7 +74,7 @@ export class AcpProcessRuntime {
         if (closed) return;
         closed = true;
         this.active.delete(active);
-        child.kill('SIGTERM');
+        void terminateManagedProcess(child);
         if (websocket.readyState === WebSocket.OPEN || websocket.readyState === WebSocket.CONNECTING)
           websocket.close(1001);
       },
@@ -111,15 +105,13 @@ export class AcpProcessRuntime {
       }
       websocket.send(chunk, { binary: true });
     });
-    child.stderr.on('data', (chunk: Buffer) => {
-      if (stderr.byteLength >= MAX_STDERR_BYTES) return;
-      stderr = Buffer.concat([stderr, chunk.subarray(0, MAX_STDERR_BYTES - stderr.byteLength)]);
-    });
+    child.stderr.resume();
     child.on('error', () => {
       if (websocket.readyState === WebSocket.OPEN) websocket.close(1011, 'ACP_PROCESS_FAILED');
       active.close();
     });
     child.on('exit', (code, signal) => {
+      signalManagedProcess(child, 'SIGKILL');
       if (closed) return;
       closed = true;
       this.active.delete(active);

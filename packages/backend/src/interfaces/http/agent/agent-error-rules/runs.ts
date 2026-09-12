@@ -50,6 +50,9 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     [
       'THREAD_HAS_ACTIVE_RUN',
       'RUN_NOT_ACCEPTING_INPUT',
+      'RUN_NOT_STREAMING_MODEL',
+      'RUN_NOT_ACCEPTING_GOAL',
+      'GOAL_REVISION_CONFLICT',
       'RUN_NOT_AWAITING_BUDGET',
       'RUN_NOT_SCHEDULABLE',
       'RUNTIME_NOT_SCHEDULABLE',

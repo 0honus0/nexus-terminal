@@ -32,7 +32,7 @@ export interface ModelAttemptResult {
   error?: unknown;
 }
 
-const latestInputText = (run: RunSnapshot): string => {
+const latestInput = (run: RunSnapshot): { id: string; text: string } => {
   for (let index = run.recentEntries.length - 1; index >= 0; index -= 1) {
     const entry = run.recentEntries[index]!;
     if (
@@ -44,9 +44,9 @@ const latestInputText = (run: RunSnapshot): string => {
       continue;
     }
     const text = (entry.payload as Record<string, unknown>).text;
-    if (typeof text === 'string') return text;
+    if (typeof text === 'string') return { id: entry.id, text };
   }
-  return '';
+  return { id: '', text: '' };
 };
 
 const retryAfterMilliseconds = (error: unknown): number => {
@@ -76,6 +76,7 @@ export class ModelStepRunner {
     const model = provider.models.find((candidate) => candidate.id === snapshot.definition.model.modelId);
     if (!model) throw new Error('MODEL_NOT_FOUND');
 
+    const currentInput = latestInput(snapshot);
     const contextPlan = await this.context.compose({
       scope,
       threadId: snapshot.threadId,
@@ -83,7 +84,16 @@ export class ModelStepRunner {
       ...(snapshot.definition.contextBoundary === undefined
         ? {}
         : { historyBoundary: snapshot.definition.contextBoundary }),
-      currentInput: latestInputText(snapshot),
+      currentInput: currentInput.text,
+      ...(currentInput.id ? { currentInputEntryId: currentInput.id } : {}),
+      ...(snapshot.goal.text ? { goal: snapshot.goal.text } : {}),
+      ...(snapshot.plan.items.length
+        ? {
+            taskPlan: snapshot.plan.items
+              .map((item) => `${item.status}: ${item.title}${item.detail ? ` — ${item.detail}` : ''}`)
+              .join('\n'),
+          }
+        : {}),
       collaborationContext,
       modelContextWindow: model.contextWindow,
       maxContextTokens: snapshot.budget.maxContextTokens,

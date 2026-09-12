@@ -1,6 +1,11 @@
 import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { ToolInspection } from '../../../modules/agent/capabilities/tool.types';
-import type { HostEvent, RunEvent, RunSnapshot } from '../../../modules/agent/runtime/runs/run.types';
+import type {
+  PendingRunInputPage,
+  HostEvent,
+  RunEvent,
+  RunSnapshot,
+} from '../../../modules/agent/runtime/runs/run.types';
 import type {
   HostCursorReaderPort,
   PendingMutationTool,
@@ -121,6 +126,41 @@ export class SqliteRunRepository
         })),
       };
     });
+  }
+
+  async pendingInputs(scope: Scope, runId: string, limit: number): Promise<PendingRunInputPage> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('VALIDATION_FAILED');
+    const run = await this.db.queryOne<RunRow>(
+      `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+      [runId, scope.userId, scope.appId],
+    );
+    if (!run) throw new Error('NOT_FOUND');
+    const count = await this.db.queryOne<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM ai_thread_entries
+       WHERE run_id = ? AND user_id = ? AND app_id = ? AND kind = 'user_input' AND sequence > ?`,
+      [runId, scope.userId, scope.appId, run.consumed_input_sequence],
+    );
+    const rows = await this.db.queryAll<EntryRow>(
+      `SELECT id, sequence, kind, payload_json, created_at
+       FROM ai_thread_entries
+       WHERE run_id = ? AND user_id = ? AND app_id = ? AND kind = 'user_input' AND sequence > ?
+       ORDER BY sequence LIMIT ?`,
+      [runId, scope.userId, scope.appId, run.consumed_input_sequence, limit],
+    );
+    const items = rows.map((row) => {
+      const payload = JSON.parse(row.payload_json) as { text?: unknown; artifactRefs?: unknown };
+      return {
+        id: row.id,
+        sequence: row.sequence,
+        text: typeof payload.text === 'string' ? payload.text : '',
+        artifactRefs: Array.isArray(payload.artifactRefs)
+          ? payload.artifactRefs.filter((value): value is string => typeof value === 'string')
+          : [],
+        createdAt: row.created_at,
+      };
+    });
+    const total = count?.count ?? 0;
+    return { items, total, hasMore: total > items.length };
   }
 
   async list(scope: Scope, threadId: string | undefined, limit: number, before?: string): Promise<RunPage> {

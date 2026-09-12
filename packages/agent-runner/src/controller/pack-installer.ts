@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { isUtf8 } from 'node:buffer';
 import { spawn } from 'node:child_process';
+import { MANAGED_PROCESS_DETACHED, signalManagedProcess } from '../managed-process';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as tar from 'tar';
@@ -8,7 +9,6 @@ import semver from 'semver';
 import type { CatalogPack, ToolchainPackRef } from '../types';
 import type { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import type { ToolchainStore } from './toolchain-store';
-import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
 const RUNNER_API_VERSION = '1.0.0';
 const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
@@ -20,11 +20,6 @@ const MAX_MANIFEST_BYTES = 64 * 1024;
 const MISE_INSTALL_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_MISE_OUTPUT_BYTES = 64 * 1024;
 const MAX_RELOCATABLE_TEXT_BYTES = 8 * 1024 * 1024;
-const INSTALL_OUTPUT_ROOT = '/nexus-output';
-const INSTALL_STAGING_PATH = `${INSTALL_OUTPUT_ROOT}/pack`;
-const INSTALL_MISE_ROOT = '/nexus-mise';
-const MATERIALIZER_ETC_DIRECTORIES = ['/etc/ssl'] as const;
-const MATERIALIZER_ETC_FILES = ['/etc/host.conf', '/etc/hosts', '/etc/nsswitch.conf', '/etc/gai.conf'] as const;
 
 interface PackManifest {
   schemaVersion: 1;
@@ -49,18 +44,6 @@ const parseMiseSource = (source: string, pack: CatalogPack): string => {
     throw new Error('WORKSPACE_TOOLCHAIN_SOURCE_UNSUPPORTED');
   }
   return safeSegment(installerVersion);
-};
-
-const materializerEtcRuntimeArguments = (resolverSnapshot: string): string[] => {
-  const args = ['--dir', '/etc'];
-  for (const source of MATERIALIZER_ETC_DIRECTORIES) {
-    if (fs.existsSync(source)) args.push('--ro-bind', source, source);
-  }
-  for (const source of MATERIALIZER_ETC_FILES) {
-    if (fs.existsSync(source)) args.push('--ro-bind', source, source);
-  }
-  args.push('--ro-bind', resolverSnapshot, '/etc/resolv.conf');
-  return args;
 };
 
 const safeArchivePath = (raw: string): string => {
@@ -125,9 +108,6 @@ const hashFile = async (filePath: string): Promise<string> =>
     stream.once('error', reject);
     stream.once('end', () => resolve(`sha256:${hash.digest('hex')}`));
   });
-
-const canonicalPackTarget = (pack: Pick<CatalogPack, 'familyId' | 'versionId'>): string =>
-  `/opt/nexus/packs/${safeSegment(pack.familyId)}/${safeSegment(pack.versionId)}`;
 
 const safeSymlink = (root: string, linkPath: string): string => {
   const target = fs.readlinkSync(linkPath);
@@ -202,12 +182,17 @@ const runProcess = async (
   options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number },
 ): Promise<{ stdout: string; stderr: string }> =>
   new Promise((resolve, reject) => {
-    const child = spawn(file, argv, { cwd: options.cwd, env: options.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(file, argv, {
+      cwd: options.cwd,
+      env: options.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: MANAGED_PROCESS_DETACHED,
+    });
     let stdout: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let stderr: Buffer<ArrayBufferLike> = Buffer.alloc(0);
     let killedForOutput = false;
     const terminate = (): void => {
-      child.kill('SIGKILL');
+      signalManagedProcess(child, 'SIGKILL');
     };
     const append = (current: Buffer, chunk: Buffer): Buffer => {
       const next = Buffer.concat([current, chunk]);
@@ -227,6 +212,7 @@ const runProcess = async (
     });
     child.once('exit', (code, signal) => {
       clearTimeout(timer);
+      signalManagedProcess(child, 'SIGKILL');
       if (code === 0 && !killedForOutput) {
         resolve({ stdout: stdout.toString('utf8'), stderr: stderr.toString('utf8') });
         return;
@@ -237,7 +223,7 @@ const runProcess = async (
         .replace(/\s+/g, ' ')
         .trim()
         .slice(0, 2048);
-      if (diagnostic) process.stderr.write(`[nexus-agent-runner] isolated tool materializer failed: ${diagnostic}\n`);
+      if (diagnostic) process.stderr.write(`[nexus-agent-runner] tool materializer failed: ${diagnostic}\n`);
       reject(
         new Error(
           killedForOutput
@@ -256,7 +242,6 @@ export class PackInstaller {
     private readonly catalog: WorkspaceRuntimeCatalog,
     private readonly store: ToolchainStore,
     private readonly cacheRoot: string,
-    private readonly sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || 'bwrap',
   ) {
     fs.mkdirSync(path.join(cacheRoot, 'download'), { recursive: true });
     fs.mkdirSync(path.join(cacheRoot, 'mise'), { recursive: true });
@@ -281,8 +266,8 @@ export class PackInstaller {
       if (!expected || expected !== ref.contentDigest || !/^sha256:[a-f0-9]{64}$/.test(expected)) {
         throw new Error('WORKSPACE_TOOLCHAIN_DIGEST_MISMATCH');
       }
-      if (this.store.installed(ref)) continue;
-      await this.installOne(pack, ref, commandId);
+      if (!this.store.installed(ref)) await this.installOne(pack, ref, commandId);
+      this.store.activate(ref);
     }
   }
 
@@ -460,21 +445,22 @@ export class PackInstaller {
     ]) {
       if (directory) fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
     }
-    const resolverSnapshot = path.join(miseRoot, 'resolv.conf');
-    fs.copyFileSync('/etc/resolv.conf', resolverSnapshot);
-    fs.chmodSync(resolverSnapshot, 0o600);
     try {
       const version = await runProcess(miseBin, ['--version'], { cwd: working, env, timeoutMs: 10_000 });
       if (version.stdout.trim().split(/\s+/, 1)[0] !== installerVersion) {
         throw new Error('WORKSPACE_TOOLCHAIN_INSTALLER_VERSION_MISMATCH');
       }
       fs.mkdirSync(staging, { recursive: true, mode: 0o700 });
-      await this.materializeWithMiseSandbox(miseBin, miseRoot, resolverSnapshot, staging, pack);
       const materialized = path.join(staging, 'pack');
+      await runProcess(miseBin, ['install-into', `${pack.familyId}@${pack.versionId}`, materialized], {
+        cwd: working,
+        env,
+        timeoutMs: MISE_INSTALL_TIMEOUT_MS,
+      });
       if (!fs.existsSync(materialized) || !fs.statSync(materialized).isDirectory()) {
         throw new Error('WORKSPACE_TOOLCHAIN_INSTALL_INVALID');
       }
-      relocateTextTree(materialized, INSTALL_STAGING_PATH, canonicalPackTarget(pack));
+      relocateTextTree(materialized, materialized, this.store.canonicalPath(pack));
       await this.verifyMiseVersion(materialized, pack);
       const manifest: PackManifest = {
         schemaVersion: 1,
@@ -499,85 +485,6 @@ export class PackInstaller {
     }
   }
 
-  private async materializeWithMiseSandbox(
-    miseBin: string,
-    miseRoot: string,
-    resolverSnapshot: string,
-    staging: string,
-    pack: CatalogPack,
-  ): Promise<void> {
-    const sandboxBinary = this.sandboxBinary;
-    const systemBindings = sandboxSystemRuntimeArguments({ includeEtc: false });
-    const etcBindings = materializerEtcRuntimeArguments(resolverSnapshot);
-    const args = [
-      '--die-with-parent',
-      '--new-session',
-      '--unshare-user',
-      '--unshare-pid',
-      '--unshare-ipc',
-      '--unshare-uts',
-      ...systemBindings,
-      ...etcBindings,
-      '--proc',
-      '/proc',
-      '--dev',
-      '/dev',
-      '--tmpfs',
-      '/tmp',
-      '--dir',
-      '/nexus-installer',
-      '--ro-bind',
-      miseBin,
-      '/nexus-installer/mise',
-      '--bind',
-      miseRoot,
-      INSTALL_MISE_ROOT,
-      '--bind',
-      staging,
-      INSTALL_OUTPUT_ROOT,
-      '--dir',
-      '/work',
-      '--chdir',
-      '/work',
-      '--setenv',
-      'HOME',
-      `${INSTALL_MISE_ROOT}/home`,
-      '--setenv',
-      'MISE_CACHE_DIR',
-      `${INSTALL_MISE_ROOT}/cache`,
-      '--setenv',
-      'MISE_DATA_DIR',
-      `${INSTALL_MISE_ROOT}/data`,
-      '--setenv',
-      'MISE_STATE_DIR',
-      `${INSTALL_MISE_ROOT}/state`,
-      '--setenv',
-      'MISE_CONFIG_DIR',
-      `${INSTALL_MISE_ROOT}/config`,
-      '--setenv',
-      'MISE_NO_CONFIG',
-      '1',
-      '--setenv',
-      'MISE_YES',
-      '1',
-      '--setenv',
-      'PATH',
-      '/usr/local/bin:/usr/bin:/bin',
-      '--cap-drop',
-      'ALL',
-      '--',
-      '/nexus-installer/mise',
-      'install-into',
-      `${pack.familyId}@${pack.versionId}`,
-      INSTALL_STAGING_PATH,
-    ];
-    await runProcess(sandboxBinary, args, {
-      cwd: '/',
-      env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', LANG: process.env.LANG ?? 'C.UTF-8' },
-      timeoutMs: MISE_INSTALL_TIMEOUT_MS,
-    });
-  }
-
   private async verifyMiseVersion(staging: string, pack: CatalogPack): Promise<void> {
     const relativeExecutable =
       pack.familyId === 'node' ? 'bin/node' : pack.familyId === 'python' ? 'bin/python3' : 'bin/go';
@@ -593,54 +500,15 @@ export class PackInstaller {
     ) {
       throw new Error('WORKSPACE_TOOLCHAIN_INSTALL_INVALID');
     }
-
-    const target = canonicalPackTarget(pack);
-    const parentSegments = target.split('/').filter(Boolean);
-    const targetParentArgs: string[] = [];
-    let current = '';
-    for (const segment of parentSegments.slice(0, -1)) {
-      current += `/${segment}`;
-      targetParentArgs.push('--dir', current);
-    }
-    const result = await runProcess(
-      this.sandboxBinary,
-      [
-        '--die-with-parent',
-        '--new-session',
-        '--unshare-user',
-        '--unshare-pid',
-        '--unshare-ipc',
-        '--unshare-uts',
-        '--unshare-net',
-        ...sandboxSystemRuntimeArguments(),
-        '--proc',
-        '/proc',
-        '--dev',
-        '/dev',
-        '--tmpfs',
-        '/tmp',
-        ...targetParentArgs,
-        '--ro-bind',
-        staging,
-        target,
-        '--setenv',
-        'PATH',
-        `${target}/bin:/usr/local/bin:/usr/bin:/bin`,
-        '--setenv',
-        'GOTOOLCHAIN',
-        'local',
-        '--cap-drop',
-        'ALL',
-        '--',
-        `${target}/${relativeExecutable}`,
-        ...(pack.familyId === 'go' ? ['version'] : ['--version']),
-      ],
-      {
-        cwd: '/',
-        env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', LANG: process.env.LANG ?? 'C.UTF-8' },
-        timeoutMs: 10_000,
+    const result = await runProcess(executable, pack.familyId === 'go' ? ['version'] : ['--version'], {
+      cwd: staging,
+      env: {
+        PATH: `${path.join(staging, 'bin')}:/usr/local/bin:/usr/bin:/bin`,
+        LANG: process.env.LANG ?? 'C.UTF-8',
+        GOTOOLCHAIN: 'local',
       },
-    );
+      timeoutMs: 10_000,
+    });
     const output = `${result.stdout}${result.stderr}`.trim();
     const valid =
       pack.familyId === 'node'

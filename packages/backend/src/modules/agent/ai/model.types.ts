@@ -81,6 +81,12 @@ export interface ProviderTestResult {
   errorCode?: string;
 }
 
+export interface DiscoveredProviderModel {
+  id: string;
+  ownedBy?: string;
+  createdAt?: number;
+}
+
 export type ModelEvent =
   | { type: 'message.delta'; text: string }
   | { type: 'tool.delta'; index: number; id?: string; name?: string; argumentsDelta?: string }

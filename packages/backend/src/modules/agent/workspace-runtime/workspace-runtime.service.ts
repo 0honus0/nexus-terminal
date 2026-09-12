@@ -369,9 +369,8 @@ export class WorkspaceRuntimeService {
   async action(
     scope: Scope,
     workspaceId: string,
-    action: 'start' | 'stop' | 'restart' | 'delete' | 'setNetwork' | 'resize',
+    action: 'start' | 'stop' | 'restart' | 'delete',
     expectedVersion: number,
-    parameters: JsonValue,
     waitForTerminal = false,
   ): Promise<WorkspaceRuntimeCommandView> {
     if (action !== 'stop' && action !== 'delete') await this.assertExecutionEnabled(scope);
@@ -398,7 +397,6 @@ export class WorkspaceRuntimeService {
       {
         ...this.runnerPayload(workspace, availability.deploymentId),
         expectedVersion,
-        parameters,
       },
       true,
       waitForTerminal,
@@ -479,7 +477,6 @@ export class WorkspaceRuntimeService {
       {
         ...this.runnerPayload(workspace, availability.deploymentId),
         expectedVersion: switching.version,
-        parameters: { reason: 'workspace-toolchain-switch' },
       },
       false,
       true,
@@ -524,7 +521,6 @@ export class WorkspaceRuntimeService {
       {
         ...this.runnerPayload(reconfigured, availability.deploymentId),
         expectedVersion: reconfigured.version,
-        parameters: { reason: 'workspace-toolchain-switch' },
       },
       true,
       true,
@@ -538,14 +534,7 @@ export class WorkspaceRuntimeService {
     if (wasRunning) {
       const ready = await this.repository.getWorkspace(scope, workspaceId);
       if (!ready || ready.status !== 'ready') throw new Error('WORKSPACE_STATE_INVALID');
-      const started = await this.action(
-        scope,
-        workspaceId,
-        'start',
-        ready.version,
-        { reason: 'workspace-toolchain-switch' },
-        true,
-      );
+      const started = await this.action(scope, workspaceId, 'start', ready.version, true);
       commands.push(started);
       if (started.status !== 'succeeded') {
         const current = (await this.repository.getWorkspace(scope, workspaceId)) ?? ready;
@@ -641,8 +630,6 @@ export class WorkspaceRuntimeService {
       catalogRevision: workspace.profile.catalogRevision,
       toolchain: workspace.profile.toolchain.map((pack) => ({ ...pack })),
       runnerPlugins: workspace.profile.runnerPlugins.map((target) => ({ ...target })),
-      limits: { ...workspace.profile.limits },
-      network: { mode: workspace.profile.network.mode, hosts: [...workspace.profile.network.hosts] },
       acpProfiles: workspace.profile.acpProfiles.map((profile) => ({ ...profile, argv: [...profile.argv] })),
       browserTarget: workspace.profile.browserTarget
         ? {

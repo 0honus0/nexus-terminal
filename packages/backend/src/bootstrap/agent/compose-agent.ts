@@ -404,6 +404,7 @@ export const composeAgent = ({
     (run) => scheduler.enqueue(run),
     (run) => notifyCommitted(run),
     (run) => scheduler.signalInput(run),
+    (run) => scheduler.signalInput(run, 'GOAL_UPDATED'),
     (runId) => {
       scheduler.cancel(runId);
       subagentScheduler?.cancel(runId);
@@ -592,6 +593,11 @@ export const composeAgent = ({
         list: (scope, threadId, limit, before) => runs.list(scope, threadId, limit, before),
         appendInput: (scope, runId, input, expectedVersion, idempotencyKey) =>
           runs.appendInput(scope, runId, input, expectedVersion, idempotencyKey),
+        interrupt: (scope, runId, input, expectedVersion, idempotencyKey) =>
+          runs.interrupt(scope, runId, input, expectedVersion, idempotencyKey),
+        setGoal: (scope, runId, text, expectedVersion, idempotencyKey) =>
+          runs.setGoal(scope, runId, text, expectedVersion, idempotencyKey),
+        pendingInputs: (scope, runId) => runs.pendingInputs(scope, runId),
         increaseBudget: (scope, runId, increase, expectedVersion, idempotencyKey) =>
           runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey),
         cancel: (scope, runId, expectedVersion, idempotencyKey) =>

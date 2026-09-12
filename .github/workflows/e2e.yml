@@ -8,6 +8,7 @@ on:
       - '.env.example'
       - '.dockerignore'
       - 'scripts/docker/**'
+      - 'scripts/agent-runner/**'
       - 'packages/agent-runner/**'
       - 'packages/backend/**'
       - 'packages/frontend/**'
@@ -17,6 +18,7 @@ on:
       - 'scripts/build/build.sh'
       - 'package.json'
       - '.github/workflows/e2e.yml'
+      - '.github/workflows/publish-ghcr.yml'
   pull_request:
     paths:
       - 'Dockerfile'
@@ -24,6 +26,7 @@ on:
       - '.env.example'
       - '.dockerignore'
       - 'scripts/docker/**'
+      - 'scripts/agent-runner/**'
       - 'packages/agent-runner/**'
       - 'packages/backend/**'
       - 'packages/frontend/**'
@@ -33,6 +36,7 @@ on:
       - 'scripts/build/build.sh'
       - 'package.json'
       - '.github/workflows/e2e.yml'
+      - '.github/workflows/publish-ghcr.yml'
   schedule:
     # Weekly latest test-environment check plus a full E2E run.
     - cron: '17 3 * * 1'
@@ -306,10 +310,10 @@ jobs:
       - name: Install host Chromium for Browser direct smoke
         run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
 
-      - name: Verify Agent sandbox prerequisite pin
-        run: pnpm run check:sandbox-prerequisites --verify-latest
+      - name: Verify Agent Runner prerequisites
+        run: pnpm run check:runner-prerequisites
 
-      - name: Install host Runner sandbox dependency
+      - name: Install host Runner runtime prerequisites
         run: ./scripts/agent-runner/prepare-ubuntu-host.sh
 
       - name: Build host Agent Runner
@@ -328,6 +332,35 @@ jobs:
           tags: nexus-terminal:e2e-smoke
           cache-from: type=gha,scope=unified-image
           cache-to: type=gha,mode=max,scope=unified-image
+
+      # 独立 Runner 镜像与发布 workflow 使用同一个 Dockerfile；这里至少保证每次 E2E 都能真实构建。
+      - name: Build standalone Agent Runner image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: scripts/docker/agent-runner/Dockerfile
+          push: false
+          load: true
+          tags: nexus-agent-runner:e2e-smoke
+          cache-from: type=gha,scope=agent-runner-image
+          cache-to: type=gha,mode=max,scope=agent-runner-image
+
+      - name: Verify standalone Agent Runner image prerequisites
+        shell: bash
+        run: |
+          docker run --rm --entrypoint /bin/sh nexus-agent-runner:e2e-smoke -c '
+            set -eu
+            ! command -v bwrap >/dev/null 2>&1
+            test "$(mise --version | awk "NR == 1 { print \$1 }")" = "2026.9.5"
+            command -v script >/dev/null
+            command -v stty >/dev/null
+            command -v tini >/dev/null
+            test -f /app/catalog/catalog.json
+            test -f /app/dist/index.js
+          '
+
+      - name: Run standalone Agent Runner container smoke
+        run: scripts/e2e/standalone-runner-image-smoke.sh nexus-agent-runner:e2e-smoke
 
       - name: Run Docker deployment smoke
         run: scripts/e2e/docker-deployment-smoke.sh nexus-terminal:e2e-smoke

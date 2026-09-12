@@ -354,7 +354,7 @@ export const createWorkspaceControlTool = (
     const args = record(inspection.normalizedArguments);
     const workspaceId = stringValue(args.workspaceId, 128);
     const action = stringValue(args.action, 32) as 'start' | 'stop' | 'restart' | 'delete';
-    const command = await runtime.action(context, workspaceId, action, positiveInteger(args.expectedVersion), {});
+    const command = await runtime.action(context, workspaceId, action, positiveInteger(args.expectedVersion));
     const confirmed = command.status === 'succeeded' || command.status === 'failed';
     return {
       ok: command.status === 'succeeded',
