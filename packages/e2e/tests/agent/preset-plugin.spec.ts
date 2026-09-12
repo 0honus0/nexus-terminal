@@ -373,7 +373,9 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
         `Request the bounded shell approval exactly once. E2E_APPROVAL_CONNECTION_ID=${connectionId}`,
       );
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect(hub.getByText('Awaiting approval', { exact: true })).toBeVisible({ timeout: 30_000 });
+      await expect(hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true })).toBeVisible({
+        timeout: 30_000,
+      });
 
       const approvalRunsResponse = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
       expect(approvalRunsResponse.ok(), await approvalRunsResponse.text()).toBeTruthy();
