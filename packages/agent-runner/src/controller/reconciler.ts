@@ -1,6 +1,7 @@
 import type { SandboxEngine } from './sandbox-engine';
 import type { RunnerJournal } from './journal';
 import type { PluginRunnerRuntime } from './plugin-runner-runtime';
+import { runnerLog } from '../logging';
 
 export class Reconciler {
   constructor(
@@ -9,21 +10,50 @@ export class Reconciler {
     private readonly pluginRunner: PluginRunnerRuntime,
   ) {}
   async reconcile(): Promise<void> {
-    for (const workspace of this.journal.workspaces()) {
+    const workspaces = this.journal.workspaces();
+    const commands = this.journal.commands();
+    const jobs = this.journal.jobs();
+    let failedWorkspaces = 0;
+    let interruptedCommands = 0;
+    let interruptedJobs = 0;
+    runnerLog('info', 'Agent Runner startup reconciliation started', {
+      workspaceCount: workspaces.length,
+      commandCount: commands.length,
+      jobCount: jobs.length,
+    });
+    for (const workspace of workspaces) {
       try {
         const reconciled = await this.sandboxEngine.reconcile(workspace);
         this.journal.saveWorkspace(reconciled);
         if (reconciled.status === 'running') await this.pluginRunner.activateWorkspace(reconciled);
-      } catch {
+      } catch (error) {
+        failedWorkspaces += 1;
+        runnerLog('warn', 'Agent Runner Workspace reconciliation failed', {
+          workspaceId: workspace.workspaceId,
+          generation: workspace.generation,
+          errorCode: error instanceof Error ? error.message : String(error),
+        });
         this.journal.saveWorkspace({ ...workspace, status: 'failed', updatedAt: Math.floor(Date.now() / 1000) });
       }
     }
-    for (const command of this.journal.commands()) {
-      if (command.status === 'running') this.journal.unknown(command.commandId, 'controller_restarted_during_command');
+    for (const command of commands) {
+      if (command.status === 'running') {
+        interruptedCommands += 1;
+        this.journal.unknown(command.commandId, 'controller_restarted_during_command');
+      }
     }
-    for (const job of this.journal.jobs()) {
-      if (job.status === 'running') this.journal.unknownJob(job.jobId, 'controller_restarted_during_job');
+    for (const job of jobs) {
+      if (job.status === 'running') {
+        interruptedJobs += 1;
+        this.journal.unknownJob(job.jobId, 'controller_restarted_during_job');
+      }
     }
     this.journal.compact();
+    runnerLog('info', 'Agent Runner startup reconciliation finished', {
+      workspaceCount: workspaces.length,
+      failedWorkspaceCount: failedWorkspaces,
+      interruptedCommandCount: interruptedCommands,
+      interruptedJobCount: interruptedJobs,
+    });
   }
 }

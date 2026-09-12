@@ -20,6 +20,11 @@ type AppSummary = {
   pendingBudgetRequests: number;
 };
 
+type AgentFeatureSettingsView = {
+  revision: number;
+  effectiveSettings: { feature: { enabled: boolean } };
+};
+
 test('Agent launcher stays passive until the user explicitly opens the Hub', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
 
@@ -34,6 +39,72 @@ test('Agent launcher stays passive until the user explicitly opens the Hub', asy
 
   await launcher.click();
   await expect(hub).toBeVisible();
+});
+
+test('Agent feature enable opens one global floating window that survives route navigation', async ({
+  page,
+  context,
+}) => {
+  await loginAsInitialAdmin(context.request);
+  const initialSettingsResponse = await context.request.get('/api/v1/agent/settings');
+  expect(initialSettingsResponse.ok(), await initialSettingsResponse.text()).toBeTruthy();
+  let settings = ((await initialSettingsResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
+  const originalEnabled = settings.effectiveSettings.feature.enabled;
+
+  const patchFeature = async (enabled: boolean): Promise<void> => {
+    const csrf = await csrfToken(context.request);
+    const response = await context.request.patch('/api/v1/agent/settings', {
+      headers: { 'X-Nexus-CSRF': csrf },
+      data: { patch: { feature: { enabled } }, expectedVersion: settings.revision },
+    });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    settings = ((await response.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
+  };
+
+  if (!originalEnabled) await patchFeature(true);
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+
+  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+  const hub = page.getByRole('dialog', { name: 'Agent', exact: true });
+  const featureSection = page
+    .getByRole('heading', { name: 'Agent feature', exact: true })
+    .locator('xpath=ancestor::section[1]');
+  await expect(launcher).toBeVisible();
+  await expect(hub).toHaveCount(0);
+
+  try {
+    await featureSection.getByRole('button', { name: 'Disable Agent', exact: true }).click();
+    await expect(featureSection.getByRole('button', { name: 'Enable Agent', exact: true })).toBeVisible();
+    await expect(launcher).toHaveCount(0, { timeout: 10_000 });
+    await expect(hub).toHaveCount(0);
+
+    await featureSection.getByRole('button', { name: 'Enable Agent', exact: true }).click();
+    await expect(featureSection.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
+    await expect(launcher).toBeVisible({ timeout: 10_000 });
+    await expect(hub).toBeVisible({ timeout: 10_000 });
+    const settingsBounds = await hub.boundingBox();
+    expect(settingsBounds).not.toBeNull();
+
+    await page.getByRole('link', { name: 'Connections', exact: true }).click();
+    await expect(page).toHaveURL(/\/connections$/);
+    await expect(launcher).toBeVisible();
+    await expect(hub).toBeVisible();
+    const connectionsBounds = await hub.boundingBox();
+    expect(connectionsBounds).toEqual(settingsBounds);
+
+    await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(launcher).toBeVisible();
+    await expect(hub).toBeVisible();
+  } finally {
+    if (!originalEnabled) {
+      const currentResponse = await context.request.get('/api/v1/agent/settings');
+      expect(currentResponse.ok(), await currentResponse.text()).toBeTruthy();
+      settings = ((await currentResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
+      if (settings.effectiveSettings.feature.enabled) await patchFeature(false);
+    }
+  }
 });
 
 test('Agent settings surface exposes the production control plane and captures functional evidence', async ({

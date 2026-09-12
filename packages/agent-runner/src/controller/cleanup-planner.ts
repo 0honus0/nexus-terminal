@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { SandboxEngine } from './sandbox-engine';
 import type { RunnerJournal } from './journal';
+import { runnerLog } from '../logging';
 
 export class CleanupPlanner {
   constructor(
@@ -16,6 +17,7 @@ export class CleanupPlanner {
     if (!Number.isSafeInteger(userId) || userId < 1 || workspaceIds.length > 4096) {
       throw new Error('VALIDATION_FAILED');
     }
+    runnerLog('info', 'Agent Runner runtime cleanup started', { userId, requestedWorkspaceCount: workspaceIds.length });
     const requested = new Set(workspaceIds);
     if (requested.size !== workspaceIds.length) throw new Error('VALIDATION_FAILED');
     const deleted: string[] = [],
@@ -54,6 +56,12 @@ export class CleanupPlanner {
         this.journal.deleteWorkspace(workspace.workspaceId);
         deleted.push(workspace.workspaceId);
       } catch (error) {
+        runnerLog('warn', 'Agent Runner Workspace cleanup quarantined', {
+          userId,
+          workspaceId: workspace.workspaceId,
+          generation: workspace.generation,
+          errorCode: error instanceof Error ? error.message : String(error),
+        });
         const target = path.join(this.root, 'quarantine', `workspace-${workspace.workspaceId}`);
         fs.mkdirSync(target, { recursive: true, mode: 0o700 });
         fs.writeFileSync(
@@ -71,12 +79,21 @@ export class CleanupPlanner {
       }
     }
     this.journal.compact();
+    runnerLog('info', 'Agent Runner runtime cleanup finished', {
+      userId,
+      requestedWorkspaceCount: workspaceIds.length,
+      deletedWorkspaceCount: deleted.length,
+      skippedWorkspaceCount: skipped.length,
+      quarantinedWorkspaceCount: quarantined.length,
+    });
     return { deleted, quarantined, skipped };
   }
   cacheCleanup(): { cleared: true } {
     const cache = path.join(this.root, 'cache');
+    runnerLog('info', 'Agent Runner cache cleanup started');
     fs.rmSync(cache, { recursive: true, force: true });
     fs.mkdirSync(cache, { recursive: true });
+    runnerLog('info', 'Agent Runner cache cleanup finished');
     return { cleared: true };
   }
 }

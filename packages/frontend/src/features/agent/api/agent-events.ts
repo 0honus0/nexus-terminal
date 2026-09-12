@@ -126,6 +126,11 @@ export type AgentStreamEvent =
 type AgentSubscriptionRequest =
   { channel: 'host'; cursor: number } | { channel: 'run'; appId: string; runId: string; cursor: number };
 
+const subscriptionContext = (request: AgentSubscriptionRequest) =>
+  request.channel === 'host'
+    ? { channel: 'host' as const, cursor: request.cursor }
+    : { channel: 'run' as const, appId: request.appId, runId: request.runId, cursor: request.cursor };
+
 interface AgentWireMessage {
   type: string;
   requestId?: string;
@@ -389,6 +394,8 @@ async function* connectOnce(
 
   const socket = openWebSocket('/ws/agent');
   const subscriptionId = crypto.randomUUID();
+  const log = subscriptionContext(request);
+  logger.debug(log, 'Agent event WebSocket opening');
   const requestId = crypto.randomUUID();
   const queue: AgentStreamEvent[] = [];
   let wake: (() => void) | null = null;
@@ -416,6 +423,7 @@ async function* connectOnce(
       const message = parseWireMessage(browserEvent.data);
       if (message.type === 'subscribed' && message.requestId === requestId) {
         subscribed = true;
+        logger.debug(log, 'Agent event subscription acknowledged');
         resolveSubscribed?.();
         return;
       }
@@ -432,11 +440,13 @@ async function* connectOnce(
           message.requestId === requestId || payload.subscriptionId === subscriptionId || !message.requestId;
         if (!relevant) return;
         terminalError = protocolError(payload);
+        logger.warn({ ...log, err: terminalError }, 'Agent event subscription returned a protocol error');
         rejectSubscribed?.(terminalError);
         notify();
       }
     } catch (cause) {
       terminalError = cause instanceof Error ? cause : new Error('AGENT_WS_PROTOCOL_ERROR');
+      logger.warn({ ...log, err: terminalError }, 'Agent event message processing failed');
       rejectSubscribed?.(terminalError);
       notify();
       if (socket.readyState === WebSocket.OPEN) socket.close(1002, 'Agent protocol error');
@@ -444,6 +454,10 @@ async function* connectOnce(
   });
   socket.addEventListener('close', (event) => {
     if (!signal.aborted && !terminalError) terminalError = new Error(`AGENT_WS_CLOSED_${event.code}`);
+    logger.debug(
+      { ...log, closeCode: event.code, clean: event.wasClean, aborted: signal.aborted },
+      'Agent event WebSocket closed',
+    );
     if (terminalError) rejectSubscribed?.(terminalError);
     notify();
   });
@@ -559,7 +573,14 @@ async function* connect(request: AgentSubscriptionRequest, signal: AbortSignal):
       if (signal.aborted) return;
     } catch (cause) {
       if (signal.aborted) return;
-      if (!retryableTransportError(cause)) throw cause;
+      if (!retryableTransportError(cause)) {
+        logger.warn({ ...subscriptionContext(request), cursor, err: cause }, 'Agent event stream failed permanently');
+        throw cause;
+      }
+      logger.debug(
+        { ...subscriptionContext(request), cursor, retryAttempt, err: cause },
+        'Agent event stream disconnected; scheduling reconnect',
+      );
       if (needsSessionProbe(cause)) await assertActiveSession();
     }
 

@@ -767,7 +767,14 @@ no module cycles
 - `ARCHITECTURE.md` / `IMPLEMENTATION.md` 不再保留“Agent 尚未开工 / software-requirements 尚未同步”的历史前言；
 - `NXW1`、`/ws/uploads`、`NXR2`、Backend↔Runner HTTP streaming 已冻结为彼此独立的 transport contract。
 
-11. Workspace mixed-mode lease：**完成并通过远程 Actions 验收**。
+11. Agent 全局浮窗与诊断可观测性：**当前代码已收敛**。
+
+- `AgentSurfaceHost` 继续只在 `App.vue` 根级挂载，位于 `RouterView` 外，并将 `AgentLauncher/AgentHubWindow` Teleport 到 `body`；router 仍没有 `/agent` 页面。Dashboard/Workspace/Connections/Settings 等路由切换不重建 Agent Host。
+- 初次认证加载保持 Launcher passive；Settings 将 feature 从 disabled→enabled 后，Host summary transition 立即打开同一个全局 Hub；disabled 隐藏 Launcher/Hub。Hub 仍保留 header drag、右下 resize、minimize、maximize/restore、close 和 user-scoped layout persistence。
+- Frontend 已补 Host attach/summary/event WebSocket/window/layout 结构化 pino 日志；Backend 已补 Run 与 Workspace command/reconcile/cleanup 日志；Runner 已补 JSON structured startup/command/job/reconcile/cleanup/journal 日志。日志只含安全 ID、状态、generation、bounds/计数/error code，不记录 prompt/message、credential/token 或 command payload/argv。
+- Agent production E2E 新增 feature toggle→auto-open global Hub→SPA route navigation 仍保持同一 Hub/Launcher 与窗口几何的断言，继续使用真实 role/name，不增加 test-only DOM seam。
+
+12. Workspace mixed-mode lease：**完成并通过远程 Actions 验收**。
     - `LeasePort.acquireMany(owner, keys, mode)` 保留为同 mode convenience API，底层新增单事务 `acquireResources([{resourceKey,mode}])`，重复 key 按 write 优先合并；
     - `MutationGuardRequest.ownerId` 保持稳定 actor identity，并发长 mutation 使用独立 `leaseOwnerId` 表达具体 holder，避免把 actor 与 operation identity 混在一起；
     - upload/compress 对可证明唯一写目标使用 connection root read + canonical file write；decompress/copy-move/upload prepare 等宽写集合继续 connection root write；
@@ -775,14 +782,14 @@ no module cycles
     - Platform 新增统一 absolute remote path canonicalization，Archive/Upload/Transfer/Workspace lease key 与真实 I/O 使用同一规范化规则；
     - GitHub Actions run `34498027448`（HEAD `e62847c`）整体 success，8 个 Playwright groups 全绿；新增同 Workspace 两个不同 ZIP 目标并发用例 1.6s passed，group 5 为 52 passed、group 3 为 37 passed、group 4 为 16 passed，并覆盖 archive overlap、mobile progress、multi-file upload 与 slow-SFTP batch。
 
-12. Root execution owner 收敛：**本轮代码已完成，本地完整门禁通过**。
+13. Root execution owner 收敛：**本轮代码已完成，本地完整门禁通过**。
     - `NativeAgentBackend` 构造依赖由 13 项收敛为 6 项，只直接持有 Run/Delegation snapshot、`StateCommitPort`、`ModelStepRunner`、`ToolCallRunner` 与 `ClockPort`；
     - `ModelStepRunner` 负责 Provider/model/Context/model stream/ModelCallLimiter 与 transport retry，`ToolCallRunner` 负责 Tool inspect/policy、read lease 与 Tool execution；
     - Agent mutation 使用独立 staged `MutationLeaseGuardPort`，底层 `LeasePort` 只存在于 infrastructure adapter；顺序固定为 `lease acquire → StateCommit.beginMutationTool → mark active → side effect → StateCommit.settleMutationTool → settle/release 或 quarantine`；
     - Backend architecture checker 禁止 `NativeAgentBackend` 重新直接依赖 Provider/Context/Tool/Lease execution services 或调用 mutation lease marker；
     - Backend/Frontend architecture + build、Agent Runtime build、test-policy、70 specs/8 groups assignment、sandbox prerequisite、shell syntax 与 `git diff --check` 均已通过；最终远端产品证据见上文验证状态中的产品代码 SHA `a15cf3bb3b29`。
 
-13. Child execution owner 收敛：**完成并通过远端 Actions 验收**。
+14. Child execution owner 收敛：**完成并通过远端 Actions 验收**。
     - `SubagentScheduler` 从接近 1000 行收敛为 durable work scheduler，只负责 scope/fairness/capacity、`ready/terminal` scan、claim CAS、active tracking 与 quiesce；
     - 已 claim 的 `model_step/tool_step/consume_inbox/terminal` execution 进入 `SubagentParticipantExecutor`，其 durable Run/Runtime/Delegation/Step/Tool 状态仍显式经 `StateCommitPort`；
     - `SubagentContextBuilder` 独立负责 runtime/mailbox/tool-history context、child tool schema 与 context/token limit，避免 context assembly 继续长在 Scheduler 中；
@@ -792,14 +799,14 @@ no module cycles
     - GitHub Actions run `34579244526`（产品代码 HEAD `9f4ffbd`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
     - GitHub Actions run `34576022008`（产品代码 HEAD `15f821b`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
-14. Architecture guard coverage：**已补齐当前已知 owner/phase 防回退缺口**。
+15. Architecture guard coverage：**已补齐当前已知 owner/phase 防回退缺口**。
     - 整个 Agent Runtime 禁止直接调用底层 mutation lease marker；
     - `SubagentScheduler` 禁止取得 `RelationalDatabase` / `.transaction()` authority；
     - StateCommit `*-transitions.ts` 的导出 transition 必须以 `tx: RelationalDatabase` 为首参数，且不得自行开启 transaction；
     - ACP/Browser architecture guard 已从“禁止 live wiring”切换为**约束 live owner**：Operations manifest 必须保留对应 capability，`compose-agent.ts` 只经 tool-contribution seam 注册；Browser semantic runtime 固定在 Backend adapter，Runner 只允许 tunnel/runtime transport，不得出现第二套 Puppeteer semantic owner；
     - `NativeAgentBackend` 的 SQLite/Express/Runner concrete dependency 已由既有 layer / technology-package checker 覆盖，不再增加重复专用规则。
 
-15. Composition Root Tool contribution owner：**已收敛**。
+16. Composition Root Tool contribution owner：**已收敛**。
     - `compose-agent.ts` 不再直接 import Operations Tool creator，也不再手写 machine/workspace/runtime/MCP contribution metadata；
     - `bootstrap/agent/tool-contributions.ts` 只负责把已构造 Port/Service 注册为 Tool contribution，并维护 MCP owned contribution hook；
     - `ToolCatalog.registerContribution()` 只接受静态 contribution；动态 scoped ownership 只能走 `replaceOwnedContribution()/removeOwned()`，避免公开 API 暗含 scope/owner 双重语义；无 consumer 的 contribution introspection API 已删除；
@@ -808,13 +815,13 @@ no module cycles
     - GitHub Actions run `34581381495`（产品代码 HEAD `af04bf7`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
     - GitHub Actions run `34584611396`（产品代码 HEAD `aaff050`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
-16. Frontend Host / builtin App ownership：**已收敛**。
+17. Frontend Host / builtin App ownership：**已收敛**。
     - `AgentHubWindow.vue` 不再直接 import 任何 builtin App view；通用 Conversation/TaskRail/Workspace composition 已提升为 `host/AgentAppSurface.vue`；
     - Operations 通过 `apps/operations/public.ts` lazy export host-owned `AgentAppSurface`，`host/builtin-apps.ts` 仍是唯一静态 builtin composition seam；声明 `agents[]` 且无 Frontend target 的安装式 App 直接复用 `AgentAppSurface`，自定义 Frontend target 才走 `PluginAppFrame`；
     - Frontend architecture checker 默认禁止 `host/** -> apps/**`，仅允许 `host/builtin-apps.ts -> apps/<app>/public.ts`，因此 Host 无法重新依赖 App 私有组件。
     - GitHub Actions run `34582398075`（产品代码 HEAD `debdac1`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
-17. Run read least-authority：**已收敛**。
+18. Run read least-authority：**已收敛**。
     - broad `RunRepositoryPort` 已删除，`SqliteRunRepository` 仍是单一 concrete adapter，但分别实现 `RunSnapshotReaderPort`、`RunQueryPort`、`RunExecutionReaderPort`、`RunEventReaderPort`、`HostCursorReaderPort`；
     - Plan/Approval/Checkpoint/Subagent participant 只拿 snapshot；`SubagentService` 只拿 snapshot + host cursor；`RunService` 只拿 snapshot + list；`NativeAgentBackend` 只拿 `snapshot/rootRuntimeId/pendingMutation`；
     - 无产品 consumer 的 `createdQueue()` 已删除，后继若需要必须按新的 durable owner 重新引入；

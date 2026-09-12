@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../shared/logging/logger';
 import { createDefaultAgentSettings, type AgentSettingsDocument } from '../agent-defaults';
 import type { JsonValue } from '../agent.types';
 import type { AgentSettingsService } from '../host/agent-settings.service';
@@ -331,6 +332,19 @@ export class WorkspaceRuntimeManagementService {
       createdAt: now,
       expiresAt: preview.expiresAt,
     });
+    logger.info(
+      {
+        userId,
+        confirmationId: preview.confirmationId,
+        workspaceCount: preview.workspaceCount,
+        activeCount: preview.activeCount,
+        retainedCount: preview.retainedCount,
+        estimatedReclaimableBytes: preview.estimatedReclaimableBytes,
+        expectedVersion,
+        catalogRevision: preview.catalogRevision,
+      },
+      'Agent Workspace runtime cleanup preview created',
+    );
     return preview;
   }
 
@@ -355,6 +369,16 @@ export class WorkspaceRuntimeManagementService {
       throw new Error('VALIDATION_FAILED');
     }
     await this.confirmations.delete(userId, confirmationId);
+    logger.info(
+      {
+        userId,
+        confirmationId,
+        expectedVersion,
+        workspaceCount: workspaceIds.length,
+        catalogRevision: catalog.revision,
+      },
+      'Agent Workspace runtime cleanup confirmed',
+    );
     return this.runtime.adminAction(userId, 'runtimeCleanup', asJson({ workspaceIds }));
   }
 

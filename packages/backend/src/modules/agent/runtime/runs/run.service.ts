@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import { ProviderService } from '../../ai/provider.service';
 import { AgentSettingsService } from '../../host/agent-settings.service';
@@ -230,6 +231,21 @@ export class RunService {
       this.onCommitted(committed.run);
       this.onCreated(committed.run);
     }
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId: committed.run.id,
+        threadId: committed.run.threadId,
+        status: committed.run.status,
+        replayed: committed.replayed,
+        agentDefinitionId: command.agentDefinitionId,
+        providerId: command.model.providerId,
+        modelId: command.model.modelId,
+        connectionCount: connectionIds.length,
+      },
+      'Agent Run create committed',
+    );
     return committed.run;
   }
 
@@ -328,6 +344,18 @@ export class RunService {
       this.onCommitted(committed.run);
       if (committed.accepted) this.onCancelRequested(runId);
     }
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        status: committed.run.status,
+        accepted: committed.accepted,
+        replayed: committed.replayed,
+        runVersion: committed.run.version,
+      },
+      'Agent Run cancellation committed',
+    );
     return committed.run;
   }
 
@@ -336,15 +364,34 @@ export class RunService {
       throw new Error('VALIDATION_FAILED');
     }
     const key = requireIdempotencyKey(idempotencyKey);
-    const committed = await this.stateCommit.deleteRun({
-      scope,
-      runId,
-      expectedRunVersion: expectedVersion,
-      idempotencyKey: key,
-      requestHash: requestHash(1, { runId, expectedVersion }),
-      now: this.clock.nowUnixSeconds(),
-    });
-    if (!committed.replayed) this.onDeleted(scope.userId, committed.hostEventCursor);
+    try {
+      const committed = await this.stateCommit.deleteRun({
+        scope,
+        runId,
+        expectedRunVersion: expectedVersion,
+        idempotencyKey: key,
+        requestHash: requestHash(1, { runId, expectedVersion }),
+        now: this.clock.nowUnixSeconds(),
+      });
+      if (!committed.replayed) this.onDeleted(scope.userId, committed.hostEventCursor);
+      logger.info(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          runId,
+          expectedVersion,
+          replayed: committed.replayed,
+          hostEventCursor: committed.hostEventCursor,
+        },
+        'Agent Run deleted',
+      );
+    } catch (cause) {
+      logger.warn(
+        { err: cause, userId: scope.userId, appId: scope.appId, runId, expectedVersion },
+        'Agent Run deletion rejected',
+      );
+      throw cause;
+    }
   }
 
   async get(scope: Scope, runId: string): Promise<RunSnapshot> {

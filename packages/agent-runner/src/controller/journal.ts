@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { CommandRecord, JobRecord, WorkspaceJobResult, WorkspaceRecord } from '../types';
+import { runnerLog } from '../logging';
 
 interface JournalState {
   schemaVersion: 2;
@@ -232,8 +233,16 @@ export class RunnerJournal {
     const jobCount = Object.keys(this.state.jobs).length;
     prune(this.state.commands, new Set(['succeeded', 'failed']));
     prune(this.state.jobs, new Set(['succeeded', 'failed', 'cancelled']));
-    if (commandCount !== Object.keys(this.state.commands).length || jobCount !== Object.keys(this.state.jobs).length) {
+    const nextCommandCount = Object.keys(this.state.commands).length;
+    const nextJobCount = Object.keys(this.state.jobs).length;
+    if (commandCount !== nextCommandCount || jobCount !== nextJobCount) {
       this.flush();
+      runnerLog('debug', 'Agent Runner journal compacted', {
+        prunedCommandCount: commandCount - nextCommandCount,
+        prunedJobCount: jobCount - nextJobCount,
+        remainingCommandCount: nextCommandCount,
+        remainingJobCount: nextJobCount,
+      });
     }
   }
 
@@ -247,6 +256,10 @@ export class RunnerJournal {
       fs.renameSync(this.filePath, target);
     }
     fsyncDirectory(path.dirname(this.filePath));
+    runnerLog(reason === 'corrupt' ? 'error' : 'warn', 'Agent Runner journal evidence preserved', {
+      reason,
+      evidenceFile: path.basename(target),
+    });
   }
 
   private patchJob(id: string, patch: Partial<JobRecord>): void {

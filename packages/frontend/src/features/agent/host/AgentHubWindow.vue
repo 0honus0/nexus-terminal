@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted } from 'vue';
+  import { logger } from '@/client/logging/logger';
   import type { HostSummaryView } from '../api/agent-api';
   import AgentAppSurface from './AgentAppSurface.vue';
   import PluginAppFrame from './PluginAppFrame.vue';
@@ -51,11 +52,25 @@
 
   const finish = (event: PointerEvent) => {
     if (pointerId !== event.pointerId) return;
+    const completedMode = mode;
+    const previousBounds = { ...startBounds };
     const target = event.currentTarget as HTMLElement;
     if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
     pointerId = null;
     mode = null;
     emit('layoutChange');
+    if (completedMode) {
+      logger.debug(
+        {
+          interaction: completedMode,
+          previousBounds,
+          bounds: { ...state.bounds },
+          maximized: state.maximized,
+          activeAppId: state.activeAppId,
+        },
+        'Agent floating window pointer interaction completed',
+      );
+    }
   };
 
   const switchApp = (appId: string) => {
@@ -75,7 +90,16 @@
     };
   });
 
-  const handleResize = () => agentWindowManager.clamp();
+  const handleResize = () => {
+    const previousBounds = { ...state.bounds };
+    agentWindowManager.clamp();
+    if (JSON.stringify(previousBounds) !== JSON.stringify(state.bounds)) {
+      logger.debug(
+        { previousBounds, bounds: { ...state.bounds }, maximized: state.maximized },
+        'Agent floating window clamped to viewport',
+      );
+    }
+  };
   onMounted(() => window.addEventListener('resize', handleResize));
   onBeforeUnmount(() => window.removeEventListener('resize', handleResize));
 </script>
@@ -83,6 +107,8 @@
 <template>
   <section
     v-if="visible"
+    role="dialog"
+    aria-modal="false"
     class="agent-hub-window fixed z-30 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl"
     :style="style"
     :aria-label="$t('agent.hub.title')"

@@ -485,7 +485,7 @@ SharedFacts只允许run-scoped key/value+version CAS，值64KiB、单Run总1MiB�
 
 ## 11. 前端 UI 与原页面兼容
 
-全局只有一个 AgentLauncher 和一个 AgentHubWindow，挂在 App.vue 的 RouterView 外、登录后可见；**Agent 只提供全局非模态浮窗，不提供独立全页 presentation，不修改当前 RouterView 路由，也不改 AppHeader/顶部横向导航。** Agent Hub 采用**conversation-first**：中间 Conversation 是始终存在的主工作区，用户通过自然语言产生目标、计划、执行任务、审批和结果；Run/Step/Subagent/Workspace 是对话派生的执行事实，不把用户强制切换到独立“任务管理后台”。窗口非模态，不锁body、不遮原终端，不引用 RemoteDesktopModal 的连接或Guacamole对象。默认1080×700、最小640×420（小视口例外），边界按顶部导航/visualViewport clamp；宽<1200收任务详情，宽<768用全宽sheet，避让虚拟键盘/安全区。
+全局只有一个 AgentLauncher 和一个 AgentHubWindow，`AgentSurfaceHost` 挂在 App.vue 的 RouterView 外并把 Launcher/Hub `Teleport` 到 `body` root overlay；**Agent 只提供全局非模态浮窗，不提供独立全页 presentation，不修改当前 RouterView 路由，也不改 AppHeader/顶部横向导航。** 因此 Dashboard/Workspace/Connections/Settings 等 SPA 路由切换只替换 RouterView，不能卸载或重建 Agent Host。首次认证加载保持 passive，仅显示 Launcher；当 Host summary 观察到 feature 从 disabled→enabled 时立即 `openHub({restoreRecent:true})`，让用户在 Settings 打开总开关后直接得到全局浮窗；disabled 则关闭 Hub 并隐藏 Launcher。 Agent Hub 采用**conversation-first**：中间 Conversation 是始终存在的主工作区，用户通过自然语言产生目标、计划、执行任务、审批和结果；Run/Step/Subagent/Workspace 是对话派生的执行事实，不把用户强制切换到独立“任务管理后台”。窗口非模态，不锁body、不遮原终端，不引用 RemoteDesktopModal 的连接或Guacamole对象。默认1080×700、最小640×420（小视口例外），边界按顶部导航/visualViewport clamp；宽<1200收任务详情，宽<768用全宽sheet，避让虚拟键盘/安全区。
 
 Launcher只定义**单击**打开：恢复上一次选中的有效App及其会话视图状态；移动>6px视为拖动并取消本次打开，pointercancel/卸载释放capture，Enter/Space立即打开并忽略repeat/合成click。App切换始终在Hub内部完成：标题区保留单选`AgentAppSwitcher`作为紧凑/移动入口；当存在多个已启用 App 时，其下方同时显示基于 Host summary 的 quick-switch activity strip，直接呈现每 App 的 running Run、pending approval、pending budget 数量。App 搜索只过滤可选项且始终保留当前 App，不能因搜索条件让 select 进入无效值。选择A→B只改变前台presentation，A已启动的Run/Workspace/Subagent/审批/预算等待全部继续，不能因切换App、最小化或关闭Hub而cancel。Host持续订阅各App安全summary；非当前App暂停详细 Agent event subscription和重型视图，重新切回时用snapshot+catchup恢复。每个已访问App在当前登录生命周期内保留独立的threadId/draft/scroll/选中task/next-run model key等轻量view state；刷新后运行事实从服务端恢复，未提交draft仍不持久化。无历史默认Operations；停用App过滤，全部无效显示empty-state。
 
@@ -505,7 +505,7 @@ localStorage仅存 nexus.agent.surface.v1.user.<userId> 的bounds/maximized/laun
 
 ## 12. 可观测、生产运维与验收边界
 
-Agent审计记录requestId/runId/stepId/operationHash/目标别名/结果/token/耗时/配额，不保存明文密钥、隐藏思维链或无限prompt；业务messages按用户会话权限读取，不进入全局诊断日志。redaction不能保证识别所有秘密，因此外部日志默认最小读取，用户主动提交敏感资料仍提示模型出站风险。
+Agent审计记录requestId/runId/stepId/operationHash/目标别名/结果/token/耗时/配额，不保存明文密钥、隐藏思维链或无限prompt；业务messages按用户会话权限读取，不进入全局诊断日志。诊断日志沿用 Nexus 结构化 logger：Frontend 记录 Agent Host attach/detach、summary/event WebSocket reconnect、窗口 open/minimize/maximize/close、App/view 切换、move/resize 完成与 layout restore/persist；Backend 记录 Run create/cancel/delete、Workspace command/reconcile/cleanup；Runner 使用统一 JSON prefix 记录 startup、command/job、reconcile、cleanup、journal compaction/corrupt evidence。字段只包含安全的 user/app/thread/run/runtime/workspace/command/job ID、状态、generation、bounds/计数、耗时或 error code；禁止写 prompt/message 文本、credential/token/cookie、Tool/Runner command payload、argv/cwd 或任意可能包含用户正文的序列化对象。redaction不能保证识别所有秘密，因此外部日志默认最小读取，用户主动提交敏感资料仍提示模型出站风险。
 
 Agent Browser 事件统一使用独立 `/ws/agent` WebSocket，不修改全局 Axios timeout，也不复用 Workspace/NXR2 socket。upgrade 复用现有 WebSocket 的同源 Origin、IP whitelist、session/2FA 与 heartbeat 边界；Host/Run 通过显式 subscription 订阅，durable 事件只以数据库 sequence 推进 cursor，`message.delta`/`tool.delta` 仅实时发送且无 durable id。Nginx 复用现有 `/ws/` upgrade 代理，不再需要 Agent SSE 专用 location；登出、reset、shutdown 或 WebSocket quiesce 必须关闭订阅。
 

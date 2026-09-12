@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../shared/logging/logger';
 import type { AgentSettingsService } from '../host/agent-settings.service';
 import type { AppLifecycleService } from '../host/app-lifecycle.service';
 import type { AppCapabilityBroker } from '../host/app-capability-broker';
@@ -346,6 +347,22 @@ export class WorkspaceRuntimeService {
     if (provision.status === 'succeeded') {
       workspace = (await this.repository.getWorkspace(scope, workspace.id)) ?? workspace;
     }
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        agentRuntimeId,
+        workspaceId: workspace.id,
+        generation: workspace.generation,
+        status: workspace.status,
+        recipeId: workspace.profile.recipeId,
+        retained: workspace.retained,
+        provisionCommandId: provision.id,
+        provisionStatus: provision.status,
+      },
+      'Agent Workspace created',
+    );
     return workspace;
   }
 
@@ -373,7 +390,7 @@ export class WorkspaceRuntimeService {
     ) {
       throw new Error('PLUGIN_RUNNER_PROTOCOL_VERSION_UNSUPPORTED');
     }
-    return this.dispatch(
+    const command = await this.dispatch(
       scope,
       action,
       workspaceId,
@@ -386,6 +403,19 @@ export class WorkspaceRuntimeService {
       true,
       waitForTerminal,
     );
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        workspaceId,
+        generation: workspace.generation,
+        action,
+        commandId: command.id,
+        commandStatus: command.status,
+      },
+      'Agent Workspace action dispatched',
+    );
+    return command;
   }
 
   async switchToolVersions(
@@ -570,7 +600,11 @@ export class WorkspaceRuntimeService {
             : command;
         await this.syncCommandProjection(scope, updated);
         if (['succeeded', 'failed', 'unknown'].includes(remote.status)) completed += 1;
-      } catch {
+      } catch (cause) {
+        logger.debug(
+          { err: cause, commandId: command.id, action: command.action, workspaceId: command.workspaceId },
+          'Agent Workspace reconciliation query failed',
+        );
         if (command.deadlineAt <= this.now()) {
           const updated = await this.repository.completeCommand(
             scope,
@@ -583,6 +617,12 @@ export class WorkspaceRuntimeService {
           completed += 1;
         }
       }
+    }
+    if (pending.length > 0) {
+      logger.debug(
+        { pendingCommands: pending.length, completedCommands: completed, limit },
+        'Agent Workspace reconciliation pass finished',
+      );
     }
     return completed;
   }
@@ -648,6 +688,19 @@ export class WorkspaceRuntimeService {
       deadlineAt,
       createdAt: now,
     });
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        commandId: command.id,
+        workspaceId: workspaceId ?? null,
+        action,
+        generation,
+        deadlineAt,
+        replayed: command.id !== commandId,
+      },
+      'Agent Workspace runtime command recorded',
+    );
     if (command.id !== commandId) {
       if (!['pending', 'running'].includes(command.status)) {
         if (syncWorkspace) await this.syncCommandProjection(scope, command);
@@ -671,6 +724,18 @@ export class WorkspaceRuntimeService {
       }
       const updated = await this.repository.completeCommand(scope, commandId, remote.status, remote.result, this.now());
       if (syncWorkspace) await this.syncCommandProjection(scope, updated);
+      logger.debug(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          commandId,
+          workspaceId: workspaceId ?? null,
+          action,
+          generation,
+          commandStatus: updated.status,
+        },
+        'Agent Workspace runtime command completed',
+      );
       return updated;
     } catch (error) {
       const updated = await this.repository.completeCommand(
@@ -681,6 +746,18 @@ export class WorkspaceRuntimeService {
         this.now(),
       );
       if (syncWorkspace) await this.syncCommandProjection(scope, updated);
+      logger.warn(
+        {
+          err: error,
+          userId: scope.userId,
+          appId: scope.appId,
+          commandId: command.id,
+          workspaceId: workspaceId ?? null,
+          action,
+          generation,
+        },
+        'Agent Workspace runtime command became unknown',
+      );
       return updated;
     }
   }
@@ -731,6 +808,10 @@ export class WorkspaceRuntimeService {
     const deletedIds = [...new Set(deleted.filter((value): value is string => typeof value === 'string'))];
     if (!deletedIds.length) return;
     await this.repository.markRuntimeCleanupDeleted(userId, deletedIds, this.now());
+    logger.info(
+      { userId, commandId: command.id, deletedWorkspaceCount: deletedIds.length },
+      'Agent Workspace runtime cleanup projection synchronized',
+    );
   }
 
   private async syncWorkspaceStatus(scope: Scope, command: WorkspaceRuntimeCommandView): Promise<void> {

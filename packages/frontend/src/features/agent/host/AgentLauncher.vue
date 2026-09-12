@@ -4,6 +4,7 @@
   import { agentWindowManager } from './window-manager';
 
   const props = defineProps<{ summary: HostSummaryView | null; paused?: boolean }>();
+  const emit = defineEmits<{ layoutChange: [] }>();
 
   const position = computed(() => agentWindowManager.state.launcherPosition);
   let pointerId: number | null = null;
@@ -49,7 +50,8 @@
     const target = event.currentTarget as HTMLElement;
     if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
     pointerId = null;
-    if (!moved && !props.paused) agentWindowManager.openHub({ restoreRecent: true });
+    if (moved) emit('layoutChange');
+    else if (!props.paused) agentWindowManager.openHub({ restoreRecent: true });
   };
 
   const cancel = (event: PointerEvent) => {

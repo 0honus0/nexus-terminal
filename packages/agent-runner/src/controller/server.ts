@@ -18,6 +18,7 @@ import type { AcpProcessRuntime } from './acp-process-runtime';
 import type { WorkspaceTerminalRuntime } from './workspace-terminal-runtime';
 import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
 import type { WorkspaceBrowserEndpoint } from '../types';
+import { runnerLog } from '../logging';
 
 const RUNNER_API_VERSION = '2026-09-11';
 const MAX_BODY_BYTES = 256 * 1024;
@@ -589,7 +590,17 @@ export class RunnerControllerServer {
       throw new Error('VALIDATION_FAILED');
     }
     const hash = payloadHash(request);
+    const priorJob = this.dependencies.journal.job(request.jobId);
     const job = this.dependencies.journal.beginJob(request.jobId, hash, workspaceId, request.generation);
+    runnerLog('debug', 'Agent Runner Workspace job accepted', {
+      jobId: request.jobId,
+      workspaceId,
+      generation: request.generation,
+      userId: request.userId,
+      appId: request.appId,
+      runId: request.runId,
+      replayed: priorJob !== null,
+    });
     if (job.status === 'pending') {
       this.dependencies.journal.runningJob(request.jobId);
       void this.executeWorkspaceJob(workspace.sandboxId, request);
@@ -601,9 +612,21 @@ export class RunnerControllerServer {
     try {
       const result = await this.dependencies.sandboxEngine.executeJob(sandboxId, request);
       this.dependencies.journal.succeedJob(request.jobId, result);
+      runnerLog('debug', 'Agent Runner Workspace job completed', {
+        jobId: request.jobId,
+        workspaceId: request.workspaceId,
+        generation: request.generation,
+        exitCode: result.exitCode,
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.dependencies.journal.failJob(request.jobId, message);
+      runnerLog('warn', 'Agent Runner Workspace job failed', {
+        jobId: request.jobId,
+        workspaceId: request.workspaceId,
+        generation: request.generation,
+        errorCode: message.slice(0, 200),
+      });
     }
   }
 
@@ -628,7 +651,18 @@ export class RunnerControllerServer {
     const command = record as unknown as WorkspaceRuntimeCommand;
     this.validateCommand(command);
     const hash = payloadHash(command);
+    const priorCommand = this.dependencies.journal.command(command.commandId);
     const existing = this.dependencies.journal.begin(command.commandId, hash, command.action, command.workspaceId);
+    runnerLog('debug', 'Agent Runner Workspace command accepted', {
+      commandId: command.commandId,
+      action: command.action,
+      workspaceId: command.workspaceId,
+      generation: command.generation,
+      userId: command.userId,
+      appId: command.appId,
+      runId: command.runId,
+      replayed: priorCommand !== null,
+    });
     if (existing.status === 'pending') {
       this.dependencies.journal.running(command.commandId);
       void this.executeWorkspaceCommand(command);
@@ -641,8 +675,23 @@ export class RunnerControllerServer {
       const result =
         command.action === 'provision' ? await this.provision(command) : await this.workspaceAction(command);
       this.dependencies.journal.succeed(command.commandId, result);
+      runnerLog('debug', 'Agent Runner Workspace command completed', {
+        commandId: command.commandId,
+        action: command.action,
+        workspaceId: command.workspaceId,
+        generation: command.generation,
+        workspaceStatus: result.status,
+      });
     } catch (error) {
-      this.dependencies.journal.fail(command.commandId, error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      this.dependencies.journal.fail(command.commandId, message);
+      runnerLog('warn', 'Agent Runner Workspace command failed', {
+        commandId: command.commandId,
+        action: command.action,
+        workspaceId: command.workspaceId,
+        generation: command.generation,
+        errorCode: message.slice(0, 200),
+      });
     }
   }
 
@@ -653,7 +702,14 @@ export class RunnerControllerServer {
     this.validateCommonCommand(command);
     const commandId = String(command.commandId);
     const hash = payloadHash(command);
+    const priorCommand = this.dependencies.journal.command(commandId);
     const existing = this.dependencies.journal.begin(commandId, hash, action, null);
+    runnerLog('debug', 'Agent Runner admin command accepted', {
+      commandId,
+      action,
+      userId: command.userId,
+      replayed: priorCommand !== null,
+    });
     if (existing.status === 'pending') {
       this.dependencies.journal.running(commandId);
       void this.executeAdminCommand(command, action);
@@ -716,8 +772,31 @@ export class RunnerControllerServer {
         result = { uninstalled: true };
       }
       this.dependencies.journal.succeed(commandId, result);
+      const cleanupResult =
+        action === 'runtimeCleanup' && result && typeof result === 'object' && !Array.isArray(result)
+          ? (result as { deleted?: unknown[]; skipped?: unknown[]; quarantined?: unknown[] })
+          : null;
+      runnerLog('info', 'Agent Runner admin command completed', {
+        commandId,
+        action,
+        userId: command.userId,
+        ...(cleanupResult
+          ? {
+              deletedWorkspaceCount: cleanupResult.deleted?.length ?? 0,
+              skippedWorkspaceCount: cleanupResult.skipped?.length ?? 0,
+              quarantinedWorkspaceCount: cleanupResult.quarantined?.length ?? 0,
+            }
+          : {}),
+      });
     } catch (error) {
-      this.dependencies.journal.fail(commandId, error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      this.dependencies.journal.fail(commandId, message);
+      runnerLog('warn', 'Agent Runner admin command failed', {
+        commandId,
+        action,
+        userId: command.userId,
+        errorCode: message.slice(0, 200),
+      });
     }
   }
 

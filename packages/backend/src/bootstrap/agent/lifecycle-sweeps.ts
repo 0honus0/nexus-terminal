@@ -1,3 +1,4 @@
+import { logger } from '../../shared/logging/logger';
 import type { ClockPort } from '../../modules/agent/agent.types';
 import type { ApprovalSweepCommitPort } from '../../modules/agent/runtime/runs/state-commit.port';
 import type { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
@@ -38,19 +39,25 @@ export const createAgentLifecycleSweeps = ({
           notifyCommitted(run);
           scheduler.enqueue(run);
         }
+        if (resumed.length > 0)
+          logger.debug({ resumedRuns: resumed.length }, 'Agent approval expiry sweep resumed Runs');
       })
-      .catch((error) => console.error('[Agent] approval expiry sweep failed:', error));
+      .catch((error) => logger.warn({ err: error }, 'Agent approval expiry sweep failed'));
   };
 
   const sweepWorkspaceReconciliation = (): void => {
     workspaceReconcileSweep = workspaceReconcileSweep
       .then(() => workspaceRuntime.reconcile())
-      .then(() => undefined)
-      .catch((error) => console.error('[Agent] workspace reconciliation sweep failed:', error));
+      .then((completed) => {
+        if (completed > 0)
+          logger.debug({ completedCommands: completed }, 'Agent Workspace reconciliation sweep completed commands');
+      })
+      .catch((error) => logger.warn({ err: error }, 'Agent Workspace reconciliation sweep failed'));
   };
 
   return {
     start: () => {
+      logger.debug('Agent lifecycle sweeps starting');
       if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
       if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
       sweepExpiredApprovals();
@@ -61,6 +68,7 @@ export const createAgentLifecycleSweeps = ({
       workspaceReconcileTimer.unref?.();
     },
     stop: async () => {
+      logger.debug('Agent lifecycle sweeps stopping');
       if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
       if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
       approvalExpiryTimer = null;

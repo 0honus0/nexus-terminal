@@ -15,6 +15,7 @@ import { PluginRunnerRuntime } from './controller/plugin-runner-runtime';
 import { AcpProcessRuntime } from './controller/acp-process-runtime';
 import { WorkspaceTerminalRuntime } from './controller/workspace-terminal-runtime';
 import { BrowserTunnelRuntime } from './controller/browser-tunnel-runtime';
+import { runnerLog } from './logging';
 
 const main = async (): Promise<void> => {
   const root = process.env.NEXUS_AGENT_RUNNER_ROOT?.trim() || '/var/lib/nexus-agent-runner';
@@ -28,6 +29,7 @@ const main = async (): Promise<void> => {
   );
   const catalog = new WorkspaceRuntimeCatalog(catalogFile);
   const sandboxBinary = process.env.NEXUS_AGENT_SANDBOX_BIN?.trim() || 'bwrap';
+  runnerLog('info', 'Agent Runner starting', { deploymentId, sandboxBinary });
   const journal = new RunnerJournal(path.join(root, 'state', 'journal.json'));
   const sandboxEngine = new SandboxEngine(path.join(root, 'runtime'), path.join(root, 'packs'), sandboxBinary);
   const store = new ToolchainStore(path.join(root, 'packs'));
@@ -66,10 +68,12 @@ const main = async (): Promise<void> => {
   }).createServer();
   const port = Number(process.env.PORT || 8790);
   const host = process.env.NEXUS_AGENT_RUNNER_HOST?.trim() || '127.0.0.1';
-  server.listen(port, host, () => console.log(`[nexus-agent-runner] controller listening on ${host}:${port}`));
+  server.listen(port, host, () => runnerLog('info', 'Agent Runner controller listening', { host, port, deploymentId }));
 };
 
 void main().catch((error) => {
-  console.error('[nexus-agent-runner] fatal:', error);
+  runnerLog('error', 'Agent Runner fatal startup failure', {
+    errorCode: error instanceof Error ? error.message : String(error),
+  });
   process.exitCode = 1;
 });
