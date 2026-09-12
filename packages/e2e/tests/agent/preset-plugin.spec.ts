@@ -289,7 +289,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     const hub = page.locator('section[aria-label="Agent"]');
     await expect(hub).toBeVisible();
     await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.developer');
-    await expect(hub.getByText('Preset E2E thread', { exact: true })).toBeVisible();
+    await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toBeVisible();
     await expect(hub.getByText('OK', { exact: true })).toBeVisible();
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
     await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();

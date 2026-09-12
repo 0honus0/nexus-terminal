@@ -70,10 +70,10 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(panel.getByText('Phase 3', { exact: true })).toBeVisible();
   const subagentSection = subagents.locator('xpath=ancestor::section[1]');
   await subagentSection.getByRole('button', { name: 'Add profile', exact: true }).click();
-  await expect(subagentSection.getByDisplayValue('worker-1')).toBeVisible();
-  await expect(subagentSection.getByDisplayValue('Bounded child agent')).toBeVisible();
+  await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
+  await expect(subagentSection.getByLabel('Role', { exact: true })).toHaveValue('Bounded child agent');
   await subagentSection.getByRole('button', { name: 'Save profiles', exact: true }).click();
-  await expect(subagentSection.getByDisplayValue('worker-1')).toBeVisible();
+  await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
   await captureFunctionalScreenshot(page, 'agent-settings-subagents.png', { viewport: { width: 1440, height: 900 } });
 
   const workspace = panel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
