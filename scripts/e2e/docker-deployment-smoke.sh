@@ -1298,10 +1298,10 @@ const provider = await ok(
   {
     kind: 'openai-compatible',
     displayName: 'Docker lifecycle smoke provider',
-    baseUrl: 'https://example.com/v1',
+    baseUrl: 'https://host.docker.internal:443/v1',
     credential: 'docker-lifecycle-smoke-secret',
     models: [{ id: 'smoke-model', contextWindow: 8192, maxOutputTokens: 64, supportsTools: true }],
-    privateHostExceptions: [],
+    privateHostExceptions: ['host.docker.internal:443'],
     enabled: true,
   },
   mutationHeaders,
@@ -1310,6 +1310,16 @@ const provider = await ok(
 const definitions = await ok('GET', '/api/v1/apps/nexus.operations/agent-definitions');
 const definition = definitions[0];
 if (!definition?.id) throw new Error('Operations Agent definition unavailable in deployment smoke.');
+let lifecycleSettings = await ok('GET', '/api/v1/agent/settings');
+lifecycleSettings = await ok(
+  'PATCH',
+  '/api/v1/agent/settings',
+  { patch: { budget: { maxRunTokens: 1 } }, expectedVersion: lifecycleSettings.revision },
+  mutationHeaders,
+);
+if (lifecycleSettings.effectiveSettings.budget.maxRunTokens !== 1) {
+  throw new Error(`Lifecycle smoke budget was not applied: ${JSON.stringify(lifecycleSettings.effectiveSettings.budget)}`);
+}
 const catalog = await ok('GET', '/api/v1/agent/workspace-runtime/catalog');
 const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 if (!recipe) throw new Error('Workspace dev recipe unavailable through Backend API.');
@@ -1317,7 +1327,7 @@ if (!recipe) throw new Error('Workspace dev recipe unavailable through Backend A
 const terminalRunStatuses = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
 const createRun = async (title) => {
   const thread = await ok('POST', '/api/v1/apps/nexus.operations/threads', { title }, mutationHeaders, 201);
-  return ok(
+  const created = await ok(
     'POST',
     '/api/v1/apps/nexus.operations/runs',
     {
@@ -1331,6 +1341,17 @@ const createRun = async (title) => {
     { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     201,
   );
+  let current = created;
+  const deadline = Date.now() + 10_000;
+  while (['created', 'running'].includes(current.status)) {
+    if (Date.now() >= deadline) throw new Error(`Lifecycle Run did not reach budget wait: ${JSON.stringify(current)}`);
+    await wait(100);
+    current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${created.id}`);
+  }
+  if (current.status !== 'awaiting_budget') {
+    throw new Error(`Lifecycle Run reached unexpected state before Workspace creation: ${JSON.stringify(current)}`);
+  }
+  return current;
 };
 
 const cancelToTerminal = async (run) => {

@@ -941,7 +941,7 @@
             {{ modelSelectionLocked ? $t('agent.operations.activeRun') : $t('agent.operations.nextRun') }}
           </span>
 
-          <div class="flex min-w-0 items-center gap-1.5 rounded-lg bg-background/70 px-2 py-1.5">
+          <div class="flex min-w-44 flex-1 items-center gap-1.5 rounded-lg bg-background/70 px-2 py-1.5">
             <i class="fa-solid fa-microchip shrink-0 text-[9px] text-text-secondary" aria-hidden="true"></i>
             <span class="agent-config-label shrink-0 text-[9px] font-medium text-text-secondary">{{
               $t('agent.operations.model')
@@ -955,7 +955,7 @@
             <select
               v-else-if="modelOptions.length"
               :value="selectedModelKey"
-              class="min-w-0 max-w-56 truncate bg-transparent text-[10px] font-medium text-foreground outline-none"
+              class="min-w-24 flex-1 truncate bg-transparent text-[10px] font-medium text-foreground outline-none"
               :aria-label="$t('agent.operations.runModel')"
               :title="$t('agent.operations.runModelHint')"
               :disabled="busy"
@@ -1226,16 +1226,18 @@
     display: none;
   }
 
+  @container agent-hub-window (max-width: 1180px) {
+    .agent-model-meta {
+      display: none;
+    }
+  }
+
   @container agent-hub-window (max-width: 1040px) {
     .agent-surface-layout {
       grid-template-columns: 224px minmax(0, 1fr);
     }
 
     .agent-task-rail {
-      display: none;
-    }
-
-    .agent-model-meta {
       display: none;
     }
   }
