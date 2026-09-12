@@ -731,15 +731,15 @@ no module cycles
    - `ARCHITECTURE.md` 与 `IMPLEMENTATION.md` 已同步三 target SDK/protocol freeze、Workspace root 产品入口、Runner target、Workspace ACL、Workspace↔Artifact 与 Capability 边界。
 
 7. 本地/远程验证状态：
-   - `packages/agent-runtime` build：**通过**；Backend build：**通过**；Frontend architecture/i18n/`vue-tsc`/Vite/bundle budget：**通过（318 source files；Initial JS 206.2/260.0 KiB gzip）**；
+   - `packages/agent-runtime` build：**通过**；Backend build：**通过**；Frontend architecture/i18n/`vue-tsc`/Vite/bundle budget：**通过（318 source files；Initial JS 207.0/260.0 KiB gzip）**；
    - Backend architecture：**通过（426 files，无 forbidden layer edge/source cycle/module cycle）**；
-   - root package-management guard：**通过**；root test policy：**通过（72 E2E spec files / 58 functional screenshot declarations）**；
+   - root package-management guard：**通过**；root test policy：**通过（72 E2E spec files / 64 functional screenshot declarations）**；
    - E2E groups generator/check：**通过（70 grouped specs / 8 groups，exactly once）**；
    - migration 53 专项 E2E：**本地通过**，验证旧 `artifact_app_id/artifact_id` stage 无损迁移到 `source_kind/source_json` 并保留 hash/size/status/timestamp/CAS version；
    - `pnpm run format:check`、`git diff --check`、Backend architecture、package-management、test-policy、Docker smoke/host-prepare shell syntax 与完整 Frontend build：**通过**；
    - 当前宿主 Node `v22.17.0` 低于仓库声明的 Node `>=24`，pnpm 命令会产生预期 engine warning；Node 24 CI 为最终权威；
-   - 当前宿主 Chromium 仍缺 `libglib-2.0.so.0`，且本机没有可作为 production evidence 的 Docker/bubblewrap 环境，因此 Browser UI 全量与 production Docker smoke 不在本机伪造通过；远端最终产品验收以产品代码 SHA `9ebb2d52c73d` 为准：GitHub Actions run `34671933336` 整体 **success**，Docker deployment smoke 与 Playwright groups 1–8 全部 **success**，无 flaky job failure；随后只有 E2E timing/group rebalance `[skip ci]` 提交。
-   - 功能截图验收以 `workflow_dispatch` run `34672158314` 为证据：其 Docker smoke、8 个 Playwright groups 与 `Commit functional screenshots` job 均为 **success**；verification artifact 对 source SHA `0055b4f7eae1`（仅为上述绿色产品 SHA 后的 rebalance 提交）报告 expected/actual `58/58`、missing/unexpected/failures 均为空。`agent-developer-preset.png` 为 `1440×900`、72,463 bytes，SHA-256 `c665c2da901c0a66b70b85db9a97bcd214d77a8f101393904521fcd76f7757d1`，且已由截图提交 `a7a0bce` 纳入 `doc/imgs/e2e/`。
+   - 当前宿主 Chromium 仍缺 `libglib-2.0.so.0`，且本机没有可作为 production evidence 的 Docker/bubblewrap 环境，因此 Browser UI 全量与 production Docker smoke 不在本机伪造通过；本轮 Agent UI/coverage 最终产品验收以产品代码 SHA `a15cf3bb3b29` 为准：GitHub Actions run `34674818137` 整体 **success**，Docker deployment smoke 与 Playwright groups 1–8 全部 **success**；8 个 Playwright job 日志均无 `retry=1`/flaky marker。该 SHA 包含 Agent workspace UI polish、Provider/Subagent/Run/Checkpoint/Artifact UI acceptance，以及远端验收进一步发现并修复的 Browser Runtime reactive-clone 渲染崩溃和 Dashboard background reconnect `lastConnectedAt` 状态回退竞态。随后只有 E2E timing/group rebalance `[skip ci]` 提交。
+   - 功能截图验收以 `workflow_dispatch` run `34675035041` 为证据：Docker smoke、8 个 Playwright groups、`Commit functional screenshots` 与 rebalance job 均为 **success**；verification artifact 对 source SHA `ac8a1c47fde6`（仅为上述绿色产品 SHA 后的 timing/group rebalance 提交）报告 expected/actual `64/64`、missing/unexpected/failures 均为空。Agent 功能截图现有 7 张，全部为 `1440×900`：`agent-developer-preset.png` 90,384 bytes / SHA-256 `7b39e18c7958205319ca3c79434457c7d9118f750a3aadc3e70e9144b8edcd13`，并新增 `agent-run-details.png`、`agent-checkpoint-recovery.png`、`agent-artifact-library.png`、`agent-settings-overview.png`、`agent-settings-subagents.png`、`agent-settings-runtime.png`；7 张仓库文件的独立 SHA-256 复核均与 verification artifact 一致。截图由提交 `24c2db9` 纳入 `doc/imgs/e2e/`，随后 `2efed77` 仅 rebalance `[skip ci]`。
 
 8. 相邻 Nexus SSH/Workspace binary transport：**完成 Base64 data-path 清理**。
    - `/ws/workspace` 使用独立 `binaryProtocolVersion=1`，固定 16-byte header 区分 terminal 与 request-scoped response；binary response 通过 requestId/final 分片重组，每个 payload frame 最大 256 KiB；
@@ -779,7 +779,7 @@ no module cycles
     - `ModelStepRunner` 负责 Provider/model/Context/model stream/ModelCallLimiter 与 transport retry，`ToolCallRunner` 负责 Tool inspect/policy、read lease 与 Tool execution；
     - Agent mutation 使用独立 staged `MutationLeaseGuardPort`，底层 `LeasePort` 只存在于 infrastructure adapter；顺序固定为 `lease acquire → StateCommit.beginMutationTool → mark active → side effect → StateCommit.settleMutationTool → settle/release 或 quarantine`；
     - Backend architecture checker 禁止 `NativeAgentBackend` 重新直接依赖 Provider/Context/Tool/Lease execution services 或调用 mutation lease marker；
-    - Backend/Frontend architecture + build、Agent Runtime build、test-policy、70 specs/8 groups assignment、sandbox prerequisite、shell syntax 与 `git diff --check` 均已通过；最终远端产品证据见上文验证状态中的产品代码 SHA `9ebb2d52c73d`。
+    - Backend/Frontend architecture + build、Agent Runtime build、test-policy、70 specs/8 groups assignment、sandbox prerequisite、shell syntax 与 `git diff --check` 均已通过；最终远端产品证据见上文验证状态中的产品代码 SHA `a15cf3bb3b29`。
 
 13. Child execution owner 收敛：**完成并通过远端 Actions 验收**。
     - `SubagentScheduler` 从接近 1000 行收敛为 durable work scheduler，只负责 scope/fairness/capacity、`ready/terminal` scan、claim CAS、active tracking 与 quiesce；
