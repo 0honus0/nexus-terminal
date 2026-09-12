@@ -2,7 +2,7 @@
 
 > 状态：Current implementation snapshot
 >
-> 日期：2026-09-12
+> 日期：2026-09-13
 >
 > 分支：`dev`
 >
@@ -57,7 +57,7 @@ Infrastructure
                  nexus-agent-runner
                  ├─ Workspace Runtime Manager
                  ├─ Pack Manager
-                 ├─ Workspace Broker
+                 ├─ Plugin Workspace Store
                  ├─ Plugin Runner Host
                  └─ Workspace generations / runtime profiles
 ```
@@ -139,7 +139,7 @@ packages/frontend/src/features/agent/
 └─ apps/operations/  built-in Operations App contribution
 ```
 
-当前只有 `nexus.operations` 一个 built-in App，Host 可以显式组合。新增第二个 built-in Agent App 前先建立明确的 contribution registry；安装式第三方 App UI 始终由独立 origin + sandboxed iframe + MessageChannel bridge 承载，不加载 arbitrary same-origin plugin JavaScript。
+当前只有 `nexus.operations` 一个 built-in App，Host 可以显式组合。新增第二个 built-in Agent App 前先建立明确的 contribution registry；安装式 App 没有 Frontend target 时复用 Host Agent surface；声明 Frontend target 时，该独立 origin + sandboxed iframe 拥有完整 Custom App Surface。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
 
 Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/apps/operations/public` 子域依赖，并继续禁止 feature 反向依赖 Workspace runtime。
 
@@ -148,55 +148,56 @@ Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/apps
 `nexus-agent-runner` 是独立的 Workspace/runtime 执行平面，但**不是 Docker controller，也不是多租户安全沙箱**。Nexus 当前是单用户应用，Runner 的正式模型因此收敛为“多个持久 Workspace + 可切换运行环境”：
 
 - 一个 Workspace 是稳定的项目/代码/文件系统边界；Node、Python、Go 等只是该 Workspace 的 Toolchain 选择，共享同一份 Workspace 文件；
-- Workspace Profile 冻结工具版本、Runner Plugin、ACP Profile、Browser Target 以及产品级资源/网络配置；Generation 是该 Profile 的一次运行实例，稳定 identity 始终是 Workspace；
+- Workspace Profile 冻结工具版本、Runner Plugin、ACP Profile、Browser Target 与 retention；Generation 是该 Profile 的一次运行实例，稳定 identity 始终是 Workspace；
 - 全局 Tool Store 以 `familyId/versionId/contentDigest`（digest 按 arch 解析）保存不可变工具版本，同 family 多版本可并存；不同 Workspace 可以同时选择不同 Node/Python/Go 版本，相同精确版本只保存一份；
 - 当前 x64 Catalog 已实际提供 Node 24.21.0/22.23.2、Python 3.14.7/3.13.15、Go 1.27.1/1.26.8；这些 pack 由 SHA-256 固定的 `mise 2026.9.5 install-into` 原生生成，随后校验可执行版本、Nexus canonical tree digest 和 manifest；最终通过 `/opt/nexus/packs/<family>/<version>` 指向精确 digest，不修改全局 `/usr/bin`；
 - Workspace 切换工具版本时只创建/重启该 Workspace 的新 generation，并重新解析该 generation 的 PATH；不修改全局 `/usr/bin`，不影响其他 Workspace，项目文件也不随 generation 复制或丢失；
 - 平台管理的逻辑 `/workspace/deps`、`/workspace/build` 与 npm/pip/Go cache 按精确 `runtimeDigest + packRefs` 的 `toolchainFingerprint` 分区；不同 ABI 工具组合不共享依赖状态，切回相同组合可复用，项目源码仍保持稳定；native Runner 会把这些逻辑路径解析到真实 Runner data root；
 - Workspace job、ACP process、Workspace local Terminal 和 Runner Plugin 都作为 Runner 子进程在对应 Workspace/runtime profile 下运行；job/ACP/Runner Plugin 使用 Runner-managed process group，生命周期结束时整组回收；Terminal 使用系统 `script(1)` 创建真实 PTY，并按 PTY foreground process group 处理 signal；
-- **Workspace 之间只有逻辑隔离，不是安全隔离**：不创建 per-Workspace mount/PID/network namespace；Workspace Profile 的 limits/network 是产品配置，不进入 native Runner 的执行命令，也不声称为内核级强制边界；Host Runner 与其子进程共享宿主安全上下文，容器 Runner 则共享同一个 Runner 容器安全上下文；
+- **Workspace 之间只有逻辑隔离，不是安全隔离**：不创建 per-Workspace mount/PID/network namespace，也不提供没有执行效果的 Workspace limits/network 假配置；Host Runner 与其子进程共享宿主安全上下文，容器 Runner 则共享同一个 Runner 容器安全上下文；
 - Runner 不持 host Docker socket、不启动 dockerd、不使用 nested Docker。独立 Runner 容器不需要 `privileged`、`SYS_ADMIN` 或 unconfined seccomp/AppArmor；镜像仅用 `tini` 作为 PID 1 做信号转发和孤儿进程回收。Docker 容器本身可以作为整个 Runner 服务的操作系统边界，但容器内 Workspace 仍属于同一 Nexus 用户；
-- Runner Plugin 按 Workspace generation 显式选择并冻结 `{pluginId, version, sdkVersion, protocolVersion, packageHash, entry}`。由于 Runner 采用单用户 native trust model，用户安装并启用的 Runner Plugin 代码与其他 Workspace 子进程使用同一 Runner OS 权限；Workspace Broker/ACL 继续约束其通过 SDK 访问的逻辑 Plugin workspace，但**不是 OS sandbox**；
-- Host Runner 与独立 `nexus-agent-runner` 镜像使用相同 runtime contract。Compose 中的 Runner service 默认保持注释以兼容现有部署，需要时可直接启用，不再有 container capability 放宽要求。
+- Runner Plugin 按 Workspace generation 显式选择并冻结 `{pluginId, version, sdkVersion, protocolVersion, packageHash, entry}`。由于 Runner 采用单用户 native trust model，用户安装并启用的 Runner Plugin 代码与其他 Workspace 子进程使用同一 Runner OS 权限；每个 target 的 Plugin workspace 只是 SDK/Artifact exchange 使用的逻辑目录，不再提供跨 Plugin ACL，也不描述成 OS 安全边界；
+- Host Runner 与独立 `nexus-agent-runner` 镜像使用相同 runtime contract。Backend 以至少 32 字符的 Bearer token 认证所有 Runner HTTP/WS 请求，并使用 `X-Nexus-Agent-Protocol: 2026-09-13` 做显式协议门槛；Compose 中的 Runner service 默认保持注释以兼容现有部署，需要时可直接启用，不再有 container capability 放宽要求。
+- Runner 控制协议按职责最小化：`provision` 发送完整冻结 profile；后续 lifecycle 只使用 `workspaceId + generation`；job 只传 execution input。Backend 的 user/app/run identity、optimistic version、operation hash/idempotency 继续由 Backend 持有，不跨进程重复投影。
 
 ### 5.1 Runtime consumer / owner 边界
 
-| Consumer                                   | 执行 owner                                                     | 共享内容                                                                      | 明确不共享                                                                  |
-| ------------------------------------------ | -------------------------------------------------------------- | ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Agent `workspace_execute_argv`             | Workspace Runtime Gateway → Runner generation                  | 当前 Workspace/Profile、稳定文件、Tool Store、toolchain fingerprint           | SSH live session、浏览器 socket、Plugin IPC handle                          |
-| Runner Plugin                              | Runner native child process + Workspace Broker                 | 当前 generation 冻结的 Tool Pack/Plugin target；经 ACL 访问 logical workspace | Backend DB/API、Agent approval 对象；但不宣称 OS 级 filesystem/network 隔离 |
-| Workspace local Terminal                   | Runner native PTY session，绑定明确 `workspaceId + generation` | 与 Agent job 相同的 Workspace/Profile/Tool Store                              | 不复用 Nexus Remote SSH session，不直接把 Runner 内部对象暴露给浏览器       |
-| 现有 SSH Terminal / Files / Docker Manager | Nexus `modules/workspace` + SSH/SFTP/remote machine capability | 可与 Agent 共享底层 Platform capability/Lease 冲突规则                        | 不进入本地 Runner generation，不共享本地 Workspace PTY/filesystem handle    |
-| RDP/VNC                                    | Remote Desktop / Guacamole runtime                             | 仅通用认证、策略与产品 shell                                                  | 不进入 Runner，不把 guacd/session ticket 变成 Workspace Runtime handle      |
+| Consumer                                   | 执行 owner                                                     | 共享内容                                                                    | 明确不共享                                                                        |
+| ------------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| Agent `workspace_execute_argv`             | Workspace Runtime Gateway → Runner generation                  | 当前 Workspace/Profile、稳定文件、Tool Store、toolchain fingerprint         | SSH live session、浏览器 socket、Plugin IPC handle                                |
+| Runner Plugin                              | Runner native child process + Plugin Workspace Store           | 当前 generation 冻结的 Tool Pack/Plugin target；自己的逻辑 plugin workspace | Backend DB/API、Agent approval 对象；逻辑目录不宣称 OS 级 filesystem/network 隔离 |
+| Workspace local Terminal                   | Runner native PTY session，绑定明确 `workspaceId + generation` | 与 Agent job 相同的 Workspace/Profile/Tool Store                            | 不复用 Nexus Remote SSH session，不直接把 Runner 内部对象暴露给浏览器             |
+| 现有 SSH Terminal / Files / Docker Manager | Nexus `modules/workspace` + SSH/SFTP/remote machine capability | 可与 Agent 共享底层 Platform capability/Lease 冲突规则                      | 不进入本地 Runner generation，不共享本地 Workspace PTY/filesystem handle          |
+| RDP/VNC                                    | Remote Desktop / Guacamole runtime                             | 仅通用认证、策略与产品 shell                                                | 不进入 Runner，不把 guacd/session ticket 变成 Workspace Runtime handle            |
 
 “统一 Runtime”只统一 **Workspace/Profile/Generation 的本地执行契约与工具解析**，不统一不同传输协议、会话 owner 或授权身份。Workspace local Terminal 已通过 Workspace Runtime interactive-session port 接入 Runner，但仍与 Nexus Remote SSH Workspace 的 live session 完全分离。
 
-现有 Browser ↔ Nexus Workspace 的 `NXW1`、`/ws/uploads`、Runner Plugin `NXR2` 与 Backend ↔ Runner HTTP 仍是四条独立 transport contract；Workspace 产品模型统一不意味着合并 wire protocol。真实远端 Docker 操作仍属于 Nexus Backend 的 `machine.docker.*` capability，与 Runner runtime 基础设施无关。
+现有 Browser ↔ Nexus Workspace 的 `NXW1`、`/ws/uploads`、Runner Plugin `NXR3` 与 Backend ↔ Runner HTTP 仍是四条独立 transport contract；Workspace 产品模型统一不意味着合并 wire protocol。真实远端 Docker 操作仍属于 Nexus Backend 的 `machine.docker.*` capability，与 Runner runtime 基础设施无关。
 
 ## 6. Plugin 三目标与隔离
 
 Plugin manifest 只有三个代码运行 target：
 
 ```text
-frontend  → isolated browser origin / iframe
+frontend  → isolated browser origin / iframe，拥有完整 Custom App Surface
 backend   → Backend-owned process sandbox
 runner    → Workspace-generation-scoped native Runner Plugin process
 ```
 
-不增加 `database/browser/ai/artifact` 等 target；这些属于 SDK capability。Frontend/Backend target 当前各自使用显式 `sdkVersion + protocolVersion=1`，Runner target 当前为 `protocolVersion=2`；三套 target protocol 独立演进，版本数字相同也不代表兼容。
+不增加 `database/browser/ai/artifact` 等 target；这些属于 SDK capability。Frontend target 当前使用 `sdkVersion + protocolVersion=1`，并从 isolated Plugin origin 导入 `/sdk/frontend-v1.mjs`；第一阶段显式暴露 AppStorage 与 App-scoped AgentDefinition/Provider/Thread/Run/Subagent/Approval/Run-event API。Backend target 使用独立 `protocolVersion=1`，Runner target 当前为 `protocolVersion=3`；三套 target protocol 独立演进，版本数字相同也不代表兼容。
 
-Runner Plugin 不直接 bind 真实 workspace，必须经 Workspace Broker + Host-bound `callerPluginId` 访问。自己的 workspace 默认可用，跨 Plugin 默认 deny，由目标 workspace ACL 以 `target/principal/path/permission` 明确授权；路径 traversal、symlink escape、跨 Workspace target 均拒绝。
+Runner Plugin SDK 只暴露当前 Plugin target 自己的逻辑 workspace，不再接受 `targetPluginId` 或跨 Plugin grant。Plugin workspace store 继续拒绝路径 traversal 与 symlink escape，以保证 SDK/Artifact exchange 不会因错误路径写出目标目录；这属于文件 API 正确性约束，不是对 native Plugin 进程的安全隔离。
 
-## 7. 当前四条 binary/data transport
+## 7. 当前四条独立 transport
 
-| 路径                                | 协议 / owner                                       | 当前上限与语义                                                                                                                                                                                                                                         |
-| ----------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Browser ↔ Nexus Workspace           | `NXW1`, `binaryProtocolVersion=1`, Workspace owner | client→server JSON control 最大 1 MiB；server binary 固定 16-byte header，terminal / request-scoped response 分流；UTF-8 requestId 最多 128 bytes；单 payload frame 最大 256 KiB；response 以 final frame 完成；文件/terminal/history 不走 Base64 JSON |
-| Browser → `/ws/uploads`             | raw upload transport, Transfer owner               | 一条 socket 对应一个 upload，binary message 就是有序文件 bytes；不套 `NXW1`，避免 bulk upload 阻塞 Workspace terminal/control                                                                                                                          |
-| Runner Plugin process ↔ Runner Host | `NXR2`, Plugin `protocolVersion=2`                 | local stdio fixed 16-byte framing；uint32 requestId；JSON control 最大 256 KiB；单次 workspace binary 最大 16 MiB；caller identity Host-bound                                                                                                          |
-| Backend ↔ `nexus-agent-runner`      | authenticated Controller HTTP                      | bounded JSON control；Workspace↔Artifact 使用 `application/octet-stream` streaming + 精确 `Content-Length`，当前 hard cap 256 MiB                                                                                                                      |
+| 路径                                | 协议 / owner                                                       | 当前上限与语义                                                                                                                                                                                                                                         |
+| ----------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Browser ↔ Nexus Workspace           | `NXW1`, `binaryProtocolVersion=1`, Workspace owner                 | client→server JSON control 最大 1 MiB；server binary 固定 16-byte header，terminal / request-scoped response 分流；UTF-8 requestId 最多 128 bytes；单 payload frame 最大 256 KiB；response 以 final frame 完成；文件/terminal/history 不走 Base64 JSON |
+| Browser → `/ws/uploads`             | raw upload transport, Transfer owner                               | 一条 socket 对应一个 upload，binary message 就是有序文件 bytes；不套 `NXW1`，避免 bulk upload 阻塞 Workspace terminal/control                                                                                                                          |
+| Runner Plugin process ↔ Runner Host | `NXR3`, Plugin `protocolVersion=3`                                 | local stdio fixed 16-byte JSON framing；uint32 requestId；单帧最大 256 KiB；只承载 ready/activate/health/quiesce/dispose lifecycle。`sdk.workspace.*` 在 Plugin worker 内直接访问当前 target 的逻辑目录，不再通过 Host IPC 搬运文件 bytes              |
+| Backend ↔ `nexus-agent-runner`      | Bearer-authenticated HTTP/WS，`X-Nexus-Agent-Protocol: 2026-09-13` | `provision` 传完整 frozen profile，lifecycle/job 使用最小 workspace/generation payload；Workspace↔Artifact 使用 `application/octet-stream` streaming + 精确 `Content-Length`，当前 hard cap 256 MiB                                                    |
 
-四条协议只共享 bounded/raw-byte/backpressure-or-streaming/fail-closed 原则，**不共享 magic、requestId 类型、版本号、lifecycle 或 transport handle**。`NXW1 v1` 和 Frontend/Backend Plugin `protocolVersion=1` 只是碰巧同号，没有兼容关系。
+四条协议只共享 bounded/backpressure/fail-closed 原则；需要搬运文件/终端数据的 transport 才使用 raw bytes/streaming。它们**不共享 magic、requestId 类型、版本号、lifecycle 或 transport handle**。`NXW1 v1` 和 Frontend/Backend Plugin `protocolVersion=1` 只是碰巧同号，没有兼容关系。
 
 ## 8. 数据生命周期
 
@@ -208,7 +209,7 @@ Runner Workspace filesystem
 = Workspace 生命周期内稳定 mutable project data；Workspace generation 只切换运行配置/工具版本，不复制该数据
 
 Runner Plugin logical Workspace
-= 同一 Workspace 内的 Plugin scoped mutable data；跨 Plugin 默认 deny
+= 同一 Workspace 内按 Plugin target 分目录的 mutable data；用于 SDK/Artifact exchange，不作为 Plugin 间安全隔离
 
 Artifact
 = durable file/result/evidence
@@ -220,7 +221,7 @@ Conversation Ledger / Run Events / Checkpoint
 = Agent durable facts and recovery state
 ```
 
-Runner Plugin workspace 跨 Plugin 授权读取同一底层文件，不复制。Workspace↔Artifact 是显式生命周期转换：`workspace→artifact` 需要 `workspace.runtime.execute + artifacts.write`，`artifact→workspace` 需要 `workspace.runtime.execute + artifacts.read`；Backend `agent/exchange` 重新校验 scope/capability，Runner Host streaming bridge 不把 transfer handle 暴露给 Frontend/Plugin/模型。
+Runner Plugin workspace 不提供跨 Plugin grant；Workspace↔Artifact 是显式生命周期转换：`workspace→artifact` 需要 `workspace.runtime.execute + artifacts.write`，`artifact→workspace` 需要 `workspace.runtime.execute + artifacts.read`；Backend `agent/exchange` 重新校验 scope/capability，Runner Host streaming bridge 不把 transfer handle 暴露给 Frontend/Plugin/模型。
 
 ## 9. Mutation / security pipeline
 
@@ -239,7 +240,7 @@ inspect
 
 硬 deny 不能被 Approval 覆盖；Approval 绑定 canonical operation hash；未知远端结果不能因为 lease 超时就自动重放。Workspace typed mutation 与 Agent 共用资源冲突/MutationGuard 原语，但仍保留各自 runtime owner。
 
-Secrets 不进入浏览器 view、Artifact、Plugin activation plain payload 或日志。动态 Backend Plugin 仍由 Backend-owned process sandbox 执行；Runner Plugin 属于单用户 native Runner trust model，必须可停止、协议有界并经 Workspace Broker/ACL 访问逻辑 plugin workspace，但不把该 ACL 描述成 OS 安全沙箱。
+Secrets 不进入浏览器 view、Artifact、Plugin activation plain payload 或日志。动态 Backend Plugin 仍由 Backend-owned process sandbox 执行；Runner Plugin 属于单用户 native Runner trust model，必须可停止、协议有界；Plugin workspace store 只提供逻辑目录与路径安全，不再维护无法形成 OS 隔离的跨 Plugin ACL。
 
 ## 10. 当前 Agent capability 接线状态
 

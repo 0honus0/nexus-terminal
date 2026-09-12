@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
@@ -27,14 +26,12 @@ import type {
   WorkspaceRuntimeAvailability,
   WorkspaceRuntimeCatalog,
   WorkspaceRuntimeStorageView,
-  PluginWorkspaceGrantSet,
-  PluginWorkspaceGrantInput,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_HOST_WORKSPACE_TRANSFER_BYTES = 256 * 1024 * 1024;
 const WORKSPACE_TRANSFER_TIMEOUT_MS = 120_000;
-const API_VERSION = '2026-09-12';
+const RUNNER_PROTOCOL_VERSION = '2026-09-13';
 
 const retryableRunnerGetTransportError = (error: unknown): boolean => {
   if (!(error instanceof TypeError)) return false;
@@ -284,12 +281,9 @@ export class RunnerHttpAdapter
     if (!this.baseUrl || !this.token) {
       return {
         available: false,
-        state: 'unavailable',
         reason: 'runner_not_configured',
-        deploymentId: null,
-        controllerVersion: null,
-        runtime: { available: false, reason: 'runner_not_configured', mode: 'native', isolation: 'logical' },
-        capabilities: { egressAllowlist: false },
+        mode: 'native',
+        isolation: 'logical',
       };
     }
     try {
@@ -297,12 +291,9 @@ export class RunnerHttpAdapter
     } catch (error) {
       return {
         available: false,
-        state: 'unavailable',
         reason: error instanceof Error ? error.message : 'runner_unavailable',
-        deploymentId: null,
-        controllerVersion: null,
-        runtime: { available: false, reason: 'runner_unavailable', mode: 'native', isolation: 'logical' },
-        capabilities: { egressAllowlist: false },
+        mode: 'native',
+        isolation: 'logical',
       };
     }
   }
@@ -326,9 +317,10 @@ export class RunnerHttpAdapter
         body: {
           ...command.payload,
           commandId: command.commandId,
-          operationHash: command.operationHash,
           action: command.action,
-          generation: command.generation,
+          ...(['provision', 'start', 'stop', 'restart', 'delete'].includes(command.action)
+            ? { generation: command.generation }
+            : {}),
           deadlineAt: command.deadlineAt,
         },
       },
@@ -342,35 +334,6 @@ export class RunnerHttpAdapter
     return commandResult(
       await this.get<RunnerCommandWireResponse>(`/v1/commands/${encodeURIComponent(commandId)}`, signal),
     );
-  }
-
-  async workspaceGrants(
-    workspaceId: string,
-    generation: number,
-    targetPluginId: string,
-    signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrantSet> {
-    const result = await this.get<{ targetPluginId: string } & PluginWorkspaceGrantSet>(
-      `/v1/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/grants?generation=${generation}`,
-      signal,
-    );
-    return { revision: result.revision, grants: result.grants };
-  }
-
-  async replaceWorkspaceGrants(
-    workspaceId: string,
-    generation: number,
-    targetPluginId: string,
-    grants: readonly PluginWorkspaceGrantInput[],
-    expectedRevision: number,
-    signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrantSet> {
-    const result = await this.request<{ targetPluginId: string } & PluginWorkspaceGrantSet>(
-      `/v1/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/grants`,
-      { method: 'POST', body: { generation, grants, expectedRevision } },
-      signal,
-    );
-    return { revision: result.revision, grants: result.grants };
   }
 
   openWorkspaceFileRead(
@@ -414,20 +377,12 @@ export class RunnerHttpAdapter
 
   async invoke(grant: WorkspaceExecutionGrant, call: WorkspaceJobCall, signal: AbortSignal): Promise<WorkspaceJobView> {
     const jobId = `job-${call.operationHash.slice(3)}`;
-    const issuedAt = Math.floor(Date.now() / 1000);
-    const deadlineAt = issuedAt + Math.ceil(call.timeoutMs / 1000) + 15;
+    const createdAt = Math.floor(Date.now() / 1000);
+    const deadlineAt = createdAt + Math.ceil(call.timeoutMs / 1000) + 15;
     const request = {
       jobId,
-      workspaceId: grant.workspaceId,
       generation: grant.generation,
-      userId: grant.userId,
-      appId: grant.appId,
-      runId: grant.runId,
-      agentRuntimeId: grant.agentRuntimeId,
-      operationHash: call.operationHash,
-      issuedAt,
       deadlineAt,
-      nonce: randomUUID(),
       argv: [...call.argv],
       cwd: call.cwd,
       maxBytes: call.maxBytes,
@@ -450,7 +405,7 @@ export class RunnerHttpAdapter
           status: 'unknown',
           result: null,
           error: 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
-          createdAt: issuedAt,
+          createdAt,
           completedAt: Math.floor(Date.now() / 1000),
         };
       }
@@ -464,7 +419,7 @@ export class RunnerHttpAdapter
           status: 'unknown',
           result: null,
           error: error instanceof Error ? error.message.slice(0, 256) : 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
-          createdAt: issuedAt,
+          createdAt,
           completedAt: Math.floor(Date.now() / 1000),
         };
       }
@@ -513,7 +468,7 @@ export class RunnerHttpAdapter
         method: 'GET',
         headers: {
           Accept: 'application/octet-stream',
-          'X-Nexus-Agent-Protocol': API_VERSION,
+          'X-Nexus-Agent-Protocol': RUNNER_PROTOCOL_VERSION,
           Authorization: `Bearer ${this.token}`,
         },
         signal: scoped.signal,
@@ -594,7 +549,7 @@ export class RunnerHttpAdapter
           Accept: 'application/json',
           'Content-Type': 'application/octet-stream',
           'Content-Length': String(expectedBytes),
-          'X-Nexus-Agent-Protocol': API_VERSION,
+          'X-Nexus-Agent-Protocol': RUNNER_PROTOCOL_VERSION,
           Authorization: `Bearer ${this.token}`,
         },
         body,
@@ -648,7 +603,7 @@ export class RunnerHttpAdapter
         maxPayload,
         headers: {
           Authorization: `Bearer ${this.token}`,
-          'X-Nexus-Agent-Protocol': API_VERSION,
+          'X-Nexus-Agent-Protocol': RUNNER_PROTOCOL_VERSION,
           ...headers,
         },
       });
@@ -706,7 +661,7 @@ export class RunnerHttpAdapter
             method: input.method,
             headers: {
               Accept: 'application/json',
-              'X-Nexus-Agent-Protocol': API_VERSION,
+              'X-Nexus-Agent-Protocol': RUNNER_PROTOCOL_VERSION,
               Authorization: `Bearer ${this.token}`,
               ...(input.body === undefined ? {} : { 'Content-Type': 'application/json' }),
             },

@@ -15,7 +15,7 @@ type AppSummary = {
   id: string;
   displayName: string;
   version: string;
-  surface: 'builtin' | 'agent' | 'plugin' | 'none';
+  surface: 'builtin' | 'agent' | 'custom' | 'none';
   stateVersion: number;
   policyRevision: number;
   enabled: boolean;
@@ -107,7 +107,7 @@ const installAndRunDeveloperPreset = async (
     }>;
     expect(catalog.data.repositoryUrl).toBe(repositoryUrl);
     expect(catalog.data.packages).toContainEqual(
-      expect.objectContaining({ appId: 'nexus.developer', version: '1.0.0' }),
+      expect.objectContaining({ appId: 'nexus.developer', version: '1.1.0' }),
     );
     publisher = catalog.data.publishers.find(
       (candidate) => candidate.keyId === catalog.data.packages[0]!.publisherKeyId,
@@ -125,7 +125,7 @@ const installAndRunDeveloperPreset = async (
   await step('download, hash-check, signature-verify, and install the remote preset package', async () => {
     const staged = await request.post('/api/v1/agent/plugins/remote/stage', {
       headers,
-      data: { repositoryUrl, appId: 'nexus.developer', version: '1.0.0' },
+      data: { repositoryUrl, appId: 'nexus.developer', version: '1.1.0' },
     });
     expect(staged.status(), await staged.text()).toBe(201);
     const stage = (await staged.json()) as Envelope<{
@@ -135,7 +135,7 @@ const installAndRunDeveloperPreset = async (
       version: string;
     }>;
     stageId = stage.data.id;
-    expect(stage.data).toMatchObject({ publisherKeyId: publisher.keyId, appId: 'nexus.developer', version: '1.0.0' });
+    expect(stage.data).toMatchObject({ publisherKeyId: publisher.keyId, appId: 'nexus.developer', version: '1.1.0' });
 
     const verified = await request.post('/api/v1/agent/plugins/verify', { headers, data: { stageId } });
     expect(verified.ok(), await verified.text()).toBeTruthy();
@@ -143,9 +143,9 @@ const installAndRunDeveloperPreset = async (
       data: {
         plugin: {
           appId: 'nexus.developer',
-          version: '1.0.0',
+          version: '1.1.0',
           publisherKeyId: publisher.keyId,
-          manifest: { agents: [{ id: 'developer.default', version: '1.0.0' }] },
+          manifest: { agents: [{ id: 'developer.default', version: '1.1.0' }] },
           skillFiles: ['skills/developer-workflow/SKILL.md'],
         },
       },
@@ -226,7 +226,7 @@ const installAndRunDeveloperPreset = async (
     const definitions = await request.get('/api/v1/apps/nexus.developer/agent-definitions');
     expect(definitions.ok(), await definitions.text()).toBeTruthy();
     await expect(definitions.json()).resolves.toMatchObject({
-      data: [{ id: 'developer.default', version: '1.0.0', displayName: 'Developer Agent' }],
+      data: [{ id: 'developer.default', version: '1.1.0', displayName: 'Developer Agent' }],
     });
 
     const thread = await request.post('/api/v1/apps/nexus.developer/threads', {
@@ -364,6 +364,87 @@ test('unsafe remote plugin archive fails validation without terminating the Back
 
   const health = await request.get('/api/v1/agent/apps');
   expect(health.ok(), await health.text()).toBeTruthy();
+});
+
+test('frontend target owns a full Custom App Surface and connects through the isolated Plugin SDK', async ({
+  page,
+  context,
+}) => {
+  const request = context.request;
+  await loginAsInitialAdmin(request);
+  const csrf = await csrfToken(request);
+  const headers = { 'X-Nexus-CSRF': csrf };
+
+  const before = await request.get('/api/v1/agent/settings');
+  expect(before.ok(), await before.text()).toBeTruthy();
+  const settings = ((await before.json()) as Envelope<SettingsView>).data;
+  const patched = await request.patch('/api/v1/agent/settings', {
+    headers,
+    data: {
+      patch: { plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] } },
+      expectedVersion: settings.revision,
+    },
+  });
+  expect(patched.ok(), await patched.text()).toBeTruthy();
+
+  const catalogResponse = await request.get('/api/v1/agent/plugins/remote/catalog', { params: { repositoryUrl } });
+  expect(catalogResponse.ok(), await catalogResponse.text()).toBeTruthy();
+  const catalog = (await catalogResponse.json()) as Envelope<{
+    publishers: Array<{ keyId: string; label: string; publicKeyPem: string }>;
+    packages: Array<{ appId: string; version: string; publisherKeyId: string }>;
+  }>;
+  const customPackage = catalog.data.packages.find((candidate) => candidate.appId === 'nexus.custom-surface');
+  expect(customPackage).toMatchObject({ version: '1.0.0' });
+  const publisher = catalog.data.publishers.find((candidate) => candidate.keyId === customPackage!.publisherKeyId);
+  expect(publisher).toBeDefined();
+  const trusted = await request.post('/api/v1/agent/plugins/publishers', {
+    headers,
+    data: { publicKeyPem: publisher!.publicKeyPem, label: publisher!.label },
+  });
+  expect(trusted.status(), await trusted.text()).toBe(201);
+
+  const staged = await request.post('/api/v1/agent/plugins/remote/stage', {
+    headers,
+    data: { repositoryUrl, appId: 'nexus.custom-surface', version: '1.0.0' },
+  });
+  expect(staged.status(), await staged.text()).toBe(201);
+  const stageId = ((await staged.json()) as Envelope<{ id: string }>).data.id;
+  const verified = await request.post('/api/v1/agent/plugins/verify', { headers, data: { stageId } });
+  expect(verified.ok(), await verified.text()).toBeTruthy();
+  await expect(verified.json()).resolves.toMatchObject({
+    data: {
+      plugin: {
+        appId: 'nexus.custom-surface',
+        version: '1.0.0',
+        frontendEntry: 'frontend/index.html',
+        manifest: { agents: [{ id: 'custom.default' }], targets: { frontend: { entry: 'frontend/index.html' } } },
+      },
+    },
+  });
+
+  const installed = await request.post('/api/v1/agent/plugins/install', { headers, data: { stageId } });
+  expect(installed.status(), await installed.text()).toBe(201);
+  await expect(installed.json()).resolves.toMatchObject({ data: { app: { surface: 'custom' } } });
+  const app = await appSummary(request, 'nexus.custom-surface');
+  const enabled = await request.patch('/api/v1/agent/apps/nexus.custom-surface', {
+    headers,
+    data: { enabled: true, expectedVersion: app.stateVersion },
+  });
+  expect(enabled.ok(), await enabled.text()).toBeTruthy();
+  await expect(enabled.json()).resolves.toMatchObject({
+    data: { id: 'nexus.custom-surface', enabled: true, health: 'healthy', surface: 'custom' },
+  });
+
+  await page.goto('/connections');
+  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+  const hub = page.locator('section[aria-label="Agent"]');
+  await expect(hub).toBeVisible();
+  await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.custom-surface');
+  const customSurface = page.frameLocator('section[aria-label="Agent"] iframe');
+  await expect(customSurface.getByRole('heading', { name: 'Custom Surface Fixture' })).toBeVisible();
+  await expect(customSurface.getByTestId('custom-sdk-status')).toHaveText('ready:nexus.custom-surface:custom.default', {
+    timeout: 15_000,
+  });
 });
 
 test('remote signed Developer preset installs, registers an Agent definition, and completes a real Run', async ({

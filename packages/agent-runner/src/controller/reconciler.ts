@@ -33,7 +33,7 @@ export class Reconciler {
           generation: workspace.generation,
           errorCode: error instanceof Error ? error.message : String(error),
         });
-        this.journal.saveWorkspace({ ...workspace, status: 'failed', updatedAt: Math.floor(Date.now() / 1000) });
+        this.journal.saveWorkspace({ ...workspace, status: 'failed' });
       }
     }
     for (const command of commands) {

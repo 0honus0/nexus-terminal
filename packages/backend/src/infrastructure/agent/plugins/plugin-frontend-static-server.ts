@@ -4,6 +4,7 @@ import path from 'node:path';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
 const SAFE_ASSET_SEGMENT = /^[A-Za-z0-9_.-]{1,255}$/;
+const SDK_FRONTEND_V1_PATH = '/sdk/frontend-v1.mjs';
 
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   '.css': 'text/css; charset=utf-8',
@@ -33,6 +34,7 @@ const applySecurityHeaders = (response: ServerResponse, publicOrigin: string): v
   response.setHeader('Referrer-Policy', 'no-referrer');
   response.setHeader('Permissions-Policy', 'camera=(), geolocation=(), microphone=(), payment=(), usb=()');
   response.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  response.setHeader('Access-Control-Allow-Origin', '*');
   response.setHeader(
     'Content-Security-Policy',
     `default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; frame-ancestors ${publicOrigin}`,
@@ -52,6 +54,19 @@ const decodeSegment = (value: string): string | null => {
   } catch {
     return null;
   }
+};
+
+const resolveSdkAsset = (request: IncomingMessage): string | null => {
+  if (!request.url) return null;
+  let url: URL;
+  try {
+    url = new URL(request.url, 'http://plugin-frontend.invalid');
+  } catch {
+    return null;
+  }
+  if (url.search || url.hash || url.pathname !== SDK_FRONTEND_V1_PATH) return null;
+  const asset = path.resolve(__dirname, 'frontend-sdk', 'frontend-v1.mjs');
+  return fs.existsSync(asset) ? asset : null;
 };
 
 const resolveAsset = (dataDirectory: string, request: IncomingMessage): string | null => {
@@ -104,7 +119,7 @@ export const createPluginFrontendStaticServer = (options: { dataDirectory: strin
       fail(response, 405, options.publicOrigin);
       return;
     }
-    const asset = resolveAsset(options.dataDirectory, request);
+    const asset = resolveSdkAsset(request) ?? resolveAsset(options.dataDirectory, request);
     if (!asset) {
       fail(response, 404, options.publicOrigin);
       return;

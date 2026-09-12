@@ -206,14 +206,7 @@ export const createWorkspaceJobTool = (
     const timeoutSeconds = positiveInteger(args.timeoutSeconds);
     const maxBytes = Math.max(1, Math.min(512 * 1024, Math.floor(context.maxOutputBytes / 2)));
     const job = await gateway.invoke(
-      {
-        userId: context.userId,
-        appId: context.appId,
-        runId: context.runId,
-        agentRuntimeId: context.agentRuntimeId,
-        workspaceId,
-        generation,
-      },
+      { workspaceId, generation },
       {
         operationHash: inspection.operationHash,
         argv,
@@ -234,7 +227,7 @@ export const createWorkspaceJobTool = (
         errorCode: job.error ?? 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
         verification: {
           status: 'unverified',
-          summary: 'Runner could not prove whether the isolated Workspace job completed.',
+          summary: 'Runner could not prove whether the native Workspace job completed.',
           evidenceRefs: [],
         },
       };

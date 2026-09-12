@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ToolchainPackRef, WorkspaceJobRequest, WorkspaceRuntimeCommand } from '../types';
+import type { ToolchainPackRef, WorkspaceJobRequest, WorkspaceProvisionCommand } from '../types';
 import type { ToolchainStore } from './toolchain-store';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -11,12 +11,6 @@ export interface WorkspaceExecution {
   argv: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
-}
-
-export interface WorkspaceRuntimeAvailability {
-  available: boolean;
-  reason: string | null;
-  isolation: 'logical';
 }
 
 interface WorkspaceRuntimeMetadata {
@@ -65,12 +59,7 @@ export class WorkspaceRuntimeManager {
     private readonly store: ToolchainStore,
   ) {}
 
-  availability(): WorkspaceRuntimeAvailability {
-    fs.mkdirSync(this.runtimeRoot, { recursive: true });
-    return { available: true, reason: null, isolation: 'logical' };
-  }
-
-  create(command: WorkspaceRuntimeCommand): void {
+  create(command: WorkspaceProvisionCommand): void {
     const workspaceId = safeSegment(command.workspaceId);
     const generation = command.generation;
     if (!Number.isSafeInteger(generation) || generation < 1) throw new Error('VALIDATION_FAILED');

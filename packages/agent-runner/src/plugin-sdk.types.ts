@@ -1,4 +1,4 @@
-export const PLUGIN_RUNNER_PROTOCOL_VERSION = 2 as const;
+export const PLUGIN_RUNNER_PROTOCOL_VERSION = 3 as const;
 
 export interface RunnerPluginWorkspaceStat {
   type: 'file' | 'directory';
@@ -8,13 +8,13 @@ export interface RunnerPluginWorkspaceStat {
 
 export interface RunnerPluginSdkV1 {
   workspace: {
-    read(targetPluginId: string, path: string): Promise<Uint8Array>;
-    write(targetPluginId: string, path: string, value: Uint8Array): Promise<void>;
-    list(targetPluginId: string, path: string): Promise<string[]>;
-    stat(targetPluginId: string, path: string): Promise<RunnerPluginWorkspaceStat>;
-    mkdir(targetPluginId: string, path: string): Promise<void>;
-    rename(targetPluginId: string, path: string, destinationPath: string): Promise<void>;
-    remove(targetPluginId: string, path: string): Promise<void>;
+    read(path: string): Promise<Uint8Array>;
+    write(path: string, value: Uint8Array): Promise<void>;
+    list(path: string): Promise<string[]>;
+    stat(path: string): Promise<RunnerPluginWorkspaceStat>;
+    mkdir(path: string): Promise<void>;
+    rename(path: string, destinationPath: string): Promise<void>;
+    remove(path: string): Promise<void>;
   };
 }
 

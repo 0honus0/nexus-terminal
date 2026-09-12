@@ -4,6 +4,7 @@ import process from 'node:process';
 
 const root = path.resolve(import.meta.dirname, '..', '..');
 const expected = {
+  runnerProtocol: '2026-09-13',
   mise: {
     version: '2026.9.5',
     amd64Sha256: 'd71e94e1ed59d4d0ca4ac847fa321d6d6615a8e613e9b468c9fb39f0dddd06d5',
@@ -18,6 +19,10 @@ const requireText = (relative, needle, message) => {
 };
 const forbidText = (relative, needle, message) => {
   if (read(relative).includes(needle)) failures.push(`${relative}: ${message}`);
+};
+const requireCount = (relative, needle, count, message) => {
+  const actual = read(relative).split(needle).length - 1;
+  if (actual !== count) failures.push(`${relative}: ${message} (expected ${count}, got ${actual})`);
 };
 
 const catalog = JSON.parse(read('scripts/docker/agent-runner/catalog/catalog.json'));
@@ -80,6 +85,38 @@ forbidText(
   'mise release policy belongs in Catalog/prepare/check, not Runner runtime code',
 );
 
+// Runner 控制面统一使用一个至少 32 字符的 Bearer token；HTTP 与 WebSocket upgrade 都必须先认证。
+requireText(
+  'packages/agent-runner/src/index.ts',
+  'NEXUS_AGENT_RUNNER_TOKEN',
+  'Runner token must come from the documented environment variable',
+);
+forbidText(
+  'packages/agent-runner/src/index.ts',
+  'NEXUS_AGENT_RUNNER_TOKEN_FILE',
+  'undocumented token-file compatibility path must not return',
+);
+requireText(
+  'packages/agent-runner/src/controller/server.ts',
+  'timingSafeEqual',
+  'Runner Bearer token comparison must be timing-safe',
+);
+requireCount(
+  'packages/agent-runner/src/controller/server.ts',
+  'if (!this.authorized(request))',
+  2,
+  'both HTTP requests and WebSocket upgrades must enforce Runner authentication',
+);
+for (const relative of [
+  'packages/agent-runner/src/controller/server.ts',
+  'packages/backend/src/infrastructure/agent/workspace-runtime/runner-http.adapter.ts',
+  'scripts/docker/agent-runner/Dockerfile',
+  'scripts/e2e/standalone-runner-image-smoke.sh',
+  'scripts/e2e/docker-deployment-smoke.sh',
+]) {
+  requireText(relative, expected.runnerProtocol, 'Runner protocol version must stay synchronized');
+}
+
 // 单用户 native Runner 不允许重新引入内部 sandbox、nested container 或自编译 PTY helper。
 for (const relative of [
   'scripts/docker/agent-runner/Dockerfile',
@@ -118,5 +155,5 @@ if (failures.length) {
 }
 
 console.log(
-  `Agent Runner prerequisite check passed: native Workspace runtime uses mise ${expected.mise.version} + script/stty; standalone image uses tini PID 1 with no internal sandbox or custom native compilation.`,
+  `Agent Runner prerequisite check passed: authenticated native Workspace runtime uses protocol ${expected.runnerProtocol}, mise ${expected.mise.version} + script/stty; standalone image uses tini PID 1 with no internal sandbox or custom native compilation.`,
 );

@@ -10,17 +10,13 @@
     type AgentSettingsView,
     type PluginInstallation,
     type PluginVersionView,
-    type PluginWorkspaceGrant,
-    type PluginWorkspacePermission,
     type WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
   import WorkspaceArtifactTransfer from './WorkspaceArtifactTransfer.vue';
   import AgentWorkspaceTerminal from './AgentWorkspaceTerminal.vue';
   import WorkspaceCreateCard from './WorkspaceCreateCard.vue';
-  import WorkspacePluginGrants from './WorkspacePluginGrants.vue';
   import WorkspaceToolchainCard from './WorkspaceToolchainCard.vue';
   import { createRuntimeOperationState } from './runtime-operation-state';
-  import { createWorkspaceGrantState } from './workspace-grant-state';
 
   const props = defineProps<{ appId: string; runId: string; busy?: boolean }>();
   const { t } = useI18n();
@@ -77,31 +73,13 @@
   );
   const selectedWorkspace = computed(() => pluginTargets.value.find((item) => item.key === workspaceKey.value) ?? null);
 
-  const grantState = createWorkspaceGrantState(
-    () => ({ appId: props.appId, runId: props.runId }),
-    () => {
-      const selected = selectedWorkspace.value;
-      return selected
-        ? {
-            key: selected.key,
-            workspaceId: selected.workspace.id,
-            workspaceGeneration: selected.workspace.generation,
-            targetPluginId: selected.targetPluginId,
-          }
-        : null;
-    },
-  );
-  const grants = grantState.grants;
-  const grantRevision = grantState.revision;
-  const grantLoading = grantState.loading;
-  const refreshLocked = computed(() => Boolean(props.busy) || localBusy.value || loading.value || grantLoading.value);
+  const refreshLocked = computed(() => Boolean(props.busy) || localBusy.value || loading.value);
   const locked = computed(() => refreshLocked.value || operationState.mutationBlocked.value);
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, t('agent.workspaceRuntime.requestFailed'));
 
   const refresh = async (preserveError = false): Promise<boolean> => {
     const current = ++refreshGeneration;
-    grantState.invalidate();
     loading.value = true;
     if (!preserveError) error.value = '';
     try {
@@ -128,7 +106,6 @@
       if (!pluginTargets.value.some((item) => item.key === workspaceKey.value)) {
         workspaceKey.value = pluginTargets.value[0]?.key ?? '';
       }
-      await grantState.load();
       return true;
     } catch (cause) {
       if (current === refreshGeneration) error.value = explain(cause);
@@ -226,33 +203,6 @@
     switchToolVersions(activeWorkspace.value, changes);
   };
 
-  const replaceGrants = (next: PluginWorkspaceGrant[]): Promise<void> => grantState.replace(next);
-
-  const addGrant = (input: {
-    principalPluginId: string;
-    path: string;
-    permissions: PluginWorkspacePermission[];
-  }): void => {
-    const selected = selectedWorkspace.value;
-    if (!selected || grantRevision.value === null) return;
-    void run(async () => {
-      const next = grants.value.filter(
-        (grant) => !(grant.principalPluginId === input.principalPluginId && grant.path === input.path),
-      );
-      await replaceGrants([
-        ...next,
-        { targetPluginId: selected.targetPluginId, ...input, permissions: [...input.permissions] },
-      ]);
-    }, t('agent.workspaceRuntime.grantsSaved'));
-  };
-
-  const removeGrant = (index: number): void => {
-    if (grantRevision.value === null) return;
-    void run(async () => {
-      await replaceGrants(grants.value.filter((_, candidateIndex) => candidateIndex !== index));
-    }, t('agent.workspaceRuntime.grantsSaved'));
-  };
-
   const exportArtifact = (input: { path: string; name: string; mediaType: string }): void => {
     const selected = selectedWorkspace.value;
     if (!selected) return;
@@ -312,12 +262,8 @@
     () => void refresh(),
     { immediate: true },
   );
-  watch(workspaceKey, () => {
-    if (!loading.value) void grantState.load().catch((cause) => (error.value = explain(cause)));
-  });
   onBeforeUnmount(() => {
     refreshGeneration += 1;
-    grantState.dispose();
   });
 </script>
 
@@ -462,14 +408,6 @@
       </article>
     </div>
 
-    <WorkspacePluginGrants
-      v-model="workspaceKey"
-      :targets="pluginTargets"
-      :grants="grants"
-      :locked="locked"
-      @add="addGrant"
-      @remove="removeGrant"
-    />
     <WorkspaceArtifactTransfer
       v-if="selectedWorkspace"
       :artifacts="artifacts"

@@ -1,4 +1,4 @@
-export const PLUGIN_RUNNER_PROTOCOL_VERSION = 2 as const;
+export const PLUGIN_RUNNER_PROTOCOL_VERSION = 3 as const;
 
 export interface PluginRunnerTarget {
   pluginId: string;

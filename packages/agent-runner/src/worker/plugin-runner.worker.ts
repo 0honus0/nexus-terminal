@@ -2,33 +2,19 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   decodePluginJson,
-  encodePluginBinaryFrame,
   encodePluginJsonFrame,
   PluginIpcDecoder,
   type PluginIpcFrame,
   writePluginFrame,
 } from '../plugin-ipc';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION, type RunnerPluginModuleV1, type RunnerPluginSdkV1 } from '../plugin-sdk.types';
+import { PluginWorkspaceFiles } from '../controller/plugin-workspace-store';
 
 type HostLifecycleRequest =
   | { kind: 'lifecycle.activate' }
   | { kind: 'lifecycle.health' }
   | { kind: 'lifecycle.quiesce'; deadlineUnixSeconds: number }
   | { kind: 'lifecycle.dispose' };
-
-type HostWorkspaceResponse =
-  { kind: 'workspace.result'; ok: true; value: unknown } | { kind: 'workspace.result'; ok: false; error: string };
-
-type HostMessage = HostLifecycleRequest | HostWorkspaceResponse;
-
-type WorkspaceRequestInput =
-  | { kind: 'workspace.read'; targetPluginId: string; path: string }
-  | { kind: 'workspace.write'; targetPluginId: string; path: string }
-  | { kind: 'workspace.list'; targetPluginId: string; path: string }
-  | { kind: 'workspace.stat'; targetPluginId: string; path: string }
-  | { kind: 'workspace.mkdir'; targetPluginId: string; path: string }
-  | { kind: 'workspace.rename'; targetPluginId: string; path: string; destinationPath: string }
-  | { kind: 'workspace.remove'; targetPluginId: string; path: string };
 
 const workspaceId = process.env.NEXUS_WORKSPACE_ID?.trim() ?? '';
 const generation = Number(process.env.NEXUS_WORKSPACE_GENERATION);
@@ -38,6 +24,8 @@ const sdkVersion = process.env.NEXUS_PLUGIN_SDK_VERSION?.trim() ?? '';
 const protocolVersion = Number(process.env.NEXUS_PLUGIN_PROTOCOL_VERSION);
 const entry = process.env.NEXUS_PLUGIN_RUNNER_ENTRY?.trim() ?? '';
 const sourceRoot = process.env.NEXUS_PLUGIN_SOURCE_ROOT?.trim() ?? '';
+const workspaceRoot = process.env.NEXUS_PLUGIN_WORKSPACE_ROOT?.trim() ?? '';
+
 if (!/^[A-Za-z0-9_.-]{1,128}$/.test(workspaceId) || !Number.isSafeInteger(generation) || generation < 1) {
   throw new Error('PLUGIN_RUNNER_WORKSPACE_INVALID');
 }
@@ -56,122 +44,40 @@ if (
 if (!/^runner\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:m?js|cjs)$/.test(entry) || entry.includes('..')) {
   throw new Error('PLUGIN_RUNNER_ENTRY_INVALID');
 }
-if (!sourceRoot || !path.isAbsolute(sourceRoot) || sourceRoot.includes('\0')) {
+if (!sourceRoot || !path.isAbsolute(sourceRoot) || sourceRoot.includes('\0'))
   throw new Error('PLUGIN_RUNNER_SOURCE_INVALID');
+if (!workspaceRoot || !path.isAbsolute(workspaceRoot) || workspaceRoot.includes('\0')) {
+  throw new Error('PLUGIN_RUNNER_WORKSPACE_INVALID');
 }
 
 console.log = (...args: unknown[]) => console.error('[runner-plugin]', ...args);
 console.info = (...args: unknown[]) => console.error('[runner-plugin]', ...args);
 console.warn = (...args: unknown[]) => console.error('[runner-plugin]', ...args);
 
-interface PendingWorkspaceRequest {
-  expected: 'json' | 'binary';
-  resolve(value: unknown): void;
-  reject(error: Error): void;
-  timer: NodeJS.Timeout;
-}
+const files = new PluginWorkspaceFiles(workspaceRoot);
+const sdk: RunnerPluginSdkV1 = Object.freeze({
+  workspace: Object.freeze({
+    read: async (logicalPath: string) => files.read(logicalPath),
+    write: async (logicalPath: string, value: Uint8Array) => files.write(logicalPath, value),
+    list: async (logicalPath: string) => files.list(logicalPath),
+    stat: async (logicalPath: string) => files.stat(logicalPath),
+    mkdir: async (logicalPath: string) => files.mkdir(logicalPath),
+    rename: async (logicalPath: string, destinationPath: string) => files.rename(logicalPath, destinationPath),
+    remove: async (logicalPath: string) => files.remove(logicalPath),
+  }),
+});
 
 const decoder = new PluginIpcDecoder();
 let lifecycleQueue = Promise.resolve();
-let sequence = 0;
-const pendingWorkspace = new Map<number, PendingWorkspaceRequest>();
-
-const nextRequestId = (): number => {
-  sequence = sequence >= 0xffff_ffff ? 1 : sequence + 1;
-  if (pendingWorkspace.has(sequence)) throw new Error('PLUGIN_RUNNER_REQUEST_ID_EXHAUSTED');
-  return sequence;
-};
-
-const beginWorkspaceRequest = (requestId: number, expected: PendingWorkspaceRequest['expected']): Promise<unknown> =>
-  new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      pendingWorkspace.delete(requestId);
-      reject(new Error('PLUGIN_RUNNER_TIMEOUT'));
-    }, 30_000);
-    timer.unref?.();
-    pendingWorkspace.set(requestId, { expected, resolve, reject, timer });
-  });
-
-const failWorkspaceRequest = (requestId: number, error: unknown): void => {
-  const pending = pendingWorkspace.get(requestId);
-  if (!pending) return;
-  pendingWorkspace.delete(requestId);
-  clearTimeout(pending.timer);
-  pending.reject(error instanceof Error ? error : new Error('PLUGIN_RUNNER_NOT_RUNNING'));
-};
 
 const protocolFailure = (error: unknown): void => {
-  const failure = error instanceof Error ? error : new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-  console.error('[runner-plugin-runtime] protocol error:', failure);
-  for (const [requestId, pending] of pendingWorkspace) {
-    pendingWorkspace.delete(requestId);
-    clearTimeout(pending.timer);
-    pending.reject(failure);
-  }
+  console.error(
+    '[runner-plugin-runtime] protocol error:',
+    error instanceof Error ? error : new Error('PLUGIN_RUNNER_PROTOCOL_INVALID'),
+  );
   process.exitCode = 1;
   process.stdin.destroy();
 };
-
-const workspaceRequest = async (request: WorkspaceRequestInput): Promise<unknown> => {
-  const requestId = nextRequestId();
-  const result = beginWorkspaceRequest(requestId, request.kind === 'workspace.read' ? 'binary' : 'json');
-  try {
-    await writePluginFrame(process.stdout, encodePluginJsonFrame(requestId, request));
-  } catch (error) {
-    failWorkspaceRequest(requestId, error);
-    throw error;
-  }
-  return result;
-};
-
-const workspaceWrite = async (targetPluginId: string, path: string, value: Uint8Array): Promise<void> => {
-  const requestId = nextRequestId();
-  const binaryFrame = encodePluginBinaryFrame(requestId, value);
-  const result = beginWorkspaceRequest(requestId, 'json');
-  try {
-    await writePluginFrame(
-      process.stdout,
-      encodePluginJsonFrame(requestId, { kind: 'workspace.write', targetPluginId, path }),
-    );
-    await writePluginFrame(process.stdout, binaryFrame);
-    await result;
-  } catch (error) {
-    failWorkspaceRequest(requestId, error);
-    throw error;
-  }
-};
-
-const sdk: RunnerPluginSdkV1 = Object.freeze({
-  workspace: Object.freeze({
-    read: async (targetPluginId: string, path: string) =>
-      Buffer.from((await workspaceRequest({ kind: 'workspace.read', targetPluginId, path })) as Uint8Array),
-    write: async (targetPluginId: string, path: string, value: Uint8Array) => {
-      if (!(value instanceof Uint8Array)) throw new Error('WORKSPACE_VALUE_INVALID');
-      await workspaceWrite(targetPluginId, path, value);
-    },
-    list: async (targetPluginId: string, path: string) => {
-      const value = await workspaceRequest({ kind: 'workspace.list', targetPluginId, path });
-      if (!Array.isArray(value) || value.some((item) => typeof item !== 'string'))
-        throw new Error('WORKSPACE_RESPONSE_INVALID');
-      return value as string[];
-    },
-    stat: async (targetPluginId: string, path: string) =>
-      (await workspaceRequest({ kind: 'workspace.stat', targetPluginId, path })) as {
-        type: 'file' | 'directory';
-        sizeBytes: number;
-        modifiedAtMs: number;
-      },
-    mkdir: async (targetPluginId: string, path: string) => {
-      await workspaceRequest({ kind: 'workspace.mkdir', targetPluginId, path });
-    },
-    rename: async (targetPluginId: string, path: string, destinationPath: string) => {
-      await workspaceRequest({ kind: 'workspace.rename', targetPluginId, path, destinationPath });
-    },
-    remove: async (targetPluginId: string, path: string) => {
-      await workspaceRequest({ kind: 'workspace.remove', targetPluginId, path });
-    },
-  }),
-});
 
 const startRuntime = async (): Promise<void> => {
   const entryPath = path.resolve(sourceRoot, entry);
@@ -206,32 +112,7 @@ const startRuntime = async (): Promise<void> => {
   };
 
   const handleFrame = (frame: PluginIpcFrame): void => {
-    if (frame.type === 'binary') {
-      const pending = pendingWorkspace.get(frame.requestId);
-      if (!pending || pending.expected !== 'binary') throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-      pendingWorkspace.delete(frame.requestId);
-      clearTimeout(pending.timer);
-      pending.resolve(frame.payload);
-      return;
-    }
-    const message = decodePluginJson(frame) as HostMessage;
-    if (message.kind === 'workspace.result') {
-      const pending = pendingWorkspace.get(frame.requestId);
-      if (!pending) return;
-      pendingWorkspace.delete(frame.requestId);
-      clearTimeout(pending.timer);
-      if (!message.ok) {
-        if (typeof message.error !== 'string') throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-        pending.reject(new Error(message.error));
-      } else if (pending.expected === 'json') {
-        pending.resolve(message.value);
-      } else {
-        const error = new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-        pending.reject(error);
-        throw error;
-      }
-      return;
-    }
+    const message = decodePluginJson(frame);
     lifecycleQueue = lifecycleQueue
       .then(async () => {
         if (
@@ -250,7 +131,7 @@ const startRuntime = async (): Promise<void> => {
             encodePluginJsonFrame(frame.requestId, {
               kind: 'lifecycle.result',
               ok: true,
-              value: await lifecycle(message),
+              value: await lifecycle(message as HostLifecycleRequest),
             }),
           );
         } catch (error) {

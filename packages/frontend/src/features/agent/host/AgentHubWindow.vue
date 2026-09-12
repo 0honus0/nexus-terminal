@@ -275,7 +275,7 @@
         :app-id="activeApp.id"
       />
       <PluginAppFrame
-        v-else-if="activeApp?.surface === 'plugin'"
+        v-else-if="activeApp?.surface === 'custom'"
         :key="`${activeApp.id}@${activeApp.version}`"
         :app-id="activeApp.id"
       />

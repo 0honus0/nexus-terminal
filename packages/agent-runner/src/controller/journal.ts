@@ -5,13 +5,13 @@ import type { CommandRecord, JobRecord, WorkspaceJobResult, WorkspaceRecord } fr
 import { runnerLog } from '../logging';
 
 interface JournalState {
-  schemaVersion: 3;
+  schemaVersion: 4;
   commands: Record<string, CommandRecord>;
   workspaces: Record<string, WorkspaceRecord>;
   jobs: Record<string, JobRecord>;
 }
 
-const empty = (): JournalState => ({ schemaVersion: 3, commands: {}, workspaces: {}, jobs: {} });
+const empty = (): JournalState => ({ schemaVersion: 4, commands: {}, workspaces: {}, jobs: {} });
 const TERMINAL_HISTORY_LIMIT = 4096;
 const TERMINAL_HISTORY_MIN_AGE_SECONDS = 24 * 60 * 60;
 
@@ -44,7 +44,7 @@ export class RunnerJournal {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     try {
       this.state = JSON.parse(fs.readFileSync(filePath, 'utf8')) as JournalState;
-      if (this.state.schemaVersion !== 3) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
+      if (this.state.schemaVersion !== 4) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
       if (
         !this.state.commands ||
         typeof this.state.commands !== 'object' ||
@@ -57,11 +57,6 @@ export class RunnerJournal {
         Array.isArray(this.state.jobs)
       ) {
         throw new Error('JOURNAL_STATE_INVALID');
-      }
-      for (const workspace of Object.values(this.state.workspaces)) {
-        workspace.runnerPlugins ??= [];
-        workspace.acpProfiles ??= [];
-        workspace.browserTarget ??= null;
       }
     } catch (error) {
       if (isMissingFile(error)) {

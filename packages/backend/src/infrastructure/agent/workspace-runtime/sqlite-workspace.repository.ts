@@ -9,9 +9,7 @@ import type {
 import type {
   AgentWorkspaceView,
   ToolchainPackRef,
-  WorkspaceNetworkPolicy,
   WorkspaceProfileView,
-  WorkspaceResourceLimits,
   WorkspaceRuntimeCommandView,
   WorkspaceStatus,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
@@ -33,8 +31,6 @@ interface WorkspaceRow {
   runner_plugins_json: string;
   generation: number;
   status: WorkspaceStatus;
-  limits_json: string;
-  network_json: string;
   acp_profiles_json: string;
   browser_target_json: string | null;
   retained_manifest_ref: string | null;
@@ -60,7 +56,7 @@ interface CommandRow {
 }
 
 const WORKSPACE_COLUMNS =
-  'id,user_id,app_id,run_id,agent_runtime_id,retained,kind,recipe_id,recipe_revision,runtime_digest,catalog_revision,toolchain_json,runner_plugins_json,generation,status,limits_json,network_json,acp_profiles_json,browser_target_json,retained_manifest_ref,version,last_active_at,created_at,updated_at';
+  'id,user_id,app_id,run_id,agent_runtime_id,retained,kind,recipe_id,recipe_revision,runtime_digest,catalog_revision,toolchain_json,runner_plugins_json,generation,status,acp_profiles_json,browser_target_json,retained_manifest_ref,version,last_active_at,created_at,updated_at';
 const COMMAND_COLUMNS =
   'id,user_id,app_id,workspace_id,action,operation_hash,generation,status,result_json,deadline_at,created_at,completed_at';
 
@@ -79,8 +75,6 @@ const workspaceView = (row: WorkspaceRow): AgentWorkspaceView => ({
     catalogRevision: row.catalog_revision,
     toolchain: JSON.parse(row.toolchain_json) as ToolchainPackRef[],
     runnerPlugins: JSON.parse(row.runner_plugins_json) as PluginRunnerTarget[],
-    limits: JSON.parse(row.limits_json) as WorkspaceResourceLimits,
-    network: JSON.parse(row.network_json) as WorkspaceNetworkPolicy,
     acpProfiles: JSON.parse(row.acp_profiles_json || '[]') as WorkspaceProfileView['acpProfiles'],
     browserTarget: row.browser_target_json
       ? (JSON.parse(row.browser_target_json) as WorkspaceProfileView['browserTarget'])
@@ -167,8 +161,8 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
       await tx.execute(
         `INSERT INTO agent_workspaces
           (id,user_id,app_id,run_id,agent_runtime_id,retained,kind,recipe_id,recipe_revision,runtime_digest,catalog_revision,
-           toolchain_json,runner_plugins_json,generation,status,limits_json,network_json,acp_profiles_json,browser_target_json,retained_manifest_ref,version,last_active_at,created_at,updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'creating',?,?,?,?,NULL,1,?,?,?)`,
+           toolchain_json,runner_plugins_json,generation,status,acp_profiles_json,browser_target_json,retained_manifest_ref,version,last_active_at,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'creating',?,?,NULL,1,?,?,?)`,
         [
           record.id,
           record.scope.userId,
@@ -184,8 +178,6 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
           JSON.stringify(record.profile.toolchain),
           JSON.stringify(record.profile.runnerPlugins),
           record.generation,
-          JSON.stringify(record.profile.limits),
-          JSON.stringify(record.profile.network),
           JSON.stringify(record.profile.acpProfiles),
           record.profile.browserTarget ? JSON.stringify(record.profile.browserTarget) : null,
           record.createdAt,

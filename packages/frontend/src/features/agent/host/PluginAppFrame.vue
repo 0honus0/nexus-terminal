@@ -1,14 +1,14 @@
 <script setup lang="ts">
   import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
   import { agentApi, type PluginFrontendDescriptor } from '../api/agent-api';
-  import { PluginAppBridge } from './app-bridge';
-  import { PLUGIN_FRONTEND_PROTOCOL_VERSION } from './plugin-sdk';
+  import { PluginFrontendHostBridge } from '../plugin-sdk/host-bridge';
+  import { PLUGIN_FRONTEND_PROTOCOL_VERSION } from '../plugin-sdk/protocol';
 
   const props = defineProps<{ appId: string }>();
   const iframe = ref<HTMLIFrameElement | null>(null);
   const descriptor = ref<PluginFrontendDescriptor | null>(null);
   const status = ref<'loading' | 'connecting' | 'ready' | 'unavailable'>('loading');
-  let bridge: PluginAppBridge | null = null;
+  let bridge: PluginFrontendHostBridge | null = null;
   let generation = 0;
 
   const disposeBridge = (): void => {
@@ -40,7 +40,7 @@
       if (current !== generation) return;
       const frame = iframe.value;
       if (!frame) throw new Error('PLUGIN_FRONTEND_FRAME_MISSING');
-      const nextBridge = new PluginAppBridge(frame, props.appId, next);
+      const nextBridge = new PluginFrontendHostBridge(frame, props.appId, next);
       bridge = nextBridge;
       const connected = nextBridge.start();
       frame.src = next.url;

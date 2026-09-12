@@ -171,7 +171,10 @@ export const parseBudgetIncreaseRequest = (body: unknown): { increase: RunBudget
 };
 
 const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
-  if (!isRecord(value) || !hasOnlyKeys(value, ['recipeId', 'versions', 'runnerPluginIds', 'limits', 'network'])) {
+  if (
+    !isRecord(value) ||
+    !hasOnlyKeys(value, ['recipeId', 'versions', 'runnerPluginIds', 'acpProfileIds', 'browserTargetId'])
+  ) {
     throw new Error('VALIDATION_FAILED');
   }
   if (typeof value.recipeId !== 'string' || value.recipeId.length < 1 || value.recipeId.length > 128) {
@@ -195,21 +198,21 @@ const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
       throw new Error('VALIDATION_FAILED');
     }
   }
-  if (value.limits !== undefined) {
-    if (!isRecord(value.limits) || !hasOnlyKeys(value.limits, ['cpus', 'memoryBytes', 'pids', 'tmpfsBytes'])) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    if (Object.values(value.limits).some((entry) => entry !== undefined && !positiveInteger(entry))) {
+  if (value.acpProfileIds !== undefined) {
+    if (
+      !Array.isArray(value.acpProfileIds) ||
+      value.acpProfileIds.length > 16 ||
+      new Set(value.acpProfileIds).size !== value.acpProfileIds.length ||
+      value.acpProfileIds.some((id) => typeof id !== 'string' || !/^[a-z][a-z0-9_.-]{0,127}$/.test(id))
+    ) {
       throw new Error('VALIDATION_FAILED');
     }
   }
-  if (value.network !== undefined) {
-    if (!isRecord(value.network) || !hasOnlyKeys(value.network, ['mode', 'hosts']))
-      throw new Error('VALIDATION_FAILED');
-    if ((value.network.mode !== 'none' && value.network.mode !== 'allowlist') || !Array.isArray(value.network.hosts)) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    if (value.network.hosts.some((host) => typeof host !== 'string')) throw new Error('VALIDATION_FAILED');
+  if (
+    value.browserTargetId !== undefined &&
+    (typeof value.browserTargetId !== 'string' || !/^[a-z][a-z0-9_.-]{0,127}$/.test(value.browserTargetId))
+  ) {
+    throw new Error('VALIDATION_FAILED');
   }
   return value as unknown as AgentWorkspaceCreateSpec;
 };

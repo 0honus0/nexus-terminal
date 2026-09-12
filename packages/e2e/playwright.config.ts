@@ -26,6 +26,9 @@ const backendEnv: Record<string, string> = {
   GUACD_HOST: '127.0.0.1',
   GUACD_PORT: String(E2E_PORTS.guacd),
   NEXUS_VITE_BACKEND_ORIGIN: E2E_URLS.backendOrigin,
+  AGENT_PUBLIC_ORIGIN: E2E_URLS.frontendOrigin,
+  AGENT_PLUGIN_FRONTEND_ORIGIN: E2E_URLS.pluginFrontendOrigin,
+  AGENT_PLUGIN_FRONTEND_PORT: String(E2E_PORTS.pluginFrontend),
 };
 
 export default defineConfig({

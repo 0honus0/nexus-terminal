@@ -52,13 +52,6 @@ for (const file of sourceFiles) {
     failures.push(`${rel}: Run HTTP reads must flow through features/agent/runtime/run-facade.ts`);
   }
 
-  if (
-    rel === 'features/agent/runtime/WorkspaceRuntimePanel.vue' &&
-    /\bagentApi\.(?:workspaceGrants|replaceWorkspaceGrants)\s*\(/.test(content)
-  ) {
-    failures.push(`${rel}: Workspace grant request lifecycle must flow through workspace-grant-state.ts`);
-  }
-
   if (rel === 'features/agent/runtime/ApprovalCard.vue' && /\bDate\.now\s*\(/.test(content)) {
     failures.push(`${rel}: approval expiry must use the server clock anchor, not the browser wall clock`);
   }
@@ -95,8 +88,9 @@ const agentArea = (rel) => {
 
 const allowedAgentAreas = {
   public: new Set(['public', 'api', 'host', 'settings']),
-  host: new Set(['host', 'api', 'files']),
+  host: new Set(['host', 'api', 'files', 'plugin-sdk']),
   api: new Set(['api', 'host']),
+  'plugin-sdk': new Set(['plugin-sdk', 'api', 'runtime']),
   ai: new Set(['ai', 'api', 'files']),
   files: new Set(['files', 'api']),
   runtime: new Set(['runtime', 'api']),

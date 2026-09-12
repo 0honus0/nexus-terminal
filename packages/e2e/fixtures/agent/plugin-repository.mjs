@@ -13,7 +13,8 @@ if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
   throw new Error('NEXUS_E2E_PLUGIN_REPOSITORY_PORT_INVALID');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-e2e-plugin-repo-'));
 const keyPath = path.join(temp, 'publisher.pem');
-const packagePath = path.join(temp, 'nexus.developer-1.0.0.tar');
+const packagePath = path.join(temp, 'nexus.developer-1.1.0.tar');
+const customPackagePath = path.join(temp, 'nexus.custom-surface-1.0.0.tar');
 const unsafePackagePath = path.join(temp, 'nexus.unsafe-1.0.0.tar');
 const { privateKey } = generateKeyPairSync('ed25519');
 fs.writeFileSync(keyPath, privateKey.export({ type: 'pkcs8', format: 'pem' }));
@@ -30,6 +31,19 @@ const metadata = JSON.parse(
   ),
 );
 const packageBytes = fs.readFileSync(packagePath);
+const customMetadata = JSON.parse(
+  execFileSync(
+    process.execPath,
+    [
+      path.join(current, 'build-plugin-package.mjs'),
+      path.join(current, 'plugin-source/nexus.custom-surface'),
+      customPackagePath,
+      keyPath,
+    ],
+    { cwd: current, encoding: 'utf8' },
+  ),
+);
+const customPackageBytes = fs.readFileSync(customPackagePath);
 const unsafeRoot = path.join(temp, 'unsafe-package');
 fs.mkdirSync(unsafeRoot, { recursive: true });
 fs.symlinkSync('/etc/passwd', path.join(unsafeRoot, 'escape'));
@@ -51,10 +65,20 @@ const catalog = {
       version: metadata.version,
       displayName: metadata.displayName,
       description: 'Signed E2E Developer Agent contract fixture.',
-      packageUrl: `http://${host}:${port}/packages/nexus.developer-1.0.0.tar`,
+      packageUrl: `http://${host}:${port}/packages/nexus.developer-1.1.0.tar`,
       sha256: metadata.sha256,
       sizeBytes: metadata.sizeBytes,
       publisherKeyId: metadata.publisherKeyId,
+    },
+    {
+      appId: customMetadata.appId,
+      version: customMetadata.version,
+      displayName: customMetadata.displayName,
+      description: 'E2E-only full Custom App Surface SDK fixture.',
+      packageUrl: `http://${host}:${port}/packages/nexus.custom-surface-1.0.0.tar`,
+      sha256: customMetadata.sha256,
+      sizeBytes: customMetadata.sizeBytes,
+      publisherKeyId: customMetadata.publisherKeyId,
     },
     {
       appId: 'nexus.unsafe',
@@ -85,13 +109,22 @@ const server = http.createServer((request, response) => {
     response.end(catalogBytes);
     return;
   }
-  if (request.method === 'GET' && request.url === '/packages/nexus.developer-1.0.0.tar') {
+  if (request.method === 'GET' && request.url === '/packages/nexus.developer-1.1.0.tar') {
     response.writeHead(200, {
       'Content-Type': 'application/octet-stream',
       'Content-Length': String(packageBytes.byteLength),
       'Cache-Control': 'no-store',
     });
     response.end(packageBytes);
+    return;
+  }
+  if (request.method === 'GET' && request.url === '/packages/nexus.custom-surface-1.0.0.tar') {
+    response.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': String(customPackageBytes.byteLength),
+      'Cache-Control': 'no-store',
+    });
+    response.end(customPackageBytes);
     return;
   }
   if (request.method === 'GET' && request.url === '/packages/nexus.unsafe-1.0.0.tar') {

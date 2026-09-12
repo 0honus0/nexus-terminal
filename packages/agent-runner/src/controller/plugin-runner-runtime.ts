@@ -5,7 +5,6 @@ import path from 'node:path';
 import { valid as validSemver } from 'semver';
 import {
   decodePluginJson,
-  encodePluginBinaryFrame,
   encodePluginJsonFrame,
   PluginIpcDecoder,
   type PluginIpcFrame,
@@ -13,45 +12,9 @@ import {
 } from '../plugin-ipc';
 import type { WorkspaceRecord, PluginRunnerTarget } from '../types';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
-import {
-  WorkspaceBroker,
-  type WorkspaceAccessTarget,
-  type WorkspaceGrant,
-  type WorkspaceGrantSet,
-  type WorkspaceReadHandle,
-} from './workspace-broker';
+import { PluginWorkspaceStore, type WorkspaceReadHandle } from './plugin-workspace-store';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
-
-type WorkspaceRequest =
-  | { kind: 'workspace.read'; targetPluginId: string; path: string }
-  | { kind: 'workspace.write'; targetPluginId: string; path: string }
-  | { kind: 'workspace.list'; targetPluginId: string; path: string }
-  | { kind: 'workspace.stat'; targetPluginId: string; path: string }
-  | { kind: 'workspace.mkdir'; targetPluginId: string; path: string }
-  | { kind: 'workspace.rename'; targetPluginId: string; path: string; destinationPath: string }
-  | { kind: 'workspace.remove'; targetPluginId: string; path: string };
-
-const workspaceRequest = (message: Record<string, unknown>): WorkspaceRequest => {
-  const kind = message.kind;
-  if (
-    ![
-      'workspace.read',
-      'workspace.write',
-      'workspace.list',
-      'workspace.stat',
-      'workspace.mkdir',
-      'workspace.rename',
-      'workspace.remove',
-    ].includes(String(kind)) ||
-    typeof message.targetPluginId !== 'string' ||
-    typeof message.path !== 'string' ||
-    (kind === 'workspace.rename' && typeof message.destinationPath !== 'string')
-  ) {
-    throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-  }
-  return message as WorkspaceRequest;
-};
 
 type LifecycleResult =
   { kind: 'lifecycle.result'; ok: true; value: unknown } | { kind: 'lifecycle.result'; ok: false; error: string };
@@ -62,14 +25,8 @@ interface PendingRequest {
   timer: NodeJS.Timeout;
 }
 
-interface PendingWorkspaceWrite {
-  target: WorkspaceAccessTarget;
-  timer: NodeJS.Timeout;
-}
-
 class RunnerPluginProcess {
   private readonly pending = new Map<number, PendingRequest>();
-  private readonly pendingWorkspaceWrites = new Map<number, PendingWorkspaceWrite>();
   private readonly decoder = new PluginIpcDecoder();
   private frameQueue = Promise.resolve();
   private sequence = 0;
@@ -82,18 +39,13 @@ class RunnerPluginProcess {
 
   constructor(
     private readonly child: ChildProcessWithoutNullStreams,
-    private readonly workspaceId: string,
-    private readonly generation: number,
-    private readonly callerPluginId: string,
-    private readonly workspaces: WorkspaceBroker,
     private readonly sdkVersion: string,
     private readonly protocolVersion: typeof PLUGIN_RUNNER_PROTOCOL_VERSION,
   ) {
     child.stdout.on('data', (chunk: Buffer) => {
       try {
-        for (const frame of this.decoder.push(chunk)) {
+        for (const frame of this.decoder.push(chunk))
           this.frameQueue = this.frameQueue.then(() => this.handleFrame(frame));
-        }
         this.frameQueue = this.frameQueue.catch((error) => this.protocolFailure(error));
       } catch (error) {
         this.protocolFailure(error);
@@ -120,8 +72,9 @@ class RunnerPluginProcess {
   request(kind: 'lifecycle.activate' | 'lifecycle.health' | 'lifecycle.dispose'): Promise<unknown>;
   request(kind: 'lifecycle.quiesce', payload: { deadlineUnixSeconds: number }): Promise<unknown>;
   request(kind: string, payload: Record<string, unknown> = {}): Promise<unknown> {
-    if (this.child.exitCode !== null || this.child.signalCode !== null || !this.child.stdin.writable)
+    if (this.child.exitCode !== null || this.child.signalCode !== null || !this.child.stdin.writable) {
       throw new Error('PLUGIN_RUNNER_NOT_RUNNING');
+    }
     const requestId = this.nextRequestId();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -147,11 +100,7 @@ class RunnerPluginProcess {
     await terminateManagedProcess(this.child);
   }
 
-  private async handleFrame(frame: PluginIpcFrame): Promise<void> {
-    if (frame.type === 'binary') {
-      await this.handleWorkspaceBinary(frame.requestId, frame.payload);
-      return;
-    }
+  private handleFrame(frame: PluginIpcFrame): void {
     const message = decodePluginJson(frame);
     if (message.kind === 'runtime.ready') {
       if (frame.requestId !== 0) throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
@@ -163,113 +112,26 @@ class RunnerPluginProcess {
       this.readyResolve();
       return;
     }
-    if (message.kind === 'lifecycle.result') {
-      const result = message as LifecycleResult;
-      const pending = this.pending.get(frame.requestId);
-      if (!pending) return;
-      this.pending.delete(frame.requestId);
-      clearTimeout(pending.timer);
-      if (result.ok) pending.resolve(result.value);
-      else if (typeof result.error === 'string')
-        pending.reject(new Error(`PLUGIN_RUNNER_ERROR:${result.error.slice(0, 1024)}`));
-      else pending.reject(new Error('PLUGIN_RUNNER_PROTOCOL_INVALID'));
-      return;
-    }
-    if (
-      message.kind === 'workspace.read' ||
-      message.kind === 'workspace.write' ||
-      message.kind === 'workspace.list' ||
-      message.kind === 'workspace.stat' ||
-      message.kind === 'workspace.mkdir' ||
-      message.kind === 'workspace.rename' ||
-      message.kind === 'workspace.remove'
-    ) {
-      if (frame.requestId === 0) throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-      await this.handleWorkspace(frame.requestId, workspaceRequest(message));
-      return;
-    }
-    throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-  }
-
-  private async handleWorkspace(requestId: number, message: WorkspaceRequest): Promise<void> {
-    try {
-      const target: WorkspaceAccessTarget = {
-        workspaceId: this.workspaceId,
-        generation: this.generation,
-        callerPluginId: this.callerPluginId,
-        targetPluginId: message.targetPluginId,
-        path: message.path,
-      };
-      let value: unknown;
-      if (message.kind === 'workspace.read') {
-        await writePluginFrame(this.child.stdin, encodePluginBinaryFrame(requestId, this.workspaces.read(target)));
-        return;
-      } else if (message.kind === 'workspace.write') {
-        if (this.pendingWorkspaceWrites.has(requestId)) throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-        const timer = setTimeout(() => {
-          this.pendingWorkspaceWrites.delete(requestId);
-          void this.sendWorkspaceResult(requestId, false, 'PLUGIN_RUNNER_TIMEOUT');
-        }, 30_000);
-        timer.unref?.();
-        this.pendingWorkspaceWrites.set(requestId, { target, timer });
-        return;
-      } else if (message.kind === 'workspace.list') value = this.workspaces.list(target);
-      else if (message.kind === 'workspace.stat') value = this.workspaces.stat(target);
-      else if (message.kind === 'workspace.mkdir') {
-        this.workspaces.mkdir(target);
-        value = { created: true };
-      } else if (message.kind === 'workspace.rename') {
-        this.workspaces.rename(target, message.destinationPath);
-        value = { renamed: true };
-      } else {
-        this.workspaces.remove(target);
-        value = { removed: true };
-      }
-      await this.sendWorkspaceResult(requestId, true, value);
-    } catch (error) {
-      await this.sendWorkspaceResult(
-        requestId,
-        false,
-        error instanceof Error ? error.message : 'WORKSPACE_ACCESS_FAILED',
-      );
-    }
-  }
-
-  private async handleWorkspaceBinary(requestId: number, payload: Buffer): Promise<void> {
-    const pending = this.pendingWorkspaceWrites.get(requestId);
-    if (!pending) throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-    this.pendingWorkspaceWrites.delete(requestId);
+    if (message.kind !== 'lifecycle.result') throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
+    const result = message as LifecycleResult;
+    const pending = this.pending.get(frame.requestId);
+    if (!pending) return;
+    this.pending.delete(frame.requestId);
     clearTimeout(pending.timer);
-    try {
-      this.workspaces.write(pending.target, payload);
-      await this.sendWorkspaceResult(requestId, true, { written: payload.byteLength });
-    } catch (error) {
-      await this.sendWorkspaceResult(
-        requestId,
-        false,
-        error instanceof Error ? error.message : 'WORKSPACE_ACCESS_FAILED',
-      );
-    }
-  }
-
-  private sendWorkspaceResult(requestId: number, ok: boolean, value: unknown): Promise<void> {
-    const message = ok
-      ? { kind: 'workspace.result', ok: true, value }
-      : { kind: 'workspace.result', ok: false, error: String(value).slice(0, 1024) };
-    return writePluginFrame(this.child.stdin, encodePluginJsonFrame(requestId, message));
+    if (result.ok) pending.resolve(result.value);
+    else if (typeof result.error === 'string')
+      pending.reject(new Error(`PLUGIN_RUNNER_ERROR:${result.error.slice(0, 1024)}`));
+    else pending.reject(new Error('PLUGIN_RUNNER_PROTOCOL_INVALID'));
   }
 
   private nextRequestId(): number {
     this.sequence = this.sequence >= 0xffff_ffff ? 1 : this.sequence + 1;
-    if (this.pending.has(this.sequence) || this.pendingWorkspaceWrites.has(this.sequence)) {
-      throw new Error('PLUGIN_RUNNER_REQUEST_ID_EXHAUSTED');
-    }
+    if (this.pending.has(this.sequence)) throw new Error('PLUGIN_RUNNER_REQUEST_ID_EXHAUSTED');
     return this.sequence;
   }
 
   private protocolFailure(error: unknown): void {
-    const failure = error instanceof Error ? error : new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-    this.failAll(failure);
+    this.failAll(error instanceof Error ? error : new Error('PLUGIN_RUNNER_PROTOCOL_INVALID'));
     if (this.child.exitCode === null && this.child.signalCode === null) signalManagedProcess(this.child, 'SIGKILL');
   }
 
@@ -280,20 +142,18 @@ class RunnerPluginProcess {
       pending.reject(error);
     }
     this.pending.clear();
-    for (const pending of this.pendingWorkspaceWrites.values()) clearTimeout(pending.timer);
-    this.pendingWorkspaceWrites.clear();
   }
 }
 
 export class PluginRunnerRuntime {
-  private readonly workspaces: WorkspaceBroker;
+  private readonly workspaces: PluginWorkspaceStore;
   private readonly instances = new Map<string, RunnerPluginProcess>();
 
   constructor(
     private readonly runtimeRoot: string,
     private readonly pluginSourceRoot: string,
   ) {
-    this.workspaces = new WorkspaceBroker(runtimeRoot);
+    this.workspaces = new PluginWorkspaceStore(runtimeRoot);
   }
 
   available(): boolean {
@@ -301,18 +161,17 @@ export class PluginRunnerRuntime {
   }
 
   prepareWorkspace(workspace: WorkspaceRecord): void {
-    for (const target of workspace.runnerPlugins ?? []) {
+    for (const target of workspace.runnerPlugins) {
       this.validateTarget(target);
-      this.workspaces.ensurePluginWorkspace(workspace.workspaceId, workspace.generation, target.pluginId);
+      this.workspaces.ensure(workspace.workspaceId, workspace.generation, target.pluginId);
     }
   }
 
   async activateWorkspace(workspace: WorkspaceRecord): Promise<void> {
     this.prepareWorkspace(workspace);
-    for (const target of workspace.runnerPlugins ?? []) {
+    for (const target of workspace.runnerPlugins) {
       const key = this.key(workspace, target.pluginId);
-      const existing = this.instances.get(key);
-      if (existing) continue;
+      if (this.instances.has(key)) continue;
       const instance = this.start(workspace, target);
       this.instances.set(key, instance);
       try {
@@ -327,14 +186,14 @@ export class PluginRunnerRuntime {
   }
 
   async quiesceWorkspace(workspace: WorkspaceRecord, deadlineUnixSeconds: number): Promise<void> {
-    for (const target of workspace.runnerPlugins ?? []) {
+    for (const target of workspace.runnerPlugins) {
       const instance = this.instances.get(this.key(workspace, target.pluginId));
       if (instance) await instance.request('lifecycle.quiesce', { deadlineUnixSeconds });
     }
   }
 
   async disposeWorkspace(workspace: WorkspaceRecord): Promise<void> {
-    for (const target of workspace.runnerPlugins ?? []) {
+    for (const target of workspace.runnerPlugins) {
       const key = this.key(workspace, target.pluginId);
       const instance = this.instances.get(key);
       if (!instance) continue;
@@ -343,33 +202,13 @@ export class PluginRunnerRuntime {
     }
   }
 
-  replaceWorkspaceGrants(
-    workspaceId: string,
-    generation: number,
-    targetPluginId: string,
-    grants: readonly Omit<WorkspaceGrant, 'targetPluginId'>[],
-    expectedRevision: number,
-  ): WorkspaceGrantSet {
-    return this.workspaces.replaceTargetGrants(workspaceId, generation, targetPluginId, grants, expectedRevision);
-  }
-
-  workspaceGrants(workspaceId: string, generation: number, targetPluginId: string): WorkspaceGrantSet {
-    return this.workspaces.grantSetForTarget(workspaceId, generation, targetPluginId);
-  }
-
   openWorkspaceFileRead(
     workspaceId: string,
     generation: number,
     targetPluginId: string,
     logicalPath: string,
   ): Promise<WorkspaceReadHandle> {
-    return this.workspaces.openRead({
-      workspaceId,
-      generation,
-      callerPluginId: targetPluginId,
-      targetPluginId,
-      path: logicalPath,
-    });
+    return this.workspaces.files(workspaceId, generation, targetPluginId).openRead(logicalPath);
   }
 
   writeWorkspaceFileStream(
@@ -380,17 +219,9 @@ export class PluginRunnerRuntime {
     source: AsyncIterable<Uint8Array>,
     expectedBytes: number,
   ): Promise<void> {
-    return this.workspaces.writeStream(
-      {
-        workspaceId,
-        generation,
-        callerPluginId: targetPluginId,
-        targetPluginId,
-        path: logicalPath,
-      },
-      source,
-      expectedBytes,
-    );
+    return this.workspaces
+      .files(workspaceId, generation, targetPluginId)
+      .writeStream(logicalPath, source, expectedBytes);
   }
 
   private start(workspace: WorkspaceRecord, target: PluginRunnerTarget): RunnerPluginProcess {
@@ -400,7 +231,7 @@ export class PluginRunnerRuntime {
     if (!fs.existsSync(marker) || fs.readFileSync(marker, 'utf8').trim() !== target.packageHash) {
       throw new Error('PLUGIN_RUNNER_SOURCE_MISMATCH');
     }
-    this.workspaces.ensurePluginWorkspace(workspace.workspaceId, workspace.generation, target.pluginId);
+    const pluginWorkspaceRoot = this.workspaces.ensure(workspace.workspaceId, workspace.generation, target.pluginId);
     const worker = path.resolve(__dirname, '../worker/plugin-runner.worker.js');
     if (!fs.existsSync(worker)) throw new Error('PLUGIN_RUNNER_RUNTIME_UNAVAILABLE');
     const home = path.join(
@@ -426,25 +257,19 @@ export class PluginRunnerRuntime {
         NEXUS_PLUGIN_PROTOCOL_VERSION: String(target.protocolVersion),
         NEXUS_PLUGIN_RUNNER_ENTRY: target.entry,
         NEXUS_PLUGIN_SOURCE_ROOT: source,
+        NEXUS_PLUGIN_WORKSPACE_ROOT: pluginWorkspaceRoot,
       },
     });
-    return new RunnerPluginProcess(
-      child,
-      workspace.workspaceId,
-      workspace.generation,
-      target.pluginId,
-      this.workspaces,
-      target.sdkVersion,
-      target.protocolVersion,
-    );
+    return new RunnerPluginProcess(child, target.sdkVersion, target.protocolVersion);
   }
 
   private validateTarget(target: PluginRunnerTarget): void {
     this.safe(target.pluginId);
     if (!validSemver(target.version)) throw new Error('PLUGIN_RUNNER_VERSION_INVALID');
     if (!validSemver(target.sdkVersion)) throw new Error('PLUGIN_RUNNER_SDK_VERSION_INVALID');
-    if (target.protocolVersion !== PLUGIN_RUNNER_PROTOCOL_VERSION)
+    if (target.protocolVersion !== PLUGIN_RUNNER_PROTOCOL_VERSION) {
       throw new Error('PLUGIN_RUNNER_PROTOCOL_VERSION_UNSUPPORTED');
+    }
     if (!/^[a-f0-9]{64}$/.test(target.packageHash)) throw new Error('PLUGIN_RUNNER_HASH_INVALID');
     if (
       !/^runner\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:m?js|cjs)$/.test(target.entry) ||

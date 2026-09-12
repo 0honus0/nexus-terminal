@@ -219,7 +219,6 @@ set_env NEXUS_PLUGIN_FRONTEND_ORIGIN "http://127.0.0.1:$plugin_frontend_port"
 set_env NEXUS_IPV6_SUBNET "fd01:ee:${network_hex}::/80"
 set_env NEXUS_IPV6_GATEWAY "fd01:ee:${network_hex}::1"
 set_env NEXUS_AGENT_RUNNER_TOKEN "$runner_token"
-set_env NEXUS_AGENT_DEPLOYMENT_ID "nexus-e2e-$suffix"
 set_env RP_ID 'ssh.honus.top'
 set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
 
@@ -342,7 +341,6 @@ kill -0 "$browser_probe_pid" 2>/dev/null || { echo 'Browser CDP probe did not st
 NEXUS_AGENT_RUNNER_HOST=0.0.0.0 \
 PORT="$runner_port" \
 NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
-NEXUS_AGENT_DEPLOYMENT_ID="nexus-e2e-$suffix" \
 NEXUS_AGENT_RUNNER_ROOT="$runner_root" \
 NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
 NEXUS_AGENT_PLUGIN_SOURCE_ROOT="$data_dir/agent/plugins" \
@@ -351,7 +349,7 @@ runner_pid=$!
 
 runner_listener_ready=0
 for _ in {1..30}; do
-  if curl -fsS -H "Authorization: Bearer $runner_token" -H "X-Nexus-Agent-Protocol: 2026-09-12" "http://127.0.0.1:${runner_port}/v1/availability" >/dev/null; then
+  if curl -fsS -H "Authorization: Bearer $runner_token" -H "X-Nexus-Agent-Protocol: 2026-09-13" "http://127.0.0.1:${runner_port}/v1/availability" >/dev/null; then
     runner_listener_ready=1
     break
   fi
@@ -390,6 +388,15 @@ done
 grep -Fq 'plugin-static-ok' "$plugin_frontend_body"
 grep -Eqi '^Content-Security-Policy: .*frame-ancestors http://127\.0\.0\.1:' "$plugin_frontend_headers"
 grep -Eqi '^Cache-Control: public, max-age=31536000, immutable' "$plugin_frontend_headers"
+grep -Eqi '^Access-Control-Allow-Origin: \*' "$plugin_frontend_headers"
+plugin_sdk_headers="$workspace/plugin-sdk.headers"
+plugin_sdk_body="$workspace/plugin-sdk.body"
+curl -fsS -D "$plugin_sdk_headers" -o "$plugin_sdk_body" \
+  "http://127.0.0.1:${plugin_frontend_port}/sdk/frontend-v1.mjs"
+grep -Fq 'connectNexusPlugin' "$plugin_sdk_body"
+grep -Eqi '^Content-Type: application/javascript; charset=utf-8' "$plugin_sdk_headers"
+grep -Eqi '^Cache-Control: public, max-age=31536000, immutable' "$plugin_sdk_headers"
+grep -Eqi '^Access-Control-Allow-Origin: \*' "$plugin_sdk_headers"
 if curl -fsS "http://127.0.0.1:${plugin_frontend_port}/plugins/smoke-static/1/.nexus-package-hash" >/dev/null 2>&1; then
   echo "Plugin frontend listener exposed a dotfile." >&2
   exit 1
@@ -402,11 +409,11 @@ for _ in {1..60}; do
   if compose exec -T backend node - <<'NODE'
 const token = process.env.AGENT_RUNNER_TOKEN;
 const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
-  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-12' },
+  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-13' },
 }).catch(() => null);
 if (!response?.ok) process.exit(1);
 const body = await response.json();
-if (body.available !== true || body.state !== 'ready' || body.runtime?.mode !== 'native' || body.runtime?.isolation !== 'logical') process.exit(1);
+if (body.available !== true || body.mode !== 'native' || body.isolation !== 'logical') process.exit(1);
 NODE
   then
     runner_ready=1
@@ -419,7 +426,7 @@ if [[ "$runner_ready" -ne 1 ]]; then
   compose exec -T backend node - <<'NODE' || true
 const token = process.env.AGENT_RUNNER_TOKEN;
 const response = await fetch(process.env.AGENT_RUNNER_URL + '/v1/availability', {
-  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-12' },
+  headers: { authorization: `Bearer ${token}`, 'x-nexus-agent-protocol': '2026-09-13' },
 }).catch(() => null);
 if (!response) {
   console.error('runner availability: unreachable');
@@ -450,13 +457,12 @@ host_tool_snapshot_before="$(host_tool_snapshot)"
 # Exercise the actual Controller -> Tool Store -> native Workspace Dev Environment -> job
 # path, not only binary presence or HTTP health. The probe originates from Backend
 # through the host-gateway path using the same shared Controller token as production.
-compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" -e NEXUS_E2E_RUNNER_DEPLOYMENT_ID="nexus-e2e-$suffix" backend node - <<'NODE'
+compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" backend node - <<'NODE'
 const { randomUUID } = await import('node:crypto');
 const { lookup } = await import('node:dns/promises');
 const baseUrl = process.env.AGENT_RUNNER_URL;
 const token = process.env.AGENT_RUNNER_TOKEN;
-const deploymentId = process.env.NEXUS_E2E_RUNNER_DEPLOYMENT_ID;
-const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-09-12' };
+const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json', 'x-nexus-agent-protocol': '2026-09-13' };
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 const get = async (path) => {
   for (let attempt = 1; attempt <= 5; attempt += 1) {
@@ -579,7 +585,6 @@ rl.on('line', (line) => {
 const now = () => Math.floor(Date.now() / 1000);
 const workspaceId = `smoke-workspace-${randomUUID()}`;
 const identity = {
-  deploymentId,
   userId: 1,
   appId: 'operations.default',
   runId: 'smoke-run',
@@ -605,17 +610,26 @@ const identity = {
   ],
   browserTarget: null,
   retained: false,
-  expectedVersion: 0,
 };
 const command = (action, generation = 1) => ({
-  ...identity,
+  workspaceId,
   generation,
+  ...(action === 'provision'
+    ? {
+        recipeId: identity.recipeId,
+        recipeRevision: identity.recipeRevision,
+        runtimeDigest: identity.runtimeDigest,
+        catalogRevision: identity.catalogRevision,
+        toolchain: identity.toolchain,
+        runnerPlugins: identity.runnerPlugins,
+        acpProfiles: identity.acpProfiles,
+        browserTarget: identity.browserTarget,
+        retained: identity.retained,
+      }
+    : {}),
   commandId: `smoke-${action}-${generation}-${randomUUID()}`,
   action,
-  operationHash: `v1:${'0'.repeat(64)}`,
-  issuedAt: now(),
   deadlineAt: now() + 60,
-  nonce: randomUUID(),
 });
 
 const provision = await submitCommand(command('provision'));
@@ -947,16 +961,8 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
 const jobId = `smoke-job-${randomUUID()}`;
 const job = {
   jobId,
-  workspaceId,
   generation: 1,
-  userId: identity.userId,
-  appId: identity.appId,
-  runId: identity.runId,
-  agentRuntimeId: identity.agentRuntimeId,
-  operationHash: `v1:${'1'.repeat(64)}`,
-  issuedAt: now(),
   deadlineAt: now() + 30,
-  nonce: randomUUID(),
   argv: [
     'nexus-sh',
     '-c',
@@ -982,10 +988,7 @@ const processTreeJobId = `smoke-process-tree-${randomUUID()}`;
 await post(`/v1/workspaces/${encodeURIComponent(workspaceId)}/jobs`, {
   ...job,
   jobId: processTreeJobId,
-  operationHash: `v1:${'7'.repeat(64)}`,
-  issuedAt: now(),
   deadlineAt: now() + 30,
-  nonce: randomUUID(),
   argv: [
     'nexus-sh',
     '-c',
@@ -1021,10 +1024,7 @@ const generationJob = {
   ...job,
   jobId: generationJobId,
   generation: 2,
-  operationHash: `v1:${'2'.repeat(64)}`,
-  issuedAt: now(),
   deadlineAt: now() + 30,
-  nonce: randomUUID(),
   argv: [
     'nexus-sh',
     '-c',
@@ -1061,11 +1061,6 @@ const baseRef = ref('base-tools', '1');
 const newToolchain = [baseRef, ref('go', '1.27.1'), ref('node', '24.21.0'), ref('python', '3.14.7')];
 const oldToolchain = [baseRef, ref('go', '1.26.8'), ref('node', '22.23.2'), ref('python', '3.13.15')];
 const makeIdentity = (workspaceId, generation, toolchain) => ({
-  deploymentId,
-  userId: 1,
-  appId: 'operations.default',
-  runId: 'smoke-multiversion-run',
-  agentRuntimeId: 'smoke-multiversion-runtime',
   workspaceId,
   generation,
   recipeId: recipe.id,
@@ -1077,31 +1072,33 @@ const makeIdentity = (workspaceId, generation, toolchain) => ({
   acpProfiles: [],
   browserTarget: null,
   retained: false,
-  expectedVersion: 0,
 });
 const lifecycle = (identity, action) => ({
-  ...identity,
+  workspaceId: identity.workspaceId,
+  generation: identity.generation,
+  ...(action === 'provision'
+    ? {
+        recipeId: identity.recipeId,
+        recipeRevision: identity.recipeRevision,
+        runtimeDigest: identity.runtimeDigest,
+        catalogRevision: identity.catalogRevision,
+        toolchain: identity.toolchain,
+        runnerPlugins: identity.runnerPlugins,
+        acpProfiles: identity.acpProfiles,
+        browserTarget: identity.browserTarget,
+        retained: identity.retained,
+      }
+    : {}),
   commandId: `smoke-${action}-${identity.generation}-${randomUUID()}`,
   action,
-  operationHash: `v1:${'3'.repeat(64)}`,
-  issuedAt: now(),
   deadlineAt: now() + 15 * 60,
-  nonce: randomUUID(),
 });
 const runWorkspaceJob = async (identity, shell, expectedStdout) => {
   const id = `smoke-toolchain-${randomUUID()}`;
   await post(`/v1/workspaces/${encodeURIComponent(identity.workspaceId)}/jobs`, {
     jobId: id,
-    workspaceId: identity.workspaceId,
     generation: identity.generation,
-    userId: identity.userId,
-    appId: identity.appId,
-    runId: identity.runId,
-    agentRuntimeId: identity.agentRuntimeId,
-    operationHash: `v1:${'4'.repeat(64)}`,
-    issuedAt: now(),
     deadlineAt: now() + 60,
-    nonce: randomUUID(),
     argv: ['nexus-sh', '-c', shell],
     cwd: '/workspace',
     maxBytes: 16 * 1024,
@@ -1222,15 +1219,8 @@ await requireLifecycle(cleanupA, 'provision');
 await requireLifecycle(cleanupB, 'provision');
 const cleanupCommand = await submitCommand({
   commandId: `smoke-runtime-cleanup-${randomUUID()}`,
-  deploymentId,
-  userId: 1,
-  appId: 'nexus.host',
   action: 'runtimeCleanup',
-  generation: 1,
-  operationHash: `v1:${'5'.repeat(64)}`,
-  issuedAt: now(),
   deadlineAt: now() + 60,
-  nonce: randomUUID(),
   workspaceIds: [cleanupWorkspaceA],
 });
 if (
@@ -1240,26 +1230,18 @@ if (
 ) {
   throw new Error(`Runner scoped runtime cleanup failed: ${JSON.stringify(cleanupCommand)}`);
 }
-const removedCleanupWorkspace = await fetch(`${baseUrl}/v1/workspaces/${encodeURIComponent(cleanupWorkspaceA)}`, { headers });
-if (removedCleanupWorkspace.status !== 404) {
-  throw new Error(`Runtime cleanup kept confirmed Workspace: ${removedCleanupWorkspace.status}`);
+const cleanupStorage = await get('/v1/storage');
+if (cleanupStorage.byWorkspace.some((item) => item.workspaceId === cleanupWorkspaceA)) {
+  throw new Error('Runtime cleanup kept the confirmed Workspace in Runner storage.');
 }
-const preservedCleanupWorkspace = await get(`/v1/workspaces/${encodeURIComponent(cleanupWorkspaceB)}`);
-if (preservedCleanupWorkspace.status !== 'ready') {
-  throw new Error(`Runtime cleanup removed an unconfirmed Workspace: ${JSON.stringify(preservedCleanupWorkspace)}`);
+if (!cleanupStorage.byWorkspace.some((item) => item.workspaceId === cleanupWorkspaceB && item.status === 'ready')) {
+  throw new Error('Runtime cleanup removed or changed an unconfirmed Workspace.');
 }
 await requireLifecycle(cleanupB, 'delete');
 const cleanupBCommand = await submitCommand({
   commandId: `smoke-runtime-cleanup-${randomUUID()}`,
-  deploymentId,
-  userId: 1,
-  appId: 'nexus.host',
   action: 'runtimeCleanup',
-  generation: 1,
-  operationHash: `v1:${'6'.repeat(64)}`,
-  issuedAt: now(),
   deadlineAt: now() + 60,
-  nonce: randomUUID(),
   workspaceIds: [cleanupWorkspaceB],
 });
 if (cleanupBCommand.status !== 'succeeded' || cleanupBCommand.result?.deleted?.[0] !== cleanupWorkspaceB) {
@@ -1308,7 +1290,6 @@ printf '{not-json' > "$corrupt_runner_root/state/journal.json"
 if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
   PORT=0 \
   NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
-  NEXUS_AGENT_DEPLOYMENT_ID="nexus-e2e-corrupt-$suffix" \
   NEXUS_AGENT_RUNNER_ROOT="$corrupt_runner_root" \
   NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
   node "$repo_root/packages/agent-runner/dist/index.js" >"$corrupt_runner_log" 2>&1; then
@@ -1327,7 +1308,6 @@ compgen -G "$corrupt_runner_root/state/journal.json.corrupt.*" >/dev/null || {
 if NEXUS_AGENT_RUNNER_HOST=127.0.0.1 \
   PORT=0 \
   NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
-  NEXUS_AGENT_DEPLOYMENT_ID="nexus-e2e-corrupt-retry-$suffix" \
   NEXUS_AGENT_RUNNER_ROOT="$corrupt_runner_root" \
   NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
   node "$repo_root/packages/agent-runner/dist/index.js" >>"$corrupt_runner_log" 2>&1; then

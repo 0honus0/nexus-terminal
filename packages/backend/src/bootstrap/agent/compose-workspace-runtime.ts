@@ -98,10 +98,6 @@ export const composeWorkspaceRuntime = ({
     getWorkspace: (scope, workspaceId) => service.getWorkspace(scope, workspaceId),
     openTerminal: (scope, workspaceId, generation, columns, rows, sessionId, signal) =>
       terminal.open(scope, workspaceId, generation, columns, rows, sessionId, signal),
-    workspaceGrants: (scope, workspaceId, targetPluginId) =>
-      service.workspaceGrants(scope, workspaceId, targetPluginId),
-    replaceWorkspaceGrants: (scope, workspaceId, targetPluginId, grants, expectedRevision) =>
-      service.replaceWorkspaceGrants(scope, workspaceId, targetPluginId, grants, expectedRevision),
     exportWorkspaceArtifact: (scope, input, signal) => workspaceArtifacts.export(scope, input, signal),
     importArtifactToWorkspace: (scope, input, signal) => workspaceArtifacts.import(scope, input, signal),
     createWorkspace: (scope, runId, agentRuntimeId, workspace, retained, idempotencyKey, catalogRevision) =>

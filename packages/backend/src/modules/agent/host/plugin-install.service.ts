@@ -92,8 +92,8 @@ export interface PluginFrontendDescriptor {
   protocolVersion: typeof PLUGIN_FRONTEND_PROTOCOL_VERSION;
   url: string;
   sandbox: 'allow-scripts';
-  maxMessageBytes: 64_000;
-  requestTimeoutMs: 10_000;
+  maxMessageBytes: 256_000;
+  requestTimeoutMs: 15_000;
 }
 
 export interface PluginFrontendRpcRequest {
@@ -541,6 +541,7 @@ export class PluginInstallService {
     if (!this.publicOrigin || !this.pluginFrontendOrigin) throw new Error('PLUGIN_FRONTEND_ORIGIN_UNAVAILABLE');
     if (this.pluginFrontendOrigin === this.publicOrigin) throw new Error('PLUGIN_FRONTEND_ORIGIN_NOT_ISOLATED');
     const relativeEntry = plugin.frontendEntry
+      .slice('frontend/'.length)
       .split('/')
       .map((segment) => encodeURIComponent(segment))
       .join('/');
@@ -551,8 +552,8 @@ export class PluginInstallService {
       protocolVersion: PLUGIN_FRONTEND_PROTOCOL_VERSION,
       url: `${this.pluginFrontendOrigin}/plugins/${encodeURIComponent(appId)}/${encodeURIComponent(plugin.version)}/${relativeEntry}`,
       sandbox: 'allow-scripts',
-      maxMessageBytes: 64_000,
-      requestTimeoutMs: 10_000,
+      maxMessageBytes: 256_000,
+      requestTimeoutMs: 15_000,
     };
   }
 
@@ -859,7 +860,7 @@ export class PluginInstallService {
       ...record,
       displayName: plugin.manifest.displayName,
       capabilities: [...plugin.manifest.capabilities],
-      surface: plugin.frontendEntry ? 'plugin' : plugin.manifest.agents?.length ? 'agent' : 'none',
+      surface: plugin.frontendEntry ? 'custom' : plugin.manifest.agents?.length ? 'agent' : 'none',
     };
   }
 }

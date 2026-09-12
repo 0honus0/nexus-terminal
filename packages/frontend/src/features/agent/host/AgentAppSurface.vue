@@ -177,7 +177,7 @@
     const availability = workspaceRuntimeAvailability.value;
     if (!availability) return 'bg-text-secondary/40';
     if (!availability.available) return 'bg-text-secondary/50';
-    return availability.runtime.available ? 'bg-success' : 'bg-warning';
+    return 'bg-success';
   });
   const mutationLocked = computed(
     () =>

@@ -137,7 +137,9 @@ App 由 manifest / registry 注册。`userId + appId` 是服务端推导的授�
 - Frontend target；
 - Backend / Runner target。
 
-没有自定义 Frontend target、但声明 AgentDefinition 的 App，可以直接复用 Nexus host-owned `AgentAppSurface`。
+没有 Frontend target、但声明 AgentDefinition 的 App，直接复用 Nexus host-owned `AgentAppSurface`。声明 Frontend target 时，该 iframe 拥有 Hub 内整个 App content surface，而不是附加小面板；AgentDefinition 仍可同时存在并由 Custom Frontend 通过 Plugin Frontend SDK 驱动。
+
+Custom Frontend 只能经 Nexus 同源提供的 `/sdk/frontend-v1.mjs` 建立 MessagePort SDK。第一阶段 SDK 只暴露 AppStorage 与 App-scoped AgentDefinition/Provider/Thread/Run/Subagent/Approval/Run-event 能力；iframe 不获得 Nexus cookie、CSRF token、HTTP client、数据库或内部 service object。
 
 ### 4.2 Thread
 
@@ -466,7 +468,6 @@ Workspace 是稳定的项目/文件边界，不是一次 Run 的临时目录，�
 - Runner Plugin ids；
 - ACP Profiles；
 - Browser Target；
-- resource/network policy；
 - retention。
 
 Node/Python/Go 可在同一个 Workspace 中共存。
@@ -509,6 +510,10 @@ Runner 提供：
 
 Runner 永远不获得 host Docker socket、不启动 dockerd、不使用 nested Docker。独立 Runner 容器也不需要 `privileged`、`SYS_ADMIN` 或 unconfined seccomp/AppArmor；镜像只使用 `tini` 作为 PID 1 负责信号转发与孤儿进程回收，不把它当成 Workspace 隔离层。
 
+Backend ↔ Runner 控制面统一使用至少 32 字符的 `NEXUS_AGENT_RUNNER_TOKEN` Bearer token，并要求 `X-Nexus-Agent-Protocol: 2026-09-13`；HTTP 与 WebSocket upgrade 在路由分发前使用同一认证。Runner token 代表该 Nexus 实例对 Runner 的完整控制权，不是 per-user credential，不能暴露给浏览器、日志或第三方 Plugin。
+
+Runner wire 只传执行所需事实：`provision` 发送完整冻结 Workspace profile；`start/stop/restart/delete` 只发送 `workspaceId + generation`；Workspace job 只发送 generation 与执行参数。`userId/appId/runId/agentRuntimeId`、Backend optimistic `expectedVersion`、Agent operation hash 仍由 Backend 自己授权、持久化和 reconcile，不重复镜像到 Runner。
+
 ### 12.4 单用户 native Workspace Runtime
 
 Nexus 当前是单用户应用。Workspace/Generation/Toolchain 的职责是组织项目数据和运行环境，而不是在同一个 Nexus 用户内部构造 OS 安全沙箱：
@@ -519,10 +524,12 @@ Nexus 当前是单用户应用。Workspace/Generation/Toolchain 的职责是组�
 - `/workspace/deps`、`/workspace/build` 等逻辑路径映射到按 toolchain fingerprint 分区的 Runner data root；
 - job、ACP、Terminal 和 Runner Plugin 都是 Runner 原生子进程；job/ACP/Runner Plugin 由独立 process group 管理并随 owner 生命周期整组回收，Terminal 使用真实 PTY foreground process group 处理交互 signal；
 - Host Runner 子进程共享宿主安全上下文；Docker Runner 子进程共享同一个 Runner 容器安全上下文；
-- resource/network 配置保留在 Backend Workspace Profile 作为产品配置，不进入 native Runner command，不宣称为 per-Workspace cgroup/network namespace 强制隔离；
-- 用户安装并启用 Runner Plugin，等价于允许该代码以 Runner OS 权限执行。Workspace Broker/ACL 约束 Plugin SDK 的逻辑 workspace 访问，但不是 OS sandbox。
+- Workspace Profile 不提供伪资源配额或伪网络白名单字段；Agent Hard Limits、Browser/Provider outbound policy 等安全/预算约束仍由各自 Backend owner 执行，不冒充 per-Workspace cgroup/network namespace；
+- 用户安装并启用 Runner Plugin，等价于允许该代码以 Runner OS 权限执行。Runner 只为每个 Plugin target 提供独立逻辑工作目录作为 SDK/Artifact exchange 的文件组织方式；不再提供跨 Plugin ACL，因为同权限 native Plugin 可以绕过这类逻辑 ACL，它不能构成真实安全边界。
 
 因此安全边界必须表述准确：Backend capability/policy/approval/lease 仍决定 Nexus 是否允许某个操作；Runner 负责把已允许的操作放到正确 Workspace/runtime profile 中执行，但不再声称它能隔离同一用户自己的代码。
+
+“单用户”只意味着 Nexus 不为多个互不信任的人建立租户隔离，不意味着所有输入和扩展代码都可信。登录/session、CSRF、SSRF/private-network policy、Plugin 包签名与 Backend/Frontend Plugin 隔离、App capability/grant、Agent mutation approval/lease/reconcile/quarantine、Runner Bearer token 仍保护当前用户免受第三方 Plugin、模型误操作、恶意网页/协议输入、并发写冲突和未知远端结果影响，因此不因单用户模型删除。
 
 ### 12.5 Generation 与版本切换
 
@@ -674,13 +681,15 @@ agent/plugins/<appId>/versions/<version>
 
 上传 Backend code 不在 Nexus Backend 进程内 eval/import。
 
-动态 Frontend 资源通过 Backend-owned isolated static origin + sandboxed iframe 提供；Frontend container 不挂载插件 storage。
+动态 Frontend 资源通过 Backend-owned isolated static origin + sandboxed iframe 提供；有 Frontend target 时它拥有完整 Custom App Surface。隔离 origin 同源提供 `/sdk/frontend-v1.mjs`，Plugin 只经 bounded MessagePort 调用显式 SDK；Frontend container 不挂载插件 storage，也不向 iframe 暴露 Nexus session/CSRF/HTTP client。
 
 Runner plugin 通过独立 Runner protocol/lifecycle 执行。
 
 ### 16.3 第一方插件仓库
 
 第一方可分发插件源和签名发布流程由独立仓库 `0honus0/nexus-agent-plugins` 持有。
+
+当前首个 `nexus.developer` 是刻意保持最小的 Host-surface App：只贡献 `AgentDefinition + Skill`，不为了形式补空的 Frontend/Backend/Runner target。需要完全不同产品体验的 App（例如多角色/角色卡应用）再声明 Frontend target 并使用 Custom App Surface + Plugin Frontend SDK。
 
 Nexus Terminal 主仓只持有：
 
@@ -765,7 +774,7 @@ Runner 记录：
 - Nexus Workspace `NXW1`；
 - upload socket；
 - Agent `/ws/agent`；
-- Runner Plugin `NXR2`；
+- Runner Plugin `NXR3`；
 - Backend <-> Host Runner streaming；
 - Browser tunnel；
 - Workspace local terminal stream。
@@ -783,6 +792,8 @@ Agent 复用 Platform capability，不复用 Workspace runtime transport owner�
 - StateCommit transaction 作为 durable mutation authority；
 - Root dispatcher process-local；
 - Subagent work durable SQLite claim queue。
+
+当前 Agent schema 尚未进入 `main` 时，`dev` **不维护 dev→dev Agent migration 兼容链**：`sqlite-schema.registry.ts` 直接描述当前最终 Agent/AI 表结构，`sqlite-migrations.ts` 只保留 `main` 已存在的历史 migration（当前最高 #20）。旧 dev 数据库若与当前 Agent schema 不兼容，应重建开发数据库，而不是继续堆叠临时 add/rename/drop migration。
 
 如果未来进入多 Backend 实例，不允许只把 Root queue 换成 Redis 就宣称支持分布式。必须同时设计：
 

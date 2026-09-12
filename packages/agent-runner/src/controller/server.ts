@@ -4,7 +4,14 @@ import type { Duplex } from 'node:stream';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
-import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, WorkspaceRecord } from '../types';
+import type {
+  WorkspaceRuntimeCommand,
+  WorkspaceProvisionCommand,
+  WorkspaceLifecycleCommand,
+  WorkspaceJobInput,
+  WorkspaceJobRequest,
+  WorkspaceRecord,
+} from '../types';
 import { WorkspaceRuntimeCatalog } from './workspace-runtime-catalog';
 import { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 import { RunnerJournal, payloadHash } from './journal';
@@ -12,14 +19,14 @@ import { PackInstaller } from './pack-installer';
 import { SpaceReporter } from './space-reporter';
 import { CleanupPlanner } from './cleanup-planner';
 import { PluginRunnerRuntime } from './plugin-runner-runtime';
-import { MAX_HOST_WORKSPACE_TRANSFER_BYTES, type WorkspacePermission } from './workspace-broker';
+import { MAX_HOST_WORKSPACE_TRANSFER_BYTES } from './plugin-workspace-store';
 import type { AcpProcessRuntime } from './acp-process-runtime';
 import type { WorkspaceTerminalRuntime } from './workspace-terminal-runtime';
 import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
 import type { WorkspaceBrowserEndpoint } from '../types';
 import { runnerLog } from '../logging';
 
-const RUNNER_API_VERSION = '2026-09-12';
+const RUNNER_PROTOCOL_VERSION = '2026-09-13';
 const MAX_BODY_BYTES = 256 * 1024;
 const json = (response: ServerResponse, status: number, body: unknown): void => {
   response.statusCode = status;
@@ -73,6 +80,11 @@ const asRecord = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
+const hasOnlyKeys = (value: Record<string, unknown>, allowed: readonly string[]): boolean => {
+  const keys = new Set(allowed);
+  return Object.keys(value).every((key) => keys.has(key));
+};
+
 const SAFE_RUNTIME_RESOURCE_ID = /^[a-z][a-z0-9_.-]{0,127}$/;
 const validBrowserUrlPattern = (value: string): boolean => {
   const match = /^(\*|https?|wss?):\/\/(\*\.)?([^/:?#]+)(?::(\d{1,5}))?(\/[^?#]*)?$/.exec(value.trim());
@@ -83,7 +95,7 @@ const validBrowserUrlPattern = (value: string): boolean => {
   return !rawPath || !rawPath.includes('*') || rawPath.endsWith('*');
 };
 
-const validateWorkspaceBindings = (command: WorkspaceRuntimeCommand): void => {
+const validateWorkspaceBindings = (command: WorkspaceProvisionCommand): void => {
   if (!Array.isArray(command.acpProfiles) || command.acpProfiles.length > 16) {
     throw new Error('ACP_PROFILE_INVALID');
   }
@@ -182,7 +194,6 @@ const equalsToken = (candidate: string, expected: string): boolean => {
 
 export interface RunnerControllerDependencies {
   token: string;
-  deploymentId: string;
   catalog: WorkspaceRuntimeCatalog;
   journal: RunnerJournal;
   runtimeEngine: WorkspaceRuntimeEngine;
@@ -215,7 +226,7 @@ export class RunnerControllerServer {
         this.rejectUpgrade(socket, 401, 'UNAUTHORIZED');
         return;
       }
-      if (request.headers['x-nexus-agent-protocol'] !== RUNNER_API_VERSION) {
+      if (request.headers['x-nexus-agent-protocol'] !== RUNNER_PROTOCOL_VERSION) {
         this.rejectUpgrade(socket, 426, 'RUNNER_PROTOCOL_UNSUPPORTED');
         return;
       }
@@ -321,26 +332,17 @@ export class RunnerControllerServer {
         json(response, 401, { error: 'UNAUTHORIZED' });
         return;
       }
-      if (request.headers['x-nexus-agent-protocol'] !== RUNNER_API_VERSION) {
-        json(response, 426, { error: 'RUNNER_PROTOCOL_UNSUPPORTED', expected: RUNNER_API_VERSION });
+      if (request.headers['x-nexus-agent-protocol'] !== RUNNER_PROTOCOL_VERSION) {
+        json(response, 426, { error: 'RUNNER_PROTOCOL_UNSUPPORTED', expected: RUNNER_PROTOCOL_VERSION });
         return;
       }
       const url = new URL(request.url ?? '/', 'http://runner.internal');
       if (request.method === 'GET' && url.pathname === '/v1/availability') {
-        const runtime = this.dependencies.runtimeEngine.availability();
         json(response, 200, {
-          available: runtime.available,
-          state: runtime.available ? 'ready' : 'degraded',
-          reason: runtime.available ? 'ready' : (runtime.reason ?? 'runtime_unavailable'),
-          deploymentId: this.dependencies.deploymentId,
-          controllerVersion: '1.0.0',
-          runtime: {
-            available: runtime.available,
-            reason: runtime.reason,
-            mode: 'native',
-            isolation: runtime.isolation,
-          },
-          capabilities: { egressAllowlist: false },
+          available: true,
+          reason: null,
+          mode: 'native',
+          isolation: 'logical',
         });
         return;
       }
@@ -354,18 +356,12 @@ export class RunnerControllerServer {
           const ref = { familyId: pack.familyId, versionId: pack.versionId, contentDigest };
           const supported = Boolean(contentDigest) && pack.supportedArchitectures.includes(process.arch);
           return {
-            schemaVersion: 1 as const,
             familyId: pack.familyId,
             versionId: pack.versionId,
             displayName: pack.displayName,
             contentDigest,
-            capabilities: pack.capabilities,
-            runnerApiRange: pack.runnerApiRange,
             diskBytes: pack.diskBytes,
-            dependencies: pack.dependencies,
-            supportedArchitectures: pack.supportedArchitectures,
             status: supported ? pack.status : ('unavailable' as const),
-            sideBySide: pack.sideBySide,
             installed: supported && this.dependencies.installer.installed(ref),
             enabled: supported && pack.status === 'supported',
             inUse:
@@ -401,7 +397,7 @@ export class RunnerControllerServer {
         const workspace = this.dependencies.journal.workspace(workspaceId);
         if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('WORKSPACE_NOT_FOUND');
         if (generation !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
-        if (!(workspace.runnerPlugins ?? []).some((target) => target.pluginId === targetPluginId)) {
+        if (!workspace.runnerPlugins.some((target) => target.pluginId === targetPluginId)) {
           throw new Error('WORKSPACE_TARGET_NOT_FOUND');
         }
         if (request.method === 'GET') {
@@ -430,57 +426,6 @@ export class RunnerControllerServer {
         json(response, 200, { writtenBytes: expectedBytes });
         return;
       }
-      const workspaceGrantMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/plugins\/([^/]+)\/grants$/);
-      if (workspaceGrantMatch && (request.method === 'GET' || request.method === 'POST')) {
-        const workspaceId = decodeURIComponent(workspaceGrantMatch[1]!);
-        const targetPluginId = decodeURIComponent(workspaceGrantMatch[2]!);
-        const workspace = this.dependencies.journal.workspace(workspaceId);
-        if (!workspace) throw new Error('WORKSPACE_NOT_FOUND');
-        const targetIds = new Set((workspace.runnerPlugins ?? []).map((target) => target.pluginId));
-        if (!targetIds.has(targetPluginId)) throw new Error('WORKSPACE_TARGET_NOT_FOUND');
-        if (request.method === 'GET') {
-          const generation = Number(url.searchParams.get('generation'));
-          if (generation !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
-          const grantSet = this.dependencies.pluginRunner.workspaceGrants(workspaceId, generation, targetPluginId);
-          json(response, 200, { targetPluginId, ...grantSet });
-          return;
-        }
-        const input = asRecord(await body(request));
-        const generation = Number(input.generation);
-        const expectedRevision = Number(input.expectedRevision);
-        if (
-          generation !== workspace.generation ||
-          !Number.isSafeInteger(expectedRevision) ||
-          expectedRevision < 1 ||
-          !Array.isArray(input.grants) ||
-          input.grants.length > 256
-        ) {
-          throw new Error('VALIDATION_FAILED');
-        }
-        const grants = input.grants.map((candidate) => {
-          const grant = asRecord(candidate);
-          const principalPluginId = String(grant.principalPluginId ?? '');
-          const grantPath = String(grant.path ?? '');
-          if (
-            !targetIds.has(principalPluginId) ||
-            principalPluginId === targetPluginId ||
-            !Array.isArray(grant.permissions)
-          ) {
-            throw new Error('WORKSPACE_GRANT_INVALID');
-          }
-          const permissions = grant.permissions.map(String) as WorkspacePermission[];
-          return { principalPluginId, path: grantPath, permissions };
-        });
-        const grantSet = this.dependencies.pluginRunner.replaceWorkspaceGrants(
-          workspaceId,
-          generation,
-          targetPluginId,
-          grants,
-          expectedRevision,
-        );
-        json(response, 200, { targetPluginId, ...grantSet });
-        return;
-      }
       const commandMatch = url.pathname.match(/^\/v1\/commands\/([^/]+)$/);
       if (request.method === 'GET' && commandMatch) {
         const command = this.dependencies.journal.command(decodeURIComponent(commandMatch[1]!));
@@ -489,16 +434,6 @@ export class RunnerControllerServer {
           return;
         }
         json(response, 200, command);
-        return;
-      }
-      const workspaceMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)$/);
-      if (request.method === 'GET' && workspaceMatch) {
-        const workspace = this.dependencies.journal.workspace(decodeURIComponent(workspaceMatch[1]!));
-        if (!workspace) {
-          json(response, 404, { error: 'WORKSPACE_NOT_FOUND' });
-          return;
-        }
-        json(response, 200, workspace);
         return;
       }
       const jobMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)$/);
@@ -514,25 +449,8 @@ export class RunnerControllerServer {
       const workspaceJobsMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/jobs$/);
       if (request.method === 'POST' && workspaceJobsMatch) {
         const workspaceId = decodeURIComponent(workspaceJobsMatch[1]!);
-        const requestBody = asRecord(await body(request)) as unknown as WorkspaceJobRequest;
-        json(response, 202, this.beginWorkspaceJob(workspaceId, requestBody));
-        return;
-      }
-      if (request.method === 'POST' && url.pathname === '/v1/setup/preview') {
-        const input = asRecord(await body(request));
-        const recipeId = String(input.recipeId ?? '');
-        const versions = (
-          input.versions && typeof input.versions === 'object' && !Array.isArray(input.versions) ? input.versions : {}
-        ) as Record<string, string>;
-        const recipe = this.dependencies.catalog.recipe(recipeId);
-        const packs = this.dependencies.catalog.resolve(recipeId, versions);
-        json(response, 200, {
-          recipe,
-          packs,
-          missingPacks: packs,
-          limits: recipe.defaultLimits,
-          network: recipe.networkDefaults,
-        });
+        const input = asRecord(await body(request)) as unknown as WorkspaceJobInput;
+        json(response, 202, this.beginWorkspaceJob(workspaceId, input));
         return;
       }
       if (request.method === 'POST' && url.pathname === '/v1/commands') {
@@ -562,48 +480,35 @@ export class RunnerControllerServer {
     }
   }
 
-  private beginWorkspaceJob(workspaceId: string, request: WorkspaceJobRequest) {
+  private beginWorkspaceJob(workspaceId: string, input: WorkspaceJobInput) {
     const workspace = this.dependencies.journal.workspace(workspaceId);
-    if (!workspace || workspace.status !== 'running') {
-      throw new Error('WORKSPACE_NOT_RUNNING');
-    }
+    if (!workspace || workspace.status !== 'running') throw new Error('WORKSPACE_NOT_RUNNING');
     const now = Math.floor(Date.now() / 1000);
+    const record = input as unknown as Record<string, unknown>;
     if (
-      !request ||
-      typeof request !== 'object' ||
-      request.workspaceId !== workspaceId ||
-      typeof request.jobId !== 'string' ||
-      !/^[A-Za-z0-9-]{8,128}$/.test(request.jobId) ||
-      request.userId !== workspace.userId ||
-      request.appId !== workspace.appId ||
-      request.runId !== workspace.runId ||
-      request.agentRuntimeId !== workspace.agentRuntimeId ||
-      request.generation !== workspace.generation ||
-      typeof request.operationHash !== 'string' ||
-      !/^v1:[a-f0-9]{64}$/.test(request.operationHash) ||
-      !Number.isSafeInteger(request.issuedAt) ||
-      request.issuedAt > now + 60 ||
-      !Number.isSafeInteger(request.deadlineAt) ||
-      request.deadlineAt <= now ||
-      typeof request.nonce !== 'string' ||
-      request.nonce.length < 8 ||
-      request.nonce.length > 256 ||
-      !Array.isArray(request.argv) ||
-      request.argv.length < 1 ||
-      request.argv.length > 128 ||
-      request.argv.some((arg) => typeof arg !== 'string' || arg.includes('\0')) ||
-      typeof request.cwd !== 'string' ||
-      request.cwd.length < 1 ||
-      request.cwd.length > 4096 ||
-      !Number.isSafeInteger(request.maxBytes) ||
-      request.maxBytes < 1 ||
-      request.maxBytes > 1024 * 1024 ||
-      !Number.isSafeInteger(request.timeoutMs) ||
-      request.timeoutMs < 1 ||
-      request.timeoutMs > 5 * 60 * 1000
+      !hasOnlyKeys(record, ['jobId', 'generation', 'deadlineAt', 'argv', 'cwd', 'maxBytes', 'timeoutMs']) ||
+      typeof input.jobId !== 'string' ||
+      !/^[A-Za-z0-9-]{8,128}$/.test(input.jobId) ||
+      input.generation !== workspace.generation ||
+      !Number.isSafeInteger(input.deadlineAt) ||
+      input.deadlineAt <= now ||
+      !Array.isArray(input.argv) ||
+      input.argv.length < 1 ||
+      input.argv.length > 128 ||
+      input.argv.some((arg) => typeof arg !== 'string' || arg.includes('\0')) ||
+      typeof input.cwd !== 'string' ||
+      input.cwd.length < 1 ||
+      input.cwd.length > 4096 ||
+      !Number.isSafeInteger(input.maxBytes) ||
+      input.maxBytes < 1 ||
+      input.maxBytes > 1024 * 1024 ||
+      !Number.isSafeInteger(input.timeoutMs) ||
+      input.timeoutMs < 1 ||
+      input.timeoutMs > 5 * 60 * 1000
     ) {
       throw new Error('VALIDATION_FAILED');
     }
+    const request: WorkspaceJobRequest = { ...input, workspaceId };
     const hash = payloadHash(request);
     const priorJob = this.dependencies.journal.job(request.jobId);
     const job = this.dependencies.journal.beginJob(request.jobId, hash, workspaceId, request.generation);
@@ -611,9 +516,6 @@ export class RunnerControllerServer {
       jobId: request.jobId,
       workspaceId,
       generation: request.generation,
-      userId: request.userId,
-      appId: request.appId,
-      runId: request.runId,
       replayed: priorJob !== null,
     });
     if (job.status === 'pending') {
@@ -673,9 +575,6 @@ export class RunnerControllerServer {
       action: command.action,
       workspaceId: command.workspaceId,
       generation: command.generation,
-      userId: command.userId,
-      appId: command.appId,
-      runId: command.runId,
       replayed: priorCommand !== null,
     });
     if (existing.status === 'pending') {
@@ -687,15 +586,14 @@ export class RunnerControllerServer {
 
   private async executeWorkspaceCommand(command: WorkspaceRuntimeCommand): Promise<void> {
     try {
-      const result =
-        command.action === 'provision' ? await this.provision(command) : await this.workspaceAction(command);
-      this.dependencies.journal.succeed(command.commandId, result);
+      if (command.action === 'provision') await this.provision(command);
+      else await this.workspaceAction(command);
+      this.dependencies.journal.succeed(command.commandId, null);
       runnerLog('debug', 'Agent Runner Workspace command completed', {
         commandId: command.commandId,
         action: command.action,
         workspaceId: command.workspaceId,
         generation: command.generation,
-        workspaceStatus: result.status,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -714,17 +612,12 @@ export class RunnerControllerServer {
     command: Record<string, unknown>,
     action: 'cacheCleanup' | 'runtimeCleanup' | 'packInstall' | 'packUninstall',
   ) {
-    this.validateCommonCommand(command);
+    this.validateAdminCommand(command, action);
     const commandId = String(command.commandId);
     const hash = payloadHash(command);
     const priorCommand = this.dependencies.journal.command(commandId);
     const existing = this.dependencies.journal.begin(commandId, hash, action, null);
-    runnerLog('debug', 'Agent Runner admin command accepted', {
-      commandId,
-      action,
-      userId: command.userId,
-      replayed: priorCommand !== null,
-    });
+    runnerLog('debug', 'Agent Runner admin command accepted', { commandId, action, replayed: priorCommand !== null });
     if (existing.status === 'pending') {
       this.dependencies.journal.running(commandId);
       void this.executeAdminCommand(command, action);
@@ -741,32 +634,13 @@ export class RunnerControllerServer {
       let result: unknown;
       if (action === 'cacheCleanup') result = this.dependencies.cleanup.cacheCleanup();
       else if (action === 'runtimeCleanup') {
-        const workspaceIds = command.workspaceIds;
-        if (
-          !Array.isArray(workspaceIds) ||
-          workspaceIds.length > 4096 ||
-          workspaceIds.some((value) => typeof value !== 'string' || !/^[A-Za-z0-9_.-]{1,128}$/.test(value)) ||
-          new Set(workspaceIds).size !== workspaceIds.length
-        ) {
-          throw new Error('VALIDATION_FAILED');
-        }
-        result = await this.dependencies.cleanup.runtimeCleanup(command.userId as number, workspaceIds as string[]);
+        result = await this.dependencies.cleanup.runtimeCleanup(command.workspaceIds as string[]);
       } else if (action === 'packInstall') {
-        const packs = Array.isArray(command.packs) ? command.packs : [];
-        if (!packs.length || packs.length > 32) throw new Error('VALIDATION_FAILED');
-        await this.dependencies.installer.ensure(packs as never[], commandId);
+        const packs = command.packs as never[];
+        await this.dependencies.installer.ensure(packs, commandId);
         result = { installed: packs.length };
       } else {
-        const pack = command.pack;
-        if (!pack || typeof pack !== 'object' || Array.isArray(pack)) throw new Error('VALIDATION_FAILED');
-        const ref = pack as { familyId?: unknown; versionId?: unknown; contentDigest?: unknown };
-        if (
-          typeof ref.familyId !== 'string' ||
-          typeof ref.versionId !== 'string' ||
-          typeof ref.contentDigest !== 'string'
-        ) {
-          throw new Error('VALIDATION_FAILED');
-        }
+        const ref = command.pack as { familyId: string; versionId: string; contentDigest: string };
         const inUse = this.dependencies.journal
           .workspaces()
           .filter((workspace) => !['deleted', 'failed'].includes(workspace.status))
@@ -779,11 +653,7 @@ export class RunnerControllerServer {
             ),
           );
         if (inUse) throw new Error('WORKSPACE_TOOLCHAIN_IN_USE');
-        await this.dependencies.installer.uninstall({
-          familyId: ref.familyId,
-          versionId: ref.versionId,
-          contentDigest: ref.contentDigest,
-        });
+        await this.dependencies.installer.uninstall(ref);
         result = { uninstalled: true };
       }
       this.dependencies.journal.succeed(commandId, result);
@@ -794,7 +664,6 @@ export class RunnerControllerServer {
       runnerLog('info', 'Agent Runner admin command completed', {
         commandId,
         action,
-        userId: command.userId,
         ...(cleanupResult
           ? {
               deletedWorkspaceCount: cleanupResult.deleted?.length ?? 0,
@@ -806,12 +675,7 @@ export class RunnerControllerServer {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.dependencies.journal.fail(commandId, message);
-      runnerLog('warn', 'Agent Runner admin command failed', {
-        commandId,
-        action,
-        userId: command.userId,
-        errorCode: message.slice(0, 200),
-      });
+      runnerLog('warn', 'Agent Runner admin command failed', { commandId, action, errorCode: message.slice(0, 200) });
     }
   }
 
@@ -819,84 +683,140 @@ export class RunnerControllerServer {
     const now = Math.floor(Date.now() / 1000);
     if (
       typeof command.commandId !== 'string' ||
-      !command.commandId ||
-      command.deploymentId !== this.dependencies.deploymentId ||
-      !Number.isSafeInteger(command.userId) ||
-      (command.userId as number) < 1 ||
-      typeof command.appId !== 'string' ||
-      !command.appId ||
+      !/^[A-Za-z0-9-]{8,128}$/.test(command.commandId) ||
       !Number.isSafeInteger(command.deadlineAt) ||
-      (command.deadlineAt as number) <= now ||
-      !Number.isSafeInteger(command.issuedAt) ||
-      (command.issuedAt as number) > now + 60 ||
-      typeof command.nonce !== 'string' ||
-      !command.nonce ||
-      command.nonce.length > 256 ||
-      typeof command.operationHash !== 'string' ||
-      !/^v1:[a-f0-9]{64}$/.test(command.operationHash)
+      (command.deadlineAt as number) <= now
     ) {
       throw new Error('VALIDATION_FAILED');
     }
   }
 
-  private validateCommand(command: WorkspaceRuntimeCommand): void {
-    this.validateCommonCommand(command as unknown as Record<string, unknown>);
-    if (!command.workspaceId || !command.runId || !command.agentRuntimeId) {
+  private validateAdminCommand(
+    command: Record<string, unknown>,
+    action: 'cacheCleanup' | 'runtimeCleanup' | 'packInstall' | 'packUninstall',
+  ): void {
+    this.validateCommonCommand(command);
+    const common = ['commandId', 'action', 'deadlineAt'];
+    const specific =
+      action === 'runtimeCleanup'
+        ? ['workspaceIds']
+        : action === 'packInstall'
+          ? ['packs']
+          : action === 'packUninstall'
+            ? ['pack']
+            : [];
+    if (!hasOnlyKeys(command, [...common, ...specific]) || command.action !== action) {
       throw new Error('VALIDATION_FAILED');
     }
-    if (!Number.isSafeInteger(command.generation) || command.generation < 1) throw new Error('VALIDATION_FAILED');
-    validateWorkspaceBindings(command);
-    if (command.action === 'provision') {
-      const catalog = this.dependencies.catalog.load();
-      if (command.catalogRevision !== catalog.revision || command.runtimeDigest !== catalog.runtimeDigest) {
-        throw new Error('CATALOG_REVISION_CONFLICT');
+    if (action === 'runtimeCleanup') {
+      const workspaceIds = command.workspaceIds;
+      if (
+        !Array.isArray(workspaceIds) ||
+        workspaceIds.length > 4096 ||
+        workspaceIds.some((value) => typeof value !== 'string' || !/^[A-Za-z0-9_.-]{1,128}$/.test(value)) ||
+        new Set(workspaceIds).size !== workspaceIds.length
+      ) {
+        throw new Error('VALIDATION_FAILED');
       }
-      const recipe = this.dependencies.catalog.recipe(command.recipeId);
-      if (recipe.revision !== command.recipeRevision) throw new Error('WORKSPACE_RECIPE_STALE');
-      this.dependencies.catalog.validateSelection(command.recipeId, command.toolchain);
-      const targets = command.runnerPlugins ?? [];
-      if (!Array.isArray(targets) || targets.length > 64) throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
-      const targetIds = new Set<string>();
-      for (const target of targets) {
-        if (
-          !target ||
-          typeof target.pluginId !== 'string' ||
-          typeof target.version !== 'string' ||
-          typeof target.sdkVersion !== 'string' ||
-          target.protocolVersion !== PLUGIN_RUNNER_PROTOCOL_VERSION ||
-          typeof target.packageHash !== 'string' ||
-          typeof target.entry !== 'string' ||
-          targetIds.has(target.pluginId)
-        ) {
-          throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
-        }
-        targetIds.add(target.pluginId);
+    } else if (action === 'packInstall') {
+      if (!Array.isArray(command.packs) || command.packs.length < 1 || command.packs.length > 32) {
+        throw new Error('VALIDATION_FAILED');
+      }
+    } else if (action === 'packUninstall') {
+      const pack = command.pack;
+      if (!pack || typeof pack !== 'object' || Array.isArray(pack)) throw new Error('VALIDATION_FAILED');
+      const ref = pack as { familyId?: unknown; versionId?: unknown; contentDigest?: unknown };
+      if (
+        typeof ref.familyId !== 'string' ||
+        typeof ref.versionId !== 'string' ||
+        typeof ref.contentDigest !== 'string'
+      ) {
+        throw new Error('VALIDATION_FAILED');
       }
     }
   }
 
-  private async provision(command: WorkspaceRuntimeCommand): Promise<WorkspaceRecord> {
+  private validateCommand(command: WorkspaceRuntimeCommand): void {
+    const record = command as unknown as Record<string, unknown>;
+    this.validateCommonCommand(record);
+    if (
+      !['provision', 'start', 'stop', 'restart', 'delete'].includes(command.action) ||
+      typeof command.workspaceId !== 'string' ||
+      !/^[A-Za-z0-9_.-]{1,128}$/.test(command.workspaceId) ||
+      !Number.isSafeInteger(command.generation) ||
+      command.generation < 1
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const common = ['commandId', 'workspaceId', 'generation', 'action', 'deadlineAt'];
+    if (command.action !== 'provision') {
+      if (!hasOnlyKeys(record, common)) throw new Error('VALIDATION_FAILED');
+      return;
+    }
+    const provisionKeys = [
+      ...common,
+      'recipeId',
+      'recipeRevision',
+      'runtimeDigest',
+      'catalogRevision',
+      'toolchain',
+      'runnerPlugins',
+      'acpProfiles',
+      'browserTarget',
+      'retained',
+    ];
+    if (
+      !hasOnlyKeys(record, provisionKeys) ||
+      typeof command.recipeId !== 'string' ||
+      typeof command.recipeRevision !== 'string' ||
+      typeof command.runtimeDigest !== 'string' ||
+      typeof command.catalogRevision !== 'string' ||
+      !Array.isArray(command.toolchain) ||
+      typeof command.retained !== 'boolean'
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    validateWorkspaceBindings(command);
+    const catalog = this.dependencies.catalog.load();
+    if (command.catalogRevision !== catalog.revision || command.runtimeDigest !== catalog.runtimeDigest) {
+      throw new Error('CATALOG_REVISION_CONFLICT');
+    }
+    const recipe = this.dependencies.catalog.recipe(command.recipeId);
+    if (recipe.revision !== command.recipeRevision) throw new Error('WORKSPACE_RECIPE_STALE');
+    this.dependencies.catalog.validateSelection(command.recipeId, command.toolchain);
+    const targets = command.runnerPlugins;
+    if (!Array.isArray(targets) || targets.length > 64) throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
+    const targetIds = new Set<string>();
+    for (const target of targets) {
+      if (
+        !target ||
+        typeof target.pluginId !== 'string' ||
+        typeof target.version !== 'string' ||
+        typeof target.sdkVersion !== 'string' ||
+        target.protocolVersion !== PLUGIN_RUNNER_PROTOCOL_VERSION ||
+        typeof target.packageHash !== 'string' ||
+        typeof target.entry !== 'string' ||
+        targetIds.has(target.pluginId)
+      ) {
+        throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
+      }
+      targetIds.add(target.pluginId);
+    }
+  }
+
+  private async provision(command: WorkspaceProvisionCommand): Promise<void> {
     const current = this.dependencies.journal.workspace(command.workspaceId);
-    if (current && current.generation >= command.generation && current.status !== 'deleted')
+    if (current && current.generation >= command.generation && current.status !== 'deleted') {
       throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    }
     await this.dependencies.installer.ensure(command.toolchain, command.commandId);
-    const now = Math.floor(Date.now() / 1000);
     const creating: WorkspaceRecord = {
       workspaceId: command.workspaceId,
-      userId: command.userId,
-      appId: command.appId,
-      runId: command.runId,
-      agentRuntimeId: command.agentRuntimeId,
       generation: command.generation,
       status: 'creating',
-      commandId: command.commandId,
-      retained: command.retained === true,
-      recipeId: command.recipeId,
-      recipeRevision: command.recipeRevision,
-      runtimeDigest: command.runtimeDigest,
-      catalogRevision: command.catalogRevision,
-      toolchain: command.toolchain,
-      runnerPlugins: (command.runnerPlugins ?? []).map((target) => ({ ...target })),
+      retained: command.retained,
+      toolchain: command.toolchain.map((pack) => ({ ...pack })),
+      runnerPlugins: command.runnerPlugins.map((target) => ({ ...target })),
       acpProfiles: command.acpProfiles.map((profile) => ({ ...profile, argv: [...profile.argv] })),
       browserTarget: command.browserTarget
         ? {
@@ -905,46 +825,17 @@ export class RunnerControllerServer {
             allowedUrlPatterns: [...command.browserTarget.allowedUrlPatterns],
           }
         : null,
-      updatedAt: now,
     };
     this.dependencies.journal.saveWorkspace(creating);
     await this.dependencies.runtimeEngine.create(command);
-    const ready: WorkspaceRecord = {
-      ...creating,
-      status: 'ready',
-      updatedAt: Math.floor(Date.now() / 1000),
-    };
+    const ready: WorkspaceRecord = { ...creating, status: 'ready' };
     this.dependencies.pluginRunner.prepareWorkspace(ready);
     this.dependencies.journal.saveWorkspace(ready);
-    return ready;
   }
 
-  private async workspaceAction(command: WorkspaceRuntimeCommand): Promise<WorkspaceRecord> {
+  private async workspaceAction(command: WorkspaceLifecycleCommand): Promise<void> {
     const workspace = this.dependencies.journal.workspace(command.workspaceId);
-    if (!workspace || workspace.generation !== command.generation) {
-      throw new Error('WORKSPACE_NOT_FOUND');
-    }
-    const samePacks = JSON.stringify(workspace.toolchain) === JSON.stringify(command.toolchain);
-    const sameRunnerPlugins =
-      JSON.stringify(workspace.runnerPlugins ?? []) === JSON.stringify(command.runnerPlugins ?? []);
-    const sameAcpProfiles = JSON.stringify(workspace.acpProfiles) === JSON.stringify(command.acpProfiles);
-    const sameBrowserTarget = JSON.stringify(workspace.browserTarget) === JSON.stringify(command.browserTarget);
-    if (
-      workspace.userId !== command.userId ||
-      workspace.appId !== command.appId ||
-      workspace.runId !== command.runId ||
-      workspace.agentRuntimeId !== command.agentRuntimeId ||
-      workspace.recipeId !== command.recipeId ||
-      workspace.recipeRevision !== command.recipeRevision ||
-      workspace.runtimeDigest !== command.runtimeDigest ||
-      workspace.catalogRevision !== command.catalogRevision ||
-      !samePacks ||
-      !sameRunnerPlugins ||
-      !sameAcpProfiles ||
-      !sameBrowserTarget
-    ) {
-      throw new Error('WORKSPACE_IDENTITY_MISMATCH');
-    }
+    if (!workspace || workspace.generation !== command.generation) throw new Error('WORKSPACE_NOT_FOUND');
     if (command.action === 'start') {
       await this.dependencies.runtimeEngine.start(workspace.workspaceId, workspace.generation);
       try {
@@ -953,7 +844,8 @@ export class RunnerControllerServer {
         await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation).catch(() => undefined);
         throw error;
       }
-      return this.save(workspace, 'running', command.commandId);
+      this.save(workspace, 'running');
+      return;
     }
     if (command.action === 'stop') {
       this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
@@ -962,7 +854,8 @@ export class RunnerControllerServer {
       await this.dependencies.pluginRunner.quiesceWorkspace(workspace, Math.floor(Date.now() / 1000) + 10);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
       await this.dependencies.runtimeEngine.stop(workspace.workspaceId, workspace.generation);
-      return this.save(workspace, 'stopped', command.commandId);
+      this.save(workspace, 'stopped');
+      return;
     }
     if (command.action === 'restart') {
       this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
@@ -971,22 +864,18 @@ export class RunnerControllerServer {
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
       await this.dependencies.runtimeEngine.restart(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.activateWorkspace(workspace);
-      return this.save(workspace, 'running', command.commandId);
+      this.save(workspace, 'running');
+      return;
     }
-    if (command.action === 'delete') {
-      this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
-      this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
-      this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
-      await this.dependencies.pluginRunner.disposeWorkspace(workspace);
-      await this.dependencies.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
-      return this.save(workspace, 'deleted', command.commandId);
-    }
-    throw new Error('VALIDATION_FAILED');
+    this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+    this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+    this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
+    await this.dependencies.pluginRunner.disposeWorkspace(workspace);
+    await this.dependencies.runtimeEngine.remove(workspace.workspaceId, workspace.generation);
+    this.save(workspace, 'deleted');
   }
 
-  private save(workspace: WorkspaceRecord, status: WorkspaceRecord['status'], commandId: string): WorkspaceRecord {
-    const next = { ...workspace, status, commandId, updatedAt: Math.floor(Date.now() / 1000) };
-    this.dependencies.journal.saveWorkspace(next);
-    return next;
+  private save(workspace: WorkspaceRecord, status: WorkspaceRecord['status']): void {
+    this.dependencies.journal.saveWorkspace({ ...workspace, status });
   }
 }

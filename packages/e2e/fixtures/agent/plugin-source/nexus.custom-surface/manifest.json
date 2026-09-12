@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "nexus.custom-surface",
+  "version": "1.0.0",
+  "displayName": "Custom Surface Fixture",
+  "sdkVersion": "1.0.0",
+  "nexus": {
+    "minVersion": "1.0.0",
+    "maxVersion": "1.99.99"
+  },
+  "capabilities": [],
+  "intents": [],
+  "agents": [
+    {
+      "id": "custom.default",
+      "version": "1.0.0",
+      "displayName": "Custom Surface Agent",
+      "description": "E2E-only AgentDefinition used to validate the isolated Custom App Surface SDK bridge.",
+      "requiredModelCapabilities": ["streaming"]
+    }
+  ],
+  "targets": {
+    "frontend": {
+      "entry": "frontend/index.html"
+    }
+  }
+}

@@ -94,7 +94,6 @@ services:
   #       required: false
   #   environment:
   #     NEXUS_AGENT_RUNNER_TOKEN: ${NEXUS_AGENT_RUNNER_TOKEN:-}
-  #     NEXUS_AGENT_DEPLOYMENT_ID: ${NEXUS_AGENT_DEPLOYMENT_ID:-nexus-local}
   #   volumes:
   #     - ${NEXUS_AGENT_RUNNER_DATA_DIR:-./agent-runner-data}:/var/lib/nexus-agent-runner
   #     - ./data/agent/plugins:/var/lib/nexus-agent-runner/plugin-source:ro

@@ -56,7 +56,7 @@ export const createAcpExecuteTool = (
     name: 'acp_execute',
     version: '1.0.0',
     description:
-      'Run one approved ACP prompt through an ACP backend frozen into an already-running Workspace generation. The ACP backend receives read-only Workspace access, no network, no direct Nexus filesystem or terminal capability, and ACP-side sensitive-operation permission requests fail closed.',
+      'Run one approved ACP prompt through an ACP backend frozen into an already-running Workspace generation. ACP runs as a native Runner child process in the single-user trust model, so Nexus does not claim per-process read-only filesystem or network sandboxing; ACP-side sensitive-operation permission requests still fail closed at the Nexus protocol boundary.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

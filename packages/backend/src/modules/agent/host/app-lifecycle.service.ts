@@ -200,7 +200,7 @@ export class AppLifecycleService {
     const surface: AppView['surface'] = this.registry.isBuiltin(record.appId)
       ? 'builtin'
       : manifest.targets?.frontend
-        ? 'plugin'
+        ? 'custom'
         : manifest.agents?.length
           ? 'agent'
           : 'none';

@@ -6,7 +6,6 @@ import type {
   AgentSettingsDocument,
   AgentSettingsView,
 } from './agent-api.types';
-import type { PluginFrontendRpcMethod } from '../host/plugin-sdk';
 import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
 
 export type {
@@ -22,7 +21,7 @@ export interface AgentAppSummary {
   id: string;
   displayName: string;
   version: string;
-  surface: 'builtin' | 'agent' | 'plugin' | 'none';
+  surface: 'builtin' | 'agent' | 'custom' | 'none';
   stateVersion: number;
   enabled: boolean;
   health: string;
@@ -82,25 +81,19 @@ export interface PluginFrontendDescriptor {
   protocolVersion: 1;
   url: string;
   sandbox: 'allow-scripts';
-  maxMessageBytes: 64_000;
-  requestTimeoutMs: 10_000;
+  maxMessageBytes: 256_000;
+  requestTimeoutMs: 15_000;
 }
 
-export type { PluginFrontendRpcMethod } from '../host/plugin-sdk';
 export type {
   AgentWorkspaceView,
   PluginRunnerTargetView,
-  PluginWorkspaceGrant,
-  PluginWorkspaceGrantSet,
-  PluginWorkspacePermission,
   ToolchainCatalogPack,
   ToolchainPackRef,
   ToolchainPackUninstallPreview,
   WorkspaceArtifactImportResult,
-  WorkspaceNetworkPolicy,
   WorkspaceProfileView,
   WorkspaceRecipe,
-  WorkspaceResourceLimits,
   WorkspaceRuntimeAvailability,
   WorkspaceRuntimeCatalog,
   WorkspaceRuntimeCleanupPreview,
@@ -887,7 +880,7 @@ export const agentApi = {
   },
   async pluginFrontendRpc(
     appId: string,
-    method: PluginFrontendRpcMethod,
+    method: 'host.appInfo' | 'storage.get' | 'storage.put' | 'storage.delete',
     params: unknown,
     signal?: AbortSignal,
   ): Promise<unknown> {

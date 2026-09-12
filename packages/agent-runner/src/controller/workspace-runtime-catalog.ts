@@ -29,27 +29,6 @@ export class WorkspaceRuntimeCatalog {
     return pack;
   }
 
-  resolve(recipeId: string, versions: Record<string, string> = {}): ToolchainPackRef[] {
-    const recipe = this.recipe(recipeId);
-    const architecture = process.arch;
-    const requestedFamilies = Object.keys(versions);
-    if (requestedFamilies.some((familyId) => !recipe.allowedFamilies.includes(familyId))) {
-      throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
-    }
-    const families = [...new Set([...recipe.defaultFamilies, ...requestedFamilies])].sort();
-    return families.map((familyId) => {
-      const candidates = this.load().packs.filter((pack) => pack.familyId === familyId && pack.status === 'supported');
-      const selected = versions[familyId]
-        ? this.pack(familyId, versions[familyId]!)
-        : candidates.sort((a, b) => b.versionId.localeCompare(a.versionId, undefined, { numeric: true }))[0];
-      if (!selected || selected.status !== 'supported' || !selected.supportedArchitectures.includes(architecture))
-        throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
-      const digest = selected.contentDigestByArch[architecture];
-      if (!digest) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');
-      return { familyId, versionId: selected.versionId, contentDigest: digest };
-    });
-  }
-
   validateSelection(recipeId: string, refs: readonly ToolchainPackRef[]): void {
     const recipe = this.recipe(recipeId);
     if (!refs.length || refs.length > 32) throw new Error('WORKSPACE_TOOLCHAIN_UNAVAILABLE');

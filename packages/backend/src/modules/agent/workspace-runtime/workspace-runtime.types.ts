@@ -11,33 +11,6 @@ export interface ToolchainPackRef {
   contentDigest: string;
 }
 
-export interface WorkspaceResourceLimits {
-  cpus: number;
-  memoryBytes: number;
-  pids: number;
-  tmpfsBytes: number;
-}
-
-export type PluginWorkspacePermission = 'read' | 'write' | 'list' | 'delete';
-
-export interface PluginWorkspaceGrant {
-  targetPluginId: string;
-  principalPluginId: string;
-  path: string;
-  permissions: PluginWorkspacePermission[];
-}
-
-export interface PluginWorkspaceGrantSet {
-  revision: number;
-  grants: PluginWorkspaceGrant[];
-}
-
-export interface PluginWorkspaceGrantInput {
-  principalPluginId: string;
-  path: string;
-  permissions: PluginWorkspacePermission[];
-}
-
 export interface WorkspaceAcpProfile {
   id: string;
   profileRevision: number;
@@ -61,36 +34,22 @@ export interface WorkspaceBrowserTarget {
   allowedUrlPatterns: string[];
 }
 
-export interface WorkspaceNetworkPolicy {
-  mode: 'none' | 'allowlist';
-  hosts: string[];
-}
-
 export interface WorkspaceRecipe {
   id: string;
   revision: string;
   kind: WorkspaceKind;
   displayName: string;
   allowedFamilies: string[];
-  requiredCapabilities: string[];
   defaultFamilies: string[];
-  defaultLimits: WorkspaceResourceLimits;
-  networkDefaults: WorkspaceNetworkPolicy;
 }
 
 export interface ToolchainCatalogPack {
-  schemaVersion: 1;
   familyId: string;
   versionId: string;
   displayName: string;
   contentDigest: string;
-  capabilities: string[];
-  runnerApiRange: string;
   diskBytes: number;
-  dependencies: Array<{ familyId: string; versionId: string }>;
-  supportedArchitectures: string[];
   status: 'supported' | 'deprecated' | 'unavailable';
-  sideBySide: boolean;
   installed: boolean;
   enabled: boolean;
   inUse: boolean;
@@ -98,12 +57,9 @@ export interface ToolchainCatalogPack {
 
 export interface WorkspaceRuntimeAvailability {
   available: boolean;
-  state: 'unavailable' | 'uninitialized' | 'ready' | 'degraded';
-  reason: string;
-  deploymentId: string | null;
-  controllerVersion: string | null;
-  runtime: { available: boolean; reason: string | null; mode: 'native'; isolation: 'logical' };
-  capabilities: { egressAllowlist: boolean };
+  reason: string | null;
+  mode: 'native';
+  isolation: 'logical';
 }
 
 export interface WorkspaceRuntimeCatalog {
@@ -134,8 +90,6 @@ export interface WorkspaceProfileView {
   catalogRevision: string;
   toolchain: ToolchainPackRef[];
   runnerPlugins: PluginRunnerTarget[];
-  limits: WorkspaceResourceLimits;
-  network: WorkspaceNetworkPolicy;
   acpProfiles: WorkspaceAcpProfile[];
   browserTarget: WorkspaceBrowserTarget | null;
 }
@@ -181,8 +135,6 @@ export interface AgentWorkspaceCreateSpec {
   runnerPluginIds?: string[];
   acpProfileIds?: string[];
   browserTargetId?: string;
-  limits?: Partial<WorkspaceResourceLimits>;
-  network?: WorkspaceNetworkPolicy;
 }
 
 export interface WorkspaceRuntimeSetupRecipeSelection {

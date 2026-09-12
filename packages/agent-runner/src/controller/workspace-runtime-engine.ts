@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { WorkspaceJobRequest, WorkspaceJobResult, WorkspaceRecord, WorkspaceRuntimeCommand } from '../types';
+import type { WorkspaceJobRequest, WorkspaceJobResult, WorkspaceRecord, WorkspaceProvisionCommand } from '../types';
 import { JobRunner } from '../worker/job-runner';
-import { WorkspaceRuntimeManager, type WorkspaceRuntimeAvailability } from './workspace-runtime-manager';
+import { WorkspaceRuntimeManager } from './workspace-runtime-manager';
 import type { ToolchainStore } from './toolchain-store';
 
 const workspaceKey = (workspaceId: string, generation: number): string => `${workspaceId}\u0000${generation}`;
@@ -15,11 +15,7 @@ export class WorkspaceRuntimeEngine {
     this.runtime = new WorkspaceRuntimeManager(runtimeRoot, store);
   }
 
-  availability(): WorkspaceRuntimeAvailability {
-    return this.runtime.availability();
-  }
-
-  async create(command: WorkspaceRuntimeCommand): Promise<void> {
+  async create(command: WorkspaceProvisionCommand): Promise<void> {
     this.runtime.create(command);
   }
 
@@ -88,7 +84,7 @@ export class WorkspaceRuntimeEngine {
             : state === 'stopped'
               ? 'stopped'
               : 'failed';
-    return { ...record, status: mapped, updatedAt: Math.floor(Date.now() / 1000) };
+    return { ...record, status: mapped };
   }
 
   runtimeBytes(workspaceId: string, generation: number): number {

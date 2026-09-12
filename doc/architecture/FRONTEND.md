@@ -509,12 +509,15 @@ AgentSurfaceHost
   ↓
 AgentHubWindow
   ├── built-in OperationsView
-  └── PluginAppFrame → isolated plugin origin + MessageChannel bridge
+  ├── Host Agent surface（无 frontend target）
+  └── PluginAppFrame → full Custom App Surface → isolated plugin origin
+                         ↓
+                    plugin-sdk/ MessagePort bridge
 ```
 
-`host/` 负责 Launcher/Hub/App switcher、每 App 轻量 view state、动态 Plugin iframe bridge 和当前 built-in App contribution 选择；它不拥有 Run/Provider/Artifact 的后端事实，也不允许 App 直接修改全局 router/sidebar/Pinia ownership。当前只有 `nexus.operations` 这一项 built-in contribution，因此 Host 可以显式组合它；新增第二个 built-in Agent App 前必须先引入明确的本地 contribution registry，不能继续扩张条件分支，也不能绕过 App Host scope/grant。
+`host/` 只负责 Launcher/Hub/App switcher、每 App 轻量 view state、Custom Surface iframe 生命周期和当前 built-in App contribution 选择；它不拥有 Plugin SDK dispatch，也不拥有 Run/Provider/Artifact 的后端事实。`plugin-sdk/` 高内聚拥有 Plugin Frontend protocol、MessagePort host bridge 与 App-scoped Agent SDK dispatcher；它复用 `runtime/run-facade.ts` 和 `api/` transport，不重新实现 Run 状态机。当前只有 `nexus.operations` 这一项 built-in contribution，因此 Host 可以显式组合它；新增第二个 built-in Agent App 前必须先引入明确的本地 contribution registry。
 
-安装式动态 UI 始终走独立 origin + sandboxed iframe + MessageChannel/nonce/source 校验，不允许 arbitrary same-origin JavaScript 获得 Nexus 页面权限。
+没有 Frontend target 的安装式 AgentDefinition App 使用 Nexus 默认 Agent surface；有 Frontend target 时 iframe 获得 Hub 内整个 App content surface，可完全自定义布局。动态 UI 始终走独立 origin + `sandbox=allow-scripts` + MessageChannel/nonce/source 校验，不允许 arbitrary same-origin JavaScript 获得 Nexus 页面权限。Plugin static origin 只承载公开 immutable package assets 与 Nexus Frontend SDK，并显式允许无凭证 CORS（`Access-Control-Allow-Origin: *`），以支持 opaque sandbox origin 的 ES module 加载；Nexus 主站 API 不因此开放跨域访问。隔离 Plugin origin 由 Nexus 同源提供 `/sdk/frontend-v1.mjs`；SDK 只代理显式 App-scoped 能力，不向 iframe 暴露 cookie、CSRF、HTTP client 或内部 service object。MessagePort request/response/event envelope 最大 256 KB；AppStorage Backend RPC 仍独立限制为 64 KB。Custom UI 可读取 Subagent/message 并取消 delegation，但 Subagent 创建、调度和 capability delegation 仍由 Agent Runtime/Tool policy 拥有。
 
 ### 10.3 Agent 共享前端能力
 
@@ -525,9 +528,10 @@ features/agent/
 ├── api/       typed HTTP + `/ws/agent` client + transport parsing
 ├── ai/        conversation presentation
 ├── files/     Files / Artifact Library 与 picker
-├── runtime/   Run/Task/Approval/Subagent/Environment presentation + facade
-├── settings/  Agent host/settings contribution
-├── host/      Launcher/Hub/App/Plugin presentation owner
+├── runtime/      Run/Task/Approval/Subagent/Environment presentation + facade
+├── plugin-sdk/   Custom Frontend protocol/MessagePort/Agent SDK dispatcher
+├── settings/     Agent host/settings contribution
+├── host/         Launcher/Hub/App/Custom Surface lifecycle owner
 └── apps/operations/
 ```
 
@@ -622,7 +626,7 @@ Raw WebSocket transport 只属于：
 client/websocket/
 ```
 
-Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. Agent/App-scoped HTTP + `/ws/agent` transport ownership belongs to `features/agent/api/`; Run-facing composition belongs to `features/agent/runtime/`, Host/Plugin bridge belongs to `features/agent/host/`, and built-in Operations presentation belongs to `features/agent/apps/operations/`. Agent code must not reuse Workspace sockets/sessions, and Workspace code must not import Agent live state. Dynamic Plugin UI uses its isolated Host bridge rather than Workspace WebSocket or direct Nexus API/session access.
+Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. Agent/App-scoped HTTP + `/ws/agent` transport ownership belongs to `features/agent/api/`; Run-facing state/facade belongs to `features/agent/runtime/`; Custom Frontend protocol/MessagePort dispatch belongs to `features/agent/plugin-sdk/`; Host only owns iframe/window lifecycle in `features/agent/host/`; built-in Operations presentation belongs to `features/agent/apps/operations/`. Agent code must not reuse Workspace sockets/sessions, and Workspace code must not import Agent live state. Dynamic Plugin UI uses the Plugin SDK bridge rather than Workspace WebSocket or direct Nexus API/session access.
 
 Terminal/Filesystem/Transfer 等 feature 不应该直接发送 string message name。
 
@@ -800,7 +804,8 @@ Source directories do not carry their own README policy files. Durable placement
 | `app/bootstrap/`                             | Owns application startup ordering and public-feature bootstrap sequencing. It is not a product service locator and must not replace feature/runtime ownership.                                          |
 | `app/pages/dashboard/`                       | Application composition surface for public capabilities such as Connections, Tags, Audit, and System Overview; it does not own those domains.                                                           |
 | `app/pages/settings/`                        | Application composition surface for existing Nexus settings plus registered shared/App settings contributions. It does not own Provider secrets or App runtime/domain state.                            |
-| `features/agent/host/`                       | Current Agent App Host/Launcher/Hub/App switch/Plugin iframe bridge owner. It composes App presentation but does not own canonical Run/Provider/Artifact facts.                                         |
+| `features/agent/host/`                       | Agent Host/Launcher/Hub/App switch and Custom Surface iframe lifecycle owner. It composes presentation but does not own Plugin SDK dispatch or canonical Run/Provider/Artifact facts.                   |
+| `features/agent/plugin-sdk/`                 | Plugin Frontend protocol, bounded MessagePort host bridge and App-scoped Agent SDK dispatcher. It adapts existing API/runtime owners and does not create a second Agent state machine.                  |
 | `features/agent/api/`                        | Typed Agent HTTP + `/ws/agent` clients and transport parsing. It does not own user-visible runtime state or security decisions.                                                                         |
 | `features/agent/{ai,files,runtime,settings}` | Shared Agent presentation/use-case boundaries for conversation, Artifact Library, Run/Environment projection and settings. They consume Backend facts and do not own Workspace live runtime resources.  |
 | `foundation/async/`                          | Business-neutral async coordination primitives, including latest-value persistence mechanics used by debounced UI settings.                                                                             |

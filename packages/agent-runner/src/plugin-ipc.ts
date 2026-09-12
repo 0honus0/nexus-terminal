@@ -1,43 +1,37 @@
 import type { Writable } from 'node:stream';
 
-const FRAME_MAGIC = 0x4e585232; // NXR2
+const FRAME_MAGIC = 0x4e585233; // NXR3
 const FRAME_HEADER_BYTES = 16;
 const FRAME_JSON = 1;
-const FRAME_BINARY = 2;
 const MAX_JSON_BYTES = 256 * 1024;
-const MAX_BINARY_BYTES = 16 * 1024 * 1024;
 
-export type PluginIpcFrame =
-  { type: 'json'; requestId: number; payload: Buffer } | { type: 'binary'; requestId: number; payload: Buffer };
+export interface PluginIpcFrame {
+  requestId: number;
+  payload: Buffer;
+}
 
 const requestId = (value: number): number => {
-  if (!Number.isSafeInteger(value) || value < 0 || value > 0xffff_ffff) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > 0xffff_ffff)
     throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
-  }
   return value;
 };
 
-const encodeFrame = (type: typeof FRAME_JSON | typeof FRAME_BINARY, id: number, payload: Uint8Array): Buffer => {
+export const encodePluginJsonFrame = (id: number, value: unknown): Buffer => {
   const normalizedId = requestId(id);
-  const maxBytes = type === FRAME_JSON ? MAX_JSON_BYTES : MAX_BINARY_BYTES;
-  if (payload.byteLength > maxBytes) throw new Error('PLUGIN_RUNNER_FRAME_TOO_LARGE');
+  const payload = Buffer.from(JSON.stringify(value), 'utf8');
+  if (payload.byteLength > MAX_JSON_BYTES) throw new Error('PLUGIN_RUNNER_FRAME_TOO_LARGE');
   const frame = Buffer.allocUnsafe(FRAME_HEADER_BYTES + payload.byteLength);
   frame.writeUInt32BE(FRAME_MAGIC, 0);
-  frame.writeUInt8(type, 4);
+  frame.writeUInt8(FRAME_JSON, 4);
   frame.writeUInt8(0, 5);
   frame.writeUInt16BE(0, 6);
   frame.writeUInt32BE(normalizedId, 8);
   frame.writeUInt32BE(payload.byteLength, 12);
-  Buffer.from(payload.buffer, payload.byteOffset, payload.byteLength).copy(frame, FRAME_HEADER_BYTES);
+  payload.copy(frame, FRAME_HEADER_BYTES);
   return frame;
 };
 
-export const encodePluginJsonFrame = (id: number, value: unknown): Buffer =>
-  encodeFrame(FRAME_JSON, id, Buffer.from(JSON.stringify(value), 'utf8'));
-
-export const encodePluginBinaryFrame = (id: number, value: Uint8Array): Buffer => encodeFrame(FRAME_BINARY, id, value);
-
-export const decodePluginJson = (frame: Extract<PluginIpcFrame, { type: 'json' }>): Record<string, unknown> => {
+export const decodePluginJson = (frame: PluginIpcFrame): Record<string, unknown> => {
   try {
     const value = JSON.parse(frame.payload.toString('utf8')) as unknown;
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('invalid');
@@ -87,18 +81,20 @@ export class PluginIpcDecoder {
     const frames: PluginIpcFrame[] = [];
     while (this.bufferedBytes >= FRAME_HEADER_BYTES) {
       const header = this.peek(FRAME_HEADER_BYTES);
-      if (header.readUInt32BE(0) !== FRAME_MAGIC || header.readUInt8(5) !== 0 || header.readUInt16BE(6) !== 0) {
+      if (
+        header.readUInt32BE(0) !== FRAME_MAGIC ||
+        header.readUInt8(4) !== FRAME_JSON ||
+        header.readUInt8(5) !== 0 ||
+        header.readUInt16BE(6) !== 0
+      ) {
         throw new Error('PLUGIN_RUNNER_PROTOCOL_INVALID');
       }
-      const type = header.readUInt8(4);
       const id = header.readUInt32BE(8);
       const length = header.readUInt32BE(12);
-      const maxBytes = type === FRAME_JSON ? MAX_JSON_BYTES : type === FRAME_BINARY ? MAX_BINARY_BYTES : -1;
-      if (maxBytes < 0 || length > maxBytes) throw new Error('PLUGIN_RUNNER_FRAME_TOO_LARGE');
+      if (length > MAX_JSON_BYTES) throw new Error('PLUGIN_RUNNER_FRAME_TOO_LARGE');
       if (this.bufferedBytes < FRAME_HEADER_BYTES + length) break;
       this.consume(FRAME_HEADER_BYTES);
-      const payload = this.consume(length);
-      frames.push({ type: type === FRAME_JSON ? 'json' : 'binary', requestId: id, payload });
+      frames.push({ requestId: id, payload: this.consume(length) });
     }
     return frames;
   }

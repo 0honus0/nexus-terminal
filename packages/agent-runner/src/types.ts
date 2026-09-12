@@ -1,15 +1,7 @@
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from './plugin-sdk.types';
 
 export type WorkspaceKind = 'shell' | 'code' | 'data' | 'browser';
-export type WorkspaceStatus =
-  'creating' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'deleting' | 'deleted' | 'failed';
-
-export interface ResourceLimits {
-  memoryBytes: number;
-  cpus: number;
-  pids: number;
-  tmpfsBytes: number;
-}
+export type WorkspaceStatus = 'creating' | 'ready' | 'running' | 'stopped' | 'deleted' | 'failed';
 
 export interface PluginRunnerTarget {
   pluginId: string;
@@ -39,7 +31,6 @@ export interface CatalogPack {
   dependencies: Array<{ familyId: string; versionId: string }>;
   supportedArchitectures: string[];
   status: 'supported' | 'deprecated' | 'unavailable';
-  sideBySide: boolean;
 }
 
 export interface WorkspaceRecipe {
@@ -48,10 +39,7 @@ export interface WorkspaceRecipe {
   kind: WorkspaceKind;
   displayName: string;
   allowedFamilies: string[];
-  requiredCapabilities: string[];
   defaultFamilies: string[];
-  defaultLimits: ResourceLimits;
-  networkDefaults: { mode: 'none' | 'allowlist'; hosts: string[] };
 }
 
 export interface RuntimeCatalog {
@@ -85,51 +73,41 @@ export interface WorkspaceBrowserTarget {
   allowedUrlPatterns: string[];
 }
 
-export interface WorkspaceRuntimeCommand {
+interface WorkspaceCommandBase {
   commandId: string;
-  deploymentId: string;
-  userId: number;
-  appId: string;
-  runId: string;
-  agentRuntimeId: string;
   workspaceId: string;
   generation: number;
-  action: 'provision' | 'start' | 'stop' | 'restart' | 'delete';
+  deadlineAt: number;
+}
+
+export interface WorkspaceProvisionCommand extends WorkspaceCommandBase {
+  action: 'provision';
   recipeId: string;
   recipeRevision: string;
   runtimeDigest: string;
   catalogRevision: string;
   toolchain: ToolchainPackRef[];
-  runnerPlugins?: PluginRunnerTarget[];
+  runnerPlugins: PluginRunnerTarget[];
   acpProfiles: WorkspaceAcpProfile[];
   browserTarget: WorkspaceBrowserTarget | null;
   retained: boolean;
-  expectedVersion: number;
-  operationHash: string;
-  issuedAt: number;
-  deadlineAt: number;
-  nonce: string;
 }
+
+export interface WorkspaceLifecycleCommand extends WorkspaceCommandBase {
+  action: 'start' | 'stop' | 'restart' | 'delete';
+}
+
+export type WorkspaceRuntimeCommand = WorkspaceProvisionCommand | WorkspaceLifecycleCommand;
 
 export interface WorkspaceRecord {
   workspaceId: string;
-  userId: number;
-  appId: string;
-  runId: string;
-  agentRuntimeId: string;
   generation: number;
   status: WorkspaceStatus;
-  commandId: string;
   retained: boolean;
-  recipeId: string;
-  recipeRevision: string;
-  runtimeDigest: string;
-  catalogRevision: string;
   toolchain: ToolchainPackRef[];
-  runnerPlugins?: PluginRunnerTarget[];
+  runnerPlugins: PluginRunnerTarget[];
   acpProfiles: WorkspaceAcpProfile[];
   browserTarget: WorkspaceBrowserTarget | null;
-  updatedAt: number;
 }
 
 export interface CommandRecord {
@@ -144,22 +122,18 @@ export interface CommandRecord {
   completedAt: number | null;
 }
 
-export interface WorkspaceJobRequest {
+export interface WorkspaceJobInput {
   jobId: string;
-  workspaceId: string;
   generation: number;
-  userId: number;
-  appId: string;
-  runId: string;
-  agentRuntimeId: string;
-  operationHash: string;
-  issuedAt: number;
   deadlineAt: number;
-  nonce: string;
   argv: string[];
   cwd: string;
   maxBytes: number;
   timeoutMs: number;
+}
+
+export interface WorkspaceJobRequest extends WorkspaceJobInput {
+  workspaceId: string;
 }
 
 export interface WorkspaceJobResult {

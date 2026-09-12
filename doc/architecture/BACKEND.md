@@ -340,7 +340,7 @@ modules/agent/
 ├── host             App registry/lifecycle/grants/AppStorage/Plugin lifecycle
 ├── ai               Provider/Conversation/Context/Artifact/Memory/Integration
 ├── capabilities     Tool Catalog/authorization/policy/approval/lease boundary
-├── environments     Environment control use cases
+├── workspace-runtime Workspace lifecycle/profile/control use cases
 ├── runtime          Run/event/planning/recovery/collaboration/exchange
 └── apps/operations  built-in Operations contribution only
         │
@@ -357,11 +357,13 @@ bootstrap/agent validates/registers built-ins and constructs the concrete graph
 
 `modules/agent/ai` owns reusable Provider/model routing, canonical Conversation/User Input, Context, Recall/Memory, Skills, Artifacts and external integration contracts. Generic Tool Catalog and real capability authorization belong to `modules/agent/capabilities`, not AI. AI has no dependency on Operations private implementation.
 
+`modules/agent/workspace-runtime` owns Backend-side Workspace identity/profile/version, settings/setup/cleanup confirmation and Runner control use cases. `infrastructure/agent/workspace-runtime/runner-http.adapter.ts` is the only Backend↔Runner transport adapter: every HTTP/WebSocket call carries the shared Bearer token plus `X-Nexus-Agent-Protocol: 2026-09-13`. Only `provision` sends the full frozen Runner profile; later lifecycle and job calls use the minimal `workspaceId + generation + execution input` contract. Backend user/App/Run identity, optimistic version and operation-hash/idempotency facts remain Backend-owned and are not duplicated into Runner payloads.
+
 The built-in Operations contribution lives at `modules/agent/apps/operations/`. Generic AgentDefinition/Run/AgentRuntime/Plan/Checkpoint/Subagent scheduling belongs to `modules/agent/runtime`; Operations contributes concrete definitions, Tools, risk classification and verification policy through public Agent contracts. It consumes AI and machine capabilities through the Host/Capability boundary rather than owning Infrastructure handles.
 
 ### Built-in vs installable Apps
 
-Built-in Apps are trusted compile-time contributions registered by Bootstrap. Installable packages follow the Agent Plugin contract: package staging/signature/file-list verification occurs before activation; Backend target code runs through the Backend-owned process sandbox, Runner target code runs as a generation-scoped native Runner child process under the single-user trust model, and Frontend target assets are served from a separate origin into a sandboxed iframe. Plugin code does not create its own Docker container and never receives raw database, Workspace, Docker socket or other Host object.
+Built-in Apps are trusted compile-time contributions registered by Bootstrap. Installable packages follow the Agent Plugin contract: package staging/signature/file-list verification occurs before activation; Backend target code runs through the Backend-owned process sandbox, Runner target code runs as a generation-scoped native Runner child process under the single-user trust model, and Frontend target assets are served from a separate origin into a sandboxed iframe that owns the full Custom App Surface. That isolated origin also serves the Nexus-owned `/sdk/frontend-v1.mjs`; Frontend Plugin code reaches App-scoped Agent/AppStorage operations only through the bounded MessagePort SDK and never receives Nexus cookies, CSRF material, raw HTTP clients, database, Workspace, Docker socket or other Host objects.
 
 Plugin package bytes, immutable installed versions, AppStorage and runtime workspace/Artifact data remain separate lifecycle owners. Upgrade is stage→validate→quiesce/snapshot→activate/health; migration failure may restore package/version state but cannot claim rollback of already executed remote side effects.
 

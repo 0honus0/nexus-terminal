@@ -84,7 +84,7 @@ export interface AppRecord extends Scope {
 export interface AppView extends AppRecord {
   displayName: string;
   capabilities: AgentCapability[];
-  surface: 'builtin' | 'agent' | 'plugin' | 'none';
+  surface: 'builtin' | 'agent' | 'custom' | 'none';
 }
 
 export interface AppStatePatch {

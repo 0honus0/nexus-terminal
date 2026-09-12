@@ -11,19 +11,16 @@ export class CleanupPlanner {
     private readonly runtimeEngine: WorkspaceRuntimeEngine,
   ) {}
   async runtimeCleanup(
-    userId: number,
     workspaceIds: readonly string[],
   ): Promise<{ deleted: string[]; quarantined: string[]; skipped: string[] }> {
-    if (!Number.isSafeInteger(userId) || userId < 1 || workspaceIds.length > 4096) {
-      throw new Error('VALIDATION_FAILED');
-    }
-    runnerLog('info', 'Agent Runner runtime cleanup started', { userId, requestedWorkspaceCount: workspaceIds.length });
+    if (workspaceIds.length > 4096) throw new Error('VALIDATION_FAILED');
+    runnerLog('info', 'Agent Runner runtime cleanup started', { requestedWorkspaceCount: workspaceIds.length });
     const requested = new Set(workspaceIds);
     if (requested.size !== workspaceIds.length) throw new Error('VALIDATION_FAILED');
     const deleted: string[] = [],
       quarantined: string[] = [],
       skipped: string[] = [];
-    const activeStatuses = new Set(['creating', 'starting', 'running', 'stopping', 'deleting']);
+    const activeStatuses = new Set(['creating', 'running']);
     const activeWorkspaceIds = new Set(
       this.journal
         .jobs()
@@ -35,7 +32,6 @@ export class CleanupPlanner {
       const workspace = byId.get(workspaceId);
       if (
         !workspace ||
-        workspace.userId !== userId ||
         workspace.retained ||
         activeStatuses.has(workspace.status) ||
         activeWorkspaceIds.has(workspace.workspaceId)
@@ -57,7 +53,6 @@ export class CleanupPlanner {
         deleted.push(workspace.workspaceId);
       } catch (error) {
         runnerLog('warn', 'Agent Runner Workspace cleanup quarantined', {
-          userId,
           workspaceId: workspace.workspaceId,
           generation: workspace.generation,
           errorCode: error instanceof Error ? error.message : String(error),
@@ -80,7 +75,6 @@ export class CleanupPlanner {
     }
     this.journal.compact();
     runnerLog('info', 'Agent Runner runtime cleanup finished', {
-      userId,
       requestedWorkspaceCount: workspaceIds.length,
       deletedWorkspaceCount: deleted.length,
       skippedWorkspaceCount: skipped.length,

@@ -90,7 +90,7 @@ EXPOSE 8790
 
 # 健康检查验证 Controller 与 native Workspace runtime 可用，不依赖 namespace/capability probe。
 HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=10 \
-  CMD node -e "fetch('http://127.0.0.1:8790/v1/availability',{headers:{authorization:'Bearer '+process.env.NEXUS_AGENT_RUNNER_TOKEN,'x-nexus-agent-protocol':'2026-09-12'}}).then(async r=>{const b=await r.json();process.exit(r.ok&&b.available===true&&b.runtime?.mode==='native'?0:1)}).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:8790/v1/availability',{headers:{authorization:'Bearer '+process.env.NEXUS_AGENT_RUNNER_TOKEN,'x-nexus-agent-protocol':'2026-09-13'}}).then(async r=>{const b=await r.json();process.exit(r.ok&&b.available===true&&b.mode==='native'?0:1)}).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/index.js"]

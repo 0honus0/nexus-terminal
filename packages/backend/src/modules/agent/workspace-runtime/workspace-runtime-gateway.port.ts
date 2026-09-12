@@ -1,9 +1,5 @@
-import type { Scope } from '../agent.types';
-
-export interface WorkspaceExecutionGrant extends Scope {
+export interface WorkspaceExecutionGrant {
   workspaceId: string;
-  runId: string;
-  agentRuntimeId: string;
   generation: number;
 }
 

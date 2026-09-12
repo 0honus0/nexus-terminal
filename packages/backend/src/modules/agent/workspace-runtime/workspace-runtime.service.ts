@@ -17,12 +17,8 @@ import type { AgentWorkspaceRepositoryPort } from './workspace-runtime.repositor
 import type {
   AgentWorkspaceCreateSpec,
   AgentWorkspaceView,
-  PluginWorkspaceGrantSet,
-  PluginWorkspaceGrantInput,
   ToolchainPackRef,
-  WorkspaceNetworkPolicy,
   WorkspaceProfileView,
-  WorkspaceResourceLimits,
   WorkspaceRuntimeCatalog,
   WorkspaceRuntimeCommandView,
   WorkspaceToolchainSwitchView,
@@ -32,46 +28,6 @@ const COMMAND_SECONDS = 120;
 const TOOLCHAIN_COMMAND_SECONDS = 12 * 60;
 const COMMAND_POLL_MS = 250;
 const ADMIN_SCOPE = { userId: 0, appId: 'nexus.host' } as const;
-
-const cleanHosts = (hosts: readonly string[]): string[] => {
-  if (!Array.isArray(hosts) || hosts.length > 64) throw new Error('VALIDATION_FAILED');
-  const normalized = [...new Set(hosts.map((host) => host.trim().toLowerCase()))];
-  if (normalized.some((host) => !host || host.length > 253 || /[\s/@]/.test(host))) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  return normalized.sort();
-};
-
-const network = (
-  value: WorkspaceNetworkPolicy | undefined,
-  fallback: WorkspaceNetworkPolicy,
-): WorkspaceNetworkPolicy => {
-  const candidate = value ?? fallback;
-  if (candidate.mode !== 'none' && candidate.mode !== 'allowlist') throw new Error('VALIDATION_FAILED');
-  return { mode: candidate.mode, hosts: candidate.mode === 'none' ? [] : cleanHosts(candidate.hosts) };
-};
-
-const finitePositive = (value: unknown, fallback: number): number => {
-  if (value === undefined) return fallback;
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) throw new Error('VALIDATION_FAILED');
-  return value;
-};
-
-const positiveInteger = (value: unknown, fallback: number): number => {
-  if (value === undefined) return fallback;
-  if (!Number.isSafeInteger(value) || (value as number) < 1) throw new Error('VALIDATION_FAILED');
-  return value as number;
-};
-
-const limits = (
-  value: Partial<WorkspaceResourceLimits> | undefined,
-  defaults: WorkspaceResourceLimits,
-): WorkspaceResourceLimits => ({
-  cpus: Math.min(32, finitePositive(value?.cpus, defaults.cpus)),
-  memoryBytes: Math.min(64 * 1024 * 1024 * 1024, positiveInteger(value?.memoryBytes, defaults.memoryBytes)),
-  pids: Math.min(32_768, positiveInteger(value?.pids, defaults.pids)),
-  tmpfsBytes: Math.min(16 * 1024 * 1024 * 1024, positiveInteger(value?.tmpfsBytes, defaults.tmpfsBytes)),
-});
 
 const selectedAcpProfiles = (
   ids: readonly string[] | undefined,
@@ -146,15 +102,11 @@ export class WorkspaceRuntimeService {
     return this.controller.availability(signal);
   }
 
-  async catalog(signal?: AbortSignal) {
-    const availability = await this.controller.availability(signal);
-    if (!availability.available) throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
+  catalog(signal?: AbortSignal) {
     return this.controller.catalog(signal);
   }
 
-  async storage(signal?: AbortSignal) {
-    const availability = await this.controller.availability(signal);
-    if (!availability.available) throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
+  storage(signal?: AbortSignal) {
     return this.controller.storage(signal);
   }
 
@@ -166,44 +118,6 @@ export class WorkspaceRuntimeService {
     const workspace = await this.repository.getWorkspace(scope, workspaceId);
     if (!workspace) throw new Error('NOT_FOUND');
     return workspace;
-  }
-
-  async workspaceGrants(
-    scope: Scope,
-    workspaceId: string,
-    targetPluginId: string,
-    signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrantSet> {
-    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
-    if (!workspace.profile.runnerPlugins.some((target) => target.pluginId === targetPluginId)) {
-      throw new Error('WORKSPACE_TARGET_NOT_FOUND');
-    }
-    return this.controller.workspaceGrants(workspaceId, workspace.generation, targetPluginId, signal);
-  }
-
-  async replaceWorkspaceGrants(
-    scope: Scope,
-    workspaceId: string,
-    targetPluginId: string,
-    grants: readonly PluginWorkspaceGrantInput[],
-    expectedRevision: number,
-    signal?: AbortSignal,
-  ): Promise<PluginWorkspaceGrantSet> {
-    await this.assertExecutionEnabled(scope);
-    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
-    const pluginIds = new Set(workspace.profile.runnerPlugins.map((target) => target.pluginId));
-    if (!pluginIds.has(targetPluginId)) throw new Error('WORKSPACE_TARGET_NOT_FOUND');
-    if (grants.some((grant) => !pluginIds.has(grant.principalPluginId) || grant.principalPluginId === targetPluginId)) {
-      throw new Error('WORKSPACE_GRANT_INVALID');
-    }
-    return this.controller.replaceWorkspaceGrants(
-      workspaceId,
-      workspace.generation,
-      targetPluginId,
-      grants,
-      expectedRevision,
-      signal,
-    );
   }
 
   async openWorkspaceFileRead(
@@ -267,13 +181,7 @@ export class WorkspaceRuntimeService {
       },
       this.cryptoHash,
     );
-    const [availability, catalog, settings] = await Promise.all([
-      this.controller.availability(),
-      this.controller.catalog().catch(() => null),
-      this.settings.get(scope.userId),
-    ]);
-    if (!availability.available || !availability.deploymentId || !catalog)
-      throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
+    const [catalog, settings] = await Promise.all([this.controller.catalog(), this.settings.get(scope.userId)]);
     if (expectedCatalogRevision && catalog.revision !== expectedCatalogRevision) {
       throw new Error('CATALOG_REVISION_CONFLICT');
     }
@@ -311,8 +219,6 @@ export class WorkspaceRuntimeService {
       catalogRevision: catalog.revision,
       toolchain: resolveWorkspaceToolchain(catalog, recipe.id, spec.versions),
       runnerPlugins: resolvedRunnerPlugins.map((target) => ({ ...target })),
-      limits: limits(spec.limits, recipe.defaultLimits),
-      network: network(spec.network, recipe.networkDefaults),
       acpProfiles: selectedAcpProfiles(spec.acpProfileIds, workspaceSettings.acpProfiles, settings.revision),
       browserTarget: selectedBrowserTarget(
         spec.browserTargetId,
@@ -321,9 +227,6 @@ export class WorkspaceRuntimeService {
       ),
     };
     if (profile.browserTarget && recipe.kind !== 'browser') throw new Error('BROWSER_TARGET_REQUIRES_BROWSER_RECIPE');
-    if (profile.network.mode === 'allowlist' && !availability.capabilities.egressAllowlist) {
-      throw new Error('WORKSPACE_NETWORK_ENFORCEMENT_UNAVAILABLE');
-    }
     const now = this.now();
     const workspaceId = randomUUID();
     let workspace = await this.repository.createWorkspace({
@@ -339,11 +242,13 @@ export class WorkspaceRuntimeService {
       generation: 1,
       createdAt: now,
     });
-    const provision = await this.dispatch(scope, 'provision', workspace.id, workspace.generation, {
-      ...this.runnerPayload(workspace, availability.deploymentId),
-      expectedVersion: workspace.version,
-      idempotencyKey,
-    });
+    const provision = await this.dispatch(
+      scope,
+      'provision',
+      workspace.id,
+      workspace.generation,
+      this.runnerProvisionPayload(workspace),
+    );
     if (provision.status === 'succeeded') {
       workspace = (await this.repository.getWorkspace(scope, workspace.id)) ?? workspace;
     }
@@ -374,12 +279,8 @@ export class WorkspaceRuntimeService {
     waitForTerminal = false,
   ): Promise<WorkspaceRuntimeCommandView> {
     if (action !== 'stop' && action !== 'delete') await this.assertExecutionEnabled(scope);
-    const [workspace, availability] = await Promise.all([
-      this.repository.getWorkspace(scope, workspaceId),
-      this.controller.availability(),
-    ]);
+    const workspace = await this.repository.getWorkspace(scope, workspaceId);
     if (!workspace) throw new Error('NOT_FOUND');
-    if (!availability.available || !availability.deploymentId) throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
     if (workspace.version !== expectedVersion) throw new Error('STATE_CONFLICT');
     if (
       (action === 'start' || action === 'restart') &&
@@ -394,10 +295,7 @@ export class WorkspaceRuntimeService {
       action,
       workspaceId,
       workspace.generation,
-      {
-        ...this.runnerPayload(workspace, availability.deploymentId),
-        expectedVersion,
-      },
+      { workspaceId },
       true,
       waitForTerminal,
     );
@@ -435,14 +333,11 @@ export class WorkspaceRuntimeService {
       throw new Error('VALIDATION_FAILED');
     }
     await this.assertExecutionEnabled(scope);
-    const [workspace, availability, catalog] = await Promise.all([
+    const [workspace, catalog] = await Promise.all([
       this.repository.getWorkspace(scope, workspaceId),
-      this.controller.availability(),
-      this.controller.catalog().catch(() => null),
+      this.controller.catalog(),
     ]);
     if (!workspace) throw new Error('NOT_FOUND');
-    if (!availability.available || !availability.deploymentId || !catalog)
-      throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
     if (expectedCatalogRevision && catalog.revision !== expectedCatalogRevision) {
       throw new Error('CATALOG_REVISION_CONFLICT');
     }
@@ -474,10 +369,7 @@ export class WorkspaceRuntimeService {
       'delete',
       workspaceId,
       workspace.generation,
-      {
-        ...this.runnerPayload(workspace, availability.deploymentId),
-        expectedVersion: switching.version,
-      },
+      { workspaceId },
       false,
       true,
     );
@@ -518,10 +410,7 @@ export class WorkspaceRuntimeService {
       'provision',
       workspaceId,
       generation,
-      {
-        ...this.runnerPayload(reconfigured, availability.deploymentId),
-        expectedVersion: reconfigured.version,
-      },
+      this.runnerProvisionPayload(reconfigured),
       true,
       true,
     );
@@ -565,15 +454,8 @@ export class WorkspaceRuntimeService {
   }
 
   async adminAction(userId: number, action: string, payload: JsonValue): Promise<WorkspaceRuntimeCommandView> {
-    const availability = await this.controller.availability();
-    if (!availability.available || !availability.deploymentId) throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
     const input = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
-    return this.dispatch({ userId, appId: ADMIN_SCOPE.appId }, action, undefined, 1, {
-      deploymentId: availability.deploymentId,
-      userId,
-      appId: ADMIN_SCOPE.appId,
-      ...input,
-    });
+    return this.dispatch({ userId, appId: ADMIN_SCOPE.appId }, action, undefined, 1, input);
   }
 
   async reconcile(limit = 100): Promise<number> {
@@ -616,13 +498,8 @@ export class WorkspaceRuntimeService {
     return completed;
   }
 
-  private runnerPayload(workspace: AgentWorkspaceView, deploymentId: string): Record<string, JsonValue> {
+  private runnerProvisionPayload(workspace: AgentWorkspaceView): Record<string, JsonValue> {
     return {
-      deploymentId,
-      userId: workspace.userId,
-      appId: workspace.appId,
-      runId: workspace.runId,
-      agentRuntimeId: workspace.agentRuntimeId,
       workspaceId: workspace.id,
       recipeId: workspace.profile.recipeId,
       recipeRevision: workspace.profile.recipeRevision,
@@ -662,8 +539,8 @@ export class WorkspaceRuntimeService {
     );
     const deadlineAt =
       now + (action === 'provision' || action === 'packInstall' ? TOOLCHAIN_COMMAND_SECONDS : COMMAND_SECONDS);
-    const payloadRecord = payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
-    const wirePayload: JsonValue = { ...payloadRecord, issuedAt: now, nonce: randomUUID() };
+    const wirePayload: JsonValue =
+      payload && typeof payload === 'object' && !Array.isArray(payload) ? { ...payload } : {};
     const command = await this.repository.createCommand({
       scope,
       id: commandId,
@@ -698,7 +575,6 @@ export class WorkspaceRuntimeService {
     }
     const request: RunnerCommandRequest = {
       commandId,
-      operationHash,
       action,
       generation,
       deadlineAt,

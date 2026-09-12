@@ -11,8 +11,6 @@ import type {
   WorkspaceRuntimeSetupPreview,
   WorkspaceRuntimeStorageView,
   WorkspaceToolchainSwitchView,
-  PluginWorkspaceGrantSet,
-  PluginWorkspaceGrantInput,
 } from './workspace-runtime/workspace-runtime.types';
 import type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
 import type {
@@ -328,14 +326,6 @@ export interface AgentWorkspaceRuntimeFacade {
     sessionId?: string,
     signal?: AbortSignal,
   ): Promise<WorkspaceRuntimeTerminalAttachment>;
-  workspaceGrants(scope: Scope, workspaceId: string, targetPluginId: string): Promise<PluginWorkspaceGrantSet>;
-  replaceWorkspaceGrants(
-    scope: Scope,
-    workspaceId: string,
-    targetPluginId: string,
-    grants: readonly PluginWorkspaceGrantInput[],
-    expectedRevision: number,
-  ): Promise<PluginWorkspaceGrantSet>;
   exportWorkspaceArtifact(scope: Scope, input: WorkspaceArtifactExportInput, signal: AbortSignal): Promise<ArtifactRef>;
   importArtifactToWorkspace(
     scope: Scope,

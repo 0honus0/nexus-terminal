@@ -268,15 +268,8 @@
               : $t('agent.settings.workspaceRuntime.unavailable')
           }}
         </span>
-        <span class="text-xs text-text-secondary">{{ availability.state }}</span>
       </div>
-      <p class="mt-2 text-xs text-text-secondary">{{ availability.reason }}</p>
-      <p v-if="availability.controllerVersion" class="mt-1 text-xs text-text-secondary">
-        {{ $t('agent.settings.workspaceRuntime.controllerVersion', { version: availability.controllerVersion }) }}
-      </p>
-      <p v-if="availability.available && !availability.capabilities.egressAllowlist" class="mt-2 text-xs text-warning">
-        {{ $t('agent.settings.workspaceRuntime.egressUnavailable') }}
-      </p>
+      <p v-if="availability.reason" class="mt-2 text-xs text-text-secondary">{{ availability.reason }}</p>
     </div>
 
     <div v-if="error" class="mt-3 rounded border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
@@ -306,9 +299,7 @@
               />
               <span>
                 <span class="block text-sm font-medium">{{ recipe.displayName }}</span>
-                <span class="block text-xs text-text-secondary"
-                  >{{ recipe.kind }} · {{ recipe.requiredCapabilities.join(', ') }}</span
-                >
+                <span class="block text-xs text-text-secondary">{{ recipe.kind }}</span>
               </span>
             </label>
           </div>
