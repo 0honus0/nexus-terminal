@@ -5,9 +5,9 @@ import { spawnSync } from 'node:child_process';
 import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, ToolchainPackRef } from '../types';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
-const WORKSPACE_TERMINAL_USER = 'nexus';
-const WORKSPACE_TERMINAL_UID = 1000;
-const WORKSPACE_TERMINAL_GID = 1000;
+const WORKSPACE_TERMINAL_USER = 'root';
+const WORKSPACE_TERMINAL_UID = 0;
+const WORKSPACE_TERMINAL_GID = 0;
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
 const SANDBOX_ID = /^([A-Za-z0-9_.-]{1,128}):(\d+)$/;
@@ -307,9 +307,9 @@ export class SandboxManager {
       sessionId,
       argv: [
         ...beforeCommand,
-        // Dropbear 2022.83 only permits a non-root daemon to authenticate the
-        // daemon's own uid. Give the terminal sandbox a stable unprivileged uid
-        // inside its user namespace instead of reintroducing SETUID/SETGID caps.
+        // Ubuntu Noble ships Dropbear 2022.83, whose non-root server cannot
+        // reliably allocate PTYs. Become uid/gid 0 only inside the private user
+        // namespace while retaining the sandbox's explicit --cap-drop ALL.
         '--uid',
         String(WORKSPACE_TERMINAL_UID),
         '--gid',
