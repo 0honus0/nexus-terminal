@@ -536,6 +536,10 @@ CREATE TABLE IF NOT EXISTS ai_memories (
     confidence REAL NOT NULL CHECK(confidence BETWEEN 0 AND 1),
     status TEXT NOT NULL CHECK(status IN ('candidate','published','revoked')),
     expires_at INTEGER,
+    proposed_by_runtime_id TEXT,
+    review_action TEXT CHECK(review_action IS NULL OR review_action IN ('publish','reject','revoke')),
+    reviewed_at INTEGER,
+    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY(user_id, app_id) REFERENCES agent_apps(user_id, app_id) ON DELETE CASCADE
@@ -551,6 +555,9 @@ CREATE TABLE IF NOT EXISTS agent_runtimes (
     backend_kind TEXT NOT NULL CHECK(backend_kind IN ('native','acp')),
     model_ref_json TEXT NOT NULL CHECK(json_valid(model_ref_json)),
     status TEXT NOT NULL CHECK(status IN ('created','running','stopping','stopped','failed','interrupted')),
+    schedule_state TEXT NOT NULL DEFAULT 'queued'
+      CHECK(schedule_state IN ('queued','runnable','executing','waiting_message','waiting_approval','waiting_budget','joining','finished')),
+    consumed_mailbox_sequence INTEGER NOT NULL DEFAULT 0 CHECK(consumed_mailbox_sequence >= 0),
     execution_owner_id TEXT NOT NULL UNIQUE,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
