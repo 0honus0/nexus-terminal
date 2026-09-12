@@ -10,9 +10,14 @@
 
   const targets = ref<BrowserTarget[]>([]);
 
-  const cloneTargets = (): BrowserTarget[] => structuredClone(props.settings.requestedSettings.browser.targets);
+  const cloneTargets = (source: readonly BrowserTarget[]): BrowserTarget[] =>
+    source.map((target) => ({
+      ...target,
+      endpoints: target.endpoints.map((endpoint) => ({ ...endpoint })),
+      allowedUrlPatterns: [...target.allowedUrlPatterns],
+    }));
   const sync = (): void => {
-    targets.value = cloneTargets();
+    targets.value = cloneTargets(props.settings.requestedSettings.browser.targets);
   };
 
   const addTarget = (): void => {
@@ -50,7 +55,7 @@
       .filter(Boolean);
   };
 
-  const save = (): void => emit('save', { targets: structuredClone(targets.value) });
+  const save = (): void => emit('save', { targets: cloneTargets(targets.value) });
 
   watch(() => props.settings.revision, sync, { immediate: true });
 </script>

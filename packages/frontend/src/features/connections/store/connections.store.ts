@@ -6,7 +6,17 @@ export const useConnectionsStore = defineStore('connections', {
   actions: {
     async load(force = false) {
       if (this.loaded && !force) return this.items;
-      this.items = await connectionsApi.list();
+      const incoming = await connectionsApi.list();
+      const currentById = new Map(this.items.map((item) => [item.id, item] as const));
+      this.items = incoming.map((item) => {
+        const current = currentById.get(item.id);
+        if (!current || (current.lastConnectedAt ?? 0) <= (item.lastConnectedAt ?? 0)) return item;
+        return {
+          ...item,
+          lastConnectedAt: current.lastConnectedAt,
+          updatedAt: Math.max(item.updatedAt, current.updatedAt),
+        };
+      });
       this.loaded = true;
       return this.items;
     },
