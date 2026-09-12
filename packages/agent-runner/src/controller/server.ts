@@ -374,7 +374,7 @@ export class RunnerControllerServer {
         return;
       }
       if (request.method === 'GET' && url.pathname === '/v1/storage') {
-        json(response, 200, this.dependencies.storage.report());
+        json(response, 200, await this.dependencies.storage.report());
         return;
       }
       const workspaceFileMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/plugins\/([^/]+)\/file$/);
