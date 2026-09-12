@@ -1298,10 +1298,10 @@ const provider = await ok(
   {
     kind: 'openai-compatible',
     displayName: 'Docker lifecycle smoke provider',
-    baseUrl: 'http://host.docker.internal:1/v1',
+    baseUrl: 'https://example.com/v1',
     credential: 'docker-lifecycle-smoke-secret',
     models: [{ id: 'smoke-model', contextWindow: 8192, maxOutputTokens: 64, supportsTools: true }],
-    privateHostExceptions: ['host.docker.internal:1'],
+    privateHostExceptions: [],
     enabled: true,
   },
   mutationHeaders,
@@ -1331,8 +1331,25 @@ const createTerminalRun = async (title) => {
     201,
   );
   let current = created;
+  const terminal = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
+  for (let attempt = 0; attempt < 8 && !terminal.has(current.status); attempt += 1) {
+    const cancelled = await call(
+      'POST',
+      `/api/v1/apps/nexus.operations/runs/${created.id}/cancel`,
+      { expectedVersion: current.version },
+      { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+    );
+    if (cancelled.response.ok) current = cancelled.json?.data;
+    else if (cancelled.response.status !== 409) {
+      throw new Error(`Run cancellation failed: ${cancelled.response.status} ${cancelled.text}`);
+    }
+    if (!terminal.has(current.status)) {
+      await wait(150);
+      current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${created.id}`);
+    }
+  }
   const deadline = Date.now() + 45_000;
-  while (!['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'].includes(current.status)) {
+  while (!terminal.has(current.status)) {
     if (Date.now() >= deadline) throw new Error(`Run did not become terminal: ${JSON.stringify(current)}`);
     await wait(250);
     current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${created.id}`);
