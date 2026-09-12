@@ -3,17 +3,21 @@
   "group": 7,
   "workers": 8,
   "specs": [
-    "tests/ui/captcha-settings.spec.ts",
-    "tests/ui/change-password.spec.ts",
-    "tests/ui/ip-blacklist-settings.spec.ts",
-    "tests/ui/ip-whitelist-settings.spec.ts",
-    "tests/ui/protected-navigation.spec.ts",
-    "tests/ui/ssh-key-management.spec.ts",
-    "tests/websocket/authenticated-session.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts",
-    "tests/ssh/panel-wheel-scaling.spec.ts",
-    "tests/ssh/terminal-protocol.spec.ts",
-    "tests/ssh/terminal-tools-ui.spec.ts",
-    "tests/ssh/terminal-ui.spec.ts"
+    "tests/http/auth-2fa.spec.ts",
+    "tests/http/auth-api.spec.ts",
+    "tests/http/backup.spec.ts",
+    "tests/http/connection-import.spec.ts",
+    "tests/http/connections-tags.spec.ts",
+    "tests/http/database-migrations.spec.ts",
+    "tests/http/quick-commands-audit.spec.ts",
+    "tests/http/rdp-remoteapp.spec.ts",
+    "tests/http/terminal-themes.spec.ts",
+    "tests/ssh/command-history-management.spec.ts",
+    "tests/ssh/quick-command-collapsible-search.spec.ts",
+    "tests/ssh/quick-command-management.spec.ts",
+    "tests/ssh/quick-command-tags-variables.spec.ts",
+    "tests/ssh/sftp-download.spec.ts",
+    "tests/ssh/status-history-time-axis.spec.ts",
+    "tests/ssh/progress-display-baseline.spec.ts"
   ]
 }
