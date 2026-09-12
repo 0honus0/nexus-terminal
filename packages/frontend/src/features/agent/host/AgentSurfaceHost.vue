@@ -104,7 +104,7 @@
 
 <template>
   <template v-if="auth.isAuthenticated.value && summary">
-    <AgentHubWindow v-if="summary.featureEnabled" :summary="summary" />
+    <AgentHubWindow v-if="summary.featureEnabled" :summary="summary" @layout-change="persistLayout" />
     <AgentLauncher v-if="summary.featureEnabled" :summary="summary" />
   </template>
 </template>

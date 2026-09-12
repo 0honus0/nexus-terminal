@@ -15,9 +15,12 @@
     AgentProviderView,
     AgentRunSnapshot,
     AgentRunView,
+    AgentSettingsView,
     AgentSubagentMessage,
     AgentSubagentView,
     AgentThreadView,
+    WorkspaceRuntimeAvailability,
+    WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
   import { agentSurfaceSession } from './surface-session';
   import { createAgentRunFacade } from '../runtime/run-facade';
@@ -45,6 +48,9 @@
   const approvals = computed(() => approvalBatch.value?.items ?? []);
   const pendingApprovals = computed(() => approvals.value.filter((approval) => approval.status === 'requested'));
   const hardLimits = ref<AgentHardLimits | null>(null);
+  const settingsView = ref<AgentSettingsView | null>(null);
+  const workspaceRuntimeAvailability = ref<WorkspaceRuntimeAvailability | null>(null);
+  const workspaceRuntimeCatalog = ref<WorkspaceRuntimeCatalog | null>(null);
   const backgroundRuns = ref<AgentRunView[]>([]);
   const detailSnapshot = ref<AgentRunSnapshot | null>(null);
   const detailCheckpoints = ref<AgentCheckpointView[]>([]);
@@ -57,6 +63,7 @@
   const newThreadEditorVisible = ref(false);
   const newThreadTitle = ref('');
   const threadQuery = ref('');
+  const threadSidebarVisible = ref(false);
   const streamingText = ref('');
   const busy = ref(false);
   const loading = ref(true);
@@ -134,6 +141,38 @@
     if (value >= 1_000) return `${Math.round(value / 100) / 10}k`;
     return String(value);
   };
+  const displayedConnectionIds = computed(() =>
+    modelSelectionLocked.value && run.value ? run.value.definition.connectionIds : selectedConnectionIds.value,
+  );
+  const enabledEnvironmentRecipes = computed(() => {
+    const catalog = workspaceRuntimeCatalog.value;
+    const settings = settingsView.value;
+    if (!catalog || !settings) return [];
+    const enabled = new Set(settings.effectiveSettings.workspaceRuntime.enabledRecipeIds);
+    return catalog.recipes.filter((recipe) => enabled.has(recipe.id));
+  });
+  const environmentToolDefaults = computed(() => {
+    const versions = settingsView.value?.effectiveSettings.workspaceRuntime.toolVersions ?? {};
+    return Object.entries(versions)
+      .filter(([, config]) => Boolean(config.defaultVersionId))
+      .map(([familyId, config]) => `${familyId}@${config.defaultVersionId}`)
+      .sort();
+  });
+  const environmentLabel = computed(() => {
+    const availability = workspaceRuntimeAvailability.value;
+    if (!availability) return t('agent.operations.environmentUnknown');
+    if (!availability.available) return t('agent.operations.environmentUnavailable');
+    if (enabledEnvironmentRecipes.value.length === 1) return enabledEnvironmentRecipes.value[0]!.displayName;
+    if (enabledEnvironmentRecipes.value.length > 1)
+      return t('agent.operations.environmentRecipesReady', { count: enabledEnvironmentRecipes.value.length });
+    return t('agent.operations.environmentNoRecipes');
+  });
+  const environmentStatusClass = computed(() => {
+    const availability = workspaceRuntimeAvailability.value;
+    if (!availability) return 'bg-text-secondary/40';
+    if (!availability.available) return 'bg-text-secondary/50';
+    return availability.sandbox.available ? 'bg-success' : 'bg-warning';
+  });
   const mutationLocked = computed(
     () => busy.value || runtimeOperation.mutationBlocked.value || run.value?.needsReconciliation === true,
   );
@@ -156,6 +195,14 @@
     if (!option) return;
     selectedModelKey.value = option.key;
     agentSurfaceSession.setModelKey(props.appId, option.key);
+  };
+
+  const toggleConnectionSelection = (connectionId: number, checked: boolean): void => {
+    if (modelSelectionLocked.value) return;
+    const next = new Set(selectedConnectionIds.value);
+    if (checked) next.add(connectionId);
+    else next.delete(connectionId);
+    selectedConnectionIds.value = [...next].sort((left, right) => left - right);
   };
 
   const openRunFromHistory = (runId: string): void => {
@@ -273,6 +320,7 @@
   };
 
   const selectThread = async (thread: AgentThreadView): Promise<void> => {
+    threadSidebarVisible.value = false;
     if (currentThread.value?.id === thread.id) return;
     const selectionGeneration = ++threadSelectionGeneration;
     stopRunStream();
@@ -323,16 +371,23 @@
     loading.value = true;
     error.value = '';
     try {
-      const [threadPage, nextDefinitions, nextProviders, settings, nextConnections] = await Promise.all([
-        facade.listThreads(),
-        facade.definitions(),
-        facade.providers(),
-        facade.settings(),
-        connectionService.list(),
-      ]);
+      const [threadPage, nextDefinitions, nextProviders, settings, nextConnections, runtimeAvailability] =
+        await Promise.all([
+          facade.listThreads(),
+          facade.definitions(),
+          facade.providers(),
+          facade.settings(),
+          connectionService.list(),
+          agentApi.workspaceRuntimeAvailability().catch(() => null),
+        ]);
       threads.value = threadPage.items;
       definitions.value = nextDefinitions;
       providers.value = nextProviders;
+      settingsView.value = settings;
+      workspaceRuntimeAvailability.value = runtimeAvailability;
+      workspaceRuntimeCatalog.value = runtimeAvailability?.available
+        ? await agentApi.workspaceRuntimeCatalog().catch(() => null)
+        : null;
       const restoredModelKey = agentSurfaceSession.restoreModelKey(props.appId);
       const restoredModel = modelOptions.value.find((candidate) => candidate.key === restoredModelKey);
       const preferredModel = modelOptions.value.find(
@@ -665,8 +720,11 @@
 </script>
 
 <template>
-  <div class="relative grid h-full min-h-0 grid-cols-[224px_minmax(0,1fr)] xl:grid-cols-[224px_minmax(0,1fr)_280px]">
-    <aside class="flex min-h-0 flex-col border-r border-border/60 bg-card/45">
+  <div class="agent-surface-layout relative grid h-full min-h-0">
+    <aside
+      class="agent-thread-sidebar flex min-h-0 flex-col border-r border-border/60 bg-card/45"
+      :class="{ 'is-open': threadSidebarVisible }"
+    >
       <div class="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-3">
         <div class="flex items-center gap-2">
           <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-[10px] text-primary">
@@ -792,147 +850,280 @@
           {{ $t('agent.operations.noThreadsFound') }}
         </p>
       </div>
-
-      <div class="shrink-0 border-t border-border/70 p-3">
-        <div class="flex items-center gap-1.5 text-[11px] font-medium">
-          <i class="fa-solid fa-server text-[10px] text-text-secondary" aria-hidden="true"></i>
-          {{ $t('agent.operations.targets') }}
-          <span class="ml-auto rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary">
-            {{ selectedConnectionIds.length }}/{{ connections.length }}
-          </span>
-        </div>
-        <p class="mt-1 text-[10px] leading-4 text-text-secondary">{{ $t('agent.operations.targetsHint') }}</p>
-        <div class="mt-2 max-h-36 space-y-1 overflow-y-auto">
-          <label
-            v-for="connection in connections"
-            :key="connection.id"
-            class="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-[11px] hover:bg-background/80"
-          >
-            <input
-              v-model="selectedConnectionIds"
-              type="checkbox"
-              class="mt-0.5"
-              :value="connection.id"
-              :disabled="Boolean(run && nonTerminal.has(run.status))"
-            />
-            <span class="min-w-0 flex-1">
-              <span class="block truncate font-medium">{{ connection.name || connection.host }}</span>
-              <span class="mt-0.5 block truncate text-[10px] text-text-secondary"
-                >{{ connection.host }}:{{ connection.port }}</span
-              >
-            </span>
-          </label>
-          <p
-            v-if="connections.length === 0"
-            class="rounded-lg bg-background px-2.5 py-2.5 text-[10px] text-text-secondary"
-          >
-            {{ $t('agent.operations.noTargets') }}
-          </p>
-        </div>
-      </div>
     </aside>
 
+    <button
+      type="button"
+      class="agent-thread-backdrop absolute inset-0 z-20 hidden bg-background/55 backdrop-blur-[1px]"
+      :class="{ 'is-open': threadSidebarVisible }"
+      :aria-label="$t('agent.operations.closeThreads')"
+      @click="threadSidebarVisible = false"
+    ></button>
+
     <main class="flex min-h-0 min-w-0 flex-col bg-background">
-      <header class="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-border/60 bg-card/25 px-3.5">
-        <div class="min-w-0">
-          <div class="flex items-center gap-2">
-            <strong class="truncate text-xs">{{
-              currentThread?.title || $t('agent.operations.untitledThread')
-            }}</strong>
-            <span
-              v-if="run"
-              class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
-              :class="
-                run.status === 'running'
-                  ? 'bg-success/10 text-success'
-                  : run.status === 'awaiting_approval' || run.status === 'awaiting_budget'
-                    ? 'bg-warning/10 text-warning'
-                    : run.status === 'failed'
-                      ? 'bg-error/10 text-error'
-                      : 'bg-header text-text-secondary'
-              "
+      <header class="shrink-0 border-b border-border/60 bg-card/25">
+        <div class="flex min-h-12 items-center justify-between gap-3 px-3.5 py-2">
+          <div class="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              class="agent-thread-toggle hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border/70 bg-card text-text-secondary hover:bg-header hover:text-foreground"
+              :aria-label="$t('agent.operations.openThreads')"
+              @click="threadSidebarVisible = true"
             >
-              {{ $t(`agent.tasks.runStatus.${run.status}`) }}
-            </span>
-          </div>
-          <div class="mt-1.5 flex min-w-0 items-center gap-1.5 text-[10px] text-text-secondary">
-            <template v-if="modelSelectionLocked && run">
-              <span class="flex shrink-0 items-center gap-1 font-medium text-foreground/80">
-                <i class="fa-solid fa-lock text-[8px]" aria-hidden="true"></i>
-                {{ $t('agent.operations.activeRunModel') }}
-              </span>
-              <span class="truncate">{{ activeRunProviderName }} · {{ run.definition.model.modelId }}</span>
-            </template>
-            <template v-else-if="modelOptions.length">
-              <span class="shrink-0 font-medium text-foreground/70">{{ $t('agent.operations.nextRunModel') }}</span>
-              <select
-                :value="selectedModelKey"
-                class="min-w-0 max-w-56 truncate rounded-lg border border-border/70 bg-card px-2 py-1 text-[10px] text-foreground outline-none hover:bg-header focus:border-primary/50"
-                :aria-label="$t('agent.operations.runModel')"
-                :title="$t('agent.operations.runModelHint')"
-                :disabled="busy"
-                @change="setModelSelection(($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="option in modelOptions" :key="option.key" :value="option.key">
-                  {{ option.provider.displayName }} · {{ option.model.id }}
-                </option>
-              </select>
-              <span v-if="providerSelection" class="hidden shrink-0 items-center gap-1 lg:flex">
-                <span class="rounded bg-header px-1.5 py-0.5">{{
-                  $t('agent.operations.contextShort', { value: compactTokens(providerSelection.model.contextWindow) })
-                }}</span>
-                <span class="rounded bg-header px-1.5 py-0.5">
-                  {{
-                    providerSelection.model.supportsTools
-                      ? $t('agent.operations.toolsOn')
-                      : $t('agent.operations.modelOnly')
-                  }}
+              <i class="fa-regular fa-comments text-[11px]" aria-hidden="true"></i>
+            </button>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <strong class="truncate text-xs">{{
+                  currentThread?.title || $t('agent.operations.untitledThread')
+                }}</strong>
+                <span
+                  v-if="run"
+                  class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+                  :class="
+                    run.status === 'running'
+                      ? 'bg-success/10 text-success'
+                      : run.status === 'awaiting_approval' || run.status === 'awaiting_budget'
+                        ? 'bg-warning/10 text-warning'
+                        : run.status === 'failed'
+                          ? 'bg-error/10 text-error'
+                          : 'bg-header text-text-secondary'
+                  "
+                >
+                  {{ $t(`agent.tasks.runStatus.${run.status}`) }}
                 </span>
-              </span>
-            </template>
-            <span v-else>{{ $t('agent.operations.providerMissing') }}</span>
-            <span v-if="selectedConnectionIds.length" class="shrink-0">
-              · {{ $t('agent.operations.targetCount', { count: selectedConnectionIds.length }) }}
-            </span>
+              </div>
+              <div class="mt-1 text-[10px] text-text-secondary">
+                {{
+                  modelSelectionLocked
+                    ? $t('agent.operations.activeRunConfiguration')
+                    : $t('agent.operations.nextRunConfiguration')
+                }}
+              </div>
+            </div>
+          </div>
+          <div class="flex shrink-0 items-center gap-1.5">
+            <select
+              v-if="threadRuns.length > 1 && run"
+              :value="run.id"
+              class="agent-run-history h-8 max-w-40 rounded-lg border border-border/70 bg-card px-2.5 text-[10px] text-text-secondary outline-none hover:bg-header"
+              :aria-label="$t('agent.tasks.history')"
+              @change="openRunFromHistory(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="item in threadRuns" :key="item.id" :value="item.id">
+                {{ $t(`agent.tasks.runStatus.${item.status}`) }} · {{ item.definition.model.modelId }}
+              </option>
+            </select>
+            <button
+              v-if="run && pendingApprovals.length"
+              type="button"
+              class="flex h-8 items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-2.5 text-[10px] font-semibold text-warning hover:bg-warning/15"
+              :aria-label="$t('agent.approvals.openPending', { count: pendingApprovals.length })"
+              @click="openRunDetail(run)"
+            >
+              <i class="fa-solid fa-shield-halved text-[8px]" aria-hidden="true"></i>
+              {{ pendingApprovals.length }}
+            </button>
+            <button
+              v-if="run"
+              type="button"
+              class="flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-card px-2.5 text-[10px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
+              @click="openRunDetail(run)"
+            >
+              <i class="fa-solid fa-bars-progress text-[8px]" aria-hidden="true"></i>
+              <span class="agent-detail-label">{{ $t('agent.tasks.openDetail') }}</span>
+            </button>
           </div>
         </div>
-        <div class="flex shrink-0 items-center gap-1.5">
-          <select
-            v-if="threadRuns.length > 1 && run"
-            :value="run.id"
-            class="hidden h-8 max-w-40 rounded-lg border border-border/70 bg-card px-2.5 text-[10px] text-text-secondary outline-none hover:bg-header md:block"
-            :aria-label="$t('agent.tasks.history')"
-            @change="openRunFromHistory(($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="item in threadRuns" :key="item.id" :value="item.id">
-              {{ $t(`agent.tasks.runStatus.${item.status}`) }} · {{ item.definition.model.modelId }}
-            </option>
-          </select>
-          <button
-            v-if="run && pendingApprovals.length"
-            type="button"
-            class="flex h-8 items-center gap-1.5 rounded-lg border border-warning/40 bg-warning/10 px-2.5 text-[10px] font-semibold text-warning hover:bg-warning/15"
-            :aria-label="$t('agent.approvals.openPending', { count: pendingApprovals.length })"
-            @click="openRunDetail(run)"
-          >
-            <i class="fa-solid fa-shield-halved text-[8px]" aria-hidden="true"></i>
-            {{ pendingApprovals.length }}
-          </button>
-          <button
-            v-if="run"
-            type="button"
-            class="flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-card px-2.5 text-[10px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
-            @click="openRunDetail(run)"
-          >
-            <i class="fa-solid fa-bars-progress text-[8px]" aria-hidden="true"></i>
-            {{ $t('agent.tasks.openDetail') }}
-          </button>
-          <span
-            v-if="attachments.length"
-            class="hidden rounded-full bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary sm:inline"
-          >
-            <i class="fa-solid fa-paperclip mr-1" aria-hidden="true"></i>{{ attachments.length }}
+
+        <div class="agent-run-config flex min-h-11 items-center gap-2 border-t border-border/40 px-3.5 py-1.5">
+          <span class="shrink-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
+            {{ modelSelectionLocked ? $t('agent.operations.activeRun') : $t('agent.operations.nextRun') }}
           </span>
+
+          <div class="flex min-w-0 items-center gap-1.5 rounded-lg bg-background/70 px-2 py-1.5">
+            <i class="fa-solid fa-microchip shrink-0 text-[9px] text-text-secondary" aria-hidden="true"></i>
+            <span class="agent-config-label shrink-0 text-[9px] font-medium text-text-secondary">{{
+              $t('agent.operations.model')
+            }}</span>
+            <template v-if="modelSelectionLocked && run">
+              <i class="fa-solid fa-lock shrink-0 text-[7px] text-text-secondary" aria-hidden="true"></i>
+              <span class="max-w-48 truncate text-[10px] font-medium">
+                {{ activeRunProviderName }} · {{ run.definition.model.modelId }}
+              </span>
+            </template>
+            <select
+              v-else-if="modelOptions.length"
+              :value="selectedModelKey"
+              class="min-w-0 max-w-56 truncate bg-transparent text-[10px] font-medium text-foreground outline-none"
+              :aria-label="$t('agent.operations.runModel')"
+              :title="$t('agent.operations.runModelHint')"
+              :disabled="busy"
+              @change="setModelSelection(($event.target as HTMLSelectElement).value)"
+            >
+              <option v-for="option in modelOptions" :key="option.key" :value="option.key">
+                {{ option.provider.displayName }} · {{ option.model.id }}
+              </option>
+            </select>
+            <span v-else class="text-[10px] text-text-secondary">{{ $t('agent.operations.providerMissing') }}</span>
+            <span v-if="providerSelection && !modelSelectionLocked" class="agent-model-meta hidden shrink-0 gap-1">
+              <span class="rounded bg-header px-1.5 py-0.5 text-[9px] text-text-secondary">{{
+                $t('agent.operations.contextShort', { value: compactTokens(providerSelection.model.contextWindow) })
+              }}</span>
+              <span class="rounded bg-header px-1.5 py-0.5 text-[9px] text-text-secondary">
+                {{
+                  providerSelection.model.supportsTools
+                    ? $t('agent.operations.toolsOn')
+                    : $t('agent.operations.modelOnly')
+                }}
+              </span>
+            </span>
+          </div>
+
+          <details class="relative shrink-0">
+            <summary
+              role="button"
+              class="agent-config-summary flex cursor-pointer list-none items-center gap-1.5 rounded-lg bg-background/70 px-2 py-1.5 text-[10px] hover:bg-header"
+              :aria-label="$t('agent.operations.environment')"
+              :title="$t('agent.operations.environmentHint')"
+            >
+              <span class="h-1.5 w-1.5 rounded-full" :class="environmentStatusClass"></span>
+              <span class="agent-config-label text-[9px] font-medium text-text-secondary">{{
+                $t('agent.operations.environment')
+              }}</span>
+              <span class="max-w-36 truncate font-medium">{{ environmentLabel }}</span>
+              <i class="fa-solid fa-chevron-down text-[7px] text-text-secondary" aria-hidden="true"></i>
+            </summary>
+            <div
+              class="absolute left-0 top-[calc(100%+6px)] z-40 w-80 max-w-[min(80vw,320px)] rounded-xl border border-border/70 bg-background p-3 shadow-xl"
+            >
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <div class="text-[11px] font-semibold">{{ $t('agent.operations.environment') }}</div>
+                  <p class="mt-1 text-[10px] leading-4 text-text-secondary">
+                    {{ $t('agent.operations.environmentHint') }}
+                  </p>
+                </div>
+                <span
+                  class="shrink-0 rounded-full px-2 py-1 text-[9px] font-medium"
+                  :class="
+                    workspaceRuntimeAvailability?.available
+                      ? 'bg-success/10 text-success'
+                      : 'bg-header text-text-secondary'
+                  "
+                >
+                  {{
+                    workspaceRuntimeAvailability?.available
+                      ? $t('agent.operations.environmentRunnerReady')
+                      : $t('agent.operations.environmentUnavailable')
+                  }}
+                </span>
+              </div>
+              <div class="mt-3 border-t border-border/50 pt-3">
+                <div class="text-[9px] font-semibold uppercase tracking-[0.1em] text-text-secondary">
+                  {{ $t('agent.operations.environmentRecipes') }}
+                </div>
+                <div v-if="enabledEnvironmentRecipes.length" class="mt-2 flex flex-wrap gap-1.5">
+                  <span
+                    v-for="recipe in enabledEnvironmentRecipes"
+                    :key="recipe.id"
+                    class="rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary"
+                  >
+                    {{ recipe.displayName }}
+                  </span>
+                </div>
+                <p v-else class="mt-2 text-[10px] text-text-secondary">
+                  {{ $t('agent.operations.environmentNoRecipes') }}
+                </p>
+              </div>
+              <div class="mt-3 border-t border-border/50 pt-3">
+                <div class="text-[9px] font-semibold uppercase tracking-[0.1em] text-text-secondary">
+                  {{ $t('agent.operations.environmentToolchain') }}
+                </div>
+                <p class="mt-2 text-[10px] text-foreground/85">
+                  {{
+                    environmentToolDefaults.length
+                      ? environmentToolDefaults.join(' · ')
+                      : $t('agent.operations.environmentNoToolchain')
+                  }}
+                </p>
+                <p class="mt-2 text-[10px] text-text-secondary">
+                  {{
+                    $t('agent.operations.environmentProfiles', {
+                      acp: settingsView?.effectiveSettings.workspaceRuntime.acpProfiles.length ?? 0,
+                      browser: settingsView?.effectiveSettings.browser.targets.length ?? 0,
+                    })
+                  }}
+                </p>
+              </div>
+              <p class="mt-3 rounded-lg bg-card/70 px-2.5 py-2 text-[10px] leading-4 text-text-secondary">
+                {{ $t('agent.operations.environmentRunContract') }}
+              </p>
+            </div>
+          </details>
+
+          <details class="relative shrink-0">
+            <summary
+              role="button"
+              class="agent-config-summary flex cursor-pointer list-none items-center gap-1.5 rounded-lg bg-background/70 px-2 py-1.5 text-[10px] hover:bg-header"
+              :aria-label="$t('agent.operations.targets')"
+            >
+              <i class="fa-solid fa-server text-[8px] text-text-secondary" aria-hidden="true"></i>
+              <span class="agent-config-label text-[9px] font-medium text-text-secondary">{{
+                $t('agent.operations.targets')
+              }}</span>
+              <span class="font-medium">{{ displayedConnectionIds.length }}/{{ connections.length }}</span>
+              <i
+                v-if="modelSelectionLocked"
+                class="fa-solid fa-lock text-[7px] text-text-secondary"
+                aria-hidden="true"
+              ></i>
+              <i v-else class="fa-solid fa-chevron-down text-[7px] text-text-secondary" aria-hidden="true"></i>
+            </summary>
+            <div
+              class="absolute right-0 top-[calc(100%+6px)] z-40 w-72 max-w-[min(80vw,288px)] rounded-xl border border-border/70 bg-background p-3 shadow-xl"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <div>
+                  <div class="text-[11px] font-semibold">{{ $t('agent.operations.targets') }}</div>
+                  <p class="mt-1 text-[10px] leading-4 text-text-secondary">{{ $t('agent.operations.targetsHint') }}</p>
+                </div>
+                <span
+                  v-if="modelSelectionLocked"
+                  class="rounded-full bg-header px-2 py-1 text-[9px] text-text-secondary"
+                >
+                  <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i>{{ $t('agent.operations.frozen') }}
+                </span>
+              </div>
+              <div class="mt-3 max-h-52 space-y-1 overflow-y-auto">
+                <label
+                  v-for="connection in connections"
+                  :key="connection.id"
+                  class="flex items-start gap-2 rounded-lg px-2 py-2 text-[11px] hover:bg-card/70"
+                >
+                  <input
+                    type="checkbox"
+                    class="mt-0.5"
+                    :checked="displayedConnectionIds.includes(connection.id)"
+                    :disabled="modelSelectionLocked"
+                    @change="toggleConnectionSelection(connection.id, ($event.target as HTMLInputElement).checked)"
+                  />
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate font-medium">{{ connection.name || connection.host }}</span>
+                    <span class="mt-0.5 block truncate text-[10px] text-text-secondary">{{
+                      `${connection.host}:${connection.port}`
+                    }}</span>
+                  </span>
+                </label>
+                <p
+                  v-if="connections.length === 0"
+                  class="rounded-lg bg-card/70 px-2.5 py-2.5 text-[10px] text-text-secondary"
+                >
+                  {{ $t('agent.operations.noTargets') }}
+                </p>
+              </div>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -985,7 +1176,7 @@
       </div>
     </main>
 
-    <div class="hidden min-h-0 xl:block">
+    <div class="agent-task-rail min-h-0">
       <TaskRail
         :current="run"
         :background-runs="backgroundRuns"
@@ -1021,3 +1212,84 @@
     />
   </div>
 </template>
+
+<style scoped>
+  .agent-surface-layout {
+    grid-template-columns: 224px minmax(0, 1fr) 280px;
+  }
+
+  .agent-model-meta {
+    display: flex;
+  }
+
+  .agent-config-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  @container agent-hub-window (max-width: 1040px) {
+    .agent-surface-layout {
+      grid-template-columns: 224px minmax(0, 1fr);
+    }
+
+    .agent-task-rail {
+      display: none;
+    }
+
+    .agent-model-meta {
+      display: none;
+    }
+  }
+
+  @container agent-hub-window (max-width: 880px) {
+    .agent-run-history {
+      display: none;
+    }
+  }
+
+  @container agent-hub-window (max-width: 760px) {
+    .agent-surface-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .agent-thread-sidebar {
+      position: absolute;
+      inset: 0 auto 0 0;
+      z-index: 30;
+      width: min(280px, calc(100% - 48px));
+      transform: translateX(-102%);
+      box-shadow: 12px 0 32px rgb(0 0 0 / 0.18);
+      transition: transform 160ms ease;
+    }
+
+    .agent-thread-sidebar.is-open {
+      transform: translateX(0);
+    }
+
+    .agent-thread-backdrop.is-open {
+      display: block;
+    }
+
+    .agent-thread-toggle {
+      display: flex;
+    }
+
+    .agent-config-label {
+      display: none;
+    }
+
+    .agent-run-config {
+      flex-wrap: wrap;
+      align-content: center;
+    }
+
+    .agent-detail-label {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .agent-thread-sidebar {
+      transition: none;
+    }
+  }
+</style>

@@ -26,7 +26,7 @@ type RunView = {
   id: string;
   status: string;
   version: number;
-  definition: { agentDefinitionId: string; model?: { modelId: string } };
+  definition: { agentDefinitionId: string; model?: { modelId: string }; connectionIds: number[] };
 };
 
 const repositoryUrl = `${E2E_URLS.pluginRepositoryOrigin}/catalog.json`;
@@ -309,6 +309,71 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
     await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
 
+    await step('the Run configuration bar exposes production-backed environment state', async () => {
+      await expect(hub.getByText('Next Run', { exact: true })).toBeVisible();
+      const environment = hub.locator('summary[aria-label="Environment"]');
+      await expect(environment).toBeVisible();
+      await expect(environment).toContainText('Runner unavailable');
+      await environment.click();
+      await expect(
+        hub.getByText(
+          'Workspace profiles are chosen when a Run creates a workspace, then frozen and shown in Run details.',
+        ),
+      ).toBeVisible();
+      await environment.click();
+    });
+
+    await step('the resize grip drives container-responsive Agent layout and persists bounds', async () => {
+      const resizeHandle = hub.getByTestId('agent-resize-handle');
+      await expect(resizeHandle).toBeVisible();
+      const initialBounds = await hub.boundingBox();
+      const initialHandle = await resizeHandle.boundingBox();
+      expect(initialBounds).not.toBeNull();
+      expect(initialHandle).not.toBeNull();
+      expect(initialBounds!.width).toBeGreaterThan(1040);
+
+      await page.mouse.move(initialHandle!.x + initialHandle!.width / 2, initialHandle!.y + initialHandle!.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(
+        initialHandle!.x + initialHandle!.width / 2 - 390,
+        initialHandle!.y + initialHandle!.height / 2,
+      );
+      await page.mouse.up();
+
+      const narrowBounds = await hub.boundingBox();
+      expect(narrowBounds).not.toBeNull();
+      expect(narrowBounds!.width).toBeLessThanOrEqual(760);
+      await expect(hub.getByText('Execution state', { exact: true })).toBeHidden();
+      const openThreads = hub.getByRole('button', { name: 'Open conversations', exact: true });
+      await expect(openThreads).toBeVisible();
+      await openThreads.click();
+      await expect(hub.getByPlaceholder('Search conversations', { exact: true })).toBeVisible();
+      await hub.getByRole('button', { name: 'Close conversations', exact: true }).click();
+
+      await page.reload();
+      await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
+      await expect(hub).toBeVisible();
+      const restoredBounds = await hub.boundingBox();
+      expect(restoredBounds).not.toBeNull();
+      expect(Math.abs(restoredBounds!.width - narrowBounds!.width)).toBeLessThan(2);
+      await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeVisible();
+
+      const restoredHandle = await hub.getByTestId('agent-resize-handle').boundingBox();
+      expect(restoredHandle).not.toBeNull();
+      await page.mouse.move(
+        restoredHandle!.x + restoredHandle!.width / 2,
+        restoredHandle!.y + restoredHandle!.height / 2,
+      );
+      await page.mouse.down();
+      await page.mouse.move(
+        restoredHandle!.x + restoredHandle!.width / 2 + (initialBounds!.width - restoredBounds!.width),
+        restoredHandle!.y + restoredHandle!.height / 2,
+      );
+      await page.mouse.up();
+      await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
+      await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeHidden();
+    });
+
     await step('users can name a new conversation and return to the existing thread', async () => {
       await hub.getByRole('button', { name: 'New', exact: true }).click();
       await hub.getByLabel('Conversation title', { exact: true }).fill('UI named thread');
@@ -390,8 +455,11 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     });
 
     await step('pending mutation approval remains actionable when the TaskRail is hidden', async () => {
+      const targets = hub.locator('summary[aria-label="SSH targets"]');
+      await targets.click();
       const targetRow = hub.getByText('E2E SSH', { exact: true }).locator('..').locator('..');
       await targetRow.getByRole('checkbox').check();
+      await targets.click();
       await restoredComposer.fill(
         `Request the bounded shell approval exactly once. E2E_APPROVAL_CONNECTION_ID=${connectionId}`,
       );
@@ -405,6 +473,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       const approvalRunPage = (await approvalRunsResponse.json()) as Envelope<{ items: RunView[] }>;
       const approvalRun = approvalRunPage.data.items.find((item) => item.status === 'awaiting_approval');
       expect(approvalRun).toBeDefined();
+      expect(approvalRun!.definition.connectionIds).toEqual([connectionId]);
 
       await page.setViewportSize({ width: 1000, height: 800 });
       await hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true }).click();

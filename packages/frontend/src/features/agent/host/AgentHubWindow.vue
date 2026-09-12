@@ -11,6 +11,7 @@
   const ArtifactLibraryView = defineAsyncComponent(() => import('../files/ArtifactLibraryView.vue'));
 
   const props = defineProps<{ summary: HostSummaryView }>();
+  const emit = defineEmits<{ layoutChange: [] }>();
   const state = agentWindowManager.state;
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
   const activeBuiltinView = computed(() => (activeApp.value ? builtinAppView(activeApp.value.id) : null));
@@ -54,6 +55,7 @@
     if (target.hasPointerCapture(event.pointerId)) target.releasePointerCapture(event.pointerId);
     pointerId = null;
     mode = null;
+    emit('layoutChange');
   };
 
   const switchApp = (appId: string) => {
@@ -81,7 +83,7 @@
 <template>
   <section
     v-if="visible"
-    class="fixed z-30 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl"
+    class="agent-hub-window fixed z-30 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl"
     :style="style"
     :aria-label="$t('agent.hub.title')"
   >
@@ -97,7 +99,7 @@
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm text-primary">
           <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
         </div>
-        <div class="hidden min-w-0 sm:block">
+        <div class="agent-hub-title min-w-0">
           <div class="flex items-center gap-2">
             <span class="text-sm font-semibold leading-none">{{ $t('agent.hub.title') }}</span>
             <span
@@ -128,7 +130,7 @@
           @click="agentWindowManager.setHubView('conversation')"
         >
           <i class="fa-regular fa-message text-[10px]" aria-hidden="true"></i>
-          <span class="hidden sm:inline">{{ $t('agent.hub.conversation') }}</span>
+          <span class="agent-hub-nav-label">{{ $t('agent.hub.conversation') }}</span>
         </button>
         <button
           type="button"
@@ -141,14 +143,14 @@
           @click="agentWindowManager.setHubView('files')"
         >
           <i class="fa-regular fa-folder-open text-[10px]" aria-hidden="true"></i>
-          <span class="hidden sm:inline">{{ $t('agent.hub.files') }}</span>
+          <span class="agent-hub-nav-label">{{ $t('agent.hub.files') }}</span>
         </button>
       </nav>
 
       <div class="flex shrink-0 items-center gap-0.5" @pointerdown.stop>
         <span
           v-if="summary.totalPendingApprovals > 0"
-          class="mr-1 hidden items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-[9px] font-medium text-warning lg:flex"
+          class="agent-hub-approval-badge mr-1 flex items-center gap-1 rounded-full bg-warning/10 px-2 py-1 text-[9px] font-medium text-warning"
         >
           <span class="h-1.5 w-1.5 rounded-full bg-warning"></span>
           {{ $t('agent.hub.approvals', { count: summary.totalPendingApprovals }) }}
@@ -182,7 +184,7 @@
 
     <div
       v-if="enabledApps.length > 1"
-      class="hidden h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/50 bg-card/35 px-3.5 sm:flex"
+      class="agent-hub-activity flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto border-b border-border/50 bg-card/35 px-3.5"
       :aria-label="$t('agent.hub.appActivity')"
       @pointerdown.stop
     >
@@ -265,12 +267,41 @@
     <button
       v-if="!state.maximized"
       type="button"
-      class="absolute bottom-0 right-0 h-5 w-5 cursor-nwse-resize touch-none bg-transparent"
+      data-testid="agent-resize-handle"
+      class="group absolute bottom-0 right-0 z-40 h-8 w-8 cursor-nwse-resize touch-none rounded-tl-xl bg-transparent outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
       :aria-label="$t('agent.hub.resize')"
       @pointerdown.stop="begin($event, 'resize')"
       @pointermove="move"
       @pointerup="finish"
       @pointercancel="finish"
-    ></button>
+    >
+      <span
+        class="absolute bottom-[7px] right-[5px] h-px w-4 -rotate-45 rounded-full bg-text-secondary/35 transition-colors group-hover:bg-primary/70"
+      ></span>
+      <span
+        class="absolute bottom-[6px] right-[11px] h-px w-2.5 -rotate-45 rounded-full bg-text-secondary/25 transition-colors group-hover:bg-primary/50"
+      ></span>
+    </button>
   </section>
 </template>
+
+<style scoped>
+  .agent-hub-window {
+    container-type: inline-size;
+    container-name: agent-hub-window;
+  }
+
+  @container agent-hub-window (max-width: 900px) {
+    .agent-hub-approval-badge {
+      display: none;
+    }
+  }
+
+  @container agent-hub-window (max-width: 700px) {
+    .agent-hub-title,
+    .agent-hub-nav-label,
+    .agent-hub-activity {
+      display: none;
+    }
+  }
+</style>

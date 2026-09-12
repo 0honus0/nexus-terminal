@@ -49,7 +49,7 @@
 <template>
   <div
     v-if="visible"
-    class="absolute inset-0 z-10 bg-background/35 backdrop-blur-[1px] xl:hidden"
+    class="agent-detail-backdrop absolute inset-0 z-10 bg-background/35 backdrop-blur-[1px]"
     aria-hidden="true"
     @click="$emit('close')"
   ></div>
@@ -233,3 +233,11 @@
     </div>
   </aside>
 </template>
+
+<style scoped>
+  @container agent-hub-window (min-width: 1041px) {
+    .agent-detail-backdrop {
+      display: none;
+    }
+  }
+</style>
