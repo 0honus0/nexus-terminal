@@ -37,7 +37,7 @@ importers:
         specifier: ^3.9.6
         version: 3.9.6
 
-  packages/agent-runtime:
+  packages/agent-runner:
     dependencies:
       semver:
         specifier: 7.7.2
@@ -212,6 +212,12 @@ importers:
       typescript:
         specifier: catalog:node-build
         version: 7.0.2
+
+  packages/e2e:
+    devDependencies:
+      '@playwright/test':
+        specifier: 1.63.0
+        version: 1.63.0
 
   packages/frontend:
     dependencies:
@@ -399,12 +405,6 @@ importers:
       vue-tsc:
         specifier: ^3.3.11
         version: 3.3.11(@typescript/typescript6@6.0.2)
-
-  packages/e2e:
-    devDependencies:
-      '@playwright/test':
-        specifier: 1.63.0
-        version: 1.63.0
 
 packages:
 

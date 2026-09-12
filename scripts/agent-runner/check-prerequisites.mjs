@@ -20,37 +20,35 @@ const forbidText = (relative, needle, message) => {
   if (read(relative).includes(needle)) failures.push(`${relative}: ${message}`);
 };
 
-const catalog = JSON.parse(read('scripts/docker/agent-runtime/catalog/catalog.json'));
+const catalog = JSON.parse(read('scripts/docker/agent-runner/catalog/catalog.json'));
 const miseSources = (catalog.packs ?? [])
   .flatMap((pack) => Object.values(pack.downloadRefByArch ?? {}))
   .filter((source) => typeof source === 'string' && source.startsWith('mise://'));
 const miseVersions = new Set(miseSources.map((source) => /^mise:\/\/([^/]+)\//.exec(source)?.[1]).filter(Boolean));
 if (miseVersions.size !== 1) {
-  failures.push(
-    'scripts/docker/agent-runtime/catalog/catalog.json: all mise Tool Packs must pin one installer version',
-  );
+  failures.push('scripts/docker/agent-runner/catalog/catalog.json: all mise Tool Packs must pin one installer version');
 }
 const [miseVersion = ''] = [...miseVersions];
 if (miseVersion) {
   requireText(
-    'scripts/agent-runtime/prepare-ubuntu-host.sh',
+    'scripts/agent-runner/prepare-ubuntu-host.sh',
     `MISE_VERSION=${miseVersion}`,
     'host mise version must match the Tool Catalog installer pin',
   );
   requireText(
-    'scripts/agent-runtime/prepare-ubuntu-host.sh',
+    'scripts/agent-runner/prepare-ubuntu-host.sh',
     'mise_stable_bin=/usr/local/bin/mise',
     'host must publish the checked mise binary at the stable command path',
   );
   forbidText(
-    'packages/agent-runtime/src/controller/pack-installer.ts',
+    'packages/agent-runner/src/controller/pack-installer.ts',
     miseVersion,
     'mise release policy belongs in Catalog/prepare/check, not Runner runtime code',
   );
 }
 
 const { version, sha256 } = expected.bubblewrap;
-for (const relative of ['Dockerfile', 'scripts/docker/agent-runtime/Dockerfile']) {
+for (const relative of ['Dockerfile', 'scripts/docker/agent-runner/Dockerfile']) {
   requireText(relative, `ARG BWRAP_VERSION=${version}`, `Bubblewrap version must be ${version}`);
   requireText(relative, `ARG BWRAP_SHA256=${sha256}`, 'Bubblewrap release SHA-256 is out of sync');
   requireText(
@@ -60,31 +58,31 @@ for (const relative of ['Dockerfile', 'scripts/docker/agent-runtime/Dockerfile']
   );
 }
 requireText(
-  'scripts/agent-runtime/prepare-ubuntu-host.sh',
+  'scripts/agent-runner/prepare-ubuntu-host.sh',
   `BWRAP_VERSION=${version}`,
   'host Bubblewrap version is out of sync',
 );
 requireText(
-  'scripts/agent-runtime/prepare-ubuntu-host.sh',
+  'scripts/agent-runner/prepare-ubuntu-host.sh',
   `BWRAP_SHA256=${sha256}`,
   'host Bubblewrap SHA-256 is out of sync',
 );
 requireText(
-  'scripts/agent-runtime/prepare-ubuntu-host.sh',
+  'scripts/agent-runner/prepare-ubuntu-host.sh',
   'bwrap_bin=/usr/local/bin/bwrap',
   'host must install the checked binary at the stable command path',
 );
 requireText(
-  'scripts/agent-runtime/apparmor/nexus-bwrap-userns-restrict',
+  'scripts/agent-runner/apparmor/nexus-bwrap-userns-restrict',
   'profile nexus_bwrap /usr/local/bin/bwrap ',
   'AppArmor profile must target the stable checked binary path',
 );
 
 for (const relative of [
-  'packages/agent-runtime/src/controller/sandbox-manager.ts',
-  'packages/agent-runtime/src/controller/plugin-runner-runtime.ts',
-  'packages/agent-runtime/src/controller/pack-installer.ts',
-  'packages/agent-runtime/src/index.ts',
+  'packages/agent-runner/src/controller/sandbox-manager.ts',
+  'packages/agent-runner/src/controller/plugin-runner-runtime.ts',
+  'packages/agent-runner/src/controller/pack-installer.ts',
+  'packages/agent-runner/src/index.ts',
   'packages/backend/src/infrastructure/agent/plugins/local-plugin-backend-runtime.adapter.ts',
 ]) {
   forbidText(relative, version, 'sandbox release policy belongs in build/check scripts, not runtime code');

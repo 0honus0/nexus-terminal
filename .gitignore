@@ -47,8 +47,8 @@ scripts/*
 !scripts/e2e/**
 !scripts/docker/
 !scripts/docker/**
-!scripts/agent-runtime/
-!scripts/agent-runtime/**
+!scripts/agent-runner/
+!scripts/agent-runner/**
 !scripts/check-test-policy.mjs
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/
@@ -188,6 +188,3 @@ electron-app/dist_electron/
 !scripts/format-changed.mjs
 
 # Agent plugin source/build tooling (generated signed packages stay outside the repo)
-!scripts/agent-plugins/
-!scripts/agent-plugins/**
-/agent-plugins/.dist/

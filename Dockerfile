@@ -30,7 +30,7 @@ ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/agent-runtime/package.json ./packages/agent-runtime/package.json
+COPY packages/agent-runner/package.json ./packages/agent-runner/package.json
 COPY packages/backend/package.json ./packages/backend/package.json
 COPY packages/frontend/package.json ./packages/frontend/package.json
 COPY packages/e2e/package.json ./packages/e2e/package.json

@@ -613,7 +613,7 @@ Runtime
 packages/backend/src/modules/agent/runtime/
 
 Runner
-packages/agent-runtime/src/
+packages/agent-runner/src/
 
 Frontend Agent
 packages/frontend/src/features/agent/
@@ -638,11 +638,11 @@ packages/backend/src/infrastructure/agent/plugins/local-plugin-backend-runtime.a
 packages/backend/src/infrastructure/agent/plugins/plugin-backend-sandbox.worker.ts
 packages/backend/src/infrastructure/agent/workspace-runtime/runner-http.adapter.ts
 
-packages/agent-runtime/src/controller/sandbox-engine.ts
-packages/agent-runtime/src/controller/plugin-runner-runtime.ts
-packages/agent-runtime/src/controller/workspace-broker.ts
-packages/agent-runtime/src/controller/server.ts
-packages/agent-runtime/src/worker/plugin-runner-sandbox.worker.ts
+packages/agent-runner/src/controller/sandbox-engine.ts
+packages/agent-runner/src/controller/plugin-runner-runtime.ts
+packages/agent-runner/src/controller/workspace-broker.ts
+packages/agent-runner/src/controller/server.ts
+packages/agent-runner/src/worker/plugin-runner-sandbox.worker.ts
 
 packages/frontend/src/features/agent/runtime/TaskRail.vue
 packages/frontend/src/features/agent/host/app-bridge.ts
@@ -676,7 +676,7 @@ packages/frontend/src/features/agent/api/agent-api.ts
 近期验证中已通过过：
 
 ```text
-agent-runtime build
+agent-runner build
 backend build
 backend architecture check
 frontend architecture/i18n/typecheck/build（前一轮）
@@ -731,7 +731,7 @@ no module cycles
    - `ARCHITECTURE.md` 与 `IMPLEMENTATION.md` 已同步三 target SDK/protocol freeze、Workspace root 产品入口、Runner target、Workspace ACL、Workspace↔Artifact 与 Capability 边界。
 
 7. 本地/远程验证状态：
-   - `packages/agent-runtime` build：**通过**；Backend build：**通过**；Frontend architecture/i18n/`vue-tsc`/Vite/bundle budget：**通过（318 source files；Initial JS 207.0/260.0 KiB gzip）**；
+   - `packages/agent-runner` build：**通过**；Backend build：**通过**；Frontend architecture/i18n/`vue-tsc`/Vite/bundle budget：**通过（318 source files；Initial JS 207.0/260.0 KiB gzip）**；
    - Backend architecture：**通过（426 files，无 forbidden layer edge/source cycle/module cycle）**；
    - root package-management guard：**通过**；root test policy：**通过（72 E2E spec files / 64 functional screenshot declarations）**；
    - E2E groups generator/check：**通过（70 grouped specs / 8 groups，exactly once）**；
@@ -756,7 +756,7 @@ no module cycles
    - Subagent/Memory：repository、policy/service/scheduler、mailbox/shared facts、Memory review/import 继续由 composition root 组装并暴露窄 facade；
    - Plugin：manifest 新增 versioned `agents[]`；安装/升级/卸载通过 hook 动态注册 AgentDefinition。无 Frontend target 且声明 AgentDefinition 的插件使用 host-owned generic Agent surface；自定义 Frontend target 继续 isolated iframe；
    - Remote Plugin：Agent Settings 配置 repository；Backend 以 OutboundPolicy + DNS pinning + redirect deny + bounded HTTP 读取 catalog/package，stage 先校验 catalog size/SHA-256，再进入显式 trusted publisher + Ed25519 signature + `files.json` hash 链。catalog discovery 不等于 publisher trust；migration 53 将 stage source 泛化为 artifact/remote；
-   - 首个官方 preset：`agent-plugins/presets/nexus.developer/`，App `nexus.developer`，AgentDefinition `developer.default`，只携带 manifest + Skill，使用 generic Agent UI。`scripts/agent-plugins/build-package.mjs` 用仓库外 Ed25519 私钥生成可复现签名包；E2E 覆盖远程 catalog → trust → stage/verify/install → enable → dynamic AgentDefinition → real Run → `agent-developer-preset.png`。
+   - 首个官方 preset：独立仓库 `0honus0/nexus-agent-plugins` 的 `plugins/nexus.developer/`，App `nexus.developer`，AgentDefinition `developer.default`，只携带 manifest + Skill，使用 generic Agent UI。插件仓的 `scripts/build-package.mjs` 用仓库外 Ed25519 私钥生成可复现签名包和 release catalog；主仓普通 E2E 使用 `packages/e2e/fixtures/agent/plugin-source/nexus.developer/` 的协议 fixture，不依赖外部仓库网络，再覆盖远程 catalog → trust → stage/verify/install → enable → dynamic AgentDefinition → real Run → `agent-developer-preset.png`。
 
 10. 本轮文档/guard 审核：**已修正已知正式矛盾**。
 

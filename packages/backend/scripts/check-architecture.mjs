@@ -367,12 +367,12 @@ if (!fs.existsSync(browserRuntimePath)) {
     );
   }
 }
-const agentRuntimePackagePath = path.resolve('../agent-runtime/package.json');
-if (fs.existsSync(agentRuntimePackagePath)) {
-  const agentRuntimePackage = JSON.parse(fs.readFileSync(agentRuntimePackagePath, 'utf8'));
-  if (agentRuntimePackage.dependencies?.['puppeteer-core'] || agentRuntimePackage.devDependencies?.['puppeteer-core']) {
+const agentRunnerPackagePath = path.resolve('../agent-runner/package.json');
+if (fs.existsSync(agentRunnerPackagePath)) {
+  const agentRunnerPackage = JSON.parse(fs.readFileSync(agentRunnerPackagePath, 'utf8'));
+  if (agentRunnerPackage.dependencies?.['puppeteer-core'] || agentRunnerPackage.devDependencies?.['puppeteer-core']) {
     failures.push(
-      'packages/agent-runtime/package.json: Runner must remain a Browser transport/tunnel only and may not depend on puppeteer-core',
+      'packages/agent-runner/package.json: Runner must remain a Browser transport/tunnel only and may not depend on puppeteer-core',
     );
   }
 }

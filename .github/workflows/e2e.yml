@@ -8,7 +8,7 @@ on:
       - '.env.example'
       - '.dockerignore'
       - 'scripts/docker/**'
-      - 'packages/agent-runtime/**'
+      - 'packages/agent-runner/**'
       - 'packages/backend/**'
       - 'packages/frontend/**'
       - 'packages/e2e/**'
@@ -24,7 +24,7 @@ on:
       - '.env.example'
       - '.dockerignore'
       - 'scripts/docker/**'
-      - 'packages/agent-runtime/**'
+      - 'packages/agent-runner/**'
       - 'packages/backend/**'
       - 'packages/frontend/**'
       - 'packages/e2e/**'
@@ -301,7 +301,7 @@ jobs:
         run: >-
           pnpm install --frozen-lockfile
           --filter @nexus-terminal/e2e
-          --filter @nexus-terminal/agent-runtime
+          --filter @nexus-terminal/agent-runner
 
       - name: Install host Chromium for Browser direct smoke
         run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
@@ -310,10 +310,10 @@ jobs:
         run: pnpm run check:sandbox-prerequisites --verify-latest
 
       - name: Install host Runner sandbox dependency
-        run: ./scripts/agent-runtime/prepare-ubuntu-host.sh
+        run: ./scripts/agent-runner/prepare-ubuntu-host.sh
 
       - name: Build host Agent Runner
-        run: pnpm run build:agent-runtime
+        run: pnpm run build:agent-runner
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4

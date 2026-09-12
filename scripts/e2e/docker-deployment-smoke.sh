@@ -310,7 +310,7 @@ const shutdown = () => server.close(() => process.exit(0));
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 NODE
-NEXUS_WS_MODULE="$repo_root/packages/agent-runtime/node_modules/ws" \
+NEXUS_WS_MODULE="$repo_root/packages/agent-runner/node_modules/ws" \
 NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" \
 node "$browser_probe_script" >"$browser_probe_log" 2>&1 &
 browser_probe_pid=$!
@@ -326,10 +326,10 @@ PORT="$runner_port" \
 NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
 NEXUS_AGENT_DEPLOYMENT_ID="nexus-e2e-$suffix" \
 NEXUS_AGENT_RUNNER_ROOT="$runner_root" \
-NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runtime/catalog/catalog.json" \
+NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
 NEXUS_AGENT_PLUGIN_SOURCE_ROOT="$data_dir/agent/plugins" \
 NEXUS_AGENT_SANDBOX_DIAGNOSTICS=1 \
-node "$repo_root/packages/agent-runtime/dist/index.js" >"$runner_log" 2>&1 &
+node "$repo_root/packages/agent-runner/dist/index.js" >"$runner_log" 2>&1 &
 runner_pid=$!
 
 runner_listener_ready=0

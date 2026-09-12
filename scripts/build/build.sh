@@ -10,7 +10,7 @@ readonly IMAGE="${IMAGE_REPOSITORY}:${IMAGE_TAG}"
 usage() {
     cat <<'USAGE'
 Usage:
-  scripts/build/build.sh local [agent-runtime|backend|frontend]
+  scripts/build/build.sh local [agent-runner|backend|frontend]
   scripts/build/build.sh docker
   scripts/build/build.sh docker-save [output-directory]
 
@@ -100,7 +100,7 @@ main() {
             require_command node
             target="${target:-backend}"
             case "$target" in
-                agent-runtime|backend|frontend)
+                agent-runner|backend|frontend)
                     build_local "$target"
                     ;;
                 *)

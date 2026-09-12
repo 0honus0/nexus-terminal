@@ -1288,7 +1288,7 @@ AgentSettingsPanel.vue
 
 **状态：Active / live。** Plugin install/runtime 已由 `compose-plugins.ts` 接入 production composition；以下依赖描述当前真实调用边界，不是 roadmap 草图。
 
-Plugin manifest 可选声明 `agents[]`。安装 service 通过 hook 把定义注册进 `AgentDefinitionRegistry`，key 包含 `appId + appVersion`；upgrade/uninstall 同步切换/移除定义。没有 `targets.frontend` 但存在 `agents[]` 时，Host summary 将 surface 标为 `agent`，Frontend 复用 Nexus 自有 Conversation/TaskRail/Workspace UI；自定义 Frontend target 仍为 isolated iframe。首个仓库 preset 为 `agent-plugins/presets/nexus.developer/`，App=`nexus.developer`、definition=`developer.default`。
+Plugin manifest 可选声明 `agents[]`。安装 service 通过 hook 把定义注册进 `AgentDefinitionRegistry`，key 包含 `appId + appVersion`；upgrade/uninstall 同步切换/移除定义。没有 `targets.frontend` 但存在 `agents[]` 时，Host summary 将 surface 标为 `agent`，Frontend 复用 Nexus 自有 Conversation/TaskRail/Workspace UI；自定义 Frontend target 仍为 isolated iframe。首个官方 preset 由独立仓库 `0honus0/nexus-agent-plugins` 的 `plugins/nexus.developer/` 维护，App=`nexus.developer`、definition=`developer.default`；主仓 E2E 只维护协议 fixture。
 
 Plugin source 有 `artifact | remote` 两类。remote repository 先进入 Agent Settings allowlist；`HttpRemotePluginRepositoryAdapter` 通过 OutboundPolicy、DNS pinning、redirect deny 与 bounded HTTP 读取 catalog/package，`stageRemote` 再校验 catalog size/SHA-256，最终仍进入同一个 trusted publisher / Ed25519 signature / `files.json` hash verifier。catalog public key 只是 discovery metadata。migration 53 把旧 `artifact_app_id/artifact_id` stage 迁为 `source_kind/source_json`，不改变既有 package trust semantics。
 
@@ -1384,7 +1384,7 @@ Workspace A profile cache != Workspace B different ABI profile cache
 即使两者共享全局 immutable Tool Store。Tool Store 的具体持久化由：
 
 ```text
-agent-runtime/controller/toolchain-store.ts
+packages/agent-runner/src/controller/toolchain-store.ts
 ```
 
 负责，关键函数为：
@@ -1406,7 +1406,7 @@ ToolchainStore.commit(stagingPath, ref)
 Runner materialization 由：
 
 ```text
-agent-runtime/src/controller/pack-installer.ts
+packages/agent-runner/src/controller/pack-installer.ts
 ```
 
 负责。

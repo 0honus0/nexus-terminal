@@ -1,6 +1,6 @@
 # Nexus-owned variant of AppArmor's bwrap-userns-restrict profile.
 # It is intentionally scoped to the SHA-256-pinned bubblewrap binary installed by
-# scripts/agent-runtime/prepare-ubuntu-host.sh. Bubblewrap may construct namespaces;
+# scripts/agent-runner/prepare-ubuntu-host.sh. Bubblewrap may construct namespaces;
 # payloads are stacked with nexus_unpriv_bwrap so they cannot retain capabilities.
 
 abi <abi/4.0>,

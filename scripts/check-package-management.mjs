@@ -20,7 +20,7 @@ for (const pattern of ['packages/*']) {
     failures.push(`pnpm-workspace.yaml: missing workspace member pattern ${pattern}`);
 }
 
-const packageRoots = ['.', 'packages/agent-runtime', 'packages/backend', 'packages/frontend', 'packages/e2e'];
+const packageRoots = ['.', 'packages/agent-runner', 'packages/backend', 'packages/frontend', 'packages/e2e'];
 for (const relative of packageRoots) {
   for (const lockName of ['package-lock.json', 'npm-shrinkwrap.json', 'yarn.lock']) {
     const candidate = relative === '.' ? lockName : `${relative}/${lockName}`;
@@ -43,7 +43,7 @@ if (pnpmVersion && exists('packages/e2e/Dockerfile.runner')) {
 const engineeringFiles = [
   'Dockerfile',
   'scripts/build/build.sh',
-  'scripts/docker/agent-runtime/Dockerfile',
+  'scripts/docker/agent-runner/Dockerfile',
   'scripts/e2e/build-runner-image.sh',
   'scripts/e2e/docker-deployment-smoke.sh',
   'scripts/e2e/resolve-latest-test-environment.mjs',
@@ -75,7 +75,7 @@ for (const relative of engineeringFiles) {
 
 for (const relative of [
   'package.json',
-  'packages/agent-runtime/package.json',
+  'packages/agent-runner/package.json',
   'packages/backend/package.json',
   'packages/frontend/package.json',
   'packages/e2e/package.json',

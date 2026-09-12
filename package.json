@@ -31,8 +31,8 @@
     "format:all": "prettier --write \"{packages,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"package.json\"",
     "format:all:check": "prettier --check \"{packages,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"package.json\"",
     "check:test-policy": "node scripts/check-test-policy.mjs",
-    "check:sandbox-prerequisites": "node scripts/agent-runtime/check-prerequisites.mjs",
-    "build:agent-runtime": "pnpm --filter @nexus-terminal/agent-runtime build",
+    "check:sandbox-prerequisites": "node scripts/agent-runner/check-prerequisites.mjs",
+    "build:agent-runner": "pnpm --filter @nexus-terminal/agent-runner build",
     "check:package-management": "node scripts/check-package-management.mjs"
   },
   "repository": {

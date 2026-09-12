@@ -8,7 +8,7 @@ import path from 'node:path';
 const [sourceArg, outputArg, keyArg] = process.argv.slice(2);
 if (!sourceArg || !outputArg || !keyArg) {
   console.error(
-    'Usage: node scripts/agent-plugins/build-package.mjs <source-dir> <output.tar> <ed25519-private-key.pem>',
+    'Usage: node packages/e2e/fixtures/agent/build-plugin-package.mjs <source-dir> <output.tar> <ed25519-private-key.pem>',
   );
   process.exit(2);
 }

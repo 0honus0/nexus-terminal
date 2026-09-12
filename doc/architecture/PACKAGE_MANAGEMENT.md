@@ -8,7 +8,7 @@ The workspace root is the only lockfile owner:
 
 - `packages/backend` — Backend runtime package;
 - `packages/frontend` — Browser application package;
-- `packages/agent-runtime` — Agent Runner/Controller package;
+- `packages/agent-runner` — Agent Runner/Controller package;
 - `packages/e2e` — Playwright E2E package;
 - repository root — engineering scripts and shared formatting tooling.
 
@@ -37,7 +37,7 @@ Run package tasks through workspace filters or the root aliases:
 ```bash
 pnpm run build:backend
 pnpm run build:frontend
-pnpm run build:agent-runtime
+pnpm run build:agent-runner
 pnpm run test:e2e:groups:check
 ```
 

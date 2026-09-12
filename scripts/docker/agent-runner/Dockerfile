@@ -29,17 +29,17 @@ ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/agent-runtime/package.json ./packages/agent-runtime/package.json
+COPY packages/agent-runner/package.json ./packages/agent-runner/package.json
 COPY packages/backend/package.json ./packages/backend/package.json
 COPY packages/frontend/package.json ./packages/frontend/package.json
 COPY packages/e2e/package.json ./packages/e2e/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --frozen-lockfile --filter @nexus-terminal/agent-runtime
-COPY packages/agent-runtime/tsconfig.json ./packages/agent-runtime/tsconfig.json
-COPY packages/agent-runtime/src ./packages/agent-runtime/src
+    pnpm install --frozen-lockfile --filter @nexus-terminal/agent-runner
+COPY packages/agent-runner/tsconfig.json ./packages/agent-runner/tsconfig.json
+COPY packages/agent-runner/src ./packages/agent-runner/src
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm --filter @nexus-terminal/agent-runtime build \
-    && pnpm --filter @nexus-terminal/agent-runtime --prod deploy /out/agent-runtime
+    pnpm --filter @nexus-terminal/agent-runner build \
+    && pnpm --filter @nexus-terminal/agent-runner --prod deploy /out/agent-runner
 
 FROM node:${NODE_VERSION}-alpine AS controller
 ARG BWRAP_VERSION
@@ -48,10 +48,10 @@ WORKDIR /app
 RUN apk add --no-cache libcap dropbear socat
 COPY --from=bwrap-builder /out/bwrap /usr/local/bin/bwrap
 RUN /usr/local/bin/bwrap --version | grep -Fx "bubblewrap ${BWRAP_VERSION}"
-COPY --from=builder /out/agent-runtime/dist ./dist
-COPY --from=builder /out/agent-runtime/node_modules ./node_modules
-COPY --from=builder /out/agent-runtime/package.json ./package.json
-COPY scripts/docker/agent-runtime/catalog ./catalog
+COPY --from=builder /out/agent-runner/dist ./dist
+COPY --from=builder /out/agent-runner/node_modules ./node_modules
+COPY --from=builder /out/agent-runner/package.json ./package.json
+COPY scripts/docker/agent-runner/catalog ./catalog
 RUN mkdir -p /var/lib/nexus-agent-runner/state /var/lib/nexus-agent-runner/packs /var/lib/nexus-agent-runner/cache /var/lib/nexus-agent-runner/runtime /var/lib/nexus-agent-runner/quarantine /run/nexus-agent-runner
 EXPOSE 8790
 CMD ["node", "dist/index.js"]

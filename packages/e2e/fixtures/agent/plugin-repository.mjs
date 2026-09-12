@@ -7,7 +7,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const current = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(current, '../../../..');
 const host = '127.0.0.1';
 const port = Number(process.env.NEXUS_E2E_PLUGIN_REPOSITORY_PORT ?? '29092');
 if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
@@ -22,12 +21,12 @@ const metadata = JSON.parse(
   execFileSync(
     process.execPath,
     [
-      path.join(repoRoot, 'scripts/agent-plugins/build-package.mjs'),
-      path.join(repoRoot, 'agent-plugins/presets/nexus.developer'),
+      path.join(current, 'build-plugin-package.mjs'),
+      path.join(current, 'plugin-source/nexus.developer'),
       packagePath,
       keyPath,
     ],
-    { cwd: repoRoot, encoding: 'utf8' },
+    { cwd: current, encoding: 'utf8' },
   ),
 );
 const packageBytes = fs.readFileSync(packagePath);
@@ -51,7 +50,7 @@ const catalog = {
       appId: metadata.appId,
       version: metadata.version,
       displayName: metadata.displayName,
-      description: 'Signed E2E distribution of the first-party Developer Agent preset.',
+      description: 'Signed E2E Developer Agent contract fixture.',
       packageUrl: `http://${host}:${port}/packages/nexus.developer-1.0.0.tar`,
       sha256: metadata.sha256,
       sizeBytes: metadata.sizeBytes,
