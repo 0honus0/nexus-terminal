@@ -435,6 +435,7 @@ host_tool_snapshot_before="$(host_tool_snapshot)"
 # through the host-gateway path using the same shared Controller token as production.
 compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" backend node - <<'NODE'
 const { randomUUID } = await import('node:crypto');
+const { lookup } = await import('node:dns/promises');
 const baseUrl = process.env.AGENT_RUNNER_URL;
 const token = process.env.AGENT_RUNNER_TOKEN;
 const deploymentId = process.env.AGENT_RUNNER_DEPLOYMENT_ID;
@@ -767,6 +768,10 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
 // Browser direct path smoke: the exact production Backend BrowserRuntime connects to
 // host/external Chromium without Agent Runner, then exercises the restricted semantic API.
 {
+  // Chromium rejects DevTools discovery/WebSocket requests whose Host header is an
+  // arbitrary DNS name. Docker's host-gateway alias is convenient for reachability,
+  // but resolve it here so the actual CDP endpoint uses an IP-literal Host header.
+  const hostGateway = await lookup('host.docker.internal', { family: 4 });
   const { BrowserRuntimeAdapter } = await import(
     '/app/dist/infrastructure/agent/integrations/browser-runtime.adapter.js'
   );
@@ -786,7 +791,7 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
           {
             scope: 'external-network',
             via: 'backend',
-            url: `http://host.docker.internal:${process.env.NEXUS_E2E_DIRECT_CDP_PORT}`,
+            url: `http://${hostGateway.address}:${process.env.NEXUS_E2E_DIRECT_CDP_PORT}`,
             priority: 10,
             allowPlaintext: true,
             verifyTls: true,
