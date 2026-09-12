@@ -11,7 +11,7 @@
 - 哪些 helper 是允许共享的领域 primitive，哪些状态机禁止抽成 generic helper；
 - 后续拆文件时必须保持的事务与安全顺序。
 
-> 本文描述当前 `dev` 架构。状态只使用两类：**Active / live** 表示已经进入 production composition / capability execution；**Reserved / roadmap-only** 表示仅保留类型、Port、Adapter 或设计骨架，尚未进入 production live execution。P1/P2/P3 只表示历史实施/验收分组，不作为当前交付状态。ACP 与 Browser/CDP 是保留的后继能力边界，不因为当前未接入 live execution 而删除。
+> 本文描述当前 `dev` 架构。状态只使用两类：**Active / live** 表示已经进入 production composition / capability execution；**Reserved / roadmap-only** 只用于真正尚未进入 live composition 的后继能力。P1/P2/P3 仅表示历史实施/验收分组，不作为当前交付状态。当前 MCP、ACP、Browser/CDP、Subagent、Memory、Plugin 与 Workspace local Terminal 都是 Active / live；其中 Browser semantic owner 在 Backend，Runner 仅对 `via=runner` endpoint 提供 transport tunnel。
 
 ---
 
@@ -1270,7 +1270,7 @@ cause.response.data.error.code
 当前使用该 boundary 的主要组件包括：
 
 ```text
-OperationsView.vue
+AgentAppSurface.vue
 WorkspaceRuntimePanel.vue
 WorkspaceRuntimeSettings.vue
 PluginManagementSettings.vue
@@ -1287,6 +1287,10 @@ AgentSettingsPanel.vue
 ## 11. Plugin 调用边界
 
 **状态：Active / live。** Plugin install/runtime 已由 `compose-plugins.ts` 接入 production composition；以下依赖描述当前真实调用边界，不是 roadmap 草图。
+
+Plugin manifest 可选声明 `agents[]`。安装 service 通过 hook 把定义注册进 `AgentDefinitionRegistry`，key 包含 `appId + appVersion`；upgrade/uninstall 同步切换/移除定义。没有 `targets.frontend` 但存在 `agents[]` 时，Host summary 将 surface 标为 `agent`，Frontend 复用 Nexus 自有 Conversation/TaskRail/Workspace UI；自定义 Frontend target 仍为 isolated iframe。首个仓库 preset 为 `agent-plugins/presets/nexus.developer/`，App=`nexus.developer`、definition=`developer.default`。
+
+Plugin source 有 `artifact | remote` 两类。remote repository 先进入 Agent Settings allowlist；`HttpRemotePluginRepositoryAdapter` 通过 OutboundPolicy、DNS pinning、redirect deny 与 bounded HTTP 读取 catalog/package，`stageRemote` 再校验 catalog size/SHA-256，最终仍进入同一个 trusted publisher / Ed25519 signature / `files.json` hash verifier。catalog public key 只是 discovery metadata。migration 53 把旧 `artifact_app_id/artifact_id` stage 迁为 `source_kind/source_json`，不改变既有 package trust semantics。
 
 Composition：
 
@@ -1489,79 +1493,79 @@ agentApi.importArtifactToWorkspace()
 
 ---
 
-## 14. Integration / Browser execution 状态边界
+## 14. Integration / Browser / Workspace Terminal execution 边界
 
 ### ACP
 
-**状态：未完成（reserved / roadmap-only）。** 当前只保留边界和实现骨架，不属于 production live execution。
+**状态：Active / live。** `nexus.operations` manifest 声明 `integration.acp.execute`，production composition 创建 `AcpAdapter` 并把 `acp_execute` 注册到 Tool Catalog。
 
-保留：
-
-```text
-AcpAdapter
-AcpRuntimePort
-AcpTransportPort
-ACP Integration schema
-integration.acp.execute capability type (roadmap only)
-```
-
-当前 live ACP execution **未完成**；production composition root 不实例化/注入 ACP runtime，`nexus.operations` manifest 不声明该 capability，也不会创建默认 grant。
-
-未来调用方向应保持：
+真实依赖方向：
 
 ```text
-Agent Runtime
--> ACP Runtime Port
--> ACP Transport
--> permission event
--> Nexus Approval / Policy
+Agent Model proposal
+-> ToolCallRunner / ToolExecutor
+-> Capability + Policy + Approval + Lease + StateCommit
+-> createAcpExecuteTool
+-> AcpAdapter (Backend protocol client)
+-> AcpTransportPort
+-> RunnerHttpAdapter authenticated ACP WebSocket
+-> Agent Runtime AcpProcessRuntime
+-> SandboxEngine / frozen Workspace generation + ACP profile
+-> ACP child process stdio
 ```
+
+`acp_execute` inspection 冻结 integration version、`workspaceId + generation` 与 `profileRevision`；Runner 再检查 journal 中相同 generation/profile 后才 spawn。ACP process 使用 Workspace sandbox construction，默认无网络。`AcpAdapter` 显式拒绝 ACP direct filesystem/terminal RPC；外层 tool approval 只授权本次 `acp_execute`，协议内部 `session/request_permission` 当前固定选择 `reject_once`，因此外部 Agent 不能借外层批准获取 nested mutation authority。
 
 ### Browser/CDP
 
-**状态：未完成（reserved / roadmap-only）。** 当前只保留 Browser/CDP/Puppeteer 后继接线骨架，不属于 production live execution。
+**状态：Active / live。** `nexus.operations` manifest 声明 `browser.operate`，Tool Catalog 注册 create/navigate/snapshot/click/type/close。最终 semantic owner 是 Backend `BrowserRuntimeAdapter`，不是 Runner。
 
-保留：
+真实依赖方向：
 
 ```text
-PuppeteerBrowserGateway
-BrowserGatewayPort
-BrowserEndpointPort
-browser Workspace kind
-browser.operate capability type (roadmap only)
-puppeteer-core
+Agent browser_* tool
+-> Capability / ToolExecutor / StateCommit boundary
+-> BrowserGatewayPort
+-> BrowserRuntimeAdapter (Backend)
+   ├─ Puppeteer + BrowserContext + Page + CDPSession
+   ├─ snapshotId/nodeRef lifecycle
+   ├─ request interception / URL pattern policy
+   └─ endpoint transport
+       ├─ via=backend -> direct HTTP(S) discovery / WS(S) CDP
+       └─ via=runner
+           -> RunnerHttpAdapter authenticated WebSocket
+           -> Agent Runtime BrowserTunnelRuntime
+           -> configured CDP endpoint
 ```
 
-当前 Browser/CDP/Puppeteer live execution **尚未完成**；production composition root / Tool Catalog 目前仍不接线，`nexus.operations` manifest 仍不声明 `browser.operate`。本批已批准实现，guard 只能在 Runner-side Browser Runtime、Backend typed gateway、manifest/grant、Policy/Approval 与 E2E 同步落地时一起调整，不能先删除门禁。
+Runner `BrowserTunnelRuntime` 只验证 configured endpoint/binding 并转发 bounded text CDP frames；没有 Puppeteer、Page、snapshot/click/type API，也不解释 DevTools method。这样 Runner 是 optional deployment component：Standalone `via=backend` Browser target 可在 Runner unavailable 时工作。
 
-批准后的最终依赖方向：
+Browser target 来源只有两种：Agent Settings 中管理员配置的 standalone `targetId`，或 Workspace generation 冻结的 Browser target snapshot。Agent tool 不提交 endpoint URL。Standalone session 绑定 settings revision；Workspace session 绑定 `workspaceId + generation + targetRevision`。endpoint `scope=docker-network|external-network` 只表达 reachability；`external-network` 覆盖宿主、其它 Docker network、LAN/VPN/VPC 和公网。当前 endpoint policy 独立记录 `allowPlaintext` / `verifyTls`，协议可为 `http/https/ws/wss`。
 
-```text
-Agent Tool / BrowserCapabilityService (Backend)
--> BrowserGatewayPort (typed commands only)
--> RunnerBrowserGatewayAdapter (Backend infrastructure)
--> authenticated Backend<->Runner protocol
--> BrowserSessionManager (Runner)
--> BrowserEndpointResolver
-   -> docker-network endpoint (service/container DNS or configured IP)
-   -> external-network endpoint (host / other Docker network / LAN / VPN / VPC / public)
--> Puppeteer/CDP (Runner owns raw socket/context/page)
-```
+Page data-plane 与 CDP control-plane 分开：Backend Page request interception 对 HTTP(S) navigation、redirect 与 subresource 应用 `allowedUrlPatterns`；popup close，download deny。Tool surface 不存在 selector/evaluate/raw-CDP/任意 JavaScript。navigate/click/type 后旧 `snapshotId + nodeRef` 失效。
 
-`docker-network | external-network` 是 reachability scope，不是 trust level。endpoint transport 另带 plaintext/TLS/auth policy；`ws` 与 `wss` 均可按管理员策略使用。Agent 只能引用 `browserTargetId`，不得提交裸 endpoint。Browser navigation policy 与 CDP endpoint policy 分离；Tool Catalog 不公开 selector/evaluate/raw-CDP。
+### Workspace local Terminal
 
-Workspace local Terminal 的依赖方向独立于 Browser：
+**状态：Active / live。** 它是 Workspace Runtime 的独立 interactive-session consumer，不属于 Agent model/tool execution owner，也不复用远程 SSH 的高层 `WorkspaceTerminalService`。
 
 ```text
-Frontend local terminal surface
--> Backend authenticated terminal session facade
+Frontend AgentWorkspaceTerminal
+-> /ws/agent-terminal
+-> AgentTerminalProtocolSession (Backend authenticated websocket)
+-> WorkspaceRuntimeTerminalService
+   - feature/app/capability/workspace/generation checks
+   - session registry / 30s detach grace / <=1 MiB replay
 -> WorkspaceRuntimeInteractiveSessionPort
--> Runner interactive-session protocol
--> WorkspacePtySessionManager
--> generation-scoped sandbox + toolchain profile
+-> RunnerWorkspaceTerminalAdapter
+   - ephemeral Ed25519 client key
+   - SSH2 over Runner WebSocket
+-> Agent Runtime WorkspaceTerminalRuntime
+-> SandboxEngine.prepareTerminalProcess
+-> ephemeral Dropbear inside generation bubblewrap sandbox
+-> PTY / shell
 ```
 
-该 port 不属于 Agent model/tool execution owner，也不复用 SSH `WorkspaceTerminalService`。ACP 则复用 Workspace sandbox construction，但通过 bounded process-stream transport 而不是 PTY。
+Browser↔Backend 与 Backend↔Runner 是两个独立 session boundaries。Runner WebSocket 只承载 SSH bytes；Dropbear 持有 PTY、resize、signal、shell state。Workspace stop/restart/delete 或 generation replacement 关闭对应 active terminal；attach 只能命中 Backend registry 中同 scope/workspace/generation 的 detached session。实现复用 `SshShellSessionAdapter` 的低层 channel byte/backpressure primitive，但不复用远程 SSH connection/service owner。
 
 ### MCP
 
@@ -1584,12 +1588,12 @@ MCP 是真实 integration boundary，不应因为 adapter 数量优化而合并�
 
 不要为了“Runtime 统一”把所有 Terminal 放进 Runner。
 
-可共享 Workspace Runtime 的 future execution：
+可共享 Workspace Runtime 的当前 execution consumers：
 
 ```text
 Agent one-shot job
 Runner Plugin session
-future local Terminal / PTY
+local Workspace Terminal / PTY
 CI/task execution
 ```
 

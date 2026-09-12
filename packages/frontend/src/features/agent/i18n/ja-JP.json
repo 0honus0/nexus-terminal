@@ -66,7 +66,16 @@
           "pluginUpgraded": "プラグインをアップグレードしました。",
           "pluginUninstalledDataRetained": "プラグインコードをアンインストールしました。App データは保持されています。",
           "pluginDataDeleted": "保持されていた AppStorage データを削除しました。"
-        }
+        },
+        "remoteRepositories": "リモートプラグインリポジトリ",
+        "remoteRepositoriesHint": "リポジトリは検出のみを提供します。インストール前に Ed25519 発行者を明示的に信頼し、署名検証を通過する必要があります。",
+        "refreshRemote": "リポジトリを更新",
+        "repositoryUrl": "リポジトリ catalog URL",
+        "repositoryExceptions": "プライベートホスト例外 (host:port、任意)",
+        "addRepository": "リポジトリを追加",
+        "trustRemotePublisher": "発行者を信頼",
+        "prepareRemote": "パッケージを検証",
+        "removeRepository": "削除"
       },
       "hardLimits": {
         "title": "Hard Limits",
@@ -223,6 +232,55 @@
         "removeProfile": "プロファイルを削除",
         "noProfiles": "この App には Subagent プロファイルが設定されていません。",
         "saveProfiles": "プロファイルを保存"
+      },
+      "browserRuntime": {
+        "title": "ブラウザーランタイム",
+        "description": "Backend の単一 BrowserRuntime が使用する CDP ターゲットを設定します。endpoint のネットワーク scope と到達経路 via は独立し、via=runner の場合 Runner はネットワークトンネルとしてのみ使用されます。",
+        "addTarget": "ブラウザーターゲットを追加",
+        "empty": "ブラウザーターゲットは未設定です。Backend から到達できる外部 CDP は via=backend で Runner なしでも利用できます。",
+        "targetId": "ターゲット ID",
+        "remove": "ターゲットを削除",
+        "allowedUrls": "許可するページ URL Pattern（1 行 1 件）",
+        "endpoints": "CDP Endpoints",
+        "endpointHint": "scope は endpoint のネットワーク位置、via は Backend 直結または Runner トンネルを指定します。v1 では URL の userinfo・query・fragment に資格情報を含めることはできません。",
+        "addEndpoint": "Endpoint を追加",
+        "scope": "ネットワーク範囲",
+        "via": "到達経路",
+        "priority": "優先度",
+        "removeEndpoint": "削除",
+        "url": "CDP URL（http/https/ws/wss）",
+        "allowPlaintext": "平文 HTTP/WS を許可",
+        "verifyTls": "TLS 証明書を検証",
+        "save": "ブラウザー設定を保存",
+        "scopeDocker": "Docker ネットワーク",
+        "scopeExternal": "外部ネットワーク",
+        "viaBackend": "Backend から直接接続",
+        "viaRunner": "Runner トンネル経由"
+      },
+      "acpRuntime": {
+        "title": "ACP ランタイム",
+        "description": "Workspace 内で起動できる ACP プロセス Profile と、Operations Agent が呼び出す ACP Integration を設定します。ACP プロセスは generation に固定され、読み取り専用・ネットワーク隔離を維持します。",
+        "addProfile": "Profile を追加",
+        "profiles": "Workspace ACP Profiles",
+        "profilesHint": "argv は JSON 文字列配列、cwd は /workspace 配下である必要があります。保存した Profile は Workspace generation 作成時に選択して固定できます。",
+        "noProfiles": "ACP Profile は未設定です。",
+        "profileId": "Profile ID",
+        "argv": "argv（JSON 配列）",
+        "cwd": "作業ディレクトリ",
+        "remove": "削除",
+        "saveProfiles": "Profiles を保存",
+        "integrations": "ACP Integrations",
+        "integrationsHint": "Integration は Agent 向けの論理エントリで、保存済み Workspace Profile を参照します。実行にはその Profile を含む実行中 Workspace が必要です。",
+        "refresh": "更新",
+        "displayName": "表示名",
+        "integrationProfile": "Workspace Profile",
+        "selectProfile": "Profile を選択",
+        "enabled": "有効",
+        "createIntegration": "Integration を作成",
+        "saveProfileFirst": "Integration を作成する前に ACP Profile を 1 件以上保存してください。",
+        "loading": "ACP Integrations を読み込み中…",
+        "noIntegrations": "ACP Integration は未設定です。",
+        "deleteIntegration": "削除"
       }
     },
     "launcher": {
@@ -239,7 +297,8 @@
       "minimize": "Agent を最小化",
       "maximize": "Agent を最大化または復元",
       "close": "Agent を閉じる",
-      "resize": "Agent ウィンドウのサイズを変更"
+      "resize": "Agent ウィンドウのサイズを変更",
+      "noSurface": "この Agent App には操作画面がありません。"
     },
     "pluginFrontend": {
       "frameTitle": "Agent プラグイン UI",
@@ -418,7 +477,16 @@
       "reconciliationRequired": "Workspace コマンドの結果が不明です。別の変更操作を送信する前に結果を確認してください。",
       "verifyOutcome": "結果を確認",
       "reconciliationPending": "Workspace コマンドの結果はまだ不明です。元の変更操作は再実行していません。",
-      "reconciliationResolved": "Workspace コマンドの結果を照合しました。"
+      "reconciliationResolved": "Workspace コマンドの結果を照合しました。",
+      "localTerminal": "ローカルターミナル",
+      "localTerminalHint": "この Workspace generation 内で隔離された SSH セッションを開きます。",
+      "openTerminal": "ターミナルを開く",
+      "closeTerminal": "ターミナルを閉じる",
+      "browserTarget": "ブラウザーターゲット",
+      "browserTargetNone": "バインドなし（standalone は利用可能）",
+      "browserTargetHint": "選択するとターゲット設定がこの Workspace generation に固定されます。",
+      "acpProfiles": "ACP Profiles",
+      "acpProfilesHint": "この Workspace generation 内で起動可能な ACP workspace profile を選択します。"
     },
     "subagents": {
       "title": "Subagent",

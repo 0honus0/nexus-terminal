@@ -16,6 +16,7 @@ export const E2E_PORTS = {
   ssh: parsePort('NEXUS_E2E_SSH_PORT', 22222),
   sshControl: parsePort('NEXUS_E2E_SSH_CONTROL_PORT', 22223),
   smtp: parsePort('NEXUS_E2E_SMTP_PORT', 22224),
+  pluginRepository: parsePort('NEXUS_E2E_PLUGIN_REPOSITORY_PORT', 29092),
 } as const;
 
 export const E2E_URLS = {
@@ -26,4 +27,5 @@ export const E2E_URLS = {
   frontendWsOrigin: `ws://127.0.0.1:${E2E_PORTS.frontend}`,
   guacdControlOrigin: `http://127.0.0.1:${E2E_PORTS.guacdControl}`,
   sshControlOrigin: `http://127.0.0.1:${E2E_PORTS.sshControl}`,
+  pluginRepositoryOrigin: `http://127.0.0.1:${E2E_PORTS.pluginRepository}`,
 } as const;

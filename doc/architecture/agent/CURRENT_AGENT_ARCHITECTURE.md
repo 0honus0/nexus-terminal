@@ -306,7 +306,7 @@ Workspace B
 
 Tool Store 按 `family/version/digest`（digest 按 arch 解析）允许多版本并存。Workspace 切换 Node/Python/Go 版本只重建自己的 generation，重新解析 PATH/只读 Tool Pack，同时继续 bind 同一 Workspace 文件；不得修改全局 `/usr/bin` 或影响其他 Workspace。Generation 由 Runner Sandbox Manager 管理；当前 Linux 实现固定使用受支持的 bubblewrap（当前发行 0.12.0+）作为 process/filesystem/network namespace 隔离边界，并建立独立 process tree、最小环境变量和只读 Tool Pack。不能仅靠 `cwd`、Node `vm` 或 `worker_threads` 宣称 hostile-code 安全隔离。
 
-Runtime consumer/owner 边界：Agent one-shot job、Runner Plugin、CI/task 与 future local Terminal 可以共享 Workspace/Profile/Generation 和 Tool Store，但 transport/identity 不合并。现有 SSH Terminal/SFTP/remote Docker 仍由 Nexus Workspace/remote-machine 模块持有 live session；RDP/VNC 仍由 Guacamole runtime 持有。future local Terminal 需要单独的 Workspace Runtime interactive-session port，不能把 SSH `WorkspaceTerminalService`、PTY 或 Agent 模型身份直接复用到 Runner。
+Runtime consumer/owner 边界：Agent one-shot job、Runner Plugin、CI/task 与已实现的 local Workspace Terminal 共享 Workspace/Profile/Generation 和 Tool Store，但 transport/identity 不合并。local Terminal 使用独立 `WorkspaceRuntimeInteractiveSessionPort`：Frontend `/ws/agent-terminal` → Backend `WorkspaceRuntimeTerminalService` → `RunnerWorkspaceTerminalAdapter` → authenticated Runner WebSocket → sandbox 内 ephemeral Dropbear/SSH PTY；detach grace 30 秒、replay 上限 1 MiB。它不复用 Agent 模型身份或远程 SSH 的高层 `WorkspaceTerminalService`。现有 SSH Terminal/SFTP/remote Docker 仍由 Nexus Workspace/remote-machine 模块持有 live session；RDP/VNC 仍由 Guacamole runtime 持有。
 
 ## 9. Runner Plugin 显式选择
 
@@ -731,14 +731,14 @@ no module cycles
    - `ARCHITECTURE.md` 与 `IMPLEMENTATION.md` 已同步三 target SDK/protocol freeze、Workspace root 产品入口、Runner target、Workspace ACL、Workspace↔Artifact 与 Capability 边界。
 
 7. 本地/远程验证状态：
-   - `packages/agent-runtime` build：**通过**；
-   - Backend build：**通过**；Backend architecture：**通过（383 files）**；
-   - Frontend architecture/i18n/vue-tsc/Vite/bundle budget：**通过（304 source files；Initial JS 249.1/260 KiB gzip）**；
-   - root `pnpm run build`：**通过**；当前宿主 Node `v22.17.0` 低于仓库声明的 Node `>=24`，构建仅产生 engine warning；
-   - root test policy：**通过（71 E2E spec files）**；E2E groups check：**通过（69 grouped specs / 8 groups）**；
-   - Agent Launcher/Hub 回归已由远程 Actions 验证，相关 group 8 为绿色；其余本轮 Workspace mixed-mode 运行验收仍以新 push 的远程 Actions 为准；
-   - `pnpm run format:check`：**通过**；`git diff --check`：**通过**；
-   - 完整 `pnpm run test:e2e`：**已执行但当前宿主无法形成全绿浏览器证据**。一次完整运行生成的 143 个 failure context 中 143/143 都在 Chromium 启动阶段因缺少 `libglib-2.0.so.0` 退出，未进入页面/业务断言；当前宿主同时没有 Docker CLI 与 `bwrap`。因此不能把 browser E2E 或生产 bubblewrap namespace 记为通过，需在仓库固定 E2E runner/具备依赖的宿主上重跑。
+   - `packages/agent-runtime` build：**通过**；Backend build：**通过**；Frontend architecture/i18n/`vue-tsc`/Vite/bundle budget：**通过（318 source files；Initial JS 254.0/260.0 KiB gzip）**；
+   - Backend architecture：**通过（426 files，无 forbidden layer edge/source cycle/module cycle）**；
+   - root package-management guard：**通过**；root test policy：**通过（72 E2E spec files / 58 functional screenshot declarations）**；
+   - E2E groups generator/check：**通过（70 grouped specs / 8 groups，exactly once）**；
+   - migration 53 专项 E2E：**本地通过**，验证旧 `artifact_app_id/artifact_id` stage 无损迁移到 `source_kind/source_json` 并保留 hash/size/status/timestamp/CAS version；
+   - `pnpm run format:check`、`git diff --check`、Backend architecture、package-management、test-policy、Docker smoke/host-prepare shell syntax 与完整 Frontend build：**通过**；
+   - 当前宿主 Node `v22.17.0` 低于仓库声明的 Node `>=24`，pnpm 命令会产生预期 engine warning；Node 24 CI 为最终权威；
+   - 当前宿主 Chromium 仍缺 `libglib-2.0.so.0`，且本机没有可作为 production evidence 的 Docker/bubblewrap 环境，因此 Browser UI 全量与 production Docker smoke 不在本机伪造通过；本轮最终 `dev` SHA 必须以远程 Docker deployment smoke + Playwright 8/8 groups 为发布证据。
 
 8. 相邻 Nexus SSH/Workspace binary transport：**完成 Base64 data-path 清理**。
    - `/ws/workspace` 使用独立 `binaryProtocolVersion=1`，固定 16-byte header 区分 terminal 与 request-scoped response；binary response 通过 requestId/final 分片重组，每个 payload frame 最大 256 KiB；
@@ -746,14 +746,16 @@ no module cycles
    - File Editor 持有 `Uint8Array rawContent`，encoding reinterpret 不再执行 `atob/btoa`；upload 继续使用既有独立 `/ws/uploads` raw binary transport；
    - 现有 SSH E2E helper/spec 已同步 framing；700 KiB raw upload→SFTP→多帧 binary read round-trip 通过，request-only suspend/resume history 用例通过；浏览器 UI E2E 仍受上述宿主 Chromium `libglib-2.0.so.0` 缺失限制。
 
-9. Phase 3 接线状态：**MCP / Subagent / Memory / Plugin 已进入当前 composition；ACP 与 Browser/CDP/Puppeteer 明确标记为未完成（reserved / roadmap-only）**。
-   - MCP：`McpAdapter` 已由 `compose-agent.ts` 创建；`IntegrationService` refresh 后由 `bootstrap/agent/tool-contributions.ts` 的窄 hook 把 MCP tools 作为 scoped `CapabilityContribution` 注入 Tool Catalog；
-   - Subagent/Memory：repository、policy/service/scheduler、mailbox/shared facts、Memory review/import 已由 composition root 组装并暴露受限 facade；
-   - Plugin：stage/verify/install/upgrade/uninstall、Frontend isolated frame、Backend sandbox 与 Runner target 都有当前 Host/Runner 接线；
-   - ACP：**未完成**。`IntegrationService` 已支持 `kind='acp'` 的配置校验/持久化，`AcpAdapter` 也已存在，但当前 composition root 没有实例化/注入 ACP runtime；`nexus.operations` manifest 不声明 `integration.acp.execute` 且无默认 grant，因此只能视为保留骨架；
-   - Browser/CDP/Puppeteer：**未完成**。`PuppeteerBrowserGateway` 和对应 ports 已存在，但当前 composition root/Tool Catalog 没有把它接到 live Agent 执行路径；`nexus.operations` manifest 不声明 `browser.operate` 且无默认 grant，因此仍是保留骨架而非产品能力。
-
-   **已批准的下一步实现契约（尚不改变上述当前状态）**：ACP transport 下沉到 Runner workspace-profile process stream；Browser raw CDP/Puppeteer owner 下沉 Runner，并通过 `browserTargetId + profileRevision` 冻结 endpoint 选择，endpoint reachability scope 使用 `docker-network | external-network`（后者覆盖宿主、其它 Docker network、LAN/VPN/VPC/公网），`ws/wss` 与 TLS/auth/plaintext policy 分离；Backend 仅保留 typed Browser command/Capability/Approval authority。Workspace local Terminal 新增 generation-scoped PTY interactive-session port，不复用 Agent one-shot job 或 SSH Terminal owner。三项实现完成并经远端 E2E 后，本段再从 approved contract 改写为真实 live wiring。
+9. Phase 3 / preset 接线状态：**MCP / ACP / Browser-CDP / Subagent / Memory / Plugin / Workspace local Terminal 均已进入当前 composition**。
+   - MCP：`McpAdapter` 由 `compose-agent.ts` 创建，refresh 后用 owned contribution 注入 scoped MCP tools；
+   - ACP：Operations manifest 声明 `integration.acp.execute`；`compose-agent.ts` 构造 `AcpAdapter` 并注册 `acp_execute`。外层 tool 是 mutation，经过 Capability/Policy/Approval/Lease/StateCommit；Runner `AcpProcessRuntime` 只在冻结 Workspace generation/profile 中 spawn ACP backend。ACP direct fs/terminal deny，nested permission 当前固定 `reject_once` fail closed；
+   - Browser：Operations manifest 声明 `browser.operate`；`BrowserRuntimeAdapter` 在 Backend 持有 Puppeteer/BrowserContext/Page/CDPSession 与 semantic operation。`via=backend` 直接连接配置 CDP；`via=runner` 只借 Runner `BrowserTunnelRuntime` 转发 bounded text CDP frame。Runner 不拥有 Browser session/snapshot/click/type，因此 Runner unavailable 不阻断 standalone direct target；
+   - Browser data plane：target 支持 `docker-network | external-network` reachability 与独立 `allowPlaintext/verifyTls`；Agent 不提交 raw endpoint。Page request interception 检查 HTTP(S) navigation/redirect/subresource allowlist，popup close、download deny，navigate/click/type 后 nodeRef stale；
+   - Workspace local Terminal：`/ws/agent-terminal` + `WorkspaceRuntimeTerminalService` + `WorkspaceRuntimeInteractiveSessionPort` + `RunnerWorkspaceTerminalAdapter` + Runner `WorkspaceTerminalRuntime`/Dropbear 已 live，支持 detach/attach/replay/resize/signal/close，并随 generation teardown；
+   - Subagent/Memory：repository、policy/service/scheduler、mailbox/shared facts、Memory review/import 继续由 composition root 组装并暴露窄 facade；
+   - Plugin：manifest 新增 versioned `agents[]`；安装/升级/卸载通过 hook 动态注册 AgentDefinition。无 Frontend target 且声明 AgentDefinition 的插件使用 host-owned generic Agent surface；自定义 Frontend target 继续 isolated iframe；
+   - Remote Plugin：Agent Settings 配置 repository；Backend 以 OutboundPolicy + DNS pinning + redirect deny + bounded HTTP 读取 catalog/package，stage 先校验 catalog size/SHA-256，再进入显式 trusted publisher + Ed25519 signature + `files.json` hash 链。catalog discovery 不等于 publisher trust；migration 53 将 stage source 泛化为 artifact/remote；
+   - 首个官方 preset：`agent-plugins/presets/nexus.developer/`，App `nexus.developer`，AgentDefinition `developer.default`，只携带 manifest + Skill，使用 generic Agent UI。`scripts/agent-plugins/build-package.mjs` 用仓库外 Ed25519 私钥生成可复现签名包；E2E 覆盖远程 catalog → trust → stage/verify/install → enable → dynamic AgentDefinition → real Run → `agent-developer-preset.png`。
 
 10. 本轮文档/guard 审核：**已修正已知正式矛盾**。
 
@@ -792,7 +794,7 @@ no module cycles
     - 整个 Agent Runtime 禁止直接调用底层 mutation lease marker；
     - `SubagentScheduler` 禁止取得 `RelationalDatabase` / `.transaction()` authority；
     - StateCommit `*-transitions.ts` 的导出 transition 必须以 `tx: RelationalDatabase` 为首参数，且不得自行开启 transaction；
-    - ACP/Browser 继续保留 roadmap skeleton，但 `bootstrap/agent/**` 与 Operations manifest 静态禁止 live wiring / reserved capability 暴露；
+    - ACP/Browser architecture guard 已从“禁止 live wiring”切换为**约束 live owner**：Operations manifest 必须保留对应 capability，`compose-agent.ts` 只经 tool-contribution seam 注册；Browser semantic runtime 固定在 Backend adapter，Runner 只允许 tunnel/runtime transport，不得出现第二套 Puppeteer semantic owner；
     - `NativeAgentBackend` 的 SQLite/Express/Runner concrete dependency 已由既有 layer / technology-package checker 覆盖，不再增加重复专用规则。
 
 15. Composition Root Tool contribution owner：**已收敛**。
@@ -805,8 +807,8 @@ no module cycles
     - GitHub Actions run `34584611396`（产品代码 HEAD `aaff050`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
 16. Frontend Host / builtin App ownership：**已收敛**。
-    - `AgentHubWindow.vue` 不再直接 import `apps/operations/OperationsView.vue`；
-    - Operations 通过 `apps/operations/public.ts` lazy export public view，`host/builtin-apps.ts` 是唯一静态 builtin composition seam；安装式 App 继续统一走 `PluginAppFrame`；
+    - `AgentHubWindow.vue` 不再直接 import 任何 builtin App view；通用 Conversation/TaskRail/Workspace composition 已提升为 `host/AgentAppSurface.vue`；
+    - Operations 通过 `apps/operations/public.ts` lazy export host-owned `AgentAppSurface`，`host/builtin-apps.ts` 仍是唯一静态 builtin composition seam；声明 `agents[]` 且无 Frontend target 的安装式 App 直接复用 `AgentAppSurface`，自定义 Frontend target 才走 `PluginAppFrame`；
     - Frontend architecture checker 默认禁止 `host/** -> apps/**`，仅允许 `host/builtin-apps.ts -> apps/<app>/public.ts`，因此 Host 无法重新依赖 App 私有组件。
     - GitHub Actions run `34582398075`（产品代码 HEAD `debdac1`）整体 success，Docker deployment smoke 与 8 个 Playwright groups 全部通过；随后只生成 E2E timing/group rebalance `[skip ci]` 提交。
 
@@ -823,14 +825,14 @@ no module cycles
 
 继续开发时保持：
 
-- 不新增测试文件；使用现有测试/E2E/内联 smoke。
+- 新增正式能力必须补产品 E2E；测试只使用公开 API/UI/真实 downstream fixture，不从 application source import 或读取 fixture 内部计数充当 oracle。
 - 只格式化/修改本次 Agent 相关文件。
 - Runner 不重新拿 Docker socket。
 - Plugin 不创建额外 Docker。
 - 不把 Node `vm/worker_threads/cwd` 单独宣称为 hostile plugin 安全边界。
 - 如果高风险 sandbox primitive 不可用，fail closed。
-- Backend 决定“能不能做”，Runner 决定“怎么安全执行”，Frontend 决定“怎么交互”。
+- Backend 决定 Capability/Policy/状态提交与 Browser semantic authority；Runner 只持 Workspace sandbox/process/transport authority；Frontend 决定交互，不自行推进 durable 状态。
 
 ## 20. 一句话架构基线
 
-> Nexus Agent 是一个以 Backend 为 durable/control plane、以 `nexus-agent-runner` 为 sandbox execution plane、以 Frontend 为 interaction plane 的 Agent Platform；Plugin 只能通过明确 `frontend/backend/runner` target 与 target-specific SDK 扩展，Runtime 保持 `Thread → Run → AgentRuntime → Step`，用户计划使用独立 `PlanItem`，真实副作用统一进入 Capability，Workspace 内 Plugin logical workspace 默认隔离且由目标 ACL 授权访问同一底层文件，长期结果通过 Artifact 管理，Runner 永远不以 Docker socket/nested Docker 作为执行基础设施。
+> Nexus Agent 是一个以 Backend 为 durable/control plane 与 Browser semantic plane、以**可选** `nexus-agent-runner` 为 Workspace sandbox/process/transport plane、以 Frontend 为 interaction plane 的 Agent Platform；Plugin 通过明确 `frontend/backend/runner` target、可选 versioned `agents[]` 与 target-specific SDK 扩展，Runtime 保持 `Thread → Run → AgentRuntime → Step`，真实副作用统一进入 Capability/StateCommit，Workspace 内 Plugin logical workspace 默认隔离，长期结果通过 Artifact 管理，Runner 永远不以 Docker socket/nested Docker 作为执行基础设施。

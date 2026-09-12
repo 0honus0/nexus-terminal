@@ -1,4 +1,5 @@
 import type { JsonValue, Scope } from '../agent.types';
+import type { AgentBrowserEndpointSetting } from '../agent-defaults';
 
 export type IntegrationKind = 'mcp' | 'acp';
 
@@ -80,8 +81,14 @@ export interface AcpByteTransport {
   close(): Promise<void>;
 }
 
+export interface AcpTransportOpenRequest {
+  workspaceId: string;
+  generation: number;
+  profileId: string;
+}
+
 export interface AcpTransportPort {
-  open(profileId: string, signal: AbortSignal): Promise<AcpByteTransport>;
+  open(request: AcpTransportOpenRequest, signal: AbortSignal): Promise<AcpByteTransport>;
 }
 
 export interface AcpPermissionRequest {
@@ -93,6 +100,8 @@ export interface AcpPermissionRequest {
 }
 
 export interface AcpExecutionRequest {
+  workspaceId: string;
+  generation: number;
   cwd: string;
   prompt: string;
   maxOutputBytes: number;
@@ -117,30 +126,48 @@ export interface AcpRuntimePort {
   ): Promise<AcpExecutionResult>;
 }
 
+export type BrowserEndpointSetting = AgentBrowserEndpointSetting;
+
+export interface BrowserTargetSnapshot {
+  id: string;
+  profileRevision: number;
+  endpoints: BrowserEndpointSetting[];
+  allowedUrlPatterns: string[];
+}
+
 export interface BrowserSessionRequest extends Scope {
   runId: string;
   agentRuntimeId: string;
-  workspaceId: string;
+  target: BrowserTargetSnapshot;
+  workspaceId?: string;
+  generation?: number;
 }
 
-export interface BrowserEndpointBinding {
-  workspaceId: string;
-  generation: number;
-  browserWSEndpoint: string;
-  allowedHosts: string[];
+export interface BrowserSessionView extends Scope {
+  sessionId: string;
+  runId: string;
+  agentRuntimeId: string;
+  targetId: string;
+  targetRevision: number;
+  workspaceId: string | null;
+  generation: number | null;
+  url: string;
+  createdAt: number;
+}
+
+export interface BrowserMessageTransport {
+  send(message: string): void;
+  onMessage(listener: (message: string) => void): () => void;
+  onClose(listener: () => void): () => void;
   close(): Promise<void>;
 }
 
-export interface BrowserEndpointPort {
-  open(request: BrowserSessionRequest, signal: AbortSignal): Promise<BrowserEndpointBinding>;
-}
-
-export interface BrowserSessionView {
-  sessionId: string;
-  workspaceId: string;
-  generation: number;
-  url: string;
-  createdAt: number;
+export interface BrowserTunnelPort {
+  openBrowserTunnel(
+    endpoint: BrowserEndpointSetting,
+    binding: { targetId: string; targetRevision: number; workspaceId?: string; generation?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserMessageTransport>;
 }
 
 export interface BrowserSnapshotNode {
@@ -158,7 +185,8 @@ export interface BrowserSnapshotNode {
 export interface BrowserSnapshotView {
   sessionId: string;
   snapshotId: string;
-  generation: number;
+  generation: number | null;
+  targetId: string;
   url: string;
   title: string;
   nodes: BrowserSnapshotNode[];
@@ -167,6 +195,7 @@ export interface BrowserSnapshotView {
 
 export interface BrowserGatewayPort {
   createSession(request: BrowserSessionRequest, signal: AbortSignal): Promise<BrowserSessionView>;
+  getSession(sessionId: string, signal?: AbortSignal): Promise<BrowserSessionView>;
   navigate(sessionId: string, url: string, signal: AbortSignal): Promise<BrowserSessionView>;
   snapshot(
     sessionId: string,
@@ -176,5 +205,6 @@ export interface BrowserGatewayPort {
   click(sessionId: string, snapshotId: string, nodeRef: string, signal: AbortSignal): Promise<void>;
   type(sessionId: string, snapshotId: string, nodeRef: string, text: string, signal: AbortSignal): Promise<void>;
   close(sessionId: string): Promise<void>;
+  closeWorkspace(workspaceId: string, generation?: number): void;
   closeAll(): Promise<void>;
 }

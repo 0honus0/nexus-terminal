@@ -184,6 +184,13 @@ export class AppLifecycleService {
 
   private toView(record: AppRecord): AppView {
     const manifest = this.registry.get(record.appId, record.activeVersion).manifest;
-    return { ...record, displayName: manifest.displayName, capabilities: [...manifest.capabilities] };
+    const surface: AppView['surface'] = this.registry.isBuiltin(record.appId)
+      ? 'builtin'
+      : manifest.targets?.frontend
+        ? 'plugin'
+        : manifest.agents?.length
+          ? 'agent'
+          : 'none';
+    return { ...record, displayName: manifest.displayName, capabilities: [...manifest.capabilities], surface };
   }
 }

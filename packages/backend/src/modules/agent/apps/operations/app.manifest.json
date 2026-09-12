@@ -19,6 +19,8 @@
     "workspace.runtime.execute",
     "workspace.runtime.manage",
     "integration.mcp.invoke",
+    "integration.acp.execute",
+    "browser.operate",
     "artifacts.read",
     "artifacts.write"
   ],

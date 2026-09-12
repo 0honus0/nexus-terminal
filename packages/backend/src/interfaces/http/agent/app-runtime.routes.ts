@@ -48,7 +48,8 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
   router.get(
     '/agent-definitions',
     agentRoute(async (request, response) => {
-      agentData(request, response, dependencies.runs.definitions(pathParam(request.params.appId)));
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(request, response, await dependencies.runs.definitions(scope));
     }),
   );
 

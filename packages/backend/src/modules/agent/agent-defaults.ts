@@ -5,6 +5,32 @@ export interface AgentRunBudgetSnapshot {
   maxActiveExecutionSeconds: number;
 }
 
+export interface AgentAcpWorkspaceProfileSetting {
+  id: string;
+  argv: string[];
+  cwd: string;
+}
+
+export interface AgentBrowserEndpointSetting {
+  scope: 'docker-network' | 'external-network';
+  via: 'backend' | 'runner';
+  url: string;
+  priority: number;
+  allowPlaintext: boolean;
+  verifyTls: boolean;
+}
+
+export interface AgentPluginRepositorySetting {
+  url: string;
+  privateHostExceptions: string[];
+}
+
+export interface AgentBrowserTargetSetting {
+  id: string;
+  endpoints: AgentBrowserEndpointSetting[];
+  allowedUrlPatterns: string[];
+}
+
 export interface AgentSettingsDocument {
   schemaVersion: 1;
   feature: { enabled: boolean };
@@ -69,6 +95,13 @@ export interface AgentSettingsDocument {
     workspaceIdleTtlSeconds: number;
     enabledRecipeIds: string[];
     toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
+    acpProfiles: AgentAcpWorkspaceProfileSetting[];
+  };
+  browser: {
+    targets: AgentBrowserTargetSetting[];
+  };
+  plugins: {
+    repositories: AgentPluginRepositorySetting[];
   };
   safety: {
     providerPrivateNetworkExceptions: string[];
@@ -141,7 +174,10 @@ export const AGENT_DEFAULTS = {
       workspaceIdleTtlSeconds: 900,
       enabledRecipeIds: [],
       toolVersions: {},
+      acpProfiles: [],
     },
+    browser: { targets: [] },
+    plugins: { repositories: [] },
     safety: { providerPrivateNetworkExceptions: [] },
   } satisfies AgentSettingsDocument,
 } as const;
@@ -191,6 +227,129 @@ const packVersionSettings = (
   return result;
 };
 
+const acpProfiles = (
+  value: unknown,
+  fallback: AgentAcpWorkspaceProfileSetting[] = [],
+): AgentAcpWorkspaceProfileSetting[] => {
+  if (!Array.isArray(value)) return structuredClone(fallback);
+  const seen = new Set<string>();
+  const result: AgentAcpWorkspaceProfileSetting[] = [];
+  for (const candidate of value.slice(0, 32)) {
+    if (!isRecord(candidate)) continue;
+    const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
+    const cwd = typeof candidate.cwd === 'string' ? candidate.cwd.trim() : '';
+    if (
+      !/^[a-z][a-z0-9_.-]{0,127}$/.test(id) ||
+      seen.has(id) ||
+      (cwd !== '/workspace' && !cwd.startsWith('/workspace/')) ||
+      cwd.includes('\0') ||
+      Buffer.byteLength(cwd, 'utf8') > 4096
+    )
+      continue;
+    if (!Array.isArray(candidate.argv) || candidate.argv.length < 1 || candidate.argv.length > 64) continue;
+    const argv = candidate.argv.filter((item): item is string => typeof item === 'string' && !item.includes('\0'));
+    if (argv.length !== candidate.argv.length || argv.some((item) => Buffer.byteLength(item, 'utf8') > 8192)) continue;
+    seen.add(id);
+    result.push({ id, argv, cwd });
+  }
+  return result.sort((a, b) => a.id.localeCompare(b.id));
+};
+
+const validBrowserUrlPattern = (value: string): boolean => {
+  const match = /^(\*|https?|wss?):\/\/(\*\.)?([^/:?#]+)(?::(\d{1,5}))?(\/[^?#]*)?$/.exec(value.trim());
+  if (!match) return false;
+  const port = match[4];
+  if (port && (Number(port) < 1 || Number(port) > 65535)) return false;
+  const rawPath = match[5];
+  return !rawPath || !rawPath.includes('*') || rawPath.endsWith('*');
+};
+
+const browserTargets = (value: unknown, fallback: AgentBrowserTargetSetting[] = []): AgentBrowserTargetSetting[] => {
+  if (!Array.isArray(value)) return structuredClone(fallback);
+  const seen = new Set<string>();
+  const result: AgentBrowserTargetSetting[] = [];
+  for (const candidate of value.slice(0, 32)) {
+    if (!isRecord(candidate)) continue;
+    const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
+    if (!/^[a-z][a-z0-9_.-]{0,127}$/.test(id) || seen.has(id) || !Array.isArray(candidate.endpoints)) continue;
+    const endpoints: AgentBrowserEndpointSetting[] = [];
+    for (const raw of candidate.endpoints.slice(0, 16)) {
+      if (!isRecord(raw)) continue;
+      const scope = raw.scope;
+      const url = typeof raw.url === 'string' ? raw.url.trim() : '';
+      const via = raw.via ?? (scope === 'docker-network' ? 'runner' : 'backend');
+      const priority = Number(raw.priority);
+      if (
+        (scope !== 'docker-network' && scope !== 'external-network') ||
+        (via !== 'backend' && via !== 'runner') ||
+        !url ||
+        url.length > 4096
+      )
+        continue;
+      let parsed: URL;
+      try {
+        parsed = new URL(url);
+      } catch {
+        continue;
+      }
+      if (
+        !['http:', 'https:', 'ws:', 'wss:'].includes(parsed.protocol) ||
+        parsed.username ||
+        parsed.password ||
+        parsed.search ||
+        parsed.hash
+      )
+        continue;
+      const plaintext = parsed.protocol === 'http:' || parsed.protocol === 'ws:';
+      const allowPlaintext = raw.allowPlaintext === true;
+      if (plaintext && !allowPlaintext) continue;
+      endpoints.push({
+        scope,
+        via,
+        url: parsed.toString(),
+        priority: Number.isSafeInteger(priority) && priority >= 0 && priority <= 10000 ? priority : 100,
+        allowPlaintext,
+        verifyTls: raw.verifyTls !== false,
+      });
+    }
+    if (!endpoints.length) continue;
+    const allowedUrlPatterns = stringList(candidate.allowedUrlPatterns)
+      .filter((item) => item.length <= 2048 && validBrowserUrlPattern(item))
+      .slice(0, 128);
+    if (!allowedUrlPatterns.length) continue;
+    seen.add(id);
+    result.push({ id, endpoints: endpoints.sort((a, b) => a.priority - b.priority), allowedUrlPatterns });
+  }
+  return result.sort((a, b) => a.id.localeCompare(b.id));
+};
+
+const pluginRepositories = (
+  value: unknown,
+  fallback: AgentPluginRepositorySetting[] = [],
+): AgentPluginRepositorySetting[] => {
+  if (!Array.isArray(value)) return structuredClone(fallback);
+  const seen = new Set<string>();
+  const result: AgentPluginRepositorySetting[] = [];
+  for (const candidate of value.slice(0, 16)) {
+    if (!isRecord(candidate) || typeof candidate.url !== 'string') continue;
+    let url: URL;
+    try {
+      url = new URL(candidate.url.trim());
+    } catch {
+      continue;
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.hash) continue;
+    const normalized = url.toString();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    result.push({
+      url: normalized,
+      privateHostExceptions: stringList(candidate.privateHostExceptions).slice(0, 32),
+    });
+  }
+  return result;
+};
+
 const section = (root: Record<string, unknown>, key: string): Record<string, unknown> =>
   isRecord(root[key]) ? root[key] : {};
 
@@ -213,6 +372,8 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   const subagents = section(raw, 'subagents');
   const storage = section(raw, 'storage');
   const workspaceRuntime = section(raw, 'workspaceRuntime');
+  const browser = section(raw, 'browser');
+  const plugins = section(raw, 'plugins');
   const safety = section(raw, 'safety');
 
   const normalized: AgentSettingsDocument = {
@@ -330,6 +491,13 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       ),
       enabledRecipeIds: stringList(workspaceRuntime.enabledRecipeIds, defaults.workspaceRuntime.enabledRecipeIds),
       toolVersions: packVersionSettings(workspaceRuntime.toolVersions, defaults.workspaceRuntime.toolVersions),
+      acpProfiles: acpProfiles(workspaceRuntime.acpProfiles, defaults.workspaceRuntime.acpProfiles),
+    },
+    browser: {
+      targets: browserTargets(browser.targets ?? workspaceRuntime.browserTargets, defaults.browser.targets),
+    },
+    plugins: {
+      repositories: pluginRepositories(plugins.repositories, defaults.plugins.repositories),
     },
     safety: {
       providerPrivateNetworkExceptions: Array.isArray(safety.providerPrivateNetworkExceptions)

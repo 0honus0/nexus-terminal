@@ -303,6 +303,9 @@ jobs:
           --filter @nexus-terminal/e2e
           --filter @nexus-terminal/agent-runtime
 
+      - name: Install host Chromium for Browser direct smoke
+        run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
+
       - name: Verify Agent sandbox prerequisite pin
         run: pnpm run check:sandbox-prerequisites --verify-latest
 

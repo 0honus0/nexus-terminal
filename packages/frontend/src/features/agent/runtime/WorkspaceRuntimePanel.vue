@@ -7,6 +7,7 @@
     type AgentAppSummary,
     type AgentArtifactRef,
     type AgentWorkspaceView,
+    type AgentSettingsView,
     type PluginInstallation,
     type PluginVersionView,
     type PluginWorkspaceGrant,
@@ -14,6 +15,7 @@
     type WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
   import WorkspaceArtifactTransfer from './WorkspaceArtifactTransfer.vue';
+  import AgentWorkspaceTerminal from './AgentWorkspaceTerminal.vue';
   import WorkspaceCreateCard from './WorkspaceCreateCard.vue';
   import WorkspacePluginGrants from './WorkspacePluginGrants.vue';
   import WorkspaceToolchainCard from './WorkspaceToolchainCard.vue';
@@ -29,6 +31,7 @@
   const installations = ref<PluginInstallation[]>([]);
   const versions = ref<PluginVersionView[]>([]);
   const artifacts = ref<AgentArtifactRef[]>([]);
+  const agentSettings = ref<AgentSettingsView | null>(null);
   const workspaceKey = ref('');
   const notice = ref('');
   const error = ref('');
@@ -102,16 +105,16 @@
     loading.value = true;
     if (!preserveError) error.value = '';
     try {
-      const [nextCatalog, summaries, nextInstallations, nextVersions, nextWorkspaces, artifactPage] = await Promise.all(
-        [
+      const [nextCatalog, summaries, nextInstallations, nextVersions, nextWorkspaces, artifactPage, nextSettings] =
+        await Promise.all([
           agentApi.workspaceRuntimeCatalog(),
           agentApi.apps(),
           agentApi.pluginInstallations(),
           agentApi.pluginVersions(),
           agentApi.workspaces(props.appId, props.runId, true),
           agentApi.files({ appId: props.appId }),
-        ],
-      );
+          agentApi.settings(),
+        ]);
       if (current !== refreshGeneration) return false;
       catalog.value = nextCatalog;
       apps.value = summaries;
@@ -121,6 +124,7 @@
         (artifact) => artifact.appId === props.appId && artifact.status === 'ready',
       );
       workspaceList.value = nextWorkspaces;
+      agentSettings.value = nextSettings;
       if (!pluginTargets.value.some((item) => item.key === workspaceKey.value)) {
         workspaceKey.value = pluginTargets.value[0]?.key ?? '';
       }
@@ -160,6 +164,8 @@
     recipeId: string;
     versions: Record<string, string>;
     runnerPluginIds: string[];
+    acpProfileIds: string[];
+    browserTargetId: string;
     retained: boolean;
   }): void => {
     if (activeWorkspace.value || !catalog.value) return;
@@ -167,7 +173,13 @@
       await agentApi.createWorkspace(
         props.appId,
         props.runId,
-        { recipeId: input.recipeId, versions: input.versions, runnerPluginIds: input.runnerPluginIds },
+        {
+          recipeId: input.recipeId,
+          versions: input.versions,
+          runnerPluginIds: input.runnerPluginIds,
+          ...(input.acpProfileIds.length ? { acpProfileIds: input.acpProfileIds } : {}),
+          ...(input.browserTargetId ? { browserTargetId: input.browserTargetId } : {}),
+        },
         input.retained,
         catalog.value!.revision,
       );
@@ -346,9 +358,11 @@
     </div>
 
     <WorkspaceCreateCard
-      v-if="catalog && !activeWorkspace"
+      v-if="catalog && agentSettings && !activeWorkspace"
       :catalog="catalog"
       :runner-candidates="runnerCandidates"
+      :acp-profiles="agentSettings!.effectiveSettings.workspaceRuntime.acpProfiles"
+      :browser-targets="agentSettings!.effectiveSettings.browser.targets"
       :locked="locked"
       @create="createWorkspace"
     />
@@ -379,6 +393,12 @@
           :catalog="catalog"
           :locked="locked"
           @switch="switchActiveToolVersions"
+        />
+        <AgentWorkspaceTerminal
+          :app-id="props.appId"
+          :workspace-id="activeWorkspace.id"
+          :generation="activeWorkspace.generation"
+          :running="activeWorkspace.status === 'running'"
         />
         <div v-if="activeWorkspace.profile.runnerPlugins.length" class="mt-1 space-y-1">
           <div

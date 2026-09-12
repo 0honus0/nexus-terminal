@@ -14,6 +14,7 @@ import type {
   PluginWorkspaceGrantSet,
   PluginWorkspaceGrantInput,
 } from './workspace-runtime/workspace-runtime.types';
+import type { WorkspaceRuntimeTerminalAttachment } from './workspace-runtime/workspace-runtime-interactive-session.port';
 import type {
   WorkspaceArtifactExportInput,
   WorkspaceArtifactImportInput,
@@ -74,11 +75,13 @@ import type {
 import type {
   PluginInstallResult,
   PluginStageInput,
+  RemotePluginStageInput,
   PluginFrontendDescriptor,
   PluginFrontendRpcRequest,
   PluginUninstallResult,
   PluginUpgradeResult,
 } from './host/plugin-install.service';
+import type { RemotePluginCatalog } from './host/remote-plugin-repository.port';
 import type {
   AgentMessage,
   DelegationView,
@@ -91,6 +94,8 @@ export interface AgentPluginFacade {
   trustPublisherKey(userId: number, publicKeyPem: string, label: string): Promise<TrustedPublisherKey>;
   revokePublisherKey(userId: number, keyId: string): Promise<void>;
   stage(userId: number, input: PluginStageInput): Promise<PluginStageRecord>;
+  remoteCatalog(userId: number, repositoryUrl: string, signal?: AbortSignal): Promise<RemotePluginCatalog>;
+  stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord>;
   verify(userId: number, stageId: string): Promise<{ stage: PluginStageRecord; plugin: PluginVersionRecord }>;
   install(userId: number, stageId: string): Promise<PluginInstallResult>;
   upgrade(userId: number, appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult>;
@@ -256,7 +261,7 @@ export interface AgentCollaborationFacade {
 }
 
 export interface AgentRunFacade {
-  definitions(appId: string): readonly AgentDefinitionView[];
+  definitions(scope: Scope): Promise<readonly AgentDefinitionView[]>;
   create(scope: Scope, command: CreateRunCommand): Promise<RunView>;
   get(scope: Scope, runId: string): Promise<RunSnapshot>;
   rootRuntimeId(scope: Scope, runId: string): Promise<string>;
@@ -303,6 +308,15 @@ export interface AgentWorkspaceRuntimeFacade {
   storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView>;
   listWorkspaces(scope: Scope, runId?: string): Promise<AgentWorkspaceView[]>;
   getWorkspace(scope: Scope, workspaceId: string): Promise<AgentWorkspaceView>;
+  openTerminal(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    columns: number,
+    rows: number,
+    sessionId?: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceRuntimeTerminalAttachment>;
   workspaceGrants(scope: Scope, workspaceId: string, targetPluginId: string): Promise<PluginWorkspaceGrantSet>;
   replaceWorkspaceGrants(
     scope: Scope,

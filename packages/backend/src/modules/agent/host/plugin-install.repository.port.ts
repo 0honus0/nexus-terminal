@@ -12,11 +12,14 @@ export interface TrustedPublisherKey {
   revokedAt: number | null;
 }
 
+export type PluginStageSource =
+  | { kind: 'artifact'; appId: string; id: string }
+  | { kind: 'remote'; repositoryUrl: string; appId: string; version: string };
+
 export interface PluginStageRecord {
   id: string;
   userId: number;
-  artifactAppId: string;
-  artifactId: string;
+  source: PluginStageSource;
   packageHash: string;
   sizeBytes: number;
   publisherKeyId: string | null;

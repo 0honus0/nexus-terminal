@@ -65,6 +65,42 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     }),
   );
 
+  router.get(
+    '/remote/catalog',
+    agentRoute(async (request, response) => {
+      const repositoryUrl = queryString(request.query.repositoryUrl);
+      if (!repositoryUrl) throw new Error('VALIDATION_FAILED');
+      agentData(request, response, await plugins.remoteCatalog(agentUserId(request), repositoryUrl, request.signal));
+    }),
+  );
+
+  router.post(
+    '/remote/stage',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['repositoryUrl', 'appId', 'version'])) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      if (
+        !nonEmptyString(request.body.repositoryUrl) ||
+        !nonEmptyString(request.body.appId) ||
+        !nonEmptyString(request.body.version)
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      agentData(
+        request,
+        response,
+        await plugins.stageRemote(
+          agentUserId(request),
+          { repositoryUrl: request.body.repositoryUrl, appId: request.body.appId, version: request.body.version },
+          request.signal,
+        ),
+        201,
+      );
+    }),
+  );
+
   router.post(
     '/stage',
     mutationSecurity,

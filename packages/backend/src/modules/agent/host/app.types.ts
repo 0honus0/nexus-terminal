@@ -35,6 +35,14 @@ export interface AgentAppTargets {
   runner?: AgentAppTarget;
 }
 
+export interface AgentAppAgentDefinition {
+  id: string;
+  version: string;
+  displayName: string;
+  description: string;
+  requiredModelCapabilities: string[];
+}
+
 export interface AgentAppManifest {
   schemaVersion: 1;
   id: string;
@@ -47,6 +55,7 @@ export interface AgentAppManifest {
   };
   capabilities: AgentCapability[];
   intents: AgentAppIntent[];
+  agents?: AgentAppAgentDefinition[];
   targets?: AgentAppTargets;
 }
 
@@ -75,6 +84,7 @@ export interface AppRecord extends Scope {
 export interface AppView extends AppRecord {
   displayName: string;
   capabilities: AgentCapability[];
+  surface: 'builtin' | 'agent' | 'plugin' | 'none';
 }
 
 export interface AppStatePatch {

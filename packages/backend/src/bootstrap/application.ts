@@ -113,6 +113,7 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
       },
       agentEvents: services.agent.runtime.events,
       agentRuns: services.agent.runtime.runs,
+      agentWorkspaceRuntime: services.agent.runtime.workspaceRuntime,
       workspace: services.modules.workspace,
       events: services.modules.workspaceEvents,
       terminal: services.modules.workspaceTerminal,

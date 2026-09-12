@@ -410,20 +410,23 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
     expect(JSON.stringify(body)).not.toContain('app.manifest.json');
   });
 
-  await step('roadmap-only ACP and Browser capabilities are neither declared nor granted', async () => {
-    const response = await request.get('/api/v1/agent/apps/nexus.operations/grants');
-    expect(response.ok(), await response.text()).toBeTruthy();
-    const body = (await response.json()) as AgentEnvelope<{
-      declaredCapabilities: string[];
-      grants: Array<{ capability: string }>;
-    }>;
-    const grantedCapabilities = body.data.grants.map((grant) => grant.capability);
-    expect(body.data.declaredCapabilities).toContain('integration.mcp.invoke');
-    expect(body.data.declaredCapabilities).not.toContain('integration.acp.execute');
-    expect(body.data.declaredCapabilities).not.toContain('browser.operate');
-    expect(grantedCapabilities).not.toContain('integration.acp.execute');
-    expect(grantedCapabilities).not.toContain('browser.operate');
-  });
+  await step(
+    'live ACP and Browser capabilities are declared and default-granted without requiring Runner',
+    async () => {
+      const response = await request.get('/api/v1/agent/apps/nexus.operations/grants');
+      expect(response.ok(), await response.text()).toBeTruthy();
+      const body = (await response.json()) as AgentEnvelope<{
+        declaredCapabilities: string[];
+        grants: Array<{ capability: string }>;
+      }>;
+      const grantedCapabilities = body.data.grants.map((grant) => grant.capability);
+      expect(body.data.declaredCapabilities).toContain('integration.mcp.invoke');
+      expect(body.data.declaredCapabilities).toContain('integration.acp.execute');
+      expect(body.data.declaredCapabilities).toContain('browser.operate');
+      expect(grantedCapabilities).toContain('integration.acp.execute');
+      expect(grantedCapabilities).toContain('browser.operate');
+    },
+  );
 
   await step('Agent mutations reject missing CSRF and stale CAS versions', async () => {
     const missingCsrf = await request.patch('/api/v1/agent/apps/nexus.operations', {
@@ -519,6 +522,93 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
     await expect(enabled.json()).resolves.toMatchObject({
       data: { effectiveSettings: { feature: { enabled: true } }, availability: { state: 'enabled' }, revision: 3 },
     });
+  });
+
+  await step('Browser targets and ACP profiles remain configurable while the optional Runner is absent', async () => {
+    const before = await request.get('/api/v1/agent/settings');
+    expect(before.ok(), await before.text()).toBeTruthy();
+    const beforeBody = (await before.json()) as AgentEnvelope<{ revision: number }>;
+    const updated = await request.patch('/api/v1/agent/settings', {
+      headers: mutationHeaders,
+      data: {
+        patch: {
+          workspaceRuntime: {
+            acpProfiles: [{ id: 'local-acp', argv: ['/usr/bin/example-acp'], cwd: '/workspace' }],
+          },
+          browser: {
+            targets: [
+              {
+                id: 'direct-chrome',
+                endpoints: [
+                  {
+                    scope: 'external-network',
+                    via: 'backend',
+                    url: 'http://127.0.0.1:9222',
+                    priority: 10,
+                    allowPlaintext: true,
+                    verifyTls: true,
+                  },
+                ],
+                allowedUrlPatterns: ['https://example.com'],
+              },
+            ],
+          },
+        },
+        expectedVersion: beforeBody.data.revision,
+      },
+    });
+    expect(updated.ok(), await updated.text()).toBeTruthy();
+    await expect(updated.json()).resolves.toMatchObject({
+      data: {
+        requestedSettings: {
+          workspaceRuntime: { acpProfiles: [{ id: 'local-acp' }] },
+          browser: {
+            targets: [
+              {
+                id: 'direct-chrome',
+                endpoints: [{ scope: 'external-network', via: 'backend', url: 'http://127.0.0.1:9222/' }],
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const created = await request.post('/api/v1/apps/nexus.operations/integrations', {
+      headers: mutationHeaders,
+      data: {
+        kind: 'acp',
+        enabled: true,
+        configuration: {
+          displayName: 'Local ACP',
+          transport: 'workspace-profile',
+          profileId: 'local-acp',
+          protocolVersion: '1',
+        },
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const createdBody = (await created.json()) as AgentEnvelope<{ id: string; kind: string; version: number }>;
+    expect(createdBody.data).toMatchObject({ kind: 'acp', version: 1 });
+
+    const listed = await request.get('/api/v1/apps/nexus.operations/integrations?kind=acp');
+    expect(listed.ok(), await listed.text()).toBeTruthy();
+    await expect(listed.json()).resolves.toMatchObject({
+      data: [
+        {
+          id: createdBody.data.id,
+          kind: 'acp',
+          enabled: true,
+          configuration: { profileId: 'local-acp', transport: 'workspace-profile' },
+        },
+      ],
+    });
+
+    const removed = await request.delete(
+      `/api/v1/apps/nexus.operations/integrations/${encodeURIComponent(createdBody.data.id)}?expectedVersion=${createdBody.data.version}`,
+      { headers: mutationHeaders },
+    );
+    expect(removed.ok(), await removed.text()).toBeTruthy();
   });
 
   await step('Workspace Runtime availability reports the optional Runner as not configured', async () => {

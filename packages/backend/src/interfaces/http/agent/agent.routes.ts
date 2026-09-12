@@ -64,6 +64,7 @@ const appSummary = (app: AppView) => ({
   id: app.appId,
   displayName: app.displayName,
   version: app.activeVersion,
+  surface: app.surface,
   stateVersion: app.version,
   enabled: app.desiredState === 'enabled',
   health:

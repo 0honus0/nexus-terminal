@@ -64,14 +64,13 @@ for (const file of sourceFiles) {
   }
 
   if (
-    (rel === 'features/agent/apps/operations/OperationsView.vue' ||
-      rel === 'features/agent/runtime/WorkspaceRuntimePanel.vue') &&
+    (rel === 'features/agent/host/AgentAppSurface.vue' || rel === 'features/agent/runtime/WorkspaceRuntimePanel.vue') &&
     !content.includes('runtime-operation-state')
   ) {
     failures.push(`${rel}: Runtime mutation errors must flow through runtime-operation-state.ts`);
   }
 
-  if (rel === 'features/agent/apps/operations/OperationsView.vue' && content.includes('../../api/agent-events')) {
+  if (rel === 'features/agent/host/AgentAppSurface.vue' && content.includes('../api/agent-events')) {
     failures.push(`${rel}: active Run event lifecycle must be owned by runtime/run-facade.ts`);
   }
 
@@ -184,9 +183,12 @@ for (const [file, imports] of importsByFile) {
       const builtinAppPublicImport =
         relative(file) === 'features/agent/host/builtin-apps.ts' &&
         /^features\/agent\/apps\/[^/]+\/public\.ts$/.test(relative(target));
+      const sharedAgentSurfaceImport =
+        relative(file) === 'features/agent/host/AgentAppSurface.vue' &&
+        ['features/agent/ai/', 'features/agent/runtime/'].some((prefix) => relative(target).startsWith(prefix));
       if (!allowed) {
         failures.push(`${relative(file)}: unknown Agent frontend area ${fromAgentArea}`);
-      } else if (!allowed.has(targetAgentArea) && !builtinAppPublicImport) {
+      } else if (!allowed.has(targetAgentArea) && !builtinAppPublicImport && !sharedAgentSurfaceImport) {
         failures.push(
           `${relative(file)}: forbidden Agent frontend ${fromAgentArea} -> ${targetAgentArea} dependency (${specifier})`,
         );

@@ -20,6 +20,29 @@ export interface WorkspaceResourceLimits {
   tmpfsBytes: number;
 }
 
+export interface WorkspaceAcpProfile {
+  id: string;
+  profileRevision: number;
+  argv: string[];
+  cwd: string;
+}
+
+export interface WorkspaceBrowserEndpoint {
+  scope: 'docker-network' | 'external-network';
+  via: 'backend' | 'runner';
+  url: string;
+  priority: number;
+  allowPlaintext: boolean;
+  verifyTls: boolean;
+}
+
+export interface WorkspaceBrowserTarget {
+  id: string;
+  profileRevision: number;
+  endpoints: WorkspaceBrowserEndpoint[];
+  allowedUrlPatterns: string[];
+}
+
 export interface WorkspaceNetworkPolicy {
   mode: 'none' | 'allowlist';
   hosts: string[];
@@ -112,6 +135,8 @@ export interface WorkspaceProfileView {
   runnerPlugins: PluginRunnerTargetView[];
   limits: WorkspaceResourceLimits;
   network: WorkspaceNetworkPolicy;
+  acpProfiles: WorkspaceAcpProfile[];
+  browserTarget: WorkspaceBrowserTarget | null;
 }
 
 export interface AgentWorkspaceView {
@@ -386,6 +411,8 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
       recipeId: string;
       versions?: Record<string, string>;
       runnerPluginIds?: string[];
+      acpProfileIds?: string[];
+      browserTargetId?: string;
       limits?: Partial<WorkspaceResourceLimits>;
       network?: WorkspaceNetworkPolicy;
     },

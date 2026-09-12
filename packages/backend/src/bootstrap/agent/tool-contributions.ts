@@ -1,10 +1,13 @@
+import type { AgentSettingsService } from '../../modules/agent/host/agent-settings.service';
 import type { ArtifactService } from '../../modules/agent/ai/artifact.service';
 import type { IntegrationRepositoryPort } from '../../modules/agent/ai/integration.repository.port';
 import type { IntegrationServiceHooks } from '../../modules/agent/ai/integration.service';
-import type { McpRuntimePort } from '../../modules/agent/ai/integrations.types';
+import type { AcpRuntimePort, BrowserGatewayPort, McpRuntimePort } from '../../modules/agent/ai/integrations.types';
 import type { MemoryService } from '../../modules/agent/ai/memory.service';
 import { createCollaborationTools } from '../../modules/agent/apps/operations/collaboration-tools';
 import { createMcpTools } from '../../modules/agent/apps/operations/mcp-tools';
+import { createAcpExecuteTool } from '../../modules/agent/apps/operations/acp-tools';
+import { createBrowserTools } from '../../modules/agent/apps/operations/browser-tools';
 import {
   createDockerMutationTool,
   createShellTool,
@@ -140,6 +143,52 @@ export const registerRuntimeToolContributions = ({
     id: 'runtime.collaboration',
     capability: 'runs.execute',
     tools: createCollaborationTools(subagents, mailbox, facts, memories, cryptoHash),
+  });
+};
+
+export interface AcpToolContributionOptions {
+  catalog: ToolCatalog;
+  repository: IntegrationRepositoryPort;
+  workspaces: AgentWorkspaceRepositoryPort;
+  runtime: AcpRuntimePort;
+  cryptoHash: CryptoHashPort;
+}
+
+export const registerAcpToolContribution = ({
+  catalog,
+  repository,
+  workspaces,
+  runtime,
+  cryptoHash,
+}: AcpToolContributionOptions): void => {
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'integration.acp.execute',
+    capability: 'integration.acp.execute',
+    tools: [createAcpExecuteTool(repository, workspaces, runtime, cryptoHash)],
+  });
+};
+
+export interface BrowserToolContributionOptions {
+  catalog: ToolCatalog;
+  workspaces: AgentWorkspaceRepositoryPort;
+  settings: AgentSettingsService;
+  gateway: BrowserGatewayPort;
+  cryptoHash: CryptoHashPort;
+}
+
+export const registerBrowserToolContribution = ({
+  catalog,
+  workspaces,
+  settings,
+  gateway,
+  cryptoHash,
+}: BrowserToolContributionOptions): void => {
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'browser.operate',
+    capability: 'browser.operate',
+    tools: createBrowserTools(workspaces, settings, gateway, cryptoHash),
   });
 };
 

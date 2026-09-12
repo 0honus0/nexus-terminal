@@ -94,6 +94,15 @@ export default defineConfig({
       stderr: 'pipe',
     },
     {
+      command: 'node fixtures/agent/plugin-repository.mjs',
+      cwd: e2eRoot,
+      url: `${E2E_URLS.pluginRepositoryOrigin}/health`,
+      reuseExistingServer: false,
+      timeout: 30_000,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+    {
       command: 'node support/test-guacd-server.mjs',
       cwd: e2eRoot,
       url: `${E2E_URLS.guacdControlOrigin}/health`,

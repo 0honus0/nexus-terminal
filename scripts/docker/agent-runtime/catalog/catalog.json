@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "2026-09-11.3",
+  "revision": "2026-09-11.4",
   "runtimeDigest": "nexus-agent-runner:workspace-toolchain-profile-v2",
   "recipes": [
     {
@@ -10,6 +10,25 @@
       "displayName": "Workspace Dev Environment",
       "allowedFamilies": ["base-tools", "node", "python", "go"],
       "requiredCapabilities": ["shell", "code"],
+      "defaultFamilies": ["base-tools"],
+      "defaultLimits": {
+        "memoryBytes": 1073741824,
+        "cpus": 1,
+        "pids": 256,
+        "tmpfsBytes": 268435456
+      },
+      "networkDefaults": {
+        "mode": "none",
+        "hosts": []
+      }
+    },
+    {
+      "id": "workspace-browser",
+      "revision": "1",
+      "kind": "browser",
+      "displayName": "Workspace Browser Environment",
+      "allowedFamilies": ["base-tools", "node"],
+      "requiredCapabilities": ["shell", "browser"],
       "defaultFamilies": ["base-tools"],
       "defaultLimits": {
         "memoryBytes": 1073741824,

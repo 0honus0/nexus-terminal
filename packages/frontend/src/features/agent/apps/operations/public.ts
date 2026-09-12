@@ -1,3 +1,3 @@
-import { defineAsyncComponent } from 'vue';
+import AgentAppSurface from '../../host/AgentAppSurface.vue';
 
-export const OperationsAppView = defineAsyncComponent(() => import('./OperationsView.vue'));
+export const OperationsAppView = AgentAppSurface;

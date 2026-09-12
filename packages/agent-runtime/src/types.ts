@@ -62,6 +62,29 @@ export interface RuntimeCatalog {
   packs: CatalogPack[];
 }
 
+export interface WorkspaceAcpProfile {
+  id: string;
+  profileRevision: number;
+  argv: string[];
+  cwd: string;
+}
+
+export interface WorkspaceBrowserEndpoint {
+  scope: 'docker-network' | 'external-network';
+  via: 'backend' | 'runner';
+  url: string;
+  priority: number;
+  allowPlaintext: boolean;
+  verifyTls: boolean;
+}
+
+export interface WorkspaceBrowserTarget {
+  id: string;
+  profileRevision: number;
+  endpoints: WorkspaceBrowserEndpoint[];
+  allowedUrlPatterns: string[];
+}
+
 export interface WorkspaceRuntimeCommand {
   commandId: string;
   deploymentId: string;
@@ -80,6 +103,8 @@ export interface WorkspaceRuntimeCommand {
   runnerPlugins?: PluginRunnerTarget[];
   limits: ResourceLimits;
   network: { mode: 'none' | 'allowlist'; hosts: string[] };
+  acpProfiles: WorkspaceAcpProfile[];
+  browserTarget: WorkspaceBrowserTarget | null;
   retained: boolean;
   expectedVersion: number;
   operationHash: string;
@@ -107,6 +132,8 @@ export interface WorkspaceRecord {
   runnerPlugins?: PluginRunnerTarget[];
   limits: ResourceLimits;
   network: { mode: 'none' | 'allowlist'; hosts: string[] };
+  acpProfiles: WorkspaceAcpProfile[];
+  browserTarget: WorkspaceBrowserTarget | null;
   updatedAt: number;
 }
 

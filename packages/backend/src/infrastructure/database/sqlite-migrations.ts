@@ -579,6 +579,29 @@ const definedMigrations: Migration[] = [
       `DROP TABLE IF EXISTS agent_environment_confirmations;`,
     ].join('\n'),
   },
+  {
+    id: 52,
+    name: 'Freeze ACP and Browser runtime profiles on Agent Workspaces',
+    sql: [
+      `ALTER TABLE agent_workspaces ADD COLUMN acp_profiles_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(acp_profiles_json));`,
+      `ALTER TABLE agent_workspaces ADD COLUMN browser_target_json TEXT CHECK(browser_target_json IS NULL OR json_valid(browser_target_json));`,
+    ].join('\n'),
+    check: async (db) => !(await columnExists(db, 'agent_workspaces', 'acp_profiles_json')),
+  },
+  {
+    id: 53,
+    name: 'Generalize Agent plugin stage sources',
+    sql: [
+      `ALTER TABLE agent_plugin_stages RENAME TO agent_plugin_stages_legacy;`,
+      `DROP INDEX IF EXISTS agent_plugin_stages_user;`,
+      createAgentPluginStagesTableSQL,
+      `INSERT INTO agent_plugin_stages(id,user_id,source_kind,source_json,package_hash,size_bytes,publisher_key_id,app_id,app_version,manifest_json,status,error_code,created_at,updated_at,version)
+       SELECT id,user_id,'artifact',json_object('kind','artifact','appId',artifact_app_id,'id',artifact_id),package_hash,size_bytes,publisher_key_id,app_id,app_version,manifest_json,status,error_code,created_at,updated_at,version
+       FROM agent_plugin_stages_legacy;`,
+      `DROP TABLE agent_plugin_stages_legacy;`,
+    ].join('\n'),
+    check: async (db) => !(await columnExists(db, 'agent_plugin_stages', 'source_kind')),
+  },
 ];
 
 /**

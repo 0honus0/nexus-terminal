@@ -17,6 +17,7 @@ import { SqliteMemoryProvenanceAdapter } from '../../infrastructure/agent/reposi
 import { InstalledPluginSkillSourceAdapter } from '../../infrastructure/agent/plugins/installed-plugin-skill-source.adapter';
 import { OpenAiCompatibleAdapter } from '../../infrastructure/agent/providers/openai-compatible.adapter';
 import { McpAdapter } from '../../infrastructure/agent/integrations/mcp.adapter';
+import { AcpAdapter } from '../../infrastructure/agent/integrations/acp.adapter';
 import { OutboundPolicyAdapter } from '../../infrastructure/agent/providers/outbound-policy.adapter';
 import { ProviderSecretAdapter } from '../../infrastructure/agent/providers/provider-secret.adapter';
 import { SqliteProviderRepository } from '../../infrastructure/agent/repositories/sqlite-provider.repository';
@@ -28,10 +29,12 @@ import { SqliteTargetDenylistRepository } from '../../infrastructure/agent/repos
 import { SqliteStateCommitAdapter } from '../../infrastructure/agent/runtime/sqlite-state-commit.adapter';
 import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
+import type { WorkspaceRuntimeInteractiveSessionPort } from '../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
 import { AGENT_DEFAULTS } from '../../modules/agent/agent-defaults';
 import { systemClock } from '../../modules/agent/agent.types';
 import { ArtifactService } from '../../modules/agent/ai/artifact.service';
 import { IntegrationService } from '../../modules/agent/ai/integration.service';
+import type { AcpTransportPort, BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
 import type { ArtifactLimitPolicyPort } from '../../modules/agent/ai/artifact.port';
 import { ConversationService } from '../../modules/agent/ai/conversation.service';
 import { ContextService } from '../../modules/agent/ai/context.service';
@@ -96,6 +99,8 @@ import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
 import {
   createMcpToolContributionHooks,
   registerMachineToolContributions,
+  registerAcpToolContribution,
+  registerBrowserToolContribution,
   registerRuntimeToolContributions,
   registerWorkspaceToolContributions,
 } from './tool-contributions';
@@ -114,6 +119,9 @@ export interface ComposeAgentOptions {
   docker: RemoteDockerService;
   leases: LeasePort;
   workspaceRuntimeController: WorkspaceRuntimeControllerPort & WorkspaceRuntimeGatewayPort;
+  workspaceInteractiveSessions: WorkspaceRuntimeInteractiveSessionPort;
+  acpTransport: AcpTransportPort;
+  browserGateway: BrowserGatewayPort;
   audit: AuditLogService;
 }
 
@@ -131,6 +139,9 @@ export const composeAgent = ({
   docker,
   leases,
   workspaceRuntimeController,
+  workspaceInteractiveSessions,
+  acpTransport,
+  browserGateway,
   audit,
 }: ComposeAgentOptions): AgentServices => {
   const registry = new AppRegistryService();
@@ -180,6 +191,8 @@ export const composeAgent = ({
     new AppIntentArtifactAdapter(artifactStore),
     systemClock,
   );
+  const definitions = new AgentDefinitionRegistry();
+  for (const definition of OPERATIONS_AGENT_DEFINITIONS) definitions.register('nexus.operations', '1.0.0', definition);
   const { appStorage, plugins } = composePlugins({
     database,
     dataDirectory,
@@ -190,6 +203,9 @@ export const composeAgent = ({
     appStates,
     capabilityBroker,
     artifactStore,
+    outboundPolicy,
+    settings,
+    definitions,
     clock: systemClock,
     onHostStateCommitted: publishHostWake,
   });
@@ -229,8 +245,6 @@ export const composeAgent = ({
     audit,
     systemClock,
   );
-  const definitions = new AgentDefinitionRegistry();
-  for (const definition of OPERATIONS_AGENT_DEFINITIONS) definitions.register('nexus.operations', definition);
   const subagents = new SubagentService(
     delegationRepository,
     runtimeParticipants,
@@ -254,11 +268,14 @@ export const composeAgent = ({
     capabilities: capabilityBroker,
     cryptoHash,
     artifacts,
+    interactiveSessions: workspaceInteractiveSessions,
+    browserGateway,
     now: () => systemClock.nowUnixSeconds(),
   });
   const workspaceRepository = composedWorkspaceRuntime.repository;
   const workspaceRuntime = composedWorkspaceRuntime.service;
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
+  const acpRuntime = new AcpAdapter(acpTransport);
   const toolCatalog = new ToolCatalog();
   registerMachineToolContributions({ catalog: toolCatalog, machine, artifacts, cryptoHash });
   registerWorkspaceToolContributions({
@@ -266,6 +283,20 @@ export const composeAgent = ({
     repository: workspaceRepository,
     runtime: workspaceRuntime,
     gateway: workspaceRuntimeController,
+    cryptoHash,
+  });
+  registerAcpToolContribution({
+    catalog: toolCatalog,
+    repository: integrationRepository,
+    workspaces: workspaceRepository,
+    runtime: acpRuntime,
+    cryptoHash,
+  });
+  registerBrowserToolContribution({
+    catalog: toolCatalog,
+    workspaces: workspaceRepository,
+    settings,
+    gateway: browserGateway,
     cryptoHash,
   });
   registerRuntimeToolContributions({
@@ -513,6 +544,8 @@ export const composeAgent = ({
       trustPublisherKey: (userId, publicKeyPem, label) => plugins.trustPublisherKey(userId, publicKeyPem, label),
       revokePublisherKey: (userId, keyId) => plugins.revokePublisherKey(userId, keyId),
       stage: (userId, input) => plugins.stage(userId, input),
+      remoteCatalog: (userId, repositoryUrl, signal) => plugins.remoteCatalog(userId, repositoryUrl, signal),
+      stageRemote: (userId, input, signal) => plugins.stageRemote(userId, input, signal),
       verify: (userId, stageId) => plugins.verify(userId, stageId),
       install: (userId, stageId) => plugins.install(userId, stageId),
       upgrade: (userId, appId, stageId, expectedVersion) => plugins.upgrade(userId, appId, stageId, expectedVersion),
@@ -549,7 +582,10 @@ export const composeAgent = ({
     },
     runtime: {
       runs: {
-        definitions: (appId) => definitions.list(appId),
+        definitions: async (scope) => {
+          const app = await lifecycle.get(scope);
+          return definitions.list(scope.appId, app.activeVersion);
+        },
         create: (scope, command) => runs.create(scope, command),
         get: (scope, runId) => runs.get(scope, runId),
         rootRuntimeId: (scope, runId) => runRepository.rootRuntimeId(scope, runId),
@@ -633,6 +669,8 @@ export const composeAgent = ({
         lifecycleSweeps.stop(),
         subagentScheduler?.dispose() ?? Promise.resolve(),
         mcpRuntime.closeAll(),
+        workspaceInteractiveSessions.closeAll(),
+        browserGateway.closeAll(),
       ]);
       eventHub.clear();
       await lifecycle.dispose();

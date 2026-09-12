@@ -75,7 +75,10 @@ export class AcpAdapter implements AcpRuntimePort {
     assertRequest(request);
     if (context.signal.aborted) throw context.signal.reason ?? new Error('ABORTED');
     const config = acpConfig(integration);
-    const transport = await this.transports.open(config.profileId, context.signal);
+    const transport = await this.transports.open(
+      { workspaceId: request.workspaceId, generation: request.generation, profileId: config.profileId },
+      context.signal,
+    );
     const onAbort = () => void transport.close().catch(() => undefined);
     context.signal.addEventListener('abort', onAbort, { once: true });
 

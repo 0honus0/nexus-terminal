@@ -12,6 +12,9 @@ import { Reconciler } from './controller/reconciler';
 import { CertificateManager } from './controller/certificate-manager';
 import { RunnerControllerServer } from './controller/server';
 import { PluginRunnerRuntime } from './controller/plugin-runner-runtime';
+import { AcpProcessRuntime } from './controller/acp-process-runtime';
+import { WorkspaceTerminalRuntime } from './controller/workspace-terminal-runtime';
+import { BrowserTunnelRuntime } from './controller/browser-tunnel-runtime';
 
 const main = async (): Promise<void> => {
   const root = process.env.NEXUS_AGENT_RUNNER_ROOT?.trim() || '/var/lib/nexus-agent-runner';
@@ -43,6 +46,9 @@ const main = async (): Promise<void> => {
     sandboxBinary,
   );
   await new Reconciler(journal, sandboxEngine, pluginRunner).reconcile();
+  const acpRuntime = new AcpProcessRuntime(journal, sandboxEngine);
+  const terminalRuntime = new WorkspaceTerminalRuntime(journal, sandboxEngine);
+  const browserTunnel = new BrowserTunnelRuntime(journal);
   const server = new RunnerControllerServer({
     token,
     deploymentId,
@@ -54,6 +60,9 @@ const main = async (): Promise<void> => {
     storage,
     cleanup,
     pluginRunner,
+    acpRuntime,
+    terminalRuntime,
+    browserTunnel,
   }).createServer();
   const port = Number(process.env.PORT || 8790);
   const host = process.env.NEXUS_AGENT_RUNNER_HOST?.trim() || '127.0.0.1';

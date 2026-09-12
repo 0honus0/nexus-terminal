@@ -5,16 +5,23 @@
     agentApi,
     formatAgentApiError,
     type AgentAppSummary,
+    type AgentSettingsView,
     type PluginInstallation,
     type PluginPublisherKey,
     type PluginVerifyResult,
     type PluginVersionView,
+    type RemotePluginCatalog,
+    type RemotePluginPackageEntry,
+    type RemotePluginPublisher,
   } from '../api/agent-api';
 
-  const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
-  const emit = defineEmits<{ refresh: [] }>();
+  const props = defineProps<{ apps: AgentAppSummary[]; settings: AgentSettingsView; busy: boolean }>();
+  const emit = defineEmits<{ refresh: []; settingsUpdated: [AgentSettingsView] }>();
   const { t } = useI18n();
 
+  const repositoryUrl = ref('');
+  const repositoryExceptions = ref('');
+  const remoteCatalogs = ref<RemotePluginCatalog[]>([]);
   const publisherLabel = ref('');
   const publisherPem = ref('');
   const publishers = ref<PluginPublisherKey[]>([]);
@@ -31,6 +38,7 @@
   const pendingDataDeletionAppId = ref<string | null>(null);
 
   const locked = computed(() => props.busy || localBusy.value);
+  const configuredRepositories = computed(() => props.settings.requestedSettings.plugins.repositories);
   const noticeText = computed(() => {
     switch (notice.value) {
       case 'PUBLISHER_TRUSTED':
@@ -61,6 +69,13 @@
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
+  const loadRemoteCatalogs = async (): Promise<void> => {
+    const results = await Promise.allSettled(
+      configuredRepositories.value.map((repository) => agentApi.remotePluginCatalog(repository.url)),
+    );
+    remoteCatalogs.value = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+  };
+
   const refresh = async (): Promise<void> => {
     const [nextPublishers, nextInstallations, nextVersions] = await Promise.all([
       agentApi.pluginPublishers(),
@@ -70,6 +85,7 @@
     publishers.value = nextPublishers;
     installations.value = nextInstallations;
     versions.value = nextVersions;
+    await loadRemoteCatalogs();
   };
 
   const run = async (action: () => Promise<void>): Promise<void> => {
@@ -84,6 +100,57 @@
     } finally {
       localBusy.value = false;
     }
+  };
+
+  const saveRepositories = async (repositories: AgentSettingsView['requestedSettings']['plugins']['repositories']) => {
+    const updated = await agentApi.patchSettings({ plugins: { repositories } }, props.settings.revision);
+    emit('settingsUpdated', updated);
+    await loadRemoteCatalogs();
+  };
+
+  const addRepository = (): void => {
+    const url = repositoryUrl.value.trim();
+    if (!url) return;
+    void run(async () => {
+      const exceptions = repositoryExceptions.value
+        .split(/[\s,]+/)
+        .map((value) => value.trim())
+        .filter(Boolean);
+      const next = [
+        ...configuredRepositories.value.filter((candidate) => candidate.url !== url),
+        { url, privateHostExceptions: exceptions },
+      ];
+      await saveRepositories(next);
+      repositoryUrl.value = '';
+      repositoryExceptions.value = '';
+    });
+  };
+
+  const removeRepository = (url: string): void => {
+    void run(async () => saveRepositories(configuredRepositories.value.filter((candidate) => candidate.url !== url)));
+  };
+
+  const publisherTrusted = (keyId: string): boolean =>
+    publishers.value.some((publisher) => publisher.keyId === keyId && publisher.revokedAt === null);
+
+  const trustRemotePublisher = (publisher: RemotePluginPublisher): void => {
+    void run(async () => {
+      await agentApi.trustPluginPublisher(publisher.publicKeyPem, publisher.label);
+      await refresh();
+      notice.value = 'PUBLISHER_TRUSTED';
+    });
+  };
+
+  const prepareRemotePackage = (catalog: RemotePluginCatalog, entry: RemotePluginPackageEntry): void => {
+    if (!publisherTrusted(entry.publisherKeyId)) return;
+    void run(async () => {
+      candidate.value = null;
+      drainingUpgradeVersion.value = null;
+      candidateArtifactName.value = `${entry.appId}@${entry.version}`;
+      const stage = await agentApi.stageRemotePlugin(catalog.repositoryUrl, entry.appId, entry.version);
+      candidate.value = await agentApi.verifyPlugin(stage.id);
+      notice.value = 'PACKAGE_VERIFIED';
+    });
   };
 
   const trustPublisher = (): void => {
@@ -227,6 +294,110 @@
     <p v-if="noticeText" class="mt-3 rounded-md bg-success/10 px-3 py-2 text-xs text-success">
       {{ noticeText }}
     </p>
+
+    <div class="mt-5 rounded-md bg-background p-4">
+      <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.remoteRepositories') }}</h3>
+          <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.plugins.remoteRepositoriesHint') }}</p>
+        </div>
+        <button
+          type="button"
+          class="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-header disabled:opacity-50"
+          :disabled="locked || configuredRepositories.length === 0"
+          @click="run(loadRemoteCatalogs)"
+        >
+          {{ $t('agent.settings.plugins.refreshRemote') }}
+        </button>
+      </div>
+      <div class="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <input
+          v-model="repositoryUrl"
+          class="rounded-md border border-border bg-card px-3 py-2 text-sm"
+          :placeholder="$t('agent.settings.plugins.repositoryUrl')"
+          :disabled="locked"
+        />
+        <input
+          v-model="repositoryExceptions"
+          class="rounded-md border border-border bg-card px-3 py-2 text-sm"
+          :placeholder="$t('agent.settings.plugins.repositoryExceptions')"
+          :disabled="locked"
+        />
+        <button
+          type="button"
+          class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          :disabled="locked || !repositoryUrl.trim()"
+          @click="addRepository"
+        >
+          {{ $t('agent.settings.plugins.addRepository') }}
+        </button>
+      </div>
+      <div v-if="configuredRepositories.length" class="mt-3 flex flex-wrap gap-2">
+        <div
+          v-for="repository in configuredRepositories"
+          :key="repository.url"
+          class="flex max-w-full items-center gap-2 rounded border border-border bg-card px-2 py-1"
+        >
+          <span class="max-w-[32rem] truncate font-mono text-[10px]">{{ repository.url }}</span>
+          <button
+            type="button"
+            class="text-xs text-error hover:underline disabled:opacity-50"
+            :disabled="locked"
+            @click="removeRepository(repository.url)"
+          >
+            {{ $t('agent.settings.plugins.removeRepository') }}
+          </button>
+        </div>
+      </div>
+      <div v-if="remoteCatalogs.length" class="mt-4 space-y-4">
+        <div
+          v-for="catalog in remoteCatalogs"
+          :key="catalog.repositoryUrl"
+          class="rounded border border-border bg-card p-3"
+        >
+          <p class="break-all font-mono text-[10px] text-text-secondary">{{ catalog.repositoryUrl }}</p>
+          <div class="mt-3 grid gap-3 lg:grid-cols-2">
+            <div
+              v-for="entry in catalog.packages"
+              :key="`${entry.appId}@${entry.version}`"
+              class="rounded border border-border p-3"
+            >
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-medium">{{ entry.displayName }}</span>
+                <span class="rounded bg-header px-2 py-0.5 text-[10px]">v{{ entry.version }}</span>
+              </div>
+              <p class="mt-1 text-xs text-text-secondary">{{ entry.description }}</p>
+              <p class="mt-2 break-all font-mono text-[10px] text-text-secondary">{{ entry.appId }}</p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  v-if="!publisherTrusted(entry.publisherKeyId)"
+                  type="button"
+                  class="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-header disabled:opacity-50"
+                  :disabled="
+                    locked || !catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
+                  "
+                  @click="
+                    trustRemotePublisher(
+                      catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
+                    )
+                  "
+                >
+                  {{ $t('agent.settings.plugins.trustRemotePublisher') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                  :disabled="locked || !publisherTrusted(entry.publisherKeyId)"
+                  @click="prepareRemotePackage(catalog, entry)"
+                >
+                  {{ $t('agent.settings.plugins.prepareRemote') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="mt-5 grid gap-4 lg:grid-cols-2">
       <div class="rounded-md bg-background p-4">

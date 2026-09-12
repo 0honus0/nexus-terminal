@@ -13,8 +13,10 @@
     type TargetDenylistView,
   } from '../api/agent-api';
   import AgentFeatureSettings from './AgentFeatureSettings.vue';
+  import AcpRuntimeSettings from './AcpRuntimeSettings.vue';
   import AppManagementSettings from './AppManagementSettings.vue';
   import BudgetContextSettings from './BudgetContextSettings.vue';
+  import BrowserRuntimeSettings from './BrowserRuntimeSettings.vue';
   import WorkspaceRuntimeSettings from './WorkspaceRuntimeSettings.vue';
   import HardLimitsSettings from './HardLimitsSettings.vue';
   import ModelProviderSettings from './ModelProviderSettings.vue';
@@ -158,7 +160,13 @@
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
       <AgentFeatureSettings :settings="settings" :busy="busy" @change="changeFeature" />
       <AppManagementSettings :apps="apps" :busy="busy" @toggle="toggleApp" />
-      <PluginManagementSettings :apps="apps" :busy="busy" @refresh="load" />
+      <PluginManagementSettings
+        :apps="apps"
+        :settings="settings"
+        :busy="busy"
+        @refresh="load"
+        @settings-updated="(updated) => (settings = updated)"
+      />
       <ModelProviderSettings
         :providers="providers"
         :busy="busy"
@@ -189,6 +197,12 @@
         :busy="busy"
         @save="(patch) => patchSection('storage', patch)"
       />
+      <AcpRuntimeSettings
+        :settings="settings"
+        :busy="busy"
+        @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
+      />
+      <BrowserRuntimeSettings :settings="settings" :busy="busy" @save="(patch) => patchSection('browser', patch)" />
       <WorkspaceRuntimeSettings
         :availability="workspaceRuntime"
         :settings="settings"

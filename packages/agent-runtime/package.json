@@ -14,11 +14,12 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/semver": "7.7.1",
-    "typescript": "catalog:node-build"
+    "typescript": "catalog:node-build",
+    "@types/ws": "^8.18.1"
   },
   "dependencies": {
-    "puppeteer-core": "catalog:",
     "semver": "7.7.2",
-    "tar": "catalog:"
+    "tar": "catalog:",
+    "ws": "^8.21.3"
   }
 }

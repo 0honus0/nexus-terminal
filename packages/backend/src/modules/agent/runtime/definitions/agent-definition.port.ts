@@ -7,6 +7,6 @@ export interface AgentDefinitionView {
 }
 
 export interface AgentDefinitionRegistryPort {
-  list(appId: string): readonly AgentDefinitionView[];
-  require(appId: string, definitionId: string): AgentDefinitionView;
+  list(appId: string, appVersion: string): readonly AgentDefinitionView[];
+  require(appId: string, appVersion: string, definitionId: string): AgentDefinitionView;
 }

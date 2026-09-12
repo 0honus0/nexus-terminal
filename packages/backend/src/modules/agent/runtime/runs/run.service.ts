@@ -142,7 +142,6 @@ export class RunService {
 
   async create(scope: Scope, command: CreateRunCommand): Promise<RunView> {
     if (!command || typeof command !== 'object') throw new Error('VALIDATION_FAILED');
-    this.definitions.require(scope.appId, command.agentDefinitionId);
     const key = requireIdempotencyKey(command.command.key);
     if (!isAgentUuid(command.command.requestId)) throw new Error('VALIDATION_FAILED');
     if (!isAgentUuid(command.threadId)) throw new Error('VALIDATION_FAILED');
@@ -172,6 +171,7 @@ export class RunService {
     if (app.desiredState !== 'enabled' || !['running', 'degraded'].includes(app.observedState))
       throw new Error('AGENT_APP_DISABLED');
     if (!app.acceptNewRuns) throw new Error('AGENT_APP_DRAINING');
+    this.definitions.require(scope.appId, app.activeVersion, command.agentDefinitionId);
     if (!provider.enabled || provider.version !== command.model.configurationVersion)
       throw new Error('PROVIDER_CONFIGURATION_STALE');
     const model = provider.models.find((candidate) => candidate.id === command.model.modelId);

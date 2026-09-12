@@ -46,6 +46,8 @@ const patchableSections = [
   'subagents',
   'storage',
   'workspaceRuntime',
+  'browser',
+  'plugins',
   'safety',
 ] as const;
 

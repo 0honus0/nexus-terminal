@@ -66,7 +66,16 @@
           "pluginUpgraded": "插件升级成功。",
           "pluginUninstalledDataRetained": "插件代码已卸载，App 数据仍保留。",
           "pluginDataDeleted": "保留的 AppStorage 数据已删除。"
-        }
+        },
+        "remoteRepositories": "远程插件仓库",
+        "remoteRepositoriesHint": "仓库只负责发现插件。安装前仍必须显式信任 Ed25519 发布者，并通过包签名校验。",
+        "refreshRemote": "刷新仓库",
+        "repositoryUrl": "仓库 catalog URL",
+        "repositoryExceptions": "私网例外（host:port，可选）",
+        "addRepository": "添加仓库",
+        "trustRemotePublisher": "信任发布者",
+        "prepareRemote": "校验插件包",
+        "removeRepository": "移除"
       },
       "hardLimits": {
         "title": "Hard Limits",
@@ -223,6 +232,55 @@
         "removeProfile": "移除配置档",
         "noProfiles": "此 App 尚未配置 Subagent 配置档。",
         "saveProfiles": "保存配置档"
+      },
+      "browserRuntime": {
+        "title": "浏览器运行时",
+        "description": "配置由 Backend 单份 BrowserRuntime 使用的 CDP 目标。endpoint 的网络位置（scope）与访问路径（via）彼此独立；via=runner 仅使用 Runner 作为网络隧道。",
+        "addTarget": "添加浏览器目标",
+        "empty": "尚未配置浏览器目标。无需 Runner 的外部 CDP 可直接配置 via=backend。",
+        "targetId": "目标 ID",
+        "remove": "删除目标",
+        "allowedUrls": "允许访问的页面 URL Pattern（每行一个）",
+        "endpoints": "CDP Endpoints",
+        "endpointHint": "scope 描述 endpoint 所在网络；via 决定 Backend 直连还是通过 Runner 隧道。v1 不允许把凭据放进 URL 的 userinfo、query 或 fragment。",
+        "addEndpoint": "添加 Endpoint",
+        "scope": "网络范围",
+        "via": "访问路径",
+        "priority": "优先级",
+        "removeEndpoint": "删除",
+        "url": "CDP URL（http/https/ws/wss）",
+        "allowPlaintext": "允许明文 HTTP/WS",
+        "verifyTls": "校验 TLS 证书",
+        "save": "保存浏览器配置",
+        "scopeDocker": "Docker 网络",
+        "scopeExternal": "外部网络",
+        "viaBackend": "Backend 直连",
+        "viaRunner": "通过 Runner 隧道"
+      },
+      "acpRuntime": {
+        "title": "ACP 运行时",
+        "description": "配置 Workspace 内可启动的 ACP 进程 Profile，以及 Operations Agent 可调用的 ACP Integration。ACP 进程仍受 Workspace generation、只读挂载和无网络 sandbox 约束。",
+        "addProfile": "添加 Profile",
+        "profiles": "Workspace ACP Profiles",
+        "profilesHint": "argv 使用 JSON 字符串数组；cwd 必须位于 /workspace。保存 Profile 后，创建 Workspace 时可选择并冻结到 generation。",
+        "noProfiles": "尚未配置 ACP Profile。",
+        "profileId": "Profile ID",
+        "argv": "argv（JSON 数组）",
+        "cwd": "工作目录",
+        "remove": "删除",
+        "saveProfiles": "保存 Profiles",
+        "integrations": "ACP Integrations",
+        "integrationsHint": "Integration 是 Agent 的逻辑入口，只引用已保存的 Workspace Profile；执行时仍必须选择包含该 Profile 的运行中 Workspace。",
+        "refresh": "刷新",
+        "displayName": "显示名称",
+        "integrationProfile": "Workspace Profile",
+        "selectProfile": "选择 Profile",
+        "enabled": "启用",
+        "createIntegration": "创建 Integration",
+        "saveProfileFirst": "请先保存至少一个 ACP Profile，再创建 Integration。",
+        "loading": "正在加载 ACP Integrations…",
+        "noIntegrations": "尚未配置 ACP Integration。",
+        "deleteIntegration": "删除"
       }
     },
     "launcher": {
@@ -239,7 +297,8 @@
       "minimize": "最小化 Agent",
       "maximize": "最大化或还原 Agent",
       "close": "关闭 Agent",
-      "resize": "调整 Agent 窗口大小"
+      "resize": "调整 Agent 窗口大小",
+      "noSurface": "此 Agent App 未提供可交互界面。"
     },
     "pluginFrontend": {
       "frameTitle": "Agent 插件界面",
@@ -418,7 +477,16 @@
       "reconciliationRequired": "Workspace 命令结果未知；请先核实结果，再发送新的修改操作。",
       "verifyOutcome": "核实结果",
       "reconciliationPending": "Workspace 命令结果仍未知；系统没有重试原修改操作。",
-      "reconciliationResolved": "Workspace 命令结果已完成对账。"
+      "reconciliationResolved": "Workspace 命令结果已完成对账。",
+      "localTerminal": "本地终端",
+      "localTerminalHint": "通过 Workspace Runtime 的隔离 SSH 会话打开此 generation。",
+      "openTerminal": "打开终端",
+      "closeTerminal": "关闭终端",
+      "browserTarget": "浏览器目标",
+      "browserTargetNone": "不绑定（仍可 standalone 使用）",
+      "browserTargetHint": "选择后会把目标配置冻结到该 Workspace generation。",
+      "acpProfiles": "ACP Profiles",
+      "acpProfilesHint": "选择允许在该 Workspace generation 内启动的 ACP workspace profiles。"
     },
     "subagents": {
       "title": "Subagent",

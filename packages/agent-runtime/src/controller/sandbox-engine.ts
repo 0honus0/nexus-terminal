@@ -47,6 +47,14 @@ export class SandboxEngine {
     this.sandbox.remove(sandboxId);
   }
 
+  prepareAcpProcess(sandboxId: string, workspaceId: string, generation: number, argv: readonly string[], cwd: string) {
+    return this.sandbox.prepareAcpProcess(sandboxId, workspaceId, generation, argv, cwd);
+  }
+
+  prepareTerminalProcess(sandboxId: string, workspaceId: string, generation: number, authorizedKey: string) {
+    return this.sandbox.prepareTerminalProcess(sandboxId, workspaceId, generation, authorizedKey);
+  }
+
   async executeJob(sandboxId: string, request: WorkspaceJobRequest): Promise<WorkspaceJobResult> {
     const execution = this.sandbox.prepareJob(sandboxId, request);
     const controller = new AbortController();

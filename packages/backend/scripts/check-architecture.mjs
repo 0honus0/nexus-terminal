@@ -243,20 +243,10 @@ for (const file of sourceFiles) {
     }
   }
   if (relativeFile.startsWith('bootstrap/agent/')) {
-    const reservedProductionSymbols = [
-      'AcpAdapter',
-      'AcpRuntimePort',
-      'AcpTransportPort',
-      'PuppeteerBrowserGateway',
-      'BrowserGatewayPort',
-      'BrowserEndpointPort',
-      'integration.acp.execute',
-      'browser.operate',
-    ];
-    for (const symbol of reservedProductionSymbols) {
+    for (const symbol of ['PuppeteerBrowserGateway', 'BrowserEndpointPort']) {
       if (text.includes(symbol)) {
         failures.push(
-          `${relativeFile}: reserved ACP/Browser capability ${symbol} may not enter production composition`,
+          `${relativeFile}: obsolete raw Browser/CDP symbol ${symbol} may not enter production composition`,
         );
       }
     }
@@ -274,6 +264,8 @@ for (const file of sourceFiles) {
       'createWorkspaceSwitchToolVersionsTool',
       'createCollaborationTools',
       'createMcpTools',
+      'createAcpExecuteTool',
+      'createBrowserTools',
       'createPlanUpdateTool',
     ];
     for (const symbol of operationsToolCreators) {
@@ -348,10 +340,39 @@ const operationsManifest = JSON.parse(fs.readFileSync(operationsManifestPath, 'u
 const operationsCapabilities = new Set(
   Array.isArray(operationsManifest.capabilities) ? operationsManifest.capabilities : [],
 );
-for (const reservedCapability of ['integration.acp.execute', 'browser.operate']) {
-  if (operationsCapabilities.has(reservedCapability)) {
+for (const liveCapability of ['integration.acp.execute', 'browser.operate']) {
+  if (!operationsCapabilities.has(liveCapability)) {
     failures.push(
-      `modules/agent/apps/operations/app.manifest.json: reserved capability ${reservedCapability} may not be declared before its live implementation is approved`,
+      `modules/agent/apps/operations/app.manifest.json: live capability ${liveCapability} must be declared`,
+    );
+  }
+}
+const obsoleteBrowserAdapterPath = path.join(srcRoot, 'infrastructure/agent/integrations/browser-gateway.adapter.ts');
+if (fs.existsSync(obsoleteBrowserAdapterPath)) {
+  failures.push(
+    'infrastructure/agent/integrations/browser-gateway.adapter.ts: obsolete BrowserGateway adapter must not reappear; BrowserRuntimeAdapter is the single Browser/CDP owner',
+  );
+}
+
+const browserRuntimePath = path.join(srcRoot, 'infrastructure/agent/integrations/browser-runtime.adapter.ts');
+if (!fs.existsSync(browserRuntimePath)) {
+  failures.push(
+    'infrastructure/agent/integrations/browser-runtime.adapter.ts: live Browser capability requires the Backend BrowserRuntime owner',
+  );
+} else {
+  const browserRuntimeSource = fs.readFileSync(browserRuntimePath, 'utf8');
+  if (!browserRuntimeSource.includes("from 'puppeteer-core'")) {
+    failures.push(
+      'infrastructure/agent/integrations/browser-runtime.adapter.ts: Backend BrowserRuntime must own puppeteer-core',
+    );
+  }
+}
+const agentRuntimePackagePath = path.resolve('../agent-runtime/package.json');
+if (fs.existsSync(agentRuntimePackagePath)) {
+  const agentRuntimePackage = JSON.parse(fs.readFileSync(agentRuntimePackagePath, 'utf8'));
+  if (agentRuntimePackage.dependencies?.['puppeteer-core'] || agentRuntimePackage.devDependencies?.['puppeteer-core']) {
+    failures.push(
+      'packages/agent-runtime/package.json: Runner must remain a Browser transport/tunnel only and may not depend on puppeteer-core',
     );
   }
 }

@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted } from 'vue';
   import type { HostSummaryView } from '../api/agent-api';
+  import AgentAppSurface from './AgentAppSurface.vue';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
   import { builtinAppView } from './builtin-apps';
@@ -143,7 +144,22 @@
         :key="activeApp.id"
         :app-id="activeApp.id"
       />
-      <PluginAppFrame v-else-if="activeApp" :key="`${activeApp.id}@${activeApp.version}`" :app-id="activeApp.id" />
+      <AgentAppSurface
+        v-else-if="activeApp?.surface === 'agent'"
+        :key="`${activeApp.id}@${activeApp.version}`"
+        :app-id="activeApp.id"
+      />
+      <PluginAppFrame
+        v-else-if="activeApp?.surface === 'plugin'"
+        :key="`${activeApp.id}@${activeApp.version}`"
+        :app-id="activeApp.id"
+      />
+      <div
+        v-else-if="activeApp"
+        class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary"
+      >
+        {{ $t('agent.hub.noSurface') }}
+      </div>
       <div v-else class="flex h-full items-center justify-center p-6 text-center text-sm text-text-secondary">
         {{ $t('agent.hub.chooseApp') }}
       </div>

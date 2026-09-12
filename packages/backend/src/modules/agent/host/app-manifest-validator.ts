@@ -3,6 +3,7 @@ import type { JsonValue } from '../agent.types';
 import { assertJsonSchema } from '../json-schema-validator';
 import {
   AGENT_CAPABILITIES,
+  type AgentAppAgentDefinition,
   type AgentAppIntent,
   type AgentAppTarget,
   type AgentAppTargets,
@@ -34,6 +35,22 @@ const MANIFEST_SCHEMA: JsonValue = {
       },
     },
     capabilities: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
+    agents: {
+      type: 'array',
+      maxItems: 32,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['id', 'version', 'displayName', 'description', 'requiredModelCapabilities'],
+        properties: {
+          id: { type: 'string', minLength: 1 },
+          version: { type: 'string', minLength: 1 },
+          displayName: { type: 'string', minLength: 1 },
+          description: { type: 'string', minLength: 1 },
+          requiredModelCapabilities: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
+        },
+      },
+    },
     intents: {
       type: 'array',
       items: {
@@ -164,6 +181,42 @@ export const validateManifest = (raw: unknown, options: ManifestValidatorOptions
     intents.push({ id: intentId, schemaVersion: integer(intent.schemaVersion, 'manifest.intents[].schemaVersion') });
   }
 
+  let agents: AgentAppAgentDefinition[] | undefined;
+  if (input.agents !== undefined) {
+    if (!Array.isArray(input.agents) || input.agents.length > 32) throw new Error('manifest.agents must be an array.');
+    const seenAgents = new Set<string>();
+    agents = [];
+    for (const candidate of input.agents) {
+      const agent = record(candidate, 'manifest.agents[]');
+      const agentId = string(agent.id, 'manifest.agents[].id');
+      if (!INTENT_ID.test(agentId)) throw new Error(`Invalid Agent definition id: ${agentId}`);
+      if (seenAgents.has(agentId)) throw new Error(`Duplicate Agent definition: ${agentId}`);
+      seenAgents.add(agentId);
+      const agentVersion = requireSemver(
+        string(agent.version, 'manifest.agents[].version'),
+        'manifest.agents[].version',
+      );
+      const agentDisplayName = string(agent.displayName, 'manifest.agents[].displayName');
+      const description = string(agent.description, 'manifest.agents[].description');
+      if (!Array.isArray(agent.requiredModelCapabilities) || agent.requiredModelCapabilities.length > 32) {
+        throw new Error('manifest.agents[].requiredModelCapabilities must be an array.');
+      }
+      const requiredModelCapabilities = agent.requiredModelCapabilities.map((item) =>
+        string(item, 'manifest.agents[].requiredModelCapabilities[]'),
+      );
+      if (new Set(requiredModelCapabilities).size !== requiredModelCapabilities.length) {
+        throw new Error('Duplicate manifest.agents[].requiredModelCapabilities value.');
+      }
+      agents.push({
+        id: agentId,
+        version: agentVersion,
+        displayName: agentDisplayName,
+        description,
+        requiredModelCapabilities,
+      });
+    }
+  }
+
   let targets: AgentAppTargets | undefined;
   if (input.targets !== undefined) {
     const rawTargets = record(input.targets, 'manifest.targets');
@@ -198,6 +251,7 @@ export const validateManifest = (raw: unknown, options: ManifestValidatorOptions
     nexus: { minVersion, maxVersion },
     capabilities,
     intents,
+    ...(agents ? { agents } : {}),
     ...(targets ? { targets } : {}),
     validated: true,
   };

@@ -286,3 +286,164 @@ test('historical databases apply current connection and settings migrations thro
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+const downgradePluginStagesToV52 = (databasePath: string): void => {
+  const sql = `
+    PRAGMA foreign_keys = OFF;
+    DELETE FROM agent_plugin_stages;
+    DROP INDEX IF EXISTS agent_plugin_stages_user;
+    ALTER TABLE agent_plugin_stages RENAME TO agent_plugin_stages_current;
+    CREATE TABLE agent_plugin_stages (
+      id TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      artifact_app_id TEXT NOT NULL,
+      artifact_id TEXT NOT NULL,
+      package_hash TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
+      publisher_key_id TEXT,
+      app_id TEXT,
+      app_version TEXT,
+      manifest_json TEXT CHECK(manifest_json IS NULL OR json_valid(manifest_json)),
+      status TEXT NOT NULL CHECK(status IN ('staged','verified','failed','installed')),
+      error_code TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+      UNIQUE(user_id, id)
+    );
+    CREATE INDEX agent_plugin_stages_user ON agent_plugin_stages(user_id, created_at DESC, id DESC);
+    INSERT OR IGNORE INTO users (id,username,hashed_password) VALUES (1,'migration-user','not-used');
+    INSERT INTO agent_plugin_stages (
+      id,user_id,artifact_app_id,artifact_id,package_hash,size_bytes,publisher_key_id,app_id,app_version,
+      manifest_json,status,error_code,created_at,updated_at,version
+    ) VALUES (
+      'legacy-stage',1,'nexus.operations','artifact-123','aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      1024,NULL,NULL,NULL,NULL,'staged',NULL,1700000000,1700000001,3
+    );
+    DROP TABLE agent_plugin_stages_current;
+    DELETE FROM migrations WHERE id = 53;
+    PRAGMA foreign_keys = ON;
+  `;
+  const script = `
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(process.argv[1]);
+    try { db.exec(${JSON.stringify(sql)}); } finally { db.close(); }
+  `;
+  execFileSync(process.execPath, ['-e', script, databasePath], { cwd: repoRoot, stdio: 'pipe' });
+};
+
+const readPluginStageMigrationEvidence = (databasePath: string) => {
+  const script = String.raw`
+    const { DatabaseSync } = require('node:sqlite');
+    const db = new DatabaseSync(process.argv[1], { readOnly: true });
+    try {
+      const columns = db.prepare('PRAGMA table_info(agent_plugin_stages)').all().map((column) => column.name);
+      const row = db.prepare("SELECT id,user_id,source_kind,source_json,package_hash,size_bytes,status,created_at,updated_at,version FROM agent_plugin_stages WHERE id='legacy-stage'").get();
+      const migration = db.prepare('SELECT id,name FROM migrations WHERE id=53').get();
+      process.stdout.write(JSON.stringify({ columns, row, migration }));
+    } finally { db.close(); }
+  `;
+  return JSON.parse(
+    execFileSync(process.execPath, ['-e', script, databasePath], { cwd: repoRoot, encoding: 'utf8' }),
+  ) as {
+    columns: string[];
+    row: {
+      id: string;
+      user_id: number;
+      source_kind: string;
+      source_json: string;
+      package_hash: string;
+      size_bytes: number;
+      status: string;
+      created_at: number;
+      updated_at: number;
+      version: number;
+    };
+    migration: { id: number; name: string };
+  };
+};
+
+test('migration 53 preserves legacy Artifact plugin stages while generalizing stage sources', async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'nexus-plugin-stage-migration-e2e-'));
+  const databasePath = path.join(dataDir, 'nexus-terminal.db');
+  createHistoricalDatabase(databasePath);
+
+  const spawnBackend = async (): Promise<{
+    child: ChildProcessWithoutNullStreams;
+    baseURL: string;
+    logs: () => string;
+  }> => {
+    const port = await reservePort();
+    const baseURL = `http://127.0.0.1:${port}`;
+    let output = '';
+    const child = spawn(tsxBin, ['src/index.ts'], {
+      cwd: backendRoot,
+      env: {
+        ...process.env,
+        HOST: '127.0.0.1',
+        PORT: String(port),
+        NODE_ENV: 'test',
+        NEXUS_DATA_DIR: dataDir,
+        NEXUS_E2E_RESET_ENABLED: '0',
+        SESSION_COOKIE_NAME: 'nexus.plugin-migration.e2e.sid',
+        SESSION_SECRET: 'plugin-migration-e2e-session-secret-do-not-use-outside-tests-0000000000',
+        ENCRYPTION_KEY,
+        RP_ID: '127.0.0.1',
+        RP_ORIGIN: baseURL,
+      },
+      stdio: 'pipe',
+    });
+    child.stdin.end();
+    child.stdout.on('data', (chunk) => {
+      output = `${output}${String(chunk)}`.slice(-20_000);
+    });
+    child.stderr.on('data', (chunk) => {
+      output = `${output}${String(chunk)}`.slice(-20_000);
+    });
+    return { child, baseURL, logs: () => output };
+  };
+
+  let active: ChildProcessWithoutNullStreams | null = null;
+  try {
+    // First produce a structurally real current database from the same historical baseline
+    // as the normal migration E2E. Then downgrade only the plugin-stage table to its v52
+    // shape so the second startup isolates migration 53 instead of faking unrelated tables.
+    const bootstrap = await spawnBackend();
+    active = bootstrap.child;
+    await waitForBackend(bootstrap.baseURL, bootstrap.child, bootstrap.logs);
+    await stopProcess(bootstrap.child);
+    active = null;
+
+    downgradePluginStagesToV52(databasePath);
+
+    const migrated = await spawnBackend();
+    active = migrated.child;
+    await waitForBackend(migrated.baseURL, migrated.child, migrated.logs);
+    await stopProcess(migrated.child);
+    active = null;
+
+    const evidence = readPluginStageMigrationEvidence(databasePath);
+    expect(evidence.migration).toEqual({ id: 53, name: 'Generalize Agent plugin stage sources' });
+    expect(evidence.columns).toEqual(expect.arrayContaining(['source_kind', 'source_json']));
+    expect(evidence.columns).not.toEqual(expect.arrayContaining(['artifact_app_id', 'artifact_id']));
+    expect(evidence.row).toMatchObject({
+      id: 'legacy-stage',
+      user_id: 1,
+      source_kind: 'artifact',
+      package_hash: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      size_bytes: 1024,
+      status: 'staged',
+      created_at: 1700000000,
+      updated_at: 1700000001,
+      version: 3,
+    });
+    expect(JSON.parse(evidence.row.source_json)).toEqual({
+      kind: 'artifact',
+      appId: 'nexus.operations',
+      id: 'artifact-123',
+    });
+  } finally {
+    if (active) await stopProcess(active);
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

@@ -9,6 +9,7 @@ export interface WebSocketPerformanceSnapshot {
   upload: number;
   remoteDesktop: number;
   agent: number;
+  agentTerminal: number;
   agentSubscriptions: number;
   agentMaxReplayLag: number;
   agentProtocolErrors: number;

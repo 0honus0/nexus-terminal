@@ -9,6 +9,12 @@ import type { AppStorageSnapshotPort } from './app-storage-snapshot.port';
 import type { AgentAppDefinition, AppRecord, AppStatePatch, AppView } from './app.types';
 import type { PackageVerifierPort, VerifiedPluginPackage } from './package-verifier.port';
 import type { PluginPackageSourcePort } from './plugin-package-source.port';
+import type { AgentSettingsService } from './agent-settings.service';
+import type {
+  RemotePluginCatalog,
+  RemotePluginRepositoryConfig,
+  RemotePluginRepositoryPort,
+} from './remote-plugin-repository.port';
 import type {
   PluginInstallRepositoryPort,
   PluginStageRecord,
@@ -55,6 +61,12 @@ export interface PluginStageInput {
   artifactId: string;
 }
 
+export interface RemotePluginStageInput {
+  repositoryUrl: string;
+  appId: string;
+  version: string;
+}
+
 export interface PluginInstallResult {
   stage: PluginStageRecord;
   plugin: PluginVersionRecord;
@@ -89,11 +101,23 @@ export interface PluginFrontendRpcRequest {
   params: JsonValue;
 }
 
+export interface PluginInstallHooks {
+  versionInstalled(plugin: PluginVersionRecord): void;
+  versionRemoved(appId: string, version: string): void;
+}
+
+const NOOP_PLUGIN_INSTALL_HOOKS: PluginInstallHooks = {
+  versionInstalled: () => undefined,
+  versionRemoved: () => undefined,
+};
+
 export class PluginInstallService {
   constructor(
     private readonly repository: PluginInstallRepositoryPort,
     private readonly verifier: PackageVerifierPort,
     private readonly packages: PluginPackageSourcePort,
+    private readonly remotePackages: RemotePluginRepositoryPort,
+    private readonly settings: AgentSettingsService,
     private readonly registry: AppRegistryService,
     private readonly states: AppStateRepositoryPort,
     private readonly storage: AppStoragePort & AppStorageSnapshotPort,
@@ -101,6 +125,7 @@ export class PluginInstallService {
     private readonly runtime: PluginBackendRuntimePort,
     private readonly clock: ClockPort,
     private readonly nexusVersion: string,
+    private readonly hooks: PluginInstallHooks = NOOP_PLUGIN_INSTALL_HOOKS,
     private readonly onHostStateCommitted: (userId: number) => void = () => undefined,
     private readonly publicOrigin?: string,
     private readonly pluginFrontendOrigin?: string,
@@ -142,8 +167,7 @@ export class PluginInstallService {
     const record: PluginStageRecord = {
       id: stageId,
       userId,
-      artifactAppId: input.artifactAppId,
-      artifactId: input.artifactId,
+      source: { kind: 'artifact', appId: input.artifactAppId, id: input.artifactId },
       packageHash: staged.packageHash,
       sizeBytes: staged.sizeBytes,
       publisherKeyId: null,
@@ -165,11 +189,55 @@ export class PluginInstallService {
     }
   }
 
+  async remoteCatalog(userId: number, repositoryUrl: string, signal?: AbortSignal): Promise<RemotePluginCatalog> {
+    return this.remotePackages.catalog(await this.remoteRepositoryConfig(userId, repositoryUrl), signal);
+  }
+
+  async stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord> {
+    if (!input.appId || !input.version || !input.repositoryUrl) throw new Error('VALIDATION_FAILED');
+    const config = await this.remoteRepositoryConfig(userId, input.repositoryUrl);
+    const catalog = await this.remotePackages.catalog(config, signal);
+    const entry = catalog.packages.find(
+      (candidate) => candidate.appId === input.appId && candidate.version === input.version,
+    );
+    if (!entry) throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
+    const source = await this.remotePackages.openPackage(config, entry, signal);
+    const stageId = randomUUID();
+    try {
+      const staged = await this.verifier.stage({ stageId, sizeBytes: source.sizeBytes, source: source.source });
+      if (staged.sizeBytes !== entry.sizeBytes) throw new Error('PLUGIN_REMOTE_SIZE_MISMATCH');
+      if (staged.packageHash !== entry.sha256) throw new Error('PLUGIN_REMOTE_HASH_MISMATCH');
+      const now = this.clock.nowUnixSeconds();
+      const record: PluginStageRecord = {
+        id: stageId,
+        userId,
+        source: { kind: 'remote', repositoryUrl: config.url, appId: entry.appId, version: entry.version },
+        packageHash: staged.packageHash,
+        sizeBytes: staged.sizeBytes,
+        publisherKeyId: entry.publisherKeyId,
+        appId: entry.appId,
+        version: entry.version,
+        manifest: null,
+        status: 'staged',
+        errorCode: null,
+        createdAt: now,
+        updatedAt: now,
+        versionNumber: 1,
+      };
+      await this.repository.createStage(record);
+      return record;
+    } catch (error) {
+      await this.verifier.discardStage(stageId).catch(() => undefined);
+      throw error;
+    }
+  }
+
   async verify(userId: number, stageId: string): Promise<{ stage: PluginStageRecord; plugin: PluginVersionRecord }> {
     const stage = await this.requireStage(userId, stageId);
     if (stage.status === 'installed') throw new Error('PLUGIN_STAGE_ALREADY_INSTALLED');
     try {
       const verified = await this.verifyPackage(userId, stage);
+      this.assertStageIdentity(stage, verified);
       if (this.registry.isBuiltin(verified.manifest.id)) throw new Error('PLUGIN_APP_ID_RESERVED');
       if (verified.packageHash !== stage.packageHash) throw new Error('PLUGIN_STAGE_CHANGED');
       const now = this.clock.nowUnixSeconds();
@@ -203,6 +271,7 @@ export class PluginInstallService {
     let stage = await this.requireStage(userId, stageId);
     if (!['verified', 'failed'].includes(stage.status)) throw new Error('PLUGIN_STAGE_NOT_VERIFIED');
     const verified = await this.verifyPackage(userId, stage);
+    this.assertStageIdentity(stage, verified);
     if (verified.packageHash !== stage.packageHash) throw new Error('PLUGIN_STAGE_CHANGED');
     if (this.registry.isBuiltin(verified.manifest.id)) throw new Error('PLUGIN_APP_ID_RESERVED');
     const scope = { userId, appId: verified.manifest.id };
@@ -227,6 +296,7 @@ export class PluginInstallService {
     await this.verifier.install(stageId, verified);
     await this.repository.upsertVersion(plugin);
     this.registry.registerVersion(this.definition(plugin));
+    this.hooks.versionInstalled(plugin);
 
     if (!existingState) {
       const inserted = await this.states.insertDefault({
@@ -286,6 +356,7 @@ export class PluginInstallService {
     if (this.registry.isBuiltin(appId)) throw new Error('PLUGIN_APP_ID_RESERVED');
     let stage = await this.requireStage(userId, stageId);
     const verified = await this.verifyPackage(userId, stage);
+    this.assertStageIdentity(stage, verified);
     if (verified.manifest.id !== appId) throw new Error('PLUGIN_APP_ID_MISMATCH');
     if (verified.packageHash !== stage.packageHash) throw new Error('PLUGIN_STAGE_CHANGED');
     const scope = { userId, appId };
@@ -304,6 +375,7 @@ export class PluginInstallService {
     await this.verifier.install(stageId, verified);
     await this.repository.upsertVersion(nextPlugin);
     this.registry.registerVersion(this.definition(nextPlugin));
+    this.hooks.versionInstalled(nextPlugin);
 
     const draining = state.acceptNewRuns
       ? await this.compareAndSetState(scope, state.version, { acceptNewRuns: false })
@@ -436,6 +508,7 @@ export class PluginInstallService {
       try {
         await this.verifier.removeInstalled(appId, plugin.version);
         await this.repository.updateVersionStatus(appId, plugin.version, 'removed', null, this.clock.nowUnixSeconds());
+        this.hooks.versionRemoved(appId, plugin.version);
       } catch {
         await this.repository
           .updateVersionStatus(appId, plugin.version, 'failed', null, this.clock.nowUnixSeconds())
@@ -560,7 +633,10 @@ export class PluginInstallService {
       .reconcileStages(stages.map((stage) => ({ stageId: stage.id, appId: stage.appId })))
       .catch(() => undefined);
     for (const plugin of await this.repository.listVersions()) {
-      if (plugin.status === 'installed') this.registry.registerVersion(this.definition(plugin));
+      if (plugin.status === 'installed') {
+        this.registry.registerVersion(this.definition(plugin));
+        this.hooks.versionInstalled(plugin);
+      }
     }
     const userIds = new Set(
       (await this.repository.listActiveInstallations()).map((installation) => installation.userId),
@@ -673,6 +749,29 @@ export class PluginInstallService {
     return updated;
   }
 
+  private async remoteRepositoryConfig(userId: number, rawUrl: string): Promise<RemotePluginRepositoryConfig> {
+    let normalized: string;
+    try {
+      normalized = new URL(rawUrl).toString();
+    } catch {
+      throw new Error('PLUGIN_REMOTE_REPOSITORY_INVALID');
+    }
+    const view = await this.settings.get(userId);
+    const config = view.effectiveSettings.plugins.repositories.find((candidate) => candidate.url === normalized);
+    if (!config) throw new Error('PLUGIN_REMOTE_REPOSITORY_NOT_CONFIGURED');
+    return { url: config.url, privateHostExceptions: [...config.privateHostExceptions] };
+  }
+
+  private assertStageIdentity(stage: PluginStageRecord, verified: VerifiedPluginPackage): void {
+    if (stage.source.kind !== 'remote') return;
+    if (verified.manifest.id !== stage.source.appId || verified.manifest.version !== stage.source.version) {
+      throw new Error('PLUGIN_REMOTE_IDENTITY_MISMATCH');
+    }
+    if (stage.publisherKeyId && verified.publisherKeyId !== stage.publisherKeyId) {
+      throw new Error('PLUGIN_REMOTE_PUBLISHER_MISMATCH');
+    }
+  }
+
   private async requireStage(userId: number, stageId: string): Promise<PluginStageRecord> {
     const stage = await this.repository.getStage(userId, stageId);
     if (!stage) throw new Error('PLUGIN_STAGE_NOT_FOUND');
@@ -760,6 +859,7 @@ export class PluginInstallService {
       ...record,
       displayName: plugin.manifest.displayName,
       capabilities: [...plugin.manifest.capabilities],
+      surface: plugin.frontendEntry ? 'plugin' : plugin.manifest.agents?.length ? 'agent' : 'none',
     };
   }
 }

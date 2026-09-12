@@ -38,6 +38,11 @@ export class SshShellSessionAdapter implements RemoteShellSession {
     this.channel.setWindow(rows, columns, 0, 0);
   }
 
+  signal(signal: string): void {
+    if (!this.isOpen) return;
+    this.channel.signal(signal);
+  }
+
   pause(): void {
     if (this.isOpen) this.channel.pause();
   }

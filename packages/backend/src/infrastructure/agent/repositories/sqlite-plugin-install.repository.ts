@@ -23,8 +23,8 @@ interface PublisherRow {
 interface StageRow {
   id: string;
   user_id: number;
-  artifact_app_id: string;
-  artifact_id: string;
+  source_kind: 'artifact' | 'remote';
+  source_json: string;
   package_hash: string;
   size_bytes: number;
   publisher_key_id: string | null;
@@ -91,8 +91,7 @@ const mapPublisher = (row: PublisherRow): TrustedPublisherKey => ({
 const mapStage = (row: StageRow): PluginStageRecord => ({
   id: row.id,
   userId: row.user_id,
-  artifactAppId: row.artifact_app_id,
-  artifactId: row.artifact_id,
+  source: JSON.parse(row.source_json) as PluginStageRecord['source'],
   packageHash: row.package_hash,
   sizeBytes: row.size_bytes,
   publisherKeyId: row.publisher_key_id,
@@ -147,7 +146,7 @@ const mapVersion = (row: VersionRow): PluginVersionRecord => ({
   updatedAt: row.updated_at,
 });
 
-const STAGE_COLUMNS = `id,user_id,artifact_app_id,artifact_id,package_hash,size_bytes,publisher_key_id,app_id,app_version,manifest_json,status,error_code,created_at,updated_at,version`;
+const STAGE_COLUMNS = `id,user_id,source_kind,source_json,package_hash,size_bytes,publisher_key_id,app_id,app_version,manifest_json,status,error_code,created_at,updated_at,version`;
 const VERSION_COLUMNS = `app_id,version,package_hash,publisher_key_id,manifest_json,frontend_entry,backend_entry,runner_entry,skill_files_json,status,installed_at,updated_at`;
 const APP_STATE_COLUMNS = `user_id,app_id,active_version,desired_state,observed_state,health_reason,policy_revision,running_count,approval_count,budget_request_count,accept_new_runs,version,created_at,updated_at`;
 
@@ -190,13 +189,13 @@ export class SqlitePluginInstallRepository implements PluginInstallRepositoryPor
   async createStage(record: PluginStageRecord): Promise<void> {
     await this.db.execute(
       `INSERT INTO agent_plugin_stages
-       (id,user_id,artifact_app_id,artifact_id,package_hash,size_bytes,publisher_key_id,app_id,app_version,manifest_json,status,error_code,created_at,updated_at,version)
+       (id,user_id,source_kind,source_json,package_hash,size_bytes,publisher_key_id,app_id,app_version,manifest_json,status,error_code,created_at,updated_at,version)
        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         record.id,
         record.userId,
-        record.artifactAppId,
-        record.artifactId,
+        record.source.kind,
+        JSON.stringify(record.source),
         record.packageHash,
         record.sizeBytes,
         record.publisherKeyId,

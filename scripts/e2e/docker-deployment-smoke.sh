@@ -22,10 +22,50 @@ cookie_jar="$(mktemp)"
 runner_root="$workspace/agent-runner"
 runner_log="$workspace/agent-runner.log"
 runner_pid=''
+browser_probe_log="$workspace/browser-cdp-probe.log"
+browser_probe_pid=''
+cdp_browser_log="$workspace/direct-cdp-browser.log"
+cdp_browser_pid=''
+cdp_browser_profile="$workspace/direct-cdp-profile"
+browser_page_log="$workspace/direct-browser-page.log"
+browser_page_pid=''
 runner_port="$(node - <<'NODE'
 const net = require('node:net');
 const server = net.createServer();
 server.listen(0, '0.0.0.0', () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') process.exit(1);
+  console.log(address.port);
+  server.close();
+});
+NODE
+)"
+browser_probe_port="$(node - <<'NODE'
+const net = require('node:net');
+const server = net.createServer();
+server.listen(0, '127.0.0.1', () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') process.exit(1);
+  console.log(address.port);
+  server.close();
+});
+NODE
+)"
+cdp_browser_port="$(node - <<'NODE'
+const net = require('node:net');
+const server = net.createServer();
+server.listen(0, '0.0.0.0', () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') process.exit(1);
+  console.log(address.port);
+  server.close();
+});
+NODE
+)"
+browser_page_port="$(node - <<'NODE'
+const net = require('node:net');
+const server = net.createServer();
+server.listen(0, '127.0.0.1', () => {
   const address = server.address();
   if (!address || typeof address === 'string') process.exit(1);
   console.log(address.port);
@@ -82,6 +122,12 @@ print_logs() {
   compose logs --no-color 2>&1 || true
   echo "--- agent runner host log ---"
   cat "$runner_log" 2>/dev/null || true
+  echo "--- browser CDP probe log ---"
+  cat "$browser_probe_log" 2>/dev/null || true
+  echo "--- direct CDP browser log ---"
+  cat "$cdp_browser_log" 2>/dev/null || true
+  echo "--- direct Browser page log ---"
+  cat "$browser_page_log" 2>/dev/null || true
 }
 
 cleanup() {
@@ -91,6 +137,18 @@ cleanup() {
   fi
   compose exec -T backend sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
   compose down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
+  if [[ -n "$browser_page_pid" ]]; then
+    kill "$browser_page_pid" >/dev/null 2>&1 || true
+    wait "$browser_page_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$cdp_browser_pid" ]]; then
+    kill "$cdp_browser_pid" >/dev/null 2>&1 || true
+    wait "$cdp_browser_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$browser_probe_pid" ]]; then
+    kill "$browser_probe_pid" >/dev/null 2>&1 || true
+    wait "$browser_probe_pid" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$runner_pid" ]]; then
     kill "$runner_pid" >/dev/null 2>&1 || true
     wait "$runner_pid" >/dev/null 2>&1 || true
@@ -111,6 +169,8 @@ services:
     container_name: nexus-e2e-backend-$suffix
     environment:
       AGENT_RUNNER_URL: http://host.docker.internal:$runner_port
+      NEXUS_E2E_DIRECT_CDP_PORT: $cdp_browser_port
+      NEXUS_E2E_BROWSER_PAGE_PORT: $browser_page_port
   guacd:
     container_name: nexus-e2e-guacd-$suffix
 networks:
@@ -145,6 +205,82 @@ set_env RP_ID 'ssh.honus.top'
 set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
 
 compose config >/dev/null
+# Browser direct page target. Chromium itself runs on the host, so this loopback HTTP
+# server exercises the Browser data plane independently from the Backend -> CDP control plane.
+browser_page_script="$workspace/direct-browser-page.cjs"
+cat > "$browser_page_script" <<'NODE'
+const http = require('node:http');
+const port = Number(process.env.NEXUS_BROWSER_PAGE_PORT);
+const html = '<!doctype html><title>Nexus Browser Smoke</title><input aria-label="Name"><button onclick="document.querySelector('#status').textContent=document.querySelector('input').value">Apply</button><div id="status">idle</div>';
+const server = http.createServer((request, response) => {
+  if (request.url !== '/') { response.writeHead(404).end(); return; }
+  response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  response.end(html);
+});
+server.listen(port, '127.0.0.1');
+const shutdown = () => server.close(() => process.exit(0));
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+NODE
+NEXUS_BROWSER_PAGE_PORT="$browser_page_port" node "$browser_page_script" >"$browser_page_log" 2>&1 &
+browser_page_pid=$!
+for _ in {1..40}; do
+  if curl -fsS "http://127.0.0.1:${browser_page_port}/" >/dev/null; then break; fi
+  sleep 0.1
+done
+curl -fsS "http://127.0.0.1:${browser_page_port}/" >/dev/null || { echo 'Direct Browser page did not start.' >&2; exit 1; }
+
+# Browser direct smoke target. Chromium runs on the host/external side; Backend must
+# reach it directly through host.docker.internal without consulting Agent Runner.
+cdp_browser_executable="$(pnpm --filter @nexus-terminal/e2e exec node -e "process.stdout.write(require('@playwright/test').chromium.executablePath())")"
+mkdir -p "$cdp_browser_profile"
+"$cdp_browser_executable" \
+  --headless=new \
+  --no-sandbox \
+  --disable-gpu \
+  --no-first-run \
+  --no-default-browser-check \
+  --remote-allow-origins='*' \
+  --remote-debugging-address=0.0.0.0 \
+  --remote-debugging-port="$cdp_browser_port" \
+  --user-data-dir="$cdp_browser_profile" \
+  about:blank >"$cdp_browser_log" 2>&1 &
+cdp_browser_pid=$!
+cdp_browser_ready=0
+for _ in {1..60}; do
+  if curl -fsS "http://127.0.0.1:${cdp_browser_port}/json/version" >/dev/null; then
+    cdp_browser_ready=1
+    break
+  fi
+  sleep 0.25
+done
+[[ "$cdp_browser_ready" -eq 1 ]] || { echo 'Direct CDP Chromium did not start.' >&2; exit 1; }
+
+# Browser tunnel smoke target. This is deliberately only a WebSocket text echo peer,
+# not a Browser implementation: Runner must remain a byte/message tunnel and must not
+# acquire Puppeteer/CDP session semantics.
+browser_probe_script="$workspace/browser-cdp-probe.cjs"
+cat > "$browser_probe_script" <<'NODE'
+const { WebSocketServer } = require(process.env.NEXUS_WS_MODULE);
+const port = Number(process.env.NEXUS_BROWSER_PROBE_PORT);
+const server = new WebSocketServer({ host: '127.0.0.1', port, perMessageDeflate: false });
+server.on('connection', (socket) => {
+  socket.on('message', (data, isBinary) => {
+    if (isBinary) { socket.close(1003, 'text only'); return; }
+    socket.send(Buffer.isBuffer(data) ? data.toString('utf8') : String(data));
+  });
+});
+const shutdown = () => server.close(() => process.exit(0));
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+NODE
+NEXUS_WS_MODULE="$repo_root/packages/agent-runtime/node_modules/ws" \
+NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" \
+node "$browser_probe_script" >"$browser_probe_log" 2>&1 &
+browser_probe_pid=$!
+sleep 0.2
+kill -0 "$browser_probe_pid" 2>/dev/null || { echo 'Browser CDP probe did not start.' >&2; exit 1; }
+
 # The canonical Linux Agent Runner is a dedicated host service. bubblewrap therefore
 # constructs namespaces/mounts outside Docker's container AppArmor boundary instead of
 # granting broad mount privileges to a long-lived Runner container. The Runner still has
@@ -261,7 +397,7 @@ host_tool_snapshot_before="$(host_tool_snapshot)"
 # Exercise the actual Controller -> Tool Store -> Workspace Dev Environment -> bubblewrap
 # job path, not only binary presence or HTTP health. The probe originates from Backend
 # through the host-gateway path using the same shared Controller token as production.
-compose exec -T backend node - <<'NODE'
+compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" backend node - <<'NODE'
 const { randomUUID } = await import('node:crypto');
 const baseUrl = process.env.AGENT_RUNNER_URL;
 const token = process.env.AGENT_RUNNER_TOKEN;
@@ -305,9 +441,86 @@ const submitCommand = async (body) => awaitCommand(await post('/v1/commands', bo
 const catalog = await get('/v1/catalog');
 const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 const pack = catalog.packs.find((candidate) => candidate.familyId === 'base-tools' && candidate.enabled);
-if (!recipe || !pack?.contentDigest) {
-  throw new Error('Smoke catalog does not expose the Workspace Runtime/base-tools profile.');
+const nodePack = catalog.packs.find(
+  (candidate) => candidate.familyId === 'node' && candidate.enabled && candidate.contentDigest,
+);
+if (!recipe || !pack?.contentDigest || !nodePack?.contentDigest) {
+  throw new Error('Smoke catalog does not expose the Workspace Runtime/base-tools/Node profile.');
 }
+
+const acpSmokeAgentSource = String.raw`const readline = require('node:readline');
+const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+const sessionId = 'smoke-acp-session';
+let promptRequestId = null;
+const send = (value) => process.stdout.write(JSON.stringify(value) + '\n');
+const fail = (message) => { process.stderr.write(message + '\n'); process.exit(42); };
+rl.on('line', (line) => {
+  let message;
+  try { message = JSON.parse(line); } catch { fail('invalid JSON-RPC input'); return; }
+  if (message?.method === 'initialize' && message.id !== undefined) {
+    send({ jsonrpc: '2.0', id: message.id, result: { protocolVersion: 1, agentCapabilities: { loadSession: false } } });
+    return;
+  }
+  if (message?.method === 'session/new' && message.id !== undefined) {
+    send({ jsonrpc: '2.0', id: message.id, result: { sessionId } });
+    return;
+  }
+  if (message?.method === 'session/prompt' && message.id !== undefined) {
+    if (message.params?.sessionId !== sessionId) fail('unexpected session id');
+    promptRequestId = message.id;
+    send({
+      jsonrpc: '2.0',
+      method: 'session/update',
+      params: {
+        sessionId,
+        update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'acp-live-' } },
+      },
+    });
+    send({
+      jsonrpc: '2.0',
+      id: 'permission-1',
+      method: 'session/request_permission',
+      params: {
+        sessionId,
+        toolCall: {
+          toolCallId: 'smoke-sensitive-tool',
+          title: 'Smoke sensitive operation',
+          kind: 'edit',
+          status: 'pending',
+          rawInput: { action: 'write' },
+        },
+        options: [
+          { optionId: 'allow', name: 'Allow', kind: 'allow_once' },
+          { optionId: 'reject', name: 'Reject', kind: 'reject_once' },
+        ],
+      },
+    });
+    return;
+  }
+  if (message?.id === 'permission-1' && message.method === undefined) {
+    const outcome = message.result?.outcome;
+    if (outcome?.outcome !== 'selected' || outcome.optionId !== 'reject') {
+      fail('ACP permission did not fail closed');
+    }
+    send({
+      jsonrpc: '2.0',
+      method: 'session/update',
+      params: {
+        sessionId,
+        update: {
+          sessionUpdate: 'agent_message_chunk',
+          content: { type: 'text', text: 'permission-rejected' },
+        },
+      },
+    });
+    send({ jsonrpc: '2.0', id: promptRequestId, result: { stopReason: 'end_turn' } });
+    return;
+  }
+  if (message?.method === 'session/cancel') return;
+  if (message?.id !== undefined) {
+    send({ jsonrpc: '2.0', id: message.id, error: { code: -32601, message: 'Method not found' } });
+  }
+});`;
 
 const now = () => Math.floor(Date.now() / 1000);
 const workspaceId = `smoke-workspace-${randomUUID()}`;
@@ -323,10 +536,22 @@ const identity = {
   recipeRevision: recipe.revision,
   runtimeDigest: catalog.runtimeDigest,
   catalogRevision: catalog.revision,
-  toolchain: [{ familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest }],
+  toolchain: [
+    { familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest },
+    { familyId: nodePack.familyId, versionId: nodePack.versionId, contentDigest: nodePack.contentDigest },
+  ],
   runnerPlugins: [],
   limits: recipe.defaultLimits,
   network: { mode: 'none', hosts: [] },
+  acpProfiles: [
+    {
+      id: 'smoke-acp',
+      profileRevision: 1,
+      argv: [`/opt/nexus/packs/node/${nodePack.versionId}/bin/node`, '-e', acpSmokeAgentSource],
+      cwd: '/workspace',
+    },
+  ],
+  browserTarget: null,
   retained: false,
   expectedVersion: 0,
 };
@@ -345,6 +570,264 @@ const provision = await submitCommand(command('provision'));
 if (provision.status !== 'succeeded') throw new Error(`Runner provision failed: ${JSON.stringify(provision)}`);
 const start = await submitCommand(command('start'));
 if (start.status !== 'succeeded') throw new Error(`Runner start failed: ${JSON.stringify(start)}`);
+
+const { RunnerHttpAdapter } = await import('/app/dist/infrastructure/agent/workspace-runtime/runner-http.adapter.js');
+const { RunnerWorkspaceTerminalAdapter } = await import(
+  '/app/dist/infrastructure/agent/workspace-runtime/runner-workspace-terminal.adapter.js'
+);
+const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
+
+// ACP live smoke: run the exact production acp_execute tool over the exact production
+// AcpAdapter -> authenticated Runner stream -> read-only Workspace ACP process. The smoke
+// agent requests a sensitive permission and refuses to finish unless Nexus selects reject_once.
+{
+  const { AcpAdapter } = await import('/app/dist/infrastructure/agent/integrations/acp.adapter.js');
+  const { createAcpExecuteTool } = await import('/app/dist/modules/agent/apps/operations/acp-tools.js');
+  const { NodeCryptoHashAdapter } = await import('/app/dist/infrastructure/agent/capabilities/node-crypto-hash.adapter.js');
+  const integrationId = randomUUID();
+  const integration = {
+    id: integrationId,
+    userId: identity.userId,
+    appId: identity.appId,
+    kind: 'acp',
+    configuration: {
+      displayName: 'Smoke ACP',
+      transport: 'workspace-profile',
+      profileId: 'smoke-acp',
+      protocolVersion: '1',
+    },
+    hasCredential: false,
+    credentialRevision: 1,
+    schemaHash: null,
+    enabled: true,
+    version: 1,
+    createdAt: now(),
+    updatedAt: now(),
+  };
+  const workspaceView = {
+    id: workspaceId,
+    userId: identity.userId,
+    appId: identity.appId,
+    runId: identity.runId,
+    agentRuntimeId: identity.agentRuntimeId,
+    retained: false,
+    profile: { acpProfiles: identity.acpProfiles },
+    generation: 1,
+    status: 'running',
+    version: 1,
+  };
+  const runtime = new AcpAdapter(runnerAdapter);
+  const tool = createAcpExecuteTool(
+    { get: async () => integration },
+    { getWorkspace: async () => workspaceView },
+    runtime,
+    new NodeCryptoHashAdapter(),
+  );
+  const context = {
+    userId: identity.userId,
+    appId: identity.appId,
+    actor: { type: 'user', userId: identity.userId },
+    runId: identity.runId,
+    agentRuntimeId: identity.agentRuntimeId,
+    stepId: 'smoke-acp-step',
+    signal: AbortSignal.timeout(20_000),
+    deadlineAt: now() + 20,
+    maxOutputBytes: 4096,
+    inputRevision: 1,
+  };
+  const inspection = await tool.inspect(
+    { integrationId, workspaceId, prompt: 'run ACP live smoke', cwd: '/workspace/work' },
+    context,
+    1,
+  );
+  if (inspection.risk !== 'mutate' || !inspection.mutation) {
+    throw new Error(`ACP tool inspection is not mutation-gated: ${JSON.stringify(inspection)}`);
+  }
+  const result = await tool.execute(inspection, context);
+  if (
+    !result.ok ||
+    result.data?.text !== 'acp-live-permission-rejected' ||
+    result.data?.stopReason !== 'end_turn'
+  ) {
+    throw new Error(`ACP live execution smoke failed: ${JSON.stringify(result)}`);
+  }
+}
+
+// Local Workspace Terminal smoke: use the production Backend adapter plus the Workspace
+// Runtime terminal registry. Detach/re-attach must preserve the same PTY and replay bounded
+// output produced while no browser WebSocket is attached.
+{
+  const { WorkspaceRuntimeTerminalService } = await import(
+    '/app/dist/modules/agent/workspace-runtime/workspace-runtime-terminal.service.js'
+  );
+  const terminalAdapter = new RunnerWorkspaceTerminalAdapter(runnerAdapter);
+  const terminalService = new WorkspaceRuntimeTerminalService(
+    { getWorkspace: async () => ({ generation: 1, status: 'running' }) },
+    terminalAdapter,
+    { get: async () => ({ effectiveSettings: { feature: { enabled: true } } }) },
+    { get: async () => ({ desiredState: 'enabled', observedState: 'running' }) },
+    { authorize: async () => ({ allowed: true, code: 'ALLOWED' }) },
+  );
+  const scope = { userId: identity.userId, appId: identity.appId };
+  const first = await terminalService.open(scope, workspaceId, 1, 80, 24, undefined, AbortSignal.timeout(15_000));
+  first.resize(120, 40);
+  let firstOutput = '';
+  const firstMarker = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Workspace Terminal first marker timed out: ${JSON.stringify(firstOutput)}`)), 10_000);
+    const off = first.onData((chunk) => {
+      firstOutput += Buffer.from(chunk).toString('utf8');
+      if (!firstOutput.includes('workspace-terminal-first-ok')) return;
+      clearTimeout(timer);
+      off();
+      resolve();
+    });
+  });
+  first.write("export NEXUS_TERMINAL_RECONNECT=preserved; printf 'workspace-terminal-first-ok\\n'; sleep 0.2; printf 'workspace-terminal-detached-output\\n'\n");
+  await firstMarker;
+  const terminalSessionId = first.sessionId;
+  first.detach();
+  await new Promise((resolve) => setTimeout(resolve, 400));
+
+  const second = await terminalService.open(
+    scope,
+    workspaceId,
+    1,
+    100,
+    30,
+    terminalSessionId,
+    AbortSignal.timeout(15_000),
+  );
+  let secondOutput = '';
+  const replayMarker = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Workspace Terminal replay timed out: ${JSON.stringify(secondOutput)}`)), 10_000);
+    const off = second.onData((chunk) => {
+      secondOutput += Buffer.from(chunk).toString('utf8');
+      if (!secondOutput.includes('workspace-terminal-detached-output')) return;
+      clearTimeout(timer);
+      off();
+      resolve();
+    });
+  });
+  second.replayBuffered();
+  await replayMarker;
+
+  const stateMarker = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Workspace Terminal state check timed out: ${JSON.stringify(secondOutput)}`)), 10_000);
+    const off = second.onData((chunk) => {
+      secondOutput += Buffer.from(chunk).toString('utf8');
+      if (!secondOutput.includes('workspace-terminal-reconnect-preserved')) return;
+      clearTimeout(timer);
+      off();
+      resolve();
+    });
+  });
+  second.write("printf 'workspace-terminal-reconnect-%s\\n' \"$NEXUS_TERMINAL_RECONNECT\"\n");
+  await stateMarker;
+  await second.close();
+  await terminalService.closeAll();
+  await terminalAdapter.closeAll();
+}
+
+// Browser direct path smoke: the exact production Backend BrowserRuntime connects to
+// host/external Chromium without Agent Runner, then exercises the restricted semantic API.
+{
+  const { BrowserRuntimeAdapter } = await import(
+    '/app/dist/infrastructure/agent/integrations/browser-runtime.adapter.js'
+  );
+  const directOnly = new BrowserRuntimeAdapter({
+    openBrowserTunnel: async () => { throw new Error('RUNNER_TUNNEL_MUST_NOT_BE_USED'); },
+  });
+  const session = await directOnly.createSession(
+    {
+      userId: 1,
+      appId: 'nexus.operations',
+      runId: 'smoke-browser-direct-run',
+      agentRuntimeId: 'smoke-browser-direct-runtime',
+      target: {
+        id: 'smoke-direct-chrome',
+        profileRevision: 1,
+        endpoints: [
+          {
+            scope: 'external-network',
+            via: 'backend',
+            url: `http://host.docker.internal:${process.env.NEXUS_E2E_DIRECT_CDP_PORT}`,
+            priority: 10,
+            allowPlaintext: true,
+            verifyTls: true,
+          },
+        ],
+        allowedUrlPatterns: [`http://127.0.0.1:${process.env.NEXUS_E2E_BROWSER_PAGE_PORT}`],
+      },
+    },
+    AbortSignal.timeout(15_000),
+  );
+  try {
+    await directOnly.navigate(
+      session.sessionId,
+      `http://127.0.0.1:${process.env.NEXUS_E2E_BROWSER_PAGE_PORT}/`,
+      AbortSignal.timeout(15_000),
+    );
+    const first = await directOnly.snapshot(session.sessionId, { maxNodes: 100, maxBytes: 32768 }, AbortSignal.timeout(15_000));
+    const input = first.nodes.find((node) => node.role === 'textbox' && node.name === 'Name');
+    const button = first.nodes.find((node) => node.role === 'button' && node.name === 'Apply');
+    if (!input || !button || first.title !== 'Nexus Browser Smoke') throw new Error(`Browser direct snapshot invalid: ${JSON.stringify(first)}`);
+    await directOnly.type(session.sessionId, first.snapshotId, input.nodeRef, 'Nexus', AbortSignal.timeout(15_000));
+    let staleRejected = false;
+    try {
+      await directOnly.click(session.sessionId, first.snapshotId, button.nodeRef, AbortSignal.timeout(15_000));
+    } catch (error) {
+      staleRejected = error instanceof Error && error.message === 'BROWSER_NODE_STALE';
+    }
+    if (!staleRejected) throw new Error('Browser direct stale nodeRef was not rejected.');
+    const second = await directOnly.snapshot(session.sessionId, {}, AbortSignal.timeout(15_000));
+    const freshButton = second.nodes.find((node) => node.role === 'button' && node.name === 'Apply');
+    if (!freshButton) throw new Error('Browser direct fresh button missing.');
+    await directOnly.click(session.sessionId, second.snapshotId, freshButton.nodeRef, AbortSignal.timeout(15_000));
+    const third = await directOnly.snapshot(session.sessionId, {}, AbortSignal.timeout(15_000));
+    if (!third.nodes.some((node) => node.text === 'Nexus' || node.name === 'Nexus')) {
+      throw new Error(`Browser direct click/type result missing: ${JSON.stringify(third)}`);
+    }
+    let denied = false;
+    try {
+      await directOnly.navigate(session.sessionId, 'https://not-allowed.invalid/', AbortSignal.timeout(5_000));
+    } catch (error) {
+      denied = error instanceof Error && error.message === 'BROWSER_URL_DENIED';
+    }
+    if (!denied) throw new Error('Browser direct URL policy was not enforced.');
+  } finally {
+    await directOnly.closeAll();
+  }
+}
+
+// Browser Runner path smoke: Backend sends an opaque configured endpoint and CDP text
+// frame through Runner. The target is only an echo peer, proving Runner has no Browser
+// session/snapshot/click/type semantics of its own.
+{
+  const browserTunnel = await runnerAdapter.openBrowserTunnel(
+    {
+      scope: 'external-network',
+      via: 'runner',
+      url: `ws://127.0.0.1:${process.env.NEXUS_BROWSER_PROBE_PORT}`,
+      priority: 10,
+      allowPlaintext: true,
+      verifyTls: true,
+    },
+    { targetId: 'smoke-browser-tunnel', targetRevision: 1 },
+    AbortSignal.timeout(10_000),
+  );
+  const message = JSON.stringify({ id: 1, method: 'Browser.getVersion' });
+  const echoed = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('Browser tunnel smoke timed out')), 5_000);
+    const off = browserTunnel.onMessage((candidate) => {
+      clearTimeout(timer);
+      off();
+      resolve(candidate);
+    });
+  });
+  browserTunnel.send(message);
+  if ((await echoed) !== message) throw new Error('Browser tunnel altered the CDP message.');
+  await browserTunnel.close();
+}
 
 const jobId = `smoke-job-${randomUUID()}`;
 const job = {
@@ -449,6 +932,8 @@ const makeIdentity = (workspaceId, generation, toolchain) => ({
   runnerPlugins: [],
   limits: recipe.defaultLimits,
   network: { mode: 'none', hosts: [] },
+  acpProfiles: [],
+  browserTarget: null,
   retained: false,
   expectedVersion: 0,
 });
@@ -586,7 +1071,7 @@ await requireLifecycle(aNew3, 'delete');
 await requireLifecycle(bOld1, 'delete');
 
 console.log(
-  'agent runner sandbox job: runner-sandbox-ok; stable workspace generation: workspace-generation-ok; multi-version workspaces: node/python/go switch isolated',
+  'agent runner: sandbox job + ACP stream + SSH/PTTY terminal + Browser tunnel ok; stable workspace generation ok; multi-version node/python/go switch isolated',
 );
 NODE
 

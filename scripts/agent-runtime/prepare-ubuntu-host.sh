@@ -19,7 +19,7 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 "${SUDO[@]}" apt-get update
 "${SUDO[@]}" apt-get install -y \
-  apparmor apparmor-utils ca-certificates curl gcc libcap-dev meson ninja-build pkg-config xz-utils
+  apparmor apparmor-utils ca-certificates curl dropbear-bin gcc libcap-dev meson ninja-build pkg-config socat xz-utils
 
 # Ubuntu 24.04 still ships bubblewrap 0.9.x. Versions before 0.12.0 are affected by
 # GHSA-pxhw-h44j-8pfx, a setup-time symlink traversal that is directly relevant when
@@ -137,4 +137,8 @@ profile=/etc/apparmor.d/nexus-bwrap-userns-restrict
   --cap-drop ALL \
   -- /bin/true
 
-echo "Nexus Agent Runner prerequisites are ready (bubblewrap $BWRAP_VERSION + mise $MISE_VERSION)."
+command -v dropbear >/dev/null 2>&1 || { echo 'Dropbear server is required for Workspace Terminal sessions.' >&2; exit 13; }
+command -v dropbearkey >/dev/null 2>&1 || { echo 'dropbearkey is required for ephemeral Workspace Terminal host keys.' >&2; exit 13; }
+command -v socat >/dev/null 2>&1 || { echo 'socat is required for Workspace Terminal loopback transport.' >&2; exit 13; }
+
+echo "Nexus Agent Runner prerequisites are ready (bubblewrap $BWRAP_VERSION + mise $MISE_VERSION + Dropbear/socat)."

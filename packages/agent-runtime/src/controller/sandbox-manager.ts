@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -13,6 +13,11 @@ export interface SandboxExecution {
   argv: string[];
   cwd: string;
   env: NodeJS.ProcessEnv;
+}
+
+export interface SandboxInteractiveExecution extends SandboxExecution {
+  sessionId: string;
+  cleanup(): void;
 }
 
 export interface SandboxAvailability {
@@ -209,10 +214,124 @@ export class SandboxManager {
   }
 
   prepareJob(sandboxId: string, request: WorkspaceJobRequest): SandboxExecution {
+    return this.prepareExecution(sandboxId, request.workspaceId, request.generation, request.argv, request.cwd, false);
+  }
+
+  prepareAcpProcess(
+    sandboxId: string,
+    workspaceId: string,
+    generation: number,
+    argv: readonly string[],
+    cwd: string,
+  ): SandboxExecution {
+    return this.prepareExecution(sandboxId, workspaceId, generation, argv, cwd, true);
+  }
+
+  prepareTerminalProcess(
+    sandboxId: string,
+    workspaceId: string,
+    generation: number,
+    authorizedKey: string,
+  ): SandboxInteractiveExecution {
+    const key = authorizedKey.trim();
+    if (
+      !key.startsWith('ssh-ed25519 ') ||
+      key.length > 4096 ||
+      key.includes('\n') ||
+      key.includes('\r') ||
+      key.includes('\0')
+    ) {
+      throw new Error('WORKSPACE_TERMINAL_PUBLIC_KEY_INVALID');
+    }
+
+    const base = this.prepareExecution(sandboxId, workspaceId, generation, ['/bin/true'], '/workspace/work', false);
+    const root = this.requireRoot(sandboxId);
+    const sessionId = randomUUID();
+    const sessionRoot = path.join(root, '.control', 'terminal', safeSegment(sessionId));
+    const authRoot = path.join(sessionRoot, 'auth');
+    fs.mkdirSync(authRoot, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(
+      path.join(authRoot, 'authorized_keys'),
+      `no-port-forwarding,no-agent-forwarding,no-X11-forwarding ${key} nexus-workspace\n`,
+      { mode: 0o600 },
+    );
+    fs.writeFileSync(path.join(sessionRoot, 'passwd'), 'root::0:0:Nexus Workspace:/workspace/work:/bin/sh\n', {
+      mode: 0o600,
+    });
+    const hostKey = path.join(sessionRoot, 'dropbear_ed25519_host_key');
+    const generated = spawnSync('dropbearkey', ['-t', 'ed25519', '-f', hostKey], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'ignore', 'pipe'],
+      timeout: 5_000,
+      env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin', LANG: process.env.LANG ?? 'C.UTF-8' },
+    });
+    if (generated.error || generated.status !== 0) {
+      fs.rmSync(sessionRoot, { recursive: true, force: true });
+      throw new Error('WORKSPACE_TERMINAL_HOST_KEY_FAILED');
+    }
+    fs.chmodSync(hostKey, 0o600);
+
+    const marker = base.argv.lastIndexOf('--');
+    if (marker < 0) {
+      fs.rmSync(sessionRoot, { recursive: true, force: true });
+      throw new Error('WORKSPACE_SANDBOX_ARGUMENTS_INVALID');
+    }
+    const beforeCommand = base.argv.slice(0, marker);
+    const script = [
+      'set -eu',
+      '/usr/sbin/dropbear -F -E -e -s -j -k -m -T 3 -I 7200 -r /run/nexus-terminal/dropbear_ed25519_host_key -D /run/nexus-terminal/auth -p 127.0.0.1:2222 &',
+      'dropbear_pid=$!',
+      'cleanup() { kill "$dropbear_pid" 2>/dev/null || true; wait "$dropbear_pid" 2>/dev/null || true; }',
+      'trap cleanup EXIT HUP INT TERM',
+      'attempt=0',
+      'while [ "$attempt" -lt 100 ]; do',
+      '  if /usr/bin/socat -u /dev/null TCP:127.0.0.1:2222,connect-timeout=1 >/dev/null 2>&1; then break; fi',
+      '  if ! kill -0 "$dropbear_pid" 2>/dev/null; then wait "$dropbear_pid"; exit $?; fi',
+      '  attempt=$((attempt + 1))',
+      '  sleep 0.02',
+      'done',
+      '[ "$attempt" -lt 100 ] || exit 111',
+      'exec /usr/bin/socat STDIO TCP:127.0.0.1:2222,connect-timeout=5',
+    ].join('\n');
+
+    return {
+      ...base,
+      sessionId,
+      argv: [
+        ...beforeCommand,
+        '--dir',
+        '/run',
+        '--dir',
+        '/run/nexus-terminal',
+        '--ro-bind',
+        sessionRoot,
+        '/run/nexus-terminal',
+        '--ro-bind',
+        path.join(sessionRoot, 'passwd'),
+        '/etc/passwd',
+        '--',
+        '/bin/sh',
+        '-c',
+        script,
+      ],
+      cleanup: () => fs.rmSync(sessionRoot, { recursive: true, force: true }),
+    };
+  }
+
+  private prepareExecution(
+    sandboxId: string,
+    workspaceId: string,
+    generation: number,
+    argv: readonly string[],
+    cwd: string,
+    readOnlyWorkspace: boolean,
+  ): SandboxExecution {
+    if (!Array.isArray(argv) || argv.length < 1 || argv.length > 128) throw new Error('VALIDATION_FAILED');
+    if (argv.some((item) => typeof item !== 'string' || item.includes('\0'))) throw new Error('VALIDATION_FAILED');
     const root = this.requireRoot(sandboxId);
     if (this.status(sandboxId) !== 'running') throw new Error('WORKSPACE_NOT_RUNNING');
     const metadata = this.readMetadata(root);
-    if (metadata.workspaceId !== request.workspaceId || metadata.generation !== request.generation) {
+    if (metadata.workspaceId !== workspaceId || metadata.generation !== generation) {
       throw new Error('WORKSPACE_IDENTITY_MISMATCH');
     }
     const workspace = this.coreWorkspaceRoot(metadata.workspaceId);
@@ -221,7 +340,7 @@ export class SandboxManager {
     for (const relative of ['deps/cache/node', 'deps/cache/python', 'deps/cache/go', 'deps/go/pkg/mod', 'build']) {
       fs.mkdirSync(path.join(profile, relative), { recursive: true, mode: 0o700 });
     }
-    const logicalCwd = this.logicalCwd(request.cwd);
+    const logicalCwd = this.logicalCwd(cwd);
     const packBindings: string[] = [];
     const packBins: string[] = [];
     const createdDirs = new Set<string>(['/opt', '/opt/nexus', '/opt/nexus/packs']);
@@ -251,7 +370,7 @@ export class SandboxManager {
     return {
       file: this.sandboxBinary,
       argv: [
-        ...this.isolationArguments(workspace, profile),
+        ...this.isolationArguments(workspace, profile, readOnlyWorkspace),
         ...packBindings,
         '--chdir',
         logicalCwd,
@@ -302,7 +421,7 @@ export class SandboxManager {
         '--unsetenv',
         'NEXUS_AGENT_RUNNER_TOKEN_FILE',
         '--',
-        ...request.argv,
+        ...argv,
       ],
       cwd: workspace,
       env: {
@@ -329,14 +448,15 @@ export class SandboxManager {
     return path.join(this.workspaceRoot(workspaceId), 'core', 'toolchains', fingerprint);
   }
 
-  private isolationArguments(workspace: string, profile?: string): string[] {
+  private isolationArguments(workspace: string, profile?: string, readOnlyWorkspace = false): string[] {
     const systemBindings = sandboxSystemRuntimeArguments();
+    const profileBind = readOnlyWorkspace ? '--ro-bind' : '--bind';
     const profileBindings = profile
       ? [
-          '--bind',
+          profileBind,
           path.join(profile, 'deps'),
           '/workspace/deps',
-          '--bind',
+          profileBind,
           path.join(profile, 'build'),
           '/workspace/build',
         ]
@@ -358,7 +478,7 @@ export class SandboxManager {
       '/tmp',
       '--dir',
       '/workspace',
-      '--bind',
+      readOnlyWorkspace ? '--ro-bind' : '--bind',
       workspace,
       '/workspace',
       ...profileBindings,

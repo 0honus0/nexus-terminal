@@ -4,14 +4,21 @@ import express, { type Request, type RequestHandler, type Response } from 'expre
 import ipaddr from 'ipaddr.js';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import type { IpWhitelistService } from '../../modules/auth/ip-whitelist.service';
-import type { AgentEventFacade, AgentRunFacade } from '../../modules/agent/public';
+import type { AgentEventFacade, AgentRunFacade, AgentWorkspaceRuntimeFacade } from '../../modules/agent/public';
 import { logger } from '../../shared/logging/logger';
 import { runtimePerformanceMetrics } from '../../shared/observability/runtime-performance';
 import { AgentProtocolSession } from './agent-protocol.session';
+import { AgentTerminalProtocolSession } from './agent-terminal-protocol.session';
 import { bindUploadStream } from './upload-stream.transport';
 import { WorkspaceProtocolSession, type WorkspaceProtocolDependencies } from './workspace-protocol.session';
 
-const ALLOWED_PATHS = new Set(['/ws/workspace', '/ws/uploads', '/ws/remote-desktop', '/ws/agent']);
+const ALLOWED_PATHS = new Set([
+  '/ws/workspace',
+  '/ws/uploads',
+  '/ws/remote-desktop',
+  '/ws/agent',
+  '/ws/agent-terminal',
+]);
 const SAFE_WORKSPACE_ID = /^[A-Za-z0-9_-]{8,128}$/;
 const HEARTBEAT_INTERVAL_MS = 15_000;
 const MAX_MISSED_HEARTBEATS = 2;
@@ -23,7 +30,7 @@ interface SessionRequest extends Request {
 
 interface ClientRecord {
   socket: WebSocket;
-  kind: 'workspace' | 'upload' | 'remote-desktop' | 'agent';
+  kind: 'workspace' | 'upload' | 'remote-desktop' | 'agent' | 'agent-terminal';
   protocol?: { close(): Promise<void> | void };
   agentProtocol?: AgentProtocolSession;
   agentSessionKey?: string;
@@ -40,6 +47,7 @@ export interface WebSocketServerDependencies extends WorkspaceProtocolDependenci
   remoteDesktop: RemoteDesktopWebSocketAcceptor;
   agentEvents: AgentEventFacade;
   agentRuns: AgentRunFacade;
+  agentWorkspaceRuntime: AgentWorkspaceRuntimeFacade;
 }
 
 export interface WebSocketRuntimeOptions {
@@ -61,6 +69,7 @@ export interface BackendWebSocketServer {
     upload: number;
     remoteDesktop: number;
     agent: number;
+    agentTerminal: number;
     agentSubscriptions: number;
     agentMaxReplayLag: number;
     agentProtocolErrors: number;
@@ -234,6 +243,39 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     socket.once('error', () => void protocol.close());
   };
 
+  const onAgentTerminalConnection = (
+    socket: WebSocket,
+    userId: number,
+    request: {
+      appId: string;
+      workspaceId: string;
+      generation: number;
+      columns: number;
+      rows: number;
+      sessionId?: string;
+    },
+  ): void => {
+    const protocol = new AgentTerminalProtocolSession(
+      socket,
+      { userId, ...request },
+      dependencies.agentWorkspaceRuntime,
+    );
+    const record: ClientRecord = { socket, kind: 'agent-terminal', protocol, isAlive: true, missed: 0 };
+    trackClient(record);
+    socket.on('message', (data, isBinary) => protocol.handleMessage(data, isBinary));
+    socket.once('close', () => void protocol.close());
+    socket.once('error', () => void protocol.close());
+    void protocol.start().catch((error) => {
+      logger.warn(
+        { err: error, workspaceId: request.workspaceId, generation: request.generation },
+        'Agent terminal open failed',
+      );
+      if (socket.readyState === WebSocket.OPEN)
+        socket.close(1008, error instanceof Error ? error.message.slice(0, 100) : 'Workspace terminal denied');
+      void protocol.close();
+    });
+  };
+
   const handleAuthenticatedUpgrade = (
     request: SessionRequest,
     socket: Socket,
@@ -268,6 +310,45 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       wss.handleUpgrade(request, socket, head, (ws) => {
         runtimePerformanceMetrics.webSocketUpgradeAccepted();
         onRemoteDesktopConnection(ws, request, ticket, userId);
+      });
+      return;
+    }
+
+    if (pathname === '/ws/agent-terminal') {
+      const appId = url.searchParams.get('appId')?.trim() || '';
+      const workspaceId = url.searchParams.get('workspaceId')?.trim() || '';
+      const generation = Number(url.searchParams.get('generation'));
+      const columns = Number(url.searchParams.get('columns') ?? '80');
+      const rows = Number(url.searchParams.get('rows') ?? '24');
+      const sessionId = url.searchParams.get('sessionId')?.trim() || undefined;
+      if (
+        !/^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9-]*)+$/.test(appId) ||
+        !workspaceId ||
+        workspaceId.length > 128 ||
+        !Number.isSafeInteger(generation) ||
+        generation < 1 ||
+        !Number.isSafeInteger(columns) ||
+        columns < 2 ||
+        columns > 1000 ||
+        !Number.isSafeInteger(rows) ||
+        rows < 1 ||
+        rows > 500 ||
+        (sessionId !== undefined &&
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sessionId))
+      ) {
+        rejectUpgrade(socket, 400, 'Bad Request');
+        return;
+      }
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        runtimePerformanceMetrics.webSocketUpgradeAccepted();
+        onAgentTerminalConnection(ws, userId, {
+          appId,
+          workspaceId,
+          generation,
+          columns,
+          rows,
+          ...(sessionId ? { sessionId } : {}),
+        });
       });
       return;
     }
@@ -418,6 +499,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       let upload = 0;
       let remoteDesktop = 0;
       let agent = 0;
+      let agentTerminal = 0;
       let agentSubscriptions = 0;
       let bufferedAmountBytes = 0;
       let maxBufferedAmountBytes = 0;
@@ -425,10 +507,10 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         if (record.kind === 'workspace') workspace += 1;
         else if (record.kind === 'upload') upload += 1;
         else if (record.kind === 'remote-desktop') remoteDesktop += 1;
-        else {
+        else if (record.kind === 'agent') {
           agent += 1;
           agentSubscriptions += record.agentProtocol?.subscriptionCount() ?? 0;
-        }
+        } else agentTerminal += 1;
         bufferedAmountBytes += record.socket.bufferedAmount;
         maxBufferedAmountBytes = Math.max(maxBufferedAmountBytes, record.socket.bufferedAmount);
       }
@@ -438,6 +520,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
         upload,
         remoteDesktop,
         agent,
+        agentTerminal,
         agentSubscriptions,
         agentMaxReplayLag,
         agentProtocolErrors,

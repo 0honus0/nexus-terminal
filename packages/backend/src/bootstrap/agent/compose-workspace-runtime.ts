@@ -2,6 +2,7 @@ import { SqliteWorkspaceRepository } from '../../infrastructure/agent/workspace-
 import { SqliteWorkspaceRuntimeConfirmationRepository } from '../../infrastructure/agent/workspace-runtime/sqlite-workspace-runtime-confirmation.repository';
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { ArtifactService } from '../../modules/agent/ai/artifact.service';
+import type { BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { AppCapabilityBroker } from '../../modules/agent/host/app-capability-broker';
 import type { AppLifecycleService } from '../../modules/agent/host/app-lifecycle.service';
@@ -13,6 +14,8 @@ import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspa
 import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import { WorkspaceRuntimeManagementService } from '../../modules/agent/workspace-runtime/workspace-runtime-management.service';
 import { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
+import type { WorkspaceRuntimeInteractiveSessionPort } from '../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
+import { WorkspaceRuntimeTerminalService } from '../../modules/agent/workspace-runtime/workspace-runtime-terminal.service';
 
 export interface ComposeWorkspaceRuntimeOptions {
   database: RelationalDatabase;
@@ -23,6 +26,8 @@ export interface ComposeWorkspaceRuntimeOptions {
   capabilities: AppCapabilityBroker;
   cryptoHash: CryptoHashPort;
   artifacts: ArtifactService;
+  interactiveSessions: WorkspaceRuntimeInteractiveSessionPort;
+  browserGateway: BrowserGatewayPort;
   now: () => number;
 }
 
@@ -46,10 +51,19 @@ export const composeWorkspaceRuntime = ({
   capabilities,
   cryptoHash,
   artifacts,
+  interactiveSessions,
+  browserGateway,
   now,
 }: ComposeWorkspaceRuntimeOptions): ComposedWorkspaceRuntime => {
   const repository = new SqliteWorkspaceRepository(database);
   const confirmations = new SqliteWorkspaceRuntimeConfirmationRepository(database);
+  const terminal = new WorkspaceRuntimeTerminalService(
+    repository,
+    interactiveSessions,
+    settings,
+    lifecycle,
+    capabilities,
+  );
   const service = new WorkspaceRuntimeService(
     controller,
     repository,
@@ -59,6 +73,12 @@ export const composeWorkspaceRuntime = ({
     capabilities,
     cryptoHash,
     now,
+    {
+      workspaceInvalidated: (workspaceId, generation) => {
+        browserGateway.closeWorkspace(workspaceId, generation);
+        terminal.closeWorkspace(workspaceId, generation);
+      },
+    },
   );
   const management = new WorkspaceRuntimeManagementService(
     controller,
@@ -76,6 +96,8 @@ export const composeWorkspaceRuntime = ({
     storage: (signal) => service.storage(signal),
     listWorkspaces: (scope, runId) => service.listWorkspaces(scope, runId),
     getWorkspace: (scope, workspaceId) => service.getWorkspace(scope, workspaceId),
+    openTerminal: (scope, workspaceId, generation, columns, rows, sessionId, signal) =>
+      terminal.open(scope, workspaceId, generation, columns, rows, sessionId, signal),
     workspaceGrants: (scope, workspaceId, targetPluginId) =>
       service.workspaceGrants(scope, workspaceId, targetPluginId),
     replaceWorkspaceGrants: (scope, workspaceId, targetPluginId, grants, expectedRevision) =>

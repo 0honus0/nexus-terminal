@@ -24,7 +24,11 @@ export class RunnerJournal {
       this.state.commands ??= {};
       this.state.workspaces ??= {};
       this.state.jobs ??= {};
-      for (const workspace of Object.values(this.state.workspaces)) workspace.runnerPlugins ??= [];
+      for (const workspace of Object.values(this.state.workspaces)) {
+        workspace.runnerPlugins ??= [];
+        workspace.acpProfiles ??= [];
+        workspace.browserTarget ??= null;
+      }
     } catch (error) {
       if (error instanceof Error && error.message === 'JOURNAL_SCHEMA_UNSUPPORTED') {
         // Unpublished dev model: old execution-plane journals are intentionally discarded.

@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import type { Duplex } from 'node:stream';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
@@ -13,6 +14,10 @@ import { SpaceReporter } from './space-reporter';
 import { CleanupPlanner } from './cleanup-planner';
 import { PluginRunnerRuntime } from './plugin-runner-runtime';
 import { MAX_HOST_WORKSPACE_TRANSFER_BYTES, type WorkspacePermission } from './workspace-broker';
+import type { AcpProcessRuntime } from './acp-process-runtime';
+import type { WorkspaceTerminalRuntime } from './workspace-terminal-runtime';
+import type { BrowserTunnelRuntime } from './browser-tunnel-runtime';
+import type { WorkspaceBrowserEndpoint } from '../types';
 
 const RUNNER_API_VERSION = '2026-09-11';
 const MAX_BODY_BYTES = 256 * 1024;
@@ -68,6 +73,107 @@ const asRecord = (value: unknown): Record<string, unknown> => {
   return value as Record<string, unknown>;
 };
 
+const SAFE_RUNTIME_RESOURCE_ID = /^[a-z][a-z0-9_.-]{0,127}$/;
+const validBrowserUrlPattern = (value: string): boolean => {
+  const match = /^(\*|https?|wss?):\/\/(\*\.)?([^/:?#]+)(?::(\d{1,5}))?(\/[^?#]*)?$/.exec(value.trim());
+  if (!match) return false;
+  const port = match[4];
+  if (port && (Number(port) < 1 || Number(port) > 65535)) return false;
+  const rawPath = match[5];
+  return !rawPath || !rawPath.includes('*') || rawPath.endsWith('*');
+};
+
+const validateFrozenRuntimeResources = (command: WorkspaceRuntimeCommand): void => {
+  if (!Array.isArray(command.acpProfiles) || command.acpProfiles.length > 16) {
+    throw new Error('ACP_PROFILE_INVALID');
+  }
+  const profileIds = new Set<string>();
+  for (const profile of command.acpProfiles) {
+    if (
+      !profile ||
+      !SAFE_RUNTIME_RESOURCE_ID.test(profile.id) ||
+      profileIds.has(profile.id) ||
+      !Number.isSafeInteger(profile.profileRevision) ||
+      profile.profileRevision < 1 ||
+      !Array.isArray(profile.argv) ||
+      profile.argv.length < 1 ||
+      profile.argv.length > 64 ||
+      profile.argv.some(
+        (arg) => typeof arg !== 'string' || arg.includes('\0') || Buffer.byteLength(arg, 'utf8') > 8192,
+      ) ||
+      typeof profile.cwd !== 'string' ||
+      (profile.cwd !== '/workspace' && !profile.cwd.startsWith('/workspace/')) ||
+      profile.cwd.includes('\0') ||
+      Buffer.byteLength(profile.cwd, 'utf8') > 4096
+    ) {
+      throw new Error('ACP_PROFILE_INVALID');
+    }
+    profileIds.add(profile.id);
+  }
+
+  const target = command.browserTarget;
+  if (target === null) return;
+  if (
+    !target ||
+    !SAFE_RUNTIME_RESOURCE_ID.test(target.id) ||
+    !Number.isSafeInteger(target.profileRevision) ||
+    target.profileRevision < 1 ||
+    !Array.isArray(target.endpoints) ||
+    target.endpoints.length < 1 ||
+    target.endpoints.length > 16 ||
+    !Array.isArray(target.allowedUrlPatterns) ||
+    target.allowedUrlPatterns.length < 1 ||
+    target.allowedUrlPatterns.length > 128
+  ) {
+    throw new Error('BROWSER_TARGET_INVALID');
+  }
+  const patterns = new Set<string>();
+  for (const pattern of target.allowedUrlPatterns) {
+    if (
+      typeof pattern !== 'string' ||
+      pattern.length > 2048 ||
+      patterns.has(pattern) ||
+      !validBrowserUrlPattern(pattern)
+    ) {
+      throw new Error('BROWSER_TARGET_INVALID');
+    }
+    patterns.add(pattern);
+  }
+  for (const endpoint of target.endpoints) {
+    if (
+      !endpoint ||
+      (endpoint.scope !== 'docker-network' && endpoint.scope !== 'external-network') ||
+      (endpoint.via !== 'backend' && endpoint.via !== 'runner') ||
+      typeof endpoint.url !== 'string' ||
+      !endpoint.url ||
+      endpoint.url.length > 4096 ||
+      !Number.isSafeInteger(endpoint.priority) ||
+      endpoint.priority < 0 ||
+      endpoint.priority > 10000 ||
+      typeof endpoint.allowPlaintext !== 'boolean' ||
+      typeof endpoint.verifyTls !== 'boolean'
+    ) {
+      throw new Error('BROWSER_ENDPOINT_INVALID');
+    }
+    let url: URL;
+    try {
+      url = new URL(endpoint.url);
+    } catch {
+      throw new Error('BROWSER_ENDPOINT_INVALID');
+    }
+    if (
+      !['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      ((url.protocol === 'http:' || url.protocol === 'ws:') && !endpoint.allowPlaintext)
+    ) {
+      throw new Error('BROWSER_ENDPOINT_INVALID');
+    }
+  }
+};
+
 const equalsToken = (candidate: string, expected: string): boolean => {
   const left = createHash('sha256').update(candidate).digest();
   const right = createHash('sha256').update(expected).digest();
@@ -85,13 +191,117 @@ export interface RunnerControllerDependencies {
   storage: SpaceReporter;
   cleanup: CleanupPlanner;
   pluginRunner: PluginRunnerRuntime;
+  acpRuntime: AcpProcessRuntime;
+  terminalRuntime: WorkspaceTerminalRuntime;
+  browserTunnel: BrowserTunnelRuntime;
 }
 
 export class RunnerControllerServer {
   constructor(private readonly dependencies: RunnerControllerDependencies) {}
 
   createServer(): http.Server {
-    return http.createServer((request, response) => void this.route(request, response));
+    const server = http.createServer((request, response) => void this.route(request, response));
+    server.on('upgrade', (request, socket, head) => this.upgrade(request, socket, head));
+    server.on('close', () => {
+      this.dependencies.acpRuntime.closeAll();
+      this.dependencies.terminalRuntime.closeAll();
+      this.dependencies.browserTunnel.closeAll();
+    });
+    return server;
+  }
+
+  private upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): void {
+    try {
+      if (!this.authorized(request)) {
+        this.rejectUpgrade(socket, 401, 'UNAUTHORIZED');
+        return;
+      }
+      if (request.headers['x-nexus-agent-protocol'] !== RUNNER_API_VERSION) {
+        this.rejectUpgrade(socket, 426, 'RUNNER_PROTOCOL_UNSUPPORTED');
+        return;
+      }
+      const url = new URL(request.url ?? '/', 'http://runner.internal');
+
+      const acp = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/acp\/([^/]+)\/stream$/);
+      if (acp) {
+        const generation = Number(url.searchParams.get('generation'));
+        if (!Number.isSafeInteger(generation) || generation < 1) throw new Error('VALIDATION_FAILED');
+        this.dependencies.acpRuntime.handleUpgrade(
+          request,
+          socket,
+          head,
+          decodeURIComponent(acp[1]!),
+          generation,
+          decodeURIComponent(acp[2]!),
+        );
+        return;
+      }
+
+      const terminal = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/terminal\/stream$/);
+      if (terminal) {
+        const generation = Number(url.searchParams.get('generation'));
+        if (!Number.isSafeInteger(generation) || generation < 1) throw new Error('VALIDATION_FAILED');
+        const publicKey = request.headers['x-nexus-terminal-public-key'];
+        if (typeof publicKey !== 'string') throw new Error('WORKSPACE_TERMINAL_PUBLIC_KEY_INVALID');
+        this.dependencies.terminalRuntime.handleUpgrade(
+          request,
+          socket,
+          head,
+          decodeURIComponent(terminal[1]!),
+          generation,
+          publicKey,
+        );
+        return;
+      }
+
+      if (url.pathname === '/v1/browser/tunnel') {
+        const rawEndpoint = request.headers['x-nexus-browser-endpoint'];
+        if (typeof rawEndpoint !== 'string' || rawEndpoint.length > 12_000) throw new Error('BROWSER_ENDPOINT_INVALID');
+        let endpoint: WorkspaceBrowserEndpoint;
+        try {
+          endpoint = JSON.parse(Buffer.from(rawEndpoint, 'base64url').toString('utf8')) as WorkspaceBrowserEndpoint;
+        } catch {
+          throw new Error('BROWSER_ENDPOINT_INVALID');
+        }
+        const targetId = request.headers['x-nexus-browser-target'];
+        const targetRevision = Number(request.headers['x-nexus-browser-revision']);
+        if (typeof targetId !== 'string' || !Number.isSafeInteger(targetRevision) || targetRevision < 1) {
+          throw new Error('BROWSER_TARGET_INVALID');
+        }
+        const workspaceId = url.searchParams.get('workspaceId')?.trim() || undefined;
+        const generationValue = url.searchParams.get('generation');
+        const generation = generationValue === null ? undefined : Number(generationValue);
+        if (generation !== undefined && (!Number.isSafeInteger(generation) || generation < 1)) {
+          throw new Error('VALIDATION_FAILED');
+        }
+        this.dependencies.browserTunnel.handleUpgrade(request, socket, head, endpoint, {
+          targetId,
+          targetRevision,
+          ...(workspaceId ? { workspaceId } : {}),
+          ...(generation === undefined ? {} : { generation }),
+        });
+        return;
+      }
+
+      this.rejectUpgrade(socket, 404, 'NOT_FOUND');
+    } catch (error) {
+      this.rejectUpgrade(socket, 400, error instanceof Error ? error.message : 'VALIDATION_FAILED');
+    }
+  }
+
+  private rejectUpgrade(socket: Duplex, status: number, code: string): void {
+    if (socket.destroyed) return;
+    const reason =
+      status === 401
+        ? 'Unauthorized'
+        : status === 404
+          ? 'Not Found'
+          : status === 426
+            ? 'Upgrade Required'
+            : 'Bad Request';
+    socket.end(
+      `HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n${JSON.stringify({ error: code.slice(0, 128) })}`,
+    );
   }
 
   private async route(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -532,6 +742,7 @@ export class RunnerControllerServer {
       throw new Error('VALIDATION_FAILED');
     }
     if (!Number.isSafeInteger(command.generation) || command.generation < 1) throw new Error('VALIDATION_FAILED');
+    validateFrozenRuntimeResources(command);
     if (command.action === 'provision') {
       const catalog = this.dependencies.catalog.load();
       if (command.catalogRevision !== catalog.revision || command.runtimeDigest !== catalog.runtimeDigest) {
@@ -587,6 +798,14 @@ export class RunnerControllerServer {
       runnerPlugins: (command.runnerPlugins ?? []).map((target) => ({ ...target })),
       limits: command.limits,
       network: command.network,
+      acpProfiles: command.acpProfiles.map((profile) => ({ ...profile, argv: [...profile.argv] })),
+      browserTarget: command.browserTarget
+        ? {
+            ...command.browserTarget,
+            endpoints: command.browserTarget.endpoints.map((endpoint) => ({ ...endpoint })),
+            allowedUrlPatterns: [...command.browserTarget.allowedUrlPatterns],
+          }
+        : null,
       updatedAt: now,
     };
     this.dependencies.journal.saveWorkspace(creating);
@@ -610,6 +829,8 @@ export class RunnerControllerServer {
     const samePacks = JSON.stringify(workspace.toolchain) === JSON.stringify(command.toolchain);
     const sameRunnerPlugins =
       JSON.stringify(workspace.runnerPlugins ?? []) === JSON.stringify(command.runnerPlugins ?? []);
+    const sameAcpProfiles = JSON.stringify(workspace.acpProfiles) === JSON.stringify(command.acpProfiles);
+    const sameBrowserTarget = JSON.stringify(workspace.browserTarget) === JSON.stringify(command.browserTarget);
     if (
       workspace.userId !== command.userId ||
       workspace.appId !== command.appId ||
@@ -620,7 +841,9 @@ export class RunnerControllerServer {
       workspace.runtimeDigest !== command.runtimeDigest ||
       workspace.catalogRevision !== command.catalogRevision ||
       !samePacks ||
-      !sameRunnerPlugins
+      !sameRunnerPlugins ||
+      !sameAcpProfiles ||
+      !sameBrowserTarget
     ) {
       throw new Error('WORKSPACE_IDENTITY_MISMATCH');
     }
@@ -635,18 +858,27 @@ export class RunnerControllerServer {
       return this.save(workspace, 'running', command.commandId);
     }
     if (command.action === 'stop') {
+      this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+      this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+      this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.quiesceWorkspace(workspace, Math.floor(Date.now() / 1000) + 10);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
       await this.dependencies.sandboxEngine.stop(workspace.sandboxId);
       return this.save(workspace, 'stopped', command.commandId);
     }
     if (command.action === 'restart') {
+      this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+      this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+      this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
       await this.dependencies.sandboxEngine.restart(workspace.sandboxId);
       await this.dependencies.pluginRunner.activateWorkspace(workspace);
       return this.save(workspace, 'running', command.commandId);
     }
     if (command.action === 'delete') {
+      this.dependencies.acpRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+      this.dependencies.terminalRuntime.closeWorkspace(workspace.workspaceId, workspace.generation);
+      this.dependencies.browserTunnel.closeWorkspace(workspace.workspaceId, workspace.generation);
       await this.dependencies.pluginRunner.disposeWorkspace(workspace);
       await this.dependencies.sandboxEngine.remove(workspace.sandboxId);
       return this.save(workspace, 'deleted', command.commandId);

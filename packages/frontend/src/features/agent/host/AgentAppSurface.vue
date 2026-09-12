@@ -2,8 +2,8 @@
   import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { connectionService, type Connection } from '@/features/connections/public';
-  import AgentConversation from '../../ai/AgentConversation.vue';
-  import { agentApi, formatAgentApiError } from '../../api/agent-api';
+  import AgentConversation from '../ai/AgentConversation.vue';
+  import { agentApi, formatAgentApiError } from '../api/agent-api';
   import type {
     AgentApprovalBatch,
     AgentApprovalView,
@@ -18,12 +18,12 @@
     AgentSubagentMessage,
     AgentSubagentView,
     AgentThreadView,
-  } from '../../api/agent-api';
-  import { agentSurfaceSession } from '../../host/surface-session';
-  import { createAgentRunFacade } from '../../runtime/run-facade';
-  import { createRuntimeOperationState } from '../../runtime/runtime-operation-state';
-  import TaskDetailDrawer from '../../runtime/TaskDetailDrawer.vue';
-  import TaskRail from '../../runtime/TaskRail.vue';
+  } from '../api/agent-api';
+  import { agentSurfaceSession } from './surface-session';
+  import { createAgentRunFacade } from '../runtime/run-facade';
+  import { createRuntimeOperationState } from '../runtime/runtime-operation-state';
+  import TaskDetailDrawer from '../runtime/TaskDetailDrawer.vue';
+  import TaskRail from '../runtime/TaskRail.vue';
 
   const props = defineProps<{ appId: string }>();
   const { t } = useI18n();

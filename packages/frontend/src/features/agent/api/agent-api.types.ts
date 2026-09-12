@@ -63,7 +63,23 @@ export interface AgentSettingsDocument {
     workspaceIdleTtlSeconds: number;
     enabledRecipeIds: string[];
     toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
+    acpProfiles: Array<{ id: string; argv: string[]; cwd: string }>;
   };
+  browser: {
+    targets: Array<{
+      id: string;
+      endpoints: Array<{
+        scope: 'docker-network' | 'external-network';
+        via: 'backend' | 'runner';
+        url: string;
+        priority: number;
+        allowPlaintext: boolean;
+        verifyTls: boolean;
+      }>;
+      allowedUrlPatterns: string[];
+    }>;
+  };
+  plugins: { repositories: Array<{ url: string; privateHostExceptions: string[] }> };
   safety: { providerPrivateNetworkExceptions: string[] };
 }
 

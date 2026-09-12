@@ -45,7 +45,7 @@ FROM node:${NODE_VERSION}-alpine AS controller
 ARG BWRAP_VERSION
 LABEL org.opencontainers.image.title="Nexus Agent Runner"
 WORKDIR /app
-RUN apk add --no-cache libcap
+RUN apk add --no-cache libcap dropbear socat
 COPY --from=bwrap-builder /out/bwrap /usr/local/bin/bwrap
 RUN /usr/local/bin/bwrap --version | grep -Fx "bubblewrap ${BWRAP_VERSION}"
 COPY --from=builder /out/agent-runtime/dist ./dist

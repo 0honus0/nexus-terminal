@@ -7,6 +7,7 @@
     "tests/ui/connection-non-ssh-bulk.spec.ts",
     "tests/ui/custom-terminal-theme.spec.ts",
     "tests/ui/workspace-no-session.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts",
     "tests/ssh/connection-edit-delete.spec.ts",
     "tests/ssh/connection-list-search.spec.ts",
     "tests/ssh/connection.spec.ts",

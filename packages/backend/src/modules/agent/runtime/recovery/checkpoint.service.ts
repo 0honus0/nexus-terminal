@@ -109,7 +109,8 @@ export class CheckpointService {
     }
     const run = await this.runs.snapshot(scope, runId);
     if (!run) throw new Error('NOT_FOUND');
-    const definition = this.definitions.require(scope.appId, run.definition.agentDefinitionId);
+    const app = await this.lifecycle.get(scope);
+    const definition = this.definitions.require(scope.appId, app.activeVersion, run.definition.agentDefinitionId);
     return this.checkpoints.save({
       scope,
       checkpointId: randomUUID(),
@@ -150,7 +151,8 @@ export class CheckpointService {
     if (run.version !== expectedVersion) reasons.push('STATE_CONFLICT');
     if (!TERMINAL_RUN_STATUSES.has(run.status)) reasons.push('RUN_RESUME_SOURCE_NOT_TERMINAL');
     if (run.needsReconciliation) reasons.push('RECONCILIATION_REQUIRED');
-    const definition = this.definitions.require(scope.appId, run.definition.agentDefinitionId);
+    const app = await this.lifecycle.get(scope);
+    const definition = this.definitions.require(scope.appId, app.activeVersion, run.definition.agentDefinitionId);
     if (definition.version !== checkpoint.snapshot.definitionVersion) reasons.push('CHECKPOINT_DEFINITION_STALE');
     let provider = null;
     try {
@@ -213,7 +215,11 @@ export class CheckpointService {
     }
     const model = provider.models.find((candidate) => candidate.id === source.definition.model.modelId);
     if (!model) throw new Error('CHECKPOINT_MODEL_UNAVAILABLE');
-    const definitionInfo = this.definitions.require(scope.appId, source.definition.agentDefinitionId);
+    const definitionInfo = this.definitions.require(
+      scope.appId,
+      app.activeVersion,
+      source.definition.agentDefinitionId,
+    );
     if (definitionInfo.version !== validation.checkpoint.snapshot.definitionVersion) {
       throw new Error('CHECKPOINT_DEFINITION_STALE');
     }

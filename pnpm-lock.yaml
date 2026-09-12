@@ -39,15 +39,15 @@ importers:
 
   packages/agent-runtime:
     dependencies:
-      puppeteer-core:
-        specifier: 'catalog:'
-        version: 25.10.0
       semver:
         specifier: 7.7.2
         version: 7.7.2
       tar:
         specifier: 'catalog:'
         version: 7.5.22
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
     devDependencies:
       '@types/node':
         specifier: 'catalog:'
@@ -55,6 +55,9 @@ importers:
       '@types/semver':
         specifier: 7.7.1
         version: 7.7.1
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
       typescript:
         specifier: catalog:node-build
         version: 7.0.2

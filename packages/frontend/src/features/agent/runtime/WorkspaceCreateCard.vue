@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
-  import type { WorkspaceRuntimeCatalog } from '../api/agent-api';
+  import type { AgentSettingsView, WorkspaceRuntimeCatalog } from '../api/agent-api';
 
   interface RunnerCandidate {
     pluginId: string;
@@ -8,21 +8,35 @@
     displayName: string;
   }
 
+  type AcpProfile = AgentSettingsView['effectiveSettings']['workspaceRuntime']['acpProfiles'][number];
+  type BrowserTarget = AgentSettingsView['effectiveSettings']['browser']['targets'][number];
+
   const props = defineProps<{
     catalog: WorkspaceRuntimeCatalog;
     runnerCandidates: RunnerCandidate[];
+    acpProfiles: AcpProfile[];
+    browserTargets: BrowserTarget[];
     locked: boolean;
   }>();
 
   const emit = defineEmits<{
     create: [
-      input: { recipeId: string; versions: Record<string, string>; runnerPluginIds: string[]; retained: boolean },
+      input: {
+        recipeId: string;
+        versions: Record<string, string>;
+        runnerPluginIds: string[];
+        acpProfileIds: string[];
+        browserTargetId: string;
+        retained: boolean;
+      },
     ];
   }>();
 
   const selectedRecipeId = ref('');
   const toolVersions = ref<Record<string, string>>({});
   const selectedRunnerPluginIds = ref<string[]>([]);
+  const selectedAcpProfileIds = ref<string[]>([]);
+  const selectedBrowserTargetId = ref('');
   const retained = ref(false);
 
   const selectedRecipe = computed(
@@ -39,6 +53,7 @@
       (familyId) => !recipe.defaultFamilies.includes(familyId) && packsForFamily(familyId).length > 0,
     );
   });
+  const browserRecipe = computed(() => selectedRecipe.value?.kind === 'browser');
 
   const normalize = (): void => {
     if (!props.catalog.recipes.some((recipe) => recipe.id === selectedRecipeId.value)) {
@@ -54,11 +69,22 @@
     selectedRunnerPluginIds.value = selectedRunnerPluginIds.value.filter((pluginId) =>
       props.runnerCandidates.some((candidate) => candidate.pluginId === pluginId),
     );
+    selectedAcpProfileIds.value = selectedAcpProfileIds.value.filter((profileId) =>
+      props.acpProfiles.some((profile) => profile.id === profileId),
+    );
+    if (!props.browserTargets.some((target) => target.id === selectedBrowserTargetId.value)) {
+      selectedBrowserTargetId.value = '';
+    }
+    if (!browserRecipe.value) selectedBrowserTargetId.value = '';
   };
 
-  watch(() => [props.catalog, props.runnerCandidates] as const, normalize, { immediate: true, deep: true });
+  watch(() => [props.catalog, props.runnerCandidates, props.acpProfiles, props.browserTargets] as const, normalize, {
+    immediate: true,
+    deep: true,
+  });
   watch(selectedRecipeId, () => {
     toolVersions.value = {};
+    normalize();
   });
 
   const submit = (): void => {
@@ -67,6 +93,8 @@
       recipeId: selectedRecipeId.value,
       versions: Object.fromEntries(Object.entries(toolVersions.value).filter(([, versionId]) => Boolean(versionId))),
       runnerPluginIds: [...selectedRunnerPluginIds.value],
+      acpProfileIds: [...selectedAcpProfileIds.value],
+      browserTargetId: browserRecipe.value ? selectedBrowserTargetId.value : '',
       retained: retained.value,
     });
   };
@@ -88,6 +116,28 @@
         {{ $t('agent.workspaceRuntime.retained') }}
       </label>
     </div>
+
+    <label v-if="browserRecipe" class="mt-2 block text-[10px] text-text-secondary">
+      {{ $t('agent.workspaceRuntime.browserTarget') }}
+      <select
+        v-model="selectedBrowserTargetId"
+        class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
+      >
+        <option value="">{{ $t('agent.workspaceRuntime.browserTargetNone') }}</option>
+        <option v-for="target in browserTargets" :key="target.id" :value="target.id">{{ target.id }}</option>
+      </select>
+      <span class="mt-1 block text-[9px]">{{ $t('agent.workspaceRuntime.browserTargetHint') }}</span>
+    </label>
+
+    <div v-if="acpProfiles.length" class="mt-2 rounded border border-border p-2">
+      <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.acpProfiles') }}</div>
+      <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.acpProfilesHint') }}</p>
+      <label v-for="profile in acpProfiles" :key="profile.id" class="mt-1 flex items-center gap-2 text-[10px]">
+        <input v-model="selectedAcpProfileIds" type="checkbox" :value="profile.id" />
+        <span>{{ profile.id }} · {{ profile.argv.join(' ') }}</span>
+      </label>
+    </div>
+
     <div v-if="toolFamilies.length" class="mt-2 rounded border border-border p-2">
       <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.toolVersions') }}</div>
       <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.toolVersionsHint') }}</p>
@@ -106,6 +156,7 @@
         </label>
       </div>
     </div>
+
     <div class="mt-2">
       <div class="text-[10px] font-medium">{{ $t('agent.workspaceRuntime.runnerPlugins') }}</div>
       <p class="mt-0.5 text-[9px] text-text-secondary">{{ $t('agent.workspaceRuntime.runnerPluginsHint') }}</p>
@@ -117,6 +168,7 @@
         {{ $t('agent.workspaceRuntime.noRunnerPlugins') }}
       </p>
     </div>
+
     <button
       type="button"
       class="mt-3 rounded bg-primary px-2 py-1 text-[11px] text-white disabled:opacity-50"

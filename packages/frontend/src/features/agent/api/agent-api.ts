@@ -22,6 +22,7 @@ export interface AgentAppSummary {
   id: string;
   displayName: string;
   version: string;
+  surface: 'builtin' | 'agent' | 'plugin' | 'none';
   stateVersion: number;
   enabled: boolean;
   health: string;
@@ -29,6 +30,35 @@ export interface AgentAppSummary {
   runningRuns: number;
   pendingApprovals: number;
   pendingBudgetRequests: number;
+}
+
+export type AgentIntegrationKind = 'mcp' | 'acp';
+export interface AgentMcpIntegrationConfiguration {
+  displayName: string;
+  transport: 'streamable-http';
+  endpoint: string;
+  privateHostExceptions: string[];
+  protocolVersion: '2026-07-28';
+}
+export interface AgentAcpIntegrationConfiguration {
+  displayName: string;
+  transport: 'workspace-profile';
+  profileId: string;
+  protocolVersion: '1';
+}
+export interface AgentIntegrationView {
+  id: string;
+  userId: number;
+  appId: string;
+  kind: AgentIntegrationKind;
+  configuration: AgentMcpIntegrationConfiguration | AgentAcpIntegrationConfiguration;
+  hasCredential: boolean;
+  credentialRevision: number;
+  schemaHash: string | null;
+  enabled: boolean;
+  version: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface AgentCapabilityGrant {
@@ -106,6 +136,13 @@ export interface PluginManifestView {
   sdkVersion: string;
   capabilities: string[];
   intents: Array<{ id: string; schemaVersion: number }>;
+  agents?: Array<{
+    id: string;
+    version: string;
+    displayName: string;
+    description: string;
+    requiredModelCapabilities: string[];
+  }>;
   targets?: {
     frontend?: { entry: string };
     backend?: { entry: string };
@@ -126,6 +163,30 @@ export interface PluginVersionView {
   status: 'verified' | 'installed' | 'failed' | 'removed';
   installedAt: number | null;
   updatedAt: number;
+}
+
+export interface RemotePluginPublisher {
+  keyId: string;
+  label: string;
+  publicKeyPem: string;
+}
+
+export interface RemotePluginPackageEntry {
+  appId: string;
+  version: string;
+  displayName: string;
+  description: string;
+  packageUrl: string;
+  sha256: string;
+  sizeBytes: number;
+  publisherKeyId: string;
+}
+
+export interface RemotePluginCatalog {
+  schemaVersion: 1;
+  repositoryUrl: string;
+  publishers: RemotePluginPublisher[];
+  packages: RemotePluginPackageEntry[];
 }
 
 export interface PluginStageView {
@@ -710,6 +771,26 @@ export const agentApi = {
       ).data,
     );
   },
+  async remotePluginCatalog(repositoryUrl: string): Promise<RemotePluginCatalog> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<RemotePluginCatalog>>('/agent/plugins/remote/catalog', {
+          params: { repositoryUrl },
+        })
+      ).data,
+    );
+  },
+  async stageRemotePlugin(repositoryUrl: string, appId: string, version: string): Promise<PluginStageView> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<PluginStageView>>(
+          '/agent/plugins/remote/stage',
+          { repositoryUrl, appId, version },
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
   async stagePlugin(artifact: AgentArtifactRef): Promise<PluginStageView> {
     return unwrap(
       (
@@ -931,6 +1012,58 @@ export const agentApi = {
     );
   },
   ...createWorkspaceRuntimeApi(mutationHeaders),
+  async integrations(appId: string, kind?: AgentIntegrationKind): Promise<AgentIntegrationView[]> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<AgentIntegrationView[]>>(`/apps/${encodeURIComponent(appId)}/integrations`, {
+          params: kind ? { kind } : undefined,
+        })
+      ).data,
+    );
+  },
+  async createIntegration(appId: string, input: Record<string, unknown>): Promise<AgentIntegrationView> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentIntegrationView>>(
+          `/apps/${encodeURIComponent(appId)}/integrations`,
+          input,
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async updateIntegration(
+    appId: string,
+    integration: AgentIntegrationView,
+    input: Record<string, unknown>,
+  ): Promise<AgentIntegrationView> {
+    return unwrap(
+      (
+        await httpClient.patch<AgentEnvelope<AgentIntegrationView>>(
+          `/apps/${encodeURIComponent(appId)}/integrations/${encodeURIComponent(integration.id)}`,
+          { ...input, expectedVersion: integration.version },
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async deleteIntegration(appId: string, integration: AgentIntegrationView): Promise<void> {
+    await httpClient.delete(`/apps/${encodeURIComponent(appId)}/integrations/${encodeURIComponent(integration.id)}`, {
+      params: { expectedVersion: integration.version },
+      headers: await mutationHeaders(),
+    });
+  },
+  async refreshIntegration(appId: string, integrationId: string): Promise<unknown> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<unknown>>(
+          `/apps/${encodeURIComponent(appId)}/integrations/${encodeURIComponent(integrationId)}/refresh`,
+          {},
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
   async targetDenylist(): Promise<TargetDenylistView> {
     return unwrap((await httpClient.get<AgentEnvelope<TargetDenylistView>>('/agent/target-denylist')).data);
   },

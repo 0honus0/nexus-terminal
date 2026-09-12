@@ -66,7 +66,16 @@
           "pluginUpgraded": "Plugin upgraded successfully.",
           "pluginUninstalledDataRetained": "Plugin code uninstalled. App data was retained.",
           "pluginDataDeleted": "Retained AppStorage data deleted."
-        }
+        },
+        "remoteRepositories": "Remote plugin repositories",
+        "remoteRepositoriesHint": "Repositories provide discovery only. Packages still require an explicitly trusted Ed25519 publisher signature before installation.",
+        "refreshRemote": "Refresh repositories",
+        "repositoryUrl": "Repository catalog URL",
+        "repositoryExceptions": "Private host exceptions (host:port, optional)",
+        "addRepository": "Add repository",
+        "trustRemotePublisher": "Trust publisher",
+        "prepareRemote": "Verify package",
+        "removeRepository": "Remove"
       },
       "hardLimits": {
         "title": "Hard Limits",
@@ -223,6 +232,55 @@
         "removeProfile": "Remove profile",
         "noProfiles": "No Subagent profiles are configured for this App.",
         "saveProfiles": "Save profiles"
+      },
+      "browserRuntime": {
+        "title": "Browser Runtime",
+        "description": "Configure CDP targets used by the single Backend BrowserRuntime. Endpoint network scope and reachability path are independent; via=runner uses Runner only as a network tunnel.",
+        "addTarget": "Add browser target",
+        "empty": "No browser targets configured. External CDP reachable by Backend can work without Runner using via=backend.",
+        "targetId": "Target ID",
+        "remove": "Remove target",
+        "allowedUrls": "Allowed page URL patterns (one per line)",
+        "endpoints": "CDP Endpoints",
+        "endpointHint": "scope describes where the endpoint lives; via selects direct Backend access or a Runner tunnel. v1 rejects credentials in URL userinfo, query, or fragment.",
+        "addEndpoint": "Add endpoint",
+        "scope": "Network scope",
+        "via": "Reachability path",
+        "priority": "Priority",
+        "removeEndpoint": "Remove",
+        "url": "CDP URL (http/https/ws/wss)",
+        "allowPlaintext": "Allow plaintext HTTP/WS",
+        "verifyTls": "Verify TLS certificate",
+        "save": "Save browser settings",
+        "scopeDocker": "Docker network",
+        "scopeExternal": "External network",
+        "viaBackend": "Direct from Backend",
+        "viaRunner": "Through Runner tunnel"
+      },
+      "acpRuntime": {
+        "title": "ACP Runtime",
+        "description": "Configure ACP process profiles that may run inside Workspaces and ACP integrations exposed to the Operations Agent. ACP processes remain generation-bound, read-only and network-isolated.",
+        "addProfile": "Add profile",
+        "profiles": "Workspace ACP Profiles",
+        "profilesHint": "argv is a JSON string array; cwd must be under /workspace. Saved profiles can be selected and frozen when a Workspace generation is created.",
+        "noProfiles": "No ACP profiles configured.",
+        "profileId": "Profile ID",
+        "argv": "argv (JSON array)",
+        "cwd": "Working directory",
+        "remove": "Remove",
+        "saveProfiles": "Save profiles",
+        "integrations": "ACP Integrations",
+        "integrationsHint": "An integration is the Agent-facing logical entry and references a saved Workspace profile. Execution still requires a running Workspace containing that profile.",
+        "refresh": "Refresh",
+        "displayName": "Display name",
+        "integrationProfile": "Workspace Profile",
+        "selectProfile": "Select profile",
+        "enabled": "Enabled",
+        "createIntegration": "Create integration",
+        "saveProfileFirst": "Save at least one ACP profile before creating an integration.",
+        "loading": "Loading ACP integrations…",
+        "noIntegrations": "No ACP integrations configured.",
+        "deleteIntegration": "Delete"
       }
     },
     "launcher": {
@@ -239,7 +297,8 @@
       "minimize": "Minimize Agent",
       "maximize": "Maximize or restore Agent",
       "close": "Close Agent",
-      "resize": "Resize Agent"
+      "resize": "Resize Agent",
+      "noSurface": "This Agent App does not provide an interactive surface."
     },
     "pluginFrontend": {
       "frameTitle": "Agent plugin UI",
@@ -418,7 +477,16 @@
       "reconciliationRequired": "A Workspace command has an unknown outcome. Verify it before sending another mutation.",
       "verifyOutcome": "Verify outcome",
       "reconciliationPending": "The Workspace command outcome is still unknown. The original mutation was not retried.",
-      "reconciliationResolved": "Workspace command outcome reconciled."
+      "reconciliationResolved": "Workspace command outcome reconciled.",
+      "localTerminal": "Local terminal",
+      "localTerminalHint": "Open an isolated SSH session inside this Workspace generation.",
+      "openTerminal": "Open terminal",
+      "closeTerminal": "Close terminal",
+      "browserTarget": "Browser target",
+      "browserTargetNone": "No binding (standalone remains available)",
+      "browserTargetHint": "When selected, the target configuration is frozen into this Workspace generation.",
+      "acpProfiles": "ACP Profiles",
+      "acpProfilesHint": "Select ACP workspace profiles that may start inside this Workspace generation."
     },
     "subagents": {
       "title": "Subagents",

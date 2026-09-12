@@ -8,14 +8,24 @@ export const pluginErrorRules: readonly AgentErrorRule[] = [
       'PUBLISHER_KEY_LABEL_INVALID',
       'PLUGIN_FRONTEND_RPC_INVALID',
       'PLUGIN_PACKAGE_REF_INVALID',
+      'PLUGIN_REMOTE_REPOSITORY_INVALID',
     ],
     rawCode(400, 'Invalid Agent plugin request.'),
   ),
-  onCodes(['PUBLISHER_KEY_NOT_FOUND', 'PLUGIN_STAGE_NOT_FOUND', 'PLUGIN_VERSION_NOT_FOUND', 'PLUGIN_NOT_INSTALLED'], {
-    status: 404,
-    code: 'NOT_FOUND',
-    message: 'Agent plugin resource was not found.',
-  }),
+  onCodes(
+    [
+      'PUBLISHER_KEY_NOT_FOUND',
+      'PLUGIN_STAGE_NOT_FOUND',
+      'PLUGIN_VERSION_NOT_FOUND',
+      'PLUGIN_NOT_INSTALLED',
+      'PLUGIN_REMOTE_PACKAGE_NOT_FOUND',
+    ],
+    {
+      status: 404,
+      code: 'NOT_FOUND',
+      message: 'Agent plugin resource was not found.',
+    },
+  ),
   onCodes(
     [
       'PLUGIN_STAGE_VERSION_CONFLICT',
@@ -27,6 +37,7 @@ export const pluginErrorRules: readonly AgentErrorRule[] = [
       'PLUGIN_STAGE_ALREADY_INSTALLED',
       'PLUGIN_STAGE_NOT_VERIFIED',
       'PLUGIN_STAGE_CHANGED',
+      'PLUGIN_REMOTE_REPOSITORY_NOT_CONFIGURED',
       'AGENT_APP_DRAINING',
     ],
     rawCode(409, 'Agent plugin state changed or cannot accept this operation.'),
@@ -63,9 +74,19 @@ export const pluginErrorRules: readonly AgentErrorRule[] = [
       'PLUGIN_TOO_MANY_SKILLS',
       'PLUGIN_APP_ID_RESERVED',
       'PLUGIN_APP_ID_MISMATCH',
+      'PLUGIN_REMOTE_CATALOG_INVALID',
+      'PLUGIN_REMOTE_SIZE_MISMATCH',
+      'PLUGIN_REMOTE_HASH_MISMATCH',
+      'PLUGIN_REMOTE_IDENTITY_MISMATCH',
+      'PLUGIN_REMOTE_PUBLISHER_MISMATCH',
     ],
     rawCode(422, 'Agent plugin package failed validation.'),
   ),
+  onCodesOrPrefixes(['PLUGIN_REMOTE_REDIRECT_DENIED', 'PLUGIN_REMOTE_DNS_FAILED'], ['PLUGIN_REMOTE_HTTP_'], (raw) => ({
+    status: 502,
+    code: raw,
+    message: 'Remote Agent plugin repository is unavailable.',
+  })),
   onCodes(['PLUGIN_FRONTEND_RPC_METHOD_DENIED'], rawCode(403, 'Agent plugin UI method is not allowed.')),
   onCodes(['PLUGIN_RUNTIME_MIGRATION_TOO_LARGE'], rawCode(413, 'Agent plugin migration payload is too large.')),
   onCodes(

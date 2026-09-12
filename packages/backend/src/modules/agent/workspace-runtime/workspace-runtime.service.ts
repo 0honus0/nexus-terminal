@@ -72,6 +72,36 @@ const limits = (
   tmpfsBytes: Math.min(16 * 1024 * 1024 * 1024, positiveInteger(value?.tmpfsBytes, defaults.tmpfsBytes)),
 });
 
+const selectedAcpProfiles = (
+  ids: readonly string[] | undefined,
+  profiles: readonly import('../agent-defaults').AgentAcpWorkspaceProfileSetting[],
+  profileRevision: number,
+): import('./workspace-runtime.types').WorkspaceAcpProfile[] => {
+  const unique = [...new Set(ids ?? [])];
+  if (unique.length > 16) throw new Error('ACP_PROFILE_SELECTION_INVALID');
+  return unique.map((id) => {
+    const profile = profiles.find((candidate) => candidate.id === id);
+    if (!profile) throw new Error('ACP_PROFILE_NOT_FOUND');
+    return { id: profile.id, profileRevision, argv: [...profile.argv], cwd: profile.cwd };
+  });
+};
+
+const selectedBrowserTarget = (
+  id: string | undefined,
+  targets: readonly import('../agent-defaults').AgentBrowserTargetSetting[],
+  profileRevision: number,
+): import('./workspace-runtime.types').WorkspaceBrowserTarget | null => {
+  if (!id) return null;
+  const target = targets.find((candidate) => candidate.id === id);
+  if (!target) throw new Error('BROWSER_TARGET_NOT_FOUND');
+  return {
+    id: target.id,
+    profileRevision,
+    endpoints: target.endpoints.map((endpoint) => ({ ...endpoint })),
+    allowedUrlPatterns: [...target.allowedUrlPatterns],
+  };
+};
+
 export const resolveWorkspaceToolchain = (
   catalog: WorkspaceRuntimeCatalog,
   recipeId: string,
@@ -94,6 +124,10 @@ export const resolveWorkspaceToolchain = (
   });
 };
 
+export interface WorkspaceRuntimeLifecycleHooks {
+  workspaceInvalidated?(workspaceId: string, generation: number): void;
+}
+
 export class WorkspaceRuntimeService {
   constructor(
     private readonly controller: WorkspaceRuntimeControllerPort,
@@ -104,6 +138,7 @@ export class WorkspaceRuntimeService {
     private readonly capabilities: AppCapabilityBroker,
     private readonly cryptoHash: CryptoHashPort,
     private readonly now: () => number,
+    private readonly runtimeHooks: WorkspaceRuntimeLifecycleHooks = {},
   ) {}
 
   availability(signal?: AbortSignal) {
@@ -277,7 +312,14 @@ export class WorkspaceRuntimeService {
       runnerPlugins: resolvedRunnerPlugins.map((target) => ({ ...target })),
       limits: limits(spec.limits, recipe.defaultLimits),
       network: network(spec.network, recipe.networkDefaults),
+      acpProfiles: selectedAcpProfiles(spec.acpProfileIds, workspaceSettings.acpProfiles, settings.revision),
+      browserTarget: selectedBrowserTarget(
+        spec.browserTargetId,
+        settings.effectiveSettings.browser.targets,
+        settings.revision,
+      ),
     };
+    if (profile.browserTarget && recipe.kind !== 'browser') throw new Error('BROWSER_TARGET_REQUIRES_BROWSER_RECIPE');
     if (profile.network.mode === 'allowlist' && !availability.capabilities.egressAllowlist) {
       throw new Error('WORKSPACE_NETWORK_ENFORCEMENT_UNAVAILABLE');
     }
@@ -558,6 +600,14 @@ export class WorkspaceRuntimeService {
       runnerPlugins: workspace.profile.runnerPlugins.map((target) => ({ ...target })),
       limits: { ...workspace.profile.limits },
       network: { mode: workspace.profile.network.mode, hosts: [...workspace.profile.network.hosts] },
+      acpProfiles: workspace.profile.acpProfiles.map((profile) => ({ ...profile, argv: [...profile.argv] })),
+      browserTarget: workspace.profile.browserTarget
+        ? {
+            ...workspace.profile.browserTarget,
+            endpoints: workspace.profile.browserTarget.endpoints.map((endpoint) => ({ ...endpoint })),
+            allowedUrlPatterns: [...workspace.profile.browserTarget.allowedUrlPatterns],
+          }
+        : null,
       retained: workspace.retained,
     };
   }
@@ -571,6 +621,9 @@ export class WorkspaceRuntimeService {
     syncWorkspace = true,
     waitForTerminal = false,
   ): Promise<WorkspaceRuntimeCommandView> {
+    if (workspaceId && (action === 'stop' || action === 'restart' || action === 'delete')) {
+      this.runtimeHooks.workspaceInvalidated?.(workspaceId, generation);
+    }
     const now = this.now();
     const commandId = randomUUID();
     const operationHash = hashOperation(
