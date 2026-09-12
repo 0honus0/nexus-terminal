@@ -6,12 +6,12 @@
     "tests/agent/host.spec.ts",
     "tests/agent/preset-plugin.spec.ts",
     "tests/agent/provider.spec.ts",
+    "tests/auth/setup-login.spec.ts",
     "tests/ui/notification-delivery.spec.ts",
     "tests/ui/notification-settings.spec.ts",
     "tests/ui/proxy-management.spec.ts",
     "tests/ui/system-settings.spec.ts",
     "tests/ui/theme-switching.spec.ts",
-    "tests/ssh/progress-display-copy-cancel.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/ssh/progress-display-copy-cancel.spec.ts"
   ]
 }
