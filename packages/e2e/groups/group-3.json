@@ -4,7 +4,16 @@
   "workers": 8,
   "specs": [
     "tests/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "tests/ssh/cross-session-transfer.spec.ts",
-    "tests/ssh/file-upload.spec.ts"
+    "tests/ui/notification-delivery.spec.ts",
+    "tests/ui/notification-settings.spec.ts",
+    "tests/ui/proxy-management.spec.ts",
+    "tests/ui/system-settings.spec.ts",
+    "tests/ui/theme-switching.spec.ts",
+    "tests/websocket/authenticated-session.spec.ts",
+    "tests/ssh/command-history-management.spec.ts",
+    "tests/ssh/quick-command-collapsible-search.spec.ts",
+    "tests/ssh/quick-command-management.spec.ts",
+    "tests/ssh/quick-command-tags-variables.spec.ts",
+    "tests/ssh/progress-display-archive.spec.ts"
   ]
 }
