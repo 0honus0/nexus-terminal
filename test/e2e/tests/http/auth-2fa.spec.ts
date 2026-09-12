@@ -330,13 +330,14 @@ test('Login 2FA challenge supports invalid-token retry and expired-session recov
       }
 
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
-      const captchaConfigPromise = page.waitForResponse(
-        (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'GET',
-      );
-      await page.goto('/login');
-      const captchaConfig = await captchaConfigPromise;
-      expect(captchaConfig.ok()).toBeTruthy();
-      await expect(captchaConfig.json()).resolves.toMatchObject({ enabled: false, provider: 'none' });
+      const captchaConfigPromise = page
+        .waitForResponse(
+          (response) => response.url().endsWith('/api/v1/settings/captcha') && response.request().method() === 'GET',
+        )
+        .then(async (response) => ({ ok: response.ok(), body: await response.json() }));
+      const [, captchaConfig] = await Promise.all([page.goto('/login'), captchaConfigPromise]);
+      expect(captchaConfig.ok).toBeTruthy();
+      expect(captchaConfig.body).toMatchObject({ enabled: false, provider: 'none' });
       await expect(page).toHaveURL(/\/login$/);
       await expect(page.getByRole('heading', { name: 'User Login', exact: true })).toBeVisible();
 

@@ -27,6 +27,8 @@ browser_probe_pid=''
 cdp_browser_log="$workspace/direct-cdp-browser.log"
 cdp_browser_pid=''
 cdp_browser_profile="$workspace/direct-cdp-profile"
+cdp_browser_proxy_log="$workspace/direct-cdp-proxy.log"
+cdp_browser_proxy_pid=''
 browser_page_log="$workspace/direct-browser-page.log"
 browser_page_pid=''
 runner_port="$(node - <<'NODE'
@@ -52,6 +54,17 @@ server.listen(0, '127.0.0.1', () => {
 NODE
 )"
 cdp_browser_port="$(node - <<'NODE'
+const net = require('node:net');
+const server = net.createServer();
+server.listen(0, '127.0.0.1', () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') process.exit(1);
+  console.log(address.port);
+  server.close();
+});
+NODE
+)"
+cdp_browser_proxy_port="$(node - <<'NODE'
 const net = require('node:net');
 const server = net.createServer();
 server.listen(0, '0.0.0.0', () => {
@@ -126,6 +139,8 @@ print_logs() {
   cat "$browser_probe_log" 2>/dev/null || true
   echo "--- direct CDP browser log ---"
   cat "$cdp_browser_log" 2>/dev/null || true
+  echo "--- direct CDP proxy log ---"
+  cat "$cdp_browser_proxy_log" 2>/dev/null || true
   echo "--- direct Browser page log ---"
   cat "$browser_page_log" 2>/dev/null || true
 }
@@ -144,6 +159,10 @@ cleanup() {
   if [[ -n "$cdp_browser_pid" ]]; then
     kill "$cdp_browser_pid" >/dev/null 2>&1 || true
     wait "$cdp_browser_pid" >/dev/null 2>&1 || true
+  fi
+  if [[ -n "$cdp_browser_proxy_pid" ]]; then
+    kill "$cdp_browser_proxy_pid" >/dev/null 2>&1 || true
+    wait "$cdp_browser_proxy_pid" >/dev/null 2>&1 || true
   fi
   if [[ -n "$browser_probe_pid" ]]; then
     kill "$browser_probe_pid" >/dev/null 2>&1 || true
@@ -169,7 +188,7 @@ services:
     container_name: nexus-e2e-backend-$suffix
     environment:
       AGENT_RUNNER_URL: http://host.docker.internal:$runner_port
-      NEXUS_E2E_DIRECT_CDP_PORT: $cdp_browser_port
+      NEXUS_E2E_DIRECT_CDP_PORT: $cdp_browser_proxy_port
       NEXUS_E2E_BROWSER_PAGE_PORT: $browser_page_port
   guacd:
     container_name: nexus-e2e-guacd-$suffix
@@ -230,8 +249,10 @@ for _ in {1..40}; do
 done
 curl -fsS "http://127.0.0.1:${browser_page_port}/" >/dev/null || { echo 'Direct Browser page did not start.' >&2; exit 1; }
 
-# Browser direct smoke target. Chromium runs on the host/external side; Backend must
-# reach it directly through host.docker.internal without consulting Agent Runner.
+# Browser direct smoke target. Chromium intentionally owns only a host-loopback CDP
+# listener. Modern Chromium can remain loopback-only even when given a broader debug
+# address, so expose that listener through an explicit host TCP proxy for the Backend
+# container instead of relying on Chromium's bind-address behavior.
 cdp_browser_executable="$(pnpm --filter @nexus-terminal/e2e exec node -e "process.stdout.write(require('@playwright/test').chromium.executablePath())")"
 mkdir -p "$cdp_browser_profile"
 "$cdp_browser_executable" \
@@ -241,7 +262,7 @@ mkdir -p "$cdp_browser_profile"
   --no-first-run \
   --no-default-browser-check \
   --remote-allow-origins='*' \
-  --remote-debugging-address=0.0.0.0 \
+  --remote-debugging-address=127.0.0.1 \
   --remote-debugging-port="$cdp_browser_port" \
   --user-data-dir="$cdp_browser_profile" \
   about:blank >"$cdp_browser_log" 2>&1 &
@@ -255,6 +276,21 @@ for _ in {1..60}; do
   sleep 0.25
 done
 [[ "$cdp_browser_ready" -eq 1 ]] || { echo 'Direct CDP Chromium did not start.' >&2; exit 1; }
+
+socat \
+  TCP-LISTEN:"$cdp_browser_proxy_port",bind=0.0.0.0,reuseaddr,fork \
+  TCP:127.0.0.1:"$cdp_browser_port" \
+  >"$cdp_browser_proxy_log" 2>&1 &
+cdp_browser_proxy_pid=$!
+cdp_browser_proxy_ready=0
+for _ in {1..40}; do
+  if curl -fsS "http://127.0.0.1:${cdp_browser_proxy_port}/json/version" >/dev/null; then
+    cdp_browser_proxy_ready=1
+    break
+  fi
+  sleep 0.1
+done
+[[ "$cdp_browser_proxy_ready" -eq 1 ]] || { echo 'Direct CDP host proxy did not start.' >&2; exit 1; }
 
 # Browser tunnel smoke target. This is deliberately only a WebSocket text echo peer,
 # not a Browser implementation: Runner must remain a byte/message tunnel and must not
