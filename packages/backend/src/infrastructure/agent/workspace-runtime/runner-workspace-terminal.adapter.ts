@@ -141,7 +141,7 @@ export class RunnerWorkspaceTerminalAdapter implements WorkspaceRuntimeInteracti
         });
         client.connect({
           sock: tunnel,
-          username: 'root',
+          username: 'nexus',
           privateKey: keys.private,
           hostVerifier: () => true,
           readyTimeout: READY_TIMEOUT_MS,

@@ -5,6 +5,10 @@ import { spawnSync } from 'node:child_process';
 import type { WorkspaceRuntimeCommand, WorkspaceJobRequest, ToolchainPackRef } from '../types';
 import { sandboxSystemRuntimeArguments } from './sandbox-system-runtime';
 
+const WORKSPACE_TERMINAL_USER = 'nexus';
+const WORKSPACE_TERMINAL_UID = 1000;
+const WORKSPACE_TERMINAL_GID = 1000;
+
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
 const SANDBOX_ID = /^([A-Za-z0-9_.-]{1,128}):(\d+)$/;
 
@@ -257,9 +261,11 @@ export class SandboxManager {
       `no-port-forwarding,no-agent-forwarding,no-X11-forwarding ${key} nexus-workspace\n`,
       { mode: 0o600 },
     );
-    fs.writeFileSync(path.join(sessionRoot, 'passwd'), 'root::0:0:Nexus Workspace:/run/nexus-terminal/home:/bin/sh\n', {
-      mode: 0o600,
-    });
+    fs.writeFileSync(
+      path.join(sessionRoot, 'passwd'),
+      `${WORKSPACE_TERMINAL_USER}:x:${WORKSPACE_TERMINAL_UID}:${WORKSPACE_TERMINAL_GID}:Nexus Workspace:/run/nexus-terminal/home:/bin/sh\n`,
+      { mode: 0o600 },
+    );
     const hostKey = path.join(sessionRoot, 'dropbear_ed25519_host_key');
     const generated = spawnSync('dropbearkey', ['-t', 'ed25519', '-f', hostKey], {
       encoding: 'utf8',
@@ -301,6 +307,13 @@ export class SandboxManager {
       sessionId,
       argv: [
         ...beforeCommand,
+        // Dropbear 2022.83 only permits a non-root daemon to authenticate the
+        // daemon's own uid. Give the terminal sandbox a stable unprivileged uid
+        // inside its user namespace instead of reintroducing SETUID/SETGID caps.
+        '--uid',
+        String(WORKSPACE_TERMINAL_UID),
+        '--gid',
+        String(WORKSPACE_TERMINAL_GID),
         '--dir',
         '/run',
         '--dir',
