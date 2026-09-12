@@ -8,6 +8,15 @@ import type { SandboxEngine } from './sandbox-engine';
 const MAX_FRAME_BYTES = 256 * 1024;
 const MAX_SOCKET_BUFFER_BYTES = 4 * 1024 * 1024;
 const MAX_STDERR_BYTES = 16 * 1024;
+const MAX_DIAGNOSTIC_BYTES = 512;
+
+const terminalDiagnostic = (stderr: Buffer): string =>
+  stderr
+    .toString('utf8')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[^\x20-\x7e]/g, '?')
+    .trim()
+    .slice(0, MAX_DIAGNOSTIC_BYTES);
 
 interface ActiveTerminal {
   workspaceId: string;
@@ -125,6 +134,11 @@ export class WorkspaceTerminalRuntime {
     });
     child.on('exit', (code, signal) => {
       if (closed) return;
+      if (code !== 0 && process.env.NEXUS_AGENT_SANDBOX_DIAGNOSTICS === '1') {
+        console.warn(
+          `[nexus-agent-runner] workspace terminal process exited code=${code ?? 'null'} signal=${signal ?? 'none'} stderr=${JSON.stringify(terminalDiagnostic(stderr))}`,
+        );
+      }
       closed = true;
       this.active.delete(active);
       execution.cleanup();

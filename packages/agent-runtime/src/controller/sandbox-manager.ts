@@ -248,14 +248,16 @@ export class SandboxManager {
     const root = this.requireRoot(sandboxId);
     const sessionId = randomUUID();
     const sessionRoot = path.join(root, '.control', 'terminal', safeSegment(sessionId));
-    const authRoot = path.join(sessionRoot, 'auth');
-    fs.mkdirSync(authRoot, { recursive: true, mode: 0o700 });
+    const homeRoot = path.join(sessionRoot, 'home');
+    const sshRoot = path.join(homeRoot, '.ssh');
+    fs.mkdirSync(sshRoot, { recursive: true, mode: 0o700 });
+    fs.chmodSync(homeRoot, 0o700);
     fs.writeFileSync(
-      path.join(authRoot, 'authorized_keys'),
+      path.join(sshRoot, 'authorized_keys'),
       `no-port-forwarding,no-agent-forwarding,no-X11-forwarding ${key} nexus-workspace\n`,
       { mode: 0o600 },
     );
-    fs.writeFileSync(path.join(sessionRoot, 'passwd'), 'root::0:0:Nexus Workspace:/workspace/work:/bin/sh\n', {
+    fs.writeFileSync(path.join(sessionRoot, 'passwd'), 'root::0:0:Nexus Workspace:/run/nexus-terminal/home:/bin/sh\n', {
       mode: 0o600,
     });
     const hostKey = path.join(sessionRoot, 'dropbear_ed25519_host_key');
@@ -279,19 +281,19 @@ export class SandboxManager {
     const beforeCommand = base.argv.slice(0, marker);
     const script = [
       'set -eu',
-      '/usr/sbin/dropbear -F -E -e -s -j -k -m -T 3 -I 7200 -r /run/nexus-terminal/dropbear_ed25519_host_key -D /run/nexus-terminal/auth -p 127.0.0.1:2222 &',
+      '/usr/sbin/dropbear -F -E -e -s -j -k -m -T 3 -I 7200 -r /run/nexus-terminal/dropbear_ed25519_host_key -c "export HOME=/workspace; cd /workspace/work; exec /bin/sh" -p 127.0.0.1:2222 &',
       'dropbear_pid=$!',
       'cleanup() { kill "$dropbear_pid" 2>/dev/null || true; wait "$dropbear_pid" 2>/dev/null || true; }',
       'trap cleanup EXIT HUP INT TERM',
       'attempt=0',
       'while [ "$attempt" -lt 100 ]; do',
-      '  if /usr/bin/socat -u /dev/null TCP:127.0.0.1:2222,connect-timeout=1 >/dev/null 2>&1; then break; fi',
+      "  if grep -Eq '^[[:space:]]*[0-9]+: 0100007F:08AE 00000000:0000 0A ' /proc/net/tcp; then break; fi",
       '  if ! kill -0 "$dropbear_pid" 2>/dev/null; then wait "$dropbear_pid"; exit $?; fi',
       '  attempt=$((attempt + 1))',
       '  sleep 0.02',
       'done',
       '[ "$attempt" -lt 100 ] || exit 111',
-      'exec /usr/bin/socat STDIO TCP:127.0.0.1:2222,connect-timeout=5',
+      '/usr/bin/socat STDIO TCP:127.0.0.1:2222,connect-timeout=5',
     ].join('\n');
 
     return {
