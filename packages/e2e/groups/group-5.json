@@ -17,7 +17,8 @@
     "tests/http/terminal-themes.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/connection-create.spec.ts",
-    "tests/ssh/progress-display-upload-copy.spec.ts",
-    "tests/ssh/suspend-resume.spec.ts"
+    "tests/ssh/sftp-download.spec.ts",
+    "tests/ssh/status-history-time-axis.spec.ts",
+    "tests/ssh/progress-display-upload-copy.spec.ts"
   ]
 }
