@@ -124,6 +124,10 @@
       if (!settings.value) return;
       const recommendation = await agentApi.recommendedPlugin();
       if (recommendation.installed) {
+        if (!recommendation.enabled) {
+          await agentApi.installRecommendedPlugin();
+          apps.value = await agentApi.apps();
+        }
         settings.value = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
         return;
       }

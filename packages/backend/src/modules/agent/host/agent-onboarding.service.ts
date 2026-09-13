@@ -65,10 +65,11 @@ export class AgentOnboardingService {
       (candidate) => candidate.appId === this.source.recommendedAppId && candidate.status === 'installed',
     );
     if (existing) {
-      return {
-        app: await this.lifecycle.get({ userId, appId: this.source.recommendedAppId }),
-        installedNow: false,
-      };
+      const scope = { userId, appId: this.source.recommendedAppId };
+      const current = await this.lifecycle.get(scope);
+      const app =
+        current.desiredState === 'enabled' ? current : await this.lifecycle.setEnabled(scope, true, current.version);
+      return { app, installedNow: false };
     }
 
     const catalog = await this.requireOfficialCatalog(signal);
