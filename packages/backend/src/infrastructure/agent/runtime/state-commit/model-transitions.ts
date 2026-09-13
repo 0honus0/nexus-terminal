@@ -48,7 +48,7 @@ export const beginModelStepTransition = async (
   if (
     !runtime ||
     !['created', 'running'].includes(runtime.status) ||
-    !['queued', 'runnable'].includes(runtime.schedule_state)
+    !['queued', 'runnable', 'executing'].includes(runtime.schedule_state)
   ) {
     throw new Error('RUNTIME_NOT_SCHEDULABLE');
   }
@@ -73,11 +73,13 @@ export const beginModelStepTransition = async (
      VALUES (?, ?, 1, 'streaming', ?, NULL, NULL, NULL, NULL, NULL, 0, NULL, ?, NULL)`,
     [attemptId, stepId, command.reservedTokens, command.now],
   );
-  await tx.execute(
+  const runtimeChanged = await tx.execute(
     `UPDATE agent_runtimes SET status = 'running', schedule_state = 'executing', updated_at = ?
-     WHERE id = ? AND run_id = ? AND status IN ('created','running')`,
+     WHERE id = ? AND run_id = ? AND status IN ('created','running')
+       AND schedule_state IN ('queued','runnable','executing')`,
     [command.now, command.runtimeId, command.runId],
   );
+  if (runtimeChanged.changes !== 1) throw new Error('RUNTIME_NOT_SCHEDULABLE');
   const events: DurableEventInput[] = [
     ...(firstStep ? [{ type: 'run.status_changed', payload: { from: 'created', to: 'running' } } as const] : []),
     { type: 'model.started', payload: { stepId, attemptId, attemptIndex: 1 } },
