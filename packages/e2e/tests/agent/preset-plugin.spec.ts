@@ -711,7 +711,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
     await expect(presetThread).toBeVisible();
     await presetThread.click();
-    await expect(hub.getByText('OK', { exact: true })).toBeVisible();
+    const visibleOkMessage = hub.locator('article:visible pre:visible').filter({ hasText: /^OK$/ }).last();
+    await expect(visibleOkMessage).toBeVisible();
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
     await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
 

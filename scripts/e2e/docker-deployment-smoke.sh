@@ -1669,7 +1669,25 @@ const createReadyWorkspace = async (run, title) => {
 };
 
 const fullStackRun = await createRun('Docker full-stack Runner target smoke', ['nexus.fullstack']);
-const fullStackWorkspace = await createReadyWorkspace(fullStackRun, 'Full-stack Runner target');
+let fullStackWorkspace = await createReadyWorkspace(fullStackRun, 'Full-stack Runner target');
+const startedFullStackWorkspaceCommand = await ok(
+  'POST',
+  `/api/v1/apps/nexus.agent/workspaces/${fullStackWorkspace.id}/actions`,
+  { action: 'start', expectedVersion: fullStackWorkspace.version },
+  mutationHeaders,
+  202,
+);
+for (let attempt = 0; attempt < 120; attempt += 1) {
+  const command = await ok('GET', `/api/v1/agent/workspace-runtime/commands/${startedFullStackWorkspaceCommand.id}`);
+  if (command.status === 'succeeded') break;
+  if (['failed', 'unknown'].includes(command.status)) throw new Error(`Full-stack Workspace start failed: ${JSON.stringify(command)}`);
+  if (attempt === 119) throw new Error(`Full-stack Workspace start timed out: ${JSON.stringify(command)}`);
+  await wait(250);
+}
+fullStackWorkspace = await ok('GET', `/api/v1/apps/nexus.agent/workspaces/${fullStackWorkspace.id}`);
+if (fullStackWorkspace.status !== 'running') {
+  throw new Error(`Full-stack Workspace did not enter running state: ${JSON.stringify(fullStackWorkspace)}`);
+}
 const exportedRunnerArtifact = await ok(
   'POST',
   `/api/v1/apps/nexus.agent/workspaces/${fullStackWorkspace.id}/plugins/nexus.fullstack/artifacts/export`,
