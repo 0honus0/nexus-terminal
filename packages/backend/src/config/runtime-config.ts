@@ -15,7 +15,6 @@ export interface RuntimeConfig {
   agentOfficialPluginCatalogUrl?: string;
   agentOfficialPluginPublisherKeyId?: string;
   agentOfficialPluginPublisherPublicKeyPem?: string;
-  agentOfficialPluginPrivateHostExceptions: string[];
   agentRunnerUrl?: string;
   agentRunnerToken?: string;
   host: string;
@@ -127,10 +126,6 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
     (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'
       ? env.AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM?.trim() || undefined
       : undefined,
-  agentOfficialPluginPrivateHostExceptions:
-    (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'
-      ? parseCsv(env.AGENT_OFFICIAL_PLUGIN_PRIVATE_HOST_EXCEPTIONS)
-      : [],
   agentRunnerUrl: env.AGENT_RUNNER_URL?.trim() || undefined,
   agentRunnerToken: env.AGENT_RUNNER_TOKEN?.trim() || undefined,
   host: env.HOST?.trim() || '0.0.0.0',

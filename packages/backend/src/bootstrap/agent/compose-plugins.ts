@@ -8,7 +8,6 @@ import type { LocalArtifactStore } from '../../infrastructure/agent/artifacts/lo
 import type { SqliteAppStateRepository } from '../../infrastructure/agent/repositories/sqlite-app-state.repository';
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { ClockPort } from '../../modules/agent/agent.types';
-import type { OutboundPolicyPort } from '../../modules/agent/ai/outbound-policy.port';
 import type { AgentSettingsService } from '../../modules/agent/host/agent-settings.service';
 import type { AppCapabilityBroker } from '../../modules/agent/host/app-capability-broker';
 import type { AppRegistryService } from '../../modules/agent/host/app-registry.service';
@@ -26,7 +25,6 @@ export interface ComposePluginsOptions {
   appStates: SqliteAppStateRepository;
   capabilityBroker: AppCapabilityBroker;
   artifactStore: LocalArtifactStore;
-  outboundPolicy: OutboundPolicyPort;
   settings: AgentSettingsService;
   definitions: AgentDefinitionRegistry;
   clock: ClockPort;
@@ -48,7 +46,6 @@ export const composePlugins = ({
   appStates,
   capabilityBroker,
   artifactStore,
-  outboundPolicy,
   settings,
   definitions,
   clock,
@@ -78,7 +75,7 @@ export const composePlugins = ({
     pluginRepository,
     new TarPackageVerifierAdapter(dataDirectory),
     new ArtifactPluginPackageSourceAdapter(artifactStore),
-    new HttpRemotePluginRepositoryAdapter(outboundPolicy),
+    new HttpRemotePluginRepositoryAdapter(),
     settings,
     registry,
     appStates,

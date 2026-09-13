@@ -22,7 +22,6 @@
   const { t } = useI18n();
 
   const repositoryUrl = ref('');
-  const repositoryExceptions = ref('');
   const officialCatalog = ref<RemotePluginCatalog | null>(null);
   const remoteCatalogs = ref<RemotePluginCatalog[]>([]);
   const publisherLabel = ref('');
@@ -133,17 +132,9 @@
     const url = repositoryUrl.value.trim();
     if (!url) return;
     void run(async () => {
-      const exceptions = repositoryExceptions.value
-        .split(/[\s,]+/)
-        .map((value) => value.trim())
-        .filter(Boolean);
-      const next = [
-        ...configuredRepositories.value.filter((candidate) => candidate.url !== url),
-        { url, privateHostExceptions: exceptions },
-      ];
+      const next = [...configuredRepositories.value.filter((candidate) => candidate.url !== url), { url }];
       await saveRepositories(next);
       repositoryUrl.value = '';
-      repositoryExceptions.value = '';
     });
   };
 
@@ -337,17 +328,11 @@
           {{ $t('agent.settings.plugins.refreshRemote') }}
         </button>
       </div>
-      <div class="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+      <div class="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
         <input
           v-model="repositoryUrl"
           class="rounded-md border border-border bg-card px-3 py-2 text-sm"
           :placeholder="$t('agent.settings.plugins.repositoryUrl')"
-          :disabled="locked"
-        />
-        <input
-          v-model="repositoryExceptions"
-          class="rounded-md border border-border bg-card px-3 py-2 text-sm"
-          :placeholder="$t('agent.settings.plugins.repositoryExceptions')"
           :disabled="locked"
         />
         <button

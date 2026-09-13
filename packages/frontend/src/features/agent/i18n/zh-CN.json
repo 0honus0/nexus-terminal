@@ -82,7 +82,6 @@
         "officialPublisherPinned": "发布者已由 Host 固定 pin",
         "refreshRemote": "刷新仓库",
         "repositoryUrl": "仓库 catalog URL",
-        "repositoryExceptions": "私网例外（host:port，可选）",
         "addRepository": "添加仓库",
         "trustRemotePublisher": "信任发布者",
         "prepareRemote": "校验插件包",

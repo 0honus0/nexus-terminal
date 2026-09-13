@@ -22,7 +22,6 @@ export interface AgentBrowserEndpointSetting {
 
 export interface AgentPluginRepositorySetting {
   url: string;
-  privateHostExceptions: string[];
 }
 
 export interface AgentBrowserTargetSetting {
@@ -342,10 +341,7 @@ const pluginRepositories = (
     const normalized = url.toString();
     if (seen.has(normalized)) continue;
     seen.add(normalized);
-    result.push({
-      url: normalized,
-      privateHostExceptions: stringList(candidate.privateHostExceptions).slice(0, 32),
-    });
+    result.push({ url: normalized });
   }
   return result;
 };

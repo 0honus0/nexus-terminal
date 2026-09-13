@@ -82,7 +82,6 @@
         "officialPublisherPinned": "Publisher pinned by Host",
         "refreshRemote": "Refresh repositories",
         "repositoryUrl": "Repository catalog URL",
-        "repositoryExceptions": "Private host exceptions (host:port, optional)",
         "addRepository": "Add repository",
         "trustRemotePublisher": "Trust publisher",
         "prepareRemote": "Verify package",

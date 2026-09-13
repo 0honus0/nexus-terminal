@@ -789,7 +789,7 @@ export class PluginInstallService {
     } catch {
       throw new Error('PLUGIN_REMOTE_REPOSITORY_INVALID');
     }
-    return { url: normalized, privateHostExceptions: [...source.privateHostExceptions] };
+    return { url: normalized };
   }
 
   private async stageRemoteWithConfig(
@@ -850,7 +850,7 @@ export class PluginInstallService {
     const view = await this.settings.get(userId);
     const config = view.effectiveSettings.plugins.repositories.find((candidate) => candidate.url === normalized);
     if (!config) throw new Error('PLUGIN_REMOTE_REPOSITORY_NOT_CONFIGURED');
-    return { url: config.url, privateHostExceptions: [...config.privateHostExceptions] };
+    return { url: config.url };
   }
 
   private assertStageIdentity(stage: PluginStageRecord, verified: VerifiedPluginPackage): void {

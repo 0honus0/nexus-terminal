@@ -4,7 +4,6 @@ export interface OfficialAgentPluginSource {
   publisherPublicKeyPem: string;
   publisherLabel: string;
   recommendedAppId: string;
-  privateHostExceptions: string[];
 }
 
 export const DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE: OfficialAgentPluginSource = {
@@ -14,5 +13,4 @@ export const DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE: OfficialAgentPluginSource = {
     '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n',
   publisherLabel: 'Nexus first-party plugins',
   recommendedAppId: 'nexus.agent',
-  privateHostExceptions: [],
 };

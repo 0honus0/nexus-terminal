@@ -410,10 +410,6 @@ export const createCompositionRoot = (
     publisherKeyId: config.agentOfficialPluginPublisherKeyId ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.publisherKeyId,
     publisherPublicKeyPem:
       config.agentOfficialPluginPublisherPublicKeyPem ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.publisherPublicKeyPem,
-    privateHostExceptions:
-      config.agentOfficialPluginPrivateHostExceptions.length > 0
-        ? [...config.agentOfficialPluginPrivateHostExceptions]
-        : [...DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.privateHostExceptions],
   };
   const agent = composeAgent({
     database,

@@ -205,7 +205,6 @@ export const composeAgent = ({
     appStates,
     capabilityBroker,
     artifactStore,
-    outboundPolicy,
     settings,
     definitions,
     clock: systemClock,

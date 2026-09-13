@@ -8,7 +8,7 @@ import { E2E_URLS } from '../../support/test-env';
 
 type Envelope<T> = { data: T; requestId: string };
 type SettingsView = {
-  requestedSettings: { plugins: { repositories: Array<{ url: string; privateHostExceptions: string[] }> } };
+  requestedSettings: { plugins: { repositories: Array<{ url: string }> } };
   revision: number;
 };
 type AppSummary = {
@@ -83,7 +83,7 @@ const installAndRunNexusAgent = async (
       data: {
         patch: {
           feature: { enabled: true },
-          plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] },
+          plugins: { repositories: [{ url: repositoryUrl }] },
           budget: { maxOutputTokens: 16 },
         },
         expectedVersion: settings.revision,
@@ -424,7 +424,7 @@ test('unsafe remote plugin archive fails validation without terminating the Back
   const patched = await request.patch('/api/v1/agent/settings', {
     headers,
     data: {
-      patch: { plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] } },
+      patch: { plugins: { repositories: [{ url: repositoryUrl }] } },
       expectedVersion: settings.revision,
     },
   });
@@ -530,7 +530,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
     data: {
       patch: {
         feature: { enabled: true },
-        plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] },
+        plugins: { repositories: [{ url: repositoryUrl }] },
       },
       expectedVersion: settings.revision,
     },

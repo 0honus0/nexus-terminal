@@ -79,7 +79,7 @@ export interface AgentSettingsDocument {
       allowedUrlPatterns: string[];
     }>;
   };
-  plugins: { repositories: Array<{ url: string; privateHostExceptions: string[] }> };
+  plugins: { repositories: Array<{ url: string }> };
   safety: { providerPrivateNetworkExceptions: string[] };
 }
 

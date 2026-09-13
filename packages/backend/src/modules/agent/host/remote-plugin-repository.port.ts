@@ -2,7 +2,6 @@ import type { PluginPackageSource } from './plugin-package-source.port';
 
 export interface RemotePluginRepositoryConfig {
   url: string;
-  privateHostExceptions: string[];
 }
 
 export interface RemotePluginPublisher {

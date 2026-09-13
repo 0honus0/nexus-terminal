@@ -214,7 +214,6 @@ services:
         -----BEGIN PUBLIC KEY-----
         MCowBQYDK2VwAyEALU2gA/FGdyVBtxtSsTRGmLiNjRsxeE8MdkMt2dndZQ8=
         -----END PUBLIC KEY-----
-      AGENT_OFFICIAL_PLUGIN_PRIVATE_HOST_EXCEPTIONS: host.docker.internal:$plugin_repository_port
       NEXUS_E2E_DIRECT_CDP_PORT: $cdp_browser_proxy_port
       NEXUS_E2E_BROWSER_PAGE_PORT: $browser_page_port
   guacd:
@@ -1441,7 +1440,7 @@ featureSettings = await ok(
   {
     patch: {
       feature: { enabled: true },
-      plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] },
+      plugins: { repositories: [{ url: repositoryUrl }] },
     },
     expectedVersion: featureSettings.revision,
   },

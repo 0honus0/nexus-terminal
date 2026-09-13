@@ -1,7 +1,5 @@
-import net from 'node:net';
-import { Agent, fetch as undiciFetch, type Dispatcher } from 'undici';
+import { fetch as undiciFetch } from 'undici';
 import { compare, valid as validSemver } from 'semver';
-import type { OutboundPolicyPort, ResolvedEndpoint } from '../../../modules/agent/ai/outbound-policy.port';
 import type {
   RemotePluginCatalog,
   RemotePluginPackageEntry,
@@ -34,30 +32,9 @@ const integer = (value: unknown, max: number): number => {
   return value as number;
 };
 
-const pinnedDispatcher = (endpoint: ResolvedEndpoint): { dispatcher: Agent; address: string } => {
-  const address = endpoint.addresses[0];
-  if (!address) throw new Error('PLUGIN_REMOTE_DNS_FAILED');
-  const family = net.isIP(address);
-  if (!family) throw new Error('PLUGIN_REMOTE_DNS_FAILED');
-  const dispatcher = new Agent({
-    connections: 1,
-    pipelining: 1,
-    connect: {
-      servername: net.isIP(endpoint.hostname) === 0 ? endpoint.tlsServerName : undefined,
-      lookup: (_hostname, options, callback) => {
-        if (typeof options === 'object' && options.all) callback(null, [{ address, family }] as never);
-        else callback(null, address, family);
-      },
-    },
-  });
-  return { dispatcher, address };
-};
-
 export class HttpRemotePluginRepositoryAdapter implements RemotePluginRepositoryPort {
-  constructor(private readonly outbound: OutboundPolicyPort) {}
-
   async catalog(config: RemotePluginRepositoryConfig, signal?: AbortSignal): Promise<RemotePluginCatalog> {
-    const bytes = await this.readBytes(config.url, config.privateHostExceptions, MAX_CATALOG_BYTES, signal);
+    const bytes = await this.readBytes(config.url, MAX_CATALOG_BYTES, signal);
     let raw: unknown;
     try {
       raw = JSON.parse(bytes.toString('utf8'));
@@ -68,95 +45,65 @@ export class HttpRemotePluginRepositoryAdapter implements RemotePluginRepository
   }
 
   async openPackage(
-    config: RemotePluginRepositoryConfig,
+    _config: RemotePluginRepositoryConfig,
     entry: RemotePluginPackageEntry,
     signal?: AbortSignal,
   ): Promise<PluginPackageSource> {
     if (!Number.isSafeInteger(entry.sizeBytes) || entry.sizeBytes < 1 || entry.sizeBytes > MAX_PACKAGE_BYTES) {
       throw new Error('PLUGIN_REMOTE_PACKAGE_INVALID');
     }
-    const endpoint = await this.outbound.resolve(entry.packageUrl, config.privateHostExceptions);
-    const { dispatcher } = pinnedDispatcher(endpoint);
-    let response: Awaited<ReturnType<typeof undiciFetch>>;
-    try {
-      response = await undiciFetch(endpoint.url, {
-        method: 'GET',
-        redirect: 'manual',
-        dispatcher,
-        signal,
-        headers: { Accept: 'application/octet-stream', 'User-Agent': 'Nexus-Agent-Plugin-Repository/1' },
-      });
-    } catch (error) {
-      await dispatcher.close().catch(() => undefined);
-      throw error;
-    }
-    if (response.status >= 300 && response.status < 400) {
-      await response.body?.cancel().catch(() => undefined);
-      await dispatcher.close().catch(() => undefined);
-      throw new Error('PLUGIN_REMOTE_REDIRECT_DENIED');
-    }
+    const response = await undiciFetch(entry.packageUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      signal,
+      headers: { Accept: 'application/octet-stream', 'User-Agent': 'Nexus-Agent-Plugin-Repository/1' },
+    });
     if (response.status !== 200 || !response.body) {
       await response.body?.cancel().catch(() => undefined);
-      await dispatcher.close().catch(() => undefined);
       throw new Error(`PLUGIN_REMOTE_HTTP_${response.status}`);
     }
     const contentLength = Number(response.headers.get('content-length'));
     if (Number.isFinite(contentLength) && contentLength !== entry.sizeBytes) {
       await response.body.cancel().catch(() => undefined);
-      await dispatcher.close().catch(() => undefined);
       throw new Error('PLUGIN_REMOTE_SIZE_MISMATCH');
     }
     const body = response.body;
     const source = async function* (): AsyncIterable<Uint8Array> {
       let bytes = 0;
-      try {
-        for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
-          bytes += chunk.byteLength;
-          if (bytes > entry.sizeBytes || bytes > MAX_PACKAGE_BYTES) throw new Error('PLUGIN_REMOTE_PACKAGE_TOO_LARGE');
-          yield chunk;
-        }
-        if (bytes !== entry.sizeBytes) throw new Error('PLUGIN_REMOTE_SIZE_MISMATCH');
-      } finally {
-        await dispatcher.close().catch(() => undefined);
+      for await (const chunk of body as unknown as AsyncIterable<Uint8Array>) {
+        bytes += chunk.byteLength;
+        if (bytes > entry.sizeBytes || bytes > MAX_PACKAGE_BYTES) throw new Error('PLUGIN_REMOTE_PACKAGE_TOO_LARGE');
+        yield chunk;
       }
+      if (bytes !== entry.sizeBytes) throw new Error('PLUGIN_REMOTE_SIZE_MISMATCH');
     };
     return { sizeBytes: entry.sizeBytes, source: source() };
   }
 
-  private async readBytes(
-    rawUrl: string,
-    exceptions: readonly string[],
-    maxBytes: number,
-    signal?: AbortSignal,
-  ): Promise<Buffer> {
-    const endpoint = await this.outbound.resolve(rawUrl, exceptions);
-    const { dispatcher } = pinnedDispatcher(endpoint);
-    try {
-      const response = await undiciFetch(endpoint.url, {
-        method: 'GET',
-        redirect: 'manual',
-        dispatcher: dispatcher as Dispatcher,
-        signal,
-        headers: { Accept: 'application/json', 'User-Agent': 'Nexus-Agent-Plugin-Repository/1' },
-      });
-      if (response.status >= 300 && response.status < 400) {
-        await response.body?.cancel().catch(() => undefined);
-        throw new Error('PLUGIN_REMOTE_REDIRECT_DENIED');
-      }
-      if (response.status !== 200 || !response.body) throw new Error(`PLUGIN_REMOTE_HTTP_${response.status}`);
-      const declared = Number(response.headers.get('content-length'));
-      if (Number.isFinite(declared) && declared > maxBytes) throw new Error('PLUGIN_REMOTE_CATALOG_TOO_LARGE');
-      const chunks: Buffer[] = [];
-      let bytes = 0;
-      for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
-        bytes += chunk.byteLength;
-        if (bytes > maxBytes) throw new Error('PLUGIN_REMOTE_CATALOG_TOO_LARGE');
-        chunks.push(Buffer.from(chunk));
-      }
-      return Buffer.concat(chunks);
-    } finally {
-      await dispatcher.close().catch(() => undefined);
+  private async readBytes(rawUrl: string, maxBytes: number, signal?: AbortSignal): Promise<Buffer> {
+    const response = await undiciFetch(rawUrl, {
+      method: 'GET',
+      redirect: 'follow',
+      signal,
+      headers: { Accept: 'application/json', 'User-Agent': 'Nexus-Agent-Plugin-Repository/1' },
+    });
+    if (response.status !== 200 || !response.body) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error(`PLUGIN_REMOTE_HTTP_${response.status}`);
     }
+    const declared = Number(response.headers.get('content-length'));
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      await response.body.cancel().catch(() => undefined);
+      throw new Error('PLUGIN_REMOTE_CATALOG_TOO_LARGE');
+    }
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    for await (const chunk of response.body as unknown as AsyncIterable<Uint8Array>) {
+      bytes += chunk.byteLength;
+      if (bytes > maxBytes) throw new Error('PLUGIN_REMOTE_CATALOG_TOO_LARGE');
+      chunks.push(Buffer.from(chunk));
+    }
+    return Buffer.concat(chunks);
   }
 
   private parseCatalog(raw: unknown, repositoryUrl: string): RemotePluginCatalog {

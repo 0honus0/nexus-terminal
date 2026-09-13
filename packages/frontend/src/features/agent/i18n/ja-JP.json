@@ -82,7 +82,6 @@
         "officialPublisherPinned": "発行者は Host により固定済み",
         "refreshRemote": "リポジトリを更新",
         "repositoryUrl": "リポジトリ catalog URL",
-        "repositoryExceptions": "プライベートホスト例外 (host:port、任意)",
         "addRepository": "リポジトリを追加",
         "trustRemotePublisher": "発行者を信頼",
         "prepareRemote": "パッケージを検証",
