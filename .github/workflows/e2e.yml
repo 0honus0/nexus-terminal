@@ -50,6 +50,11 @@ on:
         description: Parallel E2E group workers; leave blank to use groups/settings.json
         required: false
         type: string
+      refresh_artifacts:
+        description: Refresh E2E environment, functional screenshots, and group balance after validation
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -92,11 +97,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          REFRESH_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_artifacts || false }}
         run: |
           set -euo pipefail
 
           can_update=false
-          if [[ "$GITHUB_EVENT_NAME" != "pull_request" && "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" != "pull_request" && "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" \
+            && ( "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$REFRESH_ARTIFACTS" == "true" ) ]]; then
             can_update=true
           fi
 
@@ -126,7 +133,7 @@ jobs:
           fi
 
           screenshots_requested=false
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$REFRESH_ARTIFACTS" == "true" ]]; then
             screenshots_requested=true
           elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             before_sha="${{ github.event.before }}"
@@ -603,7 +610,7 @@ jobs:
 
   rebalance:
     needs: [environment, runner-image, prepare, playwright-groups, screenshots-commit]
-    if: ${{ always() && github.event_name != 'pull_request' && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
+    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.refresh_artifacts == true) && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
     permissions:
       actions: read
       contents: write
