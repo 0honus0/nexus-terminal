@@ -322,3 +322,12 @@
 - **计划修改**：更新 Backend runtime config/plugin descriptor/static listener、Frontend Nginx/Vite、Compose/.env.example、Docker smoke 与部署文档；增加无 Runner smoke。所有源码只在 AgentDock Git 工作区修改，随后 commit/build image，再把测试环境镜像切换到该 image。
 - **验证**：TypeScript/Frontend build、架构检查；默认 Compose services 不含 Runner；无 Runner smoke；测试环境 `https://test.honus.top/sdk/frontend-v1.mjs` 和同源 `/plugins/...` 可达且无 XFO DENY/Mixed Content；正式环境不变化。
 - **状态**：`已决策，待修改`
+
+## P-017 撤销 test.honus.top 对应的 Project 测试部署目录
+
+- **发现时间**：2026-09-13
+- **用户决策**：删除 honus.top 上 `/home/honus/project/nexus_terminal_test` 测试部署目录，不再保留该 Project 测试实例文件。
+- **边界**：不得修改正式部署 `/home/honus/product/nexus_terminal`、AgentDock Git 工作区或其它 Project；本次也不删除 Nginx Proxy Manager 中的 `test.honus.top` Proxy Host，除非用户另行要求。
+- **计划**：先确认目标目录存在且路径精确匹配；删除该目录；确认目录不存在；最后验证正式 `https://ssh.honus.top/api/v1/status` 仍返回 200。
+- **验证方法**：`/home/honus/project/nexus_terminal_test` 不存在；正式 Nexus 状态接口正常。
+- **状态**：`已记录，待实施`
