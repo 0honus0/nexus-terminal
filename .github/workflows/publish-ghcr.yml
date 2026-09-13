@@ -35,6 +35,7 @@ on:
 permissions:
   contents: read
   packages: write
+  checks: read
 
 concurrency:
   group: publish-ghcr-${{ github.ref }}
@@ -144,6 +145,32 @@ jobs:
 
           echo "value=$channel" >> "$GITHUB_OUTPUT"
           echo "tag=$channel_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Require validated main commit for release channel
+        if: steps.channel.outputs.value == 'release'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source_commit.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          git fetch origin main --no-tags
+          main_sha="$(git rev-parse origin/main)"
+          if [[ "$SOURCE_SHA" != "$main_sha" ]]; then
+            echo "Release publication must use the current main commit: source=$SOURCE_SHA main=$main_sha" >&2
+            exit 1
+          fi
+
+          checks="$(gh api \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            "/repos/$GITHUB_REPOSITORY/commits/$SOURCE_SHA/check-runs?check_name=Release%20gate&status=completed")"
+          successful="$(jq '[.check_runs[] | select(.name == "Release gate" and .conclusion == "success" and .app.slug == "github-actions")] | length' <<< "$checks")"
+          if [[ "$successful" -lt 1 ]]; then
+            echo "Current main commit has no successful Release gate check: $SOURCE_SHA" >&2
+            exit 1
+          fi
 
       - name: Select image architecture
         id: architecture

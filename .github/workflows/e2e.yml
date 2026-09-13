@@ -16,7 +16,9 @@ on:
       - 'scripts/e2e/**'
       - 'scripts/check-test-policy.mjs'
       - 'scripts/build/build.sh'
+      - '.prettierignore'
       - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/e2e.yml'
       - '.github/workflows/publish-ghcr.yml'
   pull_request:
@@ -34,7 +36,9 @@ on:
       - 'scripts/e2e/**'
       - 'scripts/check-test-policy.mjs'
       - 'scripts/build/build.sh'
+      - '.prettierignore'
       - 'package.json'
+      - 'pnpm-lock.yaml'
       - '.github/workflows/e2e.yml'
       - '.github/workflows/publish-ghcr.yml'
   schedule:
@@ -270,6 +274,42 @@ jobs:
 
           echo "workers=$workers" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  quality:
+    name: Quality gates
+    needs: [environment]
+    if: ${{ always() && needs.environment.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm and target Node.js
+        uses: pnpm/setup@v2
+        with:
+          runtime: node@${{ needs.environment.outputs.node_version }}
+          cache: true
+          install: false
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm run format:all:check
+
+      - name: Check repository policies
+        run: |
+          pnpm run check:package-management
+          pnpm run check:test-policy
+
+      - name: Build production packages
+        run: |
+          pnpm run build
+          pnpm run build:agent-runner
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
 
   build-image:
     name: Docker deployment smoke
@@ -558,7 +598,7 @@ jobs:
             exit 0
           fi
 
-          git commit -m "chore(e2e): refresh test environment and screenshots [skip ci]"
+          git commit -m "chore(e2e): refresh test environment and screenshots"
           git push origin "HEAD:$GITHUB_REF_NAME"
 
   rebalance:
@@ -644,7 +684,55 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/e2e/groups
-          git commit -m "chore(e2e): rebalance test groups [skip ci]"
+          git commit -m "chore(e2e): rebalance test groups"
           if ! git push origin "HEAD:$GITHUB_REF_NAME"; then
             echo "::warning::E2E timing refresh could not be pushed; a newer branch update may have won the race."
+          fi
+
+  release-gate:
+    name: Release gate
+    needs: [environment, runner-image, quality, prepare, build-image, playwright-groups]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all release-critical checks
+        shell: bash
+        env:
+          ENVIRONMENT_RESULT: ${{ needs.environment.result }}
+          RUNNER_IMAGE_RESULT: ${{ needs.runner-image.result }}
+          QUALITY_RESULT: ${{ needs.quality.result }}
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          DOCKER_RESULT: ${{ needs.build-image.result }}
+          PLAYWRIGHT_RESULT: ${{ needs.playwright-groups.result }}
+        run: |
+          set -euo pipefail
+          failed=false
+
+          require_success() {
+            local name="$1"
+            local value="$2"
+            if [[ "$value" != "success" ]]; then
+              echo "::error::$name must succeed, got: $value"
+              failed=true
+            fi
+          }
+
+          require_success_or_skipped() {
+            local name="$1"
+            local value="$2"
+            if [[ "$value" != "success" && "$value" != "skipped" ]]; then
+              echo "::error::$name must succeed or be skipped, got: $value"
+              failed=true
+            fi
+          }
+
+          require_success "Update E2E environment" "$ENVIRONMENT_RESULT"
+          require_success_or_skipped "Build E2E runner image" "$RUNNER_IMAGE_RESULT"
+          require_success "Quality gates" "$QUALITY_RESULT"
+          require_success "E2E preparation" "$PREPARE_RESULT"
+          require_success "Docker deployment smoke" "$DOCKER_RESULT"
+          require_success "Playwright groups" "$PLAYWRIGHT_RESULT"
+
+          if [[ "$failed" == "true" ]]; then
+            exit 1
           fi

@@ -10,12 +10,7 @@ const decodePath = (value: string): string => {
 };
 
 const normalizeRemotePath = (currentFilePath: string, linkedPath: string): string => {
-  const parts = linkedPath.startsWith('/')
-    ? []
-    : currentFilePath
-        .split('/')
-        .filter(Boolean)
-        .slice(0, -1);
+  const parts = linkedPath.startsWith('/') ? [] : currentFilePath.split('/').filter(Boolean).slice(0, -1);
 
   for (const segment of linkedPath.split('/')) {
     if (!segment || segment === '.') continue;
