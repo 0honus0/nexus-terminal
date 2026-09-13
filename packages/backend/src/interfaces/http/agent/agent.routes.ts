@@ -414,7 +414,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   router.get(
     '/onboarding/recommended-plugin',
     agentRoute(async (request, response) => {
-      agentData(request, response, await dependencies.host.getRecommendedPlugin(agentUserId(request), request.signal));
+      agentData(request, response, await dependencies.host.getRecommendedPlugin(agentUserId(request), AbortSignal.timeout(30_000)));
     }),
   );
 
@@ -422,7 +422,7 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/onboarding/recommended-plugin/install',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      const installed = await dependencies.host.installRecommendedPlugin(agentUserId(request), request.signal);
+      const installed = await dependencies.host.installRecommendedPlugin(agentUserId(request), AbortSignal.timeout(120_000));
       agentData(request, response, { ...installed, app: appSummary(installed.app) }, 201);
     }),
   );

@@ -70,7 +70,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
     agentRoute(async (request, response) => {
       const repositoryUrl = queryString(request.query.repositoryUrl);
       if (!repositoryUrl) throw new Error('VALIDATION_FAILED');
-      agentData(request, response, await plugins.remoteCatalog(agentUserId(request), repositoryUrl, request.signal));
+      agentData(request, response, await plugins.remoteCatalog(agentUserId(request), repositoryUrl, AbortSignal.timeout(30_000)));
     }),
   );
 
@@ -94,7 +94,7 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
         await plugins.stageRemote(
           agentUserId(request),
           { repositoryUrl: request.body.repositoryUrl, appId: request.body.appId, version: request.body.version },
-          request.signal,
+          AbortSignal.timeout(120_000),
         ),
         201,
       );
