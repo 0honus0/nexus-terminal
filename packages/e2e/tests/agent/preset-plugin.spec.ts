@@ -263,13 +263,27 @@ const installAndRunNexusAgent = async (
     expect(running.status).toBe('running');
 
     const durableGoal = 'Confirm the Nexus Agent Developer Skill goal remains durable.';
-    const goalUpdated = await request.post(`/api/v1/apps/nexus.agent/runs/${run.id}/goal`, {
-      headers: { ...headers, 'Idempotency-Key': randomUUID() },
-      data: { schemaVersion: 1, text: durableGoal, expectedVersion: running.version },
-    });
-    expect(goalUpdated.ok(), await goalUpdated.text()).toBeTruthy();
-    const goalRun = ((await goalUpdated.json()) as Envelope<RunView>).data;
-    expect(goalRun.goal).toMatchObject({ text: durableGoal, revision: 1 });
+    const goalDeadline = Date.now() + 5_000;
+    let goalRun: RunView | null = null;
+    while (!goalRun && Date.now() < goalDeadline) {
+      const latestResponse = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}`);
+      expect(latestResponse.ok(), await latestResponse.text()).toBeTruthy();
+      const latest = ((await latestResponse.json()) as Envelope<RunView>).data;
+      expect(latest.status).toBe('running');
+      const goalUpdated = await request.post(`/api/v1/apps/nexus.agent/runs/${run.id}/goal`, {
+        headers: { ...headers, 'Idempotency-Key': randomUUID() },
+        data: { schemaVersion: 1, text: durableGoal, expectedVersion: latest.version },
+      });
+      if (goalUpdated.ok()) {
+        goalRun = ((await goalUpdated.json()) as Envelope<RunView>).data;
+        break;
+      }
+      const failure = (await goalUpdated.json()) as { error?: { code?: string } };
+      expect(failure.error?.code).toBe('STATE_CONFLICT');
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    expect(goalRun).not.toBeNull();
+    expect(goalRun!.goal).toMatchObject({ text: durableGoal, revision: 1 });
 
     const terminal = await waitForTerminalRun(request, run.id);
     expect(['completed', 'completed_unverified']).toContain(terminal.status);
