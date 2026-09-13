@@ -335,6 +335,15 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
       ).data,
     );
   },
+  async workspaceCommand(appId: string, commandId: string): Promise<WorkspaceRuntimeCommandView> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<WorkspaceRuntimeCommandView>>(
+          `/apps/${encodeURIComponent(appId)}/workspace-runtime/commands/${encodeURIComponent(commandId)}`,
+        )
+      ).data,
+    );
+  },
   async workspaceRuntimeCommand(commandId: string): Promise<WorkspaceRuntimeCommandView> {
     return unwrap(
       (

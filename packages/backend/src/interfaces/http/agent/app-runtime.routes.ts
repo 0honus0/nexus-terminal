@@ -358,6 +358,18 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     }),
   );
 
+  router.get(
+    '/workspace-runtime/commands/:commandId',
+    agentRoute(async (request, response) => {
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(
+        request,
+        response,
+        await dependencies.workspaceRuntime.getCommand(scope, pathParam(request.params.commandId)),
+      );
+    }),
+  );
+
   router.post(
     '/workspaces/:workspaceId/actions',
     mutationSecurity,

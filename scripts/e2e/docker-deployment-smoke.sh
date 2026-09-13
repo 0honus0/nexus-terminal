@@ -1678,7 +1678,7 @@ const startedFullStackWorkspaceCommand = await ok(
   202,
 );
 for (let attempt = 0; attempt < 120; attempt += 1) {
-  const command = await ok('GET', `/api/v1/agent/workspace-runtime/commands/${startedFullStackWorkspaceCommand.id}`);
+  const command = await ok('GET', `/api/v1/apps/nexus.agent/workspace-runtime/commands/${startedFullStackWorkspaceCommand.id}`);
   if (command.status === 'succeeded') break;
   if (['failed', 'unknown'].includes(command.status)) throw new Error(`Full-stack Workspace start failed: ${JSON.stringify(command)}`);
   if (attempt === 119) throw new Error(`Full-stack Workspace start timed out: ${JSON.stringify(command)}`);
@@ -1721,7 +1721,7 @@ const deletedFullStackWorkspaceCommand = await ok(
   202,
 );
 for (let attempt = 0; attempt < 120; attempt += 1) {
-  const command = await ok('GET', `/api/v1/agent/workspace-runtime/commands/${deletedFullStackWorkspaceCommand.id}`);
+  const command = await ok('GET', `/api/v1/apps/nexus.agent/workspace-runtime/commands/${deletedFullStackWorkspaceCommand.id}`);
   if (command.status === 'succeeded') break;
   if (['failed', 'unknown'].includes(command.status)) throw new Error(`Full-stack Workspace delete failed: ${JSON.stringify(command)}`);
   if (attempt === 119) throw new Error(`Full-stack Workspace delete timed out: ${JSON.stringify(command)}`);

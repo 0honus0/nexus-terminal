@@ -237,7 +237,9 @@
     if (operationState.phase.value !== 'reconciling' || commandIds.length === 0 || localBusy.value) return;
     localBusy.value = true;
     try {
-      const commands = await Promise.all(commandIds.map((commandId) => agentApi.workspaceRuntimeCommand(commandId)));
+      const commands = await Promise.all(
+        commandIds.map((commandId) => agentApi.workspaceCommand(props.appId, commandId)),
+      );
       const unresolved = commands
         .filter((command) => ['pending', 'running', 'unknown'].includes(command.status))
         .map((command) => command.id);
