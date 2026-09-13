@@ -105,6 +105,7 @@ test('Agent settings surface exposes the production control plane and captures f
   context,
 }) => {
   await loginAsInitialAdmin(context.request);
+  await enableAgentWithRecommendedOperations(context.request);
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Agent', exact: true }).click();
 

@@ -422,12 +422,8 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/onboarding/recommended-plugin/install',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      agentData(
-        request,
-        response,
-        await dependencies.host.installRecommendedPlugin(agentUserId(request), request.signal),
-        201,
-      );
+      const installed = await dependencies.host.installRecommendedPlugin(agentUserId(request), request.signal);
+      agentData(request, response, { ...installed, app: appSummary(installed.app) }, 201);
     }),
   );
 

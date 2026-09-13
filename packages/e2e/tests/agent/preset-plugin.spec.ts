@@ -382,7 +382,10 @@ test('frontend target owns a full Custom App Surface and connects through the is
   const patched = await request.patch('/api/v1/agent/settings', {
     headers,
     data: {
-      patch: { plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] } },
+      patch: {
+        feature: { enabled: true },
+        plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] },
+      },
       expectedVersion: settings.revision,
     },
   });
@@ -750,10 +753,11 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     });
 
     await step('pending mutation approval remains actionable when the TaskRail is hidden', async () => {
-      const targets = hub.locator('summary[aria-label="SSH targets"]');
+      const targets = hub.getByRole('button', { name: 'SSH targets', exact: true });
       await targets.click();
-      const targetRow = hub.getByText('E2E SSH', { exact: true }).locator('..').locator('..');
-      await targetRow.getByRole('checkbox').check();
+      const targetsPanel = hub.getByRole('dialog', { name: 'SSH targets', exact: true });
+      await expect(targetsPanel.getByText('E2E SSH', { exact: true })).toBeVisible();
+      await targetsPanel.getByRole('checkbox').check();
       await targets.click();
       await restoredComposer.fill(
         `Request the bounded shell approval exactly once. E2E_APPROVAL_CONNECTION_ID=${connectionId}`,
