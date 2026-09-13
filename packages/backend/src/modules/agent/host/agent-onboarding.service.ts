@@ -81,7 +81,6 @@ export class AgentOnboardingService {
       .sort((left, right) => rcompare(left.version, right.version))[0];
     if (!entry) throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_UNAVAILABLE');
 
-    await this.plugins.trustPublisherKey(userId, this.source.publisherPublicKeyPem, this.source.publisherLabel);
     const stage = await this.plugins.stageOfficial(userId, this.source, entry.appId, entry.version, signal);
     const verified = await this.plugins.verify(userId, stage.id);
     if (
@@ -107,12 +106,7 @@ export class AgentOnboardingService {
     return { app, installedNow: true };
   }
 
-  private async requireOfficialCatalog(signal?: AbortSignal) {
-    const catalog = await this.plugins.officialCatalog(this.source, signal);
-    const publisher = catalog.publishers.find((candidate) => candidate.keyId === this.source.publisherKeyId);
-    if (!publisher || publisher.publicKeyPem.trim() !== this.source.publisherPublicKeyPem.trim()) {
-      throw new Error('OFFICIAL_PLUGIN_PUBLISHER_MISMATCH');
-    }
-    return catalog;
+  private requireOfficialCatalog(signal?: AbortSignal) {
+    return this.plugins.officialCatalog(this.source, signal);
   }
 }

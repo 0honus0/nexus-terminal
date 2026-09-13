@@ -195,7 +195,16 @@ export class PluginInstallService {
   }
 
   async officialCatalog(source: OfficialAgentPluginSource, signal?: AbortSignal): Promise<RemotePluginCatalog> {
-    return this.remotePackages.catalog(this.officialRepositoryConfig(source), signal);
+    const catalog = await this.remotePackages.catalog(this.officialRepositoryConfig(source), signal);
+    const publisher = catalog.publishers.find((candidate) => candidate.keyId === source.publisherKeyId);
+    if (
+      !publisher ||
+      publisher.publicKeyPem.trim() !== source.publisherPublicKeyPem.trim() ||
+      catalog.packages.some((candidate) => candidate.publisherKeyId !== source.publisherKeyId)
+    ) {
+      throw new Error('OFFICIAL_PLUGIN_PUBLISHER_MISMATCH');
+    }
+    return catalog;
   }
 
   async stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord> {
@@ -216,11 +225,18 @@ export class PluginInstallService {
     signal?: AbortSignal,
   ): Promise<PluginStageRecord> {
     if (!appId || !version) throw new Error('VALIDATION_FAILED');
+    const catalog = await this.officialCatalog(source, signal);
+    if (!catalog.packages.some((candidate) => candidate.appId === appId && candidate.version === version)) {
+      throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
+    }
+    await this.trustPublisherKey(userId, source.publisherPublicKeyPem, source.publisherLabel);
     return this.stageRemoteWithConfig(
       userId,
       { repositoryUrl: source.catalogUrl, appId, version },
       this.officialRepositoryConfig(source),
       signal,
+      source.publisherKeyId,
+      catalog,
     );
   }
 
@@ -757,12 +773,17 @@ export class PluginInstallService {
     input: RemotePluginStageInput,
     config: RemotePluginRepositoryConfig,
     signal?: AbortSignal,
+    expectedPublisherKeyId?: string,
+    validatedCatalog?: RemotePluginCatalog,
   ): Promise<PluginStageRecord> {
-    const catalog = await this.remotePackages.catalog(config, signal);
+    const catalog = validatedCatalog ?? (await this.remotePackages.catalog(config, signal));
     const entry = catalog.packages.find(
       (candidate) => candidate.appId === input.appId && candidate.version === input.version,
     );
     if (!entry) throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
+    if (expectedPublisherKeyId && entry.publisherKeyId !== expectedPublisherKeyId) {
+      throw new Error('OFFICIAL_PLUGIN_PUBLISHER_MISMATCH');
+    }
     const source = await this.remotePackages.openPackage(config, entry, signal);
     const stageId = randomUUID();
     try {

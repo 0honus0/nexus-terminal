@@ -212,18 +212,6 @@ export const composeAgent = ({
     onHostStateCommitted: publishHostWake,
   });
   const onboarding = new AgentOnboardingService(plugins, lifecycle, appGrants, officialPluginSource);
-  const requireOfficialPluginCatalog = async (signal?: AbortSignal) => {
-    const catalog = await plugins.officialCatalog(officialPluginSource, signal);
-    const publisher = catalog.publishers.find((candidate) => candidate.keyId === officialPluginSource.publisherKeyId);
-    if (
-      !publisher ||
-      publisher.publicKeyPem.trim() !== officialPluginSource.publisherPublicKeyPem.trim() ||
-      catalog.packages.some((candidate) => candidate.publisherKeyId !== officialPluginSource.publisherKeyId)
-    ) {
-      throw new Error('OFFICIAL_PLUGIN_PUBLISHER_MISMATCH');
-    }
-    return catalog;
-  };
   const conversationRepository = new SqliteConversationRepository(database);
   const conversations = new ConversationService(conversationRepository, systemClock, settings, lifecycle);
   const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
@@ -549,19 +537,9 @@ export const composeAgent = ({
       trustPublisherKey: (userId, publicKeyPem, label) => plugins.trustPublisherKey(userId, publicKeyPem, label),
       revokePublisherKey: (userId, keyId) => plugins.revokePublisherKey(userId, keyId),
       stage: (userId, input) => plugins.stage(userId, input),
-      officialCatalog: (signal) => requireOfficialPluginCatalog(signal),
-      stageOfficial: async (userId, appId, version, signal) => {
-        const catalog = await requireOfficialPluginCatalog(signal);
-        if (!catalog.packages.some((candidate) => candidate.appId === appId && candidate.version === version)) {
-          throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
-        }
-        await plugins.trustPublisherKey(
-          userId,
-          officialPluginSource.publisherPublicKeyPem,
-          officialPluginSource.publisherLabel,
-        );
-        return plugins.stageOfficial(userId, officialPluginSource, appId, version, signal);
-      },
+      officialCatalog: (signal) => plugins.officialCatalog(officialPluginSource, signal),
+      stageOfficial: (userId, appId, version, signal) =>
+        plugins.stageOfficial(userId, officialPluginSource, appId, version, signal),
       remoteCatalog: (userId, repositoryUrl, signal) => plugins.remoteCatalog(userId, repositoryUrl, signal),
       stageRemote: (userId, input, signal) => plugins.stageRemote(userId, input, signal),
       verify: (userId, stageId) => plugins.verify(userId, stageId),
