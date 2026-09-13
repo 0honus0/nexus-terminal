@@ -3,703 +3,703 @@
   "specs": {
     "tests/agent/host.spec.ts": {
       "samplesMs": [
-        16114,
         15412,
         17516,
         13823,
-        17774
+        17774,
+        17374
       ],
-      "medianMs": 16114
+      "medianMs": 17374
     },
     "tests/agent/preset-plugin.spec.ts": {
       "samplesMs": [
-        29223,
         30850,
         29409,
         28151,
-        30500
+        30500,
+        29411
       ],
-      "medianMs": 29409
+      "medianMs": 29411
     },
     "tests/agent/provider.spec.ts": {
       "samplesMs": [
-        239,
         223,
         507,
         213,
-        253
+        253,
+        249
       ],
-      "medianMs": 239
+      "medianMs": 249
     },
     "tests/auth/setup-login.spec.ts": {
       "samplesMs": [
-        5922,
         4919,
         5110,
         5729,
-        6048
+        6048,
+        6058
       ],
       "medianMs": 5729
     },
     "tests/http/auth-2fa.spec.ts": {
       "samplesMs": [
-        7112,
         6271,
         7258,
         6213,
-        6936
+        6936,
+        6154
       ],
-      "medianMs": 6936
+      "medianMs": 6271
     },
     "tests/http/auth-api.spec.ts": {
       "samplesMs": [
-        1266,
         843,
         1022,
         840,
-        966
+        966,
+        880
       ],
-      "medianMs": 966
+      "medianMs": 880
     },
     "tests/http/backup.spec.ts": {
       "samplesMs": [
-        1136,
         436,
         529,
         542,
-        521
+        521,
+        489
       ],
-      "medianMs": 529
+      "medianMs": 521
     },
     "tests/http/connection-import.spec.ts": {
       "samplesMs": [
-        732,
         279,
         320,
         532,
-        327
+        327,
+        288
       ],
-      "medianMs": 327
+      "medianMs": 320
     },
     "tests/http/connections-tags.spec.ts": {
       "samplesMs": [
-        4268,
         3930,
         3847,
         3909,
-        3846
+        3846,
+        3746
       ],
-      "medianMs": 3909
+      "medianMs": 3847
     },
     "tests/http/database-migrations.spec.ts": {
       "samplesMs": [
-        2344,
         1977,
         2549,
         1983,
-        2544
+        2544,
+        2289
       ],
-      "medianMs": 2344
+      "medianMs": 2289
     },
     "tests/http/quick-commands-audit.spec.ts": {
       "samplesMs": [
-        173,
         147,
         205,
         156,
-        216
+        216,
+        192
       ],
-      "medianMs": 173
+      "medianMs": 192
     },
     "tests/http/rdp-remoteapp.spec.ts": {
       "samplesMs": [
-        31760,
         31713,
         31773,
         31817,
-        31742
+        31742,
+        31698
       ],
-      "medianMs": 31760
+      "medianMs": 31742
     },
     "tests/http/terminal-themes.spec.ts": {
       "samplesMs": [
-        709,
         225,
         256,
         208,
-        272
+        272,
+        213
       ],
-      "medianMs": 256
+      "medianMs": 225
     },
     "tests/mobile/dashboard-mobile.spec.ts": {
       "samplesMs": [
-        8749,
         8904,
         6902,
         7515,
-        8601
+        8601,
+        8094
       ],
-      "medianMs": 8601
+      "medianMs": 8094
     },
     "tests/mobile/ssh-workspace.spec.ts": {
       "samplesMs": [
-        3749,
         4352,
         3210,
         3166,
-        4260
+        4260,
+        3651
       ],
-      "medianMs": 3749
+      "medianMs": 3651
     },
     "tests/mobile/suspend-resume-ui.spec.ts": {
       "samplesMs": [
-        30344,
         30625,
         29914,
         28256,
-        30725
+        30725,
+        31594
       ],
-      "medianMs": 30344
+      "medianMs": 30625
     },
     "tests/mobile/terminal-touch.spec.ts": {
       "samplesMs": [
-        9703,
         9920,
         8724,
         8185,
-        9693
+        9693,
+        10186
       ],
       "medianMs": 9693
     },
     "tests/mobile/touch-advanced.spec.ts": {
       "samplesMs": [
-        51313,
         51608,
         43609,
         44441,
-        52159
+        52159,
+        54576
       ],
-      "medianMs": 51313
+      "medianMs": 51608
     },
     "tests/mobile/touch-workflows.spec.ts": {
       "samplesMs": [
-        18996,
         19185,
         14544,
         15300,
-        19084
+        19084,
+        22115
       ],
-      "medianMs": 18996
+      "medianMs": 19084
     },
     "tests/ssh/command-history-management.spec.ts": {
       "samplesMs": [
-        3869,
         3907,
         4072,
         3165,
-        3786
+        3786,
+        3530
       ],
-      "medianMs": 3869
+      "medianMs": 3786
     },
     "tests/ssh/connection-edit-delete.spec.ts": {
       "samplesMs": [
-        2059,
         1936,
         2228,
         1750,
-        2166
+        2166,
+        2198
       ],
-      "medianMs": 2059
+      "medianMs": 2166
     },
     "tests/ssh/connection-list-search.spec.ts": {
       "samplesMs": [
-        9780,
         7067,
         9645,
         7420,
-        9137
+        9137,
+        9383
       ],
       "medianMs": 9137
     },
     "tests/ssh/connection.spec.ts": {
       "samplesMs": [
-        8801,
         8421,
         9639,
         8575,
-        10096
+        10096,
+        9482
       ],
-      "medianMs": 8801
+      "medianMs": 9482
     },
     "tests/ssh/cross-session-transfer.spec.ts": {
       "samplesMs": [
-        401,
         509,
         492,
         416,
-        499
+        499,
+        472
       ],
       "medianMs": 492
     },
     "tests/ssh/docker-manager-ui.spec.ts": {
       "samplesMs": [
-        14884,
         16182,
         14283,
         17131,
-        15609
+        15609,
+        15443
       ],
       "medianMs": 15609
     },
     "tests/ssh/file-manager-navigation.spec.ts": {
       "samplesMs": [
-        34046,
         32380,
         32933,
         32290,
-        33743
+        33743,
+        26274
       ],
-      "medianMs": 32933
+      "medianMs": 32380
     },
     "tests/ssh/file-preview-editor.spec.ts": {
       "samplesMs": [
-        92304,
         91754,
         92576,
         90569,
-        93110
+        93110,
+        72552
       ],
-      "medianMs": 92304
+      "medianMs": 91754
     },
     "tests/ssh/file-upload.spec.ts": {
       "samplesMs": [
-        131572,
         157564,
         153984,
         133940,
-        156159
+        156159,
+        147665
       ],
       "medianMs": 153984
     },
     "tests/ssh/panel-wheel-scaling.spec.ts": {
       "samplesMs": [
-        17058,
         16430,
         17783,
         16189,
-        16212
+        16212,
+        14324
       ],
-      "medianMs": 16430
+      "medianMs": 16212
     },
     "tests/ssh/progress-display-archive-cancel.spec.ts": {
       "samplesMs": [
-        39836,
         39718,
         39918,
         39584,
-        39481
+        39481,
+        39286
       ],
-      "medianMs": 39718
+      "medianMs": 39584
     },
     "tests/ssh/progress-display-archive.spec.ts": {
       "samplesMs": [
-        28085,
         27624,
         25550,
         24447,
-        27267
+        27267,
+        26141
       ],
-      "medianMs": 27267
+      "medianMs": 26141
     },
     "tests/ssh/progress-display-baseline.spec.ts": {
       "samplesMs": [
-        43484,
         38279,
         40319,
         41362,
-        44841
+        44841,
+        42658
       ],
       "medianMs": 41362
     },
     "tests/ssh/progress-display-copy-cancel.spec.ts": {
       "samplesMs": [
-        39914,
         40175,
         39680,
         38965,
-        39895
+        39895,
+        39583
       ],
-      "medianMs": 39895
+      "medianMs": 39680
     },
     "tests/ssh/progress-display-upload-copy.spec.ts": {
       "samplesMs": [
-        27405,
         25935,
         27038,
         27512,
-        32622
+        32622,
+        37385
       ],
-      "medianMs": 27405
+      "medianMs": 27512
     },
     "tests/ssh/protocol.spec.ts": {
       "samplesMs": [
-        5422,
         5602,
         6112,
         5527,
-        5546
+        5546,
+        5174
       ],
       "medianMs": 5546
     },
     "tests/ssh/quick-command-collapsible-search.spec.ts": {
       "samplesMs": [
-        5067,
         5401,
         4112,
         4106,
-        5196
+        5196,
+        4650
       ],
-      "medianMs": 5067
+      "medianMs": 4650
     },
     "tests/ssh/quick-command-management.spec.ts": {
       "samplesMs": [
-        7006,
         7141,
         6126,
         5313,
-        6640
+        6640,
+        6310
       ],
-      "medianMs": 6640
+      "medianMs": 6310
     },
     "tests/ssh/quick-command-tags-variables.spec.ts": {
       "samplesMs": [
-        3824,
         4126,
         3132,
         3313,
-        3743
+        3743,
+        3343
       ],
-      "medianMs": 3743
+      "medianMs": 3343
     },
     "tests/ssh/reconnect-ui.spec.ts": {
       "samplesMs": [
-        16974,
         14906,
         17533,
         15506,
-        17105
+        17105,
+        17216
       ],
-      "medianMs": 16974
+      "medianMs": 17105
     },
     "tests/ssh/sftp-download.spec.ts": {
       "samplesMs": [
-        740,
         722,
         844,
         709,
-        713
+        713,
+        1168
       ],
       "medianMs": 722
     },
     "tests/ssh/status-docker-protocol.spec.ts": {
       "samplesMs": [
-        1371,
         1381,
         1397,
         1390,
-        1375
+        1375,
+        1358
       ],
       "medianMs": 1381
     },
     "tests/ssh/status-history-time-axis.spec.ts": {
       "samplesMs": [
-        2831,
         2843,
         2923,
         2735,
-        2868
+        2868,
+        2674
       ],
       "medianMs": 2843
     },
     "tests/ssh/suspend-resume.spec.ts": {
       "samplesMs": [
-        6994,
         7361,
         6900,
         5951,
-        7068
+        7068,
+        6442
       ],
-      "medianMs": 6994
+      "medianMs": 6900
     },
     "tests/ssh/terminal-protocol.spec.ts": {
       "samplesMs": [
-        1460,
         1450,
         1483,
         1441,
-        1412
+        1412,
+        1673
       ],
       "medianMs": 1450
     },
     "tests/ssh/terminal-tools-ui.spec.ts": {
       "samplesMs": [
-        3790,
         3633,
         3844,
         3685,
-        3697
+        3697,
+        2963
       ],
-      "medianMs": 3697
+      "medianMs": 3685
     },
     "tests/ssh/terminal-ui.spec.ts": {
       "samplesMs": [
-        20786,
         21267,
         21812,
         21143,
-        20716
+        20716,
+        16081
       ],
       "medianMs": 21143
     },
     "tests/ssh/upload-protocol.spec.ts": {
       "samplesMs": [
-        5785,
         5822,
         6003,
         5877,
-        5794
+        5794,
+        5834
       ],
-      "medianMs": 5822
+      "medianMs": 5834
     },
     "tests/ui/audit-log-filtering.spec.ts": {
       "samplesMs": [
-        5453,
         4163,
         5645,
         6504,
-        5987
+        5987,
+        6777
       ],
-      "medianMs": 5645
+      "medianMs": 5987
     },
     "tests/ui/backup-ui.spec.ts": {
       "samplesMs": [
-        4530,
         4768,
         4182,
         3496,
-        4110
+        4110,
+        2939
       ],
-      "medianMs": 4182
+      "medianMs": 4110
     },
     "tests/ui/batch-connection-edit.spec.ts": {
       "samplesMs": [
-        6729,
         8665,
         9645,
         8584,
-        8648
+        8648,
+        8481
       ],
       "medianMs": 8648
     },
     "tests/ui/captcha-settings.spec.ts": {
       "samplesMs": [
-        3170,
         2675,
         3536,
         3108,
-        4160
+        4160,
+        2401
       ],
-      "medianMs": 3170
+      "medianMs": 3108
     },
     "tests/ui/change-password.spec.ts": {
       "samplesMs": [
-        7480,
         6655,
         8450,
         6874,
-        8140
+        8140,
+        6390
       ],
-      "medianMs": 7480
+      "medianMs": 6874
     },
     "tests/ui/connection-create.spec.ts": {
       "samplesMs": [
-        6225,
         8468,
         7777,
         6437,
-        7827
+        7827,
+        7449
       ],
       "medianMs": 7777
     },
     "tests/ui/connection-non-ssh-bulk.spec.ts": {
       "samplesMs": [
-        2400,
         2508,
         2893,
         2068,
-        2909
+        2909,
+        1866
       ],
       "medianMs": 2508
     },
     "tests/ui/custom-terminal-theme.spec.ts": {
       "samplesMs": [
-        4015,
         3363,
         3571,
         3404,
-        3282
+        3282,
+        2524
       ],
-      "medianMs": 3404
+      "medianMs": 3363
     },
     "tests/ui/dashboard-workflows.spec.ts": {
       "samplesMs": [
-        24977,
         24888,
         24674,
         26379,
-        25179
+        25179,
+        26058
       ],
-      "medianMs": 24977
+      "medianMs": 25179
     },
     "tests/ui/ip-blacklist-settings.spec.ts": {
       "samplesMs": [
-        5830,
         4870,
         5542,
         5497,
-        5554
+        5554,
+        5955
       ],
       "medianMs": 5542
     },
     "tests/ui/ip-whitelist-settings.spec.ts": {
       "samplesMs": [
-        2744,
         2285,
         2949,
         2469,
-        2911
+        2911,
+        2042
       ],
-      "medianMs": 2744
+      "medianMs": 2469
     },
     "tests/ui/login-captcha-surface.spec.ts": {
       "samplesMs": [
-        138761,
         141027,
         139870,
         140078,
-        140626
+        140626,
+        140516
       ],
-      "medianMs": 140078
+      "medianMs": 140516
     },
     "tests/ui/login-passkey-surface.spec.ts": {
       "samplesMs": [
-        6385,
         6011,
         6087,
         7076,
-        7547
+        7547,
+        6310
       ],
-      "medianMs": 6385
+      "medianMs": 6310
     },
     "tests/ui/notification-delivery.spec.ts": {
       "samplesMs": [
-        8711,
         9098,
         7840,
         7111,
-        9821
+        9821,
+        8889
       ],
-      "medianMs": 8711
+      "medianMs": 8889
     },
     "tests/ui/notification-settings.spec.ts": {
       "samplesMs": [
-        4340,
         5175,
         4062,
         3517,
-        5548
+        5548,
+        4294
       ],
-      "medianMs": 4340
+      "medianMs": 4294
     },
     "tests/ui/protected-navigation.spec.ts": {
       "samplesMs": [
-        3670,
         2973,
         3926,
         2866,
-        3803
+        3803,
+        3088
       ],
-      "medianMs": 3670
+      "medianMs": 3088
     },
     "tests/ui/proxy-management.spec.ts": {
       "samplesMs": [
-        1940,
         1931,
         1930,
         1881,
-        2201
+        2201,
+        1812
       ],
-      "medianMs": 1931
+      "medianMs": 1930
     },
     "tests/ui/rdp-remoteapp-fullscreen.spec.ts": {
       "samplesMs": [
-        15145,
         16082,
         15363,
         11209,
-        13153
+        13153,
+        13351
       ],
-      "medianMs": 15145
+      "medianMs": 13351
     },
     "tests/ui/ssh-key-management.spec.ts": {
       "samplesMs": [
-        5396,
         4082,
         5648,
         5126,
-        5509
+        5509,
+        6227
       ],
-      "medianMs": 5396
+      "medianMs": 5509
     },
     "tests/ui/system-settings.spec.ts": {
       "samplesMs": [
-        11178,
         11446,
         10242,
         11278,
-        11626
+        11626,
+        11369
       ],
-      "medianMs": 11278
+      "medianMs": 11369
     },
     "tests/ui/theme-switching.spec.ts": {
       "samplesMs": [
-        28828,
         29992,
         27756,
         26538,
-        29931
+        29931,
+        28885
       ],
-      "medianMs": 28828
+      "medianMs": 28885
     },
     "tests/ui/workspace-no-session.spec.ts": {
       "samplesMs": [
-        1345,
         1794,
         1418,
         1053,
-        1337
+        1337,
+        1563
       ],
-      "medianMs": 1345
+      "medianMs": 1418
     },
     "tests/websocket/authenticated-session.spec.ts": {
       "samplesMs": [
-        2737,
         2608,
         1667,
         1681,
-        2202
+        2202,
+        1613
       ],
-      "medianMs": 2202
+      "medianMs": 1681
     }
   }
 }
