@@ -506,7 +506,10 @@ test('official first-party catalog is discoverable without repository configurat
   const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
   await expect(pluginsSection.getByText('Nexus first-party catalog', { exact: true })).toBeVisible();
   await expect(pluginsSection.getByText('Publisher pinned by Host', { exact: true })).toBeVisible();
-  await expect(pluginsSection.getByText('nexus.agent', { exact: true })).toBeVisible();
+  const agentCatalogIds = pluginsSection.getByText('nexus.agent', { exact: true });
+  await expect(agentCatalogIds).toHaveCount(2);
+  await expect(agentCatalogIds.first()).toBeVisible();
+  await expect(agentCatalogIds.nth(1)).toBeVisible();
   await expect(pluginsSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
 });
 
@@ -648,9 +651,9 @@ test('frontend target owns a full Custom App Surface and connects through the is
     const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
     const installedHeading = pluginsSection.getByRole('heading', { name: 'Installed plugins', exact: true });
     const installedSection = installedHeading.locator('xpath=parent::div');
-    await expect(installedSection.getByText('nexus.custom-surface', { exact: true })).toBeVisible();
-    await expect(installedSection.getByText('nexus.agent', { exact: true })).toBeVisible();
-    await expect(installedSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
+    await expect(installedSection.getByText('nexus.custom-surface · v1.0.0', { exact: true })).toBeVisible();
+    await expect(installedSection.getByText('nexus.agent · v1.0.0', { exact: true })).toBeVisible();
+    await expect(installedSection.getByText('nexus.fullstack · v1.0.0', { exact: true })).toBeVisible();
     await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
       viewport: { width: 1440, height: 900 },
     });

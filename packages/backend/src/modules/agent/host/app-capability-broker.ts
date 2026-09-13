@@ -30,10 +30,35 @@ export class AppCapabilityBroker {
     capability: AgentCapability,
     resource: CapabilityResource = {},
   ): Promise<GrantDecision> {
+    return this.authorizeWhen(
+      scope,
+      capability,
+      resource,
+      (state) => state.desiredState === 'enabled' && ['running', 'degraded'].includes(state.observedState),
+    );
+  }
+
+  async authorizeBackendStorage(scope: Scope): Promise<GrantDecision> {
+    return this.authorizeWhen(
+      scope,
+      'storage.app',
+      {},
+      (state) =>
+        (state.desiredState === 'enabled' && ['enabling', 'running', 'degraded'].includes(state.observedState)) ||
+        (state.desiredState === 'disabled' && state.observedState === 'disabling'),
+    );
+  }
+
+  private async authorizeWhen(
+    scope: Scope,
+    capability: AgentCapability,
+    resource: CapabilityResource,
+    stateAllowed: (state: NonNullable<Awaited<ReturnType<AppStateRepositoryPort['get']>>>) => boolean,
+  ): Promise<GrantDecision> {
     const state = await this.states.get(scope);
     const policyRevision = state?.policyRevision ?? 0;
 
-    if (!state || state.desiredState !== 'enabled' || !['running', 'degraded'].includes(state.observedState)) {
+    if (!state || !stateAllowed(state)) {
       return { allowed: false, code: 'APP_DISABLED', policyRevision };
     }
     const definition = this.registry.get(scope.appId, state.activeVersion);

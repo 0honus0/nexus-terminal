@@ -57,17 +57,17 @@ export const composePlugins = ({
   const appStorage = new SqliteAppStorageRepository(database);
   const pluginSdkStorage: AppStoragePort = {
     get: async (scope, key) => {
-      const decision = await capabilityBroker.authorize(scope, 'storage.app');
+      const decision = await capabilityBroker.authorizeBackendStorage(scope);
       if (!decision.allowed) throw new Error(decision.code);
       return appStorage.get(scope, key);
     },
     put: async (scope, key, value, expectedVersion) => {
-      const decision = await capabilityBroker.authorize(scope, 'storage.app');
+      const decision = await capabilityBroker.authorizeBackendStorage(scope);
       if (!decision.allowed) throw new Error(decision.code);
       return appStorage.put(scope, key, value, expectedVersion);
     },
     delete: async (scope, key, expectedVersion) => {
-      const decision = await capabilityBroker.authorize(scope, 'storage.app');
+      const decision = await capabilityBroker.authorizeBackendStorage(scope);
       if (!decision.allowed) throw new Error(decision.code);
       return appStorage.delete(scope, key, expectedVersion);
     },
