@@ -86,6 +86,8 @@ try {
       {
         appId: manifest.id,
         version: manifest.version,
+        sdkVersion: manifest.sdkVersion,
+        nexus: manifest.nexus,
         displayName: manifest.displayName,
         publisherKeyId,
         publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }).toString(),

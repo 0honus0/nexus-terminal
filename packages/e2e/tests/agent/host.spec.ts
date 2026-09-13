@@ -2,6 +2,7 @@ import { expect, test } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
+import { E2E_URLS } from '../../support/test-env';
 import type { APIRequestContext, Page, WebSocket as PlaywrightWebSocket, WebSocketRoute } from '@playwright/test';
 
 type AgentEnvelope<T> = { data: T; requestId: string };
@@ -574,6 +575,29 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
     expect(installed.status(), await installed.text()).toBe(201);
     await expect(installed.json()).resolves.toMatchObject({ data: { installedNow: true } });
 
+    await step(
+      'installed Nexus Agent recommendation stays local when the official catalog is unavailable',
+      async () => {
+        const disabled = await request.post(`${E2E_URLS.pluginRepositoryOrigin}/control/official-catalog/disable`);
+        expect(disabled.status(), await disabled.text()).toBe(204);
+        try {
+          const localRecommendation = await request.get('/api/v1/agent/onboarding/recommended-plugin');
+          expect(localRecommendation.ok(), await localRecommendation.text()).toBeTruthy();
+          await expect(localRecommendation.json()).resolves.toMatchObject({
+            data: {
+              appId: 'nexus.agent',
+              installed: true,
+              installedVersion: '1.0.0',
+              availableVersion: '1.0.0',
+              enabled: true,
+            },
+          });
+        } finally {
+          const enabled = await request.post(`${E2E_URLS.pluginRepositoryOrigin}/control/official-catalog/enable`);
+          expect(enabled.status(), await enabled.text()).toBe(204);
+        }
+      },
+    );
     const response = await request.get('/api/v1/agent/apps');
     expect(response.ok(), await response.text()).toBeTruthy();
     const body = (await response.json()) as AgentEnvelope<AppSummary[]>;

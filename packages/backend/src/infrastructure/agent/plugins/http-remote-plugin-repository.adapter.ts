@@ -1,6 +1,6 @@
 import net from 'node:net';
 import { Agent, fetch as undiciFetch, type Dispatcher } from 'undici';
-import { valid as validSemver } from 'semver';
+import { compare, valid as validSemver } from 'semver';
 import type { OutboundPolicyPort, ResolvedEndpoint } from '../../../modules/agent/ai/outbound-policy.port';
 import type {
   RemotePluginCatalog,
@@ -179,11 +179,19 @@ export class HttpRemotePluginRepositoryAdapter implements RemotePluginRepository
       const value = record(candidate);
       const appId = text(value.appId, 128);
       const version = text(value.version, 64);
+      const sdkVersion = text(value.sdkVersion, 64);
+      const nexus = record(value.nexus);
+      const minVersion = text(nexus.minVersion, 64);
+      const maxVersion = text(nexus.maxVersion, 64);
       const publisherKeyId = text(value.publisherKeyId, 128).toLowerCase();
       const sha256 = text(value.sha256, 64).toLowerCase();
       if (
         !APP_ID.test(appId) ||
         !validSemver(version) ||
+        !validSemver(sdkVersion) ||
+        !validSemver(minVersion) ||
+        !validSemver(maxVersion) ||
+        compare(minVersion, maxVersion) > 0 ||
         !KEY_ID.test(publisherKeyId) ||
         !publisherIds.has(publisherKeyId) ||
         !SHA256.test(sha256)
@@ -207,6 +215,8 @@ export class HttpRemotePluginRepositoryAdapter implements RemotePluginRepository
       return {
         appId,
         version,
+        sdkVersion,
+        nexus: { minVersion, maxVersion },
         displayName: text(value.displayName, 256),
         description: text(value.description, 2048),
         packageUrl: packageUrl.toString(),

@@ -86,7 +86,9 @@
         "addRepository": "添加仓库",
         "trustRemotePublisher": "信任发布者",
         "prepareRemote": "校验插件包",
-        "removeRepository": "移除"
+        "removeRepository": "移除",
+        "incompatible": "不兼容",
+        "compatibilityRequirement": "需要 Plugin SDK {sdk}，且 Nexus 版本须为 {min}–{max}。"
       },
       "hardLimits": {
         "title": "Hard Limits",

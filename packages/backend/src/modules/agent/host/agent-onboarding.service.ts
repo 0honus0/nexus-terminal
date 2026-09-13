@@ -31,27 +31,48 @@ export class AgentOnboardingService {
   ) {}
 
   async recommended(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginView> {
+    const installation = (await this.plugins.listInstallations(userId)).find(
+      (candidate) => candidate.appId === this.source.recommendedAppId && candidate.status === 'installed',
+    );
+    if (installation) {
+      const [app, versions] = await Promise.all([
+        this.lifecycle.get({ userId, appId: this.source.recommendedAppId }),
+        this.plugins.listVersions(userId, this.source.recommendedAppId),
+      ]);
+      const installed = versions.find(
+        (candidate) => candidate.version === installation.version && candidate.status === 'installed',
+      );
+      if (!installed) throw new Error('PLUGIN_VERSION_NOT_FOUND');
+      const description =
+        installed.manifest.agents?.[0]?.description ?? `Installed Nexus plugin: ${installed.manifest.displayName}.`;
+      return {
+        appId: installed.appId,
+        installed: true,
+        installedVersion: installed.version,
+        enabled: app.desiredState === 'enabled',
+        availableVersion: installed.version,
+        displayName: installed.manifest.displayName,
+        description,
+        catalogUrl: this.source.catalogUrl,
+        publisherKeyId: installed.publisherKeyId,
+      };
+    }
+
     const catalog = await this.requireOfficialCatalog(signal);
     const entry = catalog.packages
       .filter(
         (candidate) =>
-          candidate.appId === this.source.recommendedAppId && candidate.publisherKeyId === this.source.publisherKeyId,
+          candidate.appId === this.source.recommendedAppId &&
+          candidate.publisherKeyId === this.source.publisherKeyId &&
+          candidate.compatible === true,
       )
       .sort((left, right) => rcompare(left.version, right.version))[0];
     if (!entry) throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_UNAVAILABLE');
-    const installation = (await this.plugins.listInstallations(userId)).find(
-      (candidate) => candidate.appId === this.source.recommendedAppId && candidate.status === 'installed',
-    );
-    let enabled = false;
-    if (installation) {
-      const app = await this.lifecycle.get({ userId, appId: this.source.recommendedAppId });
-      enabled = app.desiredState === 'enabled';
-    }
     return {
       appId: entry.appId,
-      installed: Boolean(installation),
-      installedVersion: installation?.version ?? null,
-      enabled,
+      installed: false,
+      installedVersion: null,
+      enabled: false,
       availableVersion: entry.version,
       displayName: entry.displayName,
       description: entry.description,
@@ -76,7 +97,9 @@ export class AgentOnboardingService {
     const entry = catalog.packages
       .filter(
         (candidate) =>
-          candidate.appId === this.source.recommendedAppId && candidate.publisherKeyId === this.source.publisherKeyId,
+          candidate.appId === this.source.recommendedAppId &&
+          candidate.publisherKeyId === this.source.publisherKeyId &&
+          candidate.compatible === true,
       )
       .sort((left, right) => rcompare(left.version, right.version))[0];
     if (!entry) throw new Error('OFFICIAL_RECOMMENDED_PLUGIN_UNAVAILABLE');

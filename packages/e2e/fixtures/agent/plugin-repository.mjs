@@ -78,6 +78,8 @@ const catalog = {
     ...packages.map(({ metadata, packageName, description }) => ({
       appId: metadata.appId,
       version: metadata.version,
+      sdkVersion: metadata.sdkVersion,
+      nexus: metadata.nexus,
       displayName: metadata.displayName,
       description,
       packageUrl: `${publicBaseUrl}/packages/${packageName}`,
@@ -88,11 +90,25 @@ const catalog = {
     {
       appId: 'nexus.unsafe',
       version: '1.0.0',
+      sdkVersion: '1.0.0',
+      nexus: { minVersion: '1.0.0', maxVersion: '1.99.99' },
       displayName: 'Unsafe Archive Fixture',
       description: 'E2E-only package containing a symbolic link and no trusted payload.',
       packageUrl: `${publicBaseUrl}/packages/${unsafePackageName}`,
       sha256: unsafePackageHash,
       sizeBytes: unsafePackageBytes.byteLength,
+      publisherKeyId: publisher.publisherKeyId,
+    },
+    {
+      appId: 'nexus.agent',
+      version: '1.0.1',
+      sdkVersion: '1.0.0',
+      nexus: { minVersion: '1.0.2', maxVersion: '1.0.99' },
+      displayName: 'Nexus Agent',
+      description: 'E2E-only compatibility fixture that requires a newer Nexus 1.0.x host.',
+      packageUrl: `${publicBaseUrl}/packages/nexus.agent-1.0.1-incompatible.tar`,
+      sha256: '0'.repeat(64),
+      sizeBytes: 1,
       publisherKeyId: publisher.publisherKeyId,
     },
   ],
@@ -104,12 +120,23 @@ const officialCatalog = {
   packages: catalog.packages.filter((candidate) => ['nexus.agent', 'nexus.fullstack'].includes(candidate.appId)),
 };
 const officialCatalogBytes = Buffer.from(`${JSON.stringify(officialCatalog, null, 2)}\n`, 'utf8');
+let officialCatalogEnabled = true;
 const packageByUrl = new Map([
   ...packages.map((candidate) => [`/packages/${candidate.packageName}`, candidate.bytes]),
   [`/packages/${unsafePackageName}`, unsafePackageBytes],
 ]);
 
 const server = http.createServer((request, response) => {
+  if (request.method === 'POST' && request.url === '/control/official-catalog/disable') {
+    officialCatalogEnabled = false;
+    response.writeHead(204).end();
+    return;
+  }
+  if (request.method === 'POST' && request.url === '/control/official-catalog/enable') {
+    officialCatalogEnabled = true;
+    response.writeHead(204).end();
+    return;
+  }
   if (request.method === 'GET' && request.url === '/health') {
     response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
     response.end(JSON.stringify({ ok: true }));
@@ -125,6 +152,11 @@ const server = http.createServer((request, response) => {
     return;
   }
   if (request.method === 'GET' && request.url === '/official-catalog.json') {
+    if (!officialCatalogEnabled) {
+      response.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+      response.end(JSON.stringify({ error: 'official catalog disabled for E2E' }));
+      return;
+    }
     response.writeHead(200, {
       'Content-Type': 'application/json',
       'Content-Length': String(officialCatalogBytes.byteLength),

@@ -728,7 +728,7 @@ Runner plugin 通过独立 Runner protocol/lifecycle 执行。
 
 Host-owned governed Tool implementations 仍属于 Core，因为它们是 Capability Broker 与真实 machine/workspace/runtime adapter 之间的受控执行原语；Plugin 只通过 manifest grants/AgentDefinition/Skill 使用这些 capability，不把 raw SSH/Runner/Browser authority 带进插件包。这样 `nexus.agent` 的 AgentDefinition/Skills/版本以及 `nexus.fullstack` 的 target 实现可独立远程升级；若新插件要求 Host 尚不具备的新 capability/SDK/protocol，仍必须升级 Nexus 主镜像。
 
-官方 catalog URL 可以通过部署配置指向 GitHub/CDN/镜像；官方 publisher Ed25519 public key/key id 在生产 Host 中固定 pin，普通生产环境变量不能替换信任根。Plugin 管理页始终把该 Host-pinned official catalog 作为只读 first-party source 展示，不要求用户把官方 URL 添加到 `plugins.repositories`；其中的包必须经 `/official/stage` 使用同一 pinned source 下载/校验。用户额外添加的 repository 继续使用独立的显式 publisher trust 流程。只有 `NODE_ENV=test` 或显式 `NEXUS_E2E_RESET_ENABLED=1` 的受控 E2E 模式允许注入测试 publisher。
+官方 catalog URL 可以通过部署配置指向 GitHub/CDN/镜像；官方 publisher Ed25519 public key/key id 在生产 Host 中固定 pin，普通生产环境变量不能替换信任根。Plugin 管理页始终把该 Host-pinned official catalog 作为只读 first-party source 展示，不要求用户把官方 URL 添加到 `plugins.repositories`；其中的包必须经 `/official/stage` 使用同一 pinned source 下载/校验。用户额外添加的 repository 继续使用独立的显式 publisher trust 流程。只有 `NODE_ENV=test` 或显式 `NEXUS_E2E_RESET_ENABLED=1` 的受控 E2E 模式允许注入测试 publisher。 Catalog package entry 还必须携带 `sdkVersion` 与 `nexus.minVersion/maxVersion`；Host 在展示/推荐/stage 前先按当前 Nexus 版本与支持的 Plugin SDK major 计算 compatibility，不兼容包在 UI 中禁用且 Backend 拒绝 staging，包内 manifest 在签名验证后仍会再次做最终兼容性校验。已经安装的推荐 App 后续重新启用时优先读取本地 immutable installation/version，不依赖 official catalog 网络可用，也不会重置既有 grant。
 
 第一方插件仓的 `pnpm run check` 是源码/manifest 基线检查；发布产物由 `build-package.mjs` / `build-catalog-release.mjs` 生成 Ed25519 签名 tar + catalog。仓库要求 Node `>=24`，发布/CI 证据必须以标准 Node 24 workflow 为准，不能把低版本开发机的 engine warning 当成发布结果。
 

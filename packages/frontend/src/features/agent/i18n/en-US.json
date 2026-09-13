@@ -86,7 +86,9 @@
         "addRepository": "Add repository",
         "trustRemotePublisher": "Trust publisher",
         "prepareRemote": "Verify package",
-        "removeRepository": "Remove"
+        "removeRepository": "Remove",
+        "incompatible": "Incompatible",
+        "compatibilityRequirement": "Requires Plugin SDK {sdk} and Nexus {min}–{max}."
       },
       "hardLimits": {
         "title": "Hard Limits",

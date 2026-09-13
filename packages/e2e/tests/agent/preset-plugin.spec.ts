@@ -104,10 +104,35 @@ const installAndRunNexusAgent = async (
     const catalog = (await response.json()) as Envelope<{
       repositoryUrl: string;
       publishers: Array<{ keyId: string; label: string; publicKeyPem: string }>;
-      packages: Array<{ appId: string; version: string; publisherKeyId: string; sha256: string; sizeBytes: number }>;
+      packages: Array<{
+        appId: string;
+        version: string;
+        sdkVersion: string;
+        nexus: { minVersion: string; maxVersion: string };
+        compatible: boolean;
+        publisherKeyId: string;
+        sha256: string;
+        sizeBytes: number;
+      }>;
     }>;
     expect(catalog.data.repositoryUrl).toBe(repositoryUrl);
-    expect(catalog.data.packages).toContainEqual(expect.objectContaining({ appId: 'nexus.agent', version: '1.0.0' }));
+    expect(catalog.data.packages).toContainEqual(
+      expect.objectContaining({
+        appId: 'nexus.agent',
+        version: '1.0.0',
+        sdkVersion: '1.0.0',
+        compatible: true,
+      }),
+    );
+    expect(catalog.data.packages).toContainEqual(
+      expect.objectContaining({
+        appId: 'nexus.agent',
+        version: '1.0.1',
+        sdkVersion: '1.0.0',
+        nexus: { minVersion: '1.0.2', maxVersion: '1.0.99' },
+        compatible: false,
+      }),
+    );
     publisher = catalog.data.publishers.find(
       (candidate) => candidate.keyId === catalog.data.packages[0]!.publisherKeyId,
     )!;
@@ -122,6 +147,15 @@ const installAndRunNexusAgent = async (
 
   let stageId = '';
   await step('download, hash-check, signature-verify, and install the merged Nexus Agent package', async () => {
+    const incompatible = await request.post('/api/v1/agent/plugins/remote/stage', {
+      headers,
+      data: { repositoryUrl, appId: 'nexus.agent', version: '1.0.1' },
+    });
+    expect(incompatible.status(), await incompatible.text()).toBe(409);
+    await expect(incompatible.json()).resolves.toMatchObject({
+      error: { code: 'PLUGIN_REMOTE_PACKAGE_INCOMPATIBLE' },
+    });
+
     const staged = await request.post('/api/v1/agent/plugins/remote/stage', {
       headers,
       data: { repositoryUrl, appId: 'nexus.agent', version: '1.0.0' },

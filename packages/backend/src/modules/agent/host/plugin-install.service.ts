@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { compare, major, valid as validSemver } from 'semver';
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import { validateManifest } from './app-manifest-validator';
 import { AppRegistryService } from './app-registry.service';
@@ -12,6 +13,7 @@ import type { PluginPackageSourcePort } from './plugin-package-source.port';
 import type { AgentSettingsService } from './agent-settings.service';
 import type {
   RemotePluginCatalog,
+  RemotePluginPackageEntry,
   RemotePluginRepositoryConfig,
   RemotePluginRepositoryPort,
 } from './remote-plugin-repository.port';
@@ -28,6 +30,7 @@ import { PLUGIN_RUNNER_PROTOCOL_VERSION, type PluginRunnerTarget } from './plugi
 const MAX_PUBLISHER_LABEL_BYTES = 256;
 const MAX_FRONTEND_RPC_BYTES = 64_000;
 const PLUGIN_FRONTEND_PROTOCOL_VERSION = 1 as const;
+const SUPPORTED_PLUGIN_SDK_MAJOR = 1;
 
 const asRecord = (value: JsonValue, code = 'PLUGIN_FRONTEND_RPC_INVALID'): Record<string, JsonValue> => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error(code);
@@ -191,7 +194,8 @@ export class PluginInstallService {
   }
 
   async remoteCatalog(userId: number, repositoryUrl: string, signal?: AbortSignal): Promise<RemotePluginCatalog> {
-    return this.remotePackages.catalog(await this.remoteRepositoryConfig(userId, repositoryUrl), signal);
+    const catalog = await this.remotePackages.catalog(await this.remoteRepositoryConfig(userId, repositoryUrl), signal);
+    return this.catalogWithCompatibility(catalog);
   }
 
   async officialCatalog(source: OfficialAgentPluginSource, signal?: AbortSignal): Promise<RemotePluginCatalog> {
@@ -204,7 +208,7 @@ export class PluginInstallService {
     ) {
       throw new Error('OFFICIAL_PLUGIN_PUBLISHER_MISMATCH');
     }
-    return catalog;
+    return this.catalogWithCompatibility(catalog);
   }
 
   async stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord> {
@@ -226,9 +230,9 @@ export class PluginInstallService {
   ): Promise<PluginStageRecord> {
     if (!appId || !version) throw new Error('VALIDATION_FAILED');
     const catalog = await this.officialCatalog(source, signal);
-    if (!catalog.packages.some((candidate) => candidate.appId === appId && candidate.version === version)) {
-      throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
-    }
+    const entry = catalog.packages.find((candidate) => candidate.appId === appId && candidate.version === version);
+    if (!entry) throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
+    if (entry.compatible !== true) throw new Error('PLUGIN_REMOTE_PACKAGE_INCOMPATIBLE');
     await this.trustPublisherKey(userId, source.publisherPublicKeyPem, source.publisherLabel);
     return this.stageRemoteWithConfig(
       userId,
@@ -758,6 +762,26 @@ export class PluginInstallService {
     return updated;
   }
 
+  private catalogEntryCompatible(entry: RemotePluginPackageEntry): boolean {
+    const nexusVersion = validSemver(this.nexusVersion);
+    const sdkVersion = validSemver(entry.sdkVersion);
+    const minVersion = validSemver(entry.nexus.minVersion);
+    const maxVersion = validSemver(entry.nexus.maxVersion);
+    if (!nexusVersion || !sdkVersion || !minVersion || !maxVersion) return false;
+    return (
+      major(sdkVersion) === SUPPORTED_PLUGIN_SDK_MAJOR &&
+      compare(nexusVersion, minVersion) >= 0 &&
+      compare(nexusVersion, maxVersion) <= 0
+    );
+  }
+
+  private catalogWithCompatibility(catalog: RemotePluginCatalog): RemotePluginCatalog {
+    return {
+      ...catalog,
+      packages: catalog.packages.map((entry) => ({ ...entry, compatible: this.catalogEntryCompatible(entry) })),
+    };
+  }
+
   private officialRepositoryConfig(source: OfficialAgentPluginSource): RemotePluginRepositoryConfig {
     let normalized: string;
     try {
@@ -781,6 +805,7 @@ export class PluginInstallService {
       (candidate) => candidate.appId === input.appId && candidate.version === input.version,
     );
     if (!entry) throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
+    if (!this.catalogEntryCompatible(entry)) throw new Error('PLUGIN_REMOTE_PACKAGE_INCOMPATIBLE');
     if (expectedPublisherKeyId && entry.publisherKeyId !== expectedPublisherKeyId) {
       throw new Error('OFFICIAL_PLUGIN_PUBLISHER_MISMATCH');
     }

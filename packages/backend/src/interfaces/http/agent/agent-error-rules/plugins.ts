@@ -42,6 +42,11 @@ export const pluginErrorRules: readonly AgentErrorRule[] = [
     ],
     rawCode(409, 'Agent plugin state changed or cannot accept this operation.'),
   ),
+  onCodes(['PLUGIN_REMOTE_PACKAGE_INCOMPATIBLE'], {
+    status: 409,
+    code: 'PLUGIN_REMOTE_PACKAGE_INCOMPATIBLE',
+    message: 'Agent plugin package is not compatible with this Nexus version or Plugin SDK.',
+  }),
   onCodes(
     [
       'PLUGIN_PACKAGE_TOO_LARGE',

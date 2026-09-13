@@ -167,7 +167,7 @@
     entry: RemotePluginPackageEntry,
     official: boolean,
   ): void => {
-    if (!official && !publisherTrusted(entry.publisherKeyId)) return;
+    if (entry.compatible !== true || (!official && !publisherTrusted(entry.publisherKeyId))) return;
     void run(async () => {
       candidate.value = null;
       drainingUpgradeVersion.value = null;
@@ -402,9 +402,24 @@
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-sm font-medium">{{ entry.displayName }}</span>
                 <span class="rounded bg-header px-2 py-0.5 text-[10px]">v{{ entry.version }}</span>
+                <span
+                  v-if="!entry.compatible"
+                  class="rounded bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning"
+                >
+                  {{ $t('agent.settings.plugins.incompatible') }}
+                </span>
               </div>
               <p class="mt-1 text-xs text-text-secondary">{{ entry.description }}</p>
               <p class="mt-2 break-all font-mono text-[10px] text-text-secondary">{{ entry.appId }}</p>
+              <p v-if="!entry.compatible" class="mt-1 text-[10px] text-text-secondary">
+                {{
+                  $t('agent.settings.plugins.compatibilityRequirement', {
+                    sdk: entry.sdkVersion,
+                    min: entry.nexus.minVersion,
+                    max: entry.nexus.maxVersion,
+                  })
+                }}
+              </p>
               <div class="mt-3 flex flex-wrap gap-2">
                 <button
                   v-if="!source.official && !publisherTrusted(entry.publisherKeyId)"
@@ -424,7 +439,9 @@
                 <button
                   type="button"
                   class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                  :disabled="locked || (!source.official && !publisherTrusted(entry.publisherKeyId))"
+                  :disabled="
+                    locked || !entry.compatible || (!source.official && !publisherTrusted(entry.publisherKeyId))
+                  "
                   @click="prepareRemotePackage(source.catalog, entry, source.official)"
                 >
                   {{ $t('agent.settings.plugins.prepareRemote') }}

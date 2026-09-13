@@ -86,7 +86,9 @@
         "addRepository": "リポジトリを追加",
         "trustRemotePublisher": "発行者を信頼",
         "prepareRemote": "パッケージを検証",
-        "removeRepository": "削除"
+        "removeRepository": "削除",
+        "incompatible": "非互換",
+        "compatibilityRequirement": "Plugin SDK {sdk} と Nexus {min}–{max} が必要です。"
       },
       "hardLimits": {
         "title": "Hard Limits",

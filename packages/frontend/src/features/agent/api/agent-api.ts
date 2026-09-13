@@ -194,6 +194,9 @@ export interface RemotePluginPublisher {
 export interface RemotePluginPackageEntry {
   appId: string;
   version: string;
+  sdkVersion: string;
+  nexus: { minVersion: string; maxVersion: string };
+  compatible: boolean;
   displayName: string;
   description: string;
   packageUrl: string;
