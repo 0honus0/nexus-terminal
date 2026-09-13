@@ -21,6 +21,8 @@ docker compose up -d
 
 默认对外 HTTP 端口为 `18111`，可通过 `.env` 中的 `NEXUS_HTTP_PORT` 修改。
 
+Plugin Frontend 与 Frontend SDK 不再使用独立公网 Origin/端口；浏览器统一通过主站同源 `/plugins/...` 与 `/sdk/...` 访问，Frontend Nginx 在 Compose 内部代理到 Backend 的 3002 静态 listener。3002 不发布到宿主机。
+
 ### 可选 Agent Runner
 
 Agent Workspace Runtime 使用独立的 `nexus-agent-runner` 执行平面。Nexus 当前是**单用户应用**，因此 Runner 的职责是管理多个持久 Workspace、共享 Tool Pack 与 Workspace generation，而不是在同一用户内部再构造一层安全沙箱。
@@ -35,7 +37,7 @@ Ubuntu/Debian host 首次启用前，从源码 checkout 执行：
 
 该脚本只安装与 Toolchain Catalog 一致、SHA-256 固定的 `mise 2026.9.5`、Tool Pack 解包工具以及 Workspace Terminal 使用的系统 `script(1)` / `stty`，不编译或安装 Nexus 自定义 native helper。Tool Pack 仍执行版本校验与 Nexus canonical tree digest 校验，并通过 `/opt/nexus/packs/<family>/<version>` 暴露精确版本；多个 Workspace 复用同一份不可变 Tool Pack。
 
-Runner 默认监听 `127.0.0.1:8790`。当 Backend 运行在 Compose 中时，应把宿主 Runner 绑定到 Docker host-gateway 可达的宿主地址，并在 `.env` 设置同一个 `NEXUS_AGENT_RUNNER_TOKEN`；Compose 默认通过 `http://host.docker.internal:8790` 访问。Runner 所有 HTTP 与 WebSocket 控制入口统一要求 `Authorization: Bearer <NEXUS_AGENT_RUNNER_TOKEN>` 和 `X-Nexus-Agent-Protocol: 2026-09-13`；token 至少 32 字符，推荐使用 `openssl rand -hex 32` 生成。该 token 代表对 Runner 的完整控制权，不得写入日志或交给浏览器/Plugin。Runner HTTP 本身不负责 TLS：不要直接暴露到公网；跨主机部署应放在受信私网，或由 TLS 反向代理保护。
+Runner 默认监听 `127.0.0.1:8790`。Runner 是可选增强能力：未配置 `NEXUS_AGENT_RUNNER_URL` 时，Frontend/Backend/guacd 基础栈独立启动，连接管理、SSH/基础命令和诊断能力不依赖 Runner。需要 Runner 时可使用宿主 Runner，或通过 Compose `runner` profile 启用容器 Runner；两种模式都必须在 `.env` 设置同一个 `NEXUS_AGENT_RUNNER_TOKEN`。Runner 所有 HTTP 与 WebSocket 控制入口统一要求 `Authorization: Bearer <NEXUS_AGENT_RUNNER_TOKEN>` 和 `X-Nexus-Agent-Protocol: 2026-09-13`；token 至少 32 字符，推荐使用 `openssl rand -hex 32` 生成。该 token 代表对 Runner 的完整控制权，不得写入日志或交给浏览器/Plugin。Runner HTTP 本身不负责 TLS：不要直接暴露到公网；跨主机部署应放在受信私网，或由 TLS 反向代理保护。
 
 仓库同时提供独立 Runner 镜像发布流程：
 
@@ -44,7 +46,7 @@ ghcr.io/0honus0/nexus-agent-runner:latest
 ghcr.io/0honus0/nexus-agent-runner:dev
 ```
 
-`docker-compose.yml` 已提供**默认整段注释掉**的 `agent-runner` service。需要容器模式时，取消该段注释，并在 `.env` 把 `NEXUS_AGENT_RUNNER_URL` 改为 `http://agent-runner:8790`，同时取消 Backend 对 Runner 的 `depends_on` 注释。独立镜像包含固定版本 `mise`、Tool Pack 解包工具与 `script/stty`；容器入口使用发行版 `tini` 作为 PID 1，只负责转发终止信号并回收 Runner 子进程产生的孤儿/zombie 进程，不参与 Workspace 隔离。HEALTHCHECK 调用 `/v1/availability` 验证 `native + logical` Workspace Runtime。
+`docker-compose.yml` 已提供 `agent-runner` service，但通过 `profiles: [runner]` 保持默认关闭。容器模式可设置 `COMPOSE_PROFILES=runner`（或命令行 `--profile runner`），并把 `NEXUS_AGENT_RUNNER_URL` 设为 `http://agent-runner:8790`。Backend 不对 Runner 建立启动硬依赖；Runner 未就绪时仅增强能力不可用。独立镜像包含固定版本 `mise`、Tool Pack 解包工具与 `script/stty`；容器入口使用发行版 `tini` 作为 PID 1，只负责转发终止信号并回收 Runner 子进程产生的孤儿/zombie 进程，不参与 Workspace 隔离。HEALTHCHECK 调用 `/v1/availability` 验证 `native + logical` Workspace Runtime。
 
 容器 Runner 使用 Docker 默认 capability/seccomp/AppArmor 即可；Compose 示例**不需要** `privileged`、`SYS_ADMIN`、`seccomp=unconfined`、`apparmor=unconfined`、Docker socket 或 nested Docker。这里不要把“容器边界”和“Workspace 边界”混为一谈：容器可以隔离整个 Runner 服务，但容器内多个 Workspace 仍属于同一个 Nexus 用户并共享 Runner 进程权限、内核网络与 Tool Store。
 
@@ -72,7 +74,7 @@ Compose 默认以三个服务运行：
 - `frontend`：Web 静态资源与反向代理入口。
 - `backend`：认证、SSH/SFTP、设置、审计以及内置 RDP/VNC Guacamole runtime。
 - `guacd`：Guacamole 协议代理。
-- `agent-runner`：可选，默认整段注释；启用后使用独立 `nexus-agent-runner` 镜像。
+- `agent-runner`：可选 profile；启用后使用独立 `nexus-agent-runner` 镜像。
 
 `frontend` 与 `backend` 使用同一 Nexus 镜像，镜像层由 Docker 复用；`guacd` 使用独立上游镜像。
 

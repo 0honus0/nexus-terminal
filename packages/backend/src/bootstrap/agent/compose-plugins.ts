@@ -20,7 +20,6 @@ export interface ComposePluginsOptions {
   dataDirectory: string;
   nexusVersion: string;
   publicOrigin?: string;
-  pluginFrontendOrigin?: string;
   registry: AppRegistryService;
   appStates: SqliteAppStateRepository;
   capabilityBroker: AppCapabilityBroker;
@@ -41,7 +40,6 @@ export const composePlugins = ({
   dataDirectory,
   nexusVersion,
   publicOrigin,
-  pluginFrontendOrigin,
   registry,
   appStates,
   capabilityBroker,
@@ -98,7 +96,6 @@ export const composePlugins = ({
     },
     onHostStateCommitted,
     publicOrigin,
-    pluginFrontendOrigin,
   );
 
   return { appStorage, plugins };

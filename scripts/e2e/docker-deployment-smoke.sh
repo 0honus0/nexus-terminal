@@ -88,17 +88,6 @@ server.listen(0, '127.0.0.1', () => {
 });
 NODE
 )"
-plugin_frontend_port="$(node - <<'NODE'
-const net = require('node:net');
-const server = net.createServer();
-server.listen(0, '127.0.0.1', () => {
-  const address = server.address();
-  if (!address || typeof address === 'string') process.exit(1);
-  console.log(address.port);
-  server.close();
-});
-NODE
-)"
 plugin_repository_port="$(node - <<'NODE'
 const net = require('node:net');
 const server = net.createServer();
@@ -240,8 +229,6 @@ set_env NEXUS_IMAGE_REPOSITORY "$image_repository"
 set_env NEXUS_IMAGE_TAG "$image_tag"
 set_env NEXUS_HTTP_PORT "$http_port"
 set_env NEXUS_PUBLIC_ORIGIN "http://127.0.0.1:$http_port"
-set_env NEXUS_PLUGIN_FRONTEND_PORT "$plugin_frontend_port"
-set_env NEXUS_PLUGIN_FRONTEND_ORIGIN "http://127.0.0.1:$plugin_frontend_port"
 set_env NEXUS_IPV6_SUBNET "fd01:ee:${network_hex}::/80"
 set_env NEXUS_IPV6_GATEWAY "fd01:ee:${network_hex}::1"
 set_env NEXUS_AGENT_RUNNER_TOKEN "$runner_token"
@@ -419,27 +406,31 @@ plugin_frontend_body="$workspace/plugin-frontend.body"
 plugin_frontend_ready=0
 for _ in {1..30}; do
   if curl -fsS -D "$plugin_frontend_headers" -o "$plugin_frontend_body" \
-    "http://127.0.0.1:${plugin_frontend_port}/plugins/smoke-static/1/index.html"; then
+    "http://127.0.0.1:${http_port}/plugins/smoke-static/1/index.html"; then
     plugin_frontend_ready=1
     break
   fi
   sleep 1
 done
-[[ "$plugin_frontend_ready" -eq 1 ]] || { echo "Plugin frontend listener did not become ready." >&2; exit 1; }
+[[ "$plugin_frontend_ready" -eq 1 ]] || { echo "Same-origin plugin route did not become ready." >&2; exit 1; }
 grep -Fq 'plugin-static-ok' "$plugin_frontend_body"
 grep -Eqi '^Content-Security-Policy: .*frame-ancestors http://127\.0\.0\.1:' "$plugin_frontend_headers"
 grep -Eqi '^Cache-Control: public, max-age=31536000, immutable' "$plugin_frontend_headers"
 grep -Eqi '^Access-Control-Allow-Origin: \*' "$plugin_frontend_headers"
+if grep -Eqi '^X-Frame-Options: *DENY' "$plugin_frontend_headers"; then
+  echo "Same-origin plugin route inherited X-Frame-Options: DENY." >&2
+  exit 1
+fi
 plugin_sdk_headers="$workspace/plugin-sdk.headers"
 plugin_sdk_body="$workspace/plugin-sdk.body"
 curl -fsS -D "$plugin_sdk_headers" -o "$plugin_sdk_body" \
-  "http://127.0.0.1:${plugin_frontend_port}/sdk/frontend-v1.mjs"
+  "http://127.0.0.1:${http_port}/sdk/frontend-v1.mjs"
 grep -Fq 'connectNexusPlugin' "$plugin_sdk_body"
 grep -Eqi '^Content-Type: application/javascript; charset=utf-8' "$plugin_sdk_headers"
 grep -Eqi '^Cache-Control: public, max-age=31536000, immutable' "$plugin_sdk_headers"
 grep -Eqi '^Access-Control-Allow-Origin: \*' "$plugin_sdk_headers"
-if curl -fsS "http://127.0.0.1:${plugin_frontend_port}/plugins/smoke-static/1/.nexus-package-hash" >/dev/null 2>&1; then
-  echo "Plugin frontend listener exposed a dotfile." >&2
+if curl -fsS "http://127.0.0.1:${http_port}/plugins/smoke-static/1/.nexus-package-hash" >/dev/null 2>&1; then
+  echo "Same-origin plugin route exposed a dotfile." >&2
   exit 1
 fi
 

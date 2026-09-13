@@ -132,7 +132,6 @@ export class PluginInstallService {
     private readonly hooks: PluginInstallHooks = NOOP_PLUGIN_INSTALL_HOOKS,
     private readonly onHostStateCommitted: (userId: number) => void = () => undefined,
     private readonly publicOrigin?: string,
-    private readonly pluginFrontendOrigin?: string,
   ) {}
 
   listPublisherKeys(userId: number): Promise<TrustedPublisherKey[]> {
@@ -550,8 +549,7 @@ export class PluginInstallService {
     }
     const plugin = await this.repository.getVersion(appId, installation.version);
     if (!plugin || plugin.status !== 'installed' || !plugin.frontendEntry) return null;
-    if (!this.publicOrigin || !this.pluginFrontendOrigin) throw new Error('PLUGIN_FRONTEND_ORIGIN_UNAVAILABLE');
-    if (this.pluginFrontendOrigin === this.publicOrigin) throw new Error('PLUGIN_FRONTEND_ORIGIN_NOT_ISOLATED');
+    if (!this.publicOrigin) throw new Error('PLUGIN_FRONTEND_ORIGIN_UNAVAILABLE');
     const relativeEntry = plugin.frontendEntry
       .slice('frontend/'.length)
       .split('/')
@@ -562,7 +560,7 @@ export class PluginInstallService {
       version: plugin.version,
       sdkVersion: plugin.manifest.sdkVersion,
       protocolVersion: PLUGIN_FRONTEND_PROTOCOL_VERSION,
-      url: `${this.pluginFrontendOrigin}/plugins/${encodeURIComponent(appId)}/${encodeURIComponent(plugin.version)}/${relativeEntry}`,
+      url: `${this.publicOrigin}/plugins/${encodeURIComponent(appId)}/${encodeURIComponent(plugin.version)}/${relativeEntry}`,
       sandbox: 'allow-scripts',
       maxMessageBytes: 256_000,
       requestTimeoutMs: 15_000,

@@ -419,7 +419,6 @@ export const createCompositionRoot = (
     nodeEnv: config.nodeEnv,
     e2eResetEnabled: config.e2eResetEnabled,
     publicOrigin: config.agentPublicOrigin,
-    pluginFrontendOrigin: config.agentPluginFrontendOrigin,
     officialPluginSource,
     connectionResolver: createAgentConnectionResolver(connections, sshResolver),
     diagnostics: createAgentDiagnostics(diagnostics),

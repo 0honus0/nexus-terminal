@@ -87,16 +87,10 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     workspaceFilesystem: services.modules.workspaceFilesystem,
   });
   const server = http.createServer(httpApplication);
-  if (config.agentPluginFrontendOrigin && !config.agentPublicOrigin) {
-    throw new Error('PLUGIN_FRONTEND_PUBLIC_ORIGIN_REQUIRED');
-  }
-  if (config.agentPluginFrontendOrigin && config.agentPluginFrontendOrigin === config.agentPublicOrigin) {
-    throw new Error('PLUGIN_FRONTEND_ORIGIN_NOT_ISOLATED');
-  }
-  const pluginFrontendServer = config.agentPluginFrontendOrigin
+  const pluginFrontendServer = config.agentPublicOrigin
     ? createPluginFrontendStaticServer({
         dataDirectory: config.dataDirectory,
-        publicOrigin: config.agentPublicOrigin!,
+        publicOrigin: config.agentPublicOrigin,
       })
     : undefined;
   webSockets = attachWebSocketServer({

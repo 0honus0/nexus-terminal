@@ -112,7 +112,6 @@ export interface ComposeAgentOptions {
   nodeEnv: string;
   e2eResetEnabled: boolean;
   publicOrigin?: string;
-  pluginFrontendOrigin?: string;
   officialPluginSource: OfficialAgentPluginSource;
   connectionResolver: AgentConnectionResolverPort;
   diagnostics: AgentDiagnosticsPort;
@@ -134,7 +133,6 @@ export const composeAgent = ({
   nodeEnv,
   e2eResetEnabled,
   publicOrigin,
-  pluginFrontendOrigin,
   officialPluginSource,
   connectionResolver,
   diagnostics,
@@ -200,7 +198,6 @@ export const composeAgent = ({
     dataDirectory,
     nexusVersion,
     publicOrigin,
-    pluginFrontendOrigin,
     registry,
     appStates,
     capabilityBroker,

@@ -409,6 +409,9 @@ jobs:
       - name: Run standalone Agent Runner container smoke
         run: scripts/e2e/standalone-runner-image-smoke.sh nexus-agent-runner:e2e-smoke
 
+      - name: Run core no-Runner Docker smoke
+        run: scripts/e2e/docker-core-no-runner-smoke.sh nexus-terminal:e2e-smoke
+
       - name: Run Docker deployment smoke
         run: scripts/e2e/docker-deployment-smoke.sh nexus-terminal:e2e-smoke
 
