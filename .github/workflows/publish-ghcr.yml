@@ -27,6 +27,15 @@ on:
           - arm
           - amd
           - all
+      target:
+        description: Image target to publish
+        required: true
+        default: all
+        type: choice
+        options:
+          - nexus
+          - runner
+          - all
       image_tag:
         description: Optional image tag (defaults to sha-<commit>)
         required: false
@@ -53,6 +62,7 @@ jobs:
       channel_tag: ${{ steps.channel.outputs.tag }}
       architecture: ${{ steps.architecture.outputs.value }}
       platforms: ${{ steps.architecture.outputs.platforms }}
+      target: ${{ steps.target.outputs.value }}
 
     steps:
       - name: Select publication source
@@ -204,6 +214,30 @@ jobs:
           echo "value=$architecture" >> "$GITHUB_OUTPUT"
           echo "platforms=$platforms" >> "$GITHUB_OUTPUT"
 
+      - name: Select image target
+        id: target
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_TARGET: ${{ inputs.target }}
+        run: |
+          if [[ "$EVENT_NAME" == "release" ]]; then
+            target="all"
+          else
+            target="${REQUESTED_TARGET:-all}"
+          fi
+
+          case "$target" in
+            nexus|runner|all)
+              ;;
+            *)
+              echo "Unsupported image target: $target" >&2
+              exit 1
+              ;;
+          esac
+
+          echo "value=$target" >> "$GITHUB_OUTPUT"
+
       - name: Validate release versions
         if: github.event_name == 'release'
         shell: bash
@@ -229,6 +263,7 @@ jobs:
   publish:
     name: Publish Unified Image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
     needs: prepare
+    if: needs.prepare.outputs.target == 'nexus' || needs.prepare.outputs.target == 'all'
     runs-on: ubuntu-latest
 
     steps:
@@ -279,6 +314,7 @@ jobs:
   publish-runner:
     name: Publish Agent Runner Image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
     needs: prepare
+    if: needs.prepare.outputs.target == 'runner' || needs.prepare.outputs.target == 'all'
     runs-on: ubuntu-latest
 
     steps:
