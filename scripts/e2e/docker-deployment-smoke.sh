@@ -1512,9 +1512,11 @@ const backendStatus = await ok(
 if (
   backendStatus?.value?.state !== 'active' ||
   backendStatus.value.source !== 'backend' ||
-  backendStatus.value.appId !== 'nexus.fullstack'
+  backendStatus.value.appId !== 'nexus.fullstack' ||
+  backendStatus.value.fileReadDenied !== true ||
+  backendStatus.value.childProcessDenied !== true
 ) {
-  throw new Error(`Sandboxed backend target did not publish activation state: ${JSON.stringify(backendStatus)}`);
+  throw new Error(`Native backend target did not publish bounded-runtime evidence: ${JSON.stringify(backendStatus)}`);
 }
 
 const provider = await ok(
@@ -1696,7 +1698,7 @@ for (let attempt = 0; attempt < 120; attempt += 1) {
   await wait(250);
 }
 await cancelToTerminal(fullStackRun);
-console.log('full-stack plugin smoke: isolated frontend + sandboxed backend + Workspace Runner target ok');
+console.log('full-stack plugin smoke: isolated frontend + native Backend child + Workspace Runner target ok');
 
 let queueRun = await createRun('Docker pending-input smoke');
 const appendQueueInput = async (text) => {

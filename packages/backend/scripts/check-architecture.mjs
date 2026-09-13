@@ -425,6 +425,34 @@ function visitModule(moduleName) {
 }
 for (const moduleName of moduleGraph.keys()) visitModule(moduleName);
 
+const nativeBackendPluginRuntimeFiles = [
+  path.resolve(srcRoot, 'infrastructure/agent/plugins/local-plugin-backend-runtime.adapter.ts'),
+  path.resolve('../..', 'Dockerfile'),
+];
+for (const runtimeFile of nativeBackendPluginRuntimeFiles) {
+  if (!fs.existsSync(runtimeFile)) continue;
+  const text = fs.readFileSync(runtimeFile, 'utf8');
+  if (/\bbwrap\b|bubblewrap/i.test(text)) {
+    failures.push(
+      `${path.relative(path.resolve('../..'), runtimeFile).split(path.sep).join('/')}: Backend Plugin runtime must remain native and may not reintroduce bubblewrap`,
+    );
+  }
+}
+const backendPluginRuntimePath = nativeBackendPluginRuntimeFiles[0];
+if (fs.existsSync(backendPluginRuntimePath)) {
+  const runtimeSource = fs.readFileSync(backendPluginRuntimePath, 'utf8');
+  if (!runtimeSource.includes("'--permission'")) {
+    failures.push(
+      'infrastructure/agent/plugins/local-plugin-backend-runtime.adapter.ts: native Backend Plugin child must enable the Node Permission Model',
+    );
+  }
+  if (runtimeSource.includes('NEXUS_PLUGIN_SANDBOX_BIN')) {
+    failures.push(
+      'infrastructure/agent/plugins/local-plugin-backend-runtime.adapter.ts: legacy sandbox binary override is forbidden',
+    );
+  }
+}
+
 if (failures.length > 0) {
   console.error(failures.join('\n'));
   process.exit(1);

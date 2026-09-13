@@ -1,3 +1,4 @@
+import path from 'node:path';
 import readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
 import type {
@@ -39,6 +40,7 @@ const pluginVersion = process.env.NEXUS_PLUGIN_VERSION?.trim() ?? '';
 const sdkVersion = process.env.NEXUS_PLUGIN_SDK_VERSION?.trim() ?? '';
 const protocolVersion = Number(process.env.NEXUS_PLUGIN_PROTOCOL_VERSION);
 const entry = process.env.NEXUS_PLUGIN_BACKEND_ENTRY?.trim() ?? '';
+const pluginRoot = process.env.NEXUS_PLUGIN_ROOT?.trim() ?? '';
 if (
   !Number.isSafeInteger(userId) ||
   userId < 1 ||
@@ -49,6 +51,8 @@ if (
   !sdkVersion ||
   sdkVersion.length > 128 ||
   /[\0\r\n]/.test(sdkVersion) ||
+  !path.isAbsolute(pluginRoot) ||
+  /[\0\r\n]/.test(pluginRoot) ||
   protocolVersion !== PLUGIN_BACKEND_PROTOCOL_VERSION
 ) {
   throw new Error('PLUGIN_BACKEND_IDENTITY_INVALID');
@@ -106,7 +110,9 @@ const sdk: PluginBackendSdkV1 = Object.freeze({
 const scope = Object.freeze({ userId, appId });
 
 const startRuntime = async (): Promise<void> => {
-  const imported = await import(pathToFileURL(`/plugin/${entry}`).href);
+  const entryPath = path.resolve(pluginRoot, entry);
+  if (!entryPath.startsWith(`${pluginRoot}${path.sep}`)) throw new Error('PLUGIN_BACKEND_ENTRY_INVALID');
+  const imported = await import(pathToFileURL(entryPath).href);
   const candidate = imported.default && typeof imported.default === 'object' ? imported.default : imported;
   const plugin = candidate as PluginBackendModuleV1;
   const activationContext = Object.freeze({

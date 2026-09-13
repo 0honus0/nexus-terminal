@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -181,7 +181,6 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
   constructor(
     private readonly dataDirectory: string,
     private readonly storage: AppStoragePort,
-    private readonly sandboxBinary = process.env.NEXUS_PLUGIN_SANDBOX_BIN?.trim() || 'bwrap',
   ) {}
 
   async reconcileUser(userId: number, targets: readonly PluginBackendRuntimeReconcileTarget[]): Promise<void> {
@@ -272,7 +271,6 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
   }
 
   private start(scope: Scope, plugin: PluginVersionRecord): BackendPluginProcess {
-    if (!this.sandboxAvailable()) throw new Error('PLUGIN_BACKEND_SANDBOX_UNAVAILABLE');
     if (!plugin.backendEntry) throw new Error('PLUGIN_BACKEND_ENTRY_MISSING');
     const pluginRoot = path.resolve(
       this.dataDirectory,
@@ -286,72 +284,21 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
     if (!fs.existsSync(marker) || fs.readFileSync(marker, 'utf8').trim() !== plugin.packageHash) {
       throw new Error('PLUGIN_BACKEND_SOURCE_MISMATCH');
     }
-    const worker = path.join(__dirname, 'plugin-backend-sandbox.worker.js');
-    if (!fs.existsSync(worker)) throw new Error('PLUGIN_BACKEND_SANDBOX_UNAVAILABLE');
-    const systemBindings = ['/bin', '/usr', '/lib', '/sbin', '/etc'].filter((source) => fs.existsSync(source));
-    const args = [
-      '--die-with-parent',
-      '--new-session',
-      '--unshare-user',
-      '--uid',
-      '0',
-      '--gid',
-      '0',
-      '--unshare-pid',
-      '--unshare-ipc',
-      '--unshare-uts',
-      '--unshare-net',
-      ...systemBindings.flatMap((source) => ['--ro-bind', source, source]),
-      '--dir',
-      '/proc',
-      '--dev',
-      '/dev',
-      '--tmpfs',
-      '/tmp',
-      '--dir',
-      '/nexus',
-      '--ro-bind',
-      worker,
-      '/nexus/plugin-backend-sandbox.worker.js',
-      '--dir',
-      '/plugin',
-      '--ro-bind',
-      pluginRoot,
-      '/plugin',
-      '--chdir',
-      '/plugin',
-      '--clearenv',
-      '--setenv',
-      'PATH',
-      '/usr/local/bin:/usr/bin:/bin',
-      '--setenv',
-      'HOME',
-      '/tmp',
-      '--setenv',
-      'NEXUS_PLUGIN_USER_ID',
-      String(scope.userId),
-      '--setenv',
-      'NEXUS_PLUGIN_APP_ID',
-      plugin.appId,
-      '--setenv',
-      'NEXUS_PLUGIN_VERSION',
-      plugin.version,
-      '--setenv',
-      'NEXUS_PLUGIN_SDK_VERSION',
-      plugin.manifest.sdkVersion,
-      '--setenv',
-      'NEXUS_PLUGIN_PROTOCOL_VERSION',
-      String(PLUGIN_BACKEND_PROTOCOL_VERSION),
-      '--setenv',
-      'NEXUS_PLUGIN_BACKEND_ENTRY',
-      plugin.backendEntry,
-      '--',
-      process.execPath,
-      '/nexus/plugin-backend-sandbox.worker.js',
-    ];
-    const child = spawn(this.sandboxBinary, args, {
+    const worker = path.join(__dirname, 'plugin-backend-runtime.worker.js');
+    if (!fs.existsSync(worker)) throw new Error('PLUGIN_BACKEND_RUNTIME_UNAVAILABLE');
+    const args = ['--permission', `--allow-fs-read=${pluginRoot}`, `--allow-fs-read=${worker}`, worker];
+    const child = spawn(process.execPath, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin' },
+      cwd: pluginRoot,
+      env: {
+        NEXUS_PLUGIN_USER_ID: String(scope.userId),
+        NEXUS_PLUGIN_APP_ID: plugin.appId,
+        NEXUS_PLUGIN_VERSION: plugin.version,
+        NEXUS_PLUGIN_SDK_VERSION: plugin.manifest.sdkVersion,
+        NEXUS_PLUGIN_PROTOCOL_VERSION: String(PLUGIN_BACKEND_PROTOCOL_VERSION),
+        NEXUS_PLUGIN_BACKEND_ENTRY: plugin.backendEntry,
+        NEXUS_PLUGIN_ROOT: pluginRoot,
+      },
     });
     return new BackendPluginProcess(
       child,
@@ -359,11 +306,6 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
       this.storage,
       plugin.manifest.sdkVersion,
     );
-  }
-
-  private sandboxAvailable(): boolean {
-    const result = spawnSync(this.sandboxBinary, ['--version'], { stdio: 'ignore', timeout: 2_000 });
-    return !result.error && result.status === 0;
   }
 
   private instanceKey(scope: Scope, plugin: PluginVersionRecord): string {

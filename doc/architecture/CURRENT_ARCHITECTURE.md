@@ -141,7 +141,7 @@ packages/frontend/src/features/agent/
 └─ plugin-sdk/       Custom Plugin Frontend MessagePort bridge/SDK dispatcher
 ```
 
-`nexus.agent` 是默认 first-party installable Plugin App，不是 compile-time built-in。它复用 Host Agent surface，只注册一个通用 `agent.default` AgentDefinition，并在同一签名包内提供 `nexus.operations` / `nexus.developer` 两个 Skill，因此 Operations / Developer 不再产生两个重复 App shell。`nexus.fullstack` 是独立 first-party target reference App，显式覆盖 isolated frontend、sandboxed backend 和 Workspace Runner target。Agent 初次启用时 Host 通过 pin 住官方 publisher 身份的 catalog 推荐 `nexus.agent`，用户确认后按正常 Plugin lifecycle 安装/授权/启用。单用户 Host 仍可同时持有多个不同 `appId` 的安装式 Plugin；同一 `appId` 的版本变化走 upgrade/drain。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
+`nexus.agent` 是默认 first-party installable Plugin App，不是 compile-time built-in。它复用 Host Agent surface，只注册一个通用 `agent.default` AgentDefinition，并在同一签名包内提供 `nexus.operations` / `nexus.developer` 两个 Skill，因此 Operations / Developer 不再产生两个重复 App shell。`nexus.fullstack` 是独立 first-party target reference App，显式覆盖 isolated frontend、native Backend child 和 Workspace Runner target。Agent 初次启用时 Host 通过 pin 住官方 publisher 身份的 catalog 推荐 `nexus.agent`，用户确认后按正常 Plugin lifecycle 安装/授权/启用。单用户 Host 仍可同时持有多个不同 `appId` 的安装式 Plugin；同一 `appId` 的版本变化走 upgrade/drain。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
 
 Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/plugin-sdk/public` 子域依赖，并继续禁止 feature 反向依赖 Workspace runtime。
 
@@ -182,7 +182,7 @@ Plugin manifest 只有三个代码运行 target：
 
 ```text
 frontend  → isolated browser origin / iframe，拥有完整 Custom App Surface
-backend   → Backend-owned process sandbox
+backend   → Backend-owned native child process / bounded SDK
 runner    → Workspace-generation-scoped native Runner Plugin process
 ```
 
@@ -242,7 +242,7 @@ inspect
 
 硬 deny 不能被 Approval 覆盖；Approval 绑定 canonical operation hash；未知远端结果不能因为 lease 超时就自动重放。Workspace typed mutation 与 Agent 共用资源冲突/MutationGuard 原语，但仍保留各自 runtime owner。
 
-Secrets 不进入浏览器 view、Artifact、Plugin activation plain payload 或日志。动态 Backend Plugin 仍由 Backend-owned process sandbox 执行；Runner Plugin 属于单用户 native Runner trust model，必须可停止、协议有界；Plugin workspace store 只提供逻辑目录与路径安全，不再维护无法形成 OS 隔离的跨 Plugin ACL。
+Secrets 不进入浏览器 view、Artifact、Plugin activation plain payload 或日志。动态 Backend Plugin 在 Nexus Backend 之外的 native child process 中执行，并由 bounded SDK + Node Permission Model 限制文件/进程权限；它不宣称提供 OS namespace/network sandbox。Runner Plugin 属于单用户 native Runner trust model，必须可停止、协议有界；Plugin workspace store 只提供逻辑目录与路径安全，不再维护无法形成 OS 隔离的跨 Plugin ACL。
 
 ## 10. 当前 Agent capability 接线状态
 
@@ -254,7 +254,7 @@ Agent 的详细当前架构统一见 [`../AGENT.md`](../AGENT.md)。当前 produ
 - MCP tool catalog；
 - ACP live stream、Browser tunnel/CDP gateway、Workspace local direct PTY Terminal；
 - Subagent durable mailbox/shared facts/work queue 与 reviewed Memory；
-- signed installable Plugin、versioned AgentDefinition、isolated Frontend/Backend target 与 native Runner target；
+- signed installable Plugin、versioned AgentDefinition、isolated Frontend target、native Backend child target 与 native Runner target；
 - Frontend/Backend/Runner 结构化诊断日志。
 
 已经交付并进入当前合同的交互包括 durable Goal text/revision、`/goal`/`/plan`/`/interrupt`/`/queue`/`/stop`/`/help` slash-command dispatch、`//` literal escape、durable pending-input queue inspection + versioned remove/reorder，以及真正的 Next Run Environment selector。Environment 在 Run create 时由 Backend 对 Runner Catalog + Agent settings 做 CAS/解析并冻结到 `RunDefinition.environment`；Workspace create 只能消费该 snapshot。
