@@ -20,7 +20,7 @@
 
 <template>
   <div class="flex min-w-0 items-center gap-1.5">
-    <label v-if="showSearch" class="relative hidden md:block">
+    <label v-if="showSearch" class="agent-app-search relative">
       <span class="sr-only">{{ $t('agent.hub.searchApps') }}</span>
       <i
         class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-[7px] text-text-secondary"
@@ -52,3 +52,15 @@
     </div>
   </div>
 </template>
+
+<style scoped>
+  .agent-app-search {
+    display: block;
+  }
+
+  @container agent-hub-window (max-width: 900px) {
+    .agent-app-search {
+      display: none;
+    }
+  }
+</style>

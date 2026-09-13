@@ -70,10 +70,17 @@
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
   const loadRemoteCatalogs = async (): Promise<void> => {
+    const repositories = configuredRepositories.value;
     const results = await Promise.allSettled(
-      configuredRepositories.value.map((repository) => agentApi.remotePluginCatalog(repository.url)),
+      repositories.map((repository) => agentApi.remotePluginCatalog(repository.url)),
     );
     remoteCatalogs.value = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
+    const failures = results.flatMap((result, index) =>
+      result.status === 'rejected'
+        ? [`${repositories[index]?.url ?? t('agent.settings.plugins.remoteRepositories')}: ${explain(result.reason)}`]
+        : [],
+    );
+    if (failures.length > 0) error.value = failures.join(' · ');
   };
 
   const refresh = async (): Promise<void> => {

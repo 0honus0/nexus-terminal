@@ -123,11 +123,31 @@ Hub 是非模态 floating window，支持：
 
 窗口 presentation state 只由 root Host 持有。页面组件不得复制一份 Hub/Thread/Run store。
 
+### 3.3 当前 UI / 交互审计基线
+
+当前 Host-owned Agent UI 按“全局窗口 → App → Thread → Conversation/Run”四层组织，审核时应以以下行为为准：
+
+- **Launcher**：认证后被动出现，不自动打开 Hub、不抢焦点；feature disabled 时隐藏，但 Agent Settings/历史/审计数据不因此删除。
+- **Window chrome**：标题区展示全局 activity count、App selector、Conversation/Files view、pending approval 提示以及 minimize/maximize/close。多 App 时，宽窗口额外显示带 health/running/approval/budget 状态的 App activity strip；selector 是始终可达的主切换入口，App 数量超过 5 时才显示搜索。
+- **App 切换**：`AgentAppSwitcher -> AgentHubWindow.switchApp -> agentSurfaceSession.activateApp -> agentWindowManager.switchApp`。离开 App 前暂停 detail presentation；每个 App 的当前 Thread、draft、Next Run model 等 view state 独立保留，不把这些临时状态写回 Run truth。
+- **Agent surface**：宽窗口固定为 `224px Threads / Conversation / 280px TaskRail`；Conversation header 负责 Thread/Run status 和历史 Run，Run Configuration bar 负责 Model / Environment / Targets；正文只渲染 Ledger/streaming projection，右侧 TaskRail 聚合当前与后台 Run、Approval/Budget；更深的 checkpoint/subagent/approval/Workspace 信息进入 `TaskDetailDrawer`。
+- **响应式**：`AgentHubWindow` 自身是 named container。`<=1180px` 收起 model meta，`<=1040px` 隐藏 TaskRail，`<=880px` 隐藏 Run history select，`<=760px` Threads 变 overlay drawer 且 Run Configuration 可换行；Hub chrome 在 `<=900px` 收起非关键 badge/App search，在 `<=700px` 进一步隐藏 title/nav label/activity strip。不得用浏览器 viewport breakpoint 替代上述窗口容器规则。
+- **Next Run / Active Run**：没有活动 Run 时 Model/Targets 是下一次执行选择；Run 创建后 Model/Targets 改为 frozen snapshot 并显示 lock。Environment 当前只显示有效 Workspace Runtime defaults/availability，不伪装成已冻结的 RunDefinition 字段。
+- **审批/预算**：高风险操作不在聊天气泡里“假通过”。顶部 badge、TaskRail 和 Run detail 都投影同一后端 Approval/Run 状态；窄窗口即使 TaskRail 被隐藏，也必须仍能从 Run header/detail 进入处理。
+- **Files**：Artifact Library 是 Hub 的一级 view，不复制为每个 App 自己的文件浏览器；Picker/Artifact ref 仍按 App/Run scope 进入 Conversation。
+- **Custom Frontend**：声明 `targets.frontend` 的 Plugin iframe 接管 App content area，但不接管 Nexus window chrome、App switching、认证或权限 UI；无 Frontend target 的 AgentDefinition App 直接复用 Host surface。
+- **异步状态**：loading、error、reconciliation-required、running/awaiting approval/budget/terminal status 都有明确视觉状态；不得仅靠 toast 表达 durable Run truth。
+- **可访问性**：主要 action/select/input 使用可访问名称，窄屏 drawer 有 backdrop/close 语义，`prefers-reduced-motion` 禁用 drawer 动画。窗口 move/resize 仍以 pointer 为主，后续若扩展完整键盘窗口管理，应继续由 `window-manager` 统一实现，不能在各 App 内分叉。
+
+当前多插件体验采用“一套 Host chrome + 多个 App surface”的方式，而不是为每个 Plugin 打开独立窗口。这样可以同时安装多个 Plugin，并通过 App selector/activity strip 切换，同时保持各 App 的 Thread/draft/Run presentation state 独立。
+
 ## 4. App、Thread、Run 与 Ledger
 
 ### 4.1 App
 
-App 由 manifest / registry 注册。`userId + appId` 是服务端推导的授权作用域；浏览器不能覆盖 owner。
+App 由 manifest / registry 注册。Nexus 产品当前只有一个管理员用户；`userId + appId` 仍作为服务端推导的 owner/scope key，目的是让现有持久化、授权和事件边界保持显式，而不是表示多租户产品模型。浏览器不能覆盖 owner。
+
+同一用户可以同时安装多个不同 `appId` 的 Agent Plugin；`agent_plugin_installations` 以 `(user_id, app_id)` 为主键，因此语义是“每个 App 一条当前安装记录 / 多个 App 可并存”，不是“全局只能装一个 Plugin”。同一 `appId` 的新版本走 upgrade/drain，不通过第二条 installation 伪装并存版本。
 
 插件可以贡献：
 
@@ -689,7 +709,9 @@ Runner plugin 通过独立 Runner protocol/lifecycle 执行。
 
 第一方可分发插件源和签名发布流程由独立仓库 `0honus0/nexus-agent-plugins` 持有。
 
-当前首个 `nexus.developer` 是刻意保持最小的 Host-surface App：只贡献 `AgentDefinition + Skill`，不为了形式补空的 Frontend/Backend/Runner target。需要完全不同产品体验的 App（例如多角色/角色卡应用）再声明 Frontend target 并使用 Custom App Surface + Plugin Frontend SDK。
+当前首个 `nexus.developer`（manifest `1.1.0`）是刻意保持最小的 Host-surface App：只贡献 `AgentDefinition + Skill`，不为了形式补空的 Frontend/Backend/Runner target。它声明 Developer 工作流真正需要的 Nexus capabilities，由安装后的 App grant/policy 再决定实际可调用范围；Skill 明确要求优先 Workspace Runtime、Runner 不可用时不得静默落到 Backend host、Browser 只走受控 Browser capability。需要完全不同产品体验的 App（例如多角色/角色卡应用）再声明 Frontend target 并使用 Custom App Surface + Plugin Frontend SDK。
+
+第一方插件仓的 `pnpm run check` 是源码/manifest 基线检查；发布产物由 `build-package.mjs` / `build-release.mjs` 生成 Ed25519 签名 tar + catalog。仓库要求 Node `>=24`，发布/CI 证据必须以标准 Node 24 workflow 为准，不能把低版本开发机的 engine warning 当成发布结果。
 
 Nexus Terminal 主仓只持有：
 
@@ -847,6 +869,8 @@ Agent 用户可达行为必须由 production-style E2E 验收，不以 unit test
 - runtime cleanup scope；
 - Run deletion Workspace guard；
 - global floating Agent across routes；
+- signed Plugin install/upgrade/custom surface 与**多个不同 `appId` 安装式 Plugin 同时并存**；
+- Developer preset 真实 Run、App switching、窄窗审批、checkpoint、Artifact 与功能截图；
 - Agent functional Playwright scenarios；
 - functional screenshot verifier。
 

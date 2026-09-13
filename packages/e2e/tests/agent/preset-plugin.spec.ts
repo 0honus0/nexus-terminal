@@ -425,6 +425,61 @@ test('frontend target owns a full Custom App Surface and connects through the is
   const installed = await request.post('/api/v1/agent/plugins/install', { headers, data: { stageId } });
   expect(installed.status(), await installed.text()).toBe(201);
   await expect(installed.json()).resolves.toMatchObject({ data: { app: { surface: 'custom' } } });
+
+  await step('multiple installable Agent plugins coexist under the single-user Host', async () => {
+    const developerPackage = catalog.data.packages.find((candidate) => candidate.appId === 'nexus.developer');
+    expect(developerPackage).toMatchObject({ version: '1.1.0', publisherKeyId: publisher!.keyId });
+    const developerStage = await request.post('/api/v1/agent/plugins/remote/stage', {
+      headers,
+      data: { repositoryUrl, appId: 'nexus.developer', version: '1.1.0' },
+    });
+    expect(developerStage.status(), await developerStage.text()).toBe(201);
+    const developerStageId = ((await developerStage.json()) as Envelope<{ id: string }>).data.id;
+    const developerVerified = await request.post('/api/v1/agent/plugins/verify', {
+      headers,
+      data: { stageId: developerStageId },
+    });
+    expect(developerVerified.ok(), await developerVerified.text()).toBeTruthy();
+    const developerInstalled = await request.post('/api/v1/agent/plugins/install', {
+      headers,
+      data: { stageId: developerStageId },
+    });
+    expect(developerInstalled.status(), await developerInstalled.text()).toBe(201);
+
+    const installationsResponse = await request.get('/api/v1/agent/plugins/installations');
+    expect(installationsResponse.ok(), await installationsResponse.text()).toBeTruthy();
+    const installations = (await installationsResponse.json()) as Envelope<
+      Array<{ appId: string; version: string; status: string }>
+    >;
+    expect(installations.data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ appId: 'nexus.custom-surface', version: '1.0.0', status: 'installed' }),
+        expect.objectContaining({ appId: 'nexus.developer', version: '1.1.0', status: 'installed' }),
+      ]),
+    );
+
+    const appsResponse = await request.get('/api/v1/agent/apps');
+    expect(appsResponse.ok(), await appsResponse.text()).toBeTruthy();
+    const apps = ((await appsResponse.json()) as Envelope<AppSummary[]>).data;
+    expect(apps.map((candidate) => candidate.id)).toEqual(
+      expect.arrayContaining(['nexus.custom-surface', 'nexus.developer']),
+    );
+  });
+
+  await step('the Agent settings UI shows both installed plugins', async () => {
+    await page.goto('/settings');
+    await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+    const panel = page.locator('#settings-panel-agent');
+    const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
+    await pluginsHeading.scrollIntoViewIfNeeded();
+    const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
+    await expect(pluginsSection.getByText('nexus.custom-surface', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('nexus.developer', { exact: true })).toBeVisible();
+    await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
+      viewport: { width: 1440, height: 900 },
+    });
+  });
+
   const app = await appSummary(request, 'nexus.custom-surface');
   const enabled = await request.patch('/api/v1/agent/apps/nexus.custom-surface', {
     headers,

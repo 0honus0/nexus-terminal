@@ -139,7 +139,7 @@ packages/frontend/src/features/agent/
 └─ apps/operations/  built-in Operations App contribution
 ```
 
-当前只有 `nexus.operations` 一个 built-in App，Host 可以显式组合。新增第二个 built-in Agent App 前先建立明确的 contribution registry；安装式 App 没有 Frontend target 时复用 Host Agent surface；声明 Frontend target 时，该独立 origin + sandboxed iframe 拥有完整 Custom App Surface。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
+当前只有 `nexus.operations` 一个 built-in App，Host 可以显式组合。新增第二个 built-in Agent App 前先建立明确的 contribution registry；安装式 App 没有 Frontend target 时复用 Host Agent surface；声明 Frontend target 时，该独立 origin + sandboxed iframe 拥有完整 Custom App Surface。单用户 Host 可以同时持有多个不同 `appId` 的安装式 Plugin，App selector/activity strip 在同一 Hub 内切换，各 App presentation state 相互独立；同一 `appId` 的版本变化走 upgrade/drain。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
 
 Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/apps/operations/public` 子域依赖，并继续禁止 feature 反向依赖 Workspace runtime。
 
@@ -255,7 +255,80 @@ Agent 的详细当前架构统一见 [`../AGENT.md`](../AGENT.md)。当前 produ
 - signed installable Plugin、versioned AgentDefinition、isolated Frontend/Backend target 与 native Runner target；
 - Frontend/Backend/Runner 结构化诊断日志。
 
-仍未交付的产品合同必须明确标记为 roadmap，而不能靠前端制造状态：用户可编辑 durable Goal 文本和 slash-command、用户可见 pending-input queue，以及冻结进 RunDefinition 的 Next Run Environment selector。
+已经交付并进入当前合同的交互包括 durable Goal text/revision、`/goal`/`/plan`/`/interrupt`/`/queue`/`/stop`/`/help` slash-command dispatch、`//` literal escape，以及用户可见的 durable pending-input queue inspection。仍未交付且必须继续标记为 roadmap 的是 pending-input remove/reorder mutation，以及真正冻结进 RunDefinition / Workspace profile 的 Next Run Environment selector；Frontend 当前只能展示只读 Environment defaults/availability。
+
+### 10.1 关键模块依赖与函数调用链（审计入口）
+
+Bootstrap 是唯一允许把具体 Infrastructure adapter 注入 Module 的地方。当前 Agent 关键依赖可压缩为：
+
+```text
+createAgentServices / compose-agent
+  ├─ Host: AppLifecycleService + PluginService + AppStorage + Integrations
+  ├─ AI: ProviderService + Conversation/Context/Artifact/Memory
+  ├─ Capability: ToolCatalog + CapabilityBroker + Policy/Approval/Lease
+  ├─ Runtime: RunService + StateCommit + AgentScheduler + SubagentScheduler
+  ├─ Workspace Runtime: WorkspaceRuntimeService/Gateway + Runner adapter
+  └─ Operations contribution: AgentDefinition + concrete governed tools
+```
+
+用户从 Host surface 发起一次 Run 的主链路：
+
+```text
+AgentConversation @send
+  → AgentAppSurface.send/createNewRun
+  → run-facade
+  → agentApi.createRun / appendRunInput / interruptRun / setRunGoal
+  → POST /api/v1/agent/apps/:appId/runs...
+  → app-runtime.routes parse + auth/CSRF/idempotency/version check
+  → AgentRunFacade
+  → RunService
+  → RunCommandCommitPort (StateCommit durable transaction)
+  → compose-agent callbacks
+      create/reschedule → AgentScheduler.enqueue
+      appended input    → AgentScheduler.signalInput
+      goal update       → AgentScheduler.signalInput(..., GOAL_UPDATED)
+      cancel            → AgentScheduler.cancel + SubagentScheduler.cancel
+  → AgentScheduler / model step loop
+  → Context/Provider/LanguageModel
+  → ToolCallRunner when a tool is requested
+  → CapabilityBroker → policy → approval → lease/MutationGuard → concrete capability adapter
+  → StateCommit + EventHub
+  → /ws/agent wake/event cursor
+  → Frontend refreshes durable Run/Ledger/Approval projection
+```
+
+这条链里 `RunService` 不直接执行模型或真实机器副作用，`StateCommit` 不替 Scheduler 做模型循环，Frontend 也不直接改 Run 状态；三者分别负责 command validation/orchestration、durable mutation authority、presentation。
+
+Workspace Runtime 的执行链是另一条明确边界：
+
+```text
+Agent tool workspace_execute_argv
+  → Operations workspace tool inspect/normalize
+  → ToolCallRunner governed mutation pipeline
+  → WorkspaceRuntimeGatewayPort
+  → Backend Runner adapter
+  → authenticated /v1 Runner controller request
+  → WorkspaceRuntimeEngine / generation
+  → bounded argv child process
+  → job result/evidence
+  → Agent tool result → StateCommit/Ledger
+```
+
+Plugin 安装链：
+
+```text
+PluginManagementSettings
+  → agentApi remote stage/upload stage
+  → verifyPlugin (manifest/files/hash/signature/path/size)
+  → installPlugin / upgradePlugin
+  → Plugin facade/service
+  → immutable version store + installation row + App registry/lifecycle
+  → optional frontend/backend/runner target activation
+  → Host summary/event update
+  → AgentAppSwitcher / Host surface sees the installed App
+```
+
+多 Plugin 的关键数据语义是 `agent_plugin_installations PRIMARY KEY(user_id, app_id)`：当前单管理员用户可以拥有多条不同 `app_id` 安装记录；`user_id` 继续作为 owner/scope key，并不表示 Nexus 已变成多租户产品。
 
 ## 11. 当前验证状态
 
