@@ -7,12 +7,10 @@
     "tests/agent/preset-plugin.spec.ts",
     "tests/agent/provider.spec.ts",
     "tests/auth/setup-login.spec.ts",
-    "tests/ui/captcha-settings.spec.ts",
-    "tests/ui/change-password.spec.ts",
-    "tests/ui/ip-blacklist-settings.spec.ts",
-    "tests/ui/ip-whitelist-settings.spec.ts",
-    "tests/ui/protected-navigation.spec.ts",
-    "tests/ui/ssh-key-management.spec.ts",
-    "tests/ssh/progress-display-baseline.spec.ts"
+    "tests/ssh/progress-display-baseline.spec.ts",
+    "tests/ssh/docker-manager-ui.spec.ts",
+    "tests/ssh/protocol.spec.ts",
+    "tests/ssh/status-docker-protocol.spec.ts",
+    "tests/ssh/upload-protocol.spec.ts"
   ]
 }
