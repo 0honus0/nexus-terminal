@@ -227,7 +227,7 @@ jobs:
           done
 
   publish:
-    name: Publish unified image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
+    name: Publish Unified Image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
     needs: prepare
     runs-on: ubuntu-latest
 
@@ -277,7 +277,7 @@ jobs:
 
   # Agent Runner 使用独立镜像发布，tag 与主镜像保持一致，便于 Compose/宿主部署锁定同一版本。
   publish-runner:
-    name: Publish Agent Runner image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
+    name: Publish Agent Runner Image (${{ needs.prepare.outputs.channel }}, ${{ needs.prepare.outputs.architecture }})
     needs: prepare
     runs-on: ubuntu-latest
 
