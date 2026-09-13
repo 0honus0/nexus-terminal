@@ -1380,8 +1380,10 @@ cookie="$(awk 'BEGIN { first=1 } (!/^#/ || /^#HttpOnly_/) && NF >= 7 { if (!firs
 # Destructive Agent lifecycle smoke through the real authenticated HTTP API and host Runner.
 # This fixes two regressions that static architecture checks cannot observe: Run deletion must
 # refuse attached Workspaces, and runtime-cleanup confirmation must not expand after preview.
-COOKIE="$cookie" PORT="$http_port" PLUGIN_REPOSITORY_PORT="$plugin_repository_port" node <<'NODE'
+COOKIE="$cookie" PORT="$http_port" PLUGIN_REPOSITORY_PORT="$plugin_repository_port" DATA_DIR="$data_dir" node <<'NODE'
 const { randomUUID } = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
 const port = Number(process.env.PORT);
 const pluginRepositoryPort = Number(process.env.PLUGIN_REPOSITORY_PORT);
 const baseUrl = `http://127.0.0.1:${port}`;
@@ -1488,6 +1490,14 @@ if (
   throw new Error(`Full-stack target entries were not verified: ${JSON.stringify(fullStackVerified.plugin)}`);
 }
 await ok('POST', '/api/v1/agent/plugins/install', { stageId: fullStackStage.id }, mutationHeaders, 201);
+if (fullStackVerified.plugin.packageHash !== fullStackPackage.sha256) {
+  throw new Error(`Full-stack verified package hash drifted from catalog: ${fullStackVerified.plugin.packageHash} != ${fullStackPackage.sha256}`);
+}
+const fullStackMarkerPath = path.join(process.env.DATA_DIR, 'agent', 'plugins', 'nexus.fullstack', 'versions', '1.0.0', '.nexus-package-hash');
+const fullStackMarkerHash = fs.readFileSync(fullStackMarkerPath, 'utf8').trim();
+if (fullStackMarkerHash !== fullStackVerified.plugin.packageHash) {
+  throw new Error(`Full-stack shared plugin marker drifted from verified package: ${fullStackMarkerHash} != ${fullStackVerified.plugin.packageHash}`);
+}
 let fullStackGrants = await ok('GET', '/api/v1/agent/apps/nexus.fullstack/grants');
 fullStackGrants = await ok(
   'PUT',
@@ -1669,6 +1679,10 @@ const createReadyWorkspace = async (run, title) => {
 };
 
 const fullStackRun = await createRun('Docker full-stack Runner target smoke', ['nexus.fullstack']);
+const frozenFullStackTarget = fullStackRun.definition?.environment?.runnerPlugins?.find((target) => target.pluginId === 'nexus.fullstack');
+if (!frozenFullStackTarget || frozenFullStackTarget.packageHash !== fullStackVerified.plugin.packageHash) {
+  throw new Error(`Full-stack frozen Runner target hash drifted from installed package: ${JSON.stringify(frozenFullStackTarget)}`);
+}
 let fullStackWorkspace = await createReadyWorkspace(fullStackRun, 'Full-stack Runner target');
 const startedFullStackWorkspaceCommand = await ok(
   'POST',
