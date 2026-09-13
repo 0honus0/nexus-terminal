@@ -4,7 +4,8 @@ ARG E2E_RUNNER_FINGERPRINT
 ARG PLAYWRIGHT_VERSION=1.63.0
 ARG PNPM_VERSION=11.26.0
 ENV DEBIAN_FRONTEND=noninteractive \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    COREPACK_HOME=/corepack
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
