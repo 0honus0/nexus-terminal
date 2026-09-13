@@ -21,6 +21,7 @@ const MAX_MANIFEST_BYTES = 64 * 1024;
 const MAX_FILE_LIST_BYTES = 1024 * 1024;
 const CONTROL_FILES = new Set(['manifest.json', 'files.json', 'signature.ed25519']);
 const SIGNATURE_DOMAIN = Buffer.from('NEXUS_AGENT_PLUGIN_V1\0', 'utf8');
+const INSTALLED_PLUGIN_PARENT_MODE = 0o711;
 
 interface SignedFileList {
   schemaVersion: 1;
@@ -149,10 +150,16 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
   private readonly unverifiedStagingRoot: string;
 
   constructor(dataDirectory: string) {
-    this.pluginsRoot = path.join(dataDirectory, 'agent', 'plugins');
+    const agentRoot = path.join(dataDirectory, 'agent');
+    this.pluginsRoot = path.join(agentRoot, 'plugins');
     this.unverifiedStagingRoot = path.join(this.pluginsRoot, '.staging');
-    fs.mkdirSync(this.pluginsRoot, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(this.pluginsRoot, { recursive: true, mode: INSTALLED_PLUGIN_PARENT_MODE });
+    // Installed immutable versions are read by an external/standalone Runner through a read-only mount.
+    // Shared parents are traverse-only for non-owners; private siblings and unverified staging keep 0700.
+    fs.chmodSync(agentRoot, INSTALLED_PLUGIN_PARENT_MODE);
+    fs.chmodSync(this.pluginsRoot, INSTALLED_PLUGIN_PARENT_MODE);
     fs.mkdirSync(this.unverifiedStagingRoot, { recursive: true, mode: 0o700 });
+    fs.chmodSync(this.unverifiedStagingRoot, 0o700);
   }
 
   async normalizePublisherKey(publicKeyPem: string): Promise<PublisherKeyInfo> {
@@ -387,7 +394,10 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
     const appRoot = path.join(this.pluginsRoot, safeAppId);
     const versionsRoot = path.join(appRoot, 'versions');
     const target = path.join(versionsRoot, safeVersion);
-    fs.mkdirSync(versionsRoot, { recursive: true, mode: 0o700 });
+    fs.mkdirSync(appRoot, { recursive: true, mode: INSTALLED_PLUGIN_PARENT_MODE });
+    fs.chmodSync(appRoot, INSTALLED_PLUGIN_PARENT_MODE);
+    fs.mkdirSync(versionsRoot, { recursive: true, mode: INSTALLED_PLUGIN_PARENT_MODE });
+    fs.chmodSync(versionsRoot, INSTALLED_PLUGIN_PARENT_MODE);
     if (fs.existsSync(target)) {
       const marker = path.join(target, '.nexus-package-hash');
       if (fs.existsSync(marker) && fs.readFileSync(marker, 'utf8').trim() === verified.packageHash) return;

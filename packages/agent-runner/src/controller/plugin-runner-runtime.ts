@@ -228,9 +228,13 @@ export class PluginRunnerRuntime {
     this.validateTarget(target);
     const source = path.join(this.pluginSourceRoot, this.safe(target.pluginId), 'versions', target.version);
     const marker = path.join(source, '.nexus-package-hash');
-    if (!fs.existsSync(marker) || fs.readFileSync(marker, 'utf8').trim() !== target.packageHash) {
-      throw new Error('PLUGIN_RUNNER_SOURCE_MISMATCH');
+    let observedPackageHash: string;
+    try {
+      observedPackageHash = fs.readFileSync(marker, 'utf8').trim();
+    } catch {
+      throw new Error('PLUGIN_RUNNER_SOURCE_UNAVAILABLE');
     }
+    if (observedPackageHash !== target.packageHash) throw new Error('PLUGIN_RUNNER_SOURCE_MISMATCH');
     const pluginWorkspaceRoot = this.workspaces.ensure(workspace.workspaceId, workspace.generation, target.pluginId);
     const worker = path.resolve(__dirname, '../worker/plugin-runner.worker.js');
     if (!fs.existsSync(worker)) throw new Error('PLUGIN_RUNNER_RUNTIME_UNAVAILABLE');
