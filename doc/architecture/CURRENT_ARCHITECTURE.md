@@ -281,7 +281,7 @@ AgentConversation @send
   → AgentAppSurface.send/createNewRun
   → run-facade
   → agentApi.createRun / appendRunInput / interruptRun / setRunGoal
-  → POST /api/v1/agent/apps/:appId/runs...
+  → POST /api/v1/apps/:appId/runs...
   → app-runtime.routes parse + auth/CSRF/idempotency/version check
   → AgentRunFacade
   → RunService
