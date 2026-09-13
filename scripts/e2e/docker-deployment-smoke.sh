@@ -690,7 +690,7 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
 // agent requests a sensitive permission and refuses to finish unless Nexus selects reject_once.
 {
   const { AcpAdapter } = await import('/app/dist/infrastructure/agent/integrations/acp.adapter.js');
-  const { createAcpExecuteTool } = await import('/app/dist/modules/agent/capabilities/tools/acp-tools.js');
+  const { createAcpExecuteTool } = await import('/app/dist/modules/agent/tools/host/acp-tools.js');
   const { NodeCryptoHashAdapter } = await import('/app/dist/infrastructure/agent/capabilities/node-crypto-hash.adapter.js');
   const integrationId = randomUUID();
   const integration = {
