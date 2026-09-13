@@ -48,7 +48,7 @@ export class InstalledPluginSkillSourceAdapter implements PluginSkillSourcePort 
       skillFiles.length > MAX_SKILL_FILES ||
       skillFiles.some((item) => typeof item !== 'string')
     ) {
-      throw new Error('PLUGIN_SKILL_INDEX_INVALID');
+      throw new Error('PLUGIN_SKILL_FILE_LIST_INVALID');
     }
     const manifest = JSON.parse(plugin.manifest_json) as AgentAppManifest;
     const root = path.join(

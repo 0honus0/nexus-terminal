@@ -71,6 +71,7 @@ export const pluginErrorRules: readonly AgentErrorRule[] = [
       'PLUGIN_RESOURCE_MISSING',
       'PLUGIN_UI_ENTRY_INVALID',
       'PLUGIN_BACKEND_ENTRY_INVALID',
+      'PLUGIN_SKILL_LAYOUT_INVALID',
       'PLUGIN_TOO_MANY_SKILLS',
       'PLUGIN_APP_ID_RESERVED',
       'PLUGIN_APP_ID_MISMATCH',

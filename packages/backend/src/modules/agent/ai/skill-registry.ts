@@ -4,9 +4,12 @@ import { AGENT_CAPABILITIES, type AgentCapability } from '../host/app.types';
 import type { PluginSkillSourcePort } from '../host/plugin-skill-source.port';
 
 const MAX_SKILL_BODY_BYTES = 12 * 1024;
+const MAX_SKILL_NAME_BYTES = 128;
+const MAX_SKILL_DESCRIPTION_BYTES = 1024;
 
 export interface SkillMetadata {
   id: string;
+  name: string;
   version: string;
   hash: string;
   description: string;
@@ -38,9 +41,17 @@ const parseSkill = (content: string, source: string, expectedHash: string): Inde
     fields.set(line.slice(0, separator).trim(), line.slice(separator + 1).trim());
   }
   const id = fields.get('id') ?? '';
+  const name = fields.get('name') ?? '';
   const version = fields.get('version') ?? '';
   const description = fields.get('description') ?? '';
-  if (!/^[a-z0-9][a-z0-9._-]{2,127}$/.test(id) || !/^\d+\.\d+\.\d+$/.test(version) || !description) {
+  if (
+    !/^[a-z0-9][a-z0-9._-]{2,127}$/.test(id) ||
+    !name ||
+    Buffer.byteLength(name, 'utf8') > MAX_SKILL_NAME_BYTES ||
+    !/^\d+\.\d+\.\d+$/.test(version) ||
+    !description ||
+    Buffer.byteLength(description, 'utf8') > MAX_SKILL_DESCRIPTION_BYTES
+  ) {
     throw new Error(`Invalid Skill metadata: ${source}`);
   }
   const requiredCapabilities = (fields.get('requiredCapabilities') ?? '')
@@ -57,6 +68,7 @@ const parseSkill = (content: string, source: string, expectedHash: string): Inde
   if (hash !== expectedHash) throw new Error('PLUGIN_SKILL_CHANGED');
   return {
     id,
+    name,
     version,
     description,
     requiredCapabilities: requiredCapabilities as AgentCapability[],
@@ -71,12 +83,10 @@ const parseSkill = (content: string, source: string, expectedHash: string): Inde
 export class SkillRegistry {
   constructor(private readonly pluginSkills?: PluginSkillSourcePort) {}
 
-  async search(scope: Scope, query: string): Promise<SkillMetadata[]> {
-    const needle = query.trim().toLowerCase();
+  async list(scope: Scope): Promise<SkillMetadata[]> {
     const index = await this.pluginIndex(scope);
     return [...index.values()]
-      .filter((skill) => !needle || `${skill.id} ${skill.description}`.toLowerCase().includes(needle))
-      .sort((left, right) => left.id.localeCompare(right.id))
+      .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
       .map(({ source: _source, bodyOffset: _bodyOffset, content: _content, ...metadata }) => metadata);
   }
 

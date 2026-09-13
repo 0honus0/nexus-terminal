@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "nexus.operations",
+  "id": "nexus.agent",
   "version": "1.0.0",
-  "displayName": "Operations",
+  "displayName": "Nexus Agent",
   "sdkVersion": "1.0.0",
   "nexus": {
     "minVersion": "1.0.0",
@@ -32,10 +32,10 @@
   ],
   "agents": [
     {
-      "id": "operations.default",
+      "id": "agent.default",
       "version": "1.0.0",
-      "displayName": "Operations Agent",
-      "description": "Operations assistant whose available actions are resolved from current Nexus capability grants and Tool Catalog.",
+      "displayName": "Nexus Agent",
+      "description": "General-purpose Nexus Agent that selects signed first-party Skills while all execution remains governed by Host capabilities, policy, approvals, leases, Workspace Runtime, and Browser boundaries.",
       "requiredModelCapabilities": ["streaming"]
     }
   ]

@@ -23,7 +23,8 @@ Browser
 └─ Agent Surface Host
    ├─ generic Host Agent surface for installable AgentDefinition Apps
    ├─ Conversation / Task / Approval / Artifact / Workspace Runtime UI
-   ├─ first-party installable nexus.operations / nexus.developer
+   ├─ default first-party installable nexus.agent (Operations + Developer Skills)
+   ├─ first-party nexus.fullstack target reference App
    └─ isolated Plugin frontend iframe
             │
             ├─ HTTP / SSE
@@ -140,7 +141,7 @@ packages/frontend/src/features/agent/
 └─ plugin-sdk/       Custom Plugin Frontend MessagePort bridge/SDK dispatcher
 ```
 
-`nexus.operations` 与 `nexus.developer` 都是 first-party installable Plugin App，不是 compile-time built-in。没有 Frontend target 的 AgentDefinition App 统一复用 Host Agent surface；声明 Frontend target 时，该独立 origin + sandboxed iframe 拥有完整 Custom App Surface。Agent 初次启用时 Host 通过 pin 住官方 publisher 身份的 catalog 推荐 Operations，用户确认后按正常 Plugin lifecycle 安装/授权/启用。单用户 Host 可以同时持有多个不同 `appId` 的安装式 Plugin，App selector/activity strip 在同一 Hub 内切换，各 App presentation state 相互独立；同一 `appId` 的版本变化走 upgrade/drain。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
+`nexus.agent` 是默认 first-party installable Plugin App，不是 compile-time built-in。它复用 Host Agent surface，只注册一个通用 `agent.default` AgentDefinition，并在同一签名包内提供 `nexus.operations` / `nexus.developer` 两个 Skill，因此 Operations / Developer 不再产生两个重复 App shell。`nexus.fullstack` 是独立 first-party target reference App，显式覆盖 isolated frontend、sandboxed backend 和 Workspace Runner target。Agent 初次启用时 Host 通过 pin 住官方 publisher 身份的 catalog 推荐 `nexus.agent`，用户确认后按正常 Plugin lifecycle 安装/授权/启用。单用户 Host 仍可同时持有多个不同 `appId` 的安装式 Plugin；同一 `appId` 的版本变化走 upgrade/drain。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
 
 Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/plugin-sdk/public` 子域依赖，并继续禁止 feature 反向依赖 Workspace runtime。
 
@@ -270,7 +271,7 @@ createAgentServices / compose-agent
   ├─ Host Tools: cross-domain governed Tool implementations registered by bootstrap
   ├─ Runtime: RunService + StateCommit + AgentScheduler + SubagentScheduler
   ├─ Workspace Runtime: WorkspaceRuntimeService/Gateway + Runner adapter
-  └─ Plugin Host: installable AgentDefinition/Skill/App targets (including nexus.operations)
+  └─ Plugin Host: installable AgentDefinition/Skill/App targets (default nexus.agent; full target reference nexus.fullstack)
 ```
 
 用户从 Host surface 发起一次 Run 的主链路：

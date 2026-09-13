@@ -402,7 +402,7 @@
             <AcpRuntimeSettings
               :settings="settings"
               :busy="busy"
-              :operations-available="apps.some((app) => app.id === 'nexus.operations')"
+              :agent-available="apps.some((app) => app.id === 'nexus.agent')"
               @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
             />
           </section>

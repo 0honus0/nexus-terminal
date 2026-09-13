@@ -689,6 +689,12 @@ Installable App/Skill package 必须验证：
 - symlink/device；
 - archive bomb / size limits。
 
+签名粒度是 **Plugin package/version**，不是单个 Skill。一个签名包可以包含多个 `SKILL.md`；`files.json` 固定每个 Skill 文件的 SHA-256，而 package 的 Ed25519 signature 覆盖整个版本，因此任一 Skill 被单独修改都会使安装/读取校验失败，不需要为每个 Skill 再生成独立签名。
+
+Skill 目录采用单一来源规范：每个 Skill 必须且只能是 `skills/<slug>/SKILL.md`。同一个 Markdown 文件的 frontmatter 同时定义 `id/name/version/description/requiredCapabilities`，正文紧随其后；禁止再放 `skills/index.json`、独立 metadata 文件或单独 body 文件，避免索引与正文漂移。Host package verifier 会拒绝不符合这一布局的签名包。
+
+Skill 对模型采用渐进披露：基础 Context 只发送当前 App 可用 Skill 的 `id/name/description` metadata，不自动发送任意 `SKILL.md` 正文、version/hash/capability 清单。模型判断某个 Skill 与当前任务相关后，调用 Host-owned read-only `skill_read(id)`；Host 再从当前已安装签名包读取同一个 `SKILL.md` 的正文、复核文件 hash，并把该单个 Skill 正文作为 bounded Tool result 返回。这样 Skill 数量增长不会线性污染基础 Context，也不会因为安装 Plugin 就把所有 Skill instructions 自动注入模型。
+
 未验证 stage 位于：
 
 ```text
@@ -717,10 +723,10 @@ Runner plugin 通过独立 Runner protocol/lifecycle 执行。
 
 - **Host/Core**：随 `nexus-terminal` 主镜像编译发布的 Run/Scheduler、Capability Broker、Policy/Approval/Lease、Workspace Runtime bridge、Plugin verifier/installer/SDK 等安全与运行原语；修改这些代码需要更新主镜像。
 - **first-party installable Plugin App**：由 Nexus 官方维护、独立签名和发布、通过正常 Plugin lifecycle 安装/升级的 App；它不是 compile-time built-in。
-- `nexus.operations`：当前默认推荐的 first-party installable Plugin App。Agent 初次启用时 Host 从 pin 住 publisher 身份的 official catalog 读取推荐项，用户确认后按 `stage -> verify -> install -> grant -> enable` 正常流程安装。主镜像不再包含 Operations AgentDefinition/Skill/App manifest。
-- `nexus.developer`：另一个 first-party installable Plugin App（manifest `1.1.0`），同样不是 built-in；它刻意保持最小 Host-surface 形态，只贡献 `AgentDefinition + Skill`，不为了形式补空 target。
+- `nexus.agent`：当前默认推荐的 first-party installable Plugin App。它只提供一个通用 `agent.default` AgentDefinition，并在同一个签名包中提供 exactly two App-scoped Skills：`nexus.operations`（Operations）与 `nexus.developer`（Developer）。Agent 初次启用时 Host 从 pin 住 publisher 身份的 official catalog 读取推荐项，用户确认后按 `stage -> verify -> install -> grant -> enable` 正常流程安装；Operations / Developer 不再各自占用独立 App shell。
+- `nexus.fullstack`：first-party target-composition reference Plugin App，显式声明 `frontend + backend + runner` 三种 target。Frontend 运行在 isolated Plugin origin + sandboxed iframe；Backend target 只在 bubblewrap sandbox 内加载并通过 App Storage SDK 工作；Runner target 运行在冻结 Workspace generation 下，只拿 Workspace-local Runner SDK。它用于持续证明完整 target lifecycle，而不是把 Host/Core 权限迁入插件包。
 
-Host-owned governed Tool implementations 仍属于 Core，因为它们是 Capability Broker 与真实 machine/workspace/runtime adapter 之间的受控执行原语；Plugin 只通过 manifest grants/AgentDefinition/Skill 使用这些 capability，不把 raw SSH/Runner/Browser authority 带进插件包。这样 `nexus.operations` 的 AgentDefinition/Skill/版本可远程升级，而新插件若要求 Host 尚不具备的新 capability/SDK/protocol，仍必须升级 Nexus 主镜像。
+Host-owned governed Tool implementations 仍属于 Core，因为它们是 Capability Broker 与真实 machine/workspace/runtime adapter 之间的受控执行原语；Plugin 只通过 manifest grants/AgentDefinition/Skill 使用这些 capability，不把 raw SSH/Runner/Browser authority 带进插件包。这样 `nexus.agent` 的 AgentDefinition/Skills/版本以及 `nexus.fullstack` 的 target 实现可独立远程升级；若新插件要求 Host 尚不具备的新 capability/SDK/protocol，仍必须升级 Nexus 主镜像。
 
 官方 catalog URL 可以通过部署配置指向 GitHub/CDN/镜像；官方 publisher Ed25519 public key/key id 在生产 Host 中固定 pin，普通生产环境变量不能替换信任根。只有 `NODE_ENV=test` 或显式 `NEXUS_E2E_RESET_ENABLED=1` 的受控 E2E 模式允许注入测试 publisher。
 
@@ -909,7 +915,7 @@ E2E 不得为了定位新增 product-only `data-testid` 等测试 seam；优先�
 - ACP / Browser / Workspace local Terminal live execution；
 - Subagent durable mailbox/work queue；
 - signed installable Agent plugins；
-- `nexus.operations` 与 `nexus.developer` 作为独立 first-party installable Plugin 分发；Agent 初次启用时由 Host 推荐并安装 Operations，而不是从 Nexus 主镜像的编译期 built-in App 启动；
+- `nexus.agent` 作为默认 first-party installable Plugin 分发，一个 `agent.default` AgentDefinition 内承载 `nexus.operations` / `nexus.developer` 两个 Skill；Agent 初次启用时由 Host 推荐并安装该合并插件，而不是从 Nexus 主镜像启动编译期 App；`nexus.fullstack` 独立验证 frontend/backend/runner target 组合；
 - server-validated/frozen Next Run Environment snapshot；
 - structured diagnostics。
 

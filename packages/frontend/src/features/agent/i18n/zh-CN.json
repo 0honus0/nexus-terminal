@@ -13,10 +13,10 @@
         "enable": "开启 Agent"
       },
       "onboarding": {
-        "title": "安装 Operations 并启用 Agent",
-        "description": "Nexus 将从官方签名插件目录安装 Operations Plugin，授予其 manifest 声明的能力，并将它作为默认 Agent App 启用。完成后该插件仍可独立安装、升级和卸载，不属于主镜像内置代码。",
+        "title": "安装 Nexus Agent 并启用 Agent",
+        "description": "Nexus 将从官方签名插件目录安装 Nexus Agent Plugin，授予其 manifest 声明的能力，并将它作为默认 Agent App 启用。插件内包含签名的 Operations 与 Developer 两个 Skill；完成后仍可独立安装、升级和卸载，不属于主镜像内置代码。",
         "verifiedPublisher": "Nexus 固定官方发布者",
-        "installAndEnable": "安装 Operations 并启用 Agent",
+        "installAndEnable": "安装 Nexus Agent 并启用 Agent",
         "installing": "正在安装...",
         "cancel": "取消"
       },
@@ -282,7 +282,7 @@
       },
       "acpRuntime": {
         "title": "ACP 运行时",
-        "description": "配置 Workspace 内可启动的 ACP 进程 Profile，以及 Operations Agent 可调用的 ACP Integration。ACP 进程绑定冻结的 Workspace generation/runtime profile，但在单用户 native Runner 中不再声明只读挂载或网络沙箱。",
+        "description": "配置 Workspace 内可启动的 ACP 进程 Profile，以及 Nexus Agent 可调用的 ACP Integration。ACP 进程绑定冻结的 Workspace generation/runtime profile，但在单用户 native Runner 中不再声明只读挂载或网络沙箱。",
         "addProfile": "添加 Profile",
         "profiles": "Workspace ACP Profiles",
         "profilesHint": "argv 使用 JSON 字符串数组；cwd 必须位于 /workspace。保存 Profile 后，创建 Workspace 时可选择并冻结到 generation。",
@@ -301,7 +301,7 @@
         "enabled": "启用",
         "createIntegration": "创建 Integration",
         "saveProfileFirst": "请先保存至少一个 ACP Profile，再创建 Integration。",
-        "installOperationsFirst": "请先安装 Operations Plugin，再管理 ACP Integration；Workspace ACP Profile 可以提前配置。",
+        "installAgentFirst": "请先安装 Nexus Agent Plugin，再管理 ACP Integration；Workspace ACP Profile 可以提前配置。",
         "loading": "正在加载 ACP Integrations…",
         "noIntegrations": "尚未配置 ACP Integration。",
         "deleteIntegration": "删除"

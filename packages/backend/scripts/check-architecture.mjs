@@ -339,7 +339,7 @@ for (const file of sourceFiles) {
 const compileTimeOperationsRoot = path.join(srcRoot, 'modules/agent/apps/operations');
 if (fs.existsSync(compileTimeOperationsRoot)) {
   failures.push(
-    'modules/agent/apps/operations: nexus.operations is an independently signed first-party Plugin and must not be compiled into the Nexus Backend',
+    'modules/agent/apps/operations: Operations and Developer behaviors belong to the independently signed nexus.agent Plugin and must not be compiled into the Nexus Backend',
   );
 }
 const obsoleteBrowserAdapterPath = path.join(srcRoot, 'infrastructure/agent/integrations/browser-gateway.adapter.ts');

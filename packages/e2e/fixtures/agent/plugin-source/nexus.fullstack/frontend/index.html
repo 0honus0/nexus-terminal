@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Full-stack Plugin</title>
+    <script type="module" src="./app.mjs"></script>
+    <style>
+      :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #111827; color: #f3f4f6; }
+      body { margin: 0; min-height: 100vh; background: linear-gradient(145deg, #111827, #0f172a); }
+      main { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
+      .card { border: 1px solid #374151; border-radius: 14px; padding: 18px; background: rgba(31, 41, 55, 0.82); }
+      .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+      .badge { border-radius: 999px; padding: 4px 9px; background: #1f2937; font-size: 12px; }
+      button { border: 0; border-radius: 9px; padding: 9px 12px; font: inherit; cursor: pointer; background: #e5e7eb; color: #111827; }
+      code { color: #a5b4fc; }
+      p { line-height: 1.55; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Full-stack Plugin</h1>
+      <p>This App deliberately ships frontend, backend, and Runner targets so the complete Nexus Plugin lifecycle can be exercised without moving Host security primitives into plugin code.</p>
+      <section class="card">
+        <div class="row">
+          <span class="badge" data-testid="fullstack-frontend-status">connecting</span>
+          <span class="badge" data-testid="fullstack-backend-status">backend:unknown</span>
+        </div>
+        <p>Frontend state is stored through the bounded Plugin SDK. Backend state is written by the sandboxed backend target. Runner state is workspace-local and is verified through Workspace artifact exchange.</p>
+        <button type="button" data-testid="fullstack-write-storage">Write frontend storage</button>
+        <p data-testid="fullstack-storage-result"><code>storage:not-written</code></p>
+      </section>
+    </main>
+  </body>
+</html>

@@ -485,7 +485,7 @@ Store rules：
 
 ## 10. Workspace, App Platform and App frontend ownership
 
-这是长期架构中的核心边界。完整产品体验通过 App Platform 注册；共享 AI/Conversation 能力属于 feature/public surface；`nexus.operations` 是默认推荐的 first-party installable Plugin App，不是 compile-time built-in。Workspace 仍然是独立 runtime owner 而不是 App host。详细边界见 [Agent 架构](../AGENT.md)。
+这是长期架构中的核心边界。完整产品体验通过 App Platform 注册；共享 AI/Conversation 能力属于 feature/public surface；`nexus.agent` 是默认推荐的 first-party installable Plugin App，一个 Host surface 内承载 Operations / Developer 两个 Skill，不是 compile-time built-in。`nexus.fullstack` 作为独立 first-party target reference App 覆盖 custom frontend/backend/runner。Workspace 仍然是独立 runtime owner 而不是 App host。详细边界见 [Agent 架构](../AGENT.md)。
 
 ### 10.1 Workspace owns
 
@@ -514,7 +514,7 @@ AgentHubWindow
                     plugin-sdk/ MessagePort bridge
 ```
 
-`host/` 只负责 Launcher/Hub/App switcher、每 App 轻量 view state、Host Agent surface 与 Custom Surface iframe 生命周期；它不拥有 Plugin SDK dispatch，也不拥有 Run/Provider/Artifact 的后端事实。`plugin-sdk/` 高内聚拥有 Plugin Frontend protocol、MessagePort host bridge 与 App-scoped Agent SDK dispatcher；它复用 `runtime/run-facade.ts` 和 `api/` transport，不重新实现 Run 状态机。`nexus.operations` 与 `nexus.developer` 都通过正常安装式 Plugin lifecycle 注册；没有 frontend target 时统一进入 Host Agent surface，不存在本地 Operations component 特判。当前单用户 Host 允许同时安装多个不同 `appId` 的 Plugin，`AgentAppSwitcher` 与 activity strip 在同一个 Hub 中切换这些 App；每个 App 的当前 Thread、draft、Next Run model、Next Run Environment 等 presentation state 独立保存，同一 `appId` 的新版本通过 upgrade/drain 替换当前安装而不是制造第二份平行 App。
+`host/` 只负责 Launcher/Hub/App switcher、每 App 轻量 view state、Host Agent surface 与 Custom Surface iframe 生命周期；它不拥有 Plugin SDK dispatch，也不拥有 Run/Provider/Artifact 的后端事实。`plugin-sdk/` 高内聚拥有 Plugin Frontend protocol、MessagePort host bridge 与 App-scoped Agent SDK dispatcher；它复用 `runtime/run-facade.ts` 和 `api/` transport，不重新实现 Run 状态机。默认 `nexus.agent` 通过正常安装式 Plugin lifecycle 注册，并在一个 Host Agent surface 下暴露 `nexus.operations` / `nexus.developer` 两个 Skill；不再为两个 Skill 建两套 App presentation state。`nexus.fullstack` 因声明 frontend target 而使用 Custom Surface iframe。当前单用户 Host 仍允许同时安装多个不同 `appId` 的 Plugin，`AgentAppSwitcher` 与 activity strip 在同一个 Hub 中切换这些 App；每个 App 的当前 Thread、draft、Next Run model、Next Run Environment 等 presentation state 独立保存，同一 `appId` 的新版本通过 upgrade/drain 替换当前安装而不是制造第二份平行 App。
 
 Agent Hub 的响应式规则必须以 named container `agent-hub-window` 为准，而不是浏览器 viewport：宽窗口保留 Threads / Conversation / TaskRail，逐级收起 model meta、TaskRail、Run history，窄窗口把 Threads 变为 drawer 并允许 Run Configuration 换行；Hub chrome 的 App search/activity strip/title 等非关键元素也使用同一 container query 收缩。这样用户把浮窗拖窄时，内部交互与布局仍按真实可用空间变化，而不会因为浏览器本身很宽继续显示拥挤控件。
 
@@ -539,7 +539,7 @@ Frontend 不执行权威 Recall/vector search、context budgeting、Tool authori
 
 ### 10.4 Host Agent surface for installable AgentDefinition Apps
 
-没有 Frontend target、但 manifest 声明 AgentDefinition 的安装式 App 统一使用 `features/agent/host/AgentAppSurface.vue`。`nexus.operations` 和 `nexus.developer` 都走这条通用路径；Frontend 主仓不再存在 `features/agent/apps/operations/` 或 compile-time OperationsView。
+没有 Frontend target、但 manifest 声明 AgentDefinition 的安装式 App 统一使用 `features/agent/host/AgentAppSurface.vue`。默认 `nexus.agent` 走这条通用路径，Operations / Developer 只是该 App 内的两个 Skill；Frontend 主仓不再存在 Skill-specific App component 或 compile-time Operations/Developer View。`nexus.fullstack` 因声明 frontend target 而改走 isolated Custom Surface。
 
 Host Agent surface owns presentation only:
 

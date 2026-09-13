@@ -23,7 +23,7 @@
     }
     const current = enabled.find((app) => app.id === agentWindowManager.state.activeAppId);
     if (current) return;
-    const preferred = enabled.find((app) => app.id === 'nexus.operations') ?? enabled[0]!;
+    const preferred = enabled.find((app) => app.id === 'nexus.agent') ?? enabled[0]!;
     agentWindowManager.switchApp({ appId: preferred.id });
   };
 

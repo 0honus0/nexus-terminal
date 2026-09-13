@@ -13,10 +13,10 @@
         "enable": "Enable Agent"
       },
       "onboarding": {
-        "title": "Enable Agent with Operations",
-        "description": "Nexus will install the official Operations plugin from the signed first-party catalog, grant its declared capabilities, and enable it as the default Agent app. The plugin remains independently installable and upgradable after this step.",
+        "title": "Enable Agent with Nexus Agent",
+        "description": "Nexus will install the official Nexus Agent plugin from the signed first-party catalog, grant its declared capabilities, and enable it as the default Agent app. The plugin contains the signed Operations and Developer Skills and remains independently installable and upgradable after this step.",
         "verifiedPublisher": "Pinned Nexus publisher",
-        "installAndEnable": "Install Operations & enable Agent",
+        "installAndEnable": "Install Nexus Agent & enable Agent",
         "installing": "Installing...",
         "cancel": "Cancel"
       },
@@ -282,7 +282,7 @@
       },
       "acpRuntime": {
         "title": "ACP Runtime",
-        "description": "Configure ACP process profiles that may run inside Workspaces and ACP integrations exposed to the Operations Agent. ACP processes are bound to the frozen Workspace generation/runtime profile; the single-user native Runner does not claim per-process read-only or network sandboxing.",
+        "description": "Configure ACP process profiles that may run inside Workspaces and ACP integrations exposed to Nexus Agent. ACP processes are bound to the frozen Workspace generation/runtime profile; the single-user native Runner does not claim per-process read-only or network sandboxing.",
         "addProfile": "Add profile",
         "profiles": "Workspace ACP Profiles",
         "profilesHint": "argv is a JSON string array; cwd must be under /workspace. Saved profiles can be selected and frozen when a Workspace generation is created.",
@@ -301,7 +301,7 @@
         "enabled": "Enabled",
         "createIntegration": "Create integration",
         "saveProfileFirst": "Save at least one ACP profile before creating an integration.",
-        "installOperationsFirst": "Install the Operations plugin before managing ACP integrations. Workspace ACP profiles can still be configured in advance.",
+        "installAgentFirst": "Install the Nexus Agent plugin before managing ACP integrations. Workspace ACP profiles can still be configured in advance.",
         "loading": "Loading ACP integrations…",
         "noIntegrations": "No ACP integrations configured.",
         "deleteIntegration": "Delete"

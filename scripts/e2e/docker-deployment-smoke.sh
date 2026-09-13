@@ -911,7 +911,7 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
   const session = await directOnly.createSession(
     {
       userId: 1,
-      appId: 'nexus.operations',
+      appId: 'nexus.agent',
       runId: 'smoke-browser-direct-run',
       agentRuntimeId: 'smoke-browser-direct-runtime',
       target: {
@@ -1380,10 +1380,13 @@ cookie="$(awk 'BEGIN { first=1 } (!/^#/ || /^#HttpOnly_/) && NF >= 7 { if (!firs
 # Destructive Agent lifecycle smoke through the real authenticated HTTP API and host Runner.
 # This fixes two regressions that static architecture checks cannot observe: Run deletion must
 # refuse attached Workspaces, and runtime-cleanup confirmation must not expand after preview.
-COOKIE="$cookie" PORT="$http_port" node <<'NODE'
+COOKIE="$cookie" PORT="$http_port" PLUGIN_REPOSITORY_PORT="$plugin_repository_port" node <<'NODE'
 const { randomUUID } = require('node:crypto');
 const port = Number(process.env.PORT);
+const pluginRepositoryPort = Number(process.env.PLUGIN_REPOSITORY_PORT);
 const baseUrl = `http://127.0.0.1:${port}`;
+const repositoryUrl = `http://host.docker.internal:${pluginRepositoryPort}/catalog.json`;
+const repositoryException = `host.docker.internal:${pluginRepositoryPort}`;
 const cookie = process.env.COOKIE;
 const origin = baseUrl;
 const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -1416,27 +1419,104 @@ const ok = async (method, path, body, headers = {}, expectedStatus) => {
 const csrf = (await ok('GET', '/api/v1/agent/security/csrf')).token;
 const mutationHeaders = { 'X-Nexus-CSRF': csrf };
 const recommended = await ok('GET', '/api/v1/agent/onboarding/recommended-plugin');
-if (recommended.appId !== 'nexus.operations' || recommended.installed) {
+if (recommended.appId !== 'nexus.agent' || recommended.installed) {
   throw new Error(`Unexpected initial recommended plugin state: ${JSON.stringify(recommended)}`);
 }
-const installedOperations = await ok(
+const installedAgent = await ok(
   'POST',
   '/api/v1/agent/onboarding/recommended-plugin/install',
   {},
   mutationHeaders,
   201,
 );
-if (!installedOperations.installedNow || installedOperations.app.id !== 'nexus.operations') {
-  throw new Error(`Operations onboarding install failed: ${JSON.stringify(installedOperations)}`);
+if (!installedAgent.installedNow || installedAgent.app.id !== 'nexus.agent') {
+  throw new Error(`Nexus Agent onboarding install failed: ${JSON.stringify(installedAgent)}`);
 }
 let featureSettings = await ok('GET', '/api/v1/agent/settings');
 featureSettings = await ok(
   'PATCH',
   '/api/v1/agent/settings',
-  { patch: { feature: { enabled: true } }, expectedVersion: featureSettings.revision },
+  {
+    patch: {
+      feature: { enabled: true },
+      plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] },
+    },
+    expectedVersion: featureSettings.revision,
+  },
   mutationHeaders,
 );
-if (!featureSettings.effectiveSettings.feature.enabled) throw new Error('Agent feature did not enable after Operations install.');
+if (!featureSettings.effectiveSettings.feature.enabled) throw new Error('Agent feature did not enable after Nexus Agent install.');
+
+// The separate first-party full-stack fixture must exercise all optional Plugin target classes.
+// Onboarding has already pinned/trusted the official E2E publisher; generic install still follows
+// normal repository -> stage -> verify -> install -> grant -> enable lifecycle.
+const pluginCatalog = await ok('GET', `/api/v1/agent/plugins/remote/catalog?repositoryUrl=${encodeURIComponent(repositoryUrl)}`);
+const fullStackPackage = pluginCatalog.packages.find((candidate) => candidate.appId === 'nexus.fullstack');
+if (!fullStackPackage || fullStackPackage.version !== '1.0.0') {
+  throw new Error(`Full-stack plugin missing from signed catalog: ${JSON.stringify(pluginCatalog.packages)}`);
+}
+const fullStackStage = await ok(
+  'POST',
+  '/api/v1/agent/plugins/remote/stage',
+  { repositoryUrl, appId: 'nexus.fullstack', version: '1.0.0' },
+  mutationHeaders,
+  201,
+);
+const fullStackVerified = await ok(
+  'POST',
+  '/api/v1/agent/plugins/verify',
+  { stageId: fullStackStage.id },
+  mutationHeaders,
+);
+if (
+  fullStackVerified.plugin.frontendEntry !== 'frontend/index.html' ||
+  fullStackVerified.plugin.backendEntry !== 'backend/index.mjs' ||
+  fullStackVerified.plugin.runnerEntry !== 'runner/index.mjs'
+) {
+  throw new Error(`Full-stack target entries were not verified: ${JSON.stringify(fullStackVerified.plugin)}`);
+}
+await ok('POST', '/api/v1/agent/plugins/install', { stageId: fullStackStage.id }, mutationHeaders, 201);
+let fullStackGrants = await ok('GET', '/api/v1/agent/apps/nexus.fullstack/grants');
+fullStackGrants = await ok(
+  'PUT',
+  '/api/v1/agent/apps/nexus.fullstack/grants',
+  { capabilities: ['storage.app'], expectedPolicyRevision: fullStackGrants.policyRevision },
+  mutationHeaders,
+);
+let fullStackApp = (await ok('GET', '/api/v1/agent/apps')).find((candidate) => candidate.id === 'nexus.fullstack');
+if (!fullStackApp) throw new Error('Installed full-stack App is missing from Host projection.');
+fullStackApp = await ok(
+  'PATCH',
+  '/api/v1/agent/apps/nexus.fullstack',
+  { enabled: true, expectedVersion: fullStackApp.stateVersion },
+  mutationHeaders,
+);
+if (!fullStackApp.enabled || fullStackApp.health !== 'healthy' || fullStackApp.surface !== 'custom') {
+  throw new Error(`Full-stack App did not activate through isolated backend lifecycle: ${JSON.stringify(fullStackApp)}`);
+}
+const fullStackFrontend = await ok('GET', '/api/v1/agent/plugins/nexus.fullstack/frontend');
+if (fullStackFrontend.sandbox !== 'allow-scripts' || !fullStackFrontend.url.includes('/plugins/nexus.fullstack/1.0.0/')) {
+  throw new Error(`Full-stack frontend descriptor is invalid: ${JSON.stringify(fullStackFrontend)}`);
+}
+const frontendAsset = await fetch(fullStackFrontend.url);
+const frontendHtml = await frontendAsset.text();
+if (!frontendAsset.ok || !frontendHtml.includes('Full-stack Plugin')) {
+  throw new Error(`Full-stack frontend asset was not served from the isolated plugin origin: ${frontendAsset.status}`);
+}
+const backendStatus = await ok(
+  'POST',
+  '/api/v1/agent/plugins/nexus.fullstack/frontend/rpc',
+  { method: 'storage.get', params: { key: 'backend.status' } },
+  mutationHeaders,
+);
+if (
+  backendStatus?.value?.state !== 'active' ||
+  backendStatus.value.source !== 'backend' ||
+  backendStatus.value.appId !== 'nexus.fullstack'
+) {
+  throw new Error(`Sandboxed backend target did not publish activation state: ${JSON.stringify(backendStatus)}`);
+}
+
 const provider = await ok(
   'POST',
   '/api/v1/agent/ai/providers',
@@ -1452,9 +1532,9 @@ const provider = await ok(
   mutationHeaders,
   201,
 );
-const definitions = await ok('GET', '/api/v1/apps/nexus.operations/agent-definitions');
+const definitions = await ok('GET', '/api/v1/apps/nexus.agent/agent-definitions');
 const definition = definitions[0];
-if (!definition?.id) throw new Error('Operations Agent definition unavailable in deployment smoke.');
+if (!definition?.id) throw new Error('Nexus Agent definition unavailable in deployment smoke.');
 let lifecycleSettings = await ok('GET', '/api/v1/agent/settings');
 lifecycleSettings = await ok(
   'PATCH',
@@ -1479,11 +1559,11 @@ if (!lifecycleSettings.effectiveSettings.workspaceRuntime.enabledRecipeIds.inclu
 }
 
 const terminalRunStatuses = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
-const createRun = async (title) => {
-  const thread = await ok('POST', '/api/v1/apps/nexus.operations/threads', { title }, mutationHeaders, 201);
+const createRun = async (title, runnerPluginIds = []) => {
+  const thread = await ok('POST', '/api/v1/apps/nexus.agent/threads', { title }, mutationHeaders, 201);
   const created = await ok(
     'POST',
-    '/api/v1/apps/nexus.operations/runs',
+    '/api/v1/apps/nexus.agent/runs',
     {
       schemaVersion: 1,
       threadId: thread.id,
@@ -1491,7 +1571,7 @@ const createRun = async (title) => {
       agentDefinitionId: definition.id,
       model: { providerId: provider.id, modelId: 'smoke-model', configurationVersion: provider.version },
       connectionIds: [],
-      environment: { recipeId: recipe.id, catalogRevision: catalog.revision },
+      environment: { recipeId: recipe.id, catalogRevision: catalog.revision, runnerPluginIds },
     },
     { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     201,
@@ -1501,7 +1581,7 @@ const createRun = async (title) => {
   while (['created', 'running'].includes(current.status)) {
     if (Date.now() >= deadline) throw new Error(`Lifecycle Run did not reach budget wait: ${JSON.stringify(current)}`);
     await wait(100);
-    current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${created.id}`);
+    current = await ok('GET', `/api/v1/apps/nexus.agent/runs/${created.id}`);
   }
   if (current.status !== 'awaiting_budget') {
     throw new Error(`Lifecycle Run reached unexpected state before Workspace creation: ${JSON.stringify(current)}`);
@@ -1510,7 +1590,9 @@ const createRun = async (title) => {
     current.definition?.environment?.recipeId !== recipe.id ||
     current.definition.environment.catalogRevision !== catalog.revision ||
     !current.definition.environment.runtimeDigest ||
-    !Array.isArray(current.definition.environment.toolchain)
+    !Array.isArray(current.definition.environment.toolchain) ||
+    JSON.stringify(current.definition.environment.runnerPlugins.map((target) => target.pluginId).sort()) !==
+      JSON.stringify([...runnerPluginIds].sort())
   ) {
     throw new Error(`Run Environment was not server-resolved and frozen: ${JSON.stringify(current.definition)}`);
   }
@@ -1522,7 +1604,7 @@ const cancelToTerminal = async (run) => {
   for (let attempt = 0; attempt < 8 && !terminalRunStatuses.has(current.status); attempt += 1) {
     const cancelled = await call(
       'POST',
-      `/api/v1/apps/nexus.operations/runs/${run.id}/cancel`,
+      `/api/v1/apps/nexus.agent/runs/${run.id}/cancel`,
       { expectedVersion: current.version },
       { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     );
@@ -1532,14 +1614,14 @@ const cancelToTerminal = async (run) => {
     }
     if (!terminalRunStatuses.has(current.status)) {
       await wait(150);
-      current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${run.id}`);
+      current = await ok('GET', `/api/v1/apps/nexus.agent/runs/${run.id}`);
     }
   }
   const deadline = Date.now() + 45_000;
   while (!terminalRunStatuses.has(current.status)) {
     if (Date.now() >= deadline) throw new Error(`Run did not become terminal: ${JSON.stringify(current)}`);
     await wait(250);
-    current = await ok('GET', `/api/v1/apps/nexus.operations/runs/${run.id}`);
+    current = await ok('GET', `/api/v1/apps/nexus.agent/runs/${run.id}`);
   }
   return current;
 };
@@ -1547,7 +1629,7 @@ const cancelToTerminal = async (run) => {
 const createReadyWorkspace = async (run, title) => {
   const conflict = await call(
     'POST',
-    `/api/v1/apps/nexus.operations/runs/${run.id}/workspaces`,
+    `/api/v1/apps/nexus.agent/runs/${run.id}/workspaces`,
     { schemaVersion: 1, workspace: { recipeId: 'not-the-frozen-environment' }, retained: false },
     { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
   );
@@ -1556,7 +1638,7 @@ const createReadyWorkspace = async (run, title) => {
   }
   const created = await ok(
     'POST',
-    `/api/v1/apps/nexus.operations/runs/${run.id}/workspaces`,
+    `/api/v1/apps/nexus.agent/runs/${run.id}/workspaces`,
     { schemaVersion: 1, workspace: { recipeId: recipe.id }, retained: false, catalogRevision: catalog.revision },
     { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     202,
@@ -1566,29 +1648,73 @@ const createReadyWorkspace = async (run, title) => {
   while (current.status === 'creating') {
     if (Date.now() >= deadline) throw new Error(`${title} Workspace did not provision: ${JSON.stringify(current)}`);
     await wait(500);
-    current = await ok('GET', `/api/v1/apps/nexus.operations/workspaces/${created.id}`);
+    current = await ok('GET', `/api/v1/apps/nexus.agent/workspaces/${created.id}`);
   }
   if (current.status !== 'ready') throw new Error(`${title} Workspace is not ready: ${JSON.stringify(current)}`);
   return current;
 };
 
+const fullStackRun = await createRun('Docker full-stack Runner target smoke', ['nexus.fullstack']);
+const fullStackWorkspace = await createReadyWorkspace(fullStackRun, 'Full-stack Runner target');
+const exportedRunnerArtifact = await ok(
+  'POST',
+  `/api/v1/apps/nexus.agent/workspaces/${fullStackWorkspace.id}/plugins/nexus.fullstack/artifacts/export`,
+  { path: '/runner-activation.json', name: 'runner-activation.json', mediaType: 'application/json' },
+  mutationHeaders,
+  201,
+);
+const runnerArtifactResponse = await fetch(
+  `${baseUrl}/api/v1/apps/nexus.agent/artifacts/${encodeURIComponent(exportedRunnerArtifact.id)}/content`,
+  { headers: { Cookie: cookie } },
+);
+const runnerArtifactText = await runnerArtifactResponse.text();
+if (!runnerArtifactResponse.ok) {
+  throw new Error(`Runner activation Artifact read failed: ${runnerArtifactResponse.status} ${runnerArtifactText}`);
+}
+const runnerActivation = JSON.parse(runnerArtifactText);
+if (
+  runnerActivation.state !== 'active' ||
+  runnerActivation.source !== 'runner' ||
+  runnerActivation.pluginId !== 'nexus.fullstack' ||
+  runnerActivation.workspaceId !== fullStackWorkspace.id ||
+  runnerActivation.generation !== fullStackWorkspace.generation
+) {
+  throw new Error(`Runner target activation evidence is invalid: ${runnerArtifactText}`);
+}
+const deletedFullStackWorkspaceCommand = await ok(
+  'POST',
+  `/api/v1/apps/nexus.agent/workspaces/${fullStackWorkspace.id}/actions`,
+  { action: 'delete', expectedVersion: fullStackWorkspace.version },
+  mutationHeaders,
+  202,
+);
+for (let attempt = 0; attempt < 120; attempt += 1) {
+  const command = await ok('GET', `/api/v1/agent/workspace-runtime/commands/${deletedFullStackWorkspaceCommand.id}`);
+  if (command.status === 'succeeded') break;
+  if (['failed', 'unknown'].includes(command.status)) throw new Error(`Full-stack Workspace delete failed: ${JSON.stringify(command)}`);
+  if (attempt === 119) throw new Error(`Full-stack Workspace delete timed out: ${JSON.stringify(command)}`);
+  await wait(250);
+}
+await cancelToTerminal(fullStackRun);
+console.log('full-stack plugin smoke: isolated frontend + sandboxed backend + Workspace Runner target ok');
+
 let queueRun = await createRun('Docker pending-input smoke');
 const appendQueueInput = async (text) => {
   const appended = await ok(
     'POST',
-    `/api/v1/apps/nexus.operations/runs/${queueRun.id}/inputs`,
+    `/api/v1/apps/nexus.agent/runs/${queueRun.id}/inputs`,
     { schemaVersion: 1, text, artifactRefs: [], expectedVersion: queueRun.version },
     { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     202,
   );
-  queueRun = await ok('GET', `/api/v1/apps/nexus.operations/runs/${queueRun.id}`);
+  queueRun = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}`);
   if (queueRun.version !== appended.runVersion) {
     throw new Error(`Pending-input append projection did not advance atomically: ${JSON.stringify({ appended, queueRun })}`);
   }
 };
 await appendQueueInput('pending input two');
 await appendQueueInput('pending input three');
-let pendingQueue = await ok('GET', `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`);
+let pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
 if (pendingQueue.total !== 3 || pendingQueue.items.map((item) => item.text).join('|') !== 'deployment lifecycle smoke|pending input two|pending input three') {
   throw new Error(`Unexpected initial pending-input queue: ${JSON.stringify(pendingQueue)}`);
 }
@@ -1596,7 +1722,7 @@ const originalQueue = [...pendingQueue.items];
 const staleQueueVersion = queueRun.version;
 queueRun = await ok(
   'PATCH',
-  `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`,
+  `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`,
   {
     schemaVersion: 1,
     action: 'move',
@@ -1606,7 +1732,7 @@ queueRun = await ok(
   },
   { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
 );
-pendingQueue = await ok('GET', `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`);
+pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
 if (pendingQueue.items.map((item) => item.id).join('|') !== [originalQueue[2].id, originalQueue[0].id, originalQueue[1].id].join('|')) {
   throw new Error(`Pending-input move was not durable: ${JSON.stringify(pendingQueue)}`);
 }
@@ -1616,7 +1742,7 @@ if (pendingQueue.items.some((item) => originalSequences.get(item.id) !== item.se
 }
 const staleMutation = await call(
   'PATCH',
-  `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`,
+  `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`,
   {
     schemaVersion: 1,
     action: 'remove',
@@ -1631,7 +1757,7 @@ if (staleMutation.response.status !== 409 || staleMutation.json?.error?.code !==
 }
 queueRun = await ok(
   'PATCH',
-  `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`,
+  `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`,
   {
     schemaVersion: 1,
     action: 'remove',
@@ -1641,13 +1767,13 @@ queueRun = await ok(
   },
   { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
 );
-pendingQueue = await ok('GET', `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`);
+pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
 if (pendingQueue.total !== 2 || pendingQueue.items.some((item) => item.id === originalQueue[1].id)) {
   throw new Error(`Pending-input remove was not durable: ${JSON.stringify(pendingQueue)}`);
 }
 const queueLedger = await ok(
   'GET',
-  `/api/v1/apps/nexus.operations/threads/${queueRun.threadId}/entries?limit=50`,
+  `/api/v1/apps/nexus.agent/threads/${queueRun.threadId}/entries?limit=50`,
 );
 const removedLedgerEntry = queueLedger.items.find((entry) => entry.id === originalQueue[1].id);
 if (!removedLedgerEntry || removedLedgerEntry.sequence !== originalQueue[1].sequence) {
@@ -1661,7 +1787,7 @@ const workspaceA = await createReadyWorkspace(runA, 'A');
 runA = await cancelToTerminal(runA);
 const blockedDelete = await call(
   'DELETE',
-  `/api/v1/apps/nexus.operations/runs/${runA.id}?expectedVersion=${runA.version}`,
+  `/api/v1/apps/nexus.agent/runs/${runA.id}?expectedVersion=${runA.version}`,
   undefined,
   { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
 );
@@ -1710,16 +1836,16 @@ if (!cleanupCommand.result?.deleted?.includes(workspaceA.id) || !cleanupCommand.
 if (cleanupCommand.result.deleted.includes(workspaceC.id)) {
   throw new Error(`Runtime cleanup expanded beyond preview scope: ${JSON.stringify(cleanupCommand)}`);
 }
-const afterA = await ok('GET', `/api/v1/apps/nexus.operations/workspaces/${workspaceA.id}`);
-const afterB = await ok('GET', `/api/v1/apps/nexus.operations/workspaces/${workspaceB.id}`);
-const afterC = await ok('GET', `/api/v1/apps/nexus.operations/workspaces/${workspaceC.id}`);
+const afterA = await ok('GET', `/api/v1/apps/nexus.agent/workspaces/${workspaceA.id}`);
+const afterB = await ok('GET', `/api/v1/apps/nexus.agent/workspaces/${workspaceB.id}`);
+const afterC = await ok('GET', `/api/v1/apps/nexus.agent/workspaces/${workspaceC.id}`);
 if (afterA.status !== 'deleted' || afterB.status !== 'deleted' || afterC.status !== 'ready') {
   throw new Error(`Backend Workspace projection did not match Runner cleanup: ${JSON.stringify({ afterA, afterB, afterC })}`);
 }
-const refreshedRunA = await ok('GET', `/api/v1/apps/nexus.operations/runs/${runA.id}`);
+const refreshedRunA = await ok('GET', `/api/v1/apps/nexus.agent/runs/${runA.id}`);
 await ok(
   'DELETE',
-  `/api/v1/apps/nexus.operations/runs/${runA.id}?expectedVersion=${refreshedRunA.version}`,
+  `/api/v1/apps/nexus.agent/runs/${runA.id}?expectedVersion=${refreshedRunA.version}`,
   undefined,
   { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
   202,

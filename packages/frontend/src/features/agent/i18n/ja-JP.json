@@ -13,10 +13,10 @@
         "enable": "Agent を有効化"
       },
       "onboarding": {
-        "title": "Operations をインストールして Agent を有効化",
-        "description": "Nexus は署名済みの公式カタログから Operations Plugin をインストールし、manifest で宣言された capability を付与して既定の Agent App として有効化します。Plugin はメインイメージに組み込まれず、以後も独立してインストール・更新・削除できます。",
+        "title": "Nexus Agent をインストールして Agent を有効化",
+        "description": "Nexus は署名済みの公式カタログから Nexus Agent Plugin をインストールし、manifest で宣言された capability を付与して既定の Agent App として有効化します。Plugin には署名済みの Operations / Developer Skill が含まれ、メインイメージに組み込まれず独立して更新できます。",
         "verifiedPublisher": "固定された Nexus 公式 Publisher",
-        "installAndEnable": "Operations をインストールして有効化",
+        "installAndEnable": "Nexus Agent をインストールして有効化",
         "installing": "インストール中...",
         "cancel": "キャンセル"
       },
@@ -282,7 +282,7 @@
       },
       "acpRuntime": {
         "title": "ACP ランタイム",
-        "description": "Workspace 内で起動できる ACP プロセス Profile と、Operations Agent が呼び出す ACP Integration を設定します。ACP プロセスは凍結済み Workspace generation/runtime profile に固定されますが、単一ユーザー native Runner ではプロセス単位の読み取り専用・ネットワーク sandbox を保証しません。",
+        "description": "Workspace 内で起動できる ACP プロセス Profile と、Nexus Agent が呼び出す ACP Integration を設定します。ACP プロセスは凍結済み Workspace generation/runtime profile に固定されますが、単一ユーザー native Runner ではプロセス単位の読み取り専用・ネットワーク sandbox を保証しません。",
         "addProfile": "Profile を追加",
         "profiles": "Workspace ACP Profiles",
         "profilesHint": "argv は JSON 文字列配列、cwd は /workspace 配下である必要があります。保存した Profile は Workspace generation 作成時に選択して固定できます。",
@@ -301,7 +301,7 @@
         "enabled": "有効",
         "createIntegration": "Integration を作成",
         "saveProfileFirst": "Integration を作成する前に ACP Profile を 1 件以上保存してください。",
-        "installOperationsFirst": "ACP Integration を管理する前に Operations Plugin をインストールしてください。Workspace ACP Profile は先に設定できます。",
+        "installAgentFirst": "ACP Integration を管理する前に Nexus Agent Plugin をインストールしてください。Workspace ACP Profile は先に設定できます。",
         "loading": "ACP Integrations を読み込み中…",
         "noIntegrations": "ACP Integration は未設定です。",
         "deleteIntegration": "削除"

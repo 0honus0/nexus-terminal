@@ -76,6 +76,67 @@ const server = http.createServer(async (request, response) => {
     response.end(JSON.stringify({ error: { message: 'repeated current input marker' } }));
     return;
   }
+  const expectedSkill = serializedMessages.includes('E2E_EXPECT_DEVELOPER_SKILL')
+    ? { id: 'nexus.developer', name: 'Developer', bodyMarker: 'Prefer a Nexus Workspace Runtime' }
+    : serializedMessages.includes('E2E_EXPECT_OPERATIONS_SKILL')
+      ? { id: 'nexus.operations', name: 'Operations', bodyMarker: 'Prefer structured diagnostics' }
+      : null;
+  const skillToolCallId = expectedSkill ? `call_e2e_skill_${expectedSkill.id.replaceAll('.', '_')}` : null;
+  const skillToolResult =
+    skillToolCallId !== null &&
+    messages.some((message) => message?.role === 'tool' && message?.tool_call_id === skillToolCallId);
+  const skillToolOffered =
+    Array.isArray(body?.tools) &&
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'skill_read');
+  if (expectedSkill && !skillToolResult) {
+    const metadataMarker = `id: ${expectedSkill.id} | name: ${expectedSkill.name} | description:`;
+    if (!serializedMessages.includes(metadataMarker) || serializedMessages.includes(expectedSkill.bodyMarker)) {
+      response.writeHead(422, { 'Content-Type': 'application/json' });
+      response.end(
+        JSON.stringify({ error: { message: `Skill catalog must expose metadata only for ${expectedSkill.id}` } }),
+      );
+      return;
+    }
+    if (!skillToolOffered) {
+      response.writeHead(422, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'skill_read tool was not offered' } }));
+      return;
+    }
+    response.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive',
+    });
+    sendSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: skillToolCallId,
+                type: 'function',
+                function: { name: 'skill_read', arguments: JSON.stringify({ id: expectedSkill.id }) },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+    sendSse(response, {
+      choices: [],
+      usage: { prompt_tokens: 7, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 0 } },
+    });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
+  if (expectedSkill && skillToolResult && !serializedMessages.includes(expectedSkill.bodyMarker)) {
+    response.writeHead(422, { 'Content-Type': 'application/json' });
+    response.end(JSON.stringify({ error: { message: `skill_read did not load ${expectedSkill.id}` } }));
+    return;
+  }
   const approvalConnection = /E2E_APPROVAL_CONNECTION_ID=(\d+)/.exec(serializedMessages);
   const approvalToolResult = messages.some(
     (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_approval',

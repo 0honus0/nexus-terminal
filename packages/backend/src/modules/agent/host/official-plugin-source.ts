@@ -13,6 +13,6 @@ export const DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE: OfficialAgentPluginSource = {
   publisherPublicKeyPem:
     '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAPw+WXiJPcxqiKjxGCRcm3fWwy+JByAKTKX+iE5pKD/E=\n-----END PUBLIC KEY-----\n',
   publisherLabel: 'Nexus first-party plugins',
-  recommendedAppId: 'nexus.operations',
+  recommendedAppId: 'nexus.agent',
   privateHostExceptions: [],
 };

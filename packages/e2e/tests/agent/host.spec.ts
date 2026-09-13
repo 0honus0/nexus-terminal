@@ -27,7 +27,7 @@ type AgentFeatureSettingsView = {
 
 test('Agent launcher stays passive until the user explicitly opens the Hub', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
-  await enableAgentWithRecommendedOperations(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
 
   await page.goto('/connections');
 
@@ -63,14 +63,14 @@ test('Agent feature enable opens one global floating window that survives route 
   await expect(hub).toHaveCount(0);
 
   await featureSection.getByRole('button', { name: 'Enable Agent', exact: true }).click();
-  const onboarding = page.getByRole('dialog', { name: 'Enable Agent with Operations', exact: true });
+  const onboarding = page.getByRole('dialog', { name: 'Enable Agent with Nexus Agent', exact: true });
   await expect(onboarding).toBeVisible();
-  await expect(onboarding.getByText('Operations', { exact: true })).toBeVisible();
+  await expect(onboarding.getByText('Nexus Agent', { exact: true })).toBeVisible();
   await expect(onboarding.getByText('v1.0.0', { exact: true })).toBeVisible();
-  await captureFunctionalScreenshot(page, 'agent-onboarding-operations.png', {
+  await captureFunctionalScreenshot(page, 'agent-onboarding-nexus-agent.png', {
     viewport: { width: 1440, height: 900 },
   });
-  await onboarding.getByRole('button', { name: 'Install Operations & enable Agent', exact: true }).click();
+  await onboarding.getByRole('button', { name: 'Install Nexus Agent & enable Agent', exact: true }).click();
 
   await expect(onboarding).toHaveCount(0, { timeout: 15_000 });
   await expect(featureSection.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
@@ -83,7 +83,7 @@ test('Agent feature enable opens one global floating window that survives route 
   expect(installations.ok(), await installations.text()).toBeTruthy();
   await expect(installations.json()).resolves.toMatchObject({
     data: expect.arrayContaining([
-      expect.objectContaining({ appId: 'nexus.operations', version: '1.0.0', status: 'installed' }),
+      expect.objectContaining({ appId: 'nexus.agent', version: '1.0.0', status: 'installed' }),
     ]),
   });
 
@@ -105,7 +105,7 @@ test('Agent settings surface exposes the production control plane and captures f
   context,
 }) => {
   await loginAsInitialAdmin(context.request);
-  await enableAgentWithRecommendedOperations(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Agent', exact: true }).click();
 
@@ -187,7 +187,7 @@ const csrfToken = async (request: import('@playwright/test').APIRequestContext):
   return body.data.token;
 };
 
-const enableAgentWithRecommendedOperations = async (request: APIRequestContext): Promise<AppSummary> => {
+const enableAgentWithRecommendedNexusAgent = async (request: APIRequestContext): Promise<AppSummary> => {
   const csrf = await csrfToken(request);
   const installed = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
     headers: { 'X-Nexus-CSRF': csrf },
@@ -341,13 +341,13 @@ const waitForAgentSubscribed = async (socket: PlaywrightWebSocket): Promise<void
     socket.on('close', onClose);
   });
 
-const setOperationsEnabledFromApi = async (
+const setNexusAgentEnabledFromApi = async (
   request: APIRequestContext,
   enabled: boolean,
   expectedVersion: number,
   csrf: string,
 ): Promise<AppSummary> => {
-  const response = await request.patch('/api/v1/agent/apps/nexus.operations', {
+  const response = await request.patch('/api/v1/agent/apps/nexus.agent', {
     headers: { 'X-Nexus-CSRF': csrf },
     data: { enabled, expectedVersion },
   });
@@ -355,7 +355,7 @@ const setOperationsEnabledFromApi = async (
   return ((await response.json()) as AgentEnvelope<AppSummary>).data;
 };
 
-const setOperationsEnabledFromPage = async (
+const setNexusAgentEnabledFromPage = async (
   page: Page,
   enabled: boolean,
   expectedVersion: number,
@@ -366,7 +366,7 @@ const setOperationsEnabledFromPage = async (
       const csrfText = await csrfResponse.text();
       if (!csrfResponse.ok) throw new Error(csrfText);
       const csrf = JSON.parse(csrfText) as { data: { token: string } };
-      const response = await fetch('/api/v1/agent/apps/nexus.operations', {
+      const response = await fetch('/api/v1/agent/apps/nexus.agent', {
         method: 'PATCH',
         credentials: 'same-origin',
         headers: {
@@ -384,7 +384,7 @@ const setOperationsEnabledFromPage = async (
 
 test('Agent Host reconnects automatically and catches up durable Host events', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
-  await enableAgentWithRecommendedOperations(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
 
   let blockAgentReconnects = false;
   let connectedAgentRoute: WebSocketRoute | undefined;
@@ -402,11 +402,11 @@ test('Agent Host reconnects automatically and catches up durable Host events', a
   const apps = await context.request.get('/api/v1/agent/apps');
   expect(apps.ok(), await apps.text()).toBeTruthy();
   const appsBody = (await apps.json()) as AgentEnvelope<AppSummary[]>;
-  let operations = appsBody.data.find((app) => app.id === 'nexus.operations')!;
-  const originalEnabled = operations.enabled;
+  let agentApp = appsBody.data.find((app) => app.id === 'nexus.agent')!;
+  const originalEnabled = agentApp.enabled;
   const csrf = await csrfToken(context.request);
-  if (!operations.enabled) {
-    operations = await setOperationsEnabledFromApi(context.request, true, operations.stateVersion, csrf);
+  if (!agentApp.enabled) {
+    agentApp = await setNexusAgentEnabledFromApi(context.request, true, agentApp.stateVersion, csrf);
   }
 
   const initialSocketPromise = page.waitForEvent('websocket', {
@@ -427,22 +427,22 @@ test('Agent Host reconnects automatically and catches up durable Host events', a
     await connectedAgentRoute!.close({ code: 1012, reason: 'E2E controlled disconnect' });
     await expect.poll(() => agentConnectionAttempts, { timeout: 5_000 }).toBeGreaterThan(1);
 
-    operations = await setOperationsEnabledFromApi(context.request, false, operations.stateVersion, csrf);
+    agentApp = await setNexusAgentEnabledFromApi(context.request, false, agentApp.stateVersion, csrf);
     await expect(hub).toBeVisible();
 
     blockAgentReconnects = false;
     await expect(hub).toHaveCount(0, { timeout: 15_000 });
   } finally {
     blockAgentReconnects = false;
-    if (operations.enabled !== originalEnabled) {
-      operations = await setOperationsEnabledFromApi(context.request, originalEnabled, operations.stateVersion, csrf);
+    if (agentApp.enabled !== originalEnabled) {
+      agentApp = await setNexusAgentEnabledFromApi(context.request, originalEnabled, agentApp.stateVersion, csrf);
     }
   }
 });
 
 test('Agent WebSocket replays durable Host events after a disconnect', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
-  await enableAgentWithRecommendedOperations(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
   await page.goto('/connections');
 
   const summary = await context.request.get('/api/v1/agent/summary');
@@ -453,15 +453,15 @@ test('Agent WebSocket replays durable Host events after a disconnect', async ({ 
   const apps = await context.request.get('/api/v1/agent/apps');
   expect(apps.ok(), await apps.text()).toBeTruthy();
   const appsBody = (await apps.json()) as AgentEnvelope<AppSummary[]>;
-  const operations = appsBody.data.find((app) => app.id === 'nexus.operations')!;
-  const originalEnabled = operations.enabled;
+  const agentApp = appsBody.data.find((app) => app.id === 'nexus.agent')!;
+  const originalEnabled = agentApp.enabled;
 
   await openHostAgentSubscription(page, initialCursor, 'first');
-  const toggled = await setOperationsEnabledFromPage(page, !originalEnabled, operations.stateVersion);
+  const toggled = await setNexusAgentEnabledFromPage(page, !originalEnabled, agentApp.stateVersion);
   const firstSequence = await waitForDurableAgentSequence(page, 'first', initialCursor);
   await closeAgentSubscription(page, 'first');
 
-  const restored = await setOperationsEnabledFromPage(page, originalEnabled, toggled.stateVersion);
+  const restored = await setNexusAgentEnabledFromPage(page, originalEnabled, toggled.stateVersion);
   expect(restored.enabled).toBe(originalEnabled);
 
   await openHostAgentSubscription(page, firstSequence, 'second');
@@ -476,7 +476,7 @@ test('Agent WebSocket replays durable Host events after a disconnect', async ({ 
   });
 
   const retiredRunSse = await context.request.get(
-    '/api/v1/apps/nexus.operations/runs/00000000-0000-4000-8000-000000000000/events?cursor=0',
+    '/api/v1/apps/nexus.agent/runs/00000000-0000-4000-8000-000000000000/events?cursor=0',
   );
   expect(retiredRunSse.status()).toBe(410);
   await expect(retiredRunSse.json()).resolves.toMatchObject({
@@ -532,7 +532,7 @@ test('Agent WebSocket bounds concurrent sockets per authenticated session', asyn
   expect(outcomes.filter((outcome) => outcome === 'rejected')).toHaveLength(1);
 });
 
-test('Agent Host installs Operations safely and persists explicit lifecycle/settings choices', async ({ request }) => {
+test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/settings choices', async ({ request }) => {
   await step('Agent APIs use their own authenticated error envelope', async () => {
     const anonymous = await request.get('/api/v1/agent/apps');
     expect(anonymous.status()).toBe(401);
@@ -545,25 +545,25 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
   const csrf = await csrfToken(request);
   const mutationHeaders = { 'X-Nexus-CSRF': csrf };
 
-  let operations!: AppSummary;
+  let agentApp!: AppSummary;
 
-  await step('Operations is absent from the Host until the signed first-party Plugin is installed', async () => {
+  await step('Nexus Agent is absent from the Host until the signed first-party Plugin is installed', async () => {
     const core = await request.get('/api/v1/status');
     expect(core.ok(), await core.text()).toBeTruthy();
 
     const before = await request.get('/api/v1/agent/apps');
     expect(before.ok(), await before.text()).toBeTruthy();
     const beforeBody = (await before.json()) as AgentEnvelope<AppSummary[]>;
-    expect(beforeBody.data.some((app) => app.id === 'nexus.operations')).toBe(false);
+    expect(beforeBody.data.some((app) => app.id === 'nexus.agent')).toBe(false);
 
     const recommendation = await request.get('/api/v1/agent/onboarding/recommended-plugin');
     expect(recommendation.ok(), await recommendation.text()).toBeTruthy();
     await expect(recommendation.json()).resolves.toMatchObject({
       data: {
-        appId: 'nexus.operations',
+        appId: 'nexus.agent',
         installed: false,
         availableVersion: '1.0.0',
-        displayName: 'Operations',
+        displayName: 'Nexus Agent',
       },
     });
 
@@ -578,10 +578,10 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
     expect(response.ok(), await response.text()).toBeTruthy();
     const body = (await response.json()) as AgentEnvelope<AppSummary[]>;
     expect(body.requestId).toBe(response.headers()['x-request-id']);
-    operations = body.data.find((app) => app.id === 'nexus.operations')!;
-    expect(operations).toMatchObject({
-      id: 'nexus.operations',
-      displayName: 'Operations',
+    agentApp = body.data.find((app) => app.id === 'nexus.agent')!;
+    expect(agentApp).toMatchObject({
+      id: 'nexus.agent',
+      displayName: 'Nexus Agent',
       version: '1.0.0',
       enabled: true,
       health: 'healthy',
@@ -597,7 +597,7 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
   await step(
     'live ACP and Browser capabilities are declared and default-granted without requiring Runner',
     async () => {
-      const response = await request.get('/api/v1/agent/apps/nexus.operations/grants');
+      const response = await request.get('/api/v1/agent/apps/nexus.agent/grants');
       expect(response.ok(), await response.text()).toBeTruthy();
       const body = (await response.json()) as AgentEnvelope<{
         declaredCapabilities: string[];
@@ -613,19 +613,19 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
   );
 
   await step('Agent mutations reject missing CSRF and stale CAS versions', async () => {
-    const missingCsrf = await request.patch('/api/v1/agent/apps/nexus.operations', {
-      data: { enabled: false, expectedVersion: operations.stateVersion },
+    const missingCsrf = await request.patch('/api/v1/agent/apps/nexus.agent', {
+      data: { enabled: false, expectedVersion: agentApp.stateVersion },
     });
     expect(missingCsrf.status()).toBe(403);
     await expect(missingCsrf.json()).resolves.toMatchObject({ error: { code: 'CSRF_REJECTED' } });
 
-    const disabled = await request.patch('/api/v1/agent/apps/nexus.operations', {
+    const disabled = await request.patch('/api/v1/agent/apps/nexus.agent', {
       headers: mutationHeaders,
-      data: { enabled: false, expectedVersion: operations.stateVersion },
+      data: { enabled: false, expectedVersion: agentApp.stateVersion },
     });
     expect(disabled.ok(), await disabled.text()).toBeTruthy();
     const disabledBody = (await disabled.json()) as AgentEnvelope<AppSummary>;
-    expect(disabledBody.data).toMatchObject({ id: 'nexus.operations', enabled: false, health: 'disabled' });
+    expect(disabledBody.data).toMatchObject({ id: 'nexus.agent', enabled: false, health: 'disabled' });
 
     const restored = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
       headers: mutationHeaders,
@@ -635,77 +635,80 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
     const restoredBody = (await restored.json()) as AgentEnvelope<{ app: AppSummary; installedNow: boolean }>;
     expect(restoredBody.data).toMatchObject({
       installedNow: false,
-      app: { id: 'nexus.operations', enabled: true, health: 'healthy', healthReason: null },
+      app: { id: 'nexus.agent', enabled: true, health: 'healthy', healthReason: null },
     });
 
-    const stale = await request.patch('/api/v1/agent/apps/nexus.operations', {
+    const stale = await request.patch('/api/v1/agent/apps/nexus.agent', {
       headers: mutationHeaders,
-      data: { enabled: false, expectedVersion: operations.stateVersion },
+      data: { enabled: false, expectedVersion: agentApp.stateVersion },
     });
     expect(stale.status()).toBe(409);
     await expect(stale.json()).resolves.toMatchObject({ error: { code: 'STATE_CONFLICT' } });
-    operations = restoredBody.data.app;
+    agentApp = restoredBody.data.app;
   });
 
-  await step('Agent settings patch preserves Hard Limits and explicit feature choice through the host state', async () => {
-    const before = await request.get('/api/v1/agent/settings');
-    expect(before.ok(), await before.text()).toBeTruthy();
-    const beforeBody = (await before.json()) as AgentEnvelope<{
-      requestedSettings: { feature: { enabled: boolean }; hardLimits: { maxConcurrentRuntimes: number } };
-      effectiveSettings: { feature: { enabled: boolean } };
-      hardLimits: { maxConcurrentRuntimes: number };
-      availability: { state: string };
-      revision: number;
-    }>;
-    expect(beforeBody.data).toMatchObject({
-      requestedSettings: { feature: { enabled: false } },
-      effectiveSettings: { feature: { enabled: false } },
-      hardLimits: { maxConcurrentRuntimes: 4 },
-      availability: { state: 'disabled' },
-      revision: 1,
-    });
+  await step(
+    'Agent settings patch preserves Hard Limits and explicit feature choice through the host state',
+    async () => {
+      const before = await request.get('/api/v1/agent/settings');
+      expect(before.ok(), await before.text()).toBeTruthy();
+      const beforeBody = (await before.json()) as AgentEnvelope<{
+        requestedSettings: { feature: { enabled: boolean }; hardLimits: { maxConcurrentRuntimes: number } };
+        effectiveSettings: { feature: { enabled: boolean } };
+        hardLimits: { maxConcurrentRuntimes: number };
+        availability: { state: string };
+        revision: number;
+      }>;
+      expect(beforeBody.data).toMatchObject({
+        requestedSettings: { feature: { enabled: false } },
+        effectiveSettings: { feature: { enabled: false } },
+        hardLimits: { maxConcurrentRuntimes: 4 },
+        availability: { state: 'disabled' },
+        revision: 1,
+      });
 
-    const directHardLimit = await request.patch('/api/v1/agent/settings', {
-      headers: mutationHeaders,
-      data: {
-        patch: { hardLimits: { maxConcurrentRuntimes: 5 } },
-        expectedVersion: beforeBody.data.revision,
-      },
-    });
-    expect(directHardLimit.status()).toBe(400);
-    await expect(directHardLimit.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
+      const directHardLimit = await request.patch('/api/v1/agent/settings', {
+        headers: mutationHeaders,
+        data: {
+          patch: { hardLimits: { maxConcurrentRuntimes: 5 } },
+          expectedVersion: beforeBody.data.revision,
+        },
+      });
+      expect(directHardLimit.status()).toBe(400);
+      await expect(directHardLimit.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
 
-    const enabled = await request.patch('/api/v1/agent/settings', {
-      headers: mutationHeaders,
-      data: { patch: { feature: { enabled: true } }, expectedVersion: beforeBody.data.revision },
-    });
-    expect(enabled.ok(), await enabled.text()).toBeTruthy();
-    const enabledBody = (await enabled.json()) as AgentEnvelope<{
-      effectiveSettings: { feature: { enabled: boolean } };
-      availability: { state: string };
-      revision: number;
-    }>;
-    expect(enabledBody.data).toMatchObject({
-      effectiveSettings: { feature: { enabled: true } },
-      availability: { state: 'enabled' },
-      revision: 2,
-    });
+      const enabled = await request.patch('/api/v1/agent/settings', {
+        headers: mutationHeaders,
+        data: { patch: { feature: { enabled: true } }, expectedVersion: beforeBody.data.revision },
+      });
+      expect(enabled.ok(), await enabled.text()).toBeTruthy();
+      const enabledBody = (await enabled.json()) as AgentEnvelope<{
+        effectiveSettings: { feature: { enabled: boolean } };
+        availability: { state: string };
+        revision: number;
+      }>;
+      expect(enabledBody.data).toMatchObject({
+        effectiveSettings: { feature: { enabled: true } },
+        availability: { state: 'enabled' },
+        revision: 2,
+      });
 
-    const reread = await request.get('/api/v1/agent/settings');
-    expect(reread.ok(), await reread.text()).toBeTruthy();
-    await expect(reread.json()).resolves.toMatchObject({
-      data: { effectiveSettings: { feature: { enabled: true } }, revision: enabledBody.data.revision },
-    });
+      const reread = await request.get('/api/v1/agent/settings');
+      expect(reread.ok(), await reread.text()).toBeTruthy();
+      await expect(reread.json()).resolves.toMatchObject({
+        data: { effectiveSettings: { feature: { enabled: true } }, revision: enabledBody.data.revision },
+      });
 
-    const disabled = await request.patch('/api/v1/agent/settings', {
-      headers: mutationHeaders,
-      data: { patch: { feature: { enabled: false } }, expectedVersion: enabledBody.data.revision },
-    });
-    expect(disabled.ok(), await disabled.text()).toBeTruthy();
-    await expect(disabled.json()).resolves.toMatchObject({
-      data: { effectiveSettings: { feature: { enabled: false } }, availability: { state: 'disabled' }, revision: 3 },
-    });
-  });
+      const disabled = await request.patch('/api/v1/agent/settings', {
+        headers: mutationHeaders,
+        data: { patch: { feature: { enabled: false } }, expectedVersion: enabledBody.data.revision },
+      });
+      expect(disabled.ok(), await disabled.text()).toBeTruthy();
+      await expect(disabled.json()).resolves.toMatchObject({
+        data: { effectiveSettings: { feature: { enabled: false } }, availability: { state: 'disabled' }, revision: 3 },
+      });
+    },
+  );
 
   await step('Browser targets and ACP profiles remain configurable while the optional Runner is absent', async () => {
     const before = await request.get('/api/v1/agent/settings');
@@ -757,7 +760,7 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
       },
     });
 
-    const created = await request.post('/api/v1/apps/nexus.operations/integrations', {
+    const created = await request.post('/api/v1/apps/nexus.agent/integrations', {
       headers: mutationHeaders,
       data: {
         kind: 'acp',
@@ -774,7 +777,7 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
     const createdBody = (await created.json()) as AgentEnvelope<{ id: string; kind: string; version: number }>;
     expect(createdBody.data).toMatchObject({ kind: 'acp', version: 1 });
 
-    const listed = await request.get('/api/v1/apps/nexus.operations/integrations?kind=acp');
+    const listed = await request.get('/api/v1/apps/nexus.agent/integrations?kind=acp');
     expect(listed.ok(), await listed.text()).toBeTruthy();
     await expect(listed.json()).resolves.toMatchObject({
       data: [
@@ -788,7 +791,7 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
     });
 
     const removed = await request.delete(
-      `/api/v1/apps/nexus.operations/integrations/${encodeURIComponent(createdBody.data.id)}?expectedVersion=${createdBody.data.version}`,
+      `/api/v1/apps/nexus.agent/integrations/${encodeURIComponent(createdBody.data.id)}?expectedVersion=${createdBody.data.version}`,
       { headers: mutationHeaders },
     );
     expect(removed.ok(), await removed.text()).toBeTruthy();

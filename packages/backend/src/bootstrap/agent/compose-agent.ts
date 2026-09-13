@@ -310,6 +310,7 @@ export const composeAgent = ({
     mailbox,
     facts: sharedFacts,
     memories,
+    skills,
     cryptoHash,
   });
   const integrations = new IntegrationService(

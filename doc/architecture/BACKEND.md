@@ -328,7 +328,7 @@ A practical ownership guide for locating code:
 
 ## Agent App Platform and AI applications
 
-Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,workspace-runtime,runtime,apps/operations}`, concrete adapters under `infrastructure/agent`, HTTP boundaries under `interfaces/http/agent`, the Browser Agent event boundary under `interfaces/websocket/agent-protocol.session.ts` (`/ws/agent`), and composition under `bootstrap/agent`. The plugin host, shared AI capabilities and built-in Operations App are defined in [Agent Architecture](../AGENT.md).
+Agent/AI functionality follows a **Nexus App Platform + reusable capability platforms + installable App contributions** model. The current Backend implementation lives under `modules/agent/{host,ai,capabilities,workspace-runtime,runtime,tools}`, concrete adapters under `infrastructure/agent`, HTTP boundaries under `interfaces/http/agent`, the Browser Agent event boundary under `interfaces/websocket/agent-protocol.session.ts` (`/ws/agent`), and composition under `bootstrap/agent`. The Plugin Host, shared AI capabilities, governed Host tools and installable first-party Apps are defined in [Agent Architecture](../AGENT.md).
 
 Target composition:
 
@@ -342,7 +342,7 @@ modules/agent/
 ├── capabilities     Tool Catalog/authorization/policy/approval/lease boundary
 ├── workspace-runtime Workspace lifecycle/profile/control use cases
 ├── runtime          Run/event/planning/recovery/collaboration/exchange
-└── apps/operations  built-in Operations contribution only
+└── tools/host       cross-domain governed Host Tool implementations
         │
         ▼ typed ports
 platform capabilities
@@ -350,20 +350,20 @@ platform capabilities
         │
 infrastructure/agent + existing infrastructure adapters
 
-bootstrap/agent validates/registers built-ins and constructs the concrete graph
+bootstrap/agent validates/registers Host/Core contributions and constructs the concrete graph
 ```
 
-`modules/agent/host` owns App manifest/registry/lifecycle/capability grants/AppStorage/AppIntent and Plugin lifecycle/SDK contracts. It must not import Operations or Runtime private implementation. Backend architecture guard enforces the Agent area dependency matrix.
+`modules/agent/host` owns App manifest/registry/lifecycle/capability grants/AppStorage/AppIntent and Plugin lifecycle/SDK contracts. It must not import Runtime private implementation or first-party Plugin package code. Backend architecture guard enforces the Agent area dependency matrix.
 
-`modules/agent/ai` owns reusable Provider/model routing, canonical Conversation/User Input, Context, Recall/Memory, Skills, Artifacts and external integration contracts. Generic Tool Catalog and real capability authorization belong to `modules/agent/capabilities`, not AI. AI has no dependency on Operations private implementation.
+`modules/agent/ai` owns reusable Provider/model routing, canonical Conversation/User Input, Context, Recall/Memory, Skill metadata/body registry, Artifacts and external integration contracts. Generic Tool Catalog and real capability authorization belong to `modules/agent/capabilities`, not AI. AI does not import first-party Plugin implementation.
 
 `modules/agent/workspace-runtime` owns Backend-side Workspace identity/profile/version, settings/setup/cleanup confirmation and Runner control use cases. `infrastructure/agent/workspace-runtime/runner-http.adapter.ts` is the only Backend↔Runner transport adapter: every HTTP/WebSocket call carries the shared Bearer token plus `X-Nexus-Agent-Protocol: 2026-09-13`. Only `provision` sends the full frozen Runner profile; later lifecycle and job calls use the minimal `workspaceId + generation + execution input` contract. Backend user/App/Run identity, optimistic version and operation-hash/idempotency facts remain Backend-owned and are not duplicated into Runner payloads.
 
-The built-in Operations contribution lives at `modules/agent/apps/operations/`. Generic AgentDefinition/Run/AgentRuntime/Plan/Checkpoint/Subagent scheduling belongs to `modules/agent/runtime`; Operations contributes concrete definitions, Tools, risk classification and verification policy through public Agent contracts. It consumes AI and machine capabilities through the Host/Capability boundary rather than owning Infrastructure handles.
+Operations / Developer no longer exist as compile-time Backend App contributions. The default `nexus.agent` package is a first-party installable App with one generic AgentDefinition and multiple signed Skills; Host-owned governed tool implementations remain under `modules/agent/tools/host` and continue through Capability/Policy/Approval/Lease boundaries. Skill discovery is metadata-first: Context sends only `id/name/description`, and the model must call the read-only `skill_read` Host tool before any Skill body is returned.
 
-### Built-in vs installable Apps
+### Host/Core vs installable Apps
 
-Built-in Apps are trusted compile-time contributions registered by Bootstrap. Installable packages follow the Agent Plugin contract: package staging/signature/file-list verification occurs before activation; Backend target code runs through the Backend-owned process sandbox, Runner target code runs as a generation-scoped native Runner child process under the single-user trust model, and Frontend target assets are served from a separate origin into a sandboxed iframe that owns the full Custom App Surface. That isolated origin also serves the Nexus-owned `/sdk/frontend-v1.mjs`; Frontend Plugin code reaches App-scoped Agent/AppStorage operations only through the bounded MessagePort SDK and never receives Nexus cookies, CSRF material, raw HTTP clients, database, Workspace, Docker socket or other Host objects.
+Host/Core runtime primitives are trusted compile-time code registered by Bootstrap; distributable Apps are installable packages. Package staging/signature/file-list verification occurs before activation; Backend target code runs through the Backend-owned process sandbox, Runner target code runs as a generation-scoped native Runner child process under the single-user trust model, and Frontend target assets are served from a separate origin into a sandboxed iframe that owns the full Custom App Surface. That isolated origin also serves the Nexus-owned `/sdk/frontend-v1.mjs`; Frontend Plugin code reaches App-scoped Agent/AppStorage operations only through the bounded MessagePort SDK and never receives Nexus cookies, CSRF material, raw HTTP clients, database, Workspace, Docker socket or other Host objects.
 
 Plugin package bytes, immutable installed versions, AppStorage and runtime workspace/Artifact data remain separate lifecycle owners. Upgrade is stage→validate→quiesce/snapshot→activate/health; migration failure may restore package/version state but cannot claim rollback of already executed remote side effects.
 
@@ -399,6 +399,6 @@ Apps do not own Express directly. The Interface/App Host dispatches authenticate
 /api/v1/apps/<app-id>/...
 ```
 
-Operations examples use `/api/v1/apps/nexus.operations/...`; shared Provider/model resources remain `/api/v1/ai/...`.
+Default Agent examples use `/api/v1/apps/nexus.agent/...`; `nexus.operations` / `nexus.developer` are Skill IDs inside that App, while shared Provider/model resources remain `/api/v1/ai/...`.
 
 HTTP/WebSocket authentication, request bounds, streaming/backpressure and transport lifecycle remain Interface responsibilities. Provider SSE parsing stays inside the Provider adapter; Browser Agent events use the `/ws/agent` Interface boundary. A plugin cannot register a route that bypasses them.

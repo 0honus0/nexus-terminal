@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "nexus.fullstack",
+  "version": "1.0.0",
+  "displayName": "Full-stack Plugin",
+  "sdkVersion": "1.0.0",
+  "nexus": {
+    "minVersion": "1.0.0",
+    "maxVersion": "1.99.99"
+  },
+  "capabilities": ["storage.app"],
+  "intents": [],
+  "targets": {
+    "frontend": {
+      "entry": "frontend/index.html"
+    },
+    "backend": {
+      "entry": "backend/index.mjs"
+    },
+    "runner": {
+      "entry": "runner/index.mjs"
+    }
+  }
+}

@@ -60,7 +60,7 @@
 
 ## 6. 当前范围说明
 
-本需求基线覆盖当前 Nexus Terminal 用户可达能力与已经确认的 clean architecture 行为。Agent 正式需求见 [Agent Platform](requirements/agent.md)，唯一架构规范为 [`doc/AGENT.md`](../AGENT.md)。当前 Agent 已进入 live product baseline：全局 floating Host、Thread/Run/Ledger、typed Plan、运行中 append-input interruption、Artifact、Policy/Approval/Lease、Workspace Runtime/Host Runner、MCP、ACP、Browser tunnel、Workspace local Terminal、Subagent 与 installable Agent plugin 均已有 production wiring；具体“已实现/待实现”只按 Agent SRS 状态解释。当前用户可编辑 durable Goal、Conversation slash-command、基于 Ledger/watermark 的 `/queue` inspection + versioned remove/reorder，以及服务端校验/冻结的 Next Run Environment selector 已交付。`nexus.operations` 现作为独立 first-party installable Plugin 由 Agent onboarding 推荐安装，不再是主镜像 compile-time built-in App。既有非 Agent 功能仍以当前已实现基线为准。
+本需求基线覆盖当前 Nexus Terminal 用户可达能力与已经确认的 clean architecture 行为。Agent 正式需求见 [Agent Platform](requirements/agent.md)，唯一架构规范为 [`doc/AGENT.md`](../AGENT.md)。当前 Agent 已进入 live product baseline：全局 floating Host、Thread/Run/Ledger、typed Plan、运行中 append-input interruption、Artifact、Policy/Approval/Lease、Workspace Runtime/Host Runner、MCP、ACP、Browser tunnel、Workspace local Terminal、Subagent 与 installable Agent plugin 均已有 production wiring；具体“已实现/待实现”只按 Agent SRS 状态解释。当前用户可编辑 durable Goal、Conversation slash-command、基于 Ledger/watermark 的 `/queue` inspection + versioned remove/reorder，以及服务端校验/冻结的 Next Run Environment selector 已交付。`nexus.agent` 现作为默认 first-party installable Plugin 由 Agent onboarding 推荐安装；一个通用 AgentDefinition 内包含 Operations / Developer 两个 Skill。`nexus.fullstack` 独立覆盖 frontend/backend/runner target 组合；这些 App 均不属于主镜像 compile-time built-in。既有非 Agent 功能仍以当前已实现基线为准。
 
 ## 7. v1.5–v1.7 UI / 交互回归需求索引
 

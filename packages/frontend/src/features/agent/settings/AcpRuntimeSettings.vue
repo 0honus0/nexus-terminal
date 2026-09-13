@@ -15,8 +15,8 @@
     cwd: string;
   }
 
-  const OPERATIONS_APP_ID = 'nexus.operations';
-  const props = defineProps<{ settings: AgentSettingsView; busy: boolean; operationsAvailable: boolean }>();
+  const DEFAULT_AGENT_APP_ID = 'nexus.agent';
+  const props = defineProps<{ settings: AgentSettingsView; busy: boolean; agentAvailable: boolean }>();
   const emit = defineEmits<{ saveProfiles: [profiles: Profile[]] }>();
 
   const profiles = ref<ProfileDraft[]>([]);
@@ -52,7 +52,7 @@
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'ACP request failed.');
 
   const loadIntegrations = async (): Promise<void> => {
-    if (!props.operationsAvailable) {
+    if (!props.agentAvailable) {
       integrations.value = [];
       loading.value = false;
       return;
@@ -60,7 +60,7 @@
     loading.value = true;
     error.value = '';
     try {
-      integrations.value = await agentApi.integrations(OPERATIONS_APP_ID, 'acp');
+      integrations.value = await agentApi.integrations(DEFAULT_AGENT_APP_ID, 'acp');
     } catch (cause) {
       error.value = explain(cause);
     } finally {
@@ -132,7 +132,7 @@
     const selectedProfile = profileId.value;
     if (!name || !selectedProfile) return;
     void run(async () => {
-      await agentApi.createIntegration(OPERATIONS_APP_ID, {
+      await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, {
         kind: 'acp',
         configuration: {
           displayName: name,
@@ -151,7 +151,7 @@
   const toggleIntegration = (integration: AgentIntegrationView, nextEnabled: boolean): void => {
     const configuration = acpConfiguration(integration);
     void run(async () => {
-      await agentApi.updateIntegration(OPERATIONS_APP_ID, integration, {
+      await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
         kind: 'acp',
         configuration: { ...configuration },
         enabled: nextEnabled,
@@ -164,7 +164,7 @@
     const configuration = acpConfiguration(integration);
     if (!configuredProfiles.value.some((profile) => profile.id === nextProfileId)) return;
     void run(async () => {
-      await agentApi.updateIntegration(OPERATIONS_APP_ID, integration, {
+      await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
         kind: 'acp',
         configuration: { ...configuration, profileId: nextProfileId },
         enabled: integration.enabled,
@@ -175,7 +175,7 @@
 
   const removeIntegration = (integration: AgentIntegrationView): void => {
     void run(async () => {
-      await agentApi.deleteIntegration(OPERATIONS_APP_ID, integration);
+      await agentApi.deleteIntegration(DEFAULT_AGENT_APP_ID, integration);
       await loadIntegrations();
     }, 'ACP integration deleted.');
   };
@@ -268,7 +268,7 @@
         <button
           type="button"
           class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
-          :disabled="disabled || loading || !operationsAvailable"
+          :disabled="disabled || loading || !agentAvailable"
           @click="loadIntegrations"
         >
           {{ $t('agent.settings.acpRuntime.refresh') }}
@@ -276,10 +276,10 @@
       </div>
 
       <p
-        v-if="!operationsAvailable"
+        v-if="!agentAvailable"
         class="mt-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
       >
-        {{ $t('agent.settings.acpRuntime.installOperationsFirst') }}
+        {{ $t('agent.settings.acpRuntime.installAgentFirst') }}
       </p>
 
       <div class="mt-3 grid gap-2 md:grid-cols-[2fr_2fr_auto_auto]">
@@ -306,7 +306,7 @@
           <button
             type="button"
             class="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
-            :disabled="disabled || !operationsAvailable || !displayName.trim() || !profileId"
+            :disabled="disabled || !agentAvailable || !displayName.trim() || !profileId"
             @click="createIntegration"
           >
             {{ $t('agent.settings.acpRuntime.createIntegration') }}

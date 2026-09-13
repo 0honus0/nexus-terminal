@@ -4,6 +4,7 @@ import type { IntegrationRepositoryPort } from '../../modules/agent/ai/integrati
 import type { IntegrationServiceHooks } from '../../modules/agent/ai/integration.service';
 import type { AcpRuntimePort, BrowserGatewayPort, McpRuntimePort } from '../../modules/agent/ai/integrations.types';
 import type { MemoryService } from '../../modules/agent/ai/memory.service';
+import type { SkillRegistry } from '../../modules/agent/ai/skill-registry';
 import { createCollaborationTools } from '../../modules/agent/tools/host/collaboration-tools';
 import { createMcpTools } from '../../modules/agent/tools/host/mcp-tools';
 import { createAcpExecuteTool } from '../../modules/agent/tools/host/acp-tools';
@@ -20,6 +21,7 @@ import {
   createWorkspaceSwitchToolVersionsTool,
 } from '../../modules/agent/tools/host/workspace-runtime-management-tools';
 import { createWorkspaceJobTool } from '../../modules/agent/tools/host/workspace-tools';
+import { createSkillReadTool } from '../../modules/agent/tools/host/skill-tools';
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
@@ -119,6 +121,7 @@ export interface RuntimeToolContributionOptions {
   mailbox: MailboxService;
   facts: SharedFactsService;
   memories: MemoryService;
+  skills: SkillRegistry;
   cryptoHash: CryptoHashPort;
 }
 
@@ -130,8 +133,15 @@ export const registerRuntimeToolContributions = ({
   mailbox,
   facts,
   memories,
+  skills,
   cryptoHash,
 }: RuntimeToolContributionOptions): void => {
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'runtime.skills',
+    capability: 'runs.execute',
+    tools: [createSkillReadTool(skills, cryptoHash)],
+  });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'runtime.plan',

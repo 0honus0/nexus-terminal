@@ -56,7 +56,7 @@ const waitForTerminalRun = async (request: APIRequestContext, runId: string): Pr
   const deadline = Date.now() + 30_000;
   let latest: RunView | null = null;
   while (Date.now() < deadline) {
-    const response = await request.get(`/api/v1/apps/nexus.developer/runs/${runId}`);
+    const response = await request.get(`/api/v1/apps/nexus.agent/runs/${runId}`);
     expect(response.ok(), await response.text()).toBeTruthy();
     latest = ((await response.json()) as Envelope<RunView>).data;
     if (['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted'].includes(latest.status))
@@ -66,7 +66,7 @@ const waitForTerminalRun = async (request: APIRequestContext, runId: string): Pr
   throw new Error(`Preset Agent Run did not reach a terminal state: ${JSON.stringify(latest)}`);
 };
 
-const installAndRunDeveloperPreset = async (
+const installAndRunNexusAgent = async (
   request: APIRequestContext,
 ): Promise<{ threadId: string; connectionId: number }> => {
   await loginAsInitialAdmin(request);
@@ -107,9 +107,7 @@ const installAndRunDeveloperPreset = async (
       packages: Array<{ appId: string; version: string; publisherKeyId: string; sha256: string; sizeBytes: number }>;
     }>;
     expect(catalog.data.repositoryUrl).toBe(repositoryUrl);
-    expect(catalog.data.packages).toContainEqual(
-      expect.objectContaining({ appId: 'nexus.developer', version: '1.1.0' }),
-    );
+    expect(catalog.data.packages).toContainEqual(expect.objectContaining({ appId: 'nexus.agent', version: '1.0.0' }));
     publisher = catalog.data.publishers.find(
       (candidate) => candidate.keyId === catalog.data.packages[0]!.publisherKeyId,
     )!;
@@ -123,10 +121,10 @@ const installAndRunDeveloperPreset = async (
   });
 
   let stageId = '';
-  await step('download, hash-check, signature-verify, and install the remote preset package', async () => {
+  await step('download, hash-check, signature-verify, and install the merged Nexus Agent package', async () => {
     const staged = await request.post('/api/v1/agent/plugins/remote/stage', {
       headers,
-      data: { repositoryUrl, appId: 'nexus.developer', version: '1.1.0' },
+      data: { repositoryUrl, appId: 'nexus.agent', version: '1.0.0' },
     });
     expect(staged.status(), await staged.text()).toBe(201);
     const stage = (await staged.json()) as Envelope<{
@@ -136,18 +134,18 @@ const installAndRunDeveloperPreset = async (
       version: string;
     }>;
     stageId = stage.data.id;
-    expect(stage.data).toMatchObject({ publisherKeyId: publisher.keyId, appId: 'nexus.developer', version: '1.1.0' });
+    expect(stage.data).toMatchObject({ publisherKeyId: publisher.keyId, appId: 'nexus.agent', version: '1.0.0' });
 
     const verified = await request.post('/api/v1/agent/plugins/verify', { headers, data: { stageId } });
     expect(verified.ok(), await verified.text()).toBeTruthy();
     await expect(verified.json()).resolves.toMatchObject({
       data: {
         plugin: {
-          appId: 'nexus.developer',
-          version: '1.1.0',
+          appId: 'nexus.agent',
+          version: '1.0.0',
           publisherKeyId: publisher.keyId,
-          manifest: { agents: [{ id: 'developer.default', version: '1.1.0' }] },
-          skillFiles: ['skills/developer-workflow/SKILL.md'],
+          manifest: { agents: [{ id: 'agent.default', version: '1.0.0' }] },
+          skillFiles: ['skills/developer/SKILL.md', 'skills/operations/SKILL.md'],
         },
       },
     });
@@ -155,12 +153,12 @@ const installAndRunDeveloperPreset = async (
     const installed = await request.post('/api/v1/agent/plugins/install', { headers, data: { stageId } });
     expect(installed.status(), await installed.text()).toBe(201);
     await expect(installed.json()).resolves.toMatchObject({
-      data: { plugin: { appId: 'nexus.developer', status: 'installed' }, app: { surface: 'agent' } },
+      data: { plugin: { appId: 'nexus.agent', status: 'installed' }, app: { surface: 'agent' } },
     });
   });
 
-  await step('grant model/run and bounded SSH mutation authority, then enable the installed preset', async () => {
-    const grants = await request.get('/api/v1/agent/apps/nexus.developer/grants');
+  await step('grant model/run and bounded SSH mutation authority, then enable the installed Nexus Agent', async () => {
+    const grants = await request.get('/api/v1/agent/apps/nexus.agent/grants');
     expect(grants.ok(), await grants.text()).toBeTruthy();
     const grantView = (await grants.json()) as Envelope<{
       policyRevision: number;
@@ -171,7 +169,7 @@ const installAndRunDeveloperPreset = async (
       expect.arrayContaining(['ai.model.use', 'runs.execute', 'workspace.runtime.execute', 'browser.operate']),
     );
     expect(grantView.data.grants).toHaveLength(0);
-    const replaced = await request.put('/api/v1/agent/apps/nexus.developer/grants', {
+    const replaced = await request.put('/api/v1/agent/apps/nexus.agent/grants', {
       headers,
       data: {
         capabilities: ['ai.model.use', 'runs.execute', 'machine.shell.execute'],
@@ -180,19 +178,19 @@ const installAndRunDeveloperPreset = async (
     });
     expect(replaced.ok(), await replaced.text()).toBeTruthy();
 
-    const app = await appSummary(request, 'nexus.developer');
-    const enabled = await request.patch('/api/v1/agent/apps/nexus.developer', {
+    const app = await appSummary(request, 'nexus.agent');
+    const enabled = await request.patch('/api/v1/agent/apps/nexus.agent', {
       headers,
       data: { enabled: true, expectedVersion: app.stateVersion },
     });
     expect(enabled.ok(), await enabled.text()).toBeTruthy();
     await expect(enabled.json()).resolves.toMatchObject({
-      data: { id: 'nexus.developer', enabled: true, health: 'healthy', surface: 'agent' },
+      data: { id: 'nexus.agent', enabled: true, health: 'healthy', surface: 'agent' },
     });
   });
 
   let provider!: ProviderView;
-  await step('configure a real model provider and make it the preset default', async () => {
+  await step('configure a real model provider and make it the Nexus Agent default', async () => {
     const created = await request.post('/api/v1/agent/ai/providers', {
       headers,
       data: {
@@ -224,48 +222,48 @@ const installAndRunDeveloperPreset = async (
 
   let threadId = '';
   await step('the plugin AgentDefinition is visible and completes a real Run', async () => {
-    const definitions = await request.get('/api/v1/apps/nexus.developer/agent-definitions');
+    const definitions = await request.get('/api/v1/apps/nexus.agent/agent-definitions');
     expect(definitions.ok(), await definitions.text()).toBeTruthy();
     await expect(definitions.json()).resolves.toMatchObject({
-      data: [{ id: 'developer.default', version: '1.1.0', displayName: 'Developer Agent' }],
+      data: [{ id: 'agent.default', version: '1.0.0', displayName: 'Nexus Agent' }],
     });
 
-    const thread = await request.post('/api/v1/apps/nexus.developer/threads', {
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
       headers,
       data: { title: 'Preset E2E thread' },
     });
     expect(thread.status(), await thread.text()).toBe(201);
     threadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.developer/runs', {
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
         threadId,
         input: {
-          text: 'E2E_GOAL_UPDATE_HOLD Reply with a short confirmation that the Developer Agent is running.',
+          text: 'E2E_GOAL_UPDATE_HOLD E2E_EXPECT_DEVELOPER_SKILL Implement and test a small code change, then confirm the Nexus Agent is running.',
           artifactRefs: [],
         },
-        agentDefinitionId: 'developer.default',
+        agentDefinitionId: 'agent.default',
         model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
         connectionIds: [],
       },
     });
     expect(created.status(), await created.text()).toBe(201);
     const run = ((await created.json()) as Envelope<RunView>).data;
-    expect(run.definition.agentDefinitionId).toBe('developer.default');
+    expect(run.definition.agentDefinitionId).toBe('agent.default');
 
     const runningDeadline = Date.now() + 10_000;
     let running = run;
     while (running.status !== 'running' && Date.now() < runningDeadline) {
-      const response = await request.get(`/api/v1/apps/nexus.developer/runs/${run.id}`);
+      const response = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}`);
       expect(response.ok(), await response.text()).toBeTruthy();
       running = ((await response.json()) as Envelope<RunView>).data;
       if (running.status !== 'running') await new Promise((resolve) => setTimeout(resolve, 100));
     }
     expect(running.status).toBe('running');
 
-    const durableGoal = 'Confirm the Developer Agent preset goal remains durable.';
-    const goalUpdated = await request.post(`/api/v1/apps/nexus.developer/runs/${run.id}/goal`, {
+    const durableGoal = 'Confirm the Nexus Agent Developer Skill goal remains durable.';
+    const goalUpdated = await request.post(`/api/v1/apps/nexus.agent/runs/${run.id}/goal`, {
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: { schemaVersion: 1, text: durableGoal, expectedVersion: running.version },
     });
@@ -276,25 +274,56 @@ const installAndRunDeveloperPreset = async (
     const terminal = await waitForTerminalRun(request, run.id);
     expect(['completed', 'completed_unverified']).toContain(terminal.status);
     expect(terminal.goal).toMatchObject({ text: durableGoal, revision: 1 });
-    const ledger = await request.get(`/api/v1/apps/nexus.developer/threads/${threadId}/entries?limit=50`);
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${threadId}/entries?limit=50`);
     expect(ledger.ok(), await ledger.text()).toBeTruthy();
     expect(JSON.stringify(await ledger.json())).toContain('OK');
   });
 
+  await step('the merged App exposes Operations separately through metadata-first Skill loading', async () => {
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
+      headers,
+      data: { title: 'Operations Skill E2E thread' },
+    });
+    expect(thread.status(), await thread.text()).toBe(201);
+    const operationsThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: operationsThreadId,
+        input: {
+          text: 'E2E_EXPECT_OPERATIONS_SKILL Diagnose service health and bounded logs for an incident.',
+          artifactRefs: [],
+        },
+        agentDefinitionId: 'agent.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        connectionIds: [],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const terminal = await waitForTerminalRun(request, ((await created.json()) as Envelope<RunView>).data.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${operationsThreadId}/entries?limit=50`);
+    expect(ledger.ok(), await ledger.text()).toBeTruthy();
+    const serialized = JSON.stringify(await ledger.json());
+    expect(serialized).toContain('skill_read');
+    expect(serialized).toContain('nexus.operations');
+  });
+
   await step('strict interrupt supersedes only a streaming model and drains the durable input queue', async () => {
-    const thread = await request.post('/api/v1/apps/nexus.developer/threads', {
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
       headers,
       data: { title: 'Preset interrupt E2E thread' },
     });
     expect(thread.status(), await thread.text()).toBe(201);
     const interruptThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
-    const created = await request.post('/api/v1/apps/nexus.developer/runs', {
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
         threadId: interruptThreadId,
         input: { text: 'E2E_INTERRUPT_HOLD Confirm strict interrupt rescheduling.', artifactRefs: [] },
-        agentDefinitionId: 'developer.default',
+        agentDefinitionId: 'agent.default',
         model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
         connectionIds: [],
       },
@@ -305,14 +334,14 @@ const installAndRunDeveloperPreset = async (
     const runningDeadline = Date.now() + 10_000;
     let running = run;
     while (running.status !== 'running' && Date.now() < runningDeadline) {
-      const response = await request.get(`/api/v1/apps/nexus.developer/runs/${run.id}`);
+      const response = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}`);
       expect(response.ok(), await response.text()).toBeTruthy();
       running = ((await response.json()) as Envelope<RunView>).data;
       if (running.status !== 'running') await new Promise((resolve) => setTimeout(resolve, 100));
     }
     expect(running.status).toBe('running');
 
-    const interrupted = await request.post(`/api/v1/apps/nexus.developer/runs/${run.id}/interrupt`, {
+    const interrupted = await request.post(`/api/v1/apps/nexus.agent/runs/${run.id}/interrupt`, {
       headers: { ...headers, 'Idempotency-Key': randomUUID() },
       data: {
         schemaVersion: 1,
@@ -325,11 +354,11 @@ const installAndRunDeveloperPreset = async (
 
     const terminal = await waitForTerminalRun(request, run.id);
     expect(['completed', 'completed_unverified']).toContain(terminal.status);
-    const pending = await request.get(`/api/v1/apps/nexus.developer/runs/${run.id}/pending-inputs`);
+    const pending = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}/pending-inputs`);
     expect(pending.ok(), await pending.text()).toBeTruthy();
     await expect(pending.json()).resolves.toMatchObject({ data: { items: [], total: 0, hasMore: false } });
 
-    const ledger = await request.get(`/api/v1/apps/nexus.developer/threads/${interruptThreadId}/entries?limit=50`);
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${interruptThreadId}/entries?limit=50`);
     expect(ledger.ok(), await ledger.text()).toBeTruthy();
     expect(JSON.stringify(await ledger.json())).toContain('E2E_INTERRUPT_RESUME');
   });
@@ -430,45 +459,66 @@ test('frontend target owns a full Custom App Surface and connects through the is
   expect(installed.status(), await installed.text()).toBe(201);
   await expect(installed.json()).resolves.toMatchObject({ data: { app: { surface: 'custom' } } });
 
-  await step('multiple installable Agent plugins coexist under the single-user Host', async () => {
-    const developerPackage = catalog.data.packages.find((candidate) => candidate.appId === 'nexus.developer');
-    expect(developerPackage).toMatchObject({ version: '1.1.0', publisherKeyId: publisher!.keyId });
-    const developerStage = await request.post('/api/v1/agent/plugins/remote/stage', {
-      headers,
-      data: { repositoryUrl, appId: 'nexus.developer', version: '1.1.0' },
-    });
-    expect(developerStage.status(), await developerStage.text()).toBe(201);
-    const developerStageId = ((await developerStage.json()) as Envelope<{ id: string }>).data.id;
-    const developerVerified = await request.post('/api/v1/agent/plugins/verify', {
-      headers,
-      data: { stageId: developerStageId },
-    });
-    expect(developerVerified.ok(), await developerVerified.text()).toBeTruthy();
-    const developerInstalled = await request.post('/api/v1/agent/plugins/install', {
-      headers,
-      data: { stageId: developerStageId },
-    });
-    expect(developerInstalled.status(), await developerInstalled.text()).toBe(201);
+  await step(
+    'multiple installable Agent plugins coexist and the full-stack package exposes all target classes',
+    async () => {
+      const installCatalogApp = async (appId: string): Promise<void> => {
+        const catalogPackage = catalog.data.packages.find((candidate) => candidate.appId === appId);
+        expect(catalogPackage).toMatchObject({ version: '1.0.0', publisherKeyId: publisher!.keyId });
+        const stagedApp = await request.post('/api/v1/agent/plugins/remote/stage', {
+          headers,
+          data: { repositoryUrl, appId, version: '1.0.0' },
+        });
+        expect(stagedApp.status(), await stagedApp.text()).toBe(201);
+        const stagedAppId = ((await stagedApp.json()) as Envelope<{ id: string }>).data.id;
+        const verifiedApp = await request.post('/api/v1/agent/plugins/verify', {
+          headers,
+          data: { stageId: stagedAppId },
+        });
+        expect(verifiedApp.ok(), await verifiedApp.text()).toBeTruthy();
+        if (appId === 'nexus.fullstack') {
+          await expect(verifiedApp.json()).resolves.toMatchObject({
+            data: {
+              plugin: {
+                appId: 'nexus.fullstack',
+                frontendEntry: 'frontend/index.html',
+                backendEntry: 'backend/index.mjs',
+                runnerEntry: 'runner/index.mjs',
+              },
+            },
+          });
+        }
+        const installedApp = await request.post('/api/v1/agent/plugins/install', {
+          headers,
+          data: { stageId: stagedAppId },
+        });
+        expect(installedApp.status(), await installedApp.text()).toBe(201);
+      };
 
-    const installationsResponse = await request.get('/api/v1/agent/plugins/installations');
-    expect(installationsResponse.ok(), await installationsResponse.text()).toBeTruthy();
-    const installations = (await installationsResponse.json()) as Envelope<
-      Array<{ appId: string; version: string; status: string }>
-    >;
-    expect(installations.data).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ appId: 'nexus.custom-surface', version: '1.0.0', status: 'installed' }),
-        expect.objectContaining({ appId: 'nexus.developer', version: '1.1.0', status: 'installed' }),
-      ]),
-    );
+      await installCatalogApp('nexus.agent');
+      await installCatalogApp('nexus.fullstack');
 
-    const appsResponse = await request.get('/api/v1/agent/apps');
-    expect(appsResponse.ok(), await appsResponse.text()).toBeTruthy();
-    const apps = ((await appsResponse.json()) as Envelope<AppSummary[]>).data;
-    expect(apps.map((candidate) => candidate.id)).toEqual(
-      expect.arrayContaining(['nexus.custom-surface', 'nexus.developer']),
-    );
-  });
+      const installationsResponse = await request.get('/api/v1/agent/plugins/installations');
+      expect(installationsResponse.ok(), await installationsResponse.text()).toBeTruthy();
+      const installations = (await installationsResponse.json()) as Envelope<
+        Array<{ appId: string; version: string; status: string }>
+      >;
+      expect(installations.data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ appId: 'nexus.custom-surface', version: '1.0.0', status: 'installed' }),
+          expect.objectContaining({ appId: 'nexus.agent', version: '1.0.0', status: 'installed' }),
+          expect.objectContaining({ appId: 'nexus.fullstack', version: '1.0.0', status: 'installed' }),
+        ]),
+      );
+
+      const appsResponse = await request.get('/api/v1/agent/apps');
+      expect(appsResponse.ok(), await appsResponse.text()).toBeTruthy();
+      const apps = ((await appsResponse.json()) as Envelope<AppSummary[]>).data;
+      expect(apps.map((candidate) => candidate.id)).toEqual(
+        expect.arrayContaining(['nexus.custom-surface', 'nexus.agent', 'nexus.fullstack']),
+      );
+    },
+  );
 
   await step('the Agent settings UI shows both installed plugins', async () => {
     await page.goto('/settings');
@@ -478,7 +528,8 @@ test('frontend target owns a full Custom App Surface and connects through the is
     await pluginsHeading.scrollIntoViewIfNeeded();
     const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
     await expect(pluginsSection.getByText('nexus.custom-surface', { exact: true })).toBeVisible();
-    await expect(pluginsSection.getByText('nexus.developer', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('nexus.agent', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
     await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
       viewport: { width: 1440, height: 900 },
     });
@@ -506,30 +557,33 @@ test('frontend target owns a full Custom App Surface and connects through the is
   });
 });
 
-test('remote signed Developer preset installs, registers an Agent definition, and completes a real Run', async ({
+test('remote signed Nexus Agent plugin installs, registers an Agent definition, and completes a real Run', async ({
   request,
 }) => {
-  await installAndRunDeveloperPreset(request);
+  await installAndRunNexusAgent(request);
 });
 
-test('installed Developer preset uses the host-owned Agent surface and captures functional evidence', async ({
+test('installed Nexus Agent plugin uses the host-owned Agent surface and captures functional evidence', async ({
   page,
   context,
 }) => {
-  const { threadId, connectionId } = await installAndRunDeveloperPreset(context.request);
+  const { threadId, connectionId } = await installAndRunNexusAgent(context.request);
   const onboardingCsrf = await csrfToken(context.request);
-  const operationsInstall = await context.request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
+  const recommendedInstall = await context.request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
     headers: { 'X-Nexus-CSRF': onboardingCsrf },
     data: {},
   });
-  expect(operationsInstall.ok(), await operationsInstall.text()).toBeTruthy();
+  expect(recommendedInstall.ok(), await recommendedInstall.text()).toBeTruthy();
+  await expect(recommendedInstall.json()).resolves.toMatchObject({
+    data: { installedNow: false, app: { id: 'nexus.agent', enabled: true } },
+  });
   expect(threadId).not.toBe('');
-  await step('the installed preset renders through the host-owned generic Agent surface', async () => {
+  await step('the merged Nexus Agent renders through the host-owned generic Agent surface', async () => {
     await page.goto('/connections');
     await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
     const hub = page.locator('section[aria-label="Agent"]');
     await expect(hub).toBeVisible();
-    await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.developer');
+    await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.agent');
     await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toBeVisible();
     await expect(hub.getByText('OK', { exact: true })).toBeVisible();
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
@@ -639,7 +693,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
 
       await commandComposer.fill('/goal');
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect(commandResult).toContainText('Confirm the Developer Agent preset goal remains durable.');
+      await expect(commandResult).toContainText('Confirm the Nexus Agent Developer Skill goal remains durable.');
       await expect(commandResult).toContainText('Goal revision 1');
 
       await commandComposer.fill('/plan');
@@ -660,7 +714,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(commandResult).toContainText(`Unknown command: ${unknown}`);
 
-      const ledger = await context.request.get(`/api/v1/apps/nexus.developer/threads/${threadId}/entries?limit=50`);
+      const ledger = await context.request.get(`/api/v1/apps/nexus.agent/threads/${threadId}/entries?limit=50`);
       expect(ledger.ok(), await ledger.text()).toBeTruthy();
       expect(JSON.stringify(await ledger.json())).not.toContain(unknown);
 
@@ -673,23 +727,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
 
     const modelSelect = hub.getByLabel('Run model', { exact: true });
     await modelSelect.selectOption({ label: 'Preset E2E Provider · e2e-model-alt' });
-    const selectedAltModelKey = await modelSelect.inputValue();
     const composer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
-
-    await step('multi-App switching preserves the Developer conversation, draft, and next-Run model', async () => {
-      await composer.fill('Draft survives App switching');
-      const appActivity = hub.getByLabel('Agent app activity', { exact: true });
-      await expect(appActivity).toBeVisible();
-      await appActivity.getByRole('button', { name: 'Switch to Operations', exact: true }).click();
-      await expect(hub.getByLabel('Agent app', { exact: true })).toHaveValue('nexus.operations');
-      await appActivity.getByRole('button', { name: 'Switch to Developer Agent', exact: true }).click();
-      await expect(hub.getByLabel('Agent app', { exact: true })).toHaveValue('nexus.developer');
-      await expect(hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...')).toHaveValue(
-        'Draft survives App switching',
-      );
-      await expect(hub.getByLabel('Run model', { exact: true })).toHaveValue(selectedAltModelKey);
-      await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toBeVisible();
-    });
 
     const restoredComposer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
     await restoredComposer.fill('Confirm the Agent composer can start the next Run from the current thread.');
@@ -698,14 +736,14 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       hub.getByText('Confirm the Agent composer can start the next Run from the current thread.', { exact: true }),
     ).toBeVisible();
     await expect(hub.getByText('OK', { exact: true })).toHaveCount(3, { timeout: 30_000 });
-    const runsResponse = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
+    const runsResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
     expect(runsResponse.ok(), await runsResponse.text()).toBeTruthy();
     const runPage = (await runsResponse.json()) as Envelope<{ items: RunView[] }>;
-    expect(runPage.data.items[0]?.definition).toMatchObject({ agentDefinitionId: 'developer.default' });
+    expect(runPage.data.items[0]?.definition).toMatchObject({ agentDefinitionId: 'agent.default' });
     expect(runPage.data.items.some((item) => item.definition.model?.modelId === 'e2e-model-alt')).toBeTruthy();
     await expect(hub.getByLabel('Run history', { exact: true })).toBeVisible();
     await captureFunctionalScreenshot(page, 'agent-run-history.png', { viewport: { width: 1440, height: 900 } });
-    await captureFunctionalScreenshot(page, 'agent-developer-preset.png', { viewport: { width: 1440, height: 900 } });
+    await captureFunctionalScreenshot(page, 'agent-nexus-agent.png', { viewport: { width: 1440, height: 900 } });
 
     await step('completed Runs expose details, checkpoints, Workspace Runtime, and Subagent surfaces', async () => {
       await hub.getByRole('button', { name: 'Details', exact: true }).first().click();
@@ -727,7 +765,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     });
 
     await step('Run history can open and delete a terminal historical Run', async () => {
-      const beforeDeleteResponse = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
+      const beforeDeleteResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
       expect(beforeDeleteResponse.ok(), await beforeDeleteResponse.text()).toBeTruthy();
       const beforeDelete = (await beforeDeleteResponse.json()) as Envelope<{ items: RunView[] }>;
       const history = hub.getByLabel('Run history', { exact: true });
@@ -743,7 +781,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
 
       await expect
         .poll(async () => {
-          const response = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
+          const response = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
           expect(response.ok(), await response.text()).toBeTruthy();
           const page = (await response.json()) as Envelope<{ items: RunView[] }>;
           return page.data.items.map((item) => item.id);
@@ -767,7 +805,7 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
         timeout: 30_000,
       });
 
-      const approvalRunsResponse = await context.request.get(`/api/v1/apps/nexus.developer/runs?threadId=${threadId}`);
+      const approvalRunsResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
       expect(approvalRunsResponse.ok(), await approvalRunsResponse.text()).toBeTruthy();
       const approvalRunPage = (await approvalRunsResponse.json()) as Envelope<{ items: RunView[] }>;
       const approvalRun = approvalRunPage.data.items.find((item) => item.status === 'awaiting_approval');

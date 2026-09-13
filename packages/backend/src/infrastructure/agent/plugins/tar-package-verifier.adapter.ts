@@ -331,10 +331,13 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
       if (runnerEntry && (!/^runner\/[A-Za-z0-9_./-]+$/.test(runnerEntry) || runnerEntry.includes('..'))) {
         throw new Error('PLUGIN_RUNNER_ENTRY_INVALID');
       }
-      const skillFiles = fileList.files
+      const skillResourcePaths = fileList.files
         .map((file) => file.path)
-        .filter((filePath) => /^skills\/[A-Za-z0-9_.-]+\/SKILL\.md$/.test(filePath))
-        .sort();
+        .filter((filePath) => filePath.startsWith('skills/'));
+      if (skillResourcePaths.some((filePath) => !/^skills\/[A-Za-z0-9_.-]+\/SKILL\.md$/.test(filePath))) {
+        throw new Error('PLUGIN_SKILL_LAYOUT_INVALID');
+      }
+      const skillFiles = skillResourcePaths.slice().sort();
       if (skillFiles.length > 64) throw new Error('PLUGIN_TOO_MANY_SKILLS');
       return {
         stageId: safeStageId,

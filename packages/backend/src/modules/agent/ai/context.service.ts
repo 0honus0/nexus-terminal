@@ -149,7 +149,7 @@ export class ContextService {
     const [ledgerPage, recallItems, skillMetadata] = await Promise.all([
       ledgerPromise,
       this.recall.recall(input.scope, input.currentInput, input.maxRecallItems, input.maxRecallBytes),
-      this.skills.search(input.scope, input.currentInput),
+      this.skills.list(input.scope),
     ]);
 
     const inputRanksByRun = new Map(
@@ -234,17 +234,28 @@ export class ContextService {
       usedTokens += tokens;
     }
 
-    for (const metadata of skillMetadata.slice(0, 2)) {
-      const skill = await this.skills.load(input.scope, metadata.id, metadata.version);
-      const content = `[Untrusted signed plugin Skill ${skill.id}@${skill.version}; sha256=${skill.hash}]\n${skill.body}`;
-      const tokens = estimateTokens(content);
-      if (usedTokens + tokens > availableTokens) {
-        droppedSections.push(`skill:${skill.id}`);
-        continue;
+    if (skillMetadata.length > 0) {
+      const header =
+        '[Available signed plugin Skills; metadata only]\nUse the skill_read tool with a Skill id to load the full signed instructions only when they are relevant.';
+      let content = header;
+      let tokens = estimateTokens(content);
+      const selectedSkillIds: string[] = [];
+      for (const metadata of skillMetadata) {
+        const line = `\n- id: ${metadata.id} | name: ${metadata.name} | description: ${metadata.description}`;
+        const lineTokens = estimateTokens(line);
+        if (usedTokens + tokens + lineTokens > availableTokens) {
+          droppedSections.push(`skill-metadata:${metadata.id}`);
+          continue;
+        }
+        content += line;
+        tokens += lineTokens;
+        selectedSkillIds.push(metadata.id);
       }
-      messages.push({ role: 'system', content });
-      sourceRanges.push({ kind: 'skill', id: skill.id });
-      usedTokens += tokens;
+      if (selectedSkillIds.length > 0 && usedTokens + tokens <= availableTokens) {
+        messages.push({ role: 'system', content });
+        for (const id of selectedSkillIds) sourceRanges.push({ kind: 'skill', id });
+        usedTokens += tokens;
+      }
     }
 
     messages.push({ role: 'user', content: input.currentInput });
