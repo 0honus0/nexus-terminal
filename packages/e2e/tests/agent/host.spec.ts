@@ -27,6 +27,7 @@ type AgentFeatureSettingsView = {
 
 test('Agent launcher stays passive until the user explicitly opens the Hub', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
+  await enableAgentWithRecommendedOperations(context.request);
 
   await page.goto('/connections');
 
@@ -48,20 +49,8 @@ test('Agent feature enable opens one global floating window that survives route 
   await loginAsInitialAdmin(context.request);
   const initialSettingsResponse = await context.request.get('/api/v1/agent/settings');
   expect(initialSettingsResponse.ok(), await initialSettingsResponse.text()).toBeTruthy();
-  let settings = ((await initialSettingsResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
-  const originalEnabled = settings.effectiveSettings.feature.enabled;
-
-  const patchFeature = async (enabled: boolean): Promise<void> => {
-    const csrf = await csrfToken(context.request);
-    const response = await context.request.patch('/api/v1/agent/settings', {
-      headers: { 'X-Nexus-CSRF': csrf },
-      data: { patch: { feature: { enabled } }, expectedVersion: settings.revision },
-    });
-    expect(response.ok(), await response.text()).toBeTruthy();
-    settings = ((await response.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
-  };
-
-  if (!originalEnabled) await patchFeature(true);
+  const settings = ((await initialSettingsResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
+  expect(settings.effectiveSettings.feature.enabled).toBe(false);
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Agent', exact: true }).click();
 
@@ -70,41 +59,45 @@ test('Agent feature enable opens one global floating window that survives route 
   const featureSection = page
     .getByRole('heading', { name: 'Agent feature', exact: true })
     .locator('xpath=ancestor::section[1]');
-  await expect(launcher).toBeVisible();
+  await expect(launcher).toHaveCount(0);
   await expect(hub).toHaveCount(0);
 
-  try {
-    await featureSection.getByRole('button', { name: 'Disable Agent', exact: true }).click();
-    await expect(featureSection.getByRole('button', { name: 'Enable Agent', exact: true })).toBeVisible();
-    await expect(launcher).toHaveCount(0, { timeout: 10_000 });
-    await expect(hub).toHaveCount(0);
+  await featureSection.getByRole('button', { name: 'Enable Agent', exact: true }).click();
+  const onboarding = page.getByRole('dialog', { name: 'Enable Agent with Operations', exact: true });
+  await expect(onboarding).toBeVisible();
+  await expect(onboarding.getByText('Operations', { exact: true })).toBeVisible();
+  await expect(onboarding.getByText('v1.0.0', { exact: true })).toBeVisible();
+  await captureFunctionalScreenshot(page, 'agent-onboarding-operations.png', {
+    viewport: { width: 1440, height: 900 },
+  });
+  await onboarding.getByRole('button', { name: 'Install Operations & enable Agent', exact: true }).click();
 
-    await featureSection.getByRole('button', { name: 'Enable Agent', exact: true }).click();
-    await expect(featureSection.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
-    await expect(launcher).toBeVisible({ timeout: 10_000 });
-    await expect(hub).toBeVisible({ timeout: 10_000 });
-    const settingsBounds = await hub.boundingBox();
-    expect(settingsBounds).not.toBeNull();
+  await expect(onboarding).toHaveCount(0, { timeout: 15_000 });
+  await expect(featureSection.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
+  await expect(launcher).toBeVisible({ timeout: 10_000 });
+  await expect(hub).toBeVisible({ timeout: 10_000 });
+  const settingsBounds = await hub.boundingBox();
+  expect(settingsBounds).not.toBeNull();
 
-    await page.getByRole('link', { name: 'Connections', exact: true }).click();
-    await expect(page).toHaveURL(/\/connections$/);
-    await expect(launcher).toBeVisible();
-    await expect(hub).toBeVisible();
-    const connectionsBounds = await hub.boundingBox();
-    expect(connectionsBounds).toEqual(settingsBounds);
+  const installations = await context.request.get('/api/v1/agent/plugins/installations');
+  expect(installations.ok(), await installations.text()).toBeTruthy();
+  await expect(installations.json()).resolves.toMatchObject({
+    data: expect.arrayContaining([
+      expect.objectContaining({ appId: 'nexus.operations', version: '1.0.0', status: 'installed' }),
+    ]),
+  });
 
-    await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
-    await expect(page).toHaveURL(/\/$/);
-    await expect(launcher).toBeVisible();
-    await expect(hub).toBeVisible();
-  } finally {
-    if (!originalEnabled) {
-      const currentResponse = await context.request.get('/api/v1/agent/settings');
-      expect(currentResponse.ok(), await currentResponse.text()).toBeTruthy();
-      settings = ((await currentResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
-      if (settings.effectiveSettings.feature.enabled) await patchFeature(false);
-    }
-  }
+  await page.getByRole('link', { name: 'Connections', exact: true }).click();
+  await expect(page).toHaveURL(/\/connections$/);
+  await expect(launcher).toBeVisible();
+  await expect(hub).toBeVisible();
+  const connectionsBounds = await hub.boundingBox();
+  expect(connectionsBounds).toEqual(settingsBounds);
+
+  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(launcher).toBeVisible();
+  await expect(hub).toBeVisible();
 });
 
 test('Agent settings surface exposes the production control plane and captures functional evidence', async ({
@@ -191,6 +184,27 @@ const csrfToken = async (request: import('@playwright/test').APIRequestContext):
   expect(body.requestId).toBe(response.headers()['x-request-id']);
   expect(body.data.token).toMatch(/^[0-9a-f]{64}$/);
   return body.data.token;
+};
+
+const enableAgentWithRecommendedOperations = async (request: APIRequestContext): Promise<AppSummary> => {
+  const csrf = await csrfToken(request);
+  const installed = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
+    headers: { 'X-Nexus-CSRF': csrf },
+    data: {},
+  });
+  expect(installed.ok(), await installed.text()).toBeTruthy();
+  const installedBody = (await installed.json()) as AgentEnvelope<{ app: AppSummary; installedNow: boolean }>;
+  const settingsResponse = await request.get('/api/v1/agent/settings');
+  expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
+  const settings = ((await settingsResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
+  if (!settings.effectiveSettings.feature.enabled) {
+    const enabled = await request.patch('/api/v1/agent/settings', {
+      headers: { 'X-Nexus-CSRF': csrf },
+      data: { patch: { feature: { enabled: true } }, expectedVersion: settings.revision },
+    });
+    expect(enabled.ok(), await enabled.text()).toBeTruthy();
+  }
+  return installedBody.data.app;
 };
 
 const openHostAgentSubscription = async (page: Page, cursor: number, key: string): Promise<void> => {
@@ -369,6 +383,7 @@ const setOperationsEnabledFromPage = async (
 
 test('Agent Host reconnects automatically and catches up durable Host events', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
+  await enableAgentWithRecommendedOperations(context.request);
 
   let blockAgentReconnects = false;
   let connectedAgentRoute: WebSocketRoute | undefined;
@@ -426,6 +441,7 @@ test('Agent Host reconnects automatically and catches up durable Host events', a
 
 test('Agent WebSocket replays durable Host events after a disconnect', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
+  await enableAgentWithRecommendedOperations(context.request);
   await page.goto('/connections');
 
   const summary = await context.request.get('/api/v1/agent/summary');
@@ -515,9 +531,7 @@ test('Agent WebSocket bounds concurrent sockets per authenticated session', asyn
   expect(outcomes.filter((outcome) => outcome === 'rejected')).toHaveLength(1);
 });
 
-test('Agent Host initializes Operations safely and persists explicit lifecycle/settings choices', async ({
-  request,
-}) => {
+test('Agent Host installs Operations safely and persists explicit lifecycle/settings choices', async ({ request }) => {
   await step('Agent APIs use their own authenticated error envelope', async () => {
     const anonymous = await request.get('/api/v1/agent/apps');
     expect(anonymous.status()).toBe(401);
@@ -532,9 +546,32 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
 
   let operations!: AppSummary;
 
-  await step('Operations is registered from the production manifest without requiring a model', async () => {
+  await step('Operations is absent from the Host until the signed first-party Plugin is installed', async () => {
     const core = await request.get('/api/v1/status');
     expect(core.ok(), await core.text()).toBeTruthy();
+
+    const before = await request.get('/api/v1/agent/apps');
+    expect(before.ok(), await before.text()).toBeTruthy();
+    const beforeBody = (await before.json()) as AgentEnvelope<AppSummary[]>;
+    expect(beforeBody.data.some((app) => app.id === 'nexus.operations')).toBe(false);
+
+    const recommendation = await request.get('/api/v1/agent/onboarding/recommended-plugin');
+    expect(recommendation.ok(), await recommendation.text()).toBeTruthy();
+    await expect(recommendation.json()).resolves.toMatchObject({
+      data: {
+        appId: 'nexus.operations',
+        installed: false,
+        availableVersion: '1.0.0',
+        displayName: 'Operations',
+      },
+    });
+
+    const installed = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
+      headers: mutationHeaders,
+      data: {},
+    });
+    expect(installed.status(), await installed.text()).toBe(201);
+    await expect(installed.json()).resolves.toMatchObject({ data: { installedNow: true } });
 
     const response = await request.get('/api/v1/agent/apps');
     expect(response.ok(), await response.text()).toBeTruthy();
@@ -546,8 +583,8 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
       displayName: 'Operations',
       version: '1.0.0',
       enabled: true,
-      health: 'degraded',
-      healthReason: 'provider_not_configured',
+      health: 'healthy',
+      healthReason: null,
       runningRuns: 0,
       pendingApprovals: 0,
       pendingBudgetRequests: 0,
@@ -604,8 +641,8 @@ test('Agent Host initializes Operations safely and persists explicit lifecycle/s
     const enabledBody = (await enabled.json()) as AgentEnvelope<AppSummary>;
     expect(enabledBody.data).toMatchObject({
       enabled: true,
-      health: 'degraded',
-      healthReason: 'provider_not_configured',
+      health: 'healthy',
+      healthReason: null,
     });
     operations = enabledBody.data;
   });

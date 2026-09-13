@@ -1,4 +1,4 @@
-import type { JsonValue, Scope } from '../../agent.types';
+import type { AgentRunEnvironmentSelection, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../../agent.types';
 import type { ModelRef } from '../../ai/model.types';
 import type { RunPlan } from '../planning/plan.types';
 
@@ -37,6 +37,11 @@ export interface PendingRunInputPage {
   hasMore: boolean;
 }
 
+export interface RunInputProjection {
+  ordered: PendingRunInput[];
+  pending: PendingRunInput[];
+}
+
 export interface UserInputData {
   text: string;
   artifactRefs: string[];
@@ -53,6 +58,7 @@ export interface CreateRunCommand {
   agentDefinitionId: string;
   model: ModelRef;
   connectionIds: number[];
+  environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
   command: CommandIdentity;
 }
@@ -103,6 +109,7 @@ export interface RunDefinitionSnapshot {
   agentDefinitionId: string;
   model: ModelRef;
   connectionIds: number[];
+  environment?: AgentRunEnvironmentSnapshot | null;
   policyRevision: number;
   settingsRevision: number;
   contextBoundary?: RunContextBoundary;

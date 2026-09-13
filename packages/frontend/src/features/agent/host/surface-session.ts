@@ -6,6 +6,7 @@ export interface AgentAppViewState {
   scrollAnchor?: string;
   selectedTaskId?: string;
   modelKey?: string;
+  environmentRecipeId?: string;
   hubView: 'conversation' | 'files';
 }
 
@@ -51,6 +52,14 @@ export const agentSurfaceSession = {
     const state = ensure(appId);
     if (modelKey) state.modelKey = modelKey;
     else delete state.modelKey;
+  },
+  restoreEnvironmentRecipeId(appId: string): string | undefined {
+    return ensure(appId).environmentRecipeId;
+  },
+  setEnvironmentRecipeId(appId: string, recipeId?: string): void {
+    const state = ensure(appId);
+    if (recipeId) state.environmentRecipeId = recipeId;
+    else delete state.environmentRecipeId;
   },
   pauseDetail(_appId: string): void {
     navigationGeneration += 1;

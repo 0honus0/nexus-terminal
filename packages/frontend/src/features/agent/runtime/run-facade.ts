@@ -127,6 +127,12 @@ export const createAgentRunFacade = (appId: string) => {
     setGoal: async (run: AgentRunView, text: string) =>
       runStore.accept(await agentApi.setRunGoal(appId, currentRun(run), text)),
     pendingInputs: (runId: string) => agentApi.pendingRunInputs(appId, runId),
+    mutatePendingInput: async (
+      run: AgentRunView,
+      action: 'remove' | 'move',
+      inputId: string,
+      beforeInputId: string | null,
+    ) => runStore.accept(await agentApi.mutatePendingRunInput(appId, currentRun(run), action, inputId, beforeInputId)),
     increaseBudget: async (run: AgentRunView, increase: Parameters<typeof agentApi.increaseRunBudget>[2]) =>
       runStore.accept(await agentApi.increaseRunBudget(appId, currentRun(run), increase)),
     saveCheckpoint: (run: AgentRunView) => agentApi.saveCheckpoint(appId, currentRun(run)),

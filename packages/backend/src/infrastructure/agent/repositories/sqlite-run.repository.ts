@@ -4,6 +4,7 @@ import type {
   PendingRunInputPage,
   HostEvent,
   RunEvent,
+  RunInputProjection,
   RunSnapshot,
 } from '../../../modules/agent/runtime/runs/run.types';
 import type {
@@ -17,6 +18,7 @@ import type {
 } from '../../../modules/agent/runtime/runs/run.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from './sqlite-run.mapper';
+import { projectRunUserInputs } from './run-input-projection';
 
 interface EntryRow {
   id: string;
@@ -128,39 +130,26 @@ export class SqliteRunRepository
     });
   }
 
+  async inputProjection(scope: Scope, runId: string): Promise<RunInputProjection> {
+    return this.db.transaction(async (tx) => {
+      const run = await tx.queryOne<RunRow>(
+        `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+        [runId, scope.userId, scope.appId],
+      );
+      if (!run) throw new Error('NOT_FOUND');
+      const ordered = await projectRunUserInputs(tx, scope, runId);
+      return { ordered, pending: ordered.filter((entry) => entry.sequence > run.consumed_input_sequence) };
+    });
+  }
+
   async pendingInputs(scope: Scope, runId: string, limit: number): Promise<PendingRunInputPage> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('VALIDATION_FAILED');
-    const run = await this.db.queryOne<RunRow>(
-      `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
-      [runId, scope.userId, scope.appId],
-    );
-    if (!run) throw new Error('NOT_FOUND');
-    const count = await this.db.queryOne<{ count: number }>(
-      `SELECT COUNT(*) AS count FROM ai_thread_entries
-       WHERE run_id = ? AND user_id = ? AND app_id = ? AND kind = 'user_input' AND sequence > ?`,
-      [runId, scope.userId, scope.appId, run.consumed_input_sequence],
-    );
-    const rows = await this.db.queryAll<EntryRow>(
-      `SELECT id, sequence, kind, payload_json, created_at
-       FROM ai_thread_entries
-       WHERE run_id = ? AND user_id = ? AND app_id = ? AND kind = 'user_input' AND sequence > ?
-       ORDER BY sequence LIMIT ?`,
-      [runId, scope.userId, scope.appId, run.consumed_input_sequence, limit],
-    );
-    const items = rows.map((row) => {
-      const payload = JSON.parse(row.payload_json) as { text?: unknown; artifactRefs?: unknown };
-      return {
-        id: row.id,
-        sequence: row.sequence,
-        text: typeof payload.text === 'string' ? payload.text : '',
-        artifactRefs: Array.isArray(payload.artifactRefs)
-          ? payload.artifactRefs.filter((value): value is string => typeof value === 'string')
-          : [],
-        createdAt: row.created_at,
-      };
-    });
-    const total = count?.count ?? 0;
-    return { items, total, hasMore: total > items.length };
+    const projection = await this.inputProjection(scope, runId);
+    return {
+      items: projection.pending.slice(0, limit),
+      total: projection.pending.length,
+      hasMore: projection.pending.length > limit,
+    };
   }
 
   async list(scope: Scope, threadId: string | undefined, limit: number, before?: string): Promise<RunPage> {

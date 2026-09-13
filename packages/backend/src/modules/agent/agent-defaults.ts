@@ -118,7 +118,7 @@ export const AGENT_DEFAULTS = {
   maxConcurrentToolCalls: 1,
   settings: {
     schemaVersion: 1,
-    feature: { enabled: true },
+    feature: { enabled: false },
     model: { defaultProviderId: null, defaultModelId: null },
     performance: { maxConcurrentRuntimes: 2, maxConcurrentModelCalls: 'auto' },
     budget: {

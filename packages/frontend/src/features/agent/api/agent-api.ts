@@ -7,6 +7,7 @@ import type {
   AgentSettingsView,
 } from './agent-api.types';
 import { createWorkspaceRuntimeApi } from './workspace-runtime-api';
+import type { WorkspaceProfileView } from './workspace-runtime-api';
 
 export type {
   AgentArtifactRef,
@@ -16,6 +17,23 @@ export type {
   AgentSettingsView,
 } from './agent-api.types';
 export { AgentApiError, formatAgentApiError, toAgentApiError } from './agent-api-error';
+
+export interface RecommendedAgentPluginView {
+  appId: string;
+  installed: boolean;
+  installedVersion: string | null;
+  enabled: boolean;
+  availableVersion: string;
+  displayName: string;
+  description: string;
+  catalogUrl: string;
+  publisherKeyId: string;
+}
+
+export interface RecommendedAgentPluginInstallResult {
+  app: AgentAppSummary;
+  installedNow: boolean;
+}
 
 export interface AgentAppSummary {
   id: string;
@@ -29,6 +47,15 @@ export interface AgentAppSummary {
   runningRuns: number;
   pendingApprovals: number;
   pendingBudgetRequests: number;
+}
+
+export interface AgentRunEnvironmentSelection {
+  recipeId: string;
+  versions?: Record<string, string>;
+  runnerPluginIds?: string[];
+  acpProfileIds?: string[];
+  browserTargetId?: string;
+  catalogRevision?: string;
 }
 
 export type AgentIntegrationKind = 'mcp' | 'acp';
@@ -419,6 +446,7 @@ export interface AgentRunView {
     agentDefinitionId: string;
     model: { providerId: string; modelId: string; configurationVersion: number };
     connectionIds: number[];
+    environment?: WorkspaceProfileView | null;
     policyRevision: number;
     settingsRevision: number;
     contextBoundary?: { baseThrough: number; runThrough: Record<string, number> };
@@ -686,6 +714,22 @@ export const resetAgentCsrf = (): void => {
 };
 
 export const agentApi = {
+  async recommendedPlugin(): Promise<RecommendedAgentPluginView> {
+    return unwrap(
+      (await httpClient.get<AgentEnvelope<RecommendedAgentPluginView>>('/agent/onboarding/recommended-plugin')).data,
+    );
+  },
+  async installRecommendedPlugin(): Promise<RecommendedAgentPluginInstallResult> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<RecommendedAgentPluginInstallResult>>(
+          '/agent/onboarding/recommended-plugin/install',
+          {},
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
   async settings(): Promise<AgentSettingsView> {
     return unwrap((await httpClient.get<AgentEnvelope<AgentSettingsView>>('/agent/settings')).data);
   },
@@ -1266,6 +1310,7 @@ export const agentApi = {
       agentDefinitionId: string;
       model: { providerId: string; modelId: string; configurationVersion: number };
       connectionIds?: number[];
+      environment?: AgentRunEnvironmentSelection | null;
       initialGoal?: string;
     },
   ): Promise<AgentRunView> {
@@ -1279,6 +1324,7 @@ export const agentApi = {
             agentDefinitionId: input.agentDefinitionId,
             model: input.model,
             connectionIds: input.connectionIds ?? [],
+            ...(input.environment === undefined ? {} : { environment: input.environment }),
             ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),
           }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
@@ -1315,6 +1361,24 @@ export const agentApi = {
   async pendingRunInputs(appId: string, runId: string): Promise<AgentPendingRunInputPage> {
     const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(runId) + '/pending-inputs';
     return unwrap((await httpClient.get<AgentEnvelope<AgentPendingRunInputPage>>(path)).data);
+  },
+  async mutatePendingRunInput(
+    appId: string,
+    run: AgentRunView,
+    action: 'remove' | 'move',
+    inputId: string,
+    beforeInputId: string | null,
+  ): Promise<AgentRunView> {
+    const path = '/apps/' + encodeURIComponent(appId) + '/runs/' + encodeURIComponent(run.id) + '/pending-inputs';
+    return unwrap(
+      (
+        await httpClient.patch<AgentEnvelope<AgentRunView>>(
+          path,
+          agentRuntimeRequest({ action, inputId, beforeInputId, expectedVersion: run.version }),
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+        )
+      ).data,
+    );
   },
   async increaseRunBudget(
     appId: string,

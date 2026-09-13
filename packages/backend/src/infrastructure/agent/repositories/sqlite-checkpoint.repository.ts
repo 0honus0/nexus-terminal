@@ -185,7 +185,10 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
             baseThrough: definition.contextBoundary.baseThrough,
             runThrough: { ...definition.contextBoundary.runThrough, [run.id]: currentRunThrough },
           }
-        : { baseThrough: threadLedger?.value ?? currentRunThrough, runThrough: {} };
+        : {
+            baseThrough: threadLedger?.value ?? currentRunThrough,
+            runThrough: { [run.id]: currentRunThrough },
+          };
       if (
         !Number.isSafeInteger(contextBoundary.baseThrough) ||
         contextBoundary.baseThrough < 0 ||

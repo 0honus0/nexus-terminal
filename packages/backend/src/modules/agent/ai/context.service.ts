@@ -152,7 +152,41 @@ export class ContextService {
       this.skills.search(input.scope, input.currentInput),
     ]);
 
-    const ledgerCandidates = ledgerPage.items
+    const inputRanksByRun = new Map(
+      Object.entries(input.effectiveRunInputsByRun ?? {}).map(([runId, entries]) => [
+        runId,
+        new Map(entries.map((entry, index) => [entry.id, index])),
+      ]),
+    );
+    const filteredLedgerItems = ledgerPage.items.filter((entry) => {
+      if (entry.kind !== 'user_input' || !entry.runId) return true;
+      const rank = inputRanksByRun.get(entry.runId);
+      return !rank || rank.has(entry.id);
+    });
+    const orderedInputsByRun = new Map<string, LedgerEntryView[]>();
+    for (const [runId, rank] of inputRanksByRun) {
+      orderedInputsByRun.set(
+        runId,
+        filteredLedgerItems
+          .filter((entry) => entry.runId === runId && entry.kind === 'user_input')
+          .slice()
+          .sort(
+            (left, right) =>
+              (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+          ),
+      );
+    }
+    const inputIndexesByRun = new Map<string, number>();
+    const projectedLedgerItems = filteredLedgerItems.map((entry) => {
+      if (entry.kind !== 'user_input' || !entry.runId) return entry;
+      const ordered = orderedInputsByRun.get(entry.runId);
+      if (!ordered) return entry;
+      const index = inputIndexesByRun.get(entry.runId) ?? 0;
+      inputIndexesByRun.set(entry.runId, index + 1);
+      return ordered[index] ?? entry;
+    });
+
+    const ledgerCandidates = projectedLedgerItems
       .filter((entry) => entry.kind !== 'system_notice' && entry.id !== input.currentInputEntryId)
       .map((entry) => {
         const message = ledgerMessage(entry);
@@ -202,8 +236,7 @@ export class ContextService {
 
     for (const metadata of skillMetadata.slice(0, 2)) {
       const skill = await this.skills.load(input.scope, metadata.id, metadata.version);
-      const trustLabel = skill.trust === 'builtin' ? 'builtin' : 'signed plugin';
-      const content = `[Untrusted ${trustLabel} Skill ${skill.id}@${skill.version}; sha256=${skill.hash}]\n${skill.body}`;
+      const content = `[Untrusted signed plugin Skill ${skill.id}@${skill.version}; sha256=${skill.hash}]\n${skill.body}`;
       const tokens = estimateTokens(content);
       if (usedTokens + tokens > availableTokens) {
         droppedSections.push(`skill:${skill.id}`);

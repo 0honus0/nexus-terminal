@@ -21,8 +21,9 @@ Browser
 │  └─ Suspend / Resume
 ├─ Remote Desktop presentation
 └─ Agent Surface Host
-   ├─ Operations built-in App
+   ├─ generic Host Agent surface for installable AgentDefinition Apps
    ├─ Conversation / Task / Approval / Artifact / Workspace Runtime UI
+   ├─ first-party installable nexus.operations / nexus.developer
    └─ isolated Plugin frontend iframe
             │
             ├─ HTTP / SSE
@@ -37,9 +38,9 @@ Backend Modules
    ├─ Host
    ├─ AI
    ├─ Capabilities
+   ├─ Host Tool contributions
    ├─ Workspace Runtime
-   ├─ Runtime
-   └─ Apps / Operations
+   └─ Runtime
             ↓ typed ports
 Platform capabilities
 ├─ execution
@@ -105,6 +106,7 @@ packages/backend/src/modules/agent/
 ├─ host/
 ├─ ai/
 ├─ capabilities/
+├─ tools/host/
 ├─ workspace-runtime/
 ├─ runtime/
 │  ├─ approvals/
@@ -117,16 +119,15 @@ packages/backend/src/modules/agent/
 │  ├─ recovery/
 │  ├─ runs/
 │  └─ scheduling/
-└─ apps/operations/
 ```
 
-职责边界：Host 负责 App lifecycle/grant/SDK/AppStorage/Plugin lifecycle；AI 负责 Provider/Conversation/Context/Artifact/Recall/Memory/Integration；Capabilities 负责授权、Policy、Approval/Lease 接入和 Tool Catalog；Workspace Runtime 负责稳定 Workspace、Profile/Generation、Tool Store/Runner 控制用例；Exchange 是 Workspace↔Artifact 的显式桥接层；Agent Runtime 负责 Run/participant/plan/scheduler/event/recovery/collaboration；Operations 只提供具体 App definition/tool/risk/verifier contribution。
+职责边界：Host 负责 App lifecycle/grant/SDK/AppStorage/Plugin lifecycle；AI 负责 Provider/Conversation/Context/Artifact/Recall/Memory/Integration；Capabilities 负责授权、Policy、Approval/Lease 接入和 Tool Catalog contracts；`tools/host` 是允许跨 AI/Runtime/Workspace Runtime 依赖的 Host-owned governed Tool implementation/contribution 层，但真实副作用仍必须经过 Capability Broker/Policy/Approval/Lease；Workspace Runtime 负责稳定 Workspace、Profile/Generation、Tool Store/Runner 控制用例；Exchange 是 Workspace↔Artifact 的显式桥接层；Agent Runtime 负责 Run/participant/plan/scheduler/event/recovery/collaboration。Operations 的 AgentDefinition/Skill/App manifest 已从主镜像移出，改由 first-party installable Plugin 提供。
 
 Tool Catalog 使用 `CapabilityContribution { id, capability, tools[] }`。Target 只回答“代码在哪里运行”，Capability 才回答“允许做什么”。LLM、Plugin、MCP、Subagent 都不能直接形成真实副作用旁路。
 
 ## 4. Agent Frontend owner
 
-当前物理结构收敛在一个明确的 Agent feature owner 内；Host、AI presentation、Files、Runtime、Settings 与 built-in App 都按子域放置，不另建平行顶层 App/AI package：
+当前物理结构收敛在一个明确的 Agent feature owner 内；Host、AI presentation、Files、Runtime、Settings 与 Plugin surface 都按子域放置，不另建平行顶层 App/AI package：
 
 ```text
 packages/frontend/src/features/agent/
@@ -136,12 +137,12 @@ packages/frontend/src/features/agent/
 ├─ files/            Artifact Library / picker
 ├─ runtime/          Run/Task/Approval/Subagent/Workspace Runtime projection
 ├─ settings/         Agent settings contribution
-└─ apps/operations/  built-in Operations App contribution
+└─ plugin-sdk/       Custom Plugin Frontend MessagePort bridge/SDK dispatcher
 ```
 
-当前只有 `nexus.operations` 一个 built-in App，Host 可以显式组合。新增第二个 built-in Agent App 前先建立明确的 contribution registry；安装式 App 没有 Frontend target 时复用 Host Agent surface；声明 Frontend target 时，该独立 origin + sandboxed iframe 拥有完整 Custom App Surface。单用户 Host 可以同时持有多个不同 `appId` 的安装式 Plugin，App selector/activity strip 在同一 Hub 内切换，各 App presentation state 相互独立；同一 `appId` 的版本变化走 upgrade/drain。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
+`nexus.operations` 与 `nexus.developer` 都是 first-party installable Plugin App，不是 compile-time built-in。没有 Frontend target 的 AgentDefinition App 统一复用 Host Agent surface；声明 Frontend target 时，该独立 origin + sandboxed iframe 拥有完整 Custom App Surface。Agent 初次启用时 Host 通过 pin 住官方 publisher 身份的 catalog 推荐 Operations，用户确认后按正常 Plugin lifecycle 安装/授权/启用。单用户 Host 可以同时持有多个不同 `appId` 的安装式 Plugin，App selector/activity strip 在同一 Hub 内切换，各 App presentation state 相互独立；同一 `appId` 的版本变化走 upgrade/drain。`features/agent/plugin-sdk/` 通过 bounded MessagePort 提供 App-scoped SDK，不加载 arbitrary same-origin plugin JavaScript，也不暴露 Nexus session/HTTP client。
 
-Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/apps/operations/public` 子域依赖，并继续禁止 feature 反向依赖 Workspace runtime。
+Frontend architecture checker 已约束 `host/api/ai/files/runtime/settings/plugin-sdk/public` 子域依赖，并继续禁止 feature 反向依赖 Workspace runtime。
 
 ## 5. Runner / Workspace Dev Environment
 
@@ -255,7 +256,7 @@ Agent 的详细当前架构统一见 [`../AGENT.md`](../AGENT.md)。当前 produ
 - signed installable Plugin、versioned AgentDefinition、isolated Frontend/Backend target 与 native Runner target；
 - Frontend/Backend/Runner 结构化诊断日志。
 
-已经交付并进入当前合同的交互包括 durable Goal text/revision、`/goal`/`/plan`/`/interrupt`/`/queue`/`/stop`/`/help` slash-command dispatch、`//` literal escape，以及用户可见的 durable pending-input queue inspection。仍未交付且必须继续标记为 roadmap 的是 pending-input remove/reorder mutation，以及真正冻结进 RunDefinition / Workspace profile 的 Next Run Environment selector；Frontend 当前只能展示只读 Environment defaults/availability。
+已经交付并进入当前合同的交互包括 durable Goal text/revision、`/goal`/`/plan`/`/interrupt`/`/queue`/`/stop`/`/help` slash-command dispatch、`//` literal escape、durable pending-input queue inspection + versioned remove/reorder，以及真正的 Next Run Environment selector。Environment 在 Run create 时由 Backend 对 Runner Catalog + Agent settings 做 CAS/解析并冻结到 `RunDefinition.environment`；Workspace create 只能消费该 snapshot。
 
 ### 10.1 关键模块依赖与函数调用链（审计入口）
 
@@ -266,9 +267,10 @@ createAgentServices / compose-agent
   ├─ Host: AppLifecycleService + PluginService + AppStorage + Integrations
   ├─ AI: ProviderService + Conversation/Context/Artifact/Memory
   ├─ Capability: ToolCatalog + CapabilityBroker + Policy/Approval/Lease
+  ├─ Host Tools: cross-domain governed Tool implementations registered by bootstrap
   ├─ Runtime: RunService + StateCommit + AgentScheduler + SubagentScheduler
   ├─ Workspace Runtime: WorkspaceRuntimeService/Gateway + Runner adapter
-  └─ Operations contribution: AgentDefinition + concrete governed tools
+  └─ Plugin Host: installable AgentDefinition/Skill/App targets (including nexus.operations)
 ```
 
 用户从 Host surface 发起一次 Run 的主链路：
@@ -303,7 +305,7 @@ Workspace Runtime 的执行链是另一条明确边界：
 
 ```text
 Agent tool workspace_execute_argv
-  → Operations workspace tool inspect/normalize
+  → Host workspace tool inspect/normalize
   → ToolCallRunner governed mutation pipeline
   → WorkspaceRuntimeGatewayPort
   → Backend Runner adapter

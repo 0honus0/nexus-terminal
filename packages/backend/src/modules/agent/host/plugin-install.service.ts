@@ -22,6 +22,7 @@ import type {
   TrustedPublisherKey,
 } from './plugin-install.repository.port';
 import type { PluginBackendRuntimePort } from './plugin-backend-runtime.port';
+import type { OfficialAgentPluginSource } from './official-plugin-source';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION, type PluginRunnerTarget } from './plugin-runner-target.port';
 
 const MAX_PUBLISHER_LABEL_BYTES = 256;
@@ -193,43 +194,34 @@ export class PluginInstallService {
     return this.remotePackages.catalog(await this.remoteRepositoryConfig(userId, repositoryUrl), signal);
   }
 
+  async officialCatalog(source: OfficialAgentPluginSource, signal?: AbortSignal): Promise<RemotePluginCatalog> {
+    return this.remotePackages.catalog(this.officialRepositoryConfig(source), signal);
+  }
+
   async stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord> {
     if (!input.appId || !input.version || !input.repositoryUrl) throw new Error('VALIDATION_FAILED');
-    const config = await this.remoteRepositoryConfig(userId, input.repositoryUrl);
-    const catalog = await this.remotePackages.catalog(config, signal);
-    const entry = catalog.packages.find(
-      (candidate) => candidate.appId === input.appId && candidate.version === input.version,
+    return this.stageRemoteWithConfig(
+      userId,
+      input,
+      await this.remoteRepositoryConfig(userId, input.repositoryUrl),
+      signal,
     );
-    if (!entry) throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
-    const source = await this.remotePackages.openPackage(config, entry, signal);
-    const stageId = randomUUID();
-    try {
-      const staged = await this.verifier.stage({ stageId, sizeBytes: source.sizeBytes, source: source.source });
-      if (staged.sizeBytes !== entry.sizeBytes) throw new Error('PLUGIN_REMOTE_SIZE_MISMATCH');
-      if (staged.packageHash !== entry.sha256) throw new Error('PLUGIN_REMOTE_HASH_MISMATCH');
-      const now = this.clock.nowUnixSeconds();
-      const record: PluginStageRecord = {
-        id: stageId,
-        userId,
-        source: { kind: 'remote', repositoryUrl: config.url, appId: entry.appId, version: entry.version },
-        packageHash: staged.packageHash,
-        sizeBytes: staged.sizeBytes,
-        publisherKeyId: entry.publisherKeyId,
-        appId: entry.appId,
-        version: entry.version,
-        manifest: null,
-        status: 'staged',
-        errorCode: null,
-        createdAt: now,
-        updatedAt: now,
-        versionNumber: 1,
-      };
-      await this.repository.createStage(record);
-      return record;
-    } catch (error) {
-      await this.verifier.discardStage(stageId).catch(() => undefined);
-      throw error;
-    }
+  }
+
+  async stageOfficial(
+    userId: number,
+    source: OfficialAgentPluginSource,
+    appId: string,
+    version: string,
+    signal?: AbortSignal,
+  ): Promise<PluginStageRecord> {
+    if (!appId || !version) throw new Error('VALIDATION_FAILED');
+    return this.stageRemoteWithConfig(
+      userId,
+      { repositoryUrl: source.catalogUrl, appId, version },
+      this.officialRepositoryConfig(source),
+      signal,
+    );
   }
 
   async verify(userId: number, stageId: string): Promise<{ stage: PluginStageRecord; plugin: PluginVersionRecord }> {
@@ -748,6 +740,58 @@ export class PluginInstallService {
     const updated = await this.states.compareAndSet(scope, expectedVersion, patch);
     this.onHostStateCommitted(scope.userId);
     return updated;
+  }
+
+  private officialRepositoryConfig(source: OfficialAgentPluginSource): RemotePluginRepositoryConfig {
+    let normalized: string;
+    try {
+      normalized = new URL(source.catalogUrl).toString();
+    } catch {
+      throw new Error('PLUGIN_REMOTE_REPOSITORY_INVALID');
+    }
+    return { url: normalized, privateHostExceptions: [...source.privateHostExceptions] };
+  }
+
+  private async stageRemoteWithConfig(
+    userId: number,
+    input: RemotePluginStageInput,
+    config: RemotePluginRepositoryConfig,
+    signal?: AbortSignal,
+  ): Promise<PluginStageRecord> {
+    const catalog = await this.remotePackages.catalog(config, signal);
+    const entry = catalog.packages.find(
+      (candidate) => candidate.appId === input.appId && candidate.version === input.version,
+    );
+    if (!entry) throw new Error('PLUGIN_REMOTE_PACKAGE_NOT_FOUND');
+    const source = await this.remotePackages.openPackage(config, entry, signal);
+    const stageId = randomUUID();
+    try {
+      const staged = await this.verifier.stage({ stageId, sizeBytes: source.sizeBytes, source: source.source });
+      if (staged.sizeBytes !== entry.sizeBytes) throw new Error('PLUGIN_REMOTE_SIZE_MISMATCH');
+      if (staged.packageHash !== entry.sha256) throw new Error('PLUGIN_REMOTE_HASH_MISMATCH');
+      const now = this.clock.nowUnixSeconds();
+      const record: PluginStageRecord = {
+        id: stageId,
+        userId,
+        source: { kind: 'remote', repositoryUrl: config.url, appId: entry.appId, version: entry.version },
+        packageHash: staged.packageHash,
+        sizeBytes: staged.sizeBytes,
+        publisherKeyId: entry.publisherKeyId,
+        appId: entry.appId,
+        version: entry.version,
+        manifest: null,
+        status: 'staged',
+        errorCode: null,
+        createdAt: now,
+        updatedAt: now,
+        versionNumber: 1,
+      };
+      await this.repository.createStage(record);
+      return record;
+    } catch (error) {
+      await this.verifier.discardStage(stageId).catch(() => undefined);
+      throw error;
+    }
   }
 
   private async remoteRepositoryConfig(userId: number, rawUrl: string): Promise<RemotePluginRepositoryConfig> {

@@ -12,6 +12,10 @@ export interface RuntimeConfig {
   agentPublicOrigin?: string;
   agentPluginFrontendOrigin?: string;
   agentPluginFrontendPort: number;
+  agentOfficialPluginCatalogUrl?: string;
+  agentOfficialPluginPublisherKeyId?: string;
+  agentOfficialPluginPublisherPublicKeyPem?: string;
+  agentOfficialPluginPrivateHostExceptions: string[];
   agentRunnerUrl?: string;
   agentRunnerToken?: string;
   host: string;
@@ -114,6 +118,19 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
   agentPublicOrigin: parseOptionalExactOrigin(env.AGENT_PUBLIC_ORIGIN, 'AGENT_PUBLIC_ORIGIN'),
   agentPluginFrontendOrigin: parseOptionalExactOrigin(env.AGENT_PLUGIN_FRONTEND_ORIGIN, 'AGENT_PLUGIN_FRONTEND_ORIGIN'),
   agentPluginFrontendPort: parsePositiveInteger(env.AGENT_PLUGIN_FRONTEND_PORT, 3002, 'AGENT_PLUGIN_FRONTEND_PORT'),
+  agentOfficialPluginCatalogUrl: env.AGENT_OFFICIAL_PLUGIN_CATALOG_URL?.trim() || undefined,
+  agentOfficialPluginPublisherKeyId:
+    (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'
+      ? env.AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID?.trim() || undefined
+      : undefined,
+  agentOfficialPluginPublisherPublicKeyPem:
+    (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'
+      ? env.AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM?.trim() || undefined
+      : undefined,
+  agentOfficialPluginPrivateHostExceptions:
+    (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'
+      ? parseCsv(env.AGENT_OFFICIAL_PLUGIN_PRIVATE_HOST_EXCEPTIONS)
+      : [],
   agentRunnerUrl: env.AGENT_RUNNER_URL?.trim() || undefined,
   agentRunnerToken: env.AGENT_RUNNER_TOKEN?.trim() || undefined,
   host: env.HOST?.trim() || '0.0.0.0',

@@ -81,6 +81,38 @@ export const resolveWorkspaceToolchain = (
   });
 };
 
+const assertSpecMatchesFrozenProfile = (spec: AgentWorkspaceCreateSpec | null, profile: WorkspaceProfileView): void => {
+  if (!spec) return;
+  if (spec.recipeId !== profile.recipeId) throw new Error('RUN_ENVIRONMENT_CONFLICT');
+  const frozenVersions = Object.fromEntries(profile.toolchain.map((pack) => [pack.familyId, pack.versionId]));
+  for (const [familyId, versionId] of Object.entries(spec.versions ?? {})) {
+    if (frozenVersions[familyId] !== versionId) throw new Error('RUN_ENVIRONMENT_CONFLICT');
+  }
+  const sameIds = (requested: readonly string[] | undefined, frozen: readonly string[]): boolean => {
+    if (requested === undefined) return true;
+    return JSON.stringify([...requested].sort()) === JSON.stringify([...frozen].sort());
+  };
+  if (
+    !sameIds(
+      spec.runnerPluginIds,
+      profile.runnerPlugins.map((target) => target.pluginId),
+    )
+  ) {
+    throw new Error('RUN_ENVIRONMENT_CONFLICT');
+  }
+  if (
+    !sameIds(
+      spec.acpProfileIds,
+      profile.acpProfiles.map((entry) => entry.id),
+    )
+  ) {
+    throw new Error('RUN_ENVIRONMENT_CONFLICT');
+  }
+  if (spec.browserTargetId !== undefined && spec.browserTargetId !== profile.browserTarget?.id) {
+    throw new Error('RUN_ENVIRONMENT_CONFLICT');
+  }
+};
+
 export interface WorkspaceRuntimeLifecycleHooks {
   workspaceInvalidated?(workspaceId: string, generation: number): void;
 }
@@ -158,16 +190,78 @@ export class WorkspaceRuntimeService {
     );
   }
 
+  async resolveRunEnvironment(
+    scope: Scope,
+    spec: AgentWorkspaceCreateSpec,
+    expectedCatalogRevision?: string,
+    expectedSettingsRevision?: number,
+  ): Promise<WorkspaceProfileView> {
+    if (!spec || typeof spec !== 'object') throw new Error('VALIDATION_FAILED');
+    await this.assertExecutionEnabled(scope);
+    const [catalog, settings] = await Promise.all([this.controller.catalog(), this.settings.get(scope.userId)]);
+    if (expectedCatalogRevision && catalog.revision !== expectedCatalogRevision) {
+      throw new Error('CATALOG_REVISION_CONFLICT');
+    }
+    if (expectedSettingsRevision !== undefined && settings.revision !== expectedSettingsRevision) {
+      throw new Error('SETTINGS_REVISION_CONFLICT');
+    }
+    const workspaceSettings = settings.effectiveSettings.workspaceRuntime;
+    if (!workspaceSettings.enabledRecipeIds.includes(spec.recipeId)) throw new Error('WORKSPACE_RECIPE_DISABLED');
+    if (
+      (spec.runnerPluginIds?.length ?? 0) > 32 ||
+      new Set(spec.runnerPluginIds ?? []).size !== (spec.runnerPluginIds?.length ?? 0)
+    ) {
+      throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
+    }
+    const recipe = catalog.recipes.find((candidate) => candidate.id === spec.recipeId);
+    if (!recipe) throw new Error('WORKSPACE_RECIPE_NOT_FOUND');
+    const configuredDefaults = Object.fromEntries(
+      Object.entries(workspaceSettings.toolVersions)
+        .filter(([familyId, value]) => recipe.allowedFamilies.includes(familyId) && Boolean(value.defaultVersionId))
+        .map(([familyId, value]) => [familyId, value.defaultVersionId!]),
+    );
+    const versions = { ...configuredDefaults, ...(spec.versions ?? {}) };
+    for (const [familyId, versionId] of Object.entries(versions)) {
+      const configured = workspaceSettings.toolVersions[familyId];
+      if (configured && !configured.enabledVersionIds.includes(versionId)) {
+        throw new Error('WORKSPACE_TOOLCHAIN_VERSION_DISABLED');
+      }
+    }
+    const resolvedRunnerPlugins = await this.pluginTargets.resolveRunnerTargets(
+      scope.userId,
+      spec.runnerPluginIds ?? [],
+    );
+    const profile: WorkspaceProfileView = {
+      kind: recipe.kind,
+      recipeId: recipe.id,
+      recipeRevision: recipe.revision,
+      runtimeDigest: catalog.runtimeDigest,
+      catalogRevision: catalog.revision,
+      toolchain: resolveWorkspaceToolchain(catalog, recipe.id, versions),
+      runnerPlugins: resolvedRunnerPlugins.map((target) => ({ ...target })),
+      acpProfiles: selectedAcpProfiles(spec.acpProfileIds, workspaceSettings.acpProfiles, settings.revision),
+      browserTarget: selectedBrowserTarget(
+        spec.browserTargetId,
+        settings.effectiveSettings.browser.targets,
+        settings.revision,
+      ),
+    };
+    if (profile.browserTarget && recipe.kind !== 'browser') throw new Error('BROWSER_TARGET_REQUIRES_BROWSER_RECIPE');
+    return profile;
+  }
+
   async createWorkspace(
     scope: Scope,
     runId: string,
     agentRuntimeId: string,
-    spec: AgentWorkspaceCreateSpec,
+    spec: AgentWorkspaceCreateSpec | null,
     retained: boolean,
     idempotencyKey: string,
     expectedCatalogRevision?: string,
+    frozenProfile?: WorkspaceProfileView,
   ): Promise<AgentWorkspaceView> {
-    if (!idempotencyKey || !spec || typeof spec !== 'object') throw new Error('VALIDATION_FAILED');
+    if (!idempotencyKey || (!frozenProfile && (!spec || typeof spec !== 'object')))
+      throw new Error('VALIDATION_FAILED');
     await this.assertExecutionEnabled(scope);
     const requestHash = hashOperation(
       {
@@ -176,15 +270,13 @@ export class WorkspaceRuntimeService {
         runId,
         agentRuntimeId,
         workspace: JSON.parse(JSON.stringify(spec)) as JsonValue,
+        frozenProfile: frozenProfile ? (JSON.parse(JSON.stringify(frozenProfile)) as JsonValue) : null,
         retained,
         expectedCatalogRevision: expectedCatalogRevision ?? null,
       },
       this.cryptoHash,
     );
-    const [catalog, settings] = await Promise.all([this.controller.catalog(), this.settings.get(scope.userId)]);
-    if (expectedCatalogRevision && catalog.revision !== expectedCatalogRevision) {
-      throw new Error('CATALOG_REVISION_CONFLICT');
-    }
+    const settings = await this.settings.get(scope.userId);
     const existing = await this.repository.listWorkspaces(scope);
     if (
       existing.some(
@@ -199,34 +291,16 @@ export class WorkspaceRuntimeService {
     const workspaceSettings = settings.effectiveSettings.workspaceRuntime;
     const active = existing.filter((workspace) => !['deleted', 'failed'].includes(workspace.status)).length;
     if (active >= workspaceSettings.maxActiveWorkspaces) throw new Error('WORKSPACE_LIMIT_EXCEEDED');
-    if (
-      (spec.runnerPluginIds?.length ?? 0) > 32 ||
-      new Set(spec.runnerPluginIds ?? []).size !== (spec.runnerPluginIds?.length ?? 0)
-    ) {
-      throw new Error('PLUGIN_RUNNER_TARGET_INVALID');
+    let profile: WorkspaceProfileView;
+    if (frozenProfile) {
+      if (expectedCatalogRevision && frozenProfile.catalogRevision !== expectedCatalogRevision) {
+        throw new Error('CATALOG_REVISION_CONFLICT');
+      }
+      assertSpecMatchesFrozenProfile(spec, frozenProfile);
+      profile = structuredClone(frozenProfile);
+    } else {
+      profile = await this.resolveRunEnvironment(scope, spec!, expectedCatalogRevision);
     }
-    const recipe = catalog.recipes.find((candidate) => candidate.id === spec.recipeId);
-    if (!recipe) throw new Error('WORKSPACE_RECIPE_NOT_FOUND');
-    const resolvedRunnerPlugins = await this.pluginTargets.resolveRunnerTargets(
-      scope.userId,
-      spec.runnerPluginIds ?? [],
-    );
-    const profile: WorkspaceProfileView = {
-      kind: recipe.kind,
-      recipeId: recipe.id,
-      recipeRevision: recipe.revision,
-      runtimeDigest: catalog.runtimeDigest,
-      catalogRevision: catalog.revision,
-      toolchain: resolveWorkspaceToolchain(catalog, recipe.id, spec.versions),
-      runnerPlugins: resolvedRunnerPlugins.map((target) => ({ ...target })),
-      acpProfiles: selectedAcpProfiles(spec.acpProfileIds, workspaceSettings.acpProfiles, settings.revision),
-      browserTarget: selectedBrowserTarget(
-        spec.browserTargetId,
-        settings.effectiveSettings.browser.targets,
-        settings.revision,
-      ),
-    };
-    if (profile.browserTarget && recipe.kind !== 'browser') throw new Error('BROWSER_TARGET_REQUIRES_BROWSER_RECIPE');
     const now = this.now();
     const workspaceId = randomUUID();
     let workspace = await this.repository.createWorkspace({

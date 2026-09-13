@@ -16,7 +16,7 @@
   }
 
   const OPERATIONS_APP_ID = 'nexus.operations';
-  const props = defineProps<{ settings: AgentSettingsView; busy: boolean }>();
+  const props = defineProps<{ settings: AgentSettingsView; busy: boolean; operationsAvailable: boolean }>();
   const emit = defineEmits<{ saveProfiles: [profiles: Profile[]] }>();
 
   const profiles = ref<ProfileDraft[]>([]);
@@ -52,6 +52,11 @@
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'ACP request failed.');
 
   const loadIntegrations = async (): Promise<void> => {
+    if (!props.operationsAvailable) {
+      integrations.value = [];
+      loading.value = false;
+      return;
+    }
     loading.value = true;
     error.value = '';
     try {
@@ -263,12 +268,19 @@
         <button
           type="button"
           class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
-          :disabled="disabled || loading"
+          :disabled="disabled || loading || !operationsAvailable"
           @click="loadIntegrations"
         >
           {{ $t('agent.settings.acpRuntime.refresh') }}
         </button>
       </div>
+
+      <p
+        v-if="!operationsAvailable"
+        class="mt-3 rounded border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+      >
+        {{ $t('agent.settings.acpRuntime.installOperationsFirst') }}
+      </p>
 
       <div class="mt-3 grid gap-2 md:grid-cols-[2fr_2fr_auto_auto]">
         <label class="text-[11px] text-text-secondary">
@@ -294,7 +306,7 @@
           <button
             type="button"
             class="rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
-            :disabled="disabled || !displayName.trim() || !profileId"
+            :disabled="disabled || !operationsAvailable || !displayName.trim() || !profileId"
             @click="createIntegration"
           >
             {{ $t('agent.settings.acpRuntime.createIntegration') }}

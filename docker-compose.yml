@@ -41,6 +41,9 @@ services:
       AGENT_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
       AGENT_PLUGIN_FRONTEND_ORIGIN: ${NEXUS_PLUGIN_FRONTEND_ORIGIN:-http://localhost:18112}
       AGENT_PLUGIN_FRONTEND_PORT: 3002
+      # Operations / Developer 等 first-party Agent App 都是独立签名 Plugin，不编译进 Nexus 主镜像。
+      # 这里只允许替换官方 catalog/mirror 地址；Publisher 信任根由 Nexus Host 固定 pin。
+      AGENT_OFFICIAL_PLUGIN_CATALOG_URL: ${NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL:-https://github.com/0honus0/nexus-agent-plugins/releases/latest/download/catalog.json}
       # 默认连接宿主机 Runner；若启用下方注释掉的 agent-runner 服务，
       # 请在 .env 中改为 NEXUS_AGENT_RUNNER_URL=http://agent-runner:8790。
       # Nexus 当前是单用户应用，Workspace 是工作目录/运行环境边界，不是多租户安全沙箱。

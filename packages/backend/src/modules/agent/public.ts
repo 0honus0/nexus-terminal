@@ -5,6 +5,7 @@ import type {
   WorkspaceRuntimeCommandView,
   AgentWorkspaceCreateSpec,
   AgentWorkspaceView,
+  WorkspaceProfileView,
   ToolchainPackUninstallPreview,
   WorkspaceRuntimeCleanupPreview,
   WorkspaceRuntimeSettingsResetPreview,
@@ -63,6 +64,7 @@ import type { AppIntentReceipt } from './host/app-intent.repository.port';
 import type { AppIntentArtifactReadRange, AppIntentArtifactView } from './host/app-intent-artifact.port';
 import type { CreateAppIntentInput } from './host/app-intent.service';
 import type { AgentSettingsView, HardLimitPreview } from './host/agent-settings.service';
+import type { RecommendedAgentPluginInstallResult, RecommendedAgentPluginView } from './host/agent-onboarding.service';
 import type { TargetDenylistSnapshot } from './host/target-denylist.repository.port';
 import type { SharedFactView } from './runtime/collaboration/subagent.repository.port';
 import type {
@@ -129,6 +131,8 @@ export interface AgentHostFacade {
   ): Promise<{ artifact: AppIntentArtifactView; source: AsyncIterable<Uint8Array> }>;
   authorize(scope: Scope, capability: AgentCapability, resource?: CapabilityResource): Promise<GrantDecision>;
   getSettings(userId: number): Promise<AgentSettingsView>;
+  getRecommendedPlugin(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginView>;
+  installRecommendedPlugin(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginInstallResult>;
   patchSettings(userId: number, patch: unknown, expectedRevision: number): Promise<AgentSettingsView>;
   previewHardLimits(userId: number, proposed: unknown, expectedRevision: number): Promise<HardLimitPreview>;
   confirmHardLimits(userId: number, confirmationId: string, expectedRevision: number): Promise<AgentSettingsView>;
@@ -282,6 +286,15 @@ export interface AgentRunFacade {
   ): Promise<{ inputId: string; sequence: number; runVersion: number }>;
   setGoal(scope: Scope, runId: string, text: string, expectedVersion: number, idempotencyKey: string): Promise<RunView>;
   pendingInputs(scope: Scope, runId: string): Promise<PendingRunInputPage>;
+  mutatePendingInput(
+    scope: Scope,
+    runId: string,
+    action: 'remove' | 'move',
+    inputId: string,
+    beforeInputId: string | null,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Promise<RunView>;
   increaseBudget(
     scope: Scope,
     runId: string,
@@ -336,10 +349,11 @@ export interface AgentWorkspaceRuntimeFacade {
     scope: Scope,
     runId: string,
     agentRuntimeId: string,
-    workspace: AgentWorkspaceCreateSpec,
+    workspace: AgentWorkspaceCreateSpec | null,
     retained: boolean,
     idempotencyKey: string,
     expectedCatalogRevision?: string,
+    frozenProfile?: WorkspaceProfileView,
   ): Promise<AgentWorkspaceView>;
   action(
     scope: Scope,

@@ -29,5 +29,14 @@
       "id": "memory.import",
       "schemaVersion": 1
     }
+  ],
+  "agents": [
+    {
+      "id": "operations.default",
+      "version": "1.0.0",
+      "displayName": "Operations Agent",
+      "description": "Operations assistant whose available actions are resolved from current Nexus capability grants and Tool Catalog.",
+      "requiredModelCapabilities": ["streaming"]
+    }
   ]
 }

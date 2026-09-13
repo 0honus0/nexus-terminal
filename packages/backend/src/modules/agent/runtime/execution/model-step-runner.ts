@@ -9,7 +9,7 @@ import type { CatalogToolSchema } from '../../capabilities/tool-catalog';
 import type { BackendSignal } from './agent-backend.port';
 import { ModelCallLimiter } from './model-call-limiter';
 import { waitForRetry } from './execution-errors';
-import type { RunSnapshot } from '../runs/run.types';
+import type { RunInputProjection, RunSnapshot } from '../runs/run.types';
 
 const MAX_ASSISTANT_BYTES = 256 * 1024;
 
@@ -67,6 +67,7 @@ export class ModelStepRunner {
     snapshot: RunSnapshot,
     scope: Scope,
     tools: CatalogToolSchema[],
+    inputProjections: Record<string, RunInputProjection>,
     collaborationContext?: string,
   ): Promise<PreparedModelStep> {
     const provider = await this.providers.get(snapshot.userId, snapshot.definition.model.providerId);
@@ -76,7 +77,8 @@ export class ModelStepRunner {
     const model = provider.models.find((candidate) => candidate.id === snapshot.definition.model.modelId);
     if (!model) throw new Error('MODEL_NOT_FOUND');
 
-    const currentInput = latestInput(snapshot);
+    const currentProjection = inputProjections[snapshot.id] ?? { ordered: [], pending: [] };
+    const currentInput = currentProjection.ordered.at(-1) ?? latestInput(snapshot);
     const contextPlan = await this.context.compose({
       scope,
       threadId: snapshot.threadId,
@@ -86,6 +88,9 @@ export class ModelStepRunner {
         : { historyBoundary: snapshot.definition.contextBoundary }),
       currentInput: currentInput.text,
       ...(currentInput.id ? { currentInputEntryId: currentInput.id } : {}),
+      effectiveRunInputsByRun: Object.fromEntries(
+        Object.entries(inputProjections).map(([runId, projection]) => [runId, projection.ordered]),
+      ),
       ...(snapshot.goal.text ? { goal: snapshot.goal.text } : {}),
       ...(snapshot.plan.items.length
         ? {

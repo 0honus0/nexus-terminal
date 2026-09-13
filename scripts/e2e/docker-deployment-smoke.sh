@@ -31,6 +31,8 @@ cdp_browser_proxy_log="$workspace/direct-cdp-proxy.log"
 cdp_browser_proxy_pid=''
 browser_page_log="$workspace/direct-browser-page.log"
 browser_page_pid=''
+plugin_repository_log="$workspace/plugin-repository.log"
+plugin_repository_pid=''
 runner_port="$(node - <<'NODE'
 const net = require('node:net');
 const server = net.createServer();
@@ -97,6 +99,17 @@ server.listen(0, '127.0.0.1', () => {
 });
 NODE
 )"
+plugin_repository_port="$(node - <<'NODE'
+const net = require('node:net');
+const server = net.createServer();
+server.listen(0, '0.0.0.0', () => {
+  const address = server.address();
+  if (!address || typeof address === 'string') process.exit(1);
+  console.log(address.port);
+  server.close();
+});
+NODE
+)"
 session_secret='docker-smoke-session-secret-2026-00000000000000000000000000000000'
 encryption_key='0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
 runner_token="$(node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))")"
@@ -143,6 +156,8 @@ print_logs() {
   cat "$cdp_browser_proxy_log" 2>/dev/null || true
   echo "--- direct Browser page log ---"
   cat "$browser_page_log" 2>/dev/null || true
+  echo "--- Agent plugin repository log ---"
+  cat "$plugin_repository_log" 2>/dev/null || true
 }
 
 cleanup() {
@@ -152,6 +167,10 @@ cleanup() {
   fi
   compose exec -T backend sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
   compose down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
+  if [[ -n "$plugin_repository_pid" ]]; then
+    kill "$plugin_repository_pid" >/dev/null 2>&1 || true
+    wait "$plugin_repository_pid" >/dev/null 2>&1 || true
+  fi
   if [[ -n "$browser_page_pid" ]]; then
     kill "$browser_page_pid" >/dev/null 2>&1 || true
     wait "$browser_page_pid" >/dev/null 2>&1 || true
@@ -188,6 +207,14 @@ services:
     container_name: nexus-e2e-backend-$suffix
     environment:
       AGENT_RUNNER_URL: http://host.docker.internal:$runner_port
+      NEXUS_E2E_RESET_ENABLED: 1
+      AGENT_OFFICIAL_PLUGIN_CATALOG_URL: http://host.docker.internal:$plugin_repository_port/catalog.json
+      AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: ed25519:b75cef09083540273828a77809f5ec467bac0df101f5b6ec17727a4103f632f7
+      AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: |-
+        -----BEGIN PUBLIC KEY-----
+        MCowBQYDK2VwAyEALU2gA/FGdyVBtxtSsTRGmLiNjRsxeE8MdkMt2dndZQ8=
+        -----END PUBLIC KEY-----
+      AGENT_OFFICIAL_PLUGIN_PRIVATE_HOST_EXCEPTIONS: host.docker.internal:$plugin_repository_port
       NEXUS_E2E_DIRECT_CDP_PORT: $cdp_browser_proxy_port
       NEXUS_E2E_BROWSER_PAGE_PORT: $browser_page_port
   guacd:
@@ -221,6 +248,21 @@ set_env NEXUS_IPV6_GATEWAY "fd01:ee:${network_hex}::1"
 set_env NEXUS_AGENT_RUNNER_TOKEN "$runner_token"
 set_env RP_ID 'ssh.honus.top'
 set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
+
+NEXUS_E2E_PLUGIN_REPOSITORY_HOST=0.0.0.0 \
+NEXUS_E2E_PLUGIN_REPOSITORY_PORT="$plugin_repository_port" \
+NEXUS_E2E_PLUGIN_REPOSITORY_PUBLIC_BASE_URL="http://host.docker.internal:$plugin_repository_port" \
+NEXUS_E2E_PLUGIN_SIGNING_KEY_PEM="$(cat "$repo_root/packages/e2e/fixtures/agent/keys/official-e2e-private.pem")" \
+node "$repo_root/packages/e2e/fixtures/agent/plugin-repository.mjs" >"$plugin_repository_log" 2>&1 &
+plugin_repository_pid=$!
+for _ in {1..40}; do
+  if curl -fsS "http://127.0.0.1:${plugin_repository_port}/health" >/dev/null; then break; fi
+  sleep 0.1
+done
+curl -fsS "http://127.0.0.1:${plugin_repository_port}/health" >/dev/null || {
+  echo 'Agent plugin repository did not start.' >&2
+  exit 1
+}
 
 compose config >/dev/null
 # Browser direct page target. Chromium itself runs on the host, so this loopback HTTP
@@ -648,7 +690,7 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
 // agent requests a sensitive permission and refuses to finish unless Nexus selects reject_once.
 {
   const { AcpAdapter } = await import('/app/dist/infrastructure/agent/integrations/acp.adapter.js');
-  const { createAcpExecuteTool } = await import('/app/dist/modules/agent/apps/operations/acp-tools.js');
+  const { createAcpExecuteTool } = await import('/app/dist/modules/agent/capabilities/tools/acp-tools.js');
   const { NodeCryptoHashAdapter } = await import('/app/dist/infrastructure/agent/capabilities/node-crypto-hash.adapter.js');
   const integrationId = randomUUID();
   const integration = {
@@ -1373,6 +1415,28 @@ const ok = async (method, path, body, headers = {}, expectedStatus) => {
 };
 const csrf = (await ok('GET', '/api/v1/agent/security/csrf')).token;
 const mutationHeaders = { 'X-Nexus-CSRF': csrf };
+const recommended = await ok('GET', '/api/v1/agent/onboarding/recommended-plugin');
+if (recommended.appId !== 'nexus.operations' || recommended.installed) {
+  throw new Error(`Unexpected initial recommended plugin state: ${JSON.stringify(recommended)}`);
+}
+const installedOperations = await ok(
+  'POST',
+  '/api/v1/agent/onboarding/recommended-plugin/install',
+  {},
+  mutationHeaders,
+  201,
+);
+if (!installedOperations.installedNow || installedOperations.app.id !== 'nexus.operations') {
+  throw new Error(`Operations onboarding install failed: ${JSON.stringify(installedOperations)}`);
+}
+let featureSettings = await ok('GET', '/api/v1/agent/settings');
+featureSettings = await ok(
+  'PATCH',
+  '/api/v1/agent/settings',
+  { patch: { feature: { enabled: true } }, expectedVersion: featureSettings.revision },
+  mutationHeaders,
+);
+if (!featureSettings.effectiveSettings.feature.enabled) throw new Error('Agent feature did not enable after Operations install.');
 const provider = await ok(
   'POST',
   '/api/v1/agent/ai/providers',
@@ -1418,6 +1482,7 @@ const createRun = async (title) => {
       agentDefinitionId: definition.id,
       model: { providerId: provider.id, modelId: 'smoke-model', configurationVersion: provider.version },
       connectionIds: [],
+      environment: { recipeId: recipe.id, catalogRevision: catalog.revision },
     },
     { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     201,
@@ -1431,6 +1496,14 @@ const createRun = async (title) => {
   }
   if (current.status !== 'awaiting_budget') {
     throw new Error(`Lifecycle Run reached unexpected state before Workspace creation: ${JSON.stringify(current)}`);
+  }
+  if (
+    current.definition?.environment?.recipeId !== recipe.id ||
+    current.definition.environment.catalogRevision !== catalog.revision ||
+    !current.definition.environment.runtimeDigest ||
+    !Array.isArray(current.definition.environment.toolchain)
+  ) {
+    throw new Error(`Run Environment was not server-resolved and frozen: ${JSON.stringify(current.definition)}`);
   }
   return current;
 };
@@ -1463,6 +1536,15 @@ const cancelToTerminal = async (run) => {
 };
 
 const createReadyWorkspace = async (run, title) => {
+  const conflict = await call(
+    'POST',
+    `/api/v1/apps/nexus.operations/runs/${run.id}/workspaces`,
+    { schemaVersion: 1, workspace: { recipeId: 'not-the-frozen-environment' }, retained: false },
+    { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+  );
+  if (conflict.response.status !== 409 || conflict.json?.error?.code !== 'RUN_ENVIRONMENT_CONFLICT') {
+    throw new Error(`Workspace create did not enforce frozen Run Environment: ${conflict.response.status} ${conflict.text}`);
+  }
   const created = await ok(
     'POST',
     `/api/v1/apps/nexus.operations/runs/${run.id}/workspaces`,
@@ -1480,6 +1562,90 @@ const createReadyWorkspace = async (run, title) => {
   if (current.status !== 'ready') throw new Error(`${title} Workspace is not ready: ${JSON.stringify(current)}`);
   return current;
 };
+
+let queueRun = await createRun('Docker pending-input smoke');
+const appendQueueInput = async (text) => {
+  const appended = await ok(
+    'POST',
+    `/api/v1/apps/nexus.operations/runs/${queueRun.id}/inputs`,
+    { schemaVersion: 1, text, artifactRefs: [], expectedVersion: queueRun.version },
+    { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+    202,
+  );
+  queueRun = await ok('GET', `/api/v1/apps/nexus.operations/runs/${queueRun.id}`);
+  if (queueRun.version !== appended.runVersion) {
+    throw new Error(`Pending-input append projection did not advance atomically: ${JSON.stringify({ appended, queueRun })}`);
+  }
+};
+await appendQueueInput('pending input two');
+await appendQueueInput('pending input three');
+let pendingQueue = await ok('GET', `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`);
+if (pendingQueue.total !== 3 || pendingQueue.items.map((item) => item.text).join('|') !== 'deployment lifecycle smoke|pending input two|pending input three') {
+  throw new Error(`Unexpected initial pending-input queue: ${JSON.stringify(pendingQueue)}`);
+}
+const originalQueue = [...pendingQueue.items];
+const staleQueueVersion = queueRun.version;
+queueRun = await ok(
+  'PATCH',
+  `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`,
+  {
+    schemaVersion: 1,
+    action: 'move',
+    inputId: originalQueue[2].id,
+    beforeInputId: originalQueue[0].id,
+    expectedVersion: queueRun.version,
+  },
+  { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+);
+pendingQueue = await ok('GET', `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`);
+if (pendingQueue.items.map((item) => item.id).join('|') !== [originalQueue[2].id, originalQueue[0].id, originalQueue[1].id].join('|')) {
+  throw new Error(`Pending-input move was not durable: ${JSON.stringify(pendingQueue)}`);
+}
+const originalSequences = new Map(originalQueue.map((item) => [item.id, item.sequence]));
+if (pendingQueue.items.some((item) => originalSequences.get(item.id) !== item.sequence)) {
+  throw new Error(`Pending-input move rewrote immutable Ledger sequences: ${JSON.stringify(pendingQueue)}`);
+}
+const staleMutation = await call(
+  'PATCH',
+  `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`,
+  {
+    schemaVersion: 1,
+    action: 'remove',
+    inputId: originalQueue[1].id,
+    beforeInputId: null,
+    expectedVersion: staleQueueVersion,
+  },
+  { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+);
+if (staleMutation.response.status !== 409 || staleMutation.json?.error?.code !== 'STATE_CONFLICT') {
+  throw new Error(`Pending-input mutation did not enforce Run version CAS: ${staleMutation.response.status} ${staleMutation.text}`);
+}
+queueRun = await ok(
+  'PATCH',
+  `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`,
+  {
+    schemaVersion: 1,
+    action: 'remove',
+    inputId: originalQueue[1].id,
+    beforeInputId: null,
+    expectedVersion: queueRun.version,
+  },
+  { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
+);
+pendingQueue = await ok('GET', `/api/v1/apps/nexus.operations/runs/${queueRun.id}/pending-inputs`);
+if (pendingQueue.total !== 2 || pendingQueue.items.some((item) => item.id === originalQueue[1].id)) {
+  throw new Error(`Pending-input remove was not durable: ${JSON.stringify(pendingQueue)}`);
+}
+const queueLedger = await ok(
+  'GET',
+  `/api/v1/apps/nexus.operations/threads/${queueRun.threadId}/entries?limit=50`,
+);
+const removedLedgerEntry = queueLedger.items.find((entry) => entry.id === originalQueue[1].id);
+if (!removedLedgerEntry || removedLedgerEntry.sequence !== originalQueue[1].sequence) {
+  throw new Error(`Pending-input remove mutated append-only Ledger history: ${JSON.stringify(queueLedger)}`);
+}
+queueRun = await cancelToTerminal(queueRun);
+console.log('agent pending-input HTTP: durable move/remove + version CAS ok');
 
 let runA = await createRun('Docker lifecycle smoke A');
 const workspaceA = await createReadyWorkspace(runA, 'A');

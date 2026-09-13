@@ -6,6 +6,12 @@ export interface ContextHistoryBoundary {
   runThrough: Record<string, number>;
 }
 
+export interface ContextRunInput {
+  id: string;
+  sequence: number;
+  text: string;
+}
+
 export interface ContextRequest {
   scope: Scope;
   threadId: string;
@@ -13,6 +19,7 @@ export interface ContextRequest {
   historyBoundary?: ContextHistoryBoundary;
   currentInput: string;
   currentInputEntryId?: string;
+  effectiveRunInputsByRun?: Record<string, ContextRunInput[]>;
   goal?: string;
   taskPlan?: string;
   collaborationContext?: string;

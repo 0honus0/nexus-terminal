@@ -8,6 +8,7 @@ import {
   parseBudgetIncreaseRequest,
   parseCreateRunRequest,
   parseExpectedVersionRequest,
+  parsePendingInputMutationRequest,
   parseResumeRunRequest,
   parseSetGoalRequest,
   parseWorkspaceActionRequest,
@@ -205,6 +206,31 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     }),
   );
 
+  router.patch(
+    '/runs/:runId/pending-inputs',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      const input = parsePendingInputMutationRequest(request.body);
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      const runId = pathParam(request.params.runId);
+      const run = await withVersionConflictDetails(
+        input.expectedVersion,
+        async () => (await dependencies.runs.get(scope, runId)).version,
+        () =>
+          dependencies.runs.mutatePendingInput(
+            scope,
+            runId,
+            input.action,
+            input.inputId,
+            input.beforeInputId,
+            input.expectedVersion,
+            idempotencyKey(request),
+          ),
+      );
+      agentData(request, response, run);
+    }),
+  );
+
   router.post(
     '/runs/:runId/goal',
     mutationSecurity,
@@ -299,6 +325,9 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
       const input = parseWorkspaceCreateRequest(request.body);
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       const runId = pathParam(request.params.runId);
+      const run = await dependencies.runs.get(scope, runId);
+      const environmentWasFrozen = Object.prototype.hasOwnProperty.call(run.definition, 'environment');
+      if (environmentWasFrozen && !run.definition.environment) throw new Error('RUN_ENVIRONMENT_NOT_CONFIGURED');
       const agentRuntimeId = await dependencies.runs.rootRuntimeId(scope, runId);
       const workspace = await dependencies.workspaceRuntime.createWorkspace(
         scope,
@@ -308,6 +337,7 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         input.retained,
         idempotencyKey(request),
         input.catalogRevision,
+        run.definition.environment ?? undefined,
       );
       response.setHeader('Location', `/api/v1/apps/${encodeURIComponent(scope.appId)}/workspaces/${workspace.id}`);
       agentData(request, response, workspace, 202);

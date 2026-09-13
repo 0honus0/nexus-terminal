@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
+  import BaseModal from '@/foundation/ui/BaseModal.vue';
   import {
     agentApi,
     formatAgentApiError,
@@ -11,6 +12,7 @@
     type ArtifactStorageSummary,
     type WorkspaceRuntimeAvailability,
     type HardLimitPreview,
+    type RecommendedAgentPluginView,
     type TargetDenylistView,
   } from '../api/agent-api';
   import AgentFeatureSettings from './AgentFeatureSettings.vue';
@@ -40,6 +42,8 @@
   const busy = ref(false);
   const error = ref('');
   const notice = ref('');
+  const recommendedPlugin = ref<RecommendedAgentPluginView | null>(null);
+  const onboardingVisible = ref(false);
 
   const groups = [
     { id: 'overview', icon: 'fa-solid fa-table-cells-large', label: 'agent.settings.groups.overview' },
@@ -111,7 +115,39 @@
       storage.value = await agentApi.storage();
     });
 
-  const changeFeature = (enabled: boolean) => patchSection('feature', { enabled });
+  const changeFeature = (enabled: boolean): void => {
+    if (!enabled) {
+      patchSection('feature', { enabled: false });
+      return;
+    }
+    void execute(async () => {
+      if (!settings.value) return;
+      const recommendation = await agentApi.recommendedPlugin();
+      if (recommendation.installed) {
+        settings.value = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
+        return;
+      }
+      recommendedPlugin.value = recommendation;
+      onboardingVisible.value = true;
+    });
+  };
+
+  const confirmRecommendedInstall = (): void => {
+    void execute(async () => {
+      if (!settings.value) return;
+      await agentApi.installRecommendedPlugin();
+      settings.value = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
+      apps.value = await agentApi.apps();
+      onboardingVisible.value = false;
+      recommendedPlugin.value = null;
+    });
+  };
+
+  const closeOnboarding = (): void => {
+    if (busy.value) return;
+    onboardingVisible.value = false;
+    recommendedPlugin.value = null;
+  };
 
   const toggleApp = (app: AgentAppSummary, enabled: boolean) =>
     execute(async () => {
@@ -362,6 +398,7 @@
             <AcpRuntimeSettings
               :settings="settings"
               :busy="busy"
+              :operations-available="apps.some((app) => app.id === 'nexus.operations')"
               @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
             />
           </section>
@@ -411,4 +448,59 @@
       </div>
     </template>
   </section>
+
+  <BaseModal
+    :visible="onboardingVisible && Boolean(recommendedPlugin)"
+    :title="$t('agent.settings.onboarding.title')"
+    :aria-label="$t('agent.settings.onboarding.title')"
+    :close-on-backdrop="!busy"
+    :close-on-escape="!busy"
+    :focus-on-open="true"
+    :restore-focus="true"
+    panel-class="max-w-lg p-5"
+    @close="closeOnboarding"
+  >
+    <template v-if="recommendedPlugin">
+      <div class="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <i class="fa-solid fa-screwdriver-wrench" aria-hidden="true"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="font-semibold">{{ recommendedPlugin.displayName }}</span>
+            <span class="rounded-md bg-header px-2 py-0.5 text-[10px]">v{{ recommendedPlugin.availableVersion }}</span>
+          </div>
+          <p class="mt-1 text-sm leading-5 text-text-secondary">{{ recommendedPlugin.description }}</p>
+        </div>
+      </div>
+      <p class="mt-4 text-sm leading-6 text-text-secondary">
+        {{ $t('agent.settings.onboarding.description') }}
+      </p>
+      <div class="mt-4 rounded-lg border border-border/60 bg-background p-3 text-xs text-text-secondary">
+        <div class="font-medium text-foreground">{{ $t('agent.settings.onboarding.verifiedPublisher') }}</div>
+        <div class="mt-1 break-all font-mono text-[10px]">{{ recommendedPlugin.publisherKeyId }}</div>
+        <div class="mt-2 break-all text-[10px]">{{ recommendedPlugin.catalogUrl }}</div>
+      </div>
+    </template>
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <button
+          type="button"
+          class="rounded-md border border-border px-3 py-2 text-sm hover:bg-header disabled:opacity-50"
+          :disabled="busy"
+          @click="closeOnboarding"
+        >
+          {{ $t('agent.settings.onboarding.cancel') }}
+        </button>
+        <button
+          type="button"
+          class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          :disabled="busy"
+          @click="confirmRecommendedInstall"
+        >
+          {{ busy ? $t('agent.settings.onboarding.installing') : $t('agent.settings.onboarding.installAndEnable') }}
+        </button>
+      </div>
+    </template>
+  </BaseModal>
 </template>

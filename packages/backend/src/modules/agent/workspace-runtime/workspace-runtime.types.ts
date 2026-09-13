@@ -1,7 +1,15 @@
-import type { PluginRunnerTarget } from '../host/plugin-runner-target.port';
-import type { JsonValue, Scope } from '../agent.types';
+import type {
+  AgentRunEnvironmentAcpProfile,
+  AgentRunEnvironmentBrowserEndpoint,
+  AgentRunEnvironmentBrowserTarget,
+  AgentRunEnvironmentSnapshot,
+  AgentWorkspaceEnvironmentSpec,
+  AgentWorkspaceKind,
+  JsonValue,
+  Scope,
+} from '../agent.types';
 
-export type WorkspaceKind = 'shell' | 'code' | 'data' | 'browser';
+export type WorkspaceKind = AgentWorkspaceKind;
 export type WorkspaceStatus =
   'creating' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'deleting' | 'deleted' | 'failed';
 
@@ -11,28 +19,9 @@ export interface ToolchainPackRef {
   contentDigest: string;
 }
 
-export interface WorkspaceAcpProfile {
-  id: string;
-  profileRevision: number;
-  argv: string[];
-  cwd: string;
-}
-
-export interface WorkspaceBrowserEndpoint {
-  scope: 'docker-network' | 'external-network';
-  via: 'backend' | 'runner';
-  url: string;
-  priority: number;
-  allowPlaintext: boolean;
-  verifyTls: boolean;
-}
-
-export interface WorkspaceBrowserTarget {
-  id: string;
-  profileRevision: number;
-  endpoints: WorkspaceBrowserEndpoint[];
-  allowedUrlPatterns: string[];
-}
+export type WorkspaceAcpProfile = AgentRunEnvironmentAcpProfile;
+export type WorkspaceBrowserEndpoint = AgentRunEnvironmentBrowserEndpoint;
+export type WorkspaceBrowserTarget = AgentRunEnvironmentBrowserTarget;
 
 export interface WorkspaceRecipe {
   id: string;
@@ -82,17 +71,7 @@ export interface WorkspaceRuntimeStorageView {
 }
 
 /** Immutable input used to construct one Workspace generation. */
-export interface WorkspaceProfileView {
-  kind: WorkspaceKind;
-  recipeId: string;
-  recipeRevision: string;
-  runtimeDigest: string;
-  catalogRevision: string;
-  toolchain: ToolchainPackRef[];
-  runnerPlugins: PluginRunnerTarget[];
-  acpProfiles: WorkspaceAcpProfile[];
-  browserTarget: WorkspaceBrowserTarget | null;
-}
+export type WorkspaceProfileView = AgentRunEnvironmentSnapshot;
 
 /** Stable Agent Workspace identity; generation changes when the runtime profile changes. */
 export interface AgentWorkspaceView extends Scope {
@@ -129,13 +108,7 @@ export interface WorkspaceToolchainSwitchView {
   commands: WorkspaceRuntimeCommandView[];
 }
 
-export interface AgentWorkspaceCreateSpec {
-  recipeId: string;
-  versions?: Record<string, string>;
-  runnerPluginIds?: string[];
-  acpProfileIds?: string[];
-  browserTargetId?: string;
-}
+export type AgentWorkspaceCreateSpec = AgentWorkspaceEnvironmentSpec;
 
 export interface WorkspaceRuntimeSetupRecipeSelection {
   recipeId: string;

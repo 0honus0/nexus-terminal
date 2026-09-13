@@ -100,8 +100,26 @@ export const composeWorkspaceRuntime = ({
       terminal.open(scope, workspaceId, generation, columns, rows, sessionId, signal),
     exportWorkspaceArtifact: (scope, input, signal) => workspaceArtifacts.export(scope, input, signal),
     importArtifactToWorkspace: (scope, input, signal) => workspaceArtifacts.import(scope, input, signal),
-    createWorkspace: (scope, runId, agentRuntimeId, workspace, retained, idempotencyKey, catalogRevision) =>
-      service.createWorkspace(scope, runId, agentRuntimeId, workspace, retained, idempotencyKey, catalogRevision),
+    createWorkspace: (
+      scope,
+      runId,
+      agentRuntimeId,
+      workspace,
+      retained,
+      idempotencyKey,
+      catalogRevision,
+      frozenProfile,
+    ) =>
+      service.createWorkspace(
+        scope,
+        runId,
+        agentRuntimeId,
+        workspace,
+        retained,
+        idempotencyKey,
+        catalogRevision,
+        frozenProfile,
+      ),
     action: (scope, workspaceId, action, expectedVersion) =>
       service.action(scope, workspaceId, action, expectedVersion),
     switchToolVersions: (scope, workspaceId, versions, expectedVersion, expectedCatalogRevision) =>

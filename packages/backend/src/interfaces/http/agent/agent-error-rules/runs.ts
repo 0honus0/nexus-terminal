@@ -12,6 +12,16 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     rawCode(409, 'The idempotent Agent command cannot be applied in its current state.'),
   ),
   onCodes(['APPROVAL_STALE'], rawCode(409, 'The approval changed; refresh and retry.')),
+  onCodes(['PENDING_INPUT_NOT_FOUND'], {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'The pending Run input was not found.',
+  }),
+  onCodes(['PENDING_INPUT_NO_CHANGE'], rawCode(409, 'The pending Run input is already in the requested state.')),
+  onCodes(
+    ['PENDING_INPUT_REQUIRED'],
+    rawCode(409, 'A Run must retain at least one effective user input before its first model step.'),
+  ),
   onCodes(['BUDGET_INCREASE_INVALID'], rawCode(400, 'Run budget increases must strictly raise the current budget.')),
   onCodes(
     ['BUDGET_HARD_LIMIT_EXCEEDED'],

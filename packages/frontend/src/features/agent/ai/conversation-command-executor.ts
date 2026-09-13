@@ -24,6 +24,12 @@ export interface ConversationCommandExecutorDependencies {
   getRunSnapshot: (runId: string) => Promise<AgentRunSnapshot>;
   setGoal: (run: AgentRunView, text: string) => Promise<AgentRunView>;
   pendingInputs: (runId: string) => Promise<AgentPendingRunInputPage>;
+  mutatePendingInput: (
+    run: AgentRunView,
+    action: 'remove' | 'move',
+    inputId: string,
+    beforeInputId: string | null,
+  ) => Promise<AgentRunView>;
   adoptRun: (run: AgentRunView) => void;
   refreshBackgroundRuns: () => Promise<void>;
   interruptAndRefresh: (run: AgentRunView, text: string) => Promise<void>;
@@ -150,8 +156,9 @@ export const createConversationCommandExecutor = (dependencies: ConversationComm
               consumed: latest.consumedInputSequence,
             }),
             ...(pending.items.length
-              ? pending.items.map((input) =>
+              ? pending.items.map((input, index) =>
                   t('agent.conversation.commands.queueItem', {
+                    position: index + 1,
                     sequence: input.sequence,
                     text: input.text.length > 240 ? `${input.text.slice(0, 237)}…` : input.text,
                   }),
@@ -168,6 +175,54 @@ export const createConversationCommandExecutor = (dependencies: ConversationComm
           ],
           tone: 'info',
         });
+      } else if (command.kind === 'queue.remove' || command.kind === 'queue.move') {
+        const latest = await dependencies.getRunSnapshot(current.id);
+        dependencies.adoptRun(latest);
+        const pending = await dependencies.pendingInputs(current.id);
+        const sourcePosition = command.kind === 'queue.remove' ? command.position : command.from;
+        const source = pending.items[sourcePosition - 1];
+        if (!source) {
+          setError(t('agent.conversation.commands.queuePositionInvalid', { position: sourcePosition }));
+          dependencies.succeedMutation();
+          return;
+        }
+        let beforeInputId: string | null = null;
+        if (command.kind === 'queue.move') {
+          if (pending.hasMore) {
+            setError(t('agent.conversation.commands.queueReorderTooLarge'));
+            dependencies.succeedMutation();
+            return;
+          }
+          if (command.to > pending.items.length) {
+            setError(t('agent.conversation.commands.queuePositionInvalid', { position: command.to }));
+            dependencies.succeedMutation();
+            return;
+          }
+          const withoutSource = pending.items.filter((item) => item.id !== source.id);
+          beforeInputId = withoutSource[command.to - 1]?.id ?? null;
+        }
+        const updated = await dependencies.mutatePendingInput(
+          latest,
+          command.kind === 'queue.remove' ? 'remove' : 'move',
+          source.id,
+          beforeInputId,
+        );
+        dependencies.adoptRun(updated);
+        const refreshed = await dependencies.pendingInputs(current.id);
+        dependencies.setResult({
+          title: t('agent.conversation.commands.queueTitle'),
+          lines: [
+            command.kind === 'queue.remove'
+              ? t('agent.conversation.commands.queueRemoved', { position: sourcePosition })
+              : t('agent.conversation.commands.queueMoved', { from: command.from, to: command.to }),
+            t('agent.conversation.commands.queueSummary', {
+              pending: refreshed.total,
+              consumed: updated.consumedInputSequence,
+            }),
+          ],
+          tone: 'info',
+        });
+        await dependencies.refreshBackgroundRuns();
       } else if (command.kind === 'interrupt') {
         if (!dependencies.isActiveRun(current)) {
           setError(t('agent.conversation.commands.requiresActiveRun'));

@@ -330,6 +330,24 @@ export interface AppendInputCommitResult {
   shouldReschedule: boolean;
 }
 
+export interface AtomicMutatePendingInput {
+  scope: Scope;
+  runId: string;
+  action: 'remove' | 'move';
+  inputId: string;
+  beforeInputId: string | null;
+  expectedRunVersion: number;
+  idempotencyKey: string;
+  requestHash: string;
+  now: number;
+}
+
+export interface MutatePendingInputCommitResult {
+  run: RunView;
+  replayed: boolean;
+  shouldInterruptModel: boolean;
+}
+
 export interface AtomicSetRunGoal {
   scope: Scope;
   runId: string;
@@ -535,6 +553,7 @@ export interface InterruptUnexpectedRootExecutionCommand {
 export interface StateCommitPort {
   createRun(command: AtomicCreateRun): Promise<CreateRunCommitResult>;
   appendInput(command: AtomicAppendInput): Promise<AppendInputCommitResult>;
+  mutatePendingInput(command: AtomicMutatePendingInput): Promise<MutatePendingInputCommitResult>;
   setRunGoal(command: AtomicSetRunGoal): Promise<SetRunGoalCommitResult>;
   cancelRun(command: AtomicCancelRun): Promise<CancelRunCommitResult>;
   increaseRunBudget(command: AtomicIncreaseRunBudget): Promise<IncreaseRunBudgetCommitResult>;
@@ -570,7 +589,7 @@ export interface StateCommitPort {
 
 export type RunCommandCommitPort = Pick<
   StateCommitPort,
-  'createRun' | 'appendInput' | 'setRunGoal' | 'cancelRun' | 'increaseRunBudget' | 'deleteRun'
+  'createRun' | 'appendInput' | 'mutatePendingInput' | 'setRunGoal' | 'cancelRun' | 'increaseRunBudget' | 'deleteRun'
 >;
 
 export type RunCreationCommitPort = Pick<StateCommitPort, 'createRun'>;

@@ -42,8 +42,6 @@ import { ProviderService } from '../../modules/agent/ai/provider.service';
 import { RecallService } from '../../modules/agent/ai/recall.service';
 import { MemoryService } from '../../modules/agent/ai/memory.service';
 import { SkillRegistry } from '../../modules/agent/ai/skill-registry';
-import { OPERATIONS_AGENT_DEFINITIONS } from '../../modules/agent/apps/operations/agent-definitions';
-import { createOperationsAppContribution } from '../../modules/agent/apps/operations/public';
 import type { AgentConnectionResolverPort, AgentDiagnosticsPort } from '../../modules/agent/capabilities/machine.port';
 import { ApprovalService } from '../../modules/agent/runtime/approvals/approval.service';
 import { PolicyService } from '../../modules/agent/capabilities/policy.service';
@@ -51,11 +49,12 @@ import { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
 import { ToolExecutor } from '../../modules/agent/capabilities/tool-executor';
 import type { LeasePort } from '../../modules/agent/capabilities/lease.port';
 import { AgentSettingsService } from '../../modules/agent/host/agent-settings.service';
+import { AgentOnboardingService } from '../../modules/agent/host/agent-onboarding.service';
 import { AppCapabilityBroker } from '../../modules/agent/host/app-capability-broker';
 import { AppLifecycleService } from '../../modules/agent/host/app-lifecycle.service';
 import { AppIntentService } from '../../modules/agent/host/app-intent.service';
-import { validateManifest } from '../../modules/agent/host/app-manifest-validator';
 import { AppRegistryService } from '../../modules/agent/host/app-registry.service';
+import type { OfficialAgentPluginSource } from '../../modules/agent/host/official-plugin-source';
 import { AgentDefinitionRegistry } from '../../modules/agent/runtime/definitions/agent-definition.registry';
 import { AgentEventHub } from '../../modules/agent/runtime/events/event-hub';
 import { NativeAgentBackend } from '../../modules/agent/runtime/execution/native-agent-backend';
@@ -113,6 +112,7 @@ export interface ComposeAgentOptions {
   nodeEnv: string;
   publicOrigin?: string;
   pluginFrontendOrigin?: string;
+  officialPluginSource: OfficialAgentPluginSource;
   connectionResolver: AgentConnectionResolverPort;
   diagnostics: AgentDiagnosticsPort;
   executionSessions: ExecutionSessionManager;
@@ -133,6 +133,7 @@ export const composeAgent = ({
   nodeEnv,
   publicOrigin,
   pluginFrontendOrigin,
+  officialPluginSource,
   connectionResolver,
   diagnostics,
   executionSessions,
@@ -192,7 +193,6 @@ export const composeAgent = ({
     systemClock,
   );
   const definitions = new AgentDefinitionRegistry();
-  for (const definition of OPERATIONS_AGENT_DEFINITIONS) definitions.register('nexus.operations', '1.0.0', definition);
   const { appStorage, plugins } = composePlugins({
     database,
     dataDirectory,
@@ -209,6 +209,7 @@ export const composeAgent = ({
     clock: systemClock,
     onHostStateCommitted: publishHostWake,
   });
+  const onboarding = new AgentOnboardingService(plugins, lifecycle, appGrants, officialPluginSource);
   const conversationRepository = new SqliteConversationRepository(database);
   const conversations = new ConversationService(conversationRepository, systemClock, settings, lifecycle);
   const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
@@ -398,6 +399,10 @@ export const composeAgent = ({
     lifecycle,
     providers,
     definitions,
+    (scope, selection, expectedSettingsRevision) => {
+      const { catalogRevision, ...workspace } = selection;
+      return workspaceRuntime.resolveRunEnvironment(scope, workspace, catalogRevision, expectedSettingsRevision);
+    },
     stateCommit,
     runRepository,
     systemClock,
@@ -438,24 +443,6 @@ export const composeAgent = ({
     notifyCommitted(run);
     scheduler.enqueue(run);
   });
-
-  const contributions = [
-    createOperationsAppContribution({
-      hasEnabledProvider: async (userId) =>
-        (await providerRepository.list(userId)).some((provider) => provider.enabled),
-      quiesce: async (deadlineUnixSeconds) => {
-        await Promise.all([
-          scheduler.quiesce(deadlineUnixSeconds),
-          subagentScheduler?.quiesce(deadlineUnixSeconds) ?? Promise.resolve(),
-        ]);
-        await stateCommit.quiesceApp('nexus.operations', systemClock.nowUnixSeconds());
-      },
-    }),
-  ];
-  for (const contribution of contributions) {
-    const manifest = validateManifest(contribution.rawManifest, { nexusVersion, supportedSdkMajor: 1 });
-    registry.register(contribution.create(manifest));
-  }
 
   return {
     host: {
@@ -509,6 +496,8 @@ export const composeAgent = ({
         return capabilityBroker.authorize(scope, capability, resource);
       },
       getSettings: (userId) => settings.get(userId),
+      getRecommendedPlugin: (userId, signal) => onboarding.recommended(userId, signal),
+      installRecommendedPlugin: (userId, signal) => onboarding.installRecommended(userId, signal),
       patchSettings: async (userId, patch, expectedRevision) => {
         const before = await settings.get(userId);
         const updated = await settings.patch(userId, patch, expectedRevision);
@@ -598,6 +587,8 @@ export const composeAgent = ({
         setGoal: (scope, runId, text, expectedVersion, idempotencyKey) =>
           runs.setGoal(scope, runId, text, expectedVersion, idempotencyKey),
         pendingInputs: (scope, runId) => runs.pendingInputs(scope, runId),
+        mutatePendingInput: (scope, runId, action, inputId, beforeInputId, expectedVersion, idempotencyKey) =>
+          runs.mutatePendingInput(scope, runId, action, inputId, beforeInputId, expectedVersion, idempotencyKey),
         increaseBudget: (scope, runId, increase, expectedVersion, idempotencyKey) =>
           runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey),
         cancel: (scope, runId, expectedVersion, idempotencyKey) =>

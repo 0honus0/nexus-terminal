@@ -54,6 +54,7 @@ const allowedAgentAreas = {
   host: new Set(['root', 'host']),
   ai: new Set(['root', 'host', 'ai']),
   capabilities: new Set(['root', 'host', 'capabilities']),
+  tools: new Set(['root', 'host', 'ai', 'capabilities', 'workspace-runtime', 'runtime', 'tools']),
   'workspace-runtime': new Set(['root', 'host', 'workspace-runtime']),
   exchange: new Set(['root', 'host', 'ai', 'workspace-runtime', 'exchange']),
   runtime: new Set(['root', 'host', 'ai', 'capabilities', 'runtime']),
@@ -335,17 +336,11 @@ for (const file of sourceFiles) {
   }
 }
 
-const operationsManifestPath = path.join(srcRoot, 'modules/agent/apps/operations/app.manifest.json');
-const operationsManifest = JSON.parse(fs.readFileSync(operationsManifestPath, 'utf8'));
-const operationsCapabilities = new Set(
-  Array.isArray(operationsManifest.capabilities) ? operationsManifest.capabilities : [],
-);
-for (const liveCapability of ['integration.acp.execute', 'browser.operate']) {
-  if (!operationsCapabilities.has(liveCapability)) {
-    failures.push(
-      `modules/agent/apps/operations/app.manifest.json: live capability ${liveCapability} must be declared`,
-    );
-  }
+const compileTimeOperationsRoot = path.join(srcRoot, 'modules/agent/apps/operations');
+if (fs.existsSync(compileTimeOperationsRoot)) {
+  failures.push(
+    'modules/agent/apps/operations: nexus.operations is an independently signed first-party Plugin and must not be compiled into the Nexus Backend',
+  );
 }
 const obsoleteBrowserAdapterPath = path.join(srcRoot, 'infrastructure/agent/integrations/browser-gateway.adapter.ts');
 if (fs.existsSync(obsoleteBrowserAdapterPath)) {

@@ -95,7 +95,6 @@ const allowedAgentAreas = {
   files: new Set(['files', 'api']),
   runtime: new Set(['runtime', 'api']),
   settings: new Set(['settings', 'api']),
-  'apps/operations': new Set(['apps/operations', 'ai', 'api', 'host', 'runtime']),
 };
 
 for (const [file, imports] of importsByFile) {
@@ -174,15 +173,12 @@ for (const [file, imports] of importsByFile) {
     const targetAgentArea = agentArea(relative(target));
     if (fromAgentArea && targetAgentArea) {
       const allowed = allowedAgentAreas[fromAgentArea];
-      const builtinAppPublicImport =
-        relative(file) === 'features/agent/host/builtin-apps.ts' &&
-        /^features\/agent\/apps\/[^/]+\/public\.ts$/.test(relative(target));
       const sharedAgentSurfaceImport =
         relative(file) === 'features/agent/host/AgentAppSurface.vue' &&
         ['features/agent/ai/', 'features/agent/runtime/'].some((prefix) => relative(target).startsWith(prefix));
       if (!allowed) {
         failures.push(`${relative(file)}: unknown Agent frontend area ${fromAgentArea}`);
-      } else if (!allowed.has(targetAgentArea) && !builtinAppPublicImport && !sharedAgentSurfaceImport) {
+      } else if (!allowed.has(targetAgentArea) && !sharedAgentSurfaceImport) {
         failures.push(
           `${relative(file)}: forbidden Agent frontend ${fromAgentArea} -> ${targetAgentArea} dependency (${specifier})`,
         );

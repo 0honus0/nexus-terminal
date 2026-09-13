@@ -606,6 +606,7 @@ export class SubagentParticipantExecutor {
       },
       runId: run.id,
       agentRuntimeId: runtimeId,
+      environment: run.definition.environment ?? null,
       stepId,
       signal,
       deadlineAt: Math.min(delegationDeadlineAt, this.clock.nowUnixSeconds() + run.budget.toolTimeoutSeconds),

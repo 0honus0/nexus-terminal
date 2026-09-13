@@ -7,7 +7,10 @@ export const workspaceRuntimeErrorRules: readonly AgentErrorRule[] = [
     ['WORKSPACE_RUNTIME_CONFIRMATION_EXPIRED'],
     rawCode(409, 'Workspace Runtime confirmation expired; preview again.'),
   ),
-  onCodes(['CATALOG_REVISION_CONFLICT'], rawCode(409, 'Workspace Runtime Catalog changed; refresh and preview again.')),
+  onCodes(
+    ['CATALOG_REVISION_CONFLICT', 'SETTINGS_REVISION_CONFLICT'],
+    rawCode(409, 'Workspace Runtime configuration changed; refresh and retry.'),
+  ),
   onCodes(['WORKSPACE_GENERATION_CONFLICT'], rawCode(409, 'Workspace state changed; refresh and retry.')),
   onCodes(['WORKSPACE_TOOLCHAIN_IN_USE'], rawCode(409, 'The Tool Pack is still used by an active Workspace.')),
   onCodesOrPrefixes(
@@ -26,7 +29,13 @@ export const workspaceRuntimeErrorRules: readonly AgentErrorRule[] = [
     message: 'Workspace recipe was not found.',
   }),
   onCodes(
-    ['WORKSPACE_TOOLCHAIN_UNAVAILABLE', 'WORKSPACE_LIMIT_EXCEEDED'],
+    [
+      'WORKSPACE_TOOLCHAIN_UNAVAILABLE',
+      'WORKSPACE_TOOLCHAIN_VERSION_DISABLED',
+      'WORKSPACE_RECIPE_DISABLED',
+      'WORKSPACE_LIMIT_EXCEEDED',
+      'RUN_ENVIRONMENT_NOT_CONFIGURED',
+    ],
     rawCode(422, 'The requested Workspace configuration is unavailable.'),
   ),
   onCodes(
@@ -44,6 +53,7 @@ export const workspaceRuntimeErrorRules: readonly AgentErrorRule[] = [
       'WORKSPACE_STATE_INVALID',
       'WORKSPACE_RECONCILIATION_REQUIRED',
       'WORKSPACE_TOOLCHAIN_NO_CHANGE',
+      'RUN_ENVIRONMENT_CONFLICT',
     ],
     rawCode(409, 'Workspace state changed; refresh and retry.'),
   ),

@@ -27,20 +27,8 @@ const csrfToken = async (request: APIRequestContext): Promise<string> => {
   return ((await response.json()) as Envelope<{ token: string }>).data.token;
 };
 
-const operationsHealth = async (
-  request: APIRequestContext,
-): Promise<{ health: string; healthReason: string | null }> => {
-  const response = await request.get('/api/v1/agent/apps');
-  expect(response.ok(), await response.text()).toBeTruthy();
-  const apps = (await response.json()) as Envelope<Array<{ id: string; health: string; healthReason: string | null }>>;
-  const operations = apps.data.find((app) => app.id === 'nexus.operations');
-  expect(operations).toBeDefined();
-  return { health: operations!.health, healthReason: operations!.healthReason };
-};
-
 test('Provider configuration protects credentials and enforces outbound policy', async ({ request }) => {
   await loginAsInitialAdmin(request);
-  await operationsHealth(request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
@@ -63,7 +51,7 @@ test('Provider configuration protects credentials and enforces outbound policy',
     await expect(denied.json()).resolves.toMatchObject({ error: { code: 'RESOURCE_FORBIDDEN' } });
   });
 
-  await step('save returns only a safe Provider view and makes Operations healthy', async () => {
+  await step('save returns only a safe Provider view', async () => {
     const created = await request.post('/api/v1/agent/ai/providers', {
       headers,
       data: {
@@ -91,7 +79,6 @@ test('Provider configuration protects credentials and enforces outbound policy',
     const serialized = JSON.stringify(provider);
     expect(serialized).not.toContain(providerSecret);
     expect(serialized).not.toContain('protected_credential');
-    expect(await operationsHealth(request)).toEqual({ health: 'healthy', healthReason: null });
   });
 
   await step('model discovery reads the upstream catalog without inventing capabilities', async () => {
@@ -201,6 +188,5 @@ test('Provider configuration protects credentials and enforces outbound policy',
     const listed = await request.get('/api/v1/agent/ai/providers');
     expect(listed.ok(), await listed.text()).toBeTruthy();
     await expect(listed.json()).resolves.toMatchObject({ data: [] });
-    expect(await operationsHealth(request)).toEqual({ health: 'degraded', healthReason: 'provider_not_configured' });
   });
 });

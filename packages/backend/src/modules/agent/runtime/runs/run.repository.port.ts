@@ -1,6 +1,6 @@
 import type { Scope } from '../../agent.types';
 import type { ToolInspection } from '../../capabilities/tool.types';
-import type { HostEvent, PendingRunInputPage, RunEvent, RunSnapshot, RunView } from './run.types';
+import type { HostEvent, PendingRunInputPage, RunEvent, RunInputProjection, RunSnapshot, RunView } from './run.types';
 
 export interface RunPage {
   items: RunView[];
@@ -25,7 +25,11 @@ export interface RunListReaderPort {
   list(scope: Scope, threadId: string | undefined, limit: number, before?: string): Promise<RunPage>;
 }
 
-export interface RunQueryPort extends RunSnapshotReaderPort, RunListReaderPort {
+export interface RunInputReaderPort {
+  inputProjection(scope: Scope, runId: string): Promise<RunInputProjection>;
+}
+
+export interface RunQueryPort extends RunSnapshotReaderPort, RunListReaderPort, RunInputReaderPort {
   pendingInputs(scope: Scope, runId: string, limit: number): Promise<PendingRunInputPage>;
 }
 
@@ -38,7 +42,7 @@ export interface HostCursorReaderPort {
   hostCursor(userId: number): Promise<number>;
 }
 
-export interface RunExecutionReaderPort extends RunSnapshotReaderPort {
+export interface RunExecutionReaderPort extends RunSnapshotReaderPort, RunInputReaderPort {
   rootRuntimeId(scope: Scope, runId: string): Promise<string>;
   pendingMutation(scope: Scope, runId: string): Promise<PendingMutationTool | null>;
 }

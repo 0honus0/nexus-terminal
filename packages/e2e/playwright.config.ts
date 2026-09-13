@@ -1,3 +1,5 @@
+import { createHash, createPublicKey } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
 import path from 'node:path';
 import { E2E_PORTS, E2E_URLS } from './support/test-env';
@@ -8,11 +10,29 @@ const testDataDir = path.join(e2eRoot, '.tmp', 'backend-data');
 const seedDbPath = path.join(e2eRoot, 'fixtures', 'seeded-data', 'nexus-terminal.db');
 const prepareTestDataScript = path.join(e2eRoot, 'support', 'prepare-test-data.mjs');
 const isCI = Boolean(process.env.CI);
+const e2ePluginPrivateKeyPem = readFileSync(
+  path.join(e2eRoot, 'fixtures', 'agent', 'keys', 'official-e2e-private.pem'),
+  'utf8',
+);
+const e2ePluginPublicKeyPem = readFileSync(
+  path.join(e2eRoot, 'fixtures', 'agent', 'keys', 'official-e2e-public.pem'),
+  'utf8',
+);
+const e2ePluginPublisherKeyId = `ed25519:${createHash('sha256')
+  .update(createPublicKey(e2ePluginPublicKeyPem).export({ type: 'spki', format: 'der' }))
+  .digest('hex')}`;
+
+const inheritedEnv = Object.fromEntries(
+  Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
+);
+
+const pluginRepositoryEnv: Record<string, string> = {
+  ...inheritedEnv,
+  NEXUS_E2E_PLUGIN_SIGNING_KEY_PEM: e2ePluginPrivateKeyPem,
+};
 
 const backendEnv: Record<string, string> = {
-  ...Object.fromEntries(
-    Object.entries(process.env).filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
-  ),
+  ...inheritedEnv,
   NODE_ENV: 'test',
   PORT: String(E2E_PORTS.backend),
   NEXUS_DATA_DIR: testDataDir,
@@ -29,6 +49,10 @@ const backendEnv: Record<string, string> = {
   AGENT_PUBLIC_ORIGIN: E2E_URLS.frontendOrigin,
   AGENT_PLUGIN_FRONTEND_ORIGIN: E2E_URLS.pluginFrontendOrigin,
   AGENT_PLUGIN_FRONTEND_PORT: String(E2E_PORTS.pluginFrontend),
+  AGENT_OFFICIAL_PLUGIN_CATALOG_URL: `${E2E_URLS.pluginRepositoryOrigin}/catalog.json`,
+  AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: e2ePluginPublisherKeyId,
+  AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: e2ePluginPublicKeyPem,
+  AGENT_OFFICIAL_PLUGIN_PRIVATE_HOST_EXCEPTIONS: `127.0.0.1:${E2E_PORTS.pluginRepository}`,
 };
 
 export default defineConfig({
@@ -99,6 +123,7 @@ export default defineConfig({
     {
       command: 'node fixtures/agent/plugin-repository.mjs',
       cwd: e2eRoot,
+      env: pluginRepositoryEnv,
       url: `${E2E_URLS.pluginRepositoryOrigin}/health`,
       reuseExistingServer: false,
       timeout: 30_000,

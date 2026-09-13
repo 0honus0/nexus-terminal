@@ -1,4 +1,4 @@
-import type { JsonValue } from '../../../modules/agent/agent.types';
+import type { AgentRunEnvironmentSelection, JsonValue } from '../../../modules/agent/agent.types';
 import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 import type { RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
 import { hasOnlyKeys, isJsonValue, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
@@ -11,6 +11,7 @@ export interface CreateRunRequestDto {
   agentDefinitionId: string;
   model: { providerId: string; modelId: string; configurationVersion: number };
   connectionIds: number[];
+  environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
 }
 
@@ -58,6 +59,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     'agentDefinitionId',
     'model',
     'connectionIds',
+    'environment',
     'initialGoal',
   ]);
   const model = value.model;
@@ -90,6 +92,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
       configurationVersion: model.configurationVersion,
     },
     connectionIds: value.connectionIds as number[],
+    ...(value.environment === undefined ? {} : { environment: parseRunEnvironmentSelection(value.environment) }),
     ...(typeof value.initialGoal === 'string' && value.initialGoal.trim()
       ? { initialGoal: value.initialGoal.trim() }
       : {}),
@@ -109,6 +112,28 @@ export const parseAppendInputRequest = (body: unknown): { input: UserInputData; 
     input: parseUserInput({ text: value.text, artifactRefs: value.artifactRefs }),
     expectedVersion: value.expectedVersion,
   };
+};
+
+export const parsePendingInputMutationRequest = (
+  body: unknown,
+): { action: 'remove' | 'move'; inputId: string; beforeInputId: string | null; expectedVersion: number } => {
+  const value = versionedRecord(body, ['action', 'inputId', 'beforeInputId', 'expectedVersion']);
+  if (
+    !['remove', 'move'].includes(String(value.action)) ||
+    typeof value.inputId !== 'string' ||
+    value.inputId.length < 1 ||
+    value.inputId.length > 128 ||
+    (value.beforeInputId !== undefined && value.beforeInputId !== null && typeof value.beforeInputId !== 'string') ||
+    !positiveInteger(value.expectedVersion)
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const action = value.action as 'remove' | 'move';
+  const beforeInputId = typeof value.beforeInputId === 'string' ? value.beforeInputId : null;
+  if ((action === 'remove' && beforeInputId !== null) || (action === 'move' && beforeInputId === value.inputId)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return { action, inputId: value.inputId, beforeInputId, expectedVersion: value.expectedVersion };
 };
 
 export const parseSetGoalRequest = (body: unknown): { text: string; expectedVersion: number } => {
@@ -215,6 +240,23 @@ const parseWorkspaceSpec = (value: unknown): AgentWorkspaceCreateSpec => {
     throw new Error('VALIDATION_FAILED');
   }
   return value as unknown as AgentWorkspaceCreateSpec;
+};
+
+const parseRunEnvironmentSelection = (value: unknown): AgentRunEnvironmentSelection | null => {
+  if (value === null) return null;
+  if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
+  const { catalogRevision, ...workspace } = value;
+  if (
+    catalogRevision !== undefined &&
+    (typeof catalogRevision !== 'string' || !catalogRevision || catalogRevision.length > 128)
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const parsed = parseWorkspaceSpec(workspace);
+  return {
+    ...parsed,
+    ...(typeof catalogRevision === 'string' ? { catalogRevision } : {}),
+  };
 };
 
 export const parseWorkspaceCreateRequest = (body: unknown): WorkspaceCreateRequestDto => {

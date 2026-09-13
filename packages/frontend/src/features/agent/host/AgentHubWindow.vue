@@ -5,7 +5,6 @@
   import AgentAppSurface from './AgentAppSurface.vue';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
-  import { builtinAppView } from './builtin-apps';
   import { agentSurfaceSession } from './surface-session';
   import { agentWindowManager } from './window-manager';
 
@@ -15,7 +14,6 @@
   const emit = defineEmits<{ layoutChange: [] }>();
   const state = agentWindowManager.state;
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
-  const activeBuiltinView = computed(() => (activeApp.value ? builtinAppView(activeApp.value.id) : null));
   const visible = computed(() => state.status === 'visible');
   const enabledApps = computed(() => props.summary.apps.filter((app) => app.enabled));
   const activityCount = computed(
@@ -263,12 +261,6 @@
 
     <div class="min-h-0 flex-1 bg-background">
       <ArtifactLibraryView v-if="state.hubView === 'files'" :apps="summary.apps" />
-      <component
-        :is="activeBuiltinView"
-        v-else-if="activeApp && activeBuiltinView"
-        :key="activeApp.id"
-        :app-id="activeApp.id"
-      />
       <AgentAppSurface
         v-else-if="activeApp?.surface === 'agent'"
         :key="`${activeApp.id}@${activeApp.version}`"

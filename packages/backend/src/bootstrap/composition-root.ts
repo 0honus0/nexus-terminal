@@ -1,5 +1,6 @@
 import type { RuntimeConfig } from '../config/runtime-config';
 import type { AgentServices } from '../modules/agent/public';
+import { DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE } from '../modules/agent/host/official-plugin-source';
 import { composeAgent } from './agent/compose-agent';
 import { createAgentConnectionResolver, createAgentDiagnostics } from './agent/machine-support';
 import { NexusBackupCodecAdapter } from '../infrastructure/backup/backup-codec.adapter';
@@ -403,6 +404,17 @@ export const createCompositionRoot = (
     new DatabaseDiagnosticProbe(database),
     new ExecutionSessionDiagnosticProbe(executionSessions),
   ]);
+  const officialPluginSource = {
+    ...DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE,
+    catalogUrl: config.agentOfficialPluginCatalogUrl ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.catalogUrl,
+    publisherKeyId: config.agentOfficialPluginPublisherKeyId ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.publisherKeyId,
+    publisherPublicKeyPem:
+      config.agentOfficialPluginPublisherPublicKeyPem ?? DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.publisherPublicKeyPem,
+    privateHostExceptions:
+      config.agentOfficialPluginPrivateHostExceptions.length > 0
+        ? [...config.agentOfficialPluginPrivateHostExceptions]
+        : [...DEFAULT_OFFICIAL_AGENT_PLUGIN_SOURCE.privateHostExceptions],
+  };
   const agent = composeAgent({
     database,
     cipher,
@@ -411,6 +423,7 @@ export const createCompositionRoot = (
     nodeEnv: config.nodeEnv,
     publicOrigin: config.agentPublicOrigin,
     pluginFrontendOrigin: config.agentPluginFrontendOrigin,
+    officialPluginSource,
     connectionResolver: createAgentConnectionResolver(connections, sshResolver),
     diagnostics: createAgentDiagnostics(diagnostics),
     executionSessions,

@@ -1,4 +1,4 @@
-import type { Actor, JsonValue, Scope } from '../agent.types';
+import type { Actor, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../agent.types';
 import type { AgentCapability } from '../host/app.types';
 import type { ToolTargetFingerprint } from './tool-target.types';
 
@@ -42,6 +42,7 @@ export interface ToolContext extends Scope {
   actor: Actor;
   runId: string;
   agentRuntimeId: string;
+  environment: AgentRunEnvironmentSnapshot | null;
   stepId: string;
   signal: AbortSignal;
   deadlineAt: number;

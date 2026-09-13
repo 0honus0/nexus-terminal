@@ -42,7 +42,8 @@ Backend 主要目录：
 packages/backend/src/modules/agent/
 ├── host/                 App registry, lifecycle, grants, settings, plugin lifecycle
 ├── ai/                   Provider, context, conversation, artifact, memory, integrations
-├── capabilities/         Tool catalog, policy, approval, lease, governed execution
+├── capabilities/         Tool catalog, policy, approval, lease, governed execution contracts
+├── tools/host/            Host-owned governed Tool implementations/contributions
 ├── workspace-runtime/    Workspace Runtime control plane
 ├── runtime/
 │   ├── runs/             Run lifecycle and public Run model
@@ -51,7 +52,6 @@ packages/backend/src/modules/agent/
 │   ├── planning/         durable Plan projection and plan_update tool
 │   ├── recovery/         checkpoint/resume/recovery
 │   └── collaboration/    Subagent, mailbox, shared facts, durable child work
-└── apps/operations/      Nexus built-in Operations capability contributions
 
 packages/backend/src/infrastructure/agent/
   concrete persistence / runner / plugin / capability adapters
@@ -129,10 +129,10 @@ Hub 是非模态 floating window，支持：
 
 - **Launcher**：认证后被动出现，不自动打开 Hub、不抢焦点；feature disabled 时隐藏，但 Agent Settings/历史/审计数据不因此删除。
 - **Window chrome**：标题区展示全局 activity count、App selector、Conversation/Files view、pending approval 提示以及 minimize/maximize/close。多 App 时，宽窗口额外显示带 health/running/approval/budget 状态的 App activity strip；selector 是始终可达的主切换入口，App 数量超过 5 时才显示搜索。
-- **App 切换**：`AgentAppSwitcher -> AgentHubWindow.switchApp -> agentSurfaceSession.activateApp -> agentWindowManager.switchApp`。离开 App 前暂停 detail presentation；每个 App 的当前 Thread、draft、Next Run model 等 view state 独立保留，不把这些临时状态写回 Run truth。
+- **App 切换**：`AgentAppSwitcher -> AgentHubWindow.switchApp -> agentSurfaceSession.activateApp -> agentWindowManager.switchApp`。离开 App 前暂停 detail presentation；每个 App 的当前 Thread、draft、Next Run model、Next Run Environment 等 view state 独立保留，不把这些临时状态直接当作 Run truth。
 - **Agent surface**：宽窗口固定为 `224px Threads / Conversation / 280px TaskRail`；Conversation header 负责 Thread/Run status 和历史 Run，Run Configuration bar 负责 Model / Environment / Targets；正文只渲染 Ledger/streaming projection，右侧 TaskRail 聚合当前与后台 Run、Approval/Budget；更深的 checkpoint/subagent/approval/Workspace 信息进入 `TaskDetailDrawer`。
 - **响应式**：`AgentHubWindow` 自身是 named container。`<=1180px` 收起 model meta，`<=1040px` 隐藏 TaskRail，`<=880px` 隐藏 Run history select，`<=760px` Threads 变 overlay drawer 且 Run Configuration 可换行；Hub chrome 在 `<=900px` 收起非关键 badge/App search，在 `<=700px` 进一步隐藏 title/nav label/activity strip。不得用浏览器 viewport breakpoint 替代上述窗口容器规则。
-- **Next Run / Active Run**：没有活动 Run 时 Model/Targets 是下一次执行选择；Run 创建后 Model/Targets 改为 frozen snapshot 并显示 lock。Environment 当前只显示有效 Workspace Runtime defaults/availability，不伪装成已冻结的 RunDefinition 字段。
+- **Next Run / Active Run**：没有活动 Run 时 Model / Environment / Targets 都是下一次执行选择。Environment 选择先以 App-local presentation state 保存；创建 Run 时 Backend 根据当前 Runner Catalog 与 Agent settings 校验并解析为完整 `RunDefinition.environment` snapshot。Run 创建后 Model / Environment / Targets 都从 RunDefinition 冻结展示并显示 lock；选择 `No Workspace` 时该 Run 明确冻结为无 Workspace 环境。
 - **审批/预算**：高风险操作不在聊天气泡里“假通过”。顶部 badge、TaskRail 和 Run detail 都投影同一后端 Approval/Run 状态；窄窗口即使 TaskRail 被隐藏，也必须仍能从 Run header/detail 进入处理。
 - **Files**：Artifact Library 是 Hub 的一级 view，不复制为每个 App 自己的文件浏览器；Picker/Artifact ref 仍按 App/Run scope 进入 Conversation。
 - **Custom Frontend**：声明 `targets.frontend` 的 Plugin iframe 接管 App content area，但不接管 Nexus window chrome、App switching、认证或权限 UI；无 Frontend target 的 AgentDefinition App 直接复用 Host surface。
@@ -287,11 +287,13 @@ TaskRail 直接展示 typed Plan、完成比例、current focus、blocked 数、
 /plan             show current plan
 /interrupt <text> explicitly interrupt current model generation
 /queue            inspect pending user inputs
+/queue remove <position>
+/queue move <from> <to>
 /stop             cancel current Run
 /help             show command reference
 ```
 
-命令 dispatch 在 parser 层与普通对话严格分离；未知命令直接返回用户可理解错误，绝不能退化为普通 prompt。`//...` 明确逃逸为以 `/` 开头的普通用户输入，Composer 提供 slash suggestion 与 `/help`。已有 Run 时 `/goal <text>` 走 versioned/idempotent `run.goal.set`；空 Thread 上 `/goal <text>` 通过 `run.create` 的 `initialGoal` 直接建立 revision 1 的 durable Goal 并启动 Run。`/plan` 从最新 Run projection 读取 typed durable Plan，`/queue` 从 `consumedInputSequence + Ledger sequence` 派生 pending inputs，`/stop` 复用正式 cancel contract。`/interrupt <text>` 使用独立 `run.interrupt` command：只有事务内确认 Root model 正在 streaming 才会追加输入并 supersede model step，否则返回状态冲突；它不会借“interrupt”名义取消已经开始的 mutation 或 supersede approval。
+命令 dispatch 在 parser 层与普通对话严格分离；未知命令直接返回用户可理解错误，绝不能退化为普通 prompt。`//...` 明确逃逸为以 `/` 开头的普通用户输入，Composer 提供 slash suggestion 与 `/help`。已有 Run 时 `/goal <text>` 走 versioned/idempotent `run.goal.set`；空 Thread 上 `/goal <text>` 通过 `run.create` 的 `initialGoal` 直接建立 revision 1 的 durable Goal 并启动 Run。`/plan` 从最新 Run projection 读取 typed durable Plan，`/queue` 从 `consumedInputSequence + Ledger sequence` 派生 pending inputs；`/queue remove <position>` 与 `/queue move <from> <to>` 通过 versioned/idempotent Backend mutation 修改仍未消费的 durable `user_input`，并同步 bump Run `inputRevision/version`。`/stop` 复用正式 cancel contract。`/interrupt <text>` 使用独立 `run.interrupt` command：只有事务内确认 Root model 正在 streaming 才会追加输入并 supersede model step，否则返回状态冲突；它不会借“interrupt”名义取消已经开始的 mutation 或 supersede approval。
 
 命令结果是这些 durable Backend 事实的 UI projection，不是新的 frontend authority，也不会伪装成 Ledger 消息或模型隐藏推理。
 
@@ -321,15 +323,19 @@ Backend 在安全边界将当前 model step 标记为 superseded，然后以新 
 
 ### 6.3 Pending-input queue
 
-Conversation `/queue` 已复用现有 `inputRevision + consumedInputSequence + Ledger sequence` durable input stream：Backend 统计当前 Run 中 `sequence > consumedInputSequence` 的全部 `user_input`，并返回有上限的明细页、authoritative `total` 与 `hasMore`；Frontend 不维护第二套 local-only queue，也不会把第一页长度冒充总数。
+Conversation `/queue` 复用现有 append-only Ledger，并叠加 Run durable event 形成执行队列投影：原始 `user_input` 与 Ledger sequence 永不因 queue mutation 被删除或改号；Backend 先按 Ledger sequence 读取 Run 的输入，再顺序重放 `input.pending_moved` / `input.pending_removed`，最后以 `consumedInputSequence` 划分当前 pending 集合，并返回有上限的明细页、authoritative `total` 与 `hasMore`。Frontend 不维护第二套 local-only queue，也不会把第一页长度冒充总数。
 
 当前边界：
 
 - Agent 运行时仍可通过正式 append-input 追加输入；
 - 普通 append-input 维持现有 `NEW_INPUT` 语义：Root model 正在 streaming 时会 supersede 当前 model step；
 - `/interrupt <text>` 使用更严格的 `run.interrupt`：仅 streaming model 可接受，否则 409；
-- `/queue` 只做 durable inspection；
-- remove/reorder 尚未交付；如果未来增加，必须是 versioned Backend mutation，不能只改前端数组。
+- `/queue` 展示 authoritative pending queue；
+- `/queue remove <position>` 只能删除 `sequence > consumedInputSequence` 的未消费输入；
+- `/queue move <from> <to>` 只能重排同一未消费集合；Backend 在单个 StateCommit 事务内追加 queue mutation durable event 并 bump Run `inputRevision/version`，**绝不修改历史 Ledger sequence 或 Thread entry**；
+- `/queue remove` 只从“后续模型执行投影”中移除输入；原始 Ledger entry 作为用户历史事实继续保留，Context projection 会永久忽略该被移除 input；
+- 已消费输入不能通过 pending-input mutation 修改；模型正在 streaming 时队列 mutation 会触发与新输入相同的 `NEW_INPUT` safe-boundary supersede 语义；
+- Frontend position 只用于交互定位，最终 mutation 仍提交 stable input id + expected Run version，不能以 local array 作为事实源。
 
 ## 7. Root Scheduler 与崩溃语义
 
@@ -504,11 +510,9 @@ Model · Environment · Targets
 
 - Model 是真实 Next Run selector；Run 创建后从 `Run.definition.model` 冻结展示。
 - Targets 是真实 Next Run SSH `connectionIds` selector；Run 创建后从 `Run.definition.connectionIds` 冻结展示。
-- Environment **当前只是 production-backed Workspace Runtime availability/default summary，不是 selector**。
+- Environment 是真实 Next Run selector。Frontend 只保存 recipe 选择（或显式 `No Workspace`）作为下一次 Run 的输入；创建 Run 时 Backend 同时校验 expected Catalog revision 与 Agent settings revision，解析 Recipe、Toolchain、Runner Plugin、ACP Profile、Browser Target 等完整 profile，并冻结到 `RunDefinition.environment`。
 
-真正 Workspace Profile 在 Workspace 创建时由 Backend 校验/解析并冻结，Run Details 展示该 Workspace 的 frozen profile。
-
-在 Backend RunDefinition 正式扩展前，禁止前端制造“Next Run Environment 已选择”的假状态。
+Workspace create 只能消费该 Run 的 frozen Environment snapshot；模型侧 `workspace_create` 不再接受 recipe/toolchain 参数，因此不能在 Run 中途偷偷切换环境。显式 `No Workspace` 的 Run 会拒绝 Workspace create。独立管理 API 仍可为 legacy/administrative flow 创建 Workspace，但 Run-aware 路径必须优先使用 frozen snapshot。
 
 ### 12.3 Runner
 
@@ -705,13 +709,22 @@ agent/plugins/<appId>/versions/<version>
 
 Runner plugin 通过独立 Runner protocol/lifecycle 执行。
 
-### 16.3 第一方插件仓库
+### 16.3 第一方插件仓库与术语
 
 第一方可分发插件源和签名发布流程由独立仓库 `0honus0/nexus-agent-plugins` 持有。
 
-当前首个 `nexus.developer`（manifest `1.1.0`）是刻意保持最小的 Host-surface App：只贡献 `AgentDefinition + Skill`，不为了形式补空的 Frontend/Backend/Runner target。它声明 Developer 工作流真正需要的 Nexus capabilities，由安装后的 App grant/policy 再决定实际可调用范围；Skill 明确要求优先 Workspace Runtime、Runner 不可用时不得静默落到 Backend host、Browser 只走受控 Browser capability。需要完全不同产品体验的 App（例如多角色/角色卡应用）再声明 Frontend target 并使用 Custom App Surface + Plugin Frontend SDK。
+术语必须严格区分：
 
-第一方插件仓的 `pnpm run check` 是源码/manifest 基线检查；发布产物由 `build-package.mjs` / `build-release.mjs` 生成 Ed25519 签名 tar + catalog。仓库要求 Node `>=24`，发布/CI 证据必须以标准 Node 24 workflow 为准，不能把低版本开发机的 engine warning 当成发布结果。
+- **Host/Core**：随 `nexus-terminal` 主镜像编译发布的 Run/Scheduler、Capability Broker、Policy/Approval/Lease、Workspace Runtime bridge、Plugin verifier/installer/SDK 等安全与运行原语；修改这些代码需要更新主镜像。
+- **first-party installable Plugin App**：由 Nexus 官方维护、独立签名和发布、通过正常 Plugin lifecycle 安装/升级的 App；它不是 compile-time built-in。
+- `nexus.operations`：当前默认推荐的 first-party installable Plugin App。Agent 初次启用时 Host 从 pin 住 publisher 身份的 official catalog 读取推荐项，用户确认后按 `stage -> verify -> install -> grant -> enable` 正常流程安装。主镜像不再包含 Operations AgentDefinition/Skill/App manifest。
+- `nexus.developer`：另一个 first-party installable Plugin App（manifest `1.1.0`），同样不是 built-in；它刻意保持最小 Host-surface 形态，只贡献 `AgentDefinition + Skill`，不为了形式补空 target。
+
+Host-owned governed Tool implementations 仍属于 Core，因为它们是 Capability Broker 与真实 machine/workspace/runtime adapter 之间的受控执行原语；Plugin 只通过 manifest grants/AgentDefinition/Skill 使用这些 capability，不把 raw SSH/Runner/Browser authority 带进插件包。这样 `nexus.operations` 的 AgentDefinition/Skill/版本可远程升级，而新插件若要求 Host 尚不具备的新 capability/SDK/protocol，仍必须升级 Nexus 主镜像。
+
+官方 catalog URL 可以通过部署配置指向 GitHub/CDN/镜像；官方 publisher Ed25519 public key/key id 在生产 Host 中固定 pin，普通生产环境变量不能替换信任根。只有 `NODE_ENV=test` 或显式 `NEXUS_E2E_RESET_ENABLED=1` 的受控 E2E 模式允许注入测试 publisher。
+
+第一方插件仓的 `pnpm run check` 是源码/manifest 基线检查；发布产物由 `build-package.mjs` / `build-catalog-release.mjs` 生成 Ed25519 签名 tar + catalog。仓库要求 Node `>=24`，发布/CI 证据必须以标准 Node 24 workflow 为准，不能把低版本开发机的 engine warning 当成发布结果。
 
 Nexus Terminal 主仓只持有：
 
@@ -840,16 +853,16 @@ Next Run / Active Run
 Next Run：
 
 - Model 可选；
-- Targets 可选；
-- Environment 是只读 runtime summary。
+- Environment 可选启用的 Workspace Recipe，或显式选择 `No Workspace`；
+- Targets 可选。
 
 Active Run：
 
-- Model 从 frozen RunDefinition 显示；
-- Targets 从 frozen `connectionIds` 显示；
-- Environment 不能伪装成 RunDefinition snapshot；如果 Workspace 已创建，Run Details 展示 frozen Workspace profile。
+- Model 从 frozen `RunDefinition.model` 显示；
+- Environment 从 frozen `RunDefinition.environment` 显示；
+- Targets 从 frozen `connectionIds` 显示。
 
-真正的 Next Run Environment selector 必须先扩展 Backend Run/Workspace contract，让选择在服务端解析、校验、冻结并由 Workspace create 消费。
+Environment selection 不是 frontend authority：Run create 携带 recipe selection + observed Catalog revision，Backend 用当前 settings revision 与 Runner Catalog 做 CAS/解析并写入完整 snapshot。Workspace create 随后消费 snapshot，而不是重新从当前 defaults 推导。
 
 ## 22. 测试与发布门槛
 
@@ -886,7 +899,7 @@ E2E 不得为了定位新增 product-only `data-testid` 等测试 seam；优先�
 - typed durable Plan；
 - durable Goal text/revision + GoalStatus 分离；
 - Conversation slash-command dispatch：`/goal`、`/plan`、`/interrupt`、`/queue`、`/stop`、`/help` 与 `//` literal escape；
-- durable pending-input queue inspection；
+- durable pending-input queue inspection + versioned remove/reorder mutation；
 - appendInput + streaming model interruption；
 - approval supersede on newer input；
 - budget/cancel/checkpoint/resume；
@@ -896,13 +909,14 @@ E2E 不得为了定位新增 product-only `data-testid` 等测试 seam；优先�
 - ACP / Browser / Workspace local Terminal live execution；
 - Subagent durable mailbox/work queue；
 - signed installable Agent plugins；
+- `nexus.operations` 与 `nexus.developer` 作为独立 first-party installable Plugin 分发；Agent 初次启用时由 Host 推荐并安装 Operations，而不是从 Nexus 主镜像的编译期 built-in App 启动；
+- server-validated/frozen Next Run Environment snapshot；
 - structured diagnostics。
 
 ### 已决定、待实现
 
-1. Pending-input queue 的 remove/reorder mutation（如产品确有需要）；任何实现都必须 versioned、durable。
-2. 真正的 Next Run Environment selector：需要扩 RunDefinition / Workspace profile contract，不允许 frontend-only selector。
-3. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
+1. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
+2. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
 
 ## 24. 修改规则
 

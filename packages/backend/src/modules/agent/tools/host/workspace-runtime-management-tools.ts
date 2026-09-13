@@ -136,42 +136,22 @@ export const createWorkspaceCreateTool = (
 ): AgentTool => ({
   descriptor: {
     name: 'workspace_create',
-    version: '1.0.0',
+    version: '2.0.0',
     description:
-      'Provision one Nexus Agent Workspace for this Run using an enabled Workspace profile and optional tool versions. Requires user approval.',
+      'Provision one Nexus Agent Workspace for this Run using the server-validated Environment frozen into the Run definition. Requires user approval.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
-      properties: {
-        recipeId: { type: 'string', minLength: 1, maxLength: 128 },
-        versions: {
-          type: 'object',
-          maxProperties: 32,
-          additionalProperties: { type: 'string', minLength: 1, maxLength: 128 },
-        },
-        runnerPluginIds: {
-          type: 'array',
-          maxItems: 32,
-          uniqueItems: true,
-          items: {
-            type: 'string',
-            minLength: 3,
-            maxLength: 128,
-            pattern: '^[a-z][a-z0-9]*(?:\\.[a-z][a-z0-9-]*)+$',
-          },
-        },
-      },
-      required: ['recipeId'],
+      properties: {},
     },
     riskClass: 'mutate',
     capability: 'workspace.runtime.manage',
   },
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
-    onlyKeys(args, ['recipeId', 'versions', 'runnerPluginIds']);
-    const recipeId = stringValue(args.recipeId, 128);
-    const versions = versionsValue(args.versions);
-    const runnerPluginIds = runnerPluginIdsValue(args.runnerPluginIds);
+    onlyKeys(args, []);
+    const environment = context.environment;
+    if (!environment) throw new Error('RUN_ENVIRONMENT_NOT_CONFIGURED');
     const existing = await repository.listWorkspaces(context, context.runId);
     if (
       existing.some(
@@ -181,25 +161,34 @@ export const createWorkspaceCreateTool = (
     ) {
       throw new Error('WORKSPACE_EXISTS');
     }
-    const catalog = await runtime.catalog(context.signal);
-    const recipe = catalog.recipes.find((candidate) => candidate.id === recipeId);
-    if (!recipe) throw new Error('WORKSPACE_RECIPE_NOT_FOUND');
-    resolveWorkspaceToolchain(catalog, recipeId, versions);
-    const normalizedArguments: JsonValue = { recipeId, versions, runnerPluginIds, catalogRevision: catalog.revision };
+    const normalizedArguments: JsonValue = {
+      recipeId: environment.recipeId,
+      recipeRevision: environment.recipeRevision,
+      runtimeDigest: environment.runtimeDigest,
+      catalogRevision: environment.catalogRevision,
+    };
     const target = workspaceTarget(cryptoHash, {
       runId: context.runId,
       agentRuntimeId: context.agentRuntimeId,
       configuration: {
-        schemaVersion: 2,
-        catalogRevision: catalog.revision,
-        runtimeDigest: catalog.runtimeDigest,
-        recipeId: recipe.id,
-        recipeRevision: recipe.revision,
+        schemaVersion: 3,
+        catalogRevision: environment.catalogRevision,
+        runtimeDigest: environment.runtimeDigest,
+        recipeId: environment.recipeId,
+        recipeRevision: environment.recipeRevision,
       },
     });
     const resourceKeys = [`workspace:new:${context.runId}:${context.agentRuntimeId}`];
     const preconditions: ToolPrecondition[] = [
-      { kind: 'metadata', key: 'workspaceRuntimeCatalog', observedValue: { revision: catalog.revision } },
+      {
+        kind: 'metadata',
+        key: 'runEnvironment',
+        observedValue: {
+          catalogRevision: environment.catalogRevision,
+          recipeRevision: environment.recipeRevision,
+          runtimeDigest: environment.runtimeDigest,
+        },
+      },
     ];
     return {
       toolName: 'workspace_create',
@@ -227,19 +216,17 @@ export const createWorkspaceCreateTool = (
     };
   },
   execute: async (inspection, context): Promise<ToolResult> => {
-    const args = record(inspection.normalizedArguments);
+    const environment = context.environment;
+    if (!environment) throw new Error('RUN_ENVIRONMENT_NOT_CONFIGURED');
     const workspace = await runtime.createWorkspace(
       context,
       context.runId,
       context.agentRuntimeId,
-      {
-        recipeId: stringValue(args.recipeId, 128),
-        versions: versionsValue(args.versions),
-        runnerPluginIds: runnerPluginIdsValue(args.runnerPluginIds),
-      },
+      null,
       false,
       inspection.operationHash,
-      stringValue(args.catalogRevision, 128),
+      environment.catalogRevision,
+      environment,
     );
     const ready = workspace.status === 'ready';
     return {

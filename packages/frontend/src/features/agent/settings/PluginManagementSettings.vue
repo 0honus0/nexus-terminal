@@ -15,6 +15,8 @@
     type RemotePluginPublisher,
   } from '../api/agent-api';
 
+  const PLUGIN_STAGING_ARTIFACT_SCOPE = 'nexus.plugin-installer';
+
   const props = defineProps<{ apps: AgentAppSummary[]; settings: AgentSettingsView; busy: boolean }>();
   const emit = defineEmits<{ refresh: []; settingsUpdated: [AgentSettingsView] }>();
   const { t } = useI18n();
@@ -189,7 +191,7 @@
       candidate.value = null;
       drainingUpgradeVersion.value = null;
       candidateArtifactName.value = file.name;
-      const artifact = await agentApi.uploadArtifact('nexus.operations', file);
+      const artifact = await agentApi.uploadArtifact(PLUGIN_STAGING_ARTIFACT_SCOPE, file);
       const stage = await agentApi.stagePlugin(artifact);
       candidate.value = await agentApi.verifyPlugin(stage.id);
       notice.value = 'PACKAGE_VERIFIED';

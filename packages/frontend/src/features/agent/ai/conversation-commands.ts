@@ -4,6 +4,8 @@ export type ConversationSlashCommand =
   | { kind: 'goal.set'; text: string }
   | { kind: 'plan.show' }
   | { kind: 'queue.show' }
+  | { kind: 'queue.remove'; position: number }
+  | { kind: 'queue.move'; from: number; to: number }
   | { kind: 'interrupt'; text: string }
   | { kind: 'stop' };
 
@@ -25,7 +27,11 @@ export interface ConversationCommandSuggestion {
 export const CONVERSATION_COMMAND_SUGGESTIONS: readonly ConversationCommandSuggestion[] = [
   { command: '/goal', usage: '/goal [text]', descriptionKey: 'agent.conversation.commands.helpGoal' },
   { command: '/plan', usage: '/plan', descriptionKey: 'agent.conversation.commands.helpPlan' },
-  { command: '/queue', usage: '/queue', descriptionKey: 'agent.conversation.commands.helpQueue' },
+  {
+    command: '/queue',
+    usage: '/queue [remove <position> | move <from> <to>]',
+    descriptionKey: 'agent.conversation.commands.helpQueue',
+  },
   { command: '/interrupt', usage: '/interrupt <text>', descriptionKey: 'agent.conversation.commands.helpInterrupt' },
   { command: '/stop', usage: '/stop', descriptionKey: 'agent.conversation.commands.helpStop' },
   { command: '/help', usage: '/help', descriptionKey: 'agent.conversation.commands.helpHelp' },
@@ -66,7 +72,25 @@ export const parseConversationSubmission = (input: string): ConversationSubmissi
     case '/plan':
       return noArgumentCommand(commandName, argument, 'plan.show');
     case '/queue':
-      return noArgumentCommand(commandName, argument, 'queue.show');
+      if (!argument) return { kind: 'command', command: { kind: 'queue.show' } };
+      {
+        const remove = argument.match(/^remove\s+(\d+)$/i);
+        if (remove) {
+          const position = Number(remove[1]);
+          return Number.isSafeInteger(position) && position >= 1
+            ? { kind: 'command', command: { kind: 'queue.remove', position } }
+            : { kind: 'invalid_command', commandName, reason: 'unexpected_argument' };
+        }
+        const move = argument.match(/^move\s+(\d+)\s+(\d+)$/i);
+        if (move) {
+          const from = Number(move[1]);
+          const to = Number(move[2]);
+          return Number.isSafeInteger(from) && from >= 1 && Number.isSafeInteger(to) && to >= 1 && from !== to
+            ? { kind: 'command', command: { kind: 'queue.move', from, to } }
+            : { kind: 'invalid_command', commandName, reason: 'unexpected_argument' };
+        }
+        return { kind: 'invalid_command', commandName, reason: 'unexpected_argument' };
+      }
     case '/stop':
       return noArgumentCommand(commandName, argument, 'stop');
     case '/interrupt':

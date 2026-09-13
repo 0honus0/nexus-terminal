@@ -485,7 +485,7 @@ Store rules：
 
 ## 10. Workspace, App Platform and App frontend ownership
 
-这是长期架构中的核心边界。完整产品体验通过 App Platform 注册；共享 AI/Conversation 能力属于 feature/public surface；Operations Agent 是第一个 built-in App，Workspace 仍然是独立 runtime owner 而不是 App host。详细边界见 [Agent 架构](../AGENT.md)。
+这是长期架构中的核心边界。完整产品体验通过 App Platform 注册；共享 AI/Conversation 能力属于 feature/public surface；`nexus.operations` 是默认推荐的 first-party installable Plugin App，不是 compile-time built-in。Workspace 仍然是独立 runtime owner 而不是 App host。详细边界见 [Agent 架构](../AGENT.md)。
 
 ### 10.1 Workspace owns
 
@@ -508,14 +508,13 @@ App.vue
 AgentSurfaceHost
   ↓
 AgentHubWindow
-  ├── built-in OperationsView
-  ├── Host Agent surface（无 frontend target）
+  ├── Host Agent surface（安装式 App 无 frontend target）
   └── PluginAppFrame → full Custom App Surface → isolated plugin origin
                          ↓
                     plugin-sdk/ MessagePort bridge
 ```
 
-`host/` 只负责 Launcher/Hub/App switcher、每 App 轻量 view state、Custom Surface iframe 生命周期和当前 built-in App contribution 选择；它不拥有 Plugin SDK dispatch，也不拥有 Run/Provider/Artifact 的后端事实。`plugin-sdk/` 高内聚拥有 Plugin Frontend protocol、MessagePort host bridge 与 App-scoped Agent SDK dispatcher；它复用 `runtime/run-facade.ts` 和 `api/` transport，不重新实现 Run 状态机。当前只有 `nexus.operations` 这一项 built-in contribution，因此 Host 可以显式组合它；新增第二个 built-in Agent App 前必须先引入明确的本地 contribution registry。当前单用户 Host 允许同时安装多个不同 `appId` 的 Plugin，`AgentAppSwitcher` 与 activity strip 在同一个 Hub 中切换这些 App；每个 App 的当前 Thread、draft、Next Run model 等 presentation state 独立保存，同一 `appId` 的新版本通过 upgrade/drain 替换当前安装而不是制造第二份平行 App。
+`host/` 只负责 Launcher/Hub/App switcher、每 App 轻量 view state、Host Agent surface 与 Custom Surface iframe 生命周期；它不拥有 Plugin SDK dispatch，也不拥有 Run/Provider/Artifact 的后端事实。`plugin-sdk/` 高内聚拥有 Plugin Frontend protocol、MessagePort host bridge 与 App-scoped Agent SDK dispatcher；它复用 `runtime/run-facade.ts` 和 `api/` transport，不重新实现 Run 状态机。`nexus.operations` 与 `nexus.developer` 都通过正常安装式 Plugin lifecycle 注册；没有 frontend target 时统一进入 Host Agent surface，不存在本地 Operations component 特判。当前单用户 Host 允许同时安装多个不同 `appId` 的 Plugin，`AgentAppSwitcher` 与 activity strip 在同一个 Hub 中切换这些 App；每个 App 的当前 Thread、draft、Next Run model、Next Run Environment 等 presentation state 独立保存，同一 `appId` 的新版本通过 upgrade/drain 替换当前安装而不是制造第二份平行 App。
 
 Agent Hub 的响应式规则必须以 named container `agent-hub-window` 为准，而不是浏览器 viewport：宽窗口保留 Threads / Conversation / TaskRail，逐级收起 model meta、TaskRail、Run history，窄窗口把 Threads 变为 drawer 并允许 Run Configuration 换行；Hub chrome 的 App search/activity strip/title 等非关键元素也使用同一 container query 收缩。这样用户把浮窗拖窄时，内部交互与布局仍按真实可用空间变化，而不会因为浏览器本身很宽继续显示拥挤控件。
 
@@ -533,48 +532,46 @@ features/agent/
 ├── runtime/      Run/Task/Approval/Subagent/Environment presentation + facade
 ├── plugin-sdk/   Custom Frontend protocol/MessagePort/Agent SDK dispatcher
 ├── settings/     Agent host/settings contribution
-├── host/         Launcher/Hub/App/Custom Surface lifecycle owner
-└── apps/operations/
+└── host/         Launcher/Hub/App/Host Surface/Custom Surface lifecycle owner
 ```
 
 Frontend 不执行权威 Recall/vector search、context budgeting、Tool authorization、Policy/Approval/Lease 或 Environment isolation。浏览器只持有安全 view/projection 和交互状态；Backend 仍是 canonical conversation、Run、Artifact、Capability、Memory/Context 和安全决策的事实 owner。
 
-### 10.4 Operations App frontend owner
+### 10.4 Host Agent surface for installable AgentDefinition Apps
 
-Operations Agent 当前作为 `features/agent/apps/operations/` 下的 built-in contribution，由 Agent Host 组合，不另建 npm workspace package。它通过 `runtime/run-facade.ts` 和 `api/` 使用 App-scoped HTTP + `/ws/agent` contract。
+没有 Frontend target、但 manifest 声明 AgentDefinition 的安装式 App 统一使用 `features/agent/host/AgentAppSurface.vue`。`nexus.operations` 和 `nexus.developer` 都走这条通用路径；Frontend 主仓不再存在 `features/agent/apps/operations/` 或 compile-time OperationsView。
 
-It owns:
+Host Agent surface owns presentation only:
 
-- Operations conversation/run live projection；
-- `/api/v1/apps/nexus.operations/...` protocol clients；
+- App-scoped conversation/run live projection；
+- `/api/v1/apps/:appId/...` typed protocol clients；
 - event-stream reconnect/lifecycle；
-- Agent participant/runtime/backend (`native` / `acp`) presentation；
+- Agent participant/runtime presentation；
 - Goal/Plan/delegation/tool/approval/verification UI state；
 - context/Recall/Skill/Artifact explainability presentation；
-- LoopGuard/ResourceLease/Reviewer status presentation where useful；
-- App-specific navigation/routes/settings contributions.
+- Next Run Model / Environment / Targets presentation state and frozen Active Run projection.
 
-它只组合 `features/agent` 内已定义的 Host/API/AI/runtime public behavior；不拥有 Provider credentials、Backend Context planning、Recall engines、generic Skill registry、Workspace runtime 或另一个 App 的 runtime。
+它只组合 `features/agent` 内已定义的 Host/API/AI/runtime public behavior；不拥有 Provider credentials、Backend Context planning、Recall engines、generic Skill registry、Workspace runtime 或另一个 App 的 runtime。App-specific AgentDefinition/Skill/version 来自已验证的 Plugin manifest/package，而不是本地 component registry。
 
 用户输入历史仍是 canonical conversation source。Frontend 可以展示完整历史、修正关系和 compaction/context 状态，但浏览器裁剪不是权威历史，不能本地覆盖 Backend digest/projection 后继续执行。Backend 分配稳定 sequence/id；显式编辑/删除必须走后端 conversation mutation contract 并失效相关派生状态。
 
-Frontend 不直接实现 ACP client。浏览器通过 Operations App HTTP + `/ws/agent` contract 与 Nexus backend 通信；ACP wire/session/permission 由 Operations backend contribution 隔离。
+Frontend 不直接实现 ACP client。浏览器通过 App-scoped HTTP + `/ws/agent` contract 与 Nexus backend 通信；ACP wire/session/permission 由 Backend/Runner capability owner 隔离，安装式 App 只获得其 manifest grant/policy 允许的 capability。
 
 ### 10.5 Future Agent App contributions
 
-未来 Roleplay/Development/Research 只有在真实需求出现后才新增 sibling App contribution；当前不预建 `packages/apps/*`。Built-in contribution 保持在 `features/agent/apps/<app>/` 并由 Host 的显式 registry/映射加载；安装式第三方 App 继续通过 Backend 验证 manifest 后由 `PluginAppFrame` 加载隔离 UI。App 可以消费明确的 Agent 公共能力，但永远不能 import 另一个 App 的私有 runtime/store，也不能继承 Operations 的 SSH/approval 业务语义。
+未来 Roleplay/Research 等 App 只有在真实需求出现后才新增独立 Plugin package；不在 Nexus 主仓预建 compile-time sibling App contribution。无 Frontend target 的 App 复用 Host Agent surface；有 Frontend target 的 App 通过 Backend 验证 manifest 后由 `PluginAppFrame` 加载隔离 UI。App 可以消费明确的 Agent 公共能力，但永远不能 import 另一个 App 的私有 runtime/store，也不能继承 Operations 的 SSH/approval 业务语义。
 
 ### 10.6 Apps must not reuse Workspace internals
 
 禁止：
 
 ```text
-Operations App -> Workspace raw WebSocket
-Operations App -> Workspace SessionStore
-Operations App -> Workspace SFTP manager
-Operations App -> Workspace Terminal manager
-Operations App -> Workspace current cwd
-Operations App -> Workspace upload socket
+Installable Agent App / Host Agent surface -> Workspace raw WebSocket
+Installable Agent App / Host Agent surface -> Workspace SessionStore
+Installable Agent App / Host Agent surface -> Workspace SFTP manager
+Installable Agent App / Host Agent surface -> Workspace Terminal manager
+Installable Agent App / Host Agent surface -> Workspace current cwd
+Installable Agent App / Host Agent surface -> Workspace upload socket
 ```
 
 如果 Workspace 和某个 App 都需要 terminal/filesystem/transfer UI capability，应复用 feature public interface，而不是 runtime object：
@@ -583,10 +580,10 @@ Operations App -> Workspace upload socket
 Terminal Feature public port
         ↑
         ├── Workspace adapter
-        └── Operations App adapter
+        └── Agent Host surface adapter
 ```
 
-类似模式应用于 Filesystem/Transfer/Status/Docker 等展示能力。Backend machine execution仍由 App Capability Broker + Operations Tool/Policy/Approval boundary 管理，不等于把 frontend port 暴露给模型。
+类似模式应用于 Filesystem/Transfer/Status/Docker 等展示能力。Backend machine execution 仍由 App Capability Broker + Host governed Tool/Policy/Approval boundary 管理，不等于把 frontend port 暴露给模型。
 
 ## 11. HTTP architecture
 
@@ -628,7 +625,7 @@ Raw WebSocket transport 只属于：
 client/websocket/
 ```
 
-Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. Agent/App-scoped HTTP + `/ws/agent` transport ownership belongs to `features/agent/api/`; Run-facing state/facade belongs to `features/agent/runtime/`; Custom Frontend protocol/MessagePort dispatch belongs to `features/agent/plugin-sdk/`; Host only owns iframe/window lifecycle in `features/agent/host/`; built-in Operations presentation belongs to `features/agent/apps/operations/`. Agent code must not reuse Workspace sockets/sessions, and Workspace code must not import Agent live state. Dynamic Plugin UI uses the Plugin SDK bridge rather than Workspace WebSocket or direct Nexus API/session access.
+Workspace protocol ownership belongs to `runtimes/workspace/protocol/`. Agent/App-scoped HTTP + `/ws/agent` transport ownership belongs to `features/agent/api/`; Run-facing state/facade belongs to `features/agent/runtime/`; Custom Frontend protocol/MessagePort dispatch belongs to `features/agent/plugin-sdk/`; Host owns window/App switching、generic Agent surface 与 iframe lifecycle in `features/agent/host/`. Agent code must not reuse Workspace sockets/sessions, and Workspace code must not import Agent live state. Dynamic Plugin UI uses the Plugin SDK bridge rather than Workspace WebSocket or direct Nexus API/session access.
 
 Terminal/Filesystem/Transfer 等 feature 不应该直接发送 string message name。
 
@@ -791,7 +788,7 @@ SettingsPage
         └── Subagent profiles
 ```
 
-`SettingsPage` 只 import `features/agent/public.ts` 暴露的 `AgentSettingsPanel`，不 import Operations App 私有 store/runtime，也不持有 Provider secret。只有未来出现第二个需要独立设置 contribution 的 built-in App 时，才引入显式 registry；不能为尚不存在的 App 预建一套全局 settings registry。
+`SettingsPage` 只 import `features/agent/public.ts` 暴露的 `AgentSettingsPanel`，不 import 任何安装式 App 私有 store/runtime，也不持有 Provider secret。未来 Plugin-specific settings 必须通过显式 Plugin/Host contract 接入；不能为尚不存在的 App 预建一套全局 settings registry。
 
 Provider API keys 与 Integration credentials 都属于 write-only secret input，不得保存在普通 preferences store 或回传明文；前端只持有 `apiKeyConfigured` / `hasCredential` 等安全状态。第三方 Provider/MCP/未来 ACP 的模型/工具/capability/status 均由 Nexus Backend 获取、归一化和授权，浏览器不得携带 secret 直接调用外部服务。
 
@@ -801,23 +798,23 @@ Settings screen 不再拥有一个万能 `settings.store.ts`。当前 Agent sett
 
 Source directories do not carry their own README policy files. Durable placement guidance is recorded here; mandatory rules continue to come from the [engineering constraint table](../software-requirements/engineering-constraints.md).
 
-| Area                                         | Permanent ownership guidance                                                                                                                                                                            |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `app/bootstrap/`                             | Owns application startup ordering and public-feature bootstrap sequencing. It is not a product service locator and must not replace feature/runtime ownership.                                          |
-| `app/pages/dashboard/`                       | Application composition surface for public capabilities such as Connections, Tags, Audit, and System Overview; it does not own those domains.                                                           |
-| `app/pages/settings/`                        | Application composition surface for existing Nexus settings plus registered shared/App settings contributions. It does not own Provider secrets or App runtime/domain state.                            |
-| `features/agent/host/`                       | Agent Host/Launcher/Hub/App switch and Custom Surface iframe lifecycle owner. It composes presentation but does not own Plugin SDK dispatch or canonical Run/Provider/Artifact facts.                   |
-| `features/agent/plugin-sdk/`                 | Plugin Frontend protocol, bounded MessagePort host bridge and App-scoped Agent SDK dispatcher. It adapts existing API/runtime owners and does not create a second Agent state machine.                  |
-| `features/agent/api/`                        | Typed Agent HTTP + `/ws/agent` clients and transport parsing. It does not own user-visible runtime state or security decisions.                                                                         |
-| `features/agent/{ai,files,runtime,settings}` | Shared Agent presentation/use-case boundaries for conversation, Artifact Library, Run/Environment projection and settings. They consume Backend facts and do not own Workspace live runtime resources.  |
-| `foundation/async/`                          | Business-neutral async coordination primitives, including latest-value persistence mechanics used by debounced UI settings.                                                                             |
-| `foundation/browser/`                        | Business-neutral browser/device capability primitives; product behavior stays in features/runtimes/App packages.                                                                                        |
-| `foundation/interaction/`                    | Business-neutral pointer/touch/drag/resize/wheel mechanics. Guacamole/remote-desktop input remains owned by the Remote Desktop feature.                                                                 |
-| `runtimes/workspace/`                        | Owns Workspace lifecycle, connection/session binding, protocol adapters, layout composition, reconnect orchestration, and suspend handoff. It is a composition owner, not a reusable capability owner.  |
-| `features/agent/apps/operations/`            | Current built-in Operations App contribution. It composes Agent AI/runtime/Host APIs through the approved dependency graph and never reuses Workspace raw runtime state.                                |
-| future `features/agent/apps/<app>/`          | Additional built-in Agent App contribution only after a real requirement exists and an explicit Host contribution registry is introduced. Sibling Apps never import each other's private runtime/store. |
-| `shared/feedback/`                           | Cross-feature feedback primitives such as toast/confirm/alert with no domain policy.                                                                                                                    |
-| `shared/focus/`                              | Cross-feature focus/shortcut infrastructure with no feature-owned business behavior.                                                                                                                    |
+| Area                                         | Permanent ownership guidance                                                                                                                                                                           |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `app/bootstrap/`                             | Owns application startup ordering and public-feature bootstrap sequencing. It is not a product service locator and must not replace feature/runtime ownership.                                         |
+| `app/pages/dashboard/`                       | Application composition surface for public capabilities such as Connections, Tags, Audit, and System Overview; it does not own those domains.                                                          |
+| `app/pages/settings/`                        | Application composition surface for existing Nexus settings plus registered shared/App settings contributions. It does not own Provider secrets or App runtime/domain state.                           |
+| `features/agent/host/`                       | Agent Host/Launcher/Hub/App switch and Custom Surface iframe lifecycle owner. It composes presentation but does not own Plugin SDK dispatch or canonical Run/Provider/Artifact facts.                  |
+| `features/agent/plugin-sdk/`                 | Plugin Frontend protocol, bounded MessagePort host bridge and App-scoped Agent SDK dispatcher. It adapts existing API/runtime owners and does not create a second Agent state machine.                 |
+| `features/agent/api/`                        | Typed Agent HTTP + `/ws/agent` clients and transport parsing. It does not own user-visible runtime state or security decisions.                                                                        |
+| `features/agent/{ai,files,runtime,settings}` | Shared Agent presentation/use-case boundaries for conversation, Artifact Library, Run/Environment projection and settings. They consume Backend facts and do not own Workspace live runtime resources. |
+| `foundation/async/`                          | Business-neutral async coordination primitives, including latest-value persistence mechanics used by debounced UI settings.                                                                            |
+| `foundation/browser/`                        | Business-neutral browser/device capability primitives; product behavior stays in features/runtimes/App packages.                                                                                       |
+| `foundation/interaction/`                    | Business-neutral pointer/touch/drag/resize/wheel mechanics. Guacamole/remote-desktop input remains owned by the Remote Desktop feature.                                                                |
+| `runtimes/workspace/`                        | Owns Workspace lifecycle, connection/session binding, protocol adapters, layout composition, reconnect orchestration, and suspend handoff. It is a composition owner, not a reusable capability owner. |
+| `features/agent/host/AgentAppSurface.vue`    | Generic Host surface for installed AgentDefinition Apps without a frontend target; it never embeds App-specific authority or Workspace raw runtime state.                                              |
+| first/third-party Plugin packages            | App-specific AgentDefinition/Skill/custom UI code lives outside the compile-time Host and enters through verified Plugin lifecycle; sibling Apps never import each other's private runtime/store.      |
+| `shared/feedback/`                           | Cross-feature feedback primitives such as toast/confirm/alert with no domain policy.                                                                                                                   |
+| `shared/focus/`                              | Cross-feature focus/shortcut infrastructure with no feature-owned business behavior.                                                                                                                   |
 
 The mandatory frontend ownership and Agent boundaries are referenced by [EC-FE-001](../software-requirements/engineering-constraints.md#ec-fe-001), [EC-GEN-003](../software-requirements/engineering-constraints.md#ec-gen-003), [EC-RUNTIME-003](../software-requirements/engineering-constraints.md#ec-runtime-003), [EC-RUNTIME-004](../software-requirements/engineering-constraints.md#ec-runtime-004), and [EC-RUNTIME-005](../software-requirements/engineering-constraints.md#ec-runtime-005).
 
@@ -835,8 +832,8 @@ AppShell / App pages
 Feature public surfaces
    ├── Workspace runtime
    └── features/agent/host
-          ├── built-in App contribution
-          └── isolated PluginAppFrame
+          ├── generic Host Agent surface for installed AgentDefinition Apps
+          └── isolated PluginAppFrame for custom frontend targets
             ↓
 Typed HTTP / SSE / WS contracts
             ↓

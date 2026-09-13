@@ -4,22 +4,22 @@ import type { IntegrationRepositoryPort } from '../../modules/agent/ai/integrati
 import type { IntegrationServiceHooks } from '../../modules/agent/ai/integration.service';
 import type { AcpRuntimePort, BrowserGatewayPort, McpRuntimePort } from '../../modules/agent/ai/integrations.types';
 import type { MemoryService } from '../../modules/agent/ai/memory.service';
-import { createCollaborationTools } from '../../modules/agent/apps/operations/collaboration-tools';
-import { createMcpTools } from '../../modules/agent/apps/operations/mcp-tools';
-import { createAcpExecuteTool } from '../../modules/agent/apps/operations/acp-tools';
-import { createBrowserTools } from '../../modules/agent/apps/operations/browser-tools';
+import { createCollaborationTools } from '../../modules/agent/tools/host/collaboration-tools';
+import { createMcpTools } from '../../modules/agent/tools/host/mcp-tools';
+import { createAcpExecuteTool } from '../../modules/agent/tools/host/acp-tools';
+import { createBrowserTools } from '../../modules/agent/tools/host/browser-tools';
 import {
   createDockerMutationTool,
   createShellTool,
   createWriteFileTool,
-} from '../../modules/agent/apps/operations/mutation-tools';
-import { createDiagnosticsTool, createReadFileTool } from '../../modules/agent/apps/operations/tools';
+} from '../../modules/agent/tools/host/mutation-tools';
+import { createDiagnosticsTool, createReadFileTool } from '../../modules/agent/tools/host/tools';
 import {
   createWorkspaceControlTool,
   createWorkspaceCreateTool,
   createWorkspaceSwitchToolVersionsTool,
-} from '../../modules/agent/apps/operations/workspace-runtime-management-tools';
-import { createWorkspaceJobTool } from '../../modules/agent/apps/operations/workspace-tools';
+} from '../../modules/agent/tools/host/workspace-runtime-management-tools';
+import { createWorkspaceJobTool } from '../../modules/agent/tools/host/workspace-tools';
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';

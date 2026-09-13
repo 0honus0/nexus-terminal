@@ -82,6 +82,7 @@ const installAndRunDeveloperPreset = async (
       headers,
       data: {
         patch: {
+          feature: { enabled: true },
           plugins: { repositories: [{ url: repositoryUrl, privateHostExceptions: [repositoryException] }] },
           budget: { maxOutputTokens: 16 },
         },
@@ -513,6 +514,12 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
   context,
 }) => {
   const { threadId, connectionId } = await installAndRunDeveloperPreset(context.request);
+  const onboardingCsrf = await csrfToken(context.request);
+  const operationsInstall = await context.request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
+    headers: { 'X-Nexus-CSRF': onboardingCsrf },
+    data: {},
+  });
+  expect(operationsInstall.ok(), await operationsInstall.text()).toBeTruthy();
   expect(threadId).not.toBe('');
   await step('the installed preset renders through the host-owned generic Agent surface', async () => {
     await page.goto('/connections');
@@ -525,18 +532,22 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
     await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
 
-    await step('the Run configuration bar exposes production-backed environment state', async () => {
+    await step('the Next Run Environment uses the shared accessible Host popover contract', async () => {
       await expect(hub.getByText('Next Run', { exact: true })).toBeVisible();
-      const environment = hub.locator('summary[aria-label="Environment"]');
+      const environment = hub.getByRole('button', { name: 'Environment', exact: true });
       await expect(environment).toBeVisible();
-      await expect(environment).toContainText('Runner unavailable');
+      await expect(environment).toHaveAttribute('aria-expanded', 'false');
+      await expect(environment).toContainText('No Workspace');
       await environment.click();
+      await expect(environment).toHaveAttribute('aria-expanded', 'true');
       await expect(
         hub.getByText(
-          'Workspace profiles are chosen when a Run creates a workspace, then frozen and shown in Run details.',
+          "Workspace creation consumes this Run's frozen Environment snapshot; recipe and toolchain choices cannot change mid-Run.",
         ),
       ).toBeVisible();
-      await environment.click();
+      await page.keyboard.press('Escape');
+      await expect(environment).toHaveAttribute('aria-expanded', 'false');
+      await expect(environment).toBeFocused();
     });
 
     await step('the resize grip drives container-responsive Agent layout and persists bounds', async () => {
@@ -636,6 +647,10 @@ test('installed Developer preset uses the host-owned Agent surface and captures 
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(commandResult).toContainText('0 pending');
       await expect(commandResult).toContainText('No pending user inputs.');
+
+      await commandComposer.fill('/queue remove 1');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(commandResult).toContainText('Queue position 1 does not exist.');
 
       const unknown = '/definitely-not-an-agent-command';
       await commandComposer.fill(unknown);

@@ -139,6 +139,11 @@ export class RunService {
     private readonly lifecycle: AppLifecycleService,
     private readonly providers: ProviderService,
     private readonly definitions: AgentDefinitionRegistryPort,
+    private readonly resolveEnvironment: (
+      scope: Scope,
+      selection: NonNullable<CreateRunCommand['environment']>,
+      expectedSettingsRevision: number,
+    ) => Promise<NonNullable<RunDefinitionSnapshot['environment']>>,
     private readonly stateCommit: RunCommandCommitPort,
     private readonly repository: RunQueryPort,
     private readonly clock: ClockPort,
@@ -168,6 +173,10 @@ export class RunService {
     }
     const input = validateInput(command.input);
     const connectionIds = validateConnectionIds(command.connectionIds);
+    if (command.environment !== undefined && command.environment !== null && !isRecord(command.environment)) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const environmentSelection = command.environment ?? null;
     const initialGoal = command.initialGoal === undefined ? undefined : normalizeGoalText(command.initialGoal);
     if (Buffer.byteLength(JSON.stringify({ ...command, input, connectionIds }), 'utf8') > 1024 * 1024) {
       throw new Error('PAYLOAD_TOO_LARGE');
@@ -200,11 +209,15 @@ export class RunService {
     if (budget.maxOutputTokens >= budget.maxContextTokens) {
       budget.maxOutputTokens = Math.max(1, Math.min(model.maxOutputTokens, budget.maxContextTokens - 1));
     }
+    const environment = environmentSelection
+      ? await this.resolveEnvironment(scope, environmentSelection, settings.revision)
+      : null;
     const definition: RunDefinitionSnapshot = {
       schemaVersion: 1,
       agentDefinitionId: command.agentDefinitionId,
       model: { ...command.model },
       connectionIds,
+      environment,
       policyRevision: app.policyRevision,
       settingsRevision: settings.revision,
     };
@@ -218,6 +231,7 @@ export class RunService {
         configurationVersion: command.model.configurationVersion,
       },
       connectionIds,
+      environment: environmentSelection ? (JSON.parse(JSON.stringify(environmentSelection)) as JsonValue) : null,
       ...(initialGoal ? { initialGoal } : {}),
     };
     const committed = await this.stateCommit.createRun({
@@ -366,6 +380,45 @@ export class RunService {
   async pendingInputs(scope: Scope, runId: string): Promise<PendingRunInputPage> {
     if (!isAgentUuid(runId)) throw new Error('VALIDATION_FAILED');
     return this.repository.pendingInputs(scope, runId, 50);
+  }
+
+  async mutatePendingInput(
+    scope: Scope,
+    runId: string,
+    action: 'remove' | 'move',
+    inputId: string,
+    beforeInputId: string | null,
+    expectedVersion: number,
+    idempotencyKey: string,
+  ): Promise<RunView> {
+    if (
+      !isAgentUuid(runId) ||
+      !isAgentUuid(inputId) ||
+      (beforeInputId !== null && !isAgentUuid(beforeInputId)) ||
+      !Number.isSafeInteger(expectedVersion) ||
+      expectedVersion < 1 ||
+      !['remove', 'move'].includes(action)
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    if (action === 'remove' && beforeInputId !== null) throw new Error('VALIDATION_FAILED');
+    const key = requireIdempotencyKey(idempotencyKey);
+    const committed = await this.stateCommit.mutatePendingInput({
+      scope,
+      runId,
+      action,
+      inputId,
+      beforeInputId,
+      expectedRunVersion: expectedVersion,
+      idempotencyKey: key,
+      requestHash: requestHash(1, { runId, action, inputId, beforeInputId, expectedVersion }),
+      now: this.clock.nowUnixSeconds(),
+    });
+    if (!committed.replayed) {
+      this.onCommitted(committed.run);
+      this.onInputAppended(committed.run);
+    }
+    return committed.run;
   }
 
   async increaseBudget(

@@ -117,7 +117,17 @@ export class NativeAgentBackend implements AgentBackendPort {
 
       const remainingSteps = snapshot.budget.maxRunSteps - snapshot.usage.steps;
       const offeredTools = remainingSteps >= 2 ? this.toolCalls.schemas(scope) : [];
-      const directSubagents = await this.delegations.listDelegations(scope, snapshot.id, runtimeId, 50);
+      const projectionRunIds = [
+        snapshot.id,
+        ...Object.keys(snapshot.definition.contextBoundary?.runThrough ?? {}),
+      ].filter((runId, index, values) => values.indexOf(runId) === index);
+      const [projectionEntries, directSubagents] = await Promise.all([
+        Promise.all(
+          projectionRunIds.map(async (runId) => [runId, await this.repository.inputProjection(scope, runId)] as const),
+        ),
+        this.delegations.listDelegations(scope, snapshot.id, runtimeId, 50),
+      ]);
+      const inputProjections = Object.fromEntries(projectionEntries);
       const collaborationContext =
         directSubagents.length === 0
           ? undefined
@@ -141,7 +151,13 @@ export class NativeAgentBackend implements AgentBackendPort {
             );
       let preparedModelStep;
       try {
-        preparedModelStep = await this.modelSteps.prepare(snapshot, scope, offeredTools, collaborationContext);
+        preparedModelStep = await this.modelSteps.prepare(
+          snapshot,
+          scope,
+          offeredTools,
+          inputProjections,
+          collaborationContext,
+        );
       } catch (error) {
         const code = errorCode(error);
         if (code !== 'PROVIDER_CONFIGURATION_STALE' && code !== 'MODEL_NOT_FOUND') throw error;
@@ -708,6 +724,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       },
       runId: run.id,
       agentRuntimeId: runtimeId,
+      environment: run.definition.environment ?? null,
       stepId,
       signal,
       deadlineAt: this.clock.nowUnixSeconds() + run.budget.toolTimeoutSeconds,

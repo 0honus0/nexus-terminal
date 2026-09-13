@@ -28,6 +28,7 @@
     WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
   import { agentSurfaceSession } from './surface-session';
+  import AgentConfigPopover from './AgentConfigPopover.vue';
   import { createAgentRunFacade } from '../runtime/run-facade';
   import { createRuntimeOperationState } from '../runtime/runtime-operation-state';
   import TaskDetailDrawer from '../runtime/TaskDetailDrawer.vue';
@@ -65,6 +66,7 @@
   const detailSubagentMessages = ref<AgentSubagentMessage[]>([]);
   const detailVisible = ref(false);
   const selectedModelKey = ref('');
+  const selectedEnvironmentRecipeId = ref(agentSurfaceSession.restoreEnvironmentRecipeId(props.appId) ?? '');
   const newThreadEditorVisible = ref(false);
   const newThreadTitle = ref('');
   const threadQuery = ref('');
@@ -157,6 +159,12 @@
     const enabled = new Set(settings.effectiveSettings.workspaceRuntime.enabledRecipeIds);
     return catalog.recipes.filter((recipe) => enabled.has(recipe.id));
   });
+  const selectedEnvironmentRecipe = computed(
+    () => enabledEnvironmentRecipes.value.find((recipe) => recipe.id === selectedEnvironmentRecipeId.value) ?? null,
+  );
+  const activeEnvironment = computed(() =>
+    modelSelectionLocked.value ? (run.value?.definition.environment ?? null) : null,
+  );
   const environmentToolDefaults = computed(() => {
     const versions = settingsView.value?.effectiveSettings.workspaceRuntime.toolVersions ?? {};
     return Object.entries(versions)
@@ -165,15 +173,22 @@
       .sort();
   });
   const environmentLabel = computed(() => {
+    if (modelSelectionLocked.value) {
+      const frozen = activeEnvironment.value;
+      if (!frozen) return t('agent.operations.environmentNone');
+      return (
+        workspaceRuntimeCatalog.value?.recipes.find((recipe) => recipe.id === frozen.recipeId)?.displayName ??
+        frozen.recipeId
+      );
+    }
+    if (selectedEnvironmentRecipe.value) return selectedEnvironmentRecipe.value.displayName;
     const availability = workspaceRuntimeAvailability.value;
-    if (!availability) return t('agent.operations.environmentUnknown');
-    if (!availability.available) return t('agent.operations.environmentUnavailable');
-    if (enabledEnvironmentRecipes.value.length === 1) return enabledEnvironmentRecipes.value[0]!.displayName;
-    if (enabledEnvironmentRecipes.value.length > 1)
-      return t('agent.operations.environmentRecipesReady', { count: enabledEnvironmentRecipes.value.length });
-    return t('agent.operations.environmentNoRecipes');
+    if (!availability?.available) return t('agent.operations.environmentNone');
+    return t('agent.operations.environmentNone');
   });
   const environmentStatusClass = computed(() => {
+    if (modelSelectionLocked.value) return activeEnvironment.value ? 'bg-success' : 'bg-text-secondary/50';
+    if (!selectedEnvironmentRecipe.value) return 'bg-text-secondary/50';
     const availability = workspaceRuntimeAvailability.value;
     if (!availability) return 'bg-text-secondary/40';
     if (!availability.available) return 'bg-text-secondary/50';
@@ -215,6 +230,13 @@
     if (!option) return;
     selectedModelKey.value = option.key;
     agentSurfaceSession.setModelKey(props.appId, option.key);
+  };
+
+  const setEnvironmentSelection = (recipeId: string): void => {
+    if (modelSelectionLocked.value) return;
+    if (recipeId && !enabledEnvironmentRecipes.value.some((recipe) => recipe.id === recipeId)) return;
+    selectedEnvironmentRecipeId.value = recipeId;
+    agentSurfaceSession.setEnvironmentRecipeId(props.appId, recipeId || undefined);
   };
 
   const toggleConnectionSelection = (connectionId: number, checked: boolean): void => {
@@ -419,6 +441,13 @@
       const selectedModel = restoredModel ?? preferredModel ?? modelOptions.value[0] ?? null;
       selectedModelKey.value = selectedModel?.key ?? '';
       agentSurfaceSession.setModelKey(props.appId, selectedModel?.key);
+      const restoredEnvironmentId = agentSurfaceSession.restoreEnvironmentRecipeId(props.appId);
+      const selectedEnvironment =
+        enabledEnvironmentRecipes.value.find((recipe) => recipe.id === restoredEnvironmentId) ??
+        enabledEnvironmentRecipes.value[0] ??
+        null;
+      selectedEnvironmentRecipeId.value = selectedEnvironment?.id ?? '';
+      agentSurfaceSession.setEnvironmentRecipeId(props.appId, selectedEnvironment?.id);
       hardLimits.value = settings.hardLimits;
       connections.value = nextConnections.filter((connection) => connection.type === 'SSH');
       const restored = agentSurfaceSession.restoreThread(props.appId);
@@ -480,6 +509,12 @@
         configurationVersion: selection.provider.version,
       },
       connectionIds: selectedConnectionIds.value,
+      environment: selectedEnvironmentRecipe.value
+        ? {
+            recipeId: selectedEnvironmentRecipe.value.id,
+            ...(workspaceRuntimeCatalog.value ? { catalogRevision: workspaceRuntimeCatalog.value.revision } : {}),
+          }
+        : null,
       ...(initialGoal ? { initialGoal } : {}),
     });
     run.value = created;
@@ -523,6 +558,8 @@
     getRunSnapshot: (runId) => facade.getRun(runId),
     setGoal: (candidate, text) => facade.setGoal(candidate, text),
     pendingInputs: (runId) => facade.pendingInputs(runId),
+    mutatePendingInput: (candidate, action, inputId, beforeInputId) =>
+      facade.mutatePendingInput(candidate, action, inputId, beforeInputId),
     adoptRun: adoptCommandRun,
     refreshBackgroundRuns,
     interruptAndRefresh: async (candidate, text) => {
@@ -1076,26 +1113,27 @@
             </span>
           </div>
 
-          <details class="relative shrink-0">
-            <summary
-              role="button"
-              class="agent-config-summary flex cursor-pointer list-none items-center gap-1.5 rounded-lg bg-background/70 px-2 py-1.5 text-[10px] hover:bg-header"
-              :aria-label="$t('agent.operations.environment')"
-              :title="$t('agent.operations.environmentHint')"
-            >
+          <AgentConfigPopover
+            :ariaLabel="$t('agent.operations.environment')"
+            :title="$t('agent.operations.environmentHint')"
+            panel-class="w-80"
+          >
+            <template #trigger>
               <span class="h-1.5 w-1.5 rounded-full" :class="environmentStatusClass"></span>
               <span class="agent-config-label text-[9px] font-medium text-text-secondary">{{
-                $t('agent.operations.environmentDefaults')
+                $t('agent.operations.environment')
               }}</span>
               <span class="max-w-36 truncate font-medium">{{ environmentLabel }}</span>
-              <i class="fa-solid fa-chevron-down text-[7px] text-text-secondary" aria-hidden="true"></i>
-            </summary>
-            <div
-              class="absolute left-0 top-[calc(100%+6px)] z-40 w-80 max-w-[min(80vw,320px)] rounded-xl border border-border/70 bg-background p-3 shadow-xl"
-            >
+              <i
+                :class="modelSelectionLocked ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
+                class="text-[7px] text-text-secondary"
+                aria-hidden="true"
+              ></i>
+            </template>
+            <template #panel="{ close }">
               <div class="flex items-start justify-between gap-3">
                 <div>
-                  <div class="text-[11px] font-semibold">{{ $t('agent.operations.environmentDefaults') }}</div>
+                  <div class="text-[11px] font-semibold">{{ $t('agent.operations.environment') }}</div>
                   <p class="mt-1 text-[10px] leading-4 text-text-secondary">
                     {{ $t('agent.operations.environmentDefaultsHint') }}
                   </p>
@@ -1117,19 +1155,56 @@
               </div>
               <div class="mt-3 border-t border-border/50 pt-3">
                 <div class="text-[9px] font-semibold uppercase tracking-[0.1em] text-text-secondary">
-                  {{ $t('agent.operations.environmentRecipes') }}
+                  {{ modelSelectionLocked ? $t('agent.operations.frozen') : $t('agent.operations.environmentSelect') }}
                 </div>
-                <div v-if="enabledEnvironmentRecipes.length" class="mt-2 flex flex-wrap gap-1.5">
-                  <span
+                <div v-if="!modelSelectionLocked" class="mt-2 space-y-1">
+                  <label
+                    class="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-[10px] hover:bg-card/70"
+                  >
+                    <input
+                      type="radio"
+                      name="agent-environment"
+                      value=""
+                      :checked="selectedEnvironmentRecipeId === ''"
+                      @change="
+                        setEnvironmentSelection('');
+                        close(true);
+                      "
+                    />
+                    <span>
+                      <span class="block font-medium">{{ $t('agent.operations.environmentNone') }}</span>
+                      <span class="mt-0.5 block text-text-secondary">{{
+                        $t('agent.operations.environmentNoneHint')
+                      }}</span>
+                    </span>
+                  </label>
+                  <label
                     v-for="recipe in enabledEnvironmentRecipes"
                     :key="recipe.id"
-                    class="rounded-md bg-primary/10 px-2 py-1 text-[10px] font-medium text-primary"
+                    class="flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-[10px] hover:bg-card/70"
                   >
-                    {{ recipe.displayName }}
-                  </span>
+                    <input
+                      type="radio"
+                      name="agent-environment"
+                      :value="recipe.id"
+                      :checked="selectedEnvironmentRecipeId === recipe.id"
+                      @change="
+                        setEnvironmentSelection(recipe.id);
+                        close(true);
+                      "
+                    />
+                    <span class="min-w-0">
+                      <span class="block truncate font-medium">{{ recipe.displayName }}</span>
+                      <span class="mt-0.5 block font-mono text-[9px] text-text-secondary">{{ recipe.id }}</span>
+                    </span>
+                  </label>
                 </div>
-                <p v-else class="mt-2 text-[10px] text-text-secondary">
-                  {{ $t('agent.operations.environmentNoRecipes') }}
+                <p v-else class="mt-2 rounded-lg bg-card/70 px-2.5 py-2 text-[10px] text-text-secondary">
+                  {{
+                    activeEnvironment
+                      ? `${activeEnvironment.recipeId} · ${activeEnvironment.recipeRevision}`
+                      : $t('agent.operations.environmentNone')
+                  }}
                 </p>
               </div>
               <div class="mt-3 border-t border-border/50 pt-3">
@@ -1138,9 +1213,11 @@
                 </div>
                 <p class="mt-2 text-[10px] text-foreground/85">
                   {{
-                    environmentToolDefaults.length
-                      ? environmentToolDefaults.join(' · ')
-                      : $t('agent.operations.environmentNoToolchain')
+                    modelSelectionLocked && activeEnvironment?.toolchain.length
+                      ? activeEnvironment.toolchain.map((pack) => `${pack.familyId}@${pack.versionId}`).join(' · ')
+                      : environmentToolDefaults.length
+                        ? environmentToolDefaults.join(' · ')
+                        : $t('agent.operations.environmentNoToolchain')
                   }}
                 </p>
                 <p class="mt-2 text-[10px] text-text-secondary">
@@ -1155,15 +1232,11 @@
               <p class="mt-3 rounded-lg bg-card/70 px-2.5 py-2 text-[10px] leading-4 text-text-secondary">
                 {{ $t('agent.operations.environmentRunContract') }}
               </p>
-            </div>
-          </details>
+            </template>
+          </AgentConfigPopover>
 
-          <details class="relative shrink-0">
-            <summary
-              role="button"
-              class="agent-config-summary flex cursor-pointer list-none items-center gap-1.5 rounded-lg bg-background/70 px-2 py-1.5 text-[10px] hover:bg-header"
-              :aria-label="$t('agent.operations.targets')"
-            >
+          <AgentConfigPopover :ariaLabel="$t('agent.operations.targets')" align="right" panel-class="w-72">
+            <template #trigger>
               <i class="fa-solid fa-server text-[8px] text-text-secondary" aria-hidden="true"></i>
               <span class="agent-config-label text-[9px] font-medium text-text-secondary">{{
                 $t('agent.operations.targets')
@@ -1175,10 +1248,8 @@
                 aria-hidden="true"
               ></i>
               <i v-else class="fa-solid fa-chevron-down text-[7px] text-text-secondary" aria-hidden="true"></i>
-            </summary>
-            <div
-              class="absolute right-0 top-[calc(100%+6px)] z-40 w-72 max-w-[min(80vw,288px)] rounded-xl border border-border/70 bg-background p-3 shadow-xl"
-            >
+            </template>
+            <template #panel>
               <div class="flex items-center justify-between gap-2">
                 <div>
                   <div class="text-[11px] font-semibold">{{ $t('agent.operations.targets') }}</div>
@@ -1218,8 +1289,8 @@
                   {{ $t('agent.operations.noTargets') }}
                 </p>
               </div>
-            </div>
-          </details>
+            </template>
+          </AgentConfigPopover>
         </div>
       </header>
 

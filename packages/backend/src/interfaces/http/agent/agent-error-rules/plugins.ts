@@ -79,14 +79,20 @@ export const pluginErrorRules: readonly AgentErrorRule[] = [
       'PLUGIN_REMOTE_HASH_MISMATCH',
       'PLUGIN_REMOTE_IDENTITY_MISMATCH',
       'PLUGIN_REMOTE_PUBLISHER_MISMATCH',
+      'OFFICIAL_PLUGIN_PUBLISHER_MISMATCH',
+      'OFFICIAL_RECOMMENDED_PLUGIN_IDENTITY_MISMATCH',
     ],
     rawCode(422, 'Agent plugin package failed validation.'),
   ),
-  onCodesOrPrefixes(['PLUGIN_REMOTE_REDIRECT_DENIED', 'PLUGIN_REMOTE_DNS_FAILED'], ['PLUGIN_REMOTE_HTTP_'], (raw) => ({
-    status: 502,
-    code: raw,
-    message: 'Remote Agent plugin repository is unavailable.',
-  })),
+  onCodesOrPrefixes(
+    ['PLUGIN_REMOTE_REDIRECT_DENIED', 'PLUGIN_REMOTE_DNS_FAILED', 'OFFICIAL_RECOMMENDED_PLUGIN_UNAVAILABLE'],
+    ['PLUGIN_REMOTE_HTTP_'],
+    (raw) => ({
+      status: 502,
+      code: raw,
+      message: 'Remote Agent plugin repository is unavailable.',
+    }),
+  ),
   onCodes(['PLUGIN_FRONTEND_RPC_METHOD_DENIED'], rawCode(403, 'Agent plugin UI method is not allowed.')),
   onCodes(['PLUGIN_RUNTIME_MIGRATION_TOO_LARGE'], rawCode(413, 'Agent plugin migration payload is too large.')),
   onCodes(
