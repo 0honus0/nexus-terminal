@@ -1450,9 +1450,18 @@ if (!featureSettings.effectiveSettings.feature.enabled) throw new Error('Agent f
 // The separate first-party full-stack fixture must exercise all optional Plugin target classes.
 // It is discovered and staged through the Host-pinned official source rather than a user repository.
 const pluginCatalog = await ok('GET', '/api/v1/agent/plugins/official/catalog');
-const officialIds = pluginCatalog.packages.map((candidate) => candidate.appId).sort();
+const officialIds = [...new Set(pluginCatalog.packages.map((candidate) => candidate.appId))].sort();
 if (JSON.stringify(officialIds) !== JSON.stringify(['nexus.agent', 'nexus.fullstack'])) {
-  throw new Error(`Official catalog exposed unexpected packages: ${JSON.stringify(officialIds)}`);
+  throw new Error(`Official catalog exposed unexpected app ids: ${JSON.stringify(officialIds)}`);
+}
+const compatibleAgent = pluginCatalog.packages.find(
+  (candidate) => candidate.appId === 'nexus.agent' && candidate.version === '1.0.0',
+);
+const incompatibleAgent = pluginCatalog.packages.find(
+  (candidate) => candidate.appId === 'nexus.agent' && candidate.version === '1.0.1',
+);
+if (compatibleAgent?.compatible !== true || incompatibleAgent?.compatible !== false) {
+  throw new Error(`Official catalog compatibility projection is invalid: ${JSON.stringify(pluginCatalog.packages)}`);
 }
 const fullStackPackage = pluginCatalog.packages.find((candidate) => candidate.appId === 'nexus.fullstack');
 if (!fullStackPackage || fullStackPackage.version !== '1.0.0') {

@@ -462,9 +462,17 @@ test('official first-party catalog is discoverable without repository configurat
   expect(catalogResponse.ok(), await catalogResponse.text()).toBeTruthy();
   const catalog = (await catalogResponse.json()) as Envelope<{
     publishers: Array<{ keyId: string }>;
-    packages: Array<{ appId: string; version: string; publisherKeyId: string }>;
+    packages: Array<{ appId: string; version: string; publisherKeyId: string; compatible: boolean }>;
   }>;
-  expect(catalog.data.packages.map((candidate) => candidate.appId).sort()).toEqual(['nexus.agent', 'nexus.fullstack']);
+  expect(new Set(catalog.data.packages.map((candidate) => candidate.appId))).toEqual(
+    new Set(['nexus.agent', 'nexus.fullstack']),
+  );
+  expect(catalog.data.packages).toContainEqual(
+    expect.objectContaining({ appId: 'nexus.agent', version: '1.0.0', compatible: true }),
+  );
+  expect(catalog.data.packages).toContainEqual(
+    expect.objectContaining({ appId: 'nexus.agent', version: '1.0.1', compatible: false }),
+  );
   expect(catalog.data.packages.some((candidate) => candidate.appId === 'nexus.custom-surface')).toBe(false);
   expect(catalog.data.packages.some((candidate) => candidate.appId === 'nexus.unsafe')).toBe(false);
   const fullstack = catalog.data.packages.find((candidate) => candidate.appId === 'nexus.fullstack');
@@ -638,9 +646,11 @@ test('frontend target owns a full Custom App Surface and connects through the is
     const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
     await pluginsHeading.scrollIntoViewIfNeeded();
     const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
-    await expect(pluginsSection.getByText('nexus.custom-surface', { exact: true })).toBeVisible();
-    await expect(pluginsSection.getByText('nexus.agent', { exact: true })).toBeVisible();
-    await expect(pluginsSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
+    const installedHeading = pluginsSection.getByRole('heading', { name: 'Installed plugins', exact: true });
+    const installedSection = installedHeading.locator('xpath=parent::div');
+    await expect(installedSection.getByText('nexus.custom-surface', { exact: true })).toBeVisible();
+    await expect(installedSection.getByText('nexus.agent', { exact: true })).toBeVisible();
+    await expect(installedSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
     await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
       viewport: { width: 1440, height: 900 },
     });
@@ -695,7 +705,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     const hub = page.locator('section[aria-label="Agent"]');
     await expect(hub).toBeVisible();
     await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.agent');
-    await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toBeVisible();
+    const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+    await expect(presetThread).toBeVisible();
+    await presetThread.click();
     await expect(hub.getByText('OK', { exact: true })).toBeVisible();
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
     await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
