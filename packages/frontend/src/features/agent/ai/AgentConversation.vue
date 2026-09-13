@@ -29,7 +29,8 @@
     dismissCommandResult: [];
   }>();
 
-  const scroller = ref<{ scrollToBottom?: () => void } | null>(null);
+  const scroller = ref<{ scrollToBottom?: () => void; $el?: HTMLElement } | null>(null);
+  let keepPinnedToBottom = true;
   const commandSuggestions = computed(() => conversationCommandSuggestions(props.draft));
   const applyCommandSuggestion = (suggestion: ConversationCommandSuggestion): void => {
     const needsArgument = suggestion.command === '/goal' || suggestion.command === '/interrupt';
@@ -41,11 +42,31 @@
     emit('send', text, props.attachments);
   };
 
+  const isNearBottom = (): boolean => {
+    const element = scroller.value?.$el;
+    if (!element) return true;
+    return element.scrollHeight - element.scrollTop - element.clientHeight <= 96;
+  };
+
+  const scrollToBottom = async (): Promise<void> => {
+    await nextTick();
+    scroller.value?.scrollToBottom?.();
+  };
+
+  const handleScroll = (): void => {
+    keepPinnedToBottom = isNearBottom();
+  };
+
+  const handleItemResize = (): void => {
+    if (!keepPinnedToBottom) return;
+    void scrollToBottom();
+  };
+
   watch(
     () => [props.entries.length, props.streamingText] as const,
-    async () => {
-      await nextTick();
-      scroller.value?.scrollToBottom?.();
+    () => {
+      keepPinnedToBottom = isNearBottom();
+      if (keepPinnedToBottom) void scrollToBottom();
     },
   );
 </script>
@@ -59,6 +80,7 @@
         :items="entries"
         :min-item-size="64"
         key-field="id"
+        @scroll.passive="handleScroll"
       >
         <template #before>
           <div class="mx-auto mb-4 flex max-w-3xl justify-center">
@@ -92,7 +114,14 @@
           </div>
         </template>
         <template #default="{ item, index, active }">
-          <DynamicScrollerItem :item="item" :active="active" :index="index" class="mb-4">
+          <DynamicScrollerItem
+            :item="item"
+            :active="active"
+            :index="index"
+            :emit-resize="true"
+            class="mb-4"
+            @resize="handleItemResize"
+          >
             <ConversationMessage :entry="item" />
           </DynamicScrollerItem>
         </template>
