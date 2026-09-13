@@ -1468,6 +1468,15 @@ if (lifecycleSettings.effectiveSettings.budget.maxRunTokens !== 1) {
 const catalog = await ok('GET', '/api/v1/agent/workspace-runtime/catalog');
 const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 if (!recipe) throw new Error('Workspace dev recipe unavailable through Backend API.');
+lifecycleSettings = await ok(
+  'PATCH',
+  '/api/v1/agent/settings',
+  { patch: { workspaceRuntime: { enabledRecipeIds: [recipe.id] } }, expectedVersion: lifecycleSettings.revision },
+  mutationHeaders,
+);
+if (!lifecycleSettings.effectiveSettings.workspaceRuntime.enabledRecipeIds.includes(recipe.id)) {
+  throw new Error(`Workspace recipe was not explicitly enabled for Run Environment smoke: ${JSON.stringify(lifecycleSettings.effectiveSettings.workspaceRuntime)}`);
+}
 
 const terminalRunStatuses = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
 const createRun = async (title) => {

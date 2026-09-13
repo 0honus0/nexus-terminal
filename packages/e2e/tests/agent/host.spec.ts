@@ -647,7 +647,7 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
     operations = restoredBody.data.app;
   });
 
-  await step('Agent settings patch preserves Hard Limits and feature choice through the host state', async () => {
+  await step('Agent settings patch preserves Hard Limits and explicit feature choice through the host state', async () => {
     const before = await request.get('/api/v1/agent/settings');
     expect(before.ok(), await before.text()).toBeTruthy();
     const beforeBody = (await before.json()) as AgentEnvelope<{
@@ -658,10 +658,10 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
       revision: number;
     }>;
     expect(beforeBody.data).toMatchObject({
-      requestedSettings: { feature: { enabled: true } },
-      effectiveSettings: { feature: { enabled: true } },
+      requestedSettings: { feature: { enabled: false } },
+      effectiveSettings: { feature: { enabled: false } },
       hardLimits: { maxConcurrentRuntimes: 4 },
-      availability: { state: 'enabled' },
+      availability: { state: 'disabled' },
       revision: 1,
     });
 
@@ -675,35 +675,35 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
     expect(directHardLimit.status()).toBe(400);
     await expect(directHardLimit.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
 
-    const disabled = await request.patch('/api/v1/agent/settings', {
+    const enabled = await request.patch('/api/v1/agent/settings', {
       headers: mutationHeaders,
-      data: { patch: { feature: { enabled: false } }, expectedVersion: beforeBody.data.revision },
+      data: { patch: { feature: { enabled: true } }, expectedVersion: beforeBody.data.revision },
     });
-    expect(disabled.ok(), await disabled.text()).toBeTruthy();
-    const disabledBody = (await disabled.json()) as AgentEnvelope<{
+    expect(enabled.ok(), await enabled.text()).toBeTruthy();
+    const enabledBody = (await enabled.json()) as AgentEnvelope<{
       effectiveSettings: { feature: { enabled: boolean } };
       availability: { state: string };
       revision: number;
     }>;
-    expect(disabledBody.data).toMatchObject({
-      effectiveSettings: { feature: { enabled: false } },
-      availability: { state: 'disabled' },
+    expect(enabledBody.data).toMatchObject({
+      effectiveSettings: { feature: { enabled: true } },
+      availability: { state: 'enabled' },
       revision: 2,
     });
 
     const reread = await request.get('/api/v1/agent/settings');
     expect(reread.ok(), await reread.text()).toBeTruthy();
     await expect(reread.json()).resolves.toMatchObject({
-      data: { effectiveSettings: { feature: { enabled: false } }, revision: 2 },
+      data: { effectiveSettings: { feature: { enabled: true } }, revision: enabledBody.data.revision },
     });
 
-    const enabled = await request.patch('/api/v1/agent/settings', {
+    const disabled = await request.patch('/api/v1/agent/settings', {
       headers: mutationHeaders,
-      data: { patch: { feature: { enabled: true } }, expectedVersion: 2 },
+      data: { patch: { feature: { enabled: false } }, expectedVersion: enabledBody.data.revision },
     });
-    expect(enabled.ok(), await enabled.text()).toBeTruthy();
-    await expect(enabled.json()).resolves.toMatchObject({
-      data: { effectiveSettings: { feature: { enabled: true } }, availability: { state: 'enabled' }, revision: 3 },
+    expect(disabled.ok(), await disabled.text()).toBeTruthy();
+    await expect(disabled.json()).resolves.toMatchObject({
+      data: { effectiveSettings: { feature: { enabled: false } }, availability: { state: 'disabled' }, revision: 3 },
     });
   });
 
