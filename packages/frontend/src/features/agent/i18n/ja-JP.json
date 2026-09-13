@@ -76,8 +76,10 @@
           "pluginUninstalledDataRetained": "プラグインコードをアンインストールしました。App データは保持されています。",
           "pluginDataDeleted": "保持されていた AppStorage データを削除しました。"
         },
-        "remoteRepositories": "リモートプラグインリポジトリ",
-        "remoteRepositoriesHint": "リポジトリは検出のみを提供します。インストール前に Ed25519 発行者を明示的に信頼し、署名検証を通過する必要があります。",
+        "remoteRepositories": "プラグインリポジトリ",
+        "remoteRepositoriesHint": "Nexus の first-party catalog は Host が発行者を固定します。追加リポジトリは検出のみを提供し、インストール前に Ed25519 発行者を明示的に信頼する必要があります。",
+        "officialRepository": "Nexus first-party catalog",
+        "officialPublisherPinned": "発行者は Host により固定済み",
         "refreshRemote": "リポジトリを更新",
         "repositoryUrl": "リポジトリ catalog URL",
         "repositoryExceptions": "プライベートホスト例外 (host:port、任意)",

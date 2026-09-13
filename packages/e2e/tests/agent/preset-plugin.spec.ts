@@ -410,6 +410,64 @@ test('unsafe remote plugin archive fails validation without terminating the Back
   expect(health.ok(), await health.text()).toBeTruthy();
 });
 
+test('official first-party catalog is discoverable without repository configuration and stages through the pinned source', async ({
+  page,
+  context,
+}) => {
+  const request = context.request;
+  await loginAsInitialAdmin(request);
+  const csrf = await csrfToken(request);
+  const headers = { 'X-Nexus-CSRF': csrf };
+
+  const settingsResponse = await request.get('/api/v1/agent/settings');
+  expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
+  const settings = ((await settingsResponse.json()) as Envelope<SettingsView>).data;
+  expect(settings.requestedSettings.plugins.repositories).toEqual([]);
+
+  const catalogResponse = await request.get('/api/v1/agent/plugins/official/catalog');
+  expect(catalogResponse.ok(), await catalogResponse.text()).toBeTruthy();
+  const catalog = (await catalogResponse.json()) as Envelope<{
+    publishers: Array<{ keyId: string }>;
+    packages: Array<{ appId: string; version: string; publisherKeyId: string }>;
+  }>;
+  expect(catalog.data.packages.map((candidate) => candidate.appId).sort()).toEqual(['nexus.agent', 'nexus.fullstack']);
+  expect(catalog.data.packages.some((candidate) => candidate.appId === 'nexus.custom-surface')).toBe(false);
+  expect(catalog.data.packages.some((candidate) => candidate.appId === 'nexus.unsafe')).toBe(false);
+  const fullstack = catalog.data.packages.find((candidate) => candidate.appId === 'nexus.fullstack');
+  expect(fullstack).toMatchObject({ version: '1.0.0' });
+  expect(catalog.data.publishers.some((publisher) => publisher.keyId === fullstack!.publisherKeyId)).toBe(true);
+
+  const staged = await request.post('/api/v1/agent/plugins/official/stage', {
+    headers,
+    data: { appId: 'nexus.fullstack', version: '1.0.0' },
+  });
+  expect(staged.status(), await staged.text()).toBe(201);
+  const stageId = ((await staged.json()) as Envelope<{ id: string }>).data.id;
+  const verified = await request.post('/api/v1/agent/plugins/verify', { headers, data: { stageId } });
+  expect(verified.ok(), await verified.text()).toBeTruthy();
+  await expect(verified.json()).resolves.toMatchObject({
+    data: {
+      plugin: {
+        appId: 'nexus.fullstack',
+        frontendEntry: 'frontend/index.html',
+        backendEntry: 'backend/index.mjs',
+        runnerEntry: 'runner/index.mjs',
+      },
+    },
+  });
+
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+  const panel = page.locator('#settings-panel-agent');
+  const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
+  await pluginsHeading.scrollIntoViewIfNeeded();
+  const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
+  await expect(pluginsSection.getByText('Nexus first-party catalog', { exact: true })).toBeVisible();
+  await expect(pluginsSection.getByText('Publisher pinned by Host', { exact: true })).toBeVisible();
+  await expect(pluginsSection.getByText('nexus.agent', { exact: true })).toBeVisible();
+  await expect(pluginsSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
+});
+
 test('frontend target owns a full Custom App Surface and connects through the isolated Plugin SDK', async ({
   page,
   context,
@@ -476,12 +534,17 @@ test('frontend target owns a full Custom App Surface and connects through the is
   await step(
     'multiple installable Agent plugins coexist and the full-stack package exposes all target classes',
     async () => {
+      const officialCatalogResponse = await request.get('/api/v1/agent/plugins/official/catalog');
+      expect(officialCatalogResponse.ok(), await officialCatalogResponse.text()).toBeTruthy();
+      const officialCatalog = (await officialCatalogResponse.json()) as Envelope<{
+        packages: Array<{ appId: string; version: string; publisherKeyId: string }>;
+      }>;
       const installCatalogApp = async (appId: string): Promise<void> => {
-        const catalogPackage = catalog.data.packages.find((candidate) => candidate.appId === appId);
+        const catalogPackage = officialCatalog.data.packages.find((candidate) => candidate.appId === appId);
         expect(catalogPackage).toMatchObject({ version: '1.0.0', publisherKeyId: publisher!.keyId });
-        const stagedApp = await request.post('/api/v1/agent/plugins/remote/stage', {
+        const stagedApp = await request.post('/api/v1/agent/plugins/official/stage', {
           headers,
-          data: { repositoryUrl, appId, version: '1.0.0' },
+          data: { appId, version: '1.0.0' },
         });
         expect(stagedApp.status(), await stagedApp.text()).toBe(201);
         const stagedAppId = ((await stagedApp.json()) as Envelope<{ id: string }>).data.id;

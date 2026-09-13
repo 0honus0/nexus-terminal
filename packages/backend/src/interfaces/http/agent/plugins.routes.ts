@@ -66,11 +66,46 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
   );
 
   router.get(
+    '/official/catalog',
+    agentRoute(async (request, response) => {
+      agentData(request, response, await plugins.officialCatalog(AbortSignal.timeout(30_000)));
+    }),
+  );
+
+  router.post(
+    '/official/stage',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['appId', 'version'])) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      if (!nonEmptyString(request.body.appId) || !nonEmptyString(request.body.version)) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      agentData(
+        request,
+        response,
+        await plugins.stageOfficial(
+          agentUserId(request),
+          request.body.appId,
+          request.body.version,
+          AbortSignal.timeout(120_000),
+        ),
+        201,
+      );
+    }),
+  );
+
+  router.get(
     '/remote/catalog',
     agentRoute(async (request, response) => {
       const repositoryUrl = queryString(request.query.repositoryUrl);
       if (!repositoryUrl) throw new Error('VALIDATION_FAILED');
-      agentData(request, response, await plugins.remoteCatalog(agentUserId(request), repositoryUrl, AbortSignal.timeout(30_000)));
+      agentData(
+        request,
+        response,
+        await plugins.remoteCatalog(agentUserId(request), repositoryUrl, AbortSignal.timeout(30_000)),
+      );
     }),
   );
 

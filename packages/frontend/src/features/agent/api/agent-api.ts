@@ -831,6 +831,20 @@ export const agentApi = {
       ).data,
     );
   },
+  async officialPluginCatalog(): Promise<RemotePluginCatalog> {
+    return unwrap((await httpClient.get<AgentEnvelope<RemotePluginCatalog>>('/agent/plugins/official/catalog')).data);
+  },
+  async stageOfficialPlugin(appId: string, version: string): Promise<PluginStageView> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<PluginStageView>>(
+          '/agent/plugins/official/stage',
+          { appId, version },
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
   async remotePluginCatalog(repositoryUrl: string): Promise<RemotePluginCatalog> {
     return unwrap(
       (

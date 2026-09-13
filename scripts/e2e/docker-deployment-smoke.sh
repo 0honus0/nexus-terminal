@@ -208,7 +208,7 @@ services:
     environment:
       AGENT_RUNNER_URL: http://host.docker.internal:$runner_port
       NEXUS_E2E_RESET_ENABLED: 1
-      AGENT_OFFICIAL_PLUGIN_CATALOG_URL: http://host.docker.internal:$plugin_repository_port/catalog.json
+      AGENT_OFFICIAL_PLUGIN_CATALOG_URL: http://host.docker.internal:$plugin_repository_port/official-catalog.json
       AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: ed25519:b75cef09083540273828a77809f5ec467bac0df101f5b6ec17727a4103f632f7
       AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: |-
         -----BEGIN PUBLIC KEY-----
@@ -1448,17 +1448,20 @@ featureSettings = await ok(
 if (!featureSettings.effectiveSettings.feature.enabled) throw new Error('Agent feature did not enable after Nexus Agent install.');
 
 // The separate first-party full-stack fixture must exercise all optional Plugin target classes.
-// Onboarding has already pinned/trusted the official E2E publisher; generic install still follows
-// normal repository -> stage -> verify -> install -> grant -> enable lifecycle.
-const pluginCatalog = await ok('GET', `/api/v1/agent/plugins/remote/catalog?repositoryUrl=${encodeURIComponent(repositoryUrl)}`);
+// It is discovered and staged through the Host-pinned official source rather than a user repository.
+const pluginCatalog = await ok('GET', '/api/v1/agent/plugins/official/catalog');
+const officialIds = pluginCatalog.packages.map((candidate) => candidate.appId).sort();
+if (JSON.stringify(officialIds) !== JSON.stringify(['nexus.agent', 'nexus.fullstack'])) {
+  throw new Error(`Official catalog exposed unexpected packages: ${JSON.stringify(officialIds)}`);
+}
 const fullStackPackage = pluginCatalog.packages.find((candidate) => candidate.appId === 'nexus.fullstack');
 if (!fullStackPackage || fullStackPackage.version !== '1.0.0') {
   throw new Error(`Full-stack plugin missing from signed catalog: ${JSON.stringify(pluginCatalog.packages)}`);
 }
 const fullStackStage = await ok(
   'POST',
-  '/api/v1/agent/plugins/remote/stage',
-  { repositoryUrl, appId: 'nexus.fullstack', version: '1.0.0' },
+  '/api/v1/agent/plugins/official/stage',
+  { appId: 'nexus.fullstack', version: '1.0.0' },
   mutationHeaders,
   201,
 );
@@ -1492,7 +1495,7 @@ fullStackApp = await ok(
   mutationHeaders,
 );
 if (!fullStackApp.enabled || fullStackApp.health !== 'healthy' || fullStackApp.surface !== 'custom') {
-  throw new Error(`Full-stack App did not activate through isolated backend lifecycle: ${JSON.stringify(fullStackApp)}`);
+  throw new Error(`Full-stack App did not activate through native backend child lifecycle: ${JSON.stringify(fullStackApp)}`);
 }
 const fullStackFrontend = await ok('GET', '/api/v1/agent/plugins/nexus.fullstack/frontend');
 if (fullStackFrontend.sandbox !== 'allow-scripts' || !fullStackFrontend.url.includes('/plugins/nexus.fullstack/1.0.0/')) {

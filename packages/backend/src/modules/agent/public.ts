@@ -95,6 +95,8 @@ export interface AgentPluginFacade {
   trustPublisherKey(userId: number, publicKeyPem: string, label: string): Promise<TrustedPublisherKey>;
   revokePublisherKey(userId: number, keyId: string): Promise<void>;
   stage(userId: number, input: PluginStageInput): Promise<PluginStageRecord>;
+  officialCatalog(signal?: AbortSignal): Promise<RemotePluginCatalog>;
+  stageOfficial(userId: number, appId: string, version: string, signal?: AbortSignal): Promise<PluginStageRecord>;
   remoteCatalog(userId: number, repositoryUrl: string, signal?: AbortSignal): Promise<RemotePluginCatalog>;
   stageRemote(userId: number, input: RemotePluginStageInput, signal?: AbortSignal): Promise<PluginStageRecord>;
   verify(userId: number, stageId: string): Promise<{ stage: PluginStageRecord; plugin: PluginVersionRecord }>;

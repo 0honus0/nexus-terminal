@@ -76,8 +76,10 @@
           "pluginUninstalledDataRetained": "插件代码已卸载，App 数据仍保留。",
           "pluginDataDeleted": "保留的 AppStorage 数据已删除。"
         },
-        "remoteRepositories": "远程插件仓库",
-        "remoteRepositoriesHint": "仓库只负责发现插件。安装前仍必须显式信任 Ed25519 发布者，并通过包签名校验。",
+        "remoteRepositories": "插件仓库",
+        "remoteRepositoriesHint": "Nexus 第一方 catalog 由 Host 固定发布者身份；额外仓库只负责插件发现，安装前仍必须显式信任其 Ed25519 发布者。",
+        "officialRepository": "Nexus 第一方 catalog",
+        "officialPublisherPinned": "发布者已由 Host 固定 pin",
         "refreshRemote": "刷新仓库",
         "repositoryUrl": "仓库 catalog URL",
         "repositoryExceptions": "私网例外（host:port，可选）",

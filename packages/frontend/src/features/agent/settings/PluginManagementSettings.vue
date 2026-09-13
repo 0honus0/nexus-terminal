@@ -23,6 +23,7 @@
 
   const repositoryUrl = ref('');
   const repositoryExceptions = ref('');
+  const officialCatalog = ref<RemotePluginCatalog | null>(null);
   const remoteCatalogs = ref<RemotePluginCatalog[]>([]);
   const publisherLabel = ref('');
   const publisherPem = ref('');
@@ -41,6 +42,10 @@
 
   const locked = computed(() => props.busy || localBusy.value);
   const configuredRepositories = computed(() => props.settings.requestedSettings.plugins.repositories);
+  const catalogSources = computed(() => [
+    ...(officialCatalog.value ? [{ catalog: officialCatalog.value, official: true as const }] : []),
+    ...remoteCatalogs.value.map((catalog) => ({ catalog, official: false as const })),
+  ]);
   const noticeText = computed(() => {
     switch (notice.value) {
       case 'PUBLISHER_TRUSTED':
@@ -73,15 +78,22 @@
 
   const loadRemoteCatalogs = async (): Promise<void> => {
     const repositories = configuredRepositories.value;
-    const results = await Promise.allSettled(
-      repositories.map((repository) => agentApi.remotePluginCatalog(repository.url)),
-    );
+    const [officialResult, ...results] = await Promise.allSettled([
+      agentApi.officialPluginCatalog(),
+      ...repositories.map((repository) => agentApi.remotePluginCatalog(repository.url)),
+    ]);
+    officialCatalog.value = officialResult.status === 'fulfilled' ? officialResult.value : null;
     remoteCatalogs.value = results.flatMap((result) => (result.status === 'fulfilled' ? [result.value] : []));
-    const failures = results.flatMap((result, index) =>
-      result.status === 'rejected'
-        ? [`${repositories[index]?.url ?? t('agent.settings.plugins.remoteRepositories')}: ${explain(result.reason)}`]
-        : [],
-    );
+    const failures = [
+      ...(officialResult.status === 'rejected'
+        ? [`${t('agent.settings.plugins.officialRepository')}: ${explain(officialResult.reason)}`]
+        : []),
+      ...results.flatMap((result, index) =>
+        result.status === 'rejected'
+          ? [`${repositories[index]?.url ?? t('agent.settings.plugins.remoteRepositories')}: ${explain(result.reason)}`]
+          : [],
+      ),
+    ];
     if (failures.length > 0) error.value = failures.join(' · ');
   };
 
@@ -150,13 +162,19 @@
     });
   };
 
-  const prepareRemotePackage = (catalog: RemotePluginCatalog, entry: RemotePluginPackageEntry): void => {
-    if (!publisherTrusted(entry.publisherKeyId)) return;
+  const prepareRemotePackage = (
+    catalog: RemotePluginCatalog,
+    entry: RemotePluginPackageEntry,
+    official: boolean,
+  ): void => {
+    if (!official && !publisherTrusted(entry.publisherKeyId)) return;
     void run(async () => {
       candidate.value = null;
       drainingUpgradeVersion.value = null;
       candidateArtifactName.value = `${entry.appId}@${entry.version}`;
-      const stage = await agentApi.stageRemotePlugin(catalog.repositoryUrl, entry.appId, entry.version);
+      const stage = official
+        ? await agentApi.stageOfficialPlugin(entry.appId, entry.version)
+        : await agentApi.stageRemotePlugin(catalog.repositoryUrl, entry.appId, entry.version);
       candidate.value = await agentApi.verifyPlugin(stage.id);
       notice.value = 'PACKAGE_VERIFIED';
     });
@@ -313,7 +331,7 @@
         <button
           type="button"
           class="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-header disabled:opacity-50"
-          :disabled="locked || configuredRepositories.length === 0"
+          :disabled="locked"
           @click="run(loadRemoteCatalogs)"
         >
           {{ $t('agent.settings.plugins.refreshRemote') }}
@@ -358,16 +376,26 @@
           </button>
         </div>
       </div>
-      <div v-if="remoteCatalogs.length" class="mt-4 space-y-4">
+      <div v-if="catalogSources.length" class="mt-4 space-y-4">
         <div
-          v-for="catalog in remoteCatalogs"
-          :key="catalog.repositoryUrl"
+          v-for="source in catalogSources"
+          :key="`${source.official ? 'official' : 'remote'}:${source.catalog.repositoryUrl}`"
           class="rounded border border-border bg-card p-3"
         >
-          <p class="break-all font-mono text-[10px] text-text-secondary">{{ catalog.repositoryUrl }}</p>
+          <div class="flex flex-wrap items-center gap-2">
+            <span v-if="source.official" class="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+              {{ $t('agent.settings.plugins.officialRepository') }}
+            </span>
+            <span v-if="source.official" class="rounded bg-header px-2 py-0.5 text-[10px] text-text-secondary">
+              {{ $t('agent.settings.plugins.officialPublisherPinned') }}
+            </span>
+          </div>
+          <p class="mt-1 break-all font-mono text-[10px] text-text-secondary">
+            {{ source.catalog.repositoryUrl }}
+          </p>
           <div class="mt-3 grid gap-3 lg:grid-cols-2">
             <div
-              v-for="entry in catalog.packages"
+              v-for="entry in source.catalog.packages"
               :key="`${entry.appId}@${entry.version}`"
               class="rounded border border-border p-3"
             >
@@ -379,15 +407,15 @@
               <p class="mt-2 break-all font-mono text-[10px] text-text-secondary">{{ entry.appId }}</p>
               <div class="mt-3 flex flex-wrap gap-2">
                 <button
-                  v-if="!publisherTrusted(entry.publisherKeyId)"
+                  v-if="!source.official && !publisherTrusted(entry.publisherKeyId)"
                   type="button"
                   class="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-header disabled:opacity-50"
                   :disabled="
-                    locked || !catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
+                    locked || !source.catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
                   "
                   @click="
                     trustRemotePublisher(
-                      catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
+                      source.catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
                     )
                   "
                 >
@@ -396,8 +424,8 @@
                 <button
                   type="button"
                   class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                  :disabled="locked || !publisherTrusted(entry.publisherKeyId)"
-                  @click="prepareRemotePackage(catalog, entry)"
+                  :disabled="locked || (!source.official && !publisherTrusted(entry.publisherKeyId))"
+                  @click="prepareRemotePackage(source.catalog, entry, source.official)"
                 >
                   {{ $t('agent.settings.plugins.prepareRemote') }}
                 </button>

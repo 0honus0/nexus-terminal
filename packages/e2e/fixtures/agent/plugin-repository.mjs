@@ -98,6 +98,12 @@ const catalog = {
   ],
 };
 const catalogBytes = Buffer.from(`${JSON.stringify(catalog, null, 2)}\n`, 'utf8');
+const officialCatalog = {
+  schemaVersion: 1,
+  publishers: catalog.publishers,
+  packages: catalog.packages.filter((candidate) => ['nexus.agent', 'nexus.fullstack'].includes(candidate.appId)),
+};
+const officialCatalogBytes = Buffer.from(`${JSON.stringify(officialCatalog, null, 2)}\n`, 'utf8');
 const packageByUrl = new Map([
   ...packages.map((candidate) => [`/packages/${candidate.packageName}`, candidate.bytes]),
   [`/packages/${unsafePackageName}`, unsafePackageBytes],
@@ -116,6 +122,15 @@ const server = http.createServer((request, response) => {
       'Cache-Control': 'no-store',
     });
     response.end(catalogBytes);
+    return;
+  }
+  if (request.method === 'GET' && request.url === '/official-catalog.json') {
+    response.writeHead(200, {
+      'Content-Type': 'application/json',
+      'Content-Length': String(officialCatalogBytes.byteLength),
+      'Cache-Control': 'no-store',
+    });
+    response.end(officialCatalogBytes);
     return;
   }
   const packageBytes = request.method === 'GET' ? packageByUrl.get(request.url ?? '') : undefined;

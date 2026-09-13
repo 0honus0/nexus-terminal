@@ -76,8 +76,10 @@
           "pluginUninstalledDataRetained": "Plugin code uninstalled. App data was retained.",
           "pluginDataDeleted": "Retained AppStorage data deleted."
         },
-        "remoteRepositories": "Remote plugin repositories",
-        "remoteRepositoriesHint": "Repositories provide discovery only. Packages still require an explicitly trusted Ed25519 publisher signature before installation.",
+        "remoteRepositories": "Plugin repositories",
+        "remoteRepositoriesHint": "The Nexus first-party catalog is pinned by the Host. Additional repositories provide discovery only and require an explicitly trusted Ed25519 publisher before installation.",
+        "officialRepository": "Nexus first-party catalog",
+        "officialPublisherPinned": "Publisher pinned by Host",
         "refreshRemote": "Refresh repositories",
         "repositoryUrl": "Repository catalog URL",
         "repositoryExceptions": "Private host exceptions (host:port, optional)",
