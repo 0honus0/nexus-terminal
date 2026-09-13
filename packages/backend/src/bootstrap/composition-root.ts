@@ -421,6 +421,7 @@ export const createCompositionRoot = (
     dataDirectory: config.dataDirectory,
     nexusVersion: config.appVersion,
     nodeEnv: config.nodeEnv,
+    e2eResetEnabled: config.e2eResetEnabled,
     publicOrigin: config.agentPublicOrigin,
     pluginFrontendOrigin: config.agentPluginFrontendOrigin,
     officialPluginSource,

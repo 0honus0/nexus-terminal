@@ -110,6 +110,7 @@ export interface ComposeAgentOptions {
   dataDirectory: string;
   nexusVersion: string;
   nodeEnv: string;
+  e2eResetEnabled: boolean;
   publicOrigin?: string;
   pluginFrontendOrigin?: string;
   officialPluginSource: OfficialAgentPluginSource;
@@ -131,6 +132,7 @@ export const composeAgent = ({
   dataDirectory,
   nexusVersion,
   nodeEnv,
+  e2eResetEnabled,
   publicOrigin,
   pluginFrontendOrigin,
   officialPluginSource,
@@ -164,7 +166,7 @@ export const composeAgent = ({
   const settings = new AgentSettingsService(settingsRepository, hardLimitConfirmations, hardLimitUsage, systemClock);
   const capabilityBroker = new AppCapabilityBroker(registry, appStates, appGrants, targetDenylist);
   const providerRepository = new SqliteProviderRepository(database, cipher);
-  const outboundPolicy = new OutboundPolicyAdapter(nodeEnv);
+  const outboundPolicy = new OutboundPolicyAdapter(nodeEnv, e2eResetEnabled);
   const integrationRepository = new SqliteIntegrationRepository(database, cipher);
   const mcpRuntime = new McpAdapter(integrationRepository, outboundPolicy);
   const providerSecrets = new ProviderSecretAdapter(database, cipher);

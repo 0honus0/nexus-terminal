@@ -29,7 +29,10 @@ const isPrivate = (address: string): boolean => PRIVATE_RANGES.has(addressRange(
 const isLoopback = (address: string): boolean => addressRange(address) === 'loopback';
 
 export class OutboundPolicyAdapter implements OutboundPolicyPort {
-  constructor(private readonly nodeEnv: string) {}
+  constructor(
+    private readonly nodeEnv: string,
+    private readonly allowInsecurePrivateHostExceptions = false,
+  ) {}
 
   async resolve(rawUrl: string, privateHostExceptions: readonly string[]): Promise<ResolvedEndpoint> {
     let url: URL;
@@ -58,7 +61,11 @@ export class OutboundPolicyAdapter implements OutboundPolicyPort {
     if (url.protocol === 'http:') {
       const explicitDevelopmentLoopback =
         this.nodeEnv !== 'production' && exceptionAllowed && addresses.every((address) => isLoopback(address));
-      if (!explicitDevelopmentLoopback) throw new Error('PROVIDER_INSECURE_ENDPOINT_DENIED');
+      const explicitE2ePrivateException =
+        this.allowInsecurePrivateHostExceptions && exceptionAllowed && addresses.every((address) => isPrivate(address));
+      if (!explicitDevelopmentLoopback && !explicitE2ePrivateException) {
+        throw new Error('PROVIDER_INSECURE_ENDPOINT_DENIED');
+      }
     }
 
     return {
