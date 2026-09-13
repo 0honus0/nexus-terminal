@@ -12,6 +12,8 @@ import {
   parseResumeRunRequest,
   parseSetGoalRequest,
   parseWorkspaceActionRequest,
+  parseWorkspaceArtifactExportRequest,
+  parseWorkspaceArtifactImportRequest,
   parseWorkspaceCreateRequest,
   parseWorkspaceToolVersionsRequest,
 } from './agent-runtime-route-input';
@@ -369,6 +371,51 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
         () => dependencies.workspaceRuntime.action(scope, workspaceId, input.action, input.expectedVersion),
       );
       agentData(request, response, command, 202);
+    }),
+  );
+
+  router.post(
+    '/workspaces/:workspaceId/plugins/:targetPluginId/artifacts/export',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      const input = parseWorkspaceArtifactExportRequest(request.body);
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(
+        request,
+        response,
+        await dependencies.workspaceRuntime.exportWorkspaceArtifact(
+          scope,
+          {
+            workspaceId: pathParam(request.params.workspaceId),
+            targetPluginId: pathParam(request.params.targetPluginId),
+            ...input,
+          },
+          AbortSignal.timeout(120_000),
+        ),
+        201,
+      );
+    }),
+  );
+
+  router.post(
+    '/workspaces/:workspaceId/plugins/:targetPluginId/artifacts/import',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      const input = parseWorkspaceArtifactImportRequest(request.body);
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(
+        request,
+        response,
+        await dependencies.workspaceRuntime.importArtifactToWorkspace(
+          scope,
+          {
+            workspaceId: pathParam(request.params.workspaceId),
+            targetPluginId: pathParam(request.params.targetPluginId),
+            ...input,
+          },
+          AbortSignal.timeout(120_000),
+        ),
+      );
     }),
   );
 

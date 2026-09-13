@@ -38,6 +38,17 @@ export interface WorkspaceToolVersionsRequestDto {
   catalogRevision?: string;
 }
 
+export interface WorkspaceArtifactExportRequestDto {
+  path: string;
+  name: string;
+  mediaType: string;
+}
+
+export interface WorkspaceArtifactImportRequestDto {
+  artifactId: string;
+  path: string;
+}
+
 const parseUserInput = (value: unknown): UserInputData => {
   if (!isRecord(value) || !hasOnlyKeys(value, ['text', 'artifactRefs'])) throw new Error('VALIDATION_FAILED');
   if (
@@ -287,6 +298,43 @@ export const parseWorkspaceActionRequest = (body: unknown): WorkspaceActionReque
     action: value.action as WorkspaceActionRequestDto['action'],
     expectedVersion: value.expectedVersion,
   };
+};
+
+export const parseWorkspaceArtifactExportRequest = (body: unknown): WorkspaceArtifactExportRequestDto => {
+  if (!isRecord(body) || !hasOnlyKeys(body, ['path', 'name', 'mediaType'])) throw new Error('VALIDATION_FAILED');
+  if (
+    typeof body.path !== 'string' ||
+    !body.path.startsWith('/') ||
+    body.path.length > 4096 ||
+    typeof body.name !== 'string' ||
+    !body.name.trim() ||
+    Buffer.byteLength(body.name.trim(), 'utf8') > 512 ||
+    typeof body.mediaType !== 'string' ||
+    !body.mediaType.trim() ||
+    body.mediaType.trim().length > 128
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return {
+    path: body.path,
+    name: body.name.trim(),
+    mediaType: body.mediaType.trim().toLowerCase(),
+  };
+};
+
+export const parseWorkspaceArtifactImportRequest = (body: unknown): WorkspaceArtifactImportRequestDto => {
+  if (!isRecord(body) || !hasOnlyKeys(body, ['artifactId', 'path'])) throw new Error('VALIDATION_FAILED');
+  if (
+    typeof body.artifactId !== 'string' ||
+    !body.artifactId ||
+    body.artifactId.length > 256 ||
+    typeof body.path !== 'string' ||
+    !body.path.startsWith('/') ||
+    body.path.length > 4096
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return { artifactId: body.artifactId, path: body.path };
 };
 
 export const parseWorkspaceToolVersionsRequest = (body: unknown): WorkspaceToolVersionsRequestDto => {

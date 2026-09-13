@@ -426,7 +426,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
     return unwrap(
       (
         await httpClient.post<AgentEnvelope<AgentArtifactRef>>(
-          `/agent/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/artifacts/export`,
+          `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/artifacts/export`,
           input,
           { headers: await mutationHeaders() },
         )
@@ -442,7 +442,7 @@ export const createWorkspaceRuntimeApi = (mutationHeaders: () => Promise<Record<
     return unwrap(
       (
         await httpClient.post<AgentEnvelope<WorkspaceArtifactImportResult>>(
-          `/agent/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/artifacts/import`,
+          `/apps/${encodeURIComponent(appId)}/workspaces/${encodeURIComponent(workspaceId)}/plugins/${encodeURIComponent(targetPluginId)}/artifacts/import`,
           input,
           { headers: await mutationHeaders() },
         )

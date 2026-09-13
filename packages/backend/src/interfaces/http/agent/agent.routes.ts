@@ -414,7 +414,11 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   router.get(
     '/onboarding/recommended-plugin',
     agentRoute(async (request, response) => {
-      agentData(request, response, await dependencies.host.getRecommendedPlugin(agentUserId(request), AbortSignal.timeout(30_000)));
+      agentData(
+        request,
+        response,
+        await dependencies.host.getRecommendedPlugin(agentUserId(request), AbortSignal.timeout(30_000)),
+      );
     }),
   );
 
@@ -422,7 +426,10 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/onboarding/recommended-plugin/install',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      const installed = await dependencies.host.installRecommendedPlugin(agentUserId(request), AbortSignal.timeout(120_000));
+      const installed = await dependencies.host.installRecommendedPlugin(
+        agentUserId(request),
+        AbortSignal.timeout(120_000),
+      );
       agentData(request, response, { ...installed, app: appSummary(installed.app) }, 201);
     }),
   );
@@ -711,75 +718,6 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         request,
         response,
         await dependencies.artifacts.attach(agentUserId(request), pathParam(request.params.artifactId), request.body),
-      );
-    }),
-  );
-
-  router.post(
-    '/apps/:appId/workspaces/:workspaceId/plugins/:targetPluginId/artifacts/export',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['path', 'name', 'mediaType']) ||
-        !nonEmptyString(request.body.path) ||
-        !request.body.path.startsWith('/') ||
-        request.body.path.length > 4096 ||
-        !nonEmptyString(request.body.name) ||
-        Buffer.byteLength(request.body.name, 'utf8') > 512 ||
-        !nonEmptyString(request.body.mediaType) ||
-        request.body.mediaType.length > 128
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        await dependencies.workspaceRuntime.exportWorkspaceArtifact(
-          scope,
-          {
-            workspaceId: pathParam(request.params.workspaceId),
-            targetPluginId: pathParam(request.params.targetPluginId),
-            path: request.body.path,
-            name: request.body.name.trim(),
-            mediaType: request.body.mediaType.trim().toLowerCase(),
-          },
-          AbortSignal.timeout(120_000),
-        ),
-        201,
-      );
-    }),
-  );
-
-  router.post(
-    '/apps/:appId/workspaces/:workspaceId/plugins/:targetPluginId/artifacts/import',
-    mutationSecurity,
-    agentRoute(async (request, response) => {
-      if (
-        !isRecord(request.body) ||
-        !hasOnlyKeys(request.body, ['artifactId', 'path']) ||
-        !nonEmptyString(request.body.artifactId) ||
-        !nonEmptyString(request.body.path) ||
-        !request.body.path.startsWith('/') ||
-        request.body.path.length > 4096
-      ) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
-      agentData(
-        request,
-        response,
-        await dependencies.workspaceRuntime.importArtifactToWorkspace(
-          scope,
-          {
-            workspaceId: pathParam(request.params.workspaceId),
-            targetPluginId: pathParam(request.params.targetPluginId),
-            path: request.body.path,
-            artifactId: request.body.artifactId,
-          },
-          AbortSignal.timeout(120_000),
-        ),
       );
     }),
   );
