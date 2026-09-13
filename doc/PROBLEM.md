@@ -332,3 +332,13 @@
 - **验证方法**：`/home/honus/project/nexus_terminal_test` 不存在；正式 Nexus 状态接口正常。
 - **实施结果**：已先执行测试 Compose `down --remove-orphans`，随后删除 `/home/honus/project/nexus_terminal_test`。验证 `test_dir=absent`、`test_containers=none`，正式 `https://ssh.honus.top/api/v1/status` 返回 HTTP 200。Nginx Proxy Manager 中 `test.honus.top` Proxy Host 按本问题边界保留，未修改。
 - **状态**：`已完成并验证`
+
+## P-018 AgentDock 本地开发环境通过显式端口映射接入公网调试，但不修改项目默认监听端口
+
+- **发现时间**：2026-09-14
+- **背景**：AgentDock 运行在 PVE Debian VM 的 Docker 容器中，Windows VM 提供真实 Chrome CDP。为了缩短 Nexus 前后端调试闭环，需要直接在 AgentDock 工作区运行开发服务，并通过 honus.top 的 Nginx Proxy Manager 暴露到公网，再由 Windows Chrome/CDP 实际验证。
+- **当前开发链路**：Backend 使用项目现有开发默认端口 `3001`；Plugin/SDK 内部静态 listener 使用现有 `3002`；Frontend/Vite 在本次 AgentDock 开发会话中通过显式启动参数监听 `0.0.0.0:9998`。Debian 上 AgentDock 容器已存在 `9998:9998` 端口映射，外层 PVE/NPM 已将 `api.honus.top` 转发到该开发入口。
+- **用户决策**：**仅记录开发环境的实际监听方式，不修改项目默认端口。** Frontend 的 Vite 默认端口保持原有行为；`9998` 仅属于当前 AgentDock/PVE 开发运行约定，不写入源码默认值，不改变生产 Compose 的默认端口语义。
+- **开发 Origin**：公网调试时 Backend 运行环境使用 `AGENT_PUBLIC_ORIGIN=https://api.honus.top`，并对应设置 Passkey/WebAuthn Origin；Vite 仅在本地开发启动时显式监听 `9998` 并允许 `api.honus.top` Host。`/api`、`/plugins`、`/sdk` 与 WebSocket 路径继续经 Vite 同源代理到 Backend/Plugin listener。
+- **验证结果**：本地 `http://127.0.0.1:3001/api/v1/status`、`http://127.0.0.1:9998/`、`http://127.0.0.1:9998/api/v1/status`、`http://127.0.0.1:9998/sdk/frontend-v1.mjs` 均返回 200；公网 `https://api.honus.top/`、`/api/v1/status`、`/sdk/frontend-v1.mjs` 均返回 200。SDK CSP 的 `frame-ancestors` 为 `https://api.honus.top`。AgentDock 通过 Windows 外部 CDP 打开 `https://api.honus.top` 后正常进入 Nexus `/setup` 页面，未出现 console/network/page error。
+- **状态**：`已记录并验证；仅文档约定，无源码默认端口修改`
