@@ -626,25 +626,24 @@ test('Agent Host installs Operations safely and persists explicit lifecycle/sett
     const disabledBody = (await disabled.json()) as AgentEnvelope<AppSummary>;
     expect(disabledBody.data).toMatchObject({ id: 'nexus.operations', enabled: false, health: 'disabled' });
 
+    const restored = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
+      headers: mutationHeaders,
+      data: {},
+    });
+    expect(restored.status(), await restored.text()).toBe(201);
+    const restoredBody = (await restored.json()) as AgentEnvelope<{ app: AppSummary; installedNow: boolean }>;
+    expect(restoredBody.data).toMatchObject({
+      installedNow: false,
+      app: { id: 'nexus.operations', enabled: true, health: 'healthy', healthReason: null },
+    });
+
     const stale = await request.patch('/api/v1/agent/apps/nexus.operations', {
       headers: mutationHeaders,
-      data: { enabled: true, expectedVersion: operations.stateVersion },
+      data: { enabled: false, expectedVersion: operations.stateVersion },
     });
     expect(stale.status()).toBe(409);
     await expect(stale.json()).resolves.toMatchObject({ error: { code: 'STATE_CONFLICT' } });
-
-    const enabled = await request.patch('/api/v1/agent/apps/nexus.operations', {
-      headers: mutationHeaders,
-      data: { enabled: true, expectedVersion: disabledBody.data.stateVersion },
-    });
-    expect(enabled.ok(), await enabled.text()).toBeTruthy();
-    const enabledBody = (await enabled.json()) as AgentEnvelope<AppSummary>;
-    expect(enabledBody.data).toMatchObject({
-      enabled: true,
-      health: 'healthy',
-      healthReason: null,
-    });
-    operations = enabledBody.data;
+    operations = restoredBody.data.app;
   });
 
   await step('Agent settings patch preserves Hard Limits and feature choice through the host state', async () => {
