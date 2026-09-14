@@ -282,6 +282,7 @@ export interface AgentProviderView {
   kind: 'openai-compatible';
   displayName: string;
   baseUrl: string;
+  protocol: 'chat-completions' | 'responses';
   hasCredential: boolean;
   credentialRevision: number;
   models: ProviderModel[];

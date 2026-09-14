@@ -1,3 +1,5 @@
+export type OpenAiCompatibleProtocol = 'chat-completions' | 'responses';
+
 export interface ProviderModelConfig {
   id: string;
   contextWindow: number;
@@ -13,6 +15,7 @@ export interface ProviderView {
   kind: 'openai-compatible';
   displayName: string;
   baseUrl: string;
+  protocol: OpenAiCompatibleProtocol;
   hasCredential: boolean;
   credentialRevision: number;
   models: ProviderModelConfig[];
@@ -27,6 +30,7 @@ export interface ProviderInput {
   kind: 'openai-compatible';
   displayName: string;
   baseUrl: string;
+  protocol: OpenAiCompatibleProtocol;
   credential?: string;
   clearCredential?: boolean;
   models: ProviderModelConfig[];
@@ -59,12 +63,20 @@ export interface ModelToolSchema {
   inputSchema: unknown;
 }
 
+export interface ModelCacheHint {
+  scopeKey: string;
+  affinityKey?: string;
+}
+
 export interface ModelRequest {
   userId: number;
   providerId: string;
   modelId: string;
+  instructions?: string[];
   messages: ModelMessage[];
   tools?: ModelToolSchema[];
+  toolMode?: 'auto' | 'none';
+  cache?: ModelCacheHint;
   maxOutputTokens: number;
 }
 

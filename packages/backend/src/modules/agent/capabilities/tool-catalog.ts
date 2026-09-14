@@ -24,6 +24,16 @@ interface RegisteredTool {
 
 const sameScope = (left: Scope, right: Scope): boolean => left.userId === right.userId && left.appId === right.appId;
 
+const canonicalJson = (value: JsonValue): JsonValue => {
+  if (Array.isArray(value)) return value.map((item) => canonicalJson(item));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, canonicalJson(item)]),
+  ) as JsonValue;
+};
+
 export class ToolCatalog {
   private readonly tools = new Map<string, RegisteredTool>();
 
@@ -67,7 +77,7 @@ export class ToolCatalog {
       .slice(0, max)
       .map((descriptor) => ({
         ...descriptor,
-        inputSchema: JSON.parse(JSON.stringify(descriptor.inputSchema)) as JsonValue,
+        inputSchema: canonicalJson(descriptor.inputSchema),
       }));
   }
 

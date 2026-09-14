@@ -5,6 +5,7 @@ import type {
   ProviderUpdateRecord,
   ProviderView,
 } from '../../../modules/agent/ai/provider.repository.port';
+import type { OpenAiCompatibleProtocol } from '../../../modules/agent/ai/model.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../../shared/security/crypto.port';
 
@@ -29,12 +30,16 @@ const columns = `
 `;
 
 const mapRow = (row: ProviderRow): ProviderView => {
-  const endpointPolicy = JSON.parse(row.endpoint_policy_json) as { privateHostExceptions?: string[] };
+  const endpointPolicy = JSON.parse(row.endpoint_policy_json) as {
+    privateHostExceptions?: string[];
+    protocol?: OpenAiCompatibleProtocol;
+  };
   return {
     id: row.id,
     kind: row.kind,
     displayName: row.display_name,
     baseUrl: row.base_url,
+    protocol: endpointPolicy.protocol === 'responses' ? 'responses' : 'chat-completions',
     hasCredential: Boolean(row.protected_credential),
     credentialRevision: row.credential_revision,
     models: JSON.parse(row.models_json) as ProviderModelConfig[],
@@ -88,7 +93,7 @@ export class SqliteProviderRepository implements ProviderRepositoryPort {
         record.baseUrl,
         protectedCredential,
         JSON.stringify(record.models),
-        JSON.stringify({ privateHostExceptions: record.privateHostExceptions }),
+        JSON.stringify({ protocol: record.protocol, privateHostExceptions: record.privateHostExceptions }),
         record.enabled ? 1 : 0,
         record.createdAt,
         record.updatedAt,
@@ -115,7 +120,7 @@ export class SqliteProviderRepository implements ProviderRepositoryPort {
       record.displayName,
       record.baseUrl,
       JSON.stringify(record.models),
-      JSON.stringify({ privateHostExceptions: record.privateHostExceptions }),
+      JSON.stringify({ protocol: record.protocol, privateHostExceptions: record.privateHostExceptions }),
       record.enabled ? 1 : 0,
       record.updatedAt,
     ];

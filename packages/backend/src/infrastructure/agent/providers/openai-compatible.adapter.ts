@@ -56,12 +56,32 @@ interface OpenAiChunk {
   };
 }
 
+interface OpenAiResponsesEvent {
+  type?: string;
+  delta?: string;
+  output_index?: number;
+  item?: {
+    type?: string;
+    call_id?: string;
+    name?: string;
+  };
+  response?: {
+    status?: string;
+    usage?: {
+      input_tokens?: number;
+      output_tokens?: number;
+      input_tokens_details?: { cached_tokens?: number };
+    };
+  };
+}
+
 const providerUrl = (baseUrl: string, path: string): string => {
   const base = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
   return new URL(path, base).toString();
 };
 
 const chatCompletionsUrl = (baseUrl: string): string => providerUrl(baseUrl, 'chat/completions');
+const responsesUrl = (baseUrl: string): string => providerUrl(baseUrl, 'responses');
 
 const usageFromChunk = (chunk: OpenAiChunk): TokenUsage | null => {
   if (!chunk.usage) return null;
@@ -70,6 +90,66 @@ const usageFromChunk = (chunk: OpenAiChunk): TokenUsage | null => {
     outputTokens: Math.max(0, Math.trunc(chunk.usage.completion_tokens ?? 0)),
     cachedInputTokens: Math.max(0, Math.trunc(chunk.usage.prompt_tokens_details?.cached_tokens ?? 0)),
   };
+};
+
+const usageFromResponsesEvent = (event: OpenAiResponsesEvent): TokenUsage | null => {
+  const usage = event.response?.usage;
+  if (!usage) return null;
+  return {
+    inputTokens: Math.max(0, Math.trunc(usage.input_tokens ?? 0)),
+    outputTokens: Math.max(0, Math.trunc(usage.output_tokens ?? 0)),
+    cachedInputTokens: Math.max(0, Math.trunc(usage.input_tokens_details?.cached_tokens ?? 0)),
+  };
+};
+
+const modelInstructions = (request: ModelRequest): string[] => request.instructions ?? [];
+
+const chatMessages = (request: ModelRequest): unknown[] => [
+  ...modelInstructions(request).map((content) => ({ role: 'system', content })),
+  ...request.messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
+    ...(message.toolCalls?.length
+      ? {
+          tool_calls: message.toolCalls.map((toolCall) => ({
+            id: toolCall.id,
+            type: 'function',
+            function: { name: toolCall.name, arguments: toolCall.argumentsJson },
+          })),
+        }
+      : {}),
+  })),
+];
+
+const responsesInput = (request: ModelRequest): unknown[] => {
+  const input: unknown[] = [];
+  for (const message of request.messages) {
+    if (message.role === 'tool') {
+      if (!message.toolCallId) throw new Error('MODEL_TOOL_RESULT_INVALID');
+      input.push({ type: 'function_call_output', call_id: message.toolCallId, output: message.content });
+      continue;
+    }
+
+    const role = message.role === 'system' ? 'developer' : message.role;
+    if (message.content) {
+      input.push({
+        type: 'message',
+        role,
+        content: [{ type: role === 'assistant' ? 'output_text' : 'input_text', text: message.content }],
+      });
+    }
+
+    for (const toolCall of message.toolCalls ?? []) {
+      input.push({
+        type: 'function_call',
+        call_id: toolCall.id,
+        name: toolCall.name,
+        arguments: toolCall.argumentsJson,
+      });
+    }
+  }
+  return input;
 };
 
 export class OpenAiCompatibleAdapter implements LanguageModelPort {
@@ -138,26 +218,24 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
       throw new Error('MODEL_OUTPUT_LIMIT_EXCEEDED');
     }
 
+    if (provider.protocol === 'responses') {
+      yield* this.streamResponsesInstructions(
+        request,
+        provider.baseUrl,
+        provider.privateHostExceptions,
+        provider.credentialRevision,
+        signal,
+      );
+      return;
+    }
+
     const endpoint = await this.outboundPolicy.resolve(
       chatCompletionsUrl(provider.baseUrl),
       provider.privateHostExceptions,
     );
     const payload = JSON.stringify({
       model: request.modelId,
-      messages: request.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-        ...(message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
-        ...(message.toolCalls?.length
-          ? {
-              tool_calls: message.toolCalls.map((toolCall) => ({
-                id: toolCall.id,
-                type: 'function',
-                function: { name: toolCall.name, arguments: toolCall.argumentsJson },
-              })),
-            }
-          : {}),
-      })),
+      messages: chatMessages(request),
       stream: true,
       stream_options: { include_usage: true },
       max_tokens: request.maxOutputTokens,
@@ -171,6 +249,7 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
                 parameters: tool.inputSchema,
               },
             })),
+            tool_choice: request.toolMode === 'none' ? 'none' : 'auto',
             parallel_tool_calls: false,
           }
         : {}),
@@ -180,7 +259,7 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
       request.userId,
       provider.id,
       provider.credentialRevision,
-      (credential) => this.openStream(endpoint, payload, credential, signal),
+      (credential) => this.openStream(endpoint, payload, credential, signal, request.cache?.affinityKey),
     );
 
     const toolArgumentBytes = new Map<number, number>();
@@ -253,6 +332,114 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
     if (!completed) throw new Error('PROVIDER_STREAM_TRUNCATED');
   }
 
+  private async *streamResponsesInstructions(
+    request: ModelRequest,
+    baseUrl: string,
+    privateHostExceptions: readonly string[],
+    credentialRevision: number,
+    signal: AbortSignal,
+  ): AsyncIterable<ModelEvent> {
+    const endpoint = await this.outboundPolicy.resolve(responsesUrl(baseUrl), privateHostExceptions);
+    const instructions = modelInstructions(request).join('\n\n');
+    const input = responsesInput(request);
+    const payload = JSON.stringify({
+      model: request.modelId,
+      ...(instructions ? { instructions } : {}),
+      input,
+      stream: true,
+      store: false,
+      max_output_tokens: request.maxOutputTokens,
+      ...(request.tools?.length
+        ? {
+            tools: request.tools.map((tool) => ({
+              type: 'function',
+              name: tool.name,
+              description: tool.description,
+              parameters: tool.inputSchema,
+            })),
+            tool_choice: request.toolMode === 'none' ? 'none' : 'auto',
+            parallel_tool_calls: false,
+          }
+        : {}),
+    });
+
+    const response = await this.secrets.withCredential(
+      request.userId,
+      request.providerId,
+      credentialRevision,
+      (credential) => this.openStream(endpoint, payload, credential, signal, request.cache?.affinityKey),
+    );
+
+    const events: EventSourceMessage[] = [];
+    const parser = createParser({
+      maxBufferSize: MAX_SSE_FRAME_BYTES,
+      onEvent: (event) => events.push(event),
+      onError: (error) => {
+        throw error;
+      },
+    });
+    const toolArgumentBytes = new Map<number, number>();
+    let sawToolCall = false;
+    let completed = false;
+    response.setEncoding('utf8');
+    response.socket?.setTimeout(IDLE_TIMEOUT_MS, () => response.destroy(new Error('PROVIDER_IDLE_TIMEOUT')));
+
+    for await (const rawChunk of response) {
+      if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+      try {
+        parser.feed(String(rawChunk));
+      } catch {
+        throw new Error('PROVIDER_STREAM_INVALID');
+      }
+
+      while (events.length > 0) {
+        const event = events.shift()!;
+        const data = event.data;
+        if (Buffer.byteLength(data, 'utf8') > MAX_SSE_FRAME_BYTES) throw new Error('PROVIDER_FRAME_TOO_LARGE');
+        if (!data || data === '[DONE]') continue;
+
+        let chunk: OpenAiResponsesEvent;
+        try {
+          chunk = JSON.parse(data) as OpenAiResponsesEvent;
+        } catch {
+          throw new Error('PROVIDER_STREAM_INVALID');
+        }
+
+        if (chunk.type === 'response.output_text.delta' && typeof chunk.delta === 'string' && chunk.delta) {
+          yield { type: 'message.delta', text: chunk.delta };
+        } else if (chunk.type === 'response.output_item.added' && chunk.item?.type === 'function_call') {
+          const index = Math.max(0, Math.trunc(chunk.output_index ?? 0));
+          sawToolCall = true;
+          yield {
+            type: 'tool.delta',
+            index,
+            ...(chunk.item.call_id ? { id: chunk.item.call_id } : {}),
+            ...(chunk.item.name ? { name: chunk.item.name } : {}),
+          };
+        } else if (chunk.type === 'response.function_call_arguments.delta' && typeof chunk.delta === 'string') {
+          const index = Math.max(0, Math.trunc(chunk.output_index ?? 0));
+          const nextBytes = (toolArgumentBytes.get(index) ?? 0) + Buffer.byteLength(chunk.delta, 'utf8');
+          if (nextBytes > MAX_TOOL_ARGUMENT_BYTES) throw new Error('MODEL_TOOL_ARGUMENTS_TOO_LARGE');
+          toolArgumentBytes.set(index, nextBytes);
+          yield { type: 'tool.delta', index, argumentsDelta: chunk.delta };
+        }
+
+        const usage = usageFromResponsesEvent(chunk);
+        if (usage) yield { type: 'usage', usage };
+        if (chunk.type === 'response.completed') {
+          completed = true;
+          yield { type: 'completed', finishReason: sawToolCall ? 'tool_calls' : 'stop' };
+          return;
+        }
+        if (chunk.type === 'response.failed' || chunk.type === 'response.incomplete') {
+          throw new Error('PROVIDER_RESPONSE_INCOMPLETE');
+        }
+      }
+    }
+
+    if (!completed) throw new Error('PROVIDER_STREAM_TRUNCATED');
+  }
+
   private openJsonGet(
     endpoint: ResolvedEndpoint,
     credential: string | null,
@@ -315,6 +502,7 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
     body: string,
     credential: string | null,
     signal: AbortSignal,
+    affinityKey?: string,
   ): Promise<IncomingMessage> {
     const address = endpoint.addresses[0];
     if (!address) return Promise.reject(new Error('PROVIDER_DNS_RESOLUTION_FAILED'));
@@ -326,7 +514,7 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
       'Content-Length': Buffer.byteLength(body, 'utf8'),
     };
     if (credential) headers.Authorization = `Bearer ${credential}`;
-
+    if (affinityKey) headers['session-id'] = affinityKey;
     const options: RequestOptions = {
       protocol: endpoint.protocol,
       hostname: address,

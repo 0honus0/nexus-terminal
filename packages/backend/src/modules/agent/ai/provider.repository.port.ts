@@ -1,4 +1,4 @@
-import type { ProviderModelConfig, ProviderView } from './model.types';
+import type { OpenAiCompatibleProtocol, ProviderModelConfig, ProviderView } from './model.types';
 
 export interface ProviderCreateRecord {
   id: string;
@@ -6,6 +6,7 @@ export interface ProviderCreateRecord {
   kind: 'openai-compatible';
   displayName: string;
   baseUrl: string;
+  protocol: OpenAiCompatibleProtocol;
   models: ProviderModelConfig[];
   privateHostExceptions: string[];
   enabled: boolean;
@@ -17,6 +18,7 @@ export interface ProviderCreateRecord {
 export interface ProviderUpdateRecord {
   displayName: string;
   baseUrl: string;
+  protocol: OpenAiCompatibleProtocol;
   models: ProviderModelConfig[];
   privateHostExceptions: string[];
   enabled: boolean;

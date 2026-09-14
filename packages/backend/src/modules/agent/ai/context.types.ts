@@ -38,7 +38,15 @@ export interface ContextSourceRange {
   toSequence?: number;
 }
 
+export interface ContextMessageDiagnostic {
+  index: number;
+  role: ModelMessage['role'];
+  hash: string;
+  estimatedTokens: number;
+}
+
 export interface ContextPlan {
+  instructions: string[];
   messages: ModelMessage[];
   toolSchemas: ModelToolSchema[];
   estimatedInputTokens: number;
@@ -46,4 +54,8 @@ export interface ContextPlan {
   droppedSections: string[];
   sourceRanges: ContextSourceRange[];
   contextEpoch: string;
+  stablePrefixHash: string;
+  toolSchemaHash: string;
+  skillMetadataHash: string;
+  messageDiagnostics: ContextMessageDiagnostic[];
 }

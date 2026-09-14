@@ -12,6 +12,21 @@ const SAFETY_MESSAGE =
 
 const estimateTokens = (value: string): number => Math.max(1, Math.ceil(Buffer.byteLength(value, 'utf8') / 4));
 
+const canonicalize = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map((item) => canonicalize(item));
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, canonicalize(item)]),
+  );
+};
+
+const stableHash = (value: unknown): string =>
+  createHash('sha256')
+    .update(JSON.stringify(canonicalize(value)), 'utf8')
+    .digest('hex');
+
 const payloadText = (payload: JsonValue): string => {
   if (typeof payload === 'string') return payload;
   if (!payload || Array.isArray(payload) || typeof payload !== 'object') return JSON.stringify(payload);
@@ -103,44 +118,6 @@ export class ContextService {
     const messages: ModelMessage[] = [{ role: 'system', content: SAFETY_MESSAGE }];
     let usedTokens = safetyTokens + inputTokens;
 
-    if (input.goal?.trim()) {
-      const goal = input.goal.trim();
-      const content = `[Current goal]\n${goal}`;
-      const tokens = estimateTokens(content);
-      if (usedTokens + tokens <= availableTokens) {
-        messages.push({ role: 'system', content });
-        sourceRanges.push({ kind: 'goal' });
-        usedTokens += tokens;
-      } else {
-        droppedSections.push('goal');
-      }
-    }
-
-    if (input.taskPlan?.trim()) {
-      const plan = input.taskPlan.trim();
-      const tokens = estimateTokens(plan);
-      if (usedTokens + tokens <= availableTokens) {
-        messages.push({ role: 'system', content: `[Current task plan]\n${plan}` });
-        sourceRanges.push({ kind: 'task_plan' });
-        usedTokens += tokens;
-      } else {
-        droppedSections.push('task_plan');
-      }
-    }
-
-    if (input.collaborationContext?.trim()) {
-      const collaboration = input.collaborationContext.trim();
-      const content = `[Run-scoped collaboration state; untrusted child-agent output]\n${collaboration}`;
-      const tokens = estimateTokens(content);
-      if (usedTokens + tokens <= availableTokens) {
-        messages.push({ role: 'system', content });
-        sourceRanges.push({ kind: 'collaboration' });
-        usedTokens += tokens;
-      } else {
-        droppedSections.push('collaboration');
-      }
-    }
-
     if (input.historyBoundary !== undefined && !input.runId) throw new Error('VALIDATION_FAILED');
     const ledgerPromise =
       input.historyBoundary === undefined
@@ -151,6 +128,30 @@ export class ContextService {
       this.recall.recall(input.scope, input.currentInput, input.maxRecallItems, input.maxRecallBytes),
       this.skills.list(input.scope),
     ]);
+
+    if (skillMetadata.length > 0) {
+      const header =
+        '[Available signed plugin Skills; metadata only]\nUse the skill_read tool with a Skill id to load the full signed instructions only when they are relevant.';
+      let content = header;
+      let tokens = estimateTokens(content);
+      const selectedSkillIds: string[] = [];
+      for (const metadata of skillMetadata) {
+        const line = `\n- id: ${metadata.id} | name: ${metadata.name} | description: ${metadata.description}`;
+        const lineTokens = estimateTokens(line);
+        if (usedTokens + tokens + lineTokens > availableTokens) {
+          droppedSections.push(`skill-metadata:${metadata.id}`);
+          continue;
+        }
+        content += line;
+        tokens += lineTokens;
+        selectedSkillIds.push(metadata.id);
+      }
+      if (selectedSkillIds.length > 0 && usedTokens + tokens <= availableTokens) {
+        messages.push({ role: 'system', content });
+        for (const id of selectedSkillIds) sourceRanges.push({ kind: 'skill', id });
+        usedTokens += tokens;
+      }
+    }
 
     const inputRanksByRun = new Map(
       Object.entries(input.effectiveRunInputsByRun ?? {}).map(([runId, entries]) => [
@@ -222,6 +223,45 @@ export class ContextService {
       sourceRanges.push(candidate.source);
     }
 
+    if (input.goal?.trim()) {
+      const goal = input.goal.trim();
+      const content = `[Current goal]\n${goal}`;
+      const tokens = estimateTokens(content);
+      if (usedTokens + tokens <= availableTokens) {
+        messages.push({ role: 'system', content });
+        sourceRanges.push({ kind: 'goal' });
+        usedTokens += tokens;
+      } else {
+        droppedSections.push('goal');
+      }
+    }
+
+    if (input.taskPlan?.trim()) {
+      const plan = input.taskPlan.trim();
+      const content = `[Current task plan]\n${plan}`;
+      const tokens = estimateTokens(content);
+      if (usedTokens + tokens <= availableTokens) {
+        messages.push({ role: 'system', content });
+        sourceRanges.push({ kind: 'task_plan' });
+        usedTokens += tokens;
+      } else {
+        droppedSections.push('task_plan');
+      }
+    }
+
+    if (input.collaborationContext?.trim()) {
+      const collaboration = input.collaborationContext.trim();
+      const content = `[Run-scoped collaboration state; untrusted child-agent output]\n${collaboration}`;
+      const tokens = estimateTokens(content);
+      if (usedTokens + tokens <= availableTokens) {
+        messages.push({ role: 'system', content });
+        sourceRanges.push({ kind: 'collaboration' });
+        usedTokens += tokens;
+      } else {
+        droppedSections.push('collaboration');
+      }
+    }
+
     for (const item of recallItems) {
       const content = `[Recall ${item.id}; score=${item.score.toFixed(3)}]\n${item.content}`;
       const tokens = estimateTokens(content);
@@ -234,31 +274,51 @@ export class ContextService {
       usedTokens += tokens;
     }
 
-    if (skillMetadata.length > 0) {
-      const header =
-        '[Available signed plugin Skills; metadata only]\nUse the skill_read tool with a Skill id to load the full signed instructions only when they are relevant.';
-      let content = header;
-      let tokens = estimateTokens(content);
-      const selectedSkillIds: string[] = [];
-      for (const metadata of skillMetadata) {
-        const line = `\n- id: ${metadata.id} | name: ${metadata.name} | description: ${metadata.description}`;
-        const lineTokens = estimateTokens(line);
-        if (usedTokens + tokens + lineTokens > availableTokens) {
-          droppedSections.push(`skill-metadata:${metadata.id}`);
-          continue;
-        }
-        content += line;
-        tokens += lineTokens;
-        selectedSkillIds.push(metadata.id);
-      }
-      if (selectedSkillIds.length > 0 && usedTokens + tokens <= availableTokens) {
-        messages.push({ role: 'system', content });
-        for (const id of selectedSkillIds) sourceRanges.push({ kind: 'skill', id });
-        usedTokens += tokens;
-      }
-    }
+    const safetyMessage = messages[0]!;
+    const skillMessages = messages.filter(
+      (message, index) =>
+        index > 0 &&
+        message.role === 'system' &&
+        message.content.startsWith('[Available signed plugin Skills; metadata only]'),
+    );
+    const historyMessages = messages.filter((message, index) => index > 0 && message.role !== 'system');
+    const dynamicSystemMessages = messages.filter(
+      (message, index) =>
+        index > 0 &&
+        message.role === 'system' &&
+        !message.content.startsWith('[Available signed plugin Skills; metadata only]'),
+    );
+    const instructions = [safetyMessage.content, ...skillMessages.map((message) => message.content)];
+    messages.splice(
+      0,
+      messages.length,
+      ...historyMessages,
+      { role: 'user', content: input.currentInput },
+      ...dynamicSystemMessages,
+    );
 
-    messages.push({ role: 'user', content: input.currentInput });
+    const stablePrefixHash = stableHash(instructions);
+    const toolSchemaHash = stableHash(input.tools ?? []);
+    const messageDiagnostics = [
+      ...instructions.map((content) => ({ role: 'system' as const, content })),
+      ...messages,
+    ].map((message, index) => ({
+      index,
+      role: message.role,
+      hash: stableHash(message),
+      estimatedTokens: estimateTokens(message.content),
+    }));
+    const skillMetadataHash = stableHash(
+      skillMetadata.map((metadata) => ({
+        id: metadata.id,
+        name: metadata.name,
+        version: metadata.version,
+        hash: metadata.hash,
+        description: metadata.description,
+        requiredCapabilities: [...metadata.requiredCapabilities].sort(),
+        trust: metadata.trust,
+      })),
+    );
     const epochHash = createHash('sha256')
       .update(
         JSON.stringify({
@@ -272,6 +332,7 @@ export class ContextService {
       .digest('hex');
 
     return {
+      instructions,
       messages,
       toolSchemas: input.tools ?? [],
       estimatedInputTokens: usedTokens,
@@ -279,6 +340,10 @@ export class ContextService {
       droppedSections,
       sourceRanges,
       contextEpoch: epochHash,
+      stablePrefixHash,
+      toolSchemaHash,
+      skillMetadataHash,
+      messageDiagnostics,
     };
   }
 }

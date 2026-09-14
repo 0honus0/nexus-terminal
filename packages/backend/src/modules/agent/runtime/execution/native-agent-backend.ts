@@ -116,7 +116,8 @@ export class NativeAgentBackend implements AgentBackendPort {
       }
 
       const remainingSteps = snapshot.budget.maxRunSteps - snapshot.usage.steps;
-      const offeredTools = remainingSteps >= 2 ? this.toolCalls.schemas(scope) : [];
+      const offeredTools = this.toolCalls.schemas(scope);
+      const toolMode: 'auto' | 'none' = remainingSteps >= 2 ? 'auto' : 'none';
       const projectionRunIds = [
         snapshot.id,
         ...Object.keys(snapshot.definition.contextBoundary?.runThrough ?? {}),
@@ -198,7 +199,7 @@ export class NativeAgentBackend implements AgentBackendPort {
 
       try {
         while (true) {
-          const attempt = yield* this.modelSteps.runAttempt(snapshot, contextPlan, signal);
+          const attempt = yield* this.modelSteps.runAttempt(snapshot, contextPlan, signal, toolMode);
           text = attempt.text;
           usage = attempt.usage;
           finishReason = attempt.finishReason;
@@ -334,7 +335,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           return;
         }
 
-        if (offeredTools.length === 0) throw new Error('MODEL_TOOL_CALL_UNEXPECTED');
+        if (toolMode === 'none') throw new Error('MODEL_TOOL_CALL_UNEXPECTED');
         if (modelToolCalls.size !== 1) throw new Error('MODEL_PARALLEL_TOOL_CALLS_UNSUPPORTED');
         const call = [...modelToolCalls.entries()].sort(([left], [right]) => left - right)[0]?.[1];
         if (!call?.id || !call.name) throw new Error('MODEL_TOOL_CALL_INVALID');

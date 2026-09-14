@@ -400,7 +400,8 @@ export class SubagentParticipantExecutor {
       await this.failBeforeModel(scope, work, delegation, ownerEpoch, preparedContext.code);
       return;
     }
-    const { runtime, inbox, messages, offeredTools, estimatedInputTokens, maxOutputTokens } = preparedContext.plan;
+    const { runtime, inbox, instructions, messages, offeredTools, toolMode, estimatedInputTokens, maxOutputTokens } =
+      preparedContext.plan;
     const begun = await this.stateCommit.beginSubagentModelStep({
       scope,
       runId: work.runId,
@@ -427,8 +428,13 @@ export class SubagentParticipantExecutor {
             userId: scope.userId,
             providerId: delegation.modelRef.providerId,
             modelId: delegation.modelRef.modelId,
+            instructions,
             messages,
-            ...(offeredTools.length > 0 ? { tools: offeredTools } : {}),
+            ...(offeredTools.length > 0 ? { tools: offeredTools, toolMode } : {}),
+            cache: {
+              scopeKey: `nexus:subagent:${work.runId}:${delegation.id}`,
+              affinityKey: `nexus:thread:${run.threadId}`,
+            },
             maxOutputTokens,
           },
           signal,
@@ -474,9 +480,12 @@ export class SubagentParticipantExecutor {
       failureCode = 'DELEGATION_BUDGET_EXCEEDED';
     }
     if (outcome === 'completed' && toolCalls.size > 0) {
-      if (offeredTools.length === 0 || toolCalls.size !== 1) {
+      if (toolMode === 'none' || offeredTools.length === 0 || toolCalls.size !== 1) {
         outcome = 'failed';
-        failureCode = offeredTools.length === 0 ? 'SUBAGENT_TOOL_NOT_ALLOWED' : 'MODEL_PARALLEL_TOOL_CALLS_UNSUPPORTED';
+        failureCode =
+          toolMode === 'none' || offeredTools.length === 0
+            ? 'SUBAGENT_TOOL_NOT_ALLOWED'
+            : 'MODEL_PARALLEL_TOOL_CALLS_UNSUPPORTED';
       } else {
         const call = [...toolCalls.entries()].sort(([left], [right]) => left - right)[0]?.[1];
         if (!call?.id || !call.name || !offeredTools.some((tool) => tool.name === call.name)) {

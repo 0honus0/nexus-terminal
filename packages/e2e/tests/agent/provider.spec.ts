@@ -8,6 +8,7 @@ type ProviderView = {
   kind: 'openai-compatible';
   displayName: string;
   baseUrl: string;
+  protocol: 'chat-completions' | 'responses';
   hasCredential: boolean;
   credentialRevision: number;
   models: Array<{ id: string; contextWindow: number; maxOutputTokens: number; supportsTools: boolean }>;
@@ -70,6 +71,7 @@ test('Provider configuration protects credentials and enforces outbound policy',
       kind: 'openai-compatible',
       displayName: 'E2E OpenAI Compatible',
       baseUrl: providerBase,
+      protocol: 'chat-completions',
       hasCredential: true,
       credentialRevision: 1,
       privateHostExceptions: [providerException],
@@ -118,6 +120,31 @@ test('Provider configuration protects credentials and enforces outbound policy',
     expect(renamed.ok(), await renamed.text()).toBeTruthy();
     provider = ((await renamed.json()) as Envelope<ProviderView>).data;
     expect(provider).toMatchObject({ displayName: 'E2E Provider Renamed', hasCredential: true, credentialRevision: 1 });
+
+    const switched = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+      headers,
+      data: { protocol: 'responses', expectedVersion: provider.version },
+    });
+    expect(switched.ok(), await switched.text()).toBeTruthy();
+    provider = ((await switched.json()) as Envelope<ProviderView>).data;
+    expect(provider.protocol).toBe('responses');
+
+    const responsesTest = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
+      headers,
+      data: { modelId: 'e2e-model' },
+    });
+    expect(responsesTest.ok(), await responsesTest.text()).toBeTruthy();
+    await expect(responsesTest.json()).resolves.toMatchObject({
+      data: { ok: true, usage: { inputTokens: 5, outputTokens: 1, cachedInputTokens: 2 } },
+    });
+
+    const switchedBack = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+      headers,
+      data: { protocol: 'chat-completions', expectedVersion: provider.version },
+    });
+    expect(switchedBack.ok(), await switchedBack.text()).toBeTruthy();
+    provider = ((await switchedBack.json()) as Envelope<ProviderView>).data;
+    expect(provider.protocol).toBe('chat-completions');
 
     const badCredential = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
       headers,

@@ -12,6 +12,7 @@
   const emit = defineEmits<{
     create: [input: Record<string, unknown>];
     toggle: [provider: AgentProviderView, enabled: boolean];
+    protocol: [provider: AgentProviderView, protocol: AgentProviderView['protocol']];
     test: [provider: AgentProviderView, modelId: string];
     discover: [provider: AgentProviderView];
     addModel: [provider: AgentProviderView, model: AgentProviderView['models'][number]];
@@ -67,6 +68,7 @@
   const form = reactive({
     displayName: '',
     baseUrl: 'https://api.openai.com/v1',
+    protocol: 'chat-completions' as AgentProviderView['protocol'],
     credential: '',
     modelId: '',
     contextWindow: 128000,
@@ -101,6 +103,7 @@
       kind: 'openai-compatible',
       displayName: form.displayName,
       baseUrl: form.baseUrl,
+      protocol: form.protocol,
       ...(form.credential ? { credential: form.credential } : {}),
       models: [
         {
@@ -122,6 +125,9 @@
     const option = modelOptions.value.find((candidate) => candidate.key === value);
     if (option) emit('defaultModel', option.provider.id, option.model.id);
   };
+
+  const protocolFromEvent = (event: Event): AgentProviderView['protocol'] =>
+    (event.target as HTMLSelectElement).value === 'responses' ? 'responses' : 'chat-completions';
 </script>
 
 <template>
@@ -177,6 +183,13 @@
       <label>
         <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.providers.baseUrl') }}</span>
         <input v-model="form.baseUrl" class="w-full rounded-md border border-border bg-card px-3 py-2" />
+      </label>
+      <label>
+        <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.providers.protocol') }}</span>
+        <select v-model="form.protocol" class="w-full rounded-md border border-border bg-card px-3 py-2">
+          <option value="chat-completions">{{ $t('agent.settings.providers.protocolChat') }}</option>
+          <option value="responses">{{ $t('agent.settings.providers.protocolResponses') }}</option>
+        </select>
       </label>
       <label>
         <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.providers.credential') }}</span>
@@ -256,6 +269,13 @@
               <span class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary">
                 {{ $t('agent.settings.providers.modelCount', { count: provider.models.length }) }}
               </span>
+              <span class="rounded-full bg-header px-2 py-0.5 text-[11px] text-text-secondary">
+                {{
+                  provider.protocol === 'responses'
+                    ? $t('agent.settings.providers.protocolResponses')
+                    : $t('agent.settings.providers.protocolChat')
+                }}
+              </span>
             </div>
             <p class="mt-1 truncate text-xs text-text-secondary">{{ provider.baseUrl }}</p>
             <p class="mt-1 text-xs text-text-secondary">
@@ -266,7 +286,17 @@
               }}
             </p>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <select
+              :value="provider.protocol"
+              class="h-8 rounded-md border border-border/70 bg-card px-2 text-xs"
+              :aria-label="$t('agent.settings.providers.protocol')"
+              :disabled="busy"
+              @change="emit('protocol', provider, protocolFromEvent($event))"
+            >
+              <option value="chat-completions">{{ $t('agent.settings.providers.protocolChat') }}</option>
+              <option value="responses">{{ $t('agent.settings.providers.protocolResponses') }}</option>
+            </select>
             <button
               type="button"
               class="rounded-md border border-border/70 px-3 py-1.5 text-sm hover:bg-header disabled:opacity-50"

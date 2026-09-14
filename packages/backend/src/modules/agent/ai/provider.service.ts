@@ -69,6 +69,7 @@ const validateProviderInput = (raw: unknown): ProviderInput => {
     'kind',
     'displayName',
     'baseUrl',
+    'protocol',
     'credential',
     'clearCredential',
     'models',
@@ -79,6 +80,8 @@ const validateProviderInput = (raw: unknown): ProviderInput => {
   if (raw.kind !== 'openai-compatible' || !nonEmptyString(raw.displayName) || !nonEmptyString(raw.baseUrl)) {
     throw new Error('VALIDATION_FAILED');
   }
+  const protocol = raw.protocol ?? 'chat-completions';
+  if (protocol !== 'chat-completions' && protocol !== 'responses') throw new Error('VALIDATION_FAILED');
   if (raw.credential !== undefined && (typeof raw.credential !== 'string' || raw.credential.length === 0)) {
     throw new Error('VALIDATION_FAILED');
   }
@@ -109,6 +112,7 @@ const validateProviderInput = (raw: unknown): ProviderInput => {
     kind: 'openai-compatible',
     displayName: raw.displayName.trim(),
     baseUrl,
+    protocol,
     ...(raw.credential === undefined ? {} : { credential: raw.credential }),
     ...(raw.clearCredential === undefined ? {} : { clearCredential: raw.clearCredential }),
     models,
@@ -167,6 +171,7 @@ export class ProviderService {
       kind: input.kind,
       displayName: input.displayName,
       baseUrl: input.baseUrl,
+      protocol: input.protocol,
       models: input.models,
       privateHostExceptions: input.privateHostExceptions,
       enabled: input.enabled,
@@ -184,6 +189,7 @@ export class ProviderService {
     const updated = await this.repository.update(userId, providerId, expectedVersion, {
       displayName: input.displayName,
       baseUrl: input.baseUrl,
+      protocol: input.protocol,
       models: input.models,
       privateHostExceptions: input.privateHostExceptions,
       enabled: input.enabled,

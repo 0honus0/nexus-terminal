@@ -10,6 +10,7 @@ import type { BackendSignal } from './agent-backend.port';
 import { ModelCallLimiter } from './model-call-limiter';
 import { waitForRetry } from './execution-errors';
 import type { RunInputProjection, RunSnapshot } from '../runs/run.types';
+import { logger } from '../../../../shared/logging/logger';
 
 const MAX_ASSISTANT_BYTES = 256 * 1024;
 
@@ -114,6 +115,7 @@ export class ModelStepRunner {
     snapshot: RunSnapshot,
     contextPlan: ContextPlan,
     signal: AbortSignal,
+    toolMode: 'auto' | 'none' = 'auto',
   ): AsyncGenerator<BackendSignal, ModelAttemptResult> {
     const toolCalls = new Map<number, ModelToolCall>();
     let text = '';
@@ -128,8 +130,14 @@ export class ModelStepRunner {
             userId: snapshot.userId,
             providerId: snapshot.definition.model.providerId,
             modelId: snapshot.definition.model.modelId,
+            instructions: contextPlan.instructions,
             messages: contextPlan.messages,
             tools: contextPlan.toolSchemas,
+            toolMode,
+            cache: {
+              scopeKey: `nexus:thread:${snapshot.threadId}`,
+              affinityKey: `nexus:thread:${snapshot.threadId}`,
+            },
             maxOutputTokens: snapshot.budget.maxOutputTokens,
           },
           signal,
@@ -169,6 +177,25 @@ export class ModelStepRunner {
       } finally {
         releaseModelCall();
       }
+      logger.debug(
+        {
+          runId: snapshot.id,
+          threadId: snapshot.threadId,
+          contextEpoch: contextPlan.contextEpoch,
+          stablePrefixHash: contextPlan.stablePrefixHash,
+          toolSchemaHash: contextPlan.toolSchemaHash,
+          skillMetadataHash: contextPlan.skillMetadataHash,
+          messageDiagnostics: contextPlan.messageDiagnostics,
+          toolMode,
+          inputTokens: usage?.inputTokens ?? null,
+          cachedInputTokens: usage?.cachedInputTokens ?? null,
+          cacheRate:
+            usage?.inputTokens && usage.cachedInputTokens !== undefined
+              ? usage.cachedInputTokens / usage.inputTokens
+              : null,
+        },
+        'Agent model cache diagnostics',
+      );
       return { text, usage, finishReason, toolCalls };
     } catch (error) {
       return { text, usage, finishReason, toolCalls, error };

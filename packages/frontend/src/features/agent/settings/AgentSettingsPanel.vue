@@ -186,6 +186,12 @@
       apps.value = await agentApi.apps();
     });
 
+  const setProviderProtocol = (provider: AgentProviderView, protocol: AgentProviderView['protocol']) =>
+    execute(async () => {
+      const updated = await agentApi.updateProvider(provider, { protocol });
+      providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
+    });
+
   const setDefaultModel = (providerId: string, modelId: string) =>
     patchSection('model', { defaultProviderId: providerId, defaultModelId: modelId });
 
@@ -344,6 +350,7 @@
               :default-model-id="settings.requestedSettings.model.defaultModelId"
               @create="createProvider"
               @toggle="toggleProvider"
+              @protocol="setProviderProtocol"
               @test="testProvider"
               @discover="discoverProviderModels"
               @add-model="addProviderModel"

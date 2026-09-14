@@ -44,6 +44,47 @@ const server = http.createServer(async (request, response) => {
     return;
   }
 
+  if (request.method === 'POST' && request.url === '/v1/responses') {
+    if (request.headers.authorization !== `Bearer ${expectedCredential}`) {
+      response.writeHead(401, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'invalid credential' } }));
+      return;
+    }
+    let body;
+    try {
+      body = await readJson(request);
+    } catch {
+      response.writeHead(400).end();
+      return;
+    }
+    if (
+      !['e2e-model', 'e2e-model-alt'].includes(body?.model) ||
+      body?.stream !== true ||
+      body?.max_output_tokens !== 16 ||
+      body?.prompt_cache_key !== undefined ||
+      !Array.isArray(body?.input)
+    ) {
+      response.writeHead(422, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'unexpected Responses test request' } }));
+      return;
+    }
+    response.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-store',
+      Connection: 'keep-alive',
+    });
+    sendSse(response, { type: 'response.output_text.delta', delta: 'OK' });
+    sendSse(response, {
+      type: 'response.completed',
+      response: {
+        status: 'completed',
+        usage: { input_tokens: 5, output_tokens: 1, input_tokens_details: { cached_tokens: 2 } },
+      },
+    });
+    response.end();
+    return;
+  }
+
   if (request.method !== 'POST' || request.url !== '/v1/chat/completions') {
     response.writeHead(404).end();
     return;
