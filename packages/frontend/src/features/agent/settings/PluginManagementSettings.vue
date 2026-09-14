@@ -291,7 +291,7 @@
 </script>
 
 <template>
-  <section class="rounded-lg border border-border bg-card p-5">
+  <section class="rounded-xl border border-border/60 bg-card p-5">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 class="text-base font-semibold">{{ $t('agent.settings.plugins.title') }}</h2>
@@ -312,6 +312,39 @@
     <p v-if="noticeText" class="mt-3 rounded-md bg-success/10 px-3 py-2 text-xs text-success">
       {{ noticeText }}
     </p>
+
+    <div class="mt-5">
+      <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.installed') }}</h3>
+      <div class="mt-2 space-y-2">
+        <div
+          v-for="installation in activeInstallations"
+          :key="installation.appId"
+          class="flex flex-wrap items-center justify-between gap-3 rounded-md bg-background p-3"
+        >
+          <div>
+            <p class="text-sm font-medium">
+              {{ installedVersion(installation.appId)?.manifest.displayName || installation.appId }}
+            </p>
+            <p class="mt-1 text-xs text-text-secondary">{{ installation.appId }} · v{{ installation.version }}</p>
+          </div>
+          <button
+            type="button"
+            class="rounded-md border border-error/40 px-3 py-1.5 text-xs text-error hover:bg-error/10 disabled:opacity-50"
+            :disabled="locked"
+            @click="uninstall(installation)"
+          >
+            {{
+              drainingUninstallVersions[installation.appId]
+                ? $t('agent.settings.plugins.continueUninstall')
+                : $t('agent.settings.plugins.uninstall')
+            }}
+          </button>
+        </div>
+        <p v-if="activeInstallations.length === 0" class="text-xs text-text-secondary">
+          {{ $t('agent.settings.plugins.noneInstalled') }}
+        </p>
+      </div>
+    </div>
 
     <div class="mt-5 rounded-md bg-background p-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
@@ -438,9 +471,9 @@
       </div>
     </div>
 
-    <div class="mt-5 grid gap-4 lg:grid-cols-2">
-      <div class="rounded-md bg-background p-4">
-        <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.publishers') }}</h3>
+    <div class="mt-5 grid gap-4">
+      <details class="rounded-xl bg-background p-4">
+        <summary class="cursor-pointer text-sm font-semibold">{{ $t('agent.settings.plugins.publishers') }}</summary>
         <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.plugins.publisherHint') }}</p>
         <div class="mt-3 space-y-2">
           <input
@@ -487,9 +520,9 @@
             {{ $t('agent.settings.plugins.noPublishers') }}
           </p>
         </div>
-      </div>
+      </details>
 
-      <div class="rounded-md bg-background p-4">
+      <div v-if="candidate" class="rounded-md bg-background p-4">
         <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.package') }}</h3>
         <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.plugins.packageHint') }}</p>
         <div v-if="candidate" class="mt-3 rounded border border-border bg-card p-3">
@@ -534,39 +567,6 @@
           </button>
         </div>
         <p v-else class="mt-3 text-xs text-text-secondary">{{ $t('agent.settings.plugins.noCandidate') }}</p>
-      </div>
-    </div>
-
-    <div class="mt-5">
-      <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.installed') }}</h3>
-      <div class="mt-2 space-y-2">
-        <div
-          v-for="installation in activeInstallations"
-          :key="installation.appId"
-          class="flex flex-wrap items-center justify-between gap-3 rounded-md bg-background p-3"
-        >
-          <div>
-            <p class="text-sm font-medium">
-              {{ installedVersion(installation.appId)?.manifest.displayName || installation.appId }}
-            </p>
-            <p class="mt-1 text-xs text-text-secondary">{{ installation.appId }} · v{{ installation.version }}</p>
-          </div>
-          <button
-            type="button"
-            class="rounded-md border border-error/40 px-3 py-1.5 text-xs text-error hover:bg-error/10 disabled:opacity-50"
-            :disabled="locked"
-            @click="uninstall(installation)"
-          >
-            {{
-              drainingUninstallVersions[installation.appId]
-                ? $t('agent.settings.plugins.continueUninstall')
-                : $t('agent.settings.plugins.uninstall')
-            }}
-          </button>
-        </div>
-        <p v-if="activeInstallations.length === 0" class="text-xs text-text-secondary">
-          {{ $t('agent.settings.plugins.noneInstalled') }}
-        </p>
       </div>
     </div>
 

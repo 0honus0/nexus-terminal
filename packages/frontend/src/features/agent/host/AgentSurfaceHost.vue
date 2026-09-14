@@ -11,6 +11,10 @@
 
   const auth = useAuthSession();
   const summary = ref<HostSummaryView | null>(null);
+  const HOST_STREAM_LOCK_NAME = 'nexus.agent.host-stream.v1';
+  const HOST_EVENT_CHANNEL_NAME = 'nexus.agent.host-events.v1';
+  const hostChannel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel(HOST_EVENT_CHANNEL_NAME);
+
   let hostAbort: AbortController | null = null;
   let generation = 0;
   let activeUserId: number | null = null;
@@ -77,39 +81,62 @@
     }
   };
 
-  const start = async (): Promise<void> => {
-    stop('restart');
-    logger.debug({ userId: activeUserId, generation }, 'Agent global surface starting');
+  const runHostStreamAsLeader = async (controller: AbortController, currentGeneration: number): Promise<void> => {
     const initial = await refresh('initial');
-    if (!initial) return;
+    if (!initial || controller.signal.aborted || currentGeneration !== generation) return;
+    logger.debug(
+      { userId: activeUserId, generation: currentGeneration, cursor: initial.eventCursor },
+      'Agent global surface event subscription starting as cross-tab leader',
+    );
+    for await (const event of agentEvents.host(initial.eventCursor, controller.signal)) {
+      if (controller.signal.aborted || currentGeneration !== generation) return;
+      logger.debug(
+        {
+          userId: activeUserId,
+          generation: currentGeneration,
+          eventType: event.type,
+          sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
+          eventId: event.id,
+        },
+        'Agent global surface host event received',
+      );
+      await refresh('host-event');
+      if (activeUserId !== null) hostChannel?.postMessage({ type: 'host.changed', userId: activeUserId });
+    }
+  };
+
+  const start = (): void => {
+    stop('restart');
     const controller = new AbortController();
     hostAbort = controller;
     const currentGeneration = ++generation;
     logger.debug(
-      { userId: activeUserId, generation: currentGeneration, cursor: initial.eventCursor },
-      'Agent global surface event subscription starting',
+      { userId: activeUserId, generation: currentGeneration },
+      'Agent global surface host coordination starting',
     );
     void (async () => {
       try {
-        for await (const event of agentEvents.host(initial.eventCursor, controller.signal)) {
-          if (controller.signal.aborted || currentGeneration !== generation) return;
-          logger.debug(
-            {
-              userId: activeUserId,
-              generation: currentGeneration,
-              eventType: event.type,
-              sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
-              eventId: event.id,
+        if (typeof navigator.locks?.request === 'function') {
+          await navigator.locks.request(
+            HOST_STREAM_LOCK_NAME,
+            { mode: 'exclusive', signal: controller.signal },
+            async () => {
+              if (controller.signal.aborted || currentGeneration !== generation) return;
+              logger.debug(
+                { userId: activeUserId, generation: currentGeneration },
+                'Agent global surface acquired cross-tab host stream ownership',
+              );
+              await runHostStreamAsLeader(controller, currentGeneration);
             },
-            'Agent global surface host event received',
           );
-          await refresh('host-event');
+          return;
         }
+        await runHostStreamAsLeader(controller, currentGeneration);
       } catch (cause) {
         if (controller.signal.aborted || currentGeneration !== generation) return;
         logger.warn(
           { err: cause, userId: activeUserId, generation: currentGeneration },
-          'Agent global surface event subscription ended unexpectedly',
+          'Agent global surface host coordination ended unexpectedly',
         );
       }
     })();
@@ -128,7 +155,8 @@
         activeUserId = userId;
         logger.debug({ userId }, 'Agent global surface attached to authenticated shell');
         agentWindowManager.restoreForUser(userId);
-        void start();
+        void refresh('initial');
+        start();
         return;
       }
       persistLayout('auth-ended');
@@ -143,6 +171,15 @@
     { immediate: true },
   );
 
+  const onHostBroadcast = (event: MessageEvent<unknown>): void => {
+    if (!auth.isAuthenticated.value || activeUserId === null) return;
+    if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return;
+    const message = event.data as { type?: unknown; userId?: unknown };
+    if (message.type !== 'host.changed' || message.userId !== activeUserId) return;
+    void refresh('host-event');
+  };
+  hostChannel?.addEventListener('message', onHostBroadcast);
+
   const onVisibility = (): void => {
     if (document.visibilityState === 'hidden') persistLayout('document-hidden');
   };
@@ -151,6 +188,8 @@
   onBeforeUnmount(() => {
     persistLayout('host-unmount');
     document.removeEventListener('visibilitychange', onVisibility);
+    hostChannel?.removeEventListener('message', onHostBroadcast);
+    hostChannel?.close();
     stop('host-unmount');
     agentWindowManager.reset();
     agentSurfaceSession.disposeSession();
@@ -166,7 +205,7 @@
         @layout-change="persistLayout('window-interaction')"
       />
       <AgentLauncher
-        v-if="summary.featureEnabled"
+        v-if="summary.featureEnabled && agentWindowManager.state.status !== 'visible'"
         :summary="summary"
         @layout-change="persistLayout('launcher-interaction')"
       />

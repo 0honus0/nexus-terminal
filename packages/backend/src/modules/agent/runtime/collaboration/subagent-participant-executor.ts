@@ -435,6 +435,7 @@ export class SubagentParticipantExecutor {
               scopeKey: `nexus:subagent:${work.runId}:${delegation.id}`,
               affinityKey: `nexus:thread:${run.threadId}`,
             },
+            ...(model.defaultReasoningEffort === undefined ? {} : { reasoningEffort: model.defaultReasoningEffort }),
             maxOutputTokens,
           },
           signal,

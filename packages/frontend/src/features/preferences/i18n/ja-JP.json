@@ -141,7 +141,21 @@
       "navBarVisibleDescription": "ワークスペースの上部ナビゲーションを表示します。ワークスペースのタブバーからも切り替えられます。",
       "terminalRightClickCopyPasteTitle": "ターミナル右クリック コピー/貼り付け",
       "terminalRightClickCopyPasteLabel": "ターミナルの右クリック コピー/貼り付けを有効にする",
-      "terminalRightClickCopyPasteDescription": "選択範囲がある場合は右クリックでコピーし、選択範囲がない場合はクリップボードのテキストを貼り付けます。"
+      "terminalRightClickCopyPasteDescription": "選択範囲がある場合は右クリックでコピーし、選択範囲がない場合はクリップボードのテキストを貼り付けます。",
+      "organizedDescription": "関連する設定を用途ごとにまとめ、同じグループの変更をまとめて確認・保存できます。",
+      "unsavedGroups": "未保存の設定グループが {count} 件あります",
+      "moreDetails": "詳細",
+      "saveGroup": "このグループを保存",
+      "groups": {
+        "files": "ファイルとエディター",
+        "filesHint": "ファイルウィンドウ、エディター動作、削除保護、表計算プレビュー。",
+        "commands": "ターミナルとコマンド",
+        "commandsHint": "ターミナル操作、コマンドパネル、タグ、表示密度。",
+        "monitoring": "ダッシュボードと監視",
+        "monitoringHint": "ローカル/リモートリソース、更新間隔、状態監視、Docker。",
+        "advanced": "レイアウトと詳細設定",
+        "advancedHint": "利用頻度の低いワークスペースのレイアウト設定。"
+      }
     },
     "statusMonitorShowIp": {
       "title": "ステータスモニターでIPアドレスを表示",

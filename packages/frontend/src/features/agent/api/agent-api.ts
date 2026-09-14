@@ -261,11 +261,18 @@ export interface PluginUninstallResult {
   app: PluginAppStateView;
 }
 
+export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
 export interface ProviderModel {
   id: string;
   contextWindow: number;
   maxOutputTokens: number;
   supportsTools: boolean;
+  reasoningEfforts?: AgentReasoningEffort[];
+  defaultReasoningEffort?: AgentReasoningEffort;
+  reasoningSource?: 'provider' | 'registry';
+  reasoningMandatory?: boolean;
+  reasoningSupportsMaxTokens?: boolean;
   priceMicrosPerMillionInput?: number;
   priceMicrosPerMillionOutput?: number;
   priceVersion?: string;
@@ -449,6 +456,7 @@ export interface AgentRunView {
     schemaVersion: 1;
     agentDefinitionId: string;
     model: { providerId: string; modelId: string; configurationVersion: number };
+    reasoningEffort?: AgentReasoningEffort;
     connectionIds: number[];
     environment?: WorkspaceProfileView | null;
     policyRevision: number;
@@ -1327,6 +1335,7 @@ export const agentApi = {
       artifactRefs?: string[];
       agentDefinitionId: string;
       model: { providerId: string; modelId: string; configurationVersion: number };
+      reasoningEffort?: AgentReasoningEffort;
       connectionIds?: number[];
       environment?: AgentRunEnvironmentSelection | null;
       initialGoal?: string;
@@ -1341,6 +1350,7 @@ export const agentApi = {
             input: { text: input.text, artifactRefs: input.artifactRefs ?? [] },
             agentDefinitionId: input.agentDefinitionId,
             model: input.model,
+            ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
             connectionIds: input.connectionIds ?? [],
             ...(input.environment === undefined ? {} : { environment: input.environment }),
             ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),

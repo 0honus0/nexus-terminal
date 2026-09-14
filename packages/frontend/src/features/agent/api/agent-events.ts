@@ -362,28 +362,88 @@ const parseWireEvent = (
   return parseRunEventV1(event, channel);
 };
 
-const waitForOpen = (socket: WebSocket, signal: AbortSignal): Promise<void> =>
-  new Promise((resolve, reject) => {
+interface SharedAgentSocketState {
+  socket: WebSocket;
+  open: Promise<WebSocket>;
+  leases: number;
+}
+
+interface SharedAgentSocketLease {
+  socket: WebSocket;
+  release(): void;
+}
+
+let sharedAgentSocket: SharedAgentSocketState | null = null;
+
+const createSharedAgentSocket = (): SharedAgentSocketState => {
+  const socket = openWebSocket('/ws/agent');
+  let state: SharedAgentSocketState;
+  const open = new Promise<WebSocket>((resolve, reject) => {
     let settled = false;
     const finish = (error?: Error): void => {
       if (settled) return;
       settled = true;
       socket.removeEventListener('open', onOpen);
       socket.removeEventListener('error', onError);
-      socket.removeEventListener('close', onClose);
-      signal.removeEventListener('abort', onAbort);
+      socket.removeEventListener('close', onCloseBeforeOpen);
       if (error) reject(error);
-      else resolve();
+      else resolve(socket);
     };
     const onOpen = (): void => finish();
     const onError = (): void => finish(new Error('AGENT_WS_OPEN_FAILED'));
-    const onClose = (event: CloseEvent): void => finish(new Error(`AGENT_WS_OPEN_CLOSED_${event.code}`));
-    const onAbort = (): void => finish();
+    const onCloseBeforeOpen = (event: CloseEvent): void => finish(new Error(`AGENT_WS_OPEN_CLOSED_${event.code}`));
     socket.addEventListener('open', onOpen, { once: true });
     socket.addEventListener('error', onError, { once: true });
-    socket.addEventListener('close', onClose, { once: true });
-    signal.addEventListener('abort', onAbort, { once: true });
+    socket.addEventListener('close', onCloseBeforeOpen, { once: true });
   });
+  state = { socket, open, leases: 0 };
+  socket.addEventListener(
+    'close',
+    () => {
+      if (sharedAgentSocket === state) sharedAgentSocket = null;
+    },
+    { once: true },
+  );
+  sharedAgentSocket = state;
+  logger.debug({}, 'Shared Agent event WebSocket opening');
+  return state;
+};
+
+const acquireSharedAgentSocket = async (signal: AbortSignal): Promise<SharedAgentSocketLease> => {
+  if (signal.aborted) throw new Error('ABORTED');
+  let state = sharedAgentSocket;
+  if (!state || state.socket.readyState === WebSocket.CLOSING || state.socket.readyState === WebSocket.CLOSED) {
+    state = createSharedAgentSocket();
+  }
+  state.leases += 1;
+  let released = false;
+  const release = (): void => {
+    if (released) return;
+    released = true;
+    state.leases = Math.max(0, state.leases - 1);
+    if (state.leases !== 0 || sharedAgentSocket !== state) return;
+    if (state.socket.readyState === WebSocket.CONNECTING || state.socket.readyState === WebSocket.OPEN) {
+      state.socket.close(1000, 'Agent event subscribers released');
+    }
+  };
+
+  let removeAbortListener = (): void => undefined;
+  const aborted = new Promise<never>((_, reject) => {
+    const onAbort = (): void => reject(new Error('ABORTED'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    removeAbortListener = () => signal.removeEventListener('abort', onAbort);
+  });
+  try {
+    const socket = await Promise.race([state.open, aborted]);
+    removeAbortListener();
+    if (signal.aborted) throw new Error('ABORTED');
+    return { socket, release };
+  } catch (cause) {
+    removeAbortListener();
+    release();
+    throw cause;
+  }
+};
 
 async function* connectOnce(
   request: AgentSubscriptionRequest,
@@ -392,10 +452,10 @@ async function* connectOnce(
 ): AsyncIterable<AgentStreamEvent> {
   if (signal.aborted) return;
 
-  const socket = openWebSocket('/ws/agent');
+  const lease = await acquireSharedAgentSocket(signal);
+  const socket = lease.socket;
   const subscriptionId = crypto.randomUUID();
   const log = subscriptionContext(request);
-  logger.debug(log, 'Agent event WebSocket opening');
   const requestId = crypto.randomUUID();
   const queue: AgentStreamEvent[] = [];
   let wake: (() => void) | null = null;
@@ -411,14 +471,9 @@ async function* connectOnce(
   };
   const abort = (): void => {
     rejectSubscribed?.(new Error('ABORTED'));
-    if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
-      socket.close(1000, 'Agent subscription aborted');
-    }
     notify();
   };
-  signal.addEventListener('abort', abort, { once: true });
-
-  socket.addEventListener('message', (browserEvent) => {
+  const onMessage = (browserEvent: MessageEvent): void => {
     try {
       const message = parseWireMessage(browserEvent.data);
       if (message.type === 'subscribed' && message.requestId === requestId) {
@@ -437,7 +492,9 @@ async function* connectOnce(
       if (message.type === 'error') {
         const payload = isRecord(message.payload) ? message.payload : {};
         const relevant =
-          message.requestId === requestId || payload.subscriptionId === subscriptionId || !message.requestId;
+          message.requestId === requestId ||
+          payload.subscriptionId === subscriptionId ||
+          (!message.requestId && !payload.subscriptionId);
         if (!relevant) return;
         terminalError = protocolError(payload);
         logger.warn({ ...log, err: terminalError }, 'Agent event subscription returned a protocol error');
@@ -451,19 +508,21 @@ async function* connectOnce(
       notify();
       if (socket.readyState === WebSocket.OPEN) socket.close(1002, 'Agent protocol error');
     }
-  });
-  socket.addEventListener('close', (event) => {
+  };
+  const onClose = (event: CloseEvent): void => {
     if (!signal.aborted && !terminalError) terminalError = new Error(`AGENT_WS_CLOSED_${event.code}`);
     logger.debug(
       { ...log, closeCode: event.code, clean: event.wasClean, aborted: signal.aborted },
-      'Agent event WebSocket closed',
+      'Shared Agent event WebSocket closed',
     );
     if (terminalError) rejectSubscribed?.(terminalError);
     notify();
-  });
+  };
+  signal.addEventListener('abort', abort, { once: true });
+  socket.addEventListener('message', onMessage);
+  socket.addEventListener('close', onClose);
 
   try {
-    await waitForOpen(socket, signal);
     if (signal.aborted) return;
     const subscribedAck = new Promise<void>((resolve, reject) => {
       resolveSubscribed = resolve;
@@ -491,12 +550,12 @@ async function* connectOnce(
     }
   } finally {
     signal.removeEventListener('abort', abort);
+    socket.removeEventListener('message', onMessage);
+    socket.removeEventListener('close', onClose);
     if (subscribed && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'unsubscribe', payload: { subscriptionId } }));
     }
-    if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
-      socket.close(1000, 'Agent subscription ended');
-    }
+    lease.release();
   }
 }
 

@@ -31,11 +31,19 @@ export const providerErrorRules: readonly AgentErrorRule[] = [
     code: 'PROVIDER_UNAVAILABLE',
     message: 'Provider is unavailable.',
   }),
-  onCodes(['MODEL_NOT_FOUND', 'MODEL_CAPABILITY_UNSUPPORTED', 'MODEL_OUTPUT_LIMIT_EXCEEDED'], {
-    status: 422,
-    code: 'MODEL_CAPABILITY_UNSUPPORTED',
-    message: 'Model capability is unavailable.',
-  }),
+  onCodes(
+    [
+      'MODEL_NOT_FOUND',
+      'MODEL_CAPABILITY_UNSUPPORTED',
+      'MODEL_REASONING_EFFORT_UNSUPPORTED',
+      'MODEL_OUTPUT_LIMIT_EXCEEDED',
+    ],
+    {
+      status: 422,
+      code: 'MODEL_CAPABILITY_UNSUPPORTED',
+      message: 'Model capability is unavailable.',
+    },
+  ),
   onCodes(['PROVIDER_AUTH_FAILED'], rawCode(422, 'Provider credentials were rejected.')),
   onCodes(['PROVIDER_REDIRECT_DENIED'], rawCode(403, 'Provider redirects are not allowed.')),
   onCodes(

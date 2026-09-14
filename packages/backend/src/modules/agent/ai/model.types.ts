@@ -1,10 +1,25 @@
 export type OpenAiCompatibleProtocol = 'chat-completions' | 'responses';
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+export type ReasoningCapabilitySource = 'provider' | 'registry';
+
+export interface ReasoningCapability {
+  supportedEfforts: ReasoningEffort[];
+  defaultEffort?: ReasoningEffort;
+  mandatory?: boolean;
+  supportsMaxTokens?: boolean;
+  source: ReasoningCapabilitySource;
+}
 
 export interface ProviderModelConfig {
   id: string;
   contextWindow: number;
   maxOutputTokens: number;
   supportsTools: boolean;
+  reasoningEfforts?: ReasoningEffort[];
+  defaultReasoningEffort?: ReasoningEffort;
+  reasoningSource?: ReasoningCapabilitySource;
+  reasoningMandatory?: boolean;
+  reasoningSupportsMaxTokens?: boolean;
   priceMicrosPerMillionInput?: number;
   priceMicrosPerMillionOutput?: number;
   priceVersion?: string;
@@ -77,6 +92,7 @@ export interface ModelRequest {
   tools?: ModelToolSchema[];
   toolMode?: 'auto' | 'none';
   cache?: ModelCacheHint;
+  reasoningEffort?: ReasoningEffort;
   maxOutputTokens: number;
 }
 

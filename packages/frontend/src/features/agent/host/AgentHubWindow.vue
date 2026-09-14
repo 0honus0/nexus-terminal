@@ -119,7 +119,7 @@
       @pointerup="finish"
       @pointercancel="finish"
     >
-      <div class="flex min-w-0 items-center gap-2.5" @pointerdown.stop>
+      <div class="flex min-w-0 flex-1 items-center gap-2.5" @pointerdown.stop>
         <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm text-primary">
           <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
         </div>
@@ -133,7 +133,6 @@
               {{ activityCount }}
             </span>
           </div>
-          <div class="mt-1 text-[10px] text-text-secondary">{{ $t('agent.hub.workspace') }}</div>
         </div>
         <AgentAppSwitcher :apps="summary.apps" :active-app-id="state.activeAppId" @switch="switchApp" />
       </div>
@@ -151,6 +150,8 @@
               ? 'bg-card text-foreground shadow-sm'
               : 'text-text-secondary hover:text-foreground'
           "
+          :aria-label="$t('agent.hub.conversation')"
+          :aria-pressed="state.hubView === 'conversation'"
           @click="agentWindowManager.setHubView('conversation')"
         >
           <i class="fa-regular fa-message text-[10px]" aria-hidden="true"></i>
@@ -164,6 +165,8 @@
               ? 'bg-card text-foreground shadow-sm'
               : 'text-text-secondary hover:text-foreground'
           "
+          :aria-label="$t('agent.hub.files')"
+          :aria-pressed="state.hubView === 'files'"
           @click="agentWindowManager.setHubView('files')"
         >
           <i class="fa-regular fa-folder-open text-[10px]" aria-hidden="true"></i>

@@ -4,6 +4,7 @@ import type { ToolTargetFingerprint } from './tool-target.types';
 
 export interface AgentConnectionView {
   id: number;
+  name: string | null;
   type: string;
   host: string;
   port: number;
@@ -13,8 +14,17 @@ export interface AgentConnectionView {
 }
 
 export interface AgentConnectionResolverPort {
+  list(): Promise<AgentConnectionView[]>;
   get(connectionId: number): Promise<AgentConnectionView | null>;
   resolve(connectionId: number): Promise<ResolvedSshConnection>;
+}
+
+export interface MachineConnectionSummary {
+  id: number;
+  name: string | null;
+  host: string;
+  port: number;
+  username: string;
 }
 
 export interface AgentDiagnosticReport {
@@ -89,6 +99,7 @@ export interface DockerMutationResult extends DockerMutationInspection {
 }
 
 export interface MachineCapabilityPort {
+  listConnections(scope: Scope): Promise<MachineConnectionSummary[]>;
   target(scope: Scope, connectionId: number): Promise<MachineTargetFingerprint>;
   diagnose(
     scope: Scope,

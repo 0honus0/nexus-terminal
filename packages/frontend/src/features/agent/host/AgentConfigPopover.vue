@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { onBeforeUnmount, onMounted, ref, useId } from 'vue';
+  import { onBeforeUnmount, onMounted, ref, useId, nextTick } from 'vue';
 
   const props = withDefaults(
     defineProps<{
@@ -12,6 +12,7 @@
   );
 
   const open = ref(false);
+  const position = ref({ left: '0px', top: '0px', maxHeight: '300px' });
   const trigger = ref<HTMLButtonElement | null>(null);
   const panel = ref<HTMLElement | null>(null);
   const panelId = `agent-config-popover-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
@@ -22,8 +23,32 @@
     if (restoreFocus) queueMicrotask(() => trigger.value?.focus());
   };
 
-  const toggle = (): void => {
-    open.value = !open.value;
+  const positionPanel = () => {
+    const anchor = trigger.value?.getBoundingClientRect();
+    const popup = panel.value;
+    if (!anchor || !popup) return;
+    const width = popup.getBoundingClientRect().width;
+    const left = Math.max(
+      12,
+      Math.min(props.align === 'right' ? anchor.right - width : anchor.left, window.innerWidth - width - 12),
+    );
+    const below = window.innerHeight - anchor.bottom - 18;
+    const top = below >= 180 ? anchor.bottom + 6 : Math.max(12, anchor.top - popup.getBoundingClientRect().height - 6);
+    position.value = {
+      left: `${left}px`,
+      top: `${top}px`,
+      maxHeight: `${Math.max(120, window.innerHeight - top - 12)}px`,
+    };
+  };
+  const toggle = async (): Promise<void> => {
+    if (open.value) {
+      close();
+      return;
+    }
+    open.value = true;
+    await nextTick();
+    positionPanel();
+    panel.value?.focus();
   };
 
   const onPointerDown = (event: PointerEvent): void => {
@@ -40,10 +65,12 @@
   };
 
   onMounted(() => {
+    window.addEventListener('resize', positionPanel);
     document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown, true);
   });
   onBeforeUnmount(() => {
+    window.removeEventListener('resize', positionPanel);
     document.removeEventListener('pointerdown', onPointerDown, true);
     document.removeEventListener('keydown', onKeyDown, true);
   });
@@ -54,7 +81,7 @@
     <button
       ref="trigger"
       type="button"
-      class="agent-config-summary flex items-center gap-1.5 rounded-lg bg-background/70 px-2 py-1.5 text-[10px] hover:bg-header focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+      class="agent-config-summary flex items-center gap-1.5 rounded-xl bg-background/70 px-2.5 py-1.5 text-xs transition-colors hover:bg-header focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/20"
       :aria-label="props.ariaLabel"
       :title="props.title || undefined"
       :aria-expanded="open"
@@ -64,17 +91,20 @@
     >
       <slot name="trigger" :open="open" />
     </button>
-    <div
-      v-if="open"
-      :id="panelId"
-      ref="panel"
-      role="dialog"
-      aria-modal="false"
-      :aria-label="props.ariaLabel"
-      class="absolute top-[calc(100%+6px)] z-40 max-w-[min(80vw,360px)] rounded-xl border border-border/70 bg-background p-3 shadow-xl"
-      :class="[props.align === 'right' ? 'right-0' : 'left-0', props.panelClass]"
-    >
-      <slot name="panel" :close="close" />
-    </div>
+    <Teleport to="body"
+      ><div
+        v-if="open"
+        tabindex="-1"
+        :style="position"
+        :id="panelId"
+        ref="panel"
+        role="dialog"
+        aria-modal="false"
+        :aria-label="props.ariaLabel"
+        class="fixed z-[60] max-w-[calc(100vw-24px)] overflow-y-auto rounded-2xl border border-border/70 bg-background p-3 shadow-xl outline-none"
+        :class="props.panelClass"
+      >
+        <slot name="panel" :close="close" /></div
+    ></Teleport>
   </div>
 </template>

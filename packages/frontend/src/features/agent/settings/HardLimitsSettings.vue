@@ -31,7 +31,7 @@
 </script>
 
 <template>
-  <section class="rounded-lg border border-border bg-card p-5">
+  <section class="rounded-xl border border-border/60 bg-card p-5">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h2 class="text-base font-semibold">{{ $t('agent.settings.hardLimits.title') }}</h2>

@@ -1,8 +1,19 @@
 <script setup lang="ts">
   import { computed, reactive, ref } from 'vue';
-  import type { AgentDiscoveredProviderModel, AgentProviderView } from '../api/agent-api';
+  import { useI18n } from 'vue-i18n';
+  import {
+    agentApi,
+    formatAgentApiError,
+    type AgentDiscoveredProviderModel,
+    type AgentProviderView,
+  } from '../api/agent-api';
 
   const props = defineProps<{
+    addProviderModel: (
+      provider: AgentProviderView,
+      model: AgentProviderView['models'][number],
+    ) => Promise<boolean | undefined>;
+    createProvider: (input: Record<string, unknown>) => Promise<boolean | undefined>;
     providers: AgentProviderView[];
     busy: boolean;
     discoveries: Record<string, AgentDiscoveredProviderModel[]>;
@@ -10,15 +21,30 @@
     defaultModelId: string | null;
   }>();
   const emit = defineEmits<{
-    create: [input: Record<string, unknown>];
     toggle: [provider: AgentProviderView, enabled: boolean];
     protocol: [provider: AgentProviderView, protocol: AgentProviderView['protocol']];
-    test: [provider: AgentProviderView, modelId: string];
     discover: [provider: AgentProviderView];
-    addModel: [provider: AgentProviderView, model: AgentProviderView['models'][number]];
     defaultModel: [providerId: string, modelId: string];
   }>();
 
+  const { t } = useI18n();
+  const testResults = reactive<Record<string, { state: 'loading' | 'success' | 'error'; message: string }>>({});
+  const testKey = (provider: AgentProviderView, modelId: string) =>
+    JSON.stringify([provider.id, provider.version, modelId]);
+  const testModel = async (provider: AgentProviderView, modelId: string) => {
+    const key = testKey(provider, modelId);
+    if (testResults[key]?.state === 'loading') return;
+    testResults[key] = { state: 'loading', message: t('agent.ui.testing') };
+    try {
+      const result = await agentApi.testProvider(provider.id, modelId);
+      testResults[key] = result.ok
+        ? { state: 'success', message: t('agent.ui.testSuccess', { ms: result.latencyMs }) }
+        : { state: 'error', message: t('agent.ui.testFailed') };
+    } catch (cause) {
+      testResults[key] = { state: 'error', message: formatAgentApiError(cause, t('agent.ui.testFailed')) };
+    }
+  };
+  const createError = ref('');
   const showCreate = ref(false);
   const discoveryDrafts = reactive<
     Record<
@@ -40,7 +66,7 @@
     return (props.discoveries[provider.id] ?? []).filter((model) => !configured.has(model.id));
   };
 
-  const addDiscoveredModel = (provider: AgentProviderView): void => {
+  const addDiscoveredModel = async (provider: AgentProviderView): Promise<void> => {
     const draft = discoveryDraft(provider);
     if (
       !draft.modelId ||
@@ -54,12 +80,13 @@
     ) {
       return;
     }
-    emit('addModel', provider, {
+    const saved = await props.addProviderModel(provider, {
       id: draft.modelId,
       contextWindow: draft.contextWindow,
       maxOutputTokens: draft.maxOutputTokens,
       supportsTools: draft.supportsTools,
     });
+    if (!saved) return;
     draft.modelId = '';
     draft.contextWindow = null;
     draft.maxOutputTokens = null;
@@ -98,8 +125,9 @@
     return String(value);
   };
 
-  const create = () => {
-    emit('create', {
+  const create = async () => {
+    createError.value = '';
+    const saved = await props.createProvider({
       kind: 'openai-compatible',
       displayName: form.displayName,
       baseUrl: form.baseUrl,
@@ -119,6 +147,10 @@
         .filter(Boolean),
       enabled: true,
     });
+    if (saved) {
+      showCreate.value = false;
+      form.credential = '';
+    } else createError.value = t('agent.ui.createFailed');
   };
 
   const setDefaultModel = (value: string): void => {
@@ -131,7 +163,7 @@
 </script>
 
 <template>
-  <section class="rounded-2xl border border-border/60 bg-card/65 p-5 shadow-sm">
+  <section class="rounded-2xl border border-border/60 bg-card/65 p-5">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
         <div class="flex items-center gap-2">
@@ -175,14 +207,28 @@
       </div>
     </div>
 
-    <div v-if="showCreate" class="mt-4 grid gap-3 rounded-xl bg-background p-4 md:grid-cols-2">
+    <form
+      v-if="showCreate"
+      class="mt-4 grid gap-4 rounded-xl border border-border/60 bg-background p-4 md:grid-cols-2"
+      @submit.prevent="create"
+    >
       <label>
         <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.providers.name') }}</span>
-        <input v-model="form.displayName" class="w-full rounded-md border border-border bg-card px-3 py-2" />
+        <input
+          v-model="form.displayName"
+          required
+          maxlength="200"
+          class="w-full rounded-md border border-border bg-card px-3 py-2"
+        />
       </label>
       <label>
         <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.providers.baseUrl') }}</span>
-        <input v-model="form.baseUrl" class="w-full rounded-md border border-border bg-card px-3 py-2" />
+        <input
+          v-model="form.baseUrl"
+          required
+          type="url"
+          class="w-full rounded-md border border-border bg-card px-3 py-2"
+        />
       </label>
       <label>
         <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.providers.protocol') }}</span>
@@ -202,7 +248,7 @@
       </label>
       <label>
         <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.providers.model') }}</span>
-        <input v-model="form.modelId" class="w-full rounded-md border border-border bg-card px-3 py-2" />
+        <input v-model="form.modelId" required class="w-full rounded-md border border-border bg-card px-3 py-2" />
       </label>
       <label>
         <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.providers.contextWindow') }}</span>
@@ -236,17 +282,26 @@
           placeholder="10.0.0.8:8080"
         />
       </label>
+      <p v-if="createError" role="alert" class="text-sm text-error md:col-span-2">{{ createError }}</p>
       <div class="flex justify-end md:col-span-2">
         <button
-          type="button"
+          type="submit"
           class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          :disabled="busy || !form.displayName || !form.baseUrl || !form.modelId"
-          @click="create"
+          :disabled="
+            busy ||
+            !form.displayName.trim() ||
+            !form.baseUrl.trim() ||
+            !form.modelId.trim() ||
+            !Number.isSafeInteger(form.contextWindow) ||
+            !Number.isSafeInteger(form.maxOutputTokens) ||
+            form.maxOutputTokens < 1 ||
+            form.contextWindow < form.maxOutputTokens
+          "
         >
           {{ $t('agent.settings.providers.create') }}
         </button>
       </div>
-    </div>
+    </form>
 
     <div class="mt-4 space-y-3">
       <article
@@ -400,7 +455,7 @@
           <p v-else class="mt-3 text-xs text-text-secondary">{{ $t('agent.settings.providers.discoveryEmpty') }}</p>
         </div>
 
-        <div class="mt-3 grid gap-2 xl:grid-cols-2">
+        <div class="mt-3 grid gap-2" :class="provider.models.length > 1 ? 'xl:grid-cols-2' : ''">
           <div v-for="model in provider.models" :key="model.id" class="rounded-xl bg-card/80 px-3.5 py-3">
             <div class="flex items-start justify-between gap-2">
               <div class="min-w-0">
@@ -432,13 +487,46 @@
               <button
                 type="button"
                 class="shrink-0 rounded-lg border border-border/70 px-2.5 py-1.5 text-[11px] font-medium hover:bg-header disabled:opacity-50"
-                :disabled="busy || !provider.enabled"
+                :disabled="busy || !provider.enabled || testResults[testKey(provider, model.id)]?.state === 'loading'"
                 :aria-label="`${model.id} · ${$t('agent.settings.providers.test')}`"
-                @click="emit('test', provider, model.id)"
+                @click="testModel(provider, model.id)"
               >
-                {{ $t('agent.settings.providers.test') }}
+                {{
+                  testResults[testKey(provider, model.id)]?.state === 'loading'
+                    ? $t('agent.ui.testing')
+                    : $t('agent.settings.providers.test')
+                }}
               </button>
             </div>
+            <div v-if="model.reasoningEfforts?.length" class="mt-2 flex flex-wrap items-center gap-1.5 text-[10px]">
+              <span class="flex items-center gap-1 rounded-lg bg-primary/8 px-2 py-1 text-primary">
+                <i class="fa-solid fa-brain text-[8px]" aria-hidden="true"></i>
+                {{ $t('agent.settings.providers.reasoningAuto') }}
+              </span>
+              <span
+                v-for="effort in model.reasoningEfforts"
+                :key="effort"
+                class="rounded-lg bg-header px-2 py-1 text-text-secondary"
+                :class="effort === model.defaultReasoningEffort ? 'font-medium text-foreground' : ''"
+              >
+                {{ $t(`agent.ui.reasoningLevels.${effort}`) }}
+              </span>
+            </div>
+            <p
+              v-if="testResults[testKey(provider, model.id)]"
+              class="mt-2 break-words border-t border-border/40 pt-2 text-xs"
+              :class="
+                testResults[testKey(provider, model.id)]?.state === 'error'
+                  ? 'text-error'
+                  : testResults[testKey(provider, model.id)]?.state === 'success'
+                    ? 'text-success'
+                    : 'text-text-secondary'
+              "
+              role="status"
+              aria-live="polite"
+            >
+              {{ testResults[testKey(provider, model.id)]?.message }}
+            </p>
           </div>
         </div>
       </article>

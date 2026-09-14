@@ -1,8 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import type { ClockPort } from '../agent.types';
 import type { LanguageModelPort } from './language-model.port';
+import { applyReasoningCapability, resolveModelReasoningCapability } from './model-capability-resolver';
 import type { OutboundPolicyPort } from './outbound-policy.port';
-import type { ProviderInput, ProviderModelConfig, ProviderTestResult, ProviderView, TokenUsage } from './model.types';
+import type {
+  DiscoveredProviderModel,
+  ProviderInput,
+  ProviderModelConfig,
+  ProviderTestResult,
+  ProviderView,
+  TokenUsage,
+} from './model.types';
 import type { ProviderRepositoryPort } from './provider.repository.port';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -27,6 +35,11 @@ const validateModel = (raw: unknown): ProviderModelConfig => {
     'contextWindow',
     'maxOutputTokens',
     'supportsTools',
+    'reasoningEfforts',
+    'defaultReasoningEffort',
+    'reasoningSource',
+    'reasoningMandatory',
+    'reasoningSupportsMaxTokens',
     'priceMicrosPerMillionInput',
     'priceMicrosPerMillionOutput',
     'priceVersion',
@@ -151,14 +164,24 @@ export class ProviderService {
     private readonly onChanged: (userId: number) => Promise<void> = async () => undefined,
   ) {}
 
-  list(userId: number): Promise<ProviderView[]> {
-    return this.repository.list(userId);
+  private decorateProvider(provider: ProviderView): ProviderView {
+    return {
+      ...provider,
+      models: provider.models.map((model) =>
+        applyReasoningCapability(model, resolveModelReasoningCapability(model.id)),
+      ),
+    };
+  }
+
+  async list(userId: number): Promise<ProviderView[]> {
+    const providers = await this.repository.list(userId);
+    return providers.map((provider) => this.decorateProvider(provider));
   }
 
   async get(userId: number, providerId: string): Promise<ProviderView> {
     const provider = await this.repository.get(userId, providerId);
     if (!provider) throw new Error('PROVIDER_NOT_FOUND');
-    return provider;
+    return this.decorateProvider(provider);
   }
 
   async create(userId: number, raw: unknown): Promise<ProviderView> {
@@ -180,7 +203,7 @@ export class ProviderService {
       updatedAt: now,
     });
     await this.onChanged(userId);
-    return created;
+    return this.decorateProvider(created);
   }
 
   async update(userId: number, providerId: string, expectedVersion: number, raw: unknown): Promise<ProviderView> {
@@ -198,7 +221,7 @@ export class ProviderService {
       updatedAt: this.clock.nowUnixSeconds(),
     });
     await this.onChanged(userId);
-    return updated;
+    return this.decorateProvider(updated);
   }
 
   async remove(userId: number, providerId: string, expectedVersion: number): Promise<void> {
@@ -206,7 +229,7 @@ export class ProviderService {
     await this.onChanged(userId);
   }
 
-  async discoverModels(userId: number, providerId: string) {
+  async discoverModels(userId: number, providerId: string): Promise<DiscoveredProviderModel[]> {
     await this.get(userId, providerId);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error('PROVIDER_DISCOVERY_TIMEOUT')), 10_000);
@@ -232,6 +255,7 @@ export class ProviderService {
           providerId,
           modelId,
           messages: [{ role: 'user', content: 'Reply with OK.' }],
+          ...(model.defaultReasoningEffort === undefined ? {} : { reasoningEffort: model.defaultReasoningEffort }),
           maxOutputTokens: Math.min(16, model.maxOutputTokens),
         },
         controller.signal,

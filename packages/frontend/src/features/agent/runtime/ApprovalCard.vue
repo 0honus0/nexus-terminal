@@ -42,15 +42,14 @@
 
     <dl class="mt-3 grid grid-cols-[88px_minmax(0,1fr)] gap-x-2 gap-y-1 text-[11px]">
       <dt class="text-text-secondary">{{ $t('agent.approvals.target') }}</dt>
-      <dd class="truncate">{{ target.endpoint }} · {{ target.loginUser }}</dd>
+      <dd class="break-words">{{ target.endpoint }} · {{ target.loginUser }}</dd>
       <dt class="text-text-secondary">{{ $t('agent.approvals.expires') }}</dt>
       <dd>{{ remaining }}s</dd>
-      <dt class="text-text-secondary">{{ $t('agent.approvals.hash') }}</dt>
-      <dd class="break-all font-mono text-[9px]">{{ approval.operationHash }}</dd>
     </dl>
 
     <details class="mt-3 rounded border border-border bg-background p-2">
       <summary class="cursor-pointer font-medium">{{ $t('agent.approvals.operation') }}</summary>
+      <p class="mt-2 break-all font-mono text-[10px]">{{ $t('agent.approvals.hash') }}: {{ approval.operationHash }}</p>
       <pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[10px]">{{ argumentsText }}</pre>
       <div v-if="approval.inspection.preconditions.length" class="mt-2 border-t border-border pt-2">
         <div class="mb-1 text-[10px] font-medium text-text-secondary">{{ $t('agent.approvals.preconditions') }}</div>

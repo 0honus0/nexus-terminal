@@ -1,15 +1,20 @@
 import type { AgentRunEnvironmentSelection, JsonValue } from '../../../modules/agent/agent.types';
+import type { ReasoningEffort } from '../../../modules/agent/ai/model.types';
 import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 import type { RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
 import { hasOnlyKeys, isJsonValue, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
+const reasoningEfforts = new Set<ReasoningEffort>(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']);
+const isReasoningEffort = (value: unknown): value is ReasoningEffort =>
+  typeof value === 'string' && reasoningEfforts.has(value as ReasoningEffort);
 
 export interface CreateRunRequestDto {
   threadId: string;
   input: UserInputData;
   agentDefinitionId: string;
   model: { providerId: string; modelId: string; configurationVersion: number };
+  reasoningEffort?: ReasoningEffort;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
@@ -69,6 +74,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     'input',
     'agentDefinitionId',
     'model',
+    'reasoningEffort',
     'connectionIds',
     'environment',
     'initialGoal',
@@ -83,6 +89,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     typeof model.providerId !== 'string' ||
     typeof model.modelId !== 'string' ||
     !positiveInteger(model.configurationVersion) ||
+    (value.reasoningEffort !== undefined && !isReasoningEffort(value.reasoningEffort)) ||
     !Array.isArray(value.connectionIds) ||
     value.connectionIds.length > 50 ||
     value.connectionIds.some((connectionId) => !positiveInteger(connectionId)) ||
@@ -102,6 +109,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
       modelId: model.modelId,
       configurationVersion: model.configurationVersion,
     },
+    ...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort as ReasoningEffort }),
     connectionIds: value.connectionIds as number[],
     ...(value.environment === undefined ? {} : { environment: parseRunEnvironmentSelection(value.environment) }),
     ...(typeof value.initialGoal === 'string' && value.initialGoal.trim()

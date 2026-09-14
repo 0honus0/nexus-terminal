@@ -239,6 +239,7 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
       stream: true,
       stream_options: { include_usage: true },
       max_tokens: request.maxOutputTokens,
+      ...(request.reasoningEffort === undefined ? {} : { reasoning_effort: request.reasoningEffort }),
       ...(request.tools?.length
         ? {
             tools: request.tools.map((tool) => ({
@@ -349,6 +350,7 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
       stream: true,
       store: false,
       max_output_tokens: request.maxOutputTokens,
+      ...(request.reasoningEffort === undefined ? {} : { reasoning: { effort: request.reasoningEffort } }),
       ...(request.tools?.length
         ? {
             tools: request.tools.map((tool) => ({

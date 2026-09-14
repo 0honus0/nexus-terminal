@@ -16,6 +16,7 @@ import type {
   ShellMutationResult,
 } from '../../../modules/agent/capabilities/machine.port';
 import type { Scope } from '../../../modules/agent/agent.types';
+import type { TargetDenylistRepositoryPort } from '../../../modules/agent/host/target-denylist.repository.port';
 import type { RemoteDockerService } from '../../../platform/docker/remote-docker.service';
 import type { ExecutionSession } from '../../../platform/execution/execution-session';
 import type { ExecutionSessionManager } from '../../../platform/execution/execution-session-manager';
@@ -70,7 +71,21 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     private readonly diagnostics: AgentDiagnosticsPort,
     private readonly sessions: ExecutionSessionManager,
     private readonly docker: RemoteDockerService,
+    private readonly denylist: TargetDenylistRepositoryPort,
   ) {}
+
+  async listConnections(_scope: Scope) {
+    const denied = new Set((await this.denylist.list()).map((entry) => entry.connectionId));
+    return (await this.connections.list())
+      .filter((connection) => connection.type === 'SSH' && !denied.has(connection.id))
+      .map((connection) => ({
+        id: connection.id,
+        name: connection.name,
+        host: connection.host,
+        port: connection.port,
+        username: connection.username,
+      }));
+  }
 
   async target(_scope: Scope, connectionId: number): Promise<MachineTargetFingerprint> {
     if (!Number.isSafeInteger(connectionId) || connectionId < 1) throw new Error('VALIDATION_FAILED');

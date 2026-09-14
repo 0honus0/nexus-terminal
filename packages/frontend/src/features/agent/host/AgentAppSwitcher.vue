@@ -19,7 +19,7 @@
 </script>
 
 <template>
-  <div class="flex min-w-0 items-center gap-1.5">
+  <div class="flex w-52 min-w-0 max-w-full items-center gap-1.5">
     <label v-if="showSearch" class="agent-app-search relative">
       <span class="sr-only">{{ $t('agent.hub.searchApps') }}</span>
       <i
@@ -33,16 +33,16 @@
         :placeholder="$t('agent.hub.searchApps')"
       />
     </label>
-    <div class="relative min-w-0">
+    <div class="relative min-w-0 flex-1">
       <select
-        class="max-w-52 appearance-none rounded-lg border border-border bg-background py-1.5 pl-2.5 pr-7 text-[11px] font-medium outline-none focus:border-primary"
+        class="w-full min-w-0 appearance-none truncate rounded-lg border border-border bg-background py-1.5 pl-2.5 pr-7 text-[11px] font-medium outline-none focus:border-primary"
         :value="activeAppId ?? ''"
         :aria-label="$t('agent.hub.appSwitcher')"
         @change="emit('switch', ($event.target as HTMLSelectElement).value)"
       >
         <option value="" disabled>{{ $t('agent.hub.chooseApp') }}</option>
         <option v-for="app in filteredApps" :key="app.id" :value="app.id">
-          {{ app.displayName }} · {{ app.health }}{{ activityCount(app) ? ` · ${activityCount(app)}` : '' }}
+          {{ app.displayName }}{{ activityCount(app) ? ` · ${activityCount(app)}` : '' }}
         </option>
       </select>
       <i

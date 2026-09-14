@@ -360,6 +360,16 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
       ).length;
       if (activeForSession >= MAX_AGENT_SOCKETS_PER_SESSION) {
         agentConnectionLimitRejections += 1;
+        logger.warn(
+          {
+            sessionKey,
+            userId,
+            activeForSession,
+            maxSocketsPerSession: MAX_AGENT_SOCKETS_PER_SESSION,
+            activeAgentClients: [...clients].filter((record) => record.kind === 'agent').length,
+          },
+          'Rejected Agent WebSocket upgrade because the session socket limit is already reached',
+        );
         rejectUpgrade(socket, 429, 'Too Many Requests');
         return;
       }

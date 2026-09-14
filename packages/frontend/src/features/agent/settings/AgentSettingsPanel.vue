@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import BaseModal from '@/foundation/ui/BaseModal.vue';
   import {
     agentApi,
@@ -30,6 +31,7 @@
   import SubagentSettings from './SubagentSettings.vue';
   import SystemGuardrails from './SystemGuardrails.vue';
 
+  const { t } = useI18n();
   const settings = ref<AgentSettingsView | null>(null);
   const apps = ref<AgentAppSummary[]>([]);
   const providers = ref<AgentProviderView[]>([]);
@@ -57,6 +59,8 @@
 
   type AgentSettingsGroupId = (typeof groups)[number]['id'];
 
+  const workspaceBody = ref<HTMLElement | null>(null);
+  const groupScroll = new Map<string, number>();
   const activeGroup = ref<AgentSettingsGroupId>('overview');
   const activeGroupMeta = computed(() => groups.find((group) => group.id === activeGroup.value) ?? groups[0]);
 
@@ -105,9 +109,11 @@
     notice.value = '';
     try {
       await action();
-      if (success) notice.value = success;
+      notice.value = success ?? t('agent.ui.saved');
+      return true;
     } catch (cause) {
       error.value = message(cause);
+      return false;
     } finally {
       busy.value = false;
     }
@@ -215,13 +221,6 @@
       providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
     });
 
-  const testProvider = (provider: AgentProviderView, modelId: string) =>
-    execute(async () => {
-      const result = await agentApi.testProvider(provider.id, modelId);
-      if (!result.ok) throw new Error('Provider test failed.');
-      notice.value = `Provider OK · ${result.latencyMs} ms`;
-    });
-
   const saveDenylist = (connectionIds: number[], reason: string) =>
     execute(async () => {
       if (!denylist.value) return;
@@ -229,14 +228,14 @@
     });
 
   const selectGroup = (id: AgentSettingsGroupId): void => {
+    if (activeGroup.value === id) return;
+    if (workspaceBody.value) groupScroll.set(activeGroup.value, workspaceBody.value.scrollTop);
     activeGroup.value = id;
+    error.value = '';
+    notice.value = '';
     requestAnimationFrame(() => {
-      document.getElementById('agent-settings-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (workspaceBody.value) workspaceBody.value.scrollTop = groupScroll.get(id) ?? 0;
     });
-  };
-
-  const selectGroupFromEvent = (event: Event): void => {
-    selectGroup((event.target as HTMLSelectElement).value as AgentSettingsGroupId);
   };
 
   onMounted(load);
@@ -271,106 +270,56 @@
       </div>
     </div>
 
-    <div v-if="error" class="rounded-md border border-error/40 bg-error/10 px-4 py-3 text-sm text-error">
-      {{ error }}
-    </div>
-    <div v-if="notice" class="rounded-md border border-success/40 bg-success/10 px-4 py-3 text-sm text-success">
-      {{ notice }}
-    </div>
     <div v-if="loading" class="rounded-lg border border-border bg-card p-8 text-center text-sm text-text-secondary">
       {{ $t('agent.settings.loading') }}
     </div>
 
+    <p v-if="!settings && error" role="alert" class="text-sm text-error">{{ error }}</p>
+
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
-      <div class="grid gap-5 lg:grid-cols-[232px_minmax(0,1fr)] xl:gap-7">
-        <aside class="min-w-0">
-          <nav
-            class="sticky top-4 hidden rounded-2xl border border-border/60 bg-card/70 p-2.5 shadow-sm lg:block"
-            :aria-label="$t('agent.settings.navigation')"
+      <div class="agent-settings-shell overflow-hidden rounded-2xl border border-border/70 bg-card">
+        <nav
+          class="hidden shrink-0 flex-wrap gap-1 border-b border-border/60 bg-header/30 p-2 sm:flex"
+          :aria-label="$t('agent.settings.navigation')"
+        >
+          <button
+            v-for="group in groups"
+            :key="group.id"
+            type="button"
+            class="flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-primary"
+            :class="
+              activeGroup === group.id
+                ? 'bg-primary/10 font-semibold text-primary'
+                : 'text-text-secondary hover:bg-header'
+            "
+            :aria-current="activeGroup === group.id ? 'page' : undefined"
+            :aria-controls="`agent-settings-${group.id}`"
+            @click="selectGroup(group.id)"
           >
-            <div class="border-b border-border/60 px-2 pb-2.5 pt-1">
-              <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
-                {{ $t('agent.settings.controlPlane') }}
-              </div>
-              <div class="mt-2 flex items-center gap-2 text-xs">
-                <span
-                  class="h-2 w-2 rounded-full"
-                  :class="settings.effectiveSettings.feature.enabled ? 'bg-success' : 'bg-text-secondary/50'"
-                ></span>
-                <span class="font-medium">
-                  {{
-                    settings.effectiveSettings.feature.enabled
-                      ? $t('agent.settings.enabled')
-                      : $t('agent.settings.disabled')
-                  }}
-                </span>
-              </div>
-            </div>
-            <div class="mt-1.5 space-y-1">
-              <button
-                v-for="group in groups"
-                :key="group.id"
-                type="button"
-                class="flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-xs transition-colors"
-                :class="
-                  activeGroup === group.id
-                    ? 'border-primary/20 bg-primary/10 font-medium text-foreground'
-                    : 'border-transparent text-text-secondary hover:bg-header/80 hover:text-foreground'
-                "
-                :aria-current="activeGroup === group.id ? 'page' : undefined"
-                @click="selectGroup(group.id)"
-              >
-                <span
-                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-                  :class="activeGroup === group.id ? 'bg-primary/10 text-primary' : 'bg-background/70'"
-                >
-                  <i :class="`${group.icon} text-[10px]`" aria-hidden="true"></i>
-                </span>
-                <span class="min-w-0 flex-1 truncate">{{ $t(group.label) }}</span>
-                <i
-                  v-if="activeGroup === group.id"
-                  class="fa-solid fa-chevron-right text-[9px] text-primary"
-                  aria-hidden="true"
-                ></i>
-              </button>
-            </div>
-          </nav>
-        </aside>
-
-        <div class="min-w-0">
-          <div class="sticky top-3 z-10 mb-4 lg:hidden">
-            <label class="block rounded-2xl border border-border/60 bg-card/95 p-3 shadow-sm backdrop-blur">
-              <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
-                {{ $t('agent.settings.navigation') }}
-              </span>
-              <select
-                :value="activeGroup"
-                :aria-label="$t('agent.settings.navigation')"
-                class="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-medium outline-none focus:border-primary"
-                @change="selectGroupFromEvent"
-              >
-                <option v-for="group in groups" :key="group.id" :value="group.id">{{ $t(group.label) }}</option>
-              </select>
-            </label>
-          </div>
-
-          <div
-            id="agent-settings-workspace"
-            class="mb-5 scroll-mt-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm md:p-6"
+            <i :class="group.icon" class="text-xs" aria-hidden="true"></i>
+            {{ $t(group.label) }}
+          </button>
+        </nav>
+        <label class="block shrink-0 border-b border-border/60 bg-header/20 p-3 sm:hidden">
+          <span class="sr-only">{{ $t('agent.settings.navigation') }}</span>
+          <select
+            :value="activeGroup"
+            class="h-10 w-full rounded-lg border border-border bg-card px-3 text-sm"
+            @change="selectGroup(($event.target as HTMLSelectElement).value as AgentSettingsGroupId)"
           >
-            <div class="flex items-start gap-4">
-              <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <i :class="activeGroupMeta.icon" aria-hidden="true"></i>
-              </div>
-              <div class="min-w-0">
-                <h2 class="text-lg font-semibold tracking-tight">{{ $t(activeGroupMeta.label) }}</h2>
-                <p class="mt-1 max-w-3xl text-sm leading-6 text-text-secondary">
-                  {{ $t(`agent.settings.groupDescriptions.${activeGroup}`) }}
-                </p>
-              </div>
-            </div>
+            <option v-for="group in groups" :key="group.id" :value="group.id">{{ $t(group.label) }}</option>
+          </select>
+        </label>
+        <div
+          ref="workspaceBody"
+          class="agent-settings-body min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 md:p-6"
+        >
+          <div id="agent-settings-workspace" class="mb-5">
+            <h2 class="text-lg font-semibold">{{ $t(activeGroupMeta.label) }}</h2>
+            <p class="mt-1 text-sm leading-6 text-text-secondary">
+              {{ $t(`agent.settings.groupDescriptions.${activeGroup}`) }}
+            </p>
           </div>
-
           <section v-show="activeGroup === 'overview'" id="agent-settings-overview" class="scroll-mt-4 space-y-5">
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div class="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm">
@@ -415,23 +364,32 @@
               :discoveries="discoveredModels"
               :default-provider-id="settings.requestedSettings.model.defaultProviderId"
               :default-model-id="settings.requestedSettings.model.defaultModelId"
-              @create="createProvider"
+              :create-provider="createProvider"
               @toggle="toggleProvider"
               @protocol="setProviderProtocol"
-              @test="testProvider"
               @discover="discoverProviderModels"
-              @add-model="addProviderModel"
+              :add-provider-model="addProviderModel"
               @default-model="setDefaultModel"
             />
-            <BudgetContextSettings :settings="settings" :busy="busy" @save="(patch) => patchSection('budget', patch)" />
-            <HardLimitsSettings
-              :settings="settings"
-              :preview="hardLimitPreview"
-              :busy="busy"
-              @preview="previewHardLimits"
-              @confirm="confirmHardLimits"
-              @dismiss="hardLimitPreview = null"
-            />
+            <details class="rounded-xl border border-border/60 p-4">
+              <summary class="cursor-pointer text-sm font-medium">{{ $t('agent.ui.budget') }}</summary>
+              <BudgetContextSettings
+                :settings="settings"
+                :busy="busy"
+                @save="(patch) => patchSection('budget', patch)"
+              />
+            </details>
+            <details class="rounded-xl border border-border/60 p-4">
+              <summary class="cursor-pointer text-sm font-medium">{{ $t('agent.ui.limits') }}</summary>
+              <HardLimitsSettings
+                :settings="settings"
+                :preview="hardLimitPreview"
+                :busy="busy"
+                @preview="previewHardLimits"
+                @confirm="confirmHardLimits"
+                @dismiss="hardLimitPreview = null"
+              />
+            </details>
           </section>
 
           <section v-show="activeGroup === 'execution'" id="agent-settings-execution" class="scroll-mt-4 space-y-5">
@@ -440,13 +398,16 @@
               :busy="busy"
               @save="(patch) => patchSection('performance', patch)"
             />
-            <SubagentSettings
-              :settings="settings"
-              :apps="apps"
-              :providers="providers"
-              :busy="busy"
-              @save="(patch) => patchSection('subagents', patch)"
-            />
+            <details class="rounded-xl border border-border/60 p-4">
+              <summary class="cursor-pointer text-sm font-medium">{{ $t('agent.settings.subagents.title') }}</summary>
+              <SubagentSettings
+                :settings="settings"
+                :apps="apps"
+                :providers="providers"
+                :busy="busy"
+                @save="(patch) => patchSection('subagents', patch)"
+              />
+            </details>
           </section>
 
           <section
@@ -460,17 +421,25 @@
               :busy="busy"
               @settings-updated="(updated) => (settings = updated)"
             />
-            <BrowserRuntimeSettings
-              :settings="settings"
-              :busy="busy"
-              @save="(patch) => patchSection('browser', patch)"
-            />
-            <AcpRuntimeSettings
-              :settings="settings"
-              :busy="busy"
-              :agent-available="apps.some((app) => app.id === 'nexus.agent')"
-              @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
-            />
+            <details class="rounded-xl border border-border/60 p-4">
+              <summary class="cursor-pointer text-sm font-medium">
+                {{ $t('agent.settings.browserRuntime.title') }}
+              </summary>
+              <BrowserRuntimeSettings
+                :settings="settings"
+                :busy="busy"
+                @save="(patch) => patchSection('browser', patch)"
+              />
+            </details>
+            <details class="rounded-xl border border-border/60 p-4">
+              <summary class="cursor-pointer text-sm font-medium">{{ $t('agent.settings.acpRuntime.title') }}</summary>
+              <AcpRuntimeSettings
+                :settings="settings"
+                :busy="busy"
+                :agent-available="apps.some((app) => app.id === 'nexus.agent')"
+                @save-profiles="(profiles) => patchSection('workspaceRuntime', { acpProfiles: profiles })"
+              />
+            </details>
           </section>
 
           <section v-show="activeGroup === 'storage'" id="agent-settings-storage" class="scroll-mt-4 space-y-5">
@@ -494,8 +463,20 @@
 
           <section v-show="activeGroup === 'safety'" id="agent-settings-safety" class="scroll-mt-4 space-y-5">
             <SafetyNetworkSettings :denylist="denylist" :busy="busy" @save="saveDenylist" />
-            <SystemGuardrails />
+            <details class="rounded-xl border border-border/60 p-4">
+              <summary class="cursor-pointer text-sm font-medium">{{ $t('agent.settings.guardrails.title') }}</summary>
+              <SystemGuardrails />
+            </details>
           </section>
+        </div>
+        <div
+          v-if="error || notice || busy"
+          class="shrink-0 border-t border-border/60 px-5 py-3 text-sm"
+          :class="error ? 'text-error bg-error/5' : 'text-text-secondary bg-header/30'"
+          :role="error ? 'alert' : 'status'"
+          aria-live="polite"
+        >
+          {{ error || (busy ? $t('agent.ui.working') : notice) }}
         </div>
       </div>
     </template>
@@ -556,3 +537,40 @@
     </template>
   </BaseModal>
 </template>
+
+<style scoped>
+  .agent-settings-shell {
+    display: flex;
+    flex-direction: column;
+    height: clamp(420px, calc(100dvh - 290px), 900px);
+  }
+  .agent-settings-body {
+    scrollbar-gutter: stable;
+    overflow-anchor: none;
+  }
+  .agent-settings-body :deep(section) {
+    box-shadow: none;
+    border-radius: 12px;
+  }
+  .agent-settings-body :deep(details > section) {
+    border: 0;
+    padding: 16px 0 0;
+  }
+  .agent-settings-body :deep(p) {
+    overflow-wrap: anywhere;
+  }
+  .agent-settings-body :deep(input:not([type='checkbox']):not([type='radio'])),
+  .agent-settings-body :deep(select) {
+    max-width: 100%;
+    min-width: 0;
+  }
+  @media (max-width: 640px) {
+    .agent-settings-shell {
+      height: max(480px, calc(100dvh - 240px));
+    }
+    nav button {
+      flex: 1 0 42%;
+      justify-content: flex-start;
+    }
+  }
+</style>

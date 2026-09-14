@@ -3,7 +3,7 @@
     "settings": {
       "tab": "Agent",
       "title": "Agent",
-      "description": "Agent App、モデル Provider、実行上限、ストレージ、安全制御を設定します。",
+      "description": "モデル、実行環境、権限を管理します。設定する項目を選択してください。",
       "loading": "Agent 設定を読み込んでいます...",
       "feature": {
         "title": "Agent 機能",
@@ -198,6 +198,7 @@
         "contextWindow": "コンテキストウィンドウ",
         "maxOutputTokens": "最大出力トークン",
         "tools": "Tools 対応",
+        "reasoningAuto": "自動判定",
         "privateExceptions": "プライベート host:port 例外",
         "create": "Provider を作成",
         "enabled": "有効",
@@ -462,8 +463,8 @@
         "tool_result": "ツール結果",
         "system_notice": "システム"
       },
-      "emptyTitle": "画面ではなく、成果から始める",
-      "emptyDescription": "達成したい結果を伝えてください。Agent は現在のコンテキスト、許可済みツール、検証可能な証拠を使って進めます。",
+      "emptyTitle": "何を一緒に解決しましょうか？",
+      "emptyDescription": "目標を説明するか、以下の提案から始めてください。",
       "capabilityContext": "コンテキスト認識",
       "capabilityTools": "制御されたツール",
       "capabilityEvidence": "結果を検証",
@@ -523,6 +524,8 @@
     },
     "tasks": {
       "title": "タスク",
+      "dragHint": "カードをドラッグして並べ替え",
+      "dragCard": "カードをドラッグして並べ替え",
       "current": "現在の Run",
       "tokens": "トークン",
       "steps": "ステップ",
@@ -681,6 +684,45 @@
       "expired": "この承認は期限切れです。",
       "resolved": "承認状態: {state}",
       "openPending": "承認待ち {count} 件を開く"
+    },
+    "ui": {
+      "saved": "保存しました",
+      "working": "保存中…",
+      "testing": "テスト中…",
+      "testSuccess": "接続成功 · {ms} ms",
+      "testFailed": "接続できません。モデル、接続先、認証情報を確認してください。",
+      "createFailed": "追加できませんでした。入力内容と下のエラーを確認してください。",
+      "budget": "予算とコンテキスト",
+      "limits": "高度なリソース上限",
+      "reasoning": "推論の強度",
+      "reasoningDefault": "標準の推論",
+      "reasoningUnavailable": "このモデルの選択可能な推論レベルは未判定です。Provider の既定値を使用します。",
+      "reasoningDefaultShort": "標準",
+      "reasoningNone": "なし",
+      "reasoningHigh": "高",
+      "reasoningExtraHigh": "最高",
+      "reasoningUnavailableShort": "レベル未判定 · 既定値を使用",
+      "reasoningLevels": {
+        "none": "なし",
+        "minimal": "最小",
+        "low": "低",
+        "medium": "中",
+        "high": "高",
+        "xhigh": "最高",
+        "max": "最大"
+      },
+      "reasoningDragHint": "スライダーを動かすか段階を選択します。新しい Run では選択値が固定されます。",
+      "reasoningLocked": "この Run の推論強度は固定されています。",
+      "toggleTasks": "タスクパネルを表示・非表示",
+      "latest": "最新のメッセージへ",
+      "toolOutput": "ツールの結果を受信しました。展開して出力を確認できます。",
+      "rawOutput": "完全な出力",
+      "usageDetails": "使用量と実行の詳細",
+      "promptExplain": "現在の環境の仕組みを説明してください",
+      "promptDiagnose": "利用可能な接続を読み取り専用で確認してください",
+      "advanced": "詳細設定",
+      "optionalRuntime": "オプションの実行環境",
+      "approvalHistory": "処理済みの承認"
     }
   }
 }

@@ -141,7 +141,21 @@
       "navBarVisibleDescription": "Keep the Workspace top navigation visible. It can also be toggled from the Workspace tab bar.",
       "terminalRightClickCopyPasteTitle": "Terminal right-click copy/paste",
       "terminalRightClickCopyPasteLabel": "Enable terminal right-click copy/paste",
-      "terminalRightClickCopyPasteDescription": "Right-click copies the current selection; when there is no selection, right-click pastes clipboard text."
+      "terminalRightClickCopyPasteDescription": "Right-click copies the current selection; when there is no selection, right-click pastes clipboard text.",
+      "organizedDescription": "Settings are grouped by workflow so related changes can be reviewed and saved together.",
+      "unsavedGroups": "{count} setting group(s) have unsaved changes",
+      "moreDetails": "Details",
+      "saveGroup": "Save group",
+      "groups": {
+        "files": "Files & editor",
+        "filesHint": "File windows, editor behavior, deletion safety, and spreadsheet preview.",
+        "commands": "Terminal & commands",
+        "commandsHint": "Terminal interaction, command panels, tags, and display density.",
+        "monitoring": "Dashboard & monitoring",
+        "monitoringHint": "Local/remote resource cards, refresh intervals, status monitor, and Docker.",
+        "advanced": "Layout & advanced",
+        "advancedHint": "Low-frequency workspace layout controls."
+      }
     },
     "statusMonitorShowIp": {
       "title": "Status Monitor: Show IP Address",

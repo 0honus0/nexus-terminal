@@ -255,7 +255,13 @@ export const composeAgent = ({
     systemClock,
     () => subagentScheduler?.wake(),
   );
-  const machine = new MachineCapabilityAdapter(connectionResolver, diagnostics, executionSessions, docker);
+  const machine = new MachineCapabilityAdapter(
+    connectionResolver,
+    diagnostics,
+    executionSessions,
+    docker,
+    targetDenylist,
+  );
   const cryptoHash = new NodeCryptoHashAdapter();
   const plans = new PlanService(runRepository, stateCommit, () => systemClock.nowUnixSeconds());
   const composedWorkspaceRuntime = composeWorkspaceRuntime({

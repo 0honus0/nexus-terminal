@@ -554,6 +554,13 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
               contextWindow: model.contextWindow,
               maxOutputTokens: model.maxOutputTokens,
               supportsTools: model.supportsTools,
+              reasoning: {
+                supportedEfforts: model.reasoningEfforts ?? [],
+                defaultEffort: model.defaultReasoningEffort ?? null,
+                source: model.reasoningSource ?? null,
+                mandatory: model.reasoningMandatory ?? false,
+                supportsMaxTokens: model.reasoningSupportsMaxTokens ?? false,
+              },
               pricing: {
                 known:
                   Number.isSafeInteger(model.priceMicrosPerMillionInput) &&

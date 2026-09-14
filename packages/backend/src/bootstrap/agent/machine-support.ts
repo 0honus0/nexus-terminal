@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { AgentConnectionResolverPort, AgentDiagnosticsPort } from '../../modules/agent/capabilities/machine.port';
 import type { ConnectionService } from '../../modules/connections/connection.service';
+import type { Connection } from '../../modules/connections/connection.types';
 import type { SshConnectionResolver } from '../../modules/connections/services/ssh-connection-resolver.service';
 import type { DiagnosticsService } from '../../modules/system/diagnostics/system-diagnostics.service';
 
@@ -37,22 +38,27 @@ const stableConnectionHash = (connection: {
 export const createAgentConnectionResolver = (
   connections: ConnectionService,
   sshResolver: SshConnectionResolver,
-): AgentConnectionResolverPort => ({
-  get: async (connectionId) => {
-    const connection = await connections.get(connectionId);
-    if (!connection) return null;
-    return {
-      id: connection.id,
-      type: connection.type,
-      host: connection.host,
-      port: connection.port,
-      username: connection.username,
-      updatedAt: connection.updatedAt,
-      configurationHash: stableConnectionHash(connection),
-    };
-  },
-  resolve: (connectionId) => sshResolver.resolveStored(connectionId),
-});
+): AgentConnectionResolverPort => {
+  const view = (connection: Connection) => ({
+    id: connection.id,
+    name: connection.name,
+    type: connection.type,
+    host: connection.host,
+    port: connection.port,
+    username: connection.username,
+    updatedAt: connection.updatedAt,
+    configurationHash: stableConnectionHash(connection),
+  });
+
+  return {
+    list: async () => (await connections.list()).map((connection) => view(connection)),
+    get: async (connectionId) => {
+      const connection = await connections.get(connectionId);
+      return connection ? view(connection) : null;
+    },
+    resolve: (connectionId) => sshResolver.resolveStored(connectionId),
+  };
+};
 
 export const createAgentDiagnostics = (diagnostics: DiagnosticsService): AgentDiagnosticsPort => ({
   run: async (connectionId, probeIds, actorId) => {

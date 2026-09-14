@@ -26,7 +26,7 @@
 </script>
 
 <template>
-  <section class="rounded-lg border border-border bg-card p-5">
+  <section class="rounded-xl border border-border/60 bg-card p-5">
     <h2 class="text-base font-semibold">{{ $t('agent.settings.performance.title') }}</h2>
     <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.performance.description') }}</p>
     <div class="mt-4 grid gap-4 md:grid-cols-2">

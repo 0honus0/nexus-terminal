@@ -141,7 +141,21 @@
       "navBarVisibleDescription": "保持工作区顶部导航可见，也可以从工作区标签栏切换。",
       "terminalRightClickCopyPasteTitle": "终端右键复制/粘贴",
       "terminalRightClickCopyPasteLabel": "启用终端右键复制/粘贴",
-      "terminalRightClickCopyPasteDescription": "终端有选区时右键复制；没有选区时右键粘贴剪贴板文本。"
+      "terminalRightClickCopyPasteDescription": "终端有选区时右键复制；没有选区时右键粘贴剪贴板文本。",
+      "organizedDescription": "按使用场景分组相关设置，可一次检查并保存同一组修改，减少重复操作和页面噪声。",
+      "unsavedGroups": "有 {count} 组设置尚未保存",
+      "moreDetails": "查看说明",
+      "saveGroup": "保存本组",
+      "groups": {
+        "files": "文件与编辑",
+        "filesHint": "文件弹窗、编辑器行为、删除保护和电子表格预览。",
+        "commands": "终端与指令",
+        "commandsHint": "终端交互、指令面板、标签和显示密度。",
+        "monitoring": "首页与监控",
+        "monitoringHint": "本机/远程资源、刷新间隔、状态监控和 Docker。",
+        "advanced": "布局与高级设置",
+        "advancedHint": "低频使用的工作区布局控制，默认收起。"
+      }
     },
     "statusMonitorShowIp": {
       "title": "状态监视器显示IP地址",

@@ -1,4 +1,5 @@
 import { reactive } from 'vue';
+import type { AgentReasoningEffort } from '../api/agent-api';
 
 export interface AgentAppViewState {
   threadId?: string;
@@ -6,6 +7,7 @@ export interface AgentAppViewState {
   scrollAnchor?: string;
   selectedTaskId?: string;
   modelKey?: string;
+  reasoningEffort?: AgentReasoningEffort;
   environmentRecipeId?: string;
   hubView: 'conversation' | 'files';
 }
@@ -52,6 +54,14 @@ export const agentSurfaceSession = {
     const state = ensure(appId);
     if (modelKey) state.modelKey = modelKey;
     else delete state.modelKey;
+  },
+  restoreReasoningEffort(appId: string): AgentReasoningEffort | undefined {
+    return ensure(appId).reasoningEffort;
+  },
+  setReasoningEffort(appId: string, effort?: AgentReasoningEffort): void {
+    const state = ensure(appId);
+    if (effort) state.reasoningEffort = effort;
+    else delete state.reasoningEffort;
   },
   restoreEnvironmentRecipeId(appId: string): string | undefined {
     return ensure(appId).environmentRecipeId;

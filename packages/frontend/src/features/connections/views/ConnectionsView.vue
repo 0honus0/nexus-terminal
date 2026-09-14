@@ -202,10 +202,10 @@
 
       <section class="min-h-[400px] overflow-hidden rounded-lg border border-border bg-background shadow">
         <header
-          class="flex flex-col items-start justify-between gap-2 border-b border-border px-4 py-3 sm:flex-row sm:items-center"
+          class="flex flex-col items-stretch justify-between gap-3 border-b border-border px-4 py-3 lg:flex-row lg:items-center"
         >
           <h2 class="shrink-0 text-lg font-medium">{{ t('dashboard.connectionList') }} ({{ filtered.length }})</h2>
-          <div class="flex w-full flex-wrap items-stretch gap-2 sm:w-auto sm:flex-nowrap sm:items-center">
+          <div class="flex w-full flex-wrap items-stretch gap-2 lg:w-auto lg:flex-nowrap lg:items-center">
             <div class="mr-1 flex items-center">
               <label for="batch-edit-toggle" class="mr-2 text-sm font-medium text-text-secondary">{{
                 t('connections.batchEdit.toggleLabel')

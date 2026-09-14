@@ -3,7 +3,7 @@
     "settings": {
       "tab": "Agent",
       "title": "Agent",
-      "description": "Configure Agent apps, providers, execution limits, storage, and safety controls.",
+      "description": "Manage models, execution environments and permissions. Choose a section to configure.",
       "loading": "Loading Agent settings...",
       "feature": {
         "title": "Agent feature",
@@ -198,6 +198,7 @@
         "contextWindow": "Context window",
         "maxOutputTokens": "Maximum output tokens",
         "tools": "Supports tools",
+        "reasoningAuto": "Auto-detected",
         "privateExceptions": "Private host:port exceptions",
         "create": "Create provider",
         "enabled": "Enabled",
@@ -462,8 +463,8 @@
         "tool_result": "Tool result",
         "system_notice": "System"
       },
-      "emptyTitle": "Start with the outcome, not the interface",
-      "emptyDescription": "Describe the result you want. Agent will work with the current context, authorized tools, and verifiable evidence.",
+      "emptyTitle": "What would you like to work on?",
+      "emptyDescription": "Describe your goal, or start with a suggestion below.",
       "capabilityContext": "Context aware",
       "capabilityTools": "Controlled tools",
       "capabilityEvidence": "Verified outcomes",
@@ -523,6 +524,8 @@
     },
     "tasks": {
       "title": "Tasks",
+      "dragHint": "Drag cards to reorder",
+      "dragCard": "Drag card to reorder",
       "current": "Current run",
       "tokens": "Tokens",
       "steps": "Steps",
@@ -681,6 +684,45 @@
       "expired": "This approval has expired.",
       "resolved": "Approval status: {state}",
       "openPending": "Open {count} pending approvals"
+    },
+    "ui": {
+      "saved": "Saved",
+      "working": "Saving…",
+      "testing": "Testing…",
+      "testSuccess": "Connected · {ms} ms",
+      "testFailed": "Connection failed. Check the model, endpoint and credentials, then retry.",
+      "createFailed": "Could not add provider. Check the form and error below, then retry.",
+      "budget": "Budget and context",
+      "limits": "Advanced resource limits",
+      "reasoning": "Reasoning effort",
+      "reasoningDefault": "Default effort",
+      "reasoningUnavailable": "Selectable reasoning levels are not known for this model. The provider default remains in use.",
+      "reasoningDefaultShort": "Default",
+      "reasoningNone": "None",
+      "reasoningHigh": "High",
+      "reasoningExtraHigh": "Extra high",
+      "reasoningUnavailableShort": "Unknown levels · provider default",
+      "reasoningLevels": {
+        "none": "None",
+        "minimal": "Minimal",
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High",
+        "xhigh": "Extra high",
+        "max": "Max"
+      },
+      "reasoningDragHint": "Drag the slider or choose a level. A new run freezes the selection.",
+      "reasoningLocked": "This run has frozen its reasoning effort.",
+      "toggleTasks": "Show or hide task panel",
+      "latest": "Latest messages",
+      "toolOutput": "Tool returned a result. Expand to view output.",
+      "rawOutput": "Full output",
+      "usageDetails": "Usage and execution details",
+      "promptExplain": "Explain how the current environment works",
+      "promptDiagnose": "Check available connections, read only, without changes",
+      "advanced": "Advanced settings",
+      "optionalRuntime": "Optional runtime",
+      "approvalHistory": "Approval history"
     }
   }
 }

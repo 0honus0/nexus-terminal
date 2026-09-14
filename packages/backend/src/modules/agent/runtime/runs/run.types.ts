@@ -1,5 +1,5 @@
 import type { AgentRunEnvironmentSelection, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../../agent.types';
-import type { ModelRef } from '../../ai/model.types';
+import type { ModelRef, ReasoningEffort } from '../../ai/model.types';
 import type { RunPlan } from '../planning/plan.types';
 
 export type RunStatus =
@@ -57,6 +57,7 @@ export interface CreateRunCommand {
   input: UserInputData;
   agentDefinitionId: string;
   model: ModelRef;
+  reasoningEffort?: ReasoningEffort;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
@@ -108,6 +109,7 @@ export interface RunDefinitionSnapshot {
   schemaVersion: 1;
   agentDefinitionId: string;
   model: ModelRef;
+  reasoningEffort?: ReasoningEffort;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSnapshot | null;
   policyRevision: number;

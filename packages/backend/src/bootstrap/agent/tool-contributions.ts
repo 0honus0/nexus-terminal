@@ -14,7 +14,11 @@ import {
   createShellTool,
   createWriteFileTool,
 } from '../../modules/agent/tools/host/mutation-tools';
-import { createDiagnosticsTool, createReadFileTool } from '../../modules/agent/tools/host/tools';
+import {
+  createConnectionListTool,
+  createDiagnosticsTool,
+  createReadFileTool,
+} from '../../modules/agent/tools/host/tools';
 import {
   createWorkspaceControlTool,
   createWorkspaceCreateTool,
@@ -52,7 +56,7 @@ export const registerMachineToolContributions = ({
     schemaVersion: 1,
     id: 'machine.diagnostics',
     capability: 'machine.diagnostics.read',
-    tools: [createDiagnosticsTool(machine, cryptoHash)],
+    tools: [createConnectionListTool(machine, cryptoHash), createDiagnosticsTool(machine, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,

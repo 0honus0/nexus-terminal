@@ -196,6 +196,10 @@ export class RunService {
       throw new Error('PROVIDER_CONFIGURATION_STALE');
     const model = provider.models.find((candidate) => candidate.id === command.model.modelId);
     if (!model) throw new Error('MODEL_NOT_FOUND');
+    const reasoningEffort = command.reasoningEffort ?? model.defaultReasoningEffort;
+    if (reasoningEffort !== undefined && !model.reasoningEfforts?.includes(reasoningEffort)) {
+      throw new Error('MODEL_REASONING_EFFORT_UNSUPPORTED');
+    }
 
     const budget = runBudgetFrom(settings);
     if (
@@ -216,6 +220,7 @@ export class RunService {
       schemaVersion: 1,
       agentDefinitionId: command.agentDefinitionId,
       model: { ...command.model },
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
       connectionIds,
       environment,
       policyRevision: app.policyRevision,
@@ -230,6 +235,7 @@ export class RunService {
         modelId: command.model.modelId,
         configurationVersion: command.model.configurationVersion,
       },
+      ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
       connectionIds,
       environment: environmentSelection ? (JSON.parse(JSON.stringify(environmentSelection)) as JsonValue) : null,
       ...(initialGoal ? { initialGoal } : {}),

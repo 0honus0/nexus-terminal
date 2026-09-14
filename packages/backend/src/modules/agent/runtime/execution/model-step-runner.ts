@@ -138,6 +138,9 @@ export class ModelStepRunner {
               scopeKey: `nexus:thread:${snapshot.threadId}`,
               affinityKey: `nexus:thread:${snapshot.threadId}`,
             },
+            ...(snapshot.definition.reasoningEffort === undefined
+              ? {}
+              : { reasoningEffort: snapshot.definition.reasoningEffort }),
             maxOutputTokens: snapshot.budget.maxOutputTokens,
           },
           signal,

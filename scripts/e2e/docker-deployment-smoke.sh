@@ -7,6 +7,7 @@ if [[ $# -ne 1 ]]; then
 fi
 
 image="$1"
+runner_image="${NEXUS_DOCKER_SMOKE_RUNNER_IMAGE:-nexus-agent-runner:e2e-smoke}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 suffix="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}-$$"
 suffix="${suffix//[^A-Za-z0-9_.-]/-}"
@@ -20,8 +21,6 @@ env_file="$workspace/.env"
 data_dir="$workspace/data"
 cookie_jar="$(mktemp)"
 runner_root="$workspace/agent-runner"
-runner_log="$workspace/agent-runner.log"
-runner_pid=''
 browser_probe_log="$workspace/browser-cdp-probe.log"
 browser_probe_pid=''
 cdp_browser_log="$workspace/direct-cdp-browser.log"
@@ -33,17 +32,6 @@ browser_page_log="$workspace/direct-browser-page.log"
 browser_page_pid=''
 plugin_repository_log="$workspace/plugin-repository.log"
 plugin_repository_pid=''
-runner_port="$(node - <<'NODE'
-const net = require('node:net');
-const server = net.createServer();
-server.listen(0, '0.0.0.0', () => {
-  const address = server.address();
-  if (!address || typeof address === 'string') process.exit(1);
-  console.log(address.port);
-  server.close();
-});
-NODE
-)"
 browser_probe_port="$(node - <<'NODE'
 const net = require('node:net');
 const server = net.createServer();
@@ -108,11 +96,18 @@ if [[ "$image" != *:* ]]; then
   echo "Unified image must include an explicit tag: $image" >&2
   exit 2
 fi
+if [[ "$runner_image" != *:* ]]; then
+  echo "Agent Runner image must include an explicit tag: $runner_image" >&2
+  exit 2
+fi
 image_repository="${image%:*}"
 image_tag="${image##*:}"
+runner_image_repository="${runner_image%:*}"
+runner_image_tag="${runner_image##*:}"
 
 compose() {
   docker compose \
+    --profile runner \
     --project-name "$project_name" \
     --project-directory "$workspace" \
     --env-file "$env_file" \
@@ -135,8 +130,6 @@ print_logs() {
   compose ps --all 2>&1 || true
   echo "--- compose logs ---"
   compose logs --no-color 2>&1 || true
-  echo "--- agent runner host log ---"
-  cat "$runner_log" 2>/dev/null || true
   echo "--- browser CDP probe log ---"
   cat "$browser_probe_log" 2>/dev/null || true
   echo "--- direct CDP browser log ---"
@@ -176,10 +169,6 @@ cleanup() {
     kill "$browser_probe_pid" >/dev/null 2>&1 || true
     wait "$browser_probe_pid" >/dev/null 2>&1 || true
   fi
-  if [[ -n "$runner_pid" ]]; then
-    kill "$runner_pid" >/dev/null 2>&1 || true
-    wait "$runner_pid" >/dev/null 2>&1 || true
-  fi
   chmod -R u+w "$runner_root" >/dev/null 2>&1 || true
   rm -rf "$workspace" "$cookie_jar" || true
   exit "$status"
@@ -194,8 +183,10 @@ services:
     container_name: nexus-e2e-frontend-$suffix
   backend:
     container_name: nexus-e2e-backend-$suffix
+    extra_hosts:
+      - host.docker.internal:host-gateway
     environment:
-      AGENT_RUNNER_URL: http://host.docker.internal:$runner_port
+      AGENT_RUNNER_URL: http://agent-runner:8790
       NEXUS_E2E_RESET_ENABLED: 1
       AGENT_OFFICIAL_PLUGIN_CATALOG_URL: http://host.docker.internal:$plugin_repository_port/official-catalog.json
       AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: ed25519:b75cef09083540273828a77809f5ec467bac0df101f5b6ec17727a4103f632f7
@@ -207,6 +198,10 @@ services:
       NEXUS_E2E_BROWSER_PAGE_PORT: $browser_page_port
   guacd:
     container_name: nexus-e2e-guacd-$suffix
+  agent-runner:
+    container_name: nexus-e2e-agent-runner-$suffix
+    extra_hosts:
+      - host.docker.internal:host-gateway
 networks:
   nexus-terminal-network:
     name: nexus-e2e-network-$suffix
@@ -231,6 +226,10 @@ set_env NEXUS_HTTP_PORT "$http_port"
 set_env NEXUS_PUBLIC_ORIGIN "http://127.0.0.1:$http_port"
 set_env NEXUS_IPV6_SUBNET "fd01:ee:${network_hex}::/80"
 set_env NEXUS_IPV6_GATEWAY "fd01:ee:${network_hex}::1"
+set_env NEXUS_AGENT_RUNNER_IMAGE_REPOSITORY "$runner_image_repository"
+set_env NEXUS_AGENT_RUNNER_IMAGE_TAG "$runner_image_tag"
+set_env NEXUS_AGENT_RUNNER_DATA_DIR "$runner_root"
+set_env NEXUS_AGENT_RUNNER_URL 'http://agent-runner:8790'
 set_env NEXUS_AGENT_RUNNER_TOKEN "$runner_token"
 set_env RP_ID 'ssh.honus.top'
 set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
@@ -346,7 +345,7 @@ browser_probe_script="$workspace/browser-cdp-probe.cjs"
 cat > "$browser_probe_script" <<'NODE'
 const { WebSocketServer } = require(process.env.NEXUS_WS_MODULE);
 const port = Number(process.env.NEXUS_BROWSER_PROBE_PORT);
-const server = new WebSocketServer({ host: '127.0.0.1', port, perMessageDeflate: false });
+const server = new WebSocketServer({ host: '0.0.0.0', port, perMessageDeflate: false });
 server.on('connection', (socket) => {
   socket.on('message', (data, isBinary) => {
     if (isBinary) { socket.close(1003, 'text only'); return; }
@@ -364,30 +363,9 @@ browser_probe_pid=$!
 sleep 0.2
 kill -0 "$browser_probe_pid" 2>/dev/null || { echo 'Browser CDP probe did not start.' >&2; exit 1; }
 
-# Host Runner 与独立容器 Runner 使用同一套单用户 native Workspace Runtime。
-# Workspace 是持久工作目录与运行环境选择边界，不创建额外 namespace/sandbox。
-NEXUS_AGENT_RUNNER_HOST=0.0.0.0 \
-PORT="$runner_port" \
-NEXUS_AGENT_RUNNER_TOKEN="$runner_token" \
-NEXUS_AGENT_RUNNER_ROOT="$runner_root" \
-NEXUS_AGENT_CATALOG="$repo_root/scripts/docker/agent-runner/catalog/catalog.json" \
-NEXUS_AGENT_PLUGIN_SOURCE_ROOT="$data_dir/agent/plugins" \
-node "$repo_root/packages/agent-runner/dist/index.js" >"$runner_log" 2>&1 &
-runner_pid=$!
-
-runner_listener_ready=0
-for _ in {1..30}; do
-  if curl -fsS -H "Authorization: Bearer $runner_token" -H "X-Nexus-Agent-Protocol: 2026-09-13" "http://127.0.0.1:${runner_port}/v1/availability" >/dev/null; then
-    runner_listener_ready=1
-    break
-  fi
-  sleep 1
-done
-[[ "$runner_listener_ready" -eq 1 ]] || { echo "Agent Runner host service did not start." >&2; exit 1; }
-
-# Production Compose intentionally depends on guacd being started, not on the image's
-# slow built-in health cadence. Start with the same semantics, then verify readiness
-# through the application ingress and the authenticated Backend -> host Runner path.
+# This smoke is the Runner-enhanced deployment path. The core-only path is covered by
+# docker-core-no-runner-smoke.sh; here Compose explicitly enables the optional Runner profile.
+# Workspace is still a persistent native runtime boundary, not an additional security sandbox.
 compose up -d --build
 compose ps
 
@@ -968,7 +946,7 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
     {
       scope: 'external-network',
       via: 'runner',
-      url: `ws://127.0.0.1:${process.env.NEXUS_BROWSER_PROBE_PORT}`,
+      url: `ws://host.docker.internal:${process.env.NEXUS_BROWSER_PROBE_PORT}`,
       priority: 10,
       allowPlaintext: true,
       verifyTls: true,

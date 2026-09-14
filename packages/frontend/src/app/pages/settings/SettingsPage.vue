@@ -4,13 +4,18 @@
   import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
   import { AgentSettingsPanel } from '@/features/agent/public';
   import { BackupSettingsPanel } from '@/features/backup/public';
-  import { loadPreferencesSettingsPanel, type Preferences } from '@/features/preferences/public';
+  import {
+    loadPreferencesSettingsPanel,
+    loadWorkspacePreferencesPanel,
+    type Preferences,
+  } from '@/features/preferences/public';
   import { SecuritySettingsPanel } from '@/features/security/public';
   import { useAuthSession } from '@/features/auth/public';
   import { setLocale, supportedLocales } from '@/app/i18n';
   import AboutPanel from './AboutPanel.vue';
 
   const PreferencesSettingsPanel = defineAsyncComponent(loadPreferencesSettingsPanel);
+  const WorkspacePreferencesPanel = defineAsyncComponent(loadWorkspacePreferencesPanel);
   const AppearanceSettingsPanel = defineAsyncComponent(loadAppearanceSettingsPanel);
   type SettingsTab = 'workspace' | 'system' | 'security' | 'ipControl' | 'data' | 'appearance' | 'agent' | 'about';
 
@@ -37,8 +42,20 @@
 <template>
   <main class="min-h-screen bg-background p-4 text-foreground">
     <div class="mx-auto max-w-7xl">
+      <label v-if="active === 'agent'" class="mb-4 block sm:hidden">
+        <span class="sr-only">{{ t('settings.sectionsAriaLabel') }}</span>
+        <select
+          v-model="active"
+          class="h-11 w-full rounded-xl border border-border bg-card px-3 text-sm"
+          :aria-label="t('settings.sectionsAriaLabel')"
+        >
+          <option v-for="tab in tabs" :key="tab.value" :value="tab.value">{{ tab.label }}</option>
+        </select>
+      </label>
+
       <div
-        class="mb-6 flex gap-1 overflow-x-auto bg-background py-2"
+        class="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-border/60 bg-card/30 p-1.5 sm:flex sm:flex-wrap sm:border-0 sm:bg-background sm:p-0 sm:py-2"
+        :class="{ 'agent-settings-tabs': active === 'agent' }"
         role="tablist"
         :aria-label="t('settings.sectionsAriaLabel')"
       >
@@ -49,7 +66,7 @@
           role="tab"
           :aria-selected="active === tab.value"
           :aria-controls="`settings-panel-${tab.value}`"
-          class="shrink-0 rounded-md px-4 py-2 text-sm font-medium transition-colors duration-150 ease-in-out focus:outline-none"
+          class="min-w-0 rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors duration-150 ease-in-out focus:outline-none sm:shrink-0 sm:px-4"
           :class="
             active === tab.value
               ? 'bg-primary text-white'
@@ -62,13 +79,7 @@
       </div>
 
       <div class="space-y-6">
-        <PreferencesSettingsPanel
-          v-if="active === 'workspace'"
-          id="settings-panel-workspace"
-          section="workspace"
-          :locales="supportedLocales"
-          @saved="handlePreferencesSaved"
-        />
+        <WorkspacePreferencesPanel v-if="active === 'workspace'" id="settings-panel-workspace" />
         <PreferencesSettingsPanel
           v-else-if="active === 'system'"
           id="settings-panel-system"
@@ -102,3 +113,11 @@
     </div>
   </main>
 </template>
+
+<style scoped>
+  @media (max-width: 639px) {
+    .agent-settings-tabs {
+      display: none;
+    }
+  }
+</style>

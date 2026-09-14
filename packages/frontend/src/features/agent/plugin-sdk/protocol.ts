@@ -4,6 +4,7 @@ import type {
   AgentDefinitionView,
   AgentLedgerPage,
   AgentProviderView,
+  AgentReasoningEffort,
   AgentRunPage,
   AgentRunSnapshot,
   AgentRunView,
@@ -108,6 +109,7 @@ export interface PluginFrontendSdkV1 {
         artifactRefs?: string[];
         agentDefinitionId: string;
         model: { providerId: string; modelId: string; configurationVersion: number };
+        reasoningEffort?: AgentReasoningEffort;
         connectionIds?: number[];
         initialGoal?: string;
       }): Promise<AgentRunView>;

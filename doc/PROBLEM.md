@@ -109,7 +109,10 @@
 - **验证方式**：E2E/Smoke 获取到的 descriptor 与资源 URL 均使用主 Frontend Origin；独立 Plugin listener 不需要发布到宿主机。
 - **本轮实施结果**：Vite 已增加 `/plugins` / `/sdk` 到内部 Plugin listener 的代理；Playwright 不再向 Backend 注入 `AGENT_PLUGIN_FRONTEND_ORIGIN`，只把 3002 作为内部代理 target；Docker deployment smoke 已改为通过主 Frontend 端口检查 `/plugins/...` 和 `/sdk/...`，并新增 Plugin route 不得继承 `X-Frame-Options: DENY` 的断言。
 - **验证结果**：`bash -n scripts/e2e/docker-deployment-smoke.sh` 通过；由于 honus.top 宿主机没有 Node/pnpm，完整仓库 smoke 在启动阶段因 `node: command not found` 无法在该宿主执行。为避免安装额外宿主开发环境，改用无需宿主 Node 的临时 Compose 等价探针，已真实验证同源 Plugin/SDK 路由与安全 header。
-- **状态**：`代码已修复；完整仓库 E2E 待 CI/具备 Node 的环境复跑`
+- **2026-09-14 从头复核**：当前 `dev@6ae13e623bb5` 仍在 `packages/e2e/playwright.config.ts` 向 Backend 注入 `AGENT_PLUGIN_FRONTEND_ORIGIN=E2E_URLS.pluginFrontendOrigin`，且 `test-env.ts` 仍保留仅为该旧注入服务的 `pluginFrontendOrigin`。Backend 产品代码已不读取该变量，Vite 也已通过 `/plugins`、`/sdk` 同源代理访问 3002，因此这是测试配置残留，但与本问题“Playwright 不再注入独立 Plugin Origin”的验收不一致。
+- **本轮修复计划**：删除 Playwright 的 `AGENT_PLUGIN_FRONTEND_ORIGIN` 注入，并删除不再使用的 `E2E_URLS.pluginFrontendOrigin`；保留 `AGENT_PLUGIN_FRONTEND_PORT` 作为 Backend 内部静态 listener 端口，以及 Vite 对 `/plugins`、`/sdk` 的内部代理。
+- **2026-09-14 本轮实施与验证**：已删除 Playwright Backend env 中的 `AGENT_PLUGIN_FRONTEND_ORIGIN` 和不再使用的 `E2E_URLS.pluginFrontendOrigin`；保留 `AGENT_PLUGIN_FRONTEND_PORT` 作为内部 listener。全仓库定向搜索已无上述旧变量/URL 引用，`pnpm --filter @nexus-terminal/e2e test:list` 成功加载 Playwright 配置并发现 233 个测试，说明配置可解析。
+- **状态**：`已修复并完成配置级验证；完整 Docker/E2E 仍由后续总回归执行`
 
 ## P-007 Docker deployment smoke 与默认 Compose Runner 模型冲突
 
@@ -126,7 +129,11 @@
 - **验证方式**：`docker compose config` 能生成；在已有线上 `nexus-agent-runner` 的主机上 smoke 不发生容器名冲突；Backend 实际 `AGENT_RUNNER_URL` 为 `http://agent-runner:8790`，认证 availability 成功。
 - **本轮实施结果**：Docker deployment smoke 已移除 Backend 指向 `host.docker.internal:<runnerPort>` 的覆盖及主流程宿主 Runner 启动；改用默认 Compose `agent-runner`，设置带 suffix 的唯一容器名、临时 Runner data 目录和 `http://agent-runner:8790`。后半段独立的 corrupt-journal 故障注入仍保留为专项 Runner 进程测试，不再充当 Backend 主运行时。
 - **验证结果**：脚本 `bash -n` 通过；生产等价临时 Compose 探针在同一主机成功启动独立 Runner/Backend/Frontend/guacd，Runner healthy 且 Backend 认证 availability 返回 `true/native/logical`，未与线上 `nexus-agent-runner` 发生容器名冲突。完整 smoke 仍受宿主缺少 Node/pnpm 限制，需在标准 CI 环境复跑。
-- **状态**：`代码已修复；完整 smoke 待标准 CI 环境复跑；“deployment smoke 必须以 Runner 为默认生产路径”的部分已被 P-008 修正`
+- **2026-09-14 从头复核**：当前 `dev@6ae13e623bb5` 的 `scripts/e2e/docker-deployment-smoke.sh` 又回到了“宿主机直接启动 Runner + Backend 指向 `http://host.docker.internal:<随机端口>`”的旧编排；脚本没有启用 `runner` profile，也没有使用 Compose 内的 `agent-runner`。这与 P-008 的最终产品语义不冲突于“Runner 可选”，但与本条保留的增强路径验收以及 P-008 已记录的“deployment smoke 显式启用 Runner profile”不一致。
+- **本轮修复计划**：保留 `docker-core-no-runner-smoke.sh` 作为基础栈验证；将 `docker-deployment-smoke.sh` 恢复为显式 `COMPOSE_PROFILES=runner` 的增强路径，使用本次 CI 已构建的 `nexus-agent-runner:e2e-smoke` 镜像、唯一容器名和临时 Runner data 目录，Backend 通过 `http://agent-runner:8790` 访问。仅保留后半段 corrupt-journal 等明确的 host-runner 专项故障注入进程。
+- **2026-09-14 本轮实施**：`docker-deployment-smoke.sh` 已恢复为显式 `--profile runner` 的增强路径；Backend 固定通过 Compose DNS `http://agent-runner:8790` 访问 Runner，Runner 使用本轮 CI 已构建的独立镜像（默认 `nexus-agent-runner:e2e-smoke`）、带 suffix 的唯一容器名和 smoke 临时 data 目录。主流程已删除宿主 Runner 的随机端口/进程；Browser Runner tunnel probe 同步改为 `host.docker.internal` 并对 Backend/Runner 显式增加 `host-gateway`，避免容器内 `127.0.0.1` 误指向自身。后半段 corrupt-journal host Runner 专项故障注入继续保留。
+- **2026-09-14 本轮验证**：`bash -n scripts/e2e/docker-deployment-smoke.sh` 通过；静态断言确认主流程已无 `runner_port/runner_pid/runner_log`，并存在 `--profile runner`、`AGENT_RUNNER_URL=http://agent-runner:8790`、独立 Runner image/data/container 配置。当前 AgentDock 容器没有 Docker CLI；honus 宿主实测 Docker 29.8.0 / Compose 5.5.1 可用，但仍没有 Node/pnpm，因此不能在该宿主完整执行此 repository smoke。完整 Docker smoke 保留给标准 CI 总回归。
+- **状态**：`代码已修复并完成脚本级验证；完整 Docker smoke 待标准 CI 总回归`
 
 ## 本轮最终状态与剩余验证项
 
@@ -176,14 +183,14 @@
 
 - 现象：聊天测试中模型无法使用预期的基础排查、SSH/命令等能力。
 - 决策：先检查 AgentDefinition、Skill、Host tool catalog、Run capability snapshot 与 Provider tools 构建链路，定位断点后再修改；Runner 可选性不能影响基础工具暴露。
-- 状态：已记录，待定位。
+- 状态：`2026-09-14 已通过 P-019 恢复并重新验证；当前 Host Tool catalog 已重新包含只读连接发现能力。`
 
 ## P-010 Provider Prompt Cache 命中为 0
 
 - 现象：连续聊天时后台观察到 Provider 的 `cached_input_tokens` / Prompt Cache 命中率始终为 0。这里的“缓存”不是 Thread/Conversation 持久化；对话记录本身已有落库。
 - 用户澄清：类似 OpenAI 模型的 Prompt Caching，同一会话第二次及后续请求若存在足够长且稳定的输入前缀，应能出现 cached input。
 - 决策：检查最近 `agent_model_attempts.cached_input_tokens`、Provider 模型能力/响应 usage 解析，以及 Context/Tools 在请求中的排序和稳定性；重点确认 Nexus 是否每轮重排/改变 system、历史、Skill metadata、Tool schema 等前缀导致缓存无法命中。确认断点后再修改。
-- 状态：已记录，待定位。
+- 原始状态（历史）：已记录，待定位。
 
 - P-010 补充决策：OpenAI-compatible 请求使用稳定的 thread-scoped prompt cache key，帮助同一 Thread 的请求复用缓存；缓存命中数仍只采用 Provider usage 返回值，不在 Nexus 内估算。
 
@@ -205,7 +212,10 @@
 - 真实 New API 流式 Provider probe（经 Nexus 自己的 `languageModel`，不绕过 Provider secret adapter）：完全相同 3432-token prompt 连续两次，第一次 `cachedInputTokens=0`，第二次 `cachedInputTokens=2816`，证明当前 New API 渠道能够接受 `prompt_cache_key` 并透传缓存 usage。
 - 真实 append-only 多轮 probe：第一轮 `inputTokens=3956, cachedInputTokens=0`；第二轮在保留第一轮 user/assistant 上下文并追加新 user input 后，`inputTokens=3977, cachedInputTokens=3840`，同时模型正确回忆前一轮 marker `ALPHA`。
 - 结论：Prompt Cache 现在可真实命中；之前的全 0 主要来自请求前缀结构/路由键不利于复用。New API 在其他渠道类型上仍可能存在流式 usage 丢失问题，但当前 `newapi.honus.top` + `gpt-5.6-luna` 路径已实测正常。
-- **状态**：`已修复并验证`
+- **2026-09-14 从头复核**：当前 `dev@6ae13e623bb5` 已丢失本节所述实现。`ContextService` 当前顺序实际为 safety → goal/plan/collaboration → ledger → recall → skill metadata → current input，Skill metadata 没有位于稳定前缀；`ModelRequest` 也没有 cache hint，OpenAI-compatible adapter 不发送 `prompt_cache_key`。因此历史“已修复”只代表曾经验证过的丢失工作树/镜像，不代表当前 Git。
+- **2026-09-14 本轮恢复**：当前 `dev` 已重新恢复 cache-friendly Context 顺序（稳定 safety / Skill metadata 在前，append-only Ledger history 随后，动态 Goal/Plan/Collaboration/Recall 后置，本轮 user input 最后），并恢复 provider-neutral `ModelRequest.cache.scopeKey`。OpenAI-compatible adapter 仅在 adapter 层将 `affinityKey ?? scopeKey` 映射为 `prompt_cache_key`，Core 不出现厂商字段。
+- **本轮验证**：Backend `build` 与 431-file `check:architecture` 通过；本地假 Provider 对编译产物做真实 HTTP contract 捕获，确认请求体包含 `prompt_cache_key=thread-1`、`tool_choice=none`，请求头包含 `session-id=thread-1`，Provider 返回的 `cached_tokens=1024` 被解析为 `cachedInputTokens=1024`。同一测试 Provider 的开发库近期真实 Agent attempts 已多次记录 `cached_input_tokens=2560/3584`，证明 Provider usage 链路可命中并落库；本轮另一个新 scope 的两次 2740-token 外部 probe 均为 0，按 P-012/P-013 继续作为多 credential/upstream affinity 稳定性问题处理，不再归因于 P-010 的字段缺失。
+- **状态**：`2026-09-14 已重新恢复并验证；随机 cache miss 转 P-012/P-013 继续处理`
 
 ## P-011 Prompt Cache 通用层不能绑定单一模型厂商
 
@@ -287,8 +297,11 @@
 - **Compaction 规则**：后续需要压缩长历史时采用 generation boundary：一代 context 尽量 append-only；到阈值后一次性生成稳定 summary 并开启新 generation，接受一次 cold cost。禁止每轮重新总结/改写旧 history，因为那会持续改变最早 prefix。
 - **本地 contract 验证**：同一 canonical request 已分别真实发往 loopback `/v1/chat/completions` 与 `/v1/responses`，SSE usage 均正确解析；两种 body 都不含 `prompt_cache_key`，stable tool schema 一致、`parallel_tool_calls=false`。A→B→A 的 Chat body 完全一致。Backend build、Frontend `vue-tsc + i18n + Vite build` 均通过。Provider E2E 又实际把同一个已持久化 Provider 从 Chat 切到 Responses、执行 `/test`、验证 Responses usage 后再切回 Chat；fake Provider 同时强制检查 `max_output_tokens=16` 且拒绝任何 caller `prompt_cache_key`，该 E2E 已通过。
 - **真实 New API → CPA 最终回归（2026-09-14）**：使用当前 `OpenAiCompatibleAdapter`、开发库已保存的 `New API Test` Provider 与 `gpt-5.6-luna`，不传 caller `prompt_cache_key`，分别做独立长前缀严格串行回归。Chat 5 轮为 `17074/0 -> 17095/16128 -> 17116/16128 -> 17137/16128 -> 17158/16128`；Responses 5 轮为 `17072/0 -> 17093/16128 -> 17114/16128 -> 17135/16128 -> 17156/16128`。两种协议 warm `4/4` 均稳定命中约 94%，没有 warm turn 掉 0。另做 Responses A→B→A 会话切换：`A 17071/0 -> B 17071/0 -> A 17071/16128`，回到 A 后立即恢复 94.48% cached，证明切换到另一 session 不会破坏 A 的 cache/session continuity。所有请求均正常 `stop`，模型按要求返回 `OK`。
+- **Responses A/B 隔离与交替压力复核（2026-09-14）**：继续保持 caller `prompt_cache_key` 缺失，只保留 `session-id=affinityKey`。先用 A/B 从首条 instructions 即分叉、各自独立 append history 的 fresh 会话做交替测试；探索性批次曾出现单个 warm 请求 `cached=0`，但下一次同 session 立即恢复原有 cache block，重复 fresh 批次又可 warm 全中，因此该现象按“上游允许偶发完整 miss”处理，不能把单次 0 本身当成 session/cache 串扰证据。
+- **不同 token 长度防串缓存验证**：为避免 A/B 等长时无法识别 cache block 是否串用，后续故意让两边输入长度显著不同。单批 `A→B × 6` 中，A 为 `14357..14462 input`、warm 始终 `14080 cached`；B 为 `20757..20862 input`、warm 始终 `20224 cached`。首轮 A/B 均为 `0 cached`（正确 cold miss），后续 warm `10/10` 命中，未出现 A 得到 `20224` 或 B 得到 `14080` 的交叉 cache block。
+- **5 批 × 12 次最终压力回归**：再执行 5 个完全独立 batch，每批 fresh A/B key、fresh suffix、不同 instructions/payload、不同总 token 长度，且每个 turn 都 append 新内容；总计 `60` 次真实 Responses 请求。10 个首轮 cold 请求全部 `cached=0`；其余 `50` 个 warm 请求 `50/50 cached>0`、`warm cached=0: 0/50`。各批 A/B cached block 始终分离：B1 `A 26368→27392 / B 38656`，B2 `28416 / 41728`，B3 `27392→28416 / 39680`，B4 `29440 / 41728`，B5 `30464 / 43776`；未观察到任何跨 session cache block 混用。该结果进一步支持当前 `session-id=affinityKey` mapping 不需要因 Prompt Cache 再修改。
 - **最终决策**：**不做“换一个 cache key”的最小修复。模型调用层以 canonical input 为中心重构；Chat/Responses 是可切换的 wire codec；cache/session identity 由 Provider/CPA 自己管理。**
-- **状态**：`已闭环（2026-09-14）：本地 contract/build/E2E + 真实 New API→CPA Chat/Responses 长前缀 + Responses A→B→A 均通过`
+- **状态**：`已闭环（2026-09-14）：本地 contract/build/E2E + 真实 New API→CPA Chat/Responses 长前缀 + A/B 多会话切换 + 不同长度隔离 + 60-request 压力回归均通过；最终压力样本 warm miss 0/50、cache 串用 0 次`
 
 ## P-013 多账号 Provider 场景缺少会话级上游 Affinity，导致 Prompt Cache 跨 credential 失效
 
@@ -317,7 +330,7 @@
 - **2026-09-14 Codex identity bundle A/B 实际结果**：短请求 B1（追加 `thread-id/x-client-request-id`）第二轮为 `5/6` 命中，但撤回额外 header 后 A2 为 `6/6`；同时 fresh Thread 第一轮也频繁直接出现固定 `2560 cached`。因此这批约 3.1k-token probe 实际主要测到跨 Thread 共享的稳定 system/tool 前缀已被上游热缓存，不能证明额外 identity header 有收益。额外两个 header 已撤回；后续长前缀 A/B 又进一步证明真正有收益的是把 `prompt_cache_key` 从 per-Thread identity 改为 stable-prefix 分桶，而 `session-id` 继续保留 affinity 语义。
 - **2026-09-14 独有长历史与 transport 复核**：长历史结果见 P-012；L4 后续又出现 `3584,3584,0,2560`，进一步证明不是单调“等待后物化”。尝试利用 CPA v7.2.155 的 `X-CPA-TRACE-ID` 无侵入归因 selected auth，但 New API 没有把该响应头透传给 Nexus，因此没有为了观测而继续修改生产式网关配置。另对 Codex identity bundle 做 A/B：追加 `thread-id/x-client-request-id` 时短 probe 为 `5/6`，撤回后反而 `6/6`，且 fresh Thread 首轮也经常已有公共前缀 `2560 cached`，故无证据支持保留额外 header；代码已撤回。当时阶段性的 OpenAI-compatible wire contract 曾改为 `prompt_cache_key=<user-isolated stable-prefix hash>` 与 `session-id=affinityKey`；该 `prompt_cache_key` 决策随后又被 P-012 的 no-caller-key 长会话隔离实验覆盖，当前只保留 `affinityKey` routing hint。
 - **2026-09-14 `Session-Id` 独立 cache-affinity 语义校正**：OpenAI Codex 2026-09-11 的受控 issue #44716 证明，在完整 body 与 JSON `prompt_cache_key` 固定时，仅改变 HTTP/WebSocket `session-id` 就能显著改变 reported cached input；同时同一 issue 也记录稳定 identity 仍会偶发完整 miss。结合 CPA 的 header 优先级，Nexus 当前 `session-id=affinityKey` 实际会进入最终 Codex upstream，而不是只停留在 CPA credential selector。为验证是否应把它改成 stable-prefix，本轮只做一个窄对照：保持 body stable-prefix key，令下游 `session-id` 也等于该 stable-prefix。12 轮仍出现 `7853/7680 -> 7874/0 -> 7895/7680`，因此对齐 `prompt_cache_key == Session-Id` 也不能消除随机 miss；没有证据支持改变当前默认 mapping。
-- **状态补充**：`affinityKey` 作为 provider-neutral hint 保留；它是合理的路由优化，但不再被描述为随机 Prompt Cache miss 的根因或充分修复。最终真实 Responses A→B→A 回归中，A 首轮 `17071/0`、切到独立 B 后 `17071/0`、再回 A 为 `17071/16128`（94.48%），因此当前 mapping 至少满足多会话切换下的连续性要求；P-013 与 P-012 一并闭环。
+- **状态补充**：`affinityKey` 作为 provider-neutral hint 保留；它是合理的路由优化，但不再被描述为随机 Prompt Cache miss 的根因或充分修复。最终真实 Responses A→B→A 回归中，A 首轮 `17071/0`、切到独立 B 后 `17071/0`、再回 A 为 `17071/16128`（94.48%）。后续不同长度 A/B 隔离与 5×12 压力回归中，10 个 cold 请求正确为 0，50 个 warm 请求全部非零，且 A/B cached block 始终落在各自长度区间、0 次交叉；因此当前 mapping 满足多会话 continuity/隔离要求，P-013 与 P-012 一并闭环。
 
 ## P-014 部署目录与主容器被外部清理，公网返回 502
 
@@ -326,7 +339,9 @@
 - **风险**：直接用旧 `data.bak` 恢复可能丢失 20:47 之后的聊天、Provider/Agent 配置和测试数据；同时源码/Compose 丢失会破坏后续可维护性。
 - **决策**：先不覆盖任何现有备份；优先检查 Docker named volumes、残留 mount、容器层/备份时间线，寻找最新数据副本。确认数据来源后，用已验证的 `affinity-cache-v2-20260913` 镜像重建 Frontend/Backend/guacd，保留 Runner optional/profile 语义。恢复服务后再恢复源码工作树和完整文档树。
 - **验证方法**：公开状态恢复 200；Backend/Frontend/guacd/Runner healthy；数据库包含最近测试 Thread/Run/Provider 数据；P-013 affinity 仍可命中；源码可重新构建同等镜像。
-- **状态**：`已记录，正在恢复`
+- **2026-09-14 从头复核**：正式 `https://ssh.honus.top/api/v1/status` 实测 200；`nexus-terminal-frontend/backend/guacd` 与 `nexus-agent-runner` 均 healthy。P-014 的 502/容器丢失故障已恢复，不再是当前问题。
+- **2026-09-14 本轮再次验证**：honus 上 `nexus-terminal-frontend/backend/guacd` 与 `nexus-agent-runner` 仍全部 healthy，正式 `https://ssh.honus.top/api/v1/status` 仍为 200；缓存专项与开发 Backend 重启均未影响正式部署。
+- **状态**：`已恢复并重新验证`
 
 ## P-015 需要独立测试环境承载后续 Nexus 问题修改，避免直接影响正式环境
 
@@ -342,7 +357,7 @@
   6. 后续源码修改仍只在 AgentDock Git 工作区进行；honus 测试目录只接收已构建镜像和运行配置，不作为源码工作区。
 - **计划**：先只读检查正式 Nexus `.env` / Compose 实际状态和 honus project 目录布局；选定无冲突的测试目录与端口；复制并净化配置；创建 NPM Proxy Host；启动测试栈；验证 `https://test.honus.top/api/v1/status` 和正式 `https://ssh.honus.top/api/v1/status` 均正常。
 - **验证**：测试与正式环境容器/端口/data 路径完全隔离；`test.honus.top` HTTPS 可访问且 WebSocket 代理配置正确；正式环境健康状态无回归。
-- **状态**：`已决策，待实施`
+- **原始状态（历史）**：`已决策，待实施`
 
 ### P-015 方案调整：测试环境运行配置改为同步仓库最新版本
 
@@ -359,7 +374,9 @@
 - Nginx Proxy Manager 已通过其自身 internal service 创建 `test.honus.top` Proxy Host（ID 59），转发 `127.0.0.1:18121`，WebSocket upgrade 开启；独立 Let's Encrypt 证书 ID 63，CN=`test.honus.top`，到期 `2026-12-12`。
 - 验证：`http://127.0.0.1:18121/api/v1/status`=200，`https://test.honus.top/api/v1/status`=200；测试 Backend/Frontend healthy。正式 `https://ssh.honus.top/api/v1/status` 同时保持 200，正式 Backend/Frontend/guacd healthy；正式 `docker-compose.yml/.env` checksum 与变更前完全一致。
 - 已知基线差异：同步仓库当前仍采用独立 Plugin Frontend 端口/Origin 旧架构，因此测试 `.env` 暂时存在 `NEXUS_PLUGIN_FRONTEND_ORIGIN=http://test.honus.top:18122`；从 HTTPS 主站访问时可能出现 Mixed Content。这正是历史 P-002/P-005/P-006 类问题之一，后续应在测试环境按问题记录修复，不能把该旧设计发布到正式环境。
-- **状态**：`测试环境已建立并验证；后续问题修改以 AgentDock Git + test.honus.top 为准`
+- **2026-09-14 从头复核**：该测试部署后来按 P-017 的用户决策撤销；`/home/honus/project/nexus_terminal_test` 当前不存在。保留的 `test.honus.top` NPM Proxy Host 因无后端返回 502，属于已撤销测试实例的残留入口，不代表 Nexus 正式环境故障。
+- **2026-09-14 本轮再次验证**：`/home/honus/project/nexus_terminal_test` 仍为 absent，`nexus-test-*` 容器数为 0；`test.honus.top/api/v1/status` 仍为 502，而正式站同时为 200，与“历史方案已撤销但入口保留”的边界一致。
+- **状态**：`历史方案；已被 P-017 撤销，不再作为当前开发环境`
 
 ## P-016 同步库 latest 回退到旧部署边界，测试环境会重现已修复的 Plugin Origin / Runner 依赖问题
 
@@ -372,7 +389,9 @@
 - **范围**：本轮只恢复 Plugin 同源与 Runner optional 两个基础边界；P-009～P-013 的模型能力/Prompt Cache/Affinity 在该基础验证后另行按记录实施，不混在同一补丁里。
 - **计划修改**：更新 Backend runtime config/plugin descriptor/static listener、Frontend Nginx/Vite、Compose/.env.example、Docker smoke 与部署文档；增加无 Runner smoke。所有源码只在 AgentDock Git 工作区修改，随后 commit/build image，再把测试环境镜像切换到该 image。
 - **验证**：TypeScript/Frontend build、架构检查；默认 Compose services 不含 Runner；无 Runner smoke；测试环境 `https://test.honus.top/sdk/frontend-v1.mjs` 和同源 `/plugins/...` 可达且无 XFO DENY/Mixed Content；正式环境不变化。
-- **状态**：`已决策，待修改`
+- **2026-09-14 从头复核**：当前 `dev` 已具备主站同源 `/plugins`/`/sdk` 路由与 optional Runner/profile 语义；本轮 P-001～P-008 复核及 smoke/build 也未发现该旧边界回归。P-016 描述的是当时同步库旧基线，不再代表当前 `dev`。
+- **2026-09-14 本轮再次验证**：`.env.example` 的 `NEXUS_AGENT_RUNNER_URL` 默认仍为空，Compose Runner 仍由 `profiles: ['runner']` 显式启用；Frontend Nginx/Vite 继续提供同源 `/plugins`、`/sdk`，本地与公网 `/sdk/frontend-v1.mjs` 均 200。
+- **状态**：`当前 dev 已恢复并复核通过`
 
 ## P-017 撤销 test.honus.top 对应的 Project 测试部署目录
 
@@ -382,6 +401,7 @@
 - **计划**：先确认目标目录存在且路径精确匹配；删除该目录；确认目录不存在；最后验证正式 `https://ssh.honus.top/api/v1/status` 仍返回 200。
 - **验证方法**：`/home/honus/project/nexus_terminal_test` 不存在；正式 Nexus 状态接口正常。
 - **实施结果**：已先执行测试 Compose `down --remove-orphans`，随后删除 `/home/honus/project/nexus_terminal_test`。验证 `test_dir=absent`、`test_containers=none`，正式 `https://ssh.honus.top/api/v1/status` 返回 HTTP 200。Nginx Proxy Manager 中 `test.honus.top` Proxy Host 按本问题边界保留，未修改。
+- **2026-09-14 本轮再次验证**：`test_dir=absent`、`test_containers=0`，正式状态接口 200；保留入口 `test.honus.top` 因无后端继续返回 502，未对其做任何修改。
 - **状态**：`已完成并验证`
 
 ## P-018 AgentDock 本地开发环境通过显式端口映射接入公网调试，但不修改项目默认监听端口
@@ -392,8 +412,92 @@
 - **用户决策**：**仅记录开发环境的实际监听方式，不修改项目默认端口。** Frontend 的 Vite 默认端口保持原有行为；`9998` 仅属于当前 AgentDock/PVE 开发运行约定，不写入源码默认值，不改变生产 Compose 的默认端口语义。
 - **开发 Origin**：公网调试时 Backend 运行环境使用 `AGENT_PUBLIC_ORIGIN=https://api.honus.top`，并对应设置 Passkey/WebAuthn Origin；Vite 仅在本地开发启动时显式监听 `9998` 并允许 `api.honus.top` Host。`/api`、`/plugins`、`/sdk` 与 WebSocket 路径继续经 Vite 同源代理到 Backend/Plugin listener。
 - **验证结果**：本地 `http://127.0.0.1:3001/api/v1/status`、`http://127.0.0.1:9998/`、`http://127.0.0.1:9998/api/v1/status`、`http://127.0.0.1:9998/sdk/frontend-v1.mjs` 均返回 200；公网 `https://api.honus.top/`、`/api/v1/status`、`/sdk/frontend-v1.mjs` 均返回 200。SDK CSP 的 `frame-ancestors` 为 `https://api.honus.top`。AgentDock 通过 Windows 外部 CDP 打开 `https://api.honus.top` 后正常进入 Nexus `/setup` 页面，未出现 console/network/page error。
+- **2026-09-14 本轮再次验证**：3001 Backend、9998 Vite 根路径/API/SDK、`api.honus.top` 根路径/API/SDK、正式 `ssh.honus.top` 状态接口均返回 200；排除生成的 Playwright report 后，项目源码、Compose 与 `.env.example` 中没有 `9998` 默认值，确认它仍只是当前 AgentDock/PVE 开发运行约定。
 - **状态**：`已记录并验证；仅文档约定，无源码默认端口修改`
 
+## P-019 P-009 修复未进入当前 dev：Nexus Agent 缺少只读连接发现 Tool
+
+- **发现时间**：2026-09-14
+- **真实复现环境**：`dev@6ae13e623bb5`，AgentDock 本地 Backend/Frontend，经 `https://api.honus.top` 暴露；Windows VM Chrome 通过外部 CDP 真浏览器执行。测试数据库为本地独立开发库，Runner 未配置（本问题不依赖 Runner）。
+- **问题现象**：启用官方 `nexus.agent`、配置可用的 OpenAI-compatible 测试 Provider 后，在 Agent UI 输入“请查看当前可用的机器连接列表，只读取，不执行任何修改。”。Run 实际执行 3 个 step、消耗 6797 token，先读取签名 `nexus.operations` Skill，随后以 `completed_unverified` 结束；模型最终明确回答：当前可用工具中没有“列出机器连接”的只读接口，拒绝猜测 connection ID。
+- **与历史记录冲突**：P-009 的实施结果写明曾新增 `machine_list_connections`，并声明 `machine.diagnostics.read` contribution 同时注册连接发现与 diagnostics；但当前 `dev` 源码中不存在 `machine_list_connections` 符号，`git log --all -S'machine_list_connections'` 也没有命中任何提交。
+- **根因定位**：当前正式 Tool 注册链在 `packages/backend/src/bootstrap/agent/tool-contributions.ts` 的 `machine.diagnostics` contribution 中只注册 `createDiagnosticsTool(...)`。`packages/backend/src/modules/agent/tools/host/tools.ts` 只有 `machine_diagnostics` / file read 等 Tool，没有连接列表 Tool；`MachineCapabilityPort` / `AgentConnectionResolverPort` 也没有 list contract。因此缺失发生在 **Host Tool catalog 构建之前**：Provider 请求不可能获得 `machine_list_connections` schema，模型本轮行为与实际暴露能力一致。
+- **历史原因判断**：P-014 记录过 P-013 v2 验证后源码工作树被外部清理、随后恢复源码。当前所有 Git ref 均没有 `machine_list_connections` 的提交记录，因此 P-009 当时验证过的实现很可能只存在于已丢失/未提交的工作树或镜像中，没有进入目前恢复后的 Git 历史。该判断以当前 Git 证据为准，不假定旧临时源码仍可恢复。
+- **决策**：按 P-009 原有产品边界恢复最小只读连接发现能力，不通过猜测 ID、shell 探测或 Runner 绕过。Tool 只返回当前 App 被授权且未被 Agent target denylist 禁止的 SSH target 的公开字段；不得返回密码、私钥、passphrase、notes 等敏感/非必要字段。
+- **计划修改**：
+  1. 为 Agent machine connection 边界增加有界 list contract，复用现有 `ConnectionService`/resolver，不新增第二套连接事实源。
+  2. 新增只读 `machine_list_connections` Tool，输出限定为 `id/name/host/port/username`，仅包含 SSH connection，并应用当前 Agent target denylist。
+  3. 将该 Tool 与 `machine_diagnostics` 一起注册到 `machine.diagnostics.read` contribution；保持 capability/grant/policy 仍由 Host 统一控制。
+  4. 增加 contract/unit 覆盖：SSH 保留、非 SSH 过滤、denylist 过滤、无凭据字段、稳定 schema；再用同一 Windows CDP 场景真实复测模型能够先调用列表 Tool。
+- **验证方法**：
+  - 静态/测试确认 Tool catalog 中存在 `machine_list_connections`，输入 schema 为只读无参数或严格有界参数，输出不包含凭据。
+  - 本地独立数据库连接数为 0 时，真实 Agent 应调用 `machine_list_connections` 并得到空列表，而不是声称没有列举接口；新增一条测试 SSH connection 后应只返回公开元数据。
+  - Windows CDP 真浏览器复跑同一句请求，Backend/Model request 中能观察到 Tool schema，Provider 返回 tool call，Nexus 执行只读 Tool 并将结果回灌，Run 最终回答与实际连接列表一致。
+  - Runner 保持未配置也应通过，证明基础连接发现不依赖 Workspace Runtime。
+- **2026-09-14 本轮实施**：已在 `AgentConnectionResolverPort` 增加安全 list contract，继续复用 `ConnectionService`；`MachineCapabilityAdapter.listConnections()` 仅保留 SSH，并在每次执行时读取当前 target denylist 过滤目标，只映射 `id/name/host/port/username`。新增只读 `machine_list_connections` Tool，并与 `machine_diagnostics` 一起注册到 `machine.diagnostics.read` contribution；Runner 不参与该路径。
+- **2026-09-14 本轮验证**：`pnpm --filter @nexus-terminal/backend build` 通过；Backend architecture check 通过（431 files，无 forbidden layer edge/source cycle/module cycle）；开发 Backend/Frontend 均继续 200。Windows 外部 CDP 真 Chrome 用原复现语句重新执行后，真实 Tool result 为 `Found 0 authorized SSH connection(s).` / `{"connections":[]}`，最终回答“已授权 SSH 连接：0，未执行任何修改操作”，页面无 console/network/page error。当前开发库连接数为 0，因此空列表与事实一致。
+- **2026-09-14 SSH 功能链追加验证**：开发库新增 loopback-only `Local SSH Functional Test`（`127.0.0.1:2222`）后，UI“测试连接”成功；真实 Agent Run 的 `machine_list_connections` 返回该连接的 `id/name/host/port/username`。随后模型调用 `machine_execute_shell`，Host 按现有 policy 请求审批；批准后真实 SSH 返回 exitCode=0，stdout 包含 `NEXUS_SSH_OK`、`Linux`、`agentdock` 与实际工作目录。数据库 Tool Call 记录状态为 `succeeded`，证明列表发现和 SSH 执行链均真实可用。
+- **2026-09-14 本轮再次回归**：缓存专项清理并重启开发 Backend 后，新建 fresh Thread 输入“请列出当前可用的 SSH 机器，只读取连接列表，不执行任何命令或修改。”；Windows 外部 Chrome 中真实 Tool result 为 `Found 1 authorized SSH connection(s).`，只返回 `id=1/name=Local SSH Functional Test/host=127.0.0.1/port=2222/username=nexus-test`，最终回答同样只展示公开元数据且明确未执行命令。开发库最新 `agent_tool_calls` 进一步确认 `tool_name=machine_list_connections`、`risk=read`、`status=succeeded`，证明不是模型从页面文本猜测。
+- **状态**：`已修复并完成真实 Windows CDP 验证`
+
+## P-020 设置页信息架构过载与窄屏 UI 越界
+
+- **发现时间**：2026-09-14
+- **用户反馈**：当前设置项过多、分组不清晰，页面纵向过长且不同页面在窄窗口下存在越界/拥挤，整体界面显得杂乱。
+- **真实基线**：Windows Chrome 打开开发环境 `/settings` 时，旧 Workspace 设置由一个 1022 行组件承载十余个独立表单和各自的“保存”按钮，页面总高度约 4348px；Settings 顶部 8 个 Tab 依赖横向滚动，Connections 工具栏在 `sm` 宽度以上强制不换行。CDP + Playwright 对 390px Agent Hub 做布局探针时，外框本身不溢出，但 App Switcher 内部控件存在约 109px 的不可见裁切/scroll excess。
+- **设计决策**：不删除现有设置能力，也不改变设置 API/验证边界；按用户工作流重新组织信息层级，使用“语义分组 + 组级保存 + 低频项渐进披露”，并让 Settings/Connections/Agent 在窄窗口下自然换行或截断。现有关键 DOM id 与 E2E `data-testid` 尽量保持兼容。
+- **2026-09-14 本轮实施**：
+  1. 新增 `WorkspacePreferencesPanel.vue`，把 Workspace 设置收敛为“文件与编辑 / 终端与指令 / 首页与监控 / 布局与高级设置”四组；低频布局组默认折叠，长说明使用 `details` 渐进展开，每组只保留一个保存动作。
+  2. Workspace 与 System 设置拆开加载；System 继续使用原 Preferences panel，降低一次性重构风险。并解除 Workspace 普通保存与全局 locale 切换的旧耦合，只有语言设置本身才触发 locale 更新。
+  3. Settings 顶部 Tab 在窄屏使用 2 列网格，在较宽屏自动换行，不再依赖横向滚动；Connections 工具栏把强制单行阈值后移到 `lg`，平板/手机宽度允许自然换行。
+  4. Agent `AgentAppSwitcher` 增加真实 `min-width:0` / `flex:1` / select truncate 约束，修复 390px 下内部 109px excess；既有 Agent container-query 侧栏抽屉与 Run 配置换行逻辑继续复用。
+  5. 新增三语言 Workspace 分组文案；保留 `quick-command-collapsible-search-save`、`spreadsheet-preview-pagination-save` 等已有 E2E 钩子。
+- **真实验证**：
+  - Frontend 完整流水线通过：319 source files architecture check、2336 i18n keys / 3 locales / 84 fragments、`vue-tsc --noEmit`、Vite production build 与 bundle budget 全部通过；`pnpm format:check` 通过。
+  - Windows 真 Chrome 新 Workspace 页面高度约 1867px，较旧页面约 4348px 明显收敛；Settings、Connections、Agent Hub 均可正常打开，未引入新的 page/network error。
+  - 真实保存路径验证：快捷指令搜索组写入数据库后已恢复原值 `false`；电子表格每页行数从 500 改为 510 成功落库后又恢复 500；测试最终未留下偏好副作用，语言也恢复并持久化为 `zh-CN`。
+  - 通过 Windows Chrome CDP 的临时 Playwright page 分别模拟 720×800 与 390×800：`/settings`、`/connections` 的 document horizontal excess 均为 0；Agent Hub dialog horizontal excess 均为 0。App Switcher 修复后唯一被探针识别的 excess 来自 `sr-only` 无障碍隐藏文本，不属于可见 UI 溢出。
+- **状态**：`2026-09-14 已完成整体 Workspace 信息架构与主要越界修复，并通过真实 Windows Chrome/窄屏回归`
+
+## P-021 Agent WebSocket 偶发 429 导致运行状态刷新变陈旧
+
+- **发现时间**：2026-09-14
+- **真实现象**：本轮 Windows Chrome/CDP 多次打开 Agent Hub 时，console 真实出现 `wss://api.honus.top/ws/agent` 握手返回 HTTP 429。发生时 Backend Run 可已经继续/完成，但前端状态可能停留在旧值；缓存 A/B 测试中曾因此出现一次 UI 仍显示旧 Run、随后发送请求得到 409 resource changed，需要刷新后继续。
+- **根因定位**：后端从 `db61301` 起故意保留 `MAX_AGENT_SOCKETS_PER_SESSION=3` 作为同一登录 session 的物理 Agent WebSocket 安全上限；单条 `AgentProtocolSession` 本身却支持最多 16 个逻辑 subscription。修复前前端 `agentEvents.connectOnce()` 对每个 Host/Run subscription 都单独 `openWebSocket('/ws/agent')`，同时每个已登录 Nexus 标签页即使 Agent Hub 未打开也会维持一条 Host socket。Windows Chrome 调试环境当时残留 5 个同 session Nexus 标签页，Backend 运行日志持续记录 `activeForSession=3/maxSocketsPerSession=3` 并拒绝其余升级，证明 429 来自物理连接使用模型与协议 multiplex 能力不匹配，而不是 Provider 或 P-020 UI 改动。
+- **安全决策**：保留 3 条 session socket 上限，不通过扩大限额掩盖问题。该上限继续用于约束异常重连、失控页面和连接泄漏；正常 Agent 业务应远低于上限。页面内 Host + Run 逻辑订阅必须复用同一物理 socket；多标签页的全局 Host stream 只允许一个同源 leader 持有物理 socket，其余标签接收变更通知并刷新 HTTP summary。
+- **2026-09-14 本轮实施**：
+  1. `agent-events.ts` 增加页面内 shared Agent WebSocket lease；多个 Host/Run logical subscription 共享同一 `/ws/agent`，各自仍保留独立 subscription id、unsubscribe、cursor/retry 语义；最后一个 lease 释放时才关闭物理 socket。
+  2. `AgentSurfaceHost.vue` 使用 Web Locks API 的 `nexus.agent.host-stream.v1` exclusive lock 在同源标签页之间选举唯一 Host-stream leader；leader 订阅 Host events，其他标签不建立 Host socket。
+  3. leader 收到 Host durable event 后通过 `BroadcastChannel('nexus.agent.host-events.v1')` 广播轻量 `host.changed` 通知；followers 使用现有 `/agent/summary` HTTP 路径刷新 launcher/badge/feature state，因此多标签场景仍保持全局状态更新语义。
+  4. leader 标签关闭时浏览器自动释放 Web Lock，等待中的另一标签自动接管并建立新的唯一 Host socket。无 Web Locks 环境保留原有直连 fallback，不改变服务端协议或安全上限。
+  5. Backend 429 guard 增加不含凭据的结构化诊断日志：session key、user id、active/max socket count 与总 Agent client count，便于未来区分真实上限触发与其它握手失败。
+  6. E2E 新增 cross-tab leader/failover 回归；原“每 session 最多 3 条物理 socket”测试继续保留，确保本修复没有放宽安全边界。
+- **真实验证**：
+  - Windows Chrome 同一登录 session 同时打开 5 个 `api.honus.top` 标签页：`/ws/agent` 实际物理连接数分布为 `1/0/0/0/0`，五页均无 429/WS console error。
+  - 3 标签 failover probe：初始仅第一个标签有 1 条 Host socket；关闭 leader 后，剩余标签中自动出现且仅出现 1 条接管 socket。
+  - 真实 Agent Run 输入 `P021 multiplex final verification...` 并得到 `P021_FINAL_OK`；Run 前/中/后始终只有同一个 `/ws/agent` 物理 socket，`socketCount=1/openCount=1`，证明 Host + Run 已真实 multiplex，console 无 429。
+  - Backend 修复后日志未出现新的 connection-limit rejection；最近一次真实 Run 正常完成并继续记录 cache diagnostics。
+  - Frontend architecture/i18n/`vue-tsc`/Vite build/bundle budget 通过；Backend build 与 431-file architecture check 通过；`pnpm format:check` 通过；E2E groups 仍为 8 groups / 70 specs，`test:list` 现发现 234 tests。
+- **状态**：`2026-09-14 已修复并完成多标签、failover 与真实 Agent Run 验证；3-socket 安全上限保持不变`
+
+## P-022 Agent 设置页层级过长，复杂配置缺少聚焦式信息架构
+
+- **发现时间**：2026-09-14
+- **用户反馈**：新加入的 Agent UI 与排版仍不理想；本轮先只优化 Settings 中的 Agent 设置布局，不扩散到 Agent Hub/Conversation 等其它区域。
+- **当前证据**：`AgentSettingsPanel.vue` 目前以 7 个目录项对应 7 个连续纵向 section，Overview / Models / Execution / Environments / Storage / Extensions / Safety 全部同时挂载在同一长页面；其中 Provider、Hard Limits、Subagent、Workspace Runtime、Browser/ACP、Plugin 管理等高复杂度面板继续纵向串联。左侧目录只执行 `scrollIntoView`，没有当前分区状态，也不能减少一屏同时出现的信息量。现有组件已提供明确语义边界，因此问题主要在页面级信息架构与视觉层级，而非 API 或领域模型。
+- **原因**：P-020 解决了 Workspace Preferences、Settings 顶部 Tab 与窄屏越界，但 Agent 设置页仍沿用“文档目录 + 全量展开”的布局；新增 Agent 能力持续增加后，单页同时暴露过多二级/三级配置，导航与内容焦点脱节。
+- **设计决策**：保留现有 Agent settings API、组件职责、DOM section id 与安全确认流程；把 Agent 设置页调整为“可选分区导航 + 单一主工作区”的聚焦式布局。桌面使用左侧分区导航，窄屏使用顶部可换行/横向安全的分区选择；同一时刻只展示当前分区的主要配置。Overview 保留状态摘要与 App/feature 控制，其它复杂配置按语义分区进入独立主面板。不得为了 UI 便利复制 authoritative Agent state，也不改变 destructive preview/confirm 语义。
+- **计划修改**：
+  1. `AgentSettingsPanel.vue` 增加当前分区 presentation state 与可访问导航状态；桌面侧栏显示 active 项，主区域只渲染当前分区。
+  2. 顶部增加紧凑的当前分区标题/说明与关键摘要，避免每个分区重复“大标题 + 多层卡片”造成视觉噪声。
+  3. 统一主内容容器、卡片间距和响应式边界；小屏改为顶部分区导航，避免左侧栏挤压内容。
+  4. 尽量不修改 Provider/Workspace Runtime/Plugin 等子组件业务逻辑；确需样式调整时只做布局层最小修改。
+  5. 保留现有 `agent-settings-<group>` section id 作为锚点/测试兼容，并确保切换后 URL/页面不产生横向溢出。
+- **验证方式**：Frontend typecheck/i18n/Vite build/format 至少通过与本次变更相关的检查；真实 Windows Chrome 打开 `/settings` 的 Agent Tab，确认桌面与窄屏均无水平溢出，分区切换可达，Provider/Runtime/Plugin 等原交互仍可进入，控制台与网络无新增错误。
+- **2026-09-14 本轮实施**：`AgentSettingsPanel.vue` 已从“7 个 section 全量纵向展开 + 目录滚动”改为聚焦式设置工作区。桌面保留 sticky 左侧分区导航并增加 active 状态、图标层级与当前功能状态；窄屏使用 sticky 的可访问分区下拉。右侧统一显示当前分区标题/说明，同一时刻只可见一个分区；各 section 使用 `v-show` 保持挂载，因此用户切换分区时 Provider/Plugin 等未保存表单草稿不会被销毁。Overview 继续保留 App/Model/Runtime/Storage 摘要与 Feature/App 控制，其余复杂面板仍复用原组件与原 API/确认流程。现有 `agent-settings-<group>` id 保留。
+- **测试调整**：Agent Host / Plugin E2E 已按新信息架构改为先切换到目标分区再操作；新增 720px Agent 设置分区选择和 document horizontal excess ≤ 1 的断言，并补充 Safety 分区显隐语义。
+- **验证结果**：目标文件 Prettier 通过；Frontend 完整 build 通过（319 source architecture check、2339 i18n keys / 3 locales、`vue-tsc --noEmit`、Vite production build、bundle budget）；Playwright `test:list` 仍成功发现 234 tests / 70 files；`git diff --check` 通过。专项 Agent settings Playwright 已成功启动隔离 Backend/Frontend/Provider/Plugin repo/SSH/guacd，但在测试逻辑执行前因当前 AgentDock 容器缺少 Playwright `chromium_headless_shell` 而停止，属于浏览器运行依赖缺失，不是产品断言失败。Windows CDP 真 Chrome 已确认 `external_configured` 可连接，但当前页面处于未登录 `/login`，本轮没有伪造认证态截图；对应 CDP 优先验证规则已补充到 `doc/AGENT.md`。
+- **状态**：`设置页布局已完成第一轮优化并通过构建/静态/E2E 配置验证；认证态真浏览器视觉回归待可用登录会话复核`
 
 ## P-023 Backend Plugin/SDK 独立 3002 listener 增加不必要的端口复杂度
 
@@ -411,3 +515,246 @@
 - **2026-09-14 本轮实施**：`plugin-frontend-static-server.ts` 已改为可挂载到主 HTTP server 的专用 request handler；`application.ts` 在进入 Express API middleware 前仅分流 `/plugins` / `/sdk`，因此 Plugin/SDK 不继承主 API 的 `X-Frame-Options: DENY`，原 CSP、匿名访问、GET/HEAD、realpath/symlink/path traversal、package marker 与 immutable cache 逻辑继续复用。Backend 删除第二次 `listen()` 与 `agentPluginFrontendPort`；Vite 和 Frontend Nginx 的 Plugin/SDK target 均统一为 Backend 3001；E2E 删除独立 `pluginFrontend` 端口配置。按用户后续决定，`docker-compose.yml` 同步删除失效的 `AGENT_PLUGIN_FRONTEND_PORT`，`Dockerfile` 的声明端口也收敛为 `80 3001`；Docker smoke 暂不因该决策改写，后续如容器层暴露实际问题再单独处理。
 - **2026-09-14 本轮验证**：Backend build 通过；Backend architecture check 通过（431 files，无 forbidden layer edge/source cycle/module cycle）；Frontend 完整 build 通过（319 source architecture、2339 i18n keys / 3 locales、`vue-tsc --noEmit`、Vite production build、bundle budget）；E2E `test:list` 仍发现 234 tests / 70 files，groups check 为 70 specs / 8 groups；目标 diff `git diff --check` 通过。真实开发 Backend 仅监听 3001：`/api/v1/status`=200，`/sdk/frontend-v1.mjs`=200 且保留 Plugin CSP/CORS/CORP/immutable cache、没有 `X-Frame-Options: DENY`；非法 dotfile Plugin path=404，POST SDK=405 + `Allow: GET, HEAD`；`127.0.0.1:3002` 连接失败符合预期。Vite 9998 与公网 `https://api.honus.top` 的 `/api/v1/status`、`/api/v1/settings/captcha`、`/sdk/frontend-v1.mjs` 均恢复为 200。Windows CDP 真 Chrome 刷新后直接恢复到已认证 Dashboard，console/network/page error 均为空，之前 CAPTCHA 加载失败不再阻塞登录。当前 AgentDock 容器没有 Docker CLI/nginx binary，因此本轮未执行 `docker compose config` 或 Nginx 本机语法测试。
 - **状态**：`已完成 Backend/开发链路单端口合并、Compose 与 Dockerfile 端口同步，并通过本地运行态与 Windows CDP 验证；容器 smoke 暂按用户决策保持不动`
+
+## 2026-09-14 从头复核最终回归
+
+- 已按 P-001 → P-021 重新核对/修复当前 `dev` 与真实运行状态；不再把历史“已修复”文字当作当前 Git 事实。
+- Backend：`pnpm --filter @nexus-terminal/backend build` 通过；`check:architecture` 通过（431 files，无 forbidden layer edge/source cycle/module cycle）。
+- Frontend：architecture / i18n / `vue-tsc --noEmit` / Vite production build / bundle budget 全部通过（319 source files；2336 i18n keys / 3 locales / 84 fragments）；`pnpm format:check` 通过。
+- Agent Runner：TypeScript build 通过。
+- E2E 配置：8 groups / 70 specs assignment check 通过；Playwright `test:list` 成功发现 234 tests；`docker-deployment-smoke.sh` 与 `docker-core-no-runner-smoke.sh` 均通过 `bash -n`。
+- 开发运行态：本地 Backend 3001、Vite 9998、同源 `/api/v1/status`、`/sdk/frontend-v1.mjs` 均 HTTP 200；公网 `https://api.honus.top/`、`/api/v1/status`、`/sdk/frontend-v1.mjs` 均 HTTP 200。
+- Windows 真 Chrome：Settings、Connections、Agent Hub 均可正常打开并完成真实交互；P-020 响应式改动未产生新的 page/network error。P-021 修复后 5 个同 session Nexus 标签页只保留 1 条 Host `/ws/agent`，leader 关闭后可自动 failover；真实 Agent Run 的 Host + Run 逻辑订阅保持在同一条物理 socket，修复后的验证窗口无新增 429。
+- Agent SSH：loopback-only `Local SSH Functional Test` 仍在线；真实 Agent 已完成 `machine_list_connections → machine_execute_shell → Host approval → SSH exitCode=0`，数据库 Tool Call 证据与 stdout 均确认执行成功。
+- Prompt Cache：Core/adapter 缺失项已恢复；逐 message hash 证明真实 append-only Run 不存在 Nexus 侧 prefix divergence；同一 New API/模型约 10k-token 对照中 `/responses` 与 `/chat/completions` 都可从 `0 cached` 升到第二次 `8960/10057 cached`。CPA 最终 A/B 中，临时 `session-affinity=false` 的 3 组真实两轮 Agent probe 第二轮为 `2560/0/2560 cached`（2/3 命中）；恢复原始 `true` 后既有命中，也有完整 append-only 前缀仍 `0 cached` 的反例。因此 affinity 保留为合理的路由 hint，但本轮没有证据证明它是 cache miss 的必要修复或唯一根因；CPA 已恢复测试前 `session-affinity=true`。
+- 正式运行态：`https://ssh.honus.top/api/v1/status`=200；Frontend/Backend/guacd/Runner 均 healthy。P-014 已恢复；P-015 已被 P-017 撤销，`/home/honus/project/nexus_terminal_test` 不存在、18121/18122 未监听，`test.honus.top` 当前 502 属按 P-017 明确保留的历史 NPM 入口。
+- **仍保留的非代码结论/验证缺口**：P-006/P-007 的完整 repository Docker smoke 仍需标准 CI（具备 Node 24/pnpm/Docker/Playwright 依赖）执行；本轮当前环境已完成 Backend/Frontend/Runner 构建、E2E 8 groups/70 specs assignment、234-test discovery、smoke 脚本语法检查、Windows 真 Chrome、真实 Agent SSH 功能链与 P-021 多标签 WebSocket 回归。
+
+## P-024 Agent 设置与会话 UI 二次重构
+
+- **问题**：设置侧栏占宽、分区点击强制 scrollIntoView 导致跳动；Provider 测试在页面顶部反馈；会话选中后排序变化、创建强制命名、工具 JSON 全量铺开、右栏重复状态挤压正文。
+- **原因**：presentation 层导航、反馈与内容归属不一致；聊天缺少渐进披露。已检查真实开发 Chrome、现有组件与 P-020/P-022。
+- **决策**：仅改 Frontend UI/交互。顶部紧凑分区导航、稳定内容工作区、模型行就地测试反馈；一键空标题新会话、稳定列表顺序、Markdown 正文、可展开工具摘要、按需任务栏、输入区内联提示；保留所有审批/预算/对账安全边界与后端事实源。
+- **计划修改**：AgentSettingsPanel/ModelProviderSettings、AgentAppSurface/AgentConversation/ConversationMessage/TaskRail、三语言文案与需求文档。保留当前未提交改动，不 commit/push/deploy。
+- **验证方式**：Frontend architecture/i18n/typecheck/build、Prettier/diff check；Windows CDP 开发页验证分区切换、模型反馈、空会话创建、工具折叠、响应式与控制台。
+- **状态**：已完成，详见下方实施与验证结果。
+
+### P-024 本轮实施与验证结果
+
+- **实际修改**：顶部设置分区 + 独立滚动区；手机两级选择器；保留表单草稿和分区滚动位置；模型行独立测试反馈；新增 Provider / 发现模型写入失败保留输入；预算、上限、Subagent、Browser/ACP 按需展开；插件先展示已安装项，信任与安装配置后置。
+- **Agent UI**：任务栏默认关闭、按需展开，中窄窗覆盖显示；模型/思考强度说明/环境/连接归入 Composer；Markdown 安全渲染、空 assistant turn 隐藏、工具/系统摘要可展开；任务详情的历史审批/检查点/运行环境分层；原始参数/Hash 保留在审批详情；错误和对账提示就近展示且继续保持真实 mutation lock。
+- **交互**：一键无标题新建并聚焦 Composer；历史排序不再因选中改变；切换先清理旧投影，加载完成再允许发送；中文 IME Enter 不发送；窄屏隐藏未打开 drawer 的键盘焦点目标；Popover 可视边界定位与 Escape 返回焦点；详情焦点管理；Hub 打开时隐藏 Launcher，避免遮挡输入。
+- **真实开发 Chrome 验证**：设置分区切换 scrollY=0→0；真实模型测试在对应行返回“连接成功 · 1211 ms”；新建无标题输入框且 Composer 获得焦点；isComposing Enter 保留原稿。720px/390px 下 Settings document 和 Agent Hub horizontal excess 都为 0；720px TaskRail 覆盖层位于 viewport 内。手机设置压缩后主 Agent 标题位于 y=132；打开 Hub 时 Launcher 数量为 0；检查过程中 page_errors=[]。已恢复桌面 viewport 与 1080×697 窗口尺寸。
+- **构建/格式**：最终 Frontend architecture（320 files）、i18n（2360 keys/3 locales）、vue-tsc、Vite production build 和 bundle budget 均通过；pnpm format:check / git diff --check 通过。当前宿主 Node 22.17 会提示项目要求 Node >=24；以上检查实际成功，未声称完成标准 CI 环境全回归。
+- **测试边界**：用户明确要求“先不要改测试，先完成功能”。本轮测试文件调整已逐项撤回，packages/e2e/tests 无本轮 diff；未新增测试源码或更改 Docker smoke。旧导航/创建/反馈断言后续再同步。
+- **状态**：UI/前端交互已完成并经开发浏览器验证；自动命名与真实思考强度仍按 P-025/P-026 等待后端合同。本轮没有修改后端、提交、推送或部署。
+
+## P-025 会话自动命名缺少服务端合同
+
+- **问题/原因**：目前 createThread 支持省略 title，但没有公开的 Thread rename/自动标题生成合同；前端不能把本地标题伪装成服务端已保存标题。
+- **本轮 UI 决策**：新建直接调用已有无 title 的 createThread，不再强迫填写名称。
+- **后端待办**：首次有效用户输入后生成有界标题并持久化，明确手动重命名优先级、失败回退、事件与列表刷新；提供 versioned rename 合同。
+- **验收**：首次消息后自动命名，刷新/跨标签/App 切换保持一致，手动标题不被覆盖，失败仍可正常对话。
+- **TODO(P-025/thread-auto-title)**：后端自动命名与 versioned rename 合同仍待实现。这是明确保留的后续功能，不应因当前 UI 已可无标题创建 Thread 而删除相关设计记录。
+- **状态**：后端待实现。
+
+## P-026 会话思考强度缺少能力与 Run 冻结合同
+
+- **问题/原因**：Provider model capability 与 Run create/model snapshot 当前没有 reasoning effort 字段，不能仅加下拉并宣称模型按该值执行。
+- **本轮 UI 决策**：模型旁提供思考强度说明入口，明确当前由模型默认处理；未支持的选项不可提交。
+- **后端待办**：定义厂商无关能力/允许档位/default；Run 创建验证并冻结强度；适配器按 Provider 映射；历史 Run 回显，运行中禁改；不同模型不支持时安全回退。
+- **验收**：低/中/高等合法档位真实进入上游请求，非法组合拒绝；历史/恢复保留冻结值；不展示隐藏思维链。
+- **2026-09-14 架构调整**：普通用户不再手工声明模型 reasoning capability。Nexus 增加 `ModelCapabilityResolver`：当前优先使用内置 Model Capability Registry，根据 canonical/已知模型 ID 派生 `reasoningEfforts/defaultReasoningEffort`；未知模型保持 Unknown，不发送 reasoning 参数并继续使用 Provider 默认。Resolver 已预留未来 `Provider live capability` 输入层，但本轮明确不解析 `/models` 的扩展 reasoning 元数据、不做 capability 缓存，待后续单独实现。
+- **本轮计划**：Provider 对外视图由服务端自动装饰 reasoning capability；用户设置页只读展示已识别档位，不提供 capability 编辑；Create Run DTO/Run definition 保留可选 `reasoningEffort`，RunService 按自动解析能力校验并冻结；OpenAI-compatible Chat/Responses 分别映射为 `reasoning_effort` / `reasoning: { effort }`；Frontend Composer 按自动能力生成分段滑条并在 Run 活跃时锁定。
+- **2026-09-14 验证**：Backend build 与 architecture check 通过；Frontend architecture/i18n/typecheck/Vite build/bundle budget 通过；Registry probe 确认 `gpt-5.6-luna` 与带日期的 `gpt-5.6-sol-*` 自动得到 `none/low/medium/high/xhigh/max`、默认 `medium`，Unknown 模型返回 `null`。Windows CDP 真浏览器中 `gpt-5.6-luna` 无需用户配置即可显示 `无 / 低 / 中 / 高 / 极高 / 最大` 六档滑条，默认“中”，点击“高”后触发值同步更新，再恢复“中”；console/network/page error 均为空。
+- **TODO(P-026/provider-live-capability)**：Provider live capability 解析按用户决定延后。`ModelCapabilityResolver` 的 `live` 输入是有意保留的架构扩展点，后续排查/清理代码时不得按“未使用参数/死代码”删除；只有在完成并验证 Provider 权威 capability 接入或由新的等价抽象替代后才能移除。
+- **状态**：`2026-09-14 内置 Model Capability Registry + Run 冻结 + OpenAI-compatible 映射已完成；Provider live capability 解析延后并显式标记 TODO。`
+
+## P-027 Agent Composer 输入区过紧且配置摘要说明文字过多
+
+- **用户反馈**：当前 Agent 输入框偏矮；输入框下方的 Model / 思考强度 / Environment / Targets 配置条信息密度不均，提示性文字多于用户真正需要扫读的当前值。用户希望先做细节优化，不改变现有 Composer 位置、Run 冻结语义或后端合同。
+- **当前证据**：`AgentConversation.vue` 的 Composer 仅 `rows=2`、`min-h-16`；`AgentAppSurface.vue` 的配置条同时展示字段标签、图标、当前值及多个说明型 Popover，其中思考强度目前只有“默认思考 + 尚未开放”的解释，因为 P-026 的真实 reasoning effort 后端合同仍未实现。
+- **设计决策**：仅优化 Frontend presentation。输入框提高默认高度并允许更多正文直接可见；配置条改为“当前值优先”，减少重复字段名和长提示。Model / Environment / Targets 保留真实当前值、锁定与可用状态。思考强度在后端合同实现前不得伪装成可生效选择，只用更紧凑的等级视觉展示，并明确当前仍由模型默认处理。
+- **本轮范围**：优先调整 Composer 高度、配置条间距/标签、思考强度 Popover 与 Environment/Targets 中非必要说明；不修改 Run create、Provider capability、reasoning effort 后端合同、审批/预算/对账与冻结安全语义。
+- **验证**：Frontend typecheck/build/format；Windows CDP 真浏览器验证 Composer 可用高度、配置摘要可读性、窄窗无横向溢出、Run 锁定状态与发送行为无回归。
+- **2026-09-14 本轮实施与验证**：Composer 从 `rows=2/min-h-16/max-h-36` 调整为 `rows=3/min-h-24/max-h-48`，并移除发送快捷键的可见提示文字；底部配置摘要去掉重复的 Model / Environment / Targets 标签，只保留图标与真实当前值。思考强度触发器压缩为“默认”，Popover 直接展示“无 / 高 / 极高”三个等级预览和一行“当前仍使用模型默认值”；由于 P-026 后端合同尚未实现，这些等级保持不可提交，不伪装为已生效配置。Environment / Targets Popover 同步删除默认值说明、None hint、profiles/run contract 与 targets hint 等非必要说明。Frontend 完整 build 通过（320 source architecture、2365 i18n keys / 3 locales、`vue-tsc --noEmit`、Vite production build、bundle budget）；目标 Prettier 与 `git diff --check` 通过。Windows CDP 真 Chrome 中 Composer、Model、思考、Environment、Targets 均可见，实际摘要为 `gpt-5.6-luna · New API Test / 默认 / 不使用 Workspace / 0/1`，思考 Popover 为 `无 / 高 / 极高 / 当前仍使用模型默认值`，console/network/page error 均为空。
+- **状态**：`第一轮 Composer 细节优化已完成并验证；reasoning effort 后端合同已由 P-026 后续实施完成。`
+
+## P-028 Agent 会话右侧缺少可编排任务工作栏，Composer 选择控件焦点样式突兀
+
+- **用户反馈**：Agent 会话右侧需要固定工作栏，任务进度、审批等运行态信息都集中到右侧；每个模块应是独立包裹卡片并支持拖拽排序。Composer 点击输入框、模型选择时当前焦点高亮过于方正突兀；模型/思考交互希望更接近 ChatGPT Web，模型点击直接切换，思考强度用分段滑条表达，并按模型能力显示档位。
+- **当前证据**：`AgentAppSurface.vue` 已有可选 `TaskRail` 抽屉，`TaskRail.vue` 已接收 current/background/thread runs、approval batch、Plan、budget 与 targets；审批动作继续经现有 `resolveApproval`。因此无需复制运行态事实源。当前模型使用原生 `<select>`，Composer 外框使用 `focus-within:border-primary/60 + shadow-md`，在点击时容易形成明显矩形焦点框。P-026 仍确认 Provider Model/Run snapshot 没有真实 reasoning effort capability/冻结合同。
+- **设计决策**：桌面把 TaskRail 默认作为第三栏显示，窄窗继续使用覆盖式抽屉；Rail 内按“运行/审批/计划/目标/历史/后台任务”拆成独立卡片，使用前端 presentation order 拖拽排序，排序仅影响展示，不改变 Run/Approval 事实。模型选择从原生 select 改为 Popover 列表，继续调用现有 `setModelSelection()`；Composer 与选择按钮使用圆角、柔和 ring，保留键盘可见焦点但去掉突兀方框。
+- **思考强度边界**：先实现 capability-adaptive 的分段滑条外观与默认态。只有后端未来按 P-026 返回真实允许档位并接受 Run 冻结值时才允许提交；当前无能力字段的模型保持“默认”锁定，不能把本地 UI 状态伪装成上游已生效。
+- **本轮范围**：Frontend TaskRail/AgentAppSurface/AgentConfigPopover/Composer 样式与三语言文案；不修改审批 API、Run create、预算/对账、安全策略或 Provider adapter reasoning 参数。
+- **验证**：Frontend architecture/i18n/typecheck/Vite build/bundle/format；Windows CDP 真浏览器确认桌面默认右栏、卡片拖拽、审批按钮仍工作路径不变、模型点击切换、Composer/Popover 焦点样式与窄窗无横向溢出。
+- **状态**：`基础右栏/拖拽/模型与 reasoning 交互已实现；后续统一任务面板与进一步 UI 降噪转 P-029 TODO。`
+
+## P-029 Agent 弹出浮窗与对话交互 UI/UX 深度重构方案（聚焦前端视觉与交互体验）
+
+- **发现时间**：2026-09-14
+- **用户反馈**：
+  1. 当前 Agent 弹出后的 UI 不够简洁，用户交互性较差，界面充斥着大量架构说明和提示性长文字。
+  2. 桌面端默认呈现“三栏并排”（会话侧栏 + 对话区 + 任务栏），视觉拥挤、压迫感强，缺乏对话重心。
+  3. 右侧任务栏缺少明确的顶部弹出/关闭按钮；同时右侧任务栏与顶部“Details”抽屉功能严重重叠，层级混乱。
+  4. 各种底层概念（序号、JSON 日志、免责说明）直接暴露，上手门槛高。
+  5. **范围与优先级明确**：本阶段**优先聚焦 UI/UX 视觉与人机交互设计**，**先不考虑设置项目（Settings）的重构**（设置项相关预设与中文化已归档，留待后续独立阶段推进）。
+  6. 严格保证：**不减少任何既有必要功能**（包含执行状态监控、敏感操作审批、Checkpoints 快照、子 Agent 协同、Plan 任务树、Slash 命令等全部 100% 完整保留）。
+- **环境实测基线**：
+  - **CDP 浏览器连通性验证**：已通过 HTTP/WebSocket 成功接入 AgentDock 宿主 Chrome 实例（`Chrome/153.0.8010.36`，端口 `9223`），可直接检索正在运行的 Nexus 页面（`https://api.honus.top/settings`、`/workspace`）并捕获实时渲染截图，后续所有 UI 交互改造均可通过该 CDP 端口进行无头/真机双向自动化视觉回归。
+  - **当前浮窗 UI 阻碍点**：
+    - **三栏并排视觉压迫**：`AgentAppSurface.vue` 在桌面端默认 `taskRailVisible = true`，中间主对话区域被压缩至仅约 500px，一打开就像复杂的后台监控大屏。
+    - **双重面板交互冲突**：右侧 `TaskRail`（卡片列表）与点击 Details 触发的 `TaskDetailDrawer`（抽屉浮层）在运行状态、Token 消耗、审批列表、执行历史上有 70% 以上信息重叠，两套面板互相遮挡。
+    - **右侧栏缺少顶部显式控制**：目前右侧栏仅在角落有一个绝对定位的小叉号，展开与收起缺少明确的视觉反馈与平滑联动。
+    - **顶部 Header 冗余堆砌**：会话标题旁同时存在 Run 状态选择器下拉框、Details 按钮、Tasks 按钮，操作入口分散重复。
+    - **Composer 与配置项生硬**：底部 Model/Environment/Targets 弹出框层叠繁琐，输入框聚焦时边框突兀；消息流中依然露出 `#5`、`#6` 等底层物理序号；工具调用缺乏紧凑摘要。
+
+---
+
+### 一、 核心重构设计原则（零功能削减保证）
+
+1. **以会话为绝对视觉中心（Conversation-First）**：
+   - 打开 Agent 浮窗的首要任务是“与 Agent 顺畅对话与协作”。主对话区在默认状态下独占视觉主要空间（70% 以上），右侧任务工作栏改为按需展开、一键收起。
+2. **单一任务面板，消除双重抽屉（Unified Task Panel）**：
+   - 彻底合并 `TaskRail` 与 `TaskDetailDrawer`，所有执行态监控、Plan 计划树、审批流、检查点快照、子 Agent 消息统一由右侧这一个面板承载，层级清晰不重叠。
+3. **右侧栏顶部显式控制与双向联动（Intuitive Sidebar Controls）**：
+   - 在右侧边栏顶部 Header 增加显式【收起/关闭】按钮；在主对话区顶部右上角设置常驻的【任务工作栏】展开切换按钮（带动态执行态指示与待办角标），实现一键丝滑切换。
+4. **渐进式披露与微文案降噪（Progressive Disclosure & De-jargonize）**：
+   - 工具调用默认展示精炼的语义胶囊（如“✓ 已读取配置文件”），原始日志点击展开；去除所有底层序列号和后端架构说明文字。
+5. **功能完全保留（Zero Functional Regression）**：
+   - 审批决断（Approve/Deny）、预算增补、快照恢复（Checkpoints）、子 Agent 消息查看、SSH 目标切换、模型/环境选择等既有能力 100% 保留。
+
+---
+
+### 二、 详细 UI 设计与交互重构方案（模块级实施细则）
+
+#### 模块 1：右侧任务工作栏（TaskRail）折叠/弹出体系与顶部显式关闭按钮
+
+- **涉及组件**：`packages/frontend/src/features/agent/runtime/TaskRail.vue`、`packages/frontend/src/features/agent/host/AgentAppSurface.vue`
+- **详细修改说明**：
+  1. **右侧栏 Header 标准化操作区（顶部显式关闭）**：
+     - 在 `TaskRail.vue` 顶部的 Header 区域进行重新布局：
+       - **左侧**：任务工作栏图标 `<i class="fa-solid fa-list-check"></i>` 与面板标题【任务工作栏】。
+       - **右侧**：设计显式、高点击热区的【收起/关闭按钮】：
+         ```html
+         <button
+           type="button"
+           class="agent-rail-toggle-close flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-header hover:text-foreground transition-colors"
+           :title="$t(common.close)"
+           @click="emit(close)"
+         >
+           <i class="fa-solid fa-chevron-right text-xs"></i>
+         </button>
+         ```
+       - 彻底移除原 `AgentAppSurface.vue` 中悬浮在右上角的绝对定位小叉号，让关闭操作与面板 Header 浑然一体。
+  2. **默认收起策略与按需呼出**：
+     - 在 `AgentAppSurface.vue` 中，将 `taskRailVisible` 初始值统一设为 `false`（或仅在有活跃审批时自适应展开），打开浮窗时优先提供宽敞舒适的对话阅读空间。
+  3. **主界面顶部 Header 双向呼出按钮**：
+     - 在主对话区顶部右上角保留常驻的【任务工作栏】按钮：
+       - 当任务正常空闲时：展示幽灵风格按钮 `[ 任务清单 ]`。
+       - 当有 Run 正在执行时：按钮带绿色微光呼吸圆点（`● 执行中`）。
+       - 当有等待审批（Pending Approvals）时：按钮高亮警示黄色，并展示数量徽标 `[ 待审批 (1) ]`。
+     - 点击该按钮即可在“滑出右侧栏”与“收回右侧栏”之间无缝切换。
+  4. **平滑动画与响应式自适应**：
+     - 桌面端（宽屏）：右侧栏以平滑推拉动效展开，主对话区宽度自适应调整，不产生页面抖动。
+     - 中窄屏（平板/手机）：右侧栏以轻量抽屉覆盖层（Overlay Drawer）滑出，背景附带半透明遮罩，点击遮罩或顶部关闭按钮即平滑回退。
+
+#### 模块 2：TaskRail 与 TaskDetailDrawer 功能深度融合（合并为一个统一面板）
+
+- **涉及组件**：`packages/frontend/src/features/agent/runtime/TaskRail.vue`、`packages/frontend/src/features/agent/runtime/TaskDetailDrawer.vue`、`packages/frontend/src/features/agent/host/AgentAppSurface.vue`
+- **详细修改说明**：
+  1. 彻底停用并废除冗余的浮层抽屉 `TaskDetailDrawer.vue`，将其内部所有能力完整收拢进 `TaskRail.vue`，形成结构清晰的单面板系统。
+  2. 单一右侧面板内的六大模块卡片组织（自上而下）：
+     - **卡片 1：当前执行概览（Run Overview）**：
+       - 环形或线型优雅进度条、运行状态徽标、步骤数（如 `12/80 步`）、Token 消耗量、已执行用时。
+       - 运行中提供【停止/取消】操作；任务完成时提供轻量【清除/归档】选项。
+     - **卡片 2：待审批事项（Pending Approvals - 核心高亮）**：
+       - 存在未决审批时自动置顶，以柔和黄色卡片醒目呈现；卡片直接提供【批准执行】与【拒绝】按钮，点击“查看详情”可展开查看原始命令与哈希校验码。
+     - **卡片 3：任务执行计划（Plan & Steps）**：
+       - 树状或步进式呈现 Agent 的执行计划，清晰展示每一步的完成状态（已完成、执行中、待执行、受阻），高亮当前焦点步骤。
+     - **卡片 4：检查点快照（Checkpoints）**：
+       - 折叠面板，提供一键【保存检查点】按钮，并按时间倒序列出历史检查点，支持一键恢复至历史状态。
+     - **卡片 5：子 Agent 协作（Subagents & Delegations）**：
+       - 折叠面板，展示当前任务派生的子 Agent 状态、分配的目标及子任务间的通信消息流。
+     - **卡片 6：会话运行历史（Run History）**：
+       - 折叠面板，简洁罗列该会话历史上的所有 Run，点击可回顾前序任务概况。
+
+#### 模块 3：对话顶部 Header 极简降噪
+
+- **涉及组件**：`packages/frontend/src/features/agent/host/AgentAppSurface.vue`、`packages/frontend/src/features/agent/host/AgentHubWindow.vue`
+- **详细修改说明**：
+  1. **移除冗余的 Run 状态下拉框与 Details 按钮**：
+     - 删除 Header 上的 `<select class="agent-run-history">` 与单独的 `<button>详情</button>`，所有历史回溯与运行详情均已收归右侧任务工作栏，不再在顶部争抢空间。
+  2. **Header 极简两端对齐结构**：
+     - **左侧**：移动端会话侧栏汉堡菜单按钮 + 当前会话标题（单行截断展示，支持双击快速内联重命名）。
+     - **右侧**：当前 Run 状态轻量 Badge（如 `● 运行中`、`✓ 已完成`） + 【任务工作栏】展开切换按钮（带动态呼吸角标）。
+  3. **浮窗全局 Header（AgentHubWindow.vue）精简**：
+     - 压缩多 App 状态条的纵向高度，缩小图标与多余间距，确保浮窗整体观感轻盈现代。
+
+#### 4. Composer 输入区与运行配置胶囊现代化
+
+- **涉及组件**：`packages/frontend/src/features/agent/host/AgentAppSurface.vue`、`packages/frontend/src/features/agent/ai/AgentConversation.vue`、`packages/frontend/src/features/agent/host/AgentConfigPopover.vue`
+- **详细修改说明**：
+  1. **一体化极简胶囊组（Capsule Group）**：
+     - 将原输入框内部大块、分散的设置选择栏，重构为类似主流现代对话工具的极简状态胶囊组：
+       - `[ 🧠 gpt-4o ▾ ]`：点击唤起轻量模型切换面板，展示已配置的可用模型。
+       - `[ ⚡ 思考: 默认 ▾ ]`：**智能感知**——仅当选定模型真实具备思考档位能力时呈现；若当前模型不支持，则直接隐去，绝不弹出“当前不支持”的占位说明弹窗。
+       - `[ 📦 环境: 无 ▾ ]`：仅展示当前选中的 Recipe 名称（如“Node.js 开发环境”），点击切换。
+       - `[ 🖥️ SSH: 0/1 ▾ ]`：显示选中的远程机器数，点击勾选。
+     - 去除所有重复的静态说明前缀（如 “NEXT RUN”、“Model:” 等），只保留图标与当前值，大幅减少视觉杂讯。
+  2. **输入框焦点样式柔和化**：
+     - 去除原有的方正矩形硬高亮边框（`focus-within:border-primary/60 + shadow-md`），改为现代化无缝圆角卡片（`rounded-2xl`），搭配浅淡柔和的 Focus Ring（`focus-within:ring-2 focus-within:ring-primary/20 border-border/70`）。
+  3. **快捷指令（Slash Commands）轻量化**：
+     - `/goal`、`/interrupt`、`/queue` 等指令弹窗改为输入框上方的悬浮卡片，附带简明操作动词提示（如“设定任务目标”、“打断生成”），不再大段解释底层协议。
+
+#### 5. 消息流与执行工具（Tool Timeline）卡片优化
+
+- **涉及组件**：`packages/frontend/src/features/agent/ai/ConversationMessage.vue`、`packages/frontend/src/features/agent/ai/AgentMessageBody.vue`
+- **详细修改说明**：
+  1. **彻底移除底层物理序号**：
+     - 去掉消息气泡上方显示的 `#5`、`#6`、`#7` 等物理 Ledger 序号，仅保留精炼的角色标示与可读的时间提示。
+  2. **工具调用（tool_result）紧凑卡片化**：
+     - 正常完成的工具调用折叠为极简单行胶囊：
+       - `✓ 已执行终端诊断 (查看详情 ▾)`
+       - `✓ 已读取文件 packages/frontend/... (查看详情 ▾)`
+     - 失败或报错的工具调用展示淡红色警告边框及错误核心行。
+     - 用户点击单行胶囊后，才平滑展开等宽代码块展示原始 JSON 或终端原始输出，避免原始长日志强行刷屏。
+
+#### 6. 文案全面去架构化与微文案降噪
+
+- **涉及组件**：`packages/frontend/src/features/agent/i18n/zh-CN.json`、`en-US.json`、`ja-JP.json`
+- **详细修改说明**：
+  - 彻底清理如下直接把架构规范当成用户文案的长句：
+    - 删除 Checkpoints 卡片里的 “Facts only: active leases, tokens, containers, and processes are never saved.”
+    - 删除 Dev environment 卡片里的 “One Workspace keeps stable project files while each runtime generation composes Node, Python, Go...”
+    - 删除 TaskRail 顶部的 “拖拽卡片以自定义顺序”
+    - 删除思考强度 Popover 里的长句“当前仍使用模型默认值。根据模型支持的思考强度进行调整...”
+  - 全面换用清晰直观的用户意图文案：“保存检查点”、“运行环境”、“工具链”、“思考强度”。
+
+---
+
+### 三、 CDP 浏览器真机 UI 验证与视觉回归流程
+
+- **连通环境基准**：
+  - 调试地址：`http://172.30.31.11:9223`
+  - 运行内核：Chrome 153.0.8010.36
+  - 目标页面：`https://api.honus.top/settings`、`https://api.honus.top/workspace`
+- **本轮重构验收标准**：
+  1. **交互验证**：
+     - 桌面端打开 Agent 浮窗后，主会话区宽敞通透，右侧栏默认收起或仅展示轻量状态。
+     - 点击右上角【任务工作栏】按钮，右侧面板平滑滑出；点击右侧栏顶部的【收起】按钮，面板平滑收回。
+     - 触发审批时，右侧栏置顶高亮展示审批卡片，批准/拒绝按钮响应灵敏。
+     - 点击输入框与配置胶囊，弹出菜单定位精准，无突兀硬矩形焦点。
+  2. **多端分辨率与布局安全**：
+     - 在 1920×1080 桌面、1040px 临界宽度、720px 平板、390px 移动端下分别进行 CDP 截图回归，确保全部分辨率下 `document.documentElement.scrollWidth <= window.innerWidth`，无任何横向滚动条溢出。
+     - 浏览器控制台检查 `page_errors`，无任何 Vue 响应式警告或渲染错误。
+
+---
+
+### 四、 后续规划说明
+
+- **关于设置项目（Settings）**：
+  - 本条目严格聚焦浮窗与对话核心交互 UI。
+  - 模型 Provider 预设模板（OpenAI / DeepSeek / Claude / Ollama）、预算与 HardLimits 驼峰转中文及 3 档推荐预设、ACP/Browser 运行时可视化输入等设计方案已完整归档，将在本轮 UI 交互重构验收完成后，作为独立后续任务专门立项实施。
+
+- **TODO(P-029/agent-uiux)**：以上未落地的统一任务面板、TaskDetailDrawer 收敛、多分辨率完整视觉回归及 Settings 后续阶段均为有意保留的产品计划。后续代码清理不得仅因组件/入口暂未完全使用而删除对应设计或兼容层；应在实现完成、被等价方案替代或产品决策明确撤销后再移除。

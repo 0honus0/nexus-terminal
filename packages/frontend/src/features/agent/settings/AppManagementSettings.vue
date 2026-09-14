@@ -81,7 +81,7 @@
 </script>
 
 <template>
-  <section class="rounded-2xl border border-border/60 bg-card/65 p-5 shadow-sm">
+  <section class="rounded-2xl border border-border/60 bg-card/65 p-5">
     <h2 class="text-base font-semibold">{{ $t('agent.settings.apps.title') }}</h2>
     <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.apps.description') }}</p>
     <div class="mt-4 space-y-3">
