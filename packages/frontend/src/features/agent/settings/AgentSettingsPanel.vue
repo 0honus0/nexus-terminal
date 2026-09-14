@@ -55,6 +55,11 @@
     { id: 'safety', icon: 'fa-solid fa-shield-halved', label: 'agent.settings.groups.safety' },
   ] as const;
 
+  type AgentSettingsGroupId = (typeof groups)[number]['id'];
+
+  const activeGroup = ref<AgentSettingsGroupId>('overview');
+  const activeGroupMeta = computed(() => groups.find((group) => group.id === activeGroup.value) ?? groups[0]);
+
   const enabledApps = computed(() => apps.value.filter((app) => app.enabled).length);
   const enabledProviders = computed(() => providers.value.filter((provider) => provider.enabled).length);
   const modelCount = computed(() => providers.value.reduce((total, provider) => total + provider.models.length, 0));
@@ -223,8 +228,15 @@
       denylist.value = await agentApi.replaceTargetDenylist(connectionIds, reason, denylist.value.revision);
     });
 
-  const scrollToGroup = (id: string): void => {
-    document.getElementById(`agent-settings-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const selectGroup = (id: AgentSettingsGroupId): void => {
+    activeGroup.value = id;
+    requestAnimationFrame(() => {
+      document.getElementById('agent-settings-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  };
+
+  const selectGroupFromEvent = (event: Event): void => {
+    selectGroup((event.target as HTMLSelectElement).value as AgentSettingsGroupId);
   };
 
   onMounted(load);
@@ -233,12 +245,30 @@
 <template>
   <section
     id="settings-panel-agent"
-    class="mx-auto w-full max-w-[1240px] space-y-6 pb-8"
+    class="mx-auto w-full max-w-[1320px] space-y-5 pb-8"
     aria-labelledby="settings-agent-title"
   >
-    <div>
-      <h1 id="settings-agent-title" class="text-2xl font-semibold tracking-tight">{{ $t('agent.settings.title') }}</h1>
-      <p class="mt-1.5 max-w-3xl text-sm leading-6 text-text-secondary">{{ $t('agent.settings.description') }}</p>
+    <div class="flex flex-wrap items-start justify-between gap-4">
+      <div class="min-w-0">
+        <h1 id="settings-agent-title" class="text-2xl font-semibold tracking-tight">
+          {{ $t('agent.settings.title') }}
+        </h1>
+        <p class="mt-1.5 max-w-3xl text-sm leading-6 text-text-secondary">{{ $t('agent.settings.description') }}</p>
+      </div>
+      <div
+        v-if="settings"
+        class="inline-flex shrink-0 items-center gap-2 rounded-full border border-border/70 bg-card/70 px-3 py-1.5 text-xs"
+      >
+        <span
+          class="h-2 w-2 rounded-full"
+          :class="settings.effectiveSettings.feature.enabled ? 'bg-success' : 'bg-text-secondary/50'"
+        ></span>
+        <span class="font-medium">
+          {{
+            settings.effectiveSettings.feature.enabled ? $t('agent.settings.enabled') : $t('agent.settings.disabled')
+          }}
+        </span>
+      </div>
     </div>
 
     <div v-if="error" class="rounded-md border border-error/40 bg-error/10 px-4 py-3 text-sm text-error">
@@ -252,10 +282,10 @@
     </div>
 
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
-      <div class="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+      <div class="grid gap-5 lg:grid-cols-[232px_minmax(0,1fr)] xl:gap-7">
         <aside class="min-w-0">
           <nav
-            class="sticky top-4 rounded-2xl border border-border/60 bg-card/70 p-2.5 shadow-sm"
+            class="sticky top-4 hidden rounded-2xl border border-border/60 bg-card/70 p-2.5 shadow-sm lg:block"
             :aria-label="$t('agent.settings.navigation')"
           >
             <div class="border-b border-border/60 px-2 pb-2.5 pt-1">
@@ -281,24 +311,67 @@
                 v-for="group in groups"
                 :key="group.id"
                 type="button"
-                class="flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-left text-xs text-text-secondary transition-colors hover:bg-header/80 hover:text-foreground"
-                @click="scrollToGroup(group.id)"
+                class="flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-xs transition-colors"
+                :class="
+                  activeGroup === group.id
+                    ? 'border-primary/20 bg-primary/10 font-medium text-foreground'
+                    : 'border-transparent text-text-secondary hover:bg-header/80 hover:text-foreground'
+                "
+                :aria-current="activeGroup === group.id ? 'page' : undefined"
+                @click="selectGroup(group.id)"
               >
-                <i :class="`${group.icon} w-4 text-center text-[10px]`" aria-hidden="true"></i>
-                <span>{{ $t(group.label) }}</span>
+                <span
+                  class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+                  :class="activeGroup === group.id ? 'bg-primary/10 text-primary' : 'bg-background/70'"
+                >
+                  <i :class="`${group.icon} text-[10px]`" aria-hidden="true"></i>
+                </span>
+                <span class="min-w-0 flex-1 truncate">{{ $t(group.label) }}</span>
+                <i
+                  v-if="activeGroup === group.id"
+                  class="fa-solid fa-chevron-right text-[9px] text-primary"
+                  aria-hidden="true"
+                ></i>
               </button>
             </div>
           </nav>
         </aside>
 
-        <div class="min-w-0 space-y-10">
-          <section id="agent-settings-overview" class="scroll-mt-4 space-y-5">
-            <div class="border-b border-border/60 pb-3">
-              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.overview') }}</h2>
-              <p class="mt-1 text-sm leading-5 text-text-secondary">
-                {{ $t('agent.settings.groupDescriptions.overview') }}
-              </p>
+        <div class="min-w-0">
+          <div class="sticky top-3 z-10 mb-4 lg:hidden">
+            <label class="block rounded-2xl border border-border/60 bg-card/95 p-3 shadow-sm backdrop-blur">
+              <span class="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary">
+                {{ $t('agent.settings.navigation') }}
+              </span>
+              <select
+                :value="activeGroup"
+                :aria-label="$t('agent.settings.navigation')"
+                class="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm font-medium outline-none focus:border-primary"
+                @change="selectGroupFromEvent"
+              >
+                <option v-for="group in groups" :key="group.id" :value="group.id">{{ $t(group.label) }}</option>
+              </select>
+            </label>
+          </div>
+
+          <div
+            id="agent-settings-workspace"
+            class="mb-5 scroll-mt-4 rounded-2xl border border-border/60 bg-card/70 p-5 shadow-sm md:p-6"
+          >
+            <div class="flex items-start gap-4">
+              <div class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <i :class="activeGroupMeta.icon" aria-hidden="true"></i>
+              </div>
+              <div class="min-w-0">
+                <h2 class="text-lg font-semibold tracking-tight">{{ $t(activeGroupMeta.label) }}</h2>
+                <p class="mt-1 max-w-3xl text-sm leading-6 text-text-secondary">
+                  {{ $t(`agent.settings.groupDescriptions.${activeGroup}`) }}
+                </p>
+              </div>
             </div>
+          </div>
+
+          <section v-show="activeGroup === 'overview'" id="agent-settings-overview" class="scroll-mt-4 space-y-5">
             <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div class="rounded-2xl border border-border/60 bg-card/70 p-4 shadow-sm">
                 <div class="text-xs text-text-secondary">{{ $t('agent.settings.summary.apps') }}</div>
@@ -335,13 +408,7 @@
             <AppManagementSettings :apps="apps" :busy="busy" @toggle="toggleApp" />
           </section>
 
-          <section id="agent-settings-models" class="scroll-mt-4 space-y-5">
-            <div class="border-b border-border/60 pb-3">
-              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.models') }}</h2>
-              <p class="mt-1 text-sm leading-5 text-text-secondary">
-                {{ $t('agent.settings.groupDescriptions.models') }}
-              </p>
-            </div>
+          <section v-show="activeGroup === 'models'" id="agent-settings-models" class="scroll-mt-4 space-y-5">
             <ModelProviderSettings
               :providers="providers"
               :busy="busy"
@@ -367,13 +434,7 @@
             />
           </section>
 
-          <section id="agent-settings-execution" class="scroll-mt-4 space-y-5">
-            <div class="border-b border-border/60 pb-3">
-              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.execution') }}</h2>
-              <p class="mt-1 text-sm leading-5 text-text-secondary">
-                {{ $t('agent.settings.groupDescriptions.execution') }}
-              </p>
-            </div>
+          <section v-show="activeGroup === 'execution'" id="agent-settings-execution" class="scroll-mt-4 space-y-5">
             <PerformanceSettings
               :settings="settings"
               :busy="busy"
@@ -388,13 +449,11 @@
             />
           </section>
 
-          <section id="agent-settings-environments" class="scroll-mt-4 space-y-5">
-            <div class="border-b border-border/60 pb-3">
-              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.environments') }}</h2>
-              <p class="mt-1 text-sm leading-5 text-text-secondary">
-                {{ $t('agent.settings.groupDescriptions.environments') }}
-              </p>
-            </div>
+          <section
+            v-show="activeGroup === 'environments'"
+            id="agent-settings-environments"
+            class="scroll-mt-4 space-y-5"
+          >
             <WorkspaceRuntimeSettings
               :availability="workspaceRuntime"
               :settings="settings"
@@ -414,13 +473,7 @@
             />
           </section>
 
-          <section id="agent-settings-storage" class="scroll-mt-4 space-y-5">
-            <div class="border-b border-border/60 pb-3">
-              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.storage') }}</h2>
-              <p class="mt-1 text-sm leading-5 text-text-secondary">
-                {{ $t('agent.settings.groupDescriptions.storage') }}
-              </p>
-            </div>
+          <section v-show="activeGroup === 'storage'" id="agent-settings-storage" class="scroll-mt-4 space-y-5">
             <StorageArtifactSettings
               :settings="settings"
               :storage="storage"
@@ -429,13 +482,7 @@
             />
           </section>
 
-          <section id="agent-settings-extensions" class="scroll-mt-4 space-y-5">
-            <div class="border-b border-border/60 pb-3">
-              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.extensions') }}</h2>
-              <p class="mt-1 text-sm leading-5 text-text-secondary">
-                {{ $t('agent.settings.groupDescriptions.extensions') }}
-              </p>
-            </div>
+          <section v-show="activeGroup === 'extensions'" id="agent-settings-extensions" class="scroll-mt-4 space-y-5">
             <PluginManagementSettings
               :apps="apps"
               :settings="settings"
@@ -445,13 +492,7 @@
             />
           </section>
 
-          <section id="agent-settings-safety" class="scroll-mt-4 space-y-5">
-            <div class="border-b border-border/60 pb-3">
-              <h2 class="text-base font-semibold">{{ $t('agent.settings.groups.safety') }}</h2>
-              <p class="mt-1 text-sm leading-5 text-text-secondary">
-                {{ $t('agent.settings.groupDescriptions.safety') }}
-              </p>
-            </div>
+          <section v-show="activeGroup === 'safety'" id="agent-settings-safety" class="scroll-mt-4 space-y-5">
             <SafetyNetworkSettings :denylist="denylist" :busy="busy" @save="saveDenylist" />
             <SystemGuardrails />
           </section>

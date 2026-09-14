@@ -6,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 const resolveLocalModule = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 const devBackendOrigin = process.env.NEXUS_VITE_BACKEND_ORIGIN || 'http://localhost:3001';
 const devBackendWebSocketOrigin = devBackendOrigin.replace(/^http/, 'ws');
-const devPluginFrontendOrigin = process.env.NEXUS_VITE_PLUGIN_FRONTEND_ORIGIN || 'http://localhost:3002';
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -39,11 +38,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/plugins': {
-        target: devPluginFrontendOrigin,
+        target: devBackendOrigin,
         changeOrigin: false,
       },
       '/sdk': {
-        target: devPluginFrontendOrigin,
+        target: devBackendOrigin,
         changeOrigin: false,
       },
       // 将所有 /api 开头的请求代理到后端服务器

@@ -10,7 +10,6 @@ export interface RuntimeConfig {
   appName: string;
   appVersion: string;
   agentPublicOrigin?: string;
-  agentPluginFrontendPort: number;
   agentOfficialPluginCatalogUrl?: string;
   agentOfficialPluginPublisherKeyId?: string;
   agentOfficialPluginPublisherPublicKeyPem?: string;
@@ -114,7 +113,6 @@ export const loadRuntimeConfig = (dataDirectory: string, env: NodeJS.ProcessEnv 
   appName: env.APP_NAME?.trim() || 'Nexus Terminal',
   appVersion: env.NEXUS_VERSION?.trim() || BACKEND_PACKAGE_VERSION,
   agentPublicOrigin: parseOptionalExactOrigin(env.AGENT_PUBLIC_ORIGIN, 'AGENT_PUBLIC_ORIGIN'),
-  agentPluginFrontendPort: parsePositiveInteger(env.AGENT_PLUGIN_FRONTEND_PORT, 3002, 'AGENT_PLUGIN_FRONTEND_PORT'),
   agentOfficialPluginCatalogUrl: env.AGENT_OFFICIAL_PLUGIN_CATALOG_URL?.trim() || undefined,
   agentOfficialPluginPublisherKeyId:
     (env.NODE_ENV?.trim() || 'development') === 'test' || env.NEXUS_E2E_RESET_ENABLED === '1'

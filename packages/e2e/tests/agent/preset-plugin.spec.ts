@@ -501,6 +501,10 @@ test('official first-party catalog is discoverable without repository configurat
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Agent', exact: true }).click();
   const panel = page.locator('#settings-panel-agent');
+  await panel
+    .getByRole('navigation', { name: 'Agent settings sections', exact: true })
+    .getByRole('button', { name: 'Apps and extensions', exact: true })
+    .click();
   const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
   await pluginsHeading.scrollIntoViewIfNeeded();
   const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
@@ -646,6 +650,10 @@ test('frontend target owns a full Custom App Surface and connects through the is
     await page.goto('/settings');
     await page.getByRole('tab', { name: 'Agent', exact: true }).click();
     const panel = page.locator('#settings-panel-agent');
+    await panel
+      .getByRole('navigation', { name: 'Agent settings sections', exact: true })
+      .getByRole('button', { name: 'Apps and extensions', exact: true })
+      .click();
     const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
     await pluginsHeading.scrollIntoViewIfNeeded();
     const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');

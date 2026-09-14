@@ -21,7 +21,7 @@ docker compose up -d
 
 默认对外 HTTP 端口为 `18111`，可通过 `.env` 中的 `NEXUS_HTTP_PORT` 修改。
 
-Plugin Frontend 与 Frontend SDK 不再使用独立公网 Origin/端口；浏览器统一通过主站同源 `/plugins/...` 与 `/sdk/...` 访问，Frontend Nginx 在 Compose 内部代理到 Backend 的 3002 静态 listener。3002 不发布到宿主机。
+Plugin Frontend 与 Frontend SDK 不使用独立公网 Origin/端口；浏览器统一通过主站同源 `/plugins/...` 与 `/sdk/...` 访问。自 P-023 起这两类静态资源与 API/WebSocket 复用 Backend `3001` listener，但仍由独立的 Plugin/SDK request handler 提供严格 CSP、iframe 与路径校验语义。
 
 ### 可选 Agent Runner
 

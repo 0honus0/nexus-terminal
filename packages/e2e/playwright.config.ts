@@ -47,8 +47,6 @@ const backendEnv: Record<string, string> = {
   GUACD_PORT: String(E2E_PORTS.guacd),
   NEXUS_VITE_BACKEND_ORIGIN: E2E_URLS.backendOrigin,
   AGENT_PUBLIC_ORIGIN: E2E_URLS.frontendOrigin,
-  AGENT_PLUGIN_FRONTEND_ORIGIN: E2E_URLS.pluginFrontendOrigin,
-  AGENT_PLUGIN_FRONTEND_PORT: String(E2E_PORTS.pluginFrontend),
   AGENT_OFFICIAL_PLUGIN_CATALOG_URL: `${E2E_URLS.pluginRepositoryOrigin}/official-catalog.json`,
   AGENT_OFFICIAL_PLUGIN_PUBLISHER_KEY_ID: e2ePluginPublisherKeyId,
   AGENT_OFFICIAL_PLUGIN_PUBLISHER_PUBLIC_KEY_PEM: e2ePluginPublicKeyPem,

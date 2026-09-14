@@ -119,7 +119,12 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(settingsNavigation.getByRole('button', { name: 'Runtime environments', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Agent feature', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
+  await captureFunctionalScreenshot(page, 'agent-settings-overview.png', { viewport: { width: 1440, height: 900 } });
+
+  await settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
+
+  await settingsNavigation.getByRole('button', { name: 'Models and budget', exact: true }).click();
   const providersHeading = panel.getByRole('heading', { name: 'Model providers', exact: true });
   await expect(providersHeading).toBeVisible();
   const providersSection = providersHeading.locator('xpath=ancestor::section[1]');
@@ -145,8 +150,8 @@ test('Agent settings surface exposes the production control plane and captures f
   });
   await providersSection.getByRole('button', { name: 'e2e-model · Test', exact: true }).click();
   await expect(panel.getByText(/Provider OK/)).toBeVisible();
-  await captureFunctionalScreenshot(page, 'agent-settings-overview.png', { viewport: { width: 1440, height: 900 } });
 
+  await settingsNavigation.getByRole('button', { name: 'Execution and agents', exact: true }).click();
   const subagents = panel.getByRole('heading', { name: 'Subagents', exact: true });
   await subagents.scrollIntoViewIfNeeded();
   await expect(subagents).toBeVisible();
@@ -172,8 +177,27 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(workspaceRuntime).toBeVisible();
   await expect(runtimePanel.getByRole('heading', { name: 'Browser Runtime', exact: true })).toBeAttached();
   await expect(runtimePanel.getByRole('heading', { name: 'ACP Runtime', exact: true })).toBeAttached();
-  await expect(runtimePanel.getByRole('heading', { name: 'Safety and network', exact: true })).toBeAttached();
+  await expect(runtimePanel.getByRole('heading', { name: 'Safety and network', exact: true })).not.toBeVisible();
   await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
+
+  await runtimePanel
+    .getByRole('navigation', { name: 'Agent settings sections', exact: true })
+    .getByRole('button', { name: 'Safety and system', exact: true })
+    .click();
+  await expect(runtimePanel.getByRole('heading', { name: 'Safety and network', exact: true })).toBeVisible();
+
+  await page.setViewportSize({ width: 720, height: 900 });
+  await page.goto('/settings');
+  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
+  const narrowPanel = page.locator('#settings-panel-agent');
+  const sectionSelect = narrowPanel.getByRole('combobox', { name: 'Agent settings sections', exact: true });
+  await expect(sectionSelect).toBeVisible();
+  await sectionSelect.selectOption('environments');
+  await expect(narrowPanel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toBeVisible();
+  const horizontalExcess = await page.evaluate(() =>
+    Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
+  );
+  expect(horizontalExcess).toBeLessThanOrEqual(1);
 });
 
 const csrfToken = async (request: import('@playwright/test').APIRequestContext): Promise<string> => {
@@ -483,6 +507,31 @@ test('Agent WebSocket replays durable Host events after a disconnect', async ({ 
   await expect(retiredRunSse.json()).resolves.toMatchObject({
     error: { code: 'AGENT_STREAM_PROTOCOL_REPLACED' },
   });
+});
+
+test('Agent Host event stream elects one cross-tab leader', async ({ page, context }) => {
+  await loginAsInitialAdmin(context.request);
+  await enableAgentWithRecommendedNexusAgent(context.request);
+
+  const leaderSocketPromise = page.waitForEvent('websocket', {
+    predicate: (socket) => new URL(socket.url()).pathname === '/ws/agent',
+  });
+  await page.goto('/connections');
+  const leaderSocket = await leaderSocketPromise;
+  await waitForAgentSubscribed(leaderSocket);
+
+  const follower = await context.newPage();
+  let followerSockets = 0;
+  follower.on('websocket', (socket) => {
+    if (new URL(socket.url()).pathname === '/ws/agent') followerSockets += 1;
+  });
+  await follower.goto('/connections');
+  await follower.waitForTimeout(750);
+  expect(followerSockets).toBe(0);
+
+  await page.close();
+  await expect.poll(() => followerSockets, { timeout: 10_000 }).toBe(1);
+  await follower.close();
 });
 
 test('Agent WebSocket bounds concurrent sockets per authenticated session', async ({ page, context }) => {

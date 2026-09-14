@@ -2,7 +2,7 @@ import http, { type Server } from 'node:http';
 import type { RuntimeConfig } from '../config/runtime-config';
 import { GuacamoleRuntimeAdapter } from '../infrastructure/guacamole/guacamole-runtime.adapter';
 import { FileHttpSessionAdapter } from '../infrastructure/session/file-http-session.adapter';
-import { createPluginFrontendStaticServer } from '../infrastructure/agent/plugins/plugin-frontend-static-server';
+import { createPluginFrontendRequestHandler } from '../infrastructure/agent/plugins/plugin-frontend-static-server';
 import { createHttpApplication } from '../interfaces/http/http-application';
 import { attachWebSocketServer, type BackendWebSocketServer } from '../interfaces/websocket/websocket-server';
 import { createCompositionRoot, type CompositionRoot } from './composition-root';
@@ -86,13 +86,16 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
     passkeyRelyingParties: config.passkeyRelyingParties,
     workspaceFilesystem: services.modules.workspaceFilesystem,
   });
-  const server = http.createServer(httpApplication);
-  const pluginFrontendServer = config.agentPublicOrigin
-    ? createPluginFrontendStaticServer({
+  const pluginFrontendRequestHandler = config.agentPublicOrigin
+    ? createPluginFrontendRequestHandler({
         dataDirectory: config.dataDirectory,
         publicOrigin: config.agentPublicOrigin,
       })
     : undefined;
+  const server = http.createServer((request, response) => {
+    if (pluginFrontendRequestHandler?.(request, response)) return;
+    httpApplication(request, response);
+  });
   webSockets = attachWebSocketServer({
     server,
     sessionMiddleware: sessions.middleware,
@@ -148,14 +151,10 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
             });
           });
         await listen(server, config.port);
-        if (pluginFrontendServer) await listen(pluginFrontendServer, config.agentPluginFrontendPort);
       } catch (error) {
         performanceReporter?.stop();
         performanceReporter = undefined;
         await webSockets.close().catch(() => undefined);
-        if (pluginFrontendServer?.listening) {
-          await new Promise<void>((resolve) => pluginFrontendServer.close(() => resolve()));
-        }
         if (server.listening) await new Promise<void>((resolve) => server.close(() => resolve()));
         guacamoleRuntime.close();
         await services.dispose();
@@ -168,11 +167,6 @@ export const createBackendApplication = (config: RuntimeConfig): BackendApplicat
       try {
         await services.agent.quiesce(Math.floor(Date.now() / 1000) + 10).catch(() => undefined);
         await webSockets.close();
-        if (pluginFrontendServer?.listening) {
-          await new Promise<void>((resolve, reject) =>
-            pluginFrontendServer.close((error) => (error ? reject(error) : resolve())),
-          );
-        }
         await new Promise<void>((resolve, reject) => {
           if (!server.listening) {
             resolve();

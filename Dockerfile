@@ -55,7 +55,7 @@ COPY scripts/docker/entrypoint.sh /usr/local/bin/nexus-terminal
 RUN chmod 0755 /usr/local/bin/nexus-terminal \
     && mkdir -p /app/data /run/nginx
 
-EXPOSE 80 3001 3002
+EXPOSE 80 3001
 
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/nexus-terminal"]
 CMD ["frontend"]

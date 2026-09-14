@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import http, { type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import path from 'node:path';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
@@ -112,24 +112,41 @@ const resolveAsset = (dataDirectory: string, request: IncomingMessage): string |
   }
 };
 
-export const createPluginFrontendStaticServer = (options: { dataDirectory: string; publicOrigin: string }): Server =>
-  http.createServer((request, response) => {
+const isPluginFrontendRequest = (request: IncomingMessage): boolean => {
+  if (!request.url) return false;
+  try {
+    const url = new URL(request.url, 'http://plugin-frontend.invalid');
+    return (
+      url.pathname === '/plugins' ||
+      url.pathname.startsWith('/plugins/') ||
+      url.pathname === '/sdk' ||
+      url.pathname.startsWith('/sdk/')
+    );
+  } catch {
+    return request.url.startsWith('/plugins') || request.url.startsWith('/sdk');
+  }
+};
+
+export const createPluginFrontendRequestHandler =
+  (options: { dataDirectory: string; publicOrigin: string }) =>
+  (request: IncomingMessage, response: ServerResponse): boolean => {
+    if (!isPluginFrontendRequest(request)) return false;
     if (!['GET', 'HEAD'].includes(request.method ?? '')) {
       response.setHeader('Allow', 'GET, HEAD');
       fail(response, 405, options.publicOrigin);
-      return;
+      return true;
     }
     const asset = resolveSdkAsset(request) ?? resolveAsset(options.dataDirectory, request);
     if (!asset) {
       fail(response, 404, options.publicOrigin);
-      return;
+      return true;
     }
     let stat: fs.Stats;
     try {
       stat = fs.statSync(asset);
     } catch {
       fail(response, 404, options.publicOrigin);
-      return;
+      return true;
     }
     response.statusCode = 200;
     applySecurityHeaders(response, options.publicOrigin);
@@ -138,7 +155,7 @@ export const createPluginFrontendStaticServer = (options: { dataDirectory: strin
     response.setHeader('Content-Type', CONTENT_TYPES[path.extname(asset).toLowerCase()] ?? 'application/octet-stream');
     if (request.method === 'HEAD') {
       response.end();
-      return;
+      return true;
     }
     const stream = fs.createReadStream(asset);
     stream.once('error', () => {
@@ -146,4 +163,5 @@ export const createPluginFrontendStaticServer = (options: { dataDirectory: strin
       else response.destroy();
     });
     stream.pipe(response);
-  });
+    return true;
+  };

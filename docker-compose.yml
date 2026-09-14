@@ -37,7 +37,7 @@ services:
       RP_ID: ${RP_ID:-}
       RP_ORIGIN: ${RP_ORIGIN:-}
       AGENT_PUBLIC_ORIGIN: ${NEXUS_PUBLIC_ORIGIN:-http://localhost:18111}
-      AGENT_PLUGIN_FRONTEND_PORT: 3002
+      # Plugin/SDK 与 API/WebSocket 复用 Backend 3001 listener；不再需要独立 Plugin 端口配置。
       # 默认 nexus.agent（Operations + Developer Skills）以及 nexus.fullstack 等 first-party App 都是独立签名 Plugin，不编译进 Nexus 主镜像。
       # 这里只允许替换官方 catalog/mirror 地址；Publisher 信任根由 Nexus Host 固定 pin。
       AGENT_OFFICIAL_PLUGIN_CATALOG_URL: ${NEXUS_AGENT_OFFICIAL_PLUGIN_CATALOG_URL:-https://github.com/0honus0/nexus-agent-plugins/releases/latest/download/catalog.json}

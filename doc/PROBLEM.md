@@ -393,3 +393,21 @@
 - **开发 Origin**：公网调试时 Backend 运行环境使用 `AGENT_PUBLIC_ORIGIN=https://api.honus.top`，并对应设置 Passkey/WebAuthn Origin；Vite 仅在本地开发启动时显式监听 `9998` 并允许 `api.honus.top` Host。`/api`、`/plugins`、`/sdk` 与 WebSocket 路径继续经 Vite 同源代理到 Backend/Plugin listener。
 - **验证结果**：本地 `http://127.0.0.1:3001/api/v1/status`、`http://127.0.0.1:9998/`、`http://127.0.0.1:9998/api/v1/status`、`http://127.0.0.1:9998/sdk/frontend-v1.mjs` 均返回 200；公网 `https://api.honus.top/`、`/api/v1/status`、`/sdk/frontend-v1.mjs` 均返回 200。SDK CSP 的 `frame-ancestors` 为 `https://api.honus.top`。AgentDock 通过 Windows 外部 CDP 打开 `https://api.honus.top` 后正常进入 Nexus `/setup` 页面，未出现 console/network/page error。
 - **状态**：`已记录并验证；仅文档约定，无源码默认端口修改`
+
+
+## P-023 Backend Plugin/SDK 独立 3002 listener 增加不必要的端口复杂度
+
+- **发现时间**：2026-09-14
+- **用户决策**：将 Backend 的 Plugin/SDK 静态 listener 从独立 `3002` 合并到主 Backend `3001`，减少开发、Compose、Nginx 与故障排查中的端口分叉。
+- **当前结构**：同一个 Backend 进程同时监听 `3001`（HTTP API/WebSocket）和 `3002`（`/plugins/...`、`/sdk/frontend-v1.mjs`）。浏览器侧早已通过主站同源路径访问 Plugin/SDK，`3002` 不对公网发布，因此第二 listener 不提供进程级隔离，只承担路由与安全头分流。
+- **安全边界**：本次只收敛监听端口，不降低 Plugin/SDK 资源隔离。合并后必须继续保留：仅 `GET/HEAD`；匿名可访问；严格 CSP / `frame-ancestors`；不继承主页面 `X-Frame-Options: DENY`；`nosniff` / `no-referrer` / Permissions Policy；Plugin 路径 segment、package marker、realpath/symlink/path traversal 校验；静态资源 immutable cache；不存在资源返回 404 而不是 SPA fallback。
+- **实施计划**：
+  1. 将现有 Plugin/SDK 静态 server 抽成可挂载到主 HTTP server 的 request handler，并在 `3001` request pipeline 中仅拦截 `/plugins/` 与 `/sdk/` 路径。
+  2. 删除 Backend 第二次 `listen()`、`AGENT_PLUGIN_FRONTEND_PORT` / `agentPluginFrontendPort` 等产品配置。
+  3. Vite 的 `/plugins`、`/sdk` 与 `/api` 统一代理到 Backend `3001`；Frontend Nginx 删除 `backend:3002` upstream，Plugin/SDK 同样反代 `backend:3001`。
+  4. Compose 不再向 Backend 注入 `AGENT_PLUGIN_FRONTEND_PORT`；相关 E2E/test-env 与文档改为单 Backend 端口模型。
+  5. 增加/保留路由安全回归，确认 Plugin/SDK 响应头、404、GET/HEAD、路径校验与 API/WebSocket 无回归。
+- **验证标准**：Backend 产品代码不再监听 `3002`；仓库产品配置不再要求 `AGENT_PLUGIN_FRONTEND_PORT`；Backend/Frontend build 通过；开发同源 `/api/v1/status`、`/sdk/frontend-v1.mjs` 与可用 Plugin asset 均通过同一 `3001` target；Plugin route 安全头保持原语义。
+- **2026-09-14 本轮实施**：`plugin-frontend-static-server.ts` 已改为可挂载到主 HTTP server 的专用 request handler；`application.ts` 在进入 Express API middleware 前仅分流 `/plugins` / `/sdk`，因此 Plugin/SDK 不继承主 API 的 `X-Frame-Options: DENY`，原 CSP、匿名访问、GET/HEAD、realpath/symlink/path traversal、package marker 与 immutable cache 逻辑继续复用。Backend 删除第二次 `listen()` 与 `agentPluginFrontendPort`；Vite 和 Frontend Nginx 的 Plugin/SDK target 均统一为 Backend 3001；E2E 删除独立 `pluginFrontend` 端口配置。按用户后续决定，`docker-compose.yml` 同步删除失效的 `AGENT_PLUGIN_FRONTEND_PORT`，`Dockerfile` 的声明端口也收敛为 `80 3001`；Docker smoke 暂不因该决策改写，后续如容器层暴露实际问题再单独处理。
+- **2026-09-14 本轮验证**：Backend build 通过；Backend architecture check 通过（431 files，无 forbidden layer edge/source cycle/module cycle）；Frontend 完整 build 通过（319 source architecture、2339 i18n keys / 3 locales、`vue-tsc --noEmit`、Vite production build、bundle budget）；E2E `test:list` 仍发现 234 tests / 70 files，groups check 为 70 specs / 8 groups；目标 diff `git diff --check` 通过。真实开发 Backend 仅监听 3001：`/api/v1/status`=200，`/sdk/frontend-v1.mjs`=200 且保留 Plugin CSP/CORS/CORP/immutable cache、没有 `X-Frame-Options: DENY`；非法 dotfile Plugin path=404，POST SDK=405 + `Allow: GET, HEAD`；`127.0.0.1:3002` 连接失败符合预期。Vite 9998 与公网 `https://api.honus.top` 的 `/api/v1/status`、`/api/v1/settings/captcha`、`/sdk/frontend-v1.mjs` 均恢复为 200。Windows CDP 真 Chrome 刷新后直接恢复到已认证 Dashboard，console/network/page error 均为空，之前 CAPTCHA 加载失败不再阻塞登录。当前 AgentDock 容器没有 Docker CLI/nginx binary，因此本轮未执行 `docker compose config` 或 Nginx 本机语法测试。
+- **状态**：`已完成 Backend/开发链路单端口合并、Compose 与 Dockerfile 端口同步，并通过本地运行态与 Windows CDP 验证；容器 smoke 暂按用户决策保持不动`
