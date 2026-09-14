@@ -277,14 +277,28 @@ export const workspaceRuntimeRegistry = {
     for (const sessionId of ids.slice(0, index)) removeRuntime(sessionId, 'Workspace tab closed');
   },
 
-  disposeAll(): void {
-    for (const id of [...order.value]) removeRuntime(id, 'Workspace runtime disposed');
+  disposeAll(reason = 'Workspace runtime disposed'): void {
+    for (const id of [...order.value]) removeRuntime(id, reason);
   },
 };
 
 const handlePageHide = (event: PageTransitionEvent): void => {
+  if (sessions.size > 0) {
+    logger.info(
+      {
+        persisted: event.persisted,
+        visibilityState: document.visibilityState,
+        activeWorkspaceId: activeId.value,
+        sessionCount: sessions.size,
+        markedWorkspaceIds: [...sessions.values()]
+          .filter((session) => session.markedForSuspend.value)
+          .map((session) => session.id),
+      },
+      'Workspace pagehide lifecycle event',
+    );
+  }
   if (event.persisted) return;
-  workspaceRuntimeRegistry.disposeAll();
+  workspaceRuntimeRegistry.disposeAll('Workspace disposed by pagehide');
 };
 
 if (typeof window !== 'undefined') window.addEventListener('pagehide', handlePageHide);

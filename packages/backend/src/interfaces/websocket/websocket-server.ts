@@ -168,10 +168,15 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     record.socket.on('pong', alive);
     record.socket.on('message', alive);
     record.socket.on('message', (data) => runtimePerformanceMetrics.recordWebSocketInbound(rawDataByteLength(data)));
-    record.socket.once('close', (code) => {
+    record.socket.once('close', (code, reason) => {
       clients.delete(record);
       logger.debug(
-        { websocketKind: record.kind, closeCode: code, activeClients: clients.size },
+        {
+          websocketKind: record.kind,
+          closeCode: code,
+          closeReason: reason.length > 0 ? reason.toString() : undefined,
+          activeClients: clients.size,
+        },
         'WebSocket client detached',
       );
     });
@@ -182,8 +187,23 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     const record: ClientRecord = { socket, kind: 'workspace', protocol, isAlive: true, missed: 0 };
     trackClient(record);
     socket.on('message', (data, isBinary) => void protocol.handleMessage(data, isBinary));
-    socket.once('close', () => void protocol.close());
-    socket.once('error', () => void protocol.close());
+    socket.once(
+      'close',
+      (code, reason) =>
+        void protocol.close({
+          source: 'socket.close',
+          closeCode: code,
+          closeReason: reason.length > 0 ? reason.toString() : undefined,
+        }),
+    );
+    socket.once(
+      'error',
+      (error) =>
+        void protocol.close({
+          source: 'socket.error',
+          errorMessage: error.message,
+        }),
+    );
   };
 
   const onUploadConnection = (

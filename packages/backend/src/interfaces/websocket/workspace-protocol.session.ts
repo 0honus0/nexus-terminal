@@ -106,6 +106,13 @@ export interface WorkspacePeerIdentity {
   clientIp: string;
 }
 
+export interface WorkspaceProtocolCloseContext {
+  source: 'socket.close' | 'socket.error';
+  closeCode?: number;
+  closeReason?: string;
+  errorMessage?: string;
+}
+
 /** Clean Workspace WebSocket protocol over clean Module/Platform services. */
 export class WorkspaceProtocolSession {
   private workspaceId?: string;
@@ -210,7 +217,7 @@ export class WorkspaceProtocolSession {
     }
   }
 
-  async close(): Promise<void> {
+  async close(context?: WorkspaceProtocolCloseContext): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     this.autoTerminationUnsubscribe();
@@ -219,10 +226,23 @@ export class WorkspaceProtocolSession {
     this.terminalTransport.dispose();
     const workspaceId = this.workspaceId;
     this.workspaceId = undefined;
-    if (workspaceId)
-      await this.dependencies.suspendCoordinator
-        .closeWorkspace(workspaceId)
-        .catch((error) => logger.warn({ err: error, workspaceId }, 'Workspace cleanup after protocol close failed'));
+    if (!workspaceId) return;
+
+    const markedForSuspend = this.dependencies.suspendCoordinator.isMarked(workspaceId);
+    const logContext = {
+      workspaceId,
+      userId: this.identity.userId,
+      markedForSuspend,
+      ...context,
+    };
+    if (markedForSuspend) logger.info(logContext, 'Marked Workspace protocol closing');
+    else logger.debug(logContext, 'Workspace protocol closing');
+
+    await this.dependencies.suspendCoordinator
+      .closeWorkspace(workspaceId)
+      .catch((error) =>
+        logger.warn({ err: error, workspaceId, ...context }, 'Workspace cleanup after protocol close failed'),
+      );
   }
 
   private async route(type: string, payload: JsonRecord, requestId?: string): Promise<unknown> {

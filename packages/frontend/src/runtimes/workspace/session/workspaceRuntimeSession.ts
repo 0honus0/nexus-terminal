@@ -318,10 +318,17 @@ export class WorkspaceRuntimeSession {
 
   close(reason = 'Workspace closed'): void {
     if (this.disposed) return;
-    logger.debug(
-      { workspaceId: this.id, connectionId: this.connection.id, state: this.state.value, reason },
-      'Workspace runtime close requested',
-    );
+    const context = {
+      workspaceId: this.id,
+      connectionId: this.connection.id,
+      state: this.state.value,
+      reason,
+      markedForSuspend: this.markedForSuspend.value,
+      visibilityState: document.visibilityState,
+      ...(this.markedForSuspend.value ? { triggerStack: new Error('Workspace runtime close trigger').stack } : {}),
+    };
+    if (this.markedForSuspend.value) logger.info(context, 'Marked Workspace runtime close requested');
+    else logger.debug(context, 'Workspace runtime close requested');
     this.closing = true;
     this.clearReconnectTimer();
     this.statusController.workspaceDisconnected();
@@ -332,10 +339,17 @@ export class WorkspaceRuntimeSession {
 
   dispose(reason = 'Workspace disposed'): void {
     if (this.disposed) return;
-    logger.debug(
-      { workspaceId: this.id, connectionId: this.connection.id, state: this.state.value, reason },
-      'Workspace runtime dispose requested',
-    );
+    const context = {
+      workspaceId: this.id,
+      connectionId: this.connection.id,
+      state: this.state.value,
+      reason,
+      markedForSuspend: this.markedForSuspend.value,
+      visibilityState: document.visibilityState,
+      ...(this.markedForSuspend.value ? { triggerStack: new Error('Workspace runtime dispose trigger').stack } : {}),
+    };
+    if (this.markedForSuspend.value) logger.info(context, 'Marked Workspace runtime dispose requested');
+    else logger.debug(context, 'Workspace runtime dispose requested');
     this.disposed = true;
     this.closing = true;
     this.clearReconnectTimer();
@@ -351,18 +365,18 @@ export class WorkspaceRuntimeSession {
 
   private handleTransportClosed(reason?: string): void {
     if (this.disposed || this.closing) return;
-    logger.debug(
-      {
-        workspaceId: this.id,
-        connectionId: this.connection.id,
-        state: this.state.value,
-        reason,
-        hasConnected: this.hasConnected.value,
-        reconnectAttempt: this.reconnectAttempt,
-        markedForSuspend: this.markedForSuspend.value,
-      },
-      'Workspace transport closed',
-    );
+    const context = {
+      workspaceId: this.id,
+      connectionId: this.connection.id,
+      state: this.state.value,
+      reason,
+      hasConnected: this.hasConnected.value,
+      reconnectAttempt: this.reconnectAttempt,
+      markedForSuspend: this.markedForSuspend.value,
+      visibilityState: document.visibilityState,
+    };
+    if (this.markedForSuspend.value) logger.info(context, 'Marked Workspace transport closed');
+    else logger.debug(context, 'Workspace transport closed');
     this.markCapabilitiesDisconnected();
     this.state.value = 'disconnected';
     if (reason) this.statusMessage.value = reason;

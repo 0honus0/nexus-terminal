@@ -337,11 +337,23 @@ export class WorkspaceSuspendCoordinatorService {
   }
 
   async closeWorkspace(workspaceId: string): Promise<void> {
-    if (this.pending.has(workspaceId)) {
-      await this.rollbackResume(workspaceId);
+    const pendingResume = this.pending.has(workspaceId);
+    const markedForSuspend = this.marks.has(workspaceId);
+    const sessionExists = Boolean(this.workspaces.getSession(workspaceId));
+    const context = { workspaceId, pendingResume, markedForSuspend, sessionExists };
+    if (pendingResume || markedForSuspend) logger.info(context, 'Workspace close handoff started');
+    else logger.debug(context, 'Workspace close handoff started');
+
+    if (pendingResume) {
+      const rolledBack = await this.rollbackResume(workspaceId);
+      logger.info({ ...context, rolledBack }, 'Workspace close rolled back pending resume');
       return;
     }
-    await this.handleClientDisconnect(workspaceId);
+
+    const result = await this.handleClientDisconnect(workspaceId);
+    if (markedForSuspend || result.suspended)
+      logger.info({ ...context, ...result }, 'Workspace close handoff completed');
+    else logger.debug({ ...context, ...result }, 'Workspace close handoff completed');
   }
 
   async dispose(): Promise<void> {
