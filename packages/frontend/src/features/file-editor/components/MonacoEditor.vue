@@ -1,5 +1,7 @@
 <script setup lang="ts">
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  // Register before the first editor.create() snapshots Monaco's standalone service collection.
+  import 'monaco-editor/platform/actionWidget/browser/actionWidget';
   import * as monaco from 'monaco-editor/editor/editor.api';
   import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
   import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
