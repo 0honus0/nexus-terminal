@@ -32,6 +32,8 @@
   import AgentConfigPopover from './AgentConfigPopover.vue';
   import { createAgentRunFacade } from '../runtime/run-facade';
   import { createRuntimeOperationState } from '../runtime/runtime-operation-state';
+  // TODO(P-029/agent-uiux): keep TaskDetailDrawer until its checkpoint/subagent/delete capabilities are
+  // fully merged into TaskRail and the unified panel has completed responsive/browser regression.
   import TaskDetailDrawer from '../runtime/TaskDetailDrawer.vue';
   import TaskRail from '../runtime/TaskRail.vue';
 
