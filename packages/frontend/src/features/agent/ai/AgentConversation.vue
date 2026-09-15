@@ -454,7 +454,7 @@
           <div
             class="agent-composer-toolbar flex min-h-10 items-center justify-between gap-1.5 border-t border-border/35 bg-header/25 backdrop-blur-xs px-2 py-1"
           >
-            <div class="agent-toolbar-controls flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar">
+            <div class="agent-toolbar-controls flex min-w-0 flex-1 items-center gap-1 overflow-x-hidden">
               <ArtifactPicker
                 :app-id="appId"
                 :model-value="attachments"

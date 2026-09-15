@@ -336,8 +336,8 @@
             class="agent-app-tab group relative flex h-8 items-center gap-1.5 rounded-xl px-1.5 text-[11px] transition-all duration-150 select-none no-drag"
             :class="
               app.id === state.activeAppId
-                ? 'shrink-0 max-w-64 bg-primary/[0.065] font-semibold text-foreground shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)]'
-                : 'shrink min-w-0 max-w-56 bg-transparent text-text-secondary hover:bg-card/60 hover:text-foreground'
+                ? 'shrink-0 max-w-64 bg-transparent font-semibold text-foreground'
+                : 'shrink min-w-0 max-w-56 bg-transparent text-text-secondary hover:bg-card/45 hover:text-foreground'
             "
             :aria-label="$t('agent.hub.switchToApp', { app: app.displayName })"
             :title="app.displayName"

@@ -1125,49 +1125,30 @@
             class="absolute left-0.5 top-2 bottom-2 w-0.5 rounded-full bg-primary"
           ></span>
 
-          <!-- 优雅的微图标与活跃指示点 -->
-          <div
-            class="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors"
-            :class="
-              currentThread?.id === thread.id
-                ? 'bg-primary/9 text-primary'
-                : 'text-text-secondary/45 group-hover:text-text-secondary/75'
-            "
-          >
-            <i
-              class="text-[11px]"
+          <!-- 轻量会话状态点 -->
+          <span class="relative mt-px flex h-4 w-3 shrink-0 items-center justify-center" aria-hidden="true">
+            <span
+              class="relative z-10 h-1.5 w-1.5 rounded-full transition-colors"
               :class="
                 threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)
-                  ? 'fa-solid fa-wand-magic-sparkles text-primary'
+                  ? threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
+                    ? 'bg-warning'
+                    : 'bg-success'
                   : currentThread?.id === thread.id
-                    ? 'fa-solid fa-message'
-                    : 'fa-regular fa-message'
+                    ? 'bg-primary'
+                    : 'bg-text-secondary/25 group-hover:bg-text-secondary/45'
               "
-              aria-hidden="true"
-            ></i>
-            <!-- 活跃/等待审批状态脉冲小微点 -->
+            ></span>
             <span
               v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
-              class="absolute -right-0.5 -top-0.5 flex h-2 w-2 items-center justify-center"
-            >
-              <span
-                class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
-                :class="
-                  threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
-                    ? 'bg-warning'
-                    : 'bg-success'
-                "
-              ></span>
-              <span
-                class="relative inline-flex h-1.5 w-1.5 rounded-full border border-card"
-                :class="
-                  threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
-                    ? 'bg-warning'
-                    : 'bg-success'
-                "
-              ></span>
-            </span>
-          </div>
+              class="absolute h-2.5 w-2.5 animate-ping rounded-full opacity-35"
+              :class="
+                threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
+                  ? 'bg-warning'
+                  : 'bg-success'
+              "
+            ></span>
+          </span>
 
           <!-- 标题与状态行 -->
           <div class="min-w-0 flex-1">
@@ -1994,7 +1975,7 @@
       width: auto;
       min-width: 0.75rem;
       font-size: 10px;
-      line-height: 1;
+      line-height: 1.25;
     }
 
     :deep(.agent-config-summary) {
@@ -2004,7 +1985,7 @@
       border-radius: 6px;
       padding-inline: 6px;
       font-size: 10px;
-      line-height: 1;
+      line-height: 1.25;
     }
 
     .agent-detail-label {
