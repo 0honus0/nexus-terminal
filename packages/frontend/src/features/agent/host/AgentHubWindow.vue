@@ -333,11 +333,11 @@
             v-for="app in displayedApps"
             :key="app.id"
             type="button"
-            class="agent-app-tab group relative flex h-8 items-center gap-1.5 rounded-xl px-1.5 text-[11px] transition-all duration-150 select-none no-drag"
+            class="agent-app-tab group relative flex h-7 items-center gap-1.5 rounded-lg px-1.5 transition-colors duration-150 select-none no-drag"
             :class="
               app.id === state.activeAppId
-                ? 'shrink-0 max-w-64 bg-transparent font-semibold text-foreground'
-                : 'shrink min-w-0 max-w-56 bg-transparent text-text-secondary hover:bg-card/45 hover:text-foreground'
+                ? 'shrink-0 max-w-64 bg-card/55 text-foreground'
+                : 'shrink min-w-0 max-w-56 bg-transparent text-text-secondary hover:bg-card/40 hover:text-foreground'
             "
             :aria-label="$t('agent.hub.switchToApp', { app: app.displayName })"
             :title="app.displayName"
@@ -346,7 +346,7 @@
           >
             <!-- App 身份图标与呼吸健康指示灯 -->
             <span
-              class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-all"
+              class="relative flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border transition-colors"
               :class="
                 app.id === state.activeAppId
                   ? 'border-primary/15 bg-primary/10 text-primary shadow-2xs'
@@ -355,12 +355,12 @@
             >
               <i
                 v-if="app.surface === 'agent'"
-                class="fa-solid fa-wand-magic-sparkles text-[9px]"
+                class="fa-solid fa-wand-magic-sparkles text-[8px]"
                 aria-hidden="true"
               ></i>
               <i
                 v-else-if="app.surface === 'custom'"
-                class="fa-solid fa-puzzle-piece text-[9px]"
+                class="fa-solid fa-puzzle-piece text-[8px]"
                 aria-hidden="true"
               ></i>
               <i v-else class="fa-solid fa-layer-group text-[9px]" aria-hidden="true"></i>
@@ -377,15 +377,7 @@
             </span>
 
             <!-- App 名称 -->
-            <span class="min-w-0 flex-1 truncate text-left leading-[1.2] tracking-[-0.015em]">{{
-              app.displayName
-            }}</span>
-
-            <span
-              v-if="app.id === state.activeAppId"
-              class="absolute inset-x-2 bottom-0 h-px rounded-full bg-primary/70"
-              aria-hidden="true"
-            ></span>
+            <span class="agent-app-name min-w-0 flex-1 truncate text-left">{{ app.displayName }}</span>
 
             <!-- 运行状态指示徽标 -->
             <span
@@ -589,6 +581,24 @@
   .agent-backdrop-enter-from,
   .agent-backdrop-leave-to {
     opacity: 0;
+  }
+
+  .agent-app-tab {
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 500;
+    letter-spacing: -0.018em;
+  }
+
+  .agent-app-tab[aria-label] {
+    font-family: inherit;
+  }
+
+  .agent-app-name {
+    font-size: 12px;
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: -0.018em;
   }
 
   .agent-hub-view-button {
