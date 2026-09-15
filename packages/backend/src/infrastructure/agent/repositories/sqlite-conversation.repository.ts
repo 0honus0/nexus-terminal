@@ -7,15 +7,18 @@ import type {
   LedgerPage,
   Scope,
   ThreadPage,
+  ThreadTitleSource,
   ThreadView,
 } from '../../../modules/agent/ai/conversation.repository.port';
 import type { ContextHistoryBoundary } from '../../../modules/agent/ai/context.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { appendHostEvent } from '../events/host-event-outbox';
 
 interface ThreadRow {
   id: string;
   app_id: string;
   title: string;
+  title_source: ThreadTitleSource;
   version: number;
   created_at: number;
   updated_at: number;
@@ -36,6 +39,7 @@ const mapThread = (row: ThreadRow): ThreadView => ({
   id: row.id,
   appId: row.app_id,
   title: row.title,
+  titleSource: row.title_source,
   version: row.version,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -77,7 +81,7 @@ const decodeEntryCursor = (cursor: string): number => {
 };
 
 const threadSelect = `
-  SELECT t.id, t.app_id, t.title, t.version, t.created_at, t.updated_at,
+  SELECT t.id, t.app_id, t.title, t.title_source, t.version, t.created_at, t.updated_at,
     (SELECT r.id FROM agent_runs r WHERE r.thread_id = t.id AND r.user_id = t.user_id AND r.app_id = t.app_id
       ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_run_id
   FROM ai_threads t
@@ -86,15 +90,61 @@ const threadSelect = `
 export class SqliteConversationRepository implements ConversationRepositoryPort {
   constructor(private readonly db: RelationalDatabase) {}
 
-  async createThread(scope: Scope, id: string, title: string, now: number): Promise<ThreadView> {
+  async createThread(
+    scope: Scope,
+    id: string,
+    title: string,
+    titleSource: ThreadTitleSource,
+    now: number,
+  ): Promise<ThreadView> {
     await this.db.execute(
-      `INSERT INTO ai_threads (id, user_id, app_id, title, next_sequence, version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, 1, ?, ?)`,
-      [id, scope.userId, scope.appId, title, now, now],
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, next_sequence, version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)`,
+      [id, scope.userId, scope.appId, title, titleSource, now, now],
     );
     const created = await this.getThread(scope, id);
     if (!created) throw new Error('NOT_FOUND');
     return created;
+  }
+
+  async renameThread(
+    scope: Scope,
+    threadId: string,
+    title: string,
+    expectedVersion: number,
+    now: number,
+  ): Promise<ThreadView> {
+    await this.db.transaction(async (tx) => {
+      const current = await tx.queryOne<{ version: number }>(
+        'SELECT version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
+        [threadId, scope.userId, scope.appId],
+      );
+      if (!current) throw new Error('NOT_FOUND');
+      if (current.version !== expectedVersion) throw new Error('STATE_CONFLICT');
+      const updated = await tx.execute(
+        `UPDATE ai_threads SET title = ?, title_source = 'manual', version = version + 1, updated_at = ?
+         WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
+        [title, now, threadId, scope.userId, scope.appId, expectedVersion],
+      );
+      if (updated.changes !== 1) throw new Error('STATE_CONFLICT');
+      await appendHostEvent(
+        tx,
+        scope.userId,
+        'thread.changed',
+        {
+          appId: scope.appId,
+          threadId,
+          title,
+          titleSource: 'manual',
+          version: expectedVersion + 1,
+          updatedAt: now,
+        },
+        now,
+      );
+    });
+    const renamed = await this.getThread(scope, threadId);
+    if (!renamed) throw new Error('NOT_FOUND');
+    return renamed;
   }
 
   async getThread(scope: Scope, threadId: string): Promise<ThreadView | null> {

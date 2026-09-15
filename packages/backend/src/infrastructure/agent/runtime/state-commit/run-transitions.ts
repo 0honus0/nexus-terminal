@@ -38,6 +38,7 @@ interface CommandRow {
 interface ThreadRow {
   next_sequence: number;
   version: number;
+  title_source: 'placeholder' | 'auto' | 'manual';
 }
 
 interface AppPolicyRow {
@@ -75,7 +76,7 @@ export const createRunTransition = async (
   if (!app || app.desired_state !== 'enabled') throw new Error('AGENT_APP_DISABLED');
   if (app.policy_revision !== command.expectedPolicyRevision) throw new Error('POLICY_REVISION_CONFLICT');
   const thread = await tx.queryOne<ThreadRow>(
-    'SELECT next_sequence, version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
+    'SELECT next_sequence, version, title_source FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
     [command.threadId, command.scope.userId, command.scope.appId],
   );
   if (!thread) throw new Error('NOT_FOUND');
@@ -161,12 +162,36 @@ export const createRunTransition = async (
       command.now,
     ],
   );
-  const threadUpdated = await tx.execute(
-    `UPDATE ai_threads SET next_sequence = next_sequence + 1, version = version + 1, updated_at = ?
-     WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
-    [command.now, command.threadId, command.scope.userId, command.scope.appId, thread.version],
-  );
+  const automaticTitle = thread.title_source === 'placeholder' ? (command.automaticThreadTitle ?? null) : null;
+  const threadUpdated = automaticTitle
+    ? await tx.execute(
+        `UPDATE ai_threads SET title = ?, title_source = 'auto', next_sequence = next_sequence + 1,
+           version = version + 1, updated_at = ?
+         WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
+        [automaticTitle, command.now, command.threadId, command.scope.userId, command.scope.appId, thread.version],
+      )
+    : await tx.execute(
+        `UPDATE ai_threads SET next_sequence = next_sequence + 1, version = version + 1, updated_at = ?
+         WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
+        [command.now, command.threadId, command.scope.userId, command.scope.appId, thread.version],
+      );
   if (threadUpdated.changes !== 1) throw new Error('STATE_CONFLICT');
+  if (automaticTitle) {
+    await allocateHostEvent(
+      tx,
+      command.scope.userId,
+      'thread.changed',
+      {
+        appId: command.scope.appId,
+        threadId: command.threadId,
+        title: automaticTitle,
+        titleSource: 'auto',
+        version: thread.version + 1,
+        updatedAt: command.now,
+      },
+      command.now,
+    );
+  }
   for (const artifactId of initialEntry.artifactRefs) {
     await artifactForInput(
       tx,

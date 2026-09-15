@@ -8,16 +8,25 @@ import type {
   LedgerEntryView,
   LedgerPage,
   ThreadPage,
+  ThreadTitleSource,
   ThreadView,
 } from './conversation.repository.port';
 import type { ContextHistoryBoundary } from './context.types';
+import { THREAD_PLACEHOLDER_TITLE } from './thread-title';
 
-const normalizeTitle = (title: unknown): string => {
-  if (title === undefined || title === null || title === '') return 'New conversation';
+const normalizeTitle = (title: unknown): { title: string; source: ThreadTitleSource } => {
+  if (title === undefined || title === null || title === '') {
+    return { title: THREAD_PLACEHOLDER_TITLE, source: 'placeholder' };
+  }
   if (typeof title !== 'string') throw new Error('VALIDATION_FAILED');
   const normalized = title.trim();
   if (!normalized || normalized.length > 200) throw new Error('VALIDATION_FAILED');
-  return normalized;
+  return { title: normalized, source: 'manual' };
+};
+
+const normalizeExpectedVersion = (value: unknown): number => {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error('VALIDATION_FAILED');
+  return Number(value);
 };
 
 const validateLimit = (limit: number, max: number): number => {
@@ -40,7 +49,20 @@ export class ConversationService {
     if (app.desiredState !== 'enabled' || !['running', 'degraded'].includes(app.observedState))
       throw new Error('AGENT_APP_DISABLED');
     const now = this.clock.nowUnixSeconds();
-    return this.repository.createThread(scope, randomUUID(), normalizeTitle(title), now);
+    const normalized = normalizeTitle(title);
+    return this.repository.createThread(scope, randomUUID(), normalized.title, normalized.source, now);
+  }
+
+  async renameThread(scope: Scope, threadId: string, title: unknown, expectedVersion: unknown): Promise<ThreadView> {
+    const normalized = normalizeTitle(title);
+    if (normalized.source !== 'manual') throw new Error('VALIDATION_FAILED');
+    return this.repository.renameThread(
+      scope,
+      threadId,
+      normalized.title,
+      normalizeExpectedVersion(expectedVersion),
+      this.clock.nowUnixSeconds(),
+    );
   }
 
   async getThread(scope: Scope, threadId: string): Promise<ThreadView> {

@@ -370,6 +370,7 @@ export interface AgentThreadView {
   id: string;
   appId: string;
   title: string;
+  titleSource: 'placeholder' | 'auto' | 'manual';
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -1207,6 +1208,22 @@ export const agentApi = {
         await httpClient.post<AgentEnvelope<AgentThreadView>>(
           `/apps/${encodeURIComponent(appId)}/threads`,
           title ? { title } : {},
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async renameThread(
+    appId: string,
+    threadId: string,
+    title: string,
+    expectedVersion: number,
+  ): Promise<AgentThreadView> {
+    return unwrap(
+      (
+        await httpClient.patch<AgentEnvelope<AgentThreadView>>(
+          `/apps/${encodeURIComponent(appId)}/threads/${encodeURIComponent(threadId)}`,
+          { title, expectedVersion },
           { headers: await mutationHeaders() },
         )
       ).data,

@@ -84,14 +84,20 @@ interface AgentSnapshotChangedEvent extends AgentVersionedEventMetadata {
   payload: null;
 }
 
-const HOST_EVENT_TYPES = ['summary.changed', 'feature.changed', 'app.changed', 'authorization.changed'] as const;
+const HOST_EVENT_TYPES = [
+  'summary.changed',
+  'feature.changed',
+  'app.changed',
+  'authorization.changed',
+  'thread.changed',
+] as const;
 type AgentHostEventType = (typeof HOST_EVENT_TYPES)[number];
 const hostEventTypes = new Set<string>(HOST_EVENT_TYPES);
 
 interface AgentHostChangedEvent extends AgentEventMetadata {
   type: 'host.changed';
   sourceType: AgentHostEventType;
-  payload: null;
+  payload: Record<string, unknown>;
 }
 
 type AgentUnknownReason = 'invalid_payload' | 'unsupported_event' | 'unsupported_schema';
@@ -346,7 +352,7 @@ const parseWireEvent = (
       ...eventMetadata(event),
       type: 'host.changed',
       sourceType: event.eventType as AgentHostEventType,
-      payload: null,
+      payload: event.payload,
     };
   }
 

@@ -101,6 +101,8 @@ export const createAgentRunFacade = (appId: string) => {
     dispose,
     listThreads: (before?: string) => agentApi.threads(appId, before),
     createThread: (title?: string) => agentApi.createThread(appId, title),
+    renameThread: (threadId: string, title: string, expectedVersion: number) =>
+      agentApi.renameThread(appId, threadId, title, expectedVersion),
     readLedger: (threadId: string, before?: string) => agentApi.ledger(appId, threadId, before),
     definitions: () => agentApi.definitions(appId),
     providers: () => agentApi.providers(),

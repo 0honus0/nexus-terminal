@@ -20,6 +20,7 @@ export interface AtomicCreateRun {
   threadId: string;
   inputEntryId: string;
   input: UserInputData;
+  automaticThreadTitle?: string;
   parentRunId?: string | null;
   initialEntry?: { kind: LedgerEntryKind; payload: JsonValue; artifactRefs: string[] };
   initialPlan?: RunPlan;
@@ -313,6 +314,7 @@ export interface AtomicAppendInput {
   runId: string;
   inputEntryId: string;
   input: UserInputData;
+  automaticThreadTitle?: string;
   mode: 'append' | 'interrupt';
   expectedRunVersion: number;
   idempotencyKey: string;

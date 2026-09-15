@@ -106,6 +106,7 @@
   const draft = ref(agentSurfaceSession.state(props.appId).draft);
   const commandResult = ref<ConversationCommandResult | null>(null);
   let threadSelectionGeneration = 0;
+  let threadListRefreshGeneration = 0;
   let ledgerGeneration = 0;
   let approvalsGeneration = 0;
   let backgroundGeneration = 0;
@@ -530,6 +531,28 @@
     } finally {
       if (selectionGeneration === threadSelectionGeneration) selectingThread.value = false;
     }
+  };
+
+  const refreshThreadListFromHost = async (): Promise<void> => {
+    const requestGeneration = ++threadListRefreshGeneration;
+    try {
+      const page = await facade.listThreads();
+      if (requestGeneration !== threadListRefreshGeneration) return;
+      threads.value = page.items;
+      if (currentThread.value) {
+        currentThread.value = page.items.find((thread) => thread.id === currentThread.value?.id) ?? currentThread.value;
+      }
+    } catch {
+      // A later durable host event or normal surface reload will retry authoritative state.
+    }
+  };
+
+  const onThreadChanged = (event: Event): void => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    if (!detail || typeof detail !== 'object' || Array.isArray(detail)) return;
+    const payload = detail as Record<string, unknown>;
+    if (payload.appId !== props.appId) return;
+    void refreshThreadListFromHost();
   };
 
   const createThread = async (title?: string): Promise<void> => {
@@ -1013,10 +1036,12 @@
 
   onMounted(() => {
     window.addEventListener('resize', syncTaskRailViewport);
+    window.addEventListener('nexus:agent:thread-changed', onThreadChanged);
     void load();
   });
   onBeforeUnmount(() => {
     window.removeEventListener('resize', syncTaskRailViewport);
+    window.removeEventListener('nexus:agent:thread-changed', onThreadChanged);
     facade.dispose();
     streamingText.value = '';
   });

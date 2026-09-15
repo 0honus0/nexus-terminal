@@ -2,11 +2,13 @@ import type { JsonValue, Scope } from '../agent.types';
 import type { ContextHistoryBoundary } from './context.types';
 
 export type LedgerEntryKind = 'user_input' | 'assistant_message' | 'tool_result' | 'system_notice';
+export type ThreadTitleSource = 'placeholder' | 'auto' | 'manual';
 
 export interface ThreadView {
   id: string;
   appId: string;
   title: string;
+  titleSource: ThreadTitleSource;
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -42,7 +44,20 @@ export interface AppendLedgerEntry {
 }
 
 export interface ConversationRepositoryPort {
-  createThread(scope: Scope, id: string, title: string, now: number): Promise<ThreadView>;
+  createThread(
+    scope: Scope,
+    id: string,
+    title: string,
+    titleSource: ThreadTitleSource,
+    now: number,
+  ): Promise<ThreadView>;
+  renameThread(
+    scope: Scope,
+    threadId: string,
+    title: string,
+    expectedVersion: number,
+    now: number,
+  ): Promise<ThreadView>;
   getThread(scope: Scope, threadId: string): Promise<ThreadView | null>;
   listThreads(scope: Scope, limit: number, before?: string): Promise<ThreadPage>;
   readEntries(scope: Scope, threadId: string, limit: number, before?: string): Promise<LedgerPage>;

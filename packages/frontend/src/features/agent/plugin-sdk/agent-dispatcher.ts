@@ -97,6 +97,15 @@ export class PluginAgentSdkDispatcher {
         onlyKeys(params, ['title']);
         return this.runFacade.createThread(optionalString(params.title, 4_096));
       }
+      case 'agent.threads.rename': {
+        const params = record(rawParams);
+        onlyKeys(params, ['threadId', 'title', 'expectedVersion']);
+        return this.runFacade.renameThread(
+          string(params.threadId),
+          string(params.title, 4_096),
+          positiveInteger(params.expectedVersion),
+        );
+      }
       case 'agent.threads.entries': {
         const params = record(rawParams);
         onlyKeys(params, ['threadId', 'before']);

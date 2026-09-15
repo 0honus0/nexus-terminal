@@ -63,6 +63,29 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     }),
   );
 
+  router.patch(
+    '/:threadId',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body))
+        throw new Error('VALIDATION_FAILED');
+      const body = request.body as Record<string, unknown>;
+      if (Object.keys(body).some((key) => !['title', 'expectedVersion'].includes(key)))
+        throw new Error('VALIDATION_FAILED');
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(
+        request,
+        response,
+        await dependencies.conversations.renameThread(
+          scope,
+          pathParam(request.params.threadId),
+          body.title,
+          body.expectedVersion,
+        ),
+      );
+    }),
+  );
+
   router.get(
     '/:threadId',
     agentRoute(async (request, response) => {

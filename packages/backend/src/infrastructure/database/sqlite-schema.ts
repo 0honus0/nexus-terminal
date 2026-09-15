@@ -398,6 +398,7 @@ CREATE TABLE IF NOT EXISTS ai_threads (
     user_id INTEGER NOT NULL,
     app_id TEXT NOT NULL,
     title TEXT NOT NULL,
+    title_source TEXT NOT NULL DEFAULT 'placeholder' CHECK(title_source IN ('placeholder','auto','manual')),
     next_sequence INTEGER NOT NULL DEFAULT 1 CHECK(next_sequence >= 1),
     version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
     created_at INTEGER NOT NULL,

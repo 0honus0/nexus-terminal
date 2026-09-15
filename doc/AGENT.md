@@ -1645,7 +1645,7 @@ build Docker
 - Thread 创建直接复用无 title 的既有 API；排序不受当前选中状态影响；切换清除旧投影并等待加载完成后开放发送。
 - 空 assistant entry 不占阅读区；完整工具输出可展开；用户输入保持纯文本，assistant Markdown 经 DOMPurify allowlist 清洗，禁用图片/嵌入内容。
 - 中文 IME Enter 不发送，错误/对账提示位于 Composer；对账仍锁定 mutation。Popover 有可视边界定位与 Escape 返回焦点；详情 drawer 支持键盘焦点管理。
-- 自动命名仍记录在 PROBLEM P-025；P-026 的 reasoning effort 已补齐 Backend Run 冻结与 OpenAI-compatible 映射，并由内置 Model Capability Registry 自动驱动可选档位。普通用户不编辑 capability；Provider live capability 解析留作后续扩展。
+- P-025 自动命名合同已完成：Thread 标题具备 `placeholder / auto / manual` ownership，首次有效用户输入在 state-commit 事务内确定性生成有界标题，versioned rename 与 durable `thread.changed` 支持跨标签同步；当前 UI 不因此新增额外重命名控件。P-026 的 reasoning effort 已补齐 Backend Run 冻结与 OpenAI-compatible 映射，并由内置 Model Capability Registry 自动驱动可选档位。普通用户不编辑 capability；Provider live capability 解析留作后续扩展。
 - 用户要求先完成功能，不修改测试；既有测试的旧导航/命名交互断言留待后续同步。
 
 ### 2026-09-15 当前 UI 基线刷新

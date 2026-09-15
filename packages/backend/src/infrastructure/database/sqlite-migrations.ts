@@ -323,6 +323,24 @@ const definedMigrations: Migration[] = [
               AND proxy_id IS NULL;
         `,
   },
+  {
+    id: 21,
+    name: 'Track Agent thread title ownership',
+    check: async (db: Database): Promise<boolean> => {
+      const columnAlreadyExists = await columnExists(db, 'ai_threads', 'title_source');
+      return !columnAlreadyExists;
+    },
+    sql: `
+            ALTER TABLE ai_threads ADD COLUMN title_source TEXT NOT NULL DEFAULT 'manual'
+              CHECK(title_source IN ('placeholder','auto','manual'));
+            UPDATE ai_threads
+            SET title_source = 'placeholder'
+            WHERE title = 'New conversation'
+              AND NOT EXISTS (
+                SELECT 1 FROM ai_thread_entries e WHERE e.thread_id = ai_threads.id
+              );
+        `,
+  },
 ];
 
 /**

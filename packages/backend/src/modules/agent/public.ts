@@ -182,6 +182,7 @@ export interface AgentArtifactFacade {
 
 export interface AgentConversationFacade {
   createThread(scope: Scope, title?: unknown): Promise<ThreadView>;
+  renameThread(scope: Scope, threadId: string, title: unknown, expectedVersion: unknown): Promise<ThreadView>;
   getThread(scope: Scope, threadId: string): Promise<ThreadView>;
   listThreads(scope: Scope, limit?: number, before?: string): Promise<ThreadPage>;
   readPage(scope: Scope, threadId: string, limit?: number, before?: string): Promise<LedgerPage>;

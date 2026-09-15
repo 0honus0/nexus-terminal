@@ -551,12 +551,16 @@
 
 ## P-025 会话自动命名缺少服务端合同
 
-- **问题/原因**：目前 createThread 支持省略 title，但没有公开的 Thread rename/自动标题生成合同；前端不能把本地标题伪装成服务端已保存标题。
-- **本轮 UI 决策**：新建直接调用已有无 title 的 createThread，不再强迫填写名称。
-- **后端待办**：首次有效用户输入后生成有界标题并持久化，明确手动重命名优先级、失败回退、事件与列表刷新；提供 versioned rename 合同。
-- **验收**：首次消息后自动命名，刷新/跨标签/App 切换保持一致，手动标题不被覆盖，失败仍可正常对话。
-- **TODO(P-025/thread-auto-title)**：后端自动命名与 versioned rename 合同仍待实现。这是明确保留的后续功能，不应因当前 UI 已可无标题创建 Thread 而删除相关设计记录。
-- **状态**：后端待实现。
+- **问题/原因**：此前 `createThread` 虽支持省略 title，但 Thread title 只是创建时字段，没有 ownership、versioned rename 与跨标签变更事件；前端因此只能长期显示 `New conversation`，也不能安全区分 placeholder、系统自动标题与用户标题。
+- **当前合同（2026-09-15）**：
+  1. `ai_threads.title_source` 明确为 `placeholder | auto | manual`；新建无标题 Thread 为 `placeholder`，显式标题为 `manual`。
+  2. 第一次有效用户文本在 `run.create` 或活动 Run 的 `appendInput/interrupt` 原子事务中生成确定性的有界标题：折叠空白、最多 80 个 Unicode 字符，不额外调用 Provider，因此自动命名不会增加模型 Token、首轮延迟或 Provider 故障面。
+  3. 一旦标题来源变成 `auto` 或 `manual`，后续用户输入不得再次自动覆盖。显式标题从创建开始就是 `manual`。
+  4. 提供 `PATCH /api/v1/apps/:appId/threads/:threadId`，请求 `{ title, expectedVersion }`；成功后 `title_source=manual` 且 Thread version +1，旧 version 返回状态冲突。Frontend Agent API 与 Plugin Frontend SDK 同步暴露 rename 合同。
+  5. 自动/手动标题变化都写入 durable `thread.changed` Host event；Host leader 将 payload 通过现有 BroadcastChannel 转发到其它标签页，当前已挂载的对应 App surface 只刷新 Thread 列表并更新 current Thread 引用，不重建当前 Run/Conversation。
+  6. migration #21 为长期数据库补 `title_source`。历史 `New conversation` 仅在“尚无任何 Thread entry”时回填为 placeholder；已有内容的历史会话保持 manual，避免升级时突然被重新命名。
+- **验收结果（2026-09-15）**：Backend build 与 Frontend `vue-tsc --noEmit` 通过；隔离 SQLite smoke 已验证 migration 20→21、首次输入自动命名、manual 不覆盖、rename version 冲突、auto/manual `thread.changed`、emoji 80 字符边界。
+- **状态**：`已实施并完成隔离合同验证；当前 UI 不增加新的重命名控件，后续如需要可直接复用 versioned rename 合同`
 
 ## P-026 会话思考强度缺少能力与 Run 冻结合同
 

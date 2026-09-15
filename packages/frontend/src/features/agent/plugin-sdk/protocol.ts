@@ -30,6 +30,7 @@ export const PLUGIN_FRONTEND_AGENT_RPC_METHODS = [
   'agent.providers.list',
   'agent.threads.list',
   'agent.threads.create',
+  'agent.threads.rename',
   'agent.threads.entries',
   'agent.runs.list',
   'agent.runs.get',
@@ -98,6 +99,7 @@ export interface PluginFrontendSdkV1 {
     threads: {
       list(before?: string): Promise<AgentThreadPage>;
       create(title?: string): Promise<AgentThreadView>;
+      rename(threadId: string, title: string, expectedVersion: number): Promise<AgentThreadView>;
       entries(threadId: string, before?: string): Promise<AgentLedgerPage>;
     };
     runs: {

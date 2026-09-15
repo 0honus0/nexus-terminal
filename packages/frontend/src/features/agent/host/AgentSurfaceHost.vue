@@ -19,6 +19,10 @@
   let generation = 0;
   let activeUserId: number | null = null;
 
+  const dispatchThreadChanged = (payload: Record<string, unknown>): void => {
+    window.dispatchEvent(new CustomEvent('nexus:agent:thread-changed', { detail: payload }));
+  };
+
   const chooseDefaultApp = (next: HostSummaryView): void => {
     const enabled = next.apps.filter((app) => app.enabled);
     if (enabled.length === 0) {
@@ -100,8 +104,18 @@
         },
         'Agent global surface host event received',
       );
+      if (event.type === 'host.changed' && event.sourceType === 'thread.changed') {
+        dispatchThreadChanged(event.payload);
+      }
       await refresh('host-event');
-      if (activeUserId !== null) hostChannel?.postMessage({ type: 'host.changed', userId: activeUserId });
+      if (activeUserId !== null) {
+        hostChannel?.postMessage({
+          type: 'host.changed',
+          userId: activeUserId,
+          sourceType: event.type === 'host.changed' ? event.sourceType : undefined,
+          payload: event.type === 'host.changed' ? event.payload : undefined,
+        });
+      }
     }
   };
 
@@ -174,8 +188,21 @@
   const onHostBroadcast = (event: MessageEvent<unknown>): void => {
     if (!auth.isAuthenticated.value || activeUserId === null) return;
     if (!event.data || typeof event.data !== 'object' || Array.isArray(event.data)) return;
-    const message = event.data as { type?: unknown; userId?: unknown };
+    const message = event.data as {
+      type?: unknown;
+      userId?: unknown;
+      sourceType?: unknown;
+      payload?: unknown;
+    };
     if (message.type !== 'host.changed' || message.userId !== activeUserId) return;
+    if (
+      message.sourceType === 'thread.changed' &&
+      message.payload &&
+      typeof message.payload === 'object' &&
+      !Array.isArray(message.payload)
+    ) {
+      dispatchThreadChanged(message.payload as Record<string, unknown>);
+    }
     void refresh('host-event');
   };
   hostChannel?.addEventListener('message', onHostBroadcast);

@@ -20,7 +20,7 @@ export const appChangedPayload = (app: AppRecord): JsonValue => ({
 export const appendHostEvent = async (
   tx: RelationalDatabase,
   userId: number,
-  type: 'summary.changed' | 'feature.changed' | 'app.changed' | 'authorization.changed',
+  type: 'summary.changed' | 'feature.changed' | 'app.changed' | 'authorization.changed' | 'thread.changed',
   payload: JsonValue,
   occurredAt: number,
 ): Promise<number> => {

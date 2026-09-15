@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import { ProviderService } from '../../ai/provider.service';
+import { deriveAutomaticThreadTitle } from '../../ai/thread-title';
 import { AgentSettingsService } from '../../host/agent-settings.service';
 import { AppLifecycleService } from '../../host/app-lifecycle.service';
 import { isAgentUuid } from '../../uuid';
@@ -172,6 +173,7 @@ export class RunService {
       throw new Error('VALIDATION_FAILED');
     }
     const input = validateInput(command.input);
+    const automaticThreadTitle = deriveAutomaticThreadTitle(input.text);
     const connectionIds = validateConnectionIds(command.connectionIds);
     if (command.environment !== undefined && command.environment !== null && !isRecord(command.environment)) {
       throw new Error('VALIDATION_FAILED');
@@ -247,6 +249,7 @@ export class RunService {
       threadId: command.threadId,
       inputEntryId: randomUUID(),
       input,
+      ...(automaticThreadTitle ? { automaticThreadTitle } : {}),
       ...(initialGoal
         ? { initialGoal: { text: initialGoal, revision: 1, updatedAt: this.clock.nowUnixSeconds() } }
         : {}),
@@ -293,6 +296,7 @@ export class RunService {
     if (!isAgentUuid(runId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1)
       throw new Error('VALIDATION_FAILED');
     const normalizedInput = validateInput(input);
+    const automaticThreadTitle = deriveAutomaticThreadTitle(normalizedInput.text);
     const key = requireIdempotencyKey(idempotencyKey);
     const hash = requestHash(1, {
       runId,
@@ -304,6 +308,7 @@ export class RunService {
       runId,
       inputEntryId: randomUUID(),
       input: normalizedInput,
+      ...(automaticThreadTitle ? { automaticThreadTitle } : {}),
       mode: 'append',
       expectedRunVersion: expectedVersion,
       idempotencyKey: key,
@@ -328,6 +333,7 @@ export class RunService {
     if (!isAgentUuid(runId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1)
       throw new Error('VALIDATION_FAILED');
     const normalizedInput = validateInput(input);
+    const automaticThreadTitle = deriveAutomaticThreadTitle(normalizedInput.text);
     if (normalizedInput.artifactRefs.length > 0) throw new Error('VALIDATION_FAILED');
     const key = requireIdempotencyKey(idempotencyKey);
     const hash = requestHash(1, {
@@ -341,6 +347,7 @@ export class RunService {
       runId,
       inputEntryId: randomUUID(),
       input: { text: normalizedInput.text, artifactRefs: [] },
+      ...(automaticThreadTitle ? { automaticThreadTitle } : {}),
       mode: 'interrupt',
       expectedRunVersion: expectedVersion,
       idempotencyKey: key,

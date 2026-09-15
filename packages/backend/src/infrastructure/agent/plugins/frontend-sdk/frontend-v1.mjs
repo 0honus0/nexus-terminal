@@ -143,6 +143,8 @@ const createSdk = ({ port, nonce }) => {
       threads: Object.freeze({
         list: (before) => request('agent.threads.list', before === undefined ? {} : { before }),
         create: (title) => request('agent.threads.create', title === undefined ? {} : { title }),
+        rename: (threadId, title, expectedVersion) =>
+          request('agent.threads.rename', { threadId, title, expectedVersion }),
         entries: (threadId, before) =>
           request('agent.threads.entries', before === undefined ? { threadId } : { threadId, before }),
       }),
