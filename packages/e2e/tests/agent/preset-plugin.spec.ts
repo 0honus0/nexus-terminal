@@ -1056,9 +1056,13 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect(hub.getByText('OK', { exact: true })).toHaveCount(2, { timeout: 30_000 });
     });
 
-    const modelSelect = hub.getByLabel('Run model', { exact: true });
-    await modelSelect.selectOption({ label: 'Preset E2E Provider · e2e-model-alt' });
-    const composer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
+    const modelSelector = hub.getByRole('button', { name: 'Model', exact: true });
+    await modelSelector.click();
+    const modelDialog = page.getByRole('dialog', { name: 'Model', exact: true });
+    await expect(modelDialog).toBeVisible();
+    await modelDialog.getByRole('button').filter({ hasText: 'e2e-model-alt' }).click();
+    await expect(modelDialog).toHaveCount(0);
+    await expect(modelSelector).toContainText('e2e-model-alt');
 
     const restoredComposer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
     await restoredComposer.fill('Confirm the Agent composer can start the next Run from the current thread.');
@@ -1072,43 +1076,47 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     const runPage = (await runsResponse.json()) as Envelope<{ items: RunView[] }>;
     expect(runPage.data.items[0]?.definition).toMatchObject({ agentDefinitionId: 'agent.default' });
     expect(runPage.data.items.some((item) => item.definition.model?.modelId === 'e2e-model-alt')).toBeTruthy();
-    await expect(hub.getByLabel('Run history', { exact: true })).toBeVisible();
+    await taskPanelToggle.click();
+    await expect(taskRail).toBeVisible();
+    const historyCard = taskRail.locator('[data-rail-card="history"]');
+    await expect(historyCard.getByText('Run history', { exact: true })).toBeVisible();
     await captureFunctionalScreenshot(page, 'agent-run-history.png', { viewport: { width: 1440, height: 900 } });
     await captureFunctionalScreenshot(page, 'agent-nexus-agent.png', { viewport: { width: 1440, height: 900 } });
 
-    await step('completed Runs expose details, checkpoints, Workspace Runtime, and Subagent surfaces', async () => {
-      await hub.getByRole('button', { name: 'Details', exact: true }).first().click();
-      const drawer = hub.getByLabel('Run details', { exact: true });
-      await expect(drawer).toBeVisible();
-      await expect(drawer.getByText('Run overview', { exact: true })).toBeVisible();
-      await expect(drawer.getByText('Checkpoints', { exact: true })).toBeVisible();
-      await expect(drawer.getByText('Workspace dev environment', { exact: true })).toBeVisible();
-      await expect(drawer.getByText('Subagents', { exact: true })).toBeVisible();
+    await step('completed Runs expose details, checkpoints, and Workspace Runtime surfaces', async () => {
+      await historyCard.locator(':scope > button').first().click();
+      await expect(taskRail.getByRole('button', { name: 'Back to tasks', exact: true })).toBeVisible();
+      await expect(taskRail.getByText('Run overview', { exact: true })).toBeVisible();
+      await expect(taskRail.getByText('Checkpoints', { exact: true })).toBeVisible();
+      await taskRail.getByText('Optional runtime', { exact: true }).click();
+      await expect(taskRail.getByText('Workspace dev environment', { exact: true })).toBeVisible();
       await captureFunctionalScreenshot(page, 'agent-run-details.png', { viewport: { width: 1440, height: 900 } });
 
-      await drawer.getByRole('button', { name: 'Save checkpoint', exact: true }).click();
-      await expect(drawer.getByRole('button', { name: 'Resume as new run', exact: true })).toBeVisible();
+      await taskRail.getByRole('button', { name: 'Save checkpoint', exact: true }).click();
+      await expect(taskRail.getByRole('button', { name: 'Resume as new run', exact: true })).toBeVisible();
       await captureFunctionalScreenshot(page, 'agent-checkpoint-recovery.png', {
         viewport: { width: 1440, height: 900 },
       });
-      await drawer.getByRole('button', { name: 'Close run details', exact: true }).click();
-      await expect(drawer).toHaveCount(0);
+      await taskRail.getByRole('button', { name: 'Back to tasks', exact: true }).click();
+      await expect(historyCard.getByText('Run history', { exact: true })).toBeVisible();
     });
 
     await step('Run history can open and delete a terminal historical Run', async () => {
       const beforeDeleteResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
       expect(beforeDeleteResponse.ok(), await beforeDeleteResponse.text()).toBeTruthy();
       const beforeDelete = (await beforeDeleteResponse.json()) as Envelope<{ items: RunView[] }>;
-      const history = hub.getByLabel('Run history', { exact: true });
-      await history.selectOption({ index: 1 });
-      const deletedRunId = await history.inputValue();
-      expect(beforeDelete.data.items.some((item) => item.id === deletedRunId)).toBeTruthy();
+      await historyCard.locator(':scope > button').first().click();
+      const detailRunSuffix = await taskRail
+        .locator('header')
+        .getByText(/^#[0-9a-f]{6}$/i)
+        .textContent();
+      expect(detailRunSuffix).toBeTruthy();
+      const deletedRunId = beforeDelete.data.items.find((item) => `#${item.id.slice(-6)}` === detailRunSuffix)?.id;
+      expect(deletedRunId).toBeTruthy();
 
-      const historicalDrawer = hub.getByLabel('Run details', { exact: true });
-      await expect(historicalDrawer).toBeVisible();
-      await historicalDrawer.getByRole('button', { name: 'Delete run', exact: true }).click();
-      await historicalDrawer.getByRole('button', { name: 'Confirm delete', exact: true }).click();
-      await expect(historicalDrawer).toHaveCount(0);
+      await taskRail.getByRole('button', { name: 'Delete run', exact: true }).click();
+      await taskRail.getByRole('button', { name: 'Confirm delete', exact: true }).click();
+      await expect(taskRail.getByRole('button', { name: 'Back to tasks', exact: true })).toHaveCount(0);
 
       await expect
         .poll(async () => {
@@ -1117,24 +1125,25 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
           const page = (await response.json()) as Envelope<{ items: RunView[] }>;
           return page.data.items.map((item) => item.id);
         })
-        .not.toContain(deletedRunId);
-      await expect(hub.locator(`select[aria-label="Run history"] option[value="${deletedRunId}"]`)).toHaveCount(0);
+        .not.toContain(deletedRunId!);
+      await expect(taskRail.locator('header').getByText(`#${deletedRunId!.slice(-6)}`, { exact: true })).toHaveCount(0);
     });
 
-    await step('pending mutation approval remains actionable when the TaskRail is hidden', async () => {
-      const targets = hub.getByRole('button', { name: 'SSH targets', exact: true });
+    await step('pending mutation approval is surfaced through the TaskRail toggle when hidden', async () => {
+      await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(taskPanelToggle).toHaveAttribute('aria-expanded', 'false');
+
+      const targets = hub.getByRole('button', { name: 'SSH Hosts', exact: true });
       await targets.click();
-      const targetsPanel = hub.getByRole('dialog', { name: 'SSH targets', exact: true });
+      const targetsPanel = page.getByRole('dialog', { name: 'SSH Hosts', exact: true });
       await expect(targetsPanel.getByText('E2E SSH', { exact: true })).toBeVisible();
-      await targetsPanel.getByRole('checkbox').check();
+      await targetsPanel.getByRole('button').filter({ hasText: 'E2E SSH' }).click();
       await targets.click();
       await restoredComposer.fill(
         `Request the bounded shell approval exactly once. E2E_APPROVAL_CONNECTION_ID=${connectionId}`,
       );
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect(hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true })).toBeVisible({
-        timeout: 30_000,
-      });
+      await expect(taskPanelToggle).toHaveText('1', { timeout: 30_000 });
 
       const approvalRunsResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
       expect(approvalRunsResponse.ok(), await approvalRunsResponse.text()).toBeTruthy();
@@ -1146,32 +1155,32 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await restoredComposer.fill('/goal Keep the pending approval and use this updated goal afterward.');
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(hub.getByLabel('Command result', { exact: true })).toContainText('Goal updated at revision');
-      await expect(hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true })).toBeVisible();
+      await expect(taskPanelToggle).toHaveText('1');
 
       await restoredComposer.fill('/interrupt This must not supersede the pending approval.');
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(hub.getByLabel('Command result', { exact: true })).toContainText(
         '/interrupt only works while the Root model is actively streaming.',
       );
-      await expect(hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true })).toBeVisible();
+      await expect(taskPanelToggle).toHaveText('1');
 
       await page.setViewportSize({ width: 1000, height: 800 });
-      await hub.getByRole('button', { name: 'Open 1 pending approvals', exact: true }).click();
-      const approvalDrawer = hub.getByLabel('Run details', { exact: true });
-      await expect(approvalDrawer.getByText('Pending approvals', { exact: true })).toBeVisible();
+      await taskPanelToggle.click();
+      await expect(taskRail.getByText('Pending approvals', { exact: true })).toBeVisible();
       await captureFunctionalScreenshot(page, 'agent-approval-narrow.png', { viewport: { width: 1000, height: 800 } });
-      await approvalDrawer.getByRole('button', { name: 'Approve and run', exact: true }).click();
+      await taskRail.getByRole('button', { name: 'Approve and run', exact: true }).click();
       const terminal = await waitForTerminalRun(context.request, approvalRun!.id);
       expect(['completed', 'completed_unverified']).toContain(terminal.status);
-      await expect(approvalDrawer.getByText('Approval status: approved', { exact: true })).toBeVisible();
-      await approvalDrawer.getByRole('button', { name: 'Close run details', exact: true }).click();
+      await expect(taskRail.getByText('Pending approvals', { exact: true })).toHaveCount(0);
+      await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
       await page.setViewportSize({ width: 1440, height: 900 });
     });
 
     await step('Artifact upload flows into the unified Agent file library', async () => {
       const attachmentsButton = hub.getByRole('button', { name: /^Files \(\d+\)$/ }).first();
       await attachmentsButton.click();
-      await hub.locator('input[type="file"]').setInputFiles({
+      const attachmentsDialog = page.getByRole('dialog', { name: /^Files \(\d+\)$/ });
+      await attachmentsDialog.locator('input[type="file"]').setInputFiles({
         name: 'agent-ui-evidence.txt',
         mimeType: 'text/plain',
         buffer: Buffer.from('Agent UI functional evidence\n'),
