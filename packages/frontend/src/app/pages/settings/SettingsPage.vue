@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, ref } from 'vue';
+  import { computed, defineAsyncComponent, reactive, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { loadAppearanceSettingsPanel, useAppearance } from '@/features/appearance/public';
   import { AgentSettingsPanel } from '@/features/agent/public';
@@ -23,6 +23,8 @@
   const auth = useAuthSession();
   const appearance = useAppearance();
   const active = ref<SettingsTab>('workspace');
+  const visited = reactive(new Set<SettingsTab>(['workspace']));
+  watch(active, (value) => visited.add(value), { immediate: true });
   const tabs = computed<readonly { value: SettingsTab; label: string }[]>(() => [
     { value: 'workspace', label: t('settings.tabs.workspace') },
     { value: 'system', label: t('settings.tabs.system') },
@@ -81,36 +83,44 @@
       </div>
 
       <div class="space-y-6">
-        <WorkspacePreferencesPanel v-if="active === 'workspace'" id="settings-panel-workspace" />
+        <WorkspacePreferencesPanel
+          v-if="visited.has('workspace')"
+          v-show="active === 'workspace'"
+          id="settings-panel-workspace"
+        />
         <PreferencesSettingsPanel
-          v-else-if="active === 'system'"
+          v-if="visited.has('system')"
+          v-show="active === 'system'"
           id="settings-panel-system"
           section="system"
           :locales="supportedLocales"
           @saved="handlePreferencesSaved"
         />
         <SecuritySettingsPanel
-          v-else-if="active === 'security'"
+          v-if="visited.has('security')"
+          v-show="active === 'security'"
           id="settings-panel-security"
           section="security"
           :two-factor-enabled="auth.user.value?.twoFactorEnabled"
           @auth-changed="auth.refreshSession"
         />
         <SecuritySettingsPanel
-          v-else-if="active === 'ipControl'"
+          v-if="visited.has('ipControl')"
+          v-show="active === 'ipControl'"
           id="settings-panel-ipControl"
           section="ipControl"
           :two-factor-enabled="auth.user.value?.twoFactorEnabled"
           @auth-changed="auth.refreshSession"
         />
-        <BackupSettingsPanel v-else-if="active === 'data'" id="settings-panel-data" />
+        <BackupSettingsPanel v-if="visited.has('data')" v-show="active === 'data'" id="settings-panel-data" />
         <AppearanceSettingsPanel
-          v-else-if="active === 'appearance'"
+          v-if="visited.has('appearance')"
+          v-show="active === 'appearance'"
           id="settings-panel-appearance"
           @customize="appearance.openCustomizer()"
         />
-        <AgentSettingsPanel v-else-if="active === 'agent'" />
-        <AboutPanel v-else id="settings-panel-about" />
+        <AgentSettingsPanel v-if="visited.has('agent')" v-show="active === 'agent'" />
+        <AboutPanel v-if="visited.has('about')" v-show="active === 'about'" id="settings-panel-about" />
       </div>
     </div>
   </main>

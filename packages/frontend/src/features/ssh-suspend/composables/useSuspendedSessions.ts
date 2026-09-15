@@ -14,6 +14,7 @@ const sessions = ref<SuspendedSession[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 let loaded = false;
+let catalogGeneration = 0;
 let loadPromise: Promise<{ ok: boolean; status?: number }> | null = null;
 let pollTimer: number | undefined;
 let pollIntervalMs = BASE_POLL_MS;
@@ -70,13 +71,16 @@ const load = async (options: { silent?: boolean; force?: boolean } = {}): Promis
     if (loadPromise) return loadPromise;
   }
 
+  const generation = catalogGeneration;
   loadPromise = (async () => {
     if (!options.silent) {
       loading.value = true;
       error.value = null;
     }
     try {
-      sessions.value = await sshSuspendApi.list();
+      const incoming = await sshSuspendApi.list();
+      if (generation !== catalogGeneration) return { ok: true };
+      sessions.value = incoming;
       loaded = true;
       if (!options.silent) error.value = null;
       return { ok: true };
@@ -92,15 +96,33 @@ const load = async (options: { silent?: boolean; force?: boolean } = {}): Promis
         },
         'Suspended Workspace catalog load failed',
       );
-      if (!options.silent) error.value = apiErrorMessage(cause, 'Failed to load suspended SSH sessions.');
+      if (generation === catalogGeneration && !options.silent)
+        error.value = apiErrorMessage(cause, 'Failed to load suspended SSH sessions.');
       return { ok: false, status };
     } finally {
-      if (!options.silent) loading.value = false;
-      loadPromise = null;
+      if (generation === catalogGeneration && !options.silent) loading.value = false;
+      if (generation === catalogGeneration) loadPromise = null;
     }
   })();
 
   return loadPromise;
+};
+
+export const resetSuspendedSessionsCatalog = (): void => {
+  catalogGeneration += 1;
+  handoffRefreshSequence += 1;
+  handoffRefreshes.clear();
+  if (pollTimer !== undefined) window.clearTimeout(pollTimer);
+  pollTimer = undefined;
+  pollConsumers = 0;
+  pollIntervalMs = BASE_POLL_MS;
+  loaded = false;
+  loadPromise = null;
+  sessions.value = [];
+  loading.value = false;
+  error.value = null;
+  handledAutoTerminations.clear();
+  handledAutoTerminationOrder.length = 0;
 };
 
 export const refreshSuspendedSessionsCatalog = (): Promise<{ ok: boolean; status?: number }> =>

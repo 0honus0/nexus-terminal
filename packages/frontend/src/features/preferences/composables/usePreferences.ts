@@ -7,5 +7,8 @@ export function usePreferences() {
     loaded: computed(() => store.loaded),
     load: store.load.bind(store),
     update: store.update.bind(store),
+    reset: store.reset.bind(store),
   };
 }
+
+export const resetPreferencesCache = (): void => usePreferencesStore().reset();

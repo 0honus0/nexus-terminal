@@ -6,14 +6,26 @@ import { defaultPreferences, type PreferenceKey, type PreferencePatch, type Pref
 let preferenceUpdateRevision = 0;
 const preferenceKeyRevisions = new Map<PreferenceKey, number>();
 let preferenceLoadPromise: Promise<Preferences> | null = null;
+let preferenceCacheGeneration = 0;
 
 export const usePreferencesStore = defineStore('preferences', {
   state: () => ({ values: { ...defaultPreferences } as Preferences, loaded: false }),
   actions: {
+    reset() {
+      preferenceCacheGeneration += 1;
+      preferenceUpdateRevision += 1;
+      preferenceKeyRevisions.clear();
+      preferenceLoadPromise = null;
+      this.values = { ...defaultPreferences };
+      this.loaded = false;
+      setFrontendLogLevel(defaultPreferences.frontendLogLevel);
+    },
     async load(force = false) {
       if (this.loaded && !force) return this.values;
       if (!force && preferenceLoadPromise) return preferenceLoadPromise;
+      const generation = preferenceCacheGeneration;
       const load = preferencesApi.load().then((values) => {
+        if (generation !== preferenceCacheGeneration) return this.values;
         this.values = values;
         setFrontendLogLevel(values.frontendLogLevel);
         this.loaded = true;

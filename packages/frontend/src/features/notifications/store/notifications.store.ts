@@ -3,20 +3,30 @@ import { defineStore } from 'pinia';
 import { apiErrorMessage } from '@/client/http';
 import { notificationsApi } from '../api/notificationsApi';
 import type { NotificationSetting, NotificationSettingInput } from '../model/notification';
+
+let loadGeneration = 0;
 export const useNotificationsStore = defineStore('notifications', () => {
   const items = ref<NotificationSetting[]>([]),
     loading = ref(false),
     error = ref<string | null>(null);
   async function load() {
+    const generation = loadGeneration;
     loading.value = true;
     error.value = null;
     try {
-      items.value = await notificationsApi.list();
+      const incoming = await notificationsApi.list();
+      if (generation === loadGeneration) items.value = incoming;
     } catch (e) {
-      error.value = apiErrorMessage(e, 'notification-load-error');
+      if (generation === loadGeneration) error.value = apiErrorMessage(e, 'notification-load-error');
     } finally {
-      loading.value = false;
+      if (generation === loadGeneration) loading.value = false;
     }
+  }
+  function reset() {
+    loadGeneration += 1;
+    items.value = [];
+    loading.value = false;
+    error.value = null;
   }
   async function save(input: NotificationSettingInput, id?: number) {
     const saved = id ? await notificationsApi.update(id, input) : await notificationsApi.create(input);
@@ -29,5 +39,5 @@ export const useNotificationsStore = defineStore('notifications', () => {
     await notificationsApi.remove(id);
     items.value = items.value.filter((x) => x.id !== id);
   }
-  return { items, loading, error, load, save, remove };
+  return { items, loading, error, load, reset, save, remove };
 });

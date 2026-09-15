@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref, watch } from 'vue';
+  import { computed, onActivated, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { formatDistanceToNow } from 'date-fns';
@@ -37,18 +37,15 @@
   const batchModal = ref(false);
   const testing = ref(new Set<number>());
   const testResults = ref(new Map<number, { success: boolean; message: string; latency?: number }>());
-  onMounted(async () => {
-    try {
-      await data.load(true);
-    } catch {
-      feedback.notifyError(t('connections.loadFailed'));
-      return;
-    }
-    try {
-      await tags.load();
-    } catch {
-      feedback.notifyError(t('connections.tagLoadFailed'));
-    }
+  const loadInitialData = async () => {
+    const [connectionsResult, tagsResult] = await Promise.allSettled([data.load(), tags.load()]);
+    if (connectionsResult.status === 'rejected') feedback.notifyError(t('connections.loadFailed'));
+    if (tagsResult.status === 'rejected') feedback.notifyError(t('connections.tagLoadFailed'));
+  };
+  onMounted(() => void loadInitialData());
+  onActivated(() => {
+    void data.revalidate().catch(() => undefined);
+    void tags.revalidate().catch(() => undefined);
   });
   const filtered = computed(() => {
     const q = search.value.toLowerCase().trim();

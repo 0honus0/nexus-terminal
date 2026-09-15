@@ -1,16 +1,22 @@
 <script setup lang="ts">
-  import { computed, defineAsyncComponent, watch } from 'vue';
+  import { computed, defineAsyncComponent, ref, watch } from 'vue';
   import { RouterView } from 'vue-router';
+  import { preloadAuthenticatedRoutes } from './router';
   import { logger } from '@/client/logging/logger';
   import AppHeader from './shell/AppHeader.vue';
   import { useAuthSession } from '@/features/auth/public';
-  import { loadAppearanceCustomizerModal, useAppearance } from '@/features/appearance/public';
+  import { loadAppearanceCustomizerModal, resetAppearanceCache, useAppearance } from '@/features/appearance/public';
   import { AgentSurfaceHost } from '@/features/agent/public';
-  import { markConnectionConnected } from '@/features/connections/public';
+  import { markConnectionConnected, resetConnectionsCache } from '@/features/connections/public';
   import { loadRemoteDesktopModal, remoteDesktopLauncher } from '@/features/remote-desktop/public';
-  import { usePreferences } from '@/features/preferences/public';
+  import { resetPreferencesCache, usePreferences } from '@/features/preferences/public';
   import DialogHost from '@/shared/feedback/components/DialogHost.vue';
   import NotificationHost from '@/shared/feedback/components/NotificationHost.vue';
+  import { resetProxiesCache } from '@/features/proxies/public';
+  import { resetConnectionTagsCache } from '@/features/tags/public';
+  import { resetNotificationsCache } from '@/features/notifications/public';
+  import { resetAuditCache } from '@/features/audit/public';
+  import { resetSuspendedSessionsCatalog } from '@/features/ssh-suspend/public';
   import { disposeWorkspaceRuntime } from './workspaceLifecycle';
 
   const RemoteDesktopModal = defineAsyncComponent(loadRemoteDesktopModal);
@@ -19,6 +25,7 @@
   const appearance = useAppearance();
   const appearanceCustomizerVisible = appearance.customizerVisible;
   const preferences = usePreferences();
+  const authenticatedPageCacheGeneration = ref(0);
   const remoteDesktopConnection = remoteDesktopLauncher.connection;
   const remoteDesktopVisible = remoteDesktopLauncher.visible;
   const remoteDesktopWidth = computed(() =>
@@ -47,10 +54,30 @@
       .catch((cause) => logger.error({ err: cause }, 'Failed to persist remote desktop window size'));
   };
 
+  const resetAuthenticatedUiState = () => {
+    authenticatedPageCacheGeneration.value += 1;
+    resetConnectionsCache();
+    resetConnectionTagsCache();
+    resetProxiesCache();
+    resetNotificationsCache();
+    resetAuditCache();
+    resetSuspendedSessionsCatalog();
+    resetPreferencesCache();
+    resetAppearanceCache();
+  };
+
+  watch(
+    () => auth.user.value?.id ?? null,
+    (userId, previousUserId) => {
+      if (previousUserId !== null && userId !== null && userId !== previousUserId) resetAuthenticatedUiState();
+    },
+  );
+
   watch(
     auth.isAuthenticated,
     (authenticated, wasAuthenticated) => {
       if (authenticated) {
+        preloadAuthenticatedRoutes();
         void appearance.load().catch((cause) => logger.error({ err: cause }, 'Failed to load appearance settings'));
         void preferences
           .load()
@@ -58,7 +85,10 @@
         return;
       }
       remoteDesktopLauncher.close();
-      if (wasAuthenticated) void disposeWorkspaceRuntime();
+      if (wasAuthenticated) {
+        resetAuthenticatedUiState();
+        void disposeWorkspaceRuntime();
+      }
     },
     { immediate: true },
   );
@@ -68,7 +98,12 @@
   <div class="flex min-h-dvh flex-col text-foreground">
     <AppHeader v-if="auth.isAuthenticated.value" @customize-appearance="appearance.openCustomizer()" />
     <div class="min-h-0 flex-1">
-      <RouterView />
+      <RouterView v-slot="{ Component, route }">
+        <KeepAlive :key="authenticatedPageCacheGeneration">
+          <component v-if="route.meta.keepAlive" :is="Component" :key="String(route.name)" />
+        </KeepAlive>
+        <component v-if="!route.meta.keepAlive" :is="Component" />
+      </RouterView>
     </div>
     <AgentSurfaceHost v-if="auth.isAuthenticated.value" />
     <RemoteDesktopModal

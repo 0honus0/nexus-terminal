@@ -3,39 +3,94 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { createAuthNavigationFacade } from '@/features/auth/public';
 import { clearDynamicImportRecoveryMarker, recoverStaleDynamicImport } from '@/app/bootstrap/pwa';
 
+const loadDashboard = () => import('../pages/dashboard/DashboardPage.vue');
+const loadLogin = () => import('../pages/login/LoginPage.vue');
+const loadSetup = () => import('@/features/auth/views/SetupView.vue');
+const loadWorkspace = () => import('@/runtimes/workspace/views/WorkspaceView.vue');
+const loadConnections = () => import('@/features/connections/views/ConnectionsView.vue');
+const loadProxies = () => import('@/features/proxies/views/ProxiesView.vue');
+const loadNotifications = () => import('@/features/notifications/views/NotificationsView.vue');
+const loadAuditLogs = () => import('@/features/audit/views/AuditLogView.vue');
+const loadSettings = () => import('../pages/settings/SettingsPage.vue');
+
+let authenticatedPreloadScheduled = false;
+export const preloadAuthenticatedRoutes = (): void => {
+  if (authenticatedPreloadScheduled || typeof window === 'undefined') return;
+  const connection = (
+    navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }
+  ).connection;
+  if (connection?.saveData || connection?.effectiveType === 'slow-2g' || connection?.effectiveType === '2g') return;
+  authenticatedPreloadScheduled = true;
+  const preload = async () => {
+    for (const loader of [
+      loadConnections,
+      loadSettings,
+      loadWorkspace,
+      loadNotifications,
+      loadProxies,
+      loadAuditLogs,
+    ]) {
+      await loader().catch(() => undefined);
+    }
+  };
+  const requestIdle = (
+    window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+    }
+  ).requestIdleCallback;
+  if (requestIdle) requestIdle(() => void preload(), { timeout: 2_500 });
+  else window.setTimeout(() => void preload(), 800);
+};
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
     name: 'Dashboard',
-    component: () => import('../pages/dashboard/DashboardPage.vue'),
+    meta: { keepAlive: true },
+    component: loadDashboard,
   },
   {
     path: '/login',
     name: 'Login',
-    component: () => import('../pages/login/LoginPage.vue'),
+    component: loadLogin,
   },
   {
     path: '/setup',
     name: 'Setup',
-    component: () => import('@/features/auth/views/SetupView.vue'),
+    component: loadSetup,
   },
-  { path: '/workspace', name: 'Workspace', component: () => import('@/runtimes/workspace/views/WorkspaceView.vue') },
+  { path: '/workspace', name: 'Workspace', component: loadWorkspace },
   {
     path: '/connections',
     name: 'Connections',
-    component: () => import('@/features/connections/views/ConnectionsView.vue'),
+    meta: { keepAlive: true },
+    component: loadConnections,
   },
-  { path: '/proxies', name: 'Proxies', component: () => import('@/features/proxies/views/ProxiesView.vue') },
+  {
+    path: '/proxies',
+    name: 'Proxies',
+    meta: { keepAlive: true },
+    component: loadProxies,
+  },
   {
     path: '/notifications',
     name: 'Notifications',
-    component: () => import('@/features/notifications/views/NotificationsView.vue'),
+    meta: { keepAlive: true },
+    component: loadNotifications,
   },
-  { path: '/audit-logs', name: 'AuditLogs', component: () => import('@/features/audit/views/AuditLogView.vue') },
+  {
+    path: '/audit-logs',
+    name: 'AuditLogs',
+    meta: { keepAlive: true },
+    component: loadAuditLogs,
+  },
   {
     path: '/settings',
     name: 'Settings',
-    component: () => import('../pages/settings/SettingsPage.vue'),
+    meta: { keepAlive: true },
+    component: loadSettings,
   },
   {
     path: '/:pathMatch(.*)*',

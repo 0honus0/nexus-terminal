@@ -15,5 +15,8 @@ export function useAppearance() {
     previewSettings: store.previewSettings.bind(store),
     openCustomizer: store.openCustomizer.bind(store),
     closeCustomizer: store.closeCustomizer.bind(store),
+    reset: store.reset.bind(store),
   };
 }
+
+export const resetAppearanceCache = (): void => useAppearanceStore().reset();

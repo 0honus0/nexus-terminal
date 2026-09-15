@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+  import { computed, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue';
   import { useRouter } from 'vue-router';
   import { useI18n } from 'vue-i18n';
   import { BaseListboxSelect, BaseSpinner } from '@/foundation/ui';
@@ -161,6 +161,8 @@
       .join(' · ');
   };
 
+  let dashboardActive = false;
+  let hasActivatedOnce = false;
   let localRefreshTimer: number | undefined;
   let remoteRefreshTimer: number | undefined;
   let remoteInitialTimer: number | undefined;
@@ -185,10 +187,22 @@
     remoteRefreshTimer = window.setInterval(refreshRemote, seconds * 1000);
   };
   const syncLocalRefresh = () => {
+    if (!dashboardActive) {
+      window.clearInterval(localRefreshTimer);
+      localRefreshTimer = undefined;
+      return;
+    }
     scheduleLocalRefresh();
     if (preferences.values.value.dashboardShowLocalResources) refreshLocal();
   };
   const syncRemoteRefresh = () => {
+    if (!dashboardActive) {
+      window.clearInterval(remoteRefreshTimer);
+      remoteRefreshTimer = undefined;
+      window.clearTimeout(remoteInitialTimer);
+      remoteInitialTimer = undefined;
+      return;
+    }
     scheduleRemoteRefresh();
     window.clearTimeout(remoteInitialTimer);
     remoteInitialTimer = undefined;
@@ -220,29 +234,44 @@
     if (preferences.values.value.dashboardShowRemoteResources) refreshRemote();
   };
 
-  onMounted(async () => {
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    loading.value = true;
-    suspended.startPolling();
+  const refreshDashboardData = async (initial = false) => {
+    if (initial) loading.value = !connections.loaded.value || !tags.loaded.value;
     const [, , audit] = await Promise.allSettled([
-      connections.load(true),
-      tags.load(),
+      initial ? connections.load() : connections.revalidate(),
+      initial ? tags.load() : tags.revalidate(),
       auditApi.list({ limit: MAX_RECENT_LOGS, offset: 0 }),
       preferences.load(),
       suspended.load({ silent: true, force: true }),
     ]);
-    if (audit?.status === 'fulfilled') activity.value = audit.value.logs.slice(0, MAX_RECENT_LOGS);
-    loading.value = false;
+    if (audit.status === 'fulfilled') activity.value = audit.value.logs.slice(0, MAX_RECENT_LOGS);
+    if (initial) loading.value = false;
+  };
+
+  const activateDashboard = () => {
+    dashboardActive = true;
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    suspended.startPolling();
     syncLocalRefresh();
     syncRemoteRefresh();
-  });
-  onBeforeUnmount(() => {
+    if (hasActivatedOnce) void refreshDashboardData(false);
+    else hasActivatedOnce = true;
+  };
+  const deactivateDashboard = () => {
+    dashboardActive = false;
     window.clearInterval(localRefreshTimer);
+    localRefreshTimer = undefined;
     window.clearInterval(remoteRefreshTimer);
+    remoteRefreshTimer = undefined;
     window.clearTimeout(remoteInitialTimer);
+    remoteInitialTimer = undefined;
     document.removeEventListener('visibilitychange', handleVisibilityChange);
     suspended.stopPolling();
-  });
+  };
+
+  onMounted(() => void refreshDashboardData(true));
+  onActivated(activateDashboard);
+  onDeactivated(deactivateDashboard);
+  onBeforeUnmount(deactivateDashboard);
   const percent = (value?: number) => {
     if (!Number.isFinite(value)) return '—';
     return `${Math.min(100, Math.max(0, Math.round(value!)))}%`;

@@ -10,3 +10,5 @@ export function useProxies() {
     remove: store.remove.bind(store),
   };
 }
+
+export const resetProxiesCache = (): void => useProxiesStore().reset();

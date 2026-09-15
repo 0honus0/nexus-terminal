@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BaseModal from '@/foundation/ui/BaseModal.vue';
   import { useFeedback } from '@/shared/feedback/public';
@@ -95,6 +95,7 @@
   type AgentSettingsGroupId = (typeof groups)[number]['id'];
 
   const activeGroup = ref<AgentSettingsGroupId>('models');
+  const visitedGroups = reactive(new Set<AgentSettingsGroupId>(['models']));
 
   const enabledApps = computed(() => apps.value.filter((app) => app.enabled).length);
   const defaultModelName = computed(() => {
@@ -361,6 +362,7 @@
   const selectGroup = (id: AgentSettingsGroupId): void => {
     if (activeGroup.value === id) return;
     activeGroup.value = id;
+    visitedGroups.add(id);
     error.value = '';
   };
 
@@ -475,7 +477,12 @@
           </div>
 
           <!-- 1. 模型与预算（核心大本营） -->
-          <section v-show="activeGroup === 'models'" id="agent-settings-models" class="space-y-6">
+          <section
+            v-if="visitedGroups.has('models')"
+            v-show="activeGroup === 'models'"
+            id="agent-settings-models"
+            class="space-y-6"
+          >
             <!-- Agent 功能开关 -->
             <AgentFeatureSettings :settings="settings" :busy="busy" @change="changeFeature" />
 
@@ -533,7 +540,12 @@
           </section>
 
           <!-- 2. 运行与环境（并发、沙箱容器与存储空间） -->
-          <section v-show="activeGroup === 'runtime'" id="agent-settings-runtime" class="space-y-6">
+          <section
+            v-if="visitedGroups.has('runtime')"
+            v-show="activeGroup === 'runtime'"
+            id="agent-settings-runtime"
+            class="space-y-6"
+          >
             <!-- 并发与性能 -->
             <PerformanceSettings
               :settings="settings"
@@ -585,7 +597,12 @@
           </section>
 
           <!-- 3. 插件与安全（应用、生态与安全边界） -->
-          <section v-show="activeGroup === 'plugins'" id="agent-settings-plugins" class="space-y-6">
+          <section
+            v-if="visitedGroups.has('plugins')"
+            v-show="activeGroup === 'plugins'"
+            id="agent-settings-plugins"
+            class="space-y-6"
+          >
             <!-- Agent App 与能力授权 -->
             <AppManagementSettings :apps="apps" :busy="busy" @toggle="toggleApp" @refresh="load" />
 

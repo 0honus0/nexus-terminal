@@ -4,6 +4,7 @@ export {
   useSuspendedSessions,
   applySuspendedAutoTermination,
   refreshSuspendedSessionsCatalog,
+  resetSuspendedSessionsCatalog,
   refreshSuspendedSessionsAfterHandoff,
   removeSuspendedSessionFromCatalog,
   findSuspendedSessionByOriginalWorkspace,
