@@ -1337,11 +1337,11 @@
                 <div
                   v-if="modelSelectionLocked && run"
                   class="agent-config-summary flex h-7 items-center gap-1.5 rounded-lg border border-border/50 bg-header/40 px-2.5 text-xs text-text-secondary select-none"
-                  :title="$t('agent.operations.runModelLocked')"
+                  :title="`${$t('agent.operations.runModelLocked')}: ${run.definition.model.modelId}`"
                 >
                   <i class="fa-solid fa-microchip shrink-0 text-[9px] text-text-secondary" aria-hidden="true"></i>
                   <span
-                    class="hidden sm:inline w-24 sm:w-28 truncate whitespace-nowrap font-medium text-foreground text-left"
+                    class="agent-config-verbose w-24 sm:w-28 truncate whitespace-nowrap font-medium text-foreground text-left"
                   >
                     {{ run.definition.model.modelId }}
                   </span>
@@ -1350,16 +1350,16 @@
                 <AgentConfigPopover
                   v-else-if="modelOptions.length"
                   :ariaLabel="$t('agent.operations.runModel')"
-                  :title="$t('agent.operations.runModelHint')"
+                  :title="`${$t('agent.operations.runModelHint')}: ${providerSelection?.model.id ?? ''}`"
                   panel-class="w-72"
                 >
                   <template #trigger>
                     <i class="fa-solid fa-microchip text-[9px] text-text-secondary" aria-hidden="true"></i>
-                    <span class="hidden sm:inline w-24 sm:w-28 truncate whitespace-nowrap font-medium text-left">{{
+                    <span class="agent-config-verbose w-24 sm:w-28 truncate whitespace-nowrap font-medium text-left">{{
                       providerSelection?.model.id
                     }}</span>
                     <i
-                      class="fa-solid fa-chevron-down text-[7px] text-text-secondary hidden sm:inline"
+                      class="agent-config-affordance fa-solid fa-chevron-down text-[7px] text-text-secondary"
                       aria-hidden="true"
                     ></i>
                   </template>
@@ -1416,17 +1416,17 @@
                 <!-- 运行环境 -->
                 <AgentConfigPopover
                   :ariaLabel="$t('agent.operations.environment')"
-                  :title="$t('agent.operations.environmentHint')"
+                  :title="`${$t('agent.operations.environmentHint')}: ${environmentLabel}`"
                   panel-class="w-72"
                 >
                   <template #trigger>
                     <span class="h-1.5 w-1.5 rounded-full shrink-0" :class="environmentStatusClass"></span>
-                    <span class="hidden sm:inline w-16 sm:w-20 truncate whitespace-nowrap font-medium text-left">{{
+                    <span class="agent-config-verbose w-16 sm:w-20 truncate whitespace-nowrap font-medium text-left">{{
                       environmentLabel
                     }}</span>
                     <i
                       :class="modelSelectionLocked ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
-                      class="text-[7px] text-text-secondary hidden sm:inline"
+                      class="agent-config-affordance text-[7px] text-text-secondary"
                       aria-hidden="true"
                     ></i>
                   </template>
@@ -1533,17 +1533,17 @@
                 <!-- SSH 主机 -->
                 <AgentConfigPopover
                   :ariaLabel="$t('agent.operations.targets')"
-                  :title="$t('agent.operations.targetsHint')"
+                  :title="`${$t('agent.operations.targetsHint')}: ${displayedConnectionIds.length}/${connections.length}`"
                   panel-class="w-72"
                 >
                   <template #trigger>
                     <i class="fa-solid fa-server text-[8px] text-text-secondary" aria-hidden="true"></i>
-                    <span class="hidden sm:inline w-16 whitespace-nowrap font-medium text-center"
+                    <span class="agent-config-verbose w-16 whitespace-nowrap font-medium text-center"
                       >SSH {{ displayedConnectionIds.length }}/{{ connections.length }}</span
                     >
-                    <span v-if="displayedConnectionIds.length > 0" class="sm:hidden text-[10px] font-mono">{{
-                      displayedConnectionIds.length
-                    }}</span>
+                    <span class="agent-config-compact hidden text-[10px] font-mono"
+                      >{{ displayedConnectionIds.length }}/{{ connections.length }}</span
+                    >
                     <i
                       v-if="modelSelectionLocked"
                       class="fa-solid fa-lock text-[7px] text-text-secondary"
@@ -1551,7 +1551,7 @@
                     ></i>
                     <i
                       v-else
-                      class="fa-solid fa-chevron-down text-[7px] text-text-secondary hidden sm:inline"
+                      class="agent-config-affordance fa-solid fa-chevron-down text-[7px] text-text-secondary"
                       aria-hidden="true"
                     ></i>
                   </template>
@@ -1619,12 +1619,12 @@
                 <AgentConfigPopover
                   v-if="reasoningCapabilityAvailable || (modelSelectionLocked && reasoningValue)"
                   :ariaLabel="$t('agent.ui.reasoning')"
-                  :title="$t('agent.ui.reasoning')"
+                  :title="`${$t('agent.ui.reasoning')}: ${reasoningDisplayLabel}`"
                   panel-class="w-56"
                 >
                   <template #trigger>
                     <i class="fa-solid fa-bolt text-[9px] text-indigo-500" aria-hidden="true"></i>
-                    <span class="hidden sm:inline w-8 sm:w-9 whitespace-nowrap font-medium text-center">{{
+                    <span class="agent-config-reasoning w-8 sm:w-9 whitespace-nowrap font-medium text-center">{{
                       reasoningDisplayLabel
                     }}</span>
                     <i
@@ -1634,7 +1634,7 @@
                     ></i>
                     <i
                       v-else
-                      class="fa-solid fa-chevron-down text-[7px] text-text-secondary hidden sm:inline"
+                      class="agent-config-affordance fa-solid fa-chevron-down text-[7px] text-text-secondary"
                       aria-hidden="true"
                     ></i>
                   </template>
@@ -1886,8 +1886,43 @@
     }
 
     .agent-run-config {
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       align-content: center;
+      gap: 0.25rem;
+    }
+
+    .agent-config-verbose,
+    .agent-config-affordance {
+      display: none;
+    }
+
+    :deep(.agent-config-verbose) {
+      display: none;
+    }
+
+    .agent-config-compact {
+      display: inline;
+    }
+
+    :deep(.agent-config-compact) {
+      display: inline;
+    }
+
+    .agent-config-reasoning {
+      width: auto;
+      min-width: 0.75rem;
+      font-size: 10px;
+      line-height: 1;
+    }
+
+    :deep(.agent-config-summary) {
+      min-width: 26px;
+      height: 26px;
+      gap: 4px;
+      border-radius: 7px;
+      padding-inline: 7px;
+      font-size: 10px;
+      line-height: 1;
     }
 
     .agent-detail-label {

@@ -106,12 +106,15 @@
           : 'border-border/50 bg-header/40 text-text-secondary hover:border-border hover:bg-header/80 hover:text-foreground font-medium'
       "
       :disabled="disabled"
+      :aria-label="$t('agent.attachments.button', { count: modelValue.length })"
       :title="$t('agent.attachments.button', { count: modelValue.length })"
       @click="open = !open"
     >
       <i class="fa-solid fa-paperclip text-[10px]" aria-hidden="true"></i>
-      <span class="hidden sm:inline">{{ $t('agent.attachments.button', { count: modelValue.length }) }}</span>
-      <span v-if="modelValue.length > 0" class="sm:hidden text-[10px] font-medium">{{ modelValue.length }}</span>
+      <span class="agent-config-verbose">{{ $t('agent.attachments.button', { count: modelValue.length }) }}</span>
+      <span v-if="modelValue.length > 0" class="agent-config-compact hidden text-[10px] font-medium">{{
+        modelValue.length
+      }}</span>
     </button>
 
     <div

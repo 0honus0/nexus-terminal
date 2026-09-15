@@ -436,20 +436,20 @@
         </div>
 
         <div
-          class="rounded-2xl border border-border/80 bg-card/85 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.04)] ring-1 ring-border/20 transition-all duration-200 hover:border-border-hover focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 focus-within:shadow-[0_8px_32px_rgba(160,108,213,0.12)] overflow-hidden"
+          class="agent-composer-shell rounded-2xl border border-border/80 bg-card/85 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.04)] ring-1 ring-border/20 transition-all duration-200 hover:border-border-hover focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 focus-within:shadow-[0_8px_32px_rgba(160,108,213,0.12)] overflow-hidden"
         >
           <textarea
             id="agent-composer"
             :aria-label="$t('agent.conversation.placeholder')"
             :value="draft"
             rows="3"
-            class="max-h-48 min-h-24 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-sm leading-relaxed text-foreground placeholder:text-text-secondary/50 outline-none"
+            class="max-h-48 min-h-24 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-[13px] leading-relaxed text-foreground placeholder:text-text-secondary/50 outline-none"
             :placeholder="$t('agent.conversation.placeholder')"
             @input="emit('updateDraft', ($event.target as HTMLTextAreaElement).value)"
             @keydown.enter.exact="onComposerEnter"
           ></textarea>
           <div
-            class="flex min-h-11 items-center justify-between gap-2 border-t border-border/40 bg-card/40 backdrop-blur-xs px-2.5 py-1.5"
+            class="agent-composer-toolbar flex min-h-11 items-center justify-between gap-2 border-t border-border/40 bg-card/40 backdrop-blur-xs px-2.5 py-1.5"
           >
             <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto no-scrollbar">
               <ArtifactPicker
@@ -473,11 +473,13 @@
               </button>
               <button
                 type="button"
-                class="flex h-8 items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-primary-hover px-3.5 text-xs font-semibold text-white shadow-sm shadow-primary/25 transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25 disabled:bg-foreground/20 disabled:text-text-secondary disabled:shadow-none"
+                class="agent-send-button flex h-8 items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-primary-hover px-3.5 text-xs font-semibold text-white shadow-sm shadow-primary/25 transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25 disabled:bg-foreground/20 disabled:text-text-secondary disabled:shadow-none"
+                :aria-label="$t('agent.conversation.send')"
+                :title="$t('agent.conversation.send')"
                 :disabled="busy || !canSend || !draft.trim()"
                 @click="send"
               >
-                <span class="hidden sm:inline">{{ $t('agent.conversation.send') }}</span>
+                <span class="agent-send-label">{{ $t('agent.conversation.send') }}</span>
                 <i class="fa-solid fa-arrow-up text-xs" aria-hidden="true"></i>
               </button>
             </div>
@@ -496,6 +498,41 @@
       color-mix(in srgb, var(--color-primary) 2%, transparent) 40%,
       transparent 70%
     );
+  }
+
+  @container agent-hub-window (max-width: 760px) {
+    .agent-composer-shell {
+      border-radius: 12px;
+    }
+
+    #agent-composer {
+      min-height: 72px;
+      padding: 10px 12px 6px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .agent-composer-toolbar {
+      min-height: 36px;
+      gap: 4px;
+      padding: 4px 6px;
+    }
+
+    .agent-composer-toolbar > div:first-child {
+      gap: 4px;
+    }
+
+    .agent-send-button {
+      width: 28px;
+      height: 28px;
+      padding-inline: 0;
+      justify-content: center;
+      border-radius: 8px;
+    }
+
+    .agent-send-label {
+      display: none;
+    }
   }
 
   #agent-composer,
