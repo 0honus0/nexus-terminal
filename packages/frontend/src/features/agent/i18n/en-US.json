@@ -383,9 +383,9 @@
         "commandStatus": "Last command: {action} · {status}"
       },
       "safety": {
-        "title": "Safety and network",
-        "description": "Manage Agent-only target deny rules. Core security guardrails cannot be disabled.",
-        "guardrails": "CSRF protection, capability authorization, cross-App isolation, private-network controls, and mutation approval boundaries are mandatory.",
+        "title": "Globally blocked targets",
+        "description": "Configure Host-level hard blocks for Agents here. The SSH picker below chat only chooses hosts for a specific Run.",
+        "guardrails": "A globally blocked target is denied by the Host even if it is selected in the chat SSH picker.",
         "connectionIds": "Denied connection IDs",
         "reason": "Change reason",
         "revision": "Denylist revision {revision}",
@@ -401,7 +401,14 @@
         "reasonPlaceholder": "Enter the reason for updating this safety policy (e.g. Production isolation, Audit compliance)",
         "emptyConnectionsDetail": "No host or device connections are configured, so Agents cannot reach private machines by default.",
         "orphanIds": "Deleted connection IDs still present:",
-        "clearOrphanIds": "Clear all invalid IDs"
+        "clearOrphanIds": "Clear all invalid IDs",
+        "scopeHint": "This is a global hard restriction across conversations and Runs, not the SSH selection for the current chat.",
+        "manageTargets": "Manage blocked targets",
+        "collapseTargets": "Collapse",
+        "loadingConnections": "Loading system connections...",
+        "noSearchResults": "No connection targets match “{query}”",
+        "reasonAudit": "(required for security audit)",
+        "commonReasons": "Common reasons:"
       },
       "providers": {
         "title": "Model providers",

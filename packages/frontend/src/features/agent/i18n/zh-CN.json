@@ -383,9 +383,9 @@
         "commandStatus": "最近命令：{action} · {status}"
       },
       "safety": {
-        "title": "安全与网络",
-        "description": "管理仅对 Agent 生效的目标 denylist。核心安全边界不可关闭。",
-        "guardrails": "CSRF、防越权 capability、跨 App 隔离、私网控制和 mutation approval 边界均为强制保护。",
+        "title": "全局禁用目标",
+        "description": "这里配置 Agent 的系统级硬禁止目标；聊天框下方的 SSH 只决定某次 Run 想使用哪些主机。",
+        "guardrails": "被全局禁用的目标即使在聊天框中被选中，Agent 会话与工具执行仍会被 Host 强制阻断。",
         "connectionIds": "禁止的 Connection ID",
         "reason": "变更原因",
         "revision": "Denylist revision {revision}",
@@ -401,7 +401,14 @@
         "reasonPlaceholder": "请填写本次调整安全策略的原因（例如：生产环境保护、安全审计隔离）",
         "emptyConnectionsDetail": "系统内尚未录入任何主机或设备连接，Agent 当前默认无法外联任何私有机器。",
         "orphanIds": "包含已被删除的历史连接 ID：",
-        "clearOrphanIds": "清理全部无效 ID"
+        "clearOrphanIds": "清理全部无效 ID",
+        "scopeHint": "这是跨会话、跨 Run 的全局硬限制，不是本次对话的 SSH 选择。",
+        "manageTargets": "管理禁用目标",
+        "collapseTargets": "收起管理",
+        "loadingConnections": "正在获取系统连接列表...",
+        "noSearchResults": "未找到与 “{query}” 匹配的连接目标",
+        "reasonAudit": "（安全审计留痕必填）",
+        "commonReasons": "常用原因:"
       },
       "providers": {
         "title": "模型 Provider",

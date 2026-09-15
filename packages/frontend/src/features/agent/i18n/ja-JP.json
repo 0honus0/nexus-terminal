@@ -383,9 +383,9 @@
         "commandStatus": "最新コマンド：{action} · {status}"
       },
       "safety": {
-        "title": "安全とネットワーク",
-        "description": "Agent のみに適用されるターゲット denylist を管理します。中核の安全ガードは無効化できません。",
-        "guardrails": "CSRF、capability 認可、App 間分離、プライベートネットワーク制御、mutation approval 境界はすべて必須です。",
+        "title": "グローバル禁止ターゲット",
+        "description": "Agent に対する Host レベルの強制禁止ターゲットを設定します。チャット下部の SSH 選択は各 Run で使用するホストだけを指定します。",
+        "guardrails": "グローバルで禁止されたターゲットは、チャットの SSH 選択で指定されても Host によって強制的に拒否されます。",
         "connectionIds": "拒否する Connection ID",
         "reason": "変更理由",
         "revision": "Denylist revision {revision}",
@@ -401,7 +401,14 @@
         "reasonPlaceholder": "安全ポリシーの変更理由を入力してください",
         "emptyConnectionsDetail": "ホストやデバイス接続が未登録のため、Agent は既定でプライベートマシンへ接続できません。",
         "orphanIds": "削除済みの接続 ID が残っています：",
-        "clearOrphanIds": "無効な ID をすべて削除"
+        "clearOrphanIds": "無効な ID をすべて削除",
+        "scopeHint": "これは会話や Run をまたぐグローバルな強制制限で、現在のチャット用 SSH 選択ではありません。",
+        "manageTargets": "禁止ターゲットを管理",
+        "collapseTargets": "閉じる",
+        "loadingConnections": "システム接続を読み込み中...",
+        "noSearchResults": "“{query}” に一致する接続ターゲットはありません",
+        "reasonAudit": "（セキュリティ監査用・必須）",
+        "commonReasons": "よく使う理由:"
       },
       "providers": {
         "title": "モデル Provider",

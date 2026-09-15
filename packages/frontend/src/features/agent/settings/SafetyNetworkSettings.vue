@@ -15,6 +15,7 @@
   const searchQuery = ref('');
   const reason = ref('');
   const selectedIds = ref<Set<number>>(new Set());
+  const expanded = ref(false);
 
   onMounted(async () => {
     if (connectionsStore.connections.value.length) {
@@ -52,6 +53,9 @@
 
   // 过滤后的连接列表
   const allConnections = computed(() => connectionsStore.connections.value);
+  const blockedConnections = computed(() =>
+    allConnections.value.filter((connection) => selectedIds.value.has(connection.id)),
+  );
 
   const filteredConnections = computed(() => {
     const list = allConnections.value;
@@ -165,26 +169,63 @@
         <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.safety.description') }}</p>
       </div>
 
-      <!-- 审计版本指示 -->
       <div class="flex items-center gap-2">
-        <span
-          class="rounded-lg border border-border/70 bg-card px-2.5 py-1 text-xs font-mono text-text-secondary shadow-2xs"
-        >
+        <span class="hidden text-[10px] font-mono text-text-secondary/60 sm:inline">
           {{ $t('agent.settings.safety.revision', { revision: denylist.revision }) }}
         </span>
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/70 bg-background/80 px-3 text-[11px] font-medium text-foreground transition-colors hover:bg-header/70"
+          :aria-expanded="expanded"
+          @click="expanded = !expanded"
+        >
+          <i class="fa-solid fa-shield-halved text-[10px] text-primary/80" aria-hidden="true"></i>
+          <span>{{
+            $t(expanded ? 'agent.settings.safety.collapseTargets' : 'agent.settings.safety.manageTargets')
+          }}</span>
+          <i
+            class="fa-solid fa-chevron-down text-[8px] text-text-secondary transition-transform"
+            :class="{ 'rotate-180': expanded }"
+            aria-hidden="true"
+          ></i>
+        </button>
       </div>
     </div>
 
-    <div class="space-y-4 p-4 sm:p-5">
+    <div class="border-t border-border/55 px-4 py-3 sm:px-5">
+      <div class="flex items-start gap-2.5">
+        <i class="fa-solid fa-lock mt-0.5 shrink-0 text-[10px] text-text-secondary/65" aria-hidden="true"></i>
+        <div class="min-w-0 flex-1">
+          <div class="text-[11px] leading-relaxed text-text-secondary">
+            {{ $t('agent.settings.safety.scopeHint') }}
+          </div>
+          <div v-if="blockedConnections.length" class="mt-2 flex flex-wrap gap-1.5">
+            <span
+              v-for="connection in blockedConnections.slice(0, 6)"
+              :key="connection.id"
+              class="inline-flex max-w-52 items-center gap-1 rounded-md bg-error/8 px-2 py-1 text-[10px] text-error"
+            >
+              <i class="fa-solid fa-ban text-[8px]" aria-hidden="true"></i>
+              <span class="truncate">{{ connection.name || connection.host }}</span>
+            </span>
+            <span
+              v-if="blockedConnections.length > 6"
+              class="rounded-md bg-header/60 px-2 py-1 text-[10px] text-text-secondary"
+            >
+              +{{ blockedConnections.length - 6 }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="expanded" class="space-y-4 border-t border-border/60 p-4 sm:p-5">
       <!-- 强制安全边界说明 -->
       <div
         class="flex items-start gap-2.5 rounded-xl border border-border bg-background/80 p-3.5 shadow-2xs text-xs text-text-secondary leading-relaxed"
       >
         <i class="fa-solid fa-shield-halved text-sm text-primary/80 mt-0.5 shrink-0"></i>
-        <span
-          >{{ $t('agent.settings.safety.guardrails') }} 选中的 Connection 目标将被强制隔离，任何 Agent
-          会话与工具执行尝试触达该连接时都会被阻断。</span
-        >
+        <span>{{ $t('agent.settings.safety.guardrails') }}</span>
       </div>
 
       <!-- 搜索与快捷批量选择栏 -->
@@ -229,7 +270,7 @@
       <!-- 连接加载状态 -->
       <div v-if="loadingConnections" class="py-8 text-center text-xs text-text-secondary">
         <i class="fa-solid fa-circle-notch fa-spin text-lg text-primary mb-2"></i>
-        <div>正在获取系统连接列表...</div>
+        <div>{{ $t('agent.settings.safety.loadingConnections') }}</div>
       </div>
 
       <div
@@ -256,7 +297,7 @@
         v-else-if="filteredConnections.length === 0"
         class="py-6 text-center text-xs text-text-secondary rounded-xl border border-border/50 bg-header/10"
       >
-        未找到与 “{{ searchQuery }}” 匹配的连接目标
+        {{ $t('agent.settings.safety.noSearchResults', { query: searchQuery }) }}
       </div>
 
       <!-- 可视化连接卡片列表（直观展示所有连接，点击即可禁止/允许） -->
@@ -376,11 +417,13 @@
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <label class="text-xs font-semibold text-foreground flex items-center gap-1.5">
             <span>{{ $t('agent.settings.safety.reason') }}</span>
-            <span class="text-[10px] text-text-secondary font-normal">（安全审计留痕必填）</span>
+            <span class="text-[10px] text-text-secondary font-normal">{{
+              $t('agent.settings.safety.reasonAudit')
+            }}</span>
           </label>
           <!-- 快捷预设药丸 -->
           <div class="flex flex-wrap items-center gap-1.5">
-            <span class="text-[10px] text-text-secondary">常用原因:</span>
+            <span class="text-[10px] text-text-secondary">{{ $t('agent.settings.safety.commonReasons') }}</span>
             <button
               v-for="preset in reasonPresets"
               :key="preset"
