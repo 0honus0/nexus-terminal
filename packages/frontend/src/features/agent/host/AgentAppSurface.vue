@@ -32,9 +32,6 @@
   import AgentConfigPopover from './AgentConfigPopover.vue';
   import { createAgentRunFacade } from '../runtime/run-facade';
   import { createRuntimeOperationState } from '../runtime/runtime-operation-state';
-  // TODO(P-029/agent-uiux): keep TaskDetailDrawer until its checkpoint/subagent/delete capabilities are
-  // fully merged into TaskRail and the unified panel has completed responsive/browser regression.
-  import TaskDetailDrawer from '../runtime/TaskDetailDrawer.vue';
   import TaskRail from '../runtime/TaskRail.vue';
 
   const props = defineProps<{ appId: string }>();
@@ -1730,29 +1727,7 @@
       @click="taskRailVisible = false"
     ></button>
     <div v-if="taskRailVisible" id="agent-task-rail" class="agent-task-rail min-h-0">
-      <!-- 历史快照内联详情面板：直接在第三栏内部就地呈现，带就地返回导航，彻底消除跳出弹窗与遮罩 -->
-      <TaskDetailDrawer
-        v-if="detailVisible && detailSnapshot"
-        :snapshot="detailSnapshot"
-        :checkpoints="detailCheckpoints"
-        :approvals="detailApprovalBatch?.items ?? []"
-        :approval-clock="detailApprovalBatch?.clock ?? null"
-        :subagents="detailSubagents"
-        :selected-subagent-id="selectedSubagentId"
-        :subagent-messages="detailSubagentMessages"
-        :busy="mutationLocked"
-        @close="closeRunDetail"
-        @close-rail="taskRailVisible = false"
-        @save-checkpoint="saveCheckpoint"
-        @resume-checkpoint="resumeCheckpoint"
-        @select-subagent="selectSubagent"
-        @cancel-subagent="cancelSubagent"
-        @resolve-approval="resolveApproval"
-        @delete-run="deleteRun"
-      />
-      <!-- 默认任务面板：支持在卡片内就地手风琴折叠展开检查点 -->
       <TaskRail
-        v-else
         :current="run"
         :background-runs="backgroundRuns"
         :thread-runs="threadRuns"
@@ -1761,13 +1736,24 @@
         :approvals="approvals"
         :approval-clock="approvalBatch?.clock ?? null"
         :current-checkpoints="currentRunCheckpoints"
+        :detail-snapshot="detailVisible ? detailSnapshot : null"
+        :detail-checkpoints="detailCheckpoints"
+        :detail-approvals="detailApprovalBatch?.items ?? []"
+        :detail-approval-clock="detailApprovalBatch?.clock ?? null"
+        :detail-subagents="detailSubagents"
+        :selected-subagent-id="selectedSubagentId"
+        :detail-subagent-messages="detailSubagentMessages"
         :busy="mutationLocked"
         @close="taskRailVisible = false"
+        @back="closeRunDetail"
         @increase-budget="increaseBudget"
         @resolve-approval="resolveApproval"
         @open-run="openRunDetail"
         @save-checkpoint="saveCheckpoint"
         @resume-checkpoint="resumeCheckpoint"
+        @select-subagent="selectSubagent"
+        @cancel-subagent="cancelSubagent"
+        @delete-run="deleteRun"
       />
     </div>
   </div>
