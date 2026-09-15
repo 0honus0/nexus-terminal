@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
+  import AgentConfigPopover from './AgentConfigPopover.vue';
   import { RecycleScroller } from 'vue-virtual-scroller';
   import { agentApi, formatAgentApiError, type AgentArtifactRef } from '../api/agent-api';
 
@@ -10,7 +11,6 @@
   }>();
   const emit = defineEmits<{ 'update:modelValue': [value: AgentArtifactRef[]] }>();
 
-  const open = ref(false);
   const items = ref<AgentArtifactRef[]>([]);
   const nextCursor = ref<string | null>(null);
   const query = ref('');
@@ -96,83 +96,111 @@
 </script>
 
 <template>
-  <div class="relative">
-    <button
-      type="button"
-      class="agent-config-summary flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs transition-all duration-150 select-none disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
-      :class="
-        open
-          ? 'border-primary/40 bg-primary/10 text-primary font-semibold shadow-2xs'
-          : 'border-border/50 bg-header/40 text-text-secondary hover:border-border hover:bg-header/80 hover:text-foreground font-medium'
-      "
-      :disabled="disabled"
-      :aria-label="$t('agent.attachments.button', { count: modelValue.length })"
-      :title="$t('agent.attachments.button', { count: modelValue.length })"
-      @click="open = !open"
-    >
+  <AgentConfigPopover
+    :ariaLabel="$t('agent.attachments.button', { count: modelValue.length })"
+    :title="$t('agent.attachments.button', { count: modelValue.length })"
+    :disabled="disabled"
+    panel-class="w-[min(520px,calc(100vw-24px))]"
+  >
+    <template #trigger>
       <i class="fa-solid fa-paperclip text-[10px]" aria-hidden="true"></i>
-      <span class="agent-config-verbose">{{ $t('agent.attachments.button', { count: modelValue.length }) }}</span>
+      <span class="agent-config-verbose whitespace-nowrap">{{
+        $t('agent.attachments.button', { count: modelValue.length })
+      }}</span>
       <span v-if="modelValue.length > 0" class="agent-config-compact hidden text-[10px] font-medium">{{
         modelValue.length
       }}</span>
-    </button>
+    </template>
 
-    <div
-      v-if="open"
-      class="absolute bottom-full left-0 z-30 mb-2 flex h-[360px] w-[min(520px,80vw)] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/95 backdrop-blur-md shadow-2xl ring-1 ring-border/20"
-    >
-      <div class="flex shrink-0 gap-2 border-b border-border p-2">
-        <input
-          v-model="query"
-          type="search"
-          class="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm outline-none focus:border-primary"
-          :placeholder="$t('agent.attachments.search')"
-          @keydown.enter="load"
-        />
-        <button type="button" class="rounded-md px-2 py-1.5 text-sm hover:bg-header" :disabled="busy" @click="load">
-          {{ $t('agent.attachments.searchAction') }}
-        </button>
-        <button
-          type="button"
-          class="rounded-md px-2 py-1.5 text-sm hover:bg-header"
-          :disabled="busy"
-          @click="input?.click()"
-        >
-          {{ $t('agent.attachments.upload') }}
-        </button>
-        <input ref="input" type="file" multiple class="hidden" @change="upload" />
-      </div>
-      <p v-if="error" class="shrink-0 px-3 py-2 text-xs text-error">{{ error }}</p>
-      <RecycleScroller class="min-h-0 flex-1 overflow-y-auto" :items="items" :item-size="58" key-field="id">
-        <template #default="{ item }">
+    <template #panel>
+      <div class="flex h-[340px] min-h-0 flex-col">
+        <div class="flex shrink-0 gap-1.5 border-b border-border/60 pb-2">
+          <input
+            v-model="query"
+            type="search"
+            class="h-8 min-w-0 flex-1 rounded-lg border border-border/60 bg-background px-2.5 text-xs outline-none transition-colors focus:border-primary/50"
+            :placeholder="$t('agent.attachments.search')"
+            @keydown.enter="load"
+          />
           <button
             type="button"
-            class="flex h-[58px] w-full items-center gap-3 border-b border-border px-3 text-left hover:bg-header"
-            :class="selectedIds.has(item.id) ? 'bg-primary/10' : ''"
-            @click="toggle(item)"
+            class="h-8 rounded-lg px-2.5 text-xs font-medium text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+            :disabled="busy"
+            @click="load"
           >
-            <i
-              :class="selectedIds.has(item.id) ? 'fa-solid fa-square-check text-primary' : 'fa-regular fa-square'"
-              aria-hidden="true"
-            ></i>
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-sm">{{ item.originalName }}</span>
-              <span class="block truncate text-[11px] text-text-secondary"
-                >{{ item.appId }} · {{ item.mediaType }}</span
-              >
-            </span>
+            {{ $t('agent.attachments.searchAction') }}
           </button>
-        </template>
-      </RecycleScroller>
-      <button
-        v-if="nextCursor"
-        type="button"
-        class="shrink-0 border-t border-border px-3 py-2 text-xs hover:bg-header"
-        :disabled="busy"
-        @click="loadMore"
-      >
-        {{ $t('agent.attachments.loadMore') }}
-      </button>
-    </div>
-  </div>
+          <button
+            type="button"
+            class="h-8 rounded-lg bg-header/70 px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-header"
+            :disabled="busy"
+            @click="input?.click()"
+          >
+            {{ $t('agent.attachments.upload') }}
+          </button>
+          <input ref="input" type="file" multiple class="hidden" @change="upload" />
+        </div>
+        <p v-if="error" class="shrink-0 px-1 py-2 text-xs text-error">{{ error }}</p>
+        <RecycleScroller class="min-h-0 flex-1 overflow-y-auto" :items="items" :item-size="54" key-field="id">
+          <template #default="{ item }">
+            <button
+              type="button"
+              class="flex h-[54px] w-full items-center gap-2.5 border-b border-border/50 px-2 text-left transition-colors hover:bg-header/60"
+              :class="selectedIds.has(item.id) ? 'bg-primary/8' : ''"
+              @click="toggle(item)"
+            >
+              <i
+                :class="
+                  selectedIds.has(item.id)
+                    ? 'fa-solid fa-square-check text-primary'
+                    : 'fa-regular fa-square text-text-secondary'
+                "
+                aria-hidden="true"
+              ></i>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-xs font-medium text-foreground">{{ item.originalName }}</span>
+                <span class="mt-0.5 block truncate text-[10px] text-text-secondary"
+                  >{{ item.appId }} · {{ item.mediaType }}</span
+                >
+              </span>
+            </button>
+          </template>
+        </RecycleScroller>
+        <button
+          v-if="nextCursor"
+          type="button"
+          class="h-8 shrink-0 border-t border-border/60 text-xs font-medium text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+          :disabled="busy"
+          @click="loadMore"
+        >
+          {{ $t('agent.attachments.loadMore') }}
+        </button>
+      </div>
+    </template>
+  </AgentConfigPopover>
 </template>
+
+<style scoped>
+  .agent-config-summary {
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  @container agent-hub-window (max-width: 1040px) {
+    .agent-config-summary {
+      min-width: 25px;
+      height: 25px;
+      gap: 3px;
+      padding-inline: 6px;
+      font-size: 10px;
+    }
+
+    .agent-config-verbose {
+      display: none;
+    }
+
+    .agent-config-compact {
+      display: inline;
+    }
+  }
+</style>

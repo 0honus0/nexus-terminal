@@ -29,7 +29,7 @@
     WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
   import { agentSurfaceSession } from './surface-session';
-  import AgentConfigPopover from './AgentConfigPopover.vue';
+  import AgentConfigPopover from '../files/AgentConfigPopover.vue';
   import { createAgentRunFacade } from '../runtime/run-facade';
   import { createRuntimeOperationState } from '../runtime/runtime-operation-state';
   import TaskRail from '../runtime/TaskRail.vue';
@@ -1333,16 +1333,14 @@
             @dismiss-command-result="commandResult = null"
           >
             <template #configuration>
-              <div class="agent-run-config flex min-h-8 items-center gap-1.5">
+              <div class="agent-run-config flex min-h-7 items-center gap-1">
                 <div
                   v-if="modelSelectionLocked && run"
-                  class="agent-config-summary flex h-7 items-center gap-1.5 rounded-lg border border-border/50 bg-header/40 px-2.5 text-xs text-text-secondary select-none"
+                  class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium leading-none text-text-secondary select-none"
                   :title="`${$t('agent.operations.runModelLocked')}: ${run.definition.model.modelId}`"
                 >
                   <i class="fa-solid fa-microchip shrink-0 text-[9px] text-text-secondary" aria-hidden="true"></i>
-                  <span
-                    class="agent-config-verbose w-24 sm:w-28 truncate whitespace-nowrap font-medium text-foreground text-left"
-                  >
+                  <span class="agent-config-verbose max-w-28 truncate whitespace-nowrap text-foreground text-left">
                     {{ run.definition.model.modelId }}
                   </span>
                   <i class="fa-solid fa-lock shrink-0 text-[7px] text-text-secondary" aria-hidden="true"></i>
@@ -1355,7 +1353,7 @@
                 >
                   <template #trigger>
                     <i class="fa-solid fa-microchip text-[9px] text-text-secondary" aria-hidden="true"></i>
-                    <span class="agent-config-verbose w-24 sm:w-28 truncate whitespace-nowrap font-medium text-left">{{
+                    <span class="agent-config-verbose max-w-28 truncate whitespace-nowrap text-left">{{
                       providerSelection?.model.id
                     }}</span>
                     <i
@@ -1421,7 +1419,7 @@
                 >
                   <template #trigger>
                     <span class="h-1.5 w-1.5 rounded-full shrink-0" :class="environmentStatusClass"></span>
-                    <span class="agent-config-verbose w-16 sm:w-20 truncate whitespace-nowrap font-medium text-left">{{
+                    <span class="agent-config-verbose max-w-20 truncate whitespace-nowrap text-left">{{
                       environmentLabel
                     }}</span>
                     <i
@@ -1538,7 +1536,7 @@
                 >
                   <template #trigger>
                     <i class="fa-solid fa-server text-[8px] text-text-secondary" aria-hidden="true"></i>
-                    <span class="agent-config-verbose w-16 whitespace-nowrap font-medium text-center"
+                    <span class="agent-config-verbose whitespace-nowrap text-center"
                       >SSH {{ displayedConnectionIds.length }}/{{ connections.length }}</span
                     >
                     <span class="agent-config-compact hidden text-[10px] font-mono"
@@ -1624,7 +1622,7 @@
                 >
                   <template #trigger>
                     <i class="fa-solid fa-bolt text-[9px] text-indigo-500" aria-hidden="true"></i>
-                    <span class="agent-config-reasoning w-8 sm:w-9 whitespace-nowrap font-medium text-center">{{
+                    <span class="agent-config-reasoning min-w-4 whitespace-nowrap text-center">{{
                       reasoningDisplayLabel
                     }}</span>
                     <i
@@ -1771,7 +1769,13 @@
     position: relative;
   }
   .agent-run-config {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    white-space: nowrap;
+  }
+  .agent-config-summary {
+    font-size: 11px;
+    line-height: 1;
   }
   .agent-model-meta {
     display: flex;
@@ -1827,6 +1831,25 @@
   }
 
   @container agent-hub-window (max-width: 1040px) {
+    .agent-config-summary {
+      font-size: 10.5px;
+    }
+
+    .agent-config-affordance {
+      display: none;
+    }
+
+    :deep(.agent-config-summary) {
+      height: 25px;
+      padding-inline: 6px;
+      gap: 4px;
+      font-size: 10.5px;
+    }
+
+    .agent-config-verbose {
+      max-width: 5.5rem;
+    }
+
     .agent-surface-layout,
     .agent-surface-layout.has-task-rail {
       grid-template-columns: 256px minmax(0, 1fr);
@@ -1888,7 +1911,7 @@
     .agent-run-config {
       flex-wrap: nowrap;
       align-content: center;
-      gap: 0.25rem;
+      gap: 0.2rem;
     }
 
     .agent-config-verbose,
@@ -1916,11 +1939,11 @@
     }
 
     :deep(.agent-config-summary) {
-      min-width: 26px;
-      height: 26px;
-      gap: 4px;
-      border-radius: 7px;
-      padding-inline: 7px;
+      min-width: 25px;
+      height: 25px;
+      gap: 3px;
+      border-radius: 6px;
+      padding-inline: 6px;
       font-size: 10px;
       line-height: 1;
     }

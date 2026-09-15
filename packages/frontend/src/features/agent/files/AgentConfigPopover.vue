@@ -11,8 +11,9 @@
       title?: string;
       align?: 'left' | 'right';
       panelClass?: string;
+      disabled?: boolean;
     }>(),
-    { title: '', align: 'left', panelClass: '' },
+    { title: '', align: 'left', panelClass: '', disabled: false },
   );
 
   const open = ref(false);
@@ -20,6 +21,7 @@
   const trigger = ref<HTMLButtonElement | null>(null);
   const panel = ref<HTMLElement | null>(null);
   const panelId = `agent-config-popover-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+  let panelResizeObserver: ResizeObserver | null = null;
 
   const close = (restoreFocus = true): void => {
     if (!open.value) return;
@@ -27,6 +29,7 @@
     if (activePopoverCloser === close) {
       activePopoverCloser = null;
     }
+    panelResizeObserver?.disconnect();
     if (restoreFocus) queueMicrotask(() => trigger.value?.focus());
   };
 
@@ -63,6 +66,7 @@
     };
   };
   const toggle = async (): Promise<void> => {
+    if (props.disabled) return;
     if (open.value) {
       close();
       return;
@@ -74,6 +78,11 @@
     activePopoverCloser = close;
     await nextTick();
     positionPanel();
+    if (typeof ResizeObserver !== 'undefined' && panel.value) {
+      panelResizeObserver?.disconnect();
+      panelResizeObserver = new ResizeObserver(() => positionPanel());
+      panelResizeObserver.observe(panel.value);
+    }
     panel.value?.focus();
   };
 
@@ -100,6 +109,7 @@
     if (activePopoverCloser === close) {
       activePopoverCloser = null;
     }
+    panelResizeObserver?.disconnect();
     window.removeEventListener('resize', positionPanel);
     document.removeEventListener('pointerdown', onPointerDown, true);
     document.removeEventListener('mousedown', onPointerDown, true);
@@ -112,12 +122,13 @@
     <button
       ref="trigger"
       type="button"
-      class="agent-config-summary flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs transition-all duration-150 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+      class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium leading-none transition-colors duration-150 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
       :class="
         open
-          ? 'border-primary/40 bg-primary/10 text-primary font-semibold shadow-2xs'
-          : 'border-border/50 bg-header/40 text-text-secondary hover:border-border hover:bg-header/80 hover:text-foreground font-medium'
+          ? 'border-border/70 bg-header/90 text-foreground shadow-xs'
+          : 'border-transparent bg-transparent text-text-secondary hover:border-border/50 hover:bg-header/70 hover:text-foreground'
       "
+      :disabled="props.disabled"
       :aria-label="props.ariaLabel"
       :title="props.title || undefined"
       :aria-expanded="open"
@@ -144,3 +155,29 @@
     ></Teleport>
   </div>
 </template>
+
+<style scoped>
+  .agent-config-summary {
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  @container agent-hub-window (max-width: 1040px) {
+    .agent-config-summary {
+      height: 25px;
+      gap: 4px;
+      padding-inline: 6px;
+      font-size: 10.5px;
+    }
+  }
+
+  @container agent-hub-window (max-width: 760px) {
+    .agent-config-summary {
+      min-width: 25px;
+      height: 25px;
+      gap: 3px;
+      padding-inline: 6px;
+      font-size: 10px;
+    }
+  }
+</style>

@@ -429,16 +429,16 @@
 
         <!-- 悬浮微胶囊分段器 (Segmented Control) -->
         <nav
-          class="flex shrink-0 items-center rounded-lg border border-border/70 bg-header/80 p-0.5 shadow-2xs backdrop-blur-xs"
+          class="agent-hub-view-switch flex shrink-0 items-center rounded-md bg-header/45 p-0.5 backdrop-blur-xs"
           :aria-label="$t('agent.hub.views')"
         >
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150 select-none"
+            class="agent-hub-view-button flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-[11px] font-medium transition-colors duration-150 select-none"
             :class="
               state.hubView === 'conversation'
-                ? 'bg-card text-foreground shadow-xs font-semibold ring-1 ring-border/20'
-                : 'text-text-secondary hover:text-foreground'
+                ? 'bg-background/90 text-foreground shadow-xs font-semibold'
+                : 'text-text-secondary hover:bg-background/45 hover:text-foreground'
             "
             :aria-label="$t('agent.hub.conversation')"
             :aria-pressed="state.hubView === 'conversation'"
@@ -453,11 +453,11 @@
           </button>
           <button
             type="button"
-            class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150 select-none"
+            class="agent-hub-view-button flex h-7 items-center gap-1.5 rounded-[5px] px-2 text-[11px] font-medium transition-colors duration-150 select-none"
             :class="
               state.hubView === 'files'
-                ? 'bg-card text-foreground shadow-xs font-semibold ring-1 ring-border/20'
-                : 'text-text-secondary hover:text-foreground'
+                ? 'bg-background/90 text-foreground shadow-xs font-semibold'
+                : 'text-text-secondary hover:bg-background/45 hover:text-foreground'
             "
             :aria-label="$t('agent.hub.files')"
             :aria-pressed="state.hubView === 'files'"
@@ -576,7 +576,26 @@
     opacity: 0;
   }
 
+  .agent-hub-view-button {
+    font-size: 11px;
+    line-height: 1;
+  }
+
   @container agent-hub-window (max-width: 900px) {
+    .agent-hub-view-switch {
+      gap: 1px;
+      padding: 2px;
+    }
+
+    .agent-hub-view-button {
+      width: 28px;
+      padding-inline: 0;
+      justify-content: center;
+    }
+
+    .agent-hub-nav-label {
+      display: none;
+    }
     .agent-hub-approval-badge {
       display: none;
     }

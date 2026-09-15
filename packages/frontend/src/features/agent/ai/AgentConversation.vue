@@ -436,7 +436,7 @@
         </div>
 
         <div
-          class="agent-composer-shell rounded-2xl border border-border/80 bg-card/85 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.04)] ring-1 ring-border/20 transition-all duration-200 hover:border-border-hover focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 focus-within:shadow-[0_8px_32px_rgba(160,108,213,0.12)] overflow-hidden"
+          class="agent-composer-shell rounded-xl border border-border/65 bg-card/88 backdrop-blur-md shadow-[0_2px_14px_rgba(0,0,0,0.035)] transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15 overflow-hidden"
         >
           <textarea
             id="agent-composer"
@@ -449,9 +449,9 @@
             @keydown.enter.exact="onComposerEnter"
           ></textarea>
           <div
-            class="agent-composer-toolbar flex min-h-11 items-center justify-between gap-2 border-t border-border/40 bg-card/40 backdrop-blur-xs px-2.5 py-1.5"
+            class="agent-composer-toolbar flex min-h-10 items-center justify-between gap-1.5 border-t border-border/35 bg-header/25 backdrop-blur-xs px-2 py-1"
           >
-            <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto no-scrollbar">
+            <div class="agent-toolbar-controls flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar">
               <ArtifactPicker
                 :app-id="appId"
                 :model-value="attachments"
@@ -473,7 +473,7 @@
               </button>
               <button
                 type="button"
-                class="agent-send-button flex h-8 items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-primary-hover px-3.5 text-xs font-semibold text-white shadow-sm shadow-primary/25 transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25 disabled:bg-foreground/20 disabled:text-text-secondary disabled:shadow-none"
+                class="agent-send-button flex h-7 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11px] font-semibold text-white shadow-xs transition-all hover:bg-primary-hover active:scale-95 disabled:cursor-not-allowed disabled:opacity-20 disabled:bg-foreground/15 disabled:text-text-secondary disabled:shadow-none"
                 :aria-label="$t('agent.conversation.send')"
                 :title="$t('agent.conversation.send')"
                 :disabled="busy || !canSend || !draft.trim()"
@@ -500,6 +500,38 @@
     );
   }
 
+  #agent-composer {
+    font-size: 13px;
+  }
+
+  .agent-send-button {
+    font-size: 11px;
+    line-height: 1;
+  }
+
+  @container agent-hub-window (max-width: 1040px) {
+    .agent-composer-toolbar {
+      min-height: 36px;
+      gap: 4px;
+      padding: 4px 6px;
+    }
+
+    .agent-toolbar-controls {
+      gap: 3px;
+    }
+
+    .agent-send-button {
+      width: 28px;
+      height: 28px;
+      padding-inline: 0;
+      justify-content: center;
+    }
+
+    .agent-send-label {
+      display: none;
+    }
+  }
+
   @container agent-hub-window (max-width: 760px) {
     .agent-composer-shell {
       border-radius: 12px;
@@ -518,8 +550,8 @@
       padding: 4px 6px;
     }
 
-    .agent-composer-toolbar > div:first-child {
-      gap: 4px;
+    .agent-toolbar-controls {
+      gap: 3px;
     }
 
     .agent-send-button {
