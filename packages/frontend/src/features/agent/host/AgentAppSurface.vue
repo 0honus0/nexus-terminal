@@ -98,6 +98,12 @@
   const taskRailVisible = ref(false);
   const threadQuery = ref('');
   const threadSidebarVisible = ref(false);
+  const threadListScroller = ref<HTMLElement | null>(null);
+  const threadListScrollTop = ref(0);
+  const threadListViewportHeight = ref(0);
+  const THREAD_ROW_HEIGHT = 45;
+  const THREAD_OVERSCAN = 6;
+  let threadListResizeObserver: ResizeObserver | null = null;
   const streamingText = ref('');
   const busy = ref(false);
   const loading = ref(true);
@@ -115,9 +121,16 @@
   let subagentMessagesGeneration = 0;
 
   const nonTerminal = new Set(['created', 'running', 'awaiting_approval', 'awaiting_budget', 'cancelling']);
+  const backgroundThreadStatuses = computed(() => {
+    const statuses = new Map<string, AgentRunView['status']>();
+    for (const candidate of backgroundRuns.value) {
+      if (!statuses.has(candidate.threadId)) statuses.set(candidate.threadId, candidate.status);
+    }
+    return statuses;
+  });
   const threadStatus = (threadId: string): AgentRunView['status'] | null => {
     if (currentThread.value?.id === threadId && run.value) return run.value.status;
-    return backgroundRuns.value.find((candidate) => candidate.threadId === threadId)?.status ?? null;
+    return backgroundThreadStatuses.value.get(threadId) ?? null;
   };
   const activeThreadCount = computed(
     () =>
@@ -135,25 +148,46 @@
         return right.updatedAt - left.updatedAt;
       });
   });
+  const threadWindow = computed(() => {
+    const total = visibleThreads.value.length;
+    if (total === 0) return { start: 0, end: 0, topSpacer: 0, bottomSpacer: 0 };
+    const viewportRows = Math.max(1, Math.ceil(threadListViewportHeight.value / THREAD_ROW_HEIGHT));
+    const windowSize = Math.min(total, viewportRows + THREAD_OVERSCAN * 2);
+    const rawStart = Math.floor(threadListScrollTop.value / THREAD_ROW_HEIGHT) - THREAD_OVERSCAN;
+    const start = Math.min(Math.max(0, rawStart), Math.max(0, total - windowSize));
+    const end = Math.min(total, start + windowSize);
+    return {
+      start,
+      end,
+      topSpacer: start * THREAD_ROW_HEIGHT,
+      bottomSpacer: (total - end) * THREAD_ROW_HEIGHT,
+    };
+  });
+  const renderedThreads = computed(() => visibleThreads.value.slice(threadWindow.value.start, threadWindow.value.end));
   const threadTitles = computed<Record<string, string>>(() =>
     Object.fromEntries(
       threads.value.map((thread) => [thread.id, thread.title || t('agent.operations.untitledThread')]),
     ),
   );
+  const threadTimeFormatter = computed(
+    () =>
+      new Intl.DateTimeFormat(locale.value, {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+  );
+  const threadDateFormatter = computed(
+    () =>
+      new Intl.DateTimeFormat(locale.value, {
+        month: 'short',
+        day: 'numeric',
+      }),
+  );
   const formatThreadUpdatedAt = (updatedAt: number): string => {
     const date = new Date(updatedAt * 1000);
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
-    if (isToday) {
-      return new Intl.DateTimeFormat(locale.value, {
-        hour: '2-digit',
-        minute: '2-digit',
-      }).format(date);
-    }
-    return new Intl.DateTimeFormat(locale.value, {
-      month: 'short',
-      day: 'numeric',
-    }).format(date);
+    return isToday ? threadTimeFormatter.value.format(date) : threadDateFormatter.value.format(date);
   };
   const modelOptions = computed(() =>
     providers.value
@@ -580,6 +614,7 @@
       const normalizedTitle = title?.trim();
       const thread = await facade.createThread(normalizedTitle || undefined);
       threads.value = [thread, ...threads.value.filter((item) => item.id !== thread.id)];
+      resetThreadListScroll();
       await selectThread(thread);
     } catch (cause) {
       error.value = explain(cause);
@@ -1049,6 +1084,32 @@
     taskRailWideViewport = wide;
   };
 
+  const syncThreadListMetrics = (): void => {
+    const scroller = threadListScroller.value;
+    if (!scroller) return;
+    threadListScrollTop.value = scroller.scrollTop;
+    threadListViewportHeight.value = scroller.clientHeight;
+  };
+
+  const onThreadListScroll = (event: Event): void => {
+    const scroller = event.currentTarget;
+    if (!(scroller instanceof HTMLElement)) return;
+    threadListScrollTop.value = scroller.scrollTop;
+    if (threadListViewportHeight.value !== scroller.clientHeight) {
+      threadListViewportHeight.value = scroller.clientHeight;
+    }
+  };
+
+  const resetThreadListScroll = (): void => {
+    threadListScrollTop.value = 0;
+    void nextTick(() => {
+      if (threadListScroller.value) threadListScroller.value.scrollTop = 0;
+      syncThreadListMetrics();
+    });
+  };
+
+  watch(threadQuery, resetThreadListScroll);
+
   const refreshConnectionsOnFocus = (): void => {
     void connectionsStore.revalidate(0).catch(() => undefined);
   };
@@ -1057,9 +1118,19 @@
     window.addEventListener('resize', syncTaskRailViewport);
     window.addEventListener('focus', refreshConnectionsOnFocus);
     window.addEventListener('nexus:agent:thread-changed', onThreadChanged);
+    void nextTick(() => {
+      syncThreadListMetrics();
+      const scroller = threadListScroller.value;
+      if (scroller && typeof ResizeObserver !== 'undefined') {
+        threadListResizeObserver = new ResizeObserver(syncThreadListMetrics);
+        threadListResizeObserver.observe(scroller);
+      }
+    });
     void load();
   });
   onBeforeUnmount(() => {
+    threadListResizeObserver?.disconnect();
+    threadListResizeObserver = null;
     window.removeEventListener('resize', syncTaskRailViewport);
     window.removeEventListener('focus', refreshConnectionsOnFocus);
     window.removeEventListener('nexus:agent:thread-changed', onThreadChanged);
@@ -1128,18 +1199,29 @@
         </div>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-y-auto px-2 py-1.5 space-y-0.5 scrollbar-thin">
+      <div
+        ref="threadListScroller"
+        class="min-h-0 flex-1 overflow-y-auto px-2 py-1.5 scrollbar-thin"
+        @scroll.passive="onThreadListScroll"
+      >
+        <div
+          v-if="threadWindow.topSpacer > 0"
+          :style="{ height: `${threadWindow.topSpacer}px` }"
+          aria-hidden="true"
+        ></div>
         <button
-          v-for="thread in visibleThreads"
+          v-for="(thread, threadOffset) in renderedThreads"
           :key="thread.id"
           type="button"
-          class="group relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150"
+          class="agent-thread-row mb-0.5 flex h-[43px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150"
           :class="
             currentThread?.id === thread.id
               ? 'bg-primary/[0.055] text-foreground font-medium pl-2.5'
               : 'text-text-secondary hover:bg-card/45 hover:text-foreground'
           "
           :aria-current="currentThread?.id === thread.id ? 'true' : undefined"
+          :aria-setsize="visibleThreads.length"
+          :aria-posinset="threadWindow.start + threadOffset + 1"
           :disabled="busy"
           @click="selectThread(thread)"
         >
@@ -1210,6 +1292,11 @@
             </div>
           </div>
         </button>
+        <div
+          v-if="threadWindow.bottomSpacer > 0"
+          :style="{ height: `${threadWindow.bottomSpacer}px` }"
+          aria-hidden="true"
+        ></div>
 
         <!-- 空状态 -->
         <div
@@ -1605,22 +1692,6 @@
                           type="button"
                           class="flex h-5 w-6 items-center justify-center rounded-[4px] transition-colors disabled:cursor-default disabled:opacity-35"
                           :class="
-                            displayedConnectionIds.length === connections.length
-                              ? 'bg-success/14 text-success'
-                              : 'text-text-secondary/65 hover:bg-header/80 hover:text-success'
-                          "
-                          :disabled="modelSelectionLocked"
-                          :aria-pressed="displayedConnectionIds.length === connections.length"
-                          :aria-label="$t('agent.operations.enableAllTargets')"
-                          :title="$t('agent.operations.enableAllTargets')"
-                          @click="setAllConnectionSelections(true)"
-                        >
-                          <i class="fa-solid fa-check text-[8px]" aria-hidden="true"></i>
-                        </button>
-                        <button
-                          type="button"
-                          class="flex h-5 w-6 items-center justify-center rounded-[4px] transition-colors disabled:cursor-default disabled:opacity-35"
-                          :class="
                             displayedConnectionIds.length === 0
                               ? 'bg-error/10 text-error/85'
                               : 'text-text-secondary/65 hover:bg-header/80 hover:text-error/80'
@@ -1632,6 +1703,22 @@
                           @click="setAllConnectionSelections(false)"
                         >
                           <i class="fa-solid fa-xmark text-[8px]" aria-hidden="true"></i>
+                        </button>
+                        <button
+                          type="button"
+                          class="flex h-5 w-6 items-center justify-center rounded-[4px] transition-colors disabled:cursor-default disabled:opacity-35"
+                          :class="
+                            displayedConnectionIds.length === connections.length
+                              ? 'bg-success/14 text-success'
+                              : 'text-text-secondary/65 hover:bg-header/80 hover:text-success'
+                          "
+                          :disabled="modelSelectionLocked"
+                          :aria-pressed="displayedConnectionIds.length === connections.length"
+                          :aria-label="$t('agent.operations.enableAllTargets')"
+                          :title="$t('agent.operations.enableAllTargets')"
+                          @click="setAllConnectionSelections(true)"
+                        >
+                          <i class="fa-solid fa-check text-[8px]" aria-hidden="true"></i>
                         </button>
                       </div>
                     </div>
