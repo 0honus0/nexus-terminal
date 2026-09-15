@@ -861,28 +861,32 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeHidden();
     });
 
-    await step('users can name a new conversation and return to the existing thread', async () => {
-      await hub.getByRole('button', { name: 'New', exact: true }).click();
-      await hub.getByLabel('Conversation title', { exact: true }).fill('UI named thread');
-      await hub.getByRole('button', { name: 'Create', exact: true }).click();
-      await expect(hub.getByText('UI named thread', { exact: true })).toHaveCount(2);
+    await step('users can create a new conversation and return to the existing thread', async () => {
+      const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+      await expect(presetThread).toHaveAttribute('aria-current', 'true');
 
-      const namedComposer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
-      await namedComposer.fill('/goal UI named durable goal');
+      await hub.getByRole('button', { name: 'New', exact: true }).click();
+      const composer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
+      await expect(composer).toBeFocused();
+      await expect(presetThread).not.toHaveAttribute('aria-current', 'true');
+      await expect(hub.getByText('Untitled thread', { exact: true })).toHaveCount(2);
+
+      await composer.fill('/goal UI durable goal');
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
-      await expect(hub.getByLabel('Command result', { exact: true })).toContainText('UI named durable goal');
+      await expect(hub.getByLabel('Command result', { exact: true })).toContainText('UI durable goal');
       await expect(hub.getByLabel('Command result', { exact: true })).toContainText(
         'Started a new Run with durable Goal revision 1',
       );
       await expect(hub.getByText('OK', { exact: true }).last()).toBeVisible({ timeout: 30_000 });
 
       const conversationSearch = hub.getByPlaceholder('Search conversations', { exact: true });
-      await conversationSearch.fill('UI named');
-      await expect(hub.getByRole('button').filter({ hasText: 'Preset E2E thread' })).toHaveCount(0);
-      await expect(hub.getByRole('button').filter({ hasText: 'UI named thread' })).toBeVisible();
-      await conversationSearch.fill('');
-      await hub.getByRole('button').filter({ hasText: 'Preset E2E thread' }).click();
+      await conversationSearch.fill('Preset E2E');
+      await expect(presetThread).toBeVisible();
+      await expect(hub.getByRole('button').filter({ hasText: 'Untitled thread' })).toHaveCount(0);
+      await presetThread.click();
+      await expect(presetThread).toHaveAttribute('aria-current', 'true');
       await expect(hub.getByText('Preset E2E thread', { exact: true })).toHaveCount(2);
+      await conversationSearch.fill('');
     });
 
     await step('conversation slash commands project durable Run state and reject unknown prompts', async () => {
