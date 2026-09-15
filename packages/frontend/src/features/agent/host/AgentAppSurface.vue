@@ -1508,16 +1508,21 @@
                 <!-- SSH 主机 -->
                 <AgentConfigPopover
                   :ariaLabel="$t('agent.operations.targets')"
-                  :title="`${$t('agent.operations.targetsHint')}: ${displayedConnectionIds.length}/${connections.length}`"
-                  panel-class="w-72"
+                  :title="$t('agent.operations.targetsHint')"
+                  panel-class="w-[min(320px,calc(100vw-24px))] !rounded-xl !p-2.5 !shadow-xl"
                 >
                   <template #trigger>
-                    <i class="fa-solid fa-server text-[8px] text-text-secondary" aria-hidden="true"></i>
-                    <span class="agent-config-verbose whitespace-nowrap text-center"
-                      >SSH {{ displayedConnectionIds.length }}/{{ connections.length }}</span
-                    >
-                    <span class="agent-config-compact hidden text-[10px] font-mono"
-                      >{{ displayedConnectionIds.length }}/{{ connections.length }}</span
+                    <i
+                      class="fa-solid fa-server text-[8px]"
+                      :class="displayedConnectionIds.length ? 'text-primary' : 'text-text-secondary'"
+                      aria-hidden="true"
+                    ></i>
+                    <span class="agent-config-verbose whitespace-nowrap">SSH</span>
+                    <span class="agent-config-compact hidden whitespace-nowrap">SSH</span>
+                    <span
+                      class="agent-ssh-count inline-flex min-w-[0.6rem] items-center justify-center text-[9px] font-semibold leading-none"
+                      :class="displayedConnectionIds.length ? 'text-success' : 'text-error/80'"
+                      >{{ displayedConnectionIds.length }}</span
                     >
                     <i
                       v-if="modelSelectionLocked"
@@ -1526,31 +1531,39 @@
                     ></i>
                     <i
                       v-else
-                      class="agent-config-affordance fa-solid fa-chevron-down text-[7px] text-text-secondary"
+                      class="agent-config-affordance fa-solid fa-chevron-down text-[7px] text-text-secondary/70"
                       aria-hidden="true"
                     ></i>
                   </template>
                   <template #panel>
-                    <div class="mb-2 flex items-center justify-between gap-2 px-1">
-                      <span class="text-xs font-semibold">{{ $t('agent.operations.targets') }}</span>
+                    <div class="flex items-start justify-between gap-3 px-1 pb-2 pt-0.5">
+                      <div class="min-w-0">
+                        <div class="text-[11px] font-semibold leading-tight text-foreground">
+                          {{ $t('agent.operations.targets') }}
+                        </div>
+                        <div class="mt-1 text-[10px] leading-snug text-text-secondary/70">
+                          {{ $t('agent.operations.targetsHint') }}
+                        </div>
+                      </div>
                       <span
                         v-if="modelSelectionLocked"
-                        class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary"
+                        class="shrink-0 rounded-md bg-header/70 px-1.5 py-1 text-[9px] leading-none text-text-secondary"
                       >
                         <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
                         >{{ $t('agent.operations.frozen') }}
                       </span>
                     </div>
-                    <div class="max-h-64 space-y-1 overflow-y-auto">
+
+                    <div class="max-h-64 overflow-y-auto rounded-lg bg-header/25 p-1">
                       <button
                         v-for="connection in connections"
                         :key="connection.id"
                         type="button"
-                        class="flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-colors"
+                        class="group flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors disabled:cursor-default"
                         :class="
                           displayedConnectionIds.includes(connection.id)
-                            ? 'border border-border/80 bg-card font-medium text-foreground shadow-xs'
-                            : 'border border-transparent text-text-secondary hover:bg-card/70'
+                            ? 'bg-background/90 text-foreground shadow-xs'
+                            : 'text-text-secondary hover:bg-background/65 hover:text-foreground'
                         "
                         :disabled="modelSelectionLocked"
                         @click="
@@ -1558,34 +1571,43 @@
                         "
                       >
                         <span
-                          class="flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors"
+                          class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors"
                           :class="
                             displayedConnectionIds.includes(connection.id)
-                              ? 'border-foreground bg-foreground text-background'
-                              : 'border-border bg-card'
+                              ? 'bg-primary/10 text-primary'
+                              : 'bg-header/65 text-text-secondary/70 group-hover:text-foreground'
                           "
                         >
-                          <i
-                            v-if="displayedConnectionIds.includes(connection.id)"
-                            class="fa-solid fa-check text-[9px]"
-                            aria-hidden="true"
-                          ></i>
+                          <i class="fa-solid fa-server text-[9px]" aria-hidden="true"></i>
                         </span>
                         <span class="min-w-0 flex-1">
-                          <span class="block truncate text-xs font-medium text-foreground">{{
+                          <span class="block truncate text-[11px] font-medium leading-tight text-foreground">{{
                             connection.name || connection.host
                           }}</span>
-                          <span class="block truncate font-mono text-[10px] text-text-secondary"
+                          <span class="mt-1 block truncate font-mono text-[9.5px] leading-none text-text-secondary/60"
                             >{{ connection.host }}:{{ connection.port }}</span
                           >
                         </span>
+                        <span
+                          class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full transition-all"
+                          :class="
+                            displayedConnectionIds.includes(connection.id)
+                              ? 'bg-primary text-white shadow-xs'
+                              : 'bg-transparent text-transparent ring-1 ring-inset ring-border/55 group-hover:ring-border'
+                          "
+                          aria-hidden="true"
+                        >
+                          <i class="fa-solid fa-check text-[8px]"></i>
+                        </span>
                       </button>
-                      <p
+
+                      <div
                         v-if="connections.length === 0"
-                        class="rounded-lg bg-card/70 px-2.5 py-2.5 text-xs text-text-secondary"
+                        class="flex items-center gap-2 rounded-lg px-2.5 py-3 text-[11px] text-text-secondary"
                       >
-                        {{ $t('agent.operations.noTargets') }}
-                      </p>
+                        <i class="fa-solid fa-server text-[10px] text-text-secondary/45" aria-hidden="true"></i>
+                        <span>{{ $t('agent.operations.noTargets') }}</span>
+                      </div>
                     </div>
                   </template>
                 </AgentConfigPopover>

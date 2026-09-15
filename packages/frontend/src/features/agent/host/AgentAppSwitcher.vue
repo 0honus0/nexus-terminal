@@ -95,14 +95,14 @@
     <button
       ref="triggerRef"
       type="button"
-      class="flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-header/40 text-text-secondary/75 transition-all hover:border-border hover:bg-card hover:text-foreground hover:shadow-2xs focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 active:scale-95"
-      :class="open ? 'border-primary/40 bg-primary/10 text-primary shadow-xs' : ''"
+      class="agent-app-new-tab flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-transparent text-text-secondary/70 transition-colors hover:bg-card/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 active:scale-95"
+      :class="open ? 'bg-card/70 text-foreground' : ''"
       :aria-label="$t('agent.hub.chooseApp')"
       :title="$t('agent.hub.chooseApp')"
       :aria-expanded="open"
       @click="toggle"
     >
-      <i class="fa-solid fa-plus text-[11px]" aria-hidden="true"></i>
+      <i class="fa-solid fa-plus text-[10px]" aria-hidden="true"></i>
     </button>
 
     <Teleport to="body">

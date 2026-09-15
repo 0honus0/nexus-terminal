@@ -328,75 +328,53 @@
         <div class="agent-hub-brand-divider h-3 w-px shrink-0 bg-border/45 mx-1"></div>
 
         <!-- App 标签组 (直接嵌入顶栏，消除二次横切) -->
-        <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
+        <div class="agent-app-tabstrip flex min-w-0 flex-1 self-stretch items-end overflow-x-auto scrollbar-none">
           <button
             v-for="app in displayedApps"
             :key="app.id"
             type="button"
-            class="agent-app-tab group relative flex h-7 items-center gap-1.5 rounded-lg px-1.5 transition-colors duration-150 select-none no-drag"
+            class="agent-app-tab group relative flex h-8 items-center gap-1.5 px-3 transition-colors duration-150 select-none no-drag"
             :class="
               app.id === state.activeAppId
-                ? 'shrink-0 max-w-64 bg-card/55 text-foreground'
-                : 'shrink min-w-0 max-w-56 bg-transparent text-text-secondary hover:bg-card/40 hover:text-foreground'
+                ? 'agent-app-tab-active shrink-0 max-w-64 text-foreground'
+                : 'agent-app-tab-inactive shrink min-w-0 max-w-56 text-text-secondary hover:text-foreground'
             "
             :aria-label="$t('agent.hub.switchToApp', { app: app.displayName })"
             :title="app.displayName"
             @pointerdown.stop
             @click="switchApp(app.id)"
           >
-            <!-- App 身份图标与呼吸健康指示灯 -->
             <span
-              class="relative flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-md border transition-colors"
-              :class="
-                app.id === state.activeAppId
-                  ? 'border-primary/15 bg-primary/10 text-primary shadow-2xs'
-                  : 'border-border/25 bg-background/40 text-text-secondary/70 group-hover:border-border/45 group-hover:bg-background/60'
-              "
+              v-if="app.id === state.activeAppId"
+              class="agent-app-tab-surface pointer-events-none absolute inset-0"
+              aria-hidden="true"
             >
-              <i
-                v-if="app.surface === 'agent'"
-                class="fa-solid fa-wand-magic-sparkles text-[8px]"
-                aria-hidden="true"
-              ></i>
-              <i
-                v-else-if="app.surface === 'custom'"
-                class="fa-solid fa-puzzle-piece text-[8px]"
-                aria-hidden="true"
-              ></i>
-              <i v-else class="fa-solid fa-layer-group text-[9px]" aria-hidden="true"></i>
-              <span
-                class="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ring-2 ring-header transition-all"
-                :class="
-                  app.health === 'healthy'
-                    ? 'bg-success shadow-[0_0_4px_rgba(16,185,129,0.5)]'
-                    : app.health === 'degraded'
-                      ? 'bg-warning shadow-[0_0_4px_rgba(245,158,11,0.5)]'
-                      : 'bg-text-secondary/40'
-                "
-              ></span>
+              <span class="agent-app-tab-ear agent-app-tab-ear-left"></span>
+              <span class="agent-app-tab-ear agent-app-tab-ear-right"></span>
             </span>
 
+            <!-- Chrome-style tab: text first, no leading app icon. -->
             <!-- App 名称 -->
-            <span class="agent-app-name min-w-0 flex-1 truncate text-left">{{ app.displayName }}</span>
+            <span class="agent-app-name relative z-[1] min-w-0 flex-1 truncate text-left">{{ app.displayName }}</span>
 
             <!-- 运行状态指示徽标 -->
             <span
               v-if="app.runningRuns"
-              class="shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary"
+              class="relative z-[1] shrink-0 rounded-md bg-primary/15 px-1.5 py-0.5 text-[9px] font-medium text-primary"
               :title="$t('agent.hub.runningRuns')"
             >
               <i class="fa-solid fa-play mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.runningRuns }}
             </span>
             <span
               v-if="app.pendingApprovals"
-              class="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
+              class="relative z-[1] shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
               :title="$t('agent.hub.pendingApprovals')"
             >
               <i class="fa-solid fa-shield-halved mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingApprovals }}
             </span>
             <span
               v-if="app.pendingBudgetRequests"
-              class="shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
+              class="relative z-[1] shrink-0 rounded-md bg-warning/15 px-1.5 py-0.5 text-[9px] font-medium text-warning"
               :title="$t('agent.hub.pendingBudget')"
             >
               <i class="fa-solid fa-coins mr-0.5 text-[6px]" aria-hidden="true"></i>{{ app.pendingBudgetRequests }}
@@ -407,7 +385,7 @@
               v-if="displayedApps.length > 1"
               role="button"
               tabindex="0"
-              class="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-text-secondary/35 opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100 focus:opacity-100"
+              class="relative z-[1] ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-text-secondary/35 opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100 focus:opacity-100"
               :title="$t('agent.hub.closeApp', { app: app.displayName })"
               :aria-label="$t('agent.hub.closeApp', { app: app.displayName })"
               @click.stop="closeAppTab(app.id, $event)"
@@ -583,22 +561,83 @@
     opacity: 0;
   }
 
+  .agent-app-tabstrip {
+    gap: 10px;
+    padding-inline: 10px;
+  }
+
   .agent-app-tab {
+    position: relative;
+    margin-bottom: -1px;
+    border-radius: 9px 9px 0 0;
+    font-family: inherit;
     font-size: 12px;
     line-height: 1;
     font-weight: 500;
-    letter-spacing: -0.018em;
+    letter-spacing: -0.012em;
   }
 
-  .agent-app-tab[aria-label] {
-    font-family: inherit;
+  .agent-hub-header {
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-header) 82%, var(--color-background)) 0%,
+      color-mix(in srgb, var(--color-header) 62%, var(--color-background)) 58%,
+      color-mix(in srgb, var(--color-header) 34%, var(--color-background)) 100%
+    );
+  }
+
+  .agent-app-tab-active {
+    z-index: 2;
+  }
+
+  .agent-app-tab-surface {
+    border-radius: 9px 9px 0 0;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--color-header) 48%, var(--color-background)) 0%,
+      color-mix(in srgb, var(--color-background) 94%, var(--color-header)) 70%,
+      var(--color-background) 100%
+    );
+    box-shadow:
+      -1px 0 0 color-mix(in srgb, var(--color-border) 42%, transparent),
+      1px 0 0 color-mix(in srgb, var(--color-border) 42%, transparent),
+      0 -1px 0 color-mix(in srgb, var(--color-border) 34%, transparent);
+  }
+
+  .agent-app-tab-ear {
+    position: absolute;
+    bottom: 0;
+    width: 10px;
+    height: 10px;
+  }
+
+  .agent-app-tab-ear-left {
+    left: -10px;
+    border-bottom-right-radius: 10px;
+    box-shadow: 5px 5px 0 5px var(--color-background);
+  }
+
+  .agent-app-tab-ear-right {
+    right: -10px;
+    border-bottom-left-radius: 10px;
+    box-shadow: -5px 5px 0 5px var(--color-background);
+  }
+
+  .agent-app-tab-inactive {
+    margin-bottom: 2px;
+    border-radius: 8px;
+    background: transparent;
+  }
+
+  .agent-app-tab-inactive:hover {
+    background: color-mix(in srgb, var(--color-card) 56%, transparent);
   }
 
   .agent-app-name {
     font-size: 12px;
-    line-height: 1.05;
-    font-weight: 600;
-    letter-spacing: -0.018em;
+    line-height: 1.1;
+    font-weight: 500;
+    letter-spacing: -0.012em;
   }
 
   .agent-hub-view-button {
