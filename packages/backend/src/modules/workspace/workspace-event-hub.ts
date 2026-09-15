@@ -6,6 +6,7 @@ import { logger } from '../../shared/logging/logger';
 
 export type WorkspaceEvent =
   | { type: 'terminal-output'; data: Uint8Array; stderr?: boolean }
+  | { type: 'terminal-resize'; columns: number; rows: number }
   | { type: 'terminal-input-ack'; sequence: number; bytes: number }
   | { type: 'terminal-closed' }
   | { type: 'terminal-error'; message: string }

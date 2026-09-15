@@ -988,6 +988,7 @@ export interface WorkspaceCapabilityAdapters {
   status: StatusChannel;
   docker: DockerChannel;
   suspend: SshSuspendChannel;
+  terminalViewport(): TerminalViewport | undefined;
   workspaceConnected(): Promise<void>;
   workspaceDisconnected(): void;
   dispose(): void;
@@ -1019,6 +1020,7 @@ export const createWorkspaceCapabilityAdapters = (
     status: createStatusChannel(socket, workspaceId, connectionId),
     docker: createDockerChannel(socket),
     suspend: createSshSuspendChannel(socket),
+    terminalViewport: () => deferredTerminalViewport,
     async workspaceConnected() {
       workspaceBound = true;
       if (deferredTerminalViewport) {

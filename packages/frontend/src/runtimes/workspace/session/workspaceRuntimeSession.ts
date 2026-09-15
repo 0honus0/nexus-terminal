@@ -227,11 +227,13 @@ export class WorkspaceRuntimeSession {
       'Workspace suspended-session resume started',
     );
     try {
+      const viewport = this.adapters.terminalViewport();
       const result = await this.socket.request<
         WorkspaceConnectResult & { resumedFrom: string; historyAvailable?: boolean }
       >('suspend.resume', {
         suspendedSessionId,
         workspaceId: this.id,
+        ...(viewport ? { viewport } : {}),
       });
       if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
         throw new Error('Workspace binary protocol version mismatch.');

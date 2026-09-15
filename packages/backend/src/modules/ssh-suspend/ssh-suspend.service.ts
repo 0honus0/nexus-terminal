@@ -1,13 +1,18 @@
 import { randomUUID } from 'node:crypto';
 import type { RemoteExecutionTransport, RemoteShellSession } from '../../platform/execution/remote-execution.port';
 import type { SuspendedSessionLogStore } from './suspended-session-log.port';
+import type { SuspendedTerminalCheckpoint, SuspendedTerminalViewport } from './suspended-terminal-checkpoint.port';
 import type {
   PreparedResumeSession,
   ShellKind,
   SuspendedSessionInfo,
   SuspendedSessionStatus,
+  SuspendedTerminalCheckpointView,
   SuspendTakeoverRequest,
 } from './ssh-suspend.types';
+
+const CHECKPOINT_INTERVAL_MS = 30_000;
+const CHECKPOINT_OUTPUT_BYTES = 1024 * 1024;
 
 interface SuspendedSessionRecord {
   userId: number;
@@ -17,6 +22,12 @@ interface SuspendedSessionRecord {
   logIdentifier: string;
   transport: RemoteExecutionTransport;
   shell: RemoteShellSession;
+  checkpoint?: SuspendedTerminalCheckpoint;
+  latestCheckpoint?: SuspendedTerminalCheckpointView;
+  checkpointRevision: number;
+  checkpointBytes: number;
+  checkpointAt: number;
+  outputChain: Promise<void>;
   customSuspendName?: string;
   suspendStartTime: string;
   backendSshStatus: SuspendedSessionStatus;
@@ -51,18 +62,31 @@ export class SshSuspendService {
 
   async takeOver(request: SuspendTakeoverRequest): Promise<string | null> {
     if (!request.transport.isOpen || !request.shell.isOpen) {
+      request.checkpoint?.dispose();
       await request.transport.close().catch(() => undefined);
       return null;
     }
     const suspendSessionId = randomUUID();
+    const now = Date.now();
     const record: SuspendedSessionRecord = {
       ...request,
       connectionId: request.connectionId,
-      suspendStartTime: new Date().toISOString(),
+      suspendStartTime: new Date(now).toISOString(),
       backendSshStatus: 'hanging',
       resumeInProgress: false,
+      checkpointRevision: 0,
+      checkpointBytes: 0,
+      checkpointAt: now,
+      outputChain: Promise.resolve(),
       unsubscribe: [],
     };
+    try {
+      await this.logs.flush(record.logIdentifier);
+      const offset = await this.logs.position(record.logIdentifier);
+      await this.refreshCheckpoint(record, offset, true).catch(() => undefined);
+    } catch {
+      // Raw history/checkpoint are recovery aids. A healthy SSH transport remains suspendable.
+    }
     this.userSessions(request.userId).set(suspendSessionId, record);
     this.attachListeners(suspendSessionId, record);
     return suspendSessionId;
@@ -84,7 +108,11 @@ export class SshSuspendService {
     return Promise.resolve(this.list(userId));
   }
 
-  async prepareResume(userId: number, suspendSessionId: string): Promise<PreparedResumeSession | null> {
+  async prepareResume(
+    userId: number,
+    suspendSessionId: string,
+    viewport?: SuspendedTerminalViewport,
+  ): Promise<PreparedResumeSession | null> {
     const record = this.userSessions(userId).get(suspendSessionId);
     if (
       !record ||
@@ -98,24 +126,36 @@ export class SshSuspendService {
     record.shell.pause();
     this.detachListeners(record);
     try {
+      await record.outputChain.catch(() => undefined);
+      if (viewport) {
+        record.shell.resize(viewport.columns, viewport.rows);
+        await record.checkpoint?.resize(viewport);
+      }
       await this.logs.flush(record.logIdentifier);
+      const offset = await this.logs.position(record.logIdentifier);
+      const terminalCheckpoint = await this.refreshCheckpoint(record, offset, true).catch(() => undefined);
+      return {
+        transport: record.transport,
+        shell: record.shell,
+        logIdentifier: record.logIdentifier,
+        connectionName: record.connectionName,
+        originalConnectionId: record.connectionId,
+        checkpoint: record.checkpoint,
+        terminalCheckpoint,
+        viewport: terminalCheckpoint
+          ? { columns: terminalCheckpoint.columns, rows: terminalCheckpoint.rows }
+          : viewport,
+        shellPid: record.shellPid,
+        shellKind: record.shellKind,
+        shellIntegrationReady: record.shellIntegrationReady,
+        shellAtPrompt: record.shellAtPrompt,
+      };
     } catch {
       record.resumeInProgress = false;
       this.attachListeners(suspendSessionId, record);
       record.shell.resume();
       return null;
     }
-    return {
-      transport: record.transport,
-      shell: record.shell,
-      logIdentifier: record.logIdentifier,
-      connectionName: record.connectionName,
-      originalConnectionId: record.connectionId,
-      shellPid: record.shellPid,
-      shellKind: record.shellKind,
-      shellIntegrationReady: record.shellIntegrationReady,
-      shellAtPrompt: record.shellAtPrompt,
-    };
   }
   prepareResumeSession(userId: number, id: string) {
     return this.prepareResume(userId, id);
@@ -127,7 +167,12 @@ export class SshSuspendService {
     if (!record?.resumeInProgress) return false;
     map.delete(id);
     this.detachListeners(record);
-    if (!preserveLog) await this.logs.delete(record.logIdentifier).catch(() => undefined);
+    if (preserveLog) record.checkpoint = undefined;
+    else {
+      record.checkpoint?.dispose();
+      record.checkpoint = undefined;
+      await this.logs.delete(record.logIdentifier).catch(() => undefined);
+    }
     return true;
   }
   commitResumeSession(userId: number, id: string) {
@@ -156,6 +201,9 @@ export class SshSuspendService {
     if (!record) return false;
     this.detachListeners(record);
     map.delete(id);
+    await record.outputChain.catch(() => undefined);
+    record.checkpoint?.dispose();
+    record.checkpoint = undefined;
     if (record.backendSshStatus === 'hanging') await record.transport.close().catch(() => undefined);
     await this.logs.delete(record.logIdentifier).catch(() => undefined);
     return true;
@@ -170,6 +218,9 @@ export class SshSuspendService {
     if (!record || record.backendSshStatus === 'hanging') return false;
     map.delete(id);
     this.detachListeners(record);
+    await record.outputChain.catch(() => undefined);
+    record.checkpoint?.dispose();
+    record.checkpoint = undefined;
     await this.logs.delete(record.logIdentifier).catch(() => undefined);
     return true;
   }
@@ -199,6 +250,7 @@ export class SshSuspendService {
     const record = this.userSessions(userId).get(id);
     if (!record || !['hanging', 'disconnected_by_backend'].includes(record.backendSshStatus)) return null;
     try {
+      await record.outputChain.catch(() => undefined);
       await this.logs.flush(record.logIdentifier);
       const base = record.customSuspendName || record.connectionName || id.slice(0, 8);
       const safe = base.replace(/[^\w.-]/g, '_');
@@ -217,6 +269,9 @@ export class SshSuspendService {
     this.sessions.clear();
     for (const record of records) {
       this.detachListeners(record);
+      await record.outputChain.catch(() => undefined);
+      record.checkpoint?.dispose();
+      record.checkpoint = undefined;
       await record.transport.close().catch(() => undefined);
       await this.logs.flush(record.logIdentifier).catch(() => undefined);
     }
@@ -225,16 +280,65 @@ export class SshSuspendService {
   private attachListeners(id: string, record: SuspendedSessionRecord): void {
     this.detachListeners(record);
     record.unsubscribe.push(
-      record.shell.onData((data) => {
-        if (record.backendSshStatus === 'hanging' && !record.resumeInProgress)
-          void this.logs.append(record.logIdentifier, data).catch(() => undefined);
-      }),
+      record.shell.onData((data) => this.queueOutput(record, data)),
+      record.shell.onStderr((data) => this.queueOutput(record, data)),
       record.shell.onClose(() => this.markDisconnected(id, record, 'SSH shell closed.')),
       record.shell.onError(() => this.markDisconnected(id, record, 'SSH shell errored.')),
       record.transport.onClose(() => this.markDisconnected(id, record, 'SSH transport closed.')),
       record.transport.onError(() => this.markDisconnected(id, record, 'SSH transport errored.')),
     );
   }
+
+  private queueOutput(record: SuspendedSessionRecord, data: Uint8Array): void {
+    if (record.backendSshStatus !== 'hanging' || record.resumeInProgress) return;
+    const copy = data.slice();
+    record.outputChain = record.outputChain
+      .catch(() => undefined)
+      .then(() => this.appendOutput(record, copy))
+      .catch(() => undefined);
+  }
+
+  private async appendOutput(record: SuspendedSessionRecord, data: Uint8Array): Promise<void> {
+    let offset: number | undefined;
+    try {
+      offset = await this.logs.append(record.logIdentifier, data);
+    } catch {
+      // Keep the VT state current even if retained history storage has a transient failure.
+    }
+    if (!record.checkpoint) return;
+    await record.checkpoint.write(data);
+    record.checkpointBytes += data.byteLength;
+    if (offset !== undefined) await this.refreshCheckpoint(record, offset, false).catch(() => undefined);
+  }
+
+  private async refreshCheckpoint(
+    record: SuspendedSessionRecord,
+    rawLogOffset: number,
+    force: boolean,
+  ): Promise<SuspendedTerminalCheckpointView | undefined> {
+    if (!record.checkpoint) return undefined;
+    const now = Date.now();
+    if (
+      !force &&
+      record.latestCheckpoint &&
+      record.checkpointBytes < CHECKPOINT_OUTPUT_BYTES &&
+      now - record.checkpointAt < CHECKPOINT_INTERVAL_MS
+    ) {
+      return record.latestCheckpoint;
+    }
+    const snapshot = await record.checkpoint.snapshot();
+    const latest: SuspendedTerminalCheckpointView = {
+      ...snapshot,
+      rawLogOffset,
+      revision: ++record.checkpointRevision,
+      createdAt: now,
+    };
+    record.latestCheckpoint = latest;
+    record.checkpointBytes = 0;
+    record.checkpointAt = now;
+    return latest;
+  }
+
   private detachListeners(record: SuspendedSessionRecord): void {
     for (const off of record.unsubscribe.splice(0))
       try {

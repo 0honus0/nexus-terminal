@@ -44,6 +44,7 @@ import { AesGcmSecretCipher } from '../infrastructure/security/aes-gcm-secret-ci
 import { BcryptPasswordHasher } from '../infrastructure/security/bcrypt-password-hasher';
 import { SshTransportAdapter } from '../infrastructure/ssh/ssh-transport.adapter';
 import { LocalSuspendedSessionLogAdapter } from '../infrastructure/ssh-suspend/local-suspended-session-log.adapter';
+import { XtermSuspendedTerminalCheckpointFactory } from '../infrastructure/ssh-suspend/xterm-suspended-terminal-checkpoint.adapter';
 import { NodeLocalSystemStatusAdapter } from '../infrastructure/system/node-local-system-status.adapter';
 import { BackupService } from '../modules/backup/backup.service';
 import { AppearanceSettingsService } from '../modules/appearance/appearance-settings.service';
@@ -312,6 +313,7 @@ export const createCompositionRoot = (
   const transfers = new TransfersService(transferTasks, transferOrchestrator);
 
   const suspendedLogs = new LocalSuspendedSessionLogAdapter(config.dataDirectory);
+  const suspendedTerminalCheckpoints = new XtermSuspendedTerminalCheckpointFactory();
   const sshSuspend = new SshSuspendService(suspendedLogs);
 
   const workspaceSessions = new WorkspaceSessionRegistry();
@@ -362,6 +364,7 @@ export const createCompositionRoot = (
     workspaceFilesystem,
     sshSuspend,
     suspendedLogs,
+    suspendedTerminalCheckpoints,
     workspaceEvents,
   );
 

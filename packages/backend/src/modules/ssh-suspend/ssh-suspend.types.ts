@@ -1,4 +1,9 @@
 import type { RemoteExecutionTransport, RemoteShellSession } from '../../platform/execution/remote-execution.port';
+import type {
+  SuspendedTerminalCheckpoint,
+  SuspendedTerminalCheckpointSnapshot,
+  SuspendedTerminalViewport,
+} from './suspended-terminal-checkpoint.port';
 
 export type SuspendedSessionStatus = 'hanging' | 'disconnected_by_backend';
 export type ShellKind = 'bash' | 'zsh' | 'other';
@@ -14,6 +19,12 @@ export interface SuspendedSessionInfo {
   disconnectionTimestamp?: string;
 }
 
+export interface SuspendedTerminalCheckpointView extends SuspendedTerminalCheckpointSnapshot {
+  rawLogOffset: number;
+  revision: number;
+  createdAt: number;
+}
+
 export interface SuspendTakeoverRequest {
   userId: number;
   originalSessionId: string;
@@ -22,6 +33,7 @@ export interface SuspendTakeoverRequest {
   logIdentifier: string;
   transport: RemoteExecutionTransport;
   shell: RemoteShellSession;
+  checkpoint?: SuspendedTerminalCheckpoint;
   customSuspendName?: string;
   shellPid?: number;
   shellKind?: ShellKind;
@@ -35,6 +47,9 @@ export interface PreparedResumeSession {
   logIdentifier: string;
   connectionName: string;
   originalConnectionId: number;
+  checkpoint?: SuspendedTerminalCheckpoint;
+  terminalCheckpoint?: SuspendedTerminalCheckpointView;
+  viewport?: SuspendedTerminalViewport;
   shellPid?: number;
   shellKind?: ShellKind;
   shellIntegrationReady?: boolean;

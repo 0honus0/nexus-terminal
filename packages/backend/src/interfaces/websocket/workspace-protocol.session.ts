@@ -378,7 +378,7 @@ export class WorkspaceProtocolSession {
         actorUsername: this.identity.username,
         clientIp: this.identity.clientIp,
       });
-      this.dependencies.terminal.attach(workspaceId);
+      this.dependencies.terminal.attach(workspaceId, { columns: columns ?? 80, rows: rows ?? 24 });
       void this.dependencies.filesystem.initialize(workspaceId).catch(() => undefined);
       return {
         workspaceId,
@@ -608,7 +608,18 @@ export class WorkspaceProtocolSession {
     if (this.workspaceId) throw new Error('Workspace socket is already bound.');
     const suspendedSessionId = stringValue(payload.suspendedSessionId);
     const workspaceId = this.requireWorkspaceId(payload.workspaceId);
-    if (!suspendedSessionId || !this.dependencies.workspace.canCreate(workspaceId)) {
+    const requestedViewport = record(payload.viewport);
+    const columns = numberValue(requestedViewport.columns);
+    const rows = numberValue(requestedViewport.rows);
+    const viewport =
+      columns !== undefined && rows !== undefined
+        ? { columns: Math.floor(columns), rows: Math.floor(rows) }
+        : undefined;
+    if (
+      !suspendedSessionId ||
+      !this.dependencies.workspace.canCreate(workspaceId) ||
+      (viewport && (viewport.columns < 2 || viewport.columns > 1000 || viewport.rows < 1 || viewport.rows > 500))
+    ) {
       throw new Error('Invalid resume request.');
     }
     this.bindWorkspace(workspaceId);
@@ -618,6 +629,7 @@ export class WorkspaceProtocolSession {
         this.identity.userId,
         suspendedSessionId,
         workspaceId,
+        viewport,
       );
       began = true;
       if (this.closed) throw new Error('Workspace socket closed during suspended-session resume.');
@@ -703,6 +715,7 @@ export class WorkspaceProtocolSession {
         this.terminalTransport.enqueue(event.data);
         return;
       case 'terminal-input-ack':
+      case 'terminal-resize':
         return;
       case 'terminal-closed':
         this.sendEvent('terminal.closed', {});

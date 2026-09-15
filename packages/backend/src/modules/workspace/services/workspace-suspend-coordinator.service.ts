@@ -2,6 +2,11 @@ import { Readable } from 'node:stream';
 import type { SshSuspendService } from '../../ssh-suspend/ssh-suspend.service';
 import { logger } from '../../../shared/logging/logger';
 import type { SuspendedSessionLogStore } from '../../ssh-suspend/suspended-session-log.port';
+import type {
+  SuspendedTerminalCheckpoint,
+  SuspendedTerminalCheckpointFactory,
+  SuspendedTerminalViewport,
+} from '../../ssh-suspend/suspended-terminal-checkpoint.port';
 import type { WorkspaceEventHub } from '../workspace-event-hub';
 import type { WorkspaceService } from '../workspace.service';
 import type { WorkspaceFilesystemService } from './workspace-filesystem.service';
@@ -18,6 +23,7 @@ interface SuspendMark {
   logIdentifier: string;
   ready: Promise<void>;
   writeChain: Promise<void>;
+  checkpoint?: SuspendedTerminalCheckpoint;
   stopOutput?: () => void;
 }
 interface PendingResume {
@@ -26,6 +32,8 @@ interface PendingResume {
   workspaceId: string;
   logIdentifier?: string;
   historyCursor: number;
+  checkpoint?: SuspendedTerminalCheckpoint;
+  viewport?: SuspendedTerminalViewport;
 }
 interface ResumedHistory {
   userId: number;
@@ -68,25 +76,30 @@ export class WorkspaceSuspendCoordinatorService {
     private readonly filesystem: WorkspaceFilesystemService,
     private readonly suspended: SshSuspendService,
     private readonly logs: SuspendedSessionLogStore,
+    private readonly checkpoints: SuspendedTerminalCheckpointFactory,
     private readonly events: WorkspaceEventHub,
   ) {}
 
   async markForSuspend(workspaceId: string, userId: number, initialBuffer?: string): Promise<void> {
     const session = this.workspaces.requireSession(workspaceId);
     if (session.userId !== userId) throw new Error('无权挂起此会话。');
+    const viewport = this.terminal.viewport(workspaceId) ?? { columns: 80, rows: 24 };
     const existing = this.marks.get(workspaceId);
     if (existing) {
       if (existing.userId !== userId) throw new Error('无权挂起此会话。');
       await existing.ready;
+      if (initialBuffer) await this.refreshMarkCheckpoint(existing, initialBuffer, viewport);
       return;
     }
 
-    const mark = this.createMark(workspaceId, userId, workspaceId, initialBuffer);
+    const mark = this.createMark(workspaceId, userId, workspaceId, initialBuffer, undefined, viewport);
     try {
       await mark.ready;
     } catch (error) {
       if (this.marks.get(workspaceId) === mark) this.marks.delete(workspaceId);
       await this.finishMark(mark);
+      mark.checkpoint?.dispose();
+      mark.checkpoint = undefined;
       await this.logs.delete(mark.logIdentifier).catch(() => undefined);
       throw error;
     }
@@ -106,6 +119,8 @@ export class WorkspaceSuspendCoordinatorService {
     if (this.marks.get(workspaceId) !== mark) return;
     this.marks.delete(workspaceId);
     await this.finishMark(mark);
+    mark.checkpoint?.dispose();
+    mark.checkpoint = undefined;
     if (!this.resumedHistory.has(workspaceId)) await this.logs.delete(mark.logIdentifier).catch(() => undefined);
   }
   isMarked(workspaceId: string): boolean {
@@ -134,12 +149,20 @@ export class WorkspaceSuspendCoordinatorService {
       try {
         await mark.ready;
       } catch {
+        if (this.marks.get(workspaceId) === mark) this.marks.delete(workspaceId);
+        await this.finishMark(mark);
+        mark.checkpoint?.dispose();
+        mark.checkpoint = undefined;
+        await this.logs.delete(mark.logIdentifier).catch(() => undefined);
         mark = undefined;
       }
       if (mark && this.marks.get(workspaceId) !== mark) mark = undefined;
     }
 
     this.status.clear(workspaceId);
+    // Freeze a marked PTY across the short Workspace -> suspended-owner handoff so no bytes can
+    // fall into the listener gap between terminal.detach() and SshSuspendService listener binding.
+    if (mark) session.shell.pause();
     // Keep the mark listener alive through terminal detach so a decoder flush is retained too.
     this.terminal.detach(workspaceId);
     if (!mark) {
@@ -160,32 +183,53 @@ export class WorkspaceSuspendCoordinatorService {
     try {
       detached = this.workspaces.detach(workspaceId);
     } catch (error) {
+      mark.checkpoint?.dispose();
+      mark.checkpoint = undefined;
+      session.shell.resume();
       await this.operations.cleanup(workspaceId).catch(() => undefined);
       await this.logs.delete(mark.logIdentifier).catch(() => undefined);
       throw error;
     }
     if (!detached) {
+      mark.checkpoint?.dispose();
+      mark.checkpoint = undefined;
+      session.shell.resume();
       await this.operations.cleanup(workspaceId).catch(() => undefined);
       await this.logs.delete(mark.logIdentifier).catch(() => undefined);
       return { suspended: false };
     }
 
-    const suspendSessionId = await this.suspended.takeOver({
-      userId: session.userId,
-      originalSessionId: session.id,
-      connectionName: session.connectionName,
-      connectionId: session.connectionId,
-      logIdentifier: mark.logIdentifier,
-      transport: detached.transport,
-      shell: session.shell,
-      ...this.toSuspendSnapshot(snapshot),
-    });
+    let suspendSessionId: string | null;
+    try {
+      suspendSessionId = await this.suspended.takeOver({
+        userId: session.userId,
+        originalSessionId: session.id,
+        connectionName: session.connectionName,
+        connectionId: session.connectionId,
+        logIdentifier: mark.logIdentifier,
+        transport: detached.transport,
+        shell: session.shell,
+        checkpoint: mark.checkpoint,
+        ...this.toSuspendSnapshot(snapshot),
+      });
+    } catch (error) {
+      mark.checkpoint?.dispose();
+      mark.checkpoint = undefined;
+      await this.operations.cleanup(workspaceId).catch(() => undefined);
+      await detached.transport.close().catch(() => undefined);
+      await this.logs.delete(mark.logIdentifier).catch(() => undefined);
+      throw error;
+    }
     if (!suspendSessionId) {
+      mark.checkpoint?.dispose();
       await this.operations.cleanup(workspaceId).catch(() => undefined);
       await detached.transport.close().catch(() => undefined);
       await this.logs.delete(mark.logIdentifier).catch(() => undefined);
       return { suspended: false };
     }
+
+    mark.checkpoint = undefined;
+    session.shell.resume();
 
     // The transport is now owned by SshSuspendService and immediately visible as `hanging`.
     // Cleanup of ancillary file operations must not delay the user-visible suspend handoff.
@@ -198,6 +242,7 @@ export class WorkspaceSuspendCoordinatorService {
     userId: number,
     suspendSessionId: string,
     newWorkspaceId: string,
+    viewport?: SuspendedTerminalViewport,
   ): Promise<BeginWorkspaceResumeResult> {
     if (this.pending.has(newWorkspaceId)) throw new Error(`Workspace resume ${newWorkspaceId} is already pending.`);
 
@@ -220,12 +265,14 @@ export class WorkspaceSuspendCoordinatorService {
     let prepared: Awaited<ReturnType<SshSuspendService['prepareResume']>>;
     let attached = false;
     try {
-      prepared = await this.suspended.prepareResume(userId, suspendSessionId);
+      prepared = await this.suspended.prepareResume(userId, suspendSessionId, viewport);
       if (!prepared) throw new Error('服务未能恢复会话，或会话不存在/状态不正确。');
       if (this.pending.get(newWorkspaceId) !== pending) {
         throw new Error('挂起恢复已被客户端关闭操作取消。');
       }
       pending.logIdentifier = prepared.logIdentifier;
+      pending.checkpoint = prepared.checkpoint;
+      pending.viewport = prepared.viewport;
 
       const session = this.workspaces.attach({
         workspaceId: newWorkspaceId,
@@ -242,21 +289,29 @@ export class WorkspaceSuspendCoordinatorService {
         integrationReady: prepared.shellIntegrationReady,
         atPrompt: prepared.shellAtPrompt,
       });
-      // Keep the live terminal detached until the retained tail has been sent. Even with the
-      // remote shell paused, already-buffered PTY data can race a newly attached listener and
-      // appear ahead of the cached-tail stream. commitResume() attaches immediately before resume.
-      const tail = await this.logs.readTail(prepared.logIdentifier, INITIAL_RESUME_LOG_BYTES);
+      // Prefer a serialized VT checkpoint. The shell is paused while it is captured, so the
+      // first live PTY byte after commit is strictly ordered after this snapshot. Legacy/no-checkpoint
+      // sessions fall back to the bounded raw tail used before terminal checkpoints existed.
+      let logStream: Readable;
+      if (prepared.terminalCheckpoint) {
+        pending.historyCursor = prepared.terminalCheckpoint.rawLogOffset;
+        logStream = Readable.from(
+          prepared.terminalCheckpoint.data ? [Buffer.from(prepared.terminalCheckpoint.data)] : [],
+        );
+      } else {
+        const tail = await this.logs.readTail(prepared.logIdentifier, INITIAL_RESUME_LOG_BYTES);
+        pending.historyCursor = tail.startOffset;
+        logStream = Readable.from(tail.data.byteLength ? [Buffer.from(tail.data)] : []);
+      }
       if (this.pending.get(newWorkspaceId) !== pending) {
         throw new Error('挂起恢复已被客户端关闭操作取消。');
       }
-      pending.historyCursor = tail.startOffset;
-      const logStream = Readable.from(tail.data.byteLength ? [Buffer.from(tail.data)] : []);
       return {
         workspaceId: newWorkspaceId,
         connectionId: session.connectionId,
         connectionName: session.connectionName,
         logStream,
-        historyAvailable: tail.startOffset > 0,
+        historyAvailable: pending.historyCursor > 0,
       };
     } catch (error) {
       // If closeWorkspace() already consumed this reservation, it has also detached/rolled back
@@ -289,7 +344,7 @@ export class WorkspaceSuspendCoordinatorService {
     // The retained tail is fully sent before commitResume() is called. Attach the live listener only
     // now, while the shell is still paused, so the first resumed PTY bytes are ordered strictly after
     // the cached history already delivered on the WebSocket.
-    this.terminal.attach(workspaceId);
+    this.terminal.attach(workspaceId, pending.viewport ?? { columns: 80, rows: 24 });
     if (!(await this.suspended.commitResume(pending.userId, pending.suspendSessionId, true)))
       throw new Error('挂起恢复事务提交失败。');
     this.pending.delete(workspaceId);
@@ -303,7 +358,14 @@ export class WorkspaceSuspendCoordinatorService {
     }
     // Resume does not implicitly cancel suspend. Keep recording into the same retained log;
     // the frontend can explicitly unmark later if the user wants a normal reconnect lifecycle.
-    this.createMark(workspaceId, pending.userId, pending.logIdentifier);
+    this.createMark(
+      workspaceId,
+      pending.userId,
+      pending.logIdentifier,
+      undefined,
+      pending.checkpoint,
+      pending.viewport ?? { columns: 80, rows: 24 },
+    );
     const session = this.workspaces.requireSession(workspaceId);
     session.shell.resume();
     logger.info(
@@ -389,6 +451,8 @@ export class WorkspaceSuspendCoordinatorService {
     for (const [workspaceId, mark] of [...this.marks.entries()]) {
       this.marks.delete(workspaceId);
       await this.finishMark(mark);
+      mark.checkpoint?.dispose();
+      mark.checkpoint = undefined;
       await this.logs.delete(mark.logIdentifier).catch(() => undefined);
     }
     for (const workspaceId of [...this.resumedHistory.keys()]) await this.clearResumedHistory(workspaceId);
@@ -401,24 +465,56 @@ export class WorkspaceSuspendCoordinatorService {
     if (!this.marks.has(workspaceId)) await this.logs.delete(history.logIdentifier).catch(() => undefined);
   }
 
-  private createMark(workspaceId: string, userId: number, logIdentifier: string, initialBuffer?: string): SuspendMark {
-    const initialWrite = initialBuffer ? this.logs.append(logIdentifier, initialBuffer) : Promise.resolve();
+  private createMark(
+    workspaceId: string,
+    userId: number,
+    logIdentifier: string,
+    initialBuffer?: string,
+    checkpoint?: SuspendedTerminalCheckpoint,
+    viewport: SuspendedTerminalViewport = { columns: 80, rows: 24 },
+  ): SuspendMark {
+    const ownedCheckpoint = checkpoint ?? this.checkpoints.create(initialBuffer, viewport);
+    const initialWrite = initialBuffer
+      ? this.logs.append(logIdentifier, initialBuffer).then(() => undefined)
+      : Promise.resolve();
     const mark: SuspendMark = {
       userId,
       logIdentifier,
       ready: initialWrite.then(() => this.logs.flush(logIdentifier)),
       writeChain: initialWrite,
+      checkpoint: ownedCheckpoint,
     };
     // Publish the transaction before awaiting I/O so disconnect cannot bypass suspend takeover.
     this.marks.set(workspaceId, mark);
     mark.stopOutput = this.events.subscribe(workspaceId, (event) => {
-      if (event.type !== 'terminal-output' || this.marks.get(workspaceId) !== mark) return;
-      mark.writeChain = mark.writeChain
-        .catch(() => undefined)
-        .then(() => this.logs.append(logIdentifier, event.data))
-        .catch(() => undefined);
+      if (this.marks.get(workspaceId) !== mark) return;
+      if (event.type === 'terminal-output') {
+        const data = event.data.slice();
+        mark.writeChain = mark.writeChain
+          .catch(() => undefined)
+          .then(async () => {
+            await this.logs.append(logIdentifier, data).catch(() => undefined);
+            await mark.checkpoint?.write(data).catch(() => undefined);
+          });
+      } else if (event.type === 'terminal-resize') {
+        mark.writeChain = mark.writeChain
+          .catch(() => undefined)
+          .then(() => mark.checkpoint?.resize({ columns: event.columns, rows: event.rows }) ?? Promise.resolve())
+          .catch(() => undefined);
+      }
     });
     return mark;
+  }
+
+  private async refreshMarkCheckpoint(
+    mark: SuspendMark,
+    snapshot: string,
+    viewport: SuspendedTerminalViewport,
+  ): Promise<void> {
+    if (!mark.checkpoint) mark.checkpoint = this.checkpoints.create(undefined, viewport);
+    const operation = mark.writeChain.catch(() => undefined).then(() => mark.checkpoint!.reset(snapshot, viewport));
+    mark.writeChain = operation;
+    await operation;
   }
 
   private async finishMark(mark: SuspendMark): Promise<void> {

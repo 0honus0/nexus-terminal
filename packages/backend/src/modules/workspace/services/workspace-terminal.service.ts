@@ -31,7 +31,7 @@ export class WorkspaceTerminalService {
     private readonly integration: WorkspaceShellIntegrationService,
     private readonly events: WorkspaceEventHub,
   ) {}
-  attach(sessionId: string): void {
+  attach(sessionId: string, viewport: { columns: number; rows: number } = { columns: 80, rows: 24 }): void {
     if (this.states.has(sessionId)) return;
     const session = this.sessions.require(sessionId),
       state: TerminalState = {
@@ -41,6 +41,8 @@ export class WorkspaceTerminalService {
         waitingForDrain: false,
         unsubscribers: [],
         consumerBackpressure: false,
+        columns: viewport.columns,
+        rows: viewport.rows,
       };
     this.states.set(sessionId, state);
     state.unsubscribers.push(
@@ -107,6 +109,12 @@ export class WorkspaceTerminalService {
     this.sessions.require(sessionId).shell.resize(columns, rows);
     state.columns = columns;
     state.rows = rows;
+    this.events.publish(sessionId, { type: 'terminal-resize', columns, rows });
+  }
+  viewport(sessionId: string): { columns: number; rows: number } | null {
+    const state = this.states.get(sessionId);
+    if (!state?.columns || !state.rows) return null;
+    return { columns: state.columns, rows: state.rows };
   }
   setConsumerBackpressure(sessionId: string, active: boolean): void {
     const state = this.requireState(sessionId);

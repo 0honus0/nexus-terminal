@@ -17,6 +17,8 @@
     "@ai-sdk/openai-compatible": "^3.0.48",
     "@modelcontextprotocol/client": "2.0.0",
     "@simplewebauthn/server": "^14.0.1",
+    "@xterm/addon-serialize": "^0.14.0",
+    "@xterm/headless": "^6.0.0",
     "ajv": "^8.20.0",
     "archiver": "^8.0.0",
     "axios": "catalog:",

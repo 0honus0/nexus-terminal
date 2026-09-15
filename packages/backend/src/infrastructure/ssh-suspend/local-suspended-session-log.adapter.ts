@@ -1,7 +1,8 @@
-import { createReadStream } from 'node:fs';
+import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type {
   SuspendedSessionLogSlice,
   SuspendedSessionLogStore,
@@ -21,11 +22,12 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
   constructor(dataDirectory: string) {
     this.directory = path.join(dataDirectory, 'temp_suspended_ssh_logs');
   }
-  async append(id: string, data: string | Uint8Array): Promise<void> {
+  async append(id: string, data: string | Uint8Array): Promise<number> {
     const file = this.file(id);
     const chunk = typeof data === 'string' ? Buffer.from(data) : Buffer.from(data);
-    if (!chunk.length) return;
-    return this.enqueue(id, async (writer) => {
+    if (!chunk.length) return this.position(id);
+    let endOffset = 0;
+    await this.enqueue(id, async (writer) => {
       await fs.mkdir(this.directory, { recursive: true, mode: 0o700 });
       if (writer.size === undefined) {
         try {
@@ -36,14 +38,28 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
         }
       }
       const retained = chunk.length > MAX_BYTES ? chunk.subarray(chunk.length - MAX_BYTES) : chunk;
-      if (writer.size + retained.length > MAX_BYTES) {
+      if (retained.length >= MAX_BYTES) {
         await fs.writeFile(file, retained, { mode: 0o600 });
         writer.size = retained.length;
+      } else if (writer.size + retained.length > MAX_BYTES) {
+        const trimBytes = writer.size + retained.length - MAX_BYTES;
+        const temporary = `${file}.trim-${process.pid}-${writer.revision}`;
+        try {
+          await pipeline(createReadStream(file, { start: trimBytes }), createWriteStream(temporary, { mode: 0o600 }));
+          await fs.appendFile(temporary, retained);
+          await fs.rename(temporary, file);
+        } catch (error) {
+          await fs.unlink(temporary).catch(() => undefined);
+          throw error;
+        }
+        writer.size = MAX_BYTES;
       } else {
         await fs.appendFile(file, retained, { mode: 0o600 });
         writer.size += retained.length;
       }
+      endOffset = writer.size;
     });
+    return endOffset;
   }
   async flush(id: string) {
     const w = this.writer(id);
@@ -64,6 +80,9 @@ export class LocalSuspendedSessionLogAdapter implements SuspendedSessionLogStore
       throw error;
     }
     return createReadStream(file, { highWaterMark: 64 * 1024 });
+  }
+  position(id: string): Promise<number> {
+    return this.size(id);
   }
   async readTail(id: string, maxBytes: number): Promise<SuspendedSessionLogSlice> {
     const totalBytes = await this.size(id);
