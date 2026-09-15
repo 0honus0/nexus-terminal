@@ -1,6 +1,7 @@
 import { Router, type Request } from 'express';
 import { create as createContentDisposition } from 'content-disposition';
 import parseRange from 'range-parser';
+import { resolveAgentAvailability } from '../../../modules/agent/host/agent-availability';
 import { AGENT_CAPABILITIES, type AgentCapability } from '../../../modules/agent/host/app.types';
 import type {
   AgentArtifactFacade,
@@ -91,7 +92,6 @@ const providerInputKeys = [
   'credential',
   'clearCredential',
   'models',
-  'privateHostExceptions',
   'enabled',
 ] as const;
 
@@ -110,7 +110,6 @@ const providerPatchInput = async (
     baseUrl: body.baseUrl ?? current.baseUrl,
     protocol: body.protocol ?? current.protocol,
     models: body.models ?? current.models,
-    privateHostExceptions: body.privateHostExceptions ?? current.privateHostExceptions,
     enabled: body.enabled ?? current.enabled,
   };
   if ('credential' in body) input.credential = body.credential;
@@ -341,10 +340,16 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       const totalRunningRuns = summaries.reduce((total, app) => total + app.runningRuns, 0);
       const totalPendingApprovals = summaries.reduce((total, app) => total + app.pendingApprovals, 0);
       const totalPendingBudgetRequests = summaries.reduce((total, app) => total + app.pendingBudgetRequests, 0);
-      const featureEnabled = settings.effectiveSettings.feature.enabled;
+      const availability = resolveAgentAvailability(settings, apps);
+      const featureEnabled = availability.state === 'enabled' || availability.state === 'degraded';
       agentData(request, response, {
         featureEnabled,
-        hostState: featureEnabled ? 'enabled' : totalRunningRuns > 0 ? 'disabling' : 'disabled',
+        hostState:
+          availability.state === 'disabled' && totalRunningRuns > 0
+            ? 'disabling'
+            : availability.state === 'unavailable'
+              ? 'disabled'
+              : availability.state,
         apps: summaries,
         totalRunningRuns,
         totalPendingApprovals,
@@ -439,12 +444,14 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   router.get(
     '/settings',
     agentRoute(async (request, response) => {
-      const settings = await dependencies.host.getSettings(agentUserId(request));
+      const userId = agentUserId(request);
+      const [settings, apps] = await Promise.all([
+        dependencies.host.getSettings(userId),
+        dependencies.host.listApps(userId),
+      ]);
       agentData(request, response, {
         ...settings,
-        availability: {
-          state: settings.effectiveSettings.feature.enabled ? 'enabled' : 'disabled',
-        },
+        availability: resolveAgentAvailability(settings, apps),
         runtimeCapabilities: {
           workspaceRuntimeController: false,
         },
@@ -464,16 +471,12 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         agentError(request, response, 400, 'VALIDATION_FAILED', 'Invalid Agent settings update.');
         return;
       }
-      const settings = await dependencies.host.patchSettings(
-        agentUserId(request),
-        request.body.patch,
-        request.body.expectedVersion,
-      );
+      const userId = agentUserId(request);
+      const settings = await dependencies.host.patchSettings(userId, request.body.patch, request.body.expectedVersion);
+      const apps = await dependencies.host.listApps(userId);
       agentData(request, response, {
         ...settings,
-        availability: {
-          state: settings.effectiveSettings.feature.enabled ? 'enabled' : 'disabled',
-        },
+        availability: resolveAgentAvailability(settings, apps),
         runtimeCapabilities: {
           workspaceRuntimeController: false,
         },

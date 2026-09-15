@@ -263,14 +263,43 @@ export interface PluginUninstallResult {
 
 export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
+export interface ModelReasoningDefaults {
+  supportedEfforts: AgentReasoningEffort[];
+  defaultEffort?: AgentReasoningEffort;
+  mandatory?: boolean;
+  supportsMaxTokens?: boolean;
+}
+
+export interface ModelCapabilityDefaults {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsTools?: boolean;
+  reasoning?: ModelReasoningDefaults;
+}
+
+export interface ModelCapabilityOverrides {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsTools?: boolean;
+  reasoning?: ModelReasoningDefaults;
+}
+
 export interface ProviderModel {
   id: string;
   contextWindow: number;
   maxOutputTokens: number;
   supportsTools: boolean;
+  capabilitySources: {
+    contextWindow: 'registry' | 'manual';
+    maxOutputTokens: 'registry' | 'manual';
+    supportsTools: 'registry' | 'manual';
+    reasoning?: 'registry' | 'manual';
+  };
+  registryDefaults?: ModelCapabilityDefaults;
+  capabilityOverrides?: ModelCapabilityOverrides;
   reasoningEfforts?: AgentReasoningEffort[];
   defaultReasoningEffort?: AgentReasoningEffort;
-  reasoningSource?: 'provider' | 'registry';
+  reasoningSource?: 'provider' | 'registry' | 'manual';
   reasoningMandatory?: boolean;
   reasoningSupportsMaxTokens?: boolean;
   priceMicrosPerMillionInput?: number;
@@ -282,6 +311,7 @@ export interface AgentDiscoveredProviderModel {
   id: string;
   ownedBy?: string;
   createdAt?: number;
+  registryDefaults?: ModelCapabilityDefaults;
 }
 
 export interface AgentProviderView {
@@ -289,11 +319,10 @@ export interface AgentProviderView {
   kind: 'openai-compatible';
   displayName: string;
   baseUrl: string;
-  protocol: 'chat-completions' | 'responses';
+  protocol: 'chat-completions';
   hasCredential: boolean;
   credentialRevision: number;
   models: ProviderModel[];
-  privateHostExceptions: string[];
   enabled: boolean;
   version: number;
 }

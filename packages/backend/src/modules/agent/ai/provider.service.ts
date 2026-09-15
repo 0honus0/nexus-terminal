@@ -1,14 +1,21 @@
 import { randomUUID } from 'node:crypto';
 import type { ClockPort } from '../agent.types';
 import type { LanguageModelPort } from './language-model.port';
-import { applyReasoningCapability, resolveModelReasoningCapability } from './model-capability-resolver';
-import type { OutboundPolicyPort } from './outbound-policy.port';
+import {
+  REASONING_EFFORTS,
+  deriveCapabilityOverrides,
+  resolveModelCapabilityDefaults,
+  resolveProviderModelConfig,
+} from './model-capability-resolver';
 import type {
   DiscoveredProviderModel,
+  PersistedProviderModelConfig,
+  PersistedProviderView,
   ProviderInput,
   ProviderModelConfig,
   ProviderTestResult,
   ProviderView,
+  ReasoningEffort,
   TokenUsage,
 } from './model.types';
 import type { ProviderRepositoryPort } from './provider.repository.port';
@@ -20,21 +27,19 @@ const nonEmptyString = (value: unknown): value is string => typeof value === 'st
 const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 const optionalPrice = (value: unknown): value is number | undefined =>
   value === undefined || (Number.isSafeInteger(value) && (value as number) >= 0);
+const reasoningEffort = (value: unknown): value is ReasoningEffort =>
+  typeof value === 'string' && (REASONING_EFFORTS as readonly string[]).includes(value);
 
-const validateException = (value: string): void => {
-  const trimmed = value.trim();
-  const match = /^(?:\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9.-]+):(\d{1,5})$/.exec(trimmed);
-  const port = match ? Number(match[1]) : 0;
-  if (!match || port < 1 || port > 65535) throw new Error('PROVIDER_PRIVATE_EXCEPTION_INVALID');
-};
-
-const validateModel = (raw: unknown): ProviderModelConfig => {
+const validateModel = (raw: unknown): PersistedProviderModelConfig => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
     'id',
     'contextWindow',
     'maxOutputTokens',
     'supportsTools',
+    'capabilitySources',
+    'registryDefaults',
+    'capabilityOverrides',
     'reasoningEfforts',
     'defaultReasoningEffort',
     'reasoningSource',
@@ -45,10 +50,37 @@ const validateModel = (raw: unknown): ProviderModelConfig => {
     'priceVersion',
   ]);
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
-  if (!nonEmptyString(raw.id) || !positiveInteger(raw.contextWindow) || !positiveInteger(raw.maxOutputTokens)) {
+  if (
+    !nonEmptyString(raw.id) ||
+    !positiveInteger(raw.contextWindow) ||
+    !positiveInteger(raw.maxOutputTokens) ||
+    raw.maxOutputTokens > raw.contextWindow ||
+    typeof raw.supportsTools !== 'boolean'
+  ) {
     throw new Error('VALIDATION_FAILED');
   }
-  if (raw.maxOutputTokens > raw.contextWindow || typeof raw.supportsTools !== 'boolean') {
+  if (raw.reasoningEfforts !== undefined) {
+    if (
+      !Array.isArray(raw.reasoningEfforts) ||
+      raw.reasoningEfforts.some((effort) => !reasoningEffort(effort)) ||
+      new Set(raw.reasoningEfforts).size !== raw.reasoningEfforts.length
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+  }
+  if (raw.defaultReasoningEffort !== undefined && !reasoningEffort(raw.defaultReasoningEffort)) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (
+    raw.defaultReasoningEffort !== undefined &&
+    (!Array.isArray(raw.reasoningEfforts) || !raw.reasoningEfforts.includes(raw.defaultReasoningEffort))
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (raw.reasoningMandatory !== undefined && typeof raw.reasoningMandatory !== 'boolean') {
+    throw new Error('VALIDATION_FAILED');
+  }
+  if (raw.reasoningSupportsMaxTokens !== undefined && typeof raw.reasoningSupportsMaxTokens !== 'boolean') {
     throw new Error('VALIDATION_FAILED');
   }
   if (!optionalPrice(raw.priceMicrosPerMillionInput) || !optionalPrice(raw.priceMicrosPerMillionOutput)) {
@@ -61,11 +93,24 @@ const validateModel = (raw: unknown): ProviderModelConfig => {
   ) {
     throw new Error('VALIDATION_FAILED');
   }
-  return {
-    id: raw.id.trim(),
+
+  const id = raw.id.trim();
+  const capabilityOverrides = deriveCapabilityOverrides(id, {
     contextWindow: raw.contextWindow,
     maxOutputTokens: raw.maxOutputTokens,
     supportsTools: raw.supportsTools,
+    ...(Array.isArray(raw.reasoningEfforts) ? { reasoningEfforts: raw.reasoningEfforts as ReasoningEffort[] } : {}),
+    ...(raw.defaultReasoningEffort === undefined
+      ? {}
+      : { defaultReasoningEffort: raw.defaultReasoningEffort as ReasoningEffort }),
+    ...(raw.reasoningMandatory === undefined ? {} : { reasoningMandatory: raw.reasoningMandatory }),
+    ...(raw.reasoningSupportsMaxTokens === undefined
+      ? {}
+      : { reasoningSupportsMaxTokens: raw.reasoningSupportsMaxTokens }),
+  });
+  const model: PersistedProviderModelConfig = {
+    id,
+    ...(Object.keys(capabilityOverrides).length ? { capabilityOverrides } : {}),
     ...(raw.priceMicrosPerMillionInput === undefined
       ? {}
       : { priceMicrosPerMillionInput: raw.priceMicrosPerMillionInput }),
@@ -74,9 +119,12 @@ const validateModel = (raw: unknown): ProviderModelConfig => {
       : { priceMicrosPerMillionOutput: raw.priceMicrosPerMillionOutput }),
     ...(raw.priceVersion === undefined ? {} : { priceVersion: raw.priceVersion.trim() }),
   };
+  // Resolve once here so incomplete/invalid Registry + override combinations fail before persistence.
+  resolveProviderModelConfig(model);
+  return model;
 };
 
-const validateProviderInput = (raw: unknown): ProviderInput => {
+const validateProviderInput = (raw: unknown): ProviderInput & { models: PersistedProviderModelConfig[] } => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
     'kind',
@@ -86,30 +134,25 @@ const validateProviderInput = (raw: unknown): ProviderInput => {
     'credential',
     'clearCredential',
     'models',
-    'privateHostExceptions',
     'enabled',
   ]);
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (raw.kind !== 'openai-compatible' || !nonEmptyString(raw.displayName) || !nonEmptyString(raw.baseUrl)) {
     throw new Error('VALIDATION_FAILED');
   }
-  const protocol = raw.protocol ?? 'chat-completions';
-  if (protocol !== 'chat-completions' && protocol !== 'responses') throw new Error('VALIDATION_FAILED');
+  if (raw.protocol !== undefined && raw.protocol !== 'chat-completions') throw new Error('VALIDATION_FAILED');
   if (raw.credential !== undefined && (typeof raw.credential !== 'string' || raw.credential.length === 0)) {
     throw new Error('VALIDATION_FAILED');
   }
-  if (raw.clearCredential !== undefined && typeof raw.clearCredential !== 'boolean')
-    throw new Error('VALIDATION_FAILED');
-  if (raw.credential !== undefined && raw.clearCredential === true) throw new Error('VALIDATION_FAILED');
-  if (!Array.isArray(raw.models) || raw.models.length < 1 || raw.models.length > 100)
-    throw new Error('VALIDATION_FAILED');
-  const models = raw.models.map(validateModel);
-  if (new Set(models.map((model) => model.id)).size !== models.length) throw new Error('VALIDATION_FAILED');
-  if (!Array.isArray(raw.privateHostExceptions) || !raw.privateHostExceptions.every(nonEmptyString)) {
+  if (raw.clearCredential !== undefined && typeof raw.clearCredential !== 'boolean') {
     throw new Error('VALIDATION_FAILED');
   }
-  const privateHostExceptions = [...new Set(raw.privateHostExceptions.map((item) => item.trim().toLowerCase()))];
-  privateHostExceptions.forEach(validateException);
+  if (raw.credential !== undefined && raw.clearCredential === true) throw new Error('VALIDATION_FAILED');
+  if (!Array.isArray(raw.models) || raw.models.length < 1 || raw.models.length > 100) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const models = raw.models.map(validateModel);
+  if (new Set(models.map((model) => model.id)).size !== models.length) throw new Error('VALIDATION_FAILED');
   if (typeof raw.enabled !== 'boolean') throw new Error('VALIDATION_FAILED');
 
   let url: URL;
@@ -118,18 +161,19 @@ const validateProviderInput = (raw: unknown): ProviderInput => {
   } catch {
     throw new Error('PROVIDER_ENDPOINT_INVALID');
   }
-  if (url.search || url.hash || url.username || url.password) throw new Error('PROVIDER_ENDPOINT_INVALID');
+  if (!['http:', 'https:'].includes(url.protocol) || url.search || url.hash || url.username || url.password) {
+    throw new Error('PROVIDER_ENDPOINT_INVALID');
+  }
   const baseUrl = url.toString().replace(/\/$/, '');
 
   return {
     kind: 'openai-compatible',
     displayName: raw.displayName.trim(),
     baseUrl,
-    protocol,
+    protocol: 'chat-completions',
     ...(raw.credential === undefined ? {} : { credential: raw.credential }),
     ...(raw.clearCredential === undefined ? {} : { clearCredential: raw.clearCredential }),
-    models,
-    privateHostExceptions,
+    models: models as unknown as ProviderInput['models'] & PersistedProviderModelConfig[],
     enabled: raw.enabled,
   };
 };
@@ -158,35 +202,30 @@ export const calculateModelCostMicros = (
 export class ProviderService {
   constructor(
     private readonly repository: ProviderRepositoryPort,
-    private readonly outboundPolicy: OutboundPolicyPort,
     private readonly languageModel: LanguageModelPort,
     private readonly clock: ClockPort,
     private readonly onChanged: (userId: number) => Promise<void> = async () => undefined,
   ) {}
 
-  private decorateProvider(provider: ProviderView): ProviderView {
+  private toView(provider: PersistedProviderView): ProviderView {
     return {
       ...provider,
-      models: provider.models.map((model) =>
-        applyReasoningCapability(model, resolveModelReasoningCapability(model.id)),
-      ),
+      models: provider.models.map(resolveProviderModelConfig),
     };
   }
 
   async list(userId: number): Promise<ProviderView[]> {
-    const providers = await this.repository.list(userId);
-    return providers.map((provider) => this.decorateProvider(provider));
+    return (await this.repository.list(userId)).map((provider) => this.toView(provider));
   }
 
   async get(userId: number, providerId: string): Promise<ProviderView> {
     const provider = await this.repository.get(userId, providerId);
     if (!provider) throw new Error('PROVIDER_NOT_FOUND');
-    return this.decorateProvider(provider);
+    return this.toView(provider);
   }
 
   async create(userId: number, raw: unknown): Promise<ProviderView> {
     const input = validateProviderInput(raw);
-    await this.outboundPolicy.resolve(input.baseUrl, input.privateHostExceptions);
     const now = this.clock.nowUnixSeconds();
     const created = await this.repository.create({
       id: randomUUID(),
@@ -194,34 +233,31 @@ export class ProviderService {
       kind: input.kind,
       displayName: input.displayName,
       baseUrl: input.baseUrl,
-      protocol: input.protocol,
-      models: input.models,
-      privateHostExceptions: input.privateHostExceptions,
+      protocol: 'chat-completions',
+      models: input.models as unknown as PersistedProviderModelConfig[],
       enabled: input.enabled,
       ...(input.credential === undefined ? {} : { credential: input.credential }),
       createdAt: now,
       updatedAt: now,
     });
     await this.onChanged(userId);
-    return this.decorateProvider(created);
+    return this.toView(created);
   }
 
   async update(userId: number, providerId: string, expectedVersion: number, raw: unknown): Promise<ProviderView> {
     const input = validateProviderInput(raw);
-    await this.outboundPolicy.resolve(input.baseUrl, input.privateHostExceptions);
     const updated = await this.repository.update(userId, providerId, expectedVersion, {
       displayName: input.displayName,
       baseUrl: input.baseUrl,
-      protocol: input.protocol,
-      models: input.models,
-      privateHostExceptions: input.privateHostExceptions,
+      protocol: 'chat-completions',
+      models: input.models as unknown as PersistedProviderModelConfig[],
       enabled: input.enabled,
       ...(input.credential === undefined ? {} : { credential: input.credential }),
       clearCredential: input.clearCredential === true,
       updatedAt: this.clock.nowUnixSeconds(),
     });
     await this.onChanged(userId);
-    return this.decorateProvider(updated);
+    return this.toView(updated);
   }
 
   async remove(userId: number, providerId: string, expectedVersion: number): Promise<void> {
@@ -234,7 +270,10 @@ export class ProviderService {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error('PROVIDER_DISCOVERY_TIMEOUT')), 10_000);
     try {
-      return await this.languageModel.discoverModels(userId, providerId, controller.signal);
+      return (await this.languageModel.discoverModels(userId, providerId, controller.signal)).map((model) => {
+        const registryDefaults = resolveModelCapabilityDefaults(model.id);
+        return { ...model, ...(registryDefaults ? { registryDefaults } : {}) };
+      });
     } finally {
       clearTimeout(timeout);
     }

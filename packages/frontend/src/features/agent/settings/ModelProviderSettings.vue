@@ -31,7 +31,6 @@
 
   const emit = defineEmits<{
     toggle: [provider: AgentProviderView, enabled: boolean];
-    protocol: [provider: AgentProviderView, protocol: AgentProviderView['protocol']];
     discover: [provider: AgentProviderView];
     defaultModel: [providerId: string, modelId: string];
     delete: [provider: AgentProviderView];
@@ -47,9 +46,7 @@
   const modalTestResult = ref<{ ok: boolean; latencyMs?: number; message?: string } | null>(null);
   const createdProviderId = ref<string | null>(null);
   const showApiKey = ref(false);
-  const showAdvanced = ref(false);
   const copiedUrl = ref<string | null>(null);
-  const activePresetName = ref<string>('OpenAI');
 
   // 模型库同步抽屉与批量策略状态
   const drawerOpen = reactive<Record<string, boolean>>({});
@@ -107,112 +104,28 @@
     return provider.models.filter((m) => m.id.toLowerCase().includes(q));
   });
 
-  // 预设配置
-  interface ProviderPreset {
-    name: string;
-    icon: string;
-    baseUrl: string;
-    protocol: AgentProviderView['protocol'];
-    modelId: string;
-    contextWindow: number;
-    maxOutputTokens: number;
-    supportsTools: boolean;
-  }
-
-  const presets: ProviderPreset[] = [
-    {
-      name: 'OpenAI',
-      icon: 'fa-solid fa-bolt',
-      baseUrl: 'https://api.openai.com/v1',
-      protocol: 'chat-completions',
-      modelId: 'gpt-4o',
-      contextWindow: 128000,
-      maxOutputTokens: 16384,
-      supportsTools: true,
-    },
-    {
-      name: 'DeepSeek',
-      icon: 'fa-solid fa-wand-magic-sparkles',
-      baseUrl: 'https://api.deepseek.com/v1',
-      protocol: 'chat-completions',
-      modelId: 'deepseek-chat',
-      contextWindow: 64000,
-      maxOutputTokens: 8192,
-      supportsTools: true,
-    },
-    {
-      name: 'Moonshot Kimi',
-      icon: 'fa-solid fa-moon',
-      baseUrl: 'https://api.moonshot.cn/v1',
-      protocol: 'chat-completions',
-      modelId: 'moonshot-v1-8k',
-      contextWindow: 8192,
-      maxOutputTokens: 4096,
-      supportsTools: true,
-    },
-    {
-      name: 'SiliconFlow 硅基',
-      icon: 'fa-solid fa-microchip',
-      baseUrl: 'https://api.siliconflow.cn/v1',
-      protocol: 'chat-completions',
-      modelId: 'Qwen/Qwen2.5-7B-Instruct',
-      contextWindow: 32768,
-      maxOutputTokens: 4096,
-      supportsTools: true,
-    },
-    {
-      name: 'Ollama (Local)',
-      icon: 'fa-solid fa-server',
-      baseUrl: 'http://localhost:11434/v1',
-      protocol: 'chat-completions',
-      modelId: 'llama3.2',
-      contextWindow: 8192,
-      maxOutputTokens: 2048,
-      supportsTools: false,
-    },
-  ];
-
   const form = reactive({
     displayName: '',
-    baseUrl: 'https://api.openai.com/v1',
-    protocol: 'chat-completions' as AgentProviderView['protocol'],
+    baseUrl: '',
     credential: '',
-    modelId: 'gpt-4o',
+    modelId: '',
     contextWindow: 128000,
     maxOutputTokens: 4096,
     supportsTools: true,
-    privateHostExceptions: '',
   });
 
-  const applyPreset = (preset: ProviderPreset) => {
-    activePresetName.value = preset.name;
-    form.displayName = preset.name;
-    form.baseUrl = preset.baseUrl;
-    form.protocol = preset.protocol;
-    form.modelId = preset.modelId;
-    form.contextWindow = preset.contextWindow;
-    form.maxOutputTokens = preset.maxOutputTokens;
-    form.supportsTools = preset.supportsTools;
-    modalTestResult.value = null;
-    modalError.value = '';
-  };
-
   const openAddModal = () => {
-    activePresetName.value = 'OpenAI';
     form.displayName = '';
-    form.baseUrl = 'https://api.openai.com/v1';
-    form.protocol = 'chat-completions';
+    form.baseUrl = '';
     form.credential = '';
-    form.modelId = 'gpt-4o';
+    form.modelId = '';
     form.contextWindow = 128000;
     form.maxOutputTokens = 4096;
     form.supportsTools = true;
-    form.privateHostExceptions = '';
     modalError.value = '';
     modalTestResult.value = null;
     createdProviderId.value = null;
     showApiKey.value = false;
-    showAdvanced.value = false;
     modalOpen.value = true;
   };
 
@@ -279,7 +192,6 @@
           kind: 'openai-compatible',
           displayName: form.displayName.trim(),
           baseUrl: form.baseUrl.trim(),
-          protocol: form.protocol,
           ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
           models: [
             {
@@ -289,10 +201,6 @@
               supportsTools: form.supportsTools,
             },
           ],
-          privateHostExceptions: form.privateHostExceptions
-            .split(',')
-            .map((v) => v.trim())
-            .filter(Boolean),
           enabled: true,
         };
 
@@ -357,7 +265,6 @@
         kind: 'openai-compatible',
         displayName: form.displayName.trim(),
         baseUrl: form.baseUrl.trim(),
-        protocol: form.protocol,
         ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
         models: [
           {
@@ -367,10 +274,6 @@
             supportsTools: form.supportsTools,
           },
         ],
-        privateHostExceptions: form.privateHostExceptions
-          .split(',')
-          .map((v) => v.trim())
-          .filter(Boolean),
         enabled: true,
       };
 
@@ -487,18 +390,124 @@
     }
   };
 
+  const discoveredModelConfig = (provider: AgentProviderView, modelId: string): AgentProviderView['models'][number] => {
+    const discovered = (props.discoveries[provider.id] ?? []).find((model) => model.id === modelId);
+    const defaults = discovered?.registryDefaults;
+    const hasRegistryDefaults =
+      defaults?.contextWindow !== undefined &&
+      defaults.maxOutputTokens !== undefined &&
+      defaults.supportsTools !== undefined;
+    const contextWindow = hasRegistryDefaults ? defaults.contextWindow! : 128000;
+    const maxOutputTokens = hasRegistryDefaults ? defaults.maxOutputTokens! : 4096;
+    const supportsTools = hasRegistryDefaults ? defaults.supportsTools! : true;
+    return {
+      id: modelId,
+      contextWindow,
+      maxOutputTokens,
+      supportsTools,
+      capabilitySources: {
+        contextWindow: hasRegistryDefaults ? 'registry' : 'manual',
+        maxOutputTokens: hasRegistryDefaults ? 'registry' : 'manual',
+        supportsTools: hasRegistryDefaults ? 'registry' : 'manual',
+        ...(defaults?.reasoning ? { reasoning: 'registry' as const } : {}),
+      },
+      ...(defaults ? { registryDefaults: defaults } : {}),
+      ...(defaults?.reasoning
+        ? {
+            reasoningEfforts: [...defaults.reasoning.supportedEfforts],
+            ...(defaults.reasoning.defaultEffort === undefined
+              ? {}
+              : { defaultReasoningEffort: defaults.reasoning.defaultEffort }),
+            reasoningSource: 'registry' as const,
+            ...(defaults.reasoning.mandatory === undefined ? {} : { reasoningMandatory: defaults.reasoning.mandatory }),
+            ...(defaults.reasoning.supportsMaxTokens === undefined
+              ? {}
+              : { reasoningSupportsMaxTokens: defaults.reasoning.supportsMaxTokens }),
+          }
+        : {}),
+    };
+  };
+
+  const capabilityEditor = ref<{ providerId: string; modelId: string } | null>(null);
+  const capabilityForm = reactive({ contextWindow: 1, maxOutputTokens: 1, supportsTools: false });
+
+  const capabilityEditorProvider = computed(() =>
+    capabilityEditor.value
+      ? (props.providers.find((provider) => provider.id === capabilityEditor.value?.providerId) ?? null)
+      : null,
+  );
+  const capabilityEditorModel = computed(() =>
+    capabilityEditorProvider.value && capabilityEditor.value
+      ? (capabilityEditorProvider.value.models.find((model) => model.id === capabilityEditor.value?.modelId) ?? null)
+      : null,
+  );
+
+  const openCapabilityEditor = (provider: AgentProviderView, model: AgentProviderView['models'][number]): void => {
+    capabilityEditor.value = { providerId: provider.id, modelId: model.id };
+    capabilityForm.contextWindow = model.contextWindow;
+    capabilityForm.maxOutputTokens = model.maxOutputTokens;
+    capabilityForm.supportsTools = model.supportsTools;
+  };
+
+  const closeCapabilityEditor = (): void => {
+    if (props.busy) return;
+    capabilityEditor.value = null;
+  };
+
+  const restoreCapabilityField = (field: 'contextWindow' | 'maxOutputTokens' | 'supportsTools'): void => {
+    const defaults = capabilityEditorModel.value?.registryDefaults;
+    if (!defaults || defaults[field] === undefined) return;
+    if (field === 'supportsTools') capabilityForm.supportsTools = Boolean(defaults.supportsTools);
+    else capabilityForm[field] = Number(defaults[field]);
+  };
+
+  const restoreAllCapabilities = (): void => {
+    restoreCapabilityField('contextWindow');
+    restoreCapabilityField('maxOutputTokens');
+    restoreCapabilityField('supportsTools');
+  };
+
+  const capabilityFieldIsDefault = (field: 'contextWindow' | 'maxOutputTokens' | 'supportsTools'): boolean => {
+    const defaults = capabilityEditorModel.value?.registryDefaults;
+    if (!defaults || defaults[field] === undefined) return false;
+    return capabilityForm[field] === defaults[field];
+  };
+
+  const saveCapabilities = async (): Promise<void> => {
+    const provider = capabilityEditorProvider.value;
+    const model = capabilityEditorModel.value;
+    if (!provider || !model) return;
+    if (
+      !Number.isSafeInteger(capabilityForm.contextWindow) ||
+      capabilityForm.contextWindow < 2 ||
+      !Number.isSafeInteger(capabilityForm.maxOutputTokens) ||
+      capabilityForm.maxOutputTokens < 1 ||
+      capabilityForm.maxOutputTokens >= capabilityForm.contextWindow
+    ) {
+      feedback.notifyError(t('agent.settings.providers.capabilityInvalid'));
+      return;
+    }
+    const next = provider.models.map((candidate) =>
+      candidate.id === model.id
+        ? {
+            ...candidate,
+            contextWindow: capabilityForm.contextWindow,
+            maxOutputTokens: capabilityForm.maxOutputTokens,
+            supportsTools: capabilityForm.supportsTools,
+          }
+        : candidate,
+    );
+    const saved = await updateModels(provider, next, t('agent.settings.providers.capabilitySaved'));
+    if (saved) capabilityEditor.value = null;
+  };
+
   // 一键添加所有支持模型
   const addAllDiscovered = async (provider: AgentProviderView): Promise<void> => {
     const available = availableDiscoveries(provider);
     if (!available.length) return;
     isSavingModels[provider.id] = true;
     try {
-      const newModels = available.map((m) => ({
-        id: m.id,
-        contextWindow: 128000,
-        maxOutputTokens: 4096,
-        supportsTools: true,
-      }));
+      const newModels = available.map((model) => discoveredModelConfig(provider, model.id));
       const noticeAdded = t('agent.settings.providers.saveNoticeAdded', { count: available.length });
       const saved = await updateModels(provider, [...provider.models, ...newModels], noticeAdded);
       if (!saved) return;
@@ -516,12 +525,7 @@
     if (!selectedIds.length) return;
     isSavingModels[provider.id] = true;
     try {
-      const newModels = selectedIds.map((id) => ({
-        id,
-        contextWindow: 128000,
-        maxOutputTokens: 4096,
-        supportsTools: true,
-      }));
+      const newModels = selectedIds.map((id) => discoveredModelConfig(provider, id));
       const noticeSelected = t('agent.settings.providers.saveNoticeAdded', { count: selectedIds.length });
       const saved = await updateModels(provider, [...provider.models, ...newModels], noticeSelected);
       if (!saved) return;
@@ -536,12 +540,7 @@
   const addSingleDiscovered = async (provider: AgentProviderView, modelId: string): Promise<void> => {
     isSavingModels[provider.id] = true;
     try {
-      const newModel = {
-        id: modelId,
-        contextWindow: 128000,
-        maxOutputTokens: 4096,
-        supportsTools: true,
-      };
+      const newModel = discoveredModelConfig(provider, modelId);
       const noticeSingle = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
       const saved = await updateModels(provider, [...provider.models, newModel], noticeSingle);
       if (!saved) return;
@@ -658,12 +657,7 @@
     }
     isSavingModels[provider.id] = true;
     try {
-      const newModel = {
-        id,
-        contextWindow: 128000,
-        maxOutputTokens: 4096,
-        supportsTools: true,
-      };
+      const newModel = discoveredModelConfig(provider, id);
       const noticeManual = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
       const saved = await updateModels(provider, [...provider.models, newModel], noticeManual);
       if (!saved) return;
@@ -982,11 +976,6 @@
                         ? $t('agent.settings.providers.enabled')
                         : $t('agent.settings.providers.disabled')
                     }}
-                  </span>
-                  <span
-                    class="rounded-md bg-header/60 border border-border/60 px-1.5 py-0.2 font-mono text-[10px] text-text-secondary"
-                  >
-                    {{ provider.protocol === 'responses' ? 'Responses' : 'Chat' }}
                   </span>
                   <button
                     type="button"
@@ -1502,34 +1491,9 @@
         {{ $t('agent.settings.providers.modalDescription') }}
       </p>
 
-      <!-- 快捷预设填充栏（带选中微高亮） -->
-      <div class="rounded-xl border border-border/60 bg-header/20 p-3">
-        <div class="text-[11px] font-semibold text-text-secondary flex items-center gap-1.5 mb-2">
-          <i class="fa-solid fa-bolt text-amber-500 text-[10px]"></i>
-          <span>{{ $t('agent.settings.providers.quickPresets') }}</span>
-        </div>
-        <div class="flex flex-wrap gap-1.5">
-          <button
-            v-for="preset in presets"
-            :key="preset.name"
-            type="button"
-            class="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.2 text-xs font-medium shadow-2xs transition-all active:scale-95 cursor-pointer select-none"
-            :class="
-              activePresetName === preset.name
-                ? 'border-primary/60 bg-primary/10 text-primary font-semibold'
-                : 'border-border/70 bg-background text-foreground hover:border-primary/40 hover:bg-header'
-            "
-            @click="applyPreset(preset)"
-          >
-            <i :class="preset.icon" class="text-[10px]"></i>
-            <span>{{ preset.name }}</span>
-          </button>
-        </div>
-      </div>
-
       <!-- 表单核心配置 -->
       <div class="space-y-3.5">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 gap-3">
           <!-- 显示名称 -->
           <label class="block">
             <span class="mb-1 block text-xs font-medium text-foreground"
@@ -1543,41 +1507,6 @@
               :placeholder="$t('agent.settings.providers.namePlaceholder')"
             />
           </label>
-
-          <!-- 调用协议 (彻底告别原生 select，升级为分段胶囊选择器) -->
-          <div class="block">
-            <span class="mb-1 block text-xs font-medium text-foreground">{{
-              $t('agent.settings.providers.protocol')
-            }}</span>
-            <div class="flex h-9 items-center gap-1 rounded-lg border border-border/80 bg-header/60 p-1 box-border">
-              <button
-                type="button"
-                class="flex h-full flex-1 items-center justify-center gap-1.5 rounded-md text-xs font-semibold leading-none transition-all cursor-pointer select-none"
-                :class="
-                  form.protocol === 'chat-completions'
-                    ? 'bg-card text-foreground shadow-2xs border border-border/80'
-                    : 'border border-transparent text-text-secondary hover:text-foreground'
-                "
-                @click="form.protocol = 'chat-completions'"
-              >
-                <i class="fa-solid fa-comments text-[10px] text-primary"></i>
-                <span>{{ $t('agent.settings.providers.protocolChat') }}</span>
-              </button>
-              <button
-                type="button"
-                class="flex h-full flex-1 items-center justify-center gap-1.5 rounded-md text-xs font-semibold leading-none transition-all cursor-pointer select-none"
-                :class="
-                  form.protocol === 'responses'
-                    ? 'bg-card text-foreground shadow-2xs border border-border/80'
-                    : 'border border-transparent text-text-secondary hover:text-foreground'
-                "
-                @click="form.protocol = 'responses'"
-              >
-                <i class="fa-solid fa-microchip text-[10px] text-indigo-500"></i>
-                <span>{{ $t('agent.settings.providers.protocolResponses') }}</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         <!-- 接口 Base URL -->
@@ -1675,29 +1604,6 @@
                 class="h-8.5 w-full rounded-lg border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground outline-none focus:border-border-hover"
               />
             </label>
-          </div>
-        </div>
-
-        <!-- 高级网络例外折叠 -->
-        <div>
-          <button
-            type="button"
-            class="text-[11px] text-text-secondary hover:text-foreground flex items-center gap-1 transition-colors cursor-pointer"
-            @click="showAdvanced = !showAdvanced"
-          >
-            <i
-              :class="showAdvanced ? 'rotate-90' : ''"
-              class="fa-solid fa-chevron-right text-[9px] transition-transform"
-            ></i>
-            <span>{{ $t('agent.settings.providers.privateExceptions') }}</span>
-          </button>
-          <div v-show="showAdvanced" class="mt-2">
-            <input
-              v-model="form.privateHostExceptions"
-              data-no-highlight
-              class="h-8.5 w-full rounded-lg border border-border/80 bg-background px-2.5 font-mono text-xs text-foreground outline-none focus:border-border-hover"
-              placeholder="10.0.0.8:8080, 192.168.1.100"
-            />
           </div>
         </div>
       </div>
@@ -1911,6 +1817,16 @@
               {{ $t('agent.settings.providers.setDefault') }}
             </button>
 
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-border/70 bg-card px-2.5 py-1 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer shadow-2xs"
+              :disabled="busy"
+              @click="openCapabilityEditor(currentTestModalProvider, model)"
+            >
+              <i class="fa-solid fa-sliders text-[10px]" aria-hidden="true"></i>
+              <span>{{ $t('agent.settings.providers.capabilityEdit') }}</span>
+            </button>
+
             <!-- 快速测试连通性 -->
             <button
               type="button"
@@ -1975,6 +1891,163 @@
         >
           {{ $t('common.close') }}
         </button>
+      </div>
+    </template>
+  </BaseModal>
+
+  <BaseModal
+    :visible="Boolean(capabilityEditor && capabilityEditorModel)"
+    :title="$t('agent.settings.providers.capabilityTitle')"
+    :aria-label="$t('agent.settings.providers.capabilityTitle')"
+    :close-on-backdrop="!busy"
+    :close-on-escape="!busy"
+    :focus-on-open="true"
+    panel-class="max-w-lg p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    @close="closeCapabilityEditor"
+  >
+    <div v-if="capabilityEditorModel" class="space-y-4">
+      <div>
+        <div class="font-mono text-sm font-semibold text-foreground">{{ capabilityEditorModel.id }}</div>
+        <div class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.providers.capabilityDescription') }}</div>
+      </div>
+
+      <div class="space-y-3">
+        <label class="block">
+          <div class="mb-1 flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-foreground">{{ $t('agent.settings.providers.contextWindow') }}</span>
+            <div class="flex items-center gap-2 text-[10px]">
+              <span :class="capabilityFieldIsDefault('contextWindow') ? 'text-primary' : 'text-text-secondary'">
+                {{
+                  capabilityFieldIsDefault('contextWindow')
+                    ? $t('agent.settings.providers.registryDefault')
+                    : $t('agent.settings.providers.manualOverride')
+                }}
+              </span>
+              <button
+                v-if="capabilityEditorModel.registryDefaults?.contextWindow !== undefined"
+                type="button"
+                class="text-primary hover:underline disabled:opacity-40"
+                :disabled="capabilityFieldIsDefault('contextWindow')"
+                @click="restoreCapabilityField('contextWindow')"
+              >
+                {{ $t('agent.settings.providers.restoreDefault') }}
+              </button>
+            </div>
+          </div>
+          <input
+            v-model.number="capabilityForm.contextWindow"
+            type="number"
+            min="2"
+            data-no-highlight
+            class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 font-mono text-xs text-foreground outline-none focus:border-border-hover"
+          />
+        </label>
+
+        <label class="block">
+          <div class="mb-1 flex items-center justify-between gap-2">
+            <span class="text-xs font-medium text-foreground">{{
+              $t('agent.settings.providers.maxOutputTokens')
+            }}</span>
+            <div class="flex items-center gap-2 text-[10px]">
+              <span :class="capabilityFieldIsDefault('maxOutputTokens') ? 'text-primary' : 'text-text-secondary'">
+                {{
+                  capabilityFieldIsDefault('maxOutputTokens')
+                    ? $t('agent.settings.providers.registryDefault')
+                    : $t('agent.settings.providers.manualOverride')
+                }}
+              </span>
+              <button
+                v-if="capabilityEditorModel.registryDefaults?.maxOutputTokens !== undefined"
+                type="button"
+                class="text-primary hover:underline disabled:opacity-40"
+                :disabled="capabilityFieldIsDefault('maxOutputTokens')"
+                @click="restoreCapabilityField('maxOutputTokens')"
+              >
+                {{ $t('agent.settings.providers.restoreDefault') }}
+              </button>
+            </div>
+          </div>
+          <input
+            v-model.number="capabilityForm.maxOutputTokens"
+            type="number"
+            min="1"
+            data-no-highlight
+            class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 font-mono text-xs text-foreground outline-none focus:border-border-hover"
+          />
+        </label>
+
+        <div class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5">
+          <div class="flex items-center justify-between gap-3">
+            <label class="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
+              <input v-model="capabilityForm.supportsTools" type="checkbox" class="rounded accent-primary" />
+              <span>{{ $t('agent.settings.providers.tools') }}</span>
+            </label>
+            <div class="flex items-center gap-2 text-[10px]">
+              <span :class="capabilityFieldIsDefault('supportsTools') ? 'text-primary' : 'text-text-secondary'">
+                {{
+                  capabilityFieldIsDefault('supportsTools')
+                    ? $t('agent.settings.providers.registryDefault')
+                    : $t('agent.settings.providers.manualOverride')
+                }}
+              </span>
+              <button
+                v-if="capabilityEditorModel.registryDefaults?.supportsTools !== undefined"
+                type="button"
+                class="text-primary hover:underline disabled:opacity-40"
+                :disabled="capabilityFieldIsDefault('supportsTools')"
+                @click="restoreCapabilityField('supportsTools')"
+              >
+                {{ $t('agent.settings.providers.restoreDefault') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="capabilityEditorModel.reasoningEfforts?.length"
+          class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5 text-xs"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-medium text-foreground">{{ $t('agent.settings.providers.reasoningCapability') }}</span>
+            <span class="text-[10px] text-primary">{{ $t('agent.settings.providers.registryManaged') }}</span>
+          </div>
+          <div class="mt-1 font-mono text-[11px] text-text-secondary">
+            {{ capabilityEditorModel.reasoningEfforts.join(' · ') }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <template #footer>
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <button
+          v-if="capabilityEditorModel?.registryDefaults"
+          type="button"
+          class="rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-primary hover:bg-header disabled:opacity-50"
+          :disabled="busy"
+          @click="restoreAllCapabilities"
+        >
+          {{ $t('agent.settings.providers.restoreAllDefaults') }}
+        </button>
+        <span v-else></span>
+        <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-header"
+            :disabled="busy"
+            @click="closeCapabilityEditor"
+          >
+            {{ $t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
+            :disabled="busy"
+            @click="saveCapabilities"
+          >
+            {{ $t('common.save') }}
+          </button>
+        </div>
       </div>
     </template>
   </BaseModal>

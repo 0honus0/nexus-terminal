@@ -1,8 +1,10 @@
 <script setup lang="ts">
+  import { computed } from 'vue';
   import type { AgentSettingsView } from '../api/agent-api';
 
-  defineProps<{ settings: AgentSettingsView; busy: boolean }>();
+  const props = defineProps<{ settings: AgentSettingsView; busy: boolean }>();
   const emit = defineEmits<{ change: [enabled: boolean] }>();
+  const runtimeEnabled = computed(() => ['enabled', 'degraded'].includes(props.settings.availability.state));
 </script>
 
 <template>
@@ -17,36 +19,23 @@
       <div class="flex items-center gap-3">
         <span
           class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
-          :class="
-            settings.effectiveSettings.feature.enabled
-              ? 'bg-success/15 text-success'
-              : 'bg-text-secondary/15 text-text-secondary'
-          "
+          :class="runtimeEnabled ? 'bg-success/15 text-success' : 'bg-text-secondary/15 text-text-secondary'"
         >
-          <span
-            class="h-1.5 w-1.5 rounded-full"
-            :class="settings.effectiveSettings.feature.enabled ? 'bg-success' : 'bg-text-secondary'"
-          ></span>
-          {{
-            settings.effectiveSettings.feature.enabled ? $t('agent.settings.enabled') : $t('agent.settings.disabled')
-          }}
+          <span class="h-1.5 w-1.5 rounded-full" :class="runtimeEnabled ? 'bg-success' : 'bg-text-secondary'"></span>
+          {{ runtimeEnabled ? $t('agent.settings.enabled') : $t('agent.settings.disabled') }}
         </span>
         <button
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-medium shadow-sm transition-all focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           :class="
-            settings.effectiveSettings.feature.enabled
+            runtimeEnabled
               ? 'border border-error/30 bg-error/10 text-error hover:bg-error/20'
               : 'bg-primary text-white hover:bg-primary/90'
           "
           :disabled="busy"
-          @click="emit('change', !settings.effectiveSettings.feature.enabled)"
+          @click="emit('change', !runtimeEnabled)"
         >
-          {{
-            settings.effectiveSettings.feature.enabled
-              ? $t('agent.settings.feature.disable')
-              : $t('agent.settings.feature.enable')
-          }}
+          {{ runtimeEnabled ? $t('agent.settings.feature.disable') : $t('agent.settings.feature.enable') }}
         </button>
       </div>
     </div>

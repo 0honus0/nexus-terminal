@@ -49,7 +49,7 @@ export class AgentOnboardingService {
         appId: installed.appId,
         installed: true,
         installedVersion: installed.version,
-        enabled: app.desiredState === 'enabled',
+        enabled: app.desiredState === 'enabled' && ['running', 'degraded'].includes(app.observedState),
         availableVersion: installed.version,
         displayName: installed.manifest.displayName,
         description,
@@ -88,8 +88,8 @@ export class AgentOnboardingService {
     if (existing) {
       const scope = { userId, appId: this.source.recommendedAppId };
       const current = await this.lifecycle.get(scope);
-      const app =
-        current.desiredState === 'enabled' ? current : await this.lifecycle.setEnabled(scope, true, current.version);
+      const ready = current.desiredState === 'enabled' && ['running', 'degraded'].includes(current.observedState);
+      const app = ready ? current : await this.lifecycle.setEnabled(scope, true, current.version);
       return { app, installedNow: false };
     }
 

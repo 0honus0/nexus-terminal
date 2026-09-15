@@ -83,12 +83,21 @@ export interface AgentSettingsDocument {
   safety: { providerPrivateNetworkExceptions: string[] };
 }
 
+export type AgentAvailabilityState = 'disabled' | 'enabling' | 'enabled' | 'degraded' | 'unavailable';
+
+export interface AgentAvailabilityView {
+  state: AgentAvailabilityState;
+  reason: string | null;
+  appId: string | null;
+  appHealth: 'disabled' | 'enabling' | 'running' | 'degraded' | 'failed' | 'disabling' | null;
+}
+
 export interface AgentSettingsView {
   requestedSettings: AgentSettingsDocument;
   effectiveSettings: AgentSettingsDocument;
   hardLimits: AgentHardLimits;
   runtimeCapabilities: { workspaceRuntimeController: boolean };
-  availability: { state: string };
+  availability: AgentAvailabilityView;
   revision: number;
 }
 

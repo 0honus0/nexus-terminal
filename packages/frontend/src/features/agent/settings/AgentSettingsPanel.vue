@@ -157,9 +157,29 @@
       window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
     }, success);
 
+  const runtimeReady = (state: AgentSettingsView['availability']['state']): boolean =>
+    state === 'enabled' || state === 'degraded';
+
+  const assertAppReady = (app: AgentAppSummary): void => {
+    if (app.enabled && (app.health === 'healthy' || app.health === 'degraded')) return;
+    throw new Error(app.healthReason || t('agent.settings.feature.enableFailed'));
+  };
+
+  const assertFeatureReady = (view: AgentSettingsView): void => {
+    if (runtimeReady(view.availability.state)) return;
+    throw new Error(view.availability.reason || t('agent.settings.feature.enableFailed'));
+  };
+
   const changeFeature = (enabled: boolean): void => {
     if (!enabled) {
-      void patchSection('feature', { enabled: false });
+      void execute(async () => {
+        if (!settings.value) return;
+        const updated = await agentApi.patchSettings({ feature: { enabled: false } }, settings.value.revision);
+        if (updated.availability.state !== 'disabled') throw new Error(t('agent.settings.feature.disableFailed'));
+        settings.value = updated;
+        storage.value = await agentApi.storage();
+        window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+      }, t('agent.settings.feature.disabledSuccess'));
       return;
     }
     void execute(async () => {
@@ -167,13 +187,16 @@
       const recommendation = await agentApi.recommendedPlugin();
       if (recommendation.installed) {
         if (!recommendation.enabled) {
-          await agentApi.installRecommendedPlugin();
+          const installed = await agentApi.installRecommendedPlugin();
+          assertAppReady(installed.app);
           apps.value = await agentApi.apps();
         }
-        settings.value = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
+        const updated = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
+        settings.value = updated;
+        assertFeatureReady(updated);
         storage.value = await agentApi.storage();
         window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
-        feedback.notifySuccess(t('agent.ui.saved'));
+        feedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
         return;
       }
       recommendedPlugin.value = recommendation;
@@ -198,12 +221,16 @@
     void execute(async () => {
       if (!settings.value) return;
       try {
-        await agentApi.installRecommendedPlugin();
+        const installed = await agentApi.installRecommendedPlugin();
+        assertAppReady(installed.app);
         installProgress.value = 100;
-        settings.value = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
+        const updated = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
+        settings.value = updated;
+        assertFeatureReady(updated);
         storage.value = await agentApi.storage();
         apps.value = await agentApi.apps();
         window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+        feedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
         setTimeout(() => {
           onboardingVisible.value = false;
           recommendedPlugin.value = null;
@@ -282,12 +309,6 @@
       return true;
     });
 
-  const setProviderProtocol = (provider: AgentProviderView, protocol: AgentProviderView['protocol']) =>
-    execute(async () => {
-      const updated = await agentApi.updateProvider(provider, { protocol });
-      providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
-    });
-
   const setDefaultModel = (providerId: string, modelId: string) =>
     patchSection(
       'model',
@@ -363,19 +384,17 @@
               v-if="settings"
               class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
               :class="
-                settings.effectiveSettings.feature.enabled
+                runtimeReady(settings.availability.state)
                   ? 'bg-success/15 text-success'
                   : 'bg-text-secondary/15 text-text-secondary'
               "
             >
               <span
                 class="h-1.5 w-1.5 rounded-full"
-                :class="settings.effectiveSettings.feature.enabled ? 'bg-success' : 'bg-text-secondary'"
+                :class="runtimeReady(settings.availability.state) ? 'bg-success' : 'bg-text-secondary'"
               ></span>
               {{
-                settings.effectiveSettings.feature.enabled
-                  ? $t('agent.settings.enabled')
-                  : $t('agent.settings.disabled')
+                runtimeReady(settings.availability.state) ? $t('agent.settings.enabled') : $t('agent.settings.disabled')
               }}
             </span>
           </div>
@@ -468,7 +487,6 @@
               :default-model-id="settings.requestedSettings.model.defaultModelId"
               :create-provider="createProvider"
               @toggle="toggleProvider"
-              @protocol="setProviderProtocol"
               @discover="discoverProviderModels"
               :add-provider-model="addProviderModel"
               :update-provider-models="updateProviderModels"

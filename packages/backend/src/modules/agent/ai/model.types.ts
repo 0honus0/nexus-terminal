@@ -1,6 +1,7 @@
-export type OpenAiCompatibleProtocol = 'chat-completions' | 'responses';
+export type OpenAiCompatibleProtocol = 'chat-completions';
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
-export type ReasoningCapabilitySource = 'provider' | 'registry';
+export type ReasoningCapabilitySource = 'provider' | 'registry' | 'manual';
+export type ModelCapabilitySource = 'registry' | 'manual';
 
 export interface ReasoningCapability {
   supportedEfforts: ReasoningEffort[];
@@ -10,11 +11,56 @@ export interface ReasoningCapability {
   source: ReasoningCapabilitySource;
 }
 
+export interface ModelReasoningDefaults {
+  supportedEfforts: ReasoningEffort[];
+  defaultEffort?: ReasoningEffort;
+  mandatory?: boolean;
+  supportsMaxTokens?: boolean;
+}
+
+export interface ModelCapabilityDefaults {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsTools?: boolean;
+  reasoning?: ModelReasoningDefaults;
+}
+
+export interface ModelCapabilityOverrides {
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsTools?: boolean;
+  reasoning?: ModelReasoningDefaults;
+}
+
+export interface PersistedProviderModelConfig {
+  id: string;
+  capabilityOverrides?: ModelCapabilityOverrides;
+  // Legacy flat capability fields are read-only compatibility for existing models_json rows.
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  supportsTools?: boolean;
+  reasoningEfforts?: ReasoningEffort[];
+  defaultReasoningEffort?: ReasoningEffort;
+  reasoningMandatory?: boolean;
+  reasoningSupportsMaxTokens?: boolean;
+  priceMicrosPerMillionInput?: number;
+  priceMicrosPerMillionOutput?: number;
+  priceVersion?: string;
+}
+
 export interface ProviderModelConfig {
   id: string;
   contextWindow: number;
   maxOutputTokens: number;
   supportsTools: boolean;
+  capabilitySources: {
+    contextWindow: ModelCapabilitySource;
+    maxOutputTokens: ModelCapabilitySource;
+    supportsTools: ModelCapabilitySource;
+    reasoning?: ModelCapabilitySource;
+  };
+  registryDefaults?: ModelCapabilityDefaults;
+  capabilityOverrides?: ModelCapabilityOverrides;
   reasoningEfforts?: ReasoningEffort[];
   defaultReasoningEffort?: ReasoningEffort;
   reasoningSource?: ReasoningCapabilitySource;
@@ -23,6 +69,21 @@ export interface ProviderModelConfig {
   priceMicrosPerMillionInput?: number;
   priceMicrosPerMillionOutput?: number;
   priceVersion?: string;
+}
+
+export interface PersistedProviderView {
+  id: string;
+  kind: 'openai-compatible';
+  displayName: string;
+  baseUrl: string;
+  protocol: OpenAiCompatibleProtocol;
+  hasCredential: boolean;
+  credentialRevision: number;
+  models: PersistedProviderModelConfig[];
+  enabled: boolean;
+  version: number;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface ProviderView {
@@ -34,7 +95,6 @@ export interface ProviderView {
   hasCredential: boolean;
   credentialRevision: number;
   models: ProviderModelConfig[];
-  privateHostExceptions: string[];
   enabled: boolean;
   version: number;
   createdAt: number;
@@ -49,7 +109,6 @@ export interface ProviderInput {
   credential?: string;
   clearCredential?: boolean;
   models: ProviderModelConfig[];
-  privateHostExceptions: string[];
   enabled: boolean;
 }
 
@@ -113,6 +172,7 @@ export interface DiscoveredProviderModel {
   id: string;
   ownedBy?: string;
   createdAt?: number;
+  registryDefaults?: ModelCapabilityDefaults;
 }
 
 export type ModelEvent =

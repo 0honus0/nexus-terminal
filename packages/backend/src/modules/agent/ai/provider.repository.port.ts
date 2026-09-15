@@ -1,4 +1,10 @@
-import type { OpenAiCompatibleProtocol, ProviderModelConfig, ProviderView } from './model.types';
+import type {
+  OpenAiCompatibleProtocol,
+  PersistedProviderModelConfig,
+  PersistedProviderView,
+  ProviderModelConfig,
+  ProviderView,
+} from './model.types';
 
 export interface ProviderCreateRecord {
   id: string;
@@ -7,8 +13,7 @@ export interface ProviderCreateRecord {
   displayName: string;
   baseUrl: string;
   protocol: OpenAiCompatibleProtocol;
-  models: ProviderModelConfig[];
-  privateHostExceptions: string[];
+  models: PersistedProviderModelConfig[];
   enabled: boolean;
   credential?: string;
   createdAt: number;
@@ -19,8 +24,7 @@ export interface ProviderUpdateRecord {
   displayName: string;
   baseUrl: string;
   protocol: OpenAiCompatibleProtocol;
-  models: ProviderModelConfig[];
-  privateHostExceptions: string[];
+  models: PersistedProviderModelConfig[];
   enabled: boolean;
   credential?: string;
   clearCredential: boolean;
@@ -28,16 +32,20 @@ export interface ProviderUpdateRecord {
 }
 
 export interface ProviderRepositoryPort {
-  get(userId: number, providerId: string): Promise<ProviderView | null>;
-  list(userId: number): Promise<ProviderView[]>;
-  create(record: ProviderCreateRecord): Promise<ProviderView>;
+  get(userId: number, providerId: string): Promise<PersistedProviderView | null>;
+  list(userId: number): Promise<PersistedProviderView[]>;
+  create(record: ProviderCreateRecord): Promise<PersistedProviderView>;
   update(
     userId: number,
     providerId: string,
     expectedVersion: number,
     record: ProviderUpdateRecord,
-  ): Promise<ProviderView>;
+  ): Promise<PersistedProviderView>;
   remove(userId: number, providerId: string, expectedVersion: number, deletedAt: number): Promise<void>;
+}
+
+export interface ProviderRuntimeConfigPort {
+  get(userId: number, providerId: string): Promise<ProviderView>;
 }
 
 export type { ProviderModelConfig, ProviderView } from './model.types';

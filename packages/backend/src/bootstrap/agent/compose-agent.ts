@@ -168,8 +168,12 @@ export const composeAgent = ({
   const integrationRepository = new SqliteIntegrationRepository(database, cipher);
   const mcpRuntime = new McpAdapter(integrationRepository, outboundPolicy);
   const providerSecrets = new ProviderSecretAdapter(database, cipher);
-  const languageModel = new OpenAiCompatibleAdapter(providerRepository, providerSecrets, outboundPolicy);
-  const providers = new ProviderService(providerRepository, outboundPolicy, languageModel, systemClock, (userId) =>
+  let providers: ProviderService;
+  const languageModel = new OpenAiCompatibleAdapter(
+    { get: (userId, providerId) => providers.get(userId, providerId) },
+    providerSecrets,
+  );
+  providers = new ProviderService(providerRepository, languageModel, systemClock, (userId) =>
     lifecycle.refreshHealth(userId),
   );
   const artifactLimits: ArtifactLimitPolicyPort = {
