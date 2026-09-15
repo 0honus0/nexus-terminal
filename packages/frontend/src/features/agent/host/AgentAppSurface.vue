@@ -394,6 +394,13 @@
     selectedConnectionIds.value = [...next].sort((left, right) => left - right);
   };
 
+  const setAllConnectionSelections = (enabled: boolean): void => {
+    if (modelSelectionLocked.value) return;
+    selectedConnectionIds.value = enabled
+      ? connections.value.map((connection) => connection.id).sort((left, right) => left - right)
+      : [];
+  };
+
   const openRunFromHistory = (runId: string): void => {
     const candidate = threadRuns.value.find((item) => item.id === runId);
     if (candidate) void openRunDetail(candidate);
@@ -1569,6 +1576,64 @@
                         <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
                         >{{ $t('agent.operations.frozen') }}
                       </span>
+                    </div>
+
+                    <div
+                      v-if="connections.length > 0"
+                      class="mb-1.5 flex items-center justify-between gap-2 rounded-lg bg-header/30 px-2 py-1.5"
+                    >
+                      <div class="flex min-w-0 items-center gap-1.5 text-[9.5px] text-text-secondary/70">
+                        <span
+                          class="h-1.5 w-1.5 shrink-0 rounded-full"
+                          :class="displayedConnectionIds.length ? 'bg-success' : 'bg-error/75'"
+                          aria-hidden="true"
+                        ></span>
+                        <span class="truncate">{{ $t('agent.operations.targetsRunScope') }}</span>
+                        <span
+                          class="shrink-0 font-semibold tabular-nums"
+                          :class="displayedConnectionIds.length ? 'text-success' : 'text-error/80'"
+                        >
+                          {{ displayedConnectionIds.length }}/{{ connections.length }}
+                        </span>
+                      </div>
+                      <div
+                        class="flex shrink-0 overflow-hidden rounded-md border border-border/65 bg-background/55 p-0.5"
+                        role="group"
+                        :aria-label="$t('agent.operations.targetsBulkToggle')"
+                      >
+                        <button
+                          type="button"
+                          class="flex h-5 w-6 items-center justify-center rounded-[4px] transition-colors disabled:cursor-default disabled:opacity-35"
+                          :class="
+                            displayedConnectionIds.length === connections.length
+                              ? 'bg-success/14 text-success'
+                              : 'text-text-secondary/65 hover:bg-header/80 hover:text-success'
+                          "
+                          :disabled="modelSelectionLocked"
+                          :aria-pressed="displayedConnectionIds.length === connections.length"
+                          :aria-label="$t('agent.operations.enableAllTargets')"
+                          :title="$t('agent.operations.enableAllTargets')"
+                          @click="setAllConnectionSelections(true)"
+                        >
+                          <i class="fa-solid fa-check text-[8px]" aria-hidden="true"></i>
+                        </button>
+                        <button
+                          type="button"
+                          class="flex h-5 w-6 items-center justify-center rounded-[4px] transition-colors disabled:cursor-default disabled:opacity-35"
+                          :class="
+                            displayedConnectionIds.length === 0
+                              ? 'bg-error/10 text-error/85'
+                              : 'text-text-secondary/65 hover:bg-header/80 hover:text-error/80'
+                          "
+                          :disabled="modelSelectionLocked"
+                          :aria-pressed="displayedConnectionIds.length === 0"
+                          :aria-label="$t('agent.operations.disableAllTargets')"
+                          :title="$t('agent.operations.disableAllTargets')"
+                          @click="setAllConnectionSelections(false)"
+                        >
+                          <i class="fa-solid fa-xmark text-[8px]" aria-hidden="true"></i>
+                        </button>
+                      </div>
                     </div>
 
                     <div class="max-h-64 overflow-y-auto rounded-lg bg-header/25 p-1">
