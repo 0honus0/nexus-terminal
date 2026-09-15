@@ -199,7 +199,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await settingsNavigation.getByRole('button', { name: 'Plugins & Security', exact: true }).click();
   await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Safety and network', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Globally blocked targets', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'System guardrails', exact: true })).toBeVisible();
   await captureFunctionalScreenshot(page, 'agent-settings-plugins-security.png', {
     viewport: { width: 1440, height: 900 },

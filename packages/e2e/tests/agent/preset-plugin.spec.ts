@@ -993,7 +993,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const composer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
       await expect(composer).toBeFocused();
       await expect(presetThread).not.toHaveAttribute('aria-current', 'true');
-      await expect(hub.getByText('Untitled thread', { exact: true })).toHaveCount(2);
+      await expect(hub.getByText('New conversation', { exact: true })).toHaveCount(2);
 
       await composer.fill('/goal UI durable goal');
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
@@ -1006,7 +1006,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const conversationSearch = hub.getByPlaceholder('Search conversations', { exact: true });
       await conversationSearch.fill('Preset E2E');
       await expect(presetThread).toBeVisible();
-      await expect(hub.getByRole('button').filter({ hasText: 'Untitled thread' })).toHaveCount(0);
+      await expect(hub.getByRole('button').filter({ hasText: 'New conversation' })).toHaveCount(0);
       await presetThread.click();
       await expect(presetThread).toHaveAttribute('aria-current', 'true');
       await expect(hub.getByText('Preset E2E thread', { exact: true })).toHaveCount(2);

@@ -1,5 +1,6 @@
 import { expect as baseExpect, test as base } from '@playwright/test';
 import { resetTestSshFilesystem } from './ssh';
+import { E2E_URLS } from './test-env';
 
 export type { APIRequestContext, BrowserContext, Locator, Page } from '@playwright/test';
 
@@ -13,7 +14,7 @@ type E2EFixtures = {
 const resetE2EBaseline = async (request: import('@playwright/test').APIRequestContext, mode: E2EDatabaseMode) => {
   let lastFailure = 'E2E reset did not run.';
   for (let attempt = 1; attempt <= 3; attempt += 1) {
-    const response = await request.post('/api/v1/__e2e/reset', { data: { mode } });
+    const response = await request.post(`${E2E_URLS.backendOrigin}/api/v1/__e2e/reset`, { data: { mode } });
     const body = await response.text();
     if (response.ok()) return;
 
