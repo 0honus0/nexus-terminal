@@ -1254,7 +1254,7 @@
           v-for="(thread, threadOffset) in renderedThreads"
           :key="thread.id"
           type="button"
-          class="agent-thread-row mb-0.5 flex h-[43px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150"
+          class="agent-thread-row relative mb-0.5 flex h-[43px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150"
           :class="
             currentThread?.id === thread.id
               ? 'bg-primary/[0.055] text-foreground font-medium pl-2.5'
