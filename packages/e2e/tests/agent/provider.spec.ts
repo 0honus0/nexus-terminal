@@ -8,17 +8,15 @@ type ProviderView = {
   kind: 'openai-compatible';
   displayName: string;
   baseUrl: string;
-  protocol: 'chat-completions' | 'responses';
+  protocol: 'chat-completions';
   hasCredential: boolean;
   credentialRevision: number;
   models: Array<{ id: string; contextWindow: number; maxOutputTokens: number; supportsTools: boolean }>;
-  privateHostExceptions: string[];
   enabled: boolean;
   version: number;
 };
 
 const providerBase = 'http://127.0.0.1:29091/v1';
-const providerException = '127.0.0.1:29091';
 const providerSecret = 'e2e-provider-secret';
 const model = { id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true };
 
@@ -28,31 +26,14 @@ const csrfToken = async (request: APIRequestContext): Promise<string> => {
   return ((await response.json()) as Envelope<{ token: string }>).data.token;
 };
 
-test('Provider configuration protects credentials and enforces outbound policy', async ({ request }) => {
+test('Provider configuration protects credentials and enforces the OpenAI-compatible contract', async ({ request }) => {
   await loginAsInitialAdmin(request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
   let provider!: ProviderView;
 
-  await step('private loopback endpoints require an exact explicit exception', async () => {
-    const denied = await request.post('/api/v1/agent/ai/providers', {
-      headers,
-      data: {
-        kind: 'openai-compatible',
-        displayName: 'Denied E2E Provider',
-        baseUrl: providerBase,
-        credential: providerSecret,
-        models: [model],
-        privateHostExceptions: [],
-        enabled: true,
-      },
-    });
-    expect(denied.status()).toBe(403);
-    await expect(denied.json()).resolves.toMatchObject({ error: { code: 'RESOURCE_FORBIDDEN' } });
-  });
-
-  await step('save returns only a safe Provider view', async () => {
+  await step('configured model endpoints can be saved without a private-network exception list', async () => {
     const created = await request.post('/api/v1/agent/ai/providers', {
       headers,
       data: {
@@ -61,7 +42,6 @@ test('Provider configuration protects credentials and enforces outbound policy',
         baseUrl: providerBase,
         credential: providerSecret,
         models: [model],
-        privateHostExceptions: [providerException],
         enabled: true,
       },
     });
@@ -74,13 +54,13 @@ test('Provider configuration protects credentials and enforces outbound policy',
       protocol: 'chat-completions',
       hasCredential: true,
       credentialRevision: 1,
-      privateHostExceptions: [providerException],
       enabled: true,
       version: 1,
     });
     const serialized = JSON.stringify(provider);
     expect(serialized).not.toContain(providerSecret);
     expect(serialized).not.toContain('protected_credential');
+    expect(serialized).not.toContain('privateHostExceptions');
   });
 
   await step('model discovery reads the upstream catalog without inventing capabilities', async () => {
@@ -112,86 +92,70 @@ test('Provider configuration protects credentials and enforces outbound policy',
     });
   });
 
-  await step('omitting credentials preserves them while replacement invalidates old secret revision', async () => {
-    const renamed = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-      headers,
-      data: { displayName: 'E2E Provider Renamed', expectedVersion: provider.version },
-    });
-    expect(renamed.ok(), await renamed.text()).toBeTruthy();
-    provider = ((await renamed.json()) as Envelope<ProviderView>).data;
-    expect(provider).toMatchObject({ displayName: 'E2E Provider Renamed', hasCredential: true, credentialRevision: 1 });
+  await step(
+    'provider protocol stays chat-completions while credential replacement preserves secret revisions',
+    async () => {
+      const renamed = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+        headers,
+        data: { displayName: 'E2E Provider Renamed', expectedVersion: provider.version },
+      });
+      expect(renamed.ok(), await renamed.text()).toBeTruthy();
+      provider = ((await renamed.json()) as Envelope<ProviderView>).data;
+      expect(provider).toMatchObject({
+        displayName: 'E2E Provider Renamed',
+        hasCredential: true,
+        credentialRevision: 1,
+      });
 
-    const switched = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-      headers,
-      data: { protocol: 'responses', expectedVersion: provider.version },
-    });
-    expect(switched.ok(), await switched.text()).toBeTruthy();
-    provider = ((await switched.json()) as Envelope<ProviderView>).data;
-    expect(provider.protocol).toBe('responses');
+      const unsupportedProtocol = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+        headers,
+        data: { protocol: 'responses', expectedVersion: provider.version },
+      });
+      expect(unsupportedProtocol.status(), await unsupportedProtocol.text()).toBe(400);
+      await expect(unsupportedProtocol.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
 
-    const responsesTest = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
-      headers,
-      data: { modelId: 'e2e-model' },
-    });
-    expect(responsesTest.ok(), await responsesTest.text()).toBeTruthy();
-    await expect(responsesTest.json()).resolves.toMatchObject({
-      data: { ok: true, usage: { inputTokens: 5, outputTokens: 1, cachedInputTokens: 2 } },
-    });
+      const badCredential = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+        headers,
+        data: { credential: 'wrong-e2e-secret', expectedVersion: provider.version },
+      });
+      expect(badCredential.ok(), await badCredential.text()).toBeTruthy();
+      provider = ((await badCredential.json()) as Envelope<ProviderView>).data;
+      expect(provider).toMatchObject({ hasCredential: true, credentialRevision: 2 });
 
-    const switchedBack = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-      headers,
-      data: { protocol: 'chat-completions', expectedVersion: provider.version },
-    });
-    expect(switchedBack.ok(), await switchedBack.text()).toBeTruthy();
-    provider = ((await switchedBack.json()) as Envelope<ProviderView>).data;
-    expect(provider.protocol).toBe('chat-completions');
+      const failed = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
+        headers,
+        data: { modelId: 'e2e-model' },
+      });
+      expect(failed.ok(), await failed.text()).toBeTruthy();
+      await expect(failed.json()).resolves.toMatchObject({ data: { ok: false, errorCode: 'PROVIDER_AUTH_FAILED' } });
 
-    const badCredential = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-      headers,
-      data: { credential: 'wrong-e2e-secret', expectedVersion: provider.version },
-    });
-    expect(badCredential.ok(), await badCredential.text()).toBeTruthy();
-    provider = ((await badCredential.json()) as Envelope<ProviderView>).data;
-    expect(provider).toMatchObject({ hasCredential: true, credentialRevision: 2 });
+      const restored = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+        headers,
+        data: { credential: providerSecret, expectedVersion: provider.version },
+      });
+      expect(restored.ok(), await restored.text()).toBeTruthy();
+      provider = ((await restored.json()) as Envelope<ProviderView>).data;
+      expect(provider.credentialRevision).toBe(3);
+    },
+  );
 
-    const failed = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
-      headers,
-      data: { modelId: 'e2e-model' },
-    });
-    expect(failed.ok(), await failed.text()).toBeTruthy();
-    await expect(failed.json()).resolves.toMatchObject({ data: { ok: false, errorCode: 'PROVIDER_AUTH_FAILED' } });
+  await step(
+    'provider endpoint validation rejects embedded URL credentials without changing the saved endpoint',
+    async () => {
+      const rejected = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+        headers,
+        data: { baseUrl: 'http://user:pass@127.0.0.1:29091/v1', expectedVersion: provider.version },
+      });
+      expect(rejected.status(), await rejected.text()).toBe(400);
+      await expect(rejected.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
 
-    const restored = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-      headers,
-      data: { credential: providerSecret, expectedVersion: provider.version },
-    });
-    expect(restored.ok(), await restored.text()).toBeTruthy();
-    provider = ((await restored.json()) as Envelope<ProviderView>).data;
-    expect(provider.credentialRevision).toBe(3);
-  });
-
-  await step('redirect responses are rejected instead of forwarding the credential', async () => {
-    const redirected = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-      headers,
-      data: { baseUrl: 'http://127.0.0.1:29091/redirect', expectedVersion: provider.version },
-    });
-    expect(redirected.ok(), await redirected.text()).toBeTruthy();
-    provider = ((await redirected.json()) as Envelope<ProviderView>).data;
-
-    const tested = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
-      headers,
-      data: { modelId: 'e2e-model' },
-    });
-    expect(tested.ok(), await tested.text()).toBeTruthy();
-    await expect(tested.json()).resolves.toMatchObject({ data: { ok: false, errorCode: 'PROVIDER_REDIRECT_DENIED' } });
-
-    const restored = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-      headers,
-      data: { baseUrl: providerBase, expectedVersion: provider.version },
-    });
-    expect(restored.ok(), await restored.text()).toBeTruthy();
-    provider = ((await restored.json()) as Envelope<ProviderView>).data;
-  });
+      const current = await request.get('/api/v1/agent/ai/providers');
+      expect(current.ok(), await current.text()).toBeTruthy();
+      const listed = ((await current.json()) as Envelope<ProviderView[]>).data;
+      provider = listed.find((candidate) => candidate.id === provider.id)!;
+      expect(provider.baseUrl).toBe(providerBase);
+    },
+  );
 
   await step('explicit clear and deletion remove credentials without exposing them', async () => {
     const cleared = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {

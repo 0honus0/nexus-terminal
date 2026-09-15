@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 import { ensureTestSshConnection } from '../../support/ssh';
@@ -35,7 +35,6 @@ type RunView = {
 const repositoryUrl = `${E2E_URLS.pluginRepositoryOrigin}/catalog.json`;
 const repositoryException = `127.0.0.1:${new URL(E2E_URLS.pluginRepositoryOrigin).port}`;
 const providerBase = 'http://127.0.0.1:29091/v1';
-const providerException = '127.0.0.1:29091';
 const providerSecret = 'e2e-provider-secret';
 
 const csrfToken = async (request: APIRequestContext): Promise<string> => {
@@ -84,7 +83,6 @@ const installAndRunNexusAgent = async (
         patch: {
           feature: { enabled: true },
           plugins: { repositories: [{ url: repositoryUrl }] },
-          budget: { maxOutputTokens: 16 },
         },
         expectedVersion: settings.revision,
       },
@@ -236,7 +234,6 @@ const installAndRunNexusAgent = async (
           { id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true },
           { id: 'e2e-model-alt', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true },
         ],
-        privateHostExceptions: [providerException],
         enabled: true,
       },
     });
@@ -450,6 +447,7 @@ test('official first-party catalog is discoverable without repository configurat
 }) => {
   const request = context.request;
   await loginAsInitialAdmin(request);
+  await setUiLanguage(request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
@@ -503,7 +501,7 @@ test('official first-party catalog is discoverable without repository configurat
   const panel = page.locator('#settings-panel-agent');
   await panel
     .getByRole('navigation', { name: 'Agent settings sections', exact: true })
-    .getByRole('button', { name: 'Apps and extensions', exact: true })
+    .getByRole('button', { name: 'Plugins & Security', exact: true })
     .click();
   const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
   await pluginsHeading.scrollIntoViewIfNeeded();
@@ -523,6 +521,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
 }) => {
   const request = context.request;
   await loginAsInitialAdmin(request);
+  await setUiLanguage(request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
@@ -652,7 +651,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
     const panel = page.locator('#settings-panel-agent');
     await panel
       .getByRole('navigation', { name: 'Agent settings sections', exact: true })
-      .getByRole('button', { name: 'Apps and extensions', exact: true })
+      .getByRole('button', { name: 'Plugins & Security', exact: true })
       .click();
     const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
     await pluginsHeading.scrollIntoViewIfNeeded();
@@ -700,6 +699,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
   context,
 }) => {
   const { threadId, connectionId } = await installAndRunNexusAgent(context.request);
+  await setUiLanguage(context.request);
   const onboardingCsrf = await csrfToken(context.request);
   const recommendedInstall = await context.request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
     headers: { 'X-Nexus-CSRF': onboardingCsrf },

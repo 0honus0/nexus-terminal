@@ -103,7 +103,14 @@ const server = http.createServer(async (request, response) => {
     response.writeHead(400).end();
     return;
   }
-  if (!['e2e-model', 'e2e-model-alt'].includes(body?.model) || body?.stream !== true || body?.max_tokens !== 16) {
+  const maxTokens = Number(body?.max_tokens);
+  if (
+    !['e2e-model', 'e2e-model-alt'].includes(body?.model) ||
+    body?.stream !== true ||
+    !Number.isInteger(maxTokens) ||
+    maxTokens < 1 ||
+    maxTokens > 128
+  ) {
     response.writeHead(422, { 'Content-Type': 'application/json' });
     response.end(JSON.stringify({ error: { message: 'unexpected test request' } }));
     return;

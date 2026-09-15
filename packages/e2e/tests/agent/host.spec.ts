@@ -1,5 +1,5 @@
 import { expect, test } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { step } from '../../support/steps';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { E2E_URLS } from '../../support/test-env';
@@ -28,6 +28,7 @@ type AgentFeatureSettingsView = {
 
 test('Agent launcher stays passive until the user explicitly opens the Hub', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
   await enableAgentWithRecommendedNexusAgent(context.request);
 
   await page.goto('/connections');
@@ -48,6 +49,7 @@ test('Agent feature enable opens one global floating window that survives route 
   context,
 }) => {
   await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
   const initialSettingsResponse = await context.request.get('/api/v1/agent/settings');
   expect(initialSettingsResponse.ok(), await initialSettingsResponse.text()).toBeTruthy();
   const settings = ((await initialSettingsResponse.json()) as AgentEnvelope<AgentFeatureSettingsView>).data;
@@ -106,6 +108,7 @@ test('Agent settings surface exposes the production control plane and captures f
   context,
 }) => {
   await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
   await enableAgentWithRecommendedNexusAgent(context.request);
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Agent', exact: true }).click();
@@ -114,44 +117,66 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(panel).toBeVisible();
   const settingsNavigation = panel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
   await expect(settingsNavigation).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Overview', exact: true })).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Models and budget', exact: true })).toBeVisible();
-  await expect(settingsNavigation.getByRole('button', { name: 'Runtime environments', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Models & Budget', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true })).toBeVisible();
+  await expect(settingsNavigation.getByRole('button', { name: 'Plugins & Security', exact: true })).toBeVisible();
   await expect(panel.getByRole('heading', { name: 'Agent feature', exact: true })).toBeVisible();
-  await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
-  await captureFunctionalScreenshot(page, 'agent-settings-overview.png', { viewport: { width: 1440, height: 900 } });
-
-  await settingsNavigation.getByRole('button', { name: 'Apps and extensions', exact: true }).click();
-  await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
-
-  await settingsNavigation.getByRole('button', { name: 'Models and budget', exact: true }).click();
   const providersHeading = panel.getByRole('heading', { name: 'Model providers', exact: true });
   await expect(providersHeading).toBeVisible();
+  await captureFunctionalScreenshot(page, 'agent-settings-models.png', { viewport: { width: 1440, height: 900 } });
+
   const providersSection = providersHeading.locator('xpath=ancestor::section[1]');
   await providersSection.getByRole('button', { name: 'Add provider', exact: true }).click();
-  await providersSection.getByLabel('Display name', { exact: true }).fill('Settings UI Provider');
-  await providersSection.getByLabel('Base URL', { exact: true }).fill('http://127.0.0.1:29091/v1');
-  await providersSection.getByLabel('Credential', { exact: true }).fill('e2e-provider-secret');
-  await providersSection.getByLabel('Model ID', { exact: true }).fill('e2e-model');
-  await providersSection.getByLabel('Private host:port exceptions', { exact: true }).fill('127.0.0.1:29091');
-  await providersSection.getByRole('button', { name: 'Create provider', exact: true }).click();
+  const addProvider = page.getByRole('dialog', { name: 'Add Model Provider', exact: true });
+  await expect(addProvider).toBeVisible();
+  await addProvider.getByLabel('Display name', { exact: true }).fill('Settings UI Provider');
+  await addProvider.getByLabel('Base URL', { exact: true }).fill('http://127.0.0.1:29091/v1');
+  await addProvider.getByLabel('Credential', { exact: true }).fill('e2e-provider-secret');
+  await addProvider.getByLabel('Model ID', { exact: true }).fill('e2e-model');
+  await addProvider.getByLabel('Context window', { exact: true }).fill('8192');
+  await addProvider.getByLabel('Maximum output tokens', { exact: true }).fill('128');
+  await addProvider.getByRole('button', { name: 'Save & Add', exact: true }).click();
+  await expect(addProvider).toHaveCount(0);
   await expect(providersSection.getByText('Settings UI Provider', { exact: true })).toBeVisible();
-  const defaultModel = providersSection.getByLabel('Default model for new runs', { exact: true });
+
+  const defaultModel = providersSection.getByRole('button', { name: 'Default model for new runs', exact: true });
   await expect(defaultModel).toBeEnabled();
+  await defaultModel.click();
+  const defaultOption = providersSection
+    .getByRole('button')
+    .filter({ hasText: 'e2e-model' })
+    .filter({ hasText: 'Settings UI Provider' });
+  await expect(defaultOption).toBeVisible();
   const defaultModelSaved = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
   );
-  await defaultModel.selectOption({ label: 'Settings UI Provider · e2e-model' });
+  await defaultOption.click();
   expect((await defaultModelSaved).ok()).toBeTruthy();
+  await expect(defaultModel).toContainText('e2e-model');
   const savedSettings = await context.request.get('/api/v1/agent/settings');
   expect(savedSettings.ok(), await savedSettings.text()).toBeTruthy();
   await expect(savedSettings.json()).resolves.toMatchObject({
     data: { requestedSettings: { model: { defaultModelId: 'e2e-model' } } },
   });
-  await providersSection.getByRole('button', { name: 'e2e-model · Test', exact: true }).click();
-  await expect(panel.getByText(/Provider OK/)).toBeVisible();
 
-  await settingsNavigation.getByRole('button', { name: 'Execution and agents', exact: true }).click();
+  await providersSection.getByRole('button', { name: 'Models & test (1)', exact: true }).click();
+  const testModels = page.getByRole('dialog', { name: 'Configured models & test', exact: true });
+  await expect(testModels).toBeVisible();
+  const modelRow = testModels
+    .getByText('e2e-model', { exact: true })
+    .locator('xpath=ancestor::div[contains(@class, "rounded-xl")][1]');
+  await modelRow.getByRole('button', { name: 'Test', exact: true }).click();
+  await expect(modelRow).toContainText(/\d+ms/);
+  await testModels.getByRole('button', { name: 'Close', exact: true }).click();
+
+  await settingsNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: 'Execution and performance', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Plugin / App execution budget', exact: true })).toBeVisible();
+  const workspaceRuntime = panel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
+  await workspaceRuntime.scrollIntoViewIfNeeded();
+  await expect(workspaceRuntime).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Browser Runtime', exact: true })).toBeAttached();
+  await expect(panel.getByRole('heading', { name: 'ACP Runtime', exact: true })).toBeAttached();
   const subagents = panel.getByRole('heading', { name: 'Subagents', exact: true });
   await subagents.scrollIntoViewIfNeeded();
   await expect(subagents).toBeVisible();
@@ -162,37 +187,25 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(subagentSection.getByLabel('Role', { exact: true })).toHaveValue('Bounded child agent');
   await subagentSection.getByRole('button', { name: 'Save profiles', exact: true }).click();
   await expect(subagentSection.getByLabel('Profile ID', { exact: true })).toHaveValue('worker-1');
-  await captureFunctionalScreenshot(page, 'agent-settings-subagents.png', { viewport: { width: 1440, height: 900 } });
-
-  await page.goto('/settings');
-  await page.getByRole('tab', { name: 'Agent', exact: true }).click();
-  const runtimePanel = page.locator('#settings-panel-agent');
-  await runtimePanel
-    .getByRole('navigation', { name: 'Agent settings sections', exact: true })
-    .getByRole('button', { name: 'Runtime environments', exact: true })
-    .click();
-  const workspaceRuntime = runtimePanel.getByRole('heading', { name: 'Workspace dev environment', exact: true });
-  await expect(workspaceRuntime).toBeAttached();
-  await workspaceRuntime.scrollIntoViewIfNeeded();
-  await expect(workspaceRuntime).toBeVisible();
-  await expect(runtimePanel.getByRole('heading', { name: 'Browser Runtime', exact: true })).toBeAttached();
-  await expect(runtimePanel.getByRole('heading', { name: 'ACP Runtime', exact: true })).toBeAttached();
-  await expect(runtimePanel.getByRole('heading', { name: 'Safety and network', exact: true })).not.toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Artifacts and storage', exact: true })).toBeAttached();
   await captureFunctionalScreenshot(page, 'agent-settings-runtime.png', { viewport: { width: 1440, height: 900 } });
 
-  await runtimePanel
-    .getByRole('navigation', { name: 'Agent settings sections', exact: true })
-    .getByRole('button', { name: 'Safety and system', exact: true })
-    .click();
-  await expect(runtimePanel.getByRole('heading', { name: 'Safety and network', exact: true })).toBeVisible();
+  await settingsNavigation.getByRole('button', { name: 'Plugins & Security', exact: true }).click();
+  await expect(panel.getByRole('heading', { name: 'Agent apps', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Installable apps and skills', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'Safety and network', exact: true })).toBeVisible();
+  await expect(panel.getByRole('heading', { name: 'System guardrails', exact: true })).toBeVisible();
+  await captureFunctionalScreenshot(page, 'agent-settings-plugins-security.png', {
+    viewport: { width: 1440, height: 900 },
+  });
 
   await page.setViewportSize({ width: 720, height: 900 });
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'Agent', exact: true }).click();
   const narrowPanel = page.locator('#settings-panel-agent');
-  const sectionSelect = narrowPanel.getByRole('combobox', { name: 'Agent settings sections', exact: true });
-  await expect(sectionSelect).toBeVisible();
-  await sectionSelect.selectOption('environments');
+  const narrowNavigation = narrowPanel.getByRole('navigation', { name: 'Agent settings sections', exact: true });
+  await expect(narrowNavigation).toBeVisible();
+  await narrowNavigation.getByRole('button', { name: 'Runtime & Environments', exact: true }).click();
   await expect(narrowPanel.getByRole('heading', { name: 'Workspace dev environment', exact: true })).toBeVisible();
   const horizontalExcess = await page.evaluate(() =>
     Math.max(0, document.documentElement.scrollWidth - window.innerWidth),
@@ -409,6 +422,7 @@ const setNexusAgentEnabledFromPage = async (
 
 test('Agent Host reconnects automatically and catches up durable Host events', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
+  await setUiLanguage(context.request);
   await enableAgentWithRecommendedNexusAgent(context.request);
 
   let blockAgentReconnects = false;

@@ -37,3 +37,8 @@ export async function loginAsInitialAdmin(request: APIRequestContext): Promise<v
     user: { username: E2E_ADMIN.username },
   });
 }
+
+export async function setUiLanguage(request: APIRequestContext, language = 'en-US'): Promise<void> {
+  const response = await request.put('/api/v1/settings', { data: { language } });
+  expect(response.ok(), await response.text()).toBeTruthy();
+}
