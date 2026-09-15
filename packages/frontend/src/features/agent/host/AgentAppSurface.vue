@@ -1047,20 +1047,15 @@
 <template>
   <div class="agent-surface-layout relative grid h-full min-h-0" :class="{ 'has-task-rail': taskRailVisible }">
     <aside
-      class="agent-thread-sidebar flex min-h-0 flex-col border-r border-border/60 bg-header/50 backdrop-blur-xs select-none"
+      class="agent-thread-sidebar flex min-h-0 flex-col border-r border-border/45 bg-header/30 backdrop-blur-xs select-none"
       :class="{ 'is-open': threadSidebarVisible }"
     >
-      <div class="flex h-10 shrink-0 items-center justify-between border-b border-border/60 px-3">
-        <div class="flex items-center gap-2">
-          <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <i class="fa-solid fa-clock-rotate-left text-[11px]" aria-hidden="true"></i>
-          </div>
-          <div class="flex items-center gap-1.5">
+      <div class="flex h-10 shrink-0 items-center justify-between border-b border-border/45 px-3">
+        <div class="flex min-w-0 items-center gap-2">
+          <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70"></span>
+          <div class="flex min-w-0 items-center gap-1.5">
             <span class="text-xs font-semibold text-foreground leading-none">{{ $t('agent.operations.threads') }}</span>
-            <span
-              v-if="threads.length"
-              class="rounded-full bg-header/80 px-1.5 py-0.5 text-[10px] font-medium leading-none text-text-secondary"
-            >
+            <span v-if="threads.length" class="text-[10px] font-medium leading-none text-text-secondary/60">
               {{ threads.length }}
             </span>
             <span
@@ -1075,18 +1070,17 @@
 
         <button
           type="button"
-          class="flex h-7 items-center gap-1.5 rounded-lg border border-border/50 bg-card/80 px-2.5 text-xs font-medium text-foreground hover:border-border hover:bg-card hover:shadow-2xs active:scale-95 transition-all shadow-2xs disabled:opacity-50"
+          class="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-card/70 hover:text-foreground active:scale-95 disabled:opacity-50"
           :aria-label="$t('agent.operations.newThread')"
           :title="$t('agent.operations.newThread')"
           :disabled="busy"
           @click="beginThreadCreation"
         >
-          <i class="fa-solid fa-plus text-[10px] text-primary" aria-hidden="true"></i>
-          <span class="text-[11px]">{{ $t('agent.operations.newThread') }}</span>
+          <i class="fa-solid fa-plus text-[9px] text-primary" aria-hidden="true"></i>
         </button>
       </div>
 
-      <div class="shrink-0 border-b border-border/60 px-2.5 py-2">
+      <div class="shrink-0 border-b border-border/40 px-2.5 py-2">
         <div class="relative flex items-center">
           <i
             class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
@@ -1096,7 +1090,7 @@
             v-model="threadQuery"
             type="search"
             data-no-highlight
-            class="h-8 w-full rounded-xl border border-border/40 bg-card/50 pl-7.5 pr-7 text-xs text-foreground placeholder:text-text-secondary/50 outline-none transition-all hover:border-border/70 hover:bg-card/80 focus:border-primary/40 focus:bg-card focus:ring-2 focus:ring-primary/10"
+            class="h-7 w-full rounded-lg border border-transparent bg-background/55 pl-7.5 pr-7 text-[10.5px] text-foreground placeholder:text-text-secondary/40 outline-none transition-all hover:bg-card/65 focus:border-primary/20 focus:bg-card/80 focus:ring-2 focus:ring-primary/10"
             :placeholder="$t('agent.operations.searchThreads')"
           />
           <button
@@ -1110,16 +1104,16 @@
         </div>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin">
+      <div class="min-h-0 flex-1 overflow-y-auto px-2 py-1.5 space-y-0.5 scrollbar-thin">
         <button
           v-for="thread in visibleThreads"
           :key="thread.id"
           type="button"
-          class="group relative flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2 text-left transition-all duration-150"
+          class="group relative flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150"
           :class="
             currentThread?.id === thread.id
-              ? 'border-border/80 bg-background text-foreground shadow-[0_1px_3px_rgba(0,0,0,0.05)] font-medium ring-1 ring-border/30 pl-3'
-              : 'border-transparent text-text-secondary hover:bg-card/70 hover:text-foreground'
+              ? 'bg-primary/[0.055] text-foreground font-medium pl-2.5'
+              : 'text-text-secondary hover:bg-card/45 hover:text-foreground'
           "
           :aria-current="currentThread?.id === thread.id ? 'true' : undefined"
           :disabled="busy"
@@ -1128,16 +1122,16 @@
           <!-- 激活状态专属左侧品牌指示条 -->
           <span
             v-if="currentThread?.id === thread.id"
-            class="absolute left-1 top-2.5 bottom-2.5 w-1 rounded-full bg-primary shadow-[0_0_6px_rgba(160,108,213,0.5)]"
+            class="absolute left-0.5 top-2 bottom-2 w-0.5 rounded-full bg-primary"
           ></span>
 
           <!-- 优雅的微图标与活跃指示点 -->
           <div
-            class="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors"
+            class="relative flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors"
             :class="
               currentThread?.id === thread.id
-                ? 'bg-primary/15 text-primary border border-primary/25 shadow-2xs'
-                : 'bg-header/60 text-text-secondary group-hover:bg-header group-hover:text-foreground'
+                ? 'bg-primary/9 text-primary'
+                : 'text-text-secondary/45 group-hover:text-text-secondary/75'
             "
           >
             <i
@@ -1179,7 +1173,7 @@
           <div class="min-w-0 flex-1">
             <div class="flex items-center justify-between gap-1">
               <span
-                class="truncate text-xs leading-snug"
+                class="truncate text-[10.75px] leading-[1.35] tracking-[-0.012em]"
                 :class="
                   currentThread?.id === thread.id
                     ? 'font-semibold text-foreground'
@@ -1190,7 +1184,7 @@
                 {{ thread.title || $t('agent.operations.untitledThread') }}
               </span>
             </div>
-            <div class="mt-0.5 flex items-center justify-between gap-1.5 text-[10px] text-text-secondary/70">
+            <div class="mt-0.5 flex items-center justify-between gap-1.5 text-[9px] text-text-secondary/50">
               <span
                 v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
                 class="inline-flex items-center rounded-sm px-1 py-0.2 font-medium"
@@ -1202,8 +1196,10 @@
               >
                 {{ $t(`agent.tasks.runStatus.${threadStatus(thread.id)}`) }}
               </span>
-              <span v-else class="truncate text-[10px] text-text-secondary/60"> #{{ thread.id.slice(-6) }} </span>
-              <span class="shrink-0 text-[10px] text-text-secondary/60">
+              <span v-else class="truncate font-mono text-[9px] text-text-secondary/45">
+                #{{ thread.id.slice(-6) }}
+              </span>
+              <span class="shrink-0 text-[9px] tabular-nums text-text-secondary/50">
                 {{ formatThreadUpdatedAt(thread.updatedAt) }}
               </span>
             </div>
@@ -1231,7 +1227,7 @@
       @click="threadSidebarVisible = false"
     ></button>
 
-    <main class="flex min-h-0 min-w-0 flex-col bg-background">
+    <main class="agent-conversation-pane flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
       <header class="shrink-0 border-b border-border/50 bg-header/40 backdrop-blur-xs">
         <div class="flex h-9 items-center justify-between gap-3 px-3.5">
           <div class="flex min-w-0 items-center gap-2">
@@ -1336,7 +1332,7 @@
               <div class="agent-run-config flex min-h-7 items-center gap-1">
                 <div
                   v-if="modelSelectionLocked && run"
-                  class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium leading-none text-text-secondary select-none"
+                  class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border border-transparent bg-transparent px-2 text-[11px] font-medium leading-[1.25] text-text-secondary select-none"
                   :title="`${$t('agent.operations.runModelLocked')}: ${run.definition.model.modelId}`"
                 >
                   <i class="fa-solid fa-microchip shrink-0 text-[9px] text-text-secondary" aria-hidden="true"></i>
@@ -1762,6 +1758,11 @@
     grid-template-columns: 256px minmax(0, 1fr);
   }
 
+  .agent-conversation-pane {
+    container-type: inline-size;
+    container-name: agent-conversation-pane;
+  }
+
   .agent-surface-layout.has-task-rail {
     grid-template-columns: 256px minmax(0, 1fr) 320px;
   }
@@ -1865,6 +1866,64 @@
     }
     .agent-task-backdrop {
       display: block;
+    }
+  }
+
+  @container agent-conversation-pane (max-width: 700px) {
+    .agent-run-config {
+      min-width: 0;
+      gap: 0.2rem;
+    }
+
+    .agent-config-affordance {
+      display: none;
+    }
+
+    :deep(.agent-config-summary) {
+      height: 25px;
+      padding-inline: 6px;
+      gap: 4px;
+      font-size: 10.5px;
+      line-height: 1.25;
+    }
+
+    .agent-config-verbose,
+    :deep(.agent-config-verbose) {
+      max-width: 5.5rem;
+    }
+  }
+
+  @container agent-conversation-pane (max-width: 560px) {
+    .agent-run-config {
+      overflow: hidden;
+    }
+
+    .agent-config-verbose,
+    .agent-config-affordance,
+    :deep(.agent-config-verbose),
+    :deep(.agent-config-affordance) {
+      display: none;
+    }
+
+    .agent-config-compact,
+    :deep(.agent-config-compact) {
+      display: inline;
+    }
+
+    :deep(.agent-config-summary) {
+      min-width: 25px;
+      height: 25px;
+      gap: 3px;
+      padding-inline: 6px;
+      font-size: 10px;
+      line-height: 1.25;
+    }
+
+    .agent-config-reasoning {
+      width: auto;
+      min-width: 0.75rem;
+      font-size: 10px;
+      line-height: 1.25;
     }
   }
 

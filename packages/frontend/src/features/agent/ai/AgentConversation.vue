@@ -120,7 +120,7 @@
     <div class="relative z-10 min-h-0 flex-1">
       <DynamicScroller
         ref="scroller"
-        class="h-full overflow-y-auto overscroll-contain px-5 py-3.5"
+        class="agent-conversation-scroller h-full overflow-y-auto overscroll-contain px-5 py-3.5"
         :items="visibleEntries"
         :min-item-size="64"
         key-field="id"
@@ -266,7 +266,7 @@
       </DynamicScroller>
     </div>
 
-    <footer class="relative z-10 shrink-0 bg-background/90 backdrop-blur-xs px-4 pb-4 pt-2">
+    <footer class="agent-composer-footer relative z-10 shrink-0 bg-background/90 backdrop-blur-xs px-4 pb-4 pt-2">
       <div class="mx-auto max-w-3xl">
         <div
           v-if="error || reconciliation"
@@ -417,12 +417,15 @@
               <i class="fa-solid fa-arrow-down text-[8px]" aria-hidden="true"></i>
             </button>
 
-            <div v-if="run?.budget?.maxRunTokens" class="flex items-center gap-1.5 text-[10px] text-text-secondary">
+            <div
+              v-if="run?.budget?.maxRunTokens"
+              class="agent-budget-meter flex items-center gap-1.5 text-[10px] text-text-secondary"
+            >
               <span
                 >预算:
                 {{ Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100)) }}%</span
               >
-              <div class="h-1.5 w-16 overflow-hidden rounded-full bg-header">
+              <div class="agent-budget-bar h-1.5 w-16 overflow-hidden rounded-full bg-header">
                 <div
                   class="h-full rounded-full transition-all duration-300"
                   :class="totalRunTokens > run.budget.maxRunTokens * 0.9 ? 'bg-warning' : 'bg-foreground'"
@@ -507,6 +510,68 @@
   .agent-send-button {
     font-size: 11px;
     line-height: 1;
+  }
+
+  @container agent-conversation-pane (max-width: 700px) {
+    .agent-conversation-scroller {
+      padding-inline: 14px;
+    }
+
+    .agent-composer-footer {
+      padding: 6px 10px 10px;
+    }
+
+    .agent-budget-meter {
+      gap: 0;
+      font-size: 9.5px;
+    }
+
+    .agent-budget-bar {
+      display: none;
+    }
+
+    .agent-composer-toolbar {
+      min-height: 36px;
+      gap: 4px;
+      padding: 4px 6px;
+    }
+
+    .agent-toolbar-controls {
+      gap: 3px;
+      overflow-x: hidden;
+    }
+
+    .agent-send-button {
+      width: 28px;
+      height: 28px;
+      padding-inline: 0;
+      justify-content: center;
+    }
+
+    .agent-send-label {
+      display: none;
+    }
+  }
+
+  @container agent-conversation-pane (max-width: 560px) {
+    .agent-conversation-scroller {
+      padding-inline: 10px;
+    }
+
+    .agent-composer-footer {
+      padding: 5px 8px 8px;
+    }
+
+    .agent-composer-shell {
+      border-radius: 12px;
+    }
+
+    #agent-composer {
+      min-height: 72px;
+      padding: 10px 12px 6px;
+      font-size: 12px;
+      line-height: 1.55;
+    }
   }
 
   @container agent-hub-window (max-width: 1040px) {

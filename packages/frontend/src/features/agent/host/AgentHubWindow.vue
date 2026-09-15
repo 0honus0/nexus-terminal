@@ -299,21 +299,23 @@
     :aria-label="$t('agent.hub.title')"
   >
     <header
-      class="agent-hub-header flex h-11 shrink-0 touch-none select-none items-center justify-between gap-2.5 border-b border-border/60 bg-header/65 px-3 backdrop-blur-md"
+      class="agent-hub-header flex h-11 shrink-0 touch-none select-none items-center justify-between gap-2.5 border-b border-border/45 bg-header/45 px-3 backdrop-blur-md"
       :class="state.maximized ? '' : 'cursor-move'"
       @pointerdown="handleDragPointerDown"
     >
       <!-- 左侧：Agent 品牌徽标与流体 App 标签栏 -->
       <div class="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
         <!-- 品牌徽标 -->
-        <div class="agent-hub-brand flex shrink-0 items-center gap-2 pointer-events-none pr-1">
+        <div class="agent-hub-brand flex shrink-0 items-center gap-1.5 pointer-events-none pr-0.5">
           <div
-            class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs text-primary shadow-2xs"
+            class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] text-primary"
           >
             <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
           </div>
           <div class="agent-hub-title flex items-center gap-1.5">
-            <span class="text-xs font-semibold leading-none tracking-tight">{{ $t('agent.hub.title') }}</span>
+            <span class="text-[11px] font-semibold leading-none tracking-[-0.015em] text-foreground/90">{{
+              $t('agent.hub.title')
+            }}</span>
             <span
               v-if="activityCount > 0"
               class="rounded-full bg-primary/15 px-1.5 py-0.2 text-[10px] font-semibold text-primary"
@@ -323,7 +325,7 @@
           </div>
         </div>
 
-        <div class="agent-hub-brand-divider h-3.5 w-px shrink-0 bg-border/60 mx-0.5"></div>
+        <div class="agent-hub-brand-divider h-3 w-px shrink-0 bg-border/45 mx-1"></div>
 
         <!-- App 标签组 (直接嵌入顶栏，消除二次横切) -->
         <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto scrollbar-none py-1">
@@ -331,11 +333,11 @@
             v-for="app in displayedApps"
             :key="app.id"
             type="button"
-            class="group flex h-7.5 items-center gap-2 rounded-lg border text-xs transition-all select-none no-drag"
+            class="agent-app-tab group relative flex h-8 items-center gap-1.5 rounded-xl px-1.5 text-[11px] transition-all duration-150 select-none no-drag"
             :class="
               app.id === state.activeAppId
-                ? 'shrink-0 border-border/70 bg-card font-semibold text-foreground shadow-xs ring-1 ring-border/20 pl-2.5 pr-1.5 max-w-64'
-                : 'shrink min-w-0 border-transparent bg-transparent text-text-secondary hover:border-border/40 hover:bg-card/60 hover:text-foreground pl-2.5 pr-1.5 max-w-56'
+                ? 'shrink-0 max-w-64 bg-primary/[0.065] font-semibold text-foreground shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--color-primary)_14%,transparent)]'
+                : 'shrink min-w-0 max-w-56 bg-transparent text-text-secondary hover:bg-card/60 hover:text-foreground'
             "
             :aria-label="$t('agent.hub.switchToApp', { app: app.displayName })"
             :title="app.displayName"
@@ -343,22 +345,27 @@
             @click="switchApp(app.id)"
           >
             <!-- App 身份图标与呼吸健康指示灯 -->
-            <span class="relative flex items-center justify-center shrink-0">
+            <span
+              class="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border transition-all"
+              :class="
+                app.id === state.activeAppId
+                  ? 'border-primary/15 bg-primary/10 text-primary shadow-2xs'
+                  : 'border-border/25 bg-background/40 text-text-secondary/70 group-hover:border-border/45 group-hover:bg-background/60'
+              "
+            >
               <i
                 v-if="app.surface === 'agent'"
-                class="fa-solid fa-wand-magic-sparkles text-[11px] transition-colors"
-                :class="app.id === state.activeAppId ? 'text-primary' : 'text-text-secondary/70'"
+                class="fa-solid fa-wand-magic-sparkles text-[9px]"
                 aria-hidden="true"
               ></i>
               <i
                 v-else-if="app.surface === 'custom'"
-                class="fa-solid fa-puzzle-piece text-[11px] transition-colors"
-                :class="app.id === state.activeAppId ? 'text-amber-500' : 'text-text-secondary/70'"
+                class="fa-solid fa-puzzle-piece text-[9px]"
                 aria-hidden="true"
               ></i>
-              <i v-else class="fa-solid fa-layer-group text-[11px] text-text-secondary/70" aria-hidden="true"></i>
+              <i v-else class="fa-solid fa-layer-group text-[9px]" aria-hidden="true"></i>
               <span
-                class="absolute -bottom-0.5 -right-1 h-1.5 w-1.5 rounded-full ring-1 ring-background transition-all"
+                class="absolute -bottom-0.5 -right-0.5 h-1.5 w-1.5 rounded-full ring-2 ring-header transition-all"
                 :class="
                   app.health === 'healthy'
                     ? 'bg-success shadow-[0_0_4px_rgba(16,185,129,0.5)]'
@@ -370,7 +377,15 @@
             </span>
 
             <!-- App 名称 -->
-            <span class="truncate min-w-0 tracking-[-0.01em]">{{ app.displayName }}</span>
+            <span class="min-w-0 flex-1 truncate text-left leading-[1.2] tracking-[-0.015em]">{{
+              app.displayName
+            }}</span>
+
+            <span
+              v-if="app.id === state.activeAppId"
+              class="absolute inset-x-2 bottom-0 h-px rounded-full bg-primary/70"
+              aria-hidden="true"
+            ></span>
 
             <!-- 运行状态指示徽标 -->
             <span
@@ -400,7 +415,7 @@
               v-if="displayedApps.length > 1"
               role="button"
               tabindex="0"
-              class="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md transition-colors text-text-secondary/45 hover:bg-foreground/10 hover:text-foreground"
+              class="ml-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-text-secondary/35 opacity-0 transition-all hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100 focus:opacity-100"
               :title="$t('agent.hub.closeApp', { app: app.displayName })"
               :aria-label="$t('agent.hub.closeApp', { app: app.displayName })"
               @click.stop="closeAppTab(app.id, $event)"
