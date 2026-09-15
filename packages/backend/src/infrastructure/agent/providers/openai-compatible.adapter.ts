@@ -191,34 +191,40 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
       throw new Error('MODEL_OUTPUT_LIMIT_EXCEEDED');
     }
 
-    const result = await this.secrets.withCredential(
-      request.userId,
-      provider.id,
-      provider.credentialRevision,
-      async (credential) => {
-        const compatible = createOpenAICompatible({
-          name: 'nexus',
-          baseURL: provider.baseUrl,
-          ...(credential ? { apiKey: credential } : {}),
-          includeUsage: true,
-        });
-        return compatible.chatModel(request.modelId).doStream({
-          prompt: promptFor(request) as never,
-          maxOutputTokens: request.maxOutputTokens,
-          ...(request.reasoningEffort === undefined
-            ? {}
-            : { providerOptions: { openaiCompatible: { reasoningEffort: request.reasoningEffort } } }),
-          ...(request.tools?.length
-            ? {
-                tools: toolsFor(request) as never,
-                toolChoice: { type: request.toolMode === 'none' ? 'none' : 'auto' } as const,
-              }
-            : {}),
-          ...(request.cache?.affinityKey ? { headers: { 'session-id': request.cache.affinityKey } } : {}),
-          abortSignal: signal,
-        });
-      },
-    );
+    const result = await (async () => {
+      try {
+        return await this.secrets.withCredential(
+          request.userId,
+          provider.id,
+          provider.credentialRevision,
+          async (credential) => {
+            const compatible = createOpenAICompatible({
+              name: 'nexus',
+              baseURL: provider.baseUrl,
+              ...(credential ? { apiKey: credential } : {}),
+              includeUsage: true,
+            });
+            return compatible.chatModel(request.modelId).doStream({
+              prompt: promptFor(request) as never,
+              maxOutputTokens: request.maxOutputTokens,
+              ...(request.reasoningEffort === undefined
+                ? {}
+                : { providerOptions: { openaiCompatible: { reasoningEffort: request.reasoningEffort } } }),
+              ...(request.tools?.length
+                ? {
+                    tools: toolsFor(request) as never,
+                    toolChoice: { type: request.toolMode === 'none' ? 'none' : 'auto' } as const,
+                  }
+                : {}),
+              ...(request.cache?.affinityKey ? { headers: { 'session-id': request.cache.affinityKey } } : {}),
+              abortSignal: signal,
+            });
+          },
+        );
+      } catch (error) {
+        throw mapProviderError(error, signal);
+      }
+    })();
 
     const toolIndexes = new Map<string, number>();
     const toolBytes = new Map<string, number>();

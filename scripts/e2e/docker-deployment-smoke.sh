@@ -148,6 +148,7 @@ cleanup() {
     print_logs
   fi
   compose exec -T backend sh -lc 'chmod -R a+rwx /app/data' >/dev/null 2>&1 || true
+  compose exec -T agent-runner sh -lc 'chmod -R a+rwx /var/lib/nexus-agent-runner' >/dev/null 2>&1 || true
   compose down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
   if [[ -n "$plugin_repository_pid" ]]; then
     kill "$plugin_repository_pid" >/dev/null 2>&1 || true
@@ -1518,7 +1519,6 @@ const provider = await ok(
     baseUrl: 'https://host.docker.internal:443/v1',
     credential: 'docker-lifecycle-smoke-secret',
     models: [{ id: 'smoke-model', contextWindow: 8192, maxOutputTokens: 64, supportsTools: true }],
-    privateHostExceptions: ['host.docker.internal:443'],
     enabled: true,
   },
   mutationHeaders,

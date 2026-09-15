@@ -154,7 +154,7 @@ test('notification settings complete a real CRUD, event persistence, and deliver
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto('/settings');
   await page.getByRole('tab', { name: 'System', exact: true }).click();
-  const preferences = page.getByTestId('preferences-settings');
+  const preferences = page.locator('#settings-panel-system');
   await expect(preferences.locator('#languageSelect')).toHaveValue('en-US');
   const languageSavePromise = page.waitForResponse(
     (response) => response.url().endsWith('/api/v1/settings') && response.request().method() === 'PUT',

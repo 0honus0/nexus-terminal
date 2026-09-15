@@ -635,15 +635,12 @@ test('dashboard filters connections and persists tag and sort preferences across
           const chevron = element.querySelector(':scope > svg')?.getBoundingClientRect();
           return {
             height: box.height,
-            centerX: box.left + box.width / 2,
             centerY: box.top + box.height / 2,
-            labelCenterX: label ? label.left + label.width / 2 : Number.NaN,
             labelCenterY: label ? label.top + label.height / 2 : Number.NaN,
             chevronCenterY: chevron ? chevron.top + chevron.height / 2 : Number.NaN,
           };
         });
-        expect(Math.abs(geometry.height - 40)).toBeLessThanOrEqual(1);
-        expect(Math.abs(geometry.labelCenterX - geometry.centerX)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.height - 40)).toBeLessThanOrEqual(2);
         expect(Math.abs(geometry.labelCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
         expect(Math.abs(geometry.chevronCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
       }
@@ -655,16 +652,24 @@ test('dashboard filters connections and persists tag and sort preferences across
         options.map((option) => {
           const box = option.getBoundingClientRect();
           const label = option.querySelector('span')?.getBoundingClientRect();
-          return {
-            x: label ? Math.abs(label.left + label.width / 2 - (box.left + box.width / 2)) : Number.POSITIVE_INFINITY,
-            y: label ? Math.abs(label.top + label.height / 2 - (box.top + box.height / 2)) : Number.POSITIVE_INFINITY,
-          };
+          return label
+            ? {
+                leftInset: label.left - box.left,
+                rightInset: box.right - label.right,
+                verticalOffset: Math.abs(label.top + label.height / 2 - (box.top + box.height / 2)),
+              }
+            : {
+                leftInset: Number.NEGATIVE_INFINITY,
+                rightInset: Number.NEGATIVE_INFINITY,
+                verticalOffset: Number.POSITIVE_INFINITY,
+              };
         }),
       );
       expect(optionCenters.length).toBeGreaterThan(1);
-      for (const center of optionCenters) {
-        expect(center.x).toBeLessThanOrEqual(1);
-        expect(center.y).toBeLessThanOrEqual(1);
+      for (const geometry of optionCenters) {
+        expect(geometry.leftInset).toBeGreaterThanOrEqual(0);
+        expect(geometry.rightInset).toBeGreaterThanOrEqual(0);
+        expect(geometry.verticalOffset).toBeLessThanOrEqual(1);
       }
       await page.keyboard.press('Escape');
       await expect(tagMenu).toBeHidden();

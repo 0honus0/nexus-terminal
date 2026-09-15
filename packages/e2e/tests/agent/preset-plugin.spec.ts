@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext } from '../../support/fixtures';
-import { loginAsInitialAdmin } from '../../support/auth';
+import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
 import { ensureTestSshConnection } from '../../support/ssh';
@@ -35,7 +35,6 @@ type RunView = {
 const repositoryUrl = `${E2E_URLS.pluginRepositoryOrigin}/catalog.json`;
 const repositoryException = `127.0.0.1:${new URL(E2E_URLS.pluginRepositoryOrigin).port}`;
 const providerBase = 'http://127.0.0.1:29091/v1';
-const providerException = '127.0.0.1:29091';
 const providerSecret = 'e2e-provider-secret';
 
 const csrfToken = async (request: APIRequestContext): Promise<string> => {
@@ -84,7 +83,6 @@ const installAndRunNexusAgent = async (
         patch: {
           feature: { enabled: true },
           plugins: { repositories: [{ url: repositoryUrl }] },
-          budget: { maxOutputTokens: 16 },
         },
         expectedVersion: settings.revision,
       },
@@ -236,7 +234,6 @@ const installAndRunNexusAgent = async (
           { id: 'e2e-model', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true },
           { id: 'e2e-model-alt', contextWindow: 8192, maxOutputTokens: 128, supportsTools: true },
         ],
-        privateHostExceptions: [providerException],
         enabled: true,
       },
     });
@@ -450,6 +447,7 @@ test('official first-party catalog is discoverable without repository configurat
 }) => {
   const request = context.request;
   await loginAsInitialAdmin(request);
+  await setUiLanguage(request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
@@ -503,7 +501,7 @@ test('official first-party catalog is discoverable without repository configurat
   const panel = page.locator('#settings-panel-agent');
   await panel
     .getByRole('navigation', { name: 'Agent settings sections', exact: true })
-    .getByRole('button', { name: 'Apps and extensions', exact: true })
+    .getByRole('button', { name: 'Plugins & Security', exact: true })
     .click();
   const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
   await pluginsHeading.scrollIntoViewIfNeeded();
@@ -514,7 +512,7 @@ test('official first-party catalog is discoverable without repository configurat
   await expect(agentCatalogIds).toHaveCount(2);
   await expect(agentCatalogIds.first()).toBeVisible();
   await expect(agentCatalogIds.nth(1)).toBeVisible();
-  await expect(pluginsSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
+  await expect(pluginsSection.getByText('nexus.fullstack', { exact: true }).first()).toBeVisible();
 });
 
 test('frontend target owns a full Custom App Surface and connects through the isolated Plugin SDK', async ({
@@ -523,6 +521,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
 }) => {
   const request = context.request;
   await loginAsInitialAdmin(request);
+  await setUiLanguage(request);
   const csrf = await csrfToken(request);
   const headers = { 'X-Nexus-CSRF': csrf };
 
@@ -652,16 +651,20 @@ test('frontend target owns a full Custom App Surface and connects through the is
     const panel = page.locator('#settings-panel-agent');
     await panel
       .getByRole('navigation', { name: 'Agent settings sections', exact: true })
-      .getByRole('button', { name: 'Apps and extensions', exact: true })
+      .getByRole('button', { name: 'Plugins & Security', exact: true })
       .click();
     const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
     await pluginsHeading.scrollIntoViewIfNeeded();
     const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
-    const installedHeading = pluginsSection.getByRole('heading', { name: 'Installed plugins', exact: true });
-    const installedSection = installedHeading.locator('xpath=parent::div');
-    await expect(installedSection.getByText('nexus.custom-surface · v1.0.0', { exact: true })).toBeVisible();
-    await expect(installedSection.getByText('nexus.agent · v1.0.0', { exact: true })).toBeVisible();
-    await expect(installedSection.getByText('nexus.fullstack · v1.0.0', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('nexus.custom-surface', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('Custom Surface Fixture', { exact: true })).toBeVisible();
+    const fullstackCatalogEntries = pluginsSection.getByText('nexus.fullstack', { exact: true });
+    await expect(fullstackCatalogEntries).toHaveCount(2);
+    await expect(fullstackCatalogEntries.first()).toBeVisible();
+    await expect(pluginsSection.getByText('Full-stack Plugin', { exact: true }).first()).toBeVisible();
+    const nexusAgentCatalogEntries = pluginsSection.getByText('nexus.agent', { exact: true });
+    await expect(nexusAgentCatalogEntries.first()).toBeVisible();
+    expect(await nexusAgentCatalogEntries.count()).toBeGreaterThanOrEqual(2);
     await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
       viewport: { width: 1440, height: 900 },
     });
@@ -681,7 +684,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
   await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
   const hub = page.locator('section[aria-label="Agent"]');
   await expect(hub).toBeVisible();
-  await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.custom-surface');
+  await hub.getByRole('button', { name: 'Switch to Custom Surface Fixture', exact: true }).click();
   const customSurface = page.frameLocator('section[aria-label="Agent"] iframe');
   await expect(customSurface.getByRole('heading', { name: 'Custom Surface Fixture' })).toBeVisible();
   await expect(customSurface.getByTestId('custom-sdk-status')).toHaveText('ready:nexus.custom-surface:custom.default', {
@@ -700,6 +703,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
   context,
 }) => {
   const { threadId, connectionId } = await installAndRunNexusAgent(context.request);
+  await setUiLanguage(context.request);
   const onboardingCsrf = await csrfToken(context.request);
   const recommendedInstall = await context.request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
     headers: { 'X-Nexus-CSRF': onboardingCsrf },
@@ -715,13 +719,12 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
     const hub = page.locator('section[aria-label="Agent"]');
     await expect(hub).toBeVisible();
-    await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.agent');
+    await hub.getByRole('button', { name: 'Switch to Nexus Agent', exact: true }).click();
     const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
     await expect(presetThread).toBeVisible();
     await presetThread.click();
-    await expect(presetThread).toHaveClass(/bg-primary\/10/);
-    const visibleOkMessage = hub.locator('article:visible pre:visible').filter({ hasText: /^OK$/ }).last();
-    await expect(visibleOkMessage).toBeVisible({ timeout: 30_000 });
+    await expect(presetThread).toHaveAttribute('aria-current', 'true');
+    await expect(hub.getByText('OK', { exact: true }).last()).toBeVisible({ timeout: 30_000 });
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
     await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
 

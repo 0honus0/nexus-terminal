@@ -23,7 +23,7 @@ test('system settings persist timezone and language changes through the UI', asy
   try {
     await page.goto('/settings');
     await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
-    await expect(page.getByTestId('preferences-settings')).toBeVisible();
+    await expect(page.locator('#settings-panel-system')).toBeVisible();
     await expect(page.locator('#languageSelect')).toBeVisible();
     await expect(page.locator('#timezoneSelect')).toBeVisible();
     await captureFunctionalScreenshot(page, 'system-settings.png', { viewport: { width: 1440, height: 900 } });
@@ -64,7 +64,7 @@ test('system settings persist timezone and language changes through the UI', asy
     await step('both values survive a full settings page reload', async () => {
       await page.reload({ waitUntil: 'domcontentloaded' });
       await page.locator('[role="tab"][aria-controls="settings-panel-system"]').click();
-      await expect(page.getByTestId('preferences-settings')).toBeVisible();
+      await expect(page.locator('#settings-panel-system')).toBeVisible();
       await expect(page.locator('#timezoneSelect')).toHaveValue(TARGET_TIMEZONE);
       await expect(page.locator('#languageSelect')).toHaveValue(TARGET_LANGUAGE);
     });
@@ -281,7 +281,7 @@ test('workspace popup editor setting is the only editor and preview close contro
     const unifiedToggle = page.locator('#showPopupFileEditor');
     const unifiedForm = page.locator('form').filter({ has: unifiedToggle });
     await expect(unifiedToggle).toBeChecked();
-    await expect(unifiedToggle.locator('xpath=ancestor::label')).toContainText('Popup File Editor');
+    await expect(unifiedToggle.locator('xpath=ancestor::label')).toContainText('Show popup editor when opening files');
 
     await step('disabling the single control saves only showPopupFileEditor', async () => {
       await unifiedToggle.uncheck();
