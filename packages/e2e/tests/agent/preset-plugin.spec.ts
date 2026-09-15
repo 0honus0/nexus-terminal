@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, test, type APIRequestContext } from '../../support/fixtures';
+import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
 import { step } from '../../support/steps';
@@ -49,6 +49,23 @@ const appSummary = async (request: APIRequestContext, appId: string): Promise<Ap
   const app = ((await response.json()) as Envelope<AppSummary[]>).data.find((candidate) => candidate.id === appId);
   expect(app).toBeDefined();
   return app!;
+};
+
+const openAgentHub = async (page: Page) => {
+  const hub = page.locator('section[aria-label="Agent"]');
+  const launcher = page.getByRole('button', { name: 'Open Agent', exact: true });
+  await expect
+    .poll(async () => (await hub.isVisible()) || (await launcher.isVisible()), { timeout: 15_000 })
+    .toBeTruthy();
+  if (!(await hub.isVisible())) {
+    try {
+      await launcher.click({ timeout: 3_000 });
+    } catch (cause) {
+      if (!(await hub.isVisible())) throw cause;
+    }
+  }
+  await expect(hub).toBeVisible({ timeout: 10_000 });
+  return hub;
 };
 
 const waitForTerminalRun = async (request: APIRequestContext, runId: string): Promise<RunView> => {
@@ -681,9 +698,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
   });
 
   await page.goto('/connections');
-  await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-  const hub = page.locator('section[aria-label="Agent"]');
-  await expect(hub).toBeVisible();
+  const hub = await openAgentHub(page);
   await hub.getByRole('button', { name: 'Switch to Custom Surface Fixture', exact: true }).click();
   const customSurface = page.frameLocator('section[aria-label="Agent"] iframe');
   await expect(customSurface.getByRole('heading', { name: 'Custom Surface Fixture' })).toBeVisible();
@@ -716,17 +731,22 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
   expect(threadId).not.toBe('');
   await step('the merged Nexus Agent renders through the host-owned generic Agent surface', async () => {
     await page.goto('/connections');
-    await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-    const hub = page.locator('section[aria-label="Agent"]');
-    await expect(hub).toBeVisible();
+    const hub = await openAgentHub(page);
     await hub.getByRole('button', { name: 'Switch to Nexus Agent', exact: true }).click();
     const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
     await expect(presetThread).toBeVisible();
     await presetThread.click();
     await expect(presetThread).toHaveAttribute('aria-current', 'true');
     await expect(hub.getByText('OK', { exact: true }).last()).toBeVisible({ timeout: 30_000 });
-    await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();
-    await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
+    const taskPanelToggle = hub.getByRole('button', { name: 'Show or hide task panel', exact: true });
+    await expect(taskPanelToggle).toBeVisible();
+    await expect(taskPanelToggle).toHaveAttribute('aria-expanded', 'false');
+    await taskPanelToggle.click();
+    const taskRail = hub.locator('#agent-task-rail');
+    await expect(taskRail).toBeVisible();
+    await expect(taskRail.getByText('Tasks', { exact: true })).toBeVisible();
+    await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(taskRail).toHaveCount(0);
 
     await step('the Next Run Environment uses the shared accessible Host popover contract', async () => {
       await expect(hub.getByText('Next Run', { exact: true })).toBeVisible();
@@ -766,7 +786,12 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const narrowBounds = await hub.boundingBox();
       expect(narrowBounds).not.toBeNull();
       expect(narrowBounds!.width).toBeLessThanOrEqual(760);
-      await expect(hub.getByText('Execution state', { exact: true })).toBeHidden();
+      await expect(taskPanelToggle).toBeVisible();
+      await taskPanelToggle.click();
+      await expect(taskRail).toBeVisible();
+      await expect(taskRail.getByText('Tasks', { exact: true })).toBeVisible();
+      await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(taskRail).toHaveCount(0);
       const openThreads = hub.getByRole('button', { name: 'Open conversations', exact: true });
       await expect(openThreads).toBeVisible();
       await openThreads.click();
@@ -774,8 +799,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await hub.getByRole('button', { name: 'Close conversations', exact: true }).click();
 
       await page.reload();
-      await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
-      await expect(hub).toBeVisible();
+      await openAgentHub(page);
       const restoredBounds = await hub.boundingBox();
       expect(restoredBounds).not.toBeNull();
       expect(Math.abs(restoredBounds!.width - narrowBounds!.width)).toBeLessThan(2);
@@ -793,7 +817,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         restoredHandle!.y + restoredHandle!.height / 2,
       );
       await page.mouse.up();
-      await expect(hub.getByText('Execution state', { exact: true })).toBeVisible();
+      await expect(taskPanelToggle).toBeVisible();
+      await expect(taskPanelToggle).toHaveAttribute('aria-expanded', 'false');
       await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeHidden();
     });
 
