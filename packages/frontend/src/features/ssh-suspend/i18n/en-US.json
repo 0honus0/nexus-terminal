@@ -40,7 +40,7 @@
       "entryRemovedError": "Failed to remove suspended session entry: {error}",
       "nameEditedSuccess": "Suspended session name updated to \"{name}\".",
       "nameEditedError": "Failed to edit suspended session name: {error}",
-      "markedForSuspendSuccess": "Session {id} successfully marked for suspend.",
+      "markedForSuspendSuccess": "Session {id} has been suspended and can be resumed from any device.",
       "markForSuspendError": "Failed to mark session for suspend: {error}",
       "unmarkedSuccess": "Session {id} unmarked from suspend successfully.",
       "unmarkError": "Failed to unmark session from suspend: {error}",

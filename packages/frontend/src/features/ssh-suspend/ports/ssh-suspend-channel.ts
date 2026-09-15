@@ -1,5 +1,5 @@
-/** Live suspend marking capability for one active Workspace. Resume creates a new runtime session and is owned by the runtime. */
+/** Suspends one active Workspace into the server-owned session catalog. Resume creates a new runtime session. */
 export interface SshSuspendChannel {
-  mark(workspaceId: string, terminalSnapshot?: string): Promise<void>;
+  mark(workspaceId: string, terminalSnapshot?: string): Promise<{ suspendedSessionId: string }>;
   unmark(workspaceId: string): Promise<void>;
 }

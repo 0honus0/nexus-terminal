@@ -40,7 +40,7 @@
       "entryRemovedError": "移除挂起的会话条目失败: {error}",
       "nameEditedSuccess": "已挂起会话名称已更新为 \"{name}\"。",
       "nameEditedError": "编辑已挂起会话名称失败: {error}",
-      "markedForSuspendSuccess": "会话 {id} 已成功标记为待挂起。",
+      "markedForSuspendSuccess": "会话 {id} 已挂起，可从任何设备恢复。",
       "markForSuspendError": "标记会话为待挂起失败: {error}",
       "unmarkedSuccess": "会话 {id} 已成功取消标记挂起。",
       "unmarkError": "取消标记会话挂起失败: {error}",

@@ -58,6 +58,7 @@ export class WorkspaceSuspendCoordinatorService {
   private readonly marks = new Map<string, SuspendMark>();
   private readonly pending = new Map<string, PendingResume>();
   private readonly resumedHistory = new Map<string, ResumedHistory>();
+  private readonly suspendHandoffs = new Map<string, Promise<{ suspended: boolean; suspendSessionId?: string }>>();
   constructor(
     private readonly workspaces: WorkspaceService,
     private readonly terminal: WorkspaceTerminalService,
@@ -90,6 +91,13 @@ export class WorkspaceSuspendCoordinatorService {
       throw error;
     }
   }
+  async suspendNow(workspaceId: string, userId: number, initialBuffer?: string): Promise<{ suspendSessionId: string }> {
+    await this.markForSuspend(workspaceId, userId, initialBuffer);
+    const result = await this.handleClientDisconnect(workspaceId);
+    if (!result.suspended || !result.suspendSessionId) throw new Error('会话挂起失败。');
+    return { suspendSessionId: result.suspendSessionId };
+  }
+
   async unmarkForSuspend(workspaceId: string, userId: number): Promise<void> {
     const mark = this.marks.get(workspaceId);
     if (!mark) return;
@@ -105,6 +113,18 @@ export class WorkspaceSuspendCoordinatorService {
   }
 
   async handleClientDisconnect(workspaceId: string): Promise<{ suspended: boolean; suspendSessionId?: string }> {
+    const existing = this.suspendHandoffs.get(workspaceId);
+    if (existing) return existing;
+    const handoff = this.handleClientDisconnectOnce(workspaceId).finally(() => {
+      if (this.suspendHandoffs.get(workspaceId) === handoff) this.suspendHandoffs.delete(workspaceId);
+    });
+    this.suspendHandoffs.set(workspaceId, handoff);
+    return handoff;
+  }
+
+  private async handleClientDisconnectOnce(
+    workspaceId: string,
+  ): Promise<{ suspended: boolean; suspendSessionId?: string }> {
     const session = this.workspaces.getSession(workspaceId);
     if (!session) return { suspended: false };
     await this.clearResumedHistory(workspaceId);

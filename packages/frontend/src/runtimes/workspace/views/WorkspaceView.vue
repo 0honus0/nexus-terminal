@@ -485,7 +485,10 @@
         return;
       }
       const snapshot = surfaces.get(id)?.terminalSnapshot?.() || session.terminalState.snapshot.value || undefined;
-      await session.markForSuspend(snapshot);
+      const suspendedSessionId = await session.markForSuspend(snapshot);
+      registry.remove(id, 'Workspace suspended');
+      await refreshSuspendedSessionsCatalog();
+      logger.debug({ workspaceId: id, suspendedSessionId }, 'Workspace suspended immediately');
       feedback.notifySuccess(t('sshSuspend.notifications.markedForSuspendSuccess', { id }));
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);

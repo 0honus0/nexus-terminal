@@ -589,12 +589,14 @@ export class WorkspaceProtocolSession {
   }
 
   private async suspendMark(payload: JsonRecord) {
-    await this.dependencies.suspendCoordinator.markForSuspend(
-      this.requireWorkspace(),
+    const workspaceId = this.requireWorkspace();
+    const result = await this.dependencies.suspendCoordinator.suspendNow(
+      workspaceId,
       this.identity.userId,
       stringValue(payload.terminalSnapshot),
     );
-    return null;
+    this.unbindWorkspace();
+    return result;
   }
 
   private async suspendUnmark() {
