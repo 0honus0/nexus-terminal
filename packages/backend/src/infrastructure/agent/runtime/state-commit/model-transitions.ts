@@ -178,7 +178,20 @@ export const parkModelStepTransition = async (
           id: command.assistantEntryId,
           runId: command.runId,
           kind: 'assistant_message',
-          payload: { text: command.assistantText },
+          payload: {
+            text: command.assistantText,
+            usage:
+              command.inputTokens !== undefined || command.outputTokens !== undefined
+                ? {
+                    inputTokens: command.inputTokens ?? 0,
+                    outputTokens: command.outputTokens ?? 0,
+                    cachedInputTokens: command.cachedInputTokens ?? 0,
+                    estimatedUsage: command.estimatedUsage ?? false,
+                    costMicros: command.costMicros ?? null,
+                    priceVersion: command.priceVersion ?? null,
+                  }
+                : null,
+          },
         },
       ],
       command.now,
@@ -499,7 +512,20 @@ export const settleModelStepTransition = async (
           id: command.assistantEntryId,
           runId: command.runId,
           kind: 'assistant_message',
-          payload: { text: command.assistantText },
+          payload: {
+            text: command.assistantText,
+            usage:
+              command.inputTokens !== undefined || command.outputTokens !== undefined
+                ? {
+                    inputTokens: command.inputTokens ?? 0,
+                    outputTokens: command.outputTokens ?? 0,
+                    cachedInputTokens: command.cachedInputTokens ?? 0,
+                    estimatedUsage: command.estimatedUsage ?? false,
+                    costMicros: command.costMicros ?? null,
+                    priceVersion: command.priceVersion ?? null,
+                  }
+                : null,
+          },
         },
       ],
       command.now,

@@ -99,17 +99,24 @@
   <div class="relative">
     <button
       type="button"
-      class="rounded-lg border border-border px-3 py-2 text-sm hover:bg-header disabled:opacity-50"
+      class="agent-config-summary flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs transition-all duration-150 select-none disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+      :class="
+        open
+          ? 'border-primary/40 bg-primary/10 text-primary font-semibold shadow-2xs'
+          : 'border-border/50 bg-header/40 text-text-secondary hover:border-border hover:bg-header/80 hover:text-foreground font-medium'
+      "
       :disabled="disabled"
+      :title="$t('agent.attachments.button', { count: modelValue.length })"
       @click="open = !open"
     >
-      <i class="fa-solid fa-paperclip mr-1" aria-hidden="true"></i>
-      {{ $t('agent.attachments.button', { count: modelValue.length }) }}
+      <i class="fa-solid fa-paperclip text-[10px]" aria-hidden="true"></i>
+      <span class="hidden sm:inline">{{ $t('agent.attachments.button', { count: modelValue.length }) }}</span>
+      <span v-if="modelValue.length > 0" class="sm:hidden text-[10px] font-medium">{{ modelValue.length }}</span>
     </button>
 
     <div
       v-if="open"
-      class="absolute bottom-full left-0 z-30 mb-2 flex h-[360px] w-[min(520px,80vw)] flex-col overflow-hidden rounded-xl border border-border bg-card shadow-xl"
+      class="absolute bottom-full left-0 z-30 mb-2 flex h-[360px] w-[min(520px,80vw)] flex-col overflow-hidden rounded-2xl border border-border/70 bg-card/95 backdrop-blur-md shadow-2xl ring-1 ring-border/20"
     >
       <div class="flex shrink-0 gap-2 border-b border-border p-2">
         <input

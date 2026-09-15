@@ -3,9 +3,11 @@
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
   import { BaseButton, BaseFormField, BaseInput } from '@/foundation/ui';
+  import { useFeedback } from '@/shared/feedback/public';
   import { securityApi } from '../api/securityApi';
 
   const { t } = useI18n();
+  const feedback = useFeedback();
   const currentPassword = ref('');
   const newPassword = ref('');
   const confirmPassword = ref('');
@@ -18,10 +20,12 @@
     success.value = false;
     if (!currentPassword.value || !newPassword.value) {
       message.value = t('settings.changePassword.error.fieldsRequired');
+      feedback.notifyError(message.value);
       return;
     }
     if (newPassword.value !== confirmPassword.value) {
       message.value = t('settings.changePassword.error.passwordsDoNotMatch');
+      feedback.notifyError(message.value);
       return;
     }
     loading.value = true;
@@ -29,11 +33,13 @@
       await securityApi.changePassword(currentPassword.value, newPassword.value);
       message.value = t('settings.changePassword.success');
       success.value = true;
+      feedback.notifySuccess(message.value);
       currentPassword.value = '';
       newPassword.value = '';
       confirmPassword.value = '';
     } catch (cause) {
       message.value = apiErrorMessage(cause, t('settings.changePassword.error.generic'));
+      feedback.notifyError(message.value);
     } finally {
       loading.value = false;
     }

@@ -70,7 +70,7 @@
 <template>
   <button
     type="button"
-    class="fixed z-30 flex h-14 w-14 touch-none select-none items-center justify-center rounded-full border border-primary/40 bg-primary text-xl text-white shadow-xl transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:cursor-not-allowed disabled:opacity-50"
+    class="fixed z-30 flex h-10 w-10 touch-none select-none items-center justify-center rounded-full border border-border/80 bg-foreground text-background shadow-lg transition-all hover:scale-105 hover:bg-foreground/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-border disabled:cursor-not-allowed disabled:opacity-40"
     :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }"
     :aria-label="$t('agent.launcher.open')"
     :title="$t('agent.launcher.open')"
@@ -81,10 +81,10 @@
     @pointercancel="cancel"
     @keydown="keydown"
   >
-    <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+    <i class="fa-solid fa-wand-magic-sparkles text-sm" aria-hidden="true"></i>
     <span
       v-if="badge > 0"
-      class="absolute -right-1 -top-1 min-w-5 rounded-full bg-error px-1.5 py-0.5 text-center text-[10px] font-bold leading-4 text-white"
+      class="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-1 text-[9px] font-bold leading-none text-white shadow-xs"
     >
       {{ badge > 99 ? '99+' : badge }}
     </span>

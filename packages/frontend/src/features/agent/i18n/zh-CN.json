@@ -18,7 +18,28 @@
         "verifiedPublisher": "Nexus 固定官方发布者",
         "installAndEnable": "安装 Nexus Agent 并启用 Agent",
         "installing": "正在安装...",
-        "cancel": "取消"
+        "cancel": "取消",
+        "subtitle": "为实例接入官方签名认证的智能体执行环境与技能",
+        "badge": "官方核心插件",
+        "featureSkillsTitle": "双核心技能包",
+        "featureSkillsDesc": "内置签名认证的 Operations 与 Developer 运维及代码工程能力",
+        "featureSandboxTitle": "受控安全沙箱",
+        "featureSandboxDesc": "严格遵循 Host 权限策略、审批流与 Workspace 边界",
+        "featureDecoupledTitle": "热插拔架构",
+        "featureDecoupledDesc": "支持随时独立热升级或卸载停用，不侵入系统内核",
+        "publisherVerified": "官方签名通过",
+        "detailsToggle": "技术凭据",
+        "hideDetails": "收起凭据",
+        "copyKey": "复制 Key",
+        "keyCopied": "已复制",
+        "fullKeyId": "完整公钥指纹 (Ed25519)",
+        "catalogSource": "官方分发源 (Catalog URL)",
+        "installingTitle": "正在安全部署与挂载 Agent...",
+        "installStep1": "正在下载并校验 Ed25519 官方签名与完整性...",
+        "installStep2": "正在注册并装载 Operations 与 Developer 技能包...",
+        "installStep3": "正在初始化安全沙箱与启用 Agent 实例...",
+        "sandboxProtected": "执行环境受 Host 安全策略沙箱保护",
+        "defaultPluginSummary": "官方通用智能体核心，内置自动化运维诊断与全栈工程协作技能，在受控安全沙箱内执行任务。"
       },
       "apps": {
         "title": "Agent App",
@@ -33,7 +54,31 @@
         "permissionsLoading": "正在加载当前授权...",
         "noCapabilities": "此 App 未声明可授权能力。",
         "empty": "当前没有可用的 Agent App。",
-        "permissionsCollapsedHint": "展开后查看并编辑此 App 的能力授权。"
+        "permissionsCollapsedHint": "展开后查看并编辑此 App 的能力授权。",
+        "capabilitiesHeader": "系统能力与安全沙箱授权",
+        "capabilitiesSubtitle": "细粒度控制插件可访问的 Host 资源边界，未经授权的能力将被 Host 策略拦截",
+        "selectAll": "全选能力",
+        "healthHealthy": "运行正常",
+        "healthDegraded": "受控降级",
+        "healthDisabled": "已停用",
+        "categoryAi": "AI 推理与执行",
+        "categoryHost": "宿主机操作与诊断",
+        "categoryRuntime": "沙箱与外部集成",
+        "categoryStorage": "产物交付与存储",
+        "runsMetric": "运行中",
+        "approvalsMetric": "待审批",
+        "grantsMetric": "已授权能力",
+        "coreOfficial": "官方核心",
+        "configPermissions": "安全策略配置",
+        "uninstall": "卸载",
+        "uninstallDisabledHint": "请先停用该 App 后再进行卸载",
+        "uninstallConfirmTitle": "卸载 Agent 插件应用",
+        "uninstallConfirmPrompt": "确定要卸载应用 {name} (v{version}) 吗？卸载后将移除其插件代码并排空后台任务。",
+        "uninstallSuccess": "已成功卸载插件应用",
+        "uninstallFailed": "卸载失败",
+        "deleteDataFailed": "插件已卸载，但保留数据删除失败",
+        "drainingNotice": "应用正在排空后台任务中...",
+        "coreAppCannotUninstall": "内置核心应用不可卸载"
       },
       "plugins": {
         "title": "可安装 App 与 Skill",
@@ -92,6 +137,8 @@
       "hardLimits": {
         "title": "Hard Limits",
         "description": "实例级策略上限。任何变更都必须先预览并显式二次确认。",
+        "panelTitle": "实例级硬策略限制（Hard Limits）",
+        "panelHint": "高级系统约束与二次审核变更",
         "review": "预览变更",
         "unlimited": "不限",
         "effective": "当前有效值：{value}",
@@ -99,7 +146,117 @@
         "confirmDescription": "即将变更 {count} 项，当前有 {runtimes} 个 Runtime 正在执行。",
         "increaseWarning": "资源上限将提高",
         "usage": "Artifact 已用 + 已预留字节：{bytes}",
-        "confirm": "确认变更"
+        "confirm": "确认变更",
+        "presetsTitle": "安全预设方案",
+        "presetsHint": "选择实例级硬约束模板，兼顾多任务并发安全与系统稳定性。",
+        "presetStandard": "标准实例配额",
+        "presetStandardDesc": "适合单机日常开发与常规并发，防止资源意外透支",
+        "presetHigh": "高算力专用实例",
+        "presetHighDesc": "提高并发与存储配额，适合高负载开发或多任务自动化",
+        "presetCustom": "自定义配额",
+        "presetCustomDesc": "自由设定每个系统级硬限制阈值",
+        "groups": {
+          "tokens": "模型与 Token 预算上限",
+          "tokensDesc": "限制上下文窗口、单次输出与单任务累计 Token 消耗",
+          "timeouts": "执行与超时保护",
+          "timeoutsDesc": "限制任务最长运行时长与单次工具调用超时",
+          "storage": "存储与数据流硬限制",
+          "storageDesc": "限制产物文件占用空间与工具/记忆回溯数据流体积",
+          "concurrency": "并发配额与代理环境",
+          "concurrencyDesc": "限制并发任务、活跃工作区与子代理委托深度",
+          "extra": "其他系统级限制",
+          "extraDesc": "其他扩展策略参数"
+        },
+        "fields": {
+          "maxContextTokens": {
+            "label": "单次上下文窗口硬上限",
+            "hint": "单次请求包含的历史上下文 Token 绝对上限"
+          },
+          "maxOutputTokens": {
+            "label": "单次输出 Token 硬上限",
+            "hint": "单次模型调用允许生成的最大 Token 数"
+          },
+          "maxRunTokens": {
+            "label": "单次 Run 总 Token 上限",
+            "hint": "整个会话单次任务累计消耗的 Token 熔断上限"
+          },
+          "maxRunSteps": {
+            "label": "单次 Run 最大步数",
+            "hint": "单次任务允许循环执行工具与模型思考的最大步数"
+          },
+          "maxRunCostMicros": {
+            "label": "单次执行成本限额",
+            "hint": "单次任务最高微美元成本 (1 USD = 1,000,000)，留空不限制"
+          },
+          "maxActiveExecutionSeconds": {
+            "label": "任务最大执行时长",
+            "hint": "单次任务执行的最长持续时间，超时将自动取消"
+          },
+          "toolTimeoutSeconds": {
+            "label": "单工具调用超时",
+            "hint": "单次工具（Shell、网络等）允许运行的最长秒数"
+          },
+          "workspaceIdleTtlSeconds": {
+            "label": "工作区空闲超时",
+            "hint": "临时工作区无操作后的自动销毁等待时间"
+          },
+          "unretainedArtifactTtlSeconds": {
+            "label": "未保留产物生存期",
+            "hint": "未被显式归档的临时产物保留时长"
+          },
+          "maxToolOutputBytes": {
+            "label": "工具单次输出体积",
+            "hint": "单个工具执行结果允许返回的最大内容大小"
+          },
+          "maxRawToolBytes": {
+            "label": "工具原始数据总体积",
+            "hint": "任务中工具调用原始传输数据的累计上限"
+          },
+          "maxArtifactBytes": {
+            "label": "单会话产物磁盘总额",
+            "hint": "单个会话产物所允许占用的总磁盘空间"
+          },
+          "maxSingleArtifactBytes": {
+            "label": "单文件产物体积上限",
+            "hint": "单个产物文件允许写入的最大字节数"
+          },
+          "maxGlobalArtifactBytes": {
+            "label": "全局产物总磁盘配额",
+            "hint": "全系统所有 Agent 产物累计占用的磁盘上限"
+          },
+          "maxRecallItems": {
+            "label": "记忆检索条目上限",
+            "hint": "单次对话历史与记忆回溯允许提取的最大项数"
+          },
+          "maxRecallBytes": {
+            "label": "记忆检索数据上限",
+            "hint": "单次对话记忆回溯提取的数据总字节上限"
+          },
+          "maxConcurrentRuntimes": {
+            "label": "最大并发运行时数",
+            "hint": "系统允许同时处于执行状态的 Agent Runtime 最大数"
+          },
+          "maxConcurrentModelCalls": {
+            "label": "最大并发模型调用数",
+            "hint": "系统允许同时并发调用的模型 API 请求上限"
+          },
+          "maxDelegationDepth": {
+            "label": "子代理最大委托深度",
+            "hint": "Agent 递归派发 Subagent 的最大嵌套层数"
+          },
+          "maxSubagentMessagesPerRun": {
+            "label": "子代理交互消息上限",
+            "hint": "单次任务中主代理与子代理交互的最大消息条数"
+          },
+          "maxSubagentMessageBytesPerRun": {
+            "label": "子代理通信字节上限",
+            "hint": "单次任务中子代理通信消息所占用的数据总字节数"
+          },
+          "maxActiveWorkspaces": {
+            "label": "最大活跃工作区数",
+            "hint": "系统同时保活的代码工作区容器或目录数"
+          }
+        }
       },
       "performance": {
         "title": "执行与性能",
@@ -107,11 +264,59 @@
         "runtimes": "Runtime 并发数",
         "modelCalls": "模型调用并发数",
         "auto": "自动",
-        "limit": "有效 {effective} · Hard Limit {hard}"
+        "limit": "有效 {effective} · Hard Limit {hard}",
+        "runtimesHint": "同时支持运行的独立 Agent Runtime 任务容器数",
+        "modelCallsHint": "模型 API 请求并发数上限，设置为“自动”由系统智能调度"
       },
       "budget": {
         "title": "预算与上下文",
-        "description": "配置 Run 软预算与上下文限制。预算耗尽时任务会等待显式增加预算，而不是被静默标记失败。"
+        "description": "配置 Run 软预算与上下文限制。预算耗尽时任务会等待显式增加预算，而不是被静默标记失败。",
+        "presetsTitle": "场景预设方案",
+        "presetsHint": "提供常用策略预设，点击一键套用；也可自由切换为自定义微调。",
+        "presetLight": "快速轻量",
+        "presetLightDesc": "低消耗快响应，适合轻量问答、单步修改与调试",
+        "presetBalanced": "标准均衡",
+        "presetBalancedDesc": "推荐配置，兼顾推理质量、多步执行与资源控制",
+        "presetDeep": "深度探索",
+        "presetDeepDesc": "高步数长超时，适合复杂重构与深层次调试",
+        "presetCustom": "自定义微调",
+        "presetCustomDesc": "按需自由配置各项底层参数，完全掌控执行上限",
+        "customBadge": "已自定义",
+        "recommendedBadge": "推荐",
+        "saveSuccess": "预算与上下文配置已保存",
+        "fields": {
+          "maxContextTokens": "单次上下文窗口",
+          "maxContextTokensHint": "单次请求包含的历史上下文 Token 上限",
+          "maxOutputTokens": "单次最大输出",
+          "maxOutputTokensHint": "模型单次回答的最大生成 Token 数量",
+          "maxRunTokens": "任务总 Token 预算",
+          "maxRunTokensHint": "单次 Run 累计消耗的总 Token 预算上限",
+          "maxRunSteps": "最大执行步数",
+          "maxRunStepsHint": "单个 Run 允许执行的工具调用与思考最大步数",
+          "maxRunCostMicros": "任务费用上限 (美元)",
+          "maxRunCostMicrosHint": "设为空表示不限 (输入美元，例如 1.5)",
+          "maxActiveExecutionSeconds": "执行超时时间 (秒)",
+          "maxActiveExecutionSecondsHint": "单次 Run 活跃执行的最长持续时间",
+          "toolTimeoutSeconds": "单工具超时 (秒)",
+          "toolTimeoutSecondsHint": "单个工具调用的执行超时时限",
+          "maxToolOutputBytes": "工具输出截断 (字节)",
+          "maxToolOutputBytesHint": "模型接收的工具单次输出截断上限",
+          "maxRawToolBytes": "原始工具输出上限 (字节)",
+          "maxRawToolBytesHint": "工具输出原始留存大小",
+          "maxRecallItems": "记忆召回条数",
+          "maxRecallItemsHint": "记忆检索时最多召回的参考条目数",
+          "maxRecallBytes": "记忆召回字节上限",
+          "maxRecallBytesHint": "记忆检索内容的最大字节限制"
+        },
+        "readyNotice": "当前配置已就绪，将在下一次 Run 执行时生效"
+      },
+      "quantity": {
+        "placeholderBytes": "例: 10M, 500K",
+        "placeholderTokens": "例: 100k, 1M",
+        "placeholderSeconds": "例: 30m, 1h",
+        "placeholderNumber": "例: 50, 100",
+        "invalidNumber": "请输入有效数字",
+        "invalidQuantity": "格式无效，支持数字或带单位"
       },
       "storage": {
         "title": "Artifact 与存储",
@@ -120,7 +325,8 @@
         "reclaimable": "可回收",
         "protected": "受保护",
         "limit": "当前上限",
-        "hardLimitHint": "存储请求值始终受对应 Hard Limit 约束。"
+        "hardLimitHint": "存储请求值始终受对应 Hard Limit 约束。",
+        "inputHelp": "支持直接输入数字或快捷单位（例: 10M, 500K, 2G, 1d）"
       },
       "workspaceRuntime": {
         "title": "Workspace 开发环境",
@@ -182,7 +388,20 @@
         "guardrails": "CSRF、防越权 capability、跨 App 隔离、私网控制和 mutation approval 边界均为强制保护。",
         "connectionIds": "禁止的 Connection ID",
         "reason": "变更原因",
-        "revision": "Denylist revision {revision}"
+        "revision": "Denylist revision {revision}",
+        "searchConnections": "搜索连接（名称/主机/端口/用户）...",
+        "blockAll": "全部禁止",
+        "allowAll": "全部允许",
+        "blockedCount": "已禁止 {blocked} / 共 {total} 个连接",
+        "blockedBadge": "禁止访问",
+        "allowedBadge": "允许访问",
+        "emptyConnections": "系统当前暂无可用连接目标，请先在“连接管理”中添加。",
+        "connectionLoadFailed": "连接列表加载失败，请稍后重试。",
+        "savePolicy": "保存安全策略",
+        "reasonPlaceholder": "请填写本次调整安全策略的原因（例如：生产环境保护、安全审计隔离）",
+        "emptyConnectionsDetail": "系统内尚未录入任何主机或设备连接，Agent 当前默认无法外联任何私有机器。",
+        "orphanIds": "包含已被删除的历史连接 ID：",
+        "clearOrphanIds": "清理全部无效 ID"
       },
       "providers": {
         "title": "模型 Provider",
@@ -219,13 +438,63 @@
         "outputShort": "{value} 输出",
         "toolCapable": "支持 Tools",
         "modelOnly": "仅模型",
-        "discover": "发现模型",
-        "discoveryTitle": "Provider 返回的模型",
-        "discoveryHint": "发现只信任模型 ID。添加前请确认上下文、最大输出和工具能力。",
+        "discover": "更新模型",
+        "discoveryTitle": "从服务商更新的模型列表",
+        "discoveryHint": "更新只信任模型 ID。添加前请确认上下文、最大输出和工具能力。",
         "discoveryCount": "{count} 个可添加",
-        "discoveryChoose": "选择发现的模型",
+        "discoveryChoose": "选择要添加的模型",
         "discoveryAdd": "添加模型",
-        "discoveryEmpty": "Provider 没有返回尚未配置的模型。"
+        "discoveryEmpty": "服务商未返回尚未配置的新模型。",
+        "modalTitle": "添加模型服务商 (Provider)",
+        "modalDescription": "配置兼容 OpenAI 规范的模型接口，填写后可即时测试连通性并确认保存。",
+        "quickPresets": "常用服务商预设",
+        "testConnection": "测试连通性",
+        "testingConnection": "正在向模型接口发送心跳测试...",
+        "testPassed": "连通性测试通过",
+        "testFailedMessage": "测试未通过",
+        "saveAndAdd": "保存并添加",
+        "deleteConfirm": "删除该服务商",
+        "copyUrlSuccess": "接口地址已复制",
+        "toggleModels": "模型详情",
+        "setDefault": "设为默认",
+        "initialModel": "初始主力模型",
+        "apiKeyPlaceholder": "sk-... (API Key 凭据)",
+        "deleteProviderConfirmPrompt": "确定要删除服务商 {name} 吗？该操作不可撤销。",
+        "addCustomModel": "添加模型",
+        "customModelTitle": "为服务商添加新模型",
+        "addAllModels": "一键添加所有模型",
+        "addSelected": "添加所选 ({count})",
+        "removeModel": "取消添加",
+        "removeSelected": "取消所选 ({count})",
+        "selectAll": "全选",
+        "deselectAll": "取消全选",
+        "atLeastOneModel": "服务商至少需要保留一个模型",
+        "cannotRemoveDefault": "默认模型不可直接取消，请先切换默认模型",
+        "configuredModels": "已生效模型",
+        "discoveredModels": "可添加模型",
+        "allModelsConfigured": "服务商支持的所有模型均已添加",
+        "manualAddPrompt": "手动输入模型 ID 添加",
+        "filterPlaceholder": "搜索过滤模型...",
+        "drawerTitle": "模型库同步与管理",
+        "discoveringModels": "正在查询服务商支持的模型列表...",
+        "testModalTitle": "已配模型与连通测试",
+        "testModalBtn": "模型与测试 ({count})",
+        "testModalDesc": "选择已配置模型进行接口连通性测试，或调整默认执行模型与管理模型。",
+        "searchConfiguredModels": "搜索已配模型...",
+        "testSingle": "测试连通性",
+        "autoSaved": "变更已实时保存",
+        "saving": "正在保存到服务端...",
+        "saveAndClose": "保存并关闭",
+        "saveNoticeAdded": "已成功添加 {count} 个模型并保存至服务端",
+        "saveNoticeRemoved": "已成功移除模型并保存至服务端",
+        "saveNoticeDefault": "默认主力模型已更新并保存",
+        "autoSaveHint": "所有模型变更均即时同步持久化至服务端，任务下一次执行直接生效。",
+        "removeAllModels": "一键移除",
+        "saveNoticeRemovedAll": "已成功一键移除 {count} 个模型并保存至服务端",
+        "emptyHint": "点击右上角“添加 Provider”按钮，即可快速接入 OpenAI、DeepSeek、Moonshot 或本地 Ollama 模型服务。",
+        "namePlaceholder": "例如：OpenAI 官方",
+        "baseUrlPlaceholder": "https://api.openai.com/v1",
+        "modelPlaceholder": "gpt-4o"
       },
       "guardrails": {
         "title": "系统保护边界",
@@ -261,7 +530,9 @@
         "capabilities": "能力上限",
         "removeProfile": "移除配置档",
         "noProfiles": "此 App 尚未配置 Subagent 配置档。",
-        "saveProfiles": "保存配置档"
+        "saveProfiles": "保存配置档",
+        "messageBytesPlaceholder": "例: 2M, 5M",
+        "maxTokensPlaceholder": "例: 50k, 100k"
       },
       "browserRuntime": {
         "title": "浏览器运行时",
@@ -324,7 +595,9 @@
         "environments": "运行环境",
         "storage": "文件与存储",
         "extensions": "App 与扩展",
-        "safety": "安全与系统"
+        "safety": "安全与系统",
+        "runtime": "运行与环境",
+        "plugins": "插件与安全"
       },
       "groupDescriptions": {
         "overview": "查看功能状态、Agent App、活动情况与能力授权。",
@@ -342,7 +615,12 @@
         "providers": "{count} 个已启用 Provider",
         "runtime": "Workspace Runtime",
         "storage": "Artifact 存储",
-        "storageLimit": "上限 {value}"
+        "storageLimit": "上限 {value}",
+        "defaultModel": "默认模型",
+        "activeApps": "活跃 App",
+        "sandbox": "沙箱",
+        "ready": "就绪",
+        "notReady": "未就绪"
       }
     },
     "launcher": {
@@ -370,7 +648,8 @@
       "runningRuns": "运行中的 Run",
       "pendingApprovals": "待审批",
       "pendingBudget": "待处理预算请求",
-      "idle": "空闲"
+      "idle": "空闲",
+      "closeApp": "关闭 {app}"
     },
     "pluginFrontend": {
       "frameTitle": "Agent 插件界面",
@@ -382,8 +661,8 @@
       "threads": "会话",
       "newThread": "新建",
       "loading": "正在加载会话...",
-      "targets": "SSH 目标",
-      "targetsHint": "请在新 Run 启动前选择目标；服务端仍会强制检查 Agent grant 与 denylist。",
+      "targets": "SSH 主机",
+      "targetsHint": "选择目标主机",
       "noTargets": "当前没有可用的 SSH 连接。",
       "reconciliationRequired": "上次操作结果尚未确认，请在任务详情中检查后继续。",
       "untitledThread": "未命名会话",
@@ -392,8 +671,8 @@
       "threadTitle": "会话标题",
       "threadTitlePlaceholder": "给这个会话起个名字",
       "createThread": "创建",
-      "runModel": "Run 模型",
-      "runModelHint": "为下一次 Run 选择模型。",
+      "runModel": "模型",
+      "runModelHint": "切换模型",
       "runModelLocked": "当前 Run 活跃期间模型已冻结。",
       "threadCounts": "{total} 个会话 · {active} 个活跃",
       "searchThreads": "搜索会话",
@@ -408,13 +687,13 @@
       "nextRun": "下次执行",
       "activeRun": "当前执行",
       "model": "模型",
-      "environment": "执行环境",
-      "environmentHint": "为下一次 Run 选择 Workspace Runtime 环境；当前 Run 的环境不可变。",
+      "environment": "运行环境",
+      "environmentHint": "选择运行环境",
       "environmentDefaults": "Runtime 默认值",
       "environmentDefaultsHint": "创建 Run 时，Backend 会根据当前 Runner Catalog 与 Agent 设置校验该选择，并把解析后的完整环境冻结到 RunDefinition。",
       "environmentSelect": "下一次 Run 环境",
-      "environmentNone": "不使用 Workspace",
-      "environmentNoneHint": "本 Run 不绑定 Workspace 环境，因此不能在该 Run 中创建 Workspace。",
+      "environmentNone": "原生环境",
+      "environmentNoneHint": "在宿主环境直接执行",
       "environmentUnknown": "Runtime 状态未知",
       "environmentUnavailable": "Runner 不可用",
       "environmentRunnerReady": "Runner 已就绪",
@@ -513,7 +792,12 @@
         "goalNotAccepted": "当前 Run 已不能继续接受 Goal 更新。",
         "stateChanged": "命令执行期间 Run 状态已变化。已刷新到最新状态，请重试。",
         "genericFailure": "命令无法在当前状态下执行。"
-      }
+      },
+      "bentoExplainTitle": "环境与架构洞察",
+      "bentoExplainDesc": "解析当前工作区环境、容器运行配置与上下文规则",
+      "bentoDiagnoseTitle": "只读链路安全自检",
+      "bentoDiagnoseDesc": "探测可用连接与服务健康度，仅读取状态，不执行修改",
+      "heroTag": "智能协作工作台"
     },
     "attachments": {
       "button": "文件（{count}）",
@@ -590,7 +874,10 @@
         "reconciliation": "下一次修改操作前需要先完成对账。",
         "approval": "此 Run 正在等待你的审批。",
         "budget": "此 Run 已暂停，需要增加预算后继续。"
-      }
+      },
+      "totalTokens": "总消耗",
+      "advancedDetails": "高级详情与检查点",
+      "backToTasks": "返回任务列表"
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",
@@ -722,7 +1009,16 @@
       "promptDiagnose": "帮我检查可用的连接，只读取，不做修改",
       "advanced": "高级设置",
       "optionalRuntime": "可选运行环境",
-      "approvalHistory": "已处理审批"
+      "approvalHistory": "已处理审批",
+      "reasoningDescriptions": {
+        "none": "关闭深度思考，直接快速回复",
+        "minimal": "极轻思考，极快生成",
+        "low": "更快的响应，适合轻量问题",
+        "medium": "平衡速度与思考深度",
+        "high": "深入推理，适合复杂问题与代码",
+        "xhigh": "强化深度推理，全面探索",
+        "max": "最大推理探索深度"
+      }
     }
   }
 }

@@ -102,9 +102,9 @@ packages/agent-runner/
 - Agent feature 从 disabled 切到 enabled 时，打开同一个全局 Hub。
 - disabled 时隐藏 Launcher/Hub，但 Settings、历史、安全清理与审计仍保留。
 
-### 3.2 Windows 风格非模态浮窗
+### 3.2 Windows 风格模态工作台浮窗
 
-Hub 是非模态 floating window，支持：
+当前 Hub 是带全屏 backdrop 的 modal workbench（`role="dialog"` + `aria-modal="true"`）：打开 Hub 后页面背景不再接受滚轮/触摸交互，点击 backdrop 只触发窗口强调反馈，不会把 Hub 静默关闭。Hub 本身仍保留桌面窗口式操作：
 
 - move；
 - 右下 resize；
@@ -128,10 +128,10 @@ Hub 是非模态 floating window，支持：
 当前 Host-owned Agent UI 按“全局窗口 → App → Thread → Conversation/Run”四层组织，审核时应以以下行为为准：
 
 - **Launcher**：认证后被动出现，不自动打开 Hub、不抢焦点；feature disabled 时隐藏，但 Agent Settings/历史/审计数据不因此删除。
-- **Window chrome**：标题区展示全局 activity count、App selector、Conversation/Files view、pending approval 提示以及 minimize/maximize/close。多 App 时，宽窗口额外显示带 health/running/approval/budget 状态的 App activity strip；selector 是始终可达的主切换入口，App 数量超过 5 时才显示搜索。
-- **App 切换**：`AgentAppSwitcher -> AgentHubWindow.switchApp -> agentSurfaceSession.activateApp -> agentWindowManager.switchApp`。离开 App 前暂停 detail presentation；每个 App 的当前 Thread、draft、Next Run model、Next Run Environment 等 view state 独立保留，不把这些临时状态直接当作 Run truth。
+- **Window chrome**：标题栏直接承载当前已打开的 App tabs；每个 tab 显示 App identity、health 以及 running/approval/budget 微状态，多 tab 时允许就地关闭。尾部 `+` 打开 `AgentAppSwitcher`，只列出 enabled Apps，超过 4 个候选时显示搜索。右侧保留 Conversation/Files 一级 view、pending approval 提示以及 minimize/maximize/close。
+- **App 切换**：`AgentAppSwitcher / 顶栏 App tab -> AgentHubWindow.switchApp -> agentSurfaceSession.activateApp -> agentWindowManager.switchApp`。离开 App 前暂停 detail presentation；每个 App 的当前 Thread、draft、Next Run model、Next Run Environment 等 view state 独立保留，不把这些临时状态直接当作 Run truth。disabled App 会从 tabs/switcher 候选中移除，不再作为 fallback 继续展示。
 - **Agent surface**：默认 `216px Threads / Conversation`，TaskRail 按需展开为 300px 第三栏；Conversation header 负责 Thread/Run status、历史与任务入口，Composer 内配置区负责 Model / reasoning 能力说明 / Environment / Targets；正文渲染安全 Markdown 与可展开的工具/系统摘要，不改写 Ledger。TaskRail 聚合当前/后台 Run、待处理 Approval/Budget，历史审批、checkpoint 与 Workspace 在详情中渐进展开。
-- **响应式**：`AgentHubWindow` 自身是 named container。`<=1180px` 收起 model meta，`<=1040px` 将 TaskRail 改为覆盖面板，`<=880px` 隐藏 Run history select，`<=760px` Threads 变 overlay drawer 且 Composer Configuration 可换行；Hub chrome 在 `<=900px` 收起非关键 badge/App search，在 `<=700px` 进一步隐藏 title/nav label/activity strip。不得用浏览器 viewport breakpoint 替代上述窗口容器规则。
+- **响应式**：`AgentHubWindow` 自身是 named container。`<=1180px` 收起 model meta，`<=1040px` 将 TaskRail 改为覆盖面板，`<=880px` 隐藏 Run history select，`<=760px` Threads 变 overlay drawer 且 Composer Configuration 可换行；Hub chrome 在 `<=900px` 隐藏 approval badge，在 `<=760px` 隐藏品牌块与 Conversation/Files 文字标签但保留图标和 App tabs。不得用浏览器 viewport breakpoint 替代上述窗口容器规则。
 - **Next Run / Active Run**：没有活动 Run 时 Model / Environment / Targets 都是下一次执行选择。Environment 选择先以 App-local presentation state 保存；创建 Run 时 Backend 根据当前 Runner Catalog 与 Agent settings 校验并解析为完整 `RunDefinition.environment` snapshot。Run 创建后 Model / Environment / Targets 都从 RunDefinition 冻结展示并显示 lock；选择 `No Workspace` 时该 Run 明确冻结为无 Workspace 环境。
 - **审批/预算**：高风险操作不在聊天气泡里“假通过”。顶部 badge、TaskRail 和 Run detail 都投影同一后端 Approval/Run 状态；窄窗口即使 TaskRail 被隐藏，也必须仍能从 Run header/detail 进入处理。
 - **Files**：Artifact Library 是 Hub 的一级 view，不复制为每个 App 自己的文件浏览器；Picker/Artifact ref 仍按 App/Run scope 进入 Conversation。
@@ -1647,3 +1647,16 @@ build Docker
 - 中文 IME Enter 不发送，错误/对账提示位于 Composer；对账仍锁定 mutation。Popover 有可视边界定位与 Escape 返回焦点；详情 drawer 支持键盘焦点管理。
 - 自动命名仍记录在 PROBLEM P-025；P-026 的 reasoning effort 已补齐 Backend Run 冻结与 OpenAI-compatible 映射，并由内置 Model Capability Registry 自动驱动可选档位。普通用户不编辑 capability；Provider live capability 解析留作后续扩展。
 - 用户要求先完成功能，不修改测试；既有测试的旧导航/命名交互断言留待后续同步。
+
+### 2026-09-15 当前 UI 基线刷新
+
+本节覆盖前一日 UI 说明中已经被当前实现取代的 presentation 细节；产品与后续文档审查均以这里和现行组件为准，不要求代码回退到旧文档布局。
+
+- **Agent Settings 只保留 3 个一级分区**：`模型与预算 / 运行与环境 / 插件与安全`。页面顶部直接展示 feature 状态、默认模型、活跃 App 数和 Sandbox availability，不再单独提供 Overview 分区，也不再使用 7 个左侧目录项。
+- **Settings 使用自然流页面**：一级分区由顶部胶囊导航切换，分区内部按卡片纵向展开；不再依赖固定工作区高度、分区独立 `scrollTop` 或外层 `scrollIntoView`。复杂项通过卡片、抽屉或 `<details>` 渐进展开，例如 Hard Limits 收在模型分区的高级折叠面板中。
+- **模型与预算**：包含 Agent feature、Provider/default model、Budget/Context 与折叠 Hard Limits。Provider 的模型增删/默认模型/协议等 mutation 以服务端结果为准；跨区域成功/失败使用全局 NotificationHost Toast，具体测试行仍可保留 loading/success/error 的局部状态，二者职责不同。
+- **运行与环境**：包含 Performance、Workspace Runtime、Browser Runtime、ACP、Subagent 与 Artifact Storage。所有 QuantityInput 风格数值都必须在前端阻止非法最小值提交，同时 Backend 继续作为 authoritative validation。
+- **插件与安全**：包含 App capability 管理、插件仓库/签名包、Connection denylist 与 System Guardrails。只允许 enabled App 出现在 Hub App tabs / App switcher；连接列表尚未成功加载时不得把 denylist 中的 ID 误判成“已删除连接”。
+- **Provider 新建/测试**：创建后测试必须使用刚刚由服务端返回的 provider id，不依赖父 props 刷新时序；Provider/模型 mutation 失败不得显示成功反馈或清空用户选择。删除当前默认 Provider 后必须同步选择仍存在的 fallback default，或明确清空默认值。
+- **Agent Hub**：当前为 modal workbench，而不是旧版非模态浮窗。顶栏直接使用 App tabs 管理已打开 enabled Apps，`+` 入口负责选择其它 enabled Apps；背景 backdrop 阻止页面滚动/触摸交互，但窗口仍可移动、缩放、最小化、最大化和关闭。
+- **文档优先级**：`doc/PROBLEM.md` 中早期 P-022/P-024 等 UI 过程记录属于历史演进证据；若其布局描述与本节或当前组件冲突，以当前组件 + 本节为产品基线，后续只修真实 bug，不为了历史方案恢复旧 UI。

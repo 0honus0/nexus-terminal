@@ -93,14 +93,34 @@
       if (keepPinnedToBottom) void scrollToBottom();
     },
   );
+
+  const totalRunTokens = computed(() => {
+    if (!props.run) return 0;
+    return props.run.usage.inputTokens + props.run.usage.outputTokens;
+  });
+
+  const runCacheRate = computed(() => {
+    if (!props.run || props.run.usage.inputTokens <= 0) return 0;
+    const rate = (props.run.usage.cachedInputTokens / props.run.usage.inputTokens) * 100;
+    return Math.min(100, Math.max(0, Math.round(rate * 10) / 10));
+  });
+
+  const formatTokens = (num: number): string => {
+    if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
+    if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
+    return num.toLocaleString();
+  };
 </script>
 
 <template>
-  <section class="flex h-full min-h-0 flex-col bg-background">
-    <div class="min-h-0 flex-1">
+  <section class="relative flex h-full min-h-0 flex-col bg-background overflow-hidden">
+    <!-- 背景极轻环境弥散微光层 -->
+    <div class="agent-conversation-ambient pointer-events-none absolute inset-0 z-0 opacity-70"></div>
+
+    <div class="relative z-10 min-h-0 flex-1">
       <DynamicScroller
         ref="scroller"
-        class="h-full overflow-y-auto overscroll-contain px-5 py-6"
+        class="h-full overflow-y-auto overscroll-contain px-5 py-3.5"
         :items="visibleEntries"
         :min-item-size="64"
         key-field="id"
@@ -121,24 +141,95 @@
           </div>
           <div
             v-if="entries.length === 0 && !streamingText"
-            class="mx-auto flex min-h-[300px] max-w-2xl flex-col items-center justify-center px-6 text-center"
+            class="relative z-10 mx-auto flex min-h-[460px] max-w-3xl flex-col items-center justify-center px-4 py-4 text-center select-none"
           >
-            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-lg text-primary">
-              <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>
+            <!-- 顶端微胶囊标识 -->
+            <div
+              class="mb-3.5 inline-flex items-center gap-1.5 rounded-full border border-primary/25 bg-primary/[0.08] px-3.5 py-0.5 text-[10px] font-semibold tracking-wider text-primary shadow-2xs"
+            >
+              <span class="h-1.5 w-1.5 rounded-full bg-primary animate-pulse"></span>
+              <span>{{ $t('agent.conversation.heroTag') }}</span>
             </div>
-            <h2 class="mt-4 text-base font-semibold">{{ $t('agent.conversation.emptyTitle') }}</h2>
-            <p class="mt-2 max-w-md text-sm leading-6 text-text-secondary">
+
+            <!-- 柔和环境光晕与现代卡片图标 -->
+            <div class="relative flex items-center justify-center">
+              <div class="absolute -inset-4 rounded-3xl bg-primary/20 blur-2xl pointer-events-none"></div>
+              <div
+                class="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/25 bg-gradient-to-b from-card to-card/90 text-primary shadow-xl shadow-primary/15 backdrop-blur-xs ring-1 ring-border/30"
+              >
+                <i class="fa-solid fa-wand-magic-sparkles text-2xl" aria-hidden="true"></i>
+              </div>
+            </div>
+
+            <h2 class="mt-4 text-xl font-bold tracking-tight text-foreground">
+              {{ $t('agent.conversation.emptyTitle') }}
+            </h2>
+            <p class="mt-1.5 max-w-sm text-xs leading-relaxed text-text-secondary/80">
               {{ $t('agent.conversation.emptyDescription') }}
             </p>
-            <div class="mt-6 grid w-full max-w-md gap-2">
+
+            <!-- 现代化便当盒磁贴 (Bento Grid) -->
+            <div class="mt-6.5 grid w-full grid-cols-1 sm:grid-cols-2 gap-3.5">
               <button
-                v-for="key in ['promptExplain', 'promptDiagnose']"
-                :key="key"
                 type="button"
-                class="rounded-xl border border-border/60 px-4 py-3 text-left text-sm text-text-secondary hover:border-primary/40 hover:bg-primary/5"
-                @click="emit('updateDraft', $t(`agent.ui.${key}`))"
+                class="group relative flex items-center rounded-2xl border border-border/75 bg-gradient-to-br from-primary/[0.04] via-card to-card p-3.5 text-left shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-[0_8px_24px_rgba(160,108,213,0.12)] active:scale-[0.99]"
+                @click="emit('updateDraft', $t('agent.ui.promptExplain'))"
               >
-                {{ $t(`agent.ui.${key}`) }} <span class="float-right" aria-hidden="true">↗</span>
+                <div class="flex items-start gap-3.5 w-full">
+                  <span
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-2xs group-hover:scale-105 group-hover:bg-primary/15 transition-all"
+                  >
+                    <i class="fa-solid fa-code text-sm" aria-hidden="true"></i>
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center justify-between">
+                      <span
+                        class="text-[13px] font-bold tracking-tight text-foreground group-hover:text-primary transition-colors"
+                      >
+                        {{ $t('agent.conversation.bentoExplainTitle') }}
+                      </span>
+                      <span
+                        class="text-xs text-text-secondary/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary"
+                        aria-hidden="true"
+                        >↗</span
+                      >
+                    </div>
+                    <p class="mt-1 text-xs leading-relaxed text-text-secondary/75">
+                      {{ $t('agent.conversation.bentoExplainDesc') }}
+                    </p>
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                class="group relative flex items-center rounded-2xl border border-border/75 bg-gradient-to-br from-emerald-500/[0.04] via-card to-card p-3.5 text-left shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/45 hover:shadow-[0_8px_24px_rgba(16,185,129,0.12)] active:scale-[0.99]"
+                @click="emit('updateDraft', $t('agent.ui.promptDiagnose'))"
+              >
+                <div class="flex items-start gap-3.5 w-full">
+                  <span
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-2xs group-hover:scale-105 group-hover:bg-emerald-500/15 transition-all"
+                  >
+                    <i class="fa-solid fa-shield-halved text-sm" aria-hidden="true"></i>
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <div class="flex items-center justify-between">
+                      <span
+                        class="text-[13px] font-bold tracking-tight text-foreground group-hover:text-emerald-500 transition-colors"
+                      >
+                        {{ $t('agent.conversation.bentoDiagnoseTitle') }}
+                      </span>
+                      <span
+                        class="text-xs text-text-secondary/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-emerald-500"
+                        aria-hidden="true"
+                        >↗</span
+                      >
+                    </div>
+                    <p class="mt-1 text-xs leading-relaxed text-text-secondary/75">
+                      {{ $t('agent.conversation.bentoDiagnoseDesc') }}
+                    </p>
+                  </div>
+                </div>
               </button>
             </div>
           </div>
@@ -175,17 +266,8 @@
       </DynamicScroller>
     </div>
 
-    <footer class="shrink-0 bg-background px-4 pb-4 pt-2">
+    <footer class="relative z-10 shrink-0 bg-background/90 backdrop-blur-xs px-4 pb-4 pt-2">
       <div class="mx-auto max-w-3xl">
-        <div v-if="showJumpToLatest" class="mb-2 flex justify-center">
-          <button
-            type="button"
-            class="rounded-full border border-border bg-card px-3 py-1.5 text-xs shadow-sm"
-            @click="scrollToBottom"
-          >
-            {{ $t('agent.ui.latest') }} ↓
-          </button>
-        </div>
         <div
           v-if="error || reconciliation"
           class="mb-2 flex items-start gap-2 rounded-xl border px-3 py-2 text-xs leading-5"
@@ -269,34 +351,120 @@
           </button>
         </div>
 
+        <!-- 会话状态与 Token 统计指示条（始终保持整行可见，回到最新消息作为行内局部操作项） -->
         <div
-          class="rounded-2xl border border-border/70 bg-background shadow-sm transition-[border-color,box-shadow] focus-within:border-primary/30 focus-within:shadow-sm focus-within:ring-2 focus-within:ring-primary/10"
+          v-if="showJumpToLatest || (run && (totalRunTokens > 0 || run.usage.steps > 0))"
+          class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/80 bg-card/60 px-3 py-1.5 text-[11px] text-text-secondary shadow-2xs select-none"
+        >
+          <div v-if="run && (totalRunTokens > 0 || run.usage.steps > 0)" class="flex flex-wrap items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 font-medium text-foreground">
+              <i class="fa-solid fa-coins text-[10px] text-foreground/70" aria-hidden="true"></i>
+              <span>{{ $t('agent.tasks.totalTokens') || '会话总消耗' }}</span>
+              <span class="font-mono font-semibold text-foreground">{{ formatTokens(totalRunTokens) }}</span>
+            </span>
+
+            <span class="text-border/70">|</span>
+
+            <span
+              class="inline-flex items-center gap-1 text-[10px] text-text-secondary"
+              :title="`输入: ${run.usage.inputTokens} · 输出: ${run.usage.outputTokens}`"
+            >
+              <span
+                >入
+                <strong class="font-mono font-normal text-foreground/80">{{
+                  formatTokens(run.usage.inputTokens)
+                }}</strong></span
+              >
+              <span>·</span>
+              <span
+                >出
+                <strong class="font-mono font-normal text-foreground/80">{{
+                  formatTokens(run.usage.outputTokens)
+                }}</strong></span
+              >
+            </span>
+
+            <span
+              v-if="run.usage.cachedInputTokens > 0 || runCacheRate > 0"
+              class="inline-flex items-center gap-1 rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success"
+              :title="`命中缓存: ${run.usage.cachedInputTokens} tokens`"
+            >
+              <i class="fa-solid fa-bolt text-[9px]" aria-hidden="true"></i>
+              <span>缓存率 {{ runCacheRate }}%</span>
+            </span>
+
+            <span v-if="run.usage.steps > 0" class="inline-flex items-center gap-1 text-[10px] text-text-secondary">
+              <span
+                >步数: <strong class="font-mono font-normal text-foreground/80">{{ run.usage.steps }}</strong></span
+              >
+            </span>
+          </div>
+          <div v-else class="text-[11px] text-text-secondary flex items-center gap-1.5">
+            <i class="fa-solid fa-clock-rotate-left text-[10px]" aria-hidden="true"></i>
+            <span>{{ $t('agent.ui.latest') }}</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <!-- 回到最新消息按钮：行内局部显示/隐藏，触发后仅按钮隐藏，整行保持完全可见 -->
+            <button
+              v-if="showJumpToLatest"
+              type="button"
+              class="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-foreground px-2.5 py-0.5 text-[10px] font-medium text-background shadow-xs transition hover:bg-foreground/90 active:scale-95"
+              :title="$t('agent.ui.latest')"
+              @click="scrollToBottom"
+            >
+              <span>{{ $t('agent.ui.latest') }}</span>
+              <i class="fa-solid fa-arrow-down text-[8px]" aria-hidden="true"></i>
+            </button>
+
+            <div v-if="run?.budget?.maxRunTokens" class="flex items-center gap-1.5 text-[10px] text-text-secondary">
+              <span
+                >预算:
+                {{ Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100)) }}%</span
+              >
+              <div class="h-1.5 w-16 overflow-hidden rounded-full bg-header">
+                <div
+                  class="h-full rounded-full transition-all duration-300"
+                  :class="totalRunTokens > run.budget.maxRunTokens * 0.9 ? 'bg-warning' : 'bg-foreground'"
+                  :style="{
+                    width: `${Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100))}%`,
+                  }"
+                ></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="rounded-2xl border border-border/80 bg-card/85 backdrop-blur-md shadow-[0_4px_24px_rgba(0,0,0,0.04)] ring-1 ring-border/20 transition-all duration-200 hover:border-border-hover focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/20 focus-within:shadow-[0_8px_32px_rgba(160,108,213,0.12)] overflow-hidden"
         >
           <textarea
             id="agent-composer"
             :aria-label="$t('agent.conversation.placeholder')"
             :value="draft"
             rows="3"
-            class="max-h-48 min-h-24 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-sm leading-6 outline-none"
+            class="max-h-48 min-h-24 w-full resize-none bg-transparent px-4 pb-2 pt-3.5 text-sm leading-relaxed text-foreground placeholder:text-text-secondary/50 outline-none"
             :placeholder="$t('agent.conversation.placeholder')"
             @input="emit('updateDraft', ($event.target as HTMLTextAreaElement).value)"
             @keydown.enter.exact="onComposerEnter"
           ></textarea>
-          <slot name="configuration" />
-          <div class="flex items-center justify-between gap-2 px-2 pb-2">
-            <div class="flex min-w-0 items-center gap-1.5">
+          <div
+            class="flex min-h-11 items-center justify-between gap-2 border-t border-border/40 bg-card/40 backdrop-blur-xs px-2.5 py-1.5"
+          >
+            <div class="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto no-scrollbar">
               <ArtifactPicker
                 :app-id="appId"
                 :model-value="attachments"
                 :disabled="busy"
                 @update:model-value="emit('updateAttachments', $event)"
               />
+              <slot name="configuration" />
             </div>
-            <div class="flex items-center gap-1.5">
+            <div class="flex shrink-0 items-center gap-1.5">
               <button
                 v-if="run && ['created', 'running', 'awaiting_approval', 'awaiting_budget'].includes(run.status)"
                 type="button"
-                class="flex h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-error hover:bg-error/10"
+                class="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium text-error hover:bg-error/10 transition-colors"
                 :disabled="busy || run.status === 'cancelling'"
                 @click="emit('cancel')"
               >
@@ -305,11 +473,11 @@
               </button>
               <button
                 type="button"
-                class="flex h-9 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
+                class="flex h-8 items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-primary-hover px-3.5 text-xs font-semibold text-white shadow-sm shadow-primary/25 transition-all hover:brightness-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-25 disabled:bg-foreground/20 disabled:text-text-secondary disabled:shadow-none"
                 :disabled="busy || !canSend || !draft.trim()"
                 @click="send"
               >
-                <span>{{ $t('agent.conversation.send') }}</span>
+                <span class="hidden sm:inline">{{ $t('agent.conversation.send') }}</span>
                 <i class="fa-solid fa-arrow-up text-xs" aria-hidden="true"></i>
               </button>
             </div>
@@ -319,3 +487,23 @@
     </footer>
   </section>
 </template>
+
+<style scoped>
+  .agent-conversation-ambient {
+    background: radial-gradient(
+      circle at 50% 30%,
+      color-mix(in srgb, var(--color-primary) 10%, transparent) 0%,
+      color-mix(in srgb, var(--color-primary) 2%, transparent) 40%,
+      transparent 70%
+    );
+  }
+
+  #agent-composer,
+  #agent-composer:focus,
+  #agent-composer:focus-visible {
+    border: 0 !important;
+    border-color: transparent !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+</style>

@@ -998,6 +998,16 @@ export const agentApi = {
       ).data,
     );
   },
+  async deleteProvider(providerId: string, expectedVersion: number): Promise<{ deleted: boolean }> {
+    return unwrap(
+      (
+        await httpClient.delete<AgentEnvelope<{ deleted: boolean }>>(
+          `/agent/ai/providers/${encodeURIComponent(providerId)}?expectedVersion=${encodeURIComponent(expectedVersion)}`,
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
   async testProvider(providerId: string, modelId: string): Promise<{ ok: boolean; latencyMs: number }> {
     return unwrap(
       (

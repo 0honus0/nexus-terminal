@@ -9,7 +9,11 @@ body,
 
 body {
   margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   font-family: var(--font-family-sans-serif);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   background-color: var(--app-bg-color);
   color: var(--text-color);
   line-height: 1.6;
@@ -24,6 +28,23 @@ input,
 textarea,
 select {
   font: inherit;
+  font-family: inherit;
+  font-feature-settings: inherit;
+}
+
+code,
+kbd,
+samp,
+pre {
+  font-family: var(--font-family-monospace);
+}
+
+.font-mono,
+code,
+kbd,
+samp,
+pre {
+  font-variant-numeric: tabular-nums;
 }
 
 button:not(:disabled) {
@@ -96,12 +117,20 @@ select:disabled {
   opacity: 1 !important;
 }
 
-input:focus,
-textarea:focus,
-select:focus {
+input:focus:not(#agent-composer):not([data-no-highlight]):not(.no-highlight),
+textarea:focus:not(#agent-composer):not([data-no-highlight]):not(.no-highlight),
+select:focus:not([data-no-highlight]):not(.no-highlight) {
   border-color: var(--input-focus-border-color) !important;
   outline: 0;
-  box-shadow: 0 0 0 3px var(--input-focus-glow) !important;
+  box-shadow: 0 0 0 2px var(--input-focus-glow) !important;
+}
+
+[data-no-highlight]:focus,
+[data-no-highlight]:focus-within,
+.no-highlight:focus,
+.no-highlight:focus-within {
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 button.bg-button i,

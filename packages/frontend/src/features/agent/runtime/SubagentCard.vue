@@ -22,7 +22,7 @@
 <template>
   <article
     class="rounded border p-3 transition-colors"
-    :class="selected ? 'border-primary bg-primary/5' : 'border-border bg-background'"
+    :class="selected ? 'border-border-hover bg-card shadow-xs' : 'border-border/70 bg-background'"
   >
     <button type="button" class="w-full text-left" @click="$emit('select', delegation)">
       <div class="flex items-start justify-between gap-2">

@@ -4,19 +4,31 @@
   import type { AgentApprovalView, AgentHardLimits, AgentRunView, AgentServerClockAnchor } from '../api/agent-api';
   import ApprovalCard from './ApprovalCard.vue';
 
-  const props = defineProps<{
-    current: AgentRunView | null;
-    backgroundRuns: AgentRunView[];
-    threadRuns: AgentRunView[];
-    threadTitles: Record<string, string>;
-    hardLimits: AgentHardLimits | null;
-    approvals: AgentApprovalView[];
-    approvalClock: AgentServerClockAnchor | null;
-    busy?: boolean;
-  }>();
+  import type { AgentCheckpointView } from '../api/agent-api';
+
+  const props = withDefaults(
+    defineProps<{
+      current: AgentRunView | null;
+      backgroundRuns: AgentRunView[];
+      threadRuns: AgentRunView[];
+      threadTitles: Record<string, string>;
+      hardLimits: AgentHardLimits | null;
+      approvals: AgentApprovalView[];
+      approvalClock: AgentServerClockAnchor | null;
+      currentCheckpoints?: AgentCheckpointView[];
+      busy?: boolean;
+    }>(),
+    {
+      currentCheckpoints: () => [],
+      busy: false,
+    },
+  );
   const emit = defineEmits<{
+    close: [];
     openRun: [run: AgentRunView];
     resolveApproval: [approval: AgentApprovalView, decision: 'approved' | 'denied'];
+    saveCheckpoint: [snapshot: AgentRunView];
+    resumeCheckpoint: [snapshot: AgentRunView, checkpoint: AgentCheckpointView];
     increaseBudget: [
       increase: Partial<{
         maxRunTokens: number;
@@ -26,6 +38,9 @@
       }>,
     ];
   }>();
+
+  const showInlineDetails = ref(false);
+  const terminal = new Set(['completed', 'completed_unverified', 'failed', 'cancelled', 'interrupted']);
 
   const tokenUsage = computed(() =>
     props.current ? props.current.usage.inputTokens + props.current.usage.outputTokens : 0,
@@ -142,7 +157,7 @@
 
 <template>
   <aside class="flex h-full min-h-0 flex-col border-l border-border/60 bg-card/70">
-    <header class="flex h-12 shrink-0 items-center justify-between border-b border-border/60 pl-3.5 pr-11">
+    <header class="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3">
       <div class="flex min-w-0 items-center gap-2">
         <div
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-[11px] text-primary"
@@ -151,15 +166,25 @@
         </div>
         <div class="min-w-0">
           <strong class="block truncate text-xs leading-none">{{ $t('agent.tasks.title') }}</strong>
-          <span class="mt-1 block truncate text-[10px] text-text-secondary">{{ $t('agent.tasks.dragHint') }}</span>
         </div>
       </div>
-      <span
-        v-if="requestedApprovals.length || backgroundRuns.length"
-        class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary"
-      >
-        {{ requestedApprovals.length + backgroundRuns.length }}
-      </span>
+      <div class="flex items-center gap-1.5">
+        <span
+          v-if="requestedApprovals.length || backgroundRuns.length"
+          class="rounded-full bg-header px-2 py-0.5 text-[10px] text-text-secondary"
+        >
+          {{ requestedApprovals.length + backgroundRuns.length }}
+        </span>
+        <button
+          type="button"
+          class="agent-rail-close-btn flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+          :title="$t('common.close')"
+          :aria-label="$t('common.close')"
+          @click="emit('close')"
+        >
+          <i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
+        </button>
+      </div>
     </header>
 
     <div class="min-h-0 flex-1 overflow-y-auto p-3">
@@ -172,11 +197,11 @@
         chosen-class="agent-rail-card-chosen"
         drag-class="agent-rail-card-drag"
         :animation="160"
-        class="space-y-2.5"
+        class="space-y-3"
       >
         <template #item="{ element }">
           <section
-            class="agent-rail-card rounded-2xl border border-border/60 bg-background/80 p-3 shadow-sm"
+            class="agent-rail-card rounded-xl border border-border/70 bg-card p-3.5 shadow-xs transition-shadow hover:shadow-sm"
             :data-rail-card="element.id"
           >
             <template v-if="element.id === 'progress' && current">
@@ -202,13 +227,6 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-1">
-                  <button
-                    type="button"
-                    class="flex h-7 items-center gap-1 rounded-lg px-2 text-[10px] text-text-secondary hover:bg-header hover:text-foreground"
-                    @click="emit('openRun', current)"
-                  >
-                    {{ $t('agent.tasks.openDetail') }}
-                  </button>
                   <button
                     type="button"
                     class="agent-rail-drag-handle flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-text-secondary hover:bg-header active:cursor-grabbing"
@@ -243,43 +261,112 @@
                 {{ $t(`agent.tasks.attention.${attentionKey}`) }}
               </div>
 
-              <details class="mt-3 border-t border-border/50 pt-2.5">
-                <summary class="cursor-pointer text-[10px] text-text-secondary">
-                  {{ $t('agent.ui.usageDetails') }}
-                </summary>
-                <div class="mt-2.5 space-y-2.5">
-                  <div>
-                    <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
-                      <span>{{ $t('agent.tasks.tokens') }}</span>
-                      <span>{{ tokenUsage }} / {{ current.budget.maxRunTokens }}</span>
-                    </div>
-                    <div class="h-1 overflow-hidden rounded-full bg-header">
-                      <div class="h-full rounded-full bg-primary" :style="{ width: `${tokenPercent}%` }"></div>
-                    </div>
+              <div class="mt-3 border-t border-border/50 pt-2.5 space-y-2.5">
+                <div>
+                  <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
+                    <span class="font-medium">{{ $t('agent.tasks.steps') }}</span>
+                    <span class="font-mono">{{ current.usage.steps }} / {{ current.budget.maxRunSteps }}</span>
                   </div>
-                  <div>
-                    <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
-                      <span>{{ $t('agent.tasks.steps') }}</span>
-                      <span>{{ current.usage.steps }} / {{ current.budget.maxRunSteps }}</span>
-                    </div>
-                    <div class="h-1 overflow-hidden rounded-full bg-header">
-                      <div class="h-full rounded-full bg-primary/70" :style="{ width: `${stepPercent}%` }"></div>
-                    </div>
+                  <div class="h-1.5 overflow-hidden rounded-full bg-header">
+                    <div
+                      class="h-full rounded-full bg-primary/75 transition-all duration-300"
+                      :style="{ width: `${stepPercent}%` }"
+                    ></div>
                   </div>
                 </div>
-                <div class="mt-2.5 grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5 text-[10px]">
-                  <div>
+                <div class="grid grid-cols-2 gap-2 text-[10px]">
+                  <div class="rounded-lg border border-border/40 bg-background/50 px-2 py-1.5">
+                    <div class="text-text-secondary">{{ $t('agent.tasks.activeTime') }}</div>
+                    <div class="mt-0.5 font-medium font-mono">{{ current.activeExecutionSeconds }}s</div>
+                  </div>
+                  <div class="rounded-lg border border-border/40 bg-background/50 px-2 py-1.5">
                     <div class="text-text-secondary">{{ $t('agent.tasks.verification') }}</div>
                     <div class="mt-0.5 truncate font-medium">
                       {{ $t(`agent.tasks.verificationStatus.${current.verificationStatus}`) }}
                     </div>
                   </div>
-                  <div>
-                    <div class="text-text-secondary">{{ $t('agent.tasks.activeTime') }}</div>
-                    <div class="mt-0.5 font-medium">{{ current.activeExecutionSeconds }}s</div>
+                </div>
+
+                <!-- 内联手风琴折叠展开：检查点与调试信息就地查看 -->
+                <div class="border-t border-border/40 pt-2">
+                  <button
+                    type="button"
+                    class="flex w-full items-center justify-between rounded-lg px-1 py-1 text-[11px] font-medium text-text-secondary hover:bg-header/60 hover:text-foreground transition-all select-none"
+                    @click="showInlineDetails = !showInlineDetails"
+                  >
+                    <span class="flex items-center gap-1.5">
+                      <i class="fa-solid fa-layer-group text-[10px] text-primary" aria-hidden="true"></i>
+                      <span>{{ $t('agent.tasks.advancedDetails') }}</span>
+                      <span
+                        v-if="currentCheckpoints.length"
+                        class="rounded-full bg-header px-1.5 py-0.2 text-[9px] text-text-secondary font-mono"
+                      >
+                        {{ currentCheckpoints.length }}
+                      </span>
+                    </span>
+                    <i
+                      class="fa-solid fa-chevron-down text-[8px] text-text-secondary/70 transition-transform duration-200"
+                      :class="showInlineDetails ? 'rotate-180' : ''"
+                      aria-hidden="true"
+                    ></i>
+                  </button>
+
+                  <div v-if="showInlineDetails" class="mt-2 space-y-2.5 pt-0.5">
+                    <!-- 模型与思考强度 -->
+                    <div class="flex flex-wrap items-center gap-1 text-[10px] text-text-secondary">
+                      <span class="rounded-md bg-header px-2 py-0.5 font-mono">
+                        <i class="fa-solid fa-microchip mr-1 text-[8px]" aria-hidden="true"></i
+                        >{{ current.definition.model.modelId }}
+                      </span>
+                      <span v-if="current.definition.reasoningEffort" class="rounded-md bg-header px-2 py-0.5">
+                        <i class="fa-solid fa-brain mr-1 text-[8px]" aria-hidden="true"></i
+                        >{{ $t(`agent.ui.reasoningLevels.${current.definition.reasoningEffort}`) }}
+                      </span>
+                    </div>
+
+                    <!-- 检查点 -->
+                    <div class="rounded-lg border border-border/50 bg-background/50 p-2.5">
+                      <div class="flex items-center justify-between gap-1 mb-1.5">
+                        <span class="text-[10px] font-semibold text-foreground flex items-center gap-1">
+                          <i class="fa-solid fa-bookmark text-[8px] text-primary" aria-hidden="true"></i>
+                          {{ $t('agent.tasks.checkpoints') }}
+                        </span>
+                        <button
+                          type="button"
+                          class="flex items-center gap-1 rounded-md border border-border/60 bg-card px-2 py-0.5 text-[9px] font-medium text-foreground hover:bg-header disabled:opacity-50"
+                          :disabled="busy || current.status === 'cancelling' || current.needsReconciliation"
+                          @click="emit('saveCheckpoint', current)"
+                        >
+                          <i class="fa-solid fa-plus text-[7px]" aria-hidden="true"></i>
+                          {{ $t('agent.tasks.saveCheckpoint') }}
+                        </button>
+                      </div>
+
+                      <div v-if="currentCheckpoints.length === 0" class="py-1 text-[10px] text-text-secondary">
+                        {{ $t('agent.tasks.noCheckpoints') }}
+                      </div>
+                      <div v-else class="space-y-1.5 max-h-32 overflow-y-auto">
+                        <div
+                          v-for="cp in currentCheckpoints"
+                          :key="cp.id"
+                          class="flex items-center justify-between gap-1 rounded-md border border-border/40 bg-card/80 px-2 py-1 text-[9px]"
+                        >
+                          <div class="min-w-0 truncate font-mono text-foreground">#{{ cp.id.slice(-6) }}</div>
+                          <button
+                            v-if="terminal.has(current.status)"
+                            type="button"
+                            class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary hover:bg-primary/20"
+                            :disabled="busy || current.needsReconciliation"
+                            @click="emit('resumeCheckpoint', current, cp)"
+                          >
+                            {{ $t('agent.tasks.resumeCheckpoint') }}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </details>
+              </div>
 
               <button
                 v-if="current.status === 'awaiting_budget'"
@@ -349,7 +436,7 @@
                       item.status === 'completed'
                         ? 'border-success/40 bg-success/10 text-success'
                         : item.status === 'in_progress'
-                          ? 'border-primary/40 bg-primary/10 text-primary'
+                          ? 'border-border bg-foreground text-background font-semibold'
                           : item.status === 'blocked'
                             ? 'border-warning/40 bg-warning/10 text-warning'
                             : 'border-border bg-card text-text-secondary'

@@ -1,3 +1,9 @@
+export const DEFAULT_FONT_FAMILY_SANS =
+  '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Liberation Sans", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei UI", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji"';
+
+export const DEFAULT_FONT_FAMILY_MONO =
+  'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "DejaVu Sans Mono", "Courier New", monospace';
+
 export const defaultTerminalTheme: Record<string, string> = {
   background: '#1e1e1e',
   foreground: '#d4d4d4',
@@ -55,7 +61,8 @@ export const defaultUiTheme: Record<string, string> = {
   '--status-success-text-color': '#ffffff',
   '--status-warning-text-color': '#212529',
   '--status-error-text-color': '#ffffff',
-  '--font-family-sans-serif': 'sans-serif',
+  '--font-family-sans-serif': DEFAULT_FONT_FAMILY_SANS,
+  '--font-family-monospace': DEFAULT_FONT_FAMILY_MONO,
   '--base-padding': '1rem',
   '--base-margin': '0.5rem',
 };
@@ -93,6 +100,12 @@ const isDarkColor = (color: string): boolean => {
 
 export const normalizeUiTheme = (theme: Record<string, string>): Record<string, string> => {
   const normalized = { ...defaultUiTheme, ...theme };
+  if (!normalized['--font-family-sans-serif'] || normalized['--font-family-sans-serif'] === 'sans-serif') {
+    normalized['--font-family-sans-serif'] = DEFAULT_FONT_FAMILY_SANS;
+  }
+  if (!normalized['--font-family-monospace'] || normalized['--font-family-monospace'] === 'monospace') {
+    normalized['--font-family-monospace'] = DEFAULT_FONT_FAMILY_MONO;
+  }
   const dark = isDarkColor(normalized['--app-bg-color'] || '#ffffff');
   const fallback = (key: string, value: string): void => {
     if (!Object.prototype.hasOwnProperty.call(theme, key)) normalized[key] = value;

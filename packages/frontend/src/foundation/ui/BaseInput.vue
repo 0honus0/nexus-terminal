@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref } from 'vue';
   import type { UiSize } from './types';
-  import { formControlBaseClass } from './formControlClasses';
+  import { getFormControlClass } from './formControlClasses';
 
   defineOptions({ inheritAttrs: false });
 
@@ -13,8 +13,9 @@
       size?: UiSize;
       invalid?: boolean;
       disabled?: boolean;
+      highlight?: boolean;
     }>(),
-    { type: 'text', size: 'md', invalid: false, disabled: false },
+    { type: 'text', size: 'md', invalid: false, disabled: false, highlight: false },
   );
 
   const sizeClass = computed(() => {
@@ -32,7 +33,13 @@
     v-bind="$attrs"
     :type="props.type"
     :disabled="props.disabled"
-    :class="[formControlBaseClass, 'bg-input', sizeClass, props.invalid ? 'border-error' : 'border-border']"
+    :data-no-highlight="!props.highlight ? '' : undefined"
+    :class="[
+      getFormControlClass({ highlight: props.highlight, invalid: props.invalid }),
+      'bg-input',
+      sizeClass,
+      !props.highlight && 'focus:border-foreground/30 focus:ring-0 focus:shadow-none',
+    ]"
     :aria-invalid="props.invalid || undefined"
   />
 </template>

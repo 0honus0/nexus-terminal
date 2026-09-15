@@ -77,7 +77,7 @@
     line-height: 1.65;
   }
   .agent-message-body :deep(code) {
-    font-family: ui-monospace, monospace;
+    font-family: var(--font-family-monospace);
     background: var(--color-header);
     border-radius: 4px;
     padding: 1px 4px;

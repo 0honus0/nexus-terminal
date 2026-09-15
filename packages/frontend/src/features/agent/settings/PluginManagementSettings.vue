@@ -38,6 +38,9 @@
   const drainingUpgradeVersion = ref<number | null>(null);
   const drainingUninstallVersions = ref<Record<string, number>>({});
   const pendingDataDeletionAppId = ref<string | null>(null);
+  const copiedSourceUrl = ref<string | null>(null);
+  // showAdvancedMaintenance removed
+  const showPublishers = ref(false);
 
   const locked = computed(() => props.busy || localBusy.value);
   const configuredRepositories = computed(() => props.settings.requestedSettings.plugins.repositories);
@@ -73,7 +76,26 @@
     versions.value.find((item) => item.appId === appId);
   const appSummary = (appId: string): AgentAppSummary | undefined => props.apps.find((item) => item.id === appId);
 
+  const isInstalled = (appId: string): boolean => activeInstallations.value.some((item) => item.appId === appId);
+
+  const isInstalledAndEnabled = (appId: string): boolean => {
+    const app = props.apps.find((a) => a.id === appId);
+    return Boolean(app?.enabled);
+  };
+
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
+
+  const copyCatalogUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      copiedSourceUrl.value = url;
+      setTimeout(() => {
+        copiedSourceUrl.value = null;
+      }, 1800);
+    } catch {
+      // ignore
+    }
+  };
 
   const loadRemoteCatalogs = async (): Promise<void> => {
     const repositories = configuredRepositories.value;
@@ -122,18 +144,21 @@
     }
   };
 
-  const saveRepositories = async (repositories: AgentSettingsView['requestedSettings']['plugins']['repositories']) => {
+  const saveRepositories = async (repositories: { url: string }[]): Promise<void> => {
     const updated = await agentApi.patchSettings({ plugins: { repositories } }, props.settings.revision);
     emit('settingsUpdated', updated);
     await loadRemoteCatalogs();
   };
 
   const addRepository = (): void => {
-    const url = repositoryUrl.value.trim();
-    if (!url) return;
+    const trimmed = repositoryUrl.value.trim();
+    if (!trimmed) return;
+    if (configuredRepositories.value.some((candidate) => candidate.url === trimmed)) {
+      repositoryUrl.value = '';
+      return;
+    }
     void run(async () => {
-      const next = [...configuredRepositories.value.filter((candidate) => candidate.url !== url), { url }];
-      await saveRepositories(next);
+      await saveRepositories([...configuredRepositories.value, { url: trimmed }]);
       repositoryUrl.value = '';
     });
   };
@@ -291,329 +316,578 @@
 </script>
 
 <template>
-  <section class="rounded-xl border border-border/60 bg-card p-5">
-    <div class="flex flex-wrap items-start justify-between gap-3">
+  <section class="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+    <!-- 头部工具栏：现代 App Store 风格 -->
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-header/50 px-4 py-3.5 sm:px-5 sm:py-4"
+    >
       <div>
-        <h2 class="text-base font-semibold">{{ $t('agent.settings.plugins.title') }}</h2>
-        <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.plugins.description') }}</p>
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.plugins.title') }}</h3>
+          <span
+            class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary"
+          >
+            <i class="fa-solid fa-store text-[9px]" aria-hidden="true"></i>
+            <span>扩展生态与仓库</span>
+          </span>
+        </div>
+        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.plugins.description') }}</p>
       </div>
-      <button
-        type="button"
-        class="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-header disabled:opacity-50"
-        :disabled="locked"
-        @click="choosePackage"
+
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
+          :disabled="locked"
+          @click="run(refresh)"
+        >
+          <i
+            :class="
+              localBusy
+                ? 'fa-solid fa-arrows-rotate fa-spin text-primary'
+                : 'fa-solid fa-arrows-rotate text-text-secondary'
+            "
+            class="text-xs"
+            aria-hidden="true"
+          ></i>
+          <span>{{ $t('agent.settings.plugins.refreshRemote') }}</span>
+        </button>
+
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-header shadow-2xs transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
+          :disabled="locked"
+          @click="choosePackage"
+        >
+          <i class="fa-solid fa-file-arrow-up text-xs text-primary" aria-hidden="true"></i>
+          <span>{{ $t('agent.settings.plugins.choosePackage') }}</span>
+        </button>
+        <input ref="packageInput" type="file" class="hidden" accept=".tar,application/x-tar" @change="preparePackage" />
+      </div>
+    </div>
+
+    <div class="space-y-5 p-4 sm:p-5">
+      <!-- 报错与通知提示条 -->
+      <p
+        v-if="error"
+        class="rounded-xl border border-error/30 bg-error/10 px-3.5 py-2.5 text-xs text-error shadow-2xs"
+        role="alert"
       >
-        {{ $t('agent.settings.plugins.choosePackage') }}
-      </button>
-      <input ref="packageInput" type="file" class="hidden" accept=".tar,application/x-tar" @change="preparePackage" />
-    </div>
+        {{ error }}
+      </p>
+      <p
+        v-if="noticeText"
+        class="rounded-xl border border-success/30 bg-success/10 px-3.5 py-2.5 text-xs text-success shadow-2xs"
+      >
+        {{ noticeText }}
+      </p>
 
-    <p v-if="error" class="mt-3 rounded-md bg-error/10 px-3 py-2 text-xs text-error">{{ error }}</p>
-    <p v-if="noticeText" class="mt-3 rounded-md bg-success/10 px-3 py-2 text-xs text-success">
-      {{ noticeText }}
-    </p>
-
-    <div class="mt-5">
-      <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.installed') }}</h3>
-      <div class="mt-2 space-y-2">
-        <div
-          v-for="installation in activeInstallations"
-          :key="installation.appId"
-          class="flex flex-wrap items-center justify-between gap-3 rounded-md bg-background p-3"
-        >
-          <div>
-            <p class="text-sm font-medium">
-              {{ installedVersion(installation.appId)?.manifest.displayName || installation.appId }}
-            </p>
-            <p class="mt-1 text-xs text-text-secondary">{{ installation.appId }} · v{{ installation.version }}</p>
+      <!-- 待安装包验真就绪卡片 (Candidate Package) -->
+      <div
+        v-if="candidate"
+        class="rounded-xl border border-primary/50 bg-primary/5 p-4 shadow-xs ring-1 ring-primary/20"
+      >
+        <div class="flex items-center justify-between gap-2 border-b border-border pb-2.5">
+          <div class="flex items-center gap-2 text-xs font-semibold text-foreground">
+            <div class="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary">
+              <i class="fa-solid fa-box-open text-xs" aria-hidden="true"></i>
+            </div>
+            <span>{{ $t('agent.settings.plugins.package') }}</span>
           </div>
-          <button
-            type="button"
-            class="rounded-md border border-error/40 px-3 py-1.5 text-xs text-error hover:bg-error/10 disabled:opacity-50"
-            :disabled="locked"
-            @click="uninstall(installation)"
+          <span
+            class="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
           >
-            {{
-              drainingUninstallVersions[installation.appId]
-                ? $t('agent.settings.plugins.continueUninstall')
-                : $t('agent.settings.plugins.uninstall')
-            }}
-          </button>
+            <i class="fa-solid fa-shield-check text-[10px]"></i>
+            <span>签名验真通过</span>
+          </span>
         </div>
-        <p v-if="activeInstallations.length === 0" class="text-xs text-text-secondary">
-          {{ $t('agent.settings.plugins.noneInstalled') }}
-        </p>
-      </div>
-    </div>
 
-    <div class="mt-5 rounded-md bg-background p-4">
-      <div class="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.remoteRepositories') }}</h3>
-          <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.plugins.remoteRepositoriesHint') }}</p>
-        </div>
-        <button
-          type="button"
-          class="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-header disabled:opacity-50"
-          :disabled="locked"
-          @click="run(loadRemoteCatalogs)"
-        >
-          {{ $t('agent.settings.plugins.refreshRemote') }}
-        </button>
-      </div>
-      <div class="mt-3 grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
-        <input
-          v-model="repositoryUrl"
-          class="rounded-md border border-border bg-card px-3 py-2 text-sm"
-          :placeholder="$t('agent.settings.plugins.repositoryUrl')"
-          :disabled="locked"
-        />
-        <button
-          type="button"
-          class="rounded-md bg-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
-          :disabled="locked || !repositoryUrl.trim()"
-          @click="addRepository"
-        >
-          {{ $t('agent.settings.plugins.addRepository') }}
-        </button>
-      </div>
-      <div v-if="configuredRepositories.length" class="mt-3 flex flex-wrap gap-2">
-        <div
-          v-for="repository in configuredRepositories"
-          :key="repository.url"
-          class="flex max-w-full items-center gap-2 rounded border border-border bg-card px-2 py-1"
-        >
-          <span class="max-w-[32rem] truncate font-mono text-[10px]">{{ repository.url }}</span>
-          <button
-            type="button"
-            class="text-xs text-error hover:underline disabled:opacity-50"
-            :disabled="locked"
-            @click="removeRepository(repository.url)"
+        <p class="mt-2 text-xs text-text-secondary leading-relaxed">{{ $t('agent.settings.plugins.packageHint') }}</p>
+
+        <div class="mt-3 rounded-xl border border-border bg-card p-3.5 shadow-2xs">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-bold text-foreground">{{ candidate.plugin.manifest.displayName }}</span>
+              <span
+                class="rounded-md border border-border/60 bg-header/40 px-2 py-0.5 font-mono text-xs text-text-secondary"
+              >
+                v{{ candidate.plugin.version }}
+              </span>
+            </div>
+            <span class="font-mono text-xs text-text-secondary">{{ candidate.plugin.appId }}</span>
+          </div>
+
+          <div
+            class="mt-2 flex items-center gap-1.5 rounded-lg bg-header/30 px-2.5 py-1 text-[11px] font-mono text-text-secondary"
           >
-            {{ $t('agent.settings.plugins.removeRepository') }}
-          </button>
+            <i class="fa-solid fa-key text-[10px] text-primary/70" aria-hidden="true"></i>
+            <span class="truncate">{{ candidate.plugin.publisherKeyId }}</span>
+          </div>
+
+          <div class="mt-3 flex flex-wrap gap-2 text-xs">
+            <span
+              class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-header/40 px-2 py-1 text-[11px]"
+            >
+              <i class="fa-solid fa-screwdriver-wrench text-primary text-[10px]" aria-hidden="true"></i>
+              <span>Skills: {{ candidate.plugin.skillFiles.length }} 个</span>
+            </span>
+            <span
+              class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-header/40 px-2 py-1 text-[11px]"
+            >
+              <i class="fa-solid fa-desktop text-text-secondary text-[10px]" aria-hidden="true"></i>
+              <span
+                >UI:
+                {{
+                  candidate.plugin.frontendEntry
+                    ? $t('agent.settings.plugins.present')
+                    : $t('agent.settings.plugins.absent')
+                }}</span
+              >
+            </span>
+            <span
+              class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-header/40 px-2 py-1 text-[11px]"
+            >
+              <i class="fa-solid fa-server text-text-secondary text-[10px]" aria-hidden="true"></i>
+              <span
+                >Backend:
+                {{
+                  candidate.plugin.backendEntry
+                    ? $t('agent.settings.plugins.present')
+                    : $t('agent.settings.plugins.absent')
+                }}</span
+              >
+            </span>
+            <span
+              class="inline-flex items-center gap-1 rounded-md border border-border/60 bg-header/40 px-2 py-1 text-[11px]"
+            >
+              <i class="fa-solid fa-play text-text-secondary text-[10px]" aria-hidden="true"></i>
+              <span
+                >Runner:
+                {{
+                  candidate.plugin.runnerEntry
+                    ? $t('agent.settings.plugins.present')
+                    : $t('agent.settings.plugins.absent')
+                }}</span
+              >
+            </span>
+          </div>
+
+          <div class="mt-3.5 flex items-center justify-between border-t border-border pt-3">
+            <span v-if="candidateArtifactName" class="truncate text-[11px] font-mono text-text-secondary">
+              {{ candidateArtifactName }}
+            </span>
+            <span v-else></span>
+            <button
+              type="button"
+              class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer"
+              :disabled="locked"
+              @click="applyCandidate"
+            >
+              <i class="fa-solid fa-download text-xs" aria-hidden="true"></i>
+              <span>
+                {{
+                  activeInstallations.some((item) => item.appId === candidate?.plugin.appId)
+                    ? drainingUpgradeVersion
+                      ? $t('agent.settings.plugins.continueUpgrade')
+                      : $t('agent.settings.plugins.upgrade')
+                    : $t('agent.settings.plugins.install')
+                }}
+              </span>
+            </button>
+          </div>
         </div>
       </div>
-      <div v-if="catalogSources.length" class="mt-4 space-y-4">
+
+      <!-- 仓库源管理与添加 -->
+      <div class="rounded-xl border border-border bg-header/25 p-3.5 sm:p-4 shadow-2xs">
+        <div class="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-boxes-stacked text-xs text-primary" aria-hidden="true"></i>
+              <h4 class="text-xs font-semibold text-foreground">
+                {{ $t('agent.settings.plugins.remoteRepositories') }}
+              </h4>
+            </div>
+            <p class="mt-0.5 text-[11px] text-text-secondary">
+              {{ $t('agent.settings.plugins.remoteRepositoriesHint') }}
+            </p>
+          </div>
+
+          <!-- 添加新仓库输入条：无紫色高亮、中性微质感 -->
+          <div class="flex items-center gap-2">
+            <div class="relative min-w-[240px] sm:min-w-[280px]">
+              <i
+                class="fa-solid fa-link absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
+                aria-hidden="true"
+              ></i>
+              <input
+                v-model="repositoryUrl"
+                type="text"
+                data-no-highlight
+                class="h-8.5 w-full rounded-lg border border-border bg-background pl-7 pr-2.5 shadow-2xs text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none transition-all"
+                :placeholder="$t('agent.settings.plugins.repositoryUrl')"
+                :disabled="locked"
+              />
+            </div>
+            <button
+              type="button"
+              class="inline-flex h-8 items-center justify-center rounded-lg bg-primary px-3 text-xs font-medium text-white shadow-2xs transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+              :disabled="locked || !repositoryUrl.trim()"
+              @click="addRepository"
+            >
+              {{ $t('agent.settings.plugins.addRepository') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- 自定义配置的第三方仓库列表 -->
+        <div v-if="configuredRepositories.length" class="mt-3 flex flex-wrap gap-2 pt-3 border-t border-border">
+          <div
+            v-for="repository in configuredRepositories"
+            :key="repository.url"
+            class="flex max-w-full items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1 shadow-2xs text-xs"
+          >
+            <i class="fa-solid fa-globe text-[10px] text-primary/70" aria-hidden="true"></i>
+            <span class="max-w-[24rem] truncate font-mono text-[11px] text-foreground">{{ repository.url }}</span>
+            <button
+              type="button"
+              class="inline-flex h-5 w-5 items-center justify-center rounded text-text-secondary hover:bg-error/10 hover:text-error transition-colors disabled:opacity-50 cursor-pointer"
+              :title="$t('agent.settings.plugins.removeRepository')"
+              :disabled="locked"
+              @click="removeRepository(repository.url)"
+            >
+              <i class="fa-solid fa-xmark text-[10px]" aria-hidden="true"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 仓库源下的应用网格展示 (Marketplace Cards) -->
+      <div v-if="catalogSources.length" class="space-y-4">
         <div
           v-for="source in catalogSources"
           :key="`${source.official ? 'official' : 'remote'}:${source.catalog.repositoryUrl}`"
-          class="rounded border border-border bg-card p-3"
+          class="rounded-xl border border-border bg-background/50 p-4 shadow-2xs transition-all"
         >
-          <div class="flex flex-wrap items-center gap-2">
-            <span v-if="source.official" class="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-              {{ $t('agent.settings.plugins.officialRepository') }}
-            </span>
-            <span v-if="source.official" class="rounded bg-header px-2 py-0.5 text-[10px] text-text-secondary">
-              {{ $t('agent.settings.plugins.officialPublisherPinned') }}
-            </span>
+          <!-- 仓库源卡片头部标牌 -->
+          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <span
+                v-if="source.official"
+                class="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold text-primary"
+              >
+                <i class="fa-solid fa-certificate text-[9px]"></i>
+                <span>{{ $t('agent.settings.plugins.officialRepository') }}</span>
+              </span>
+              <span
+                v-if="source.official"
+                class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+              >
+                <i class="fa-solid fa-lock text-[9px]"></i>
+                <span>{{ $t('agent.settings.plugins.officialPublisherPinned') }}</span>
+              </span>
+              <span
+                v-else
+                class="inline-flex items-center gap-1 rounded-full border border-border/70 bg-header/60 px-2 py-0.5 text-[10px] font-medium text-text-secondary"
+              >
+                <i class="fa-solid fa-network-wired text-[9px]"></i>
+                <span>第三方扩展仓库</span>
+              </span>
+            </div>
+
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 font-mono text-[10px] text-text-secondary hover:text-foreground transition-colors cursor-pointer"
+              @click="copyCatalogUrl(source.catalog.repositoryUrl)"
+            >
+              <i
+                :class="
+                  copiedSourceUrl === source.catalog.repositoryUrl
+                    ? 'fa-solid fa-check text-emerald-500'
+                    : 'fa-regular fa-copy'
+                "
+              ></i>
+              <span class="max-w-[260px] truncate">{{ source.catalog.repositoryUrl }}</span>
+            </button>
           </div>
-          <p class="mt-1 break-all font-mono text-[10px] text-text-secondary">
-            {{ source.catalog.repositoryUrl }}
-          </p>
-          <div class="mt-3 grid gap-3 lg:grid-cols-2">
+
+          <!-- 现代单列（1 列）低高度扩展应用卡片列表 -->
+          <div class="mt-3 grid grid-cols-1 gap-2.5">
             <div
               v-for="entry in source.catalog.packages"
               :key="`${entry.appId}@${entry.version}`"
-              class="rounded border border-border p-3"
+              class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card p-3 sm:px-4 sm:py-3 shadow-2xs transition-all duration-200 hover:border-primary/50 hover:shadow-xs"
             >
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="text-sm font-medium">{{ entry.displayName }}</span>
-                <span class="rounded bg-header px-2 py-0.5 text-[10px]">v{{ entry.version }}</span>
-                <span
-                  v-if="!entry.compatible"
-                  class="rounded bg-warning/10 px-2 py-0.5 text-[10px] font-medium text-warning"
+              <!-- 左侧：图标 + 标题/版本/状态 + 单行描述 -->
+              <div class="flex items-center gap-3 min-w-0 flex-1">
+                <div
+                  class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm shadow-2xs transition-transform"
+                  :class="
+                    entry.appId === 'nexus.agent'
+                      ? 'bg-purple-500/15 text-primary ring-1 ring-purple-500/25'
+                      : entry.appId === 'nexus.fullstack'
+                        ? 'bg-emerald-500/15 text-emerald-500 ring-1 ring-emerald-500/25'
+                        : 'bg-primary/10 text-primary ring-1 ring-primary/20'
+                  "
                 >
-                  {{ $t('agent.settings.plugins.incompatible') }}
+                  <i
+                    :class="
+                      entry.appId === 'nexus.agent'
+                        ? 'fa-solid fa-wand-magic-sparkles'
+                        : entry.appId === 'nexus.fullstack'
+                          ? 'fa-solid fa-layer-group'
+                          : 'fa-solid fa-puzzle-piece'
+                    "
+                    aria-hidden="true"
+                  ></i>
+                </div>
+
+                <div class="min-w-0 flex-1">
+                  <!-- 上行：名称 + 版本 + 状态徽章 + appId -->
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-xs sm:text-sm font-bold text-foreground truncate">{{ entry.displayName }}</span>
+                    <span
+                      class="rounded-md border border-border/60 bg-header/40 px-1.5 py-0.2 font-mono text-[10px] text-text-secondary"
+                    >
+                      v{{ entry.version }}
+                    </span>
+                    <span
+                      v-if="!entry.compatible"
+                      class="rounded-full bg-warning/10 px-2 py-0.2 text-[10px] font-medium text-warning"
+                    >
+                      {{ $t('agent.settings.plugins.incompatible') }}
+                    </span>
+                    <span
+                      v-else-if="isInstalled(entry.appId)"
+                      class="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400"
+                    >
+                      <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                      <span>{{ isInstalledAndEnabled(entry.appId) ? '已启用' : '已安装' }}</span>
+                    </span>
+                    <span v-else class="rounded-full bg-header px-2 py-0.2 text-[10px] font-medium text-text-secondary">
+                      未安装
+                    </span>
+                    <span class="hidden md:inline font-mono text-[10px] text-text-secondary/60">
+                      {{ entry.appId }}
+                    </span>
+                  </div>
+
+                  <!-- 下行：紧凑单行描述与不兼容警示 -->
+                  <div class="mt-0.5 flex items-center gap-2 text-xs text-text-secondary">
+                    <p
+                      class="truncate text-[11px] leading-relaxed max-w-md lg:max-w-xl"
+                      :title="
+                        entry.appId === 'nexus.agent'
+                          ? '官方通用智能体核心，支持运维诊断与工程协作，在受控沙箱内安全执行。'
+                          : entry.appId === 'nexus.fullstack'
+                            ? '全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证。'
+                            : entry.description
+                      "
+                    >
+                      {{
+                        entry.appId === 'nexus.agent'
+                          ? '官方通用智能体核心，支持运维诊断与工程协作，在受控沙箱内安全执行。'
+                          : entry.appId === 'nexus.fullstack'
+                            ? '全栈应用交付套件，支持微服务治理、复杂依赖联调与部署验证。'
+                            : entry.description
+                      }}
+                    </p>
+                    <span v-if="!entry.compatible" class="shrink-0 text-[10px] text-warning font-mono">
+                      (兼容要求: Nexus {{ entry.nexus.minVersion }}~{{ entry.nexus.maxVersion }})
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右侧：签名状态与操作按钮 -->
+              <div
+                class="flex items-center justify-between sm:justify-end gap-2.5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-border"
+              >
+                <span class="hidden sm:inline-flex items-center gap-1 text-[10px] text-text-secondary/70 font-mono">
+                  <i class="fa-solid fa-shield-check text-emerald-500 text-[10px]"></i>
+                  <span>Ed25519</span>
                 </span>
-              </div>
-              <p class="mt-1 text-xs text-text-secondary">{{ entry.description }}</p>
-              <p class="mt-2 break-all font-mono text-[10px] text-text-secondary">{{ entry.appId }}</p>
-              <p v-if="!entry.compatible" class="mt-1 text-[10px] text-text-secondary">
-                {{
-                  $t('agent.settings.plugins.compatibilityRequirement', {
-                    sdk: entry.sdkVersion,
-                    min: entry.nexus.minVersion,
-                    max: entry.nexus.maxVersion,
-                  })
-                }}
-              </p>
-              <div class="mt-3 flex flex-wrap gap-2">
-                <button
-                  v-if="!source.official && !publisherTrusted(entry.publisherKeyId)"
-                  type="button"
-                  class="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-header disabled:opacity-50"
-                  :disabled="
-                    locked || !source.catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
-                  "
-                  @click="
-                    trustRemotePublisher(
-                      source.catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
-                    )
-                  "
-                >
-                  {{ $t('agent.settings.plugins.trustRemotePublisher') }}
-                </button>
-                <button
-                  type="button"
-                  class="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
-                  :disabled="
-                    locked || !entry.compatible || (!source.official && !publisherTrusted(entry.publisherKeyId))
-                  "
-                  @click="prepareRemotePackage(source.catalog, entry, source.official)"
-                >
-                  {{ $t('agent.settings.plugins.prepareRemote') }}
-                </button>
+
+                <div class="flex items-center gap-1.5">
+                  <button
+                    v-if="!source.official && !publisherTrusted(entry.publisherKeyId)"
+                    type="button"
+                    class="rounded-lg border border-border/70 bg-background px-2.5 py-1 text-xs hover:bg-header disabled:opacity-50 cursor-pointer"
+                    :disabled="
+                      locked || !source.catalog.publishers.some((publisher) => publisher.keyId === entry.publisherKeyId)
+                    "
+                    @click="
+                      trustRemotePublisher(
+                        source.catalog.publishers.find((publisher) => publisher.keyId === entry.publisherKeyId)!,
+                      )
+                    "
+                  >
+                    {{ $t('agent.settings.plugins.trustRemotePublisher') }}
+                  </button>
+
+                  <button
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-lg px-3 py-1 text-xs font-semibold shadow-2xs transition-all active:scale-95 disabled:opacity-50 cursor-pointer whitespace-nowrap"
+                    :class="
+                      isInstalled(entry.appId)
+                        ? 'border border-border/80 bg-background text-text-secondary hover:bg-header hover:text-foreground'
+                        : 'bg-primary text-white hover:bg-primary/90'
+                    "
+                    :disabled="
+                      locked || !entry.compatible || (!source.official && !publisherTrusted(entry.publisherKeyId))
+                    "
+                    @click="prepareRemotePackage(source.catalog, entry, source.official)"
+                  >
+                    <i
+                      :class="
+                        isInstalled(entry.appId)
+                          ? 'fa-solid fa-arrows-rotate text-[11px]'
+                          : 'fa-solid fa-download text-[11px]'
+                      "
+                      aria-hidden="true"
+                    ></i>
+                    <span>{{
+                      isInstalled(entry.appId) ? '重新校验包' : $t('agent.settings.plugins.prepareRemote')
+                    }}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="mt-5 grid gap-4">
-      <details class="rounded-xl bg-background p-4">
-        <summary class="cursor-pointer text-sm font-semibold">{{ $t('agent.settings.plugins.publishers') }}</summary>
-        <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.plugins.publisherHint') }}</p>
+      <!-- 保留数据清理（仅在有卸载残留时展示，不无谓占位） -->
+      <div v-if="removedInstallations.length" class="rounded-xl border border-error/30 bg-error/5 p-4">
+        <div class="flex items-center gap-2 text-xs font-semibold text-error">
+          <i class="fa-solid fa-triangle-exclamation" aria-hidden="true"></i>
+          <span>{{ $t('agent.settings.plugins.retainedData') }}</span>
+        </div>
+        <p class="mt-1 text-[11px] text-text-secondary">{{ $t('agent.settings.plugins.retainedDataHint') }}</p>
         <div class="mt-3 space-y-2">
-          <input
-            v-model="publisherLabel"
-            class="w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
-            :placeholder="$t('agent.settings.plugins.publisherLabel')"
-            :disabled="locked"
-          />
-          <textarea
-            v-model="publisherPem"
-            class="h-28 w-full resize-y rounded-md border border-border bg-card px-3 py-2 font-mono text-xs"
-            :placeholder="$t('agent.settings.plugins.publisherPem')"
-            :disabled="locked"
-          ></textarea>
-          <button
-            type="button"
-            class="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-            :disabled="locked || !publisherLabel.trim() || !publisherPem.trim()"
-            @click="trustPublisher"
-          >
-            {{ $t('agent.settings.plugins.trustPublisher') }}
-          </button>
-        </div>
-        <div class="mt-4 space-y-2">
-          <div v-for="publisher in publishers" :key="publisher.keyId" class="rounded border border-border p-2">
-            <div class="flex items-center justify-between gap-2">
-              <span class="min-w-0 truncate text-sm font-medium">{{ publisher.label }}</span>
-              <button
-                v-if="publisher.revokedAt === null"
-                type="button"
-                class="rounded px-2 py-1 text-xs text-error hover:bg-error/10 disabled:opacity-50"
-                :disabled="locked"
-                @click="revokePublisher(publisher.keyId)"
-              >
-                {{ $t('agent.settings.plugins.revokePublisher') }}
-              </button>
-            </div>
-            <p class="mt-1 break-all font-mono text-[10px] text-text-secondary">{{ publisher.keyId }}</p>
-            <p v-if="publisher.revokedAt !== null" class="mt-1 text-xs text-text-secondary">
-              {{ $t('agent.settings.plugins.revoked') }}
-            </p>
-          </div>
-          <p v-if="publishers.length === 0" class="text-xs text-text-secondary">
-            {{ $t('agent.settings.plugins.noPublishers') }}
-          </p>
-        </div>
-      </details>
-
-      <div v-if="candidate" class="rounded-md bg-background p-4">
-        <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.package') }}</h3>
-        <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.plugins.packageHint') }}</p>
-        <div v-if="candidate" class="mt-3 rounded border border-border bg-card p-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <span class="font-medium">{{ candidate.plugin.manifest.displayName }}</span>
-            <span class="rounded bg-header px-2 py-0.5 text-xs">v{{ candidate.plugin.version }}</span>
-          </div>
-          <p class="mt-2 text-xs text-text-secondary">{{ candidate.plugin.appId }}</p>
-          <p class="mt-1 break-all font-mono text-[10px] text-text-secondary">{{ candidate.plugin.publisherKeyId }}</p>
-          <p class="mt-2 text-xs text-text-secondary">
-            {{
-              $t('agent.settings.plugins.packageContents', {
-                skills: candidate.plugin.skillFiles.length,
-                ui: candidate.plugin.frontendEntry
-                  ? $t('agent.settings.plugins.present')
-                  : $t('agent.settings.plugins.absent'),
-                backend: candidate.plugin.backendEntry
-                  ? $t('agent.settings.plugins.present')
-                  : $t('agent.settings.plugins.absent'),
-                runner: candidate.plugin.runnerEntry
-                  ? $t('agent.settings.plugins.present')
-                  : $t('agent.settings.plugins.absent'),
-              })
-            }}
-          </p>
-          <p v-if="candidateArtifactName" class="mt-1 truncate text-xs text-text-secondary">
-            {{ candidateArtifactName }}
-          </p>
-          <button
-            type="button"
-            class="mt-3 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-            :disabled="locked"
-            @click="applyCandidate"
-          >
-            {{
-              activeInstallations.some((item) => item.appId === candidate?.plugin.appId)
-                ? drainingUpgradeVersion
-                  ? $t('agent.settings.plugins.continueUpgrade')
-                  : $t('agent.settings.plugins.upgrade')
-                : $t('agent.settings.plugins.install')
-            }}
-          </button>
-        </div>
-        <p v-else class="mt-3 text-xs text-text-secondary">{{ $t('agent.settings.plugins.noCandidate') }}</p>
-      </div>
-    </div>
-
-    <div v-if="removedInstallations.length" class="mt-5 border-t border-border pt-4">
-      <h3 class="text-sm font-semibold">{{ $t('agent.settings.plugins.retainedData') }}</h3>
-      <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.plugins.retainedDataHint') }}</p>
-      <div class="mt-2 space-y-2">
-        <div
-          v-for="installation in removedInstallations"
-          :key="installation.appId"
-          class="rounded-md bg-background p-3"
-        >
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <span class="text-xs">{{ installation.appId }}</span>
-            <button
-              v-if="pendingDataDeletionAppId !== installation.appId"
-              type="button"
-              class="rounded-md border border-error/40 px-3 py-1.5 text-xs text-error hover:bg-error/10 disabled:opacity-50"
-              :disabled="locked"
-              @click="requestDeleteData(installation)"
-            >
-              {{ $t('agent.settings.plugins.deleteData') }}
-            </button>
-          </div>
           <div
-            v-if="pendingDataDeletionAppId === installation.appId"
-            class="mt-3 rounded-md border border-error/40 bg-error/10 p-3"
+            v-for="installation in removedInstallations"
+            :key="installation.appId"
+            class="rounded-xl border border-border/60 bg-card p-3"
           >
-            <p class="text-xs text-error">{{ $t('agent.settings.plugins.deleteDataWarning') }}</p>
-            <div class="mt-2 flex flex-wrap gap-2">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <span class="font-mono text-xs text-foreground">{{ installation.appId }}</span>
               <button
+                v-if="pendingDataDeletionAppId !== installation.appId"
                 type="button"
-                class="rounded-md bg-error px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+                class="rounded-lg border border-error/40 px-3 py-1 text-xs font-medium text-error hover:bg-error/10 disabled:opacity-50 cursor-pointer"
                 :disabled="locked"
-                @click="deleteData(installation)"
+                @click="requestDeleteData(installation)"
               >
-                {{ $t('agent.settings.plugins.confirmDeleteData') }}
-              </button>
-              <button
-                type="button"
-                class="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-header disabled:opacity-50"
-                :disabled="locked"
-                @click="cancelDeleteData"
-              >
-                {{ $t('agent.settings.plugins.cancelDeleteData') }}
+                {{ $t('agent.settings.plugins.deleteData') }}
               </button>
             </div>
+            <div
+              v-if="pendingDataDeletionAppId === installation.appId"
+              class="mt-3 rounded-lg border border-error/40 bg-error/10 p-3"
+            >
+              <p class="text-xs text-error">{{ $t('agent.settings.plugins.deleteDataWarning') }}</p>
+              <div class="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  class="rounded-lg bg-error px-3 py-1 text-xs font-medium text-white disabled:opacity-50 cursor-pointer"
+                  :disabled="locked"
+                  @click="deleteData(installation)"
+                >
+                  {{ $t('agent.settings.plugins.confirmDeleteData') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded-lg border border-border px-3 py-1 text-xs text-text-secondary hover:bg-header disabled:opacity-50 cursor-pointer"
+                  :disabled="locked"
+                  @click="cancelDeleteData"
+                >
+                  {{ $t('agent.settings.plugins.cancelDeleteData') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 受信任发布者安全抽屉 -->
+      <div class="rounded-xl border border-border bg-header/20 overflow-hidden shadow-2xs transition-all">
+        <button
+          type="button"
+          class="flex w-full cursor-pointer items-center justify-between px-4 py-3 text-left select-none hover:bg-header/30"
+          @click="showPublishers = !showPublishers"
+        >
+          <div class="flex items-center gap-2">
+            <i class="fa-solid fa-key text-xs text-primary"></i>
+            <span class="text-xs font-medium text-foreground">{{ $t('agent.settings.plugins.publishers') }}</span>
+            <span
+              class="rounded-md border border-border/60 bg-card px-2 py-0.5 font-mono text-[10px] text-text-secondary"
+            >
+              {{ publishers.length }} 个密钥
+            </span>
+          </div>
+          <i
+            :class="showPublishers ? 'fa-solid fa-chevron-up' : 'fa-solid fa-chevron-down'"
+            class="text-[10px] text-text-secondary"
+          ></i>
+        </button>
+
+        <div v-if="showPublishers" class="border-t border-border bg-background/60 p-4 space-y-3">
+          <p class="text-[11px] text-text-secondary">{{ $t('agent.settings.plugins.publisherHint') }}</p>
+          <div class="space-y-2.5">
+            <input
+              v-model="publisherLabel"
+              type="text"
+              data-no-highlight
+              class="h-8 w-full rounded-lg border border-border/80 bg-card px-3 text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none"
+              :placeholder="$t('agent.settings.plugins.publisherLabel')"
+              :disabled="locked"
+            />
+            <textarea
+              v-model="publisherPem"
+              data-no-highlight
+              class="h-24 w-full resize-y rounded-lg border border-border/80 bg-card p-2.5 font-mono text-xs text-foreground placeholder:text-text-secondary/60 focus:border-border-hover focus:outline-none"
+              :placeholder="$t('agent.settings.plugins.publisherPem')"
+              :disabled="locked"
+            ></textarea>
+            <div class="flex justify-end">
+              <button
+                type="button"
+                class="rounded-lg bg-primary px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs transition-all hover:bg-primary/90 disabled:opacity-50 cursor-pointer"
+                :disabled="locked || !publisherLabel.trim() || !publisherPem.trim()"
+                @click="trustPublisher"
+              >
+                {{ $t('agent.settings.plugins.trustPublisher') }}
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-4 space-y-2">
+            <div
+              v-for="publisher in publishers"
+              :key="publisher.keyId"
+              class="rounded-xl border border-border bg-card p-3 shadow-2xs"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="min-w-0 truncate text-xs font-semibold text-foreground">{{ publisher.label }}</span>
+                <button
+                  v-if="publisher.revokedAt === null"
+                  type="button"
+                  class="rounded-lg border border-error/30 bg-error/5 px-2 py-0.5 text-[11px] text-error hover:bg-error/15 disabled:opacity-50 cursor-pointer"
+                  :disabled="locked"
+                  @click="revokePublisher(publisher.keyId)"
+                >
+                  {{ $t('agent.settings.plugins.revokePublisher') }}
+                </button>
+              </div>
+              <p class="mt-1 break-all font-mono text-[10px] text-text-secondary">{{ publisher.keyId }}</p>
+              <p v-if="publisher.revokedAt !== null" class="mt-1 text-[10px] text-error">
+                {{ $t('agent.settings.plugins.revoked') }}
+              </p>
+            </div>
+            <p v-if="publishers.length === 0" class="text-center py-2 text-xs text-text-secondary">
+              {{ $t('agent.settings.plugins.noPublishers') }}
+            </p>
           </div>
         </div>
       </div>

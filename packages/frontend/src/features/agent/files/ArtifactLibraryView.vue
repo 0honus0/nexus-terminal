@@ -1,6 +1,8 @@
 <script setup lang="ts">
-  import { onMounted, ref } from 'vue';
+  import { computed, onMounted, ref } from 'vue';
+  import { useI18n } from 'vue-i18n';
   import { RecycleScroller } from 'vue-virtual-scroller';
+  import { BaseListboxSelect, type BaseListboxOption } from '@/foundation/ui';
   import type {
     AgentAppSummary,
     AgentArtifactRef,
@@ -9,7 +11,19 @@
   } from '../api/agent-api';
   import { agentApi, formatAgentApiError } from '../api/agent-api';
 
-  defineProps<{ apps: AgentAppSummary[] }>();
+  const props = defineProps<{ apps: AgentAppSummary[] }>();
+  const { t } = useI18n();
+
+  const appOptions = computed<BaseListboxOption[]>(() => [
+    { value: '', label: t('agent.files.allApps') },
+    ...props.apps.map((app) => ({ value: app.id, label: app.displayName })),
+  ]);
+
+  const retentionOptions = computed<BaseListboxOption[]>(() => [
+    { value: 'all', label: t('agent.files.allRetention') },
+    { value: 'retained', label: t('agent.files.retained') },
+    { value: 'unretained', label: t('agent.files.unretained') },
+  ]);
 
   const items = ref<AgentArtifactRef[]>([]);
   const nextCursor = ref<string | null>(null);
@@ -135,15 +149,56 @@
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          class="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[10px] font-medium text-text-secondary hover:bg-header hover:text-foreground"
-          :disabled="busy"
-          @click="previewCleanup"
-        >
-          <i class="fa-solid fa-broom text-[9px]" aria-hidden="true"></i>
-          {{ $t('agent.files.cleanup') }}
-        </button>
+        <div class="flex items-center gap-2">
+          <span v-if="notice" class="rounded-lg bg-success/10 px-2.5 py-1 text-[10px] font-medium text-success">
+            {{ $t('agent.files.cleanupDone', { count: notice }) }}
+          </span>
+
+          <button
+            v-if="!cleanupPreview"
+            type="button"
+            class="flex items-center gap-1.5 rounded-lg border border-border bg-background px-2.5 py-1.5 text-[10px] font-medium text-text-secondary hover:bg-header hover:text-foreground transition-colors"
+            :disabled="busy"
+            @click="previewCleanup"
+          >
+            <i class="fa-solid fa-broom text-[9px]" aria-hidden="true"></i>
+            {{ $t('agent.files.cleanup') }}
+          </button>
+
+          <!-- 就地直接出现在右侧的确认操作条 -->
+          <div
+            v-else
+            class="flex items-center gap-2 rounded-xl border border-warning/50 bg-warning/10 px-3 py-1 text-[11px] shadow-xs transition-all"
+          >
+            <i class="fa-solid fa-triangle-exclamation text-warning text-[10px]" aria-hidden="true"></i>
+            <span class="text-foreground text-[10px] font-medium">
+              {{
+                $t('agent.files.cleanupPreview', {
+                  count: cleanupPreview.selectedCount,
+                  bytes: bytes(cleanupPreview.selectedBytes),
+                  protected: cleanupPreview.protectedCount,
+                })
+              }}
+            </span>
+            <div class="flex items-center gap-1.5 border-l border-warning/30 pl-2">
+              <button
+                type="button"
+                class="rounded-lg px-2 py-1 text-[10px] text-text-secondary hover:bg-header hover:text-foreground transition-colors"
+                @click="cleanupPreview = null"
+              >
+                {{ $t('common.cancel') }}
+              </button>
+              <button
+                type="button"
+                class="rounded-lg bg-error px-2.5 py-1 text-[10px] font-semibold text-white shadow-2xs hover:bg-error/90 disabled:opacity-50 transition-colors"
+                :disabled="busy"
+                @click="confirmCleanup"
+              >
+                {{ $t('agent.files.cleanupConfirm') }}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-if="storage" class="mt-3 grid grid-cols-3 gap-2">
@@ -170,72 +225,48 @@
       <div class="mt-3 flex flex-wrap items-center gap-2">
         <div class="relative min-w-52 flex-1">
           <i
-            class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[9px] text-text-secondary"
+            class="fa-solid fa-magnifying-glass pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
             aria-hidden="true"
           ></i>
           <input
             v-model="query"
             type="search"
-            class="w-full rounded-xl border border-border bg-background py-2 pl-8 pr-3 text-[11px] outline-none focus:border-primary"
+            data-no-highlight
+            class="h-8 w-full rounded-xl border border-border/80 bg-input/70 py-1 pl-8 pr-3 text-xs outline-none transition-colors hover:border-border focus:border-foreground/35 focus:ring-0 focus:shadow-none"
             :placeholder="$t('agent.files.search')"
             @keydown.enter="load"
           />
         </div>
-        <select
-          v-model="appId"
-          class="rounded-xl border border-border bg-background px-2.5 py-2 text-[10px]"
-          @change="load"
-        >
-          <option value="">{{ $t('agent.files.allApps') }}</option>
-          <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.displayName }}</option>
-        </select>
-        <select
-          v-model="retained"
-          class="rounded-xl border border-border bg-background px-2.5 py-2 text-[10px]"
-          @change="load"
-        >
-          <option value="all">{{ $t('agent.files.allRetention') }}</option>
-          <option value="retained">{{ $t('agent.files.retained') }}</option>
-          <option value="unretained">{{ $t('agent.files.unretained') }}</option>
-        </select>
+        <div class="w-36 shrink-0">
+          <BaseListboxSelect
+            v-model="appId"
+            :options="appOptions"
+            size="sm"
+            :highlight="false"
+            @update:model-value="load"
+          />
+        </div>
+        <div class="w-36 shrink-0">
+          <BaseListboxSelect
+            v-model="retained"
+            :options="retentionOptions"
+            size="sm"
+            :highlight="false"
+            @update:model-value="load"
+          />
+        </div>
         <button
           type="button"
-          class="rounded-xl bg-primary px-3 py-2 text-[10px] font-semibold text-white disabled:opacity-50"
+          class="flex h-8 items-center gap-1.5 rounded-xl border border-border/80 bg-header px-3.5 text-xs font-medium text-foreground hover:bg-border/60 hover:text-foreground active:scale-98 transition-all disabled:opacity-50"
           :disabled="busy"
           @click="load"
         >
-          {{ $t('agent.files.searchAction') }}
+          <i class="fa-solid fa-magnifying-glass text-[10px] text-text-secondary" aria-hidden="true"></i>
+          <span>{{ $t('agent.files.searchAction') }}</span>
         </button>
       </div>
 
       <p v-if="error" class="mt-2 rounded-lg bg-error/10 px-3 py-2 text-[10px] text-error">{{ error }}</p>
-      <p v-if="notice" class="mt-2 rounded-lg bg-success/10 px-3 py-2 text-[10px] text-success">
-        {{ $t('agent.files.cleanupDone', { count: notice }) }}
-      </p>
-      <div v-if="cleanupPreview" class="mt-3 rounded-xl border border-warning/40 bg-warning/10 p-3 text-[10px]">
-        <p>
-          {{
-            $t('agent.files.cleanupPreview', {
-              count: cleanupPreview.selectedCount,
-              bytes: bytes(cleanupPreview.selectedBytes),
-              protected: cleanupPreview.protectedCount,
-            })
-          }}
-        </p>
-        <div class="mt-2 flex justify-end gap-2">
-          <button type="button" class="rounded-lg px-2.5 py-1.5 hover:bg-header" @click="cleanupPreview = null">
-            {{ $t('common.cancel') }}
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-error px-2.5 py-1.5 font-semibold text-white disabled:opacity-50"
-            :disabled="busy"
-            @click="confirmCleanup"
-          >
-            {{ $t('agent.files.cleanupConfirm') }}
-          </button>
-        </div>
-      </div>
     </header>
 
     <div

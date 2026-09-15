@@ -3,10 +3,12 @@
   import { useI18n } from 'vue-i18n';
   import { apiErrorMessage } from '@/client/http';
   import { BaseButton, BaseCheckbox, BaseFormField, BaseInput, BaseSelect } from '@/foundation/ui';
+  import { useFeedback } from '@/shared/feedback/public';
   import { securityApi } from '../api/securityApi';
   import type { CaptchaConfigUpdate } from '../model/security';
 
   const { t } = useI18n();
+  const feedback = useFeedback();
   const form = reactive<CaptchaConfigUpdate>({
     enabled: false,
     provider: 'none',
@@ -47,8 +49,10 @@
       form.recaptchaSecretKey = '';
       message.value = t('settings.captcha.success.saved');
       success.value = true;
+      feedback.notifySuccess(message.value);
     } catch (cause) {
       message.value = apiErrorMessage(cause, t('settings.captcha.error.saveFailed'));
+      feedback.notifyError(message.value);
     } finally {
       loading.value = false;
     }

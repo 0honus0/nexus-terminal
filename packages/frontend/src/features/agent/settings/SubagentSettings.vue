@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
+  import QuantityInput from './QuantityInput.vue';
   import {
     agentApi,
     type AgentAppSummary,
@@ -16,7 +17,7 @@
     busy: boolean;
   }>();
   const emit = defineEmits<{ save: [patch: Record<string, unknown>] }>();
-  const draft = ref<Record<string, number>>({});
+  const draft = ref<Record<string, number | null>>({});
   const selectedAppId = ref('');
   const profileSettings = ref<AgentSubagentSettingsView | null>(null);
   const profileBusy = ref(false);
@@ -122,7 +123,7 @@
   };
 
   const saveProfiles = async (): Promise<void> => {
-    if (!profileSettings.value || !selectedAppId.value || profileBusy.value) return;
+    if (!profileSettings.value || !selectedAppId.value || profileBusy.value || invalidProfileLimits.value) return;
     profileBusy.value = true;
     profileError.value = '';
     try {
@@ -158,186 +159,229 @@
     { immediate: true },
   );
   watch(selectedAppId, loadProfiles, { immediate: true });
+
+  const invalidGlobalLimits = computed(() => Object.values(draft.value).some((value) => value === null || value < 1));
+  const invalidProfileLimits = computed(() =>
+    Boolean(
+      profileSettings.value?.policy.profiles.some(
+        (profile) =>
+          !Number.isSafeInteger(profile.maxTokens) ||
+          profile.maxTokens < 1 ||
+          !Number.isSafeInteger(profile.maxSteps) ||
+          profile.maxSteps < 1,
+      ),
+    ),
+  );
+
+  const saveGlobalLimits = (): void => {
+    if (invalidGlobalLimits.value) return;
+    emit('save', draft.value);
+  };
+
+  const subagentLabels: Record<string, string> = {
+    maxDelegationDepth: '最大委派深度',
+    maxSubagentMessagesPerRun: '最大公开消息数/Run',
+    maxSubagentMessageBytesPerRun: '最大公开消息字节/Run',
+  };
 </script>
 
 <template>
-  <section class="rounded-xl border border-border/60 bg-card p-5">
-    <div class="flex flex-wrap items-start justify-between gap-3">
+  <section class="overflow-hidden rounded-xl border border-border/70 bg-card/35">
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5"
+    >
       <div>
-        <h2 class="text-base font-semibold">{{ $t('agent.settings.subagents.title') }}</h2>
-        <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.subagents.description') }}</p>
+        <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.subagents.title') }}</h3>
+        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.subagents.description') }}</p>
       </div>
-      <span class="rounded bg-header px-2 py-1 text-xs text-text-secondary">{{
-        $t('agent.settings.subagents.phase')
-      }}</span>
+      <span class="rounded-full border border-border/80 bg-background px-2.5 py-0.5 text-xs text-text-secondary">
+        {{ $t('agent.settings.subagents.phase') }}
+      </span>
     </div>
-
-    <div class="mt-4 grid gap-3 md:grid-cols-3">
-      <label v-for="(_, key) in settings.requestedSettings.subagents" :key="key">
-        <span class="mb-1 block break-all text-xs font-medium text-text-secondary">{{ key }}</span>
-        <input
-          v-model.number="draft[String(key)]"
-          type="number"
-          min="1"
-          class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-        />
-      </label>
-    </div>
-    <div class="mt-4 flex justify-end">
-      <button
-        type="button"
-        class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        :disabled="busy"
-        @click="emit('save', draft)"
-      >
-        {{ $t('common.save') }}
-      </button>
-    </div>
-
-    <div class="mt-5 border-t border-border pt-5">
-      <div class="flex flex-wrap items-end justify-between gap-3">
-        <label class="min-w-52">
-          <span class="mb-1 block text-xs font-medium text-text-secondary">{{
-            $t('agent.settings.subagents.appProfiles')
-          }}</span>
-          <select
-            v-model="selectedAppId"
-            class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-          >
-            <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.displayName }}</option>
-          </select>
+    <div class="space-y-4 p-4 sm:p-5">
+      <div class="mt-4 grid gap-3 md:grid-cols-3">
+        <label v-for="(_, key) in settings.requestedSettings.subagents" :key="key" class="block">
+          <span class="mb-1 block text-xs font-medium text-foreground">{{ subagentLabels[key] || key }}</span>
+          <QuantityInput
+            v-model="draft[String(key)]"
+            :type="key === 'maxSubagentMessageBytesPerRun' ? 'bytes' : 'number'"
+            :placeholder="
+              key === 'maxSubagentMessageBytesPerRun'
+                ? $t('agent.settings.subagents.messageBytesPlaceholder')
+                : $t('agent.settings.quantity.placeholderNumber')
+            "
+            :min="1"
+            :disabled="busy"
+          />
         </label>
-        <button
-          type="button"
-          class="rounded-md border border-border px-3 py-2 text-xs disabled:opacity-50"
-          :disabled="profileBusy || modelOptions.length === 0"
-          @click="addProfile"
-        >
-          {{ $t('agent.settings.subagents.addProfile') }}
-        </button>
       </div>
-      <p class="mt-2 text-xs text-text-secondary">{{ $t('agent.settings.subagents.profileHint') }}</p>
-      <p v-if="profileError" class="mt-2 text-xs text-error">{{ profileError }}</p>
-
-      <div v-if="profileSettings" class="mt-3 space-y-3">
-        <article
-          v-for="(profile, index) in profileSettings.policy.profiles"
-          :key="`${profile.id}:${index}`"
-          class="rounded-md border border-border bg-background p-4"
-        >
-          <div class="grid gap-3 lg:grid-cols-3">
-            <label>
-              <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.subagents.profileId') }}</span>
-              <input v-model="profile.id" class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm" />
-            </label>
-            <label class="lg:col-span-2">
-              <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.subagents.role') }}</span>
-              <input v-model="profile.role" class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm" />
-            </label>
-            <label>
-              <span class="mb-1 block text-xs text-text-secondary">{{
-                $t('agent.settings.subagents.defaultModel')
-              }}</span>
-              <select
-                :value="modelKey(profile.defaultModel)"
-                class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-                @change="setDefaultModel(profile, ($event.target as HTMLSelectElement).value)"
-              >
-                <option v-for="model in modelOptions" :key="model.key" :value="model.key">{{ model.label }}</option>
-              </select>
-            </label>
-            <label>
-              <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.subagents.maxTokens') }}</span>
-              <input
-                v-model.number="profile.maxTokens"
-                type="number"
-                min="1"
-                class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label>
-              <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.subagents.maxSteps') }}</span>
-              <input
-                v-model.number="profile.maxSteps"
-                type="number"
-                min="1"
-                class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label>
-              <span class="mb-1 block text-xs text-text-secondary">{{
-                $t('agent.settings.subagents.peerMessaging')
-              }}</span>
-              <select
-                v-model="profile.peerMessaging"
-                class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-              >
-                <option value="parent-child">{{ $t('agent.settings.subagents.peerParentChild') }}</option>
-                <option value="same-run">{{ $t('agent.settings.subagents.peerSameRun') }}</option>
-              </select>
-            </label>
-            <label>
-              <span class="mb-1 block text-xs text-text-secondary">{{
-                $t('agent.settings.subagents.failureMode')
-              }}</span>
-              <select
-                v-model="profile.failureMode"
-                class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
-              >
-                <option value="isolate">{{ $t('agent.settings.subagents.failureIsolate') }}</option>
-                <option value="failFast">{{ $t('agent.settings.subagents.failureFailFast') }}</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="mt-3">
-            <div class="text-xs text-text-secondary">{{ $t('agent.settings.subagents.allowedModels') }}</div>
-            <div class="mt-1 flex flex-wrap gap-2">
-              <label v-for="model in modelOptions" :key="model.key" class="flex items-center gap-1 text-xs">
-                <input
-                  type="checkbox"
-                  :checked="profile.allowedModels.some((item) => modelKey(item) === model.key)"
-                  @change="toggleAllowedModel(profile, model.key, ($event.target as HTMLInputElement).checked)"
-                />
-                {{ model.label }}
-              </label>
-            </div>
-          </div>
-
-          <div class="mt-3">
-            <div class="text-xs text-text-secondary">{{ $t('agent.settings.subagents.capabilities') }}</div>
-            <div class="mt-1 flex flex-wrap gap-2">
-              <label v-for="capability in capabilityOptions" :key="capability" class="flex items-center gap-1 text-xs">
-                <input
-                  type="checkbox"
-                  :checked="profile.capabilities.includes(capability)"
-                  @change="toggleCapability(profile, capability, ($event.target as HTMLInputElement).checked)"
-                />
-                {{ capability }}
-              </label>
-            </div>
-          </div>
-
-          <div class="mt-3 flex justify-end">
-            <button type="button" class="text-xs text-error" :disabled="profileBusy" @click="removeProfile(index)">
-              {{ $t('agent.settings.subagents.removeProfile') }}
-            </button>
-          </div>
-        </article>
-        <p v-if="profileSettings.policy.profiles.length === 0" class="text-xs text-text-secondary">
-          {{ $t('agent.settings.subagents.noProfiles') }}
-        </p>
-      </div>
-
       <div class="mt-4 flex justify-end">
         <button
           type="button"
           class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          :disabled="profileBusy || !profileSettings"
-          @click="saveProfiles"
+          :disabled="busy || invalidGlobalLimits"
+          @click="saveGlobalLimits"
         >
-          {{ $t('agent.settings.subagents.saveProfiles') }}
+          {{ $t('common.save') }}
         </button>
+      </div>
+
+      <div class="mt-5 border-t border-border pt-5">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+          <label class="min-w-52">
+            <span class="mb-1 block text-xs font-medium text-text-secondary">{{
+              $t('agent.settings.subagents.appProfiles')
+            }}</span>
+            <select
+              v-model="selectedAppId"
+              class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+            >
+              <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.displayName }}</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            class="rounded-md border border-border px-3 py-2 text-xs disabled:opacity-50"
+            :disabled="profileBusy || modelOptions.length === 0"
+            @click="addProfile"
+          >
+            {{ $t('agent.settings.subagents.addProfile') }}
+          </button>
+        </div>
+        <p class="mt-2 text-xs text-text-secondary">{{ $t('agent.settings.subagents.profileHint') }}</p>
+        <p v-if="profileError" class="mt-2 text-xs text-error">{{ profileError }}</p>
+
+        <div v-if="profileSettings" class="mt-3 space-y-3">
+          <article
+            v-for="(profile, index) in profileSettings.policy.profiles"
+            :key="`${profile.id}:${index}`"
+            class="rounded-md border border-border bg-background p-4"
+          >
+            <div class="grid gap-3 lg:grid-cols-3">
+              <label>
+                <span class="mb-1 block text-xs text-text-secondary">{{
+                  $t('agent.settings.subagents.profileId')
+                }}</span>
+                <input v-model="profile.id" class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm" />
+              </label>
+              <label class="lg:col-span-2">
+                <span class="mb-1 block text-xs text-text-secondary">{{ $t('agent.settings.subagents.role') }}</span>
+                <input v-model="profile.role" class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm" />
+              </label>
+              <label>
+                <span class="mb-1 block text-xs text-text-secondary">{{
+                  $t('agent.settings.subagents.defaultModel')
+                }}</span>
+                <select
+                  :value="modelKey(profile.defaultModel)"
+                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
+                  @change="setDefaultModel(profile, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option v-for="model in modelOptions" :key="model.key" :value="model.key">{{ model.label }}</option>
+                </select>
+              </label>
+              <label>
+                <span class="mb-1 block text-xs text-text-secondary">{{
+                  $t('agent.settings.subagents.maxTokens')
+                }}</span>
+                <QuantityInput
+                  v-model="profile.maxTokens"
+                  type="tokens"
+                  :placeholder="$t('agent.settings.subagents.maxTokensPlaceholder')"
+                  :min="1"
+                  :disabled="busy || profileBusy"
+                />
+              </label>
+              <label>
+                <span class="mb-1 block text-xs text-text-secondary">{{
+                  $t('agent.settings.subagents.maxSteps')
+                }}</span>
+                <input
+                  v-model.number="profile.maxSteps"
+                  type="number"
+                  min="1"
+                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label>
+                <span class="mb-1 block text-xs text-text-secondary">{{
+                  $t('agent.settings.subagents.peerMessaging')
+                }}</span>
+                <select
+                  v-model="profile.peerMessaging"
+                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
+                >
+                  <option value="parent-child">{{ $t('agent.settings.subagents.peerParentChild') }}</option>
+                  <option value="same-run">{{ $t('agent.settings.subagents.peerSameRun') }}</option>
+                </select>
+              </label>
+              <label>
+                <span class="mb-1 block text-xs text-text-secondary">{{
+                  $t('agent.settings.subagents.failureMode')
+                }}</span>
+                <select
+                  v-model="profile.failureMode"
+                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
+                >
+                  <option value="isolate">{{ $t('agent.settings.subagents.failureIsolate') }}</option>
+                  <option value="failFast">{{ $t('agent.settings.subagents.failureFailFast') }}</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="mt-3">
+              <div class="text-xs text-text-secondary">{{ $t('agent.settings.subagents.allowedModels') }}</div>
+              <div class="mt-1 flex flex-wrap gap-2">
+                <label v-for="model in modelOptions" :key="model.key" class="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    :checked="profile.allowedModels.some((item) => modelKey(item) === model.key)"
+                    @change="toggleAllowedModel(profile, model.key, ($event.target as HTMLInputElement).checked)"
+                  />
+                  {{ model.label }}
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <div class="text-xs text-text-secondary">{{ $t('agent.settings.subagents.capabilities') }}</div>
+              <div class="mt-1 flex flex-wrap gap-2">
+                <label
+                  v-for="capability in capabilityOptions"
+                  :key="capability"
+                  class="flex items-center gap-1 text-xs"
+                >
+                  <input
+                    type="checkbox"
+                    :checked="profile.capabilities.includes(capability)"
+                    @change="toggleCapability(profile, capability, ($event.target as HTMLInputElement).checked)"
+                  />
+                  {{ capability }}
+                </label>
+              </div>
+            </div>
+
+            <div class="mt-3 flex justify-end">
+              <button type="button" class="text-xs text-error" :disabled="profileBusy" @click="removeProfile(index)">
+                {{ $t('agent.settings.subagents.removeProfile') }}
+              </button>
+            </div>
+          </article>
+          <p v-if="profileSettings.policy.profiles.length === 0" class="text-xs text-text-secondary">
+            {{ $t('agent.settings.subagents.noProfiles') }}
+          </p>
+        </div>
+
+        <div class="mt-4 flex justify-end">
+          <button
+            type="button"
+            class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            :disabled="profileBusy || !profileSettings || invalidProfileLimits"
+            @click="saveProfiles"
+          >
+            {{ $t('agent.settings.subagents.saveProfiles') }}
+          </button>
+        </div>
       </div>
     </div>
   </section>

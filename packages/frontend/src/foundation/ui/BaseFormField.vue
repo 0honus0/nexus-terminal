@@ -9,8 +9,12 @@
 </script>
 
 <template>
-  <div class="space-y-1.5">
-    <label v-if="label" :for="forId" class="block text-sm font-medium text-text-secondary">
+  <div class="space-y-2">
+    <label
+      v-if="label"
+      :for="forId"
+      class="relative z-1 block text-sm font-medium leading-normal text-text-secondary pb-0.5"
+    >
       {{ label }}
       <span v-if="required" aria-hidden="true" class="text-error">*</span>
     </label>

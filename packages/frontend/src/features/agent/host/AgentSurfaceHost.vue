@@ -180,6 +180,13 @@
   };
   hostChannel?.addEventListener('message', onHostBroadcast);
 
+  const onLocalHostChanged = (): void => {
+    if (!auth.isAuthenticated.value || activeUserId === null) return;
+    void refresh('host-event');
+    if (activeUserId !== null) hostChannel?.postMessage({ type: 'host.changed', userId: activeUserId });
+  };
+  window.addEventListener('nexus:agent:host-changed', onLocalHostChanged);
+
   const onVisibility = (): void => {
     if (document.visibilityState === 'hidden') persistLayout('document-hidden');
   };
@@ -188,6 +195,7 @@
   onBeforeUnmount(() => {
     persistLayout('host-unmount');
     document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('nexus:agent:host-changed', onLocalHostChanged);
     hostChannel?.removeEventListener('message', onHostBroadcast);
     hostChannel?.close();
     stop('host-unmount');

@@ -128,7 +128,7 @@
     border-radius: 0.3rem;
     background: color-mix(in srgb, var(--color-foreground) 8%, transparent);
     padding: 0.12rem 0.3rem;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: var(--font-family-monospace);
     font-size: 0.9em;
   }
   .markdown-preview :deep(pre) {

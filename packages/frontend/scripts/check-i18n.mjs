@@ -81,6 +81,7 @@ const visibleLiteralAllowlist = new Set([
   'IP',
   'hCaptcha',
   'reCAPTCHA',
+  'Ed25519',
   'zip',
   'tar.gz',
   'tar.bz2',

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, watch, nextTick } from 'vue';
+  import { ref, watch } from 'vue';
   import type {
     AgentApprovalView,
     AgentCheckpointView,
@@ -20,11 +20,11 @@
     subagents: AgentSubagentView[];
     selectedSubagentId: string | null;
     subagentMessages: AgentSubagentMessage[];
-    visible: boolean;
     busy: boolean;
   }>();
   const emit = defineEmits<{
     close: [];
+    closeRail: [];
     saveCheckpoint: [snapshot: AgentRunSnapshot];
     resumeCheckpoint: [snapshot: AgentRunSnapshot, checkpoint: AgentCheckpointView];
     selectSubagent: [delegation: AgentSubagentView];
@@ -33,43 +33,9 @@
     deleteRun: [snapshot: AgentRunSnapshot];
   }>();
 
-  const drawer = ref<HTMLElement | null>(null);
-  let previousFocus: HTMLElement | null = null;
-  watch(
-    () => props.visible,
-    async (visible) => {
-      if (visible) {
-        previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-        await nextTick();
-        drawer.value?.focus();
-      } else previousFocus?.focus();
-    },
-  );
-  const trapFocus = (event: KeyboardEvent) => {
-    if (event.key !== 'Tab') return;
-    const controls = Array.from(
-      drawer.value?.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), input:not(:disabled), select:not(:disabled), summary, [tabindex="0"]',
-      ) ?? [],
-    ).filter((el) => el.getClientRects().length);
-    const first = controls[0];
-    const last = controls[controls.length - 1];
-    if (!first) {
-      event.preventDefault();
-      return;
-    }
-    if (event.shiftKey && (document.activeElement === first || document.activeElement === drawer.value)) {
-      event.preventDefault();
-      last?.focus();
-    } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === drawer.value)) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-
   const deleteArmed = ref(false);
   watch(
-    () => [props.visible, props.snapshot?.id] as const,
+    () => props.snapshot?.id,
     () => {
       deleteArmed.value = false;
     },
@@ -81,104 +47,113 @@
 </script>
 
 <template>
-  <div
-    v-if="visible"
-    class="agent-detail-backdrop absolute inset-0 z-40 bg-background/35 backdrop-blur-[1px]"
-    aria-hidden="true"
-    @click="$emit('close')"
-  ></div>
   <aside
-    v-if="visible"
-    ref="drawer"
-    role="dialog"
-    aria-modal="true"
-    tabindex="-1"
-    @keydown.esc.stop.prevent="emit('close')"
-    @keydown="trapFocus"
-    class="absolute inset-y-0 right-0 z-50 flex w-[min(540px,94%)] flex-col border-l border-border/60 bg-background shadow-2xl"
+    class="flex h-full min-h-0 w-full flex-col border-l border-border/60 bg-card/70 select-none"
     :aria-label="$t('agent.tasks.detail')"
   >
-    <header class="flex h-14 shrink-0 items-center justify-between border-b border-border/60 px-4">
-      <div class="flex min-w-0 items-center gap-2.5">
-        <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs text-primary">
-          <i class="fa-solid fa-bars-progress" aria-hidden="true"></i>
-        </div>
-        <div class="min-w-0">
-          <strong class="block text-sm leading-none">{{ $t('agent.tasks.detail') }}</strong>
-          <span v-if="snapshot" class="mt-1 block truncate font-mono text-xs text-text-secondary">{{
-            snapshot.id
-          }}</span>
-        </div>
+    <!-- 第三栏头部：就地返回与快速关闭 -->
+    <header class="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3">
+      <div class="flex min-w-0 items-center gap-2">
+        <button
+          type="button"
+          class="flex h-7 items-center gap-1.5 rounded-lg border border-border/60 bg-background px-2 text-xs font-medium text-text-secondary hover:border-border hover:bg-header hover:text-foreground active:scale-95 transition-all shadow-2xs"
+          :title="$t('agent.tasks.backToTasks')"
+          :aria-label="$t('agent.tasks.backToTasks')"
+          @click="emit('close')"
+        >
+          <i class="fa-solid fa-arrow-left text-[10px]" aria-hidden="true"></i>
+          <span class="text-[11px]">{{ $t('agent.tasks.backToTasks') }}</span>
+        </button>
+        <span v-if="snapshot" class="truncate font-mono text-[10px] text-text-secondary font-medium">
+          #{{ snapshot.id.slice(-6) }}
+        </span>
       </div>
       <button
         type="button"
-        class="flex h-8 w-8 items-center justify-center rounded-lg text-text-secondary hover:bg-header hover:text-foreground"
-        :aria-label="$t('agent.tasks.closeDetail')"
-        @click="$emit('close')"
+        class="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+        :title="$t('common.close')"
+        :aria-label="$t('common.close')"
+        @click="emit('closeRail')"
       >
-        <i class="fa-solid fa-xmark"></i>
+        <i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
       </button>
     </header>
 
-    <div class="min-h-0 flex-1 overflow-y-auto p-4 text-[13px]">
+    <div class="min-h-0 flex-1 overflow-y-auto p-3 text-xs space-y-3">
       <template v-if="snapshot">
-        <section class="rounded-2xl border border-border/60 bg-card/55 p-4">
-          <div class="flex items-start justify-between gap-3">
-            <div>
-              <div class="text-xs font-semibold uppercase tracking-[0.12em] text-text-secondary">
+        <!-- 运行概览卡片 -->
+        <section class="rounded-xl border border-border/70 bg-card p-3 shadow-xs">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="text-[10px] font-semibold uppercase tracking-wider text-text-secondary">
                 {{ $t('agent.tasks.runOverview') }}
               </div>
-              <div class="mt-1.5 flex items-center gap-2">
-                <span class="h-2 w-2 rounded-full bg-primary"></span>
-                <strong class="text-sm">{{ $t(`agent.tasks.runStatus.${snapshot.status}`) }}</strong>
+              <div class="mt-1 flex items-center gap-1.5">
+                <span
+                  class="h-2 w-2 rounded-full"
+                  :class="
+                    snapshot.status === 'running'
+                      ? 'bg-success'
+                      : snapshot.status === 'awaiting_approval' || snapshot.status === 'awaiting_budget'
+                        ? 'bg-warning'
+                        : snapshot.status === 'failed'
+                          ? 'bg-error'
+                          : 'bg-text-secondary/50'
+                  "
+                ></span>
+                <strong class="text-xs truncate">{{ $t(`agent.tasks.runStatus.${snapshot.status}`) }}</strong>
               </div>
             </div>
-            <span class="rounded-full bg-header px-2.5 py-1 text-xs text-text-secondary">
+            <span class="rounded-md bg-header px-2 py-0.5 text-[10px] text-text-secondary shrink-0">
               {{ $t(`agent.tasks.verificationStatus.${snapshot.verificationStatus}`) }}
             </span>
           </div>
-          <div class="mt-4 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-border/60 pt-3 sm:grid-cols-4">
-            <div class="min-w-0">
-              <div class="text-xs text-text-secondary">{{ $t('agent.tasks.goal') }}</div>
-              <div class="mt-1 truncate text-xs font-medium">{{ snapshot.goalStatus }}</div>
+
+          <div class="mt-3 grid grid-cols-2 gap-2 border-t border-border/50 pt-2.5 text-[10px]">
+            <div class="rounded-lg border border-border/40 bg-background/50 p-2">
+              <div class="text-text-secondary">{{ $t('agent.tasks.steps') }}</div>
+              <div class="mt-0.5 font-mono font-medium text-foreground">{{ snapshot.usage.steps }}</div>
             </div>
-            <div class="min-w-0">
-              <div class="text-xs text-text-secondary">{{ $t('agent.tasks.steps') }}</div>
-              <div class="mt-1 text-xs font-medium">{{ snapshot.usage.steps }}</div>
-            </div>
-            <div class="min-w-0">
-              <div class="text-xs text-text-secondary">{{ $t('agent.tasks.tokens') }}</div>
-              <div class="mt-1 text-xs font-medium">
+            <div class="rounded-lg border border-border/40 bg-background/50 p-2">
+              <div class="text-text-secondary">{{ $t('agent.tasks.tokens') }}</div>
+              <div class="mt-0.5 font-mono font-medium text-foreground">
                 {{ snapshot.usage.inputTokens + snapshot.usage.outputTokens }}
               </div>
             </div>
-            <div class="min-w-0">
-              <div class="text-xs text-text-secondary">{{ $t('agent.tasks.activeTime') }}</div>
-              <div class="mt-1 text-xs font-medium">{{ snapshot.activeExecutionSeconds }}s</div>
+            <div class="rounded-lg border border-border/40 bg-background/50 p-2">
+              <div class="text-text-secondary">{{ $t('agent.tasks.activeTime') }}</div>
+              <div class="mt-0.5 font-mono font-medium text-foreground">{{ snapshot.activeExecutionSeconds }}s</div>
+            </div>
+            <div class="rounded-lg border border-border/40 bg-background/50 p-2">
+              <div class="text-text-secondary">{{ $t('agent.tasks.goal') }}</div>
+              <div class="mt-0.5 truncate font-medium text-foreground">{{ snapshot.goalStatus }}</div>
             </div>
           </div>
+
           <div
-            class="mt-3 flex flex-wrap items-center gap-2 border-t border-border/70 pt-3 text-[10px] text-text-secondary"
+            class="mt-2.5 flex flex-wrap items-center gap-1.5 border-t border-border/50 pt-2 text-[10px] text-text-secondary"
           >
-            <span class="rounded-lg bg-header px-2 py-1">
+            <span class="rounded-md bg-header px-2 py-0.5 font-mono">
               <i class="fa-solid fa-microchip mr-1 text-[8px]" aria-hidden="true"></i
               >{{ snapshot.definition.model.modelId }}
             </span>
-            <span v-if="snapshot.definition.reasoningEffort" class="rounded-lg bg-header px-2 py-1">
+            <span v-if="snapshot.definition.reasoningEffort" class="rounded-md bg-header px-2 py-0.5">
               <i class="fa-solid fa-brain mr-1 text-[8px]" aria-hidden="true"></i
               >{{ $t(`agent.ui.reasoningLevels.${snapshot.definition.reasoningEffort}`) }}
             </span>
           </div>
+
+          <!-- 删除运行按键 -->
           <div
             v-if="terminal.has(snapshot.status)"
-            class="mt-3 flex items-center justify-between gap-3 border-t border-border/70 pt-3"
+            class="mt-2.5 flex items-center justify-between gap-2 border-t border-border/50 pt-2"
           >
-            <p class="max-w-72 text-xs leading-4 text-text-secondary">{{ $t('agent.tasks.deleteRunHint') }}</p>
-            <div class="flex shrink-0 items-center gap-1.5">
+            <span class="text-[10px] text-text-secondary">{{ $t('agent.tasks.deleteRunHint') }}</span>
+            <div class="flex shrink-0 items-center gap-1">
               <button
                 v-if="deleteArmed"
                 type="button"
-                class="rounded-lg border border-border/70 px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:bg-header"
+                class="rounded-md border border-border/70 px-2 py-1 text-[10px] font-medium text-text-secondary hover:bg-header"
                 :disabled="busy"
                 @click="deleteArmed = false"
               >
@@ -186,7 +161,7 @@
               </button>
               <button
                 type="button"
-                class="rounded-lg border border-error/40 px-2.5 py-1.5 text-xs font-semibold text-error hover:bg-error/10 disabled:opacity-50"
+                class="rounded-md border border-error/40 px-2 py-1 text-[10px] font-semibold text-error hover:bg-error/10 disabled:opacity-50"
                 :disabled="busy"
                 @click="deleteArmed ? $emit('deleteRun', snapshot) : (deleteArmed = true)"
               >
@@ -196,9 +171,10 @@
           </div>
         </section>
 
+        <!-- 审批时间线 -->
         <ToolTimeline
           v-if="approvals.some((item) => item.status === 'requested')"
-          class="mt-4 rounded-2xl border border-border/60 bg-card/55 p-4"
+          class="rounded-xl border border-border/70 bg-card p-3"
           :approvals="approvals.filter((item) => item.status === 'requested')"
           :clock="approvalClock"
           :busy="busy"
@@ -207,49 +183,53 @@
 
         <details
           v-if="approvals.some((item) => item.status !== 'requested')"
-          class="mt-4 rounded-xl border border-border/60 p-4"
+          class="rounded-xl border border-border/70 bg-card p-3"
         >
-          <summary class="cursor-pointer text-xs font-medium">{{ $t('agent.ui.approvalHistory') }}</summary>
+          <summary class="cursor-pointer text-[11px] font-medium text-text-secondary hover:text-foreground">
+            {{ $t('agent.ui.approvalHistory') }}
+          </summary>
           <ToolTimeline
-            class="mt-3"
+            class="mt-2"
             :approvals="approvals.filter((item) => item.status !== 'requested')"
             :clock="approvalClock"
             :busy="busy"
           />
         </details>
-        <details class="mt-4 rounded-2xl border border-border/60 bg-card/55 p-4">
-          <summary class="cursor-pointer text-sm font-medium">
+
+        <!-- 检查点卡片 -->
+        <details class="rounded-xl border border-border/70 bg-card p-3" open>
+          <summary class="cursor-pointer text-xs font-semibold text-foreground">
             {{ $t('agent.tasks.checkpoints') }} · {{ checkpoints.length }}
           </summary>
-          <div class="mt-3 flex items-center justify-between gap-2">
-            <div>
-              <h3 class="flex items-center gap-1.5 font-medium">
-                <i class="fa-solid fa-bookmark text-xs text-text-secondary" aria-hidden="true"></i>
-                {{ $t('agent.tasks.checkpoints') }}
-              </h3>
-              <p class="mt-1 text-xs leading-4 text-text-secondary">{{ $t('agent.tasks.checkpointHint') }}</p>
-            </div>
+          <div class="mt-2.5 flex items-center justify-between gap-1">
+            <span class="text-[10px] text-text-secondary leading-tight">{{ $t('agent.tasks.checkpointHint') }}</span>
             <button
               type="button"
-              class="shrink-0 rounded-lg border border-border/70 px-2.5 py-1.5 text-xs font-medium hover:bg-header disabled:opacity-50"
+              class="shrink-0 rounded-md border border-border/70 bg-background px-2 py-1 text-[10px] font-medium hover:bg-header disabled:opacity-50"
               :disabled="busy || !canSave()"
               @click="$emit('saveCheckpoint', snapshot)"
             >
-              <i class="fa-solid fa-plus mr-1 text-[9px]" aria-hidden="true"></i>
+              <i class="fa-solid fa-plus mr-1 text-[8px]" aria-hidden="true"></i>
               {{ $t('agent.tasks.saveCheckpoint') }}
             </button>
           </div>
           <div
             v-if="checkpoints.length === 0"
-            class="mt-3 rounded-xl bg-background/70 px-3 py-3 text-xs text-text-secondary"
+            class="mt-2 rounded-lg bg-background/60 px-2.5 py-2 text-[10px] text-text-secondary"
           >
             {{ $t('agent.tasks.noCheckpoints') }}
           </div>
-          <article v-for="checkpoint in checkpoints" :key="checkpoint.id" class="mt-2 rounded-xl bg-background/70 p-3">
+          <article
+            v-for="checkpoint in checkpoints"
+            :key="checkpoint.id"
+            class="mt-2 rounded-lg border border-border/40 bg-background/60 p-2"
+          >
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <div class="truncate font-mono text-xs">{{ checkpoint.id }}</div>
-                <div class="mt-1 text-xs text-text-secondary">
+                <div class="truncate font-mono text-[10px] font-medium text-foreground">
+                  #{{ checkpoint.id.slice(-8) }}
+                </div>
+                <div class="mt-0.5 text-[9px] text-text-secondary">
                   {{
                     $t('agent.tasks.checkpointWatermark', {
                       ledger: checkpoint.ledgerThrough,
@@ -261,7 +241,7 @@
               <button
                 v-if="terminal.has(snapshot.status)"
                 type="button"
-                class="shrink-0 rounded-lg bg-primary px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                class="shrink-0 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
                 :disabled="busy || snapshot.needsReconciliation"
                 @click="$emit('resumeCheckpoint', snapshot, checkpoint)"
               >
@@ -271,11 +251,15 @@
           </article>
         </details>
 
-        <details class="mt-4 rounded-xl border border-border/60 p-4">
-          <summary class="cursor-pointer text-sm font-medium">{{ $t('agent.ui.optionalRuntime') }}</summary>
-          <WorkspaceRuntimePanel :app-id="snapshot.appId" :run-id="snapshot.id" :busy="busy" />
+        <!-- 运行时面板 -->
+        <details class="rounded-xl border border-border/70 bg-card p-3">
+          <summary class="cursor-pointer text-xs font-semibold text-foreground">
+            {{ $t('agent.ui.optionalRuntime') }}
+          </summary>
+          <WorkspaceRuntimePanel class="mt-2" :app-id="snapshot.appId" :run-id="snapshot.id" :busy="busy" />
         </details>
 
+        <!-- 子智能体树 -->
         <SubagentTree
           v-if="subagents.length"
           :items="subagents"
@@ -286,16 +270,17 @@
           @cancel="$emit('cancelSubagent', $event)"
         />
 
-        <details class="mt-4 rounded-2xl border border-border/60 bg-card/55 p-4">
-          <summary class="cursor-pointer text-xs font-medium">
-            <i class="fa-solid fa-wave-square mr-1.5 text-xs text-text-secondary" aria-hidden="true"></i>
+        <!-- 最近事实 -->
+        <details class="rounded-xl border border-border/70 bg-card p-3">
+          <summary class="cursor-pointer text-xs font-semibold text-foreground">
+            <i class="fa-solid fa-wave-square mr-1.5 text-[10px] text-text-secondary" aria-hidden="true"></i>
             {{ $t('agent.tasks.recentFacts') }} · {{ snapshot.recentEntries.length }}
           </summary>
-          <article v-for="entry in snapshot.recentEntries" :key="entry.id" class="mt-2 rounded-xl bg-background/70 p-3">
-            <div class="text-xs text-text-secondary">#{{ entry.sequence }} · {{ entry.kind }}</div>
-            <pre class="mt-1 max-h-44 overflow-auto whitespace-pre-wrap break-words text-xs leading-4">{{
-              JSON.stringify(entry.payload, null, 2)
-            }}</pre>
+          <article v-for="entry in snapshot.recentEntries" :key="entry.id" class="mt-2 rounded-lg bg-background/60 p-2">
+            <div class="text-[10px] text-text-secondary">#{{ entry.sequence }} · {{ entry.kind }}</div>
+            <pre
+              class="mt-1 max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-[9px] leading-snug"
+              >{{ JSON.stringify(entry.payload, null, 2) }}</pre>
           </article>
         </details>
       </template>

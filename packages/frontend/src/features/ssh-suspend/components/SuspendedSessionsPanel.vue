@@ -316,9 +316,7 @@
   .suspended-sessions-panel {
     container-type: size;
     container-name: suspended-sessions-view-pane;
-    font-family:
-      -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji',
-      'Segoe UI Emoji', 'Segoe UI Symbol';
+    font-family: var(--font-family-sans-serif);
   }
 
   .session-item {

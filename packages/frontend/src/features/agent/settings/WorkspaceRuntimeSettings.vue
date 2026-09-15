@@ -241,304 +241,308 @@
 </script>
 
 <template>
-  <section class="rounded-xl border border-border/60 bg-card p-5">
-    <div class="flex flex-wrap items-start justify-between gap-3">
+  <section class="overflow-hidden rounded-xl border border-border/70 bg-card/35">
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5"
+    >
       <div>
-        <h2 class="text-base font-semibold">{{ $t('agent.settings.workspaceRuntime.title') }}</h2>
-        <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.workspaceRuntime.description') }}</p>
+        <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.workspaceRuntime.title') }}</h3>
+        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.workspaceRuntime.description') }}</p>
       </div>
       <button
         v-if="availability.available"
         type="button"
-        class="rounded border border-border px-3 py-1.5 text-xs hover:bg-background disabled:opacity-50"
+        class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-header disabled:opacity-50"
         :disabled="disabled || loading"
         @click="refreshObserved"
       >
-        {{ $t('agent.settings.workspaceRuntime.refresh') }}
+        <i class="fa-solid fa-arrows-rotate text-xs" :class="{ 'fa-spin': loading }" aria-hidden="true"></i>
+        <span>{{ $t('agent.settings.workspaceRuntime.refresh') }}</span>
       </button>
     </div>
-
-    <div class="mt-4 rounded-md bg-background p-4">
-      <div class="flex items-center gap-2">
-        <span class="h-2.5 w-2.5 rounded-full" :class="availability.available ? 'bg-success' : 'bg-text-secondary'" />
-        <span class="font-medium">
-          {{
-            availability.available
-              ? $t('agent.settings.workspaceRuntime.available')
-              : $t('agent.settings.workspaceRuntime.unavailable')
-          }}
-        </span>
-      </div>
-      <p v-if="availability.reason" class="mt-2 text-xs text-text-secondary">{{ availability.reason }}</p>
-    </div>
-
-    <div v-if="error" class="mt-3 rounded border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
-      {{ error }}
-    </div>
-    <div v-if="notice" class="mt-3 rounded border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
-      {{ notice }}
-    </div>
-
-    <template v-if="availability.available && catalog && storage">
-      <div class="mt-5 grid gap-4 lg:grid-cols-2">
-        <div class="rounded-md border border-border p-4">
-          <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.setupTitle') }}</h3>
-          <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.workspaceRuntime.setupDescription') }}</p>
-          <div class="mt-3 space-y-2">
-            <label
-              v-for="recipe in catalog.recipes"
-              :key="recipe.id"
-              class="flex items-start gap-2 rounded bg-background p-2"
-            >
-              <input
-                type="checkbox"
-                class="mt-0.5"
-                :checked="selectedRecipeIds.includes(recipe.id)"
-                :disabled="disabled"
-                @change="toggleRecipe(recipe.id)"
-              />
-              <span>
-                <span class="block text-sm font-medium">{{ recipe.displayName }}</span>
-                <span class="block text-xs text-text-secondary">{{ recipe.kind }}</span>
-              </span>
-            </label>
-          </div>
-          <button
-            type="button"
-            class="mt-3 rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
-            :disabled="disabled || !selectedRecipeIds.length"
-            @click="previewSetup"
-          >
-            {{ $t('agent.settings.workspaceRuntime.previewSetup') }}
-          </button>
-          <div v-if="setupPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
-            <p>
-              {{
-                $t('agent.settings.workspaceRuntime.setupImpact', {
-                  count: setupPreview.missingPacks.length,
-                  bytes: formatBytes(setupPreview.installBytes),
-                })
-              }}
-            </p>
-            <button
-              type="button"
-              class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
-              :disabled="disabled"
-              @click="confirmSetup"
-            >
-              {{ $t('agent.settings.workspaceRuntime.confirmSetup') }}
-            </button>
-          </div>
+    <div class="space-y-4 p-4 sm:p-5">
+      <div class="mt-4 rounded-md bg-background p-4">
+        <div class="flex items-center gap-2">
+          <span class="h-2.5 w-2.5 rounded-full" :class="availability.available ? 'bg-success' : 'bg-text-secondary'" />
+          <span class="font-medium">
+            {{
+              availability.available
+                ? $t('agent.settings.workspaceRuntime.available')
+                : $t('agent.settings.workspaceRuntime.unavailable')
+            }}
+          </span>
         </div>
-
-        <div class="rounded-md border border-border p-4">
-          <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.storageTitle') }}</h3>
-          <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <div class="rounded bg-background p-2">
-              {{ $t('agent.settings.workspaceRuntime.stateBytes')
-              }}<strong class="block">{{ formatBytes(storage.stateBytes) }}</strong>
-            </div>
-            <div class="rounded bg-background p-2">
-              {{ $t('agent.settings.workspaceRuntime.packBytes')
-              }}<strong class="block">{{ formatBytes(storage.packBytes) }}</strong>
-            </div>
-            <div class="rounded bg-background p-2">
-              {{ $t('agent.settings.workspaceRuntime.cacheBytes')
-              }}<strong class="block">{{ formatBytes(storage.cacheBytes) }}</strong>
-            </div>
-            <div class="rounded bg-background p-2">
-              {{ $t('agent.settings.workspaceRuntime.runtimeBytes')
-              }}<strong class="block">{{ formatBytes(storage.runtimeBytes) }}</strong>
-            </div>
-            <div class="rounded bg-background p-2">
-              {{ $t('agent.settings.workspaceRuntime.quarantineBytes')
-              }}<strong class="block">{{ formatBytes(storage.quarantineBytes) }}</strong>
-            </div>
-          </div>
-          <p class="mt-2 text-xs text-text-secondary">
-            {{ $t('agent.settings.workspaceRuntime.reclaimable', { bytes: formatBytes(storage.reclaimableBytes) }) }}
-          </p>
-          <div class="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
-              class="rounded border border-border px-3 py-1.5 text-xs"
-              :disabled="disabled"
-              @click="previewRuntimeCleanup"
-            >
-              {{ $t('agent.settings.workspaceRuntime.previewCleanup') }}
-            </button>
-            <button
-              type="button"
-              class="rounded border border-border px-3 py-1.5 text-xs"
-              :disabled="disabled"
-              @click="cleanupCache"
-            >
-              {{ $t('agent.settings.workspaceRuntime.clearCache') }}
-            </button>
-            <button
-              type="button"
-              class="rounded border border-border px-3 py-1.5 text-xs"
-              :disabled="disabled"
-              @click="previewReset"
-            >
-              {{ $t('agent.settings.workspaceRuntime.previewReset') }}
-            </button>
-          </div>
-          <div v-if="cleanupPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
-            <p>
-              {{
-                $t('agent.settings.workspaceRuntime.cleanupImpact', {
-                  count: cleanupPreview.workspaceCount,
-                  bytes: formatBytes(cleanupPreview.estimatedReclaimableBytes),
-                  active: cleanupPreview.activeCount,
-                  retained: cleanupPreview.retainedCount,
-                })
-              }}
-            </p>
-            <button
-              type="button"
-              class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
-              :disabled="disabled"
-              @click="confirmRuntimeCleanup"
-            >
-              {{ $t('agent.settings.workspaceRuntime.confirmCleanup') }}
-            </button>
-          </div>
-          <div v-if="resetPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
-            <p>{{ $t('agent.settings.workspaceRuntime.resetImpact') }}</p>
-            <button
-              type="button"
-              class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
-              :disabled="disabled"
-              @click="confirmReset"
-            >
-              {{ $t('agent.settings.workspaceRuntime.confirmReset') }}
-            </button>
-          </div>
-        </div>
+        <p v-if="availability.reason" class="mt-2 text-xs text-text-secondary">{{ availability.reason }}</p>
       </div>
 
-      <div class="mt-5 rounded-md border border-border p-4">
-        <div class="flex items-center justify-between gap-2">
-          <div>
-            <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.packsTitle') }}</h3>
-            <p class="mt-1 text-xs text-text-secondary">
-              {{ $t('agent.settings.workspaceRuntime.catalogRevision', { revision: catalog.revision }) }}
-            </p>
-          </div>
-        </div>
-        <div class="mt-3 space-y-2">
-          <div
-            v-for="pack in catalog.packs"
-            :key="`${pack.familyId}:${pack.versionId}`"
-            class="flex flex-wrap items-center justify-between gap-3 rounded bg-background p-3"
-          >
-            <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-2 text-sm">
-                <strong>{{ pack.displayName }}</strong>
-                <span class="text-xs text-text-secondary">{{ pack.familyId }}@{{ pack.versionId }}</span>
-                <span v-if="pack.installed" class="rounded bg-success/15 px-1.5 py-0.5 text-xs text-success">{{
-                  $t('agent.settings.workspaceRuntime.installed')
-                }}</span>
-                <span v-if="pack.inUse" class="rounded bg-primary/15 px-1.5 py-0.5 text-xs">{{
-                  $t('agent.settings.workspaceRuntime.inUse')
-                }}</span>
-                <span v-if="isDesiredEnabled(pack)" class="rounded border border-border px-1.5 py-0.5 text-xs">{{
-                  $t('agent.settings.workspaceRuntime.enabled')
-                }}</span>
-                <span v-if="isDesiredDefault(pack)" class="rounded border border-border px-1.5 py-0.5 text-xs">{{
-                  $t('agent.settings.workspaceRuntime.defaultVersion')
-                }}</span>
-              </div>
-              <p class="mt-1 text-xs text-text-secondary">{{ formatBytes(pack.diskBytes) }} · {{ pack.status }}</p>
+      <div v-if="error" class="mt-3 rounded border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
+        {{ error }}
+      </div>
+      <div v-if="notice" class="mt-3 rounded border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
+        {{ notice }}
+      </div>
+
+      <template v-if="availability.available && catalog && storage">
+        <div class="mt-5 grid gap-4 lg:grid-cols-2">
+          <div class="rounded-md border border-border p-4">
+            <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.setupTitle') }}</h3>
+            <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.workspaceRuntime.setupDescription') }}</p>
+            <div class="mt-3 space-y-2">
+              <label
+                v-for="recipe in catalog.recipes"
+                :key="recipe.id"
+                class="flex items-start gap-2 rounded bg-background p-2"
+              >
+                <input
+                  type="checkbox"
+                  class="mt-0.5"
+                  :checked="selectedRecipeIds.includes(recipe.id)"
+                  :disabled="disabled"
+                  @change="toggleRecipe(recipe.id)"
+                />
+                <span>
+                  <span class="block text-sm font-medium">{{ recipe.displayName }}</span>
+                  <span class="block text-xs text-text-secondary">{{ recipe.kind }}</span>
+                </span>
+              </label>
             </div>
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-if="!pack.installed"
-                type="button"
-                class="rounded border border-border px-2 py-1 text-xs"
-                :disabled="disabled || pack.status === 'unavailable'"
-                @click="installPack(pack)"
-              >
-                {{ $t('agent.settings.workspaceRuntime.install') }}
-              </button>
-              <button
-                type="button"
-                class="rounded border border-border px-2 py-1 text-xs"
-                :disabled="disabled || pack.status === 'unavailable'"
-                @click="savePackPreference(pack, 'toggle')"
-              >
+            <button
+              type="button"
+              class="mt-3 rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
+              :disabled="disabled || !selectedRecipeIds.length"
+              @click="previewSetup"
+            >
+              {{ $t('agent.settings.workspaceRuntime.previewSetup') }}
+            </button>
+            <div v-if="setupPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
+              <p>
                 {{
-                  isDesiredEnabled(pack)
-                    ? $t('agent.settings.workspaceRuntime.disableVersion')
-                    : $t('agent.settings.workspaceRuntime.enableVersion')
+                  $t('agent.settings.workspaceRuntime.setupImpact', {
+                    count: setupPreview.missingPacks.length,
+                    bytes: formatBytes(setupPreview.installBytes),
+                  })
                 }}
-              </button>
+              </p>
               <button
                 type="button"
-                class="rounded border border-border px-2 py-1 text-xs"
-                :disabled="disabled || isDesiredDefault(pack) || pack.status === 'unavailable'"
-                @click="savePackPreference(pack, 'default')"
-              >
-                {{ $t('agent.settings.workspaceRuntime.makeDefault') }}
-              </button>
-              <button
-                v-if="pack.installed"
-                type="button"
-                class="rounded border border-error/50 px-2 py-1 text-xs text-error"
+                class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
                 :disabled="disabled"
-                @click="previewUninstall(pack)"
+                @click="confirmSetup"
               >
-                {{ $t('agent.settings.workspaceRuntime.uninstall') }}
+                {{ $t('agent.settings.workspaceRuntime.confirmSetup') }}
+              </button>
+            </div>
+          </div>
+
+          <div class="rounded-md border border-border p-4">
+            <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.storageTitle') }}</h3>
+            <div class="mt-3 grid grid-cols-2 gap-2 text-xs">
+              <div class="rounded bg-background p-2">
+                {{ $t('agent.settings.workspaceRuntime.stateBytes')
+                }}<strong class="block">{{ formatBytes(storage.stateBytes) }}</strong>
+              </div>
+              <div class="rounded bg-background p-2">
+                {{ $t('agent.settings.workspaceRuntime.packBytes')
+                }}<strong class="block">{{ formatBytes(storage.packBytes) }}</strong>
+              </div>
+              <div class="rounded bg-background p-2">
+                {{ $t('agent.settings.workspaceRuntime.cacheBytes')
+                }}<strong class="block">{{ formatBytes(storage.cacheBytes) }}</strong>
+              </div>
+              <div class="rounded bg-background p-2">
+                {{ $t('agent.settings.workspaceRuntime.runtimeBytes')
+                }}<strong class="block">{{ formatBytes(storage.runtimeBytes) }}</strong>
+              </div>
+              <div class="rounded bg-background p-2">
+                {{ $t('agent.settings.workspaceRuntime.quarantineBytes')
+                }}<strong class="block">{{ formatBytes(storage.quarantineBytes) }}</strong>
+              </div>
+            </div>
+            <p class="mt-2 text-xs text-text-secondary">
+              {{ $t('agent.settings.workspaceRuntime.reclaimable', { bytes: formatBytes(storage.reclaimableBytes) }) }}
+            </p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                class="rounded border border-border px-3 py-1.5 text-xs"
+                :disabled="disabled"
+                @click="previewRuntimeCleanup"
+              >
+                {{ $t('agent.settings.workspaceRuntime.previewCleanup') }}
+              </button>
+              <button
+                type="button"
+                class="rounded border border-border px-3 py-1.5 text-xs"
+                :disabled="disabled"
+                @click="cleanupCache"
+              >
+                {{ $t('agent.settings.workspaceRuntime.clearCache') }}
+              </button>
+              <button
+                type="button"
+                class="rounded border border-border px-3 py-1.5 text-xs"
+                :disabled="disabled"
+                @click="previewReset"
+              >
+                {{ $t('agent.settings.workspaceRuntime.previewReset') }}
+              </button>
+            </div>
+            <div v-if="cleanupPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
+              <p>
+                {{
+                  $t('agent.settings.workspaceRuntime.cleanupImpact', {
+                    count: cleanupPreview.workspaceCount,
+                    bytes: formatBytes(cleanupPreview.estimatedReclaimableBytes),
+                    active: cleanupPreview.activeCount,
+                    retained: cleanupPreview.retainedCount,
+                  })
+                }}
+              </p>
+              <button
+                type="button"
+                class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
+                :disabled="disabled"
+                @click="confirmRuntimeCleanup"
+              >
+                {{ $t('agent.settings.workspaceRuntime.confirmCleanup') }}
+              </button>
+            </div>
+            <div v-if="resetPreview" class="mt-3 rounded border border-border bg-background p-3 text-xs">
+              <p>{{ $t('agent.settings.workspaceRuntime.resetImpact') }}</p>
+              <button
+                type="button"
+                class="mt-2 rounded bg-primary px-3 py-1.5 text-white"
+                :disabled="disabled"
+                @click="confirmReset"
+              >
+                {{ $t('agent.settings.workspaceRuntime.confirmReset') }}
               </button>
             </div>
           </div>
         </div>
-      </div>
 
-      <div v-if="uninstallPreview" class="mt-4 rounded-md border border-error/40 bg-error/5 p-4 text-sm">
-        <strong>{{
-          $t('agent.settings.workspaceRuntime.uninstallTitle', { name: uninstallPreview.pack.displayName })
-        }}</strong>
-        <p class="mt-1 text-xs text-text-secondary">
+        <div class="mt-5 rounded-md border border-border p-4">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <h3 class="text-sm font-semibold">{{ $t('agent.settings.workspaceRuntime.packsTitle') }}</h3>
+              <p class="mt-1 text-xs text-text-secondary">
+                {{ $t('agent.settings.workspaceRuntime.catalogRevision', { revision: catalog.revision }) }}
+              </p>
+            </div>
+          </div>
+          <div class="mt-3 space-y-2">
+            <div
+              v-for="pack in catalog.packs"
+              :key="`${pack.familyId}:${pack.versionId}`"
+              class="flex flex-wrap items-center justify-between gap-3 rounded bg-background p-3"
+            >
+              <div class="min-w-0">
+                <div class="flex flex-wrap items-center gap-2 text-sm">
+                  <strong>{{ pack.displayName }}</strong>
+                  <span class="text-xs text-text-secondary">{{ pack.familyId }}@{{ pack.versionId }}</span>
+                  <span v-if="pack.installed" class="rounded bg-success/15 px-1.5 py-0.5 text-xs text-success">{{
+                    $t('agent.settings.workspaceRuntime.installed')
+                  }}</span>
+                  <span v-if="pack.inUse" class="rounded bg-primary/15 px-1.5 py-0.5 text-xs">{{
+                    $t('agent.settings.workspaceRuntime.inUse')
+                  }}</span>
+                  <span v-if="isDesiredEnabled(pack)" class="rounded border border-border px-1.5 py-0.5 text-xs">{{
+                    $t('agent.settings.workspaceRuntime.enabled')
+                  }}</span>
+                  <span v-if="isDesiredDefault(pack)" class="rounded border border-border px-1.5 py-0.5 text-xs">{{
+                    $t('agent.settings.workspaceRuntime.defaultVersion')
+                  }}</span>
+                </div>
+                <p class="mt-1 text-xs text-text-secondary">{{ formatBytes(pack.diskBytes) }} · {{ pack.status }}</p>
+              </div>
+              <div class="flex flex-wrap gap-1.5">
+                <button
+                  v-if="!pack.installed"
+                  type="button"
+                  class="rounded border border-border px-2 py-1 text-xs"
+                  :disabled="disabled || pack.status === 'unavailable'"
+                  @click="installPack(pack)"
+                >
+                  {{ $t('agent.settings.workspaceRuntime.install') }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-border px-2 py-1 text-xs"
+                  :disabled="disabled || pack.status === 'unavailable'"
+                  @click="savePackPreference(pack, 'toggle')"
+                >
+                  {{
+                    isDesiredEnabled(pack)
+                      ? $t('agent.settings.workspaceRuntime.disableVersion')
+                      : $t('agent.settings.workspaceRuntime.enableVersion')
+                  }}
+                </button>
+                <button
+                  type="button"
+                  class="rounded border border-border px-2 py-1 text-xs"
+                  :disabled="disabled || isDesiredDefault(pack) || pack.status === 'unavailable'"
+                  @click="savePackPreference(pack, 'default')"
+                >
+                  {{ $t('agent.settings.workspaceRuntime.makeDefault') }}
+                </button>
+                <button
+                  v-if="pack.installed"
+                  type="button"
+                  class="rounded border border-error/50 px-2 py-1 text-xs text-error"
+                  :disabled="disabled"
+                  @click="previewUninstall(pack)"
+                >
+                  {{ $t('agent.settings.workspaceRuntime.uninstall') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="uninstallPreview" class="mt-4 rounded-md border border-error/40 bg-error/5 p-4 text-sm">
+          <strong>{{
+            $t('agent.settings.workspaceRuntime.uninstallTitle', { name: uninstallPreview.pack.displayName })
+          }}</strong>
+          <p class="mt-1 text-xs text-text-secondary">
+            {{
+              $t('agent.settings.workspaceRuntime.uninstallImpact', {
+                bytes: formatBytes(uninstallPreview.pack.bytes),
+                inUse: uninstallPreview.inUse
+                  ? $t('agent.settings.workspaceRuntime.yes')
+                  : $t('agent.settings.workspaceRuntime.no'),
+                replacement: uninstallPreview.replacementDefaultVersionId || $t('agent.settings.workspaceRuntime.none'),
+              })
+            }}
+          </p>
+          <div class="mt-3 flex gap-2">
+            <button
+              type="button"
+              class="rounded bg-error px-3 py-1.5 text-xs text-white disabled:opacity-50"
+              :disabled="disabled || uninstallPreview.inUse"
+              @click="confirmUninstall"
+            >
+              {{ $t('agent.settings.workspaceRuntime.confirmUninstall') }}
+            </button>
+            <button
+              type="button"
+              class="rounded border border-border px-3 py-1.5 text-xs"
+              :disabled="disabled"
+              @click="uninstallPreview = null"
+            >
+              {{ $t('agent.settings.workspaceRuntime.cancel') }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="lastCommand" class="mt-4 rounded-md bg-background p-3 text-xs text-text-secondary">
           {{
-            $t('agent.settings.workspaceRuntime.uninstallImpact', {
-              bytes: formatBytes(uninstallPreview.pack.bytes),
-              inUse: uninstallPreview.inUse
-                ? $t('agent.settings.workspaceRuntime.yes')
-                : $t('agent.settings.workspaceRuntime.no'),
-              replacement: uninstallPreview.replacementDefaultVersionId || $t('agent.settings.workspaceRuntime.none'),
+            $t('agent.settings.workspaceRuntime.commandStatus', {
+              action: lastCommand.action,
+              status: lastCommand.status,
             })
           }}
-        </p>
-        <div class="mt-3 flex gap-2">
-          <button
-            type="button"
-            class="rounded bg-error px-3 py-1.5 text-xs text-white disabled:opacity-50"
-            :disabled="disabled || uninstallPreview.inUse"
-            @click="confirmUninstall"
-          >
-            {{ $t('agent.settings.workspaceRuntime.confirmUninstall') }}
-          </button>
-          <button
-            type="button"
-            class="rounded border border-border px-3 py-1.5 text-xs"
-            :disabled="disabled"
-            @click="uninstallPreview = null"
-          >
-            {{ $t('agent.settings.workspaceRuntime.cancel') }}
-          </button>
         </div>
-      </div>
-
-      <div v-if="lastCommand" class="mt-4 rounded-md bg-background p-3 text-xs text-text-secondary">
-        {{
-          $t('agent.settings.workspaceRuntime.commandStatus', {
-            action: lastCommand.action,
-            status: lastCommand.status,
-          })
-        }}
-      </div>
-    </template>
+      </template>
+    </div>
   </section>
 </template>

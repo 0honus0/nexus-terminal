@@ -61,137 +61,151 @@
 </script>
 
 <template>
-  <section class="rounded-xl border border-border/60 bg-card p-5">
-    <div class="flex flex-wrap items-start justify-between gap-3">
+  <section class="overflow-hidden rounded-xl border border-border/70 bg-card/35">
+    <div
+      class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-header/40 px-4 py-3 sm:px-5 sm:py-3.5"
+    >
       <div>
-        <h2 class="text-base font-semibold">{{ $t('agent.settings.browserRuntime.title') }}</h2>
-        <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.browserRuntime.description') }}</p>
+        <h3 class="text-sm font-semibold text-foreground">{{ $t('agent.settings.browserRuntime.title') }}</h3>
+        <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.browserRuntime.description') }}</p>
       </div>
       <button
         type="button"
-        class="rounded border border-border px-3 py-1.5 text-xs hover:bg-background disabled:opacity-50"
+        class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-header disabled:opacity-50"
         :disabled="busy"
         @click="addTarget"
       >
-        {{ $t('agent.settings.browserRuntime.addTarget') }}
+        <i class="fa-solid fa-plus text-xs" aria-hidden="true"></i>
+        <span>{{ $t('agent.settings.browserRuntime.addTarget') }}</span>
       </button>
     </div>
+    <div class="space-y-4 p-4 sm:p-5">
+      <p v-if="targets.length === 0" class="mt-4 rounded bg-background p-3 text-xs text-text-secondary">
+        {{ $t('agent.settings.browserRuntime.empty') }}
+      </p>
 
-    <p v-if="targets.length === 0" class="mt-4 rounded bg-background p-3 text-xs text-text-secondary">
-      {{ $t('agent.settings.browserRuntime.empty') }}
-    </p>
-
-    <article v-for="(target, targetIndex) in targets" :key="targetIndex" class="mt-4 rounded border border-border p-4">
-      <div class="flex items-start justify-between gap-3">
-        <label class="min-w-0 flex-1 text-xs text-text-secondary">
-          {{ $t('agent.settings.browserRuntime.targetId') }}
-          <input v-model="target.id" class="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-sm" />
-        </label>
-        <button
-          type="button"
-          class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
-          :disabled="busy"
-          @click="removeTarget(targetIndex)"
-        >
-          {{ $t('agent.settings.browserRuntime.remove') }}
-        </button>
-      </div>
-
-      <label class="mt-3 block text-xs text-text-secondary">
-        {{ $t('agent.settings.browserRuntime.allowedUrls') }}
-        <textarea
-          :value="patternsText(target)"
-          rows="3"
-          class="mt-1 w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
-          @input="updatePatterns(target, ($event.target as HTMLTextAreaElement).value)"
-        />
-      </label>
-
-      <div class="mt-3 flex items-center justify-between gap-3">
-        <div>
-          <h3 class="text-sm font-medium">{{ $t('agent.settings.browserRuntime.endpoints') }}</h3>
-          <p class="text-[11px] text-text-secondary">{{ $t('agent.settings.browserRuntime.endpointHint') }}</p>
-        </div>
-        <button
-          type="button"
-          class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
-          :disabled="busy"
-          @click="addEndpoint(target)"
-        >
-          {{ $t('agent.settings.browserRuntime.addEndpoint') }}
-        </button>
-      </div>
-
-      <div
-        v-for="(endpoint, endpointIndex) in target.endpoints"
-        :key="endpointIndex"
-        class="mt-2 rounded bg-background p-3"
+      <article
+        v-for="(target, targetIndex) in targets"
+        :key="targetIndex"
+        class="mt-4 rounded border border-border p-4"
       >
-        <div class="grid gap-2 md:grid-cols-4">
-          <label class="text-[11px] text-text-secondary">
-            {{ $t('agent.settings.browserRuntime.scope') }}
-            <select v-model="endpoint.scope" class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs">
-              <option value="docker-network">{{ $t('agent.settings.browserRuntime.scopeDocker') }}</option>
-              <option value="external-network">{{ $t('agent.settings.browserRuntime.scopeExternal') }}</option>
-            </select>
-          </label>
-          <label class="text-[11px] text-text-secondary">
-            {{ $t('agent.settings.browserRuntime.via') }}
-            <select v-model="endpoint.via" class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs">
-              <option value="backend">{{ $t('agent.settings.browserRuntime.viaBackend') }}</option>
-              <option value="runner">{{ $t('agent.settings.browserRuntime.viaRunner') }}</option>
-            </select>
-          </label>
-          <label class="text-[11px] text-text-secondary">
-            {{ $t('agent.settings.browserRuntime.priority') }}
+        <div class="flex items-start justify-between gap-3">
+          <label class="min-w-0 flex-1 text-xs text-text-secondary">
+            {{ $t('agent.settings.browserRuntime.targetId') }}
             <input
-              v-model.number="endpoint.priority"
-              type="number"
-              min="0"
-              max="10000"
-              class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
+              v-model="target.id"
+              class="mt-1 w-full rounded border border-border bg-background px-2 py-1 text-sm"
             />
           </label>
-          <div class="flex items-end justify-end">
-            <button
-              type="button"
-              class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
-              :disabled="busy"
-              @click="removeEndpoint(target, endpointIndex)"
-            >
-              {{ $t('agent.settings.browserRuntime.removeEndpoint') }}
-            </button>
-          </div>
+          <button
+            type="button"
+            class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
+            :disabled="busy"
+            @click="removeTarget(targetIndex)"
+          >
+            {{ $t('agent.settings.browserRuntime.remove') }}
+          </button>
         </div>
-        <label class="mt-2 block text-[11px] text-text-secondary">
-          {{ $t('agent.settings.browserRuntime.url') }}
-          <input
-            v-model="endpoint.url"
-            class="mt-1 w-full rounded border border-border bg-card px-2 py-1 font-mono text-xs"
+
+        <label class="mt-3 block text-xs text-text-secondary">
+          {{ $t('agent.settings.browserRuntime.allowedUrls') }}
+          <textarea
+            :value="patternsText(target)"
+            rows="3"
+            class="mt-1 w-full rounded border border-border bg-background px-2 py-1 font-mono text-xs"
+            @input="updatePatterns(target, ($event.target as HTMLTextAreaElement).value)"
           />
         </label>
-        <div class="mt-2 flex flex-wrap gap-4 text-[11px]">
-          <label class="flex items-center gap-2"
-            ><input v-model="endpoint.allowPlaintext" type="checkbox" />{{
-              $t('agent.settings.browserRuntime.allowPlaintext')
-            }}</label
-          >
-          <label class="flex items-center gap-2"
-            ><input v-model="endpoint.verifyTls" type="checkbox" />{{
-              $t('agent.settings.browserRuntime.verifyTls')
-            }}</label
-          >
-        </div>
-      </div>
-    </article>
 
-    <button
-      type="button"
-      class="mt-4 rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
-      :disabled="busy"
-      @click="save"
-    >
-      {{ $t('agent.settings.browserRuntime.save') }}
-    </button>
+        <div class="mt-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 class="text-sm font-medium">{{ $t('agent.settings.browserRuntime.endpoints') }}</h3>
+            <p class="text-[11px] text-text-secondary">{{ $t('agent.settings.browserRuntime.endpointHint') }}</p>
+          </div>
+          <button
+            type="button"
+            class="rounded border border-border px-2 py-1 text-xs disabled:opacity-50"
+            :disabled="busy"
+            @click="addEndpoint(target)"
+          >
+            {{ $t('agent.settings.browserRuntime.addEndpoint') }}
+          </button>
+        </div>
+
+        <div
+          v-for="(endpoint, endpointIndex) in target.endpoints"
+          :key="endpointIndex"
+          class="mt-2 rounded bg-background p-3"
+        >
+          <div class="grid gap-2 md:grid-cols-4">
+            <label class="text-[11px] text-text-secondary">
+              {{ $t('agent.settings.browserRuntime.scope') }}
+              <select
+                v-model="endpoint.scope"
+                class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
+              >
+                <option value="docker-network">{{ $t('agent.settings.browserRuntime.scopeDocker') }}</option>
+                <option value="external-network">{{ $t('agent.settings.browserRuntime.scopeExternal') }}</option>
+              </select>
+            </label>
+            <label class="text-[11px] text-text-secondary">
+              {{ $t('agent.settings.browserRuntime.via') }}
+              <select v-model="endpoint.via" class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs">
+                <option value="backend">{{ $t('agent.settings.browserRuntime.viaBackend') }}</option>
+                <option value="runner">{{ $t('agent.settings.browserRuntime.viaRunner') }}</option>
+              </select>
+            </label>
+            <label class="text-[11px] text-text-secondary">
+              {{ $t('agent.settings.browserRuntime.priority') }}
+              <input
+                v-model.number="endpoint.priority"
+                type="number"
+                min="0"
+                max="10000"
+                class="mt-1 w-full rounded border border-border bg-card px-2 py-1 text-xs"
+              />
+            </label>
+            <div class="flex items-end justify-end">
+              <button
+                type="button"
+                class="rounded border border-error/40 px-2 py-1 text-xs text-error disabled:opacity-50"
+                :disabled="busy"
+                @click="removeEndpoint(target, endpointIndex)"
+              >
+                {{ $t('agent.settings.browserRuntime.removeEndpoint') }}
+              </button>
+            </div>
+          </div>
+          <label class="mt-2 block text-[11px] text-text-secondary">
+            {{ $t('agent.settings.browserRuntime.url') }}
+            <input
+              v-model="endpoint.url"
+              class="mt-1 w-full rounded border border-border bg-card px-2 py-1 font-mono text-xs"
+            />
+          </label>
+          <div class="mt-2 flex flex-wrap gap-4 text-[11px]">
+            <label class="flex items-center gap-2"
+              ><input v-model="endpoint.allowPlaintext" type="checkbox" />{{
+                $t('agent.settings.browserRuntime.allowPlaintext')
+              }}</label
+            >
+            <label class="flex items-center gap-2"
+              ><input v-model="endpoint.verifyTls" type="checkbox" />{{
+                $t('agent.settings.browserRuntime.verifyTls')
+              }}</label
+            >
+          </div>
+        </div>
+      </article>
+
+      <button
+        type="button"
+        class="mt-4 rounded bg-primary px-3 py-1.5 text-xs text-white disabled:opacity-50"
+        :disabled="busy"
+        @click="save"
+      >
+        {{ $t('agent.settings.browserRuntime.save') }}
+      </button>
+    </div>
   </section>
 </template>

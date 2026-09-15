@@ -18,7 +18,28 @@
         "verifiedPublisher": "Pinned Nexus publisher",
         "installAndEnable": "Install Nexus Agent & enable Agent",
         "installing": "Installing...",
-        "cancel": "Cancel"
+        "cancel": "Cancel",
+        "subtitle": "Set up the signed first-party agent runtime and core capabilities",
+        "badge": "Official Core",
+        "featureSkillsTitle": "Dual Core Skills",
+        "featureSkillsDesc": "Includes signed Operations and Developer skills for operations and coding",
+        "featureSandboxTitle": "Sandboxed Execution",
+        "featureSandboxDesc": "Strictly bounded by host policy, approvals, and workspace boundaries",
+        "featureDecoupledTitle": "Decoupled Architecture",
+        "featureDecoupledDesc": "Independently upgradable or removable without mutating core images",
+        "publisherVerified": "Verified Signature",
+        "detailsToggle": "Technical details",
+        "hideDetails": "Hide details",
+        "copyKey": "Copy Key",
+        "keyCopied": "Copied",
+        "fullKeyId": "Full Public Key Fingerprint (Ed25519)",
+        "catalogSource": "Catalog Source URL",
+        "installingTitle": "Deploying and enabling Agent safely...",
+        "installStep1": "Downloading and verifying Ed25519 signature & integrity...",
+        "installStep2": "Registering and loading Operations & Developer skills...",
+        "installStep3": "Initializing sandbox policy and enabling Agent instance...",
+        "sandboxProtected": "Runtime guarded by Host sandbox security policies",
+        "defaultPluginSummary": "Official general-purpose agent engine with verified operations and developer skills running inside secure sandbox boundaries."
       },
       "apps": {
         "title": "Agent apps",
@@ -33,7 +54,31 @@
         "permissionsLoading": "Loading current capabilities...",
         "noCapabilities": "This app does not declare any grantable capabilities.",
         "empty": "No Agent apps are available.",
-        "permissionsCollapsedHint": "Expand to review and edit this app’s capability grants."
+        "permissionsCollapsedHint": "Expand to review and edit this app’s capability grants.",
+        "capabilitiesHeader": "Capabilities & Security Grants",
+        "capabilitiesSubtitle": "Fine-grained capability boundary control governed by host security policies",
+        "selectAll": "Select All",
+        "healthHealthy": "Healthy",
+        "healthDegraded": "Degraded",
+        "healthDisabled": "Disabled",
+        "categoryAi": "AI & Execution",
+        "categoryHost": "Host Machine & Ops",
+        "categoryRuntime": "Sandbox & Integration",
+        "categoryStorage": "Artifacts & Storage",
+        "runsMetric": "Active Runs",
+        "approvalsMetric": "Approvals",
+        "grantsMetric": "Granted Capabilities",
+        "coreOfficial": "Official Core",
+        "configPermissions": "Configure Policies",
+        "uninstall": "Uninstall",
+        "uninstallDisabledHint": "Disable this app before uninstalling",
+        "uninstallConfirmTitle": "Uninstall Agent App",
+        "uninstallConfirmPrompt": "Are you sure you want to uninstall {name} (v{version})? This will remove its package code and drain background tasks.",
+        "uninstallSuccess": "Plugin app uninstalled successfully",
+        "uninstallFailed": "Failed to uninstall app",
+        "deleteDataFailed": "The app was uninstalled, but retained data could not be deleted",
+        "drainingNotice": "App is draining background tasks...",
+        "coreAppCannotUninstall": "Core builtin app cannot be uninstalled"
       },
       "plugins": {
         "title": "Installable apps and skills",
@@ -92,6 +137,8 @@
       "hardLimits": {
         "title": "Hard Limits",
         "description": "Instance policy ceilings. Every change requires preview and explicit confirmation.",
+        "panelTitle": "Instance Hard Limits",
+        "panelHint": "Advanced system constraints with explicit change review",
         "review": "Review changes",
         "unlimited": "Unlimited",
         "effective": "Effective: {value}",
@@ -99,7 +146,117 @@
         "confirmDescription": "Review {count} changes. {runtimes} runtimes are currently executing.",
         "increaseWarning": "Higher resource ceiling",
         "usage": "Artifact used + reserved bytes: {bytes}",
-        "confirm": "Confirm changes"
+        "confirm": "Confirm changes",
+        "presetsTitle": "Safety Presets",
+        "presetsHint": "Select instance-level hard limit presets to balance concurrency safety and system stability.",
+        "presetStandard": "Standard Quota",
+        "presetStandardDesc": "Suitable for everyday development and regular concurrency, preventing resource exhaustion",
+        "presetHigh": "High-Capacity Quota",
+        "presetHighDesc": "Increases concurrency and storage limits for heavy workloads or automated runs",
+        "presetCustom": "Custom Quota",
+        "presetCustomDesc": "Fine-tune each instance-level hard constraint individually",
+        "groups": {
+          "tokens": "Tokens and Budget Limits",
+          "tokensDesc": "Limits context window, single output, and cumulative tokens per run",
+          "timeouts": "Execution and Timeout Protections",
+          "timeoutsDesc": "Limits maximum task duration and individual tool execution timeouts",
+          "storage": "Storage and Data Stream Limits",
+          "storageDesc": "Limits artifact disk usage and tool/recall data payload volumes",
+          "concurrency": "Concurrency and Runtime Quotas",
+          "concurrencyDesc": "Limits concurrent runs, active workspaces, and subagent delegation depth",
+          "extra": "Additional System Limits",
+          "extraDesc": "Other instance-level policy parameters"
+        },
+        "fields": {
+          "maxContextTokens": {
+            "label": "Hard Context Window Limit",
+            "hint": "Absolute ceiling for historical context tokens per request"
+          },
+          "maxOutputTokens": {
+            "label": "Hard Max Output Tokens",
+            "hint": "Maximum tokens allowed in a single model generation"
+          },
+          "maxRunTokens": {
+            "label": "Hard Max Run Tokens",
+            "hint": "Circuit-breaker ceiling for cumulative tokens consumed in a run"
+          },
+          "maxRunSteps": {
+            "label": "Hard Max Run Steps",
+            "hint": "Maximum thinking and tool execution loop steps allowed per run"
+          },
+          "maxRunCostMicros": {
+            "label": "Hard Max Run Cost",
+            "hint": "Maximum cost in micro-USD (1 USD = 1,000,000); leave empty for unlimited"
+          },
+          "maxActiveExecutionSeconds": {
+            "label": "Max Active Execution Time",
+            "hint": "Maximum continuous execution duration before auto-cancellation"
+          },
+          "toolTimeoutSeconds": {
+            "label": "Tool Execution Timeout",
+            "hint": "Maximum seconds allowed for a single tool call (Shell, Web, etc.)"
+          },
+          "workspaceIdleTtlSeconds": {
+            "label": "Workspace Idle Timeout",
+            "hint": "Idle duration before temporary workspace cleanup"
+          },
+          "unretainedArtifactTtlSeconds": {
+            "label": "Unretained Artifact TTL",
+            "hint": "Retention duration for temporary unarchived artifacts"
+          },
+          "maxToolOutputBytes": {
+            "label": "Max Tool Output Size",
+            "hint": "Maximum payload bytes returned by a single tool execution"
+          },
+          "maxRawToolBytes": {
+            "label": "Max Raw Tool Stream Size",
+            "hint": "Cumulative limit on raw input/output tool data transferred"
+          },
+          "maxArtifactBytes": {
+            "label": "Run Artifact Disk Quota",
+            "hint": "Total disk space quota for artifacts within a single run"
+          },
+          "maxSingleArtifactBytes": {
+            "label": "Max Single Artifact Size",
+            "hint": "Maximum file size allowed for an individual artifact"
+          },
+          "maxGlobalArtifactBytes": {
+            "label": "Global Artifact Disk Quota",
+            "hint": "System-wide disk quota for all agent artifacts combined"
+          },
+          "maxRecallItems": {
+            "label": "Max Recall Items",
+            "hint": "Maximum number of history/memory items retrieved per request"
+          },
+          "maxRecallBytes": {
+            "label": "Max Recall Payload Size",
+            "hint": "Maximum byte payload for retrieved memory items"
+          },
+          "maxConcurrentRuntimes": {
+            "label": "Max Concurrent Runtimes",
+            "hint": "Maximum number of Agent runtimes executing concurrently"
+          },
+          "maxConcurrentModelCalls": {
+            "label": "Max Concurrent Model Calls",
+            "hint": "Maximum parallel model API calls allowed by the instance"
+          },
+          "maxDelegationDepth": {
+            "label": "Max Subagent Depth",
+            "hint": "Maximum nested recursion depth for subagent delegation"
+          },
+          "maxSubagentMessagesPerRun": {
+            "label": "Max Subagent Messages",
+            "hint": "Maximum subagent interaction messages allowed per run"
+          },
+          "maxSubagentMessageBytesPerRun": {
+            "label": "Max Subagent Message Bytes",
+            "hint": "Total byte ceiling for subagent message exchanges in a run"
+          },
+          "maxActiveWorkspaces": {
+            "label": "Max Active Workspaces",
+            "hint": "Maximum number of concurrent workspace containers or directories"
+          }
+        }
       },
       "performance": {
         "title": "Execution and performance",
@@ -107,11 +264,59 @@
         "runtimes": "Concurrent runtimes",
         "modelCalls": "Concurrent model calls",
         "auto": "Auto",
-        "limit": "Effective {effective} · Hard Limit {hard}"
+        "limit": "Effective {effective} · Hard Limit {hard}",
+        "runtimesHint": "Maximum number of independent Agent Runtime task containers that can run concurrently",
+        "modelCallsHint": "Maximum concurrent model API requests; Auto lets the system schedule them dynamically"
       },
       "budget": {
         "title": "Budget and context",
-        "description": "Soft Run budgets and context limits. Runs pause for explicit budget increases instead of silently failing."
+        "description": "Soft Run budgets and context limits. Runs pause for explicit budget increases instead of silently failing.",
+        "presetsTitle": "Scenario Presets",
+        "presetsHint": "Select a scenario preset to apply recommended values, or customize parameters freely.",
+        "presetLight": "Fast & Light",
+        "presetLightDesc": "Quick responses and minimal resource usage, great for quick queries and single-step fixes",
+        "presetBalanced": "Balanced",
+        "presetBalancedDesc": "Recommended defaults balancing reasoning depth, multi-step actions, and resources",
+        "presetDeep": "Deep Work",
+        "presetDeepDesc": "High steps and long timeouts, best for complex refactoring and large codebases",
+        "presetCustom": "Custom",
+        "presetCustomDesc": "Manually tune all underlying parameters with complete control",
+        "customBadge": "Customized",
+        "recommendedBadge": "Recommended",
+        "saveSuccess": "Budget & context settings saved successfully",
+        "fields": {
+          "maxContextTokens": "Context Window",
+          "maxContextTokensHint": "Maximum context tokens per request",
+          "maxOutputTokens": "Max Output Tokens",
+          "maxOutputTokensHint": "Maximum tokens generated per model turn",
+          "maxRunTokens": "Total Run Token Budget",
+          "maxRunTokensHint": "Cumulative token budget allowed for the entire run",
+          "maxRunSteps": "Max Execution Steps",
+          "maxRunStepsHint": "Maximum tool actions and reasoning turns per run",
+          "maxRunCostMicros": "Run Cost Limit (USD)",
+          "maxRunCostMicrosHint": "Leave empty for unlimited (enter USD, e.g. 1.5)",
+          "maxActiveExecutionSeconds": "Execution Timeout (sec)",
+          "maxActiveExecutionSecondsHint": "Maximum active wall-clock execution time",
+          "toolTimeoutSeconds": "Tool Timeout (sec)",
+          "toolTimeoutSecondsHint": "Timeout for individual tool executions",
+          "maxToolOutputBytes": "Tool Output Truncation (Bytes)",
+          "maxToolOutputBytesHint": "Maximum output bytes returned to model",
+          "maxRawToolBytes": "Raw Tool Output Limit (Bytes)",
+          "maxRawToolBytesHint": "Maximum raw tool output saved in ledger",
+          "maxRecallItems": "Memory Recall Items",
+          "maxRecallItemsHint": "Maximum relevant memory snippets to recall",
+          "maxRecallBytes": "Memory Recall Bytes",
+          "maxRecallBytesHint": "Maximum total bytes for recalled memories"
+        },
+        "readyNotice": "The current configuration is ready and will apply to the next Run."
+      },
+      "quantity": {
+        "placeholderBytes": "e.g. 10M, 500K",
+        "placeholderTokens": "e.g. 100k, 1M",
+        "placeholderSeconds": "e.g. 30m, 1h",
+        "placeholderNumber": "e.g. 50, 100",
+        "invalidNumber": "Enter a valid number",
+        "invalidQuantity": "Invalid format; use a number with an optional unit"
       },
       "storage": {
         "title": "Artifacts and storage",
@@ -120,7 +325,8 @@
         "reclaimable": "Reclaimable",
         "protected": "Protected",
         "limit": "Current limit",
-        "hardLimitHint": "Requested storage values remain bounded by the corresponding Hard Limits."
+        "hardLimitHint": "Requested storage values remain bounded by the corresponding Hard Limits.",
+        "inputHelp": "Enter a number directly or use unit shortcuts (e.g. 10M, 500K, 2G, 1d)"
       },
       "workspaceRuntime": {
         "title": "Workspace dev environment",
@@ -182,7 +388,20 @@
         "guardrails": "CSRF protection, capability authorization, cross-App isolation, private-network controls, and mutation approval boundaries are mandatory.",
         "connectionIds": "Denied connection IDs",
         "reason": "Change reason",
-        "revision": "Denylist revision {revision}"
+        "revision": "Denylist revision {revision}",
+        "searchConnections": "Search connections (name, host, port, user)...",
+        "blockAll": "Block all",
+        "allowAll": "Allow all",
+        "blockedCount": "Blocked {blocked} / {total} total connections",
+        "blockedBadge": "Blocked",
+        "allowedBadge": "Allowed",
+        "emptyConnections": "No connection targets configured. Please add connections in Connection Management first.",
+        "connectionLoadFailed": "Failed to load the connection list. Please try again.",
+        "savePolicy": "Save safety policy",
+        "reasonPlaceholder": "Enter the reason for updating this safety policy (e.g. Production isolation, Audit compliance)",
+        "emptyConnectionsDetail": "No host or device connections are configured, so Agents cannot reach private machines by default.",
+        "orphanIds": "Deleted connection IDs still present:",
+        "clearOrphanIds": "Clear all invalid IDs"
       },
       "providers": {
         "title": "Model providers",
@@ -219,13 +438,63 @@
         "outputShort": "{value} output",
         "toolCapable": "Tools",
         "modelOnly": "Model only",
-        "discover": "Discover models",
-        "discoveryTitle": "Models reported by provider",
-        "discoveryHint": "Discovery only trusts model identifiers. Confirm context, output, and tool capability before adding a model.",
+        "discover": "Update models",
+        "discoveryTitle": "Models updated from provider",
+        "discoveryHint": "Update only trusts model identifiers. Confirm context, output, and tool capability before adding a model.",
         "discoveryCount": "{count} available",
-        "discoveryChoose": "Choose a discovered model",
+        "discoveryChoose": "Choose a model to add",
         "discoveryAdd": "Add model",
-        "discoveryEmpty": "No unconfigured models were reported."
+        "discoveryEmpty": "No new unconfigured models reported.",
+        "modalTitle": "Add Model Provider",
+        "modalDescription": "Configure an OpenAI-compatible model API. You can test connectivity before saving.",
+        "quickPresets": "Quick Presets",
+        "testConnection": "Test Connection",
+        "testingConnection": "Sending heartbeat ping to endpoint...",
+        "testPassed": "Connection test passed",
+        "testFailedMessage": "Connection test failed",
+        "saveAndAdd": "Save & Add",
+        "deleteConfirm": "Delete Provider",
+        "copyUrlSuccess": "Endpoint URL copied",
+        "toggleModels": "Models",
+        "setDefault": "Set Default",
+        "initialModel": "Initial Model",
+        "apiKeyPlaceholder": "sk-... (API Key or Token)",
+        "deleteProviderConfirmPrompt": "Are you sure you want to delete provider {name}? This cannot be undone.",
+        "addCustomModel": "Add model",
+        "customModelTitle": "Add new model to provider",
+        "addAllModels": "Add all models",
+        "addSelected": "Add selected ({count})",
+        "removeModel": "Remove",
+        "removeSelected": "Remove selected ({count})",
+        "selectAll": "Select all",
+        "deselectAll": "Deselect all",
+        "atLeastOneModel": "At least one model must be retained",
+        "cannotRemoveDefault": "Default model cannot be removed directly; switch default model first",
+        "configuredModels": "Configured models",
+        "discoveredModels": "Available models",
+        "allModelsConfigured": "All supported models have been added",
+        "manualAddPrompt": "Add custom model ID manually",
+        "filterPlaceholder": "Filter models...",
+        "drawerTitle": "Model catalog sync & management",
+        "discoveringModels": "Querying supported models from provider...",
+        "testModalTitle": "Configured models & test",
+        "testModalBtn": "Models & test ({count})",
+        "testModalDesc": "Select configured models to test connectivity, manage models, or change default model.",
+        "searchConfiguredModels": "Filter configured models...",
+        "testSingle": "Test connection",
+        "autoSaved": "Changes saved automatically",
+        "saving": "Saving to server...",
+        "saveAndClose": "Save & close",
+        "saveNoticeAdded": "Successfully added {count} models and saved",
+        "saveNoticeRemoved": "Successfully removed model and saved",
+        "saveNoticeDefault": "Default model updated and saved",
+        "autoSaveHint": "All model changes are saved automatically and take effect on the next run.",
+        "removeAllModels": "Remove all",
+        "saveNoticeRemovedAll": "Successfully removed {count} models and saved",
+        "emptyHint": "Use Add Provider to connect OpenAI, DeepSeek, Moonshot, or a local Ollama service.",
+        "namePlaceholder": "e.g. OpenAI Official",
+        "baseUrlPlaceholder": "https://api.openai.com/v1",
+        "modelPlaceholder": "gpt-4o"
       },
       "guardrails": {
         "title": "System guardrails",
@@ -261,7 +530,9 @@
         "capabilities": "Capability ceiling",
         "removeProfile": "Remove profile",
         "noProfiles": "No Subagent profiles are configured for this App.",
-        "saveProfiles": "Save profiles"
+        "saveProfiles": "Save profiles",
+        "messageBytesPlaceholder": "e.g. 2M, 5M",
+        "maxTokensPlaceholder": "e.g. 50k, 100k"
       },
       "browserRuntime": {
         "title": "Browser Runtime",
@@ -319,12 +590,14 @@
       "disabled": "Disabled",
       "groups": {
         "overview": "Overview",
-        "models": "Models and budget",
+        "models": "Models & Budget",
         "execution": "Execution and agents",
         "environments": "Runtime environments",
         "storage": "Files and storage",
         "extensions": "Apps and extensions",
-        "safety": "Safety and system"
+        "safety": "Safety and system",
+        "runtime": "Runtime & Environments",
+        "plugins": "Plugins & Security"
       },
       "groupDescriptions": {
         "overview": "Feature state, installed Agent apps, app activity, and capability grants.",
@@ -342,7 +615,12 @@
         "providers": "{count} enabled providers",
         "runtime": "Workspace runtime",
         "storage": "Artifact storage",
-        "storageLimit": "Limit {value}"
+        "storageLimit": "Limit {value}",
+        "defaultModel": "Default model",
+        "activeApps": "Active apps",
+        "sandbox": "Sandbox",
+        "ready": "Ready",
+        "notReady": "Not ready"
       }
     },
     "launcher": {
@@ -370,7 +648,8 @@
       "runningRuns": "Running runs",
       "pendingApprovals": "Pending approvals",
       "pendingBudget": "Pending budget requests",
-      "idle": "idle"
+      "idle": "idle",
+      "closeApp": "Close {app}"
     },
     "pluginFrontend": {
       "frameTitle": "Agent plugin UI",
@@ -382,8 +661,8 @@
       "threads": "Conversations",
       "newThread": "New",
       "loading": "Loading conversation...",
-      "targets": "SSH targets",
-      "targetsHint": "Choose targets before starting a new Run. The server still enforces Agent grants and the denylist.",
+      "targets": "SSH Hosts",
+      "targetsHint": "Select target hosts",
       "noTargets": "No SSH connections are available.",
       "reconciliationRequired": "This Run requires reconciliation before another mutation can be sent.",
       "untitledThread": "Untitled thread",
@@ -392,8 +671,8 @@
       "threadTitle": "Conversation title",
       "threadTitlePlaceholder": "Name this conversation",
       "createThread": "Create",
-      "runModel": "Run model",
-      "runModelHint": "Choose the model for the next Run.",
+      "runModel": "Model",
+      "runModelHint": "Switch model",
       "runModelLocked": "The model is frozen while the current Run is active.",
       "threadCounts": "{total} conversations · {active} active",
       "searchThreads": "Search conversations",
@@ -409,12 +688,12 @@
       "activeRun": "Active Run",
       "model": "Model",
       "environment": "Environment",
-      "environmentHint": "Choose the Workspace Runtime environment for the next Run. Active Run environment state is immutable.",
+      "environmentHint": "Select environment",
       "environmentDefaults": "Runtime defaults",
       "environmentDefaultsHint": "The selection is validated against the current Runner catalog and Agent settings when the Run is created, then frozen into its Run definition.",
       "environmentSelect": "Next Run environment",
-      "environmentNone": "No Workspace",
-      "environmentNoneHint": "Run without a Workspace environment. Workspace creation is unavailable for this Run.",
+      "environmentNone": "Native Host",
+      "environmentNoneHint": "Run directly on host system",
       "environmentUnknown": "Runtime status unknown",
       "environmentUnavailable": "Runner unavailable",
       "environmentRunnerReady": "Runner ready",
@@ -513,7 +792,12 @@
         "goalNotAccepted": "The current Run can no longer accept goal updates.",
         "stateChanged": "The Run changed while the command was being applied. Its latest state has been refreshed; retry the command.",
         "genericFailure": "The command could not be applied."
-      }
+      },
+      "bentoExplainTitle": "Environment Insights",
+      "bentoExplainDesc": "Inspect runtime containers, configurations, and workspace context",
+      "bentoDiagnoseTitle": "Safe Read-Only Diagnostics",
+      "bentoDiagnoseDesc": "Probe available connections and tool health without modifying state",
+      "heroTag": "Agent Workspace"
     },
     "attachments": {
       "button": "Files ({count})",
@@ -590,7 +874,10 @@
         "reconciliation": "Reconciliation is required before the next mutation.",
         "approval": "This run is waiting for your approval.",
         "budget": "This run is paused until its budget is increased."
-      }
+      },
+      "totalTokens": "Total tokens",
+      "advancedDetails": "Advanced Details & Checkpoints",
+      "backToTasks": "Back to Tasks"
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",
@@ -722,7 +1009,16 @@
       "promptDiagnose": "Check available connections, read only, without changes",
       "advanced": "Advanced settings",
       "optionalRuntime": "Optional runtime",
-      "approvalHistory": "Approval history"
+      "approvalHistory": "Approval history",
+      "reasoningDescriptions": {
+        "none": "Standard response without extended thinking",
+        "minimal": "Minimal thinking for ultra-fast answers",
+        "low": "Faster responses, light reasoning",
+        "medium": "Balances speed and reasoning depth",
+        "high": "Thorough reasoning for complex problems",
+        "xhigh": "Extended reasoning for high complexity",
+        "max": "Maximum reasoning depth"
+      }
     }
   }
 }

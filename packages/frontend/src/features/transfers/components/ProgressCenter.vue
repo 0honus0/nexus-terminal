@@ -526,9 +526,7 @@
     padding: 2px 7px;
     background: color-mix(in srgb, var(--link-active-color, #007bff) 17%, transparent);
     color: var(--link-active-color, #007bff);
-    font:
-      600 11px ui-monospace,
-      monospace;
+    font: 600 11px var(--font-family-monospace);
   }
   .archive-progress-body {
     display: grid;

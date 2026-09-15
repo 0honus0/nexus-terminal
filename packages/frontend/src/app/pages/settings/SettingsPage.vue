@@ -53,29 +53,31 @@
         </select>
       </label>
 
-      <div
-        class="mb-5 grid grid-cols-2 gap-1 rounded-xl border border-border/60 bg-card/30 p-1.5 sm:flex sm:flex-wrap sm:border-0 sm:bg-background sm:p-0 sm:py-2"
-        :class="{ 'agent-settings-tabs': active === 'agent' }"
-        role="tablist"
-        :aria-label="t('settings.sectionsAriaLabel')"
-      >
-        <button
-          v-for="tab in tabs"
-          :key="tab.value"
-          type="button"
-          role="tab"
-          :aria-selected="active === tab.value"
-          :aria-controls="`settings-panel-${tab.value}`"
-          class="min-w-0 rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors duration-150 ease-in-out focus:outline-none sm:shrink-0 sm:px-4"
-          :class="
-            active === tab.value
-              ? 'bg-primary text-white'
-              : 'text-text-secondary hover:bg-header/50 hover:text-foreground'
-          "
-          @click="active = tab.value"
+      <div class="mb-6 flex justify-center">
+        <div
+          class="flex flex-wrap items-center justify-center gap-1 rounded-2xl border border-border/70 bg-card/40 p-1.5 shadow-xs"
+          :class="{ 'agent-settings-tabs': active === 'agent' }"
+          role="tablist"
+          :aria-label="t('settings.sectionsAriaLabel')"
         >
-          {{ tab.label }}
-        </button>
+          <button
+            v-for="tab in tabs"
+            :key="tab.value"
+            type="button"
+            role="tab"
+            :aria-selected="active === tab.value"
+            :aria-controls="`settings-panel-${tab.value}`"
+            class="min-w-0 rounded-lg px-3 py-2 text-center text-sm font-medium transition-colors duration-150 ease-in-out focus:outline-none sm:shrink-0 sm:px-4"
+            :class="
+              active === tab.value
+                ? 'bg-primary text-white'
+                : 'text-text-secondary hover:bg-header/50 hover:text-foreground'
+            "
+            @click="active = tab.value"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
       </div>
 
       <div class="space-y-6">
