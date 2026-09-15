@@ -2,23 +2,244 @@
   import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   // Register before the first editor.create() snapshots Monaco's standalone service collection.
   import 'monaco-editor/platform/actionWidget/browser/actionWidget';
+  import 'monaco-editor/editor/contrib/comment/browser/comment';
   import * as monaco from 'monaco-editor/editor/editor.api';
   import EditorWorker from 'monaco-editor/editor/editor.worker?worker';
   import JsonWorker from 'monaco-editor/language/json/json.worker?worker';
   import 'monaco-editor/basic-languages/monaco.contribution';
   import 'monaco-editor/language/json/monaco.contribution';
   import { createWheelScaleResolver } from '@/foundation/interaction';
+  // Monaco keeps these services internal; its own comment action reads the same configuration service.
+  // @ts-ignore internal Monaco ESM module
+  import { StandaloneServices } from 'monaco-editor/editor/standalone/browser/standaloneServices';
+  // @ts-ignore internal Monaco ESM module
+  import { ILanguageConfigurationService } from 'monaco-editor/editor/common/languages/languageConfigurationRegistry';
+
+  interface ResolvedComments {
+    lineCommentToken?: string;
+  }
+
+  interface LanguageConfigurationService {
+    getLanguageConfiguration(languageId: string): { comments: ResolvedComments | null };
+  }
+
+  interface ContextualTextModel extends monaco.editor.ITextModel {
+    getLanguageIdAtPosition(lineNumber: number, column: number): string;
+    tokenization?: { tokenizeIfCheap(lineNumber: number): void };
+  }
+
+  interface SelectedLine {
+    lineNumber: number;
+    indent: number;
+    token: string;
+    text: string;
+    commented: boolean;
+  }
+
+  interface OffsetEdit {
+    start: number;
+    end: number;
+    text: string;
+  }
+
+  const registerLanguageAlias = (
+    id: string,
+    extensions: readonly string[],
+    filenames: readonly string[] = [],
+  ): void => {
+    const current = monaco.languages.getLanguages().find((language) => language.id === id);
+    const missingExtension = extensions.some((extension) => !current?.extensions?.includes(extension));
+    const missingFilename = filenames.some((filename) => !current?.filenames?.includes(filename));
+    if (missingExtension || missingFilename)
+      monaco.languages.register({ id, extensions: [...extensions], filenames: [...filenames] });
+  };
+
+  const ensureFallbackLanguage = (
+    id: string,
+    extensions: readonly string[],
+    comments: monaco.languages.CommentRule,
+    filenames: readonly string[] = [],
+  ): void => {
+    if (!monaco.languages.getLanguages().some((language) => language.id === id)) {
+      monaco.languages.register({ id, extensions: [...extensions], filenames: [...filenames] });
+    } else {
+      registerLanguageAlias(id, extensions, filenames);
+    }
+    monaco.languages.setLanguageConfiguration(id, { comments });
+  };
+
+  const registryState = globalThis as typeof globalThis & { __nexusFileEditorMonacoLanguages?: boolean };
+  if (!registryState.__nexusFileEditorMonacoLanguages) {
+    registryState.__nexusFileEditorMonacoLanguages = true;
+    registerLanguageAlias('html', ['.vue', '.svelte']);
+    monaco.languages.register({ id: 'jsonc', extensions: ['.jsonc'], aliases: ['JSON with Comments', 'jsonc'] });
+    monaco.languages.setMonarchTokensProvider('jsonc', {
+      tokenPostfix: '.json',
+      brackets: [
+        { open: '{', close: '}', token: 'delimiter.bracket' },
+        { open: '[', close: ']', token: 'delimiter.array' },
+      ],
+      tokenizer: {
+        root: [
+          [/\/\/.*$/, 'comment'],
+          [/\/\*/, 'comment', '@comment'],
+          [/[{}\[\]]/, '@brackets'],
+          [/[,:]/, 'delimiter'],
+          [/"(?:[^"\\]|\\.)*"(?=\s*:)/, 'string.key'],
+          [/"(?:[^"\\]|\\.)*"/, 'string.value'],
+          [/-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/, 'number'],
+          [/\b(?:true|false|null)\b/, 'keyword'],
+          [/\s+/, 'white'],
+        ],
+        comment: [
+          [/[^/*]+/, 'comment'],
+          [/\*\//, 'comment', '@pop'],
+          [/[/*]/, 'comment'],
+        ],
+      },
+    });
+    monaco.languages.setLanguageConfiguration('jsonc', {
+      comments: { lineComment: '//', blockComment: ['/*', '*/'] },
+      brackets: [
+        ['{', '}'],
+        ['[', ']'],
+      ],
+      autoClosingPairs: [
+        { open: '{', close: '}', notIn: ['string'] },
+        { open: '[', close: ']', notIn: ['string'] },
+        { open: '"', close: '"', notIn: ['string'] },
+      ],
+    });
+    registerLanguageAlias('ini', ['.properties']);
+    ensureFallbackLanguage('toml', ['.toml'], { lineComment: '#' });
+    ensureFallbackLanguage('haskell', ['.hs', '.lhs'], { lineComment: '--', blockComment: ['{-', '-}'] });
+    ensureFallbackLanguage('makefile', ['.mk', '.make'], { lineComment: '#' }, ['Makefile', 'GNUmakefile']);
+    monaco.languages.setLanguageConfiguration('dockerfile', { comments: { lineComment: '#' } });
+  }
+
+  const modelUriForPath = (path: string): monaco.Uri => {
+    const normalized = path.replace(/\\/g, '/');
+    const uriPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
+    return monaco.Uri.from({ scheme: 'file', path: uriPath, query: crypto.randomUUID() });
+  };
+
+  const firstNonWhitespace = (text: string): number => /\S/.exec(text)?.index ?? -1;
+
+  const selectedCommentLines = (
+    activeEditor: monaco.editor.IStandaloneCodeEditor,
+    activeModel: ContextualTextModel,
+  ): SelectedLine[] | null => {
+    const service = StandaloneServices.get(ILanguageConfigurationService) as LanguageConfigurationService;
+    const selected = new Map<number, SelectedLine>();
+    for (const selection of activeEditor.getSelections() ?? []) {
+      let endLine = selection.endLineNumber;
+      if (selection.startLineNumber < endLine && selection.endColumn === 1) endLine -= 1;
+      for (let lineNumber = selection.startLineNumber; lineNumber <= endLine; lineNumber += 1) {
+        if (selected.has(lineNumber)) continue;
+        const text = activeModel.getLineContent(lineNumber);
+        const indent = firstNonWhitespace(text);
+        if (indent < 0) continue;
+        activeModel.tokenization?.tokenizeIfCheap(lineNumber);
+        const languageId = activeModel.getLanguageIdAtPosition(lineNumber, indent + 1);
+        const token = service.getLanguageConfiguration(languageId).comments?.lineCommentToken;
+        if (!token) return null;
+        selected.set(lineNumber, {
+          lineNumber,
+          indent,
+          token,
+          text,
+          commented: text.startsWith(token, indent),
+        });
+      }
+    }
+    return [...selected.values()];
+  };
+
+  const mapOffset = (offset: number, edits: readonly OffsetEdit[]): number => {
+    let delta = 0;
+    for (const edit of edits) {
+      if (offset < edit.start) break;
+      const removed = edit.end - edit.start;
+      const inserted = edit.text.length;
+      if (removed === 0 && offset === edit.start) {
+        delta += inserted;
+        continue;
+      }
+      if (offset <= edit.end) return edit.start + delta + inserted;
+      delta += inserted - removed;
+    }
+    return offset + delta;
+  };
+
+  const toggleEditorComment = async (activeEditor: monaco.editor.IStandaloneCodeEditor): Promise<boolean> => {
+    const activeModel = activeEditor.getModel() as ContextualTextModel | null;
+    if (!activeModel || activeEditor.getOption(monaco.editor.EditorOption.readOnly)) return false;
+    const lines = selectedCommentLines(activeEditor, activeModel);
+    if (lines === null) {
+      const action = activeEditor.getAction('editor.action.commentLine');
+      if (!action) return false;
+      await action.run();
+      return true;
+    }
+    if (lines.length === 0) return false;
+
+    const remove = lines.every((line) => line.commented);
+    const edits: monaco.editor.IIdentifiedSingleEditOperation[] = [];
+    const offsetEdits: OffsetEdit[] = [];
+    for (const line of lines) {
+      if (remove) {
+        let length = line.token.length;
+        if (line.text[line.indent + line.token.length] === ' ') length += 1;
+        const startColumn = line.indent + 1;
+        const range = new monaco.Range(line.lineNumber, startColumn, line.lineNumber, startColumn + length);
+        edits.push({ range, text: '' });
+        offsetEdits.push({
+          start: activeModel.getOffsetAt(range.getStartPosition()),
+          end: activeModel.getOffsetAt(range.getEndPosition()),
+          text: '',
+        });
+      } else if (!line.commented) {
+        const column = line.indent + 1;
+        const range = new monaco.Range(line.lineNumber, column, line.lineNumber, column);
+        const text = `${line.token} `;
+        edits.push({ range, text });
+        const offset = activeModel.getOffsetAt(range.getStartPosition());
+        offsetEdits.push({ start: offset, end: offset, text });
+      }
+    }
+    if (edits.length === 0) return false;
+
+    offsetEdits.sort((left, right) => left.start - right.start || left.end - right.end);
+    const offsets = (activeEditor.getSelections() ?? []).map((selection) => ({
+      anchor: activeModel.getOffsetAt({
+        lineNumber: selection.selectionStartLineNumber,
+        column: selection.selectionStartColumn,
+      }),
+      active: activeModel.getOffsetAt({ lineNumber: selection.positionLineNumber, column: selection.positionColumn }),
+    }));
+    activeEditor.pushUndoStop();
+    activeEditor.executeEdits('nexus-toggle-comment', edits, () =>
+      offsets.map(({ anchor, active }) =>
+        monaco.Selection.fromPositions(
+          activeModel.getPositionAt(mapOffset(anchor, offsetEdits)),
+          activeModel.getPositionAt(mapOffset(active, offsetEdits)),
+        ),
+      ),
+    );
+    activeEditor.pushUndoStop();
+    return true;
+  };
   const props = withDefaults(
     defineProps<{
       modelValue: string;
-      language?: string;
+      path: string;
       fontSize?: number;
       fontFamily?: string;
       readOnly?: boolean;
       initialScrollTop?: number;
       initialScrollLeft?: number;
     }>(),
-    { language: 'plaintext', fontSize: 14, readOnly: false },
+    { fontSize: 14, readOnly: false },
   );
   const emit = defineEmits<{
     'update:modelValue': [value: string];
@@ -28,6 +249,7 @@
   }>();
   const root = ref<HTMLElement | null>(null);
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
+  let model: monaco.editor.ITextModel | undefined;
   const focusEditor = (): void => editor?.focus();
   let wheelHandler: ((event: WheelEvent) => void) | undefined;
   let resizeObserver: ResizeObserver | undefined;
@@ -49,9 +271,9 @@
     getWorker: (_workerId: string, label: string) => (label === 'json' ? new JsonWorker() : new EditorWorker()),
   };
   onMounted(() => {
+    model = monaco.editor.createModel(props.modelValue, undefined, modelUriForPath(props.path));
     editor = monaco.editor.create(root.value!, {
-      value: props.modelValue,
-      language: props.language,
+      model,
       automaticLayout: false,
       fontSize: appliedFontSize,
       fontFamily: props.fontFamily,
@@ -73,6 +295,15 @@
       label: 'Save File',
       keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
       run: () => emit('requestSave'),
+    });
+    editor.addAction({
+      id: 'nexus-toggle-comment',
+      label: 'Toggle Comment',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Slash],
+      precondition: '!editorReadonly',
+      run: async () => {
+        if (editor) await toggleEditorComment(editor);
+      },
     });
     const domNode = editor.getDomNode();
     if (domNode) {
@@ -101,13 +332,6 @@
     },
   );
   watch(
-    () => props.language,
-    (value) => {
-      const model = editor?.getModel();
-      if (model) monaco.editor.setModelLanguage(model, value);
-    },
-  );
-  watch(
     () => props.fontSize,
     (fontSize) => {
       if (Object.is(fontSize, appliedFontSize)) return;
@@ -129,8 +353,13 @@
     if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
     layoutFrame = undefined;
     editor?.dispose();
+    model?.dispose();
+    model = undefined;
   });
-  defineExpose({ focus: focusEditor });
+  defineExpose({
+    focus: focusEditor,
+    toggleComment: () => (editor ? toggleEditorComment(editor) : Promise.resolve(false)),
+  });
 </script>
 
 <template>

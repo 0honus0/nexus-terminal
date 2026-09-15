@@ -3,56 +3,6 @@ import type { FileDocumentPort } from '../ports/file-document-port';
 import type { EditorDocument, EditorLineEnding } from '../model/editor';
 import { canonicalEditorEncoding, decodeEditorRawContent, encodeEditorContent } from '../model/editorEncoding';
 
-const languageFor = (path: string) => {
-  const name = path.split('/').pop()?.toLowerCase() ?? '';
-  if (name === 'dockerfile') return 'dockerfile';
-  const ext = name.split('.').pop() ?? '';
-  return (
-    (
-      {
-        js: 'javascript',
-        mjs: 'javascript',
-        cjs: 'javascript',
-        jsx: 'javascript',
-        ts: 'typescript',
-        tsx: 'typescript',
-        json: 'json',
-        css: 'css',
-        scss: 'scss',
-        less: 'less',
-        html: 'html',
-        htm: 'html',
-        md: 'markdown',
-        markdown: 'markdown',
-        py: 'python',
-        java: 'java',
-        c: 'c',
-        h: 'c',
-        cpp: 'cpp',
-        cc: 'cpp',
-        cxx: 'cpp',
-        hpp: 'cpp',
-        cs: 'csharp',
-        go: 'go',
-        php: 'php',
-        rb: 'ruby',
-        rs: 'rust',
-        sql: 'sql',
-        sh: 'shell',
-        bash: 'shell',
-        zsh: 'shell',
-        yaml: 'yaml',
-        yml: 'yaml',
-        xml: 'xml',
-        ini: 'ini',
-        conf: 'ini',
-        bat: 'bat',
-        cmd: 'bat',
-      } as Record<string, string>
-    )[ext] ?? 'plaintext'
-  );
-};
-
 export interface FileEditorOpenContext {
   scopeId?: string;
   scopeLabel?: string;
@@ -127,7 +77,6 @@ export function createFileEditorSession(defaultPort?: FileDocumentPort): FileEdi
         originalContent: loaded.content,
         rawContent: loaded.rawContent,
         encoding: canonicalEditorEncoding(loaded.encoding),
-        language: languageFor(path),
         dirty: false,
         saveState: 'idle',
         scrollTop: 0,

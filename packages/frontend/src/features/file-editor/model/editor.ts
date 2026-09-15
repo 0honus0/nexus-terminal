@@ -10,7 +10,6 @@ export interface EditorDocument {
   originalContent: string;
   rawContent: Uint8Array;
   encoding: string;
-  language: string;
   dirty: boolean;
   saveState: EditorSaveState;
   scrollTop: number;

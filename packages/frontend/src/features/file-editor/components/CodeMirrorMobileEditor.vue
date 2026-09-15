@@ -1,25 +1,143 @@
 <script setup lang="ts">
   import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
-  import { Compartment, EditorState, type Extension } from '@codemirror/state';
+  import { Compartment, EditorState, type ChangeSpec, type Extension } from '@codemirror/state';
   import { EditorView, drawSelection, dropCursor, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
-  import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+  import { defaultKeymap, history, historyKeymap, toggleComment } from '@codemirror/commands';
   import {
     bracketMatching,
     defaultHighlightStyle,
     foldGutter,
     foldKeymap,
     indentOnInput,
-    StreamLanguage,
     syntaxHighlighting,
+    LanguageDescription,
   } from '@codemirror/language';
   import { autocompletion, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
   import { highlightSelectionMatches, openSearchPanel, search, searchKeymap } from '@codemirror/search';
   import { vscodeDark } from '@uiw/codemirror-theme-vscode';
+  import { languages } from '@codemirror/language-data';
+
+  interface CommentTokens {
+    line?: string;
+    block?: { open: string; close: string };
+  }
+
+  interface SelectedLine {
+    from: number;
+    text: string;
+    indent: number;
+    token: string;
+    commented: boolean;
+  }
+
+  const commentMetadataFallbacks: Readonly<Record<string, CommentTokens>> = {
+    JSON: { line: '//', block: { open: '/*', close: '*/' } },
+    JSONC: { line: '//', block: { open: '/*', close: '*/' } },
+    Vue: { block: { open: '<!--', close: '-->' } },
+    'Properties files': { line: '#' },
+    ProtoBuf: { line: '//', block: { open: '/*', close: '*/' } },
+  };
+
+  const languageDescriptions = [
+    LanguageDescription.of({
+      name: 'JSONC',
+      alias: ['jsonc'],
+      extensions: ['jsonc'],
+      load: async () => {
+        const { json } = await import('@codemirror/lang-json');
+        return json();
+      },
+    }),
+    LanguageDescription.of({
+      name: 'Svelte',
+      alias: ['svelte'],
+      extensions: ['svelte'],
+      load: async () => {
+        const { html } = await import('@codemirror/lang-html');
+        return html();
+      },
+    }),
+    ...languages,
+  ];
+
+  const filenameFor = (path: string): string => path.split(/[\\/]/).pop() || path;
+
+  const loadLanguageExtension = async (path: string): Promise<Extension> => {
+    const description = LanguageDescription.matchFilename(languageDescriptions, filenameFor(path));
+    if (!description) return [];
+    const support =
+      description.name === 'Markdown'
+        ? await import('@codemirror/lang-markdown').then(({ markdown }) =>
+            markdown({ codeLanguages: languageDescriptions }),
+          )
+        : await description.load();
+    const commentTokens = commentMetadataFallbacks[description.name];
+    const fallback = commentTokens ? EditorState.languageData.of(() => [{ commentTokens }]) : [];
+    return [support, fallback];
+  };
+
+  const commentTokensAt = (state: EditorState, position: number): CommentTokens =>
+    (state.languageDataAt('commentTokens', position, 1)[0] as CommentTokens | undefined) ?? {};
+
+  const selectedCommentLines = (state: EditorState): SelectedLine[] | null => {
+    const selected = new Map<number, SelectedLine>();
+    for (const range of state.selection.ranges) {
+      let end = range.to;
+      if (end > range.from && state.doc.lineAt(end).from === end) end -= 1;
+      const first = state.doc.lineAt(range.from);
+      const last = state.doc.lineAt(end);
+      for (let number = first.number; number <= last.number; number += 1) {
+        const line = state.doc.line(number);
+        if (selected.has(line.from)) continue;
+        const indent = /^\s*/.exec(line.text)?.[0].length ?? 0;
+        if (indent >= line.text.length) continue;
+        const token = commentTokensAt(state, line.from + indent).line;
+        if (!token) return null;
+        selected.set(line.from, {
+          from: line.from,
+          text: line.text,
+          indent,
+          token,
+          commented: line.text.startsWith(token, indent),
+        });
+      }
+    }
+    return [...selected.values()];
+  };
+
+  type CommentTarget = Pick<EditorView, 'state' | 'dispatch'>;
+
+  const toggleEditorComment = (target: CommentTarget): boolean => {
+    if (target.state.readOnly) return false;
+    const lines = selectedCommentLines(target.state);
+    if (lines === null) return toggleComment(target);
+    if (lines.length === 0) return false;
+
+    const remove = lines.every((line) => line.commented);
+    const changes: ChangeSpec[] = [];
+    for (const line of lines) {
+      if (remove) {
+        let to = line.from + line.indent + line.token.length;
+        if (line.text[line.indent + line.token.length] === ' ') to += 1;
+        changes.push({ from: line.from + line.indent, to });
+      } else if (!line.commented) {
+        changes.push({ from: line.from + line.indent, insert: `${line.token} ` });
+      }
+    }
+    if (changes.length === 0) return false;
+    const changeSet = target.state.changes(changes);
+    target.dispatch({
+      changes: changeSet,
+      selection: target.state.selection.map(changeSet, 1),
+      userEvent: 'input',
+    });
+    return true;
+  };
 
   const props = withDefaults(
     defineProps<{
       modelValue: string;
-      language?: string;
+      path: string;
       fontSize?: number;
       fontFamily?: string;
       readOnly?: boolean;
@@ -27,7 +145,6 @@
       scrollLeft?: number;
     }>(),
     {
-      language: 'plaintext',
       fontSize: 16,
       readOnly: false,
     },
@@ -59,110 +176,6 @@
       },
       '.cm-scroller': { overflow: 'auto' },
     });
-
-  const languageExtension = async (language: string): Promise<Extension> => {
-    switch (language) {
-      case 'javascript': {
-        const { javascript } = await import('@codemirror/lang-javascript');
-        return javascript();
-      }
-      case 'typescript': {
-        const { javascript } = await import('@codemirror/lang-javascript');
-        return javascript({ typescript: true, jsx: true });
-      }
-      case 'json': {
-        const { json } = await import('@codemirror/lang-json');
-        return json();
-      }
-      case 'css': {
-        const { css } = await import('@codemirror/lang-css');
-        return css();
-      }
-      case 'scss': {
-        const { sCSS } = await import('@codemirror/legacy-modes/mode/css');
-        return StreamLanguage.define(sCSS);
-      }
-      case 'less': {
-        const { less } = await import('@codemirror/legacy-modes/mode/css');
-        return StreamLanguage.define(less);
-      }
-      case 'html': {
-        const { html } = await import('@codemirror/lang-html');
-        return html();
-      }
-      case 'markdown': {
-        const { markdown } = await import('@codemirror/lang-markdown');
-        return markdown();
-      }
-      case 'python': {
-        const { python } = await import('@codemirror/lang-python');
-        return python();
-      }
-      case 'java': {
-        const { java } = await import('@codemirror/lang-java');
-        return java();
-      }
-      case 'c':
-      case 'cpp': {
-        const { cpp } = await import('@codemirror/lang-cpp');
-        return cpp();
-      }
-      case 'csharp': {
-        const { csharp } = await import('@codemirror/legacy-modes/mode/clike');
-        return StreamLanguage.define(csharp);
-      }
-      case 'go': {
-        const { go } = await import('@codemirror/lang-go');
-        return go();
-      }
-      case 'php': {
-        const { php } = await import('@codemirror/lang-php');
-        return php();
-      }
-      case 'ruby': {
-        const { ruby } = await import('@codemirror/legacy-modes/mode/ruby');
-        return StreamLanguage.define(ruby);
-      }
-      case 'rust': {
-        const { rust } = await import('@codemirror/lang-rust');
-        return rust();
-      }
-      case 'sql': {
-        const { sql } = await import('@codemirror/lang-sql');
-        return sql();
-      }
-      case 'shell':
-      case 'bat': {
-        const { shell } = await import('@codemirror/legacy-modes/mode/shell');
-        return StreamLanguage.define(shell);
-      }
-      case 'yaml': {
-        const { yaml } = await import('@codemirror/lang-yaml');
-        return yaml();
-      }
-      case 'xml': {
-        const { xml } = await import('@codemirror/lang-xml');
-        return xml();
-      }
-      case 'ini': {
-        const { properties } = await import('@codemirror/legacy-modes/mode/properties');
-        return StreamLanguage.define(properties);
-      }
-      case 'dockerfile': {
-        const { dockerFile } = await import('@codemirror/legacy-modes/mode/dockerfile');
-        return StreamLanguage.define(dockerFile);
-      }
-      default:
-        return [];
-    }
-  };
-  const loadLanguageExtension = async (language: string): Promise<Extension> => {
-    try {
-      return await languageExtension(language);
-    } catch {
-      return [];
-    }
-  };
 
   const handleScroll = () => {
     if (!view || syncingScroll) return;
@@ -197,8 +210,8 @@
 
   onMounted(async () => {
     mounted = true;
-    const initialLanguageName = props.language;
-    const initialLanguage = await loadLanguageExtension(initialLanguageName);
+    const initialPath = props.path;
+    const initialLanguage = await loadLanguageExtension(initialPath);
     if (!mounted || !root.value) return;
     view = new EditorView({
       state: EditorState.create({
@@ -224,6 +237,7 @@
           syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
           keymap.of([
             ...closeBracketsKeymap,
+            { key: 'Mod-/', run: toggleEditorComment },
             ...defaultKeymap,
             ...historyKeymap,
             ...foldKeymap,
@@ -251,9 +265,9 @@
     root.value?.addEventListener('touchend', handleTouchEnd, { passive: true });
     root.value?.addEventListener('touchcancel', handleTouchEnd, { passive: true });
 
-    if (props.language !== initialLanguageName) {
+    if (props.path !== initialPath) {
       const generation = ++languageGeneration;
-      const extension = await loadLanguageExtension(props.language);
+      const extension = await loadLanguageExtension(props.path);
       if (!view || generation !== languageGeneration) return;
       view.dispatch({ effects: languageCompartment.reconfigure(extension) });
     }
@@ -269,11 +283,11 @@
     },
   );
   watch(
-    () => props.language,
-    async (language) => {
+    () => props.path,
+    async (path) => {
       if (!view) return;
       const generation = ++languageGeneration;
-      const extension = await loadLanguageExtension(language);
+      const extension = await loadLanguageExtension(path);
       if (!view || generation !== languageGeneration) return;
       view.dispatch({ effects: languageCompartment.reconfigure(extension) });
     },
@@ -316,6 +330,7 @@
     openSearch: () => {
       if (view) openSearchPanel(view);
     },
+    toggleComment: () => (view ? toggleEditorComment(view) : false),
   });
 </script>
 
