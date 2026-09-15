@@ -43,9 +43,6 @@ export interface PersistedProviderModelConfig {
   defaultReasoningEffort?: ReasoningEffort;
   reasoningMandatory?: boolean;
   reasoningSupportsMaxTokens?: boolean;
-  priceMicrosPerMillionInput?: number;
-  priceMicrosPerMillionOutput?: number;
-  priceVersion?: string;
 }
 
 export interface ProviderModelConfig {
@@ -66,9 +63,6 @@ export interface ProviderModelConfig {
   reasoningSource?: ReasoningCapabilitySource;
   reasoningMandatory?: boolean;
   reasoningSupportsMaxTokens?: boolean;
-  priceMicrosPerMillionInput?: number;
-  priceMicrosPerMillionOutput?: number;
-  priceVersion?: string;
 }
 
 export interface PersistedProviderView {

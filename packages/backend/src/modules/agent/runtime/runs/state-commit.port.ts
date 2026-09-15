@@ -149,8 +149,6 @@ export interface ParkModelStepCommand {
   outputTokens: number;
   cachedInputTokens: number;
   estimatedUsage: boolean;
-  costMicros: number;
-  priceVersion: string | null;
   finishReason: string | null;
   reason: 'waiting_subagents' | 'waiting_message';
   now: number;
@@ -174,9 +172,7 @@ export interface CommitSubagentToolProposalCommand {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
-  costMicros: number;
   estimatedUsage: boolean;
-  priceVersion: string | null;
   finishReason: string | null;
   now: number;
 }
@@ -236,9 +232,7 @@ export interface SettleSubagentModelStepCommand {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
-  costMicros: number;
   estimatedUsage: boolean;
-  priceVersion: string | null;
   finishReason: string | null;
   errorCode?: string;
   now: number;
@@ -257,8 +251,6 @@ export interface RetryModelStepCommand {
   outputTokens?: number;
   cachedInputTokens?: number;
   estimatedUsage?: boolean;
-  costMicros?: number | null;
-  priceVersion?: string | null;
   errorCode: string;
   now: number;
 }
@@ -280,8 +272,6 @@ export interface PauseModelStepForBudgetCommand {
   outputTokens?: number;
   cachedInputTokens?: number;
   estimatedUsage?: boolean;
-  costMicros?: number | null;
-  priceVersion?: string | null;
   errorCode: string;
   budgetReason: JsonValue;
   now: number;
@@ -301,8 +291,6 @@ export interface SettleModelStepCommand {
   outputTokens?: number;
   cachedInputTokens?: number;
   estimatedUsage?: boolean;
-  costMicros?: number | null;
-  priceVersion?: string | null;
   finishReason?: string | null;
   errorCode?: string;
   terminalStatus: 'completed_unverified' | 'failed' | 'cancelled';
@@ -433,8 +421,6 @@ export interface CommitToolProposalCommand {
   outputTokens?: number;
   cachedInputTokens?: number;
   estimatedUsage?: boolean;
-  costMicros?: number | null;
-  priceVersion?: string | null;
   finishReason?: string | null;
   now: number;
 }
@@ -540,8 +526,6 @@ export interface SupersedeModelStepCommand {
   outputTokens?: number;
   cachedInputTokens?: number;
   estimatedUsage?: boolean;
-  costMicros?: number | null;
-  priceVersion?: string | null;
   now: number;
 }
 

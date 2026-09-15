@@ -197,13 +197,6 @@ export const resolveProviderModelConfig = (model: PersistedProviderModelConfig):
             : { reasoningSupportsMaxTokens: reasoning.supportsMaxTokens }),
         }
       : {}),
-    ...(model.priceMicrosPerMillionInput === undefined
-      ? {}
-      : { priceMicrosPerMillionInput: model.priceMicrosPerMillionInput }),
-    ...(model.priceMicrosPerMillionOutput === undefined
-      ? {}
-      : { priceMicrosPerMillionOutput: model.priceMicrosPerMillionOutput }),
-    ...(model.priceVersion === undefined ? {} : { priceVersion: model.priceVersion }),
   };
 };
 

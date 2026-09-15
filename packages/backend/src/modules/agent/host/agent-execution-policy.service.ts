@@ -7,7 +7,6 @@ export type ContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
 export interface AgentExecutionPolicyOverrides {
   maxRunTokens?: number;
   maxRunSteps?: number;
-  maxRunCostMicros?: number | null;
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
   maxToolOutputBytes?: number;
@@ -22,7 +21,6 @@ export interface AgentExecutionPolicyOverrides {
 export interface AgentExecutionPolicyEffective {
   maxRunTokens: number;
   maxRunSteps: number;
-  maxRunCostMicros: number | null;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
@@ -49,7 +47,6 @@ const positiveInteger = (value: unknown): value is number => Number.isSafeIntege
 const defaultsFrom = (settings: AgentSettingsView): AgentExecutionPolicyEffective => ({
   maxRunTokens: settings.effectiveSettings.budget.maxRunTokens,
   maxRunSteps: settings.effectiveSettings.budget.maxRunSteps,
-  maxRunCostMicros: settings.effectiveSettings.budget.maxRunCostMicros,
   maxActiveExecutionSeconds: settings.effectiveSettings.budget.maxActiveExecutionSeconds,
   toolTimeoutSeconds: settings.effectiveSettings.budget.toolTimeoutSeconds,
   maxToolOutputBytes: settings.effectiveSettings.budget.maxToolOutputBytes,
@@ -66,7 +63,6 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
   const allowed = new Set([
     'maxRunTokens',
     'maxRunSteps',
-    'maxRunCostMicros',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
@@ -94,11 +90,6 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
     if (!(key in raw)) continue;
     if (!positiveInteger(raw[key])) throw new Error('VALIDATION_FAILED');
     result[key] = raw[key];
-  }
-  if ('maxRunCostMicros' in raw) {
-    const value = raw.maxRunCostMicros;
-    if (value !== null && (!Number.isSafeInteger(value) || (value as number) < 0)) throw new Error('VALIDATION_FAILED');
-    result.maxRunCostMicros = value as number | null;
   }
   if ('contextCompactionMode' in raw) {
     if (
@@ -130,14 +121,6 @@ const assertWithinHardLimits = (overrides: AgentExecutionPolicyOverrides, settin
     const value = overrides[key];
     if (typeof value === 'number' && value > limit) throw new Error('BUDGET_HARD_LIMIT_EXCEEDED');
   }
-  if (
-    overrides.maxRunCostMicros !== undefined &&
-    overrides.maxRunCostMicros !== null &&
-    hard.maxRunCostMicros !== null &&
-    overrides.maxRunCostMicros > hard.maxRunCostMicros
-  ) {
-    throw new Error('BUDGET_HARD_LIMIT_EXCEEDED');
-  }
 };
 
 export class AgentExecutionPolicyService {
@@ -158,7 +141,9 @@ export class AgentExecutionPolicyService {
             throw new Error('VALIDATION_FAILED');
           })()
       : {};
-    const overrides = parseOverrides(rawOverrides);
+    const storedOverrides = { ...rawOverrides };
+    delete storedOverrides.maxRunCostMicros;
+    const overrides = parseOverrides(storedOverrides);
     assertWithinHardLimits(overrides, settings);
     return {
       overrides,

@@ -141,15 +141,15 @@
       "hardLimits": {
         "title": "Hard Limits",
         "description": "实例级策略上限。任何变更都必须先预览并显式二次确认。",
-        "panelTitle": "实例级硬策略限制（Hard Limits）",
-        "panelHint": "高级系统约束与二次审核变更",
+        "panelTitle": "高级安全上限",
+        "panelHint": "实例级 Hard Limits · 修改需二次确认",
         "review": "预览变更",
         "unlimited": "不限",
         "effective": "当前有效值：{value}",
         "confirmTitle": "确认 Hard Limit 变更",
         "confirmDescription": "即将变更 {count} 项，当前有 {runtimes} 个 Runtime 正在执行。",
         "increaseWarning": "资源上限将提高",
-        "usage": "Artifact 已用 + 已预留字节：{bytes}",
+        "usage": "Artifact 已用 + 已预留：{bytes}",
         "confirm": "确认变更",
         "presetsTitle": "安全预设方案",
         "presetsHint": "选择实例级硬约束模板，兼顾多任务并发安全与系统稳定性。",
@@ -161,7 +161,7 @@
         "presetCustomDesc": "自由设定每个系统级硬限制阈值",
         "groups": {
           "tokens": "模型与 Token 预算上限",
-          "tokensDesc": "限制上下文窗口、单次输出与单任务累计 Token 消耗",
+          "tokensDesc": "限制单任务累计 Token 消耗与执行步数",
           "timeouts": "执行与超时保护",
           "timeoutsDesc": "限制任务最长运行时长与单次工具调用超时",
           "storage": "存储与数据流硬限制",
@@ -187,10 +187,6 @@
           "maxRunSteps": {
             "label": "单次 Run 最大步数",
             "hint": "单次任务允许循环执行工具与模型思考的最大步数"
-          },
-          "maxRunCostMicros": {
-            "label": "单次执行成本限额",
-            "hint": "单次任务最高微美元成本 (1 USD = 1,000,000)，留空不限制"
           },
           "maxActiveExecutionSeconds": {
             "label": "任务最大执行时长",
@@ -297,8 +293,6 @@
           "maxRunTokensHint": "单次 Run 累计消耗的总 Token 预算上限",
           "maxRunSteps": "最大执行步数",
           "maxRunStepsHint": "单个 Run 允许执行的工具调用与思考最大步数",
-          "maxRunCostMicros": "任务费用上限 (美元)",
-          "maxRunCostMicrosHint": "设为空表示不限 (输入美元，例如 1.5)",
           "maxActiveExecutionSeconds": "执行超时时间 (秒)",
           "maxActiveExecutionSecondsHint": "单次 Run 活跃执行的最长持续时间",
           "toolTimeoutSeconds": "单工具超时 (秒)",
@@ -650,7 +644,6 @@
         "fields": {
           "maxRunTokens": "Run 总 Token 预算",
           "maxRunSteps": "Run 最大步骤保险丝",
-          "maxRunCostMicros": "Run 成本上限 (µ)",
           "maxActiveExecutionSeconds": "最长活跃执行时间",
           "toolTimeoutSeconds": "单工具超时",
           "maxToolOutputBytes": "模型可见工具输出",
@@ -915,9 +908,10 @@
         "approval": "此 Run 正在等待你的审批。",
         "budget": "此 Run 已暂停，需要增加预算后继续。"
       },
-      "totalTokens": "总消耗",
+      "totalTokens": "Token 总量",
       "advancedDetails": "高级详情与检查点",
-      "backToTasks": "返回任务列表"
+      "backToTasks": "返回任务列表",
+      "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}"
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",

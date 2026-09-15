@@ -141,15 +141,15 @@
       "hardLimits": {
         "title": "Hard Limits",
         "description": "Instance policy ceilings. Every change requires preview and explicit confirmation.",
-        "panelTitle": "Instance Hard Limits",
-        "panelHint": "Advanced system constraints with explicit change review",
+        "panelTitle": "Advanced Safety Limits",
+        "panelHint": "Instance Hard Limits · changes require confirmation",
         "review": "Review changes",
         "unlimited": "Unlimited",
         "effective": "Effective: {value}",
         "confirmTitle": "Confirm Hard Limit changes",
         "confirmDescription": "Review {count} changes. {runtimes} runtimes are currently executing.",
         "increaseWarning": "Higher resource ceiling",
-        "usage": "Artifact used + reserved bytes: {bytes}",
+        "usage": "Artifact used + reserved: {bytes}",
         "confirm": "Confirm changes",
         "presetsTitle": "Safety Presets",
         "presetsHint": "Select instance-level hard limit presets to balance concurrency safety and system stability.",
@@ -161,7 +161,7 @@
         "presetCustomDesc": "Fine-tune each instance-level hard constraint individually",
         "groups": {
           "tokens": "Tokens and Budget Limits",
-          "tokensDesc": "Limits context window, single output, and cumulative tokens per run",
+          "tokensDesc": "Caps per-run token consumption and execution steps",
           "timeouts": "Execution and Timeout Protections",
           "timeoutsDesc": "Limits maximum task duration and individual tool execution timeouts",
           "storage": "Storage and Data Stream Limits",
@@ -187,10 +187,6 @@
           "maxRunSteps": {
             "label": "Hard Max Run Steps",
             "hint": "Maximum thinking and tool execution loop steps allowed per run"
-          },
-          "maxRunCostMicros": {
-            "label": "Hard Max Run Cost",
-            "hint": "Maximum cost in micro-USD (1 USD = 1,000,000); leave empty for unlimited"
           },
           "maxActiveExecutionSeconds": {
             "label": "Max Active Execution Time",
@@ -297,8 +293,6 @@
           "maxRunTokensHint": "Cumulative token budget allowed for the entire run",
           "maxRunSteps": "Max Execution Steps",
           "maxRunStepsHint": "Maximum tool actions and reasoning turns per run",
-          "maxRunCostMicros": "Run Cost Limit (USD)",
-          "maxRunCostMicrosHint": "Leave empty for unlimited (enter USD, e.g. 1.5)",
           "maxActiveExecutionSeconds": "Execution Timeout (sec)",
           "maxActiveExecutionSecondsHint": "Maximum active wall-clock execution time",
           "toolTimeoutSeconds": "Tool Timeout (sec)",
@@ -650,7 +644,6 @@
         "fields": {
           "maxRunTokens": "Run token budget",
           "maxRunSteps": "Run step fuse",
-          "maxRunCostMicros": "Run cost ceiling (µ)",
           "maxActiveExecutionSeconds": "Active execution limit",
           "toolTimeoutSeconds": "Tool timeout",
           "maxToolOutputBytes": "Model-visible tool output",
@@ -915,9 +908,10 @@
         "approval": "This run is waiting for your approval.",
         "budget": "This run is paused until its budget is increased."
       },
-      "totalTokens": "Total tokens",
+      "totalTokens": "Token total",
       "advancedDetails": "Advanced Details & Checkpoints",
-      "backToTasks": "Back to Tasks"
+      "backToTasks": "Back to Tasks",
+      "tokenBreakdown": "In {input} · Out {output} · Cached {cached}"
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",

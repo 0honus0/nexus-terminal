@@ -190,16 +190,11 @@ const parseBudgetIncrease = (value: unknown): RunBudgetIncrease => {
       'maxActiveExecutionSeconds',
       'maxSubagentMessages',
       'maxSubagentMessageBytes',
-      'maxCostMicros',
     ])
   ) {
     throw new Error('VALIDATION_FAILED');
   }
   for (const [key, entry] of Object.entries(value)) {
-    if (key === 'maxCostMicros') {
-      if (entry === null || (Number.isSafeInteger(entry) && Number(entry) >= 0)) continue;
-      throw new Error('VALIDATION_FAILED');
-    }
     if (!positiveInteger(entry)) throw new Error('VALIDATION_FAILED');
   }
   return value as RunBudgetIncrease;

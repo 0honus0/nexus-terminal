@@ -18,19 +18,12 @@ const clampBudget = (
   model: { contextWindow: number; maxOutputTokens: number },
 ): RunBudget => {
   const hard = settings.hardLimits;
-  const maxRunCostMicros =
-    source.maxRunCostMicros === null
-      ? hard.maxRunCostMicros
-      : hard.maxRunCostMicros === null
-        ? source.maxRunCostMicros
-        : Math.min(source.maxRunCostMicros, hard.maxRunCostMicros);
   const maxContextTokens = Math.max(2, model.contextWindow);
   return {
     maxContextTokens,
     maxOutputTokens: Math.max(1, Math.min(model.maxOutputTokens, maxContextTokens - 1)),
     maxRunTokens: Math.min(source.maxRunTokens, hard.maxRunTokens),
     maxRunSteps: Math.min(source.maxRunSteps, hard.maxRunSteps),
-    maxRunCostMicros,
     maxActiveExecutionSeconds: Math.min(source.maxActiveExecutionSeconds, hard.maxActiveExecutionSeconds),
     toolTimeoutSeconds: Math.min(source.toolTimeoutSeconds, hard.toolTimeoutSeconds),
     maxToolOutputBytes: Math.min(source.maxToolOutputBytes, hard.maxToolOutputBytes),
@@ -212,12 +205,6 @@ export class CheckpointService {
       throw new Error('CHECKPOINT_DEFINITION_STALE');
     }
     const budget = clampBudget(source.budget, settings, model);
-    if (
-      budget.maxRunCostMicros !== null &&
-      (model.priceMicrosPerMillionInput === undefined || model.priceMicrosPerMillionOutput === undefined)
-    ) {
-      throw new Error('MODEL_PRICE_UNKNOWN');
-    }
     const definition: RunDefinitionSnapshot = {
       ...source.definition,
       policyRevision: app.policyRevision,

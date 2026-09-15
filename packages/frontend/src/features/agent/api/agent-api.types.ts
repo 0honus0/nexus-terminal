@@ -8,7 +8,6 @@ export interface AgentHardLimits {
   maxOutputTokens: number;
   maxRunTokens: number;
   maxRunSteps: number;
-  maxRunCostMicros: number | null;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
@@ -38,7 +37,6 @@ export interface AgentSettingsDocument {
     maxOutputTokens: number;
     maxRunTokens: number;
     maxRunSteps: number;
-    maxRunCostMicros: number | null;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;

@@ -141,15 +141,15 @@
       "hardLimits": {
         "title": "Hard Limits",
         "description": "インスタンスのポリシー上限です。すべての変更でプレビューと明示的な再確認が必要です。",
-        "panelTitle": "インスタンス Hard Limits",
-        "panelHint": "高度なシステム制約と明示的な変更レビュー",
+        "panelTitle": "高度な安全上限",
+        "panelHint": "インスタンス Hard Limits · 変更には再確認が必要",
         "review": "変更を確認",
         "unlimited": "無制限",
         "effective": "有効値: {value}",
         "confirmTitle": "Hard Limit の変更を確認",
         "confirmDescription": "{count} 件の変更を確認してください。現在 {runtimes} 個の Runtime が実行中です。",
         "increaseWarning": "リソース上限を引き上げます",
-        "usage": "Artifact 使用済み + 予約済みバイト: {bytes}",
+        "usage": "Artifact 使用済み + 予約済み: {bytes}",
         "confirm": "変更を確定",
         "presetsTitle": "安全プリセット",
         "presetsHint": "インスタンスレベルの制約プリセットを選択し、並列運用の安全性と安定性を両立します。",
@@ -161,7 +161,7 @@
         "presetCustomDesc": "各システム制約の閾値を手動で細かく調整します",
         "groups": {
           "tokens": "モデルと Token 予算上限",
-          "tokensDesc": "コンテキストウィンドウ、単一出力、および 1 回の Run の累積 Token を制限します",
+          "tokensDesc": "Run 単位の Token 消費量と実行ステップ数を制限します",
           "timeouts": "実行とタイムアウト保護",
           "timeoutsDesc": "タスクの最長実行時間とツール呼び出しタイムアウトを制限します",
           "storage": "ストレージとデータ流量の制限",
@@ -187,10 +187,6 @@
           "maxRunSteps": {
             "label": "Run 最大ステップ数",
             "hint": "1 回の Run で許可される思考・ツール実行ループの最大回数"
-          },
-          "maxRunCostMicros": {
-            "label": "Run 実行コスト上限",
-            "hint": "マイクロ USD 単位の最大コスト (空欄で無制限)"
           },
           "maxActiveExecutionSeconds": {
             "label": "タスク最長実行時間",
@@ -297,8 +293,6 @@
           "maxRunTokensHint": "1回の Run で累積消費可能な Token 予算総量",
           "maxRunSteps": "最大実行ステップ数",
           "maxRunStepsHint": "1回の Run で許可される最大ツール呼び出し・推論ステップ数",
-          "maxRunCostMicros": "Run 費用上限 (USD)",
-          "maxRunCostMicrosHint": "空欄で無制限 (USD 単位、例: 1.5)",
           "maxActiveExecutionSeconds": "実行タイムアウト (秒)",
           "maxActiveExecutionSecondsHint": "Run のアクティブ実行の最长継続時間",
           "toolTimeoutSeconds": "単一ツールタイムアウト (秒)",
@@ -650,7 +644,6 @@
         "fields": {
           "maxRunTokens": "Run 総 Token 予算",
           "maxRunSteps": "Run 最大ステップ保険",
-          "maxRunCostMicros": "Run コスト上限 (µ)",
           "maxActiveExecutionSeconds": "最大アクティブ実行時間",
           "toolTimeoutSeconds": "ツールタイムアウト",
           "maxToolOutputBytes": "モデル可視ツール出力",
@@ -915,9 +908,10 @@
         "approval": "この Run は承認を待っています。",
         "budget": "この Run は予算の増額待ちで一時停止しています。"
       },
-      "totalTokens": "総消費トークン",
+      "totalTokens": "Token 合計",
       "advancedDetails": "詳細設定とチェックポイント",
-      "backToTasks": "タスク一覧に戻る"
+      "backToTasks": "タスク一覧に戻る",
+      "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}"
     },
     "workspaceRuntime": {
       "title": "Workspace 開発環境",

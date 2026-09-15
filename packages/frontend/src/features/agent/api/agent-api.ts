@@ -40,7 +40,6 @@ export type AgentContextCompactionMode = 'aggressive' | 'balanced' | 'conservati
 export interface AgentExecutionPolicyOverrides {
   maxRunTokens?: number;
   maxRunSteps?: number;
-  maxRunCostMicros?: number | null;
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
   maxToolOutputBytes?: number;
@@ -54,7 +53,7 @@ export interface AgentExecutionPolicyOverrides {
 
 export interface AgentExecutionPolicyView {
   overrides: AgentExecutionPolicyOverrides;
-  effective: Required<Omit<AgentExecutionPolicyOverrides, 'maxRunCostMicros'>> & { maxRunCostMicros: number | null };
+  effective: Required<AgentExecutionPolicyOverrides>;
   version: number;
 }
 
@@ -325,9 +324,6 @@ export interface ProviderModel {
   reasoningSource?: 'provider' | 'registry' | 'manual';
   reasoningMandatory?: boolean;
   reasoningSupportsMaxTokens?: boolean;
-  priceMicrosPerMillionInput?: number;
-  priceMicrosPerMillionOutput?: number;
-  priceVersion?: string;
 }
 
 export interface AgentDiscoveredProviderModel {
@@ -494,7 +490,6 @@ export interface AgentRunView {
     maxOutputTokens: number;
     maxRunTokens: number;
     maxRunSteps: number;
-    maxRunCostMicros: number | null;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -522,7 +517,6 @@ export interface AgentRunView {
     inputTokens: number;
     outputTokens: number;
     cachedInputTokens: number;
-    costMicros: number;
     steps: number;
     subagentMessages: number;
     subagentMessageBytes: number;
@@ -1519,7 +1513,6 @@ export const agentApi = {
       maxRunTokens: number;
       maxRunSteps: number;
       maxActiveExecutionSeconds: number;
-      maxCostMicros: number | null;
       maxSubagentMessages: number;
       maxSubagentMessageBytes: number;
     }>,

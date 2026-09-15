@@ -97,15 +97,8 @@ const parseHardLimits = (
   const proposed = structuredClone(current);
   for (const [key, value] of Object.entries(raw)) {
     if (!allowed.has(key)) throw new Error('VALIDATION_FAILED');
-    if (key === 'maxRunCostMicros') {
-      if (value !== null && (!Number.isSafeInteger(value) || (value as number) < 0)) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      (proposed as unknown as Record<string, number | null>)[key] = value as number | null;
-      continue;
-    }
     if (!Number.isSafeInteger(value) || (value as number) < 1) throw new Error('VALIDATION_FAILED');
-    (proposed as unknown as Record<string, number | null>)[key] = value as number;
+    (proposed as unknown as Record<string, number>)[key] = value as number;
   }
   if (proposed.maxSingleArtifactBytes > proposed.maxArtifactBytes) throw new Error('HARD_LIMIT_RELATION_INVALID');
   if (proposed.maxArtifactBytes > proposed.maxGlobalArtifactBytes) throw new Error('HARD_LIMIT_RELATION_INVALID');

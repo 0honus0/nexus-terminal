@@ -410,7 +410,7 @@ Frontend event stream 使用 reconnect/backoff/cursor replay；慢消费者有�
 
 ## 9. Context、Provider 与 Budget
 
-Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 不回填明文。Backend 支持通过受现有 outbound policy/credential policy 保护的 Provider discovery 请求读取上游 `GET <baseUrl>/models`；discovery 只把 model id（以及可选 owner/created metadata）当作候选事实，不推测 context window、max output、tool capability 或 pricing，用户必须确认这些基础能力后才写入 Provider 配置。
+Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 不回填明文。Backend 支持通过受现有 outbound policy/credential policy 保护的 Provider discovery 请求读取上游 `GET <baseUrl>/models`；discovery 只把 model id（以及可选 owner/created metadata）当作候选事实，不推测 context window、max output 或 tool capability，用户必须确认这些基础能力后才写入 Provider 配置。
 
 Reasoning capability 不由普通用户手工配置。Backend 的 `ModelCapabilityResolver` 当前以 Nexus 内置 Model Capability Registry 为生效来源，根据已知/canonical model id 派生 `reasoningEfforts`、`defaultReasoningEffort` 等只读能力；未知模型保持 Unknown 并使用 Provider 默认，不猜档位、不发送 reasoning 参数。Resolver 预留未来 Provider live capability 输入层，但当前 `/models` discovery 不解析 reasoning 扩展元数据，也不缓存此类能力。Frontend 只消费 Backend 派生结果生成思考强度滑条。
 
@@ -426,7 +426,6 @@ Reasoning capability 不由普通用户手工配置。Backend 的 `ModelCapabili
 - tool output/raw bytes；
 - Recall items/bytes；
 - Subagent message count/bytes；
-- optional cost micros。
 
 预算不足时进入 `awaiting_budget`，用户可以通过 versioned increase-budget mutation 提升到 Hard Limit 以内。
 

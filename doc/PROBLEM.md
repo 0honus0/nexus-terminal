@@ -1552,7 +1552,7 @@
 - **发现时间**：2026-09-14
 - **问题现象与用户诉求**：
   1. 当前 Agent 设置把 `maxContextTokens`、`maxOutputTokens`、`maxRunTokens`、`maxRunSteps`、执行时间、Tool 输出、Recall、Subagent 消息、Artifact 等大量底层限制同时作为一套 User 全局配置，既繁琐，又无法表达不同 App 的真实差异。
-  2. 不同 App 的任务形态差异很大：普通问答可能 1~2 个 context window 即可结束；Coding/Research 可能正常就需要多个 context window、多个 Subagent、大量 Tool 输出和 Artifact；Automation 则可能更关心时间、成本与异常快速熔断。不能让所有 App 共用一套固定 Token/Step 参数。
+  2. 不同 App 的任务形态差异很大：普通问答可能 1~2 个 context window 即可结束；Coding/Research 可能正常就需要多个 context window、多个 Subagent、大量 Tool 输出和 Artifact；Automation 则可能更关心时间、Token 消耗与异常快速熔断。不能让所有 App 共用一套固定 Token/Step 参数。
   3. 固定 `maxContextTokens=32K`、`maxOutputTokens=4K` 一类全局默认会人为缩小模型能力。模型自身支持 128K/256K/更大 context 时，Nexus 应按模型 capability 使用，而不是要求用户再手工把 Nexus 的限制调大。
   4. 当前预算偏向“达到数值就停/申请增加”，但成熟 Agent 更应该区分：正常任务、超过正常额度但仍持续有进展的健康长任务、以及无进展/重复调用/死循环等异常任务。
   5. Tool bytes、Artifact、Mailbox 等并非都应该隐藏：其中部分是用户真实需要按 App 调整的工作负载参数；但 HTTP/WebSocket frame、解析器上限等协议安全边界不应暴露成普通产品设置。
@@ -1637,16 +1637,9 @@ UI 上每个 App 的运行设置应明确显示：
 
 - 全局建议默认：`6× contextWindow`。
 - 持续有 progress 才能进入扩展区。
-- Child 的真实 Token/Cost 继续计入 Run 总 usage，不能通过多开 Subagent 绕过总账。
+- Child 的真实 Token 继续计入 Run 总 usage，不能通过多开 Subagent 绕过总量限制。
 
-#### 6. 任务成本上限（可选）
-
-- 建议保留用户可设置，并允许 App 覆盖，因为不同 App 的经济容忍度明显不同。
-- 默认可为“不单独限制”，受 User emergency hard ceiling 保护。
-- 对付费模型/Research App 可以设置 App 级每 Run cost ceiling。
-- Cost ceiling 属于明确的用户意图，达到后应停止/等待用户，而不是自动健康扩展越过。
-
-#### 7. 任务最长活跃执行时间
+#### 6. 任务最长活跃执行时间
 
 - 建议保留用户可设置，并允许 App 覆盖。
 - Chat 可较短，Coding/Research/Automation 可较长。
@@ -1829,7 +1822,6 @@ interface AgentExecutionPolicyOverride {
   rootExtendedWindows?: number;
   childNormalWindows?: number;
   childExtendedWindows?: number;
-  maxRunCostMicros?: number | null;
   maxActiveExecutionSeconds?: number;
   context?: {
     targetUtilization?: number;
@@ -1907,9 +1899,8 @@ User Turn C
 
 同时仍保留跨 Run 的安全边界，但它们不作为普通任务的常规 Token 限制：
 
-- 用户/账户级小时或日成本上限；
 - provider rate / quota；
-- 极端 emergency token / cost / active-time circuit breaker；
+- 极端 emergency token / active-time circuit breaker；
 - 基础设施并发与 DoS 防护。
 
 这些跨 Run 限制只承担资源与安全保护职责，不应造成“用户正常连续追问时额度越来越少”的交互效果。

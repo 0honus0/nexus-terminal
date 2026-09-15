@@ -64,7 +64,6 @@ const runBudgetFrom = (
   maxOutputTokens: Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1)),
   maxRunTokens: policy.effective.maxRunTokens,
   maxRunSteps: policy.effective.maxRunSteps,
-  maxRunCostMicros: policy.effective.maxRunCostMicros,
   maxActiveExecutionSeconds: policy.effective.maxActiveExecutionSeconds,
   toolTimeoutSeconds: policy.effective.toolTimeoutSeconds,
   maxToolOutputBytes: policy.effective.maxToolOutputBytes,
@@ -90,7 +89,6 @@ const increasedBudget = (
     'maxActiveExecutionSeconds',
     'maxSubagentMessages',
     'maxSubagentMessageBytes',
-    'maxCostMicros',
   ]);
   if (Object.keys(raw).length === 0 || Object.keys(raw).some((key) => !allowed.has(key))) {
     throw new Error('VALIDATION_FAILED');
@@ -118,25 +116,6 @@ const increasedBudget = (
   raiseNumber('maxSubagentMessages', hardLimits.maxSubagentMessagesPerRun);
   raiseNumber('maxSubagentMessageBytes', hardLimits.maxSubagentMessageBytesPerRun);
 
-  if ('maxCostMicros' in raw) {
-    const target = raw.maxCostMicros;
-    if (current.maxRunCostMicros === null) throw new Error('BUDGET_INCREASE_INVALID');
-    if (target === null) {
-      if (hardLimits.maxRunCostMicros !== null) throw new Error('BUDGET_HARD_LIMIT_EXCEEDED');
-      next.maxRunCostMicros = null;
-      changed = true;
-    } else {
-      if (typeof target !== 'number' || !Number.isSafeInteger(target) || target < 0) {
-        throw new Error('VALIDATION_FAILED');
-      }
-      if (target <= current.maxRunCostMicros) throw new Error('BUDGET_INCREASE_INVALID');
-      if (hardLimits.maxRunCostMicros !== null && target > hardLimits.maxRunCostMicros) {
-        throw new Error('BUDGET_HARD_LIMIT_EXCEEDED');
-      }
-      next.maxRunCostMicros = target;
-      changed = true;
-    }
-  }
   if (!changed) throw new Error('BUDGET_INCREASE_INVALID');
   next.revision = current.revision + 1;
   return next;
@@ -214,12 +193,6 @@ export class RunService {
     }
 
     const budget = runBudgetFrom(settings, executionPolicy, model);
-    if (
-      budget.maxRunCostMicros !== null &&
-      (model.priceMicrosPerMillionInput === undefined || model.priceMicrosPerMillionOutput === undefined)
-    ) {
-      throw new Error('MODEL_PRICE_UNKNOWN');
-    }
     const environment = environmentSelection
       ? await this.resolveEnvironment(scope, environmentSelection, settings.revision)
       : null;
@@ -468,7 +441,6 @@ export class RunService {
       ...(increase.maxSubagentMessageBytes === undefined
         ? {}
         : { maxSubagentMessageBytes: increase.maxSubagentMessageBytes }),
-      ...(!('maxCostMicros' in increase) ? {} : { maxCostMicros: increase.maxCostMicros ?? null }),
     };
     const committed = await this.stateCommit.increaseRunBudget({
       scope,

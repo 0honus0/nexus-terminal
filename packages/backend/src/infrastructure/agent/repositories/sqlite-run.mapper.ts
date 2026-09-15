@@ -58,6 +58,18 @@ export const RUN_COLUMNS = `
   version, created_at, started_at, completed_at, updated_at
 `;
 
+const persistedBudget = (raw: string): RunBudget => {
+  const value = JSON.parse(raw) as Record<string, unknown>;
+  delete value.maxRunCostMicros;
+  return value as unknown as RunBudget;
+};
+
+const persistedUsage = (raw: string): RunUsage => {
+  const value = JSON.parse(raw) as Record<string, unknown>;
+  delete value.costMicros;
+  return value as unknown as RunUsage;
+};
+
 export const mapRunRow = (row: RunRow): RunView => ({
   id: row.id,
   userId: row.user_id,
@@ -69,10 +81,10 @@ export const mapRunRow = (row: RunRow): RunView => ({
   goal: { text: row.goal_text, revision: row.goal_revision, updatedAt: row.goal_updated_at },
   verificationStatus: row.verification_status,
   needsReconciliation: row.needs_reconciliation === 1,
-  budget: JSON.parse(row.budget_json) as RunBudget,
+  budget: persistedBudget(row.budget_json),
   definition: JSON.parse(row.definition_json) as RunDefinitionSnapshot,
   plan: persistedPlan(row.plan_json),
-  usage: JSON.parse(row.usage_json) as RunUsage,
+  usage: persistedUsage(row.usage_json),
   activeExecutionSeconds: row.active_execution_seconds,
   activeExecutionStartedAt: row.active_execution_started_at,
   executingRuntimeCount: row.executing_runtime_count,

@@ -358,7 +358,7 @@
         >
           <div v-if="run && (totalRunTokens > 0 || run.usage.steps > 0)" class="flex flex-wrap items-center gap-2">
             <span class="inline-flex items-center gap-1.5 font-medium text-foreground">
-              <i class="fa-solid fa-coins text-[10px] text-foreground/70" aria-hidden="true"></i>
+              <i class="fa-solid fa-chart-simple text-[10px] text-foreground/70" aria-hidden="true"></i>
               <span>{{ $t('agent.tasks.totalTokens') || '会话总消耗' }}</span>
               <span class="font-mono font-semibold text-foreground">{{ formatTokens(totalRunTokens) }}</span>
             </span>

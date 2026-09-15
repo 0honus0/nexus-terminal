@@ -25,7 +25,6 @@
   const fields: FieldMeta[] = [
     { key: 'maxRunTokens', type: 'tokens' },
     { key: 'maxRunSteps', type: 'number' },
-    { key: 'maxRunCostMicros', type: 'number' },
     { key: 'maxActiveExecutionSeconds', type: 'seconds' },
     { key: 'toolTimeoutSeconds', type: 'seconds' },
     { key: 'maxToolOutputBytes', type: 'bytes' },
@@ -92,8 +91,6 @@
     fields.some(({ key }) => {
       if (!hasOverride(key)) return false;
       const value = draft.value[key];
-      if (key === 'maxRunCostMicros')
-        return value !== undefined && value !== null && (!Number.isSafeInteger(value) || value < 0);
       return typeof value !== 'number' || !Number.isSafeInteger(value) || value < 1;
     }),
   );
@@ -162,7 +159,7 @@
             v-model="draft[field.key]"
             class="mt-2"
             :type="field.type"
-            :min="field.key === 'maxRunCostMicros' ? 0 : 1"
+            :min="1"
             :disabled="busy || saving"
           />
           <div v-else class="mt-2 rounded-md bg-header/50 px-2 py-2 text-[11px] text-text-secondary">

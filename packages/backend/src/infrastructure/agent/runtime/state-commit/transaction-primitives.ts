@@ -50,7 +50,6 @@ export const emptyUsage = (): RunUsage => ({
   inputTokens: 0,
   outputTokens: 0,
   cachedInputTokens: 0,
-  costMicros: 0,
   steps: 0,
   subagentMessages: 0,
   subagentMessageBytes: 0,
@@ -62,7 +61,6 @@ export const usageWithDelta = (
     inputTokens?: number | null;
     outputTokens?: number | null;
     cachedInputTokens?: number | null;
-    costMicros?: number | null;
     steps?: number;
   },
 ): RunUsage => {
@@ -71,7 +69,6 @@ export const usageWithDelta = (
     inputTokens: current.inputTokens + (delta.inputTokens ?? 0),
     outputTokens: current.outputTokens + (delta.outputTokens ?? 0),
     cachedInputTokens: current.cachedInputTokens + (delta.cachedInputTokens ?? 0),
-    costMicros: current.costMicros + (delta.costMicros ?? 0),
     steps: current.steps + (delta.steps ?? 0),
     subagentMessages: current.subagentMessages ?? 0,
     subagentMessageBytes: current.subagentMessageBytes ?? 0,

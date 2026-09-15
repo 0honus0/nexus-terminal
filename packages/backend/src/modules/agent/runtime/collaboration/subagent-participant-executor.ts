@@ -10,7 +10,7 @@ import type { AgentEventHub } from '../events/event-hub';
 import { executionErrorCode, failedToolResult as buildFailedToolResult } from '../execution/execution-errors';
 import { LeaseCoordinator, type LeaseRenewal } from '../execution/lease-coordinator';
 import type { ModelCallLimiter } from '../execution/model-call-limiter';
-import { estimateTokens, modelCost } from '../execution/model-accounting';
+import { estimateTokens } from '../execution/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { RunView } from '../runs/run.types';
@@ -358,9 +358,7 @@ export class SubagentParticipantExecutor {
         inputTokens: 0,
         outputTokens: 0,
         cachedInputTokens: 0,
-        costMicros: 0,
         estimatedUsage: true,
-        priceVersion: null,
         finishReason: null,
         errorCode: 'SUBAGENT_MODEL_INTERRUPTED',
         now: this.clock.nowUnixSeconds(),
@@ -521,9 +519,7 @@ export class SubagentParticipantExecutor {
               inputTokens: settledUsage.inputTokens,
               outputTokens: settledUsage.outputTokens,
               cachedInputTokens: settledUsage.cachedInputTokens,
-              costMicros: modelCost(model, settledUsage),
               estimatedUsage: usage === undefined,
-              priceVersion: model.priceVersion ?? null,
               finishReason,
               now: this.clock.nowUnixSeconds(),
             });
@@ -568,9 +564,7 @@ export class SubagentParticipantExecutor {
       inputTokens: settledUsage.inputTokens,
       outputTokens: settledUsage.outputTokens,
       cachedInputTokens: settledUsage.cachedInputTokens,
-      costMicros: modelCost(model, settledUsage),
       estimatedUsage: usage === undefined,
-      priceVersion: model.priceVersion ?? null,
       finishReason,
       ...(failureCode ? { errorCode: failureCode } : {}),
       now: this.clock.nowUnixSeconds(),

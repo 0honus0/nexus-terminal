@@ -596,8 +596,6 @@ CREATE TABLE IF NOT EXISTS agent_model_attempts (
     input_tokens INTEGER,
     output_tokens INTEGER,
     cached_input_tokens INTEGER,
-    cost_micros INTEGER,
-    price_version TEXT,
     estimated INTEGER NOT NULL DEFAULT 0 CHECK(estimated IN (0,1)),
     error_code TEXT,
     created_at INTEGER NOT NULL,

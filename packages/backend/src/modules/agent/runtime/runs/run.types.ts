@@ -69,7 +69,6 @@ export interface RunBudget {
   maxOutputTokens: number;
   maxRunTokens: number;
   maxRunSteps: number;
-  maxRunCostMicros: number | null;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
@@ -88,14 +87,12 @@ export interface RunBudgetIncrease {
   maxActiveExecutionSeconds?: number;
   maxSubagentMessages?: number;
   maxSubagentMessageBytes?: number;
-  maxCostMicros?: number | null;
 }
 
 export interface RunUsage {
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
-  costMicros: number;
   steps: number;
   subagentMessages: number;
   subagentMessageBytes: number;

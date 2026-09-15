@@ -1,12 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { ProviderModelConfig, TokenUsage } from '../../ai/model.types';
-import { calculateModelCostMicros } from '../../ai/provider.service';
+import type { TokenUsage } from '../../ai/model.types';
 import type { ClockPort, JsonValue } from '../../agent.types';
 import type { ToolContext, ToolProposal, ToolResult } from '../../capabilities/tool.types';
 import type { AgentBackendPort, BackendSignal } from './agent-backend.port';
 import { executionErrorCode } from './execution-errors';
 import { ModelStepRunner, type ModelToolCall } from './model-step-runner';
-import { estimateTokens, modelCost } from './model-accounting';
+import { estimateTokens } from './model-accounting';
 import { boundedUtf8 } from './text-budget';
 import { ToolCallRunner } from './tool-call-runner';
 import type { PendingMutationTool, RunExecutionReaderPort } from '../runs/run.repository.port';
@@ -16,21 +15,19 @@ import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
 
 const MAX_COLLABORATION_BYTES = 8 * 1024;
 
-const usageWithModel = (base: RunUsage, delta: TokenUsage, costMicros: number): RunUsage => ({
+const usageWithModel = (base: RunUsage, delta: TokenUsage): RunUsage => ({
   inputTokens: base.inputTokens + delta.inputTokens,
   outputTokens: base.outputTokens + delta.outputTokens,
   cachedInputTokens: base.cachedInputTokens + delta.cachedInputTokens,
-  costMicros: base.costMicros + costMicros,
   steps: base.steps + 1,
   subagentMessages: base.subagentMessages,
   subagentMessageBytes: base.subagentMessageBytes,
 });
 
-const usageWithAttempt = (base: RunUsage, delta: TokenUsage, costMicros: number): RunUsage => ({
+const usageWithAttempt = (base: RunUsage, delta: TokenUsage): RunUsage => ({
   inputTokens: base.inputTokens + delta.inputTokens,
   outputTokens: base.outputTokens + delta.outputTokens,
   cachedInputTokens: base.cachedInputTokens + delta.cachedInputTokens,
-  costMicros: base.costMicros + costMicros,
   steps: base.steps,
   subagentMessages: base.subagentMessages,
   subagentMessageBytes: base.subagentMessageBytes,
@@ -171,7 +168,6 @@ export class NativeAgentBackend implements AgentBackendPort {
 
       const budgetWait = await this.reserveModelBudget(
         snapshot,
-        model,
         contextPlan.estimatedInputTokens,
         contextPlan.reservedOutputTokens,
       );
@@ -220,13 +216,11 @@ export class NativeAgentBackend implements AgentBackendPort {
               outputTokens: text ? estimateTokens(text) : 0,
               cachedInputTokens: 0,
             } satisfies TokenUsage);
-          const failedCost = modelCost(model, failedUsage);
-          const usageAfterFailed = usageWithAttempt(currentRun.usage, failedUsage, failedCost);
+          const usageAfterFailed = usageWithAttempt(currentRun.usage, failedUsage);
           const nextAttemptIndex = currentAttemptIndex + 1;
           await this.modelSteps.waitBeforeRetry(attemptError, nextAttemptIndex, signal);
           const budgetReason = this.retryBudgetReason(
             currentRun,
-            model,
             contextPlan.estimatedInputTokens,
             usageAfterFailed,
             contextPlan.reservedOutputTokens,
@@ -244,8 +238,6 @@ export class NativeAgentBackend implements AgentBackendPort {
               outputTokens: failedUsage.outputTokens,
               cachedInputTokens: failedUsage.cachedInputTokens,
               estimatedUsage: usage === undefined,
-              costMicros: failedCost,
-              priceVersion: model.priceVersion ?? null,
               errorCode: errorCode(attemptError),
               budgetReason,
               now: this.clock.nowUnixSeconds(),
@@ -267,8 +259,6 @@ export class NativeAgentBackend implements AgentBackendPort {
             outputTokens: failedUsage.outputTokens,
             cachedInputTokens: failedUsage.cachedInputTokens,
             estimatedUsage: usage === undefined,
-            costMicros: failedCost,
-            priceVersion: model.priceVersion ?? null,
             errorCode: errorCode(attemptError),
             now: this.clock.nowUnixSeconds(),
           });
@@ -285,7 +275,7 @@ export class NativeAgentBackend implements AgentBackendPort {
             outputTokens: estimateTokens(text),
             cachedInputTokens: 0,
           } satisfies TokenUsage);
-        const afterModelUsage = usageWithModel(currentRun.usage, settledUsage, modelCost(model, settledUsage));
+        const afterModelUsage = usageWithModel(currentRun.usage, settledUsage);
 
         if (modelToolCalls.size === 0) {
           const activeChildren = (await this.delegations.listDelegations(scope, snapshot.id, runtimeId, 100)).filter(
@@ -306,8 +296,6 @@ export class NativeAgentBackend implements AgentBackendPort {
               outputTokens: settledUsage.outputTokens,
               cachedInputTokens: settledUsage.cachedInputTokens,
               estimatedUsage: usage === undefined,
-              costMicros: modelCost(model, settledUsage),
-              priceVersion: model.priceVersion ?? null,
               finishReason,
               reason: 'waiting_subagents',
               now: this.clock.nowUnixSeconds(),
@@ -330,8 +318,6 @@ export class NativeAgentBackend implements AgentBackendPort {
             outputTokens: settledUsage.outputTokens,
             cachedInputTokens: settledUsage.cachedInputTokens,
             estimatedUsage: usage === undefined,
-            costMicros: modelCost(model, settledUsage),
-            priceVersion: model.priceVersion ?? null,
             finishReason,
             terminalStatus: 'completed_unverified',
             now: this.clock.nowUnixSeconds(),
@@ -374,8 +360,6 @@ export class NativeAgentBackend implements AgentBackendPort {
           outputTokens: settledUsage.outputTokens,
           cachedInputTokens: settledUsage.cachedInputTokens,
           estimatedUsage: usage === undefined,
-          costMicros: modelCost(model, settledUsage),
-          priceVersion: model.priceVersion ?? null,
           finishReason,
           now: this.clock.nowUnixSeconds(),
         });
@@ -517,13 +501,11 @@ export class NativeAgentBackend implements AgentBackendPort {
             expectedInputRevision: snapshot.inputRevision,
             expectedGoalRevision: snapshot.goal.revision,
             reason: abortReason === 'GOAL_UPDATED' ? 'goal_updated' : 'new_input',
-            usage: usageWithModel(currentRun.usage, supersededUsage, modelCost(model, supersededUsage)),
+            usage: usageWithModel(currentRun.usage, supersededUsage),
             inputTokens: supersededUsage.inputTokens,
             outputTokens: supersededUsage.outputTokens,
             cachedInputTokens: supersededUsage.cachedInputTokens,
             estimatedUsage: usage === undefined,
-            costMicros: modelCost(model, supersededUsage),
-            priceVersion: model.priceVersion ?? null,
             now: this.clock.nowUnixSeconds(),
           });
           yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
@@ -551,7 +533,6 @@ export class NativeAgentBackend implements AgentBackendPort {
             outputTokens: text ? estimateTokens(text) : 0,
             cachedInputTokens: 0,
           } satisfies TokenUsage);
-        const failedCost = modelCost(model, failedUsage);
         const settled = await this.stateCommit.settleModelStep({
           scope,
           runId: snapshot.id,
@@ -559,13 +540,11 @@ export class NativeAgentBackend implements AgentBackendPort {
           stepId: begun.stepId,
           attemptId: currentAttemptId,
           expectedRunVersion: currentRun.version,
-          usage: usageWithModel(currentRun.usage, failedUsage, failedCost),
+          usage: usageWithModel(currentRun.usage, failedUsage),
           inputTokens: failedUsage.inputTokens,
           outputTokens: failedUsage.outputTokens,
           cachedInputTokens: failedUsage.cachedInputTokens,
           estimatedUsage: usage === undefined,
-          costMicros: failedCost,
-          priceVersion: model.priceVersion ?? null,
           errorCode: cancelled ? 'CANCELLED' : errorCode(error),
           terminalStatus: cancelled ? 'cancelled' : 'failed',
           now: this.clock.nowUnixSeconds(),
@@ -742,16 +721,12 @@ export class NativeAgentBackend implements AgentBackendPort {
 
   private retryBudgetReason(
     run: RunView,
-    model: ProviderModelConfig,
     estimatedInputTokens: number,
     usage: RunUsage,
     maxOutputTokens: number,
   ): JsonValue | null {
     const requestedTokens = estimatedInputTokens + maxOutputTokens;
     const remainingTokens = Math.max(0, run.budget.maxRunTokens - usage.inputTokens - usage.outputTokens);
-    const requestedCostMicros = calculateModelCostMicros(model, estimatedInputTokens, maxOutputTokens);
-    const remainingCostMicros =
-      run.budget.maxRunCostMicros === null ? null : Math.max(0, run.budget.maxRunCostMicros - usage.costMicros);
     const activeExecutionSeconds =
       run.activeExecutionSeconds +
       (run.executingRuntimeCount > 0 && run.activeExecutionStartedAt !== null
@@ -760,11 +735,9 @@ export class NativeAgentBackend implements AgentBackendPort {
     const reason =
       requestedTokens > remainingTokens
         ? 'token_limit'
-        : remainingCostMicros !== null && (requestedCostMicros === null || requestedCostMicros > remainingCostMicros)
-          ? 'cost_limit'
-          : activeExecutionSeconds >= run.budget.maxActiveExecutionSeconds
-            ? 'active_time_limit'
-            : null;
+        : activeExecutionSeconds >= run.budget.maxActiveExecutionSeconds
+          ? 'active_time_limit'
+          : null;
     if (!reason) return null;
     return {
       reason,
@@ -773,8 +746,6 @@ export class NativeAgentBackend implements AgentBackendPort {
       requestedSteps: usage.steps + 1,
       remainingTokens,
       requestedTokens,
-      remainingCostMicros,
-      requestedCostMicros,
       activeExecutionSeconds,
       maxActiveExecutionSeconds: run.budget.maxActiveExecutionSeconds,
     };
@@ -782,7 +753,6 @@ export class NativeAgentBackend implements AgentBackendPort {
 
   private async reserveModelBudget(
     snapshot: RunSnapshot,
-    model: ProviderModelConfig,
     estimatedInputTokens: number,
     maxOutputTokens: number,
   ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>> | null> {
@@ -791,11 +761,6 @@ export class NativeAgentBackend implements AgentBackendPort {
       0,
       snapshot.budget.maxRunTokens - snapshot.usage.inputTokens - snapshot.usage.outputTokens,
     );
-    const worstCaseCost = calculateModelCostMicros(model, estimatedInputTokens, maxOutputTokens);
-    const remainingCost =
-      snapshot.budget.maxRunCostMicros === null
-        ? null
-        : Math.max(0, snapshot.budget.maxRunCostMicros - snapshot.usage.costMicros);
     const activeSeconds =
       snapshot.activeExecutionSeconds +
       (snapshot.executingRuntimeCount > 0 && snapshot.activeExecutionStartedAt !== null
@@ -806,11 +771,9 @@ export class NativeAgentBackend implements AgentBackendPort {
         ? 'step_limit'
         : worstCaseTokens > remainingTokens
           ? 'token_limit'
-          : remainingCost !== null && (worstCaseCost === null || worstCaseCost > remainingCost)
-            ? 'cost_limit'
-            : activeSeconds >= snapshot.budget.maxActiveExecutionSeconds
-              ? 'active_time_limit'
-              : null;
+          : activeSeconds >= snapshot.budget.maxActiveExecutionSeconds
+            ? 'active_time_limit'
+            : null;
     if (!reason) return null;
 
     const now = this.clock.nowUnixSeconds();
@@ -827,8 +790,6 @@ export class NativeAgentBackend implements AgentBackendPort {
             requestedSteps: snapshot.usage.steps + 1,
             remainingTokens,
             requestedTokens: worstCaseTokens,
-            remainingCostMicros: remainingCost,
-            requestedCostMicros: worstCaseCost,
             activeExecutionSeconds: activeSeconds,
             maxActiveExecutionSeconds: snapshot.budget.maxActiveExecutionSeconds,
           },

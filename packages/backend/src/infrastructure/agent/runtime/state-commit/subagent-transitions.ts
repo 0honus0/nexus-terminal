@@ -96,8 +96,8 @@ export const beginSubagentModelStepTransition = async (
   await tx.execute(
     `INSERT INTO agent_model_attempts
       (id, step_id, attempt_index, status, reserved_tokens, input_tokens, output_tokens,
-       cached_input_tokens, cost_micros, price_version, estimated, error_code, created_at, completed_at)
-     VALUES (?, ?, 1, 'streaming', ?, NULL, NULL, NULL, NULL, NULL, 0, NULL, ?, NULL)`,
+       cached_input_tokens, estimated, error_code, created_at, completed_at)
+     VALUES (?, ?, 1, 'streaming', ?, NULL, NULL, NULL, 0, NULL, ?, NULL)`,
     [attemptId, stepId, command.reservedTokens, command.now],
   );
   const runtimeChanged = await tx.execute(
@@ -304,14 +304,12 @@ export const commitSubagentToolProposalTransition = async (
   }
   const attemptChanged = await tx.execute(
     `UPDATE agent_model_attempts SET status = 'completed', input_tokens = ?, output_tokens = ?,
-     cached_input_tokens = ?, cost_micros = ?, price_version = ?, estimated = ?, error_code = NULL, completed_at = ?
+     cached_input_tokens = ?, estimated = ?, error_code = NULL, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens,
       command.outputTokens,
       command.cachedInputTokens,
-      command.costMicros,
-      command.priceVersion,
       command.estimatedUsage ? 1 : 0,
       command.now,
       command.attemptId,
@@ -424,7 +422,6 @@ export const commitSubagentToolProposalTransition = async (
     inputTokens: command.inputTokens,
     outputTokens: command.outputTokens,
     cachedInputTokens: command.cachedInputTokens,
-    costMicros: command.costMicros,
   });
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const activeDelta =
@@ -872,16 +869,13 @@ export const settleSubagentModelStepTransition = async (
   const delegationStatus =
     effectiveOutcome === 'completed' ? 'completed' : effectiveOutcome === 'cancelled' ? 'cancelled' : 'failed';
   await tx.execute(
-    `UPDATE agent_model_attempts SET status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?,
-     cost_micros = ?, price_version = ?, estimated = ?, error_code = ?, completed_at = ?
+    `UPDATE agent_model_attempts SET status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?, estimated = ?, error_code = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       attemptStatus,
       command.inputTokens,
       command.outputTokens,
       command.cachedInputTokens,
-      command.costMicros,
-      command.priceVersion,
       command.estimatedUsage ? 1 : 0,
       effectiveErrorCode ?? null,
       command.now,
@@ -935,7 +929,6 @@ export const settleSubagentModelStepTransition = async (
     inputTokens: currentUsage.inputTokens + command.inputTokens,
     outputTokens: currentUsage.outputTokens + command.outputTokens,
     cachedInputTokens: currentUsage.cachedInputTokens + command.cachedInputTokens,
-    costMicros: currentUsage.costMicros + command.costMicros,
     steps: currentUsage.steps,
     subagentMessages: currentUsage.subagentMessages,
     subagentMessageBytes: currentUsage.subagentMessageBytes,

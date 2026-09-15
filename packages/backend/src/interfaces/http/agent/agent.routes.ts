@@ -599,14 +599,6 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
                 mandatory: model.reasoningMandatory ?? false,
                 supportsMaxTokens: model.reasoningSupportsMaxTokens ?? false,
               },
-              pricing: {
-                known:
-                  Number.isSafeInteger(model.priceMicrosPerMillionInput) &&
-                  Number.isSafeInteger(model.priceMicrosPerMillionOutput),
-                inputMicrosPerMillion: model.priceMicrosPerMillionInput ?? null,
-                outputMicrosPerMillion: model.priceMicrosPerMillionOutput ?? null,
-                priceVersion: model.priceVersion ?? null,
-              },
             })),
           ),
       );

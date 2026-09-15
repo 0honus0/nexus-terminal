@@ -25,8 +25,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const nonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
 const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
-const optionalPrice = (value: unknown): value is number | undefined =>
-  value === undefined || (Number.isSafeInteger(value) && (value as number) >= 0);
 const reasoningEffort = (value: unknown): value is ReasoningEffort =>
   typeof value === 'string' && (REASONING_EFFORTS as readonly string[]).includes(value);
 
@@ -45,9 +43,6 @@ const validateModel = (raw: unknown): PersistedProviderModelConfig => {
     'reasoningSource',
     'reasoningMandatory',
     'reasoningSupportsMaxTokens',
-    'priceMicrosPerMillionInput',
-    'priceMicrosPerMillionOutput',
-    'priceVersion',
   ]);
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (
@@ -83,17 +78,6 @@ const validateModel = (raw: unknown): PersistedProviderModelConfig => {
   if (raw.reasoningSupportsMaxTokens !== undefined && typeof raw.reasoningSupportsMaxTokens !== 'boolean') {
     throw new Error('VALIDATION_FAILED');
   }
-  if (!optionalPrice(raw.priceMicrosPerMillionInput) || !optionalPrice(raw.priceMicrosPerMillionOutput)) {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (raw.priceVersion !== undefined && !nonEmptyString(raw.priceVersion)) throw new Error('VALIDATION_FAILED');
-  if (
-    (raw.priceMicrosPerMillionInput !== undefined || raw.priceMicrosPerMillionOutput !== undefined) &&
-    !nonEmptyString(raw.priceVersion)
-  ) {
-    throw new Error('VALIDATION_FAILED');
-  }
-
   const id = raw.id.trim();
   const capabilityOverrides = deriveCapabilityOverrides(id, {
     contextWindow: raw.contextWindow,
@@ -111,13 +95,6 @@ const validateModel = (raw: unknown): PersistedProviderModelConfig => {
   const model: PersistedProviderModelConfig = {
     id,
     ...(Object.keys(capabilityOverrides).length ? { capabilityOverrides } : {}),
-    ...(raw.priceMicrosPerMillionInput === undefined
-      ? {}
-      : { priceMicrosPerMillionInput: raw.priceMicrosPerMillionInput }),
-    ...(raw.priceMicrosPerMillionOutput === undefined
-      ? {}
-      : { priceMicrosPerMillionOutput: raw.priceMicrosPerMillionOutput }),
-    ...(raw.priceVersion === undefined ? {} : { priceVersion: raw.priceVersion.trim() }),
   };
   // Resolve once here so incomplete/invalid Registry + override combinations fail before persistence.
   resolveProviderModelConfig(model);
@@ -183,20 +160,6 @@ const testErrorCode = (error: unknown): string => {
   if (/^[A-Z0-9_]+$/.test(code)) return code;
   if (/^PROVIDER_HTTP_\d+$/.test(code)) return code;
   return 'PROVIDER_UNAVAILABLE';
-};
-
-export const calculateModelCostMicros = (
-  model: ProviderModelConfig,
-  inputTokens: number,
-  outputTokens: number,
-): number | null => {
-  if (model.priceMicrosPerMillionInput === undefined || model.priceMicrosPerMillionOutput === undefined) return null;
-  const numerator =
-    BigInt(inputTokens) * BigInt(model.priceMicrosPerMillionInput) +
-    BigInt(outputTokens) * BigInt(model.priceMicrosPerMillionOutput);
-  const cost = (numerator + 999_999n) / 1_000_000n;
-  if (cost > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('MODEL_COST_OVERFLOW');
-  return Number(cost);
 };
 
 export class ProviderService {

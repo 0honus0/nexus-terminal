@@ -62,7 +62,6 @@
         maxRunTokens: number;
         maxRunSteps: number;
         maxActiveExecutionSeconds: number;
-        maxCostMicros: number | null;
       }>,
     ];
   }>();
@@ -174,7 +173,6 @@
       maxRunTokens: number;
       maxRunSteps: number;
       maxActiveExecutionSeconds: number;
-      maxCostMicros: number | null;
     }> = {};
     const raise = (current: number, ceiling: number): number | undefined => {
       if (current >= ceiling) return undefined;
@@ -186,10 +184,6 @@
     if (tokens !== undefined) next.maxRunTokens = tokens;
     if (steps !== undefined) next.maxRunSteps = steps;
     if (seconds !== undefined) next.maxActiveExecutionSeconds = seconds;
-    if (run.budget.maxRunCostMicros !== null && hard.maxRunCostMicros !== null) {
-      const cost = raise(run.budget.maxRunCostMicros, hard.maxRunCostMicros);
-      if (cost !== undefined) next.maxCostMicros = cost;
-    }
     if (Object.keys(next).length) emit('increaseBudget', next);
   };
 </script>
@@ -294,6 +288,15 @@
               <div class="text-text-secondary">{{ $t('agent.tasks.tokens') }}</div>
               <div class="mt-0.5 font-mono font-medium text-foreground">
                 {{ detailSnapshot.usage.inputTokens + detailSnapshot.usage.outputTokens }}
+              </div>
+              <div class="mt-1 truncate font-mono text-[9px] text-text-secondary/80">
+                {{
+                  $t('agent.tasks.tokenBreakdown', {
+                    input: detailSnapshot.usage.inputTokens,
+                    output: detailSnapshot.usage.outputTokens,
+                    cached: detailSnapshot.usage.cachedInputTokens,
+                  })
+                }}
               </div>
             </div>
             <div class="rounded-lg border border-border/40 bg-background/50 p-2">
@@ -542,6 +545,29 @@
                 </div>
 
                 <div class="mt-3 border-t border-border/50 pt-2.5 space-y-2.5">
+                  <div>
+                    <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
+                      <span class="font-medium">{{ $t('agent.tasks.tokens') }}</span>
+                      <span class="font-mono"
+                        >{{ tokenUsage }} / {{ current.budget.maxRunTokens }} · {{ tokenPercent }}%</span
+                      >
+                    </div>
+                    <div class="h-1.5 overflow-hidden rounded-full bg-header">
+                      <div
+                        class="h-full rounded-full bg-primary/75 transition-all duration-300"
+                        :style="{ width: `${tokenPercent}%` }"
+                      ></div>
+                    </div>
+                    <div class="mt-1 font-mono text-[9px] text-text-secondary/75">
+                      {{
+                        $t('agent.tasks.tokenBreakdown', {
+                          input: current.usage.inputTokens,
+                          output: current.usage.outputTokens,
+                          cached: current.usage.cachedInputTokens,
+                        })
+                      }}
+                    </div>
+                  </div>
                   <div>
                     <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
                       <span class="font-medium">{{ $t('agent.tasks.steps') }}</span>

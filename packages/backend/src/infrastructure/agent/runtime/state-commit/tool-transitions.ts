@@ -432,14 +432,12 @@ export const commitToolProposalTransition = async (
 
   await tx.execute(
     `UPDATE agent_model_attempts SET status = 'completed', input_tokens = ?, output_tokens = ?,
-       cached_input_tokens = ?, cost_micros = ?, price_version = ?, estimated = ?, completed_at = ?
+       cached_input_tokens = ?, estimated = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens ?? null,
       command.outputTokens ?? null,
       command.cachedInputTokens ?? null,
-      command.costMicros ?? null,
-      command.priceVersion ?? null,
       command.estimatedUsage ? 1 : 0,
       command.now,
       command.attemptId,
@@ -535,7 +533,6 @@ export const commitToolProposalTransition = async (
     inputTokens: command.inputTokens,
     outputTokens: command.outputTokens,
     cachedInputTokens: command.cachedInputTokens,
-    costMicros: command.costMicros,
     steps: 1,
   });
   const updatedRow = await patchRun(tx, row, { usage: mergedUsage }, events.length, command.now);

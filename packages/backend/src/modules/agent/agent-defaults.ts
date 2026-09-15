@@ -1,7 +1,6 @@
 export interface AgentRunBudgetSnapshot {
   maxRunTokens: number;
   maxRunSteps: number;
-  maxRunCostMicros: number | null;
   maxActiveExecutionSeconds: number;
 }
 
@@ -46,7 +45,6 @@ export interface AgentSettingsDocument {
     maxOutputTokens: number;
     maxRunTokens: number;
     maxRunSteps: number;
-    maxRunCostMicros: number | null;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -59,7 +57,6 @@ export interface AgentSettingsDocument {
     maxOutputTokens: number;
     maxRunTokens: number;
     maxRunSteps: number;
-    maxRunCostMicros: number | null;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
@@ -125,7 +122,6 @@ export const AGENT_DEFAULTS = {
       maxOutputTokens: 4_096,
       maxRunTokens: 100_000,
       maxRunSteps: 80,
-      maxRunCostMicros: null,
       maxActiveExecutionSeconds: 1_800,
       toolTimeoutSeconds: 60,
       maxToolOutputBytes: 65_536,
@@ -138,7 +134,6 @@ export const AGENT_DEFAULTS = {
       maxOutputTokens: 16_384,
       maxRunTokens: 1_000_000,
       maxRunSteps: 400,
-      maxRunCostMicros: null,
       maxActiveExecutionSeconds: 7_200,
       toolTimeoutSeconds: 300,
       maxToolOutputBytes: 262_144,
@@ -186,9 +181,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const integer = (value: unknown, fallback: number, minimum = 0): number =>
   Number.isSafeInteger(value) && (value as number) >= minimum ? (value as number) : fallback;
-
-const nullableInteger = (value: unknown, fallback: number | null): number | null =>
-  value === null ? null : integer(value, fallback ?? 0, 0);
 
 const stringOrNull = (value: unknown, fallback: string | null): string | null =>
   value === null || typeof value === 'string' ? value : fallback;
@@ -391,7 +383,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       maxOutputTokens: integer(budget.maxOutputTokens, defaults.budget.maxOutputTokens, 1),
       maxRunTokens: integer(budget.maxRunTokens, defaults.budget.maxRunTokens, 1),
       maxRunSteps: integer(budget.maxRunSteps, defaults.budget.maxRunSteps, 1),
-      maxRunCostMicros: nullableInteger(budget.maxRunCostMicros, defaults.budget.maxRunCostMicros),
       maxActiveExecutionSeconds: integer(
         budget.maxActiveExecutionSeconds,
         defaults.budget.maxActiveExecutionSeconds,
@@ -408,7 +399,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       maxOutputTokens: integer(hardLimits.maxOutputTokens, defaults.hardLimits.maxOutputTokens, 1),
       maxRunTokens: integer(hardLimits.maxRunTokens, defaults.hardLimits.maxRunTokens, 1),
       maxRunSteps: integer(hardLimits.maxRunSteps, defaults.hardLimits.maxRunSteps, 1),
-      maxRunCostMicros: nullableInteger(hardLimits.maxRunCostMicros, defaults.hardLimits.maxRunCostMicros),
       maxActiveExecutionSeconds: integer(
         hardLimits.maxActiveExecutionSeconds,
         defaults.hardLimits.maxActiveExecutionSeconds,
@@ -535,14 +525,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       (normalized.budget as unknown as Record<string, number | null>)[softKey] = hard;
     }
   }
-  if (
-    normalized.budget.maxRunCostMicros !== null &&
-    normalized.hardLimits.maxRunCostMicros !== null &&
-    normalized.budget.maxRunCostMicros > normalized.hardLimits.maxRunCostMicros
-  ) {
-    normalized.budget.maxRunCostMicros = normalized.hardLimits.maxRunCostMicros;
-  }
-
   normalized.subagents.maxDelegationDepth = Math.min(
     normalized.subagents.maxDelegationDepth,
     normalized.hardLimits.maxDelegationDepth,
@@ -592,6 +574,5 @@ export const validateSettings = (raw: unknown): AgentSettingsDocument => normali
 export const snapshotBudget = (settings: AgentSettingsDocument): AgentRunBudgetSnapshot => ({
   maxRunTokens: settings.budget.maxRunTokens,
   maxRunSteps: settings.budget.maxRunSteps,
-  maxRunCostMicros: settings.budget.maxRunCostMicros,
   maxActiveExecutionSeconds: settings.budget.maxActiveExecutionSeconds,
 });

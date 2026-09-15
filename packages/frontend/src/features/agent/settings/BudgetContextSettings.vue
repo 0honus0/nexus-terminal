@@ -26,7 +26,6 @@
     values: {
       maxRunTokens: number;
       maxRunSteps: number;
-      maxRunCostMicros: number | null;
       maxActiveExecutionSeconds: number;
       toolTimeoutSeconds: number;
       maxToolOutputBytes: number;
@@ -45,7 +44,6 @@
       values: {
         maxRunTokens: 30000,
         maxRunSteps: 25,
-        maxRunCostMicros: null,
         maxActiveExecutionSeconds: 600,
         toolTimeoutSeconds: 30,
         maxToolOutputBytes: 32768,
@@ -63,7 +61,6 @@
       values: {
         maxRunTokens: 100000,
         maxRunSteps: 80,
-        maxRunCostMicros: null,
         maxActiveExecutionSeconds: 1800,
         toolTimeoutSeconds: 60,
         maxToolOutputBytes: 65536,
@@ -80,7 +77,6 @@
       values: {
         maxRunTokens: 300000,
         maxRunSteps: 150,
-        maxRunCostMicros: null,
         maxActiveExecutionSeconds: 3600,
         toolTimeoutSeconds: 120,
         maxToolOutputBytes: 131072,
@@ -98,7 +94,6 @@
       values: {
         maxRunTokens: 100000,
         maxRunSteps: 80,
-        maxRunCostMicros: null,
         maxActiveExecutionSeconds: 1800,
         toolTimeoutSeconds: 60,
         maxToolOutputBytes: 65536,
@@ -117,7 +112,6 @@
   };
 
   const getParsedValue = (key: string, raw: string | number | null): number | null => {
-    if (key === 'maxRunCostMicros' && (raw === null || String(raw).trim() === '')) return null;
     const type = getFieldType(key);
     return parseQuantity(raw, type);
   };
@@ -179,8 +173,6 @@
   const hasInvalidDraft = computed(() =>
     Object.entries(draft.value).some(([key, raw]) => {
       const parsed = getParsedValue(key, raw);
-      if (key === 'maxRunCostMicros')
-        return raw !== null && String(raw).trim() !== '' && (parsed === null || parsed < 0);
       return parsed === null || parsed < 1;
     }),
   );
@@ -215,9 +207,9 @@
       keys: ['maxRunSteps', 'maxRunTokens'],
     },
     {
-      id: 'time_cost',
-      title: '超时与成本控制',
-      keys: ['maxActiveExecutionSeconds', 'toolTimeoutSeconds', 'maxRunCostMicros'],
+      id: 'time_control',
+      title: '执行与超时控制',
+      keys: ['maxActiveExecutionSeconds', 'toolTimeoutSeconds'],
     },
     {
       id: 'tools_data',
@@ -340,13 +332,7 @@
                 <p class="mb-1.5 text-[10px] text-text-secondary">
                   {{ $t(`agent.settings.budget.fields.${key}Hint`) }}
                 </p>
-                <QuantityInput
-                  v-model="draft[key]"
-                  :type="getFieldType(key)"
-                  :placeholder="key === 'maxRunCostMicros' ? $t('agent.settings.hardLimits.unlimited') : undefined"
-                  :min="key === 'maxRunCostMicros' ? 0 : 1"
-                  :disabled="busy"
-                />
+                <QuantityInput v-model="draft[key]" :type="getFieldType(key)" :min="1" :disabled="busy" />
               </label>
             </div>
           </div>

@@ -69,8 +69,8 @@ export const beginModelStepTransition = async (
   await tx.execute(
     `INSERT INTO agent_model_attempts
       (id, step_id, attempt_index, status, reserved_tokens, input_tokens, output_tokens,
-       cached_input_tokens, cost_micros, price_version, estimated, error_code, created_at, completed_at)
-     VALUES (?, ?, 1, 'streaming', ?, NULL, NULL, NULL, NULL, NULL, 0, NULL, ?, NULL)`,
+       cached_input_tokens, estimated, error_code, created_at, completed_at)
+     VALUES (?, ?, 1, 'streaming', ?, NULL, NULL, NULL, 0, NULL, ?, NULL)`,
     [attemptId, stepId, command.reservedTokens, command.now],
   );
   const runtimeChanged = await tx.execute(
@@ -143,14 +143,12 @@ export const parkModelStepTransition = async (
   }
   await tx.execute(
     `UPDATE agent_model_attempts SET status = 'completed', input_tokens = ?, output_tokens = ?,
-     cached_input_tokens = ?, cost_micros = ?, price_version = ?, estimated = ?, error_code = NULL, completed_at = ?
+     cached_input_tokens = ?, estimated = ?, error_code = NULL, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens,
       command.outputTokens,
       command.cachedInputTokens,
-      command.costMicros,
-      command.priceVersion,
       command.estimatedUsage ? 1 : 0,
       command.now,
       command.attemptId,
@@ -187,8 +185,6 @@ export const parkModelStepTransition = async (
                     outputTokens: command.outputTokens ?? 0,
                     cachedInputTokens: command.cachedInputTokens ?? 0,
                     estimatedUsage: command.estimatedUsage ?? false,
-                    costMicros: command.costMicros ?? null,
-                    priceVersion: command.priceVersion ?? null,
                   }
                 : null,
           },
@@ -231,7 +227,6 @@ export const parkModelStepTransition = async (
           inputTokens: command.inputTokens,
           outputTokens: command.outputTokens,
           cachedInputTokens: command.cachedInputTokens,
-          costMicros: command.costMicros,
           steps: 1,
         }),
       ),
@@ -279,14 +274,12 @@ export const retryModelStepTransition = async (
 
   const closed = await tx.execute(
     `UPDATE agent_model_attempts SET status = 'failed', input_tokens = ?, output_tokens = ?,
-       cached_input_tokens = ?, cost_micros = ?, price_version = ?, estimated = ?, error_code = ?, completed_at = ?
+       cached_input_tokens = ?, estimated = ?, error_code = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens ?? null,
       command.outputTokens ?? null,
       command.cachedInputTokens ?? null,
-      command.costMicros ?? null,
-      command.priceVersion ?? null,
       command.estimatedUsage ? 1 : 0,
       command.errorCode,
       command.now,
@@ -300,8 +293,8 @@ export const retryModelStepTransition = async (
   await tx.execute(
     `INSERT INTO agent_model_attempts
       (id, step_id, attempt_index, status, reserved_tokens, input_tokens, output_tokens,
-       cached_input_tokens, cost_micros, price_version, estimated, error_code, created_at, completed_at)
-     VALUES (?, ?, ?, 'streaming', ?, NULL, NULL, NULL, NULL, NULL, 0, NULL, ?, NULL)`,
+       cached_input_tokens, estimated, error_code, created_at, completed_at)
+     VALUES (?, ?, ?, 'streaming', ?, NULL, NULL, NULL, 0, NULL, ?, NULL)`,
     [attemptId, command.stepId, attemptIndex, command.reservedTokens, command.now],
   );
   const events: DurableEventInput[] = [
@@ -321,7 +314,6 @@ export const retryModelStepTransition = async (
     inputTokens: command.inputTokens,
     outputTokens: command.outputTokens,
     cachedInputTokens: command.cachedInputTokens,
-    costMicros: command.costMicros,
   });
   const updatedRow = await patchRun(tx, row, { usage: mergedUsage }, events.length, command.now);
   const run = mapRunRow(updatedRow);
@@ -361,14 +353,12 @@ export const pauseModelStepForBudgetTransition = async (
 
   const attemptChanged = await tx.execute(
     `UPDATE agent_model_attempts SET status = 'failed', input_tokens = ?, output_tokens = ?,
-       cached_input_tokens = ?, cost_micros = ?, price_version = ?, estimated = ?, error_code = ?, completed_at = ?
+       cached_input_tokens = ?, estimated = ?, error_code = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens ?? null,
       command.outputTokens ?? null,
       command.cachedInputTokens ?? null,
-      command.costMicros ?? null,
-      command.priceVersion ?? null,
       command.estimatedUsage ? 1 : 0,
       command.errorCode,
       command.now,
@@ -401,7 +391,6 @@ export const pauseModelStepForBudgetTransition = async (
     inputTokens: command.inputTokens,
     outputTokens: command.outputTokens,
     cachedInputTokens: command.cachedInputTokens,
-    costMicros: command.costMicros,
   });
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const activeDelta =
@@ -466,16 +455,13 @@ export const settleModelStepTransition = async (
   const succeeded = command.terminalStatus === 'completed_unverified';
   await tx.execute(
     `UPDATE agent_model_attempts SET
-       status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?, cost_micros = ?,
-       price_version = ?, estimated = ?, error_code = ?, completed_at = ?
+       status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?, estimated = ?, error_code = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       succeeded ? 'completed' : command.terminalStatus === 'cancelled' ? 'aborted' : 'failed',
       command.inputTokens ?? null,
       command.outputTokens ?? null,
       command.cachedInputTokens ?? null,
-      command.costMicros ?? null,
-      command.priceVersion ?? null,
       command.estimatedUsage ? 1 : 0,
       command.errorCode ?? null,
       command.now,
@@ -521,8 +507,6 @@ export const settleModelStepTransition = async (
                     outputTokens: command.outputTokens ?? 0,
                     cachedInputTokens: command.cachedInputTokens ?? 0,
                     estimatedUsage: command.estimatedUsage ?? false,
-                    costMicros: command.costMicros ?? null,
-                    priceVersion: command.priceVersion ?? null,
                   }
                 : null,
           },
@@ -569,7 +553,6 @@ export const settleModelStepTransition = async (
     inputTokens: command.inputTokens,
     outputTokens: command.outputTokens,
     cachedInputTokens: command.cachedInputTokens,
-    costMicros: command.costMicros,
     steps: 1,
   });
   const updated = await tx.execute(
@@ -635,15 +618,13 @@ export const supersedeModelStepTransition = async (
 
   const attemptChanged = await tx.execute(
     `UPDATE agent_model_attempts SET status = 'aborted', input_tokens = ?, output_tokens = ?,
-       cached_input_tokens = ?, cost_micros = ?, price_version = ?, estimated = ?,
+       cached_input_tokens = ?, estimated = ?,
        error_code = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens ?? null,
       command.outputTokens ?? null,
       command.cachedInputTokens ?? null,
-      command.costMicros ?? null,
-      command.priceVersion ?? null,
       command.estimatedUsage ? 1 : 0,
       command.reason === 'new_input' ? 'NEW_INPUT' : 'GOAL_UPDATED',
       command.now,
@@ -682,7 +663,6 @@ export const supersedeModelStepTransition = async (
     inputTokens: command.inputTokens,
     outputTokens: command.outputTokens,
     cachedInputTokens: command.cachedInputTokens,
-    costMicros: command.costMicros,
     steps: 1,
   });
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
