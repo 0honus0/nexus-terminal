@@ -792,18 +792,45 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const resizeHandle = hub.getByRole('button', { name: 'Resize Agent', exact: true });
       await expect(resizeHandle).toBeVisible();
       const initialBounds = await hub.boundingBox();
-      const initialHandle = await resizeHandle.boundingBox();
       expect(initialBounds).not.toBeNull();
-      expect(initialHandle).not.toBeNull();
       expect(initialBounds!.width).toBeGreaterThan(1040);
 
-      await page.mouse.move(initialHandle!.x + initialHandle!.width / 2, initialHandle!.y + initialHandle!.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(
-        initialHandle!.x + initialHandle!.width / 2 - 390,
-        initialHandle!.y + initialHandle!.height / 2,
-      );
-      await page.mouse.up();
+      const resizeToWidth = async (targetWidth: number, pointerId: number) => {
+        const bounds = await hub.boundingBox();
+        const handle = await resizeHandle.boundingBox();
+        expect(bounds).not.toBeNull();
+        expect(handle).not.toBeNull();
+        const startX = handle!.x + handle!.width / 2;
+        const startY = handle!.y + handle!.height / 2;
+        const targetX = startX + targetWidth - bounds!.width;
+        const pointer = {
+          bubbles: true,
+          pointerId,
+          pointerType: 'mouse',
+          isPrimary: true,
+          clientY: startY,
+        };
+        await resizeHandle.dispatchEvent('pointerdown', {
+          ...pointer,
+          button: 0,
+          buttons: 1,
+          clientX: startX,
+        });
+        await page.locator('body').dispatchEvent('pointermove', {
+          ...pointer,
+          button: -1,
+          buttons: 1,
+          clientX: targetX,
+        });
+        await page.locator('body').dispatchEvent('pointerup', {
+          ...pointer,
+          button: 0,
+          buttons: 0,
+          clientX: targetX,
+        });
+      };
+
+      await resizeToWidth(720, 41);
 
       const narrowBounds = await hub.boundingBox();
       expect(narrowBounds).not.toBeNull();
@@ -827,18 +854,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       expect(Math.abs(restoredBounds!.width - narrowBounds!.width)).toBeLessThan(2);
       await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeVisible();
 
-      const restoredHandle = await hub.getByRole('button', { name: 'Resize Agent', exact: true }).boundingBox();
-      expect(restoredHandle).not.toBeNull();
-      await page.mouse.move(
-        restoredHandle!.x + restoredHandle!.width / 2,
-        restoredHandle!.y + restoredHandle!.height / 2,
-      );
-      await page.mouse.down();
-      await page.mouse.move(
-        restoredHandle!.x + restoredHandle!.width / 2 + (initialBounds!.width - restoredBounds!.width),
-        restoredHandle!.y + restoredHandle!.height / 2,
-      );
-      await page.mouse.up();
+      await resizeToWidth(initialBounds!.width, 42);
+      await expect.poll(async () => (await hub.boundingBox())?.width ?? 0).toBeGreaterThan(1040);
       await expect(taskPanelToggle).toBeVisible();
       await expect(taskPanelToggle).toHaveAttribute('aria-expanded', 'false');
       await expect(hub.getByRole('button', { name: 'Open conversations', exact: true })).toBeHidden();
