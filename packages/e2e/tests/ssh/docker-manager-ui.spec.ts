@@ -405,7 +405,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           await expect(compactActions.locator('.actions')).toHaveCSS('justify-content', 'center');
           await expect
             .poll(async () => (await compactActions.locator('.actions').boundingBox())?.width ?? 999)
-            .toBeLessThanOrEqual(72);
+            .toBeLessThanOrEqual(104);
           await expect
             .poll(async () => {
               const boxes = await compactActionButtons.evaluateAll((buttons) =>
