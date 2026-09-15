@@ -90,18 +90,14 @@ test('Agent feature enable opens one global floating window that survives route 
     ]),
   });
 
-  await page
-    .getByRole('link', { name: 'Connections', exact: true })
-    .evaluate((element) => (element as HTMLElement).click());
+  await page.getByRole('link', { name: 'Connections', exact: true }).click({ force: true });
   await expect(page).toHaveURL(/\/connections$/);
   await expect(hub).toBeVisible();
   await expect(launcher).toHaveCount(0);
   const connectionsBounds = await hub.boundingBox();
   expect(connectionsBounds).toEqual(settingsBounds);
 
-  await page
-    .getByRole('link', { name: 'Dashboard', exact: true })
-    .evaluate((element) => (element as HTMLElement).click());
+  await page.getByRole('link', { name: 'Dashboard', exact: true }).click({ force: true });
   await expect(page).toHaveURL(/\/$/);
   await expect(hub).toBeVisible();
   await expect(launcher).toHaveCount(0);

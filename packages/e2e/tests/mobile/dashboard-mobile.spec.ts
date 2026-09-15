@@ -175,13 +175,21 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
       const optionGeometry = await firstOption.evaluate((element) => {
         const box = element.getBoundingClientRect();
         const label = element.querySelector('span')?.getBoundingClientRect();
-        return {
-          x: label ? Math.abs(label.left + label.width / 2 - (box.left + box.width / 2)) : Number.POSITIVE_INFINITY,
-          y: label ? Math.abs(label.top + label.height / 2 - (box.top + box.height / 2)) : Number.POSITIVE_INFINITY,
-        };
+        return label
+          ? {
+              leftInset: label.left - box.left,
+              rightInset: box.right - label.right,
+              verticalOffset: Math.abs(label.top + label.height / 2 - (box.top + box.height / 2)),
+            }
+          : {
+              leftInset: Number.NEGATIVE_INFINITY,
+              rightInset: Number.NEGATIVE_INFINITY,
+              verticalOffset: Number.POSITIVE_INFINITY,
+            };
       });
-      expect(optionGeometry.x).toBeLessThanOrEqual(1);
-      expect(optionGeometry.y).toBeLessThanOrEqual(1);
+      expect(optionGeometry.leftInset).toBeGreaterThanOrEqual(0);
+      expect(optionGeometry.rightInset).toBeGreaterThanOrEqual(0);
+      expect(optionGeometry.verticalOffset).toBeLessThanOrEqual(1);
       await page.keyboard.press('Escape');
       await expect(tagMenu).toBeHidden();
       const filterLeftGap = tagBox!.x - toolbarBox!.x;

@@ -143,10 +143,14 @@ test('mobile resumed terminal loads older suspended output when dragged downward
   );
   const earlyMarker = 'MOBILE_RESUME_HISTORY_EARLY';
   const tailMarker = 'MOBILE_RESUME_HISTORY_TAIL';
-  // Keep retained raw history larger than the initial 256 KiB tail without manufacturing
-  // thousands of visible rows. Carriage returns are terminal-safe same-line history bytes.
-  const snapshot = `${earlyMarker}\r\n${'\r'.repeat(300_000)}${tailMarker}\r\n`;
+  // Keep raw retained history just above 256 KiB without manufacturing thousands of visible rows.
+  // Repeated SGR state changes consume log bytes while each trailing CRLF advances only one row.
+  // A few downward drags can therefore reach the lazy-history boundary and fetch the page with earlyMarker.
+  const ansiStateLine = `${'\x1b[38;5;196m'.repeat(520)}\x1b[0m`;
+  const filler = Array.from({ length: 46 }, () => ansiStateLine);
+  const snapshot = `${earlyMarker}\r\n${filler.join('\r\n')}\r\n${tailMarker}\r\n`;
   expect(Buffer.byteLength(snapshot)).toBeGreaterThan(256 * 1024);
+  expect(Buffer.byteLength(snapshot)).toBeLessThan(320 * 1024);
 
   await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
   await closeWebSocket(original.socket);

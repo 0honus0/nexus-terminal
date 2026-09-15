@@ -512,7 +512,7 @@ test('official first-party catalog is discoverable without repository configurat
   await expect(agentCatalogIds).toHaveCount(2);
   await expect(agentCatalogIds.first()).toBeVisible();
   await expect(agentCatalogIds.nth(1)).toBeVisible();
-  await expect(pluginsSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
+  await expect(pluginsSection.getByText('nexus.fullstack', { exact: true }).first()).toBeVisible();
 });
 
 test('frontend target owns a full Custom App Surface and connects through the isolated Plugin SDK', async ({

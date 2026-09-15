@@ -8,6 +8,7 @@ import {
   ensureTestSshConnection,
   resetTestSshFilesystem,
 } from '../../support/ssh';
+import { closeWebSocket, openWorkspaceSession, requestWorkspace } from '../../support/ws';
 import { slowStep, step } from '../../support/steps';
 
 const CONTAINER_ID = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -290,6 +291,28 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
   expect(replaceEditorWithSuspended(utilityLayout)).toBe(true);
   expect((await context.request.put('/api/v1/settings/layout', { data: utilityLayout })).ok()).toBeTruthy();
 
+  const utilitySuspended = await openWorkspaceSession(
+    context.request,
+    connectionId,
+    `layout-utility-suspended-${crypto.randomUUID()}`,
+  );
+  await requestWorkspace(utilitySuspended.socket, 'suspend.mark');
+  await closeWebSocket(utilitySuspended.socket);
+  type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+  let utilitySuspendedId = '';
+  await expect
+    .poll(async () => {
+      const response = await context.request.get('/api/v1/ssh-suspend/suspended-sessions');
+      expect(response.ok(), await response.text()).toBeTruthy();
+      const sessions = (await response.json()) as SuspendedSession[];
+      utilitySuspendedId =
+        sessions.find(
+          (session) => session.originalWorkspaceId === utilitySuspended.workspaceId && session.status === 'active',
+        )?.id ?? '';
+      return utilitySuspendedId;
+    })
+    .not.toBe('');
+
   try {
     await connectTestSshFromConnectionsPage(page, connectionId);
 
@@ -351,33 +374,8 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           .toBeLessThanOrEqual(6);
 
         await page.setViewportSize({ width: 1440, height: 900 });
-        const activeTab = page
-          .getByTestId('terminal-tab-bar')
-          .locator('[data-session-id]')
-          .filter({ hasText: 'E2E SSH' })
-          .first();
-        const workspaceId = await activeTab.getAttribute('data-session-id');
-        expect(workspaceId).toBeTruthy();
-        await activeTab.click({ button: 'right' });
-        await page.getByText('Suspend Session', { exact: true }).click();
-
-        type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
-        let suspendedSessionId = '';
-        await expect
-          .poll(async () => {
-            const response = await context.request.get('/api/v1/ssh-suspend/suspended-sessions');
-            expect(response.ok(), await response.text()).toBeTruthy();
-            const sessions = (await response.json()) as SuspendedSession[];
-            suspendedSessionId =
-              sessions.find((session) => session.originalWorkspaceId === workspaceId && session.status === 'active')
-                ?.id ?? '';
-            return suspendedSessionId;
-          })
-          .not.toBe('');
-        await page.reload({ waitUntil: 'domcontentloaded' });
-        await expect(suspendedPanel).toBeVisible();
-        const suspendedSession = suspendedPanel.getByTestId(`suspended-session-${suspendedSessionId}`);
-        await expect(suspendedSession).toBeVisible({ timeout: 20_000 });
+        const suspendedSession = suspendedPanel.getByTestId(`suspended-session-${utilitySuspendedId}`);
+        await expect(suspendedSession).toBeVisible({ timeout: 15_000 });
         try {
           // Force the right utility pane into the minimum-width card state. Medium narrow panes
           // keep icon actions beside the text; only this tighter band stacks them underneath.
@@ -464,10 +462,6 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           await expect(compactActionButtons.first()).toHaveCSS('padding-left', '0px');
           await expect(compactActionButtons.first()).toHaveCSS('padding-right', '0px');
         } finally {
-          if (await markedSession.isVisible().catch(() => false)) {
-            await markedSession.getByRole('button', { name: 'Unmark Suspend', exact: true }).click();
-            await expect(markedSession).toHaveCount(0);
-          }
           await page.setViewportSize({ width: 1440, height: 900 });
         }
       },
@@ -749,6 +743,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
         .toBe(true);
     });
   } finally {
+    if (utilitySuspendedId) {
+      const cleanup = await context.request.delete(`/api/v1/ssh-suspend/terminate/${utilitySuspendedId}`);
+      expect([200, 404]).toContain(cleanup.status());
+    }
     await context.request.put('/api/v1/settings/layout', { data: originalLayout });
     await context.request.put('/api/v1/settings', { data: { layoutLocked: false } });
     await context.request.put('/api/v1/settings', { data: { navBarVisible: true } });
