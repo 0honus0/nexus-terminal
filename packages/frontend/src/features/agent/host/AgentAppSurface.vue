@@ -41,6 +41,9 @@
   facade.start();
   const runtimeOperation = createRuntimeOperationState();
   const threads = ref<AgentThreadView[]>([]);
+  const threadNextCursor = ref<string | null>(null);
+  const threadListLoadingMore = ref(false);
+  const THREAD_PAGE_SIZE = 20;
   const currentThread = ref<AgentThreadView | null>(null);
   const entries = ref<AgentLedgerEntry[]>([]);
   const nextCursor = ref<string | null>(null);
@@ -598,9 +601,11 @@
   const refreshThreadListFromHost = async (): Promise<void> => {
     const requestGeneration = ++threadListRefreshGeneration;
     try {
-      const page = await facade.listThreads();
+      const requestedLimit = Math.min(100, Math.max(THREAD_PAGE_SIZE, threads.value.length));
+      const page = await facade.listThreads(undefined, requestedLimit);
       if (requestGeneration !== threadListRefreshGeneration) return;
       threads.value = page.items;
+      threadNextCursor.value = page.nextCursor;
       if (currentThread.value) {
         currentThread.value = page.items.find((thread) => thread.id === currentThread.value?.id) ?? currentThread.value;
       }
@@ -640,12 +645,28 @@
     document.getElementById('agent-composer')?.focus();
   };
 
+  const loadMoreThreads = async (): Promise<void> => {
+    const cursor = threadNextCursor.value;
+    if (!cursor || threadListLoadingMore.value) return;
+    threadListLoadingMore.value = true;
+    try {
+      const page = await facade.listThreads(cursor, THREAD_PAGE_SIZE);
+      const known = new Set(threads.value.map((thread) => thread.id));
+      threads.value = [...threads.value, ...page.items.filter((thread) => !known.has(thread.id))];
+      threadNextCursor.value = page.nextCursor;
+    } catch (cause) {
+      error.value = explain(cause);
+    } finally {
+      threadListLoadingMore.value = false;
+    }
+  };
+
   const load = async (): Promise<void> => {
     loading.value = true;
     error.value = '';
     try {
       const [threadPage, nextDefinitions, nextProviders, settings, , runtimeAvailability] = await Promise.all([
-        facade.listThreads(),
+        facade.listThreads(undefined, THREAD_PAGE_SIZE),
         facade.definitions(),
         facade.providers(),
         facade.settings(),
@@ -653,6 +674,7 @@
         agentApi.workspaceRuntimeAvailability().catch(() => null),
       ]);
       threads.value = threadPage.items;
+      threadNextCursor.value = threadPage.nextCursor;
       definitions.value = nextDefinitions;
       providers.value = nextProviders;
       settingsView.value = settings;
@@ -1162,7 +1184,7 @@
           <div class="flex min-w-0 items-center gap-1.5">
             <span class="text-xs font-semibold text-foreground leading-none">{{ $t('agent.operations.threads') }}</span>
             <span v-if="threads.length" class="text-[10px] font-medium leading-none text-text-secondary/60">
-              {{ threads.length }}
+              {{ threadNextCursor ? `${threads.length}+` : threads.length }}
             </span>
             <span
               v-if="activeThreadCount > 0"
@@ -1308,6 +1330,21 @@
           :style="{ height: `${threadWindow.bottomSpacer}px` }"
           aria-hidden="true"
         ></div>
+
+        <button
+          v-if="threadNextCursor && !threadQuery"
+          type="button"
+          class="mx-auto mt-1.5 flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-medium text-text-secondary transition-colors hover:bg-card/55 hover:text-foreground disabled:opacity-45"
+          :disabled="threadListLoadingMore"
+          @click="loadMoreThreads"
+        >
+          <i
+            class="fa-solid text-[8px]"
+            :class="threadListLoadingMore ? 'fa-spinner fa-spin' : 'fa-clock-rotate-left'"
+            aria-hidden="true"
+          ></i>
+          <span>{{ $t('agent.operations.loadMoreThreads') }}</span>
+        </button>
 
         <!-- 空状态 -->
         <div

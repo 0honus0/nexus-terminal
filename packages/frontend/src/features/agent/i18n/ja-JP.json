@@ -722,6 +722,7 @@
       "runModelLocked": "現在の Run が実行中の間、モデルは固定されています。",
       "threadCounts": "会話 {total} 件 · アクティブ {active} 件",
       "searchThreads": "会話を検索",
+      "loadMoreThreads": "以前の会話を表示",
       "noThreadsFound": "一致する会話はありません。",
       "activeRunModel": "現在の Run モデル",
       "nextRunModel": "次の Run",

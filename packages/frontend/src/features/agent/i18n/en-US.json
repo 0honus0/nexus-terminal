@@ -722,6 +722,7 @@
       "runModelLocked": "The model is frozen while the current Run is active.",
       "threadCounts": "{total} conversations · {active} active",
       "searchThreads": "Search conversations",
+      "loadMoreThreads": "Show older conversations",
       "noThreadsFound": "No conversations match this search.",
       "activeRunModel": "Run model",
       "nextRunModel": "Next run",

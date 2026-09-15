@@ -1266,11 +1266,11 @@ export const agentApi = {
   async summary(): Promise<HostSummaryView> {
     return unwrap((await httpClient.get<AgentEnvelope<HostSummaryView>>('/agent/summary')).data);
   },
-  async threads(appId: string, before?: string): Promise<AgentThreadPage> {
+  async threads(appId: string, before?: string, limit = 50): Promise<AgentThreadPage> {
     return unwrap(
       (
         await httpClient.get<AgentEnvelope<AgentThreadPage>>(`/apps/${encodeURIComponent(appId)}/threads`, {
-          params: { limit: 50, ...(before ? { before } : {}) },
+          params: { limit, ...(before ? { before } : {}) },
         })
       ).data,
     );
