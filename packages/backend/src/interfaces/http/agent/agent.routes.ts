@@ -237,6 +237,41 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
   );
 
   router.get(
+    '/apps/:appId/execution-policy',
+    agentRoute(async (request, response) => {
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(request, response, await dependencies.host.getAppExecutionPolicy(scope));
+    }),
+  );
+
+  router.put(
+    '/apps/:appId/execution-policy',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['overrides', 'expectedVersion'])) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      if (
+        !isRecord(request.body.overrides) ||
+        !Number.isSafeInteger(request.body.expectedVersion) ||
+        (request.body.expectedVersion as number) < 0
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(
+        request,
+        response,
+        await dependencies.host.replaceAppExecutionPolicy(
+          scope,
+          request.body.overrides,
+          request.body.expectedVersion as number,
+        ),
+      );
+    }),
+  );
+
+  router.get(
     '/apps/:appId/plugin-intents',
     agentRoute(async (request, response) => {
       const rawLimit = queryString(request.query.limit);

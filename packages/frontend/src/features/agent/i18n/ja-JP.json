@@ -274,7 +274,7 @@
       },
       "budget": {
         "title": "予算とコンテキスト",
-        "description": "Run のソフト予算とコンテキスト上限を設定します。予算不足時は失敗扱いにせず、明示的な増額を待ちます。",
+        "description": "Run 全体の予算とツール資源を設定します。モデル単体のコンテキストと出力能力は Model Registry が決定します。",
         "presetsTitle": "シナリオプリセット",
         "presetsHint": "推奨プリセットを選択してワンクリックで適用するか、自由にカスタム設定できます。",
         "presetLight": "軽量クイック",
@@ -312,7 +312,8 @@
           "maxRecallBytes": "記憶想起バイト上限",
           "maxRecallBytesHint": "想起テキストの最大バイト数制限"
         },
-        "readyNotice": "現在の設定は準備済みで、次回の Run から適用されます。"
+        "readyNotice": "現在の設定は準備済みで、次回の Run から適用されます。",
+        "modelCapabilityNotice": "1 回のコンテキストと最大出力は Provider/Registry の物理モデル能力をそのまま使用します。ここでは Run 全体とツール資源の予算だけを制御します。"
       },
       "quantity": {
         "placeholderBytes": "例: 10M, 500K",
@@ -631,6 +632,35 @@
         "sandbox": "サンドボックス",
         "ready": "準備完了",
         "notReady": "未準備"
+      },
+      "executionPolicy": {
+        "title": "Plugin / App 個別実行予算",
+        "description": "各 Agent Plugin/App は Run・ツール・協調予算を個別に上書きできます。未設定項目はグローバル既定値を継承します。",
+        "app": "Plugin / App を選択",
+        "override": "上書き",
+        "inherited": "グローバル既定値を継承",
+        "effective": "現在の有効値: {value}",
+        "compactionHint": "物理モデルのコンテキストに収まらない場合だけ古い履歴を圧縮します。モデルの context window 自体は縮小しません。",
+        "compactionInherited": "継承: {value}",
+        "compaction": {
+          "aggressive": "積極的",
+          "balanced": "バランス",
+          "conservative": "保守的"
+        },
+        "fields": {
+          "maxRunTokens": "Run 総 Token 予算",
+          "maxRunSteps": "Run 最大ステップ保険",
+          "maxRunCostMicros": "Run コスト上限 (µ)",
+          "maxActiveExecutionSeconds": "最大アクティブ実行時間",
+          "toolTimeoutSeconds": "ツールタイムアウト",
+          "maxToolOutputBytes": "モデル可視ツール出力",
+          "maxRawToolBytes": "ツール生データ上限",
+          "maxRecallItems": "Recall 件数",
+          "maxRecallBytes": "Recall 容量",
+          "maxSubagentMessages": "Subagent メッセージ数",
+          "maxSubagentMessageBytes": "Subagent メッセージ容量",
+          "contextCompactionMode": "動的コンテキスト圧縮"
+        }
       }
     },
     "launcher": {

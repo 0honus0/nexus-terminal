@@ -106,6 +106,8 @@ export class ContextService {
       throw new Error('VALIDATION_FAILED');
 
     const availableTokens = Math.min(input.maxContextTokens, input.modelContextWindow - input.reservedOutputTokens);
+    const compactionMode = input.compactionMode ?? 'balanced';
+    const compactionRatio = compactionMode === 'aggressive' ? 0.65 : compactionMode === 'conservative' ? 0.92 : 0.8;
     const safetyTokens = estimateTokens(SAFETY_MESSAGE);
     const inputTokens = estimateTokens(input.currentInput);
     if (safetyTokens + inputTokens > availableTokens) throw new Error('CONTEXT_BUDGET_EXCEEDED');
@@ -274,6 +276,23 @@ export class ContextService {
       usedTokens += tokens;
     }
 
+    // Compaction is adaptive: use the full physical model window while the context fits.
+    // Once something no longer fits, trim the oldest raw ledger turns to create working
+    // headroom. This is a context-management policy, not a smaller model capability limit.
+    const compacted = droppedSections.length > 0;
+    if (compacted && selectedLedger.length > 0) {
+      const targetTokens = Math.max(safetyTokens + inputTokens, Math.floor(availableTokens * compactionRatio));
+      for (const candidate of selectedLedger) {
+        if (usedTokens <= targetTokens) break;
+        const messageIndex = messages.indexOf(candidate.message);
+        if (messageIndex >= 0) messages.splice(messageIndex, 1);
+        const sourceIndex = sourceRanges.findIndex((source) => source.kind === 'ledger' && source.id === candidate.id);
+        if (sourceIndex >= 0) sourceRanges.splice(sourceIndex, 1);
+        usedTokens = Math.max(safetyTokens + inputTokens, usedTokens - candidate.tokens);
+        if (!droppedSections.includes(`ledger:${candidate.id}`)) droppedSections.push(`ledger:${candidate.id}`);
+      }
+    }
+
     const safetyMessage = messages[0]!;
     const skillMessages = messages.filter(
       (message, index) =>
@@ -327,6 +346,7 @@ export class ContextService {
           maxContextTokens: input.maxContextTokens,
           modelContextWindow: input.modelContextWindow,
           reservedOutputTokens: input.reservedOutputTokens,
+          compactionMode,
         }),
       )
       .digest('hex');
@@ -338,6 +358,8 @@ export class ContextService {
       estimatedInputTokens: usedTokens,
       reservedOutputTokens: input.reservedOutputTokens,
       droppedSections,
+      compacted,
+      compactionMode,
       sourceRanges,
       contextEpoch: epochHash,
       stablePrefixHash,

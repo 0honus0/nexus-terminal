@@ -2,7 +2,11 @@
   import { computed, ref, watch } from 'vue';
   import type { AgentHardLimits, AgentSettingsView, HardLimitPreview } from '../api/agent-api';
 
-  const props = defineProps<{ settings: AgentSettingsView; preview: HardLimitPreview | null; busy: boolean }>();
+  const props = defineProps<{
+    settings: AgentSettingsView;
+    preview: HardLimitPreview | null;
+    busy: boolean;
+  }>();
   const emit = defineEmits<{
     preview: [proposed: Partial<AgentHardLimits>];
     confirm: [confirmationId: string, expectedVersion: number];
@@ -28,14 +32,23 @@
   });
 
   const canPreview = computed(() => Object.keys(proposedChanges.value).length > 0 && !props.busy);
+  const visibleHardLimitKeys = computed(() =>
+    (Object.keys(props.settings.hardLimits) as Array<keyof AgentHardLimits>).filter(
+      (key) => !['maxContextTokens', 'maxOutputTokens'].includes(key),
+    ),
+  );
 </script>
 
 <template>
   <section class="rounded-xl border border-border/60 bg-card p-5">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 class="text-base font-semibold">{{ $t('agent.settings.hardLimits.title') }}</h2>
-        <p class="mt-1 text-sm text-text-secondary">{{ $t('agent.settings.hardLimits.description') }}</p>
+        <h2 class="text-base font-semibold">
+          {{ $t('agent.settings.hardLimits.title') }}
+        </h2>
+        <p class="mt-1 text-sm text-text-secondary">
+          {{ $t('agent.settings.hardLimits.description') }}
+        </p>
       </div>
       <button
         type="button"
@@ -48,7 +61,7 @@
     </div>
 
     <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-      <label v-for="(_, key) in settings.hardLimits" :key="key" class="block">
+      <label v-for="key in visibleHardLimitKeys" :key="key" class="block">
         <span class="mb-1 block break-all text-xs font-medium text-text-secondary">{{ key }}</span>
         <input
           v-model="draft[String(key)]"
@@ -62,7 +75,11 @@
           v-if="settings.requestedSettings.hardLimits[key] !== settings.effectiveSettings.hardLimits[key]"
           class="mt-1 block text-xs text-text-secondary"
         >
-          {{ $t('agent.settings.hardLimits.effective', { value: settings.effectiveSettings.hardLimits[key] }) }}
+          {{
+            $t('agent.settings.hardLimits.effective', {
+              value: settings.effectiveSettings.hardLimits[key],
+            })
+          }}
         </span>
       </label>
     </div>
@@ -70,7 +87,9 @@
     <div v-if="preview" class="mt-5 rounded-lg border border-primary/40 bg-primary/5 p-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 class="font-semibold">{{ $t('agent.settings.hardLimits.confirmTitle') }}</h3>
+          <h3 class="font-semibold">
+            {{ $t('agent.settings.hardLimits.confirmTitle') }}
+          </h3>
           <p class="mt-1 text-sm text-text-secondary">
             {{
               $t('agent.settings.hardLimits.confirmDescription', {

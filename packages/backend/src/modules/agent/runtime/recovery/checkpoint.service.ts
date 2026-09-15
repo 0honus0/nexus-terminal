@@ -18,29 +18,16 @@ const clampBudget = (
   model: { contextWindow: number; maxOutputTokens: number },
 ): RunBudget => {
   const hard = settings.hardLimits;
-  const effective = settings.effectiveSettings.budget;
   const maxRunCostMicros =
     source.maxRunCostMicros === null
       ? hard.maxRunCostMicros
       : hard.maxRunCostMicros === null
         ? source.maxRunCostMicros
         : Math.min(source.maxRunCostMicros, hard.maxRunCostMicros);
-  const maxContextTokens = Math.max(
-    2,
-    Math.min(source.maxContextTokens, effective.maxContextTokens, hard.maxContextTokens, model.contextWindow),
-  );
+  const maxContextTokens = Math.max(2, model.contextWindow);
   return {
     maxContextTokens,
-    maxOutputTokens: Math.max(
-      1,
-      Math.min(
-        source.maxOutputTokens,
-        effective.maxOutputTokens,
-        hard.maxOutputTokens,
-        model.maxOutputTokens,
-        maxContextTokens - 1,
-      ),
-    ),
+    maxOutputTokens: Math.max(1, Math.min(model.maxOutputTokens, maxContextTokens - 1)),
     maxRunTokens: Math.min(source.maxRunTokens, hard.maxRunTokens),
     maxRunSteps: Math.min(source.maxRunSteps, hard.maxRunSteps),
     maxRunCostMicros,
@@ -52,6 +39,7 @@ const clampBudget = (
     maxRecallBytes: Math.min(source.maxRecallBytes, hard.maxRecallBytes),
     maxSubagentMessages: Math.min(source.maxSubagentMessages, hard.maxSubagentMessagesPerRun),
     maxSubagentMessageBytes: Math.min(source.maxSubagentMessageBytes, hard.maxSubagentMessageBytesPerRun),
+    contextCompactionMode: source.contextCompactionMode ?? 'balanced',
     revision: settings.revision,
   };
 };

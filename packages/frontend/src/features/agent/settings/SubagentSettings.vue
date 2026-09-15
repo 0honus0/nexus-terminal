@@ -24,11 +24,18 @@
   const profileError = ref('');
 
   const capabilityOptions = [
+    'ai.model.use',
     'runs.execute',
     'machine.diagnostics.read',
     'machine.files.read',
+    'machine.files.write',
+    'machine.shell.execute',
+    'machine.docker.mutate',
     'workspace.runtime.execute',
+    'workspace.runtime.manage',
     'integration.mcp.invoke',
+    'integration.acp.execute',
+    'browser.operate',
     'artifacts.read',
     'artifacts.write',
     'storage.app',

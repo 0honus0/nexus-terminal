@@ -78,6 +78,7 @@ export interface RunBudget {
   maxRecallBytes: number;
   maxSubagentMessages: number;
   maxSubagentMessageBytes: number;
+  contextCompactionMode?: 'aggressive' | 'balanced' | 'conservative';
   revision: number;
 }
 

@@ -24,8 +24,6 @@
     description: string;
     badge?: string;
     values: {
-      maxContextTokens: number;
-      maxOutputTokens: number;
       maxRunTokens: number;
       maxRunSteps: number;
       maxRunCostMicros: number | null;
@@ -45,8 +43,6 @@
       label: t('agent.settings.budget.presetLight'),
       description: t('agent.settings.budget.presetLightDesc'),
       values: {
-        maxContextTokens: 16384,
-        maxOutputTokens: 2048,
         maxRunTokens: 30000,
         maxRunSteps: 25,
         maxRunCostMicros: null,
@@ -65,8 +61,6 @@
       description: t('agent.settings.budget.presetBalancedDesc'),
       badge: t('agent.settings.budget.recommendedBadge'),
       values: {
-        maxContextTokens: 32000,
-        maxOutputTokens: 4096,
         maxRunTokens: 100000,
         maxRunSteps: 80,
         maxRunCostMicros: null,
@@ -84,8 +78,6 @@
       label: t('agent.settings.budget.presetDeep'),
       description: t('agent.settings.budget.presetDeepDesc'),
       values: {
-        maxContextTokens: 64000,
-        maxOutputTokens: 8192,
         maxRunTokens: 300000,
         maxRunSteps: 150,
         maxRunCostMicros: null,
@@ -104,8 +96,6 @@
       description: t('agent.settings.budget.presetCustomDesc'),
       badge: t('agent.settings.budget.customBadge'),
       values: {
-        maxContextTokens: 32000,
-        maxOutputTokens: 4096,
         maxRunTokens: 100000,
         maxRunSteps: 80,
         maxRunCostMicros: null,
@@ -120,7 +110,7 @@
   ]);
 
   const getFieldType = (key: string): QuantityType => {
-    if (['maxRunTokens', 'maxContextTokens', 'maxOutputTokens'].includes(key)) return 'tokens';
+    if (key === 'maxRunTokens') return 'tokens';
     if (['maxToolOutputBytes', 'maxRawToolBytes', 'maxRecallBytes'].includes(key)) return 'bytes';
     if (['maxActiveExecutionSeconds', 'toolTimeoutSeconds'].includes(key)) return 'seconds';
     return 'number';
@@ -222,7 +212,7 @@
     {
       id: 'tokens_steps',
       title: '执行步数与 Token 预算',
-      keys: ['maxRunSteps', 'maxRunTokens', 'maxContextTokens', 'maxOutputTokens'],
+      keys: ['maxRunSteps', 'maxRunTokens'],
     },
     {
       id: 'time_cost',
@@ -262,6 +252,10 @@
     </div>
 
     <div class="space-y-5 p-4 sm:p-5">
+      <div class="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 text-xs leading-5 text-text-secondary">
+        <i class="fa-solid fa-circle-info mr-1.5 text-primary" aria-hidden="true"></i>
+        {{ $t('agent.settings.budget.modelCapabilityNotice') }}
+      </div>
       <div>
         <div class="mb-2 flex items-center justify-between">
           <span class="text-xs font-semibold text-foreground">{{ $t('agent.settings.budget.presetsTitle') }}</span>

@@ -20,6 +20,7 @@
   import AgentFeatureSettings from './AgentFeatureSettings.vue';
   import AcpRuntimeSettings from './AcpRuntimeSettings.vue';
   import AppManagementSettings from './AppManagementSettings.vue';
+  import AppExecutionPolicySettings from './AppExecutionPolicySettings.vue';
   import BudgetContextSettings from './BudgetContextSettings.vue';
   import BrowserRuntimeSettings from './BrowserRuntimeSettings.vue';
   import WorkspaceRuntimeSettings from './WorkspaceRuntimeSettings.vue';
@@ -539,6 +540,9 @@
               :busy="busy"
               @save="(patch) => patchSection('performance', patch)"
             />
+
+            <!-- 每个 Agent Plugin/App 独立执行预算；未覆盖字段继承全局默认 -->
+            <AppExecutionPolicySettings :apps="apps" :busy="busy" />
 
             <!-- Workspace 开发环境运行时 -->
             <WorkspaceRuntimeSettings

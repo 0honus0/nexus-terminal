@@ -274,7 +274,7 @@
       },
       "budget": {
         "title": "Budget and context",
-        "description": "Soft Run budgets and context limits. Runs pause for explicit budget increases instead of silently failing.",
+        "description": "Configure total Run and tool-resource budgets. Per-call model context and output capabilities come from the Model Registry.",
         "presetsTitle": "Scenario Presets",
         "presetsHint": "Select a scenario preset to apply recommended values, or customize parameters freely.",
         "presetLight": "Fast & Light",
@@ -312,7 +312,8 @@
           "maxRecallBytes": "Memory Recall Bytes",
           "maxRecallBytesHint": "Maximum total bytes for recalled memories"
         },
-        "readyNotice": "The current configuration is ready and will apply to the next Run."
+        "readyNotice": "The current configuration is ready and will apply to the next Run.",
+        "modelCapabilityNotice": "Per-call context and output limits come directly from the Provider/Registry model capabilities. These settings only govern total Run and tool-resource budgets."
       },
       "quantity": {
         "placeholderBytes": "e.g. 10M, 500K",
@@ -631,6 +632,35 @@
         "sandbox": "Sandbox",
         "ready": "Ready",
         "notReady": "Not ready"
+      },
+      "executionPolicy": {
+        "title": "Plugin / App execution budget",
+        "description": "Each Agent Plugin/App can override global Run, tool, and collaboration budgets. Unset fields inherit global defaults.",
+        "app": "Select Plugin / App",
+        "override": "Override",
+        "inherited": "Inherit global default",
+        "effective": "Effective: {value}",
+        "compactionHint": "Old history is compacted only when the physical model window would overflow; Nexus does not shrink the model context window.",
+        "compactionInherited": "Inherited: {value}",
+        "compaction": {
+          "aggressive": "Aggressive",
+          "balanced": "Balanced",
+          "conservative": "Conservative"
+        },
+        "fields": {
+          "maxRunTokens": "Run token budget",
+          "maxRunSteps": "Run step fuse",
+          "maxRunCostMicros": "Run cost ceiling (µ)",
+          "maxActiveExecutionSeconds": "Active execution limit",
+          "toolTimeoutSeconds": "Tool timeout",
+          "maxToolOutputBytes": "Model-visible tool output",
+          "maxRawToolBytes": "Raw tool collection limit",
+          "maxRecallItems": "Recall items",
+          "maxRecallBytes": "Recall bytes",
+          "maxSubagentMessages": "Subagent messages",
+          "maxSubagentMessageBytes": "Subagent message bytes",
+          "contextCompactionMode": "Dynamic context compaction"
+        }
       }
     },
     "launcher": {

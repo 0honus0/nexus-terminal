@@ -44,6 +44,7 @@ import type { IntegrationKind, IntegrationRefreshView, IntegrationView } from '.
 import type { DiscoveredProviderModel, ProviderTestResult, ProviderView } from './ai/model.types';
 import type { MemoryImportConfirmation, MemoryStatus, MemoryView } from './ai/memory.repository.port';
 import type { ApprovalView } from './runtime/approvals/approval.repository.port';
+import type { AgentExecutionPolicyView } from './host/agent-execution-policy.service';
 import type { CheckpointView } from './runtime/recovery/checkpoint.repository.port';
 import type { AgentDefinitionView } from './runtime/definitions/agent-definition.port';
 import type { TransientRunEvent } from './runtime/events/event.types';
@@ -121,6 +122,12 @@ export interface AgentHostFacade {
     capabilities: readonly AgentCapability[],
     expectedPolicyRevision: number,
   ): Promise<{ app: AppView; grants: CapabilityGrant[] }>;
+  getAppExecutionPolicy(scope: Scope): Promise<AgentExecutionPolicyView>;
+  replaceAppExecutionPolicy(
+    scope: Scope,
+    overrides: unknown,
+    expectedVersion: number,
+  ): Promise<AgentExecutionPolicyView>;
   createAppIntent(scope: Scope, input: CreateAppIntentInput): Promise<AppIntentReceipt>;
   listReceivedAppIntents(scope: Scope, limit?: number): Promise<AppIntentReceipt[]>;
   revokeAppIntent(scope: Scope, receiptId: string): Promise<void>;

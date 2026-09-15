@@ -67,10 +67,11 @@ export class SubagentContextBuilder {
     ].join('\n');
     const estimatedInputTokens = estimateTokens(encodedContext);
     const remainingChildTokens = delegation.budget.maxTokens - delegation.usage.tokens;
+    const remainingRunTokens = run.budget.maxRunTokens - run.usage.inputTokens - run.usage.outputTokens;
     const maxOutputTokens = Math.min(
       model.maxOutputTokens,
-      run.budget.maxOutputTokens,
       Math.max(0, remainingChildTokens - estimatedInputTokens),
+      Math.max(0, remainingRunTokens - estimatedInputTokens),
     );
     if (maxOutputTokens < 1 || Buffer.byteLength(encodedContext, 'utf8') > MAX_CONTEXT_BYTES) {
       return { kind: 'fail', code: 'DELEGATION_BUDGET_EXCEEDED' };

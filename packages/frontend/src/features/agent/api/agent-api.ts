@@ -35,6 +35,29 @@ export interface RecommendedAgentPluginInstallResult {
   installedNow: boolean;
 }
 
+export type AgentContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
+
+export interface AgentExecutionPolicyOverrides {
+  maxRunTokens?: number;
+  maxRunSteps?: number;
+  maxRunCostMicros?: number | null;
+  maxActiveExecutionSeconds?: number;
+  toolTimeoutSeconds?: number;
+  maxToolOutputBytes?: number;
+  maxRawToolBytes?: number;
+  maxRecallItems?: number;
+  maxRecallBytes?: number;
+  maxSubagentMessages?: number;
+  maxSubagentMessageBytes?: number;
+  contextCompactionMode?: AgentContextCompactionMode;
+}
+
+export interface AgentExecutionPolicyView {
+  overrides: AgentExecutionPolicyOverrides;
+  effective: Required<Omit<AgentExecutionPolicyOverrides, 'maxRunCostMicros'>> & { maxRunCostMicros: number | null };
+  version: number;
+}
+
 export interface AgentAppSummary {
   id: string;
   displayName: string;
@@ -480,6 +503,7 @@ export interface AgentRunView {
     maxRecallBytes: number;
     maxSubagentMessages: number;
     maxSubagentMessageBytes: number;
+    contextCompactionMode?: AgentContextCompactionMode;
     revision: number;
   };
   definition: {
@@ -817,6 +841,30 @@ export const agentApi = {
         await httpClient.patch<AgentEnvelope<AgentAppSummary>>(
           `/agent/apps/${encodeURIComponent(app.id)}`,
           { enabled, expectedVersion: app.stateVersion },
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async appExecutionPolicy(appId: string): Promise<AgentExecutionPolicyView> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<AgentExecutionPolicyView>>(
+          `/agent/apps/${encodeURIComponent(appId)}/execution-policy`,
+        )
+      ).data,
+    );
+  },
+  async replaceAppExecutionPolicy(
+    appId: string,
+    overrides: AgentExecutionPolicyOverrides,
+    expectedVersion: number,
+  ): Promise<AgentExecutionPolicyView> {
+    return unwrap(
+      (
+        await httpClient.put<AgentEnvelope<AgentExecutionPolicyView>>(
+          `/agent/apps/${encodeURIComponent(appId)}/execution-policy`,
+          { overrides, expectedVersion },
           { headers: await mutationHeaders() },
         )
       ).data,

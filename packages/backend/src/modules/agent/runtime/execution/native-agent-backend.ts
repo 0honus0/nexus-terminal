@@ -169,14 +169,19 @@ export class NativeAgentBackend implements AgentBackendPort {
       }
       const { model, contextPlan } = preparedModelStep;
 
-      const budgetWait = await this.reserveModelBudget(snapshot, model, contextPlan.estimatedInputTokens);
+      const budgetWait = await this.reserveModelBudget(
+        snapshot,
+        model,
+        contextPlan.estimatedInputTokens,
+        contextPlan.reservedOutputTokens,
+      );
       if (budgetWait) {
         yield { type: 'durable', runId: snapshot.id, cursor: budgetWait.eventCursor };
         yield { type: 'settled', run: budgetWait.run };
         return;
       }
 
-      const worstCaseTokens = contextPlan.estimatedInputTokens + snapshot.budget.maxOutputTokens;
+      const worstCaseTokens = contextPlan.estimatedInputTokens + contextPlan.reservedOutputTokens;
       const begun = await this.stateCommit.beginModelStep({
         scope,
         runId: snapshot.id,
@@ -224,6 +229,7 @@ export class NativeAgentBackend implements AgentBackendPort {
             model,
             contextPlan.estimatedInputTokens,
             usageAfterFailed,
+            contextPlan.reservedOutputTokens,
           );
           if (budgetReason) {
             const paused = await this.stateCommit.pauseModelStepForBudget({
@@ -739,10 +745,11 @@ export class NativeAgentBackend implements AgentBackendPort {
     model: ProviderModelConfig,
     estimatedInputTokens: number,
     usage: RunUsage,
+    maxOutputTokens: number,
   ): JsonValue | null {
-    const requestedTokens = estimatedInputTokens + run.budget.maxOutputTokens;
+    const requestedTokens = estimatedInputTokens + maxOutputTokens;
     const remainingTokens = Math.max(0, run.budget.maxRunTokens - usage.inputTokens - usage.outputTokens);
-    const requestedCostMicros = calculateModelCostMicros(model, estimatedInputTokens, run.budget.maxOutputTokens);
+    const requestedCostMicros = calculateModelCostMicros(model, estimatedInputTokens, maxOutputTokens);
     const remainingCostMicros =
       run.budget.maxRunCostMicros === null ? null : Math.max(0, run.budget.maxRunCostMicros - usage.costMicros);
     const activeExecutionSeconds =
@@ -777,13 +784,14 @@ export class NativeAgentBackend implements AgentBackendPort {
     snapshot: RunSnapshot,
     model: ProviderModelConfig,
     estimatedInputTokens: number,
+    maxOutputTokens: number,
   ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>> | null> {
-    const worstCaseTokens = estimatedInputTokens + snapshot.budget.maxOutputTokens;
+    const worstCaseTokens = estimatedInputTokens + maxOutputTokens;
     const remainingTokens = Math.max(
       0,
       snapshot.budget.maxRunTokens - snapshot.usage.inputTokens - snapshot.usage.outputTokens,
     );
-    const worstCaseCost = calculateModelCostMicros(model, estimatedInputTokens, snapshot.budget.maxOutputTokens);
+    const worstCaseCost = calculateModelCostMicros(model, estimatedInputTokens, maxOutputTokens);
     const remainingCost =
       snapshot.budget.maxRunCostMicros === null
         ? null

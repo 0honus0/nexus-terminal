@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import { ProviderService } from '../../ai/provider.service';
+import type { ProviderModelConfig } from '../../ai/model.types';
 import { deriveAutomaticThreadTitle } from '../../ai/thread-title';
 import { AgentSettingsService } from '../../host/agent-settings.service';
 import { AppLifecycleService } from '../../host/app-lifecycle.service';
+import type { AgentExecutionPolicyService, AgentExecutionPolicyView } from '../../host/agent-execution-policy.service';
 import { isAgentUuid } from '../../uuid';
 import type { AgentDefinitionRegistryPort } from '../definitions/agent-definition.port';
 import type { RunQueryPort } from './run.repository.port';
@@ -52,21 +54,27 @@ const validateConnectionIds = (values: number[]): number[] => {
   return [...new Set(values)];
 };
 
-const runBudgetFrom = (settings: Awaited<ReturnType<AgentSettingsService['get']>>): RunBudget => ({
-  maxContextTokens: settings.effectiveSettings.budget.maxContextTokens,
-  maxOutputTokens: settings.effectiveSettings.budget.maxOutputTokens,
-  maxRunTokens: settings.effectiveSettings.budget.maxRunTokens,
-  maxRunSteps: settings.effectiveSettings.budget.maxRunSteps,
-  maxRunCostMicros: settings.effectiveSettings.budget.maxRunCostMicros,
-  maxActiveExecutionSeconds: settings.effectiveSettings.budget.maxActiveExecutionSeconds,
-  toolTimeoutSeconds: settings.effectiveSettings.budget.toolTimeoutSeconds,
-  maxToolOutputBytes: settings.effectiveSettings.budget.maxToolOutputBytes,
-  maxRawToolBytes: settings.effectiveSettings.budget.maxRawToolBytes,
-  maxRecallItems: settings.effectiveSettings.budget.maxRecallItems,
-  maxRecallBytes: settings.effectiveSettings.budget.maxRecallBytes,
-  maxSubagentMessages: settings.effectiveSettings.subagents.maxSubagentMessagesPerRun,
-  maxSubagentMessageBytes: settings.effectiveSettings.subagents.maxSubagentMessageBytesPerRun,
-  revision: settings.revision,
+const runBudgetFrom = (
+  settings: Awaited<ReturnType<AgentSettingsService['get']>>,
+  policy: AgentExecutionPolicyView,
+  model: ProviderModelConfig,
+): RunBudget => ({
+  // Model context/output are physical capabilities, not Nexus user budgets.
+  maxContextTokens: model.contextWindow,
+  maxOutputTokens: Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1)),
+  maxRunTokens: policy.effective.maxRunTokens,
+  maxRunSteps: policy.effective.maxRunSteps,
+  maxRunCostMicros: policy.effective.maxRunCostMicros,
+  maxActiveExecutionSeconds: policy.effective.maxActiveExecutionSeconds,
+  toolTimeoutSeconds: policy.effective.toolTimeoutSeconds,
+  maxToolOutputBytes: policy.effective.maxToolOutputBytes,
+  maxRawToolBytes: policy.effective.maxRawToolBytes,
+  maxRecallItems: policy.effective.maxRecallItems,
+  maxRecallBytes: policy.effective.maxRecallBytes,
+  maxSubagentMessages: policy.effective.maxSubagentMessages,
+  maxSubagentMessageBytes: policy.effective.maxSubagentMessageBytes,
+  contextCompactionMode: policy.effective.contextCompactionMode,
+  revision: Math.max(settings.revision, policy.version),
 });
 
 const increasedBudget = (
@@ -139,6 +147,7 @@ export class RunService {
     private readonly settings: AgentSettingsService,
     private readonly lifecycle: AppLifecycleService,
     private readonly providers: ProviderService,
+    private readonly executionPolicies: AgentExecutionPolicyService,
     private readonly definitions: AgentDefinitionRegistryPort,
     private readonly resolveEnvironment: (
       scope: Scope,
@@ -184,10 +193,11 @@ export class RunService {
       throw new Error('PAYLOAD_TOO_LARGE');
     }
 
-    const [settings, app, provider] = await Promise.all([
+    const [settings, app, provider, executionPolicy] = await Promise.all([
       this.settings.get(scope.userId),
       this.lifecycle.get(scope),
       this.providers.get(scope.userId, command.model.providerId),
+      this.executionPolicies.get(scope),
     ]);
     if (!settings.effectiveSettings.feature.enabled) throw new Error('AGENT_DISABLED');
     if (app.desiredState !== 'enabled' || !['running', 'degraded'].includes(app.observedState))
@@ -203,17 +213,12 @@ export class RunService {
       throw new Error('MODEL_REASONING_EFFORT_UNSUPPORTED');
     }
 
-    const budget = runBudgetFrom(settings);
+    const budget = runBudgetFrom(settings, executionPolicy, model);
     if (
       budget.maxRunCostMicros !== null &&
       (model.priceMicrosPerMillionInput === undefined || model.priceMicrosPerMillionOutput === undefined)
     ) {
       throw new Error('MODEL_PRICE_UNKNOWN');
-    }
-    budget.maxContextTokens = Math.min(budget.maxContextTokens, model.contextWindow);
-    budget.maxOutputTokens = Math.min(budget.maxOutputTokens, model.maxOutputTokens);
-    if (budget.maxOutputTokens >= budget.maxContextTokens) {
-      budget.maxOutputTokens = Math.max(1, Math.min(model.maxOutputTokens, budget.maxContextTokens - 1));
     }
     const environment = environmentSelection
       ? await this.resolveEnvironment(scope, environmentSelection, settings.revision)

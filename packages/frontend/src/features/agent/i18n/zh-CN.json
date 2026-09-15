@@ -274,7 +274,7 @@
       },
       "budget": {
         "title": "预算与上下文",
-        "description": "配置 Run 软预算与上下文限制。预算耗尽时任务会等待显式增加预算，而不是被静默标记失败。",
+        "description": "配置 Run 总预算与工具资源。模型单次上下文和输出能力由 Model Registry 决定。",
         "presetsTitle": "场景预设方案",
         "presetsHint": "提供常用策略预设，点击一键套用；也可自由切换为自定义微调。",
         "presetLight": "快速轻量",
@@ -312,7 +312,8 @@
           "maxRecallBytes": "记忆召回字节上限",
           "maxRecallBytesHint": "记忆检索内容的最大字节限制"
         },
-        "readyNotice": "当前配置已就绪，将在下一次 Run 执行时生效"
+        "readyNotice": "当前配置已就绪，将在下一次 Run 执行时生效",
+        "modelCapabilityNotice": "模型单次上下文与最大输出直接使用 Provider/Registry 声明的物理能力；这里仅控制整个 Run 的总预算与工具资源。"
       },
       "quantity": {
         "placeholderBytes": "例: 10M, 500K",
@@ -631,6 +632,35 @@
         "sandbox": "沙箱",
         "ready": "就绪",
         "notReady": "未就绪"
+      },
+      "executionPolicy": {
+        "title": "Plugin / App 独立执行预算",
+        "description": "每个 Agent Plugin/App 可覆盖全局 Run、工具与协作预算；未覆盖字段自动继承全局默认。",
+        "app": "选择 Plugin / App",
+        "override": "覆盖",
+        "inherited": "继承全局默认",
+        "effective": "当前有效值：{value}",
+        "compactionHint": "只有当上下文真的放不下时才压缩旧历史；不会把模型物理 context window 人为缩小。",
+        "compactionInherited": "继承：{value}",
+        "compaction": {
+          "aggressive": "积极压缩",
+          "balanced": "平衡",
+          "conservative": "保守压缩"
+        },
+        "fields": {
+          "maxRunTokens": "Run 总 Token 预算",
+          "maxRunSteps": "Run 最大步骤保险丝",
+          "maxRunCostMicros": "Run 成本上限 (µ)",
+          "maxActiveExecutionSeconds": "最长活跃执行时间",
+          "toolTimeoutSeconds": "单工具超时",
+          "maxToolOutputBytes": "模型可见工具输出",
+          "maxRawToolBytes": "工具原始采集上限",
+          "maxRecallItems": "Recall 条目数",
+          "maxRecallBytes": "Recall 容量",
+          "maxSubagentMessages": "Subagent 消息总数",
+          "maxSubagentMessageBytes": "Subagent 消息总容量",
+          "contextCompactionMode": "上下文动态压缩策略"
+        }
       }
     },
     "launcher": {

@@ -78,6 +78,15 @@ export class ModelStepRunner {
     const model = provider.models.find((candidate) => candidate.id === snapshot.definition.model.modelId);
     if (!model) throw new Error('MODEL_NOT_FOUND');
 
+    const remainingRunTokens = Math.max(
+      1,
+      snapshot.budget.maxRunTokens - snapshot.usage.inputTokens - snapshot.usage.outputTokens,
+    );
+    const reservedOutputTokens = Math.max(
+      1,
+      Math.min(model.maxOutputTokens, model.contextWindow - 1, remainingRunTokens),
+    );
+
     const currentProjection = inputProjections[snapshot.id] ?? { ordered: [], pending: [] };
     const currentInput = currentProjection.ordered.at(-1) ?? latestInput(snapshot);
     const contextPlan = await this.context.compose({
@@ -102,13 +111,26 @@ export class ModelStepRunner {
         : {}),
       collaborationContext,
       modelContextWindow: model.contextWindow,
-      maxContextTokens: snapshot.budget.maxContextTokens,
-      reservedOutputTokens: snapshot.budget.maxOutputTokens,
+      maxContextTokens: model.contextWindow,
+      reservedOutputTokens,
+      compactionMode: snapshot.budget.contextCompactionMode ?? 'balanced',
       maxRecallItems: snapshot.budget.maxRecallItems,
       maxRecallBytes: snapshot.budget.maxRecallBytes,
       tools,
     });
-    return { model, contextPlan };
+    return {
+      model,
+      contextPlan: {
+        ...contextPlan,
+        reservedOutputTokens: Math.max(
+          1,
+          Math.min(
+            contextPlan.reservedOutputTokens,
+            Math.max(1, remainingRunTokens - contextPlan.estimatedInputTokens),
+          ),
+        ),
+      },
+    };
   }
 
   async *runAttempt(
@@ -141,7 +163,7 @@ export class ModelStepRunner {
             ...(snapshot.definition.reasoningEffort === undefined
               ? {}
               : { reasoningEffort: snapshot.definition.reasoningEffort }),
-            maxOutputTokens: snapshot.budget.maxOutputTokens,
+            maxOutputTokens: contextPlan.reservedOutputTokens,
           },
           signal,
         )) {

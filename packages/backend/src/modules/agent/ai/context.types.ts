@@ -26,6 +26,7 @@ export interface ContextRequest {
   modelContextWindow: number;
   maxContextTokens: number;
   reservedOutputTokens: number;
+  compactionMode?: 'aggressive' | 'balanced' | 'conservative';
   maxRecallItems: number;
   maxRecallBytes: number;
   tools?: ModelToolSchema[];
@@ -52,6 +53,8 @@ export interface ContextPlan {
   estimatedInputTokens: number;
   reservedOutputTokens: number;
   droppedSections: string[];
+  compacted: boolean;
+  compactionMode: 'aggressive' | 'balanced' | 'conservative';
   sourceRanges: ContextSourceRange[];
   contextEpoch: string;
   stablePrefixHash: string;

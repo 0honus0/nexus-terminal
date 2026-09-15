@@ -86,6 +86,7 @@ import type {
   SharedFactRepositoryPort,
 } from '../../modules/agent/runtime/collaboration/subagent.repository.port';
 import { PlanService } from '../../modules/agent/runtime/planning/plan.service';
+import { AgentExecutionPolicyService } from '../../modules/agent/host/agent-execution-policy.service';
 import type { AgentServices } from '../../modules/agent/public';
 import type { ExecutionSessionManager } from '../../platform/execution/execution-session-manager';
 import type { RemoteDockerService } from '../../platform/docker/remote-docker.service';
@@ -212,6 +213,7 @@ export const composeAgent = ({
     onHostStateCommitted: publishHostWake,
   });
   const onboarding = new AgentOnboardingService(plugins, lifecycle, appGrants, officialPluginSource);
+  const executionPolicies = new AgentExecutionPolicyService(appStorage, settings);
   const conversationRepository = new SqliteConversationRepository(database);
   const conversations = new ConversationService(conversationRepository, systemClock, settings, lifecycle);
   const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
@@ -407,6 +409,7 @@ export const composeAgent = ({
     settings,
     lifecycle,
     providers,
+    executionPolicies,
     definitions,
     (scope, selection, expectedSettingsRevision) => {
       const { catalogRevision, ...workspace } = selection;
@@ -473,6 +476,9 @@ export const composeAgent = ({
         await lifecycle.initializeDefaults(userId);
         return appGrants.list({ userId, appId });
       },
+      getAppExecutionPolicy: (scope) => executionPolicies.get(scope),
+      replaceAppExecutionPolicy: (scope, overrides, expectedVersion) =>
+        executionPolicies.replace(scope, overrides, expectedVersion),
       replaceAppGrants: async (userId, appId, capabilities, expectedPolicyRevision) => {
         await lifecycle.initializeDefaults(userId);
         const scope = { userId, appId };
