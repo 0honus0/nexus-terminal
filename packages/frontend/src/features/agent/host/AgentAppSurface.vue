@@ -428,11 +428,22 @@
     selectedConnectionIds.value = [...next].sort((left, right) => left - right);
   };
 
+  const connectionSelectionState = computed<'off' | 'mixed' | 'on'>(() => {
+    const selectedCount = displayedConnectionIds.value.length;
+    if (selectedCount === 0) return 'off';
+    if (selectedCount === connections.value.length) return 'on';
+    return 'mixed';
+  });
+
   const setAllConnectionSelections = (enabled: boolean): void => {
     if (modelSelectionLocked.value) return;
     selectedConnectionIds.value = enabled
       ? connections.value.map((connection) => connection.id).sort((left, right) => left - right)
       : [];
+  };
+
+  const toggleAllConnectionSelections = (): void => {
+    setAllConnectionSelections(connectionSelectionState.value !== 'on');
   };
 
   const openRunFromHistory = (runId: string): void => {
@@ -1683,44 +1694,51 @@
                           {{ displayedConnectionIds.length }}/{{ connections.length }}
                         </span>
                       </div>
-                      <div
-                        class="flex shrink-0 overflow-hidden rounded-md border border-border/65 bg-background/55 p-0.5"
-                        role="group"
+                      <button
+                        type="button"
+                        class="grid h-6 w-[54px] shrink-0 grid-cols-3 items-center overflow-hidden rounded-md border border-border/65 bg-background/55 p-0.5 transition-colors disabled:cursor-default disabled:opacity-35"
+                        :disabled="modelSelectionLocked"
+                        :aria-pressed="
+                          connectionSelectionState === 'mixed' ? 'mixed' : connectionSelectionState === 'on'
+                        "
                         :aria-label="$t('agent.operations.targetsBulkToggle')"
+                        :title="
+                          connectionSelectionState === 'on'
+                            ? $t('agent.operations.disableAllTargets')
+                            : $t('agent.operations.enableAllTargets')
+                        "
+                        @click="toggleAllConnectionSelections"
                       >
-                        <button
-                          type="button"
-                          class="flex h-5 w-6 items-center justify-center rounded-[4px] transition-colors disabled:cursor-default disabled:opacity-35"
+                        <span
+                          class="flex h-5 items-center justify-center rounded-[4px] text-[8px] transition-all"
                           :class="
-                            displayedConnectionIds.length === 0
-                              ? 'bg-error/10 text-error/85'
-                              : 'text-text-secondary/65 hover:bg-header/80 hover:text-error/80'
+                            connectionSelectionState === 'off' ? 'bg-error/10 text-error/85' : 'text-text-secondary/45'
                           "
-                          :disabled="modelSelectionLocked"
-                          :aria-pressed="displayedConnectionIds.length === 0"
-                          :aria-label="$t('agent.operations.disableAllTargets')"
-                          :title="$t('agent.operations.disableAllTargets')"
-                          @click="setAllConnectionSelections(false)"
+                          aria-hidden="true"
                         >
-                          <i class="fa-solid fa-xmark text-[8px]" aria-hidden="true"></i>
-                        </button>
-                        <button
-                          type="button"
-                          class="flex h-5 w-6 items-center justify-center rounded-[4px] transition-colors disabled:cursor-default disabled:opacity-35"
+                          <i class="fa-solid fa-xmark"></i>
+                        </span>
+                        <span
+                          class="flex h-5 items-center justify-center rounded-[4px] text-[8px] transition-all"
                           :class="
-                            displayedConnectionIds.length === connections.length
-                              ? 'bg-success/14 text-success'
-                              : 'text-text-secondary/65 hover:bg-header/80 hover:text-success'
+                            connectionSelectionState === 'mixed'
+                              ? 'bg-primary/10 text-primary'
+                              : 'text-text-secondary/35'
                           "
-                          :disabled="modelSelectionLocked"
-                          :aria-pressed="displayedConnectionIds.length === connections.length"
-                          :aria-label="$t('agent.operations.enableAllTargets')"
-                          :title="$t('agent.operations.enableAllTargets')"
-                          @click="setAllConnectionSelections(true)"
+                          aria-hidden="true"
                         >
-                          <i class="fa-solid fa-check text-[8px]" aria-hidden="true"></i>
-                        </button>
-                      </div>
+                          <i class="fa-solid fa-minus"></i>
+                        </span>
+                        <span
+                          class="flex h-5 items-center justify-center rounded-[4px] text-[8px] transition-all"
+                          :class="
+                            connectionSelectionState === 'on' ? 'bg-success/14 text-success' : 'text-text-secondary/45'
+                          "
+                          aria-hidden="true"
+                        >
+                          <i class="fa-solid fa-check"></i>
+                        </span>
+                      </button>
                     </div>
 
                     <div class="max-h-64 overflow-y-auto rounded-lg bg-header/25 p-1">
