@@ -863,6 +863,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 
     await step('users can create a new conversation and return to the existing thread', async () => {
       const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
+      await expect(presetThread).toBeVisible();
+      await presetThread.click();
       await expect(presetThread).toHaveAttribute('aria-current', 'true');
 
       await hub.getByRole('button', { name: 'New', exact: true }).click();
