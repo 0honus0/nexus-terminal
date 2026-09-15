@@ -233,12 +233,12 @@
             "hint": "記憶回想で取得されるデータの最大バイト数"
           },
           "maxConcurrentRuntimes": {
-            "label": "最大並列 Runtime 数",
-            "hint": "同時に実行可能な Agent Runtime の最大数"
+            "label": "最大 Agent 実行並列数",
+            "hint": "1 ユーザーで同時実行できる Root Agent と Subagent Runtime の合計上限。両者は同じ実行スロットを共有します"
           },
           "maxConcurrentModelCalls": {
-            "label": "最大並列モデル呼び出し数",
-            "hint": "システム全体で同時に実行可能なモデル API 呼び出し数"
+            "label": "最大モデルリクエスト並列数",
+            "hint": "1 ユーザーで同時実行できるモデル API リクエスト上限。Agent 実行並列数を超えることはありません"
           },
           "maxDelegationDepth": {
             "label": "サブエージェント委譲深度",
@@ -260,13 +260,14 @@
       },
       "performance": {
         "title": "実行とパフォーマンス",
-        "description": "要求された並列数は Hard Limit に制約されます。値を下げても実行中の処理は強制終了せず、以後の claim に反映されます。",
-        "runtimes": "Runtime 並列数",
-        "modelCalls": "モデル呼び出し並列数",
-        "auto": "自動",
-        "limit": "有効 {effective} · Hard Limit {hard}",
-        "runtimesHint": "同時実行できる独立した Agent Runtime タスクコンテナの上限",
-        "modelCallsHint": "モデル API の同時リクエスト上限。「自動」ではシステムが動的に調整します"
+        "description": "同時に実行する Agent とモデルリクエストを制御します。値を下げても実行中の処理は中断せず、以後のスケジュールに反映されます。",
+        "runtimes": "Agent 実行並列数",
+        "modelCalls": "モデルリクエスト並列数",
+        "auto": "自動（実行並列数に追従）",
+        "limit": "有効 {effective} · システム上限 {hard}",
+        "sharedSlots": "Root + Subagent は実行スロットを共有",
+        "runtimesHint": "1 ユーザーで同時実行する Agent 単位の合計数。Root Agent と各 Subagent がそれぞれ 1 スロットを使用します",
+        "modelCallsHint": "同時モデル API リクエスト数。「自動」は Agent 実行並列数に追従し、明示値も実行並列数を超えません"
       },
       "budget": {
         "title": "予算とコンテキスト",
@@ -517,6 +518,7 @@
         "title": "Subagent",
         "description": "Run 単位の子 Agent 委任制限、永続 Mailbox トラフィック、共有コラボレーション予算です。",
         "phase": "フェーズ 3",
+        "concurrencyHint": "Subagent に独立した並列数設定はありません。Root Agent とすべての Subagent は上の「Agent 実行並列数」を共有し、ここでは委任のネスト深度とメッセージ予算を制御します。",
         "appProfiles": "App プロファイル",
         "addProfile": "プロファイルを追加",
         "profileHint": "子 Agent 作成時にモデルと capability 上限を固定します。実行時には現在の App grant と親 grant を再確認します。",

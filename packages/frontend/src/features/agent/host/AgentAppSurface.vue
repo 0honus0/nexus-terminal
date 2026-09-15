@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, onMounted, ref, nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { connectionService, type Connection } from '@/features/connections/public';
+  import { useConnections } from '@/features/connections/public';
   import AgentConversation from '../ai/AgentConversation.vue';
   import {
     createConversationCommandExecutor,
@@ -37,6 +37,7 @@
   const props = defineProps<{ appId: string }>();
   const { t, locale } = useI18n();
   const facade = createAgentRunFacade(props.appId);
+  const connectionsStore = useConnections();
   facade.start();
   const runtimeOperation = createRuntimeOperationState();
   const threads = ref<AgentThreadView[]>([]);
@@ -47,7 +48,9 @@
   const threadRuns = ref<AgentRunView[]>([]);
   const definitions = ref<AgentDefinitionView[]>([]);
   const providers = ref<AgentProviderView[]>([]);
-  const connections = ref<Connection[]>([]);
+  const connections = computed(() =>
+    connectionsStore.connections.value.filter((connection) => connection.type === 'SSH'),
+  );
   const selectedConnectionIds = ref<number[]>([]);
   const attachments = ref<AgentArtifactRef[]>([]);
   const approvalBatch = ref<AgentApprovalBatch | null>(null);
@@ -270,6 +273,16 @@
   });
   const displayedConnectionIds = computed(() =>
     modelSelectionLocked.value && run.value ? run.value.definition.connectionIds : selectedConnectionIds.value,
+  );
+  watch(
+    [modelSelectionLocked, () => connections.value.map((connection) => connection.id).join('\u0000')],
+    () => {
+      if (modelSelectionLocked.value) return;
+      const availableIds = new Set(connections.value.map((connection) => connection.id));
+      const next = selectedConnectionIds.value.filter((id) => availableIds.has(id));
+      if (next.length !== selectedConnectionIds.value.length) selectedConnectionIds.value = next;
+    },
+    { immediate: true },
   );
   const enabledEnvironmentRecipes = computed(() => {
     const catalog = workspaceRuntimeCatalog.value;
@@ -578,15 +591,14 @@
     loading.value = true;
     error.value = '';
     try {
-      const [threadPage, nextDefinitions, nextProviders, settings, nextConnections, runtimeAvailability] =
-        await Promise.all([
-          facade.listThreads(),
-          facade.definitions(),
-          facade.providers(),
-          facade.settings(),
-          connectionService.list(),
-          agentApi.workspaceRuntimeAvailability().catch(() => null),
-        ]);
+      const [threadPage, nextDefinitions, nextProviders, settings, , runtimeAvailability] = await Promise.all([
+        facade.listThreads(),
+        facade.definitions(),
+        facade.providers(),
+        facade.settings(),
+        connectionsStore.revalidate(0),
+        agentApi.workspaceRuntimeAvailability().catch(() => null),
+      ]);
       threads.value = threadPage.items;
       definitions.value = nextDefinitions;
       providers.value = nextProviders;
@@ -621,7 +633,6 @@
       selectedEnvironmentRecipeId.value = selectedEnvironment?.id ?? '';
       agentSurfaceSession.setEnvironmentRecipeId(props.appId, selectedEnvironment?.id);
       hardLimits.value = settings.hardLimits;
-      connections.value = nextConnections.filter((connection) => connection.type === 'SSH');
       const restored = agentSurfaceSession.restoreThread(props.appId);
       const selected = threads.value.find((thread) => thread.id === restored) ?? threads.value[0];
       if (selected) await selectThread(selected);
@@ -1031,13 +1042,19 @@
     taskRailWideViewport = wide;
   };
 
+  const refreshConnectionsOnFocus = (): void => {
+    void connectionsStore.revalidate(0).catch(() => undefined);
+  };
+
   onMounted(() => {
     window.addEventListener('resize', syncTaskRailViewport);
+    window.addEventListener('focus', refreshConnectionsOnFocus);
     window.addEventListener('nexus:agent:thread-changed', onThreadChanged);
     void load();
   });
   onBeforeUnmount(() => {
     window.removeEventListener('resize', syncTaskRailViewport);
+    window.removeEventListener('focus', refreshConnectionsOnFocus);
     window.removeEventListener('nexus:agent:thread-changed', onThreadChanged);
     facade.dispose();
     streamingText.value = '';

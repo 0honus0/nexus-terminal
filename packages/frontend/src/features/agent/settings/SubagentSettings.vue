@@ -206,7 +206,13 @@
       </span>
     </div>
     <div class="space-y-4 p-4 sm:p-5">
-      <div class="mt-4 grid gap-3 md:grid-cols-3">
+      <div
+        class="flex items-start gap-2.5 rounded-lg border border-border/55 bg-header/30 px-3 py-2.5 text-[11px] leading-relaxed text-text-secondary"
+      >
+        <i class="fa-solid fa-diagram-project mt-0.5 shrink-0 text-[10px] text-primary/75" aria-hidden="true"></i>
+        <span>{{ $t('agent.settings.subagents.concurrencyHint') }}</span>
+      </div>
+      <div class="grid gap-3 md:grid-cols-3">
         <label v-for="(_, key) in settings.requestedSettings.subagents" :key="key" class="block">
           <span class="mb-1 block text-xs font-medium text-foreground">{{ subagentLabels[key] || key }}</span>
           <QuantityInput

@@ -233,12 +233,12 @@
             "hint": "单次对话记忆回溯提取的数据总字节上限"
           },
           "maxConcurrentRuntimes": {
-            "label": "最大并发运行时数",
-            "hint": "系统允许同时处于执行状态的 Agent Runtime 最大数"
+            "label": "最大 Agent 执行并发",
+            "hint": "同一用户同时执行的 Root Agent 与 Subagent Runtime 总数上限；两者共用执行槽位"
           },
           "maxConcurrentModelCalls": {
-            "label": "最大并发模型调用数",
-            "hint": "系统允许同时并发调用的模型 API 请求上限"
+            "label": "最大模型请求并发",
+            "hint": "同一用户同时进行的模型 API 请求上限，且不会超过 Agent 执行并发"
           },
           "maxDelegationDepth": {
             "label": "子代理最大委托深度",
@@ -260,13 +260,14 @@
       },
       "performance": {
         "title": "执行与性能",
-        "description": "请求并发受 Hard Limit 约束。降低数值只影响后续 claim，不会强杀已经运行的任务。",
-        "runtimes": "Runtime 并发数",
-        "modelCalls": "模型调用并发数",
-        "auto": "自动",
-        "limit": "有效 {effective} · Hard Limit {hard}",
-        "runtimesHint": "同时支持运行的独立 Agent Runtime 任务容器数",
-        "modelCallsHint": "模型 API 请求并发数上限，设置为“自动”由系统智能调度"
+        "description": "控制同一时刻真正执行的 Agent 与模型请求。降低数值只影响后续调度，不会中断已经运行的任务。",
+        "runtimes": "Agent 执行并发",
+        "modelCalls": "模型请求并发",
+        "auto": "自动（跟随执行并发）",
+        "limit": "当前生效 {effective} · 系统上限 {hard}",
+        "sharedSlots": "Root + Subagent 共用执行槽位",
+        "runtimesHint": "同一用户同时执行的 Agent 单元总数；Root Agent 和每个 Subagent 都各占 1 个槽位",
+        "modelCallsHint": "同时进行的模型 API 请求数；“自动”会跟随 Agent 执行并发，显式数值也不会超过执行并发"
       },
       "budget": {
         "title": "预算与上下文",
@@ -517,6 +518,7 @@
         "title": "Subagent",
         "description": "Run 范围的子 Agent 委派限制、持久 Mailbox 流量和共享协作预算。",
         "phase": "第三阶段",
+        "concurrencyHint": "Subagent 没有单独的并发数量设置。Root Agent 与所有 Subagent 共用上方“Agent 执行并发”；这里控制的是委派嵌套深度和协作消息预算。",
         "appProfiles": "App 配置档",
         "addProfile": "添加配置档",
         "profileHint": "创建子 Agent 时会冻结配置档中的模型与能力上限；执行时仍会再次检查当前 App grant 与父级 grant。",

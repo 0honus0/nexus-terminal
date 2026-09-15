@@ -233,12 +233,12 @@
             "hint": "Maximum byte payload for retrieved memory items"
           },
           "maxConcurrentRuntimes": {
-            "label": "Max Concurrent Runtimes",
-            "hint": "Maximum number of Agent runtimes executing concurrently"
+            "label": "Max Agent execution concurrency",
+            "hint": "Maximum total Root Agent and Subagent Runtimes executing concurrently for one user; both share the same slots"
           },
           "maxConcurrentModelCalls": {
-            "label": "Max Concurrent Model Calls",
-            "hint": "Maximum parallel model API calls allowed by the instance"
+            "label": "Max model request concurrency",
+            "hint": "Maximum concurrent model API requests for one user; it can never exceed Agent execution concurrency"
           },
           "maxDelegationDepth": {
             "label": "Max Subagent Depth",
@@ -260,13 +260,14 @@
       },
       "performance": {
         "title": "Execution and performance",
-        "description": "Requested concurrency is bounded by Hard Limits. Lower values affect future claims without killing work already running.",
-        "runtimes": "Concurrent runtimes",
-        "modelCalls": "Concurrent model calls",
-        "auto": "Auto",
-        "limit": "Effective {effective} · Hard Limit {hard}",
-        "runtimesHint": "Maximum number of independent Agent Runtime task containers that can run concurrently",
-        "modelCallsHint": "Maximum concurrent model API requests; Auto lets the system schedule them dynamically"
+        "description": "Controls Agent work and model requests that may execute at the same time. Lower values only affect future scheduling and do not interrupt work already running.",
+        "runtimes": "Agent execution concurrency",
+        "modelCalls": "Model request concurrency",
+        "auto": "Auto (follow execution concurrency)",
+        "limit": "Effective {effective} · system limit {hard}",
+        "sharedSlots": "Root + Subagent share execution slots",
+        "runtimesHint": "Total Agent units executing concurrently for one user; the Root Agent and every Subagent each occupy one slot",
+        "modelCallsHint": "Concurrent model API requests; Auto follows Agent execution concurrency, and an explicit value can never exceed it"
       },
       "budget": {
         "title": "Budget and context",
@@ -517,6 +518,7 @@
         "title": "Subagents",
         "description": "Run-scoped delegation limits for child agents, durable mailbox traffic, and shared collaboration budgets.",
         "phase": "Phase 3",
+        "concurrencyHint": "Subagents do not have a separate concurrency count. Root Agents and all Subagents share the Agent execution concurrency above; this section controls delegation depth and collaboration-message budgets.",
         "appProfiles": "App profiles",
         "addProfile": "Add profile",
         "profileHint": "Profiles freeze their model and capability ceiling when a child is created. Current App grants and the parent grant are checked again at execution time.",

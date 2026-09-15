@@ -55,8 +55,11 @@
         <p class="mt-0.5 text-xs text-text-secondary">{{ $t('agent.settings.performance.description') }}</p>
       </div>
       <div class="flex items-center gap-2">
-        <span class="rounded-full border border-border/80 bg-background px-2.5 py-0.5 text-xs text-text-secondary">
-          并发上限 {{ settings.hardLimits.maxConcurrentRuntimes }}
+        <span
+          class="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/80 px-2.5 py-1 text-[11px] text-text-secondary"
+        >
+          <i class="fa-solid fa-code-branch text-[9px] text-primary/75" aria-hidden="true"></i>
+          {{ $t('agent.settings.performance.sharedSlots') }}
         </span>
       </div>
     </div>
