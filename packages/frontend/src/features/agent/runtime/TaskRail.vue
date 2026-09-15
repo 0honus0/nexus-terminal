@@ -192,7 +192,7 @@
   <aside class="flex h-full min-h-0 flex-col border-l border-border/60 bg-card/70">
     <header
       v-if="detailSnapshot"
-      class="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3"
+      class="flex h-[37px] shrink-0 items-center justify-between border-b border-border/60 px-3"
     >
       <div class="flex min-w-0 items-center gap-2">
         <button
@@ -219,7 +219,7 @@
         <i class="fa-solid fa-xmark text-xs" aria-hidden="true"></i>
       </button>
     </header>
-    <header v-else class="flex h-12 shrink-0 items-center justify-between border-b border-border/60 px-3">
+    <header v-else class="flex h-[37px] shrink-0 items-center justify-between border-b border-border/60 px-3">
       <div class="flex min-w-0 items-center gap-2">
         <div
           class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-[11px] text-primary"
