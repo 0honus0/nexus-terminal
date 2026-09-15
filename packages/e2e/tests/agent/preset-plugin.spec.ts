@@ -697,6 +697,27 @@ test('frontend target owns a full Custom App Surface and connects through the is
     data: { id: 'nexus.custom-surface', enabled: true, health: 'healthy', surface: 'custom' },
   });
 
+  const recommendedInstall = await request.post('/api/v1/agent/onboarding/recommended-plugin/install', {
+    headers,
+    data: {},
+  });
+  expect(recommendedInstall.ok(), await recommendedInstall.text()).toBeTruthy();
+  await expect(recommendedInstall.json()).resolves.toMatchObject({
+    data: { installedNow: false, app: { id: 'nexus.agent', enabled: true, health: 'healthy' } },
+  });
+  const hostSummary = await request.get('/api/v1/agent/summary');
+  expect(hostSummary.ok(), await hostSummary.text()).toBeTruthy();
+  await expect(hostSummary.json()).resolves.toMatchObject({
+    data: {
+      featureEnabled: true,
+      hostState: 'enabled',
+      apps: expect.arrayContaining([
+        expect.objectContaining({ id: 'nexus.agent', enabled: true, health: 'healthy' }),
+        expect.objectContaining({ id: 'nexus.custom-surface', enabled: true, health: 'healthy' }),
+      ]),
+    },
+  });
+
   await page.goto('/connections');
   const hub = await openAgentHub(page);
   await hub.getByRole('button', { name: 'Switch to Custom Surface Fixture', exact: true }).click();
@@ -748,20 +769,20 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(taskRail).toHaveCount(0);
 
-    await step('the Next Run Environment uses the shared accessible Host popover contract', async () => {
-      await expect(hub.getByText('Next Run', { exact: true })).toBeVisible();
+    await step('the active Run Environment uses the shared accessible Host popover contract', async () => {
       const environment = hub.getByRole('button', { name: 'Environment', exact: true });
       await expect(environment).toBeVisible();
       await expect(environment).toHaveAttribute('aria-expanded', 'false');
-      await expect(environment).toContainText('No Workspace');
+      await expect(environment).toContainText('Native Host');
       await environment.click();
       await expect(environment).toHaveAttribute('aria-expanded', 'true');
-      await expect(
-        hub.getByText(
-          "Workspace creation consumes this Run's frozen Environment snapshot; recipe and toolchain choices cannot change mid-Run.",
-        ),
-      ).toBeVisible();
+      const environmentDialog = page.getByRole('dialog', { name: 'Environment', exact: true });
+      await expect(environmentDialog).toBeVisible();
+      await expect(environmentDialog.getByText('Environment', { exact: true })).toBeVisible();
+      await expect(environmentDialog.getByText('Frozen', { exact: true })).toBeVisible();
+      await expect(environmentDialog.getByText('Native Host', { exact: true })).toBeVisible();
       await page.keyboard.press('Escape');
+      await expect(environmentDialog).toHaveCount(0);
       await expect(environment).toHaveAttribute('aria-expanded', 'false');
       await expect(environment).toBeFocused();
     });
