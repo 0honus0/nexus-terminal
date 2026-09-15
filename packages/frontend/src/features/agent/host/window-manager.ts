@@ -23,7 +23,6 @@ interface AgentHubState {
 const DEFAULT_BOUNDS: AgentHubBounds = { x: 80, y: 16, width: 1180, height: 740 };
 const MIN_WIDTH = 560;
 const MIN_HEIGHT = 380;
-const MIN_VISIBLE_HEADER = 36;
 
 const state = reactive<AgentHubState>({
   status: 'closed',
@@ -42,20 +41,14 @@ const viewport = (): { width: number; height: number } => ({
 
 const clampBounds = (bounds: AgentHubBounds): AgentHubBounds => {
   const screen = viewport();
-  const maxWidth = Math.max(320, screen.width);
-  const maxHeight = Math.max(240, screen.height);
+  const maxWidth = Math.max(1, screen.width);
+  const maxHeight = Math.max(1, screen.height);
   const width = Math.min(Math.max(bounds.width, Math.min(MIN_WIDTH, maxWidth)), maxWidth);
   const height = Math.min(Math.max(bounds.height, Math.min(MIN_HEIGHT, maxHeight)), maxHeight);
 
-  // 左右拖拽允许窗口在视口内移动，避免因窗口过大导致 x 死锁
-  const minX = Math.min(0, screen.width - width);
-  const maxX = Math.max(0, screen.width - 80);
-  const x = Math.min(Math.max(bounds.x, minX), maxX);
-
-  // 允许贴顶 y = 0，向下只要标题栏留在视口内
-  const minY = 0;
-  const maxY = Math.max(0, screen.height - MIN_VISIBLE_HEADER);
-  const y = Math.min(Math.max(bounds.y, minY), maxY);
+  // Keep the entire floating window inside the viewport on every edge.
+  const x = Math.min(Math.max(bounds.x, 0), Math.max(0, screen.width - width));
+  const y = Math.min(Math.max(bounds.y, 0), Math.max(0, screen.height - height));
 
   return { x, y, width, height };
 };
@@ -196,6 +189,16 @@ export const agentWindowManager = {
   },
   setBounds(bounds: AgentHubBounds): void {
     state.bounds = clampBounds(bounds);
+  },
+  resize(width: number, height: number): void {
+    const screen = viewport();
+    const maxWidth = Math.max(1, screen.width - state.bounds.x);
+    const maxHeight = Math.max(1, screen.height - state.bounds.y);
+    state.bounds = clampBounds({
+      ...state.bounds,
+      width: Math.min(Math.max(width, Math.min(MIN_WIDTH, maxWidth)), maxWidth),
+      height: Math.min(Math.max(height, Math.min(MIN_HEIGHT, maxHeight)), maxHeight),
+    });
   },
   clamp(): void {
     state.bounds = clampBounds(state.bounds);

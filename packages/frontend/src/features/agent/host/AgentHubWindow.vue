@@ -145,11 +145,7 @@
       if (e.pointerId !== undefined && pointerId !== undefined && e.pointerId !== pointerId) return;
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
-      agentWindowManager.setBounds({
-        ...startBounds,
-        width: startBounds.width + dx,
-        height: startBounds.height + dy,
-      });
+      agentWindowManager.resize(startBounds.width + dx, startBounds.height + dy);
     };
 
     const cleanup = () => {
