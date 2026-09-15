@@ -69,13 +69,13 @@ import type { RecommendedAgentPluginInstallResult, RecommendedAgentPluginView } 
 import type { TargetDenylistSnapshot } from './host/target-denylist.repository.port';
 import type { SharedFactView } from './runtime/collaboration/subagent.repository.port';
 import type {
-  PluginInstallationRecord,
   PluginStageRecord,
   PluginVersionRecord,
   TrustedPublisherKey,
 } from './host/plugin-install.repository.port';
 import type {
   PluginInstallResult,
+  PluginInstallationView,
   PluginStageInput,
   RemotePluginStageInput,
   PluginFrontendDescriptor,
@@ -108,7 +108,7 @@ export interface AgentPluginFacade {
   frontendDescriptor(userId: number, appId: string): Promise<PluginFrontendDescriptor | null>;
   frontendRpc(userId: number, appId: string, request: PluginFrontendRpcRequest): Promise<JsonValue>;
   listVersions(userId: number, appId?: string): Promise<PluginVersionRecord[]>;
-  listInstallations(userId: number): Promise<PluginInstallationRecord[]>;
+  listInstallations(userId: number): Promise<PluginInstallationView[]>;
 }
 
 export interface AgentHostFacade {

@@ -13,8 +13,14 @@ export interface AppStorageSnapshot {
   totalBytes: number;
 }
 
+export interface AppStorageStats {
+  entryCount: number;
+  totalBytes: number;
+}
+
 export interface AppStorageSnapshotPort {
   capture(scope: Scope): Promise<AppStorageSnapshot>;
+  stats(scope: Scope): Promise<AppStorageStats>;
   restore(scope: Scope, snapshot: AppStorageSnapshot): Promise<void>;
   clear(scope: Scope): Promise<void>;
 }

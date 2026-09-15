@@ -19,6 +19,7 @@ import type {
 } from './remote-plugin-repository.port';
 import type {
   PluginInstallRepositoryPort,
+  PluginInstallationRecord,
   PluginStageRecord,
   PluginVersionRecord,
   TrustedPublisherKey,
@@ -87,6 +88,11 @@ export interface PluginUpgradeResult {
 export interface PluginUninstallResult {
   state: 'draining' | 'removed';
   app: AppView;
+}
+
+export interface PluginInstallationView extends PluginInstallationRecord {
+  retainedDataEntries: number;
+  retainedDataBytes: number;
 }
 
 export interface PluginFrontendDescriptor {
@@ -531,7 +537,7 @@ export class PluginInstallService {
 
   async deleteData(userId: number, appId: string): Promise<void> {
     const installation = await this.repository.getInstallation(userId, appId);
-    if (installation?.status === 'installed') throw new Error('PLUGIN_MUST_BE_UNINSTALLED');
+    if (!installation || installation.status !== 'removed') throw new Error('PLUGIN_MUST_BE_UNINSTALLED');
     await this.storage.clear({ userId, appId });
   }
 
@@ -715,8 +721,21 @@ export class PluginInstallService {
     return this.repository.listVersionsForUser(userId, appId);
   }
 
-  listInstallations(userId: number) {
-    return this.repository.listInstallations(userId);
+  async listInstallations(userId: number): Promise<PluginInstallationView[]> {
+    const installations = await this.repository.listInstallations(userId);
+    return Promise.all(
+      installations.map(async (installation) => {
+        if (installation.status !== 'removed') {
+          return { ...installation, retainedDataEntries: 0, retainedDataBytes: 0 };
+        }
+        const stats = await this.storage.stats({ userId, appId: installation.appId });
+        return {
+          ...installation,
+          retainedDataEntries: stats.entryCount,
+          retainedDataBytes: stats.totalBytes,
+        };
+      }),
+    );
   }
 
   private async reconcileRuntime(userId: number, plugin: PluginVersionRecord): Promise<void> {

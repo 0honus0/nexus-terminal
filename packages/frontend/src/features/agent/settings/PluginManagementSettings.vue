@@ -71,7 +71,9 @@
     }
   });
   const activeInstallations = computed(() => installations.value.filter((item) => item.status === 'installed'));
-  const removedInstallations = computed(() => installations.value.filter((item) => item.status === 'removed'));
+  const removedInstallations = computed(() =>
+    installations.value.filter((item) => item.status === 'removed' && item.retainedDataEntries > 0),
+  );
   const installedVersion = (appId: string): PluginVersionView | undefined =>
     versions.value.find((item) => item.appId === appId);
   const appSummary = (appId: string): AgentAppSummary | undefined => props.apps.find((item) => item.id === appId);
@@ -307,6 +309,8 @@
     if (pendingDataDeletionAppId.value !== installation.appId) return;
     void run(async () => {
       await agentApi.deletePluginData(installation.appId, true);
+      await refresh();
+      emit('refresh');
       pendingDataDeletionAppId.value = null;
       notice.value = 'PLUGIN_DATA_DELETED';
     });

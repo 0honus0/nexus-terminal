@@ -166,6 +166,8 @@ export interface PluginInstallation {
   appId: string;
   version: string;
   status: 'installed' | 'removed';
+  retainedDataEntries: number;
+  retainedDataBytes: number;
   createdAt: number;
   updatedAt: number;
 }

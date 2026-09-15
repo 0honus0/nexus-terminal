@@ -532,6 +532,128 @@ test('official first-party catalog is discoverable without repository configurat
   await expect(pluginsSection.getByText('nexus.fullstack', { exact: true }).first()).toBeVisible();
 });
 
+test('uninstalled plugin retained AppStorage can be permanently deleted', async ({ request }) => {
+  await loginAsInitialAdmin(request);
+  const csrf = await csrfToken(request);
+  const headers = { 'X-Nexus-CSRF': csrf };
+
+  const settingsResponse = await request.get('/api/v1/agent/settings');
+  expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
+  const settings = ((await settingsResponse.json()) as Envelope<SettingsView>).data;
+  const patched = await request.patch('/api/v1/agent/settings', {
+    headers,
+    data: {
+      patch: {
+        feature: { enabled: true },
+        plugins: { repositories: [{ url: repositoryUrl }] },
+      },
+      expectedVersion: settings.revision,
+    },
+  });
+  expect(patched.ok(), await patched.text()).toBeTruthy();
+
+  const catalogResponse = await request.get('/api/v1/agent/plugins/remote/catalog', { params: { repositoryUrl } });
+  expect(catalogResponse.ok(), await catalogResponse.text()).toBeTruthy();
+  const catalog = (await catalogResponse.json()) as Envelope<{
+    publishers: Array<{ keyId: string; label: string; publicKeyPem: string }>;
+    packages: Array<{ appId: string; version: string; publisherKeyId: string }>;
+  }>;
+  const packageEntry = catalog.data.packages.find((candidate) => candidate.appId === 'nexus.custom-surface');
+  expect(packageEntry).toMatchObject({ version: '1.0.0' });
+  const publisher = catalog.data.publishers.find((candidate) => candidate.keyId === packageEntry!.publisherKeyId);
+  expect(publisher).toBeDefined();
+  const trusted = await request.post('/api/v1/agent/plugins/publishers', {
+    headers,
+    data: { publicKeyPem: publisher!.publicKeyPem, label: publisher!.label },
+  });
+  expect(trusted.status(), await trusted.text()).toBe(201);
+
+  const staged = await request.post('/api/v1/agent/plugins/remote/stage', {
+    headers,
+    data: { repositoryUrl, appId: 'nexus.custom-surface', version: '1.0.0' },
+  });
+  expect(staged.status(), await staged.text()).toBe(201);
+  const stageId = ((await staged.json()) as Envelope<{ id: string }>).data.id;
+  const verified = await request.post('/api/v1/agent/plugins/verify', { headers, data: { stageId } });
+  expect(verified.ok(), await verified.text()).toBeTruthy();
+  const installed = await request.post('/api/v1/agent/plugins/install', { headers, data: { stageId } });
+  expect(installed.status(), await installed.text()).toBe(201);
+
+  const grants = await request.get('/api/v1/agent/apps/nexus.custom-surface/grants');
+  expect(grants.ok(), await grants.text()).toBeTruthy();
+  const grantView = (await grants.json()) as Envelope<{ policyRevision: number; declaredCapabilities: string[] }>;
+  expect(grantView.data.declaredCapabilities).toContain('storage.app');
+  const granted = await request.put('/api/v1/agent/apps/nexus.custom-surface/grants', {
+    headers,
+    data: { capabilities: ['storage.app'], expectedPolicyRevision: grantView.data.policyRevision },
+  });
+  expect(granted.ok(), await granted.text()).toBeTruthy();
+
+  let app = await appSummary(request, 'nexus.custom-surface');
+  const enabled = await request.patch('/api/v1/agent/apps/nexus.custom-surface', {
+    headers,
+    data: { enabled: true, expectedVersion: app.stateVersion },
+  });
+  expect(enabled.ok(), await enabled.text()).toBeTruthy();
+  app = ((await enabled.json()) as Envelope<AppSummary>).data;
+  expect(app).toMatchObject({ enabled: true, health: 'healthy' });
+
+  const stored = await request.post('/api/v1/agent/plugins/nexus.custom-surface/frontend/rpc', {
+    headers,
+    data: {
+      method: 'storage.put',
+      params: { key: 'e2e.retained', value: { retained: true }, expectedVersion: null },
+    },
+  });
+  expect(stored.ok(), await stored.text()).toBeTruthy();
+
+  const disabled = await request.patch('/api/v1/agent/apps/nexus.custom-surface', {
+    headers,
+    data: { enabled: false, expectedVersion: app.stateVersion },
+  });
+  expect(disabled.ok(), await disabled.text()).toBeTruthy();
+  app = ((await disabled.json()) as Envelope<AppSummary>).data;
+
+  const uninstalled = await request.post('/api/v1/agent/plugins/nexus.custom-surface/uninstall', {
+    headers,
+    data: { deleteData: false, expectedVersion: app.stateVersion },
+  });
+  expect(uninstalled.ok(), await uninstalled.text()).toBeTruthy();
+  await expect(uninstalled.json()).resolves.toMatchObject({ data: { state: 'removed' } });
+
+  const beforeDelete = await request.get('/api/v1/agent/plugins/installations');
+  expect(beforeDelete.ok(), await beforeDelete.text()).toBeTruthy();
+  const removed = (
+    (await beforeDelete.json()) as Envelope<
+      Array<{ appId: string; status: string; retainedDataEntries: number; retainedDataBytes: number }>
+    >
+  ).data.find((candidate) => candidate.appId === 'nexus.custom-surface');
+  expect(removed).toMatchObject({ appId: 'nexus.custom-surface', status: 'removed' });
+  expect(removed!.retainedDataEntries).toBeGreaterThan(0);
+  expect(removed!.retainedDataBytes).toBeGreaterThan(0);
+
+  const deleted = await request.post('/api/v1/agent/plugins/nexus.custom-surface/delete-data', {
+    headers,
+    data: { confirmed: true },
+  });
+  expect(deleted.ok(), await deleted.text()).toBeTruthy();
+  await expect(deleted.json()).resolves.toMatchObject({ data: { deleted: true } });
+
+  const afterDelete = await request.get('/api/v1/agent/plugins/installations');
+  expect(afterDelete.ok(), await afterDelete.text()).toBeTruthy();
+  const cleared = (
+    (await afterDelete.json()) as Envelope<
+      Array<{ appId: string; status: string; retainedDataEntries: number; retainedDataBytes: number }>
+    >
+  ).data.find((candidate) => candidate.appId === 'nexus.custom-surface');
+  expect(cleared).toMatchObject({
+    appId: 'nexus.custom-surface',
+    status: 'removed',
+    retainedDataEntries: 0,
+    retainedDataBytes: 0,
+  });
+});
+
 test('frontend target owns a full Custom App Surface and connects through the isolated Plugin SDK', async ({
   page,
   context,

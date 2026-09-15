@@ -1,5 +1,9 @@
 import type { AppStoragePort, AppStorageRecord, JsonValue, Scope } from '../../../modules/agent/host/app-storage.port';
-import type { AppStorageSnapshot, AppStorageSnapshotPort } from '../../../modules/agent/host/app-storage-snapshot.port';
+import type {
+  AppStorageSnapshot,
+  AppStorageSnapshotPort,
+  AppStorageStats,
+} from '../../../modules/agent/host/app-storage-snapshot.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 
 const MAX_VALUE_BYTES = 64 * 1024;
@@ -98,6 +102,15 @@ export class SqliteAppStorageRepository implements AppStoragePort, AppStorageSna
     if (result.changes === 1) return true;
     if (await this.get(scope, key)) throw new Error('APP_STORAGE_VERSION_CONFLICT');
     return false;
+  }
+
+  async stats(scope: Scope): Promise<AppStorageStats> {
+    const row = await this.db.queryOne<{ entry_count: number; total_bytes: number }>(
+      `SELECT COUNT(*) AS entry_count, COALESCE(SUM(bytes), 0) AS total_bytes
+       FROM agent_app_storage WHERE user_id=? AND app_id=?`,
+      [scope.userId, scope.appId],
+    );
+    return { entryCount: row?.entry_count ?? 0, totalBytes: row?.total_bytes ?? 0 };
   }
 
   async capture(scope: Scope): Promise<AppStorageSnapshot> {
