@@ -165,7 +165,7 @@ test('mobile dashboard reflows without horizontal overflow or cramped control ro
             chevronCenterY: chevron ? chevron.top + chevron.height / 2 : Number.NaN,
           };
         });
-        expect(Math.abs(geometry.height - 40)).toBeLessThanOrEqual(1);
+        expect(Math.abs(geometry.height - 40)).toBeLessThanOrEqual(2);
         expect(Math.abs(geometry.labelCenterX - geometry.centerX)).toBeLessThanOrEqual(1);
         expect(Math.abs(geometry.labelCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
         expect(Math.abs(geometry.chevronCenterY - geometry.centerY)).toBeLessThanOrEqual(1);

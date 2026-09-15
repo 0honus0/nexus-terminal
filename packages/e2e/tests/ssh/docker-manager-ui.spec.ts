@@ -356,10 +356,26 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           .locator('[data-session-id]')
           .filter({ hasText: 'E2E SSH' })
           .first();
+        const workspaceId = await activeTab.getAttribute('data-session-id');
+        expect(workspaceId).toBeTruthy();
         await activeTab.click({ button: 'right' });
         await page.getByText('Suspend Session', { exact: true }).click();
-        const markedSession = suspendedPanel.locator('[data-testid^="marked-suspended-session-"]').first();
-        await expect(markedSession).toBeVisible();
+
+        type SuspendedSession = { id: string; originalWorkspaceId: string; status: 'active' | 'disconnected' };
+        let suspendedSessionId = '';
+        await expect
+          .poll(async () => {
+            const response = await context.request.get('/api/v1/ssh-suspend/suspended-sessions');
+            expect(response.ok(), await response.text()).toBeTruthy();
+            const sessions = (await response.json()) as SuspendedSession[];
+            suspendedSessionId =
+              sessions.find((session) => session.originalWorkspaceId === workspaceId && session.status === 'active')
+                ?.id ?? '';
+            return suspendedSessionId;
+          })
+          .not.toBe('');
+        const suspendedSession = suspendedPanel.getByTestId(`suspended-session-${suspendedSessionId}`);
+        await expect(suspendedSession).toBeVisible();
         try {
           // Force the right utility pane into the minimum-width card state. Medium narrow panes
           // keep icon actions beside the text; only this tighter band stacks them underneath.
@@ -376,15 +392,15 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
               }),
             )
             .toBeLessThanOrEqual(260);
-          await expect(markedSession.locator('.session-info')).toHaveCSS('text-align', 'center');
-          await expect(markedSession.locator('.session-name')).toHaveCSS('text-align', 'center');
-          await expect(markedSession.locator('.status-badge')).toHaveCSS('margin-left', '0px');
-          const compactAction = markedSession.locator('.session-action').first();
+          await expect(suspendedSession.locator('.session-info')).toHaveCSS('text-align', 'center');
+          await expect(suspendedSession.locator('.session-name')).toHaveCSS('text-align', 'center');
+          await expect(suspendedSession.locator('.status-badge')).toHaveCSS('margin-left', '0px');
+          const compactAction = suspendedSession.locator('.session-action').first();
           await expect.poll(async () => (await compactAction.boundingBox())?.width ?? 99).toBeLessThanOrEqual(28);
-          await expect(markedSession.locator('.button-session-text').first()).toHaveCSS('display', 'none');
-          const compactInfo = markedSession.locator('.session-info');
-          const compactActions = markedSession.locator('.session-status-actions');
-          const compactActionButtons = markedSession.locator('.session-action');
+          await expect(suspendedSession.locator('.button-session-text').first()).toHaveCSS('display', 'none');
+          const compactInfo = suspendedSession.locator('.session-info');
+          const compactActions = suspendedSession.locator('.session-status-actions');
+          const compactActionButtons = suspendedSession.locator('.session-action');
           await expect(compactActions.locator('.actions')).toHaveCSS('flex-direction', 'row');
           await expect(compactActions.locator('.actions')).toHaveCSS('justify-content', 'center');
           await expect
@@ -420,7 +436,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
           await expect
             .poll(async () => {
               const [rowBox, infoBox, actionsBox] = await Promise.all([
-                markedSession.locator('.session-row').boundingBox(),
+                suspendedSession.locator('.session-row').boundingBox(),
                 compactInfo.boundingBox(),
                 compactActions.boundingBox(),
               ]);
@@ -441,7 +457,7 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
 
           await page.setViewportSize({ width: 1000, height: 320 });
           await expect.poll(async () => (await suspendedPanel.boundingBox())?.height ?? 999).toBeLessThanOrEqual(280);
-          await expect(markedSession.locator('.status-badge')).toHaveCSS('margin-left', '0px');
+          await expect(suspendedSession.locator('.status-badge')).toHaveCSS('margin-left', '0px');
           await expect(compactActions.locator('.actions')).toHaveCSS('flex-direction', 'row');
           await expect(compactActionButtons.first()).toHaveCSS('padding-left', '0px');
           await expect(compactActionButtons.first()).toHaveCSS('padding-right', '0px');

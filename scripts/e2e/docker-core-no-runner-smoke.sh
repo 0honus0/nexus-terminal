@@ -26,7 +26,7 @@ cleanup() {
   local status=$?
   if [[ "$failed" -ne 0 || "$status" -ne 0 ]]; then compose ps -a >&2 || true; compose logs --no-color >&2 || true; fi
   compose down --volumes --remove-orphans --timeout 10 >/dev/null 2>&1 || true
-  rm -rf "$work"
+  rm -rf "$work" >/dev/null 2>&1 || true
   exit "$status"
 }
 trap cleanup EXIT

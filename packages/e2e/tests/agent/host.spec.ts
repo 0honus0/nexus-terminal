@@ -77,8 +77,8 @@ test('Agent feature enable opens one global floating window that survives route 
 
   await expect(onboarding).toHaveCount(0, { timeout: 15_000 });
   await expect(featureSection.getByRole('button', { name: 'Disable Agent', exact: true })).toBeVisible();
-  await expect(launcher).toBeVisible({ timeout: 10_000 });
   await expect(hub).toBeVisible({ timeout: 10_000 });
+  await expect(launcher).toHaveCount(0);
   const settingsBounds = await hub.boundingBox();
   expect(settingsBounds).not.toBeNull();
 
@@ -92,15 +92,15 @@ test('Agent feature enable opens one global floating window that survives route 
 
   await page.getByRole('link', { name: 'Connections', exact: true }).click();
   await expect(page).toHaveURL(/\/connections$/);
-  await expect(launcher).toBeVisible();
   await expect(hub).toBeVisible();
+  await expect(launcher).toHaveCount(0);
   const connectionsBounds = await hub.boundingBox();
   expect(connectionsBounds).toEqual(settingsBounds);
 
   await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(launcher).toBeVisible();
   await expect(hub).toBeVisible();
+  await expect(launcher).toHaveCount(0);
 });
 
 test('Agent settings surface exposes the production control plane and captures functional evidence', async ({
@@ -126,7 +126,7 @@ test('Agent settings surface exposes the production control plane and captures f
   await captureFunctionalScreenshot(page, 'agent-settings-models.png', { viewport: { width: 1440, height: 900 } });
 
   const providersSection = providersHeading.locator('xpath=ancestor::section[1]');
-  await providersSection.getByRole('button', { name: 'Add provider', exact: true }).click();
+  await providersSection.getByRole('button', { name: 'Add provider', exact: true }).first().click();
   const addProvider = page.getByRole('dialog', { name: 'Add Model Provider', exact: true });
   await expect(addProvider).toBeVisible();
   await addProvider.getByLabel('Display name', { exact: true }).fill('Settings UI Provider');

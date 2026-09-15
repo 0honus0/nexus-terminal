@@ -1,4 +1,3 @@
-import type { WebSocketRoute } from '@playwright/test';
 import { expect, test, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin } from '../../support/auth';
 import {
@@ -71,7 +70,7 @@ async function dragTerminalDown(page: Page): Promise<void> {
   );
 }
 
-test('mobile suspended catalog refreshes promptly after a marked tab closes', async ({ page, context }) => {
+test('mobile suspended catalog refreshes promptly after the immediate suspend handoff', async ({ page, context }) => {
   await loginAsInitialAdmin(context.request);
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
@@ -96,7 +95,7 @@ test('mobile suspended catalog refreshes promptly after a marked tab closes', as
   try {
     await tab.click({ button: 'right' });
     await page.getByText('Suspend Session', { exact: true }).click();
-    await tab.getByRole('button', { name: 'Close Tab', exact: true }).click();
+    await expect(tab).toHaveCount(0);
 
     const emptySuspendedPanel = page.getByTestId('mobile-empty-suspended-panel');
     await expect(emptySuspendedPanel).toBeVisible();
@@ -144,9 +143,13 @@ test('mobile resumed terminal loads older suspended output when dragged downward
   );
   const earlyMarker = 'MOBILE_RESUME_HISTORY_EARLY';
   const tailMarker = 'MOBILE_RESUME_HISTORY_TAIL';
-  // Keep the byte history larger than the initial 256 KiB resume tail without creating
-  // thousands of visible rows. A run of carriage returns is terminal-safe filler.
-  const snapshot = `${earlyMarker}\r\n${'\r'.repeat(300_000)}${tailMarker}\r\n`;
+  // Keep the retained history larger than the initial 256 KiB resume tail using real rows,
+  // so the first mobile viewport contains only recent output and older pages remain scrollable.
+  const filler = Array.from(
+    { length: 3600 },
+    (_, index) => `mobile-history-${String(index).padStart(5, '0')}-${'x'.repeat(88)}`,
+  );
+  const snapshot = `${earlyMarker}\r\n${filler.join('\r\n')}\r\n${tailMarker}\r\n`;
   expect(Buffer.byteLength(snapshot)).toBeGreaterThan(256 * 1024);
 
   await requestWorkspace(original.socket, 'suspend.mark', { terminalSnapshot: snapshot });
@@ -201,7 +204,7 @@ test('mobile resumed terminal loads older suspended output when dragged downward
   await page.getByText('Unmark Suspend', { exact: true }).click();
 });
 
-test('mobile foreground recovery replaces a suspended tab without exposing a temporary duplicate', async ({
+test('mobile resume replaces an immediately suspended tab without exposing a temporary duplicate', async ({
   page,
   context,
 }) => {
@@ -209,25 +212,13 @@ test('mobile foreground recovery replaces a suspended tab without exposing a tem
   await configureSshE2eSettings(context.request);
   await resetTestSshFilesystem();
   const connectionId = await ensureTestSshConnection(context.request);
-  let workspaceRoute: WebSocketRoute | undefined;
-  await page.routeWebSocket('**/ws/workspace', (route) => {
-    route.connectToServer();
-    workspaceRoute = route;
-  });
   await connectTestSshFromConnectionsPage(page, connectionId);
-  await expect.poll(() => Boolean(workspaceRoute), { timeout: 20_000 }).toBe(true);
 
   const tabBar = page.getByTestId('terminal-tab-bar');
   const tab = tabBar.locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first();
   await expect(tab).toBeVisible({ timeout: 20_000 });
   const originalSessionId = (await tab.getAttribute('data-session-id')) ?? '';
   expect(originalSessionId).not.toBe('');
-
-  await tab.click({ button: 'right' });
-  await page.getByText('Suspend Session', { exact: true }).click();
-  await tab.click({ button: 'right' });
-  await expect(page.getByText('Unmark Suspend', { exact: true })).toBeVisible({ timeout: 10_000 });
-  await page.keyboard.press('Escape');
 
   await page.evaluate(() => {
     const bar = document.querySelector<HTMLElement>('[data-testid="terminal-tab-bar"]');
@@ -243,50 +234,42 @@ test('mobile foreground recovery replaces a suspended tab without exposing a tem
     (window as typeof window & { __suspendTabState?: typeof state }).__suspendTabState = state;
   });
 
-  const dispatchVisibility = async (state: 'hidden' | 'visible') => {
-    await page.evaluate((nextState) => {
-      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => nextState });
-      Object.defineProperty(document, 'hidden', { configurable: true, get: () => nextState === 'hidden' });
-      document.dispatchEvent(new Event('visibilitychange'));
-    }, state);
-  };
-
   try {
-    await dispatchVisibility('hidden');
-    await workspaceRoute!.close({ code: 4001, reason: 'E2E suspend takeover' });
+    await tab.click({ button: 'right' });
+    await page.getByText('Suspend Session', { exact: true }).click();
+    await expect(tab).toHaveCount(0);
+
+    let suspended: SuspendedSession | undefined;
     await expect
       .poll(
-        async () =>
-          (await suspendedSessions(context.request)).some(
+        async () => {
+          suspended = (await suspendedSessions(context.request)).find(
             (session) => session.originalWorkspaceId === originalSessionId && session.status === 'active',
-          ),
+          );
+          return Boolean(suspended);
+        },
         { timeout: 30_000 },
       )
       .toBeTruthy();
 
-    await dispatchVisibility('visible');
+    const manager = page.getByTestId('mobile-empty-suspended-panel');
+    await expect(manager).toBeVisible();
+    const hanging = manager.getByTestId(`suspended-session-${suspended!.id}`);
+    await expect(hanging).toBeVisible({ timeout: 20_000 });
+    await hanging.getByRole('button', { name: 'Resume', exact: true }).click();
 
     await expect.poll(() => tabBar.locator('[data-session-id]').count(), { timeout: 30_000 }).toBe(1);
     await expect
-      .poll(
-        async () =>
-          (await suspendedSessions(context.request)).some(
-            (session) => session.originalWorkspaceId === originalSessionId,
-          ),
-        { timeout: 30_000 },
-      )
+      .poll(async () => (await suspendedSessions(context.request)).some((session) => session.id === suspended!.id), {
+        timeout: 30_000,
+      })
       .toBeFalsy();
 
     const maxTabs = await page.evaluate(() => {
       return (window as typeof window & { __suspendTabState?: { maxTabs: number } }).__suspendTabState?.maxTabs ?? 0;
     });
     expect(maxTabs).toBe(1);
-
-    const resumedTab = tabBar.locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first();
-    await expect(resumedTab).toBeVisible();
-    await resumedTab.click({ button: 'right' });
-    await expect(page.getByText('Unmark Suspend', { exact: true })).toBeVisible({ timeout: 10_000 });
-    await page.getByText('Unmark Suspend', { exact: true }).click();
+    await expect(tabBar.locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first()).toBeVisible();
   } finally {
     await page.evaluate(() => {
       const target = window as typeof window & { __suspendTabObserver?: MutationObserver; __suspendTabState?: unknown };
@@ -323,8 +306,9 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
   });
 
   let originalSessionId = '';
+  let primarySuspendedId = '';
   let disposableOriginalSessionId = '';
-  await step('mark the active terminal tab for suspend from its context menu', async () => {
+  await step('suspend the active terminal immediately while delayed PTY output remains pending', async () => {
     const tab = page
       .getByTestId('terminal-tab-bar')
       .locator('[data-session-id]')
@@ -334,19 +318,40 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     originalSessionId = (await tab.getAttribute('data-session-id')) ?? '';
     expect(originalSessionId).not.toBe('');
 
+    await commandInput.fill('(sleep 0.5; printf \'AFTER_SUSPEND=%s\\n\' "$PWD") &');
+    await commandInput.press('Enter');
     await tab.click({ button: 'right' });
     await page.getByText('Suspend Session', { exact: true }).click();
+    await expect(tab).toHaveCount(0);
 
-    await tab.click({ button: 'right' });
-    await expect(page.getByText('Unmark Suspend', { exact: true })).toBeVisible({ timeout: 10_000 });
-    await page.keyboard.press('Escape');
+    await expect
+      .poll(
+        async () => {
+          const match = (await suspendedSessions(context.request)).find(
+            (session) => session.originalWorkspaceId === originalSessionId && session.status === 'active',
+          );
+          primarySuspendedId = match?.id ?? '';
+          return primarySuspendedId;
+        },
+        { timeout: 30_000 },
+      )
+      .not.toBe('');
   });
 
-  await step('retain terminal output produced after the suspend mark', async () => {
-    await commandInput.fill('printf \'AFTER_MARK_BEFORE_SUSPEND=%s\\n\' "$PWD"');
-    await commandInput.press('Enter');
-    await expect.poll(terminalText, { timeout: 15_000 }).toContain('AFTER_MARK_BEFORE_SUSPEND=');
-    await expect.poll(terminalText, { timeout: 15_000 }).toContain('folder-seed');
+  await step('retain terminal output produced after the server-owned suspend takeover', async () => {
+    await expect
+      .poll(
+        async () => {
+          const response = await context.request.get(`/api/v1/ssh-suspend/log/${primarySuspendedId}`);
+          expect(response.ok()).toBeTruthy();
+          return response.text();
+        },
+        { timeout: 10_000 },
+      )
+      .toContain('AFTER_SUSPEND=');
+    const response = await context.request.get(`/api/v1/ssh-suspend/log/${primarySuspendedId}`);
+    const text = await response.text();
+    expect(text).toContain('folder-seed');
   });
 
   await step('prepare a second suspended session for destructive remove verification', async () => {
@@ -529,7 +534,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await page.setViewportSize(originalViewport!);
   });
 
-  await slowStep('browser reload promotes the marked session to a backend hanging session', async () => {
+  await slowStep('browser reload exposes the existing server-owned suspended session', async () => {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await expect
       .poll(
@@ -618,7 +623,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     for await (const chunk of downloadStream) chunks.push(Buffer.from(chunk));
     const exportedBeforeResume = Buffer.concat(chunks).toString('utf8');
     expect(exportedBeforeResume).toContain('BEFORE_SUSPEND=');
-    expect(exportedBeforeResume).toContain('AFTER_MARK_BEFORE_SUSPEND=');
+    expect(exportedBeforeResume).toContain('AFTER_SUSPEND=');
 
     await disposableRow.getByRole('button', { name: 'Remove', exact: true }).click();
     const cancelConfirm = page.getByRole('dialog', { name: 'Please confirm' });
@@ -692,7 +697,7 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     expect(resumedLog.ok()).toBeTruthy();
     const resumedLogText = await resumedLog.text();
     expect(resumedLogText).toContain('BEFORE_SUSPEND=');
-    expect(resumedLogText).toContain('AFTER_MARK_BEFORE_SUSPEND=');
+    expect(resumedLogText).toContain('AFTER_SUSPEND=');
     expect(resumedLogText).toContain('AFTER_RESUME=');
     expect((await context.request.delete(`/api/v1/ssh-suspend/terminate/${resuspended!.id}`)).ok()).toBeTruthy();
   });

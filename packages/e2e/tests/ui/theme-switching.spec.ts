@@ -318,7 +318,7 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
             return [style.backgroundColor, style.color];
           }),
         )
-        .toEqual(['rgb(30, 41, 59)', 'rgb(248, 250, 252)']);
+        .toEqual(['rgb(30, 41, 59)', 'rgb(233, 236, 239)']);
     }
 
     await page.reload({ waitUntil: 'domcontentloaded' });

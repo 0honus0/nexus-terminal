@@ -656,11 +656,13 @@ test('frontend target owns a full Custom App Surface and connects through the is
     const pluginsHeading = panel.getByRole('heading', { name: 'Installable apps and skills', exact: true });
     await pluginsHeading.scrollIntoViewIfNeeded();
     const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
-    const installedHeading = pluginsSection.getByRole('heading', { name: 'Installed plugins', exact: true });
-    const installedSection = installedHeading.locator('xpath=parent::div');
-    await expect(installedSection.getByText('nexus.custom-surface · v1.0.0', { exact: true })).toBeVisible();
-    await expect(installedSection.getByText('nexus.agent · v1.0.0', { exact: true })).toBeVisible();
-    await expect(installedSection.getByText('nexus.fullstack · v1.0.0', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('nexus.custom-surface', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('Custom Surface Fixture', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
+    await expect(pluginsSection.getByText('Full-stack Plugin', { exact: true })).toBeVisible();
+    const nexusAgentCatalogEntries = pluginsSection.getByText('nexus.agent', { exact: true });
+    await expect(nexusAgentCatalogEntries).toHaveCount(2);
+    await expect(nexusAgentCatalogEntries.first()).toBeVisible();
     await captureFunctionalScreenshot(page, 'agent-plugins-multiple-installed.png', {
       viewport: { width: 1440, height: 900 },
     });
@@ -680,7 +682,7 @@ test('frontend target owns a full Custom App Surface and connects through the is
   await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
   const hub = page.locator('section[aria-label="Agent"]');
   await expect(hub).toBeVisible();
-  await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.custom-surface');
+  await hub.getByRole('button', { name: 'Switch to Custom Surface Fixture', exact: true }).click();
   const customSurface = page.frameLocator('section[aria-label="Agent"] iframe');
   await expect(customSurface.getByRole('heading', { name: 'Custom Surface Fixture' })).toBeVisible();
   await expect(customSurface.getByTestId('custom-sdk-status')).toHaveText('ready:nexus.custom-surface:custom.default', {
@@ -715,7 +717,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await page.getByRole('button', { name: 'Open Agent', exact: true }).click();
     const hub = page.locator('section[aria-label="Agent"]');
     await expect(hub).toBeVisible();
-    await hub.getByLabel('Agent app', { exact: true }).selectOption('nexus.agent');
+    await hub.getByRole('button', { name: 'Switch to Nexus Agent', exact: true }).click();
     const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
     await expect(presetThread).toBeVisible();
     await presetThread.click();
