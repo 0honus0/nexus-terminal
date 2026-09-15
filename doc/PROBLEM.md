@@ -2682,27 +2682,32 @@ architecture / SRS / engineering constraints
   - 浏览器崩溃、断网、正常关闭、跨设备接管四条路径都有 E2E/协议测试。
 - **状态**：`已记录，待复现并设计跨设备 takeover`
 
-## P-057 Windows EXE / Desktop 版本规划：在不复制业务逻辑的前提下提供可安装桌面客户端
+## P-057 Windows EXE / Desktop 完整本地版规划：单一安装包交付 Frontend + Backend + Agent Runtime
 
-- **问题背景**：当前 Nexus Terminal 交付形态以 Web + Docker/Backend 为主，仓库没有 Electron/Tauri/NSIS 等桌面打包依赖或 Windows `.exe` 构建链。需要正式规划 EXE 版本，而不是临时把 Web 页面套一层壳后形成第二套架构。
-- **目标**：提供 Windows 桌面安装/便携版本，同时最大化复用现有 Frontend、Backend API/WS 协议、Agent/Workspace/Remote Desktop 能力，并保证 Web 版本继续是同一产品而不是两套分叉客户端。
-- **首要架构决策（实施前必须确认）**：
-  1. **Remote Client 模式**：EXE 只是桌面 WebView/Shell，连接用户已有 Nexus Server。优点是轻量、升级简单，最适合作为第一阶段。
-  2. **Bundled Local Server 模式**：EXE 内携 Backend/Runner/依赖，在本机启动服务后由 Desktop shell 访问。能力更完整但安装体积、端口、权限、更新、SSH/Runner 依赖、Windows service 生命周期复杂度显著增加。
-  3. 第一阶段不得同时实现两套；建议先验证 Remote Client，待桌面价值明确后再评估 local bundle。
-- **技术选型要求**：
-  - 对 Electron 与 Tauri/WebView2 做 ADR 级比较：安装体积、Windows 兼容性、WebSocket/下载/上传、剪贴板、文件系统、自动更新、签名、企业代理、GPU/RDP/VNC/Canvas/WebGL、PWA 能力复用、安全 sandbox。
-  - 不能为了 EXE 把 Frontend feature 复制到新目录；桌面特有能力应通过窄 platform adapter/capability port 注入。
+- **问题背景**：当前 Nexus Terminal 交付形态以 Web + Docker/Backend 为主，仓库没有 Windows 桌面打包链。Windows 桌面版的目标不是 Remote Client，也不是仅把远程 Web 页面套一层壳，而是提供可直接安装运行的完整本地 Nexus Terminal。
+- **已确认产品形态**：Windows 第一版采用 **Bundled Local Server**。用户只需要下载安装 Nexus Terminal，不需要另行部署 Nexus Server、Node.js 或 Docker；安装包内同时交付现有 Frontend、Backend、Agent Runner 和所需本地运行时。
+- **推荐架构**：
+  1. 桌面壳采用 **Tauri 2**，只负责应用窗口、生命周期、安装/更新和本地 Backend 进程编排，不复制任何现有业务 feature。
+  2. 安装包内携官方 **Node.js 24 Windows runtime** 作为 sidecar；现有 Backend 与 Agent Runner 保持独立 Node 进程语义，不嵌入 Tauri Rust 进程，也不改写为桌面专用实现。
+  3. 启动时由 Desktop shell 选择仅监听 `127.0.0.1` 的可用端口，设置 `NEXUS_DATA_DIR` 到用户数据目录，启动 Backend，等待 health ready 后再由 WebView 加载本地 Nexus UI。
+  4. Frontend 继续使用现有 `/api/v1/*`、`/ws/*`、`/plugins`、`/sdk` 协议，不建立第二套 Desktop API。
+  5. Windows 本地数据默认落在用户目录（例如 `%APPDATA%\Nexus Terminal\`），SQLite、session、Agent artifact/plugin 等继续沿用 Backend 现有数据目录模型。
+- **为什么不优先把 Backend 直接运行在 Electron 内部**：现有 Backend 明确要求 Node >=24，并直接使用 `node:sqlite`；Agent/plugin runtime 还通过 `process.execPath` 启动子 Node worker。使用独立 Node 24 sidecar 能最大程度维持现有语义，也避免 Electron ABI/native addon rebuild 和 `process.execPath` 指向 Electron executable 的额外兼容层。
+- **完整功能前置阻塞点**：
+  1. **RDP/VNC runtime**：当前 Remote Desktop 路径依赖外部 `guacd`（Docker 中由 `guacamole/guacd` 提供）。若 Windows EXE 要完整支持 RDP/VNC，必须提供可随安装包交付的 Windows runtime。优先验证 Windows 原生 `guacd + FreeRDP/VNC` 打包；若无法稳定交付，再在保持 `RemoteDesktopSessionIssuer` port 不变的前提下替换 Windows 实现。
+  2. **Agent Runner Windows terminal runtime**：当前 Workspace Runtime 明确依赖 POSIX `script`、`/bin/sh` 和 shell 语义。Windows 版需要增加 Windows platform adapter（优先 ConPTY + PowerShell/cmd），上层 Agent Runtime、预算、工具和协议保持不分叉。
+  3. **Native Node dependencies**：`bcrypt`、`ssh2` 等依赖需要在 Windows x64 构建/打包环境验证可安装、可加载；数据库使用 Node 24 自带 `node:sqlite`，无需另引入桌面专用 SQLite 层。
+- **安装与运行模型**：`Nexus-Terminal-Setup-x.y.z-win-x64.exe` 是单一对外交付安装包；安装完成后应用目录允许包含 `NexusTerminal.exe`、`node.exe`、Backend/Runner resources、native DLL/addon 和 Remote Desktop runtime。第一阶段不追求“安装后磁盘上也只有一个 PE 文件”，避免为单文件自解压破坏 native module、child process 与更新语义。
 - **版本与发布规划**：
-  1. 桌面版本与 Nexus 产品 SemVer 对齐，但 build artifact 带平台/架构，例如 `Nexus-Terminal-1.x.y-win-x64.exe`。
-  2. 至少规划 installer 与是否提供 portable；如果两者都提供，配置/缓存/自动更新语义必须区分清楚。
-  3. CI 在 Windows runner 产出 artifact，并在正式发布前完成代码签名/SmartScreen 策略；未签名 nightly 与 signed stable 明确区分。
-  4. 自动更新必须校验签名/哈希，不能直接执行任意远程下载。
-  5. 配置服务器 URL、证书信任、代理、深链、单实例、窗口恢复、下载目录等桌面设置需要单独需求定义。
-- **安全要求**：桌面 shell 不得给 Web 内容默认开放任意 Node/native 权限；远程页面、插件 iframe、Agent Plugin Frontend 仍遵守现有 CSP/origin/capability 边界。任何本地文件/系统调用必须通过显式受控 bridge。
+  1. Desktop 与 Nexus 产品 SemVer 对齐，Windows x64 先行，arm64 后续单独评估。
+  2. Windows CI 构建 Frontend、Backend、Agent Runner 与 sidecar resources，产出 installer artifact，并验证干净 Windows 10/11 环境安装、启动、升级、卸载。
+  3. Stable 安装包必须代码签名并规划 SmartScreen reputation；自动更新必须校验签名/哈希。
+  4. Desktop shell 管理单实例、窗口恢复、本地 Backend 子进程启动/退出、异常重启与端口生命周期；Web 业务状态仍由现有 Frontend/Backend 管理。
+- **安全与本地边界**：Backend 默认仅绑定 loopback；Desktop shell 不向 Web 内容直接暴露任意 filesystem/shell/native 权限。现有 Plugin/CSP/capability 边界继续保留，本地系统能力只能通过明确的 platform adapter 增加。
 - **验证方式**：
-  - Windows 10/11 x64（后续再决定 arm64）安装、启动、升级、卸载可重复验证。
-  - 登录、Workspace SSH/SFTP、挂起恢复、RDP/VNC、Agent、文件上传下载、通知、剪贴板等核心功能与 Web 版行为一致。
-  - 断网/服务器证书错误/服务器升级不兼容时有可理解错误，不白屏。
-  - 桌面包不会内置长期明文密钥，也不会扩大 Plugin/网页对本机系统的权限。
-- **状态**：`已记录，待产品形态与技术选型确认`
+  - 在全新 Windows 10/11 x64、未安装 Node/Docker 的环境中，仅安装 Nexus EXE 即可启动并完成首次设置。
+  - SSH/SFTP、Workspace、挂起恢复、文件上传下载、Agent/Plugin、模型 Provider、通知、备份等现有能力与 Web 版一致。
+  - RDP/VNC 在不依赖外部 Docker/WSL/手工安装 guacd 的条件下可用。
+  - Agent Windows Workspace terminal 不依赖 `/bin/sh` 或 Unix `script`，并通过 ConPTY/Windows shell 完成等价运行。
+  - 应用退出后 Backend/Runner/Remote Desktop 子进程不残留；数据库与用户数据升级/卸载语义明确且可恢复。
+- **状态**：`方案已确认，暂不实施；后续实现前先验证 Windows guacd/RDP-VNC runtime 与 Agent Runner ConPTY 两个平台前置点`
