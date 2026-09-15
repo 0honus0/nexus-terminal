@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onBeforeUnmount, onMounted, ref, nextTick, watch } from 'vue';
+  import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { useConnections } from '@/features/connections/public';
   import AgentConversation from '../ai/AgentConversation.vue';
@@ -32,7 +32,8 @@
   import AgentConfigPopover from '../files/AgentConfigPopover.vue';
   import { createAgentRunFacade } from '../runtime/run-facade';
   import { createRuntimeOperationState } from '../runtime/runtime-operation-state';
-  import TaskRail from '../runtime/TaskRail.vue';
+
+  const TaskRail = defineAsyncComponent(() => import('../runtime/TaskRail.vue'));
 
   const props = defineProps<{ appId: string }>();
   const { t, locale } = useI18n();
@@ -661,53 +662,59 @@
     }
   };
 
+  const loadRunConfiguration = async (): Promise<void> => {
+    const [nextDefinitions, nextProviders, settings, , runtimeAvailability] = await Promise.all([
+      facade.definitions(),
+      facade.providers(),
+      facade.settings(),
+      connectionsStore.revalidate(0),
+      agentApi.workspaceRuntimeAvailability().catch(() => null),
+    ]);
+    definitions.value = nextDefinitions;
+    providers.value = nextProviders;
+    settingsView.value = settings;
+    workspaceRuntimeAvailability.value = runtimeAvailability;
+    workspaceRuntimeCatalog.value = runtimeAvailability?.available
+      ? await agentApi.workspaceRuntimeCatalog().catch(() => null)
+      : null;
+    const restoredModelKey = agentSurfaceSession.restoreModelKey(props.appId);
+    const restoredModel = modelOptions.value.find((candidate) => candidate.key === restoredModelKey);
+    const preferredModel = modelOptions.value.find(
+      (candidate) =>
+        candidate.provider.id === settings.effectiveSettings.model.defaultProviderId &&
+        candidate.model.id === settings.effectiveSettings.model.defaultModelId,
+    );
+    const selectedModel = restoredModel ?? preferredModel ?? modelOptions.value[0] ?? null;
+    selectedModelKey.value = selectedModel?.key ?? '';
+    agentSurfaceSession.setModelKey(props.appId, selectedModel?.key);
+    const restoredReasoningEffort = agentSurfaceSession.restoreReasoningEffort(props.appId);
+    const allowedReasoningEfforts = selectedModel?.model.reasoningEfforts ?? [];
+    const initialReasoningEffort =
+      restoredReasoningEffort && allowedReasoningEfforts.includes(restoredReasoningEffort)
+        ? restoredReasoningEffort
+        : (selectedModel?.model.defaultReasoningEffort ?? null);
+    selectedReasoningEffort.value = initialReasoningEffort;
+    agentSurfaceSession.setReasoningEffort(props.appId, initialReasoningEffort ?? undefined);
+    const restoredEnvironmentId = agentSurfaceSession.restoreEnvironmentRecipeId(props.appId);
+    const selectedEnvironment =
+      enabledEnvironmentRecipes.value.find((recipe) => recipe.id === restoredEnvironmentId) ??
+      enabledEnvironmentRecipes.value[0] ??
+      null;
+    selectedEnvironmentRecipeId.value = selectedEnvironment?.id ?? '';
+    agentSurfaceSession.setEnvironmentRecipeId(props.appId, selectedEnvironment?.id);
+    hardLimits.value = settings.hardLimits;
+  };
+
   const load = async (): Promise<void> => {
     loading.value = true;
     error.value = '';
+    const configurationPromise = loadRunConfiguration().catch((cause) => {
+      error.value = explain(cause);
+    });
     try {
-      const [threadPage, nextDefinitions, nextProviders, settings, , runtimeAvailability] = await Promise.all([
-        facade.listThreads(undefined, THREAD_PAGE_SIZE),
-        facade.definitions(),
-        facade.providers(),
-        facade.settings(),
-        connectionsStore.revalidate(0),
-        agentApi.workspaceRuntimeAvailability().catch(() => null),
-      ]);
+      const threadPage = await facade.listThreads(undefined, THREAD_PAGE_SIZE);
       threads.value = threadPage.items;
       threadNextCursor.value = threadPage.nextCursor;
-      definitions.value = nextDefinitions;
-      providers.value = nextProviders;
-      settingsView.value = settings;
-      workspaceRuntimeAvailability.value = runtimeAvailability;
-      workspaceRuntimeCatalog.value = runtimeAvailability?.available
-        ? await agentApi.workspaceRuntimeCatalog().catch(() => null)
-        : null;
-      const restoredModelKey = agentSurfaceSession.restoreModelKey(props.appId);
-      const restoredModel = modelOptions.value.find((candidate) => candidate.key === restoredModelKey);
-      const preferredModel = modelOptions.value.find(
-        (candidate) =>
-          candidate.provider.id === settings.effectiveSettings.model.defaultProviderId &&
-          candidate.model.id === settings.effectiveSettings.model.defaultModelId,
-      );
-      const selectedModel = restoredModel ?? preferredModel ?? modelOptions.value[0] ?? null;
-      selectedModelKey.value = selectedModel?.key ?? '';
-      agentSurfaceSession.setModelKey(props.appId, selectedModel?.key);
-      const restoredReasoningEffort = agentSurfaceSession.restoreReasoningEffort(props.appId);
-      const allowedReasoningEfforts = selectedModel?.model.reasoningEfforts ?? [];
-      const initialReasoningEffort =
-        restoredReasoningEffort && allowedReasoningEfforts.includes(restoredReasoningEffort)
-          ? restoredReasoningEffort
-          : (selectedModel?.model.defaultReasoningEffort ?? null);
-      selectedReasoningEffort.value = initialReasoningEffort;
-      agentSurfaceSession.setReasoningEffort(props.appId, initialReasoningEffort ?? undefined);
-      const restoredEnvironmentId = agentSurfaceSession.restoreEnvironmentRecipeId(props.appId);
-      const selectedEnvironment =
-        enabledEnvironmentRecipes.value.find((recipe) => recipe.id === restoredEnvironmentId) ??
-        enabledEnvironmentRecipes.value[0] ??
-        null;
-      selectedEnvironmentRecipeId.value = selectedEnvironment?.id ?? '';
-      agentSurfaceSession.setEnvironmentRecipeId(props.appId, selectedEnvironment?.id);
-      hardLimits.value = settings.hardLimits;
       const restored = agentSurfaceSession.restoreThread(props.appId);
       const selected = threads.value.find((thread) => thread.id === restored) ?? threads.value[0];
       if (selected) await selectThread(selected);
@@ -717,6 +724,7 @@
     } finally {
       loading.value = false;
     }
+    void configurationPromise;
   };
 
   const beginRuntimeMutation = (): boolean => {

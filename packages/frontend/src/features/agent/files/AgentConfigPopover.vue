@@ -15,6 +15,7 @@
     }>(),
     { title: '', align: 'left', panelClass: '', disabled: false },
   );
+  const emit = defineEmits<{ 'open-change': [open: boolean] }>();
 
   const open = ref(false);
   const position = ref({ left: '0px', top: '0px', maxHeight: '300px' });
@@ -26,6 +27,7 @@
   const close = (restoreFocus = true): void => {
     if (!open.value) return;
     open.value = false;
+    emit('open-change', false);
     if (activePopoverCloser === close) {
       activePopoverCloser = null;
     }
@@ -75,6 +77,7 @@
       activePopoverCloser(false);
     }
     open.value = true;
+    emit('open-change', true);
     activePopoverCloser = close;
     await nextTick();
     positionPanel();

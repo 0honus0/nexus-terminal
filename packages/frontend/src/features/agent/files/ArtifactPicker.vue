@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, onMounted, ref } from 'vue';
+  import { computed, ref } from 'vue';
   import AgentConfigPopover from './AgentConfigPopover.vue';
   import { RecycleScroller } from 'vue-virtual-scroller';
   import { agentApi, formatAgentApiError, type AgentArtifactRef } from '../api/agent-api';
@@ -53,6 +53,13 @@
     }
   };
 
+  let loaded = false;
+  const handleOpenChange = (open: boolean): void => {
+    if (!open || loaded) return;
+    loaded = true;
+    void load();
+  };
+
   const toggle = (artifact: AgentArtifactRef): void => {
     if (props.disabled) return;
     const existing = props.modelValue.find((item) => item.id === artifact.id);
@@ -91,8 +98,6 @@
       busy.value = false;
     }
   };
-
-  onMounted(load);
 </script>
 
 <template>
@@ -101,6 +106,7 @@
     :title="$t('agent.attachments.button', { count: modelValue.length })"
     :disabled="disabled"
     panel-class="w-[min(520px,calc(100vw-24px))]"
+    @open-change="handleOpenChange"
   >
     <template #trigger>
       <i class="fa-solid fa-paperclip text-[10px]" aria-hidden="true"></i>

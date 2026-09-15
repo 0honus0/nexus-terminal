@@ -2,12 +2,13 @@
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { logger } from '@/client/logging/logger';
   import type { AgentAppSummary, HostSummaryView } from '../api/agent-api';
-  import AgentAppSurface from './AgentAppSurface.vue';
   import PluginAppFrame from './PluginAppFrame.vue';
   import AgentAppSwitcher from './AgentAppSwitcher.vue';
   import { agentSurfaceSession } from './surface-session';
   import { agentWindowManager } from './window-manager';
 
+  const loadAgentAppSurface = () => import('./AgentAppSurface.vue');
+  const AgentAppSurface = defineAsyncComponent(loadAgentAppSurface);
   const ArtifactLibraryView = defineAsyncComponent(() => import('../files/ArtifactLibraryView.vue'));
 
   const props = defineProps<{ summary: HostSummaryView }>();
@@ -15,6 +16,10 @@
   const state = agentWindowManager.state;
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
   const visible = computed(() => state.status === 'visible');
+  const hasOpened = ref(visible.value);
+  watch(visible, (isVisible) => {
+    if (isVisible) hasOpened.value = true;
+  });
   const enabledApps = computed(() => props.summary.apps.filter((app) => app.enabled));
   const activityCount = computed(
     () =>
@@ -23,6 +28,8 @@
 
   const flashWindow = ref(false);
   let flashTimer: ReturnType<typeof setTimeout> | null = null;
+  let surfacePreloadHandle: number | ReturnType<typeof setTimeout> | null = null;
+  let surfacePreloadUsesIdleCallback = false;
 
   const handleBackdropPointerDown = () => {
     flashWindow.value = true;
@@ -269,10 +276,25 @@
       );
     }
   };
-  onMounted(() => window.addEventListener('resize', handleResize));
+  onMounted(() => {
+    window.addEventListener('resize', handleResize);
+    if ('requestIdleCallback' in window) {
+      surfacePreloadUsesIdleCallback = true;
+      surfacePreloadHandle = window.requestIdleCallback(() => void loadAgentAppSurface(), { timeout: 1200 });
+    } else {
+      surfacePreloadHandle = setTimeout(() => void loadAgentAppSurface(), 350);
+    }
+  });
   onBeforeUnmount(() => {
     window.removeEventListener('resize', handleResize);
     if (flashTimer) clearTimeout(flashTimer);
+    if (surfacePreloadHandle !== null) {
+      if (surfacePreloadUsesIdleCallback && 'cancelIdleCallback' in window) {
+        window.cancelIdleCallback(surfacePreloadHandle as number);
+      } else {
+        clearTimeout(surfacePreloadHandle as ReturnType<typeof setTimeout>);
+      }
+    }
     cancelActiveInteraction();
   });
 </script>
@@ -290,7 +312,8 @@
   </Transition>
 
   <section
-    v-if="visible"
+    v-if="hasOpened"
+    v-show="visible"
     role="dialog"
     aria-modal="true"
     class="agent-hub-window fixed z-50 flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-2xl transition-[box-shadow,transform] duration-150"
