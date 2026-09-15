@@ -769,7 +769,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(taskRail).toHaveCount(0);
 
-    await step('the active Run Environment uses the shared accessible Host popover contract', async () => {
+    await step('the next Run Environment uses the shared accessible Host popover contract', async () => {
       const environment = hub.getByRole('button', { name: 'Environment', exact: true });
       await expect(environment).toBeVisible();
       await expect(environment).toHaveAttribute('aria-expanded', 'false');
@@ -779,8 +779,9 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const environmentDialog = page.getByRole('dialog', { name: 'Environment', exact: true });
       await expect(environmentDialog).toBeVisible();
       await expect(environmentDialog.getByText('Environment', { exact: true })).toBeVisible();
-      await expect(environmentDialog.getByText('Frozen', { exact: true })).toBeVisible();
-      await expect(environmentDialog.getByText('Native Host', { exact: true })).toBeVisible();
+      await expect(
+        environmentDialog.getByRole('button', { name: 'Native Host Run directly on host system', exact: true }),
+      ).toBeVisible();
       await page.keyboard.press('Escape');
       await expect(environmentDialog).toHaveCount(0);
       await expect(environment).toHaveAttribute('aria-expanded', 'false');
