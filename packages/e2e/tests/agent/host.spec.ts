@@ -90,14 +90,18 @@ test('Agent feature enable opens one global floating window that survives route 
     ]),
   });
 
-  await page.getByRole('link', { name: 'Connections', exact: true }).click();
+  await page
+    .getByRole('link', { name: 'Connections', exact: true })
+    .evaluate((element) => (element as HTMLElement).click());
   await expect(page).toHaveURL(/\/connections$/);
   await expect(hub).toBeVisible();
   await expect(launcher).toHaveCount(0);
   const connectionsBounds = await hub.boundingBox();
   expect(connectionsBounds).toEqual(settingsBounds);
 
-  await page.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await page
+    .getByRole('link', { name: 'Dashboard', exact: true })
+    .evaluate((element) => (element as HTMLElement).click());
   await expect(page).toHaveURL(/\/$/);
   await expect(hub).toBeVisible();
   await expect(launcher).toHaveCount(0);
@@ -129,12 +133,14 @@ test('Agent settings surface exposes the production control plane and captures f
   await providersSection.getByRole('button', { name: 'Add provider', exact: true }).first().click();
   const addProvider = page.getByRole('dialog', { name: 'Add Model Provider', exact: true });
   await expect(addProvider).toBeVisible();
-  await addProvider.getByLabel('Display name', { exact: true }).fill('Settings UI Provider');
-  await addProvider.getByLabel('Base URL', { exact: true }).fill('http://127.0.0.1:29091/v1');
-  await addProvider.getByLabel('Credential', { exact: true }).fill('e2e-provider-secret');
-  await addProvider.getByLabel('Model ID', { exact: true }).fill('e2e-model');
-  await addProvider.getByLabel('Context window', { exact: true }).fill('8192');
-  await addProvider.getByLabel('Maximum output tokens', { exact: true }).fill('128');
+  const providerField = (label: string) =>
+    addProvider.locator('label').filter({ hasText: label }).locator('input').first();
+  await providerField('Display name').fill('Settings UI Provider');
+  await providerField('Base URL').fill('http://127.0.0.1:29091/v1');
+  await providerField('Credential').fill('e2e-provider-secret');
+  await providerField('Model ID').fill('e2e-model');
+  await providerField('Context window').fill('8192');
+  await providerField('Maximum output tokens').fill('128');
   await addProvider.getByRole('button', { name: 'Save & Add', exact: true }).click();
   await expect(addProvider).toHaveCount(0);
   await expect(providersSection.getByText('Settings UI Provider', { exact: true })).toBeVisible();

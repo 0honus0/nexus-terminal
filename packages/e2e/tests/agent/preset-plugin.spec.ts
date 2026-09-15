@@ -658,8 +658,10 @@ test('frontend target owns a full Custom App Surface and connects through the is
     const pluginsSection = pluginsHeading.locator('xpath=ancestor::section[1]');
     await expect(pluginsSection.getByText('nexus.custom-surface', { exact: true })).toBeVisible();
     await expect(pluginsSection.getByText('Custom Surface Fixture', { exact: true })).toBeVisible();
-    await expect(pluginsSection.getByText('nexus.fullstack', { exact: true })).toBeVisible();
-    await expect(pluginsSection.getByText('Full-stack Plugin', { exact: true })).toBeVisible();
+    const fullstackCatalogEntries = pluginsSection.getByText('nexus.fullstack', { exact: true });
+    await expect(fullstackCatalogEntries).toHaveCount(2);
+    await expect(fullstackCatalogEntries.first()).toBeVisible();
+    await expect(pluginsSection.getByText('Full-stack Plugin', { exact: true }).first()).toBeVisible();
     const nexusAgentCatalogEntries = pluginsSection.getByText('nexus.agent', { exact: true });
     await expect(nexusAgentCatalogEntries).toHaveCount(2);
     await expect(nexusAgentCatalogEntries.first()).toBeVisible();
@@ -721,7 +723,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     const presetThread = hub.getByRole('button').filter({ hasText: 'Preset E2E thread' });
     await expect(presetThread).toBeVisible();
     await presetThread.click();
-    await expect(presetThread).toHaveClass(/bg-primary\/10/);
+    await expect(presetThread).toHaveAttribute('aria-current', 'true');
     const visibleOkMessage = hub.locator('article:visible pre:visible').filter({ hasText: /^OK$/ }).last();
     await expect(visibleOkMessage).toBeVisible({ timeout: 30_000 });
     await expect(hub.getByText('Agent workspace', { exact: true })).toBeVisible();

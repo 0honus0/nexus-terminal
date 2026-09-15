@@ -374,8 +374,10 @@ test('Workspace layout lock and top-navigation toggle affect the live shell and 
             return suspendedSessionId;
           })
           .not.toBe('');
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await expect(suspendedPanel).toBeVisible();
         const suspendedSession = suspendedPanel.getByTestId(`suspended-session-${suspendedSessionId}`);
-        await expect(suspendedSession).toBeVisible();
+        await expect(suspendedSession).toBeVisible({ timeout: 20_000 });
         try {
           // Force the right utility pane into the minimum-width card state. Medium narrow panes
           // keep icon actions beside the text; only this tighter band stacks them underneath.

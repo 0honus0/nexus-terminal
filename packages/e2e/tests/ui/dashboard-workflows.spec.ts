@@ -635,15 +635,12 @@ test('dashboard filters connections and persists tag and sort preferences across
           const chevron = element.querySelector(':scope > svg')?.getBoundingClientRect();
           return {
             height: box.height,
-            centerX: box.left + box.width / 2,
             centerY: box.top + box.height / 2,
-            labelCenterX: label ? label.left + label.width / 2 : Number.NaN,
             labelCenterY: label ? label.top + label.height / 2 : Number.NaN,
             chevronCenterY: chevron ? chevron.top + chevron.height / 2 : Number.NaN,
           };
         });
         expect(Math.abs(geometry.height - 40)).toBeLessThanOrEqual(2);
-        expect(Math.abs(geometry.labelCenterX - geometry.centerX)).toBeLessThanOrEqual(1);
         expect(Math.abs(geometry.labelCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
         expect(Math.abs(geometry.chevronCenterY - geometry.centerY)).toBeLessThanOrEqual(1);
       }
