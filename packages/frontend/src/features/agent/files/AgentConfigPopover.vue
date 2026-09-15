@@ -122,7 +122,7 @@
     <button
       ref="trigger"
       type="button"
-      class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium leading-none transition-colors duration-150 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
+      class="agent-config-summary flex h-[26px] items-center gap-1.5 rounded-md border px-2 text-[11px] font-medium transition-colors duration-150 select-none focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
       :class="
         open
           ? 'border-border/70 bg-header/90 text-foreground shadow-xs'
@@ -159,7 +159,7 @@
 <style scoped>
   .agent-config-summary {
     font-size: 11px;
-    line-height: 1;
+    line-height: 1.25;
   }
 
   @container agent-hub-window (max-width: 1040px) {
@@ -168,6 +168,7 @@
       gap: 4px;
       padding-inline: 6px;
       font-size: 10.5px;
+      line-height: 1.25;
     }
   }
 
@@ -178,6 +179,7 @@
       gap: 3px;
       padding-inline: 6px;
       font-size: 10px;
+      line-height: 1.25;
     }
   }
 </style>
