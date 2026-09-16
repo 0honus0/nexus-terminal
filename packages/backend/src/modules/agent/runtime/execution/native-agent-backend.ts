@@ -3,7 +3,7 @@ import type { TokenUsage } from '../../ai/model.types';
 import type { ClockPort, JsonValue } from '../../agent.types';
 import type { ToolContext, ToolProposal, ToolResult } from '../../capabilities/tool.types';
 import type { AgentBackendPort, BackendSignal } from './agent-backend.port';
-import { executionErrorCode } from './execution-errors';
+import { executionErrorCode, executionErrorDetail } from './execution-errors';
 import { ModelStepRunner, type ModelToolCall } from './model-step-runner';
 import { estimateTokens } from './model-accounting';
 import { boundedUtf8 } from './text-budget';
@@ -38,6 +38,21 @@ const usageWithAttempt = (base: RunUsage, delta: TokenUsage): RunUsage => ({
 const usageWithToolStep = (base: RunUsage): RunUsage => ({ ...base, steps: base.steps + 1 });
 
 const errorCode = (error: unknown): string => executionErrorCode(error, 'MODEL_EXECUTION_FAILED');
+
+const mutationLeaseFailureReason = (error: unknown, code: string, resourceKeys: readonly string[]): string => {
+  const resources = resourceKeys.length > 0 ? resourceKeys.join(', ') : 'target resource';
+  if (code === 'RESOURCE_QUARANTINED') {
+    return `Cannot mutate ${resources}: the resource is quarantined after an earlier mutation with an unresolved outcome. Verify the actual state and reconcile it before retrying. [${code}]`;
+  }
+  if (code === 'LEASE_CONFLICT') {
+    return `Cannot mutate ${resources}: another active operation currently holds its write lease. Wait for that operation to finish or stop it before retrying. [${code}]`;
+  }
+  if (code === 'LEASE_LOST') {
+    return `Cannot mutate ${resources}: the write lease was lost before execution could start safely. [${code}]`;
+  }
+  const detail = executionErrorDetail(error, code);
+  return `Cannot acquire the write lease for ${resources}: ${detail}${detail === code ? '' : ` [${code}]`}`;
+};
 
 const signalReason = (signal: AbortSignal): string | null => {
   if (!signal.aborted) return null;
@@ -756,6 +771,8 @@ export class NativeAgentBackend implements AgentBackendPort {
         pending.inspection,
       ));
     } catch (error) {
+      const code = errorCode(error);
+      const detail = executionErrorDetail(error, code);
       const superseded = await this.stateCommit.supersedeMutationTool({
         scope,
         runId: snapshot.id,
@@ -763,7 +780,9 @@ export class NativeAgentBackend implements AgentBackendPort {
         toolCallId: pending.toolCallId,
         approvalId: pending.approvalId,
         expectedRunVersion: snapshot.version,
-        reason: `Approved operation could not be re-inspected safely: ${errorCode(error)}`,
+        reason: `Approved operation could not be re-inspected safely: ${detail}${detail === code ? '' : ` [${code}]`}`,
+        errorCode: code,
+        details: { phase: 'reinspect', resourceKeys: pending.inspection.resourceKeys },
         now: this.clock.nowUnixSeconds(),
       });
       yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
@@ -782,7 +801,41 @@ export class NativeAgentBackend implements AgentBackendPort {
         toolCallId: pending.toolCallId,
         approvalId: pending.approvalId,
         expectedRunVersion: snapshot.version,
-        reason: 'The target, preconditions, input, or policy changed after approval.',
+        reason:
+          'The target, preconditions, input, or policy changed after approval; the approved mutation was not executed.',
+        errorCode: 'APPROVAL_STALE',
+        details: {
+          phase: 'approval_refresh',
+          resourceKeys: inspection.resourceKeys,
+          targetChanged: inspection.operationHash !== pending.inspection.operationHash,
+          inputChanged: inspection.inputRevision !== pending.inspection.inputRevision,
+          policyChanged: inspection.policyRevision !== pending.inspection.policyRevision,
+        },
+        now: this.clock.nowUnixSeconds(),
+      });
+      yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
+      return;
+    }
+
+    const confirmedMutation = await this.repository.confirmedMutation(scope, snapshot.id, inspection.operationHash);
+    if (confirmedMutation && confirmedMutation.toolCallId !== pending.toolCallId) {
+      const superseded = await this.stateCommit.supersedeMutationTool({
+        scope,
+        runId: snapshot.id,
+        toolStepId: pending.stepId,
+        toolCallId: pending.toolCallId,
+        approvalId: pending.approvalId,
+        expectedRunVersion: snapshot.version,
+        reason:
+          'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
+        errorCode: 'MUTATION_ALREADY_CONFIRMED',
+        details: {
+          phase: 'duplicate_guard',
+          operationHash: inspection.operationHash,
+          previousToolCallId: confirmedMutation.toolCallId,
+          previousProviderCallId: confirmedMutation.providerCallId,
+          resourceKeys: inspection.resourceKeys,
+        },
         now: this.clock.nowUnixSeconds(),
       });
       yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
@@ -809,7 +862,9 @@ export class NativeAgentBackend implements AgentBackendPort {
         toolCallId: pending.toolCallId,
         approvalId: pending.approvalId,
         expectedRunVersion: snapshot.version,
-        reason: `Approved operation cannot acquire its resource lease: ${code}`,
+        reason: mutationLeaseFailureReason(error, code, inspection.resourceKeys),
+        errorCode: code,
+        details: { phase: 'lease_acquire', resourceKeys: inspection.resourceKeys },
         now: this.clock.nowUnixSeconds(),
       });
       yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };

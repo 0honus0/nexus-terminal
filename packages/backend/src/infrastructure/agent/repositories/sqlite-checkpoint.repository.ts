@@ -1,4 +1,5 @@
 import type { JsonValue } from '../../../modules/agent/agent.types';
+import type { ToolRisk } from '../../../modules/agent/capabilities/tool.types';
 import type {
   CheckpointDelegationRecoveryEntry,
   CheckpointRecoveryHazards,
@@ -26,7 +27,7 @@ interface CheckpointRow {
 interface ToolRecoveryRow {
   id: string;
   operation_hash: string;
-  risk: 'read' | 'mutate' | 'destructive';
+  risk: ToolRisk;
   status: CheckpointToolStatus;
   result_json: string | null;
   started_at: number | null;
@@ -71,14 +72,9 @@ const toolRecovery = (
       outcome = null;
     }
   }
+  const mutatingRisk = row.risk === 'mutate' || row.risk === 'destructive';
   const sideEffectStatus: CheckpointToolRecoveryEntry['sideEffectStatus'] =
-    row.started_at === null
-      ? 'not_started'
-      : row.risk === 'read'
-        ? 'confirmed'
-        : outcome === 'confirmed'
-          ? 'confirmed'
-          : 'unknown';
+    row.started_at === null ? 'not_started' : !mutatingRisk || outcome === 'confirmed' ? 'confirmed' : 'unknown';
   return {
     toolCallId: row.id,
     operationHash: row.operation_hash,

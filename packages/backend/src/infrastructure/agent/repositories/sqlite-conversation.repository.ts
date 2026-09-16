@@ -91,11 +91,7 @@ const threadSelect = `
 
 const nonTerminalRunSql = "'created','running','awaiting_approval','awaiting_budget','cancelling'";
 
-const assertThreadDeleteSafe = async (
-  db: RelationalDatabase,
-  scope: Scope,
-  threadId?: string,
-): Promise<void> => {
+const assertThreadDeleteSafe = async (db: RelationalDatabase, scope: Scope, threadId?: string): Promise<void> => {
   const threadFilter = threadId ? ' AND r.thread_id = ?' : '';
   const params: unknown[] = [scope.userId, scope.appId, ...(threadId ? [threadId] : [])];
   const active = await db.queryOne<{ id: string }>(
@@ -134,11 +130,7 @@ const assertThreadDeleteSafe = async (
   }
 };
 
-const cleanupThreadRunReferences = async (
-  db: RelationalDatabase,
-  scope: Scope,
-  threadId?: string,
-): Promise<void> => {
+const cleanupThreadRunReferences = async (db: RelationalDatabase, scope: Scope, threadId?: string): Promise<void> => {
   const threadFilter = threadId ? ' AND thread_id = ?' : '';
   const params: unknown[] = [scope.userId, scope.appId, ...(threadId ? [threadId] : [])];
   await db.execute(
@@ -346,6 +338,18 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
       items: page.map(mapEntry).reverse(),
       nextCursor: rows.length > limit && last ? encodeEntryCursor(last.sequence) : null,
     };
+  }
+
+  async readOldestEntries(scope: Scope, threadId: string, limit: number): Promise<LedgerPage> {
+    if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
+    const rows = await this.db.queryAll<EntryRow>(
+      `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+       FROM ai_thread_entries
+       WHERE thread_id = ? AND user_id = ? AND app_id = ?
+       ORDER BY sequence ASC LIMIT ?`,
+      [threadId, scope.userId, scope.appId, limit],
+    );
+    return { items: rows.map(mapEntry), nextCursor: null };
   }
 
   async readContextEntries(

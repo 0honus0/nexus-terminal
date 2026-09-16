@@ -133,7 +133,9 @@ export class SqliteLeaseRepository implements LeasePort {
           'SELECT resource_key FROM agent_resource_quarantine WHERE resource_key = ?',
           [key],
         );
-        if (quarantined) throw new Error('RESOURCE_QUARANTINED');
+        // Quarantine protects uncertain side effects from further mutation. Read leases stay
+        // available so an operator/Agent can inspect authoritative state before reconciling.
+        if (quarantined && request.mode === 'write') throw new Error('RESOURCE_QUARANTINED');
         const active = await tx.queryAll<LeaseRow>(
           `SELECT id, resource_key, mode, owner_type, owner_id, fence, acquired_at, expires_at, active_mutation, operation_id
            FROM agent_leases WHERE resource_key = ? AND expires_at > ?`,

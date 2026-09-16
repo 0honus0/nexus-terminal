@@ -11,7 +11,11 @@ import type {
   ToolProposal,
   ToolResult,
 } from '../../capabilities/tool.types';
-import { failedToolResult as buildFailedToolResult, executionErrorCode } from './execution-errors';
+import {
+  executionErrorCode,
+  executionErrorDetail,
+  failedToolResult as buildFailedToolResult,
+} from './execution-errors';
 import { LeaseCoordinator, type LeaseRenewal } from './lease-coordinator';
 import type { MutationLeaseGuardHandle, MutationLeaseGuardPort } from './mutation-lease-guard.port';
 
@@ -36,9 +40,11 @@ const failedReadResult = (error: unknown): ToolResult =>
 
 const unknownMutationResult = (error: unknown): ToolResult => {
   const code = executionErrorCode(error, 'MODEL_EXECUTION_FAILED');
+  const detail = executionErrorDetail(error, code);
   return {
     ok: false,
-    summary: `Remote mutation outcome could not be confirmed: ${code}`,
+    summary: `Remote mutation outcome could not be confirmed: ${detail}${detail === code ? '' : ` [${code}]`}`,
+    data: { error: { code, message: detail } },
     artifactRefs: [],
     truncated: false,
     outcome: 'unknown',

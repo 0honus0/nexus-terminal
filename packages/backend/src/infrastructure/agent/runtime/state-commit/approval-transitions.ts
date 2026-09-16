@@ -47,7 +47,7 @@ export const requestToolApprovalTransition = async (
     !tool ||
     tool.status !== 'proposed' ||
     tool.operation_hash !== command.inspection.operationHash ||
-    tool.risk === 'read'
+    (tool.risk !== 'mutate' && tool.risk !== 'destructive')
   ) {
     throw new Error('TOOL_STATE_CONFLICT');
   }

@@ -145,6 +145,20 @@ export interface RunView extends Scope {
   updatedAt: number;
 }
 
+export interface RunReconciliationResource {
+  resourceKey: string;
+  toolCallId: string | null;
+  reason: string;
+  version: number;
+  createdAt: number;
+}
+
+export interface RunReconciliationView {
+  runId: string;
+  required: boolean;
+  resources: RunReconciliationResource[];
+}
+
 export interface RunEvent {
   eventId: string;
   runId: string;
@@ -163,7 +177,15 @@ export interface HostEvent {
   occurredAt: number;
 }
 
+export interface RunTerminalIssue {
+  eventType: string;
+  errorCode: string | null;
+  reason: string | null;
+  occurredAt: number;
+}
+
 export interface RunSnapshot extends RunView {
+  terminalIssue: RunTerminalIssue | null;
   recentEntries: Array<{
     id: string;
     sequence: number;

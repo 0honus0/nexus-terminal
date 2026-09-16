@@ -383,6 +383,36 @@ const installAndRunNexusAgent = async (
     expect(serialized).toContain('nexus.operations');
   });
 
+  await step('control-risk tools persist the current enum without compatibility remapping', async () => {
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
+      headers,
+      data: { title: 'Control risk enum E2E thread' },
+    });
+    expect(thread.status(), await thread.text()).toBe(201);
+    const controlThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: controlThreadId,
+        input: { text: 'E2E_CONTROL_TOOL_RISK Persist the current control risk enum directly.', artifactRefs: [] },
+        agentDefinitionId: 'agent.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'ask',
+        connectionIds: [],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const terminal = await waitForTerminalRun(request, ((await created.json()) as Envelope<RunView>).data.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+    expect(terminal.plan.items).toContainEqual(
+      expect.objectContaining({ id: 'control-enum-e2e', status: 'completed' }),
+    );
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${controlThreadId}/entries?limit=50`);
+    expect(ledger.ok(), await ledger.text()).toBeTruthy();
+    expect(JSON.stringify(await ledger.json())).toContain('plan_update');
+  });
+
   await step('machine_read_file reads a selected SSH target through the bounded SFTP capability', async () => {
     const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
       headers,
@@ -413,6 +443,40 @@ const installAndRunNexusAgent = async (
     const serialized = JSON.stringify(await ledger.json());
     expect(serialized).toContain('machine_read_file');
     expect(serialized).toContain('nexus-e2e-seed');
+  });
+
+  await step('a confirmed mutation is not executed twice when the model repeats the identical proposal', async () => {
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
+      headers,
+      data: { title: 'Duplicate mutation guard E2E thread' },
+    });
+    expect(thread.status(), await thread.text()).toBe(201);
+    const duplicateThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: duplicateThreadId,
+        input: {
+          text: `E2E_DUPLICATE_MUTATION_CONNECTION_ID=${connectionId} Execute the bounded mutation once, then detect the provider's duplicate proposal.`,
+          artifactRefs: [],
+        },
+        agentDefinitionId: 'agent.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'full_access',
+        connectionIds: [connectionId],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const run = ((await created.json()) as Envelope<RunView>).data;
+    const terminal = await waitForTerminalRun(request, run.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${duplicateThreadId}/entries?limit=50`);
+    expect(ledger.ok(), await ledger.text()).toBeTruthy();
+    const serialized = JSON.stringify(await ledger.json());
+    expect(serialized).toContain('MUTATION_ALREADY_CONFIRMED');
+    expect(serialized).toContain('duplicate-e2e');
   });
 
   await step('strict interrupt supersedes only a streaming model and drains the durable input queue', async () => {

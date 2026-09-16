@@ -1,4 +1,5 @@
 import type { JsonValue, Scope } from '../../agent.types';
+import type { ToolRisk } from '../../capabilities/tool.types';
 import type { RunPlan } from '../planning/plan.types';
 import type { RunContextBoundary, RunGoal } from '../runs/run.types';
 
@@ -16,7 +17,7 @@ export type CheckpointToolStatus =
 export interface CheckpointToolRecoveryEntry {
   toolCallId: string;
   operationHash: string;
-  risk: 'read' | 'mutate' | 'destructive';
+  risk: ToolRisk;
   status: CheckpointToolStatus;
   sideEffectStatus: 'not_started' | 'confirmed' | 'unknown';
   verificationStatus: 'not_started' | 'verified' | 'unverified' | 'failed';

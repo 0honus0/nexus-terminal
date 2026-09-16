@@ -1,6 +1,14 @@
 import type { Scope } from '../../agent.types';
 import type { ToolInspection } from '../../capabilities/tool.types';
-import type { HostEvent, PendingRunInputPage, RunEvent, RunInputProjection, RunSnapshot, RunView } from './run.types';
+import type {
+  HostEvent,
+  PendingRunInputPage,
+  RunEvent,
+  RunInputProjection,
+  RunReconciliationView,
+  RunSnapshot,
+  RunView,
+} from './run.types';
 
 export interface RunPage {
   items: RunView[];
@@ -17,6 +25,11 @@ export interface PendingMutationTool {
   inspection: ToolInspection;
 }
 
+export interface ConfirmedMutationTool {
+  toolCallId: string;
+  providerCallId: string;
+}
+
 export interface RunSnapshotReaderPort {
   snapshot(scope: Scope, runId: string): Promise<RunSnapshot | null>;
 }
@@ -31,6 +44,7 @@ export interface RunInputReaderPort {
 
 export interface RunQueryPort extends RunSnapshotReaderPort, RunListReaderPort, RunInputReaderPort {
   pendingInputs(scope: Scope, runId: string, limit: number): Promise<PendingRunInputPage>;
+  reconciliation(scope: Scope, runId: string): Promise<RunReconciliationView>;
 }
 
 export interface RunEventReaderPort {
@@ -45,6 +59,7 @@ export interface HostCursorReaderPort {
 export interface RunExecutionReaderPort extends RunSnapshotReaderPort, RunInputReaderPort {
   rootRuntimeId(scope: Scope, runId: string): Promise<string>;
   pendingMutation(scope: Scope, runId: string): Promise<PendingMutationTool | null>;
+  confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null>;
 }
 
 export type { Scope } from '../../agent.types';

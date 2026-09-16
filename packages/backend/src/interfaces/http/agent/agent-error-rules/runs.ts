@@ -18,6 +18,7 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     message: 'The pending Run input was not found.',
   }),
   onCodes(['PENDING_INPUT_NO_CHANGE'], rawCode(409, 'The pending Run input is already in the requested state.')),
+  onCodes(['RECONCILIATION_NOT_REQUIRED'], rawCode(409, 'This Run no longer requires reconciliation.')),
   onCodes(
     ['PENDING_INPUT_REQUIRED'],
     rawCode(409, 'A Run must retain at least one effective user input before its first model step.'),

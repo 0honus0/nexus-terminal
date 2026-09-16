@@ -56,6 +56,12 @@ export interface WorkspaceArtifactImportRequestDto {
   path: string;
 }
 
+export interface ReconciliationResolveRequestDto {
+  expectedVersion: number;
+  note: string;
+  resources: Array<{ resourceKey: string; version: number }>;
+}
+
 const parseUserInput = (value: unknown): UserInputData => {
   if (!isRecord(value) || !hasOnlyKeys(value, ['text', 'artifactRefs'])) throw new Error('VALIDATION_FAILED');
   if (
@@ -128,6 +134,38 @@ export const parseExpectedVersionRequest = (body: unknown): number => {
   const value = versionedRecord(body, ['expectedVersion']);
   if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
   return value.expectedVersion;
+};
+
+export const parseReconciliationResolveRequest = (body: unknown): ReconciliationResolveRequestDto => {
+  const value = versionedRecord(body, ['expectedVersion', 'note', 'resources']);
+  if (
+    !positiveInteger(value.expectedVersion) ||
+    typeof value.note !== 'string' ||
+    !value.note.trim() ||
+    Buffer.byteLength(value.note.trim(), 'utf8') > 2_000 ||
+    !Array.isArray(value.resources) ||
+    value.resources.length < 1 ||
+    value.resources.length > 64
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const resources = value.resources.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      !hasOnlyKeys(entry, ['resourceKey', 'version']) ||
+      typeof entry.resourceKey !== 'string' ||
+      entry.resourceKey.length < 1 ||
+      Buffer.byteLength(entry.resourceKey, 'utf8') > 512 ||
+      !positiveInteger(entry.version)
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    return { resourceKey: entry.resourceKey, version: entry.version };
+  });
+  if (new Set(resources.map((resource) => resource.resourceKey)).size !== resources.length) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  return { expectedVersion: value.expectedVersion, note: value.note.trim(), resources };
 };
 
 export const parseAppendInputRequest = (body: unknown): { input: UserInputData; expectedVersion: number } => {

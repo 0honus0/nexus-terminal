@@ -73,6 +73,7 @@ export const supersedeMutationToolTransition = async (
   if (approvalChanged.changes !== 1 || toolChanged.changes !== 1 || stepChanged.changes !== 1) {
     throw new Error('APPROVAL_STALE');
   }
+  const failureCode = command.errorCode;
   const ledgerCursor = await appendLedger(
     tx,
     row,
@@ -86,8 +87,9 @@ export const supersedeMutationToolTransition = async (
           text: JSON.stringify({
             ok: false,
             outcome: 'confirmed',
-            errorCode: 'APPROVAL_STALE',
+            errorCode: failureCode,
             summary: command.reason,
+            ...(command.details === undefined ? {} : { data: { failure: command.details } }),
           }),
         },
       },
@@ -97,11 +99,16 @@ export const supersedeMutationToolTransition = async (
   const events: DurableEventInput[] = [
     {
       type: 'approval.superseded',
-      payload: { approvalId: command.approvalId, toolCallId: command.toolCallId, reason: command.reason },
+      payload: {
+        approvalId: command.approvalId,
+        toolCallId: command.toolCallId,
+        reason: command.reason,
+        errorCode: failureCode,
+      },
     },
     {
       type: 'tool.failed',
-      payload: { toolCallId: command.toolCallId, toolStepId: command.toolStepId, errorCode: 'APPROVAL_STALE' },
+      payload: { toolCallId: command.toolCallId, toolStepId: command.toolStepId, errorCode: failureCode },
     },
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
@@ -150,7 +157,12 @@ export const beginMutationToolTransition = async (
     'SELECT status, operation_hash, risk, version FROM agent_tool_calls WHERE id = ? AND run_id = ? AND step_id = ?',
     [command.toolCallId, row.id, command.toolStepId],
   );
-  if (!tool || tool.status !== 'ready' || tool.risk === 'read' || tool.operation_hash !== command.operationHash) {
+  if (
+    !tool ||
+    tool.status !== 'ready' ||
+    (tool.risk !== 'mutate' && tool.risk !== 'destructive') ||
+    tool.operation_hash !== command.operationHash
+  ) {
     throw new Error('TOOL_STATE_CONFLICT');
   }
   const approvalChanged = await tx.execute(

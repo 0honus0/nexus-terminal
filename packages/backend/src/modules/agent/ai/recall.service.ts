@@ -10,15 +10,30 @@ export interface RecallItem {
   updatedAt: number;
 }
 
-const terms = (value: string): string[] =>
-  [
-    ...new Set(
-      value
-        .toLowerCase()
-        .split(/[^\p{L}\p{N}_-]+/u)
-        .filter((term) => term.length >= 2),
-    ),
-  ].slice(0, 64);
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+export const recallTerms = (value: string): string[] => {
+  const selected = new Set<string>();
+  const chunks = value
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}_-]+/u)
+    .filter(Boolean);
+  for (const chunk of chunks) {
+    const characters = [...chunk];
+    if (CJK.test(chunk)) {
+      if (characters.length >= 2 && characters.length <= 32) selected.add(chunk);
+      for (const width of [2, 3]) {
+        for (let index = 0; index + width <= characters.length && selected.size < 64; index += 1) {
+          selected.add(characters.slice(index, index + width).join(''));
+        }
+      }
+    } else if (chunk.length >= 2) {
+      selected.add(chunk);
+    }
+    if (selected.size >= 64) break;
+  }
+  return [...selected].slice(0, 64);
+};
 
 export class RecallService {
   constructor(
@@ -29,7 +44,7 @@ export class RecallService {
   async recall(scope: Scope, query: string, limit = 5, maxBytes = 8192): Promise<RecallItem[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 20) throw new Error('VALIDATION_FAILED');
     if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 32_768) throw new Error('VALIDATION_FAILED');
-    const queryTerms = terms(query);
+    const queryTerms = recallTerms(query);
     if (queryTerms.length === 0) return [];
 
     const now = this.clock.nowUnixSeconds();

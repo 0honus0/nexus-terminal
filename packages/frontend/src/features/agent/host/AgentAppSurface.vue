@@ -21,6 +21,7 @@
     AgentLedgerEntry,
     AgentProviderView,
     AgentReasoningEffort,
+    AgentRunReconciliationView,
     AgentRunSnapshot,
     AgentRunView,
     AgentSettingsView,
@@ -54,6 +55,8 @@
   const entries = ref<AgentLedgerEntry[]>([]);
   const nextCursor = ref<string | null>(null);
   const run = ref<AgentRunView | null>(null);
+  const reconciliationDetails = ref<AgentRunReconciliationView | null>(null);
+  const reconciliationBusy = ref(false);
   const threadRuns = ref<AgentRunView[]>([]);
   const definitions = ref<AgentDefinitionView[]>([]);
   const providers = ref<AgentProviderView[]>([]);
@@ -161,6 +164,7 @@
   let threadListRefreshGeneration = 0;
   let ledgerGeneration = 0;
   let approvalsGeneration = 0;
+  let reconciliationGeneration = 0;
   let backgroundGeneration = 0;
   let detailSubagentsGeneration = 0;
   let detailOpenGeneration = 0;
@@ -535,6 +539,24 @@
     nextCursor.value = page.nextCursor;
   };
 
+  const refreshReconciliation = async (runId?: string): Promise<void> => {
+    const requestGeneration = ++reconciliationGeneration;
+    const targetRun = run.value;
+    if (!runId || !targetRun || targetRun.id !== runId || !targetRun.needsReconciliation) {
+      reconciliationDetails.value = null;
+      return;
+    }
+    try {
+      const details = await facade.getReconciliation(runId);
+      if (requestGeneration !== reconciliationGeneration || run.value?.id !== runId) return;
+      reconciliationDetails.value = details.required ? details : null;
+    } catch (cause) {
+      if (requestGeneration !== reconciliationGeneration || run.value?.id !== runId) return;
+      reconciliationDetails.value = null;
+      error.value = explain(cause);
+    }
+  };
+
   const refreshRun = async (runId: string, minimumEventCursor = 0): Promise<AgentRunSnapshot | null> => {
     try {
       const snapshot = await facade.getRun(runId, minimumEventCursor);
@@ -543,6 +565,10 @@
       rememberThreadRun(snapshot);
       if (snapshot.needsReconciliation) {
         runtimeOperation.markReconciling('RECONCILIATION_REQUIRED', t('agent.operations.reconciliationRequired'));
+        await refreshReconciliation(snapshot.id);
+      } else {
+        reconciliationDetails.value = null;
+        if (runtimeOperation.phase.value === 'reconciling') runtimeOperation.succeed();
       }
       return snapshot;
     } catch {
@@ -589,6 +615,29 @@
       return;
     }
     if (decision.phase === 'conflict' && next) runtimeOperation.succeed();
+  };
+
+  const resolveReconciliation = async (note: string): Promise<void> => {
+    const currentRun = run.value;
+    const details = reconciliationDetails.value;
+    const normalizedNote = note.trim();
+    if (!currentRun?.needsReconciliation || !details?.required || !normalizedNote || reconciliationBusy.value) return;
+
+    reconciliationBusy.value = true;
+    error.value = '';
+    try {
+      const resolved = await facade.resolveReconciliation(currentRun, details, normalizedNote);
+      if (run.value?.id !== resolved.id) return;
+      run.value = resolved;
+      rememberThreadRun(resolved);
+      reconciliationDetails.value = null;
+      runtimeOperation.succeed();
+      await Promise.all([refreshLedger(), refreshApprovals(resolved.id), refreshBackgroundRuns()]);
+    } catch (cause) {
+      await recoverRuntimeFailure(cause, currentRun.id);
+    } finally {
+      reconciliationBusy.value = false;
+    }
   };
 
   const stopRunStream = (): void => {
@@ -670,6 +719,7 @@
     currentThread.value = thread;
     entries.value = [];
     run.value = null;
+    reconciliationDetails.value = null;
     threadRuns.value = [];
     approvalBatch.value = null;
     nextCursor.value = null;
@@ -684,8 +734,18 @@
       const runs = await facade.listRuns(thread.id);
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       threadRuns.value = runs.items;
-      const active = runs.items.find((candidate) => nonTerminal.has(candidate.status)) ?? runs.items[0] ?? null;
+      const selectedRun = runs.items.find((candidate) => nonTerminal.has(candidate.status)) ?? runs.items[0] ?? null;
+      const active =
+        selectedRun && !nonTerminal.has(selectedRun.status) ? await facade.getRun(selectedRun.id) : selectedRun;
+      if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       run.value = active;
+      if (active) rememberThreadRun(active);
+      if (active?.needsReconciliation) {
+        runtimeOperation.markReconciling('RECONCILIATION_REQUIRED', t('agent.operations.reconciliationRequired'));
+        await refreshReconciliation(active.id);
+      } else {
+        reconciliationDetails.value = null;
+      }
       await refreshApprovals(active?.id);
       if (selectionGeneration !== threadSelectionGeneration || currentThread.value?.id !== thread.id) return;
       if (active && nonTerminal.has(active.status)) startRunStream(active);
@@ -1586,105 +1646,135 @@
           :style="{ height: `${threadWindow.topSpacer}px` }"
           aria-hidden="true"
         ></div>
-        <button
+        <div
           v-for="(thread, threadOffset) in renderedThreads"
           :key="thread.id"
-          type="button"
-          class="agent-thread-row relative mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-[height,background-color,color] duration-150"
-          :style="{
-            height: `${Math.max(30, threadRowHeight - 2)}px`,
-            paddingTop: `${6 * threadListScale}px`,
-            paddingBottom: `${6 * threadListScale}px`,
-          }"
-          :class="
-            currentThread?.id === thread.id
-              ? 'bg-primary/[0.055] text-foreground font-medium pl-2.5'
-              : 'text-text-secondary hover:bg-card/45 hover:text-foreground'
-          "
-          :aria-current="currentThread?.id === thread.id ? 'true' : undefined"
-          :aria-setsize="visibleThreads.length"
-          :aria-posinset="threadWindow.start + threadOffset + 1"
-          :disabled="busy"
-          @click="selectThread(thread)"
+          class="group relative mb-0.5"
+          :style="{ height: `${Math.max(30, threadRowHeight - 2)}px` }"
         >
-          <!-- 激活状态专属左侧品牌指示条 -->
-          <span
-            v-if="currentThread?.id === thread.id"
-            class="absolute left-0.5 top-2 bottom-2 w-0.5 rounded-full bg-primary"
-          ></span>
-
-          <!-- 轻量会话状态点 -->
-          <span class="relative mt-px flex h-4 w-3 shrink-0 items-center justify-center" aria-hidden="true">
+          <button
+            type="button"
+            class="agent-thread-row relative flex h-full w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-8 text-left transition-[height,background-color,color] duration-150"
+            :style="{
+              paddingTop: `${6 * threadListScale}px`,
+              paddingBottom: `${6 * threadListScale}px`,
+            }"
+            :class="
+              currentThread?.id === thread.id
+                ? 'bg-primary/[0.055] text-foreground font-medium pl-2.5'
+                : 'text-text-secondary hover:bg-card/45 hover:text-foreground'
+            "
+            :aria-current="currentThread?.id === thread.id ? 'true' : undefined"
+            :aria-setsize="visibleThreads.length"
+            :aria-posinset="threadWindow.start + threadOffset + 1"
+            :disabled="busy"
+            @click="selectThread(thread)"
+          >
+            <!-- 激活状态专属左侧品牌指示条 -->
             <span
-              class="relative z-10 h-1.5 w-1.5 rounded-full transition-colors"
-              :class="
-                threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)
-                  ? threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
-                    ? 'bg-warning'
-                    : 'bg-success'
-                  : currentThread?.id === thread.id
-                    ? 'bg-primary'
-                    : 'bg-text-secondary/25 group-hover:bg-text-secondary/45'
-              "
+              v-if="currentThread?.id === thread.id"
+              class="absolute left-0.5 top-2 bottom-2 w-0.5 rounded-full bg-primary"
             ></span>
-            <span
-              v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
-              class="absolute h-2.5 w-2.5 animate-ping rounded-full opacity-35"
-              :class="
-                threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
-                  ? 'bg-warning'
-                  : 'bg-success'
-              "
-            ></span>
-          </span>
 
-          <!-- 标题与状态行 -->
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center justify-between gap-1">
+            <!-- 轻量会话状态点 -->
+            <span class="relative mt-px flex h-4 w-3 shrink-0 items-center justify-center" aria-hidden="true">
               <span
-                class="truncate text-[10.75px] leading-[1.35] tracking-[-0.012em]"
-                :style="{ fontSize: `${10.75 * threadListScale}px` }"
+                class="relative z-10 h-1.5 w-1.5 rounded-full transition-colors"
                 :class="
-                  currentThread?.id === thread.id
-                    ? 'font-semibold text-foreground'
-                    : 'text-foreground/90 group-hover:text-foreground'
+                  threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)
+                    ? threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
+                      ? 'bg-warning'
+                      : 'bg-success'
+                    : currentThread?.id === thread.id
+                      ? 'bg-primary'
+                      : 'bg-text-secondary/25 group-hover:bg-text-secondary/45'
                 "
-                :title="thread.title || $t('agent.operations.untitledThread')"
-              >
-                {{ thread.title || $t('agent.operations.untitledThread') }}
-              </span>
-            </div>
-            <div
-              class="mt-0.5 flex items-center justify-between gap-1.5 text-[9px] text-text-secondary/50"
-              :style="{ marginTop: `${2 * threadListScale}px`, fontSize: `${9 * threadListScale}px` }"
-            >
+              ></span>
               <span
                 v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
-                class="inline-flex items-center rounded-sm px-1 py-0.2 font-medium"
+                class="absolute h-2.5 w-2.5 animate-ping rounded-full opacity-35"
                 :class="
                   threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
-                    ? 'bg-warning/15 text-warning'
-                    : 'bg-success/15 text-success'
+                    ? 'bg-warning'
+                    : 'bg-success'
                 "
+              ></span>
+            </span>
+
+            <!-- 标题与状态行 -->
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center justify-between gap-1">
+                <span
+                  class="truncate text-[10.75px] leading-[1.35] tracking-[-0.012em]"
+                  :style="{ fontSize: `${10.75 * threadListScale}px` }"
+                  :class="
+                    currentThread?.id === thread.id
+                      ? 'font-semibold text-foreground'
+                      : 'text-foreground/90 group-hover:text-foreground'
+                  "
+                  :title="thread.title || $t('agent.operations.untitledThread')"
+                >
+                  {{ thread.title || $t('agent.operations.untitledThread') }}
+                </span>
+              </div>
+              <div
+                class="mt-0.5 flex items-center justify-between gap-1.5 text-[9px] text-text-secondary/50"
+                :style="{ marginTop: `${2 * threadListScale}px`, fontSize: `${9 * threadListScale}px` }"
               >
-                {{ $t(`agent.tasks.runStatus.${threadStatus(thread.id)}`) }}
-              </span>
-              <span
-                v-else
-                class="truncate font-mono text-[9px] text-text-secondary/45"
-                :style="{ fontSize: `${9 * threadListScale}px` }"
-              >
-                #{{ thread.id.slice(-6) }}
-              </span>
-              <span
-                class="shrink-0 text-[9px] tabular-nums text-text-secondary/50"
-                :style="{ fontSize: `${9 * threadListScale}px` }"
-              >
-                {{ formatThreadUpdatedAt(thread.updatedAt) }}
-              </span>
+                <span
+                  v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
+                  class="inline-flex items-center rounded-sm px-1 py-0.2 font-medium"
+                  :class="
+                    threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
+                      ? 'bg-warning/15 text-warning'
+                      : 'bg-success/15 text-success'
+                  "
+                >
+                  {{ $t(`agent.tasks.runStatus.${threadStatus(thread.id)}`) }}
+                </span>
+                <span
+                  v-else
+                  class="truncate font-mono text-[9px] text-text-secondary/45"
+                  :style="{ fontSize: `${9 * threadListScale}px` }"
+                >
+                  #{{ thread.id.slice(-6) }}
+                </span>
+                <span
+                  class="shrink-0 text-[9px] tabular-nums text-text-secondary/50"
+                  :style="{ fontSize: `${9 * threadListScale}px` }"
+                >
+                  {{ formatThreadUpdatedAt(thread.updatedAt) }}
+                </span>
+              </div>
             </div>
-          </div>
-        </button>
+          </button>
+          <button
+            type="button"
+            class="absolute right-1 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-25"
+            :class="[
+              threadDeleteArmedId === thread.id
+                ? 'bg-error/10 text-error opacity-100'
+                : 'text-text-secondary/70 hover:bg-error/10 hover:text-error',
+              currentThread?.id === thread.id ? 'opacity-100' : '',
+            ]"
+            :aria-label="
+              threadDeleteArmedId === thread.id
+                ? $t('agent.operations.confirmDeleteThread')
+                : $t('agent.operations.deleteThread')
+            "
+            :title="
+              threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)
+                ? $t('agent.operations.deleteThreadActiveHint')
+                : threadDeleteArmedId === thread.id
+                  ? $t('agent.operations.confirmDeleteThread')
+                  : $t('agent.operations.deleteThread')
+            "
+            :disabled="busy || Boolean(threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!))"
+            @click.stop="requestDeleteThread(thread)"
+          >
+            <i class="fa-solid fa-trash-can text-[9px]" aria-hidden="true"></i>
+          </button>
+        </div>
         <div
           v-if="threadWindow.bottomSpacer > 0"
           :style="{ height: `${threadWindow.bottomSpacer}px` }"
@@ -1831,6 +1921,8 @@
             :app-id="appId"
             :error="error"
             :reconciliation="run?.needsReconciliation === true || runtimeOperation.phase.value === 'reconciling'"
+            :reconciliation-details="reconciliationDetails"
+            :reconciliation-busy="reconciliationBusy"
             @dismiss-error="error = ''"
             :entries="entries"
             :next-cursor="nextCursor"
@@ -1847,6 +1939,7 @@
             @update-draft="updateDraft"
             @update-attachments="attachments = $event"
             @dismiss-command-result="commandResult = null"
+            @resolve-reconciliation="resolveReconciliation"
           >
             <template #approvals>
               <div
@@ -2005,39 +2098,6 @@
                         type="button"
                         class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
                         :class="
-                          approvalModeValue === 'full_access'
-                            ? 'border-success/25 bg-success/[0.06] text-foreground'
-                            : 'border-transparent text-text-secondary hover:bg-card/70'
-                        "
-                        :disabled="modelSelectionLocked || busy"
-                        @click="
-                          setApprovalMode('full_access');
-                          close(true);
-                        "
-                      >
-                        <span
-                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success"
-                        >
-                          <i class="fa-solid fa-bolt text-[9px]" aria-hidden="true"></i>
-                        </span>
-                        <span class="min-w-0 flex-1">
-                          <span class="block text-xs font-semibold text-foreground">{{
-                            $t('agent.operations.approvalFullAccess')
-                          }}</span>
-                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
-                            $t('agent.operations.approvalFullAccessDesc')
-                          }}</span>
-                        </span>
-                        <i
-                          v-if="approvalModeValue === 'full_access'"
-                          class="fa-solid fa-check mt-1.5 text-[9px] text-success"
-                          aria-hidden="true"
-                        ></i>
-                      </button>
-                      <button
-                        type="button"
-                        class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
-                        :class="
                           approvalModeValue === 'ask'
                             ? 'border-warning/25 bg-warning/[0.06] text-foreground'
                             : 'border-transparent text-text-secondary hover:bg-card/70'
@@ -2064,6 +2124,39 @@
                         <i
                           v-if="approvalModeValue === 'ask'"
                           class="fa-solid fa-check mt-1.5 text-[9px] text-warning"
+                          aria-hidden="true"
+                        ></i>
+                      </button>
+                      <button
+                        type="button"
+                        class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
+                        :class="
+                          approvalModeValue === 'full_access'
+                            ? 'border-success/25 bg-success/[0.06] text-foreground'
+                            : 'border-transparent text-text-secondary hover:bg-card/70'
+                        "
+                        :disabled="modelSelectionLocked || busy"
+                        @click="
+                          setApprovalMode('full_access');
+                          close(true);
+                        "
+                      >
+                        <span
+                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success"
+                        >
+                          <i class="fa-solid fa-bolt text-[9px]" aria-hidden="true"></i>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                          <span class="block text-xs font-semibold text-foreground">{{
+                            $t('agent.operations.approvalFullAccess')
+                          }}</span>
+                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                            $t('agent.operations.approvalFullAccessDesc')
+                          }}</span>
+                        </span>
+                        <i
+                          v-if="approvalModeValue === 'full_access'"
+                          class="fa-solid fa-check mt-1.5 text-[9px] text-success"
                           aria-hidden="true"
                         ></i>
                       </button>

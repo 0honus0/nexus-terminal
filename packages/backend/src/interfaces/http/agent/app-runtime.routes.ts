@@ -9,6 +9,7 @@ import {
   parseCreateRunRequest,
   parseExpectedVersionRequest,
   parsePendingInputMutationRequest,
+  parseReconciliationResolveRequest,
   parseResumeRunRequest,
   parseSetGoalRequest,
   parseWorkspaceActionRequest,
@@ -97,6 +98,34 @@ export const createAppRuntimeRouter = (dependencies: AppRuntimeRouterDependencie
     agentRoute(async (request, response) => {
       const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
       agentData(request, response, await dependencies.runs.get(scope, pathParam(request.params.runId)));
+    }),
+  );
+
+  router.get(
+    '/runs/:runId/reconciliation',
+    agentRoute(async (request, response) => {
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(request, response, await dependencies.runs.reconciliation(scope, pathParam(request.params.runId)));
+    }),
+  );
+
+  router.post(
+    '/runs/:runId/reconciliation/resolve',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      const input = parseReconciliationResolveRequest(request.body);
+      agentData(
+        request,
+        response,
+        await dependencies.runs.resolveReconciliation(
+          scope,
+          pathParam(request.params.runId),
+          input.expectedVersion,
+          input.note,
+          input.resources,
+        ),
+      );
     }),
   );
 

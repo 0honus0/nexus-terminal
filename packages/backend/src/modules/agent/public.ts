@@ -57,6 +57,7 @@ import type {
   PendingRunInputPage,
   RunBudgetIncrease,
   RunEvent,
+  RunReconciliationView,
   RunSnapshot,
   RunView,
   UserInputData,
@@ -317,6 +318,14 @@ export interface AgentRunFacade {
     idempotencyKey: string,
   ): Promise<RunView>;
   cancel(scope: Scope, runId: string, expectedVersion: number, idempotencyKey: string): Promise<RunView>;
+  reconciliation(scope: Scope, runId: string): Promise<RunReconciliationView>;
+  resolveReconciliation(
+    scope: Scope,
+    runId: string,
+    expectedVersion: number,
+    note: string,
+    resources: readonly { resourceKey: string; version: number }[],
+  ): Promise<RunView>;
   listCheckpoints(scope: Scope, runId: string): Promise<CheckpointView[]>;
   saveCheckpoint(scope: Scope, runId: string, expectedVersion: number): Promise<CheckpointView>;
   resume(

@@ -33,7 +33,17 @@ export interface ContextRequest {
 }
 
 export interface ContextSourceRange {
-  kind: 'ledger' | 'recall' | 'skill' | 'goal' | 'task_plan' | 'collaboration' | 'current_input' | 'safety';
+  kind:
+    | 'ledger'
+    | 'thread_anchor'
+    | 'thread_recall'
+    | 'recall'
+    | 'skill'
+    | 'goal'
+    | 'task_plan'
+    | 'collaboration'
+    | 'current_input'
+    | 'safety';
   id?: string;
   fromSequence?: number;
   toSequence?: number;

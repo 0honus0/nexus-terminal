@@ -72,6 +72,7 @@ export interface ConversationRepositoryPort {
   deleteThread(scope: Scope, threadId: string, expectedVersion: number, now: number): Promise<ThreadDeleteResult>;
   deleteAllThreads(scope: Scope, now: number): Promise<ThreadDeleteAllResult>;
   readEntries(scope: Scope, threadId: string, limit: number, before?: string): Promise<LedgerPage>;
+  readOldestEntries(scope: Scope, threadId: string, limit: number): Promise<LedgerPage>;
   readContextEntries(
     scope: Scope,
     threadId: string,

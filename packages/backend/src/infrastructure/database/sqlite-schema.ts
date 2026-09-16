@@ -616,7 +616,7 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
     inspection_json TEXT NOT NULL CHECK(json_valid(inspection_json)),
     operation_hash TEXT NOT NULL,
     operation_hash_version INTEGER NOT NULL CHECK(operation_hash_version = 1),
-    risk TEXT NOT NULL CHECK(risk IN ('read','mutate','destructive')),
+    risk TEXT NOT NULL CHECK(risk IN ('read','control','mutate','destructive','forbidden')),
     status TEXT NOT NULL CHECK(status IN (
       'proposed','awaiting_approval','ready','running','succeeded','verification_failed','failed','cancelled','reconciling'
     )),

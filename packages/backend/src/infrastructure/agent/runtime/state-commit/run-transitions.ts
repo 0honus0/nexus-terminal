@@ -10,6 +10,8 @@ import type {
   DeleteRunCommitResult,
   DurableEventInput,
   IncreaseRunBudgetCommitResult,
+  ResolveRunReconciliationCommand,
+  StateCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import type { RunBudget, RunStatus } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
@@ -25,6 +27,7 @@ import {
   emptyUsage,
   IDEMPOTENCY_TTL_SECONDS,
   NON_TERMINAL,
+  patchRun,
   summaryPayload,
   updateAppLiveCount,
 } from './transaction-primitives';
@@ -467,6 +470,91 @@ export const increaseRunBudgetTransition = async (
   if (completed.changes !== 1) throw new Error('IDEMPOTENCY_STATE_CONFLICT');
   void committedEvents;
   return { run, replayed: false };
+};
+
+export const resolveRunReconciliationTransition = async (
+  tx: RelationalDatabase,
+  command: ResolveRunReconciliationCommand,
+): Promise<StateCommitResult> => {
+  const row = await tx.queryOne<RunRow>(
+    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+    [command.runId, command.scope.userId, command.scope.appId],
+  );
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.version !== command.expectedRunVersion) throw new Error('STATE_CONFLICT');
+  if (row.needs_reconciliation !== 1) throw new Error('RECONCILIATION_NOT_REQUIRED');
+
+  const current = await tx.queryAll<{
+    resource_key: string;
+    version: number;
+    tool_call_id: string | null;
+    owner_type: string;
+    owner_id: string;
+  }>(
+    `SELECT q.resource_key, q.version, q.tool_call_id, q.owner_type, q.owner_id
+     FROM agent_resource_quarantine q
+     JOIN agent_runtimes rt ON rt.id = q.owner_id AND q.owner_type = 'agent'
+     WHERE rt.run_id = ?
+     ORDER BY q.resource_key`,
+    [row.id],
+  );
+  const requested = [...command.resources].sort((a, b) => a.resourceKey.localeCompare(b.resourceKey));
+  if (
+    current.length === 0 ||
+    current.length !== requested.length ||
+    current.some(
+      (resource, index) =>
+        resource.resource_key !== requested[index]?.resourceKey || resource.version !== requested[index]?.version,
+    )
+  ) {
+    throw new Error('STATE_CONFLICT');
+  }
+
+  for (const resource of requested) {
+    const quarantine = current.find((candidate) => candidate.resource_key === resource.resourceKey);
+    if (!quarantine) throw new Error('STATE_CONFLICT');
+
+    // A mutation with an unknown outcome deliberately leaves its write lease marked active.
+    // Reconciliation is the operator-confirmed boundary where that exact stale mutation may be
+    // retired. Without this cleanup, lease acquisition would immediately quarantine the same
+    // resource again and the next mutation could never make progress.
+    if (quarantine.tool_call_id) {
+      await tx.execute(
+        `DELETE FROM agent_leases
+         WHERE resource_key = ? AND owner_type = ? AND owner_id = ?
+           AND active_mutation = 1 AND operation_id = ?`,
+        [quarantine.resource_key, quarantine.owner_type, quarantine.owner_id, quarantine.tool_call_id],
+      );
+    } else {
+      await tx.execute(
+        `DELETE FROM agent_leases
+         WHERE resource_key = ? AND owner_type = ? AND owner_id = ?
+           AND active_mutation = 1 AND expires_at <= ?`,
+        [quarantine.resource_key, quarantine.owner_type, quarantine.owner_id, command.now],
+      );
+    }
+
+    const deleted = await tx.execute('DELETE FROM agent_resource_quarantine WHERE resource_key = ? AND version = ?', [
+      resource.resourceKey,
+      resource.version,
+    ]);
+    if (deleted.changes !== 1) throw new Error('STATE_CONFLICT');
+  }
+
+  const events: DurableEventInput[] = [
+    {
+      type: 'run.reconciliation_resolved',
+      payload: {
+        resourceKeys: requested.map((resource) => resource.resourceKey),
+        note: command.note,
+      },
+    },
+  ];
+  const committedEvents = await appendEvents(tx, row, events, command.now);
+  const updatedRow = await patchRun(tx, row, { needsReconciliation: false }, events.length, command.now);
+  const run = mapRunRow(updatedRow);
+  await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(run), command.now);
+  return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
 };
 
 export const deleteRunTransition = async (

@@ -611,6 +611,9 @@ export const composeAgent = ({
           runs.increaseBudget(scope, runId, increase, expectedVersion, idempotencyKey),
         cancel: (scope, runId, expectedVersion, idempotencyKey) =>
           runs.cancel(scope, runId, expectedVersion, idempotencyKey),
+        reconciliation: (scope, runId) => runs.reconciliation(scope, runId),
+        resolveReconciliation: (scope, runId, expectedVersion, note, resources) =>
+          runs.resolveReconciliation(scope, runId, expectedVersion, note, resources),
         listCheckpoints: (scope, runId) => checkpoints.list(scope, runId),
         saveCheckpoint: (scope, runId, expectedVersion) => checkpoints.save(scope, runId, expectedVersion),
         resume: (scope, runId, checkpointId, expectedVersion, idempotencyKey) =>

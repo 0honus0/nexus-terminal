@@ -5,9 +5,11 @@ import type {
   HostEvent,
   RunEvent,
   RunInputProjection,
+  RunReconciliationView,
   RunSnapshot,
 } from '../../../modules/agent/runtime/runs/run.types';
 import type {
+  ConfirmedMutationTool,
   HostCursorReaderPort,
   PendingMutationTool,
   RunEventReaderPort,
@@ -56,6 +58,14 @@ interface PendingMutationRow {
   inspection_json: string;
 }
 
+interface ReconciliationResourceRow {
+  resource_key: string;
+  tool_call_id: string | null;
+  reason: string;
+  version: number;
+  created_at: number;
+}
+
 const encodeCursor = (createdAt: number, id: string): string =>
   Buffer.from(JSON.stringify({ createdAt, id }), 'utf8').toString('base64url');
 
@@ -100,25 +110,50 @@ export class SqliteRunRepository
       const historyClause = historyBoundary
         ? `AND (${['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')].join(' OR ')})`
         : '';
-      const entries = await tx.queryAll<EntryRow>(
-        `SELECT id, sequence, kind, payload_json, created_at
-         FROM ai_thread_entries
-         WHERE thread_id = ? AND user_id = ? AND app_id = ?
-           ${historyClause}
-         ORDER BY sequence DESC LIMIT 50`,
-        historyBoundary
-          ? [
-              row.thread_id,
-              scope.userId,
-              scope.appId,
-              historyBoundary.baseThrough,
-              row.id,
-              ...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
-            ]
-          : [row.thread_id, scope.userId, scope.appId],
-      );
+      const [entries, issueRow] = await Promise.all([
+        tx.queryAll<EntryRow>(
+          `SELECT id, sequence, kind, payload_json, created_at
+           FROM ai_thread_entries
+           WHERE thread_id = ? AND user_id = ? AND app_id = ?
+             ${historyClause}
+           ORDER BY sequence DESC LIMIT 50`,
+          historyBoundary
+            ? [
+                row.thread_id,
+                scope.userId,
+                scope.appId,
+                historyBoundary.baseThrough,
+                row.id,
+                ...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
+              ]
+            : [row.thread_id, scope.userId, scope.appId],
+        ),
+        ['failed', 'interrupted', 'cancelled'].includes(run.status)
+          ? tx.queryOne<EventRow>(
+              `SELECT event_id, run_id, sequence, schema_version, type, payload_json, occurred_at
+               FROM agent_events
+               WHERE run_id = ? AND type IN ('model.failed','tool.failed','run.interrupted','run.cancelled')
+               ORDER BY sequence DESC LIMIT 1`,
+              [row.id],
+            )
+          : Promise.resolve(null),
+      ]);
+      const issuePayload = issueRow ? (JSON.parse(issueRow.payload_json) as Record<string, JsonValue>) : null;
       return {
         ...run,
+        terminalIssue: issueRow
+          ? {
+              eventType: issueRow.type,
+              errorCode: typeof issuePayload?.errorCode === 'string' ? issuePayload.errorCode : null,
+              reason:
+                typeof issuePayload?.reason === 'string'
+                  ? issuePayload.reason
+                  : typeof issuePayload?.summary === 'string'
+                    ? issuePayload.summary
+                    : null,
+              occurredAt: issueRow.occurred_at,
+            }
+          : null,
         recentEntries: entries.reverse().map((entry) => ({
           id: entry.id,
           sequence: entry.sequence,
@@ -149,6 +184,33 @@ export class SqliteRunRepository
       items: projection.pending.slice(0, limit),
       total: projection.pending.length,
       hasMore: projection.pending.length > limit,
+    };
+  }
+
+  async reconciliation(scope: Scope, runId: string): Promise<RunReconciliationView> {
+    const run = await this.db.queryOne<{ id: string; needs_reconciliation: number }>(
+      'SELECT id, needs_reconciliation FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?',
+      [runId, scope.userId, scope.appId],
+    );
+    if (!run) throw new Error('NOT_FOUND');
+    const resources = await this.db.queryAll<ReconciliationResourceRow>(
+      `SELECT q.resource_key, q.tool_call_id, q.reason, q.version, q.created_at
+       FROM agent_resource_quarantine q
+       JOIN agent_runtimes rt ON rt.id = q.owner_id AND q.owner_type = 'agent'
+       WHERE rt.run_id = ?
+       ORDER BY q.created_at, q.resource_key`,
+      [runId],
+    );
+    return {
+      runId,
+      required: run.needs_reconciliation === 1,
+      resources: resources.map((row) => ({
+        resourceKey: row.resource_key,
+        toolCallId: row.tool_call_id,
+        reason: row.reason,
+        version: row.version,
+        createdAt: row.created_at,
+      })),
     };
   }
 
@@ -256,5 +318,18 @@ export class SqliteRunRepository
       approvalVersion: row.approval_version,
       inspection: JSON.parse(row.inspection_json) as ToolInspection,
     };
+  }
+
+  async confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null> {
+    const row = await this.db.queryOne<{ tool_call_id: string; provider_call_id: string }>(
+      `SELECT t.id AS tool_call_id, t.provider_call_id
+       FROM agent_tool_calls t
+       JOIN agent_runs r ON r.id = t.run_id
+       WHERE t.run_id = ? AND r.user_id = ? AND r.app_id = ?
+         AND t.operation_hash = ? AND t.status = 'succeeded' AND t.risk <> 'read'
+       ORDER BY t.completed_at, t.created_at, t.id LIMIT 1`,
+      [runId, scope.userId, scope.appId, operationHash],
+    );
+    return row ? { toolCallId: row.tool_call_id, providerCallId: row.provider_call_id } : null;
   }
 }

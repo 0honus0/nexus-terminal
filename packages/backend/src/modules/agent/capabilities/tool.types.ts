@@ -2,12 +2,15 @@ import type { Actor, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../ag
 import type { AgentCapability } from '../host/app.types';
 import type { ToolTargetFingerprint } from './tool-target.types';
 
+export type ToolRisk = 'read' | 'control' | 'mutate' | 'destructive' | 'forbidden';
+export type ToolRiskClass = Exclude<ToolRisk, 'forbidden'>;
+
 export interface ToolDescriptor {
   name: string;
   version: string;
   description: string;
   inputSchema: JsonValue;
-  riskClass: 'read' | 'control' | 'mutate' | 'destructive';
+  riskClass: ToolRiskClass;
   capability: AgentCapability;
 }
 
@@ -28,7 +31,7 @@ export interface ToolInspection {
   normalizedArguments: JsonValue;
   target: ToolTargetFingerprint;
   resourceKeys: string[];
-  risk: 'read' | 'control' | 'mutate' | 'destructive' | 'forbidden';
+  risk: ToolRisk;
   mutation: boolean;
   operationHash: string;
   operationHashVersion: 1;

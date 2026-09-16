@@ -470,6 +470,7 @@ export type AgentRunStatus =
   | 'interrupted';
 
 export type AgentApprovalMode = 'ask' | 'full_access';
+export type AgentToolRisk = 'read' | 'control' | 'mutate' | 'destructive' | 'forbidden';
 
 export type AgentPlanItemStatus = 'pending' | 'in_progress' | 'blocked' | 'completed' | 'cancelled';
 
@@ -488,6 +489,13 @@ export interface AgentRunPlan {
   items: AgentPlanItem[];
 }
 
+export interface AgentRunTerminalIssue {
+  eventType: string;
+  errorCode: string | null;
+  reason: string | null;
+  occurredAt: number;
+}
+
 export interface AgentRunView {
   id: string;
   userId: number;
@@ -495,6 +503,7 @@ export interface AgentRunView {
   threadId: string;
   parentRunId: string | null;
   status: AgentRunStatus;
+  terminalIssue?: AgentRunTerminalIssue | null;
   goalStatus: string;
   goal: { text: string | null; revision: number; updatedAt: number | null };
   verificationStatus: string;
@@ -547,6 +556,20 @@ export interface AgentRunView {
   updatedAt: number;
 }
 
+export interface AgentRunReconciliationResource {
+  resourceKey: string;
+  toolCallId: string | null;
+  reason: string;
+  version: number;
+  createdAt: number;
+}
+
+export interface AgentRunReconciliationView {
+  runId: string;
+  required: boolean;
+  resources: AgentRunReconciliationResource[];
+}
+
 export interface AgentPendingRunInput {
   id: string;
   sequence: number;
@@ -587,7 +610,7 @@ export interface AgentCheckpointView {
       tools: Array<{
         toolCallId: string;
         operationHash: string;
-        risk: 'read' | 'mutate' | 'destructive';
+        risk: AgentToolRisk;
         status: string;
         sideEffectStatus: 'not_started' | 'confirmed' | 'unknown';
         verificationStatus: 'not_started' | 'verified' | 'unverified' | 'failed';
@@ -710,7 +733,7 @@ export interface AgentToolInspection {
     hostKeyTrust: string;
   };
   resourceKeys: string[];
-  risk: 'read' | 'mutate' | 'destructive' | 'forbidden';
+  risk: AgentToolRisk;
   mutation: boolean;
   operationHash: string;
   operationHashVersion: 1;
@@ -1337,10 +1360,13 @@ export const agentApi = {
   async deleteAllThreads(appId: string): Promise<AgentThreadDeleteAllResult> {
     return unwrap(
       (
-        await httpClient.delete<AgentEnvelope<AgentThreadDeleteAllResult>>(`/apps/${encodeURIComponent(appId)}/threads`, {
-          headers: await mutationHeaders(),
-          data: { confirmation: 'delete_all_threads' },
-        })
+        await httpClient.delete<AgentEnvelope<AgentThreadDeleteAllResult>>(
+          `/apps/${encodeURIComponent(appId)}/threads`,
+          {
+            headers: await mutationHeaders(),
+            data: { confirmation: 'delete_all_threads' },
+          },
+        )
       ).data,
     );
   },
@@ -1377,6 +1403,35 @@ export const agentApi = {
       (
         await httpClient.get<AgentEnvelope<AgentRunSnapshot>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}`,
+        )
+      ).data,
+    );
+  },
+  async runReconciliation(appId: string, runId: string): Promise<AgentRunReconciliationView> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<AgentRunReconciliationView>>(
+          `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(runId)}/reconciliation`,
+        )
+      ).data,
+    );
+  },
+  async resolveRunReconciliation(
+    appId: string,
+    run: AgentRunView,
+    reconciliation: AgentRunReconciliationView,
+    note: string,
+  ): Promise<AgentRunView> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentRunView>>(
+          `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/reconciliation/resolve`,
+          agentRuntimeRequest({
+            expectedVersion: run.version,
+            note,
+            resources: reconciliation.resources.map(({ resourceKey, version }) => ({ resourceKey, version })),
+          }),
+          { headers: await mutationHeaders() },
         )
       ).data,
     );

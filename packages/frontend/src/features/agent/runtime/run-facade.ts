@@ -1,4 +1,10 @@
-import { agentApi, type AgentApprovalView, type AgentRunSnapshot, type AgentRunView } from '../api/agent-api';
+import {
+  agentApi,
+  type AgentApprovalView,
+  type AgentRunReconciliationView,
+  type AgentRunSnapshot,
+  type AgentRunView,
+} from '../api/agent-api';
 import { agentEvents, type AgentStreamEvent } from '../api/agent-events';
 import { createAgentRunStore } from './run-store';
 
@@ -114,6 +120,9 @@ export const createAgentRunFacade = (appId: string) => {
       return { ...page, items: page.items.map((run) => runStore.accept(run)) };
     },
     getRun: (runId: string, minimumEventCursor = 0) => refreshSnapshot(runId, minimumEventCursor),
+    getReconciliation: (runId: string) => agentApi.runReconciliation(appId, runId),
+    resolveReconciliation: async (run: AgentRunView, reconciliation: AgentRunReconciliationView, note: string) =>
+      runStore.accept(await agentApi.resolveRunReconciliation(appId, currentRun(run), reconciliation, note)),
     listCheckpoints: (runId: string) => agentApi.checkpoints(appId, runId),
     listApprovals: (runId: string) => agentApi.approvals(appId, runId),
     listSubagents: (runId: string, before?: string) => agentApi.subagents(appId, runId, before),

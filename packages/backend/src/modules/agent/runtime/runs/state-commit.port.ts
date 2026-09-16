@@ -401,6 +401,20 @@ export interface DeleteRunCommitResult {
   hostEventCursor: number;
 }
 
+export interface ResolveRunReconciliationResource {
+  resourceKey: string;
+  version: number;
+}
+
+export interface ResolveRunReconciliationCommand {
+  scope: Scope;
+  runId: string;
+  expectedRunVersion: number;
+  note: string;
+  resources: ResolveRunReconciliationResource[];
+  now: number;
+}
+
 export interface CommitToolProposalCommand {
   scope: Scope;
   runId: string;
@@ -483,6 +497,8 @@ export interface SupersedeMutationToolCommand {
   approvalId: string;
   expectedRunVersion: number;
   reason: string;
+  errorCode: string;
+  details?: JsonValue;
   now: number;
 }
 
@@ -546,6 +562,7 @@ export interface StateCommitPort {
   cancelRun(command: AtomicCancelRun): Promise<CancelRunCommitResult>;
   increaseRunBudget(command: AtomicIncreaseRunBudget): Promise<IncreaseRunBudgetCommitResult>;
   deleteRun(command: AtomicDeleteRun): Promise<DeleteRunCommitResult>;
+  resolveRunReconciliation(command: ResolveRunReconciliationCommand): Promise<StateCommitResult>;
   beginModelStep(command: BeginModelStepCommand): Promise<BeginModelStepResult>;
   beginSubagentModelStep(command: BeginSubagentModelStepCommand): Promise<BeginModelStepResult>;
   pauseRuntimeForBudget(command: PauseRuntimeForBudgetCommand): Promise<StateCommitResult>;
@@ -577,7 +594,14 @@ export interface StateCommitPort {
 
 export type RunCommandCommitPort = Pick<
   StateCommitPort,
-  'createRun' | 'appendInput' | 'mutatePendingInput' | 'setRunGoal' | 'cancelRun' | 'increaseRunBudget' | 'deleteRun'
+  | 'createRun'
+  | 'appendInput'
+  | 'mutatePendingInput'
+  | 'setRunGoal'
+  | 'cancelRun'
+  | 'increaseRunBudget'
+  | 'deleteRun'
+  | 'resolveRunReconciliation'
 >;
 
 export type RunCreationCommitPort = Pick<StateCommitPort, 'createRun'>;

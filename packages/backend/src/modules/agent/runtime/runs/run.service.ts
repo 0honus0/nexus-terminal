@@ -525,6 +525,63 @@ export class RunService {
     return committed.run;
   }
 
+  async reconciliation(scope: Scope, runId: string) {
+    if (!isAgentUuid(runId)) throw new Error('VALIDATION_FAILED');
+    return this.repository.reconciliation(scope, runId);
+  }
+
+  async resolveReconciliation(
+    scope: Scope,
+    runId: string,
+    expectedVersion: number,
+    note: string,
+    resources: readonly { resourceKey: string; version: number }[],
+  ): Promise<RunView> {
+    if (!isAgentUuid(runId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const normalizedNote = note.trim();
+    if (!normalizedNote || Buffer.byteLength(normalizedNote, 'utf8') > 2_000) throw new Error('VALIDATION_FAILED');
+    if (!Array.isArray(resources) || resources.length < 1 || resources.length > 64)
+      throw new Error('VALIDATION_FAILED');
+    const normalizedResources = resources.map((resource) => {
+      if (
+        !resource ||
+        typeof resource.resourceKey !== 'string' ||
+        resource.resourceKey.length < 1 ||
+        Buffer.byteLength(resource.resourceKey, 'utf8') > 512 ||
+        !Number.isSafeInteger(resource.version) ||
+        resource.version < 1
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+      return { resourceKey: resource.resourceKey, version: resource.version };
+    });
+    if (new Set(normalizedResources.map((resource) => resource.resourceKey)).size !== normalizedResources.length) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const committed = await this.stateCommit.resolveRunReconciliation({
+      scope,
+      runId,
+      expectedRunVersion: expectedVersion,
+      note: normalizedNote,
+      resources: normalizedResources,
+      now: this.clock.nowUnixSeconds(),
+    });
+    this.onCommitted(committed.run);
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        resourceCount: normalizedResources.length,
+        runVersion: committed.run.version,
+      },
+      'Agent Run reconciliation resolved',
+    );
+    return committed.run;
+  }
+
   async delete(scope: Scope, runId: string, expectedVersion: number, idempotencyKey: string): Promise<void> {
     if (!isAgentUuid(runId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
       throw new Error('VALIDATION_FAILED');

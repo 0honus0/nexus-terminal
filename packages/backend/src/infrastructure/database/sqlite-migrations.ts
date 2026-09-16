@@ -341,6 +341,118 @@ const definedMigrations: Migration[] = [
               );
         `,
   },
+  {
+    id: 22,
+    name: 'Use the current Agent tool risk enum in durable tool state',
+    check: async (db: Database): Promise<boolean> => {
+      const createSQL = await getTableCreateSQL(db, 'agent_tool_calls');
+      if (!createSQL) return false;
+      return !createSQL.includes("'control'") || !createSQL.includes("'forbidden'");
+    },
+    sql: `
+            ALTER TABLE agent_approvals RENAME TO agent_approvals_old_risk_enum;
+            ALTER TABLE agent_resource_quarantine RENAME TO agent_resource_quarantine_old_risk_enum;
+            ALTER TABLE agent_tool_calls RENAME TO agent_tool_calls_old_risk_enum;
+
+            CREATE TABLE agent_tool_calls (
+                id TEXT PRIMARY KEY,
+                run_id TEXT NOT NULL,
+                agent_runtime_id TEXT NOT NULL,
+                step_id TEXT NOT NULL,
+                provider_call_id TEXT NOT NULL,
+                tool_name TEXT NOT NULL,
+                tool_version TEXT NOT NULL,
+                inspection_json TEXT NOT NULL CHECK(json_valid(inspection_json)),
+                operation_hash TEXT NOT NULL,
+                operation_hash_version INTEGER NOT NULL CHECK(operation_hash_version = 1),
+                risk TEXT NOT NULL CHECK(risk IN ('read','control','mutate','destructive','forbidden')),
+                status TEXT NOT NULL CHECK(status IN (
+                  'proposed','awaiting_approval','ready','running','succeeded','verification_failed','failed','cancelled','reconciling'
+                )),
+                result_json TEXT CHECK(result_json IS NULL OR json_valid(result_json)),
+                created_at INTEGER NOT NULL,
+                started_at INTEGER,
+                completed_at INTEGER,
+                version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+                UNIQUE(step_id, provider_call_id),
+                UNIQUE(step_id, operation_hash),
+                UNIQUE(id, run_id),
+                FOREIGN KEY(step_id, run_id) REFERENCES agent_steps(id, run_id) ON DELETE CASCADE,
+                FOREIGN KEY(agent_runtime_id, run_id) REFERENCES agent_runtimes(id, run_id) ON DELETE CASCADE
+            );
+
+            INSERT INTO agent_tool_calls (
+              id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
+              inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
+              created_at, started_at, completed_at, version
+            )
+            SELECT
+              id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
+              inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
+              created_at, started_at, completed_at, version
+            FROM agent_tool_calls_old_risk_enum;
+
+            CREATE TABLE agent_approvals (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                app_id TEXT NOT NULL,
+                run_id TEXT NOT NULL,
+                tool_call_id TEXT NOT NULL,
+                requested_by_runtime_id TEXT NOT NULL,
+                operation_hash TEXT NOT NULL,
+                operation_hash_version INTEGER NOT NULL CHECK(operation_hash_version = 1),
+                status TEXT NOT NULL CHECK(status IN ('requested','approved','denied','expired','superseded')),
+                policy_revision INTEGER NOT NULL CHECK(policy_revision > 0),
+                input_revision INTEGER NOT NULL CHECK(input_revision >= 0),
+                decided_by_user_id INTEGER REFERENCES users(id),
+                decided_at INTEGER,
+                consumed_at INTEGER,
+                requested_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL,
+                version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+                FOREIGN KEY(run_id, user_id, app_id) REFERENCES agent_runs(id, user_id, app_id) ON DELETE CASCADE,
+                FOREIGN KEY(tool_call_id, run_id) REFERENCES agent_tool_calls(id, run_id) ON DELETE CASCADE,
+                FOREIGN KEY(requested_by_runtime_id, run_id) REFERENCES agent_runtimes(id, run_id) ON DELETE CASCADE
+            );
+
+            INSERT INTO agent_approvals (
+              id, user_id, app_id, run_id, tool_call_id, requested_by_runtime_id, operation_hash,
+              operation_hash_version, status, policy_revision, input_revision, decided_by_user_id,
+              decided_at, consumed_at, requested_at, expires_at, version
+            )
+            SELECT
+              id, user_id, app_id, run_id, tool_call_id, requested_by_runtime_id, operation_hash,
+              operation_hash_version, status, policy_revision, input_revision, decided_by_user_id,
+              decided_at, consumed_at, requested_at, expires_at, version
+            FROM agent_approvals_old_risk_enum;
+
+            CREATE TABLE agent_resource_quarantine (
+                resource_key TEXT PRIMARY KEY REFERENCES agent_resource_fences(resource_key) ON DELETE CASCADE,
+                tool_call_id TEXT REFERENCES agent_tool_calls(id) ON DELETE SET NULL,
+                owner_type TEXT NOT NULL CHECK(owner_type IN ('agent','workspace','system')),
+                owner_id TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                evidence_json TEXT NOT NULL CHECK(json_valid(evidence_json)),
+                version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+                created_at INTEGER NOT NULL
+            );
+
+            INSERT INTO agent_resource_quarantine (
+              resource_key, tool_call_id, owner_type, owner_id, reason, evidence_json, version, created_at
+            )
+            SELECT resource_key, tool_call_id, owner_type, owner_id, reason, evidence_json, version, created_at
+            FROM agent_resource_quarantine_old_risk_enum;
+
+            DROP TABLE agent_approvals_old_risk_enum;
+            DROP TABLE agent_resource_quarantine_old_risk_enum;
+            DROP TABLE agent_tool_calls_old_risk_enum;
+
+            CREATE UNIQUE INDEX agent_one_active_approval ON agent_approvals(tool_call_id)
+                WHERE status = 'requested' OR (status = 'approved' AND consumed_at IS NULL);
+            CREATE INDEX agent_approval_expiry ON agent_approvals(status, expires_at);
+            CREATE INDEX agent_approval_scope ON agent_approvals(user_id, app_id, run_id, requested_at);
+        `,
+  },
 ];
 
 /**

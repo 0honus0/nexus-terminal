@@ -1,9 +1,27 @@
 <script setup lang="ts">
-  import { computed } from 'vue';
+  import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
   import type { AgentLedgerEntry } from '../api/agent-api';
   import AgentMessageBody from './AgentMessageBody.vue';
   const props = defineProps<{ entry: AgentLedgerEntry; relatedToolName?: string }>();
   const emit = defineEmits<{ layoutChange: [] }>();
+  const root = ref<HTMLElement | null>(null);
+  let resizeObserver: ResizeObserver | null = null;
+  let resizeFrame: number | null = null;
+  onMounted(() => {
+    if (typeof ResizeObserver === 'undefined' || !root.value) return;
+    resizeObserver = new ResizeObserver(() => {
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        emit('layoutChange');
+      });
+    });
+    resizeObserver.observe(root.value);
+  });
+  onBeforeUnmount(() => {
+    if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+    resizeObserver?.disconnect();
+  });
   const record = (value: unknown): Record<string, unknown> | null =>
     value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
   const payload = computed(() => record(props.entry.payload));
@@ -73,6 +91,32 @@
     return typeof value === 'string' ? value : '';
   });
   const failed = computed(() => toolResult.value?.ok === false || toolResult.value?.status === 'failed');
+  const toolErrorCode = computed(() => {
+    const value = toolResult.value?.errorCode;
+    return typeof value === 'string' && value ? value : '';
+  });
+  const friendlyFailureByCode: Readonly<Record<string, string>> = {
+    RESOURCE_QUARANTINED: '目标资源因先前修改结果未确认而处于隔离状态；请先核验现场并完成对账。',
+    RECONCILIATION_REQUIRED: '先前修改仍需要对账，当前修改没有执行。',
+    LEASE_CONFLICT: '目标资源正被另一个操作占用，请等待该操作完成或停止后重试。',
+    LEASE_LOST: '执行期间资源锁已丢失，无法确认继续执行是否安全。',
+    APPROVAL_STALE: '批准后目标、输入、策略或资源状态发生变化，本次操作已作废且未执行。',
+    MUTATION_ALREADY_CONFIRMED: '同一 Run 中完全相同的修改已经确认成功，本次重复提议已被安全跳过，没有再次执行。',
+    ECONNREFUSED: '远端端点拒绝连接；请检查服务是否监听、地址端口是否正确以及网络路径。',
+    ENOTFOUND: '无法解析目标主机名；请检查主机名或 DNS。',
+    ETIMEDOUT: '连接或操作超时；目标可能不可达、响应过慢或被网络策略阻断。',
+  };
+  const visibleToolSummary = computed(() => {
+    const summary = toolSummary.value;
+    const code = toolErrorCode.value;
+    if (!failed.value || !code) return summary;
+    const friendly = friendlyFailureByCode[code];
+    if (!friendly) return summary || code;
+    if (!summary || summary === code || summary.endsWith(`: ${code}`) || summary.includes(`: ${code} `)) {
+      return `${friendly} [${code}]`;
+    }
+    return summary;
+  });
   const isUser = computed(() => props.entry.kind === 'user_input');
   interface EntryUsage {
     totalTokens: number;
@@ -125,7 +169,7 @@
 </script>
 
 <template>
-  <article v-if="isToolCallEntry" class="mx-auto w-full max-w-3xl">
+  <article ref="root" v-if="isToolCallEntry" class="mx-auto w-full max-w-3xl">
     <details class="group/tool-call" @toggle="emit('layoutChange')">
       <summary
         class="relative flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-2 py-1.5 text-[11px] text-text-secondary transition-colors select-none hover:bg-header/35 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
@@ -158,14 +202,18 @@
             <span>{{ $t('agent.conversation.toolArguments') }}</span>
           </div>
           <pre
-            class="max-h-52 overflow-auto whitespace-pre rounded-lg bg-header/30 px-3 py-2.5 font-mono text-[10px] leading-5 text-foreground/80 ring-1 ring-inset ring-border/30"
+            class="max-h-52 max-w-full overflow-auto whitespace-pre-wrap break-words rounded-lg bg-header/30 px-3 py-2.5 font-mono text-[10px] leading-5 text-foreground/80 ring-1 ring-inset ring-border/30"
             >{{ call.formattedArguments }}</pre>
         </div>
       </div>
     </details>
   </article>
 
-  <article v-else-if="entry.kind === 'tool_result' || entry.kind === 'system_notice'" class="mx-auto w-full max-w-3xl">
+  <article
+    ref="root"
+    v-else-if="entry.kind === 'tool_result' || entry.kind === 'system_notice'"
+    class="mx-auto w-full max-w-3xl"
+  >
     <details class="group/result ml-4 border-l border-border/40 pl-5" @toggle="emit('layoutChange')">
       <summary
         class="flex cursor-pointer list-none items-center gap-2.5 rounded-lg px-2 py-1.5 text-[11px] transition-colors select-none hover:bg-header/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/20"
@@ -201,8 +249,12 @@
           {{ toolName }}
         </code>
         <span class="min-w-0 flex flex-1 items-baseline overflow-hidden">
-          <span v-if="toolSummary" class="min-w-0 truncate text-[10px] text-text-secondary/75">
-            {{ toolSummary }}
+          <span
+            v-if="visibleToolSummary"
+            class="min-w-0 truncate text-[10px] text-text-secondary/75"
+            :title="visibleToolSummary"
+          >
+            {{ visibleToolSummary }}
           </span>
         </span>
         <span
@@ -228,6 +280,7 @@
     </details>
   </article>
   <article
+    ref="root"
     v-else-if="isUser || text?.trim()"
     class="mx-auto flex w-full max-w-3xl"
     :class="isUser ? 'justify-end' : ''"

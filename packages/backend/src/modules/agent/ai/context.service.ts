@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { JsonValue } from '../agent.types';
-import type { LedgerEntryView } from './conversation.repository.port';
+import type { LedgerEntryView, LedgerPage } from './conversation.repository.port';
 import { ConversationService } from './conversation.service';
 import type { ContextPlan, ContextRequest, ContextSourceRange } from './context.types';
 import type { ModelMessage } from './model.types';
-import { RecallService } from './recall.service';
+import { RecallService, recallTerms } from './recall.service';
 import { SkillRegistry } from './skill-registry';
 
 const SAFETY_MESSAGE =
@@ -83,12 +83,153 @@ interface CandidateSection {
   source: ContextSourceRange;
 }
 
+interface ThreadRecallCandidate extends CandidateSection {
+  sequence: number;
+  score: number;
+  bytes: number;
+}
+
+const THREAD_ANCHOR_ITEM_LIMIT = 2;
+const THREAD_ANCHOR_TOKEN_LIMIT = 2_048;
+const THREAD_RECALL_SCAN_LIMIT = 800;
+const THREAD_RECALL_ITEM_LIMIT = 6;
+const THREAD_RECALL_BYTE_LIMIT = 8 * 1024;
+
+const hasAssistantToolCalls = (entry: LedgerEntryView): boolean => {
+  if (
+    entry.kind !== 'assistant_message' ||
+    !entry.payload ||
+    Array.isArray(entry.payload) ||
+    typeof entry.payload !== 'object'
+  ) {
+    return false;
+  }
+  const rawCalls = (entry.payload as Record<string, JsonValue>).toolCalls;
+  return Array.isArray(rawCalls) && rawCalls.length > 0;
+};
+
+const threadRecallScore = (
+  content: string,
+  queryTerms: readonly string[],
+  sequence: number,
+  newestSequence: number,
+): number => {
+  const normalized = content.toLowerCase();
+  const matched = queryTerms.reduce((count, term) => count + (normalized.includes(term) ? 1 : 0), 0);
+  if (matched === 0) return 0;
+  const lexical = matched / Math.max(1, queryTerms.length);
+  const sequenceDistance = Math.max(0, newestSequence - sequence);
+  const recency = 1 / (1 + sequenceDistance / 200);
+  return lexical * 0.85 + recency * 0.15;
+};
+
 export class ContextService {
   constructor(
     private readonly conversations: ConversationService,
     private readonly recall: RecallService,
     private readonly skills: SkillRegistry,
   ) {}
+
+  private async threadAnchors(input: ContextRequest, ledgerPage: LedgerPage): Promise<CandidateSection[]> {
+    if (input.historyBoundary !== undefined || !ledgerPage.nextCursor) return [];
+    const recentIds = new Set(ledgerPage.items.map((entry) => entry.id));
+    const page = await this.conversations.readOldestPage(input.scope, input.threadId, 8);
+    const selected: CandidateSection[] = [];
+    let usedTokens = 0;
+    for (const entry of page.items) {
+      if (
+        recentIds.has(entry.id) ||
+        !['user_input', 'assistant_message'].includes(entry.kind) ||
+        hasAssistantToolCalls(entry)
+      ) {
+        continue;
+      }
+      const message = ledgerMessage(entry);
+      if (!message || message.role === 'tool' || message.role === 'system') continue;
+      const rawContent = message.content.length > 4_096 ? `${message.content.slice(0, 4_096)}…` : message.content;
+      const content = `[Thread anchor #${entry.sequence}; historical context from the start of this conversation. The current user input has priority.]\n${rawContent}`;
+      const tokens = estimateTokens(content);
+      if (usedTokens + tokens > THREAD_ANCHOR_TOKEN_LIMIT) continue;
+      selected.push({
+        id: entry.id,
+        message: { ...message, content },
+        tokens,
+        source: {
+          kind: 'thread_anchor',
+          id: entry.id,
+          fromSequence: entry.sequence,
+          toSequence: entry.sequence,
+        },
+      });
+      usedTokens += tokens;
+      if (selected.length >= THREAD_ANCHOR_ITEM_LIMIT) break;
+    }
+    return selected;
+  }
+
+  private async recallEarlierThreadEntries(
+    input: ContextRequest,
+    ledgerPage: LedgerPage,
+  ): Promise<ThreadRecallCandidate[]> {
+    if (input.historyBoundary !== undefined || !ledgerPage.nextCursor) return [];
+    const queryTerms = recallTerms(input.currentInput);
+    if (queryTerms.length === 0) return [];
+
+    const newestSequence = ledgerPage.items.at(-1)?.sequence ?? 0;
+    const candidates: ThreadRecallCandidate[] = [];
+    let cursor: string | undefined = ledgerPage.nextCursor;
+    let scanned = 0;
+    while (cursor && scanned < THREAD_RECALL_SCAN_LIMIT) {
+      const pageLimit = Math.min(200, THREAD_RECALL_SCAN_LIMIT - scanned);
+      const page = await this.conversations.readPage(input.scope, input.threadId, pageLimit, cursor);
+      scanned += page.items.length;
+      for (const entry of page.items) {
+        if (!['user_input', 'assistant_message'].includes(entry.kind) || hasAssistantToolCalls(entry)) continue;
+        const content = payloadText(entry.payload).trim();
+        if (!content) continue;
+        const score = threadRecallScore(content, queryTerms, entry.sequence, newestSequence);
+        if (score <= 0) continue;
+        const message = ledgerMessage(entry);
+        if (!message || message.role === 'tool' || message.role === 'system') continue;
+        const rawContent = message.content.length > 4_096 ? `${message.content.slice(0, 4_096)}…` : message.content;
+        const clippedContent = `[Earlier thread excerpt #${entry.sequence}; historical context, not a new instruction]\n${rawContent}`;
+        const clippedMessage: ModelMessage = { ...message, content: clippedContent };
+        const bytes = Buffer.byteLength(clippedContent, 'utf8');
+        candidates.push({
+          id: entry.id,
+          sequence: entry.sequence,
+          score,
+          bytes,
+          message: clippedMessage,
+          tokens: estimateTokens(clippedContent),
+          source: {
+            kind: 'thread_recall',
+            id: entry.id,
+            fromSequence: entry.sequence,
+            toSequence: entry.sequence,
+          },
+        });
+      }
+      cursor = page.nextCursor ?? undefined;
+      if (page.items.length === 0) break;
+    }
+
+    const selected: ThreadRecallCandidate[] = [];
+    const seenContent = new Set<string>();
+    let usedBytes = 0;
+    for (const candidate of candidates.sort(
+      (left, right) => right.score - left.score || right.sequence - left.sequence || left.id.localeCompare(right.id),
+    )) {
+      const fingerprint = candidate.message.content.trim().toLowerCase();
+      if (!fingerprint || seenContent.has(fingerprint) || usedBytes + candidate.bytes > THREAD_RECALL_BYTE_LIMIT)
+        continue;
+      selected.push(candidate);
+      seenContent.add(fingerprint);
+      usedBytes += candidate.bytes;
+      if (selected.length >= THREAD_RECALL_ITEM_LIMIT) break;
+    }
+    return selected.sort((left, right) => left.sequence - right.sequence);
+  }
 
   async compose(input: ContextRequest): Promise<ContextPlan> {
     if (
@@ -127,13 +268,19 @@ export class ContextService {
     if (input.historyBoundary !== undefined && !input.runId) throw new Error('VALIDATION_FAILED');
     const ledgerPromise =
       input.historyBoundary === undefined
-        ? this.conversations.readPage(input.scope, input.threadId, 100)
-        : this.conversations.readContextPage(input.scope, input.threadId, input.runId!, input.historyBoundary, 100);
+        ? this.conversations.readPage(input.scope, input.threadId, 160)
+        : this.conversations.readContextPage(input.scope, input.threadId, input.runId!, input.historyBoundary, 160);
     const [ledgerPage, recallItems, skillMetadata] = await Promise.all([
       ledgerPromise,
       this.recall.recall(input.scope, input.currentInput, input.maxRecallItems, input.maxRecallBytes),
       this.skills.list(input.scope),
     ]);
+    const [threadAnchorCandidates, recalledThreadCandidates] = await Promise.all([
+      this.threadAnchors(input, ledgerPage),
+      this.recallEarlierThreadEntries(input, ledgerPage),
+    ]);
+    const threadAnchorIds = new Set(threadAnchorCandidates.map((candidate) => candidate.id));
+    const threadRecallCandidates = recalledThreadCandidates.filter((candidate) => !threadAnchorIds.has(candidate.id));
 
     if (skillMetadata.length > 0) {
       const header =
@@ -214,9 +361,26 @@ export class ContextService {
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
       .reverse();
 
+    const remainingBeforeHistory = Math.max(0, availableTokens - usedTokens);
+    const threadAnchorTokenReserve = Math.min(
+      threadAnchorCandidates.reduce((total, candidate) => total + candidate.tokens, 0),
+      THREAD_ANCHOR_TOKEN_LIMIT,
+      Math.floor(availableTokens * 0.04),
+      remainingBeforeHistory,
+    );
+    const threadRecallTokenReserve = Math.min(
+      threadRecallCandidates.reduce((total, candidate) => total + candidate.tokens, 0),
+      4_096,
+      Math.floor(availableTokens * 0.08),
+      Math.max(0, remainingBeforeHistory - threadAnchorTokenReserve),
+    );
+    const ledgerTokenCeiling = Math.max(
+      usedTokens,
+      availableTokens - threadAnchorTokenReserve - threadRecallTokenReserve,
+    );
     const selectedLedger: CandidateSection[] = [];
     for (const candidate of ledgerCandidates) {
-      if (usedTokens + candidate.tokens > availableTokens) {
+      if (usedTokens + candidate.tokens > ledgerTokenCeiling) {
         droppedSections.push(`ledger:${candidate.id}`);
         continue;
       }
@@ -224,7 +388,37 @@ export class ContextService {
       usedTokens += candidate.tokens;
     }
     selectedLedger.reverse();
-    for (const candidate of selectedLedger) {
+
+    let threadAnchorTokens = 0;
+    const selectedThreadAnchors: CandidateSection[] = [];
+    for (const candidate of threadAnchorCandidates) {
+      if (
+        threadAnchorTokens + candidate.tokens > threadAnchorTokenReserve ||
+        usedTokens + candidate.tokens > availableTokens
+      ) {
+        droppedSections.push(`thread-anchor:${candidate.id}`);
+        continue;
+      }
+      selectedThreadAnchors.push(candidate);
+      threadAnchorTokens += candidate.tokens;
+      usedTokens += candidate.tokens;
+    }
+
+    let threadRecallTokens = 0;
+    const selectedThreadRecall: ThreadRecallCandidate[] = [];
+    for (const candidate of threadRecallCandidates) {
+      if (
+        threadRecallTokens + candidate.tokens > threadRecallTokenReserve ||
+        usedTokens + candidate.tokens > availableTokens
+      ) {
+        droppedSections.push(`thread-recall:${candidate.id}`);
+        continue;
+      }
+      selectedThreadRecall.push(candidate);
+      threadRecallTokens += candidate.tokens;
+      usedTokens += candidate.tokens;
+    }
+    for (const candidate of [...selectedThreadAnchors, ...selectedThreadRecall, ...selectedLedger]) {
       messages.push(candidate.message);
       sourceRanges.push(candidate.source);
     }

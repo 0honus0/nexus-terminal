@@ -96,6 +96,10 @@ export class ConversationService {
     return this.repository.readEntries(scope, threadId, validateLimit(limit, 200), before);
   }
 
+  readOldestPage(scope: Scope, threadId: string, limit = 4): Promise<LedgerPage> {
+    return this.repository.readOldestEntries(scope, threadId, validateLimit(limit, 32));
+  }
+
   readContextPage(
     scope: Scope,
     threadId: string,

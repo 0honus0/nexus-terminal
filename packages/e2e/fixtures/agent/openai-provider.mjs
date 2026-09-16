@@ -213,9 +213,27 @@ const server = http.createServer(async (request, response) => {
   const approvalToolResult = messages.some(
     (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_approval',
   );
+  const duplicateMutationConnection = /E2E_DUPLICATE_MUTATION_CONNECTION_ID=(\d+)/.exec(serializedMessages);
+  const duplicateMutationFirstResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_duplicate_first',
+  );
+  const duplicateMutationSecondResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_duplicate_second',
+  );
+  const duplicateMutationReadResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_duplicate_read',
+  );
   const readFileConnection = /E2E_READ_FILE_CONNECTION_ID=(\d+)/.exec(serializedMessages);
   const readFileToolResult = messages.find(
     (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_read_file',
+  );
+  const missingFileConnection = /E2E_MISSING_FILE_CONNECTION_ID=(\d+)/.exec(serializedMessages);
+  const missingFileToolResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_missing_file',
+  );
+  const controlToolRequested = serializedMessages.includes('E2E_CONTROL_TOOL_RISK');
+  const controlToolResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_control_tool',
   );
   const shellToolOffered =
     Array.isArray(body?.tools) &&
@@ -223,6 +241,9 @@ const server = http.createServer(async (request, response) => {
   const readFileToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_read_file');
+  const controlToolOffered =
+    Array.isArray(body?.tools) &&
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'plan_update');
   const failRun = serializedMessages.includes('E2E_FAIL_RUN');
   const holdForGoalUpdate =
     serializedMessages.includes('E2E_GOAL_UPDATE_HOLD') && !serializedMessages.includes('[Current goal]');
@@ -250,6 +271,43 @@ const server = http.createServer(async (request, response) => {
                 id: 'call_e2e_missing_tool',
                 type: 'function',
                 function: { name: 'e2e_missing_tool', arguments: '{}' },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+    sendSse(response, {
+      choices: [],
+      usage: { prompt_tokens: 7, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 0 } },
+    });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
+  if (controlToolRequested && !controlToolResult && controlToolOffered) {
+    sendSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_e2e_control_tool',
+                type: 'function',
+                function: {
+                  name: 'plan_update',
+                  arguments: JSON.stringify({
+                    items: [
+                      {
+                        id: 'control-enum-e2e',
+                        title: 'Persist current control risk enum',
+                        status: 'completed',
+                      },
+                    ],
+                  }),
+                },
               },
             ],
           },
@@ -297,6 +355,74 @@ const server = http.createServer(async (request, response) => {
     sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
     response.end('data: [DONE]\n\n');
     return;
+  }
+
+  if (duplicateMutationConnection && shellToolOffered && readFileToolOffered) {
+    const connectionId = Number(duplicateMutationConnection[1]);
+    const mutationArguments = JSON.stringify({
+      connectionId,
+      command: "printf 'duplicate-e2e\\n' >> duplicate-proof.txt",
+      timeoutSeconds: 10,
+    });
+    const sendToolCall = (id, name, args) => {
+      sendSse(response, {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id,
+                  type: 'function',
+                  function: { name, arguments: args },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      });
+      sendSse(response, {
+        choices: [],
+        usage: { prompt_tokens: 7, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 0 } },
+      });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+      response.end('data: [DONE]\n\n');
+    };
+    if (!duplicateMutationFirstResult) {
+      sendToolCall('call_e2e_duplicate_first', 'machine_execute_shell', mutationArguments);
+      return;
+    }
+    if (!duplicateMutationSecondResult) {
+      sendToolCall('call_e2e_duplicate_second', 'machine_execute_shell', mutationArguments);
+      return;
+    }
+    if (!JSON.stringify(duplicateMutationSecondResult).includes('MUTATION_ALREADY_CONFIRMED')) {
+      response.writeHead(422, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ error: { message: 'Duplicate mutation was not blocked by the runtime' } }));
+      return;
+    }
+    if (!duplicateMutationReadResult) {
+      sendToolCall(
+        'call_e2e_duplicate_read',
+        'machine_read_file',
+        JSON.stringify({ connectionId, path: '/duplicate-proof.txt', maxBytes: 4096, offset: 0 }),
+      );
+      return;
+    }
+    const readSerialized = JSON.stringify(duplicateMutationReadResult);
+    const markerCount = readSerialized.split('duplicate-e2e').length - 1;
+    if (markerCount !== 1) {
+      response.writeHead(422, { 'Content-Type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          error: {
+            message: `Duplicate mutation side effect count mismatch: expected 1 marker, received ${markerCount}`,
+          },
+        }),
+      );
+      return;
+    }
   }
 
   if (readFileConnection && !readFileToolResult && readFileToolOffered) {

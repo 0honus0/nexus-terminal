@@ -35,6 +35,7 @@ import type {
   RetryModelStepCommand,
   RetryModelStepResult,
   RequestToolApprovalCommand,
+  ResolveRunReconciliationCommand,
   ResolveToolApprovalCommand,
   SettleModelStepCommand,
   SettleReadToolCommand,
@@ -76,6 +77,7 @@ import {
   createRunTransition,
   deleteRunTransition,
   increaseRunBudgetTransition,
+  resolveRunReconciliationTransition,
 } from './state-commit/run-transitions';
 import { setRunGoalTransition } from './state-commit/goal-transitions';
 import { appendInputTransition } from './state-commit/input-transitions';
@@ -128,6 +130,10 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
 
   async deleteRun(command: AtomicDeleteRun): Promise<DeleteRunCommitResult> {
     return this.db.transaction((tx) => deleteRunTransition(tx, command));
+  }
+
+  async resolveRunReconciliation(command: ResolveRunReconciliationCommand): Promise<StateCommitResult> {
+    return this.db.transaction((tx) => resolveRunReconciliationTransition(tx, command));
   }
 
   async beginModelStep(command: BeginModelStepCommand): Promise<BeginModelStepResult> {
