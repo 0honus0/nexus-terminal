@@ -51,6 +51,13 @@ const MANIFEST_SCHEMA: JsonValue = {
         },
       },
     },
+    agentSurface: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        defaultApprovalMode: { enum: ['ask', 'full_access'] },
+      },
+    },
     intents: {
       type: 'array',
       items: {
@@ -242,6 +249,16 @@ export const validateManifest = (raw: unknown, options: ManifestValidatorOptions
     if (runner) targets.runner = runner;
   }
 
+  let agentSurface: { defaultApprovalMode?: 'ask' | 'full_access' } | undefined;
+  if (input.agentSurface !== undefined) {
+    const rawAgentSurface = record(input.agentSurface, 'manifest.agentSurface');
+    const defaultApprovalMode = rawAgentSurface.defaultApprovalMode;
+    if (defaultApprovalMode !== undefined && defaultApprovalMode !== 'ask' && defaultApprovalMode !== 'full_access') {
+      throw new Error('manifest.agentSurface.defaultApprovalMode must be ask or full_access.');
+    }
+    agentSurface = defaultApprovalMode === undefined ? {} : { defaultApprovalMode };
+  }
+
   return {
     schemaVersion: 1,
     id,
@@ -252,6 +269,7 @@ export const validateManifest = (raw: unknown, options: ManifestValidatorOptions
     capabilities,
     intents,
     ...(agents ? { agents } : {}),
+    ...(agentSurface ? { agentSurface } : {}),
     ...(targets ? { targets } : {}),
     validated: true,
   };

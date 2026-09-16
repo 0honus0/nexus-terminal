@@ -23,6 +23,10 @@
     window.dispatchEvent(new CustomEvent('nexus:agent:thread-changed', { detail: payload }));
   };
 
+  const dispatchAuthorizationChanged = (payload: Record<string, unknown> = {}): void => {
+    window.dispatchEvent(new CustomEvent('nexus:agent:authorization-changed', { detail: payload }));
+  };
+
   const chooseDefaultApp = (next: HostSummaryView): void => {
     const enabled = next.apps.filter((app) => app.enabled);
     if (enabled.length === 0) {
@@ -106,6 +110,9 @@
       );
       if (event.type === 'host.changed' && event.sourceType === 'thread.changed') {
         dispatchThreadChanged(event.payload);
+      }
+      if (event.type === 'host.changed' && event.sourceType === 'authorization.changed') {
+        dispatchAuthorizationChanged(event.payload);
       }
       await refresh('host-event');
       if (activeUserId !== null) {
@@ -202,6 +209,13 @@
       !Array.isArray(message.payload)
     ) {
       dispatchThreadChanged(message.payload as Record<string, unknown>);
+    }
+    if (message.sourceType === 'authorization.changed') {
+      dispatchAuthorizationChanged(
+        message.payload && typeof message.payload === 'object' && !Array.isArray(message.payload)
+          ? (message.payload as Record<string, unknown>)
+          : {},
+      );
     }
     void refresh('host-event');
   };

@@ -610,6 +610,7 @@ export class SubagentParticipantExecutor {
       },
       runId: run.id,
       agentRuntimeId: runtimeId,
+      connectionIds: [...run.definition.connectionIds],
       environment: run.definition.environment ?? null,
       stepId,
       signal,

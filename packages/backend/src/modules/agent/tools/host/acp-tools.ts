@@ -71,6 +71,7 @@ export const createAcpExecuteTool = (
     riskClass: 'mutate',
     capability: 'integration.acp.execute',
   },
+  isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = object(input);
     const integrationId = string(args.integrationId, 64);

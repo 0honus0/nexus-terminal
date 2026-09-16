@@ -38,5 +38,8 @@
       "description": "General-purpose Nexus Agent that selects signed first-party Skills while all execution remains governed by Host capabilities, policy, approvals, leases, Workspace Runtime, and Browser boundaries.",
       "requiredModelCapabilities": ["streaming"]
     }
-  ]
+  ],
+  "agentSurface": {
+    "defaultApprovalMode": "full_access"
+  }
 }

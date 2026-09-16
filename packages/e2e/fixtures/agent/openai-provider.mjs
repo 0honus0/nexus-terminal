@@ -124,6 +124,30 @@ const server = http.createServer(async (request, response) => {
     response.end(JSON.stringify({ error: { message: 'repeated current input marker' } }));
     return;
   }
+  const expectsNoWorkspaceTools = serializedMessages.includes('E2E_NO_WORKSPACE_TOOLS');
+  if (expectsNoWorkspaceTools) {
+    const offeredToolNames = Array.isArray(body?.tools)
+      ? body.tools.map((tool) => tool?.function?.name).filter((name) => typeof name === 'string')
+      : [];
+    const unavailableWorkspaceTools = [
+      'workspace_create',
+      'workspace_control',
+      'workspace_switch_tool_versions',
+      'workspace_execute_argv',
+      'acp_execute',
+    ].filter((name) => offeredToolNames.includes(name));
+    if (unavailableWorkspaceTools.length > 0) {
+      response.writeHead(422, { 'Content-Type': 'application/json' });
+      response.end(
+        JSON.stringify({
+          error: {
+            message: `Workspace-only tools were offered without a Run environment: ${unavailableWorkspaceTools.join(', ')}`,
+          },
+        }),
+      );
+      return;
+    }
+  }
   const expectedSkill = serializedMessages.includes('E2E_EXPECT_DEVELOPER_SKILL')
     ? { id: 'nexus.developer', name: 'Developer', bodyMarker: 'Prefer a Nexus Workspace Runtime' }
     : serializedMessages.includes('E2E_EXPECT_OPERATIONS_SKILL')
@@ -189,9 +213,17 @@ const server = http.createServer(async (request, response) => {
   const approvalToolResult = messages.some(
     (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_approval',
   );
+  const readFileConnection = /E2E_READ_FILE_CONNECTION_ID=(\d+)/.exec(serializedMessages);
+  const readFileToolResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_read_file',
+  );
   const shellToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_execute_shell');
+  const readFileToolOffered =
+    Array.isArray(body?.tools) &&
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_read_file');
+  const failRun = serializedMessages.includes('E2E_FAIL_RUN');
   const holdForGoalUpdate =
     serializedMessages.includes('E2E_GOAL_UPDATE_HOLD') && !serializedMessages.includes('[Current goal]');
   const holdForInterrupt =
@@ -207,6 +239,32 @@ const server = http.createServer(async (request, response) => {
     'Cache-Control': 'no-store',
     Connection: 'keep-alive',
   });
+  if (failRun) {
+    sendSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_e2e_missing_tool',
+                type: 'function',
+                function: { name: 'e2e_missing_tool', arguments: '{}' },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+    sendSse(response, {
+      choices: [],
+      usage: { prompt_tokens: 7, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 0 } },
+    });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
   if (approvalConnection && !approvalToolResult && shellToolOffered) {
     sendSse(response, {
       choices: [
@@ -238,6 +296,45 @@ const server = http.createServer(async (request, response) => {
     });
     sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
     response.end('data: [DONE]\n\n');
+    return;
+  }
+
+  if (readFileConnection && !readFileToolResult && readFileToolOffered) {
+    sendSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_e2e_read_file',
+                type: 'function',
+                function: {
+                  name: 'machine_read_file',
+                  arguments: JSON.stringify({
+                    connectionId: Number(readFileConnection[1]),
+                    path: '/seed.txt',
+                    maxBytes: 4096,
+                    offset: 0,
+                  }),
+                },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+    sendSse(response, {
+      choices: [],
+      usage: { prompt_tokens: 7, completion_tokens: 4, prompt_tokens_details: { cached_tokens: 0 } },
+    });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
+  if (readFileToolResult && !JSON.stringify(readFileToolResult).includes('nexus-e2e-seed')) {
+    response.end();
     return;
   }
 

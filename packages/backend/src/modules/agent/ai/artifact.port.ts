@@ -35,12 +35,15 @@ export interface ArtifactReadRange {
   endInclusive: number;
 }
 
+export type ArtifactFileKind = 'image' | 'document' | 'code' | 'archive' | 'media' | 'other';
+
 export interface ArtifactLibraryQuery {
   limit: number;
   before?: string;
   q?: string;
   appId?: string;
   retained?: boolean;
+  kind?: ArtifactFileKind;
 }
 
 export interface ArtifactLibraryPage {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, nextTick, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { logger } from '@/client/logging/logger';
   import { useConnections } from '@/features/connections/public';
   import AgentConversation from '../ai/AgentConversation.vue';
   import {
@@ -10,6 +11,7 @@
   import { parseConversationSubmission } from '../ai/conversation-commands';
   import { agentApi, formatAgentApiError } from '../api/agent-api';
   import type {
+    AgentApprovalMode,
     AgentApprovalBatch,
     AgentApprovalView,
     AgentCheckpointView,
@@ -25,17 +27,19 @@
     AgentSubagentMessage,
     AgentSubagentView,
     AgentThreadView,
+    TargetDenylistView,
     WorkspaceRuntimeAvailability,
     WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
   import { agentSurfaceSession } from './surface-session';
   import AgentConfigPopover from '../files/AgentConfigPopover.vue';
+  import ApprovalCard from '../runtime/ApprovalCard.vue';
   import { createAgentRunFacade } from '../runtime/run-facade';
   import { createRuntimeOperationState } from '../runtime/runtime-operation-state';
 
   const TaskRail = defineAsyncComponent(() => import('../runtime/TaskRail.vue'));
 
-  const props = defineProps<{ appId: string }>();
+  const props = defineProps<{ appId: string; defaultApprovalMode: AgentApprovalMode }>();
   const { t, locale } = useI18n();
   const facade = createAgentRunFacade(props.appId);
   const connectionsStore = useConnections();
@@ -44,7 +48,8 @@
   const threads = ref<AgentThreadView[]>([]);
   const threadNextCursor = ref<string | null>(null);
   const threadListLoadingMore = ref(false);
-  const THREAD_PAGE_SIZE = 20;
+  const THREAD_PAGE_MIN = 12;
+  const THREAD_PAGE_MAX = 100;
   const currentThread = ref<AgentThreadView | null>(null);
   const entries = ref<AgentLedgerEntry[]>([]);
   const nextCursor = ref<string | null>(null);
@@ -52,10 +57,19 @@
   const threadRuns = ref<AgentRunView[]>([]);
   const definitions = ref<AgentDefinitionView[]>([]);
   const providers = ref<AgentProviderView[]>([]);
-  const connections = computed(() =>
-    connectionsStore.connections.value.filter((connection) => connection.type === 'SSH'),
+  const targetDenylist = ref<TargetDenylistView | null>(null);
+  const deniedConnectionIds = computed(
+    () => new Set(targetDenylist.value?.list.map((entry) => entry.connectionId) ?? []),
   );
-  const selectedConnectionIds = ref<number[]>([]);
+  const connections = computed(() => {
+    if (!targetDenylist.value) return [];
+    return connectionsStore.connections.value.filter(
+      (connection) => connection.type === 'SSH' && !deniedConnectionIds.value.has(connection.id),
+    );
+  });
+  const restoredConnectionIds = agentSurfaceSession.restoreConnectionIds(props.appId);
+  const selectedConnectionIds = ref<number[]>(restoredConnectionIds ?? []);
+  const connectionSelectionExplicit = ref(restoredConnectionIds !== undefined);
   const attachments = ref<AgentArtifactRef[]>([]);
   const approvalBatch = ref<AgentApprovalBatch | null>(null);
   const approvals = computed(() => approvalBatch.value?.items ?? []);
@@ -97,16 +111,44 @@
   const selectedReasoningEffort = ref<AgentReasoningEffort | null>(
     agentSurfaceSession.restoreReasoningEffort(props.appId) ?? null,
   );
+  const selectedApprovalMode = ref<AgentApprovalMode>(
+    agentSurfaceSession.restoreApprovalMode(props.appId) ?? props.defaultApprovalMode,
+  );
   const selectedEnvironmentRecipeId = ref(agentSurfaceSession.restoreEnvironmentRecipeId(props.appId) ?? '');
   let taskRailWideViewport = typeof window !== 'undefined' ? window.innerWidth > 1040 : false;
   const taskRailVisible = ref(false);
   const threadQuery = ref('');
+  const threadDeleteArmedId = ref<string | null>(null);
+  const deleteAllThreadsArmed = ref(false);
   const threadSidebarVisible = ref(false);
   const threadListScroller = ref<HTMLElement | null>(null);
   const threadListScrollTop = ref(0);
   const threadListViewportHeight = ref(0);
-  const THREAD_ROW_HEIGHT = 45;
+  const THREAD_ROW_BASE_HEIGHT = 45;
+  const THREAD_LIST_SCALE_MIN = 0.8;
+  const THREAD_LIST_SCALE_MAX = 1.3;
+  const THREAD_LIST_SCALE_STEP = 0.1;
+  const THREAD_LIST_SCALE_STORAGE_KEY = 'nexus.agent.thread-list-scale.v1';
+  const restoreThreadListScale = (): number => {
+    if (typeof window === 'undefined') return 1;
+    try {
+      const stored = window.localStorage.getItem(THREAD_LIST_SCALE_STORAGE_KEY);
+      if (!stored) return 1;
+      const parsed = Number(stored);
+      if (!Number.isFinite(parsed)) return 1;
+      return Math.min(THREAD_LIST_SCALE_MAX, Math.max(THREAD_LIST_SCALE_MIN, parsed));
+    } catch {
+      return 1;
+    }
+  };
+  const threadListScale = ref(restoreThreadListScale());
+  const threadRowHeight = computed(() => Math.round(THREAD_ROW_BASE_HEIGHT * threadListScale.value));
   const THREAD_OVERSCAN = 6;
+  const threadPageSize = computed(() => {
+    const viewportHeight = threadListViewportHeight.value;
+    const visibleRows = viewportHeight > 0 ? Math.ceil(viewportHeight / threadRowHeight.value) : THREAD_PAGE_MIN;
+    return Math.min(THREAD_PAGE_MAX, Math.max(THREAD_PAGE_MIN, visibleRows + THREAD_OVERSCAN * 2));
+  });
   let threadListResizeObserver: ResizeObserver | null = null;
   const streamingText = ref('');
   const busy = ref(false);
@@ -123,6 +165,8 @@
   let detailSubagentsGeneration = 0;
   let detailOpenGeneration = 0;
   let subagentMessagesGeneration = 0;
+  let threadDeleteArmTimer: number | null = null;
+  let deleteAllThreadsArmTimer: number | null = null;
 
   const nonTerminal = new Set(['created', 'running', 'awaiting_approval', 'awaiting_budget', 'cancelling']);
   const backgroundThreadStatuses = computed(() => {
@@ -149,22 +193,28 @@
       .filter((thread) => !needle || `${thread.title} ${thread.id}`.toLowerCase().includes(needle))
       .slice()
       .sort((left, right) => {
+        const leftStatus = threadStatus(left.id);
+        const rightStatus = threadStatus(right.id);
+        const leftActive = leftStatus !== null && nonTerminal.has(leftStatus);
+        const rightActive = rightStatus !== null && nonTerminal.has(rightStatus);
+        if (leftActive !== rightActive) return leftActive ? -1 : 1;
         return right.updatedAt - left.updatedAt;
       });
   });
   const threadWindow = computed(() => {
     const total = visibleThreads.value.length;
     if (total === 0) return { start: 0, end: 0, topSpacer: 0, bottomSpacer: 0 };
-    const viewportRows = Math.max(1, Math.ceil(threadListViewportHeight.value / THREAD_ROW_HEIGHT));
+    const rowHeight = threadRowHeight.value;
+    const viewportRows = Math.max(1, Math.ceil(threadListViewportHeight.value / rowHeight));
     const windowSize = Math.min(total, viewportRows + THREAD_OVERSCAN * 2);
-    const rawStart = Math.floor(threadListScrollTop.value / THREAD_ROW_HEIGHT) - THREAD_OVERSCAN;
+    const rawStart = Math.floor(threadListScrollTop.value / rowHeight) - THREAD_OVERSCAN;
     const start = Math.min(Math.max(0, rawStart), Math.max(0, total - windowSize));
     const end = Math.min(total, start + windowSize);
     return {
       start,
       end,
-      topSpacer: start * THREAD_ROW_HEIGHT,
-      bottomSpacer: (total - end) * THREAD_ROW_HEIGHT,
+      topSpacer: start * rowHeight,
+      bottomSpacer: (total - end) * rowHeight,
     };
   });
   const renderedThreads = computed(() => visibleThreads.value.slice(threadWindow.value.start, threadWindow.value.end));
@@ -209,6 +259,14 @@
       modelOptions.value.find((candidate) => candidate.key === selectedModelKey.value) ?? modelOptions.value[0] ?? null,
   );
   const modelSelectionLocked = computed(() => Boolean(run.value && nonTerminal.has(run.value.status)));
+  const approvalModeValue = computed<AgentApprovalMode>(() =>
+    modelSelectionLocked.value ? (run.value?.definition.approvalMode ?? 'ask') : selectedApprovalMode.value,
+  );
+  const setApprovalMode = (mode: AgentApprovalMode): void => {
+    if (modelSelectionLocked.value) return;
+    selectedApprovalMode.value = mode;
+    agentSurfaceSession.setApprovalMode(props.appId, mode);
+  };
   const activeRunModel = computed(() => {
     const frozen = run.value?.definition.model;
     if (!frozen) return null;
@@ -316,9 +374,17 @@
     [modelSelectionLocked, () => connections.value.map((connection) => connection.id).join('\u0000')],
     () => {
       if (modelSelectionLocked.value) return;
-      const availableIds = new Set(connections.value.map((connection) => connection.id));
+      const available = connections.value.map((connection) => connection.id).sort((left, right) => left - right);
+      if (!connectionSelectionExplicit.value) {
+        selectedConnectionIds.value = available;
+        return;
+      }
+      const availableIds = new Set(available);
       const next = selectedConnectionIds.value.filter((id) => availableIds.has(id));
-      if (next.length !== selectedConnectionIds.value.length) selectedConnectionIds.value = next;
+      if (next.length !== selectedConnectionIds.value.length) {
+        selectedConnectionIds.value = next;
+        agentSurfaceSession.setConnectionIds(props.appId, next);
+      }
     },
     { immediate: true },
   );
@@ -430,6 +496,8 @@
     if (checked) next.add(connectionId);
     else next.delete(connectionId);
     selectedConnectionIds.value = [...next].sort((left, right) => left - right);
+    connectionSelectionExplicit.value = true;
+    agentSurfaceSession.setConnectionIds(props.appId, selectedConnectionIds.value);
   };
 
   const connectionSelectionState = computed<'off' | 'mixed' | 'on'>(() => {
@@ -444,6 +512,8 @@
     selectedConnectionIds.value = enabled
       ? connections.value.map((connection) => connection.id).sort((left, right) => left - right)
       : [];
+    connectionSelectionExplicit.value = true;
+    agentSurfaceSession.setConnectionIds(props.appId, selectedConnectionIds.value);
   };
 
   const toggleAllConnectionSelections = (): void => {
@@ -528,9 +598,33 @@
 
   const startRunStream = (initial: AgentRunView): void => {
     streamingText.value = '';
+    logger.debug(
+      {
+        appId: props.appId,
+        runId: initial.id,
+        threadId: initial.threadId,
+        status: initial.status,
+        eventCursor: initial.eventCursor,
+        modelId: initial.definition.model.modelId,
+        reasoningEffort: initial.definition.reasoningEffort ?? null,
+      },
+      'Agent UI run stream starting',
+    );
     facade.selectRun(initial, {
       onEvent: async (event, signal) => {
         if (signal.aborted) return;
+        if (event.type !== 'message.delta' && event.type !== 'tool.delta') {
+          logger.debug(
+            {
+              appId: props.appId,
+              runId: initial.id,
+              threadId: initial.threadId,
+              eventType: event.type,
+              eventId: event.id ?? null,
+            },
+            'Agent UI run event received',
+          );
+        }
         if (event.type === 'transport.disconnected') streamingText.value = '';
         if (event.type === 'message.delta') {
           if (!event.payload.delegationId) streamingText.value += event.payload.text;
@@ -559,6 +653,10 @@
         }
       },
       onError: (cause) => {
+        logger.warn(
+          { appId: props.appId, runId: initial.id, threadId: initial.threadId, err: cause },
+          'Agent UI run stream failed',
+        );
         error.value = explain(cause);
       },
     });
@@ -602,7 +700,7 @@
   const refreshThreadListFromHost = async (): Promise<void> => {
     const requestGeneration = ++threadListRefreshGeneration;
     try {
-      const requestedLimit = Math.min(100, Math.max(THREAD_PAGE_SIZE, threads.value.length));
+      const requestedLimit = Math.min(THREAD_PAGE_MAX, Math.max(threadPageSize.value, threads.value.length));
       const page = await facade.listThreads(undefined, requestedLimit);
       if (requestGeneration !== threadListRefreshGeneration) return;
       threads.value = page.items;
@@ -651,7 +749,7 @@
     if (!cursor || threadListLoadingMore.value) return;
     threadListLoadingMore.value = true;
     try {
-      const page = await facade.listThreads(cursor, THREAD_PAGE_SIZE);
+      const page = await facade.listThreads(cursor, threadPageSize.value);
       const known = new Set(threads.value.map((thread) => thread.id));
       threads.value = [...threads.value, ...page.items.filter((thread) => !known.has(thread.id))];
       threadNextCursor.value = page.nextCursor;
@@ -663,16 +761,18 @@
   };
 
   const loadRunConfiguration = async (): Promise<void> => {
-    const [nextDefinitions, nextProviders, settings, , runtimeAvailability] = await Promise.all([
+    const [nextDefinitions, nextProviders, settings, , runtimeAvailability, nextDenylist] = await Promise.all([
       facade.definitions(),
       facade.providers(),
       facade.settings(),
       connectionsStore.revalidate(0),
       agentApi.workspaceRuntimeAvailability().catch(() => null),
+      agentApi.targetDenylist(),
     ]);
     definitions.value = nextDefinitions;
     providers.value = nextProviders;
     settingsView.value = settings;
+    targetDenylist.value = nextDenylist;
     workspaceRuntimeAvailability.value = runtimeAvailability;
     workspaceRuntimeCatalog.value = runtimeAvailability?.available
       ? await agentApi.workspaceRuntimeCatalog().catch(() => null)
@@ -712,7 +812,7 @@
       error.value = explain(cause);
     });
     try {
-      const threadPage = await facade.listThreads(undefined, THREAD_PAGE_SIZE);
+      const threadPage = await facade.listThreads(undefined, threadPageSize.value);
       threads.value = threadPage.items;
       threadNextCursor.value = threadPage.nextCursor;
       const restored = agentSurfaceSession.restoreThread(props.appId);
@@ -764,6 +864,21 @@
     if (!thread) throw new Error('NOT_FOUND');
     if (!selection || !definition) throw new Error('AGENT_PROVIDER_REQUIRED');
     const artifactRefs = await resolveArtifactRefs(selectedArtifacts);
+    logger.debug(
+      {
+        appId: props.appId,
+        threadId: thread.id,
+        providerId: selection.provider.id,
+        modelId: selection.model.id,
+        reasoningEffort: selectedReasoningEffort.value,
+        approvalMode: selectedApprovalMode.value,
+        inputBytes: new TextEncoder().encode(text).byteLength,
+        artifactCount: artifactRefs.length,
+        connectionCount: selectedConnectionIds.value.length,
+        environmentRecipeId: selectedEnvironmentRecipe.value?.id ?? null,
+      },
+      'Agent UI creating run',
+    );
     const created = await facade.createRun({
       threadId: thread.id,
       text,
@@ -775,6 +890,7 @@
         configurationVersion: selection.provider.version,
       },
       ...(selectedReasoningEffort.value === null ? {} : { reasoningEffort: selectedReasoningEffort.value }),
+      approvalMode: selectedApprovalMode.value,
       connectionIds: selectedConnectionIds.value,
       environment: selectedEnvironmentRecipe.value
         ? {
@@ -785,6 +901,19 @@
       ...(initialGoal ? { initialGoal } : {}),
     });
     run.value = created;
+    logger.info(
+      {
+        appId: props.appId,
+        runId: created.id,
+        threadId: created.threadId,
+        status: created.status,
+        eventCursor: created.eventCursor,
+        modelId: created.definition.model.modelId,
+        reasoningEffort: created.definition.reasoningEffort ?? null,
+        approvalMode: created.definition.approvalMode ?? 'ask',
+      },
+      'Agent UI run created',
+    );
     rememberThreadRun(created);
     clearComposer(true);
     await refreshLedger();
@@ -917,10 +1046,14 @@
     }
   };
 
-  const resolveApproval = async (approval: AgentApprovalView, decision: 'approved' | 'denied'): Promise<void> => {
+  const resolveApproval = async (
+    approval: AgentApprovalView,
+    decision: 'approved' | 'denied',
+    feedback?: string,
+  ): Promise<void> => {
     if (approval.status !== 'requested' || !beginRuntimeMutation()) return;
     try {
-      await facade.resolveApproval(approval, decision);
+      await facade.resolveApproval(approval, decision, feedback);
       const next = await refreshRun(approval.runId);
       await Promise.all([
         refreshApprovals(approval.runId),
@@ -1097,6 +1230,117 @@
     }
   };
 
+  const clearThreadDeleteArm = (): void => {
+    threadDeleteArmedId.value = null;
+    if (threadDeleteArmTimer !== null) window.clearTimeout(threadDeleteArmTimer);
+    threadDeleteArmTimer = null;
+  };
+
+  const clearDeleteAllThreadsArm = (): void => {
+    deleteAllThreadsArmed.value = false;
+    if (deleteAllThreadsArmTimer !== null) window.clearTimeout(deleteAllThreadsArmTimer);
+    deleteAllThreadsArmTimer = null;
+  };
+
+  const resetDeletedThreadSelection = (): void => {
+    threadSelectionGeneration += 1;
+    stopRunStream();
+    currentThread.value = null;
+    entries.value = [];
+    run.value = null;
+    threadRuns.value = [];
+    approvalBatch.value = null;
+    nextCursor.value = null;
+    currentRunCheckpoints.value = [];
+    agentSurfaceSession.setThread(props.appId);
+  };
+
+  const selectFirstOrCreateThread = async (): Promise<void> => {
+    const page = await facade.listThreads(undefined, threadPageSize.value);
+    threads.value = page.items;
+    threadNextCursor.value = page.nextCursor;
+    const next = page.items[0];
+    if (next) {
+      await selectThread(next);
+      return;
+    }
+    const created = await facade.createThread();
+    threads.value = [created];
+    threadNextCursor.value = null;
+    await selectThread(created);
+  };
+
+  const deleteThreadConversation = async (thread: AgentThreadView): Promise<void> => {
+    if (busy.value) return;
+    busy.value = true;
+    error.value = '';
+    clearThreadDeleteArm();
+    try {
+      const deletingCurrent = currentThread.value?.id === thread.id;
+      await facade.deleteThread(thread);
+      threads.value = threads.value.filter((candidate) => candidate.id !== thread.id);
+      if (detailSnapshot.value?.threadId === thread.id) closeRunDetail();
+      if (deletingCurrent) {
+        resetDeletedThreadSelection();
+        clearComposer(true);
+        await selectFirstOrCreateThread();
+      }
+      await refreshBackgroundRuns();
+      runtimeOperation.succeed();
+    } catch (cause) {
+      error.value = explain(cause);
+      runtimeOperation.fail(cause);
+    } finally {
+      busy.value = false;
+    }
+  };
+
+  const requestDeleteThread = (thread: AgentThreadView): void => {
+    const status = threadStatus(thread.id);
+    if (status && nonTerminal.has(status)) return;
+    if (threadDeleteArmedId.value === thread.id) {
+      void deleteThreadConversation(thread);
+      return;
+    }
+    clearThreadDeleteArm();
+    threadDeleteArmedId.value = thread.id;
+    threadDeleteArmTimer = window.setTimeout(clearThreadDeleteArm, 5000);
+  };
+
+  const deleteAllConversations = async (): Promise<void> => {
+    if (busy.value) return;
+    busy.value = true;
+    error.value = '';
+    clearDeleteAllThreadsArm();
+    clearThreadDeleteArm();
+    try {
+      await facade.deleteAllThreads();
+      closeRunDetail();
+      resetDeletedThreadSelection();
+      backgroundRuns.value = [];
+      threadQuery.value = '';
+      clearComposer(true);
+      await selectFirstOrCreateThread();
+      runtimeOperation.succeed();
+    } catch (cause) {
+      error.value = explain(cause);
+      runtimeOperation.fail(cause);
+    } finally {
+      busy.value = false;
+    }
+  };
+
+  const requestDeleteAllConversations = (): void => {
+    if (activeThreadCount.value > 0) return;
+    if (deleteAllThreadsArmed.value) {
+      void deleteAllConversations();
+      return;
+    }
+    clearDeleteAllThreadsArm();
+    deleteAllThreadsArmed.value = true;
+    deleteAllThreadsArmTimer = window.setTimeout(clearDeleteAllThreadsArm, 5000);
+  };
+
   const loadOlder = async (): Promise<void> => {
     const thread = currentThread.value;
     const cursor = nextCursor.value;
@@ -1132,6 +1376,14 @@
     threadListViewportHeight.value = scroller.clientHeight;
   };
 
+  const maybeLoadMoreThreads = (): void => {
+    const scroller = threadListScroller.value;
+    if (!scroller || threadQuery.value || !threadNextCursor.value || threadListLoadingMore.value) return;
+    const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+    const threshold = Math.max(72, threadRowHeight.value * 3);
+    if (remaining <= threshold) void loadMoreThreads();
+  };
+
   const onThreadListScroll = (event: Event): void => {
     const scroller = event.currentTarget;
     if (!(scroller instanceof HTMLElement)) return;
@@ -1139,6 +1391,44 @@
     if (threadListViewportHeight.value !== scroller.clientHeight) {
       threadListViewportHeight.value = scroller.clientHeight;
     }
+    maybeLoadMoreThreads();
+  };
+
+  const persistThreadListScale = (): void => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(THREAD_LIST_SCALE_STORAGE_KEY, String(threadListScale.value));
+    } catch {
+      // Preference persistence is best-effort; zoom should keep working without storage access.
+    }
+  };
+
+  const onThreadListWheel = (event: WheelEvent): void => {
+    if (!(event.ctrlKey || event.metaKey) || event.deltaY === 0) return;
+
+    const direction = event.deltaY < 0 ? 1 : -1;
+    const nextScale = Math.min(
+      THREAD_LIST_SCALE_MAX,
+      Math.max(
+        THREAD_LIST_SCALE_MIN,
+        Math.round((threadListScale.value + direction * THREAD_LIST_SCALE_STEP) * 10) / 10,
+      ),
+    );
+    if (nextScale === threadListScale.value) return;
+
+    event.preventDefault();
+    const scroller = threadListScroller.value;
+    const previousRowHeight = threadRowHeight.value;
+    const anchorRow = scroller ? scroller.scrollTop / previousRowHeight : 0;
+
+    threadListScale.value = nextScale;
+    persistThreadListScale();
+
+    void nextTick(() => {
+      if (scroller) scroller.scrollTop = anchorRow * threadRowHeight.value;
+      syncThreadListMetrics();
+      maybeLoadMoreThreads();
+    });
   };
 
   const resetThreadListScroll = (): void => {
@@ -1151,30 +1441,46 @@
 
   watch(threadQuery, resetThreadListScroll);
 
+  const refreshConnectionsAndAuthorization = async (): Promise<void> => {
+    const [nextDenylist] = await Promise.all([agentApi.targetDenylist(), connectionsStore.revalidate(0)]);
+    targetDenylist.value = nextDenylist;
+  };
+
   const refreshConnectionsOnFocus = (): void => {
-    void connectionsStore.revalidate(0).catch(() => undefined);
+    void refreshConnectionsAndAuthorization().catch(() => undefined);
+  };
+
+  const onAuthorizationChanged = (): void => {
+    void refreshConnectionsAndAuthorization().catch(() => undefined);
   };
 
   onMounted(() => {
     window.addEventListener('resize', syncTaskRailViewport);
     window.addEventListener('focus', refreshConnectionsOnFocus);
     window.addEventListener('nexus:agent:thread-changed', onThreadChanged);
+    window.addEventListener('nexus:agent:authorization-changed', onAuthorizationChanged);
     void nextTick(() => {
       syncThreadListMetrics();
       const scroller = threadListScroller.value;
       if (scroller && typeof ResizeObserver !== 'undefined') {
-        threadListResizeObserver = new ResizeObserver(syncThreadListMetrics);
+        threadListResizeObserver = new ResizeObserver(() => {
+          syncThreadListMetrics();
+          maybeLoadMoreThreads();
+        });
         threadListResizeObserver.observe(scroller);
       }
+      void load();
     });
-    void load();
   });
   onBeforeUnmount(() => {
+    clearThreadDeleteArm();
+    clearDeleteAllThreadsArm();
     threadListResizeObserver?.disconnect();
     threadListResizeObserver = null;
     window.removeEventListener('resize', syncTaskRailViewport);
     window.removeEventListener('focus', refreshConnectionsOnFocus);
     window.removeEventListener('nexus:agent:thread-changed', onThreadChanged);
+    window.removeEventListener('nexus:agent:authorization-changed', onAuthorizationChanged);
     facade.dispose();
     streamingText.value = '';
   });
@@ -1204,16 +1510,44 @@
           </div>
         </div>
 
-        <button
-          type="button"
-          class="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-card/70 hover:text-foreground active:scale-95 disabled:opacity-50"
-          :aria-label="$t('agent.operations.newThread')"
-          :title="$t('agent.operations.newThread')"
-          :disabled="busy"
-          @click="beginThreadCreation"
-        >
-          <i class="fa-solid fa-plus text-[9px] text-primary" aria-hidden="true"></i>
-        </button>
+        <div class="flex items-center gap-0.5">
+          <button
+            v-if="threads.length"
+            type="button"
+            class="flex h-7 w-7 items-center justify-center rounded-lg transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
+            :class="
+              deleteAllThreadsArmed
+                ? 'bg-error/10 text-error'
+                : 'text-text-secondary hover:bg-error/10 hover:text-error'
+            "
+            :aria-label="
+              deleteAllThreadsArmed
+                ? $t('agent.operations.confirmDeleteAllThreads')
+                : $t('agent.operations.deleteAllThreads')
+            "
+            :title="
+              activeThreadCount > 0
+                ? $t('agent.operations.deleteAllThreadsActiveHint')
+                : deleteAllThreadsArmed
+                  ? $t('agent.operations.confirmDeleteAllThreads')
+                  : $t('agent.operations.deleteAllThreads')
+            "
+            :disabled="busy || activeThreadCount > 0"
+            @click="requestDeleteAllConversations"
+          >
+            <i class="fa-solid fa-trash-can text-[9px]" aria-hidden="true"></i>
+          </button>
+          <button
+            type="button"
+            class="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-card/70 hover:text-foreground active:scale-95 disabled:opacity-50"
+            :aria-label="$t('agent.operations.newThread')"
+            :title="$t('agent.operations.newThread')"
+            :disabled="busy"
+            @click="beginThreadCreation"
+          >
+            <i class="fa-solid fa-plus text-[9px] text-primary" aria-hidden="true"></i>
+          </button>
+        </div>
       </div>
 
       <div class="shrink-0 border-b border-border/40 px-2.5 py-2">
@@ -1243,7 +1577,9 @@
       <div
         ref="threadListScroller"
         class="min-h-0 flex-1 overflow-y-auto px-2 py-1.5 scrollbar-thin"
+        :title="$t('agent.operations.threadZoomHint')"
         @scroll.passive="onThreadListScroll"
+        @wheel="onThreadListWheel"
       >
         <div
           v-if="threadWindow.topSpacer > 0"
@@ -1254,7 +1590,12 @@
           v-for="(thread, threadOffset) in renderedThreads"
           :key="thread.id"
           type="button"
-          class="agent-thread-row relative mb-0.5 flex h-[43px] w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors duration-150"
+          class="agent-thread-row relative mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-[height,background-color,color] duration-150"
+          :style="{
+            height: `${Math.max(30, threadRowHeight - 2)}px`,
+            paddingTop: `${6 * threadListScale}px`,
+            paddingBottom: `${6 * threadListScale}px`,
+          }"
           :class="
             currentThread?.id === thread.id
               ? 'bg-primary/[0.055] text-foreground font-medium pl-2.5'
@@ -1302,6 +1643,7 @@
             <div class="flex items-center justify-between gap-1">
               <span
                 class="truncate text-[10.75px] leading-[1.35] tracking-[-0.012em]"
+                :style="{ fontSize: `${10.75 * threadListScale}px` }"
                 :class="
                   currentThread?.id === thread.id
                     ? 'font-semibold text-foreground'
@@ -1312,7 +1654,10 @@
                 {{ thread.title || $t('agent.operations.untitledThread') }}
               </span>
             </div>
-            <div class="mt-0.5 flex items-center justify-between gap-1.5 text-[9px] text-text-secondary/50">
+            <div
+              class="mt-0.5 flex items-center justify-between gap-1.5 text-[9px] text-text-secondary/50"
+              :style="{ marginTop: `${2 * threadListScale}px`, fontSize: `${9 * threadListScale}px` }"
+            >
               <span
                 v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
                 class="inline-flex items-center rounded-sm px-1 py-0.2 font-medium"
@@ -1324,10 +1669,17 @@
               >
                 {{ $t(`agent.tasks.runStatus.${threadStatus(thread.id)}`) }}
               </span>
-              <span v-else class="truncate font-mono text-[9px] text-text-secondary/45">
+              <span
+                v-else
+                class="truncate font-mono text-[9px] text-text-secondary/45"
+                :style="{ fontSize: `${9 * threadListScale}px` }"
+              >
                 #{{ thread.id.slice(-6) }}
               </span>
-              <span class="shrink-0 text-[9px] tabular-nums text-text-secondary/50">
+              <span
+                class="shrink-0 text-[9px] tabular-nums text-text-secondary/50"
+                :style="{ fontSize: `${9 * threadListScale}px` }"
+              >
                 {{ formatThreadUpdatedAt(thread.updatedAt) }}
               </span>
             </div>
@@ -1339,20 +1691,14 @@
           aria-hidden="true"
         ></div>
 
-        <button
-          v-if="threadNextCursor && !threadQuery"
-          type="button"
-          class="mx-auto mt-1.5 flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[10px] font-medium text-text-secondary transition-colors hover:bg-card/55 hover:text-foreground disabled:opacity-45"
-          :disabled="threadListLoadingMore"
-          @click="loadMoreThreads"
+        <div
+          v-if="threadListLoadingMore && !threadQuery"
+          class="mx-auto mt-1.5 flex h-7 items-center gap-1.5 px-2.5 text-[10px] text-text-secondary/70"
+          aria-live="polite"
         >
-          <i
-            class="fa-solid text-[8px]"
-            :class="threadListLoadingMore ? 'fa-spinner fa-spin' : 'fa-clock-rotate-left'"
-            aria-hidden="true"
-          ></i>
-          <span>{{ $t('agent.operations.loadMoreThreads') }}</span>
-        </button>
+          <i class="fa-solid fa-spinner fa-spin text-[8px]" aria-hidden="true"></i>
+          <span>{{ $t('agent.operations.loading') }}</span>
+        </div>
 
         <!-- 空状态 -->
         <div
@@ -1410,6 +1756,32 @@
             </div>
           </div>
           <div class="flex shrink-0 items-center gap-1.5">
+            <button
+              v-if="currentThread"
+              type="button"
+              class="flex h-7.5 w-7.5 items-center justify-center rounded-lg border transition-all disabled:cursor-not-allowed disabled:opacity-35"
+              :class="
+                threadDeleteArmedId === currentThread.id
+                  ? 'border-error/30 bg-error/10 text-error'
+                  : 'border-border/70 bg-card/60 text-text-secondary hover:border-error/30 hover:bg-error/10 hover:text-error'
+              "
+              :aria-label="
+                threadDeleteArmedId === currentThread.id
+                  ? $t('agent.operations.confirmDeleteThread')
+                  : $t('agent.operations.deleteThread')
+              "
+              :title="
+                run && nonTerminal.has(run.status)
+                  ? $t('agent.operations.deleteThreadActiveHint')
+                  : threadDeleteArmedId === currentThread.id
+                    ? $t('agent.operations.confirmDeleteThread')
+                    : $t('agent.operations.deleteThread')
+              "
+              :disabled="busy || Boolean(run && nonTerminal.has(run.status))"
+              @click="requestDeleteThread(currentThread)"
+            >
+              <i class="fa-solid fa-trash-can text-[10px]" aria-hidden="true"></i>
+            </button>
             <button
               type="button"
               class="relative flex h-7.5 w-7.5 items-center justify-center rounded-lg border transition-all"
@@ -1476,6 +1848,34 @@
             @update-attachments="attachments = $event"
             @dismiss-command-result="commandResult = null"
           >
+            <template #approvals>
+              <div
+                v-if="approvalBatch?.clock && pendingApprovals.length"
+                class="mx-auto mb-5 w-full max-w-3xl rounded-2xl border border-warning/25 bg-warning/[0.035] p-2.5 shadow-sm"
+              >
+                <div class="mb-2 flex items-center gap-2 px-1 text-[11px] text-text-secondary">
+                  <span class="flex h-6 w-6 items-center justify-center rounded-lg bg-warning/12 text-warning">
+                    <i class="fa-solid fa-shield-halved text-[9px]" aria-hidden="true"></i>
+                  </span>
+                  <div class="min-w-0 flex-1">
+                    <div class="font-semibold text-foreground">{{ $t('agent.conversation.approvalRequestTitle') }}</div>
+                    <div class="mt-0.5 text-[10px] leading-4 text-text-secondary/75">
+                      {{ $t('agent.conversation.approvalRequestHint') }}
+                    </div>
+                  </div>
+                </div>
+                <div class="space-y-2">
+                  <ApprovalCard
+                    v-for="approval in pendingApprovals"
+                    :key="approval.id"
+                    :approval="approval"
+                    :clock="approvalBatch.clock"
+                    :busy="mutationLocked"
+                    @resolve="resolveApproval"
+                  />
+                </div>
+              </div>
+            </template>
             <template #configuration>
               <div class="agent-run-config flex min-h-7 items-center gap-1">
                 <div
@@ -1554,6 +1954,122 @@
                 <span v-else class="min-w-32 flex-1 px-2 text-xs text-text-secondary">
                   {{ $t('agent.operations.providerMissing') }}
                 </span>
+
+                <!-- Run 级批准策略：新 Run 创建时冻结，运行中只读 -->
+                <AgentConfigPopover
+                  :ariaLabel="$t('agent.operations.approvalMode')"
+                  :title="`${$t('agent.operations.approvalModeHint')}: ${
+                    approvalModeValue === 'full_access'
+                      ? $t('agent.operations.approvalFullAccess')
+                      : $t('agent.operations.approvalAsk')
+                  }`"
+                  panel-class="w-72"
+                >
+                  <template #trigger>
+                    <i
+                      class="fa-solid fa-shield-halved text-[9px]"
+                      :class="approvalModeValue === 'full_access' ? 'text-success' : 'text-warning'"
+                      aria-hidden="true"
+                    ></i>
+                    <span class="agent-config-verbose max-w-24 truncate whitespace-nowrap text-left">
+                      {{
+                        approvalModeValue === 'full_access'
+                          ? $t('agent.operations.approvalFullAccess')
+                          : $t('agent.operations.approvalAsk')
+                      }}
+                    </span>
+                    <i
+                      :class="modelSelectionLocked ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
+                      class="agent-config-affordance text-[7px] text-text-secondary"
+                      aria-hidden="true"
+                    ></i>
+                  </template>
+                  <template #panel="{ close }">
+                    <div class="mb-2 flex items-center justify-between gap-2 px-1">
+                      <div>
+                        <div class="text-xs font-semibold">{{ $t('agent.operations.approvalMode') }}</div>
+                        <div class="mt-1 text-[10px] leading-4 text-text-secondary">
+                          {{ $t('agent.operations.approvalModeHint') }}
+                        </div>
+                      </div>
+                      <span
+                        v-if="modelSelectionLocked"
+                        class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary"
+                      >
+                        <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
+                        >{{ $t('agent.operations.frozen') }}
+                      </span>
+                    </div>
+                    <div class="space-y-1">
+                      <button
+                        type="button"
+                        class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
+                        :class="
+                          approvalModeValue === 'full_access'
+                            ? 'border-success/25 bg-success/[0.06] text-foreground'
+                            : 'border-transparent text-text-secondary hover:bg-card/70'
+                        "
+                        :disabled="modelSelectionLocked || busy"
+                        @click="
+                          setApprovalMode('full_access');
+                          close(true);
+                        "
+                      >
+                        <span
+                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success"
+                        >
+                          <i class="fa-solid fa-bolt text-[9px]" aria-hidden="true"></i>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                          <span class="block text-xs font-semibold text-foreground">{{
+                            $t('agent.operations.approvalFullAccess')
+                          }}</span>
+                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                            $t('agent.operations.approvalFullAccessDesc')
+                          }}</span>
+                        </span>
+                        <i
+                          v-if="approvalModeValue === 'full_access'"
+                          class="fa-solid fa-check mt-1.5 text-[9px] text-success"
+                          aria-hidden="true"
+                        ></i>
+                      </button>
+                      <button
+                        type="button"
+                        class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
+                        :class="
+                          approvalModeValue === 'ask'
+                            ? 'border-warning/25 bg-warning/[0.06] text-foreground'
+                            : 'border-transparent text-text-secondary hover:bg-card/70'
+                        "
+                        :disabled="modelSelectionLocked || busy"
+                        @click="
+                          setApprovalMode('ask');
+                          close(true);
+                        "
+                      >
+                        <span
+                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-warning/10 text-warning"
+                        >
+                          <i class="fa-solid fa-hand text-[9px]" aria-hidden="true"></i>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                          <span class="block text-xs font-semibold text-foreground">{{
+                            $t('agent.operations.approvalAsk')
+                          }}</span>
+                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                            $t('agent.operations.approvalAskDesc')
+                          }}</span>
+                        </span>
+                        <i
+                          v-if="approvalModeValue === 'ask'"
+                          class="fa-solid fa-check mt-1.5 text-[9px] text-warning"
+                          aria-hidden="true"
+                        ></i>
+                      </button>
+                    </div>
+                  </template>
+                </AgentConfigPopover>
 
                 <!-- 运行环境 -->
                 <AgentConfigPopover

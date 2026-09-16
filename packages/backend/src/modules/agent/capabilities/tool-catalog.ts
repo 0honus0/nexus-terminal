@@ -1,7 +1,7 @@
 import type { JsonValue, Scope } from '../agent.types';
 import type { AgentCapability } from '../host/app.types';
 import { prepareJsonSchema } from '../json-schema-validator';
-import type { AgentTool, ToolDescriptor } from './tool.types';
+import type { AgentTool, ToolAvailabilityContext, ToolDescriptor } from './tool.types';
 
 export interface CatalogToolSchema {
   name: string;
@@ -66,11 +66,15 @@ export class ToolCatalog {
     return registered.tool;
   }
 
-  discover(scope: Scope, query = '', max = 12): ToolDescriptor[] {
+  discover(scope: Scope, query = '', max = 12, availability?: ToolAvailabilityContext): ToolDescriptor[] {
     if (!Number.isSafeInteger(max) || max < 1 || max > 256) throw new Error('VALIDATION_FAILED');
     const needle = query.trim().toLowerCase();
     return [...this.tools.values()]
-      .filter((registered) => !registered.scope || sameScope(registered.scope, scope))
+      .filter(
+        (registered) =>
+          (!registered.scope || sameScope(registered.scope, scope)) &&
+          (!availability || !registered.tool.isAvailable || registered.tool.isAvailable(availability)),
+      )
       .map((registered) => registered.tool.descriptor)
       .filter((descriptor) => !needle || `${descriptor.name} ${descriptor.description}`.toLowerCase().includes(needle))
       .sort((left, right) => left.name.localeCompare(right.name))
@@ -81,8 +85,8 @@ export class ToolCatalog {
       }));
   }
 
-  schemas(scope: Scope): CatalogToolSchema[] {
-    return this.discover(scope, '', 256).map((descriptor) => ({
+  schemas(scope: Scope, availability?: ToolAvailabilityContext): CatalogToolSchema[] {
+    return this.discover(scope, '', 256, availability).map((descriptor) => ({
       name: descriptor.name,
       description: descriptor.description,
       inputSchema: descriptor.inputSchema,

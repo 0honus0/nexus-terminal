@@ -16,6 +16,7 @@ type AppSummary = {
   displayName: string;
   version: string;
   surface: 'builtin' | 'agent' | 'custom' | 'none';
+  defaultApprovalMode: 'ask' | 'full_access';
   stateVersion: number;
   policyRevision: number;
   enabled: boolean;
@@ -29,7 +30,12 @@ type RunView = {
   goal: { text: string | null; revision: number };
   plan: { revision: number; items: Array<{ id: string; title: string; status: string }> };
   consumedInputSequence: number;
-  definition: { agentDefinitionId: string; model?: { modelId: string }; connectionIds: number[] };
+  definition: {
+    agentDefinitionId: string;
+    model?: { modelId: string };
+    approvalMode?: 'ask' | 'full_access';
+    connectionIds: number[];
+  };
 };
 
 const repositoryUrl = `${E2E_URLS.pluginRepositoryOrigin}/catalog.json`;
@@ -202,7 +208,10 @@ const installAndRunNexusAgent = async (
     const installed = await request.post('/api/v1/agent/plugins/install', { headers, data: { stageId } });
     expect(installed.status(), await installed.text()).toBe(201);
     await expect(installed.json()).resolves.toMatchObject({
-      data: { plugin: { appId: 'nexus.agent', status: 'installed' }, app: { surface: 'agent' } },
+      data: {
+        plugin: { appId: 'nexus.agent', status: 'installed' },
+        app: { surface: 'agent', defaultApprovalMode: 'full_access' },
+      },
     });
   });
 
@@ -221,7 +230,7 @@ const installAndRunNexusAgent = async (
     const replaced = await request.put('/api/v1/agent/apps/nexus.agent/grants', {
       headers,
       data: {
-        capabilities: ['ai.model.use', 'runs.execute', 'machine.shell.execute'],
+        capabilities: ['ai.model.use', 'runs.execute', 'machine.files.read', 'machine.shell.execute'],
         expectedPolicyRevision: grantView.data.policyRevision,
       },
     });
@@ -288,11 +297,12 @@ const installAndRunNexusAgent = async (
         schemaVersion: 1,
         threadId,
         input: {
-          text: 'E2E_GOAL_UPDATE_HOLD E2E_EXPECT_DEVELOPER_SKILL Implement and test a small code change, then confirm the Nexus Agent is running.',
+          text: 'E2E_GOAL_UPDATE_HOLD E2E_EXPECT_DEVELOPER_SKILL E2E_NO_WORKSPACE_TOOLS Implement and test a small code change, then confirm the Nexus Agent is running.',
           artifactRefs: [],
         },
         agentDefinitionId: 'agent.default',
         model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'ask',
         connectionIds: [],
       },
     });
@@ -359,6 +369,7 @@ const installAndRunNexusAgent = async (
         },
         agentDefinitionId: 'agent.default',
         model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'ask',
         connectionIds: [],
       },
     });
@@ -370,6 +381,38 @@ const installAndRunNexusAgent = async (
     const serialized = JSON.stringify(await ledger.json());
     expect(serialized).toContain('skill_read');
     expect(serialized).toContain('nexus.operations');
+  });
+
+  await step('machine_read_file reads a selected SSH target through the bounded SFTP capability', async () => {
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
+      headers,
+      data: { title: 'Machine read-file E2E thread' },
+    });
+    expect(thread.status(), await thread.text()).toBe(201);
+    const readThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: readThreadId,
+        input: {
+          text: `E2E_READ_FILE_CONNECTION_ID=${connectionId} Read the bounded remote seed fixture.`,
+          artifactRefs: [],
+        },
+        agentDefinitionId: 'agent.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'ask',
+        connectionIds: [connectionId],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const terminal = await waitForTerminalRun(request, ((await created.json()) as Envelope<RunView>).data.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${readThreadId}/entries?limit=50`);
+    expect(ledger.ok(), await ledger.text()).toBeTruthy();
+    const serialized = JSON.stringify(await ledger.json());
+    expect(serialized).toContain('machine_read_file');
+    expect(serialized).toContain('nexus-e2e-seed');
   });
 
   await step('strict interrupt supersedes only a streaming model and drains the durable input queue', async () => {
@@ -387,6 +430,7 @@ const installAndRunNexusAgent = async (
         input: { text: 'E2E_INTERRUPT_HOLD Confirm strict interrupt rescheduling.', artifactRefs: [] },
         agentDefinitionId: 'agent.default',
         model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'ask',
         connectionIds: [],
       },
     });
@@ -716,7 +760,9 @@ test('frontend target owns a full Custom App Surface and connects through the is
 
   const installed = await request.post('/api/v1/agent/plugins/install', { headers, data: { stageId } });
   expect(installed.status(), await installed.text()).toBe(201);
-  await expect(installed.json()).resolves.toMatchObject({ data: { app: { surface: 'custom' } } });
+  await expect(installed.json()).resolves.toMatchObject({
+    data: { app: { surface: 'custom', defaultApprovalMode: 'ask' } },
+  });
 
   await step(
     'multiple installable Agent plugins coexist and the full-stack package exposes all target classes',
@@ -1132,27 +1178,39 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       expect(afterDeleteIds).toContain(currentRunId!);
     });
 
-    await step('pending mutation approval is surfaced through the TaskRail toggle when hidden', async () => {
+    await step('pending mutation approval is surfaced inline while the TaskRail is hidden', async () => {
       await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
       await expect(taskPanelToggle).toHaveAttribute('aria-expanded', 'false');
+
+      const approvalMode = hub.getByRole('button', { name: 'Approval mode', exact: true });
+      await expect(approvalMode).toContainText('Full access');
+      await approvalMode.click();
+      const approvalModeDialog = page.getByRole('dialog', { name: 'Approval mode', exact: true });
+      await approvalModeDialog.getByRole('button', { name: /Ask when needed/ }).click();
+      await expect(approvalMode).toContainText('Ask when needed');
 
       const targets = hub.getByRole('button', { name: 'SSH Hosts', exact: true });
       await targets.click();
       const targetsPanel = page.getByRole('dialog', { name: 'SSH Hosts', exact: true });
       await expect(targetsPanel.getByText('E2E SSH', { exact: true })).toBeVisible();
-      await targetsPanel.getByRole('button').filter({ hasText: 'E2E SSH' }).click();
+      await expect(targetsPanel.getByText('1/1')).toBeVisible();
       await targets.click();
       await restoredComposer.fill(
         `Request the bounded shell approval exactly once. E2E_APPROVAL_CONNECTION_ID=${connectionId}`,
       );
       await hub.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(taskPanelToggle).toHaveText('1', { timeout: 30_000 });
+      await expect(hub.getByText('Agent needs your approval', { exact: true })).toBeVisible();
+      await expect(hub.getByRole('button', { name: 'Deny', exact: true })).toBeVisible();
+      await expect(hub.getByRole('button', { name: 'Deny + guidance', exact: true })).toBeVisible();
+      await expect(hub.getByRole('button', { name: 'Approve and run', exact: true })).toBeVisible();
 
       const approvalRunsResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
       expect(approvalRunsResponse.ok(), await approvalRunsResponse.text()).toBeTruthy();
       const approvalRunPage = (await approvalRunsResponse.json()) as Envelope<{ items: RunView[] }>;
       const approvalRun = approvalRunPage.data.items.find((item) => item.status === 'awaiting_approval');
       expect(approvalRun).toBeDefined();
+      expect(approvalRun!.definition.approvalMode).toBe('ask');
       expect(approvalRun!.definition.connectionIds).toEqual([connectionId]);
 
       await restoredComposer.fill('/goal Keep the pending approval and use this updated goal afterward.');
@@ -1168,15 +1226,120 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await expect(taskPanelToggle).toHaveText('1');
 
       await page.setViewportSize({ width: 1000, height: 800 });
-      await taskPanelToggle.click();
-      await expect(taskRail.getByText('Pending approvals', { exact: true })).toBeVisible();
       await captureFunctionalScreenshot(page, 'agent-approval-narrow.png', { viewport: { width: 1000, height: 800 } });
-      await taskRail.getByRole('button', { name: 'Approve and run', exact: true }).click();
+      await hub.getByRole('button', { name: 'Approve and run', exact: true }).click();
       const terminal = await waitForTerminalRun(context.request, approvalRun!.id);
       expect(['completed', 'completed_unverified']).toContain(terminal.status);
-      await expect(taskRail.getByText('Pending approvals', { exact: true })).toHaveCount(0);
-      await taskRail.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(hub.getByText('Agent needs your approval', { exact: true })).toHaveCount(0);
       await page.setViewportSize({ width: 1440, height: 900 });
+    });
+
+    await step('terminal Run failures are surfaced directly in the conversation', async () => {
+      const restoredComposer = hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...');
+      await restoredComposer.fill('E2E_FAIL_RUN Surface this intentional terminal failure in the chat.');
+      await hub.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(hub.getByText('Run failed', { exact: true })).toBeVisible({ timeout: 30_000 });
+      await expect(hub.getByText(/This run did not finish/)).toBeVisible();
+
+      const runsResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
+      expect(runsResponse.ok(), await runsResponse.text()).toBeTruthy();
+      const runPage = (await runsResponse.json()) as Envelope<{ items: RunView[] }>;
+      expect(runPage.data.items[0]?.status).toBe('failed');
+    });
+
+    await step(
+      'globally denied SSH targets disappear from the Agent selector and return when allowed again',
+      async () => {
+        const csrf = await csrfToken(context.request);
+        const denylistResponse = await context.request.get('/api/v1/agent/target-denylist');
+        expect(denylistResponse.ok(), await denylistResponse.text()).toBeTruthy();
+        const original = (await denylistResponse.json()) as Envelope<{
+          revision: number;
+          list: Array<{ connectionId: number; reason: string }>;
+        }>;
+        const blocked = await context.request.put('/api/v1/agent/target-denylist', {
+          headers: { 'X-Nexus-CSRF': csrf },
+          data: {
+            connectionIds: [connectionId],
+            reason: 'E2E Agent selector denylist',
+            expectedRevision: original.data.revision,
+          },
+        });
+        expect(blocked.ok(), await blocked.text()).toBeTruthy();
+        const blockedView = (await blocked.json()) as Envelope<{ revision: number }>;
+
+        const targets = hub.getByRole('button', { name: 'SSH Hosts', exact: true });
+        await targets.click();
+        const targetsPanel = page.getByRole('dialog', { name: 'SSH Hosts', exact: true });
+        await expect(targetsPanel.getByText('E2E SSH', { exact: true })).toHaveCount(0, { timeout: 10_000 });
+        await expect(
+          targetsPanel.getByText('No SSH connections are currently available.', { exact: true }),
+        ).toBeVisible();
+        await targets.click();
+
+        const restored = await context.request.put('/api/v1/agent/target-denylist', {
+          headers: { 'X-Nexus-CSRF': csrf },
+          data: {
+            connectionIds: original.data.list.map((entry) => entry.connectionId),
+            reason: original.data.list[0]?.reason ?? 'E2E restore target policy',
+            expectedRevision: blockedView.data.revision,
+          },
+        });
+        expect(restored.ok(), await restored.text()).toBeTruthy();
+        await targets.click();
+        await expect(targetsPanel.getByText('E2E SSH', { exact: true })).toBeVisible({ timeout: 10_000 });
+        await expect(targetsPanel.getByText('1/1')).toBeVisible();
+        await targets.click();
+      },
+    );
+
+    await step('conversations support guarded single-delete and delete-all flows', async () => {
+      await hub.getByRole('button', { name: 'New', exact: true }).click();
+      await expect(hub.getByRole('button', { name: 'Delete conversation', exact: true })).toBeVisible();
+
+      const afterCreateResponse = await context.request.get('/api/v1/apps/nexus.agent/threads?limit=100');
+      expect(afterCreateResponse.ok(), await afterCreateResponse.text()).toBeTruthy();
+      const afterCreate = (await afterCreateResponse.json()) as Envelope<{
+        items: Array<{ id: string; version: number }>;
+      }>;
+      const singleDeleteId = afterCreate.data.items[0]!.id;
+
+      await hub.getByRole('button', { name: 'Delete conversation', exact: true }).click();
+      await hub.getByRole('button', { name: 'Click again to delete this conversation', exact: true }).click();
+      await expect
+        .poll(async () => {
+          const response = await context.request.get(`/api/v1/apps/nexus.agent/threads/${singleDeleteId}`);
+          return response.status();
+        })
+        .toBe(404);
+
+      const csrf = await csrfToken(context.request);
+      const createExtra = async (title: string): Promise<string> => {
+        const response = await context.request.post('/api/v1/apps/nexus.agent/threads', {
+          headers: { 'X-Nexus-CSRF': csrf },
+          data: { title },
+        });
+        expect(response.status(), await response.text()).toBe(201);
+        return ((await response.json()) as Envelope<{ id: string }>).data.id;
+      };
+      const extraIds = [await createExtra('Delete all E2E A'), await createExtra('Delete all E2E B')];
+
+      await expect(hub.getByRole('button', { name: 'Delete all conversations', exact: true })).toBeVisible();
+      await hub.getByRole('button', { name: 'Delete all conversations', exact: true }).click();
+      await hub.getByRole('button', { name: 'Click again to delete all conversations', exact: true }).click();
+
+      await expect
+        .poll(async () => {
+          const response = await context.request.get('/api/v1/apps/nexus.agent/threads?limit=100');
+          expect(response.ok(), await response.text()).toBeTruthy();
+          const page = (await response.json()) as Envelope<{ items: Array<{ id: string }> }>;
+          return page.data.items;
+        })
+        .toHaveLength(1);
+      const finalThreadsResponse = await context.request.get('/api/v1/apps/nexus.agent/threads?limit=100');
+      const finalThreads = (await finalThreadsResponse.json()) as Envelope<{ items: Array<{ id: string }> }>;
+      expect(finalThreads.data.items).toHaveLength(1);
+      expect(extraIds).not.toContain(finalThreads.data.items[0]!.id);
     });
 
     await step('Artifact upload flows into the unified Agent file library', async () => {

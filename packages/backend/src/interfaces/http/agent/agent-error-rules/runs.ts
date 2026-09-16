@@ -33,8 +33,12 @@ export const runErrorRules: readonly AgentErrorRule[] = [
       'RUN_DELETE_REFERENCED',
       'RUN_DELETE_RECONCILIATION_REQUIRED',
       'RUN_DELETE_WORKSPACE_ATTACHED',
+      'THREAD_DELETE_ACTIVE',
+      'THREAD_DELETE_REFERENCED',
+      'THREAD_DELETE_RECONCILIATION_REQUIRED',
+      'THREAD_DELETE_WORKSPACE_ATTACHED',
     ],
-    rawCode(409, 'The Run cannot be deleted while it is active or still referenced by a Workspace.'),
+    rawCode(409, 'The conversation cannot be deleted while an active or retained Agent runtime still depends on it.'),
   ),
   onCodes(
     [

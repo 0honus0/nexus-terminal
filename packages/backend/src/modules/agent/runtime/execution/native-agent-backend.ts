@@ -12,6 +12,8 @@ import type { PendingMutationTool, RunExecutionReaderPort } from '../runs/run.re
 import type { DelegationReaderPort } from '../collaboration/subagent.repository.port';
 import type { RootExecutionCommitPort } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
+import { requestHash } from '../runs/idempotency';
+import { logger } from '../../../../shared/logging/logger';
 
 const MAX_COLLABORATION_BYTES = 8 * 1024;
 
@@ -55,6 +57,19 @@ export class NativeAgentBackend implements AgentBackendPort {
   ) {}
 
   async *execute(initial: RunView, signal: AbortSignal): AsyncIterable<BackendSignal> {
+    logger.debug(
+      {
+        runId: initial.id,
+        threadId: initial.threadId,
+        appId: initial.appId,
+        userId: initial.userId,
+        status: initial.status,
+        providerId: initial.definition.model.providerId,
+        modelId: initial.definition.model.modelId,
+        reasoningEffort: initial.definition.reasoningEffort ?? null,
+      },
+      'Agent backend execution entered',
+    );
     try {
       yield* this.executePersisted(initial, signal);
     } catch (error) {
@@ -113,7 +128,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       }
 
       const remainingSteps = snapshot.budget.maxRunSteps - snapshot.usage.steps;
-      const offeredTools = this.toolCalls.schemas(scope);
+      const offeredTools = this.toolCalls.schemas(scope, { environment: snapshot.definition.environment ?? null });
       const toolMode: 'auto' | 'none' = remainingSteps >= 2 ? 'auto' : 'none';
       const projectionRunIds = [
         snapshot.id,
@@ -165,6 +180,24 @@ export class NativeAgentBackend implements AgentBackendPort {
         return;
       }
       const { model, contextPlan } = preparedModelStep;
+      logger.debug(
+        {
+          runId: snapshot.id,
+          threadId: snapshot.threadId,
+          runVersion: snapshot.version,
+          inputRevision: snapshot.inputRevision,
+          usageSteps: snapshot.usage.steps,
+          remainingSteps,
+          modelId: model.id,
+          reasoningEffort: snapshot.definition.reasoningEffort ?? null,
+          toolMode,
+          offeredToolCount: offeredTools.length,
+          estimatedInputTokens: contextPlan.estimatedInputTokens,
+          reservedOutputTokens: contextPlan.reservedOutputTokens,
+          contextEpoch: contextPlan.contextEpoch,
+        },
+        'Agent model step prepared',
+      );
 
       const budgetWait = await this.reserveModelBudget(
         snapshot,
@@ -187,6 +220,18 @@ export class NativeAgentBackend implements AgentBackendPort {
         reservedTokens: worstCaseTokens,
         now: this.clock.nowUnixSeconds(),
       });
+      logger.debug(
+        {
+          runId: snapshot.id,
+          stepId: begun.stepId,
+          attemptId: begun.attemptId,
+          attemptIndex: begun.attemptIndex,
+          runVersion: begun.run.version,
+          eventCursor: begun.run.eventCursor,
+          reservedTokens: worstCaseTokens,
+        },
+        'Agent model step begun',
+      );
       yield { type: 'durable', runId: snapshot.id, cursor: begun.run.eventCursor };
 
       let currentRun = begun.run;
@@ -205,6 +250,22 @@ export class NativeAgentBackend implements AgentBackendPort {
           usage = attempt.usage;
           finishReason = attempt.finishReason;
           modelToolCalls = attempt.toolCalls;
+          logger.debug(
+            {
+              runId: snapshot.id,
+              stepId: begun.stepId,
+              attemptId: currentAttemptId,
+              attemptIndex: currentAttemptIndex,
+              finishReason,
+              textBytes: Buffer.byteLength(text, 'utf8'),
+              toolCallCount: modelToolCalls.size,
+              inputTokens: usage?.inputTokens ?? null,
+              outputTokens: usage?.outputTokens ?? null,
+              cachedInputTokens: usage?.cachedInputTokens ?? null,
+              errorCode: attempt.error ? errorCode(attempt.error) : null,
+            },
+            'Agent model attempt returned',
+          );
           if (!attempt.error) break;
 
           const attemptError = attempt.error;
@@ -322,14 +383,41 @@ export class NativeAgentBackend implements AgentBackendPort {
             terminalStatus: 'completed_unverified',
             now: this.clock.nowUnixSeconds(),
           });
+          logger.info(
+            {
+              runId: snapshot.id,
+              threadId: snapshot.threadId,
+              status: settled.run.status,
+              runVersion: settled.run.version,
+              eventCursor: settled.eventCursor,
+              finishReason,
+              inputTokens: settledUsage.inputTokens,
+              outputTokens: settledUsage.outputTokens,
+              cachedInputTokens: settledUsage.cachedInputTokens,
+              totalSteps: settled.run.usage.steps,
+            },
+            'Agent run settled after model response',
+          );
           yield { type: 'durable', runId: snapshot.id, cursor: settled.eventCursor };
           yield { type: 'settled', run: settled.run };
           return;
         }
 
         if (toolMode === 'none') throw new Error('MODEL_TOOL_CALL_UNEXPECTED');
-        if (modelToolCalls.size !== 1) throw new Error('MODEL_PARALLEL_TOOL_CALLS_UNSUPPORTED');
-        const call = [...modelToolCalls.entries()].sort(([left], [right]) => left - right)[0]?.[1];
+        const orderedToolCalls = [...modelToolCalls.entries()].sort(([left], [right]) => left - right);
+        if (orderedToolCalls.length > 1) {
+          logger.warn(
+            {
+              runId: snapshot.id,
+              threadId: snapshot.threadId,
+              stepId: begun.stepId,
+              toolCallCount: orderedToolCalls.length,
+              toolNames: orderedToolCalls.map(([, candidate]) => candidate.name ?? 'unknown'),
+            },
+            'Model returned parallel tool calls; executing the first call and deferring the remainder',
+          );
+        }
+        const call = orderedToolCalls[0]?.[1];
         if (!call?.id || !call.name) throw new Error('MODEL_TOOL_CALL_INVALID');
         const proposal: ToolProposal = {
           providerCallId: call.id,
@@ -338,6 +426,18 @@ export class NativeAgentBackend implements AgentBackendPort {
         };
         const inspectionContext = this.toolContext(currentRun, runtimeId, begun.stepId, signal);
         const { inspection, policyDecision } = await this.toolCalls.inspect(inspectionContext, proposal);
+        logger.info(
+          {
+            runId: snapshot.id,
+            threadId: snapshot.threadId,
+            stepId: begun.stepId,
+            toolName: proposal.name,
+            toolVersion: inspection.toolVersion,
+            policyAction: policyDecision.action,
+            resourceKeyCount: inspection.resourceKeys.length,
+          },
+          'Agent tool call inspected',
+        );
         if (policyDecision.action === 'deny') throw new Error(policyDecision.reason);
         const toolCallId = randomUUID();
         const proposed = await this.stateCommit.commitToolProposal({
@@ -367,28 +467,65 @@ export class NativeAgentBackend implements AgentBackendPort {
         yield { type: 'durable', runId: snapshot.id, cursor: proposed.eventCursor };
 
         if (policyDecision.action === 'requireApproval') {
+          const approvalId = randomUUID();
           const requested = await this.stateCommit.requestToolApproval({
             scope,
             runId: proposed.run.id,
             runtimeId,
             toolStepId: proposed.toolStepId,
             toolCallId: proposed.toolCallId,
-            approvalId: randomUUID(),
+            approvalId,
             expectedRunVersion: proposed.run.version,
             inspection,
             expiresAt: this.clock.nowUnixSeconds() + 600,
             now: this.clock.nowUnixSeconds(),
           });
           yield { type: 'durable', runId: snapshot.id, cursor: requested.eventCursor };
+          if ((snapshot.definition.approvalMode ?? 'ask') === 'full_access') {
+            const idempotencyKey = randomUUID();
+            const expectedVersion = 1;
+            const resolved = await this.stateCommit.resolveToolApproval({
+              scope,
+              runId: requested.run.id,
+              approvalId,
+              decision: 'approved',
+              operationHash: inspection.operationHash,
+              expectedApprovalVersion: expectedVersion,
+              expectedRunVersion: requested.run.version,
+              expectedPolicyRevision: inspection.policyRevision,
+              expectedInputRevision: inspection.inputRevision,
+              decidedByUserId: scope.userId,
+              resolutionSource: 'full_access',
+              idempotencyKey,
+              requestHash: requestHash(1, {
+                approvalId,
+                runId: requested.run.id,
+                decision: 'approved',
+                operationHash: inspection.operationHash,
+                expectedVersion,
+              }),
+              now: this.clock.nowUnixSeconds(),
+            });
+            logger.info(
+              {
+                runId: snapshot.id,
+                toolCallId: proposed.toolCallId,
+                toolName: inspection.toolName,
+                approvalId,
+              },
+              'Agent tool approval auto-approved by full access mode',
+            );
+            yield { type: 'durable', runId: snapshot.id, cursor: resolved.eventCursor };
+            continue;
+          }
           yield { type: 'settled', run: requested.run };
           return;
         }
 
-        const readContext = this.toolContext(proposed.run, runtimeId, proposed.toolStepId, signal);
         const readLeaseTtlSeconds = Math.min(300, Math.max(30, proposed.run.budget.toolTimeoutSeconds + 15));
-        const readLease = await this.toolCalls.acquireRead(readContext, inspection, readLeaseTtlSeconds);
         let toolSettled: Awaited<ReturnType<RootExecutionCommitPort['settleReadTool']>>;
         let executedToolResult: ToolResult | null = null;
+        let readLease: Awaited<ReturnType<ToolCallRunner['acquireRead']>> | null = null;
         try {
           const started = await this.stateCommit.beginReadTool({
             scope,
@@ -401,12 +538,45 @@ export class NativeAgentBackend implements AgentBackendPort {
           });
           yield { type: 'durable', runId: snapshot.id, cursor: started.eventCursor };
 
-          const toolResult = await this.toolCalls.executeRead(
-            readLease,
-            this.toolContext(started.run, runtimeId, proposed.toolStepId, readLease.signal),
-            inspection,
-          );
+          let toolResult: ToolResult;
+          try {
+            readLease = await this.toolCalls.acquireRead(
+              this.toolContext(started.run, runtimeId, proposed.toolStepId, signal),
+              inspection,
+              readLeaseTtlSeconds,
+            );
+            toolResult = await this.toolCalls.executeRead(
+              readLease,
+              this.toolContext(started.run, runtimeId, proposed.toolStepId, readLease.signal),
+              inspection,
+            );
+          } catch (error) {
+            toolResult = this.toolCalls.failedRead(error);
+            logger.warn(
+              {
+                runId: snapshot.id,
+                threadId: snapshot.threadId,
+                toolCallId: proposed.toolCallId,
+                toolName: inspection.toolName,
+                errorCode: toolResult.errorCode ?? null,
+              },
+              'Agent read tool could not acquire or retain its execution lease',
+            );
+          }
           executedToolResult = toolResult;
+          logger.info(
+            {
+              runId: snapshot.id,
+              threadId: snapshot.threadId,
+              toolCallId: proposed.toolCallId,
+              toolName: inspection.toolName,
+              ok: toolResult.ok,
+              outcome: toolResult.outcome,
+              errorCode: toolResult.errorCode ?? null,
+              outputBytes: Buffer.byteLength(JSON.stringify(toolResult.data ?? null), 'utf8'),
+            },
+            'Agent read tool execution completed',
+          );
 
           toolSettled = await this.stateCommit.settleReadTool({
             scope,
@@ -423,7 +593,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           });
           yield { type: 'durable', runId: snapshot.id, cursor: toolSettled.eventCursor };
         } finally {
-          await this.toolCalls.releaseRead(readLease);
+          if (readLease) await this.toolCalls.releaseRead(readLease);
         }
 
         if (['cancelled', 'interrupted', 'failed'].includes(toolSettled.run.status)) {
@@ -483,6 +653,21 @@ export class NativeAgentBackend implements AgentBackendPort {
           return;
         }
       } catch (error) {
+        logger.warn(
+          {
+            runId: snapshot.id,
+            threadId: snapshot.threadId,
+            stepId: begun.stepId,
+            attemptId: currentAttemptId,
+            attemptIndex: currentAttemptIndex,
+            modelStepClosed,
+            aborted: signal.aborted,
+            abortReason: signalReason(signal),
+            errorCode: errorCode(error),
+            err: error,
+          },
+          'Agent model/tool step failed or was interrupted',
+        );
         const abortReason = signalReason(signal);
         if ((abortReason === 'NEW_INPUT' || abortReason === 'GOAL_UPDATED') && !modelStepClosed) {
           const supersededUsage: TokenUsage =
@@ -710,6 +895,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       },
       runId: run.id,
       agentRuntimeId: runtimeId,
+      connectionIds: [...run.definition.connectionIds],
       environment: run.definition.environment ?? null,
       stepId,
       signal,

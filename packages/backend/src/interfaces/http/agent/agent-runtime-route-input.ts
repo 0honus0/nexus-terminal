@@ -1,7 +1,7 @@
 import type { AgentRunEnvironmentSelection, JsonValue } from '../../../modules/agent/agent.types';
 import type { ReasoningEffort } from '../../../modules/agent/ai/model.types';
 import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
-import type { RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
+import type { RunApprovalMode, RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
 import { hasOnlyKeys, isJsonValue, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
@@ -15,6 +15,7 @@ export interface CreateRunRequestDto {
   agentDefinitionId: string;
   model: { providerId: string; modelId: string; configurationVersion: number };
   reasoningEffort?: ReasoningEffort;
+  approvalMode: RunApprovalMode;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
@@ -24,6 +25,7 @@ export interface ApprovalResolveRequestDto {
   decision: 'approved' | 'denied';
   operationHash: string;
   expectedVersion: number;
+  feedback?: string;
 }
 
 export interface WorkspaceCreateRequestDto {
@@ -75,6 +77,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     'agentDefinitionId',
     'model',
     'reasoningEffort',
+    'approvalMode',
     'connectionIds',
     'environment',
     'initialGoal',
@@ -83,6 +86,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
   if (!isRecord(model) || !hasOnlyKeys(model, ['providerId', 'modelId', 'configurationVersion'])) {
     throw new Error('VALIDATION_FAILED');
   }
+  const approvalMode = value.approvalMode === undefined ? 'ask' : value.approvalMode;
   if (
     typeof value.threadId !== 'string' ||
     typeof value.agentDefinitionId !== 'string' ||
@@ -90,6 +94,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     typeof model.modelId !== 'string' ||
     !positiveInteger(model.configurationVersion) ||
     (value.reasoningEffort !== undefined && !isReasoningEffort(value.reasoningEffort)) ||
+    (approvalMode !== 'ask' && approvalMode !== 'full_access') ||
     !Array.isArray(value.connectionIds) ||
     value.connectionIds.length > 50 ||
     value.connectionIds.some((connectionId) => !positiveInteger(connectionId)) ||
@@ -110,6 +115,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
       configurationVersion: model.configurationVersion,
     },
     ...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort as ReasoningEffort }),
+    approvalMode: approvalMode as RunApprovalMode,
     connectionIds: value.connectionIds as number[],
     ...(value.environment === undefined ? {} : { environment: parseRunEnvironmentSelection(value.environment) }),
     ...(typeof value.initialGoal === 'string' && value.initialGoal.trim()
@@ -364,12 +370,16 @@ export const parseWorkspaceToolVersionsRequest = (body: unknown): WorkspaceToolV
 };
 
 export const parseApprovalResolveRequest = (body: unknown): ApprovalResolveRequestDto => {
-  const value = versionedRecord(body, ['decision', 'operationHash', 'expectedVersion']);
+  const value = versionedRecord(body, ['decision', 'operationHash', 'expectedVersion', 'feedback']);
+  const feedback = typeof value.feedback === 'string' ? value.feedback.trim() : undefined;
   if (
     (value.decision !== 'approved' && value.decision !== 'denied') ||
     typeof value.operationHash !== 'string' ||
     !/^v1:[a-f0-9]{64}$/.test(value.operationHash) ||
-    !positiveInteger(value.expectedVersion)
+    !positiveInteger(value.expectedVersion) ||
+    (value.feedback !== undefined && typeof value.feedback !== 'string') ||
+    (feedback !== undefined && Buffer.byteLength(feedback, 'utf8') > 2000) ||
+    (value.decision === 'approved' && feedback)
   ) {
     throw new Error('VALIDATION_FAILED');
   }
@@ -377,5 +387,6 @@ export const parseApprovalResolveRequest = (body: unknown): ApprovalResolveReque
     decision: value.decision,
     operationHash: value.operationHash,
     expectedVersion: value.expectedVersion,
+    ...(feedback ? { feedback } : {}),
   };
 };

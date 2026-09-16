@@ -3,7 +3,11 @@
   import type { AgentApprovalView, AgentServerClockAnchor } from '../api/agent-api';
 
   const props = defineProps<{ approval: AgentApprovalView; clock: AgentServerClockAnchor; busy?: boolean }>();
-  const emit = defineEmits<{ resolve: [approval: AgentApprovalView, decision: 'approved' | 'denied'] }>();
+  const emit = defineEmits<{
+    resolve: [approval: AgentApprovalView, decision: 'approved' | 'denied', feedback?: string];
+  }>();
+  const feedbackVisible = ref(false);
+  const feedback = ref('');
   const monotonicNow = ref(performance.now());
   const timer = window.setInterval(() => (monotonicNow.value = performance.now()), 1000);
   onBeforeUnmount(() => window.clearInterval(timer));
@@ -67,23 +71,63 @@
       {{ $t('agent.approvals.resolved', { state: approval.status }) }}
     </p>
     <p v-else-if="remaining === 0" class="mt-3 text-[11px] text-error">{{ $t('agent.approvals.expired') }}</p>
-    <div v-else class="mt-3 grid grid-cols-2 gap-2">
-      <button
-        type="button"
-        class="rounded-md border border-error/40 px-3 py-2 font-medium text-error hover:bg-error/10 disabled:opacity-50"
-        :disabled="!actionable"
-        @click="emit('resolve', approval, 'denied')"
-      >
-        {{ $t('agent.approvals.deny') }}
-      </button>
-      <button
-        type="button"
-        class="rounded-md bg-warning px-3 py-2 font-semibold text-black disabled:opacity-50"
-        :disabled="!actionable"
-        @click="emit('resolve', approval, 'approved')"
-      >
-        {{ $t('agent.approvals.approve') }}
-      </button>
+    <div v-else class="mt-3 space-y-2">
+      <div v-if="feedbackVisible" class="rounded-lg border border-border/70 bg-background/70 p-2">
+        <label class="mb-1.5 block text-[10px] font-medium text-text-secondary">
+          {{ $t('agent.approvals.feedbackLabel') }}
+        </label>
+        <textarea
+          v-model="feedback"
+          rows="2"
+          maxlength="2000"
+          class="w-full resize-none rounded-md border border-border/70 bg-card px-2.5 py-2 text-[11px] text-foreground outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/15"
+          :placeholder="$t('agent.approvals.feedbackPlaceholder')"
+        ></textarea>
+        <div class="mt-2 flex justify-end gap-1.5">
+          <button
+            type="button"
+            class="rounded-md px-2.5 py-1.5 text-[10px] text-text-secondary hover:bg-header disabled:opacity-50"
+            :disabled="!actionable"
+            @click="feedbackVisible = false"
+          >
+            {{ $t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="rounded-md bg-error px-2.5 py-1.5 text-[10px] font-medium text-white disabled:opacity-50"
+            :disabled="!actionable || !feedback.trim()"
+            @click="emit('resolve', approval, 'denied', feedback.trim())"
+          >
+            {{ $t('agent.approvals.denyWithFeedbackSubmit') }}
+          </button>
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-2">
+        <button
+          type="button"
+          class="rounded-md border border-error/40 px-2 py-2 font-medium text-error hover:bg-error/10 disabled:opacity-50"
+          :disabled="!actionable"
+          @click="emit('resolve', approval, 'denied')"
+        >
+          {{ $t('agent.approvals.deny') }}
+        </button>
+        <button
+          type="button"
+          class="rounded-md border border-border px-2 py-2 font-medium text-text-secondary hover:bg-header hover:text-foreground disabled:opacity-50"
+          :disabled="!actionable"
+          @click="feedbackVisible = !feedbackVisible"
+        >
+          {{ $t('agent.approvals.denyWithFeedback') }}
+        </button>
+        <button
+          type="button"
+          class="rounded-md bg-warning px-2 py-2 font-semibold text-black disabled:opacity-50"
+          :disabled="!actionable"
+          @click="emit('resolve', approval, 'approved')"
+        >
+          {{ $t('agent.approvals.approve') }}
+        </button>
+      </div>
     </div>
   </article>
 </template>

@@ -77,6 +77,58 @@ const columns = `
   size_bytes, reserved_bytes, status, retained, version, created_at, ready_at, expires_at, deleted_at
 `;
 
+const imageArtifactPredicate = `(LOWER(media_type) LIKE 'image/%')`;
+const mediaArtifactPredicate = `(LOWER(media_type) LIKE 'audio/%' OR LOWER(media_type) LIKE 'video/%')`;
+const archiveArtifactPredicate = `(
+  LOWER(media_type) IN (
+    'application/zip','application/x-7z-compressed','application/vnd.rar','application/x-rar-compressed',
+    'application/x-tar','application/gzip','application/x-gzip','application/x-bzip2','application/x-xz'
+  ) OR LOWER(original_name) GLOB '*.zip' OR LOWER(original_name) GLOB '*.7z' OR LOWER(original_name) GLOB '*.rar'
+    OR LOWER(original_name) GLOB '*.tar' OR LOWER(original_name) GLOB '*.tgz' OR LOWER(original_name) GLOB '*.tar.gz'
+    OR LOWER(original_name) GLOB '*.gz' OR LOWER(original_name) GLOB '*.bz2' OR LOWER(original_name) GLOB '*.xz'
+)`;
+const codeArtifactPredicate = `(
+  LOWER(media_type) IN (
+    'application/json','application/ld+json','application/xml','text/xml','text/html','text/css',
+    'text/javascript','application/javascript','application/sql','application/x-yaml','text/yaml',
+    'text/x-python','text/x-shellscript'
+  ) OR LOWER(original_name) GLOB '*.js' OR LOWER(original_name) GLOB '*.jsx' OR LOWER(original_name) GLOB '*.ts'
+    OR LOWER(original_name) GLOB '*.tsx' OR LOWER(original_name) GLOB '*.vue' OR LOWER(original_name) GLOB '*.py'
+    OR LOWER(original_name) GLOB '*.go' OR LOWER(original_name) GLOB '*.rs' OR LOWER(original_name) GLOB '*.java'
+    OR LOWER(original_name) GLOB '*.c' OR LOWER(original_name) GLOB '*.h' OR LOWER(original_name) GLOB '*.cpp'
+    OR LOWER(original_name) GLOB '*.hpp' OR LOWER(original_name) GLOB '*.cs' OR LOWER(original_name) GLOB '*.rb'
+    OR LOWER(original_name) GLOB '*.php' OR LOWER(original_name) GLOB '*.sh' OR LOWER(original_name) GLOB '*.sql'
+    OR LOWER(original_name) GLOB '*.html' OR LOWER(original_name) GLOB '*.css' OR LOWER(original_name) GLOB '*.scss'
+    OR LOWER(original_name) GLOB '*.less' OR LOWER(original_name) GLOB '*.json' OR LOWER(original_name) GLOB '*.jsonl'
+    OR LOWER(original_name) GLOB '*.yaml' OR LOWER(original_name) GLOB '*.yml' OR LOWER(original_name) GLOB '*.toml'
+    OR LOWER(original_name) GLOB '*.xml'
+)`;
+const documentArtifactPredicate = `(
+  LOWER(media_type) IN (
+    'application/pdf','application/rtf','text/rtf','application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-powerpoint',
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation','application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','application/vnd.oasis.opendocument.text',
+    'application/vnd.oasis.opendocument.spreadsheet','application/epub+zip','text/csv','text/markdown'
+  ) OR LOWER(original_name) GLOB '*.pdf' OR LOWER(original_name) GLOB '*.doc' OR LOWER(original_name) GLOB '*.docx'
+    OR LOWER(original_name) GLOB '*.ppt' OR LOWER(original_name) GLOB '*.pptx' OR LOWER(original_name) GLOB '*.xls'
+    OR LOWER(original_name) GLOB '*.xlsx' OR LOWER(original_name) GLOB '*.csv' OR LOWER(original_name) GLOB '*.txt'
+    OR LOWER(original_name) GLOB '*.md' OR LOWER(original_name) GLOB '*.rtf' OR LOWER(original_name) GLOB '*.odt'
+    OR LOWER(original_name) GLOB '*.ods' OR LOWER(original_name) GLOB '*.epub'
+)`;
+const knownArtifactKindPredicate = `(
+  ${imageArtifactPredicate} OR ${documentArtifactPredicate} OR ${codeArtifactPredicate} OR ${archiveArtifactPredicate} OR ${mediaArtifactPredicate}
+)`;
+
+const artifactKindPredicate = (kind: NonNullable<ArtifactLibraryQuery['kind']>): string => {
+  if (kind === 'image') return imageArtifactPredicate;
+  if (kind === 'document') return documentArtifactPredicate;
+  if (kind === 'code') return codeArtifactPredicate;
+  if (kind === 'archive') return archiveArtifactPredicate;
+  if (kind === 'media') return mediaArtifactPredicate;
+  return `(NOT ${knownArtifactKindPredicate})`;
+};
+
 const quotaKey = (userId: number): string => `artifact:user:${userId}`;
 
 const encodeCursor = (createdAt: number, id: string): string =>
@@ -409,6 +461,7 @@ export class LocalArtifactStore implements ArtifactPort {
       clauses.push('retained = ?');
       parameters.push(query.retained ? 1 : 0);
     }
+    if (query.kind) clauses.push(artifactKindPredicate(query.kind));
     if (query.q) {
       clauses.push('(LOWER(original_name) LIKE ? OR LOWER(media_type) LIKE ?)');
       const needle = `%${query.q.toLowerCase().replaceAll('%', '\\%').replaceAll('_', '\\_')}%`;

@@ -3,6 +3,7 @@ import type { AgentSettingsService } from '../../host/agent-settings.service';
 import type { AgentBackendPort } from '../execution/agent-backend.port';
 import { AgentEventHub } from '../events/event-hub';
 import type { RunView } from '../runs/run.types';
+import { logger } from '../../../../shared/logging/logger';
 
 interface QueuedRun {
   run: RunView;
@@ -42,6 +43,18 @@ export class AgentScheduler {
     }
     if (queue.some((candidate) => candidate.run.id === run.id)) return;
     queue.push({ run });
+    logger.debug(
+      {
+        runId: run.id,
+        threadId: run.threadId,
+        appId: run.appId,
+        userId: run.userId,
+        status: run.status,
+        queueDepth: queue.length,
+        activeForUser: this.activeCountForUser(run.userId),
+      },
+      'Agent scheduler enqueued run',
+    );
     void this.pump();
   }
 
@@ -139,6 +152,20 @@ export class AgentScheduler {
 
   private start(run: RunView): void {
     const controller = new AbortController();
+    const startedAt = this.clock.nowUnixMilliseconds();
+    logger.info(
+      {
+        runId: run.id,
+        threadId: run.threadId,
+        appId: run.appId,
+        userId: run.userId,
+        status: run.status,
+        providerId: run.definition.model.providerId,
+        modelId: run.definition.model.modelId,
+        reasoningEffort: run.definition.reasoningEffort ?? null,
+      },
+      'Agent scheduler started run',
+    );
     const done = (async () => {
       try {
         for await (const signal of this.backend.execute(run, controller.signal)) {
@@ -157,8 +184,28 @@ export class AgentScheduler {
           }
         }
       } catch (error) {
-        console.error(`[Agent Scheduler] run ${run.id} failed outside the persisted harness:`, error);
+        logger.error(
+          { runId: run.id, threadId: run.threadId, appId: run.appId, userId: run.userId, err: error },
+          'Agent scheduler run failed outside persisted harness',
+        );
       } finally {
+        logger.info(
+          {
+            runId: run.id,
+            threadId: run.threadId,
+            appId: run.appId,
+            userId: run.userId,
+            aborted: controller.signal.aborted,
+            abortReason:
+              controller.signal.reason instanceof Error
+                ? controller.signal.reason.message
+                : controller.signal.reason === undefined
+                  ? null
+                  : String(controller.signal.reason),
+            elapsedMs: Math.max(0, this.clock.nowUnixMilliseconds() - startedAt),
+          },
+          'Agent scheduler finished run execution',
+        );
         this.active.delete(run.id);
         this.decrementActiveUser(run.userId);
         void this.pump();

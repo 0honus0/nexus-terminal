@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { computed, nextTick, ref, watch } from 'vue';
+  import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller';
   import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
   import type { AgentArtifactRef, AgentLedgerEntry, AgentRunView } from '../api/agent-api';
@@ -33,20 +33,173 @@
     dismissCommandResult: [];
   }>();
 
+  type HomePromptTone = 'primary' | 'emerald' | 'sky' | 'amber';
+
+  interface HomePromptCard {
+    promptKey: string;
+    titleKey: string;
+    descriptionKey: string;
+    icon: string;
+    tone: HomePromptTone;
+  }
+
+  const HOME_PROMPT_ROTATE_MS = 9_000;
+  const HOME_PROMPTS_PER_PAGE = 2;
+  const homePromptCards: HomePromptCard[] = [
+    {
+      promptKey: 'agent.ui.promptExplain',
+      titleKey: 'agent.conversation.bentoExplainTitle',
+      descriptionKey: 'agent.conversation.bentoExplainDesc',
+      icon: 'fa-code',
+      tone: 'primary',
+    },
+    {
+      promptKey: 'agent.ui.promptDiagnose',
+      titleKey: 'agent.conversation.bentoDiagnoseTitle',
+      descriptionKey: 'agent.conversation.bentoDiagnoseDesc',
+      icon: 'fa-shield-halved',
+      tone: 'emerald',
+    },
+    {
+      promptKey: 'agent.ui.promptProjectOverview',
+      titleKey: 'agent.conversation.bentoProjectTitle',
+      descriptionKey: 'agent.conversation.bentoProjectDesc',
+      icon: 'fa-diagram-project',
+      tone: 'sky',
+    },
+    {
+      promptKey: 'agent.ui.promptReviewChanges',
+      titleKey: 'agent.conversation.bentoReviewTitle',
+      descriptionKey: 'agent.conversation.bentoReviewDesc',
+      icon: 'fa-code-branch',
+      tone: 'amber',
+    },
+    {
+      promptKey: 'agent.ui.promptTroubleshoot',
+      titleKey: 'agent.conversation.bentoTroubleshootTitle',
+      descriptionKey: 'agent.conversation.bentoTroubleshootDesc',
+      icon: 'fa-stethoscope',
+      tone: 'emerald',
+    },
+    {
+      promptKey: 'agent.ui.promptRunChecks',
+      titleKey: 'agent.conversation.bentoChecksTitle',
+      descriptionKey: 'agent.conversation.bentoChecksDesc',
+      icon: 'fa-vial-circle-check',
+      tone: 'primary',
+    },
+    {
+      promptKey: 'agent.ui.promptAutomation',
+      titleKey: 'agent.conversation.bentoAutomationTitle',
+      descriptionKey: 'agent.conversation.bentoAutomationDesc',
+      icon: 'fa-gears',
+      tone: 'sky',
+    },
+    {
+      promptKey: 'agent.ui.promptNextSteps',
+      titleKey: 'agent.conversation.bentoNextStepsTitle',
+      descriptionKey: 'agent.conversation.bentoNextStepsDesc',
+      icon: 'fa-list-check',
+      tone: 'amber',
+    },
+  ];
+
+  const homePromptToneClasses: Record<HomePromptTone, { card: string; icon: string; title: string; arrow: string }> = {
+    primary: {
+      card: 'bg-gradient-to-br from-primary/[0.04] via-card to-card hover:border-primary/45 hover:shadow-[0_8px_24px_rgba(160,108,213,0.12)]',
+      icon: 'bg-primary/10 text-primary border-primary/20 group-hover:bg-primary/15',
+      title: 'group-hover:text-primary',
+      arrow: 'group-hover:text-primary',
+    },
+    emerald: {
+      card: 'bg-gradient-to-br from-emerald-500/[0.04] via-card to-card hover:border-emerald-500/45 hover:shadow-[0_8px_24px_rgba(16,185,129,0.12)]',
+      icon: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 group-hover:bg-emerald-500/15',
+      title: 'group-hover:text-emerald-500',
+      arrow: 'group-hover:text-emerald-500',
+    },
+    sky: {
+      card: 'bg-gradient-to-br from-sky-500/[0.04] via-card to-card hover:border-sky-500/45 hover:shadow-[0_8px_24px_rgba(14,165,233,0.12)]',
+      icon: 'bg-sky-500/10 text-sky-500 border-sky-500/20 group-hover:bg-sky-500/15',
+      title: 'group-hover:text-sky-500',
+      arrow: 'group-hover:text-sky-500',
+    },
+    amber: {
+      card: 'bg-gradient-to-br from-amber-500/[0.04] via-card to-card hover:border-amber-500/45 hover:shadow-[0_8px_24px_rgba(245,158,11,0.12)]',
+      icon: 'bg-amber-500/10 text-amber-500 border-amber-500/20 group-hover:bg-amber-500/15',
+      title: 'group-hover:text-amber-500',
+      arrow: 'group-hover:text-amber-500',
+    },
+  };
+
+  const homePromptPage = ref(0);
+  const homePromptPageCount = Math.ceil(homePromptCards.length / HOME_PROMPTS_PER_PAGE);
+  const visibleHomePromptCards = computed(() => {
+    const start = homePromptPage.value * HOME_PROMPTS_PER_PAGE;
+    return homePromptCards.slice(start, start + HOME_PROMPTS_PER_PAGE);
+  });
+
+  let homePromptTimer: number | null = null;
+  onMounted(() => {
+    homePromptTimer = window.setInterval(() => {
+      if (props.entries.length > 0 || props.streamingText || props.draft.trim()) return;
+      homePromptPage.value = (homePromptPage.value + 1) % homePromptPageCount;
+    }, HOME_PROMPT_ROTATE_MS);
+  });
+  onBeforeUnmount(() => {
+    if (homePromptTimer !== null) window.clearInterval(homePromptTimer);
+  });
+
+  const asRecord = (value: unknown): Record<string, unknown> | null =>
+    value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+  const toolCallsFromEntry = (entry: AgentLedgerEntry): Array<Record<string, unknown>> => {
+    const payload = asRecord(entry.payload);
+    return Array.isArray(payload?.toolCalls)
+      ? payload.toolCalls.filter((item): item is Record<string, unknown> => Boolean(asRecord(item)))
+      : [];
+  };
+  const toolNameByCallId = computed(() => {
+    const names = new Map<string, string>();
+    for (const entry of props.entries) {
+      for (const call of toolCallsFromEntry(entry)) {
+        if (typeof call.id === 'string' && typeof call.name === 'string') names.set(call.id, call.name);
+      }
+    }
+    return names;
+  });
+  const relatedToolName = (entry: AgentLedgerEntry): string => {
+    if (entry.kind !== 'tool_result') return '';
+    const payload = asRecord(entry.payload);
+    const callId = typeof payload?.toolCallId === 'string' ? payload.toolCallId : '';
+    return callId ? (toolNameByCallId.value.get(callId) ?? '') : '';
+  };
+  const entrySpacingClass = (entry: AgentLedgerEntry): string => {
+    if (entry.kind === 'user_input') return 'mb-7';
+    if (entry.kind === 'tool_result' || entry.kind === 'system_notice') return 'mb-5';
+    if (entry.kind === 'assistant_message' && toolCallsFromEntry(entry).length > 0) return 'mb-0.5';
+    return 'mb-7';
+  };
+
   const visibleEntries = computed(() =>
     props.entries.filter((entry) => {
       if (entry.kind !== 'assistant_message') return true;
       const payload = entry.payload;
       if (typeof payload === 'string') return Boolean(payload.trim());
       if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-        const text = (payload as Record<string, unknown>).text;
-        if (typeof text === 'string') return Boolean(text.trim());
+        const record = payload as Record<string, unknown>;
+        const text = record.text;
+        if (typeof text === 'string' && text.trim()) return true;
+        if (Array.isArray(record.toolCalls) && record.toolCalls.length > 0) return true;
+        return false;
       }
       return true;
     }),
   );
   const showJumpToLatest = ref(false);
-  const scroller = ref<{ scrollToBottom?: () => void; $el?: HTMLElement } | null>(null);
+  const scroller = ref<{
+    scrollToBottom?: () => void;
+    forceUpdate?: (clear?: boolean) => void;
+    $el?: HTMLElement;
+  } | null>(null);
   let keepPinnedToBottom = true;
   const commandSuggestions = computed(() => conversationCommandSuggestions(props.draft));
   const applyCommandSuggestion = (suggestion: ConversationCommandSuggestion): void => {
@@ -86,6 +239,15 @@
     void scrollToBottom();
   };
 
+  const handleDisclosureLayoutChange = async (): Promise<void> => {
+    const pinned = keepPinnedToBottom;
+    await nextTick();
+    // Native <details> can collapse after DynamicScroller has cached its expanded height.
+    // Clear measured sizes so collapsed tool rows cannot leave a large phantom spacer behind.
+    scroller.value?.forceUpdate?.(true);
+    if (pinned) await scrollToBottom();
+  };
+
   watch(
     () => [props.entries.length, props.streamingText] as const,
     () => {
@@ -110,6 +272,35 @@
     if (num >= 1_000) return `${(num / 1_000).toFixed(1)}k`;
     return num.toLocaleString();
   };
+
+  const terminalRunNotice = computed(() => {
+    const status = props.run?.status;
+    if (status === 'failed') {
+      return {
+        titleKey: 'agent.conversation.runFailedTitle',
+        hintKey: 'agent.conversation.runFailedHint',
+        icon: 'fa-triangle-exclamation',
+        className: 'border-error/30 bg-error/[0.045] text-error',
+      };
+    }
+    if (status === 'interrupted') {
+      return {
+        titleKey: 'agent.conversation.runInterruptedTitle',
+        hintKey: 'agent.conversation.runInterruptedHint',
+        icon: 'fa-pause',
+        className: 'border-warning/35 bg-warning/[0.055] text-warning',
+      };
+    }
+    if (status === 'cancelled') {
+      return {
+        titleKey: 'agent.conversation.runCancelledTitle',
+        hintKey: 'agent.conversation.runCancelledHint',
+        icon: 'fa-ban',
+        className: 'border-border/70 bg-header/35 text-text-secondary',
+      };
+    }
+    return null;
+  });
 </script>
 
 <template>
@@ -120,7 +311,7 @@
     <div class="relative z-10 min-h-0 flex-1">
       <DynamicScroller
         ref="scroller"
-        class="agent-conversation-scroller h-full overflow-y-auto overscroll-contain px-5 py-3.5"
+        class="agent-conversation-scroller h-full overflow-y-auto overscroll-contain px-5 py-5"
         :items="visibleEntries"
         :min-item-size="64"
         key-field="id"
@@ -171,65 +362,61 @@
             <!-- 现代化便当盒磁贴 (Bento Grid) -->
             <div class="mt-6.5 grid w-full grid-cols-1 sm:grid-cols-2 gap-3.5">
               <button
+                v-for="prompt in visibleHomePromptCards"
+                :key="prompt.promptKey"
                 type="button"
-                class="group relative flex items-center rounded-2xl border border-border/75 bg-gradient-to-br from-primary/[0.04] via-card to-card p-3.5 text-left shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/45 hover:shadow-[0_8px_24px_rgba(160,108,213,0.12)] active:scale-[0.99]"
-                @click="emit('updateDraft', $t('agent.ui.promptExplain'))"
+                class="group relative flex items-center rounded-2xl border border-border/75 p-3.5 text-left shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99]"
+                :class="homePromptToneClasses[prompt.tone].card"
+                @click="emit('updateDraft', $t(prompt.promptKey))"
               >
                 <div class="flex items-start gap-3.5 w-full">
                   <span
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary border border-primary/20 shadow-2xs group-hover:scale-105 group-hover:bg-primary/15 transition-all"
+                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-2xs transition-all group-hover:scale-105"
+                    :class="homePromptToneClasses[prompt.tone].icon"
                   >
-                    <i class="fa-solid fa-code text-sm" aria-hidden="true"></i>
+                    <i class="fa-solid text-sm" :class="prompt.icon" aria-hidden="true"></i>
                   </span>
                   <div class="min-w-0 flex-1">
                     <div class="flex items-center justify-between">
                       <span
-                        class="text-[13px] font-bold tracking-tight text-foreground group-hover:text-primary transition-colors"
+                        class="text-[13px] font-bold tracking-tight text-foreground transition-colors"
+                        :class="homePromptToneClasses[prompt.tone].title"
                       >
-                        {{ $t('agent.conversation.bentoExplainTitle') }}
+                        {{ $t(prompt.titleKey) }}
                       </span>
                       <span
-                        class="text-xs text-text-secondary/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-primary"
+                        class="text-xs text-text-secondary/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+                        :class="homePromptToneClasses[prompt.tone].arrow"
                         aria-hidden="true"
                         >↗</span
                       >
                     </div>
                     <p class="mt-1 text-xs leading-relaxed text-text-secondary/75">
-                      {{ $t('agent.conversation.bentoExplainDesc') }}
+                      {{ $t(prompt.descriptionKey) }}
                     </p>
                   </div>
                 </div>
               </button>
-
+            </div>
+            <div class="mt-3 flex items-center justify-center gap-1.5">
               <button
+                v-for="page in homePromptPageCount"
+                :key="page"
                 type="button"
-                class="group relative flex items-center rounded-2xl border border-border/75 bg-gradient-to-br from-emerald-500/[0.04] via-card to-card p-3.5 text-left shadow-[0_1px_3px_rgba(0,0,0,0.03),0_4px_12px_rgba(0,0,0,0.02)] backdrop-blur-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/45 hover:shadow-[0_8px_24px_rgba(16,185,129,0.12)] active:scale-[0.99]"
-                @click="emit('updateDraft', $t('agent.ui.promptDiagnose'))"
+                class="h-4 rounded-full px-0 transition-all duration-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                :class="page - 1 === homePromptPage ? 'w-5' : 'w-3 hover:w-4'"
+                :aria-label="$t('agent.conversation.promptPage', { page })"
+                :aria-current="page - 1 === homePromptPage ? 'true' : undefined"
+                @click="homePromptPage = page - 1"
               >
-                <div class="flex items-start gap-3.5 w-full">
-                  <span
-                    class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 shadow-2xs group-hover:scale-105 group-hover:bg-emerald-500/15 transition-all"
-                  >
-                    <i class="fa-solid fa-shield-halved text-sm" aria-hidden="true"></i>
-                  </span>
-                  <div class="min-w-0 flex-1">
-                    <div class="flex items-center justify-between">
-                      <span
-                        class="text-[13px] font-bold tracking-tight text-foreground group-hover:text-emerald-500 transition-colors"
-                      >
-                        {{ $t('agent.conversation.bentoDiagnoseTitle') }}
-                      </span>
-                      <span
-                        class="text-xs text-text-secondary/40 transition-all group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-emerald-500"
-                        aria-hidden="true"
-                        >↗</span
-                      >
-                    </div>
-                    <p class="mt-1 text-xs leading-relaxed text-text-secondary/75">
-                      {{ $t('agent.conversation.bentoDiagnoseDesc') }}
-                    </p>
-                  </div>
-                </div>
+                <span
+                  class="mx-auto block h-1.5 rounded-full transition-all duration-300"
+                  :class="
+                    page - 1 === homePromptPage
+                      ? 'w-4 bg-primary/70 shadow-[0_0_0_1px_color-mix(in_srgb,var(--color-primary)_12%,transparent)]'
+                      : 'w-1.5 bg-text-secondary/30 ring-1 ring-inset ring-text-secondary/10 hover:bg-text-secondary/45'
+                  "
+                ></span>
               </button>
             </div>
           </div>
@@ -241,10 +428,14 @@
             :index="index"
             :emit-resize="true"
             :size-dependencies="[item.payload]"
-            class="mb-4"
+            :class="entrySpacingClass(item)"
             @resize="handleItemResize"
           >
-            <ConversationMessage :entry="item" />
+            <ConversationMessage
+              :entry="item"
+              :related-tool-name="relatedToolName(item)"
+              @layout-change="handleDisclosureLayoutChange"
+            />
           </DynamicScrollerItem>
         </template>
         <template #after>
@@ -260,6 +451,20 @@
                 <span class="flex gap-0.5" aria-hidden="true"><span>·</span><span>·</span><span>·</span></span>
               </div>
               <AgentMessageBody :text="streamingText" />
+            </div>
+          </div>
+          <slot name="approvals" />
+          <div
+            v-if="terminalRunNotice"
+            class="mx-auto mb-4 flex w-full max-w-3xl items-start gap-2.5 rounded-xl border px-3 py-2.5 text-xs leading-5"
+            :class="terminalRunNotice.className"
+            :role="run?.status === 'cancelled' ? 'status' : 'alert'"
+            aria-live="polite"
+          >
+            <i class="fa-solid mt-0.5 shrink-0" :class="terminalRunNotice.icon" aria-hidden="true"></i>
+            <div class="min-w-0">
+              <div class="font-semibold">{{ $t(terminalRunNotice.titleKey) }}</div>
+              <div class="mt-0.5 text-[11px] text-current/80">{{ $t(terminalRunNotice.hintKey) }}</div>
             </div>
           </div>
         </template>
@@ -351,93 +556,6 @@
           </button>
         </div>
 
-        <!-- 会话状态与 Token 统计指示条（始终保持整行可见，回到最新消息作为行内局部操作项） -->
-        <div
-          v-if="showJumpToLatest || (run && (totalRunTokens > 0 || run.usage.steps > 0))"
-          class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/80 bg-card/60 px-3 py-1.5 text-[11px] text-text-secondary shadow-2xs select-none"
-        >
-          <div v-if="run && (totalRunTokens > 0 || run.usage.steps > 0)" class="flex flex-wrap items-center gap-2">
-            <span class="inline-flex items-center gap-1.5 font-medium text-foreground">
-              <i class="fa-solid fa-chart-simple text-[10px] text-foreground/70" aria-hidden="true"></i>
-              <span>{{ $t('agent.tasks.totalTokens') || '会话总消耗' }}</span>
-              <span class="font-mono font-semibold text-foreground">{{ formatTokens(totalRunTokens) }}</span>
-            </span>
-
-            <span class="text-border/70">|</span>
-
-            <span
-              class="inline-flex items-center gap-1 text-[10px] text-text-secondary"
-              :title="`输入: ${run.usage.inputTokens} · 输出: ${run.usage.outputTokens}`"
-            >
-              <span
-                >入
-                <strong class="font-mono font-normal text-foreground/80">{{
-                  formatTokens(run.usage.inputTokens)
-                }}</strong></span
-              >
-              <span>·</span>
-              <span
-                >出
-                <strong class="font-mono font-normal text-foreground/80">{{
-                  formatTokens(run.usage.outputTokens)
-                }}</strong></span
-              >
-            </span>
-
-            <span
-              v-if="run.usage.cachedInputTokens > 0 || runCacheRate > 0"
-              class="inline-flex items-center gap-1 rounded-md bg-success/15 px-1.5 py-0.5 text-[10px] font-medium text-success"
-              :title="`命中缓存: ${run.usage.cachedInputTokens} tokens`"
-            >
-              <i class="fa-solid fa-bolt text-[9px]" aria-hidden="true"></i>
-              <span>缓存率 {{ runCacheRate }}%</span>
-            </span>
-
-            <span v-if="run.usage.steps > 0" class="inline-flex items-center gap-1 text-[10px] text-text-secondary">
-              <span
-                >步数: <strong class="font-mono font-normal text-foreground/80">{{ run.usage.steps }}</strong></span
-              >
-            </span>
-          </div>
-          <div v-else class="text-[11px] text-text-secondary flex items-center gap-1.5">
-            <i class="fa-solid fa-clock-rotate-left text-[10px]" aria-hidden="true"></i>
-            <span>{{ $t('agent.ui.latest') }}</span>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <!-- 回到最新消息按钮：行内局部显示/隐藏，触发后仅按钮隐藏，整行保持完全可见 -->
-            <button
-              v-if="showJumpToLatest"
-              type="button"
-              class="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-foreground px-2.5 py-0.5 text-[10px] font-medium text-background shadow-xs transition hover:bg-foreground/90 active:scale-95"
-              :title="$t('agent.ui.latest')"
-              @click="scrollToBottom"
-            >
-              <span>{{ $t('agent.ui.latest') }}</span>
-              <i class="fa-solid fa-arrow-down text-[8px]" aria-hidden="true"></i>
-            </button>
-
-            <div
-              v-if="run?.budget?.maxRunTokens"
-              class="agent-budget-meter flex items-center gap-1.5 text-[10px] text-text-secondary"
-            >
-              <span
-                >预算:
-                {{ Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100)) }}%</span
-              >
-              <div class="agent-budget-bar h-1.5 w-16 overflow-hidden rounded-full bg-header">
-                <div
-                  class="h-full rounded-full transition-all duration-300"
-                  :class="totalRunTokens > run.budget.maxRunTokens * 0.9 ? 'bg-warning' : 'bg-foreground'"
-                  :style="{
-                    width: `${Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100))}%`,
-                  }"
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div
           class="agent-composer-shell rounded-xl border border-border/65 bg-card/88 backdrop-blur-md shadow-[0_2px_14px_rgba(0,0,0,0.035)] transition-all duration-200 hover:border-border-hover focus-within:border-primary/45 focus-within:ring-2 focus-within:ring-primary/15 overflow-hidden"
         >
@@ -464,6 +582,27 @@
               <slot name="configuration" />
             </div>
             <div class="flex shrink-0 items-center gap-1.5">
+              <button
+                v-if="showJumpToLatest"
+                type="button"
+                class="flex h-7 w-7 items-center justify-center rounded-lg border border-border/60 bg-background/60 text-text-secondary transition hover:bg-header hover:text-foreground"
+                :title="$t('agent.ui.latest')"
+                :aria-label="$t('agent.ui.latest')"
+                @click="scrollToBottom"
+              >
+                <i class="fa-solid fa-arrow-down text-[9px]" aria-hidden="true"></i>
+              </button>
+              <span
+                v-if="run && (totalRunTokens > 0 || run.usage.steps > 0)"
+                class="agent-token-status inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/55 bg-background/50 px-2 text-[9.5px] text-text-secondary select-none"
+                :title="`${$t('agent.tasks.totalTokens')}: ${totalRunTokens} · input ${run.usage.inputTokens} · output ${run.usage.outputTokens} · cache ${runCacheRate}% · steps ${run.usage.steps}${run.budget.maxRunTokens ? ` · budget ${Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100))}%` : ''}`"
+              >
+                <i class="fa-solid fa-chart-simple text-[8px] text-text-secondary/70" aria-hidden="true"></i>
+                <strong class="font-mono font-medium text-foreground/80">{{ formatTokens(totalRunTokens) }}</strong>
+                <span v-if="run.budget.maxRunTokens" class="agent-token-budget text-text-secondary/60">
+                  · {{ Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100)) }}%
+                </span>
+              </span>
               <button
                 v-if="run && ['created', 'running', 'awaiting_approval', 'awaiting_budget'].includes(run.status)"
                 type="button"

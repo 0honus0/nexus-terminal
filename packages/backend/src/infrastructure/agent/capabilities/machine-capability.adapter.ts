@@ -15,7 +15,6 @@ import type {
   MachineToolContext,
   ShellMutationResult,
 } from '../../../modules/agent/capabilities/machine.port';
-import type { Scope } from '../../../modules/agent/agent.types';
 import type { TargetDenylistRepositoryPort } from '../../../modules/agent/host/target-denylist.repository.port';
 import type { RemoteDockerService } from '../../../platform/docker/remote-docker.service';
 import type { ExecutionSession } from '../../../platform/execution/execution-session';
@@ -60,6 +59,10 @@ const assertDeadline = (context: MachineToolContext): void => {
   if (Math.floor(Date.now() / 1000) >= context.deadlineAt) throw new Error('TOOL_TIMEOUT');
 };
 
+const assertConnectionSelected = (context: MachineToolContext, connectionId: number): void => {
+  if (!context.connectionIds.includes(connectionId)) throw new Error('TARGET_NOT_SELECTED');
+};
+
 const readLength = (requested: number, context: MachineToolContext): number => {
   if (!Number.isSafeInteger(requested) || requested < 1) throw new Error('VALIDATION_FAILED');
   return Math.min(requested, context.maxOutputBytes, MAX_FILE_READ_BYTES);
@@ -74,10 +77,11 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     private readonly denylist: TargetDenylistRepositoryPort,
   ) {}
 
-  async listConnections(_scope: Scope) {
+  async listConnections(context: MachineToolContext) {
     const denied = new Set((await this.denylist.list()).map((entry) => entry.connectionId));
+    const selected = new Set(context.connectionIds);
     return (await this.connections.list())
-      .filter((connection) => connection.type === 'SSH' && !denied.has(connection.id))
+      .filter((connection) => connection.type === 'SSH' && selected.has(connection.id) && !denied.has(connection.id))
       .map((connection) => ({
         id: connection.id,
         name: connection.name,
@@ -87,8 +91,9 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
       }));
   }
 
-  async target(_scope: Scope, connectionId: number): Promise<MachineTargetFingerprint> {
+  async target(context: MachineToolContext, connectionId: number): Promise<MachineTargetFingerprint> {
     if (!Number.isSafeInteger(connectionId) || connectionId < 1) throw new Error('VALIDATION_FAILED');
+    assertConnectionSelected(context, connectionId);
     const connection = await this.connections.get(connectionId);
     if (!connection || connection.type !== 'SSH') throw new Error('NOT_FOUND');
     const endpoint = `${connection.host.trim().toLowerCase()}:${connection.port}`;
@@ -107,13 +112,14 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
   }
 
   async diagnose(
-    _scope: Scope,
+    context: MachineToolContext,
     connectionId: number,
     probeIds: readonly string[],
     actorId: string,
     signal: AbortSignal,
   ): Promise<AgentDiagnosticReport> {
     if (!Number.isSafeInteger(connectionId) || connectionId < 1) throw new Error('VALIDATION_FAILED');
+    assertConnectionSelected(context, connectionId);
     if (
       !Array.isArray(probeIds) ||
       probeIds.length > MAX_PROBES ||
@@ -270,6 +276,7 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     if (!Number.isSafeInteger(connectionId) || connectionId < 1 || !Number.isSafeInteger(offset) || offset < 0) {
       throw new Error('VALIDATION_FAILED');
     }
+    assertConnectionSelected(context, connectionId);
     const requestedPath = normalizeRemotePath(remotePath);
     if (hardDeniedPath(requestedPath)) throw new Error('RESOURCE_FORBIDDEN');
     const limit = readLength(maxBytes, context);
@@ -285,44 +292,49 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     try {
       assertDeadline(context);
       const filesystem = await session.fileSystem('control');
-      const requestedMetadata = await filesystem.metadata(requestedPath, { followSymbolicLinks: false });
-      if (requestedMetadata.isSymbolicLink) throw new Error('RESOURCE_FORBIDDEN');
-      if (!requestedMetadata.isFile) throw new Error('RESOURCE_FORBIDDEN');
-      const resolvedPath = await filesystem.resolvePath(requestedPath);
-      const normalizedResolved = normalizeRemotePath(resolvedPath);
-      if (hardDeniedPath(normalizedResolved)) throw new Error('RESOURCE_FORBIDDEN');
-      const metadata = await filesystem.metadata(normalizedResolved, { followSymbolicLinks: false });
-      if (!metadata.isFile || metadata.isSymbolicLink) throw new Error('RESOURCE_FORBIDDEN');
-      if (offset >= metadata.size) {
-        return {
-          path: requestedPath,
-          resolvedPath: normalizedResolved,
-          sizeBytes: metadata.size,
-          modifiedAt: metadata.modifiedAt,
-          offset,
-          bytesRead: 0,
-          truncated: false,
-          content: '',
-        };
-      }
-      const reader = await filesystem.openPositionedReader(normalizedResolved);
       try {
-        assertDeadline(context);
-        const available = Math.max(0, metadata.size - offset);
-        const bytes = await reader.read(offset, Math.min(limit, available));
-        assertDeadline(context);
-        return {
-          path: requestedPath,
-          resolvedPath: normalizedResolved,
-          sizeBytes: metadata.size,
-          modifiedAt: metadata.modifiedAt,
-          offset,
-          bytesRead: bytes.byteLength,
-          truncated: offset + bytes.byteLength < metadata.size,
-          content: Buffer.from(bytes).toString('utf8'),
-        };
-      } finally {
-        await reader.close().catch(() => undefined);
+        const requestedMetadata = await filesystem.metadata(requestedPath, { followSymbolicLinks: false });
+        if (requestedMetadata.isSymbolicLink) throw new Error('RESOURCE_FORBIDDEN');
+        if (!requestedMetadata.isFile) throw new Error('RESOURCE_FORBIDDEN');
+        const resolvedPath = await filesystem.resolvePath(requestedPath);
+        const normalizedResolved = normalizeRemotePath(resolvedPath);
+        if (hardDeniedPath(normalizedResolved)) throw new Error('RESOURCE_FORBIDDEN');
+        const metadata = await filesystem.metadata(normalizedResolved, { followSymbolicLinks: false });
+        if (!metadata.isFile || metadata.isSymbolicLink) throw new Error('RESOURCE_FORBIDDEN');
+        if (offset >= metadata.size) {
+          return {
+            path: requestedPath,
+            resolvedPath: normalizedResolved,
+            sizeBytes: metadata.size,
+            modifiedAt: metadata.modifiedAt,
+            offset,
+            bytesRead: 0,
+            truncated: false,
+            content: '',
+          };
+        }
+        const reader = await filesystem.openPositionedReader(normalizedResolved);
+        try {
+          assertDeadline(context);
+          const available = Math.max(0, metadata.size - offset);
+          const bytes = await reader.read(offset, Math.min(limit, available));
+          assertDeadline(context);
+          return {
+            path: requestedPath,
+            resolvedPath: normalizedResolved,
+            sizeBytes: metadata.size,
+            modifiedAt: metadata.modifiedAt,
+            offset,
+            bytesRead: bytes.byteLength,
+            truncated: offset + bytes.byteLength < metadata.size,
+            content: Buffer.from(bytes).toString('utf8'),
+          };
+        } finally {
+          await reader.close().catch(() => undefined);
+        }
+      } catch (error) {
+        if (isRemoteFileMissingError(error)) throw new Error('REMOTE_FILE_NOT_FOUND');
+        throw error;
       }
     } finally {
       await this.sessions.close(session.id).catch(() => undefined);
@@ -403,6 +415,7 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
   ): Promise<T> {
     assertDeadline(context);
     if (!Number.isSafeInteger(connectionId) || connectionId < 1) throw new Error('VALIDATION_FAILED');
+    assertConnectionSelected(context, connectionId);
     const safe = await this.connections.get(connectionId);
     if (!safe || safe.type !== 'SSH') throw new Error('NOT_FOUND');
     const resolved = await this.connections.resolve(connectionId);

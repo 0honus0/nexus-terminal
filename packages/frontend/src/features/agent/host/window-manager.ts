@@ -34,6 +34,11 @@ const state = reactive<AgentHubState>({
   launcherPosition: { right: 22, bottom: 24 },
 });
 
+// Keep the user's intended bounds separate from viewport-clamped render bounds.
+// Temporary viewport shrinkage (for example docked DevTools) can then be reversed
+// when the viewport grows again without losing the user's chosen position or size.
+let preferredBounds: AgentHubBounds = { ...DEFAULT_BOUNDS };
+
 const viewport = (): { width: number; height: number } => ({
   width: Math.max(document.documentElement.clientWidth, window.innerWidth || 0),
   height: Math.max(document.documentElement.clientHeight, window.innerHeight || 0),
@@ -90,7 +95,7 @@ export const agentWindowManager = {
     } else if (input.restoreRecent && !state.activeAppId && state.recentAppIds[0]) {
       state.activeAppId = state.recentAppIds[0];
     }
-    state.bounds = clampBounds(state.bounds);
+    state.bounds = clampBounds(preferredBounds);
     state.status = 'visible';
     logger.debug(
       { previousStatus, requestedAppId: input.appId ?? null, ...logContext() },
@@ -133,7 +138,8 @@ export const agentWindowManager = {
         Number.isFinite(bounds.width) &&
         Number.isFinite(bounds.height)
       ) {
-        state.bounds = clampBounds(bounds);
+        preferredBounds = { ...bounds };
+        state.bounds = clampBounds(preferredBounds);
       }
       state.maximized = stored.maximized === true;
       state.recentAppIds = Array.isArray(stored.recentAppIds)
@@ -153,7 +159,7 @@ export const agentWindowManager = {
     try {
       const payload = JSON.stringify({
         schemaVersion: 1,
-        bounds: state.bounds,
+        bounds: preferredBounds,
         maximized: state.maximized,
         launcherPosition: state.launcherPosition,
         recentAppIds: state.recentAppIds,
@@ -184,29 +190,34 @@ export const agentWindowManager = {
   toggleMaximize(): void {
     const previousMaximized = state.maximized;
     state.maximized = !state.maximized;
-    if (!state.maximized) state.bounds = clampBounds(state.bounds);
+    if (!state.maximized) state.bounds = clampBounds(preferredBounds);
     logger.debug({ previousMaximized, ...logContext() }, 'Agent floating window maximize state changed');
   },
   setBounds(bounds: AgentHubBounds): void {
-    state.bounds = clampBounds(bounds);
+    const next = clampBounds(bounds);
+    preferredBounds = { ...next };
+    state.bounds = next;
   },
   resize(width: number, height: number): void {
     const screen = viewport();
     const maxWidth = Math.max(1, screen.width - state.bounds.x);
     const maxHeight = Math.max(1, screen.height - state.bounds.y);
-    state.bounds = clampBounds({
+    const next = clampBounds({
       ...state.bounds,
       width: Math.min(Math.max(width, Math.min(MIN_WIDTH, maxWidth)), maxWidth),
       height: Math.min(Math.max(height, Math.min(MIN_HEIGHT, maxHeight)), maxHeight),
     });
+    preferredBounds = { ...next };
+    state.bounds = next;
   },
   clamp(): void {
-    state.bounds = clampBounds(state.bounds);
+    state.bounds = clampBounds(preferredBounds);
   },
   reset(): void {
     const previous = logContext();
     state.status = 'closed';
-    state.bounds = { ...DEFAULT_BOUNDS };
+    preferredBounds = { ...DEFAULT_BOUNDS };
+    state.bounds = { ...preferredBounds };
     state.maximized = false;
     state.activeAppId = null;
     state.recentAppIds = [];

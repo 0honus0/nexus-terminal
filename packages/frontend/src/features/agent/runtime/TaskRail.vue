@@ -54,7 +54,7 @@
     selectSubagent: [delegation: AgentSubagentView];
     cancelSubagent: [delegation: AgentSubagentView];
     deleteRun: [snapshot: AgentRunSnapshot];
-    resolveApproval: [approval: AgentApprovalView, decision: 'approved' | 'denied'];
+    resolveApproval: [approval: AgentApprovalView, decision: 'approved' | 'denied', feedback?: string];
     saveCheckpoint: [snapshot: AgentRunView | AgentRunSnapshot];
     resumeCheckpoint: [snapshot: AgentRunView | AgentRunSnapshot, checkpoint: AgentCheckpointView];
     increaseBudget: [
@@ -359,7 +359,7 @@
           :approvals="detailApprovals.filter((item) => item.status === 'requested')"
           :clock="detailApprovalClock"
           :busy="busy"
-          @resolve="(approval, decision) => $emit('resolveApproval', approval, decision)"
+          @resolve="(approval, decision, feedback) => $emit('resolveApproval', approval, decision, feedback)"
         />
 
         <details
@@ -709,7 +709,7 @@
                     :approval="approval"
                     :clock="approvalClock"
                     :busy="busy"
-                    @resolve="(item, decision) => emit('resolveApproval', item, decision)"
+                    @resolve="(item, decision, feedback) => emit('resolveApproval', item, decision, feedback)"
                   />
                 </div>
               </template>

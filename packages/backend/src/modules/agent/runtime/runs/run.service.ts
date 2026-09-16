@@ -201,6 +201,7 @@ export class RunService {
       agentDefinitionId: command.agentDefinitionId,
       model: { ...command.model },
       ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      approvalMode: command.approvalMode,
       connectionIds,
       environment,
       policyRevision: app.policyRevision,
@@ -216,6 +217,7 @@ export class RunService {
         configurationVersion: command.model.configurationVersion,
       },
       ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
+      approvalMode: command.approvalMode,
       connectionIds,
       environment: environmentSelection ? (JSON.parse(JSON.stringify(environmentSelection)) as JsonValue) : null,
       ...(initialGoal ? { initialGoal } : {}),
@@ -257,7 +259,14 @@ export class RunService {
         agentDefinitionId: command.agentDefinitionId,
         providerId: command.model.providerId,
         modelId: command.model.modelId,
+        reasoningEffort: reasoningEffort ?? null,
+        approvalMode: command.approvalMode,
         connectionCount: connectionIds.length,
+        artifactCount: input.artifactRefs.length,
+        inputBytes: Buffer.byteLength(input.text, 'utf8'),
+        maxRunTokens: budget.maxRunTokens,
+        maxRunSteps: budget.maxRunSteps,
+        maxOutputTokens: budget.maxOutputTokens,
       },
       'Agent Run create committed',
     );
@@ -298,6 +307,22 @@ export class RunService {
       if (committed.shouldInterruptModel) this.onInputAppended(committed.run);
       else if (committed.shouldReschedule) this.onCreated(committed.run);
     }
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        inputId: committed.inputId,
+        sequence: committed.sequence,
+        runVersion: committed.runVersion,
+        replayed: committed.replayed,
+        shouldInterruptModel: committed.shouldInterruptModel,
+        shouldReschedule: committed.shouldReschedule,
+        inputBytes: Buffer.byteLength(normalizedInput.text, 'utf8'),
+        artifactCount: normalizedInput.artifactRefs.length,
+      },
+      'Agent Run input appended',
+    );
     return { inputId: committed.inputId, sequence: committed.sequence, runVersion: committed.runVersion };
   }
 
@@ -336,6 +361,19 @@ export class RunService {
       this.onCommitted(committed.run);
       this.onInputAppended(committed.run);
     }
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId,
+        inputId: committed.inputId,
+        sequence: committed.sequence,
+        runVersion: committed.runVersion,
+        replayed: committed.replayed,
+        inputBytes: Buffer.byteLength(normalizedInput.text, 'utf8'),
+      },
+      'Agent Run interrupt input committed',
+    );
     return { inputId: committed.inputId, sequence: committed.sequence, runVersion: committed.runVersion };
   }
 

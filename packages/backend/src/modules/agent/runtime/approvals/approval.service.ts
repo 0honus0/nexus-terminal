@@ -32,6 +32,7 @@ export class ApprovalService {
     expectedVersion: number,
     actorUserId: number,
     idempotencyKey: string,
+    feedback?: string,
   ): Promise<ApprovalView> {
     if (
       !['approved', 'denied'].includes(decision) ||
@@ -56,6 +57,7 @@ export class ApprovalService {
       expectedPolicyRevision: approval.policyRevision,
       expectedInputRevision: approval.inputRevision,
       decidedByUserId: actorUserId,
+      ...(feedback ? { feedback } : {}),
       idempotencyKey: key,
       requestHash: requestHash(1, {
         approvalId,
@@ -63,6 +65,7 @@ export class ApprovalService {
         decision,
         operationHash,
         expectedVersion,
+        ...(feedback ? { feedback } : {}),
       }),
       now: this.clock.nowUnixSeconds(),
     });

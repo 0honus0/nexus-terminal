@@ -204,6 +204,12 @@ export class AppLifecycleService {
         : manifest.agents?.length
           ? 'agent'
           : 'none';
-    return { ...record, displayName: manifest.displayName, capabilities: [...manifest.capabilities], surface };
+    return {
+      ...record,
+      displayName: manifest.displayName,
+      capabilities: [...manifest.capabilities],
+      surface,
+      defaultApprovalMode: manifest.agentSurface?.defaultApprovalMode ?? 'ask',
+    };
   }
 }

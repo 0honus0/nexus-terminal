@@ -66,6 +66,7 @@ const appSummary = (app: AppView) => ({
   displayName: app.displayName,
   version: app.activeVersion,
   surface: app.surface,
+  defaultApprovalMode: app.defaultApprovalMode,
   stateVersion: app.version,
   enabled: app.desiredState === 'enabled',
   health:
@@ -83,6 +84,15 @@ const appSummary = (app: AppView) => ({
   pendingApprovals: app.approvalCount,
   pendingBudgetRequests: app.budgetRequestCount,
 });
+
+const artifactFileKinds = ['image', 'document', 'code', 'archive', 'media', 'other'] as const;
+type ArtifactFileKind = (typeof artifactFileKinds)[number];
+
+const artifactFileKind = (value: string | undefined): ArtifactFileKind | undefined => {
+  if (value === undefined) return undefined;
+  if ((artifactFileKinds as readonly string[]).includes(value)) return value as ArtifactFileKind;
+  throw new Error('VALIDATION_FAILED');
+};
 
 const providerInputKeys = [
   'kind',
@@ -697,12 +707,14 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       if (retainedRaw !== undefined && retainedRaw !== 'true' && retainedRaw !== 'false') {
         throw new Error('VALIDATION_FAILED');
       }
+      const kind = artifactFileKind(queryString(request.query.kind));
       const page = await dependencies.artifacts.listLibrary(agentUserId(request), {
         limit,
         ...(queryString(request.query.before) ? { before: queryString(request.query.before) } : {}),
         ...(queryString(request.query.q) ? { q: queryString(request.query.q) } : {}),
         ...(queryString(request.query.appId) ? { appId: queryString(request.query.appId) } : {}),
         ...(retainedRaw === undefined ? {} : { retained: retainedRaw === 'true' }),
+        ...(kind === undefined ? {} : { kind }),
       });
       agentData(request, response, page);
     }),

@@ -62,6 +62,7 @@ export interface AgentAppSummary {
   displayName: string;
   version: string;
   surface: 'builtin' | 'agent' | 'custom' | 'none';
+  defaultApprovalMode: AgentApprovalMode;
   stateVersion: number;
   enabled: boolean;
   health: string;
@@ -432,6 +433,15 @@ export interface AgentThreadPage {
   nextCursor: string | null;
 }
 
+export interface AgentThreadDeleteResult {
+  threadId: string;
+  deleted: true;
+}
+
+export interface AgentThreadDeleteAllResult {
+  deletedCount: number;
+}
+
 export interface AgentLedgerEntry {
   id: string;
   threadId: string;
@@ -458,6 +468,8 @@ export type AgentRunStatus =
   | 'failed'
   | 'cancelled'
   | 'interrupted';
+
+export type AgentApprovalMode = 'ask' | 'full_access';
 
 export type AgentPlanItemStatus = 'pending' | 'in_progress' | 'blocked' | 'completed' | 'cancelled';
 
@@ -508,6 +520,7 @@ export interface AgentRunView {
     agentDefinitionId: string;
     model: { providerId: string; modelId: string; configurationVersion: number };
     reasoningEffort?: AgentReasoningEffort;
+    approvalMode?: AgentApprovalMode;
     connectionIds: number[];
     environment?: WorkspaceProfileView | null;
     policyRevision: number;
@@ -1097,7 +1110,13 @@ export const agentApi = {
     return unwrap((await httpClient.get<AgentEnvelope<ArtifactStorageSummary>>('/agent/files/storage')).data);
   },
   async files(
-    query: { before?: string; q?: string; appId?: string; retained?: boolean } = {},
+    query: {
+      before?: string;
+      q?: string;
+      appId?: string;
+      retained?: boolean;
+      kind?: 'image' | 'document' | 'code' | 'archive' | 'media' | 'other';
+    } = {},
   ): Promise<AgentArtifactPage> {
     return unwrap(
       (
@@ -1302,6 +1321,29 @@ export const agentApi = {
       ).data,
     );
   },
+  async deleteThread(appId: string, thread: AgentThreadView): Promise<AgentThreadDeleteResult> {
+    return unwrap(
+      (
+        await httpClient.delete<AgentEnvelope<AgentThreadDeleteResult>>(
+          `/apps/${encodeURIComponent(appId)}/threads/${encodeURIComponent(thread.id)}`,
+          {
+            headers: await mutationHeaders(),
+            data: { expectedVersion: thread.version },
+          },
+        )
+      ).data,
+    );
+  },
+  async deleteAllThreads(appId: string): Promise<AgentThreadDeleteAllResult> {
+    return unwrap(
+      (
+        await httpClient.delete<AgentEnvelope<AgentThreadDeleteAllResult>>(`/apps/${encodeURIComponent(appId)}/threads`, {
+          headers: await mutationHeaders(),
+          data: { confirmation: 'delete_all_threads' },
+        })
+      ).data,
+    );
+  },
   async ledger(appId: string, threadId: string, before?: string): Promise<AgentLedgerPage> {
     return unwrap(
       (
@@ -1416,12 +1458,18 @@ export const agentApi = {
     appId: string,
     approval: AgentApprovalView,
     decision: 'approved' | 'denied',
+    feedback?: string,
   ): Promise<AgentApprovalView> {
     return unwrap(
       (
         await httpClient.post<AgentEnvelope<AgentApprovalView>>(
           `/apps/${encodeURIComponent(appId)}/approvals/${encodeURIComponent(approval.id)}/resolve`,
-          agentRuntimeRequest({ decision, operationHash: approval.operationHash, expectedVersion: approval.version }),
+          agentRuntimeRequest({
+            decision,
+            operationHash: approval.operationHash,
+            expectedVersion: approval.version,
+            ...(feedback ? { feedback } : {}),
+          }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
@@ -1436,6 +1484,7 @@ export const agentApi = {
       agentDefinitionId: string;
       model: { providerId: string; modelId: string; configurationVersion: number };
       reasoningEffort?: AgentReasoningEffort;
+      approvalMode: AgentApprovalMode;
       connectionIds?: number[];
       environment?: AgentRunEnvironmentSelection | null;
       initialGoal?: string;
@@ -1451,6 +1500,7 @@ export const agentApi = {
             agentDefinitionId: input.agentDefinitionId,
             model: input.model,
             ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
+            approvalMode: input.approvalMode,
             connectionIds: input.connectionIds ?? [],
             ...(input.environment === undefined ? {} : { environment: input.environment }),
             ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),

@@ -35,6 +35,15 @@ export interface LedgerPage {
   nextCursor: string | null;
 }
 
+export interface ThreadDeleteResult {
+  threadId: string;
+  deleted: true;
+}
+
+export interface ThreadDeleteAllResult {
+  deletedCount: number;
+}
+
 export interface AppendLedgerEntry {
   id: string;
   runId?: string;
@@ -60,6 +69,8 @@ export interface ConversationRepositoryPort {
   ): Promise<ThreadView>;
   getThread(scope: Scope, threadId: string): Promise<ThreadView | null>;
   listThreads(scope: Scope, limit: number, before?: string): Promise<ThreadPage>;
+  deleteThread(scope: Scope, threadId: string, expectedVersion: number, now: number): Promise<ThreadDeleteResult>;
+  deleteAllThreads(scope: Scope, now: number): Promise<ThreadDeleteAllResult>;
   readEntries(scope: Scope, threadId: string, limit: number, before?: string): Promise<LedgerPage>;
   readContextEntries(
     scope: Scope,

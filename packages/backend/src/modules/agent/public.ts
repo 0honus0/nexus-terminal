@@ -35,6 +35,8 @@ import type {
   LedgerEntryKind,
   LedgerEntryView,
   LedgerPage,
+  ThreadDeleteAllResult,
+  ThreadDeleteResult,
   ThreadPage,
   ThreadView,
 } from './ai/conversation.repository.port';
@@ -192,6 +194,8 @@ export interface AgentConversationFacade {
   renameThread(scope: Scope, threadId: string, title: unknown, expectedVersion: unknown): Promise<ThreadView>;
   getThread(scope: Scope, threadId: string): Promise<ThreadView>;
   listThreads(scope: Scope, limit?: number, before?: string): Promise<ThreadPage>;
+  deleteThread(scope: Scope, threadId: string, expectedVersion: unknown): Promise<ThreadDeleteResult>;
+  deleteAllThreads(scope: Scope, confirmation: unknown): Promise<ThreadDeleteAllResult>;
   readPage(scope: Scope, threadId: string, limit?: number, before?: string): Promise<LedgerPage>;
   append(
     scope: Scope,
@@ -415,6 +419,7 @@ export interface AgentApprovalFacade {
     expectedVersion: number,
     actorUserId: number,
     idempotencyKey: string,
+    feedback?: string,
   ): Promise<ApprovalView>;
 }
 

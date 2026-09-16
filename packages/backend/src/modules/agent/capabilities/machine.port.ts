@@ -39,6 +39,7 @@ export interface AgentDiagnosticsPort {
 export interface MachineToolContext extends Scope {
   runId: string;
   agentRuntimeId: string;
+  connectionIds: readonly number[];
   signal: AbortSignal;
   deadlineAt: number;
   maxOutputBytes: number;
@@ -99,10 +100,10 @@ export interface DockerMutationResult extends DockerMutationInspection {
 }
 
 export interface MachineCapabilityPort {
-  listConnections(scope: Scope): Promise<MachineConnectionSummary[]>;
-  target(scope: Scope, connectionId: number): Promise<MachineTargetFingerprint>;
+  listConnections(context: MachineToolContext): Promise<MachineConnectionSummary[]>;
+  target(context: MachineToolContext, connectionId: number): Promise<MachineTargetFingerprint>;
   diagnose(
-    scope: Scope,
+    context: MachineToolContext,
     connectionId: number,
     probeIds: readonly string[],
     actorId: string,

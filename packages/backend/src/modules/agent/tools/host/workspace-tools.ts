@@ -125,6 +125,7 @@ export const createWorkspaceJobTool = (
     riskClass: 'mutate',
     capability: 'workspace.runtime.execute',
   },
+  isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
     onlyKeys(args, ['workspaceId', 'argv', 'cwd', 'timeoutSeconds', 'generation']);

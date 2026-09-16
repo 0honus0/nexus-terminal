@@ -8,6 +8,8 @@ import type {
   LedgerEntryView,
   LedgerPage,
   ThreadPage,
+  ThreadDeleteAllResult,
+  ThreadDeleteResult,
   ThreadTitleSource,
   ThreadView,
 } from './conversation.repository.port';
@@ -73,6 +75,21 @@ export class ConversationService {
 
   listThreads(scope: Scope, limit = 50, before?: string): Promise<ThreadPage> {
     return this.repository.listThreads(scope, validateLimit(limit, 100), before);
+  }
+
+  deleteThread(scope: Scope, threadId: string, expectedVersion: unknown): Promise<ThreadDeleteResult> {
+    if (!threadId) throw new Error('VALIDATION_FAILED');
+    return this.repository.deleteThread(
+      scope,
+      threadId,
+      normalizeExpectedVersion(expectedVersion),
+      this.clock.nowUnixSeconds(),
+    );
+  }
+
+  deleteAllThreads(scope: Scope, confirmation: unknown): Promise<ThreadDeleteAllResult> {
+    if (confirmation !== 'delete_all_threads') throw new Error('VALIDATION_FAILED');
+    return this.repository.deleteAllThreads(scope, this.clock.nowUnixSeconds());
   }
 
   readPage(scope: Scope, threadId: string, limit = 50, before?: string): Promise<LedgerPage> {

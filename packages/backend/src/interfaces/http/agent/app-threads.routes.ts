@@ -63,6 +63,19 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
     }),
   );
 
+  router.delete(
+    '/',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body))
+        throw new Error('VALIDATION_FAILED');
+      const body = request.body as Record<string, unknown>;
+      if (Object.keys(body).some((key) => key !== 'confirmation')) throw new Error('VALIDATION_FAILED');
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(request, response, await dependencies.conversations.deleteAllThreads(scope, body.confirmation), 202);
+    }),
+  );
+
   router.patch(
     '/:threadId',
     mutationSecurity,
@@ -82,6 +95,28 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
           body.title,
           body.expectedVersion,
         ),
+      );
+    }),
+  );
+
+  router.delete(
+    '/:threadId',
+    mutationSecurity,
+    agentRoute(async (request, response) => {
+      if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body))
+        throw new Error('VALIDATION_FAILED');
+      const body = request.body as Record<string, unknown>;
+      if (Object.keys(body).some((key) => key !== 'expectedVersion')) throw new Error('VALIDATION_FAILED');
+      const scope = { userId: agentUserId(request), appId: pathParam(request.params.appId) };
+      agentData(
+        request,
+        response,
+        await dependencies.conversations.deleteThread(
+          scope,
+          pathParam(request.params.threadId),
+          body.expectedVersion,
+        ),
+        202,
       );
     }),
   );

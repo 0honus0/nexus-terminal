@@ -7,6 +7,7 @@
   export interface BaseListboxOption {
     value: string | number;
     label: string;
+    triggerLabel?: string;
     disabled?: boolean;
     description?: string;
   }
@@ -42,6 +43,7 @@
   const trigger = ref<HTMLButtonElement | null>(null);
   const panel = ref<HTMLElement | null>(null);
   const visible = ref(false);
+  const positioned = ref(false);
   const activeIndex = ref(-1);
   const left = ref(0);
   const top = ref(0);
@@ -51,7 +53,7 @@
   const selectedIndex = computed(() => props.options.findIndex((option) => option.value === model.value));
   const selectedOption = computed(() => props.options[selectedIndex.value]);
   const selectedLabel = computed(() => {
-    return selectedOption.value?.label ?? props.placeholder;
+    return selectedOption.value?.triggerLabel ?? selectedOption.value?.label ?? props.placeholder;
   });
 
   const activeOptionId = computed(() => {
@@ -63,7 +65,7 @@
     if (props.size === 'sm') {
       return {
         trigger: 'h-8 px-2.5 text-xs rounded-lg gap-1.5',
-        item: 'py-1.5 px-2 text-xs rounded-md',
+        item: 'h-8 px-2.5 text-xs rounded-md',
         icon: 'text-[9px]',
       };
     }
@@ -101,17 +103,19 @@
 
     const rect = button.getBoundingClientRect();
     const margin = 8;
-    const menuWidth = Math.max(rect.width, 140);
+    const menuWidth = rect.width;
     width.value = menuWidth;
     left.value = Math.max(margin, Math.min(rect.left, window.innerWidth - menuWidth - margin));
 
     const below = rect.bottom + 4;
     const above = rect.top - menu.offsetHeight - 4;
     top.value = below + menu.offsetHeight <= window.innerHeight - margin ? below : Math.max(margin, above);
+    positioned.value = true;
   };
 
   const open = async (): Promise<void> => {
     if (props.disabled || visible.value) return;
+    positioned.value = false;
     visible.value = true;
     activeIndex.value = enabledIndexFrom(selectedIndex.value >= 0 ? selectedIndex.value : 0, 1);
     await place();
@@ -120,6 +124,7 @@
   const close = (restoreFocus = false): void => {
     if (!visible.value) return;
     visible.value = false;
+    positioned.value = false;
     activeIndex.value = -1;
     if (restoreFocus) void nextTick(() => trigger.value?.focus());
   };
@@ -270,8 +275,13 @@
       ref="panel"
       :data-testid="props.panelTestId"
       role="listbox"
-      class="fixed z-[180] max-h-[min(20rem,calc(100dvh-1rem))] overflow-y-auto rounded-xl border border-border/80 bg-input/95 p-1 text-foreground shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
-      :style="{ left: `${left}px`, top: `${top}px`, minWidth: `${width}px` }"
+      class="fixed z-[180] max-h-[min(20rem,calc(100dvh-1rem))] overflow-y-auto rounded-lg border border-border bg-background p-1 text-foreground shadow-[0_12px_32px_rgba(0,0,0,0.16)] ring-1 ring-black/5"
+      :style="{
+        left: `${left}px`,
+        top: `${top}px`,
+        minWidth: `${width}px`,
+        visibility: positioned ? 'visible' : 'hidden',
+      }"
     >
       <button
         v-for="(option, index) in props.options"
@@ -289,8 +299,8 @@
         class="flex w-full select-none items-center justify-between outline-none transition-colors duration-100 disabled:cursor-default disabled:opacity-50"
         :class="[
           sizeStyles.item,
-          option.value === model ? 'bg-primary/10 font-medium text-primary' : 'text-foreground hover:bg-header/80',
-          index === activeIndex ? 'ring-1 ring-inset ring-foreground/20' : '',
+          option.value === model ? 'bg-primary/8 font-medium text-foreground' : 'text-foreground/85 hover:bg-header/70',
+          index === activeIndex ? 'bg-header/80' : '',
         ]"
         @pointerenter="!option.disabled && (activeIndex = index)"
         @click="choose(index)"
@@ -298,7 +308,7 @@
         <span class="truncate pr-2 text-left">{{ option.label }}</span>
         <svg
           v-if="option.value === model"
-          class="shrink-0 text-primary"
+          class="shrink-0 text-text-secondary"
           width="12"
           height="12"
           viewBox="0 0 12 12"

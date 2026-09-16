@@ -38,10 +38,15 @@ export interface ToolInspection {
   inputRevision: number;
 }
 
+export interface ToolAvailabilityContext {
+  environment: AgentRunEnvironmentSnapshot | null;
+}
+
 export interface ToolContext extends Scope {
   actor: Actor;
   runId: string;
   agentRuntimeId: string;
+  connectionIds: readonly number[];
   environment: AgentRunEnvironmentSnapshot | null;
   stepId: string;
   signal: AbortSignal;
@@ -67,6 +72,7 @@ export interface ToolResult {
 
 export interface AgentTool {
   descriptor: ToolDescriptor;
+  isAvailable?(context: ToolAvailabilityContext): boolean;
   inspect(input: JsonValue, context: ToolContext, policyRevision: number): Promise<ToolInspection>;
   execute(inspection: ToolInspection, context: ToolContext): Promise<ToolResult>;
 }

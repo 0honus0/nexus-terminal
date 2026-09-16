@@ -203,6 +203,14 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
               baseURL: provider.baseUrl,
               ...(credential ? { apiKey: credential } : {}),
               includeUsage: true,
+              // NativeAgentBackend persists and executes one tool proposal at a time so
+              // approvals, leases, budgets, and reconciliation stay deterministic. Ask
+              // OpenAI-compatible providers to honor that execution contract instead of
+              // accepting parallel calls and failing the whole Run afterwards.
+              transformRequestBody: (body) =>
+                Array.isArray(body.tools) && body.tools.length > 0
+                  ? { ...body, parallel_tool_calls: false }
+                  : body,
             });
             return compatible.chatModel(request.modelId).doStream({
               prompt: promptFor(request) as never,

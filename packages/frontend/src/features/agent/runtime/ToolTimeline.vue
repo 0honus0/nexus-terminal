@@ -3,7 +3,9 @@
   import ApprovalCard from './ApprovalCard.vue';
 
   defineProps<{ approvals: AgentApprovalView[]; clock: AgentServerClockAnchor | null; busy?: boolean }>();
-  const emit = defineEmits<{ resolve: [approval: AgentApprovalView, decision: 'approved' | 'denied'] }>();
+  const emit = defineEmits<{
+    resolve: [approval: AgentApprovalView, decision: 'approved' | 'denied', feedback?: string];
+  }>();
 </script>
 
 <template>
@@ -16,7 +18,7 @@
       :approval="approval"
       :clock="clock"
       :busy="busy"
-      @resolve="(item, decision) => emit('resolve', item, decision)"
+      @resolve="(item, decision, feedback) => emit('resolve', item, decision, feedback)"
     />
   </section>
 </template>

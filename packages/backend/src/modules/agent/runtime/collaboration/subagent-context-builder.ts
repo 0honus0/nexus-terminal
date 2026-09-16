@@ -53,7 +53,7 @@ export class SubagentContextBuilder {
       this.mailboxes.readMessages(scope, runId, runtimeId, runtime.consumedMailboxSequence, INBOX_LIMIT),
       this.runtimes.recentRuntimeToolExchanges(scope, runId, runtimeId, 8),
     ]);
-    const offeredTools = this.toolSchemas(scope, delegation, model);
+    const offeredTools = this.toolSchemas(scope, delegation, model, run);
     const toolMode: 'auto' | 'none' =
       offeredTools.length > 0 &&
       delegation.usage.steps + 2 <= delegation.budget.maxSteps &&
@@ -65,7 +65,8 @@ export class SubagentContextBuilder {
       ...instructions.map((content) => `system:${content}`),
       ...messages.map((message) => `${message.role}:${message.content}`),
     ].join('\n');
-    const estimatedInputTokens = estimateTokens(encodedContext);
+    const toolSchemaTokens = offeredTools.length ? estimateTokens(JSON.stringify(offeredTools)) : 0;
+    const estimatedInputTokens = estimateTokens(encodedContext) + toolSchemaTokens;
     const remainingChildTokens = delegation.budget.maxTokens - delegation.usage.tokens;
     const remainingRunTokens = run.budget.maxRunTokens - run.usage.inputTokens - run.usage.outputTokens;
     const maxOutputTokens = Math.min(
@@ -163,11 +164,16 @@ export class SubagentContextBuilder {
     };
   }
 
-  private toolSchemas(scope: Scope, delegation: DelegationView, model: ProviderModelConfig): ModelToolSchema[] {
+  private toolSchemas(
+    scope: Scope,
+    delegation: DelegationView,
+    model: ProviderModelConfig,
+    run: RunView,
+  ): ModelToolSchema[] {
     if (!model.supportsTools) return [];
     const allowedCapabilities = new Set(delegation.capabilities);
     return this.toolCatalog
-      .discover(scope, '', 256)
+      .discover(scope, '', 256, { environment: run.definition.environment ?? null })
       .filter(
         (descriptor) =>
           allowedCapabilities.has(descriptor.capability) &&

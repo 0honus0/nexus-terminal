@@ -103,6 +103,8 @@ export const createAgentRunFacade = (appId: string) => {
     createThread: (title?: string) => agentApi.createThread(appId, title),
     renameThread: (threadId: string, title: string, expectedVersion: number) =>
       agentApi.renameThread(appId, threadId, title, expectedVersion),
+    deleteThread: (thread: Parameters<typeof agentApi.deleteThread>[1]) => agentApi.deleteThread(appId, thread),
+    deleteAllThreads: () => agentApi.deleteAllThreads(appId),
     readLedger: (threadId: string, before?: string) => agentApi.ledger(appId, threadId, before),
     definitions: () => agentApi.definitions(appId),
     providers: () => agentApi.providers(),
@@ -119,8 +121,8 @@ export const createAgentRunFacade = (appId: string) => {
       agentApi.subagentMessages(appId, runId, delegationId, before),
     cancelSubagent: (runId: string, delegation: Parameters<typeof agentApi.cancelSubagent>[2]) =>
       agentApi.cancelSubagent(appId, runId, delegation),
-    resolveApproval: (approval: AgentApprovalView, decision: 'approved' | 'denied') =>
-      agentApi.resolveApproval(appId, approval, decision),
+    resolveApproval: (approval: AgentApprovalView, decision: 'approved' | 'denied', feedback?: string) =>
+      agentApi.resolveApproval(appId, approval, decision, feedback),
     createRun: async (input: Parameters<typeof agentApi.createRun>[1]) =>
       runStore.accept(await agentApi.createRun(appId, input)),
     appendInput: (run: AgentRunView, text: string, artifactRefs: string[] = []) =>

@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { AgentReasoningEffort } from '../api/agent-api';
+import type { AgentApprovalMode, AgentReasoningEffort } from '../api/agent-api';
 
 export interface AgentAppViewState {
   threadId?: string;
@@ -8,6 +8,8 @@ export interface AgentAppViewState {
   selectedTaskId?: string;
   modelKey?: string;
   reasoningEffort?: AgentReasoningEffort;
+  approvalMode?: AgentApprovalMode;
+  connectionIds?: number[];
   environmentRecipeId?: string;
   hubView: 'conversation' | 'files';
 }
@@ -62,6 +64,23 @@ export const agentSurfaceSession = {
     const state = ensure(appId);
     if (effort) state.reasoningEffort = effort;
     else delete state.reasoningEffort;
+  },
+  restoreApprovalMode(appId: string): AgentApprovalMode | undefined {
+    return ensure(appId).approvalMode;
+  },
+  setApprovalMode(appId: string, approvalMode?: AgentApprovalMode): void {
+    const state = ensure(appId);
+    if (approvalMode) state.approvalMode = approvalMode;
+    else delete state.approvalMode;
+  },
+  restoreConnectionIds(appId: string): number[] | undefined {
+    const value = ensure(appId).connectionIds;
+    return value ? [...value] : undefined;
+  },
+  setConnectionIds(appId: string, connectionIds?: readonly number[]): void {
+    const state = ensure(appId);
+    if (connectionIds) state.connectionIds = [...connectionIds];
+    else delete state.connectionIds;
   },
   restoreEnvironmentRecipeId(appId: string): string | undefined {
     return ensure(appId).environmentRecipeId;

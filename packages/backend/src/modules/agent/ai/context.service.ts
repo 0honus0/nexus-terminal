@@ -110,7 +110,11 @@ export class ContextService {
     const compactionRatio = compactionMode === 'aggressive' ? 0.65 : compactionMode === 'conservative' ? 0.92 : 0.8;
     const safetyTokens = estimateTokens(SAFETY_MESSAGE);
     const inputTokens = estimateTokens(input.currentInput);
-    if (safetyTokens + inputTokens > availableTokens) throw new Error('CONTEXT_BUDGET_EXCEEDED');
+    // Tool definitions are serialized into the provider request and consume input/context tokens.
+    // Account for them before selecting optional history/recall sections so budget reservation and
+    // context compaction reflect the request that is actually sent upstream.
+    const toolSchemaTokens = input.tools?.length ? estimateTokens(JSON.stringify(input.tools)) : 0;
+    if (safetyTokens + inputTokens + toolSchemaTokens > availableTokens) throw new Error('CONTEXT_BUDGET_EXCEEDED');
 
     const sourceRanges: ContextSourceRange[] = [
       { kind: 'safety' },
@@ -118,7 +122,7 @@ export class ContextService {
     ];
     const droppedSections: string[] = [];
     const messages: ModelMessage[] = [{ role: 'system', content: SAFETY_MESSAGE }];
-    let usedTokens = safetyTokens + inputTokens;
+    let usedTokens = safetyTokens + inputTokens + toolSchemaTokens;
 
     if (input.historyBoundary !== undefined && !input.runId) throw new Error('VALIDATION_FAILED');
     const ledgerPromise =
@@ -281,14 +285,17 @@ export class ContextService {
     // headroom. This is a context-management policy, not a smaller model capability limit.
     const compacted = droppedSections.length > 0;
     if (compacted && selectedLedger.length > 0) {
-      const targetTokens = Math.max(safetyTokens + inputTokens, Math.floor(availableTokens * compactionRatio));
+      const targetTokens = Math.max(
+        safetyTokens + inputTokens + toolSchemaTokens,
+        Math.floor(availableTokens * compactionRatio),
+      );
       for (const candidate of selectedLedger) {
         if (usedTokens <= targetTokens) break;
         const messageIndex = messages.indexOf(candidate.message);
         if (messageIndex >= 0) messages.splice(messageIndex, 1);
         const sourceIndex = sourceRanges.findIndex((source) => source.kind === 'ledger' && source.id === candidate.id);
         if (sourceIndex >= 0) sourceRanges.splice(sourceIndex, 1);
-        usedTokens = Math.max(safetyTokens + inputTokens, usedTokens - candidate.tokens);
+        usedTokens = Math.max(safetyTokens + inputTokens + toolSchemaTokens, usedTokens - candidate.tokens);
         if (!droppedSections.includes(`ledger:${candidate.id}`)) droppedSections.push(`ledger:${candidate.id}`);
       }
     }

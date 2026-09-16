@@ -97,7 +97,10 @@ const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
 const hostKey = privateKey.export({ type: 'pkcs1', format: 'pem' });
 
 function normalizeRemotePath(remotePath = '.') {
-  const raw = String(remotePath || '.').replace(/\\/g, '/');
+  let raw = String(remotePath || '.').replace(/\\/g, '/');
+  const normalizedRoot = rootDir.replace(/\\/g, '/');
+  if (raw === normalizedRoot) raw = '/';
+  else if (raw.startsWith(`${normalizedRoot}/`)) raw = raw.slice(normalizedRoot.length);
   if (raw === '.' || raw === './') return '';
   const normalized = path.posix.normalize(raw.startsWith('/') ? raw : `/${raw}`);
   return normalized === '/' ? '' : normalized.slice(1);

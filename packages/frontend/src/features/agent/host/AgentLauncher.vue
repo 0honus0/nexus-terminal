@@ -70,7 +70,7 @@
 <template>
   <button
     type="button"
-    class="fixed z-30 flex h-10 w-10 touch-none select-none items-center justify-center rounded-full border border-border/80 bg-foreground text-background shadow-lg transition-all hover:scale-105 hover:bg-foreground/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-border disabled:cursor-not-allowed disabled:opacity-40"
+    class="fixed z-30 flex h-10 w-10 touch-none select-none items-center justify-center rounded-full border border-primary/45 bg-primary text-white shadow-lg shadow-primary/20 transition-all hover:scale-105 hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-40"
     :style="{ right: `${position.right}px`, bottom: `${position.bottom}px` }"
     :aria-label="$t('agent.launcher.open')"
     :title="$t('agent.launcher.open')"

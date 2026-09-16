@@ -4,7 +4,13 @@ import type { ToolPolicyDecision } from '../../capabilities/policy.service';
 import { PolicyService } from '../../capabilities/policy.service';
 import { ToolCatalog } from '../../capabilities/tool-catalog';
 import { ToolExecutor } from '../../capabilities/tool-executor';
-import type { ToolContext, ToolInspection, ToolProposal, ToolResult } from '../../capabilities/tool.types';
+import type {
+  ToolAvailabilityContext,
+  ToolContext,
+  ToolInspection,
+  ToolProposal,
+  ToolResult,
+} from '../../capabilities/tool.types';
 import { failedToolResult as buildFailedToolResult, executionErrorCode } from './execution-errors';
 import { LeaseCoordinator, type LeaseRenewal } from './lease-coordinator';
 import type { MutationLeaseGuardHandle, MutationLeaseGuardPort } from './mutation-lease-guard.port';
@@ -54,8 +60,8 @@ export class ToolCallRunner {
     private readonly mutationLeases: MutationLeaseGuardPort,
   ) {}
 
-  schemas(scope: Scope): CatalogToolSchema[] {
-    return this.catalog.schemas(scope);
+  schemas(scope: Scope, availability?: ToolAvailabilityContext): CatalogToolSchema[] {
+    return this.catalog.schemas(scope, availability);
   }
 
   async inspect(context: ToolContext, proposal: ToolProposal): Promise<InspectedToolCall> {
@@ -92,6 +98,10 @@ export class ToolCallRunner {
     }
     const renewalError = await lease.renewal.stop();
     return renewalError ? failedReadResult(renewalError) : result;
+  }
+
+  failedRead(error: unknown): ToolResult {
+    return failedReadResult(error);
   }
 
   async releaseRead(lease: ReadToolLease): Promise<void> {

@@ -35,6 +35,10 @@ export interface AgentAppTargets {
   runner?: AgentAppTarget;
 }
 
+export interface AgentAppSurfacePreferences {
+  defaultApprovalMode?: 'ask' | 'full_access';
+}
+
 export interface AgentAppAgentDefinition {
   id: string;
   version: string;
@@ -56,6 +60,7 @@ export interface AgentAppManifest {
   capabilities: AgentCapability[];
   intents: AgentAppIntent[];
   agents?: AgentAppAgentDefinition[];
+  agentSurface?: AgentAppSurfacePreferences;
   targets?: AgentAppTargets;
 }
 
@@ -85,6 +90,7 @@ export interface AppView extends AppRecord {
   displayName: string;
   capabilities: AgentCapability[];
   surface: 'builtin' | 'agent' | 'custom' | 'none';
+  defaultApprovalMode: 'ask' | 'full_access';
 }
 
 export interface AppStatePatch {

@@ -357,6 +357,12 @@
     execute(async () => {
       if (!denylist.value) return;
       denylist.value = await agentApi.replaceTargetDenylist(connectionIds, reason, denylist.value.revision);
+      window.dispatchEvent(
+        new CustomEvent('nexus:agent:authorization-changed', {
+          detail: { revision: denylist.value.revision, connectionIds },
+        }),
+      );
+      window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
     });
 
   const selectGroup = (id: AgentSettingsGroupId): void => {

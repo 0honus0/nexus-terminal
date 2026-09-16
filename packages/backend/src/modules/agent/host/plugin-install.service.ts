@@ -968,6 +968,7 @@ export class PluginInstallService {
       displayName: plugin.manifest.displayName,
       capabilities: [...plugin.manifest.capabilities],
       surface: plugin.frontendEntry ? 'custom' : plugin.manifest.agents?.length ? 'agent' : 'none',
+      defaultApprovalMode: plugin.manifest.agentSurface?.defaultApprovalMode ?? 'ask',
     };
   }
 }

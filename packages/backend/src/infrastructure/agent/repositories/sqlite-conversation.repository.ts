@@ -6,6 +6,8 @@ import type {
   LedgerEntryView,
   LedgerPage,
   Scope,
+  ThreadDeleteAllResult,
+  ThreadDeleteResult,
   ThreadPage,
   ThreadTitleSource,
   ThreadView,
@@ -86,6 +88,97 @@ const threadSelect = `
       ORDER BY r.created_at DESC, r.id DESC LIMIT 1) AS latest_run_id
   FROM ai_threads t
 `;
+
+const nonTerminalRunSql = "'created','running','awaiting_approval','awaiting_budget','cancelling'";
+
+const assertThreadDeleteSafe = async (
+  db: RelationalDatabase,
+  scope: Scope,
+  threadId?: string,
+): Promise<void> => {
+  const threadFilter = threadId ? ' AND r.thread_id = ?' : '';
+  const params: unknown[] = [scope.userId, scope.appId, ...(threadId ? [threadId] : [])];
+  const active = await db.queryOne<{ id: string }>(
+    `SELECT r.id FROM agent_runs r
+     WHERE r.user_id = ? AND r.app_id = ?${threadFilter} AND r.status IN (${nonTerminalRunSql}) LIMIT 1`,
+    params,
+  );
+  if (active) throw new Error('THREAD_DELETE_ACTIVE');
+
+  const reconciliation = await db.queryOne<{ id: string }>(
+    `SELECT r.id FROM agent_runs r
+     WHERE r.user_id = ? AND r.app_id = ?${threadFilter} AND r.needs_reconciliation = 1 LIMIT 1`,
+    params,
+  );
+  if (reconciliation) throw new Error('THREAD_DELETE_RECONCILIATION_REQUIRED');
+
+  const workspace = await db.queryOne<{ id: string }>(
+    `SELECT w.id FROM agent_workspaces w
+     INNER JOIN agent_runs r ON r.id = w.run_id AND r.user_id = w.user_id AND r.app_id = w.app_id
+     WHERE r.user_id = ? AND r.app_id = ?${threadFilter}
+       AND (w.status <> 'deleted' OR w.retained = 1) LIMIT 1`,
+    params,
+  );
+  if (workspace) throw new Error('THREAD_DELETE_WORKSPACE_ATTACHED');
+
+  if (threadId) {
+    const externallyReferenced = await db.queryOne<{ id: string }>(
+      `SELECT child.id
+       FROM agent_runs child
+       INNER JOIN agent_runs parent
+         ON parent.id = child.parent_run_id AND parent.user_id = child.user_id AND parent.app_id = child.app_id
+       WHERE parent.user_id = ? AND parent.app_id = ? AND parent.thread_id = ? AND child.thread_id <> ? LIMIT 1`,
+      [scope.userId, scope.appId, threadId, threadId],
+    );
+    if (externallyReferenced) throw new Error('THREAD_DELETE_REFERENCED');
+  }
+};
+
+const cleanupThreadRunReferences = async (
+  db: RelationalDatabase,
+  scope: Scope,
+  threadId?: string,
+): Promise<void> => {
+  const threadFilter = threadId ? ' AND thread_id = ?' : '';
+  const params: unknown[] = [scope.userId, scope.appId, ...(threadId ? [threadId] : [])];
+  await db.execute(
+    `DELETE FROM agent_artifact_links
+     WHERE run_id IN (SELECT id FROM agent_runs WHERE user_id = ? AND app_id = ?${threadFilter})`,
+    params,
+  );
+  if (threadId) {
+    await db.execute(
+      'DELETE FROM agent_artifact_grants WHERE receiver_user_id = ? AND receiver_app_id = ? AND receiver_thread_id = ?',
+      [scope.userId, scope.appId, threadId],
+    );
+    await db.execute('DELETE FROM ai_thread_entries WHERE user_id = ? AND app_id = ? AND thread_id = ?', [
+      scope.userId,
+      scope.appId,
+      threadId,
+    ]);
+    await db.execute('DELETE FROM ai_context_digests WHERE thread_id = ?', [threadId]);
+    await db.execute('UPDATE agent_runs SET parent_run_id = NULL WHERE user_id = ? AND app_id = ? AND thread_id = ?', [
+      scope.userId,
+      scope.appId,
+      threadId,
+    ]);
+    return;
+  }
+
+  await db.execute('DELETE FROM agent_artifact_grants WHERE receiver_user_id = ? AND receiver_app_id = ?', [
+    scope.userId,
+    scope.appId,
+  ]);
+  await db.execute('DELETE FROM ai_thread_entries WHERE user_id = ? AND app_id = ?', [scope.userId, scope.appId]);
+  await db.execute(
+    'DELETE FROM ai_context_digests WHERE thread_id IN (SELECT id FROM ai_threads WHERE user_id = ? AND app_id = ?)',
+    [scope.userId, scope.appId],
+  );
+  await db.execute('UPDATE agent_runs SET parent_run_id = NULL WHERE user_id = ? AND app_id = ?', [
+    scope.userId,
+    scope.appId,
+  ]);
+};
 
 export class SqliteConversationRepository implements ConversationRepositoryPort {
   constructor(private readonly db: RelationalDatabase) {}
@@ -175,6 +268,60 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
       items: page.map(mapThread),
       nextCursor: rows.length > limit && last ? encodeThreadCursor(last.updated_at, last.id) : null,
     };
+  }
+
+  async deleteThread(
+    scope: Scope,
+    threadId: string,
+    expectedVersion: number,
+    now: number,
+  ): Promise<ThreadDeleteResult> {
+    await this.db.transaction(async (tx) => {
+      const thread = await tx.queryOne<{ version: number }>(
+        'SELECT version FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ?',
+        [threadId, scope.userId, scope.appId],
+      );
+      if (!thread) throw new Error('NOT_FOUND');
+      if (thread.version !== expectedVersion) throw new Error('STATE_CONFLICT');
+      await assertThreadDeleteSafe(tx, scope, threadId);
+      await cleanupThreadRunReferences(tx, scope, threadId);
+      const deleted = await tx.execute(
+        'DELETE FROM ai_threads WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?',
+        [threadId, scope.userId, scope.appId, expectedVersion],
+      );
+      if (deleted.changes !== 1) throw new Error('STATE_CONFLICT');
+      await appendHostEvent(tx, scope.userId, 'thread.changed', { appId: scope.appId, threadId, deleted: true }, now);
+      await appendHostEvent(tx, scope.userId, 'summary.changed', { appId: scope.appId, threadId, deleted: true }, now);
+    });
+    return { threadId, deleted: true };
+  }
+
+  async deleteAllThreads(scope: Scope, now: number): Promise<ThreadDeleteAllResult> {
+    let deletedCount = 0;
+    await this.db.transaction(async (tx) => {
+      const count = await tx.queryOne<{ count: number }>(
+        'SELECT COUNT(*) AS count FROM ai_threads WHERE user_id = ? AND app_id = ?',
+        [scope.userId, scope.appId],
+      );
+      deletedCount = count?.count ?? 0;
+      if (deletedCount === 0) return;
+      await assertThreadDeleteSafe(tx, scope);
+      await cleanupThreadRunReferences(tx, scope);
+      const deleted = await tx.execute('DELETE FROM ai_threads WHERE user_id = ? AND app_id = ?', [
+        scope.userId,
+        scope.appId,
+      ]);
+      if (deleted.changes !== deletedCount) throw new Error('STATE_CONFLICT');
+      await appendHostEvent(
+        tx,
+        scope.userId,
+        'thread.changed',
+        { appId: scope.appId, allDeleted: true, deletedCount },
+        now,
+      );
+      await appendHostEvent(tx, scope.userId, 'summary.changed', { appId: scope.appId, allDeleted: true }, now);
+    });
+    return { deletedCount };
   }
 
   async readEntries(scope: Scope, threadId: string, limit: number, before?: string): Promise<LedgerPage> {

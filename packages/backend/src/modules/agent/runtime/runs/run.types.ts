@@ -52,12 +52,15 @@ export interface CommandIdentity {
   requestId: string;
 }
 
+export type RunApprovalMode = 'ask' | 'full_access';
+
 export interface CreateRunCommand {
   threadId: string;
   input: UserInputData;
   agentDefinitionId: string;
   model: ModelRef;
   reasoningEffort?: ReasoningEffort;
+  approvalMode: RunApprovalMode;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
@@ -108,6 +111,7 @@ export interface RunDefinitionSnapshot {
   agentDefinitionId: string;
   model: ModelRef;
   reasoningEffort?: ReasoningEffort;
+  approvalMode?: RunApprovalMode;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSnapshot | null;
   policyRevision: number;

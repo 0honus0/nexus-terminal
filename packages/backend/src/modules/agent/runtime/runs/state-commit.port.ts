@@ -454,6 +454,8 @@ export interface ResolveToolApprovalCommand {
   expectedPolicyRevision: number;
   expectedInputRevision: number;
   decidedByUserId: number;
+  feedback?: string;
+  resolutionSource?: 'user' | 'full_access';
   idempotencyKey: string;
   requestHash: string;
   now: number;
@@ -606,6 +608,7 @@ export type RootExecutionCommitPort = Pick<
   | 'pauseModelStepForBudget'
   | 'pauseRuntimeForBudget'
   | 'requestToolApproval'
+  | 'resolveToolApproval'
   | 'retryModelStep'
   | 'settleModelStep'
   | 'settleMutationTool'

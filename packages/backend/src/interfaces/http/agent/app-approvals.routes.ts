@@ -60,6 +60,7 @@ export const createAppApprovalsRouter = (dependencies: AppApprovalsRouterDepende
             body.expectedVersion,
             userId,
             idempotencyKey(request.header('idempotency-key')),
+            body.feedback,
           ),
         ['STATE_CONFLICT', 'APPROVAL_STALE'],
       );

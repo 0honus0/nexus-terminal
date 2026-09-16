@@ -143,8 +143,25 @@ export class ModelStepRunner {
     let text = '';
     let usage: TokenUsage | undefined;
     let finishReason: string | null = null;
+    const startedAt = Date.now();
 
     try {
+      logger.debug(
+        {
+          runId: snapshot.id,
+          threadId: snapshot.threadId,
+          providerId: snapshot.definition.model.providerId,
+          modelId: snapshot.definition.model.modelId,
+          reasoningEffort: snapshot.definition.reasoningEffort ?? null,
+          toolMode,
+          messageCount: contextPlan.messages.length,
+          toolSchemaCount: contextPlan.toolSchemas.length,
+          estimatedInputTokens: contextPlan.estimatedInputTokens,
+          reservedOutputTokens: contextPlan.reservedOutputTokens,
+          contextEpoch: contextPlan.contextEpoch,
+        },
+        'Agent model attempt started',
+      );
       const releaseModelCall = await this.modelCalls.acquire(snapshot.userId, signal);
       try {
         for await (const event of this.modelPort.stream(
@@ -218,11 +235,30 @@ export class ModelStepRunner {
             usage?.inputTokens && usage.cachedInputTokens !== undefined
               ? usage.cachedInputTokens / usage.inputTokens
               : null,
+          finishReason,
+          textBytes: Buffer.byteLength(text, 'utf8'),
+          toolCallCount: toolCalls.size,
+          elapsedMs: Math.max(0, Date.now() - startedAt),
         },
         'Agent model cache diagnostics',
       );
       return { text, usage, finishReason, toolCalls };
     } catch (error) {
+      logger.debug(
+        {
+          runId: snapshot.id,
+          threadId: snapshot.threadId,
+          providerId: snapshot.definition.model.providerId,
+          modelId: snapshot.definition.model.modelId,
+          reasoningEffort: snapshot.definition.reasoningEffort ?? null,
+          toolMode,
+          textBytes: Buffer.byteLength(text, 'utf8'),
+          toolCallCount: toolCalls.size,
+          elapsedMs: Math.max(0, Date.now() - startedAt),
+          err: error,
+        },
+        'Agent model attempt failed',
+      );
       return { text, usage, finishReason, toolCalls, error };
     }
   }

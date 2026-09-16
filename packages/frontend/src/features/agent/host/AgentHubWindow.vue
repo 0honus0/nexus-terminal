@@ -520,6 +520,7 @@
         v-else-if="activeApp?.surface === 'agent'"
         :key="`${activeApp.id}@${activeApp.version}`"
         :app-id="activeApp.id"
+        :default-approval-mode="activeApp.defaultApprovalMode"
       />
       <PluginAppFrame
         v-else-if="activeApp?.surface === 'custom'"
@@ -587,11 +588,11 @@
 
   .agent-app-tab {
     position: relative;
-    margin-bottom: -1px;
+    margin-bottom: 0;
     border-radius: 9px 9px 0 0;
     font-family: inherit;
     font-size: 12px;
-    line-height: 1;
+    line-height: 1.25;
     font-weight: 500;
     letter-spacing: -0.012em;
   }
@@ -654,7 +655,7 @@
 
   .agent-app-name {
     font-size: 12px;
-    line-height: 1.1;
+    line-height: 1.3;
     font-weight: 500;
     letter-spacing: -0.012em;
   }

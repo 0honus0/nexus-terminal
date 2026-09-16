@@ -236,7 +236,10 @@ export const resolveToolApprovalTransition = async (
               ok: false,
               outcome: 'confirmed',
               errorCode: 'APPROVAL_DENIED',
-              summary: 'The user denied this remote mutation.',
+              summary: command.feedback
+                ? `The user denied this remote mutation and provided guidance: ${command.feedback}`
+                : 'The user denied this remote mutation.',
+              ...(command.feedback ? { userFeedback: command.feedback } : {}),
             }),
           },
         },
@@ -251,6 +254,7 @@ export const resolveToolApprovalTransition = async (
         approvalId: command.approvalId,
         toolCallId: approval.tool_call_id,
         operationHash: command.operationHash,
+        source: command.resolutionSource ?? 'user',
       },
     },
     { type: 'run.status_changed', payload: { from: 'awaiting_approval', to: 'running' } },
