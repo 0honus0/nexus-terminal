@@ -3,7 +3,6 @@
   "group": 5,
   "workers": 8,
   "specs": [
-    "tests/auth/setup-login.spec.ts",
     "tests/http/auth-2fa.spec.ts",
     "tests/http/auth-api.spec.ts",
     "tests/http/backup.spec.ts",
@@ -15,12 +14,10 @@
     "tests/http/terminal-themes.spec.ts",
     "tests/ui/audit-log-filtering.spec.ts",
     "tests/ui/login-passkey-surface.spec.ts",
-    "tests/ui/captcha-settings.spec.ts",
-    "tests/ui/change-password.spec.ts",
-    "tests/ui/ip-blacklist-settings.spec.ts",
-    "tests/ui/ip-whitelist-settings.spec.ts",
-    "tests/ui/protected-navigation.spec.ts",
-    "tests/ui/ssh-key-management.spec.ts",
+    "tests/ssh/connection-edit-delete.spec.ts",
+    "tests/ssh/connection-list-search.spec.ts",
+    "tests/ssh/connection.spec.ts",
+    "tests/ssh/reconnect-ui.spec.ts",
     "tests/ssh/progress-display-upload-copy.spec.ts"
   ]
 }
