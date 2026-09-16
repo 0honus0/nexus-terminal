@@ -1481,9 +1481,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         await targets.click();
         const targetsPanel = page.getByRole('dialog', { name: 'SSH Hosts', exact: true });
         await expect(targetsPanel.getByText('E2E SSH', { exact: true })).toHaveCount(0, { timeout: 10_000 });
-        await expect(
-          targetsPanel.getByText('No SSH connections are currently available.', { exact: true }),
-        ).toBeVisible();
+        await expect(targetsPanel.getByText('No SSH connections are available.', { exact: true })).toBeVisible();
         await targets.click();
 
         const restored = await context.request.put('/api/v1/agent/target-denylist', {
