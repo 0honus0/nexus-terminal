@@ -506,7 +506,6 @@ export class NativeAgentBackend implements AgentBackendPort {
               },
               'Agent tool call inspected for model batch',
             );
-            if (policyDecision.action === 'deny') throw new Error(policyDecision.reason);
             batchItems.push({
               providerCallId: proposal.providerCallId,
               toolCallId: randomUUID(),
