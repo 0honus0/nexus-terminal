@@ -336,6 +336,18 @@
     terminal?.clear();
   };
 
+  const prepareForTransportReset = (): void => {
+    if (!terminal) return;
+    // A Workspace reconnect creates a fresh remote PTY while this xterm instance and its
+    // scrollback intentionally stay alive. If the old PTY stopped at a shell prompt, the new
+    // PTY's first prompt would otherwise be appended at the old cursor column (for example
+    // "root@host:# root@host:#"). Preserve scrollback, but discard the now-invalid active
+    // input line before the reconnect starts. This is local-only; the remote readline state is
+    // already gone, so there is no cursor-state divergence to introduce here.
+    flushPendingOutput();
+    terminal.write('\r\x1b[2K');
+  };
+
   const MOBILE_LONG_PRESS_DELAY = 520;
   const MOBILE_LONG_PRESS_MOVE_TOLERANCE = 12;
   const mobileClipboardMenu = ref({ visible: false, x: 0, y: 0, hasSelection: false });
@@ -1002,7 +1014,10 @@
         void props.channel.sendInput(data);
       }).dispose,
       props.channel.onOutput(handleTerminalOutput),
-      props.channel.onClose((reason) => emit('closed', reason)),
+      props.channel.onClose((reason) => {
+        prepareForTransportReset();
+        emit('closed', reason);
+      }),
       props.channel.onError((message) => emit('error', message)),
     );
     cleanup.push(
