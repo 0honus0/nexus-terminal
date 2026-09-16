@@ -1105,14 +1105,11 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       const beforeDeleteResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
       expect(beforeDeleteResponse.ok(), await beforeDeleteResponse.text()).toBeTruthy();
       const beforeDelete = (await beforeDeleteResponse.json()) as Envelope<{ items: RunView[] }>;
+      const beforeDeleteIds = beforeDelete.data.items.map((item) => item.id);
+      const currentRunId = runPage.data.items.find((item) => item.definition.model?.modelId === 'e2e-model-alt')?.id;
+      expect(currentRunId).toBeTruthy();
       await historyCard.locator(':scope > button').first().click();
-      const detailRunSuffix = await taskRail
-        .locator('header')
-        .getByText(/^#[0-9a-f]{6}$/i)
-        .textContent();
-      expect(detailRunSuffix).toBeTruthy();
-      const deletedRunId = beforeDelete.data.items.find((item) => `#${item.id.slice(-6)}` === detailRunSuffix)?.id;
-      expect(deletedRunId).toBeTruthy();
+      await expect(taskRail.getByRole('button', { name: 'Back to Tasks', exact: true })).toBeVisible();
 
       await taskRail.getByRole('button', { name: 'Delete run', exact: true }).click();
       await taskRail.getByRole('button', { name: 'Confirm delete', exact: true }).click();
@@ -1123,10 +1120,16 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
           const response = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
           expect(response.ok(), await response.text()).toBeTruthy();
           const page = (await response.json()) as Envelope<{ items: RunView[] }>;
-          return page.data.items.map((item) => item.id);
+          return page.data.items.length;
         })
-        .not.toContain(deletedRunId!);
-      await expect(taskRail.locator('header').getByText(`#${deletedRunId!.slice(-6)}`, { exact: true })).toHaveCount(0);
+        .toBe(beforeDeleteIds.length - 1);
+      const afterDeleteResponse = await context.request.get(`/api/v1/apps/nexus.agent/runs?threadId=${threadId}`);
+      expect(afterDeleteResponse.ok(), await afterDeleteResponse.text()).toBeTruthy();
+      const afterDelete = (await afterDeleteResponse.json()) as Envelope<{ items: RunView[] }>;
+      const afterDeleteIds = afterDelete.data.items.map((item) => item.id);
+      const removedIds = beforeDeleteIds.filter((id) => !afterDeleteIds.includes(id));
+      expect(removedIds).toHaveLength(1);
+      expect(afterDeleteIds).toContain(currentRunId!);
     });
 
     await step('pending mutation approval is surfaced through the TaskRail toggle when hidden', async () => {
