@@ -1085,7 +1085,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 
     await step('completed Runs expose details, checkpoints, and Workspace Runtime surfaces', async () => {
       await historyCard.locator(':scope > button').first().click();
-      await expect(taskRail.getByRole('button', { name: 'Back to tasks', exact: true })).toBeVisible();
+      await expect(taskRail.getByRole('button', { name: 'Back to Tasks', exact: true })).toBeVisible();
       await expect(taskRail.getByText('Run overview', { exact: true })).toBeVisible();
       await expect(taskRail.getByText('Checkpoints', { exact: true })).toBeVisible();
       await taskRail.getByText('Optional runtime', { exact: true }).click();
@@ -1097,7 +1097,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await captureFunctionalScreenshot(page, 'agent-checkpoint-recovery.png', {
         viewport: { width: 1440, height: 900 },
       });
-      await taskRail.getByRole('button', { name: 'Back to tasks', exact: true }).click();
+      await taskRail.getByRole('button', { name: 'Back to Tasks', exact: true }).click();
       await expect(historyCard.getByText('Run history', { exact: true })).toBeVisible();
     });
 
@@ -1116,7 +1116,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 
       await taskRail.getByRole('button', { name: 'Delete run', exact: true }).click();
       await taskRail.getByRole('button', { name: 'Confirm delete', exact: true }).click();
-      await expect(taskRail.getByRole('button', { name: 'Back to tasks', exact: true })).toHaveCount(0);
+      await expect(taskRail.getByRole('button', { name: 'Back to Tasks', exact: true })).toHaveCount(0);
 
       await expect
         .poll(async () => {

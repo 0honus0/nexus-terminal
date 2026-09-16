@@ -299,16 +299,19 @@ test('legacy dark UI themes without input tokens keep Dashboard controls readabl
     await expect(tag).toBeVisible();
     await expect(sort).toBeVisible();
 
-    const searchColors = await search.evaluate((node) => ({
-      background: getComputedStyle(node).backgroundColor,
-      text: getComputedStyle(node).color,
-      placeholder: getComputedStyle(node, '::placeholder').color,
-    }));
-    expect(searchColors).toEqual({
-      background: 'rgb(30, 41, 59)',
-      text: 'rgb(248, 250, 252)',
-      placeholder: 'rgb(148, 163, 184)',
-    });
+    await expect
+      .poll(() =>
+        search.evaluate((node) => ({
+          background: getComputedStyle(node).backgroundColor,
+          text: getComputedStyle(node).color,
+          placeholder: getComputedStyle(node, '::placeholder').color,
+        })),
+      )
+      .toEqual({
+        background: 'rgb(30, 41, 59)',
+        text: 'rgb(248, 250, 252)',
+        placeholder: 'rgb(148, 163, 184)',
+      });
 
     for (const control of [tag, sort]) {
       await expect
