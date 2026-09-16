@@ -1087,7 +1087,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       await historyCard.locator(':scope > button').first().click();
       await expect(taskRail.getByRole('button', { name: 'Back to Tasks', exact: true })).toBeVisible();
       await expect(taskRail.getByText('Run overview', { exact: true })).toBeVisible();
-      await expect(taskRail.getByText('Checkpoints', { exact: true })).toBeVisible();
+      await expect(taskRail.getByText(/^Checkpoints · \d+$/)).toBeVisible();
       await taskRail.getByText('Optional runtime', { exact: true }).click();
       await expect(taskRail.getByText('Workspace dev environment', { exact: true })).toBeVisible();
       await captureFunctionalScreenshot(page, 'agent-run-details.png', { viewport: { width: 1440, height: 900 } });
