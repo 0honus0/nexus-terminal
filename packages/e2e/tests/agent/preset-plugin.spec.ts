@@ -1502,6 +1502,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 
     await step('conversations support guarded single-delete and delete-all flows', async () => {
       await hub.getByRole('button', { name: 'New', exact: true }).click();
+      await expect(hub.getByPlaceholder('Ask Agent to inspect, diagnose, or explain...')).toBeFocused();
       const currentThreadItem = hub.locator('.agent-thread-row[aria-current="true"]').locator('..');
       await expect(currentThreadItem.getByRole('button', { name: 'Delete conversation', exact: true })).toBeVisible();
 
