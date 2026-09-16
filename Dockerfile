@@ -30,7 +30,6 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/frontend
 COPY packages/frontend/src ./packages/frontend/src
 COPY packages/frontend/public ./packages/frontend/public
-COPY packages/frontend/scripts ./packages/frontend/scripts
 COPY packages/frontend/index.html packages/frontend/tsconfig.json packages/frontend/vite.config.ts ./packages/frontend/
 RUN pnpm --filter @nexus-terminal/frontend build
 
