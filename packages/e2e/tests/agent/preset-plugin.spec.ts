@@ -1569,7 +1569,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         .getByRole('button', { name: 'Files', exact: true })
         .click();
       await expect(hub.getByText('agent-ui-evidence.txt', { exact: true })).toBeVisible();
-      const artifactRow = hub.getByText('agent-ui-evidence.txt', { exact: true }).locator('..').locator('..');
+      const artifactRow = hub.locator('article').filter({ hasText: 'agent-ui-evidence.txt' });
       await artifactRow.getByRole('button', { name: 'Retain', exact: true }).click();
       await expect(artifactRow.getByRole('button', { name: 'Release retention', exact: true })).toBeVisible();
       await captureFunctionalScreenshot(page, 'agent-artifact-library.png', { viewport: { width: 1440, height: 900 } });
