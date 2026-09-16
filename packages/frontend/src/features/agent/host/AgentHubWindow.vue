@@ -17,9 +17,47 @@
   const activeApp = computed(() => props.summary.apps.find((app) => app.id === state.activeAppId) ?? null);
   const visible = computed(() => state.status === 'visible');
   const hasOpened = ref(visible.value);
-  watch(visible, (isVisible) => {
-    if (isVisible) hasOpened.value = true;
-  });
+  let backgroundScrollRestore: (() => void) | null = null;
+
+  const unlockBackgroundScroll = () => {
+    backgroundScrollRestore?.();
+    backgroundScrollRestore = null;
+  };
+
+  const lockBackgroundScroll = () => {
+    if (backgroundScrollRestore || typeof document === 'undefined') return;
+    const root = document.documentElement;
+    const body = document.body;
+    const previous = {
+      rootOverflow: root.style.overflow,
+      rootOverscrollBehavior: root.style.overscrollBehavior,
+      bodyOverflow: body.style.overflow,
+      bodyOverscrollBehavior: body.style.overscrollBehavior,
+    };
+    root.style.overflow = 'hidden';
+    root.style.overscrollBehavior = 'none';
+    body.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'none';
+    backgroundScrollRestore = () => {
+      root.style.overflow = previous.rootOverflow;
+      root.style.overscrollBehavior = previous.rootOverscrollBehavior;
+      body.style.overflow = previous.bodyOverflow;
+      body.style.overscrollBehavior = previous.bodyOverscrollBehavior;
+    };
+  };
+
+  watch(
+    visible,
+    (isVisible) => {
+      if (isVisible) {
+        hasOpened.value = true;
+        lockBackgroundScroll();
+      } else {
+        unlockBackgroundScroll();
+      }
+    },
+    { immediate: true },
+  );
   const enabledApps = computed(() => props.summary.apps.filter((app) => app.enabled));
   const activityCount = computed(
     () =>
@@ -292,6 +330,7 @@
       }
     }
     cancelActiveInteraction();
+    unlockBackgroundScroll();
   });
 </script>
 
@@ -316,6 +355,8 @@
     :class="flashWindow ? 'ring-2 ring-primary/60 scale-[1.002]' : ''"
     :style="style"
     :aria-label="$t('agent.hub.title')"
+    @wheel.stop
+    @touchmove.stop
   >
     <header
       class="agent-hub-header flex h-11 shrink-0 touch-none select-none items-center justify-between gap-2.5 border-b border-border/45 bg-header/45 px-3 backdrop-blur-md"
@@ -559,6 +600,7 @@
   .agent-hub-window {
     container-type: inline-size;
     container-name: agent-hub-window;
+    overscroll-behavior: contain;
     box-shadow:
       0 20px 48px -12px rgba(0, 0, 0, 0.22),
       0 0 0 1px rgba(0, 0, 0, 0.05),

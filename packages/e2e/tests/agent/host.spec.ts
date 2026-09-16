@@ -81,6 +81,28 @@ test('Agent feature enable opens one global floating window that survives route 
   await expect(launcher).toHaveCount(0);
   const settingsBounds = await hub.boundingBox();
   expect(settingsBounds).not.toBeNull();
+  await expect
+    .poll(() =>
+      page.evaluate(() => ({
+        rootOverflow: document.documentElement.style.overflow,
+        rootOverscroll: document.documentElement.style.overscrollBehavior,
+        bodyOverflow: document.body.style.overflow,
+        bodyOverscroll: document.body.style.overscrollBehavior,
+      })),
+    )
+    .toEqual({
+      rootOverflow: 'hidden',
+      rootOverscroll: 'none',
+      bodyOverflow: 'hidden',
+      bodyOverscroll: 'none',
+    });
+  const backgroundScrollBefore = await page.evaluate(() => window.scrollY);
+  await page.mouse.move(
+    settingsBounds!.x + Math.min(settingsBounds!.width - 1, settingsBounds!.width / 2),
+    settingsBounds!.y + Math.min(settingsBounds!.height - 1, settingsBounds!.height / 2),
+  );
+  await page.mouse.wheel(0, 1_200);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(backgroundScrollBefore);
 
   const installations = await context.request.get('/api/v1/agent/plugins/installations');
   expect(installations.ok(), await installations.text()).toBeTruthy();
