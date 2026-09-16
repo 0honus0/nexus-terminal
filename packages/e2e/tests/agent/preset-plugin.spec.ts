@@ -1502,7 +1502,8 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
 
     await step('conversations support guarded single-delete and delete-all flows', async () => {
       await hub.getByRole('button', { name: 'New', exact: true }).click();
-      await expect(hub.getByRole('button', { name: 'Delete conversation', exact: true })).toBeVisible();
+      const currentThreadItem = hub.locator('.agent-thread-row[aria-current="true"]').locator('..');
+      await expect(currentThreadItem.getByRole('button', { name: 'Delete conversation', exact: true })).toBeVisible();
 
       const afterCreateResponse = await context.request.get('/api/v1/apps/nexus.agent/threads?limit=100');
       expect(afterCreateResponse.ok(), await afterCreateResponse.text()).toBeTruthy();
@@ -1511,8 +1512,10 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
       }>;
       const singleDeleteId = afterCreate.data.items[0]!.id;
 
-      await hub.getByRole('button', { name: 'Delete conversation', exact: true }).click();
-      await hub.getByRole('button', { name: 'Click again to delete this conversation', exact: true }).click();
+      await currentThreadItem.getByRole('button', { name: 'Delete conversation', exact: true }).click();
+      await currentThreadItem
+        .getByRole('button', { name: 'Click again to delete this conversation', exact: true })
+        .click();
       await expect
         .poll(async () => {
           const response = await context.request.get(`/api/v1/apps/nexus.agent/threads/${singleDeleteId}`);
