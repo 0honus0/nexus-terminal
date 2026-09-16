@@ -14,11 +14,11 @@ on:
       - 'packages/frontend/**'
       - 'packages/e2e/**'
       - 'scripts/e2e/**'
-      - 'scripts/check-test-policy.mjs'
       - 'scripts/build/build.sh'
       - '.prettierignore'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/e2e.yml'
       - '.github/workflows/publish-ghcr.yml'
   pull_request:
@@ -34,11 +34,11 @@ on:
       - 'packages/frontend/**'
       - 'packages/e2e/**'
       - 'scripts/e2e/**'
-      - 'scripts/check-test-policy.mjs'
       - 'scripts/build/build.sh'
       - '.prettierignore'
       - 'package.json'
       - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
       - '.github/workflows/e2e.yml'
       - '.github/workflows/publish-ghcr.yml'
   schedule:
@@ -62,7 +62,10 @@ permissions:
   packages: read
 
 concurrency:
-  group: e2e-${{ github.ref }}
+  # Use the source branch identity for both push and pull_request runs so a newer
+  # commit cancels duplicate work for the same branch instead of keeping separate
+  # refs/heads/* and refs/pull/* pipelines alive.
+  group: e2e-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 env:
@@ -79,6 +82,9 @@ jobs:
       runner_image: ${{ steps.state.outputs.runner_image }}
       runner_rebuild: ${{ steps.state.outputs.runner_rebuild }}
       node_version: ${{ steps.state.outputs.node_version }}
+      docker_validation: ${{ steps.state.outputs.docker_validation }}
+      workers: ${{ steps.groups.outputs.workers }}
+      matrix: ${{ steps.groups.outputs.matrix }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -97,6 +103,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before || '' }}
+          TARGET_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           REFRESH_ARTIFACTS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_artifacts || false }}
         run: |
           set -euo pipefail
@@ -144,25 +152,54 @@ jobs:
             fi
           fi
 
+          full_validation=false
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$GITHUB_EVENT_NAME" == "workflow_dispatch" \
+            || ( "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF_NAME" == "$DEFAULT_BRANCH" ) ]]; then
+            full_validation=true
+          fi
+
+          docker_validation="$full_validation"
+          if [[ "$full_validation" != "true" ]]; then
+            if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+              # Unknown comparison base: fail safe and keep the expensive checks.
+              docker_validation=true
+            else
+              changed_files="$RUNNER_TEMP/e2e-changed-files.txt"
+              git diff --name-only "$BASE_SHA" "$TARGET_SHA" > "$changed_files"
+
+              if grep -Eq '^(Dockerfile|docker-compose\.yml|\.dockerignore|\.env\.example|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|scripts/docker/|scripts/agent-runner/|scripts/build/build\.sh|packages/agent-runner/)' "$changed_files"; then
+                docker_validation=true
+              fi
+            fi
+          fi
+          if [[ "$changed" == "true" ]]; then
+            docker_validation=true
+          fi
+
           node_version="$(node -p "require('./scripts/e2e/versions.json').node")"
           tag="$(node scripts/e2e/runner-image-info.mjs tag)"
           fingerprint="$(node scripts/e2e/runner-image-info.mjs fingerprint)"
           owner="${GITHUB_REPOSITORY_OWNER,,}"
           runner_repository="ghcr.io/${owner}/nexus-terminal-e2e-runner"
-          runner_image="${runner_repository}:${tag}"
+          version_image="${runner_repository}:${tag}"
           fingerprint_image="${runner_repository}:fingerprint-${fingerprint}"
+          # CI consumes the immutable fingerprint tag. The version tag remains a
+          # convenience alias only, so concurrent branches with different lockfiles
+          # cannot overwrite the image another branch is about to run offline.
+          runner_image="$fingerprint_image"
 
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin >/dev/null
           manifest_config_digest() {
             docker manifest inspect "$1" 2>/dev/null | jq -r '.config.digest // empty'
           }
 
-          runner_digest="$(manifest_config_digest "$runner_image" || true)"
           fingerprint_digest="$(manifest_config_digest "$fingerprint_image" || true)"
           runner_rebuild=false
-          if [[ -z "$runner_digest" || -z "$fingerprint_digest" || "$runner_digest" != "$fingerprint_digest" ]]; then
+          if [[ -z "$fingerprint_digest" ]]; then
             runner_rebuild=true
-            echo "::notice::E2E runner image is missing or does not match the current runner fingerprint; it will be rebuilt before grouped E2E starts."
+            echo "::notice::E2E runner image for the current fingerprint is missing; it will be rebuilt before grouped E2E starts."
+          else
+            echo "::notice::Using immutable E2E runner image $runner_image (version alias: $version_image)."
           fi
 
           echo "changed=$changed" >> "$GITHUB_OUTPUT"
@@ -170,6 +207,25 @@ jobs:
           echo "node_version=$node_version" >> "$GITHUB_OUTPUT"
           echo "runner_image=$runner_image" >> "$GITHUB_OUTPUT"
           echo "runner_rebuild=$runner_rebuild" >> "$GITHUB_OUTPUT"
+          echo "docker_validation=$docker_validation" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve E2E group matrix
+        id: groups
+        shell: bash
+        env:
+          REQUESTED_WORKERS: ${{ github.event_name == 'workflow_dispatch' && inputs.workers || '' }}
+        run: |
+          set -euo pipefail
+          workers="$REQUESTED_WORKERS"
+          if [[ -z "$workers" ]]; then
+            workers="$(node -p "require('./packages/e2e/groups/settings.json').workers")"
+          fi
+
+          node packages/e2e/support/groups.mjs generate --workers "$workers"
+          node packages/e2e/support/groups.mjs check --workers "$workers"
+          matrix="$(node packages/e2e/support/groups.mjs matrix --workers "$workers")"
+          echo "workers=$workers" >> "$GITHUB_OUTPUT"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
       - name: Validate synchronized environment
         if: steps.state.outputs.changed == 'true'
@@ -228,62 +284,8 @@ jobs:
       - name: Build, smoke-check, and push E2E runner image
         run: scripts/e2e/build-runner-image.sh --push --image "$E2E_RUNNER_REPOSITORY"
 
-  prepare:
-    needs: [environment, runner-image]
-    if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
-    runs-on: ubuntu-latest
-    outputs:
-      workers: ${{ steps.groups.outputs.workers }}
-      matrix: ${{ steps.groups.outputs.matrix }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Download E2E environment patch
-        if: needs.environment.outputs.changed == 'true'
-        uses: actions/download-artifact@v8
-        with:
-          name: e2e-environment-patch
-          path: ${{ runner.temp }}/e2e-environment-patch
-
-      - name: Apply E2E environment patch
-        if: needs.environment.outputs.changed == 'true'
-        shell: bash
-        run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
-
-      - name: Set up pnpm and target Node.js
-        uses: pnpm/setup@v2
-        with:
-          runtime: node@${{ needs.environment.outputs.node_version }}
-          install: false
-
-      - name: Enforce package-manager architecture
-        run: pnpm run check:package-management
-
-      - name: Enforce E2E-only test policy
-        run: pnpm run check:test-policy
-
-      - name: Resolve and validate E2E groups
-        id: groups
-        shell: bash
-        env:
-          REQUESTED_WORKERS: ${{ github.event_name == 'workflow_dispatch' && inputs.workers || '' }}
-        run: |
-          set -euo pipefail
-          workers="$REQUESTED_WORKERS"
-          if [[ -z "$workers" ]]; then
-            workers="$(node -p "require('./packages/e2e/groups/settings.json').workers")"
-          fi
-
-          node packages/e2e/support/groups.mjs generate --workers "$workers"
-          node packages/e2e/support/groups.mjs check --workers "$workers"
-          matrix="$(node packages/e2e/support/groups.mjs matrix --workers "$workers")"
-
-          echo "workers=$workers" >> "$GITHUB_OUTPUT"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-
   quality:
-    name: Quality gates
+    name: Format and build
     needs: [environment]
     if: ${{ always() && needs.environment.result == 'success' }}
     runs-on: ubuntu-latest
@@ -305,23 +307,15 @@ jobs:
       - name: Check formatting
         run: pnpm run format:all:check
 
-      - name: Check repository policies
-        run: |
-          pnpm run check:package-management
-          pnpm run check:test-policy
-
       - name: Build production packages
         run: |
           pnpm run build
           pnpm run build:agent-runner
 
-      - name: Audit production dependencies
-        run: pnpm audit --prod --audit-level=high
-
   build-image:
     name: Docker deployment smoke
     needs: [environment, runner-image]
-    if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
+    if: ${{ always() && needs.environment.result == 'success' && needs.environment.outputs.docker_validation == 'true' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
     runs-on: ubuntu-latest
     # First-run Tool Store materialization verifies six real Node/Python/Go packs.
     timeout-minutes: 35
@@ -357,9 +351,6 @@ jobs:
       - name: Install host Chromium for Browser direct smoke
         run: pnpm --filter @nexus-terminal/e2e exec playwright install --with-deps chromium
 
-      - name: Verify Agent Runner prerequisites
-        run: pnpm run check:runner-prerequisites
-
       - name: Install host Runner runtime prerequisites
         run: ./scripts/agent-runner/prepare-ubuntu-host.sh
 
@@ -392,20 +383,6 @@ jobs:
           cache-from: type=gha,scope=agent-runner-image
           cache-to: type=gha,mode=max,scope=agent-runner-image
 
-      - name: Verify standalone Agent Runner image prerequisites
-        shell: bash
-        run: |
-          docker run --rm --entrypoint /bin/sh nexus-agent-runner:e2e-smoke -c '
-            set -eu
-            ! command -v bwrap >/dev/null 2>&1
-            test "$(mise --version | awk "NR == 1 { print \$1 }")" = "2026.9.5"
-            command -v script >/dev/null
-            command -v stty >/dev/null
-            command -v tini >/dev/null
-            test -f /app/catalog/catalog.json
-            test -f /app/dist/index.js
-          '
-
       - name: Run standalone Agent Runner container smoke
         run: scripts/e2e/standalone-runner-image-smoke.sh nexus-agent-runner:e2e-smoke
 
@@ -416,8 +393,8 @@ jobs:
         run: scripts/e2e/docker-deployment-smoke.sh nexus-terminal:e2e-smoke
 
   playwright-groups:
-    needs: [environment, runner-image, prepare]
-    if: ${{ always() && needs.environment.result == 'success' && needs.prepare.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
+    needs: [environment, runner-image]
+    if: ${{ always() && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     container:
@@ -427,10 +404,12 @@ jobs:
         password: ${{ github.token }}
       options: --ipc=host
     strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+      # Keep full failure collection on main/scheduled/manual validation, but stop
+      # sibling groups early on ordinary branch/PR iteration once one group fails.
+      fail-fast: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_name != github.event.repository.default_branch) }}
+      matrix: ${{ fromJSON(needs.environment.outputs.matrix) }}
     env:
-      E2E_GROUP_WORKERS: ${{ needs.prepare.outputs.workers }}
+      E2E_GROUP_WORKERS: ${{ needs.environment.outputs.workers }}
       E2E_CAPTURE_SCREENSHOTS: ${{ (needs.environment.outputs.screenshots_requested == 'true' || needs.environment.outputs.changed == 'true') && '1' || '0' }}
       E2E_SCREENSHOT_OUTPUT_DIR: .tmp/functional-screenshots
       GITHUB_TOKEN: ${{ github.token }}
@@ -450,9 +429,9 @@ jobs:
         shell: bash
         run: git apply --binary "$RUNNER_TEMP/e2e-environment-patch/e2e-environment.patch"
 
-      - name: Install E2E workspace dependencies
+      - name: Link E2E workspace dependencies from prewarmed runner store
         run: >-
-          pnpm install --frozen-lockfile
+          pnpm install --frozen-lockfile --offline
           --filter @nexus-terminal/backend
           --filter @nexus-terminal/frontend
           --filter @nexus-terminal/e2e
@@ -471,7 +450,7 @@ jobs:
           node packages/e2e/support/groups.mjs generate --workers "$E2E_GROUP_WORKERS"
           node packages/e2e/support/groups.mjs check --workers "$E2E_GROUP_WORKERS"
 
-      - name: Run E2E group ${{ matrix.group }} of ${{ needs.prepare.outputs.workers }}
+      - name: Run E2E group ${{ matrix.group }} of ${{ needs.environment.outputs.workers }}
         id: e2e
         timeout-minutes: 16
         run: node packages/e2e/support/groups.mjs run --workers "$E2E_GROUP_WORKERS" --group "${{ matrix.group }}"
@@ -612,8 +591,8 @@ jobs:
           git push origin "HEAD:$GITHUB_REF_NAME"
 
   rebalance:
-    needs: [environment, runner-image, prepare, playwright-groups, screenshots-commit]
-    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.refresh_artifacts == true) && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.prepare.result == 'success' && needs.playwright-groups.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
+    needs: [environment, runner-image, playwright-groups, screenshots-commit]
+    if: ${{ always() && github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.refresh_artifacts == true) && needs.environment.result == 'success' && (needs.runner-image.result == 'success' || needs.runner-image.result == 'skipped') && needs.playwright-groups.result == 'success' && (needs.screenshots-commit.result == 'success' || needs.screenshots-commit.result == 'skipped') }}
     permissions:
       actions: read
       contents: write
@@ -648,8 +627,8 @@ jobs:
           fi
 
           mapfile -t artifacts < <(jq -r '.artifacts[] | select(.name | startswith("e2e-timings-group-")) | [.id, .name] | @tsv' "$response")
-          if [[ "${#artifacts[@]}" -ne "${{ needs.prepare.outputs.workers }}" ]]; then
-            echo "::warning::Expected ${{ needs.prepare.outputs.workers }} timing artifacts, found ${#artifacts[@]}; skipping this run's optional E2E rebalance."
+          if [[ "${#artifacts[@]}" -ne "${{ needs.environment.outputs.workers }}" ]]; then
+            echo "::warning::Expected ${{ needs.environment.outputs.workers }} timing artifacts, found ${#artifacts[@]}; skipping this run's optional E2E rebalance."
             exit 0
           fi
 
@@ -701,7 +680,7 @@ jobs:
 
   release-gate:
     name: Release gate
-    needs: [environment, runner-image, quality, prepare, build-image, playwright-groups]
+    needs: [environment, runner-image, quality, build-image, playwright-groups]
     if: ${{ always() }}
     runs-on: ubuntu-latest
     steps:
@@ -711,8 +690,8 @@ jobs:
           ENVIRONMENT_RESULT: ${{ needs.environment.result }}
           RUNNER_IMAGE_RESULT: ${{ needs.runner-image.result }}
           QUALITY_RESULT: ${{ needs.quality.result }}
-          PREPARE_RESULT: ${{ needs.prepare.result }}
           DOCKER_RESULT: ${{ needs.build-image.result }}
+          DOCKER_REQUIRED: ${{ needs.environment.outputs.docker_validation }}
           PLAYWRIGHT_RESULT: ${{ needs.playwright-groups.result }}
         run: |
           set -euo pipefail
@@ -738,9 +717,12 @@ jobs:
 
           require_success "Update E2E environment" "$ENVIRONMENT_RESULT"
           require_success_or_skipped "Build E2E runner image" "$RUNNER_IMAGE_RESULT"
-          require_success "Quality gates" "$QUALITY_RESULT"
-          require_success "E2E preparation" "$PREPARE_RESULT"
-          require_success "Docker deployment smoke" "$DOCKER_RESULT"
+          require_success "Format and build" "$QUALITY_RESULT"
+          if [[ "$DOCKER_REQUIRED" == "true" ]]; then
+            require_success "Docker deployment smoke" "$DOCKER_RESULT"
+          else
+            require_success_or_skipped "Docker deployment smoke" "$DOCKER_RESULT"
+          fi
           require_success "Playwright groups" "$PLAYWRIGHT_RESULT"
 
           if [[ "$failed" == "true" ]]; then

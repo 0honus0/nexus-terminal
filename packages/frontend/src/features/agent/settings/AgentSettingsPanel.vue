@@ -288,6 +288,12 @@
       apps.value = await agentApi.apps();
     });
 
+  const changeProviderProtocol = (provider: AgentProviderView, protocol: AgentProviderView['protocol']) =>
+    execute(async () => {
+      const updated = await agentApi.updateProvider(provider, { protocol });
+      providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
+    });
+
   const deleteProvider = (provider: AgentProviderView) =>
     execute(async () => {
       await agentApi.deleteProvider(provider.id, provider.version);
@@ -501,6 +507,7 @@
               :default-model-id="settings.requestedSettings.model.defaultModelId"
               :create-provider="createProvider"
               @toggle="toggleProvider"
+              @protocol="changeProviderProtocol"
               @discover="discoverProviderModels"
               :add-provider-model="addProviderModel"
               :update-provider-models="updateProviderModels"

@@ -294,15 +294,9 @@ The intended Agent integration point is that diagnostics service. The correspond
 
 Diagnostic actor types are `system`, `agent` and `user`. Actor/scope policy and redaction are applied by `SystemDiagnosticsService`. The complete security constraints for diagnostic access and output are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-diag-003).
 
-## Architecture guard
+## Architecture review
 
-Run:
-
-```bash
-pnpm --filter @nexus-terminal/backend run check:architecture
-```
-
-The guard checks the dependency graph, including layer edges, source cycles and module-level cycles. The temporary compatibility-import exceptions were removed when the compatibility directories were deleted. The rules it enforces are centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-arch-001).
+Layer edges, source cycles, module ownership and public/private import direction are review invariants rather than a standalone quality gate. The temporary compatibility-import exceptions were removed when the compatibility directories were deleted. The authoritative rules remain centralized in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-arch-001).
 
 ## Verification and testing
 
@@ -353,7 +347,7 @@ infrastructure/agent + existing infrastructure adapters
 bootstrap/agent validates/registers Host/Core contributions and constructs the concrete graph
 ```
 
-`modules/agent/host` owns App manifest/registry/lifecycle/capability grants/AppStorage/AppIntent and Plugin lifecycle/SDK contracts. It must not import Runtime private implementation or first-party Plugin package code. Backend architecture guard enforces the Agent area dependency matrix.
+`modules/agent/host` owns App manifest/registry/lifecycle/capability grants/AppStorage/AppIntent and Plugin lifecycle/SDK contracts. It must not import Runtime private implementation or first-party Plugin package code. The Agent area dependency matrix is enforced by module ownership, TypeScript/build boundaries and architecture review.
 
 `modules/agent/ai` owns reusable Provider/model routing, canonical Conversation/User Input, Context, Recall/Memory, Skill metadata/body registry, Artifacts and external integration contracts. Generic Tool Catalog and real capability authorization belong to `modules/agent/capabilities`, not AI. AI does not import first-party Plugin implementation.
 

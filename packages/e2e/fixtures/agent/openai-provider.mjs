@@ -10,7 +10,12 @@ const readJson = async (request) => {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 };
 
-const sendSse = (response, value) => response.write(`data: ${JSON.stringify(value)}\n\n`);
+const sendSse = (response, value) => {
+  const payload = Array.isArray(value?.choices)
+    ? { ...value, choices: value.choices.map((choice, index) => ({ index, ...choice })) }
+    : value;
+  response.write(`data: ${JSON.stringify(payload)}\n\n`);
+};
 
 const server = http.createServer(async (request, response) => {
   if (request.method === 'GET' && request.url === '/health') {
@@ -73,11 +78,26 @@ const server = http.createServer(async (request, response) => {
       'Cache-Control': 'no-store',
       Connection: 'keep-alive',
     });
-    sendSse(response, { type: 'response.output_text.delta', delta: 'OK' });
+    const responseId = 'resp_e2e_provider_test';
+    const messageId = 'msg_e2e_provider_test';
+    sendSse(response, {
+      type: 'response.created',
+      response: { id: responseId, created_at: 1700000000, model: body.model },
+    });
+    sendSse(response, {
+      type: 'response.output_item.added',
+      output_index: 0,
+      item: { type: 'message', id: messageId },
+    });
+    sendSse(response, { type: 'response.output_text.delta', item_id: messageId, output_index: 0, delta: 'OK' });
+    sendSse(response, {
+      type: 'response.output_item.done',
+      output_index: 0,
+      item: { type: 'message', id: messageId },
+    });
     sendSse(response, {
       type: 'response.completed',
       response: {
-        status: 'completed',
         usage: { input_tokens: 5, output_tokens: 1, input_tokens_details: { cached_tokens: 2 } },
       },
     });

@@ -3,7 +3,11 @@ import type {
   ProviderRepositoryPort,
   ProviderUpdateRecord,
 } from '../../../modules/agent/ai/provider.repository.port';
-import type { PersistedProviderModelConfig, PersistedProviderView } from '../../../modules/agent/ai/model.types';
+import type {
+  OpenAiCompatibleProtocol,
+  PersistedProviderModelConfig,
+  PersistedProviderView,
+} from '../../../modules/agent/ai/model.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../../shared/security/crypto.port';
 
@@ -27,6 +31,20 @@ const columns = `
   models_json, endpoint_policy_json, enabled, version, created_at, updated_at
 `;
 
+const protocolFromPolicy = (raw: string): OpenAiCompatibleProtocol => {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error('PROVIDER_ENDPOINT_POLICY_INVALID');
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'chat-completions';
+  const protocol = (value as { protocol?: unknown }).protocol;
+  if (protocol === undefined || protocol === 'chat-completions') return 'chat-completions';
+  if (protocol === 'responses') return 'responses';
+  throw new Error('PROVIDER_ENDPOINT_POLICY_INVALID');
+};
+
 const mapRow = (row: ProviderRow): PersistedProviderView => {
   const persistedModels = JSON.parse(row.models_json) as PersistedProviderModelConfig[];
   return {
@@ -34,7 +52,7 @@ const mapRow = (row: ProviderRow): PersistedProviderView => {
     kind: row.kind,
     displayName: row.display_name,
     baseUrl: row.base_url,
-    protocol: 'chat-completions',
+    protocol: protocolFromPolicy(row.endpoint_policy_json),
     hasCredential: Boolean(row.protected_credential),
     credentialRevision: row.credential_revision,
     models: persistedModels,
@@ -85,7 +103,7 @@ export class SqliteProviderRepository implements ProviderRepositoryPort {
         record.baseUrl,
         protectedCredential,
         JSON.stringify(record.models),
-        JSON.stringify({ protocol: 'chat-completions' }),
+        JSON.stringify({ protocol: record.protocol }),
         record.enabled ? 1 : 0,
         record.createdAt,
         record.updatedAt,
@@ -112,7 +130,7 @@ export class SqliteProviderRepository implements ProviderRepositoryPort {
       record.displayName,
       record.baseUrl,
       JSON.stringify(record.models),
-      JSON.stringify({ protocol: 'chat-completions' }),
+      JSON.stringify({ protocol: record.protocol }),
       record.enabled ? 1 : 0,
       record.updatedAt,
     ];

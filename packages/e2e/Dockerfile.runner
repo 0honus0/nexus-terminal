@@ -26,6 +26,11 @@ RUN corepack enable \
     && pnpm store prune \
     && chmod -R a+rX /ms-playwright
 
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml /tmp/nexus-e2e-store/
+RUN cd /tmp/nexus-e2e-store \
+    && pnpm fetch --frozen-lockfile \
+    && rm -rf /tmp/nexus-e2e-store
+
 WORKDIR /workspace
 
 LABEL io.nexus-terminal.e2e-runner.fingerprint="${E2E_RUNNER_FINGERPRINT}" \

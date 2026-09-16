@@ -2,6 +2,22 @@
 
 Nexus Terminal 支持 Docker Compose 部署，并提供运行时配置、反向代理、IPv6、更新和源码构建方式。
 
+## 包管理与构建边界
+
+仓库只使用一个根 pnpm workspace：`packages/backend`、`packages/frontend`、`packages/agent-runner`、`packages/e2e` 分别保持独立 runtime/deployment 生命周期，但依赖解析统一由根 `pnpm-workspace.yaml` 与 `pnpm-lock.yaml` 管理。workspace package 不得新增 `package-lock.json`、嵌套 lockfile 或独立安装流程；需要共享版本的依赖通过 pnpm catalog 管理，带 lifecycle/build script 的依赖必须经过根 `allowBuilds` 审查。
+
+从仓库根目录安装一次：
+
+```bash
+pnpm install --frozen-lockfile
+```
+
+随后通过 workspace filter 或根脚本执行构建，例如 `pnpm run build:backend`、`pnpm run build:frontend`、`pnpm run build:agent-runner`。根脚本可以编排多个 workspace，但 package script 不得再次执行第二套 package-manager install；`scripts/build/build.sh local ...` 假定根 workspace install 已完成。
+
+根 `packageManager` 字段 pin 本地、CI 与 Docker 使用的 pnpm release；升级 pnpm major 前必须确认 lockfile 与 GitHub dependency/security tooling 兼容。依赖刷新如果修改 shared catalog，需要重新生成唯一根 lockfile，并至少构建 Frontend、Backend、Agent Runner，因为 catalog 变化可能同时影响多个 package。
+
+Docker builder 与 CI 必须从根 workspace/lockfile 安装；Backend 与 Agent Runner 的 production tree 使用 workspace-aware `pnpm deploy --prod` 生成，不恢复 per-package `npm ci`/`npm prune`。Frontend 只产出静态 `dist`。规范约束见 [EC-REPO-003](software-requirements/engineering-constraints.md#ec-repo-003)。
+
 ## Docker Compose 部署
 
 创建目录并下载仓库中的 Compose 与环境变量模板：

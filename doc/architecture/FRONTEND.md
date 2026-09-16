@@ -557,9 +557,9 @@ Host Agent surface owns presentation only:
 
 Frontend 不直接实现 ACP client。浏览器通过 App-scoped HTTP + `/ws/agent` contract 与 Nexus backend 通信；ACP wire/session/permission 由 Backend/Runner capability owner 隔离，安装式 App 只获得其 manifest grant/policy 允许的 capability。
 
-### 10.5 Future Agent App contributions
+### 10.5 新增 Agent App contributions
 
-未来 Roleplay/Research 等 App 只有在真实需求出现后才新增独立 Plugin package；不在 Nexus 主仓预建 compile-time sibling App contribution。无 Frontend target 的 App 复用 Host Agent surface；有 Frontend target 的 App 通过 Backend 验证 manifest 后由 `PluginAppFrame` 加载隔离 UI。App 可以消费明确的 Agent 公共能力，但永远不能 import 另一个 App 的私有 runtime/store，也不能继承 Operations 的 SSH/approval 业务语义。
+Roleplay/Research 等新的 App 只有在真实需求出现后才新增独立 Plugin package；不在 Nexus 主仓预建 compile-time sibling App contribution。无 Frontend target 的 App 复用 Host Agent surface；有 Frontend target 的 App 通过 Backend 验证 manifest 后由 `PluginAppFrame` 加载隔离 UI。App 可以消费明确的 Agent 公共能力，但永远不能 import 另一个 App 的私有 runtime/store，也不能继承 Operations 的 SSH/approval 业务语义。
 
 ### 10.6 Apps must not reuse Workspace internals
 
@@ -820,7 +820,7 @@ The mandatory frontend ownership and Agent boundaries are referenced by [EC-FE-0
 
 ## 18. Current validation model
 
-Architecture/static invariants are checked through the repository build and architecture guard. User-reachable behavior is validated through the real E2E system documented in [E2E](../testing/E2E.md). The mandatory verification and E2E policies are defined only by [EC-VER-001](../software-requirements/engineering-constraints.md#ec-ver-001) and the [EC-E2E-*](../software-requirements/engineering-constraints.md#ec-e2e-001) constraint rows.
+Architecture/static invariants are checked through TypeScript/build plus architecture review; there is no separate frontend architecture quality gate. User-reachable behavior is validated through the real E2E system documented in [E2E](../testing/E2E.md). The mandatory verification and E2E policies are defined only by [EC-VER-001](../software-requirements/engineering-constraints.md#ec-ver-001) and the [EC-E2E-*](../software-requirements/engineering-constraints.md#ec-e2e-001) constraint rows.
 
 Current + target dependency model:
 

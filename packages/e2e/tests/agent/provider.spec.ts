@@ -8,7 +8,7 @@ type ProviderView = {
   kind: 'openai-compatible';
   displayName: string;
   baseUrl: string;
-  protocol: 'chat-completions';
+  protocol: 'chat-completions' | 'responses';
   hasCredential: boolean;
   credentialRevision: number;
   models: Array<{ id: string; contextWindow: number; maxOutputTokens: number; supportsTools: boolean }>;
@@ -78,66 +78,79 @@ test('Provider configuration protects credentials and enforces the OpenAI-compat
     expect(JSON.stringify(await discovered.json())).not.toContain('contextWindow');
   });
 
-  await step('minimal provider test streams through the pinned endpoint and reports usage', async () => {
-    const tested = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
+  await step(
+    'minimal Chat Completions provider test streams through the configured endpoint and reports usage',
+    async () => {
+      const tested = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
+        headers,
+        data: { modelId: 'e2e-model' },
+      });
+      expect(tested.ok(), await tested.text()).toBeTruthy();
+      await expect(tested.json()).resolves.toMatchObject({
+        data: {
+          ok: true,
+          usage: { inputTokens: 5, outputTokens: 1, cachedInputTokens: 2 },
+        },
+      });
+    },
+  );
+
+  await step('provider can switch to Responses while credential replacement preserves secret revisions', async () => {
+    const renamed = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+      headers,
+      data: { displayName: 'E2E Provider Renamed', expectedVersion: provider.version },
+    });
+    expect(renamed.ok(), await renamed.text()).toBeTruthy();
+    provider = ((await renamed.json()) as Envelope<ProviderView>).data;
+    expect(provider).toMatchObject({
+      displayName: 'E2E Provider Renamed',
+      hasCredential: true,
+      credentialRevision: 1,
+    });
+
+    const switched = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+      headers,
+      data: { protocol: 'responses', expectedVersion: provider.version },
+    });
+    expect(switched.ok(), await switched.text()).toBeTruthy();
+    provider = ((await switched.json()) as Envelope<ProviderView>).data;
+    expect(provider.protocol).toBe('responses');
+
+    const responsesTest = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
       headers,
       data: { modelId: 'e2e-model' },
     });
-    expect(tested.ok(), await tested.text()).toBeTruthy();
-    await expect(tested.json()).resolves.toMatchObject({
+    expect(responsesTest.ok(), await responsesTest.text()).toBeTruthy();
+    await expect(responsesTest.json()).resolves.toMatchObject({
       data: {
         ok: true,
         usage: { inputTokens: 5, outputTokens: 1, cachedInputTokens: 2 },
       },
     });
+
+    const badCredential = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+      headers,
+      data: { credential: 'wrong-e2e-secret', expectedVersion: provider.version },
+    });
+    expect(badCredential.ok(), await badCredential.text()).toBeTruthy();
+    provider = ((await badCredential.json()) as Envelope<ProviderView>).data;
+    expect(provider).toMatchObject({ hasCredential: true, credentialRevision: 2 });
+
+    const failed = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
+      headers,
+      data: { modelId: 'e2e-model' },
+    });
+    expect(failed.ok(), await failed.text()).toBeTruthy();
+    await expect(failed.json()).resolves.toMatchObject({ data: { ok: false, errorCode: 'PROVIDER_AUTH_FAILED' } });
+
+    const restored = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
+      headers,
+      data: { credential: providerSecret, expectedVersion: provider.version },
+    });
+    expect(restored.ok(), await restored.text()).toBeTruthy();
+    provider = ((await restored.json()) as Envelope<ProviderView>).data;
+    expect(provider.credentialRevision).toBe(3);
   });
-
-  await step(
-    'provider protocol stays chat-completions while credential replacement preserves secret revisions',
-    async () => {
-      const renamed = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-        headers,
-        data: { displayName: 'E2E Provider Renamed', expectedVersion: provider.version },
-      });
-      expect(renamed.ok(), await renamed.text()).toBeTruthy();
-      provider = ((await renamed.json()) as Envelope<ProviderView>).data;
-      expect(provider).toMatchObject({
-        displayName: 'E2E Provider Renamed',
-        hasCredential: true,
-        credentialRevision: 1,
-      });
-
-      const unsupportedProtocol = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-        headers,
-        data: { protocol: 'responses', expectedVersion: provider.version },
-      });
-      expect(unsupportedProtocol.status(), await unsupportedProtocol.text()).toBe(400);
-      await expect(unsupportedProtocol.json()).resolves.toMatchObject({ error: { code: 'VALIDATION_FAILED' } });
-
-      const badCredential = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-        headers,
-        data: { credential: 'wrong-e2e-secret', expectedVersion: provider.version },
-      });
-      expect(badCredential.ok(), await badCredential.text()).toBeTruthy();
-      provider = ((await badCredential.json()) as Envelope<ProviderView>).data;
-      expect(provider).toMatchObject({ hasCredential: true, credentialRevision: 2 });
-
-      const failed = await request.post(`/api/v1/agent/ai/providers/${provider.id}/test`, {
-        headers,
-        data: { modelId: 'e2e-model' },
-      });
-      expect(failed.ok(), await failed.text()).toBeTruthy();
-      await expect(failed.json()).resolves.toMatchObject({ data: { ok: false, errorCode: 'PROVIDER_AUTH_FAILED' } });
-
-      const restored = await request.patch(`/api/v1/agent/ai/providers/${provider.id}`, {
-        headers,
-        data: { credential: providerSecret, expectedVersion: provider.version },
-      });
-      expect(restored.ok(), await restored.text()).toBeTruthy();
-      provider = ((await restored.json()) as Envelope<ProviderView>).data;
-      expect(provider.credentialRevision).toBe(3);
-    },
-  );
 
   await step(
     'provider endpoint validation rejects embedded URL credentials without changing the saved endpoint',

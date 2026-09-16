@@ -2,7 +2,7 @@
 
 > 状态：Current architecture baseline
 >
-> 适用分支：`dev`
+> 适用分支：`main`
 >
 > 本文件是 Nexus Agent 的**唯一长期架构文档**。软件行为需求以 [`software-requirements/requirements/agent.md`](software-requirements/requirements/agent.md) 为准；强制工程约束以 [`software-requirements/engineering-constraints.md`](software-requirements/engineering-constraints.md) 为准。历史实现过程、重构 review 和阶段施工记录不再作为规范源。
 
@@ -410,11 +410,15 @@ Frontend event stream 使用 reconnect/backoff/cursor replay；慢消费者有�
 
 ## 9. Context、Provider 与 Budget
 
-Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 不回填明文。Backend 支持通过受现有 outbound policy/credential policy 保护的 Provider discovery 请求读取上游 `GET <baseUrl>/models`；discovery 只把 model id（以及可选 owner/created metadata）当作候选事实，不推测 context window、max output 或 tool capability，用户必须确认这些基础能力后才写入 Provider 配置。
+Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 不回填明文。`ProviderService` 是 Provider 配置应用服务：负责输入校验、CRUD/version、credential revision、模型 capability 解析、model discovery/test 编排，以及配置变化后的 Agent Host health 刷新；它不是模型 HTTP transport owner。当前 Provider endpoint 只做 URL/协议等基础配置校验，不提供 Nexus 内建的 Provider 私网例外、DNS pinning、redirect/SSRF policy。Provider discovery 请求读取上游 `GET <baseUrl>/models`，只把 model id（以及可选 owner/created metadata）当作候选事实，不把未定义语义的上游字段当成可信 capability。
 
-Reasoning capability 不由普通用户手工配置。Backend 的 `ModelCapabilityResolver` 当前以 Nexus 内置 Model Capability Registry 为生效来源，根据已知/canonical model id 派生 `reasoningEfforts`、`defaultReasoningEffort` 等只读能力；未知模型保持 Unknown 并使用 Provider 默认，不猜档位、不发送 reasoning 参数。Resolver 预留未来 Provider live capability 输入层，但当前 `/models` discovery 不解析 reasoning 扩展元数据，也不缓存此类能力。Frontend 只消费 Backend 派生结果生成思考强度滑条。
+Backend 的 `ModelCapabilityResolver` 统一解析模型物理能力。当前 Nexus Registry 可按已知/canonical model id 提供 `contextWindow`、`maxOutputTokens`、`supportsTools` 与 reasoning metadata；用户保存模型时只持久化相对 Registry 的 capability override。未知/私有模型如果没有完整的人工 capability，必须报 `MODEL_CAPABILITY_INCOMPLETE`，不能偷偷回退到固定 32K/4K。Provider live capability ingestion 仍是后续扩展，未交付前不得把普通 `/models` discovery 描述成 capability authority。
 
-每个 Run 冻结 Provider configuration version 与最终 reasoning effort。Provider/Registry 能力在 Run 创建后发生变化，不得改写已有 Run 的 definition snapshot；下一次 Run 才使用新能力。
+每个 Run 冻结 Provider configuration version、最终 model capability 与 reasoning effort。模型/Registry 能力在 Run 创建后发生变化，不得改写已有 Run 的 definition snapshot；下一次 Run 才使用新能力。`maxContextTokens`/`maxOutputTokens` 来自模型物理 capability，不是用户预算；累计 `maxRunTokens`、step/time/tool/recall/subagent 等执行预算来自 User defaults + App-scoped execution policy，并在 Run 创建时冻结且受 System/User hard limit 约束。
+
+OpenAI-compatible Provider 支持 `chat-completions` 与 `responses` 两种协议，由 Provider 配置显式选择。两种协议统一通过 `@ai-sdk/openai` 的 `createOpenAI({ baseURL, ... })` 接入：Chat 使用 `openai.chat(modelId)`，Responses 使用 `openai.responses(modelId)`；Nexus 不再维护独立 Responses payload/SSE codec，SDK 的统一 `LanguageModelV4` stream 再映射为 Core `ModelEvent`。第三方 endpoint 仍必须真实兼容所选 OpenAI wire，不能因使用该 SDK 就假定任意第三方 API 自动支持 Responses。两种协议都不得重新引入 caller-owned `prompt_cache_key`、Codex 专属 thread/turn metadata 或为了 cache 命中而扩散 provider-specific identity header；`affinityKey` 只作为 provider-neutral routing hint。Provider 双协议不等于恢复 Nexus 内建 DNS pinning、redirect/SSRF policy 或 private-host exception。
+
+Core model input 还必须保持 cache-friendly 且与 Provider 无关：稳定 instructions（safety + 已签名 Skill metadata）在前，append-oriented Ledger/tool chronology 随后，本轮 user input 再后，Goal/Plan/Collaboration/Recall 等易变 snapshot 放在尾部。`runId/attemptId/contextEpoch/credential revision/routing identity` 等控制面事实不得为了 cache 或诊断进入模型正文。Tool schema 要确定性 canonicalize/稳定排序；达到 step budget 时通过 `toolMode=none` 禁止新 Tool，而不是删除 schema 破坏前缀。长上下文压缩采用 generation boundary：一次生成稳定 summary 后开启新 generation，不得每轮重写旧 history。
 
 上下文构建必须有界：
 
@@ -456,6 +460,8 @@ inspect
 - cancellation 不能声称回滚已经发生的远端副作用。
 
 Read tool 也必须经过 scope/capability/network boundary，只是风险链更轻。
+
+模型单次 step 可以提出有界的 multi-tool batch。整批 proposal 必须先完成 inspection 并写入 durable lineage；可恢复的单项拒绝也必须持久化，不能因同批其他 Tool 合法而丢失。执行阶段只有 `read`、明确 `parallelSafe` 且 `resourceKeys` 不冲突的 Tool 可以小批并行；`control` 保持边界顺序，有副作用 Tool 继续遵守 approval、lease/fence、verify/reconcile 并按安全边界推进。Provider wire 当前仍发送 `parallel_tool_calls=false`；它只是上游生成提示，不代表 Runtime 只能处理一个 Tool proposal。
 
 ## 11. Artifact、Memory 与文件交换
 
@@ -517,7 +523,7 @@ Workspace create 只能消费该 Run 的 frozen Environment snapshot；模型侧
 
 ### 12.3 Runner
 
-Runner package：`packages/agent-runner`。Host 与独立 Docker 镜像使用同一套 runtime contract。
+Runner package：`packages/agent-runner`。Host 与独立 Docker 镜像使用同一套 runtime contract。Runner 是**可选增强能力**：核心 Nexus/Backend 在没有 Runner URL、Runner 未启动或 Runner 暂时不可达时仍必须正常启动并提供连接管理、SSH/基础 machine capability 等核心功能；Workspace Runtime availability 明确降级为 unavailable。Compose 中 Runner 通过显式 profile/部署配置启用，不把 `host.docker.internal` 或任何固定 Runner 地址写成产品默认硬依赖。
 
 Runner 提供：
 
@@ -549,7 +555,7 @@ Nexus 当前是单用户应用。Workspace/Generation/Toolchain 的职责是组�
 - `/workspace/deps`、`/workspace/build` 等逻辑路径映射到按 toolchain fingerprint 分区的 Runner data root；
 - job、ACP、Terminal 和 Runner Plugin 都是 Runner 原生子进程；job/ACP/Runner Plugin 由独立 process group 管理并随 owner 生命周期整组回收，Terminal 使用真实 PTY foreground process group 处理交互 signal；
 - Host Runner 子进程共享宿主安全上下文；Docker Runner 子进程共享同一个 Runner 容器安全上下文；
-- Workspace Profile 不提供伪资源配额或伪网络白名单字段；Agent Hard Limits、Browser/Provider outbound policy 等安全/预算约束仍由各自 Backend owner 执行，不冒充 per-Workspace cgroup/network namespace；
+- Workspace Profile 不提供伪资源配额或伪网络白名单字段；Agent Hard Limits、Browser/MCP 等实际存在的网络边界仍由各自 Backend owner 执行，不冒充 per-Workspace cgroup/network namespace，也不把 Provider transport 描述成拥有 Nexus 内建 outbound policy；
 - 用户安装并启用 Runner Plugin，等价于允许该代码以 Runner OS 权限执行。Runner 只为每个 Plugin target 提供独立逻辑工作目录作为 SDK/Artifact exchange 的文件组织方式；不再提供跨 Plugin ACL，因为同权限 native Plugin 可以绕过这类逻辑 ACL，它不能构成真实安全边界。
 
 因此安全边界必须表述准确：Backend capability/policy/approval/lease 仍决定 Nexus 是否允许某个操作；Runner 负责把已允许的操作放到正确 Workspace/runtime profile 中执行，但不再声称它能隔离同一用户自己的代码。
@@ -712,7 +718,7 @@ agent/plugins/<appId>/versions/<version>
 
 上传 Backend code 不在 Nexus Backend 进程内 eval/import。
 
-动态 Frontend 资源通过 Nexus 主站同源 `/plugins/...` 与 `/sdk/frontend-v1.mjs` 提供，但 iframe 继续使用 `sandbox=allow-scripts` 且不授予 `allow-same-origin`，因此 Plugin JavaScript 保持 opaque origin。Plugin 只经 bounded MessagePort 调用显式 SDK；Frontend container 不挂载插件 storage，也不向 iframe 暴露 Nexus session/CSRF/HTTP client。
+动态 Frontend 资源通过 Nexus 主站同源 `/plugins/...` 与 `/sdk/frontend-v1.mjs` 提供，但 iframe 继续使用 `sandbox=allow-scripts` 且不授予 `allow-same-origin`，因此 Plugin JavaScript 保持 opaque origin。Plugin 只经 bounded MessagePort 调用显式 SDK；Frontend container 不挂载插件 storage，也不向 iframe 暴露 Nexus session/CSRF/HTTP client。浏览器可见的 Plugin/SDK 不得重新拆成独立公网 Origin、独立子域名或额外公开端口；内部 handler 继续复用主 Backend listener 的正式路由/安全边界。
 
 Runner plugin 通过独立 Runner protocol/lifecycle 执行。
 
@@ -835,7 +841,7 @@ Agent 复用 Platform capability，不复用 Workspace runtime transport owner�
 - Root dispatcher process-local；
 - Subagent work durable SQLite claim queue。
 
-当前 Agent schema 尚未进入 `main` 时，`dev` **不维护 dev→dev Agent migration 兼容链**：`sqlite-schema.registry.ts` 直接描述当前最终 Agent/AI 表结构，`sqlite-migrations.ts` 只保留 `main` 已存在的历史 migration（当前最高 #20）。旧 dev 数据库若与当前 Agent schema 不兼容，应重建开发数据库，而不是继续堆叠临时 add/rename/drop migration。
+Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #23（Thread title ownership、Tool risk enum、durable multi-tool batch lineage）。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
 
 如果未来进入多 Backend 实例，不允许只把 Root queue 换成 Redis 就宣称支持分布式。必须同时设计：
 
@@ -873,57 +879,36 @@ Environment selection 不是 frontend authority：Run create 携带 recipe selec
 
 ## 22. 测试与发布门槛
 
-Agent 用户可达行为必须由 production-style E2E 验收，不以 unit test 或 console log 代替。
+CI 保持最小化，只把能够直接证明仓库可交付的通用检查当门槛。完整 E2E 的 canonical evidence 必须来自 GitHub Actions 远程 runner：本地环境只用于单 spec、定向 smoke、日志复现和开发调试，不把开发机 Node/浏览器/端口/缓存状态当成完整回归或发布结论。
 
-当前 canonical CI 覆盖包括：
+- Prettier 全仓格式检查；
+- Backend、Frontend、Agent Runner production build/typecheck；
+- 按 group 运行的真实产品 E2E；
+- Docker/Runner 打包相关变更，以及 `main`、定时或手动全量运行时执行 deployment smoke；
+- release 发布前仍执行 production dependency audit 与 Release gate。
+- `Update dependencies` workflow 只负责 workspace 依赖更新、frozen install、格式、production build/audit 与创建更新 PR；依赖分支/PR 触发同一 canonical E2E workflow，不在 updater 内再维护第二套 Chromium/ingress/full-E2E 流程。
 
-- Docker deployment smoke；
-- Host Runner native runtime prerequisites；
-- Runner build；
-- native Workspace job；
-- ACP stream；
-- Workspace direct PTY terminal；
-- Browser tunnel；
-- stable Workspace generation；
-- Node/Python/Go multi-version runtime profile switching；
-- runtime cleanup scope；
-- Run deletion Workspace guard；
-- global floating Agent across routes；
-- signed Plugin install/upgrade/custom surface 与**多个不同 `appId` 安装式 Plugin 同时并存**；
-- Developer preset 真实 Run、App switching、窄窗审批、checkpoint、Artifact 与功能截图；
-- Agent functional Playwright scenarios；
-- functional screenshot verifier。
+不要为 Agent 的每条内部约束继续增加一次性 CI checker。已删除的 package-management、E2E-only test-policy、Runner prerequisite 独立 gate 不再恢复；这些要求作为本文件/工程约束中的 review invariant，由正常 build、真实 E2E 与 Docker smoke 证明最终行为。新增专用 gate 只有在通用 build/E2E 无法观察到一个高风险不变量、并且确有持续回归证据时才考虑。
 
-E2E 不得为了定位新增 product-only `data-testid` 等测试 seam；优先使用可访问角色、名称和真实用户行为。
+Agent 改动仍必须遵守以下 review invariant：
 
-## 23. 当前已知边界与下一步
-
-### 已交付
-
-- 全局 floating Agent Host；
-- App/Thread/Run/Ledger；
-- Provider/model snapshot；
-- typed durable Plan；
-- durable Goal text/revision + GoalStatus 分离；
-- Conversation slash-command dispatch：`/goal`、`/plan`、`/interrupt`、`/queue`、`/stop`、`/help` 与 `//` literal escape；
-- durable pending-input queue inspection + versioned remove/reorder mutation；
-- appendInput + streaming model interruption；
-- approval supersede on newer input；
-- budget/cancel/checkpoint/resume；
-- Artifact Library；
-- governed Tool execution；
-- Workspace Runtime + Host Runner；
-- ACP / Browser / Workspace local Terminal live execution；
-- Subagent durable mailbox/work queue；
-- signed installable Agent plugins；
-- `nexus.agent` 作为默认 first-party installable Plugin 分发，一个 `agent.default` AgentDefinition 内承载 `nexus.operations` / `nexus.developer` 两个 Skill；Agent 初次启用时由 Host 推荐并安装该合并插件，而不是从 Nexus 主镜像启动编译期 App；`nexus.fullstack` 独立验证 frontend/backend/runner target 组合；
-- server-validated/frozen Next Run Environment snapshot；
-- structured diagnostics。
+- 依赖解析只使用根 pnpm workspace/lockfile/catalog，不新增 workspace-local lockfile 或第二套 install flow；
+- 自动化产品测试只进入 `packages/e2e`，不为 Module/Repository/Adapter 再建 unit/component/internal test suite；内部不变量优先由类型/build/architecture review 与用户可达 E2E 证明；
+- Backend/Frontend 继续遵守既有 owner/layer/public API 依赖方向，新增 import 必须在 review 中检查跨层、feature 私有目录和循环依赖；不再用独立 architecture quality gate 代替架构审查；
+- Agent 三个 locale fragment 的 key 与用户可见语义保持同步；新增/修改 UI 文案时同一改动更新 `zh-CN/en-US/ja-JP`，不再设置独立 i18n checker；
+- Frontend 大依赖、编辑器/预览器等重资源继续按 route/feature 懒加载，异常 bundle 增长在变更审查中说明，不再设置独立 bundle-budget gate；
+- Runner 镜像/宿主是否具备所需 runtime 以真实 standalone/container smoke 为准，不用单独的二进制存在性 quality gate 代替行为验证；
+- GitHub Actions grouped E2E 使用长期 GHCR runner image 预装 Node/pnpm/Chromium，并按根 `package.json` + `pnpm-lock.yaml` + `pnpm-workspace.yaml` fingerprint 预热 pnpm content-addressable store；CI 实际拉取 immutable `fingerprint-*` image tag，避免并行分支争写版本 alias；matrix shard 只做 `pnpm install --offline` 链接依赖。依赖 authority 变化时重建一次 runner image，不在每个 shard 重新下载同一依赖；
+- Provider 同时支持 Chat Completions 与 Responses，但 Provider 网络访问没有 Nexus 内建 private-host/SSRF policy；
+- Agent mutation、StateCommit、approval/lease/reconcile、Plugin 签名与 scope 等安全不变量不得为了减少 CI 项而放宽；它们通过对应产品路径 E2E 与代码审查维持。
 
 ### 已决定、待实现
 
-1. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
-2. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
+1. Provider live capability ingestion：只有语义明确且可验证的 Provider metadata 才能覆盖/补充 Registry；普通 `/models` discovery 仍不能猜 capability。
+2. Agent 执行预算仍需补齐“按模型窗口缩放的 normal/extended policy”与 no-progress/repeated-operation guard；现有 App override + hard limit 已交付，但不能把它描述为完整的健康长任务策略。
+3. Suspended SSH session 的跨设备 takeover/owner lease 仍未形成正式状态机；现有 `prepareResume/commitResume/rollbackResume` 解决单次恢复事务，不等价于跨设备抢占。
+4. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
+5. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
 
 ## 24. 修改规则
 
@@ -935,727 +920,9 @@ E2E 不得为了定位新增 product-only `data-testid` 等测试 seam；优先�
 4. 不恢复已删除的 legacy Agent Environment 数据模型；Runtime 环境以 Workspace Runtime contract 为唯一方向。
 5. 不为 UI 便利复制 Run/Thread/Workspace/queue 的 authoritative state。
 6. destructive operation 必须 preview/freeze/confirm/recheck/reconcile。
-7. mutation unknown outcome 必须 fail closed。
-8. 不记录隐藏思维链或敏感业务正文到诊断日志。
-
-## 25. 当前 Agent 问题测试环境与操作交接（2026-09-14）
-
-本节记录当前用于 Nexus Agent 问题定位与验证的真实开发环境、Git/文档规则、PVE/Windows CDP 拓扑、本地开发链路和测试方法。它是当前会话恢复与继续测试的操作基线；若环境事实发生变化，应先重新验证再更新本节。
-
-### 25.1 源码与 Git 规则
-
-Nexus Terminal 唯一源码工作区：
-
-```text
-/home/agentdock/AgentDock/nexus-terminal
-```
-
-源码、文档、测试修改都只在该仓库进行。不要在 honus.top 的 `/home/honus/product/nexus_terminal*` 或其它 project 目录里修改源码。
-
-Git 只使用一个开发分支：
-
-```text
-dev
-```
-
-不要为每个问题创建新 branch，也不要复制多个源码树。开发流程固定为：
-
-```text
-dev 修改
-  -> 本地 Node/Vite 热更新
-  -> api.honus.top
-  -> Windows Chrome CDP 真浏览器测试
-  -> commit
-  -> push dev
-```
-
-只有需要验证 Docker/Compose 部署行为时，才构建 Docker image。
-
-当前 Git 状态：
-
-- branch：`dev`
-- local HEAD：`6ae13e623bb5`
-- `origin/dev = 6ae13e623bb5`
-- `origin/main = 3d790e4c8cac`
-- 已确认 `origin/main` 是当前 `dev` 的 ancestor。
-- 最近提交：`6ae13e6 docs: record AgentDock dev port mapping`
-- local dev 与 origin/dev 当前一致。
-- GitHub CLI 已认证账号 `0honus0`，HTTPS Git operations 已配置，`git push origin dev` 已实测成功。
-
-### 25.2 PROBLEM 文档规则
-
-唯一问题记录：
-
-```text
-/home/agentdock/AgentDock/nexus-terminal/doc/PROBLEM.md
-```
-
-不要在 honus.top 另外创建 PROBLEM.md。
-
-每次发现需要修改代码的问题，必须按以下顺序：
-
-1. 先复现并收集证据。
-2. 在 `doc/PROBLEM.md` 写清问题现象、根因、决策、计划修改、验证方法。
-3. 再修改代码。
-4. 本地真实验证。
-5. 补实施结果和最终状态。
-6. commit 到 `dev`。
-7. push `origin/dev`。
-
-不要先改代码后补问题记录。
-
-当前 PROBLEM 已记录到 P-018。P-018 只记录 AgentDock 当前开发端口映射，不修改任何 Nexus 默认端口。特别注意：不要修改 Frontend/Vite 或 Backend 的源码默认端口，除非后续单独形成新的问题和明确决策。
-
-### 25.3 AgentDock 当前环境
-
-AgentDock 当前版本：
-
-```text
-0.8.3
-```
-
-AgentDock Core 健康。AgentDock 实际运行在 PVE 里的 Debian VM：
-
-```text
-hostname: hermes
-Debian VM IP: 172.30.31.10
-AgentDock Docker IP: 172.18.0.2
-```
-
-Debian 上 Compose：
-
-```text
-/home/honus/agentdock/docker-compose.yml
-```
-
-AgentDock 容器当前 host port：
-
-```text
-8765:8765
-9998:9998
-```
-
-公网 MCP：
-
-```text
-https://mcp.honus.top
-```
-
-### 25.4 SSH MCP 持久化配置
-
-SSH MCP 之前安装在容器临时目录：
-
-```text
-/home/agentdock/.local/mcp-ssh/...
-```
-
-AgentDock 容器重建后 package 消失，但 registry 仍保留，因此出现 `MCP_CONNECTION_FAILED`。
-
-现在已经重新安装到持久化目录：
-
-```text
-/home/agentdock/.agentdock/mcp/ssh-runtime
-```
-
-入口：
-
-```text
-/home/agentdock/.agentdock/mcp/ssh-runtime/node_modules/@aiondadotcom/mcp-ssh/bin/mcp-ssh.js
-```
-
-SSH dynamic MCP 已重新注册、refresh，当前：
-
-```text
-status = ready
-tool_count = 7
-```
-
-可用能力：
-
-- `checkConnectivity`
-- `listKnownHosts`
-- `getHostInfo`
-- `runRemoteCommand`
-- `runCommandBatch`
-- `uploadFile`
-- `downloadFile`
-
-重要 SSH alias：
-
-```text
-honus
-  host: honus.top
-  port: 9902
-  user: root
-
-debian
-  host: honus.top
-  port: 19902
-  user: root
-```
-
-访问 PVE 内 Debian VM 时使用 `debian`。不要直接使用 `honus.top`，否则可能走 SSH 默认 22。
-
-### 25.5 PVE / Debian / Windows 网络拓扑
-
-整体链路：
-
-```text
-Internet
-  -> honus.top
-  -> Docker 化 PVE
-  -> Debian VM + Windows VM
-```
-
-外层 honus.top 运行 Docker project：
-
-```text
-pve
-```
-
-PVE container：
-
-```text
-10.240.31.2
-```
-
-PVE 内部 bridge：
-
-```text
-vmbr0 = 172.30.31.1/24
-```
-
-VM 100：
-
-```text
-name: debian
-IP: 172.30.31.10
-```
-
-VM 101：
-
-```text
-name: windows
-IP: 172.30.31.11
-```
-
-Debian 和 Windows 都挂在同一个 `172.30.31.0/24` 内部网络。
-
-### 25.6 Windows Chrome CDP
-
-Windows Chrome CDP：
-
-```text
-http://172.30.31.11:9223
-```
-
-已实际验证：
-
-```text
-http://172.30.31.11:9223/json/version
-```
-
-返回 HTTP 200，Chrome 为：
-
-```text
-Chrome/152.0.7977.83
-```
-
-AgentDock Docker container 内也已经实际验证可以访问 `172.30.31.11:9223`。
-
-AgentDock Core 当前实际配置：
-
-```text
-AGENTDOCK_BROWSER_ENABLED=true
-AGENTDOCK_BROWSER_CDP_URL=http://172.30.31.11:9223
-```
-
-AgentDock Browser 已实测返回：
-
-```text
-connection_mode=external_configured
-```
-
-因此 `browser_session`、`browser_act`、`browser_snapshot` 当前控制的是 Windows VM 中真实 Chrome，而不是 AgentDock container 临时启动的 Chromium。
-
-以后所有 UI / Agent 用户行为问题，优先使用真实 Windows Chrome 验证。不要把 CDP 9223 暴露公网。
-
-AgentDock 已通过 `AGENTDOCK_BROWSER_CDP_URL` 配好外部 Chrome，因此调用 `browser_session` 时应直接使用默认 `external_configured` 连接，不要在单次调用里手动传 `cdp_url`。如果本地 Playwright 因缺少自带 Chromium/Headless Shell 无法启动，UI 验证优先继续走这个 Windows CDP 真浏览器，不要仅为当前验证临时下载浏览器；只有标准 E2E/CI 需要 Playwright 自带浏览器时才按对应环境准备依赖。
-
-### 25.7 Nexus 本地开发服务当前状态
-
-当前两个 AgentDock command sessions 仍处于 running：
-
-```text
-Backend  -> session-84fda9a5e6893657debc34c7
-Frontend -> session-d24e7364efb5a67a6145f6cc
-```
-
-Backend 当前开发入口：
-
-```text
-3001
-```
-
-Frontend 当前开发实例：
-
-```text
-9998
-```
-
-注意：`9998` 是当前 AgentDock 开发环境显式传入的运行端口，不是 Nexus Frontend 的源码默认端口。Frontend 源码 dev script 仍然是：
-
-```text
-vite --host
-```
-
-不要修改默认端口。当前 Vite 是通过显式命令运行：
-
-```bash
-pnpm exec vite --host 0.0.0.0 --port 9998
-```
-
-### 25.8 Backend 本地开发配置
-
-Backend dev script：
-
-```bash
-pnpm --filter @nexus-terminal/backend dev
-```
-
-当前公网开发测试使用：
-
-```text
-AGENT_PUBLIC_ORIGIN=https://api.honus.top
-RP_ID=api.honus.top
-RP_ORIGIN=https://api.honus.top
-```
-
-Backend：
-
-```text
-HTTP API: 0.0.0.0:3001
-Plugin / SDK: 同一 3001 listener 下的 /plugins/... 与 /sdk/...
-```
-
-P-023 起 Backend 不再启动独立 `3002` listener。Plugin/SDK 保留专用静态 request handler 与安全头，但和 API/WebSocket 复用 `3001`；浏览器仍只通过同源 `/plugins/...` 和 `/sdk/...` 访问。
-
-Backend 开发数据目录：
-
-```text
-/home/agentdock/AgentDock/nexus-terminal/packages/backend/data
-```
-
-这是本地独立开发数据。已经生成：
-
-```text
-packages/backend/data/.env
-```
-
-其中包含本地自动生成的 `ENCRYPTION_KEY` 和 `SESSION_SECRET`。不要使用正式环境数据库进行本地 Agent 测试。
-
-### 25.9 Frontend / Vite 当前代理关系
-
-Frontend 开发服务器：
-
-```text
-0.0.0.0:9998
-```
-
-Vite 当前负责：
-
-```text
-/api               -> Backend 3001
-/uploads           -> Backend 3001
-/ws/workspace      -> Backend
-/ws/uploads        -> Backend
-/ws/remote-desktop -> Backend
-/ws/agent          -> Backend
-/plugins           -> Backend 3001 Plugin static handler
-/sdk               -> Backend 3001 Plugin static handler
-```
-
-因此浏览器只需要访问一个 Origin。
-
-### 25.10 api.honus.top 公网开发链
-
-Nginx Proxy Manager 已经存在：
-
-```text
-api.honus.top
-```
-
-NPM：
-
-```text
-api.honus.top -> 127.0.0.1:9998
-```
-
-外层 PVE 已经存在：
-
-```text
-9998 -> 172.30.31.10:9998
-```
-
-Debian AgentDock Docker：
-
-```text
-host 9998 -> AgentDock container 9998
-```
-
-最终链路：
-
-```text
-AgentDock Vite
-  -> Debian VM
-  -> nested PVE
-  -> honus.top
-  -> Nginx Proxy Manager
-  -> https://api.honus.top
-```
-
-当前已重新验证：
-
-```text
-http://127.0.0.1:3001/api/v1/status       -> 200
-http://127.0.0.1:9998/                    -> 200
-http://127.0.0.1:9998/api/v1/status       -> 200
-http://127.0.0.1:9998/sdk/frontend-v1.mjs -> 200
-https://api.honus.top/                     -> 200
-https://api.honus.top/api/v1/status       -> 200
-https://api.honus.top/sdk/frontend-v1.mjs -> 200
-```
-
-所以当前开发环境已经完全可用。
-
-### 25.11 Windows 真浏览器验证 Nexus
-
-AgentDock 已通过 Windows Chrome CDP 实际打开：
-
-```text
-https://api.honus.top
-```
-
-页面 title：
-
-```text
-Nexus Terminal
-```
-
-本地开发数据库是全新的，因此当前自动进入：
-
-```text
-https://api.honus.top/setup
-```
-
-页面显示“创建第一个管理员账号”。当时 browser snapshot：
-
-```text
-console_errors = []
-network_errors = []
-page_errors = []
-```
-
-所以浏览器、公网、Frontend、Backend 当前链路正常。接下来可以直接创建本地开发管理员并开始 Agent UI 测试。不要拿线上账户/线上数据库替代这套独立开发数据。
-
-### 25.12 Node / pnpm 状态
-
-当前：
-
-```text
-Node v22.17.0
-pnpm 11.26.0
-```
-
-Nexus repo 当前声明 `Node >= 24`，因此执行时会出现 engine warning。目前实际 Backend dev、Frontend Vite、API、Browser 均正常，所以该 warning 当前没有阻塞 Agent 测试。
-
-如果后续遇到 Node API / SQLite / build 行为差异，应优先考虑升级 AgentDock container 到 Node 24 环境，而不是直接修改 Nexus 代码绕过。
-
-### 25.13 Plugin 同源架构规则
-
-历史 P-002 / P-005 / P-006 / P-016 已确定：Plugin 不使用独立公网 Origin。
-
-浏览器看到的是：
-
-```text
-https://<nexus-origin>/plugins/...
-https://<nexus-origin>/sdk/...
-```
-
-P-023 起 Plugin/SDK 与 API 复用 Backend `3001` listener，但 Plugin 静态 handler 继续保留独立 CSP、iframe 与路径校验安全语义。不要重新引入独立 Plugin listener、公网端口或 `plugin.honus.top`。
-
-Plugin iframe 继续保持：
-
-```text
-sandbox=allow-scripts
-```
-
-不要添加：
-
-```text
-allow-same-origin
-```
-
-Plugin route 不应该继承主页面：
-
-```text
-X-Frame-Options: DENY
-```
-
-### 25.14 Runner 当前产品边界
-
-历史 P-008 / P-016 已确定：Agent Runner 是 optional capability。
-
-核心 Nexus 不应该：
-
-- 默认硬依赖 Runner。
-- 因 Runner 不存在而不能启动。
-- 默认写死 `host.docker.internal` Runner URL。
-
-Runner 使用 Compose profile 显式启用。当前本地 Agent 问题测试如果不涉及 Workspace Runner，不要先启动 Runner。
-
-### 25.15 Agent / Model 历史问题重点
-
-接下来主要开始测试 Agent。历史 PROBLEM 有 P-009～P-013。这些记录很重要，但必须重新对照当前 dev 源码，不能因为文档写了就假定代码已经完整实现。
-
-#### P-009：模型没有正确使用 Nexus Tool
-
-方向：模型应该知道声明出来的 Tool 是 Nexus 当前可用 capability。例如 `machine_list_connections` 这种安全只读工具应该可以被模型正确选择。
-
-#### P-010：Prompt Cache ordering
-
-稳定上下文应该尽可能在前。当前目标顺序：
-
-1. static safety / tool instruction
-2. Skill metadata
-3. append-only ledger/history
-4. current user input
-5. goal
-6. plan
-7. collaboration
-8. recall
-
-不要把频繁变化内容放在稳定 prefix 前部。
-
-#### P-011～P-013：当前模型输入与 Prompt Cache 架构（2026-09-14 最终校正）
-
-Core 不拥有 Provider 私有 cache 字段。当前通用 `ModelRequest` 的关键结构是：
-
-```text
-instructions[]
-messages[]
-tools[]
-toolMode
-cache.scopeKey
-cache.affinityKey?
-```
-
-职责边界：
-
-```text
-Nexus Core
-  -> deterministic / stable-prefix-first / append-oriented model input
-Provider adapter
-  -> Chat 或 Responses wire serialization
-CPA / upstream provider
-  -> cache/session identity 与 routing
-```
-
-不要再把 OpenAI/Codex 的 `prompt_cache_key` 放回 Nexus 普通调用路径。2026-09-14 的最终隔离实验已经证明：
-
-- CPA 标准 session / Chat-style 长历史不传 caller `prompt_cache_key`，约 21k input 的 warm `11/11` 非零，稳定约 98%~99% cached。
-- 相同 Responses `instructions + input` 只去掉 caller `prompt_cache_key`，保留既有 affinity 行为，`21344/0` 后连续 11 轮都是 `20992 cached`，warm 约 97.4%~98.3%。
-- 因此 Responses 不是根因，`instructions + input` 不是根因；让 Nexus 显式拥有 caller `prompt_cache_key` 才是最终被撤掉的耦合点。
-
-更早的 per-Thread-key vs stable-prefix-key A/B 仍有历史价值：它证明了 per-Thread 高基数 key 会破坏相同 prompt 的 cache grouping；但 **stable-prefix key 也只是阶段性实验，不是当前实现**。详细序列与语义校正都以 `doc/PROBLEM.md` P-012 为准。
-
-当前 canonical input 顺序与预算优先级：
-
-```text
-[STABLE INSTRUCTIONS]
-safety
-signed Skill metadata
-
-[APPEND-ORIENTED HISTORY]
-user / assistant / tool chronology
-
-[CURRENT TURN]
-current user input
-
-[VOLATILE TAIL]
-goal
-plan
-collaboration
-recall
-```
-
-稳定 Skill metadata 必须在预算分配时也优先于 history/volatile tail，不能只在最终数组中移动到前面。动态 snapshot 不要放到历史前面；`contextEpoch`、runId、attemptId、credential revision、routing/cache identity 等控制面数据不得进入模型正文。
-
-Tool schema 要保持 deterministic/canonical。达到 step budget 时保留同一 schema，改用 `toolMode=none`，不要删除 tools 导致 prefix 改变。Tool history 保留原始 `assistant tool_call -> tool_result -> assistant` chronology，不要每轮重写旧 tool 结果。
-
-#### Chat Completions / Responses 双协议
-
-OpenAI-compatible Provider 现在正式支持两种可切换协议：
-
-```text
-chat-completions
-responses
-```
-
-协议是 **per-Provider 配置**，不是全局 `AGENT_OPENAI_PROTOCOL` 环境变量；存储在现有 Provider `endpoint_policy_json`，旧 Provider 缺字段时默认 `chat-completions`。不同 Provider 可以同时使用不同协议。
-
-两种协议必须消费完全相同的 Core canonical input：
-
-- Chat：`instructions[]` 依次序列化为 leading `system` messages，然后追加 `messages[]`。
-- Responses：`instructions[]` 合并为顶层 `instructions`，`messages[]` 映射到 `input`；尾部动态 system 映射为 `developer`。
-- 两边使用相同稳定 Tool schema、相同 `toolMode`；当前都设置 `parallel_tool_calls=false`。
-- Nexus 不发送 `prompt_cache_key`，也不注入 Codex 专属 turn/thread metadata。
-- 2026-09-14 最终真实 New API→CPA 回归：Chat `17074/0` 后 warm 4 轮均 `16128 cached`；Responses `17072/0` 后 warm 4 轮均 `16128 cached`，两边约 94%。Responses A→B→A 为 `A 17071/0 -> B 17071/0 -> A 17071/16128`，证明协议双路径与多 session 切换在当前实现下都能维持预期 cache continuity。P-012/P-013 因此已闭环。
-- 最终 cache/session 压力基线：A/B 测试必须使用不同 instructions/payload，并刻意拉开总 token 长度，以便从 `cachedInputTokens` block 判断是否串 cache。单批不同长度测试中 A 约 14.3k input、warm 固定 `14080 cached`，B 约 20.8k input、warm 固定 `20224 cached`；随后 5 个 fresh batch × 每批 12 请求，共 60 次真实 Responses 调用，10 个 cold 请求全部为 0，50 个 warm 请求全部非零，A/B cached block 0 次交叉。
-- Cache 回归判定：`cachedInputTokens=0` 只表示该次是 cold/miss，本身是合法结果，不应直接判失败。真正需要报警的是稳定 append-only 前缀长期无法 warm、或不同 session 命中到对方的 cache block/identity。上游允许偶发单次 warm miss；若下一轮恢复且大样本压力回归稳定，不据此修改 identity/header contract。
-
-`affinityKey` 仍是 provider-neutral routing hint：Root 使用 `nexus:thread:<threadId>`，Subagent 继承所属 Thread；OpenAI-compatible adapter 当前仍可把它映射成既有 `session-id`。不要把它描述成 Prompt Cache 根因或充分修复，也不要再增加 identity header 组合，除非新的 wire 证据证明必要。
-
-#### 多会话切换约束
-
-A→B→A 必须满足：A 的 model body 只由 A 自己的 Provider config + context 决定，B 不得改变 A 的 instructions、tools、history serialization 或正文。不要从“当前 UI active thread/session”向 model builder 注入任何全局状态。
-
-本地 loopback contract 已验证：相同 A canonical request 在 A→B→A 后两次 Chat JSON body 完全一致；同一 canonical request 也能切换成 Responses wire，且两边都没有 caller `prompt_cache_key`。协议切换改变 wire codec，不改变 Core context semantics。
-
-#### 长上下文 compaction
-
-未来做 history compaction 时按 generation boundary：一代 history 尽量 append-only；达到阈值后一次性生成稳定 summary 并开启新 generation，接受一次 cold-cache cost。不要每一轮重新总结/改写旧 history。
-
-缓存观测优先看 warm `cached/input` 比例、warm turn 掉 0 的频率和精确 prefix hash；不要跨不同总输入长度只比较 `cachedInputTokens` 绝对值。约 4.2k~4.6k input 上的 `3584 cached` 已接近完整 cache block，不能被描述成“缓存深度只能到 3584”。
-
-当前 `dev` 的实际代码和 `doc/PROBLEM.md` 必须作为事实源一起检查；不要仅凭更早的 P-009～P-013 文字推断实现状态。
-
-### 25.16 当前推荐 Agent 测试方法
-
-新一轮测试不要一上来读很多代码，也不要先改代码。先用真实系统复现。
-
-优先定位顺序：
-
-```text
-Windows Chrome CDP
-  -> Agent UI 操作
-  -> Backend logs
-  -> /api
-  -> /ws/agent
-  -> Model request
-  -> Tool schema
-  -> Tool call
-  -> Provider adapter
-  -> Agent execution state
-```
-
-目标是先确定“第一个发生偏差的层”。
-
-例如如果 Agent 不调用工具，不要直接判断是 prompt 问题。需要区分：
-
-- Tool 是否真的注册。
-- 前端请求是否把 Agent 配置传正确。
-- Backend 是否向模型声明 tools。
-- `toolMode` 是否允许。
-- Provider payload 中 tools 是否存在。
-- 模型是否返回 tool_call。
-- Backend 是否正确解析 tool_call。
-- Tool execution 是否被权限/策略拒绝。
-- Tool result 是否重新加入模型上下文。
-- UI 是否正确显示执行状态。
-
-### 25.17 推荐的第一个 Agent 测试
-
-先从真实 Agent UI 开始。
-
-1. 打开 `https://api.honus.top`。
-2. 如果仍在 `/setup`，创建本地开发管理员。
-3. 进入 Agent。
-4. 设计一个最简单、可验证、只读、安全的 Tool 测试，例如让 Agent 查看当前机器连接列表。
-5. 同时检查 Agent UI 请求、`/ws/agent`、Backend Agent 日志、ModelRequest 实际 tools、Provider adapter 发出的请求、模型 tool call、Nexus Tool execution、Tool result 回灌和最终回答。
-6. 找到第一个真实问题以后，先写 `doc/PROBLEM.md`，再修改代码。
-
-### 25.18 当前开发验证原则
-
-UI / 浏览器行为：优先用 Windows CDP 真 Chrome。
-
-API contract：使用 curl / backend test。
-
-代码结构：使用 architecture check / unit test。
-
-Frontend 修改：依靠 Vite hot reload，直接在 Windows Chrome 看效果。
-
-Backend 修改：tsx watch 自动重载。
-
-不要每次修改都走：
-
-```text
-build Docker
-  -> push GHCR
-  -> deploy
-```
-
-只有以下情况才需要 Docker 验证：
-
-- Compose
-- Docker networking
-- Nginx container
-- Runner profile
-- container-only path
-- production deployment boundary
-
-### 25.19 明确禁止事项
-
-- 不要创建新的测试源码目录。
-- 不要在 honus product/project 里修改 Nexus 源码。
-- 不要创建多个 issue branch。
-- 不要修改 Frontend 默认端口来适配 9998。
-- 不要重新引入独立 Backend Plugin listener 或把 Plugin 暴露为独立公网 Origin。
-- 不要把 Windows CDP 9223 暴露公网。
-- 不要直接拿正式数据库做本地测试。
-- 不要看到 PROBLEM 历史记录就假设代码已经实现。
-- 不要在定位问题之前大规模重构。
-- 不要先改代码后补 PROBLEM。
-
-### 25.20 新会话开始后的直接执行顺序
-
-当前 Git、SSH MCP、本地开发服务、公网入口和 Windows CDP 均已经准备好。新会话直接执行：
-
-1. 确认 Backend session / Frontend session 仍 running。
-2. 检查 `https://api.honus.top/api/v1/status`。
-3. 使用 AgentDock Windows CDP 打开 `https://api.honus.top`。
-4. 如果首次 setup，则创建本地开发管理员。
-5. 进入 Agent UI。
-6. 选择一个最简单的真实 Agent Tool 场景。
-7. 同时观察 Backend / WebSocket / Model / Tool execution。
-8. 找到第一个真实故障点。
-9. 在 `doc/PROBLEM.md` 新增问题记录。
-10. 再开始修改。
-11. 验证。
-12. 只有用户明确要求时才 commit 到 `dev`。
-13. 只有用户明确要求时才 push `origin/dev`。
-
-本节仅作为当前 Agent 测试环境与操作基线记录；本次写入不要求单独提交。
-
-### 2026-09-14 Agent UI 重构补充
-
-- Settings 从左侧目录改为顶部可换行分区导航；固定工作区高度，各分区保留草稿和独立 scrollTop，不再 scrollIntoView 外层页面。
-- Provider 测试独立记录 provider/version/model 对应的 loading/success/error，就地显示延迟与错误；不占用页面顶部通告。创建成功关闭表单并清空 credential，失败保留输入。
-- Thread 创建直接复用无 title 的既有 API；排序不受当前选中状态影响；切换清除旧投影并等待加载完成后开放发送。
-- 空 assistant entry 不占阅读区；完整工具输出可展开；用户输入保持纯文本，assistant Markdown 经 DOMPurify allowlist 清洗，禁用图片/嵌入内容。
-- 中文 IME Enter 不发送，错误/对账提示位于 Composer；对账仍锁定 mutation。Popover 有可视边界定位与 Escape 返回焦点；详情 drawer 支持键盘焦点管理。
-- P-025 自动命名合同已完成：Thread 标题具备 `placeholder / auto / manual` ownership，首次有效用户输入在 state-commit 事务内确定性生成有界标题，versioned rename 与 durable `thread.changed` 支持跨标签同步；当前 UI 不因此新增额外重命名控件。P-026 的 reasoning effort 已补齐 Backend Run 冻结与 OpenAI-compatible 映射，并由内置 Model Capability Registry 自动驱动可选档位。普通用户不编辑 capability；Provider live capability 解析留作后续扩展。
-- 用户要求先完成功能，不修改测试；既有测试的旧导航/命名交互断言留待后续同步。
-
-### 2026-09-15 当前 UI 基线刷新
-
-本节覆盖前一日 UI 说明中已经被当前实现取代的 presentation 细节；产品与后续文档审查均以这里和现行组件为准，不要求代码回退到旧文档布局。
-
-- **Agent Settings 只保留 3 个一级分区**：`模型与预算 / 运行与环境 / 插件与安全`。页面顶部直接展示 feature 状态、默认模型、活跃 App 数和 Sandbox availability，不再单独提供 Overview 分区，也不再使用 7 个左侧目录项。
-- **Settings 使用自然流页面**：一级分区由顶部胶囊导航切换，分区内部按卡片纵向展开；不再依赖固定工作区高度、分区独立 `scrollTop` 或外层 `scrollIntoView`。复杂项通过卡片、抽屉或 `<details>` 渐进展开，例如 Hard Limits 收在模型分区的高级折叠面板中。
-- **模型与预算**：包含 Agent feature、Provider/default model、Budget/Context 与折叠 Hard Limits。Provider 的模型增删/默认模型/协议等 mutation 以服务端结果为准；跨区域成功/失败使用全局 NotificationHost Toast，具体测试行仍可保留 loading/success/error 的局部状态，二者职责不同。
-- **运行与环境**：包含 Performance、Workspace Runtime、Browser Runtime、ACP、Subagent 与 Artifact Storage。所有 QuantityInput 风格数值都必须在前端阻止非法最小值提交，同时 Backend 继续作为 authoritative validation。
-- **插件与安全**：包含 App capability 管理、插件仓库/签名包、Connection denylist 与 System Guardrails。只允许 enabled App 出现在 Hub App tabs / App switcher；连接列表尚未成功加载时不得把 denylist 中的 ID 误判成“已删除连接”。
-- **Provider 新建/测试**：创建后测试必须使用刚刚由服务端返回的 provider id，不依赖父 props 刷新时序；Provider/模型 mutation 失败不得显示成功反馈或清空用户选择。删除当前默认 Provider 后必须同步选择仍存在的 fallback default，或明确清空默认值。
-- **Agent Hub**：当前为 modal workbench，而不是旧版非模态浮窗。顶栏直接使用 App tabs 管理已打开 enabled Apps，`+` 入口负责选择其它 enabled Apps；背景 backdrop 阻止页面滚动/触摸交互，但窗口仍可移动、缩放、最小化、最大化和关闭。
-- **文档优先级**：`doc/PROBLEM.md` 中早期 P-022/P-024 等 UI 过程记录属于历史演进证据；若其布局描述与本节或当前组件冲突，以当前组件 + 本节为产品基线，后续只修真实 bug，不为了历史方案恢复旧 UI。
+7. 不为可由 format/build/E2E 覆盖的规则增加专用 quality gate；特殊 Agent invariant 先更新本文件并在对应真实产品路径验证。
+8. mutation unknown outcome 必须 fail closed。
+9. 不记录隐藏思维链或敏感业务正文到诊断日志；Agent Core/HTTP/Scheduler 不直接 `console.*` 绕过结构化 logger 与字段约束。
+10. 新增跨进程/持久化 JSON 边界必须先以 `unknown` 解析并做有界 runtime validation；禁止把 `JSON.parse()` 的结果直接泛型断言成领域对象来代替协议校验。
+11. Agent 已进入 `main` 后，兼容层必须绑定明确的已发布数据/protocol 版本与删除条件；不得继续保留只服务历史 dev 数据或旧测试调用方的永久 shim。
+12. multi-tool batch 不得弱化单 Tool 安全链：批量只改变 proposal/调度粒度，不改变 scope、policy、approval、resource conflict、verify/reconcile 的权威 owner。

@@ -1,15 +1,7 @@
-export type OpenAiCompatibleProtocol = 'chat-completions';
+export type OpenAiCompatibleProtocol = 'chat-completions' | 'responses';
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 export type ReasoningCapabilitySource = 'provider' | 'registry' | 'manual';
 export type ModelCapabilitySource = 'registry' | 'manual';
-
-export interface ReasoningCapability {
-  supportedEfforts: ReasoningEffort[];
-  defaultEffort?: ReasoningEffort;
-  mandatory?: boolean;
-  supportsMaxTokens?: boolean;
-  source: ReasoningCapabilitySource;
-}
 
 export interface ModelReasoningDefaults {
   supportedEfforts: ReasoningEffort[];

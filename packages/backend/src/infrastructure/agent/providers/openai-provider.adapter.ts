@@ -1,4 +1,4 @@
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelPort } from '../../../modules/agent/ai/language-model.port';
 import type {
   DiscoveredProviderModel,
@@ -11,6 +11,7 @@ import type { ProviderSecretPort } from '../../../modules/agent/ai/provider-secr
 
 const MAX_MODELS_RESPONSE_BYTES = 1024 * 1024;
 const MAX_TOOL_ARGUMENT_BYTES = 32 * 1024;
+const ANONYMOUS_SDK_API_KEY = 'nexus-anonymous-provider';
 
 const providerUrl = (baseUrl: string, path: string): string =>
   `${baseUrl.replace(/\/$/, '')}/${path.replace(/^\//, '')}`;
@@ -119,7 +120,16 @@ const usageFrom = (usage: {
 const finishReasonFrom = (reason: { unified: string; raw?: string }): string =>
   reason.raw ?? (reason.unified === 'tool-calls' ? 'tool_calls' : reason.unified);
 
-export class OpenAiCompatibleAdapter implements LanguageModelPort {
+const sdkFetch =
+  (hasCredential: boolean): typeof fetch =>
+  async (input, init) => {
+    if (hasCredential) return fetch(input, init);
+    const headers = new Headers(init?.headers);
+    headers.delete('authorization');
+    return fetch(input, { ...init, headers });
+  };
+
+export class OpenAiProviderAdapter implements LanguageModelPort {
   constructor(
     private readonly providers: ProviderRuntimeConfigPort,
     private readonly secrets: ProviderSecretPort,
@@ -198,31 +208,30 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
           provider.id,
           provider.credentialRevision,
           async (credential) => {
-            const compatible = createOpenAICompatible({
+            const openai = createOpenAI({
               name: 'nexus',
               baseURL: provider.baseUrl,
-              ...(credential ? { apiKey: credential } : {}),
-              includeUsage: true,
-              // NativeAgentBackend persists and executes one tool proposal at a time so
-              // approvals, leases, budgets, and reconciliation stay deterministic. Ask
-              // OpenAI-compatible providers to honor that execution contract instead of
-              // accepting parallel calls and failing the whole Run afterwards.
-              transformRequestBody: (body) =>
-                Array.isArray(body.tools) && body.tools.length > 0 ? { ...body, parallel_tool_calls: false } : body,
+              apiKey: credential || ANONYMOUS_SDK_API_KEY,
+              fetch: sdkFetch(Boolean(credential)),
             });
-            return compatible.chatModel(request.modelId).doStream({
+            const languageModel =
+              provider.protocol === 'responses' ? openai.responses(request.modelId) : openai.chat(request.modelId);
+            return languageModel.doStream({
               prompt: promptFor(request) as never,
               maxOutputTokens: request.maxOutputTokens,
-              ...(request.reasoningEffort === undefined
-                ? {}
-                : { providerOptions: { openaiCompatible: { reasoningEffort: request.reasoningEffort } } }),
+              providerOptions: {
+                openai: {
+                  ...(request.tools?.length ? { parallelToolCalls: false } : {}),
+                  ...(provider.protocol === 'responses' ? { store: false } : {}),
+                  ...(request.reasoningEffort === undefined ? {} : { reasoningEffort: request.reasoningEffort }),
+                },
+              },
               ...(request.tools?.length
                 ? {
                     tools: toolsFor(request) as never,
                     toolChoice: { type: request.toolMode === 'none' ? 'none' : 'auto' } as const,
                   }
                 : {}),
-              ...(request.cache?.affinityKey ? { headers: { 'session-id': request.cache.affinityKey } } : {}),
               abortSignal: signal,
             });
           },

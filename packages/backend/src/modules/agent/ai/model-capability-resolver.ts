@@ -3,7 +3,6 @@ import type {
   ModelCapabilityOverrides,
   PersistedProviderModelConfig,
   ProviderModelConfig,
-  ReasoningCapability,
   ReasoningEffort,
 } from './model.types';
 
@@ -197,18 +196,5 @@ export const resolveProviderModelConfig = (model: PersistedProviderModelConfig):
             : { reasoningSupportsMaxTokens: reasoning.supportsMaxTokens }),
         }
       : {}),
-  };
-};
-
-// Compatibility helper retained for callers/tests that only need reasoning metadata.
-export const resolveModelReasoningCapability = (modelId: string): ReasoningCapability | null => {
-  const reasoning = resolveModelCapabilityDefaults(modelId)?.reasoning;
-  if (!reasoning) return null;
-  return {
-    supportedEfforts: [...reasoning.supportedEfforts],
-    ...(reasoning.defaultEffort === undefined ? {} : { defaultEffort: reasoning.defaultEffort }),
-    ...(reasoning.mandatory === undefined ? {} : { mandatory: reasoning.mandatory }),
-    ...(reasoning.supportsMaxTokens === undefined ? {} : { supportsMaxTokens: reasoning.supportsMaxTokens }),
-    source: 'registry',
   };
 };

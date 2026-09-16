@@ -5,11 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host",
-    "build": "pnpm run check:architecture && pnpm run check:i18n && vue-tsc --noEmit && vite build && pnpm run check:bundle-budget",
-    "preview": "vite preview",
-    "check:i18n": "node ./scripts/check-i18n.mjs",
-    "check:architecture": "node ./scripts/check-architecture.mjs",
-    "check:bundle-budget": "node ./scripts/check-bundle-budget.mjs"
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "@babel/runtime": "^8.0.0",

@@ -31,6 +31,7 @@
 
   const emit = defineEmits<{
     toggle: [provider: AgentProviderView, enabled: boolean];
+    protocol: [provider: AgentProviderView, protocol: AgentProviderView['protocol']];
     discover: [provider: AgentProviderView];
     defaultModel: [providerId: string, modelId: string];
     delete: [provider: AgentProviderView];
@@ -104,9 +105,13 @@
     return provider.models.filter((m) => m.id.toLowerCase().includes(q));
   });
 
+  const protocolFromEvent = (event: Event): AgentProviderView['protocol'] =>
+    (event.target as HTMLSelectElement | null)?.value === 'responses' ? 'responses' : 'chat-completions';
+
   const form = reactive({
     displayName: '',
     baseUrl: '',
+    protocol: 'chat-completions' as AgentProviderView['protocol'],
     credential: '',
     modelId: '',
     contextWindow: 128000,
@@ -117,6 +122,7 @@
   const openAddModal = () => {
     form.displayName = '';
     form.baseUrl = '';
+    form.protocol = 'chat-completions';
     form.credential = '';
     form.modelId = '';
     form.contextWindow = 128000;
@@ -192,6 +198,7 @@
           kind: 'openai-compatible',
           displayName: form.displayName.trim(),
           baseUrl: form.baseUrl.trim(),
+          protocol: form.protocol,
           ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
           models: [
             {
@@ -265,6 +272,7 @@
         kind: 'openai-compatible',
         displayName: form.displayName.trim(),
         baseUrl: form.baseUrl.trim(),
+        protocol: form.protocol,
         ...(form.credential.trim() ? { credential: form.credential.trim() } : {}),
         models: [
           {
@@ -997,6 +1005,16 @@
 
                 <!-- 次级行：紧凑 URL 与快捷复制 -->
                 <div class="flex items-center gap-1.5 text-xs text-text-secondary/70 mt-1">
+                  <select
+                    :value="provider.protocol"
+                    class="h-6 rounded-md border border-border/70 bg-background px-1.5 text-[10px] text-text-secondary outline-none"
+                    :aria-label="$t('agent.settings.providers.protocol')"
+                    :disabled="busy"
+                    @change="emit('protocol', provider, protocolFromEvent($event))"
+                  >
+                    <option value="chat-completions">{{ $t('agent.settings.providers.protocolChat') }}</option>
+                    <option value="responses">{{ $t('agent.settings.providers.protocolResponses') }}</option>
+                  </select>
                   <span class="font-mono text-[11px] truncate max-w-xs sm:max-w-md">{{ provider.baseUrl }}</span>
                   <button
                     type="button"
@@ -1493,7 +1511,7 @@
 
       <!-- 表单核心配置 -->
       <div class="space-y-3.5">
-        <div class="grid grid-cols-1 gap-3">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <!-- 显示名称 -->
           <label class="block">
             <span class="mb-1 block text-xs font-medium text-foreground"
@@ -1506,6 +1524,18 @@
               class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 text-xs text-foreground outline-none focus:border-border-hover"
               :placeholder="$t('agent.settings.providers.namePlaceholder')"
             />
+          </label>
+          <label class="block">
+            <span class="mb-1 block text-xs font-medium text-foreground">{{
+              $t('agent.settings.providers.protocol')
+            }}</span>
+            <select
+              v-model="form.protocol"
+              class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 text-xs text-foreground outline-none focus:border-border-hover"
+            >
+              <option value="chat-completions">{{ $t('agent.settings.providers.protocolChat') }}</option>
+              <option value="responses">{{ $t('agent.settings.providers.protocolResponses') }}</option>
+            </select>
           </label>
         </div>
 

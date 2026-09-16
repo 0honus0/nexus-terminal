@@ -15,7 +15,7 @@ import { SqliteSubagentRepository } from '../../infrastructure/agent/repositorie
 import { SqliteMemoryRepository } from '../../infrastructure/agent/repositories/sqlite-memory.repository';
 import { SqliteMemoryProvenanceAdapter } from '../../infrastructure/agent/repositories/sqlite-memory-provenance.adapter';
 import { InstalledPluginSkillSourceAdapter } from '../../infrastructure/agent/plugins/installed-plugin-skill-source.adapter';
-import { OpenAiCompatibleAdapter } from '../../infrastructure/agent/providers/openai-compatible.adapter';
+import { OpenAiProviderAdapter } from '../../infrastructure/agent/providers/openai-provider.adapter';
 import { McpAdapter } from '../../infrastructure/agent/integrations/mcp.adapter';
 import { AcpAdapter } from '../../infrastructure/agent/integrations/acp.adapter';
 import { OutboundPolicyAdapter } from '../../infrastructure/agent/providers/outbound-policy.adapter';
@@ -170,7 +170,7 @@ export const composeAgent = ({
   const mcpRuntime = new McpAdapter(integrationRepository, outboundPolicy);
   const providerSecrets = new ProviderSecretAdapter(database, cipher);
   let providers: ProviderService;
-  const languageModel = new OpenAiCompatibleAdapter(
+  const languageModel = new OpenAiProviderAdapter(
     { get: (userId, providerId) => providers.get(userId, providerId) },
     providerSecrets,
   );

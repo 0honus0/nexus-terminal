@@ -101,7 +101,9 @@ const validateModel = (raw: unknown): PersistedProviderModelConfig => {
   return model;
 };
 
-const validateProviderInput = (raw: unknown): ProviderInput & { models: PersistedProviderModelConfig[] } => {
+type ValidatedProviderInput = Omit<ProviderInput, 'models'> & { models: PersistedProviderModelConfig[] };
+
+const validateProviderInput = (raw: unknown): ValidatedProviderInput => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
     'kind',
@@ -117,7 +119,8 @@ const validateProviderInput = (raw: unknown): ProviderInput & { models: Persiste
   if (raw.kind !== 'openai-compatible' || !nonEmptyString(raw.displayName) || !nonEmptyString(raw.baseUrl)) {
     throw new Error('VALIDATION_FAILED');
   }
-  if (raw.protocol !== undefined && raw.protocol !== 'chat-completions') throw new Error('VALIDATION_FAILED');
+  const protocol = raw.protocol ?? 'chat-completions';
+  if (protocol !== 'chat-completions' && protocol !== 'responses') throw new Error('VALIDATION_FAILED');
   if (raw.credential !== undefined && (typeof raw.credential !== 'string' || raw.credential.length === 0)) {
     throw new Error('VALIDATION_FAILED');
   }
@@ -147,10 +150,10 @@ const validateProviderInput = (raw: unknown): ProviderInput & { models: Persiste
     kind: 'openai-compatible',
     displayName: raw.displayName.trim(),
     baseUrl,
-    protocol: 'chat-completions',
+    protocol,
     ...(raw.credential === undefined ? {} : { credential: raw.credential }),
     ...(raw.clearCredential === undefined ? {} : { clearCredential: raw.clearCredential }),
-    models: models as unknown as ProviderInput['models'] & PersistedProviderModelConfig[],
+    models,
     enabled: raw.enabled,
   };
 };
@@ -196,8 +199,8 @@ export class ProviderService {
       kind: input.kind,
       displayName: input.displayName,
       baseUrl: input.baseUrl,
-      protocol: 'chat-completions',
-      models: input.models as unknown as PersistedProviderModelConfig[],
+      protocol: input.protocol,
+      models: input.models,
       enabled: input.enabled,
       ...(input.credential === undefined ? {} : { credential: input.credential }),
       createdAt: now,
@@ -212,8 +215,8 @@ export class ProviderService {
     const updated = await this.repository.update(userId, providerId, expectedVersion, {
       displayName: input.displayName,
       baseUrl: input.baseUrl,
-      protocol: 'chat-completions',
-      models: input.models as unknown as PersistedProviderModelConfig[],
+      protocol: input.protocol,
+      models: input.models,
       enabled: input.enabled,
       ...(input.credential === undefined ? {} : { credential: input.credential }),
       clearCredential: input.clearCredential === true,

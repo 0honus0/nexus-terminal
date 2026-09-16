@@ -16,6 +16,9 @@ if (!/^\d+\.\d+\.\d+/.test(String(versions.playwright))) {
 }
 
 const definitionFiles = [
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
   'packages/e2e/Dockerfile.runner',
   'scripts/e2e/build-runner-image.sh',
   'scripts/e2e/runner-image-info.mjs',
