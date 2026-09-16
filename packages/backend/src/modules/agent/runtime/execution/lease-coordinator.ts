@@ -27,6 +27,9 @@ export class LeaseCoordinator {
     signal: AbortSignal,
     deadlineAt: number,
   ): Promise<ResourceLease[]> {
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    if (this.clock.nowUnixSeconds() >= deadlineAt) throw new Error('TOOL_TIMEOUT');
+    if (resourceKeys.length === 0) return [];
     while (true) {
       if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
       if (this.clock.nowUnixSeconds() >= deadlineAt) throw new Error('TOOL_TIMEOUT');
@@ -45,6 +48,12 @@ export class LeaseCoordinator {
     ttlSeconds: number,
     parentSignal: AbortSignal,
   ): LeaseRenewal {
+    if (leaseIds.length === 0) {
+      return {
+        signal: parentSignal,
+        stop: async () => null,
+      };
+    }
     const controller = new AbortController();
     let stopped = false;
     let renewalError: unknown | null = null;
@@ -82,6 +91,7 @@ export class LeaseCoordinator {
   }
 
   release(leaseIds: readonly string[], owner: LeaseOwner): Promise<void> {
+    if (leaseIds.length === 0) return Promise.resolve();
     return this.leases.release(leaseIds, owner);
   }
 
