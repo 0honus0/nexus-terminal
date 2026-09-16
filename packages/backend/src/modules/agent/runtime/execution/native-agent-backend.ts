@@ -30,39 +30,6 @@ const rejectedToolResult = (errorCode: string, summary: string): ToolResult => (
   verification: { status: 'failed', summary: 'The tool call was not executed.', evidenceRefs: [] },
 });
 
-const rejectedToolInspection = (run: RunView, proposal: ToolProposal, failureCode: string): ToolInspection => {
-  const operationHash = requestHash(1, {
-    kind: 'rejected_tool_call',
-    runId: run.id,
-    providerCallId: proposal.providerCallId,
-    toolName: proposal.name,
-    argumentsJson: proposal.argumentsJson,
-    inputRevision: run.inputRevision,
-    failureCode,
-  });
-  return {
-    toolName: proposal.name,
-    toolVersion: 'unavailable',
-    normalizedArguments: {},
-    target: {
-      kind: 'run',
-      targetIdentity: `run:${run.id}:rejected-tool:${proposal.providerCallId}`,
-      endpoint: `run:${run.id}`,
-      loginUser: `agent-runtime:${run.id}`,
-      configurationHash: operationHash,
-    },
-    resourceKeys: [],
-    risk: 'forbidden',
-    mutation: false,
-    operationHash,
-    operationHashVersion: 1,
-    preconditions: [],
-    secretRefs: [],
-    policyRevision: run.definition.policyRevision,
-    inputRevision: run.inputRevision,
-  };
-};
-
 const inspectionChanged = (left: ToolInspection, right: ToolInspection): boolean =>
   JSON.stringify(left) !== JSON.stringify(right);
 
@@ -539,6 +506,7 @@ export class NativeAgentBackend implements AgentBackendPort {
               },
               'Agent tool call inspected for model batch',
             );
+            if (policyDecision.action === 'deny') throw new Error(policyDecision.reason);
             batchItems.push({
               providerCallId: proposal.providerCallId,
               toolCallId: randomUUID(),
@@ -549,7 +517,6 @@ export class NativeAgentBackend implements AgentBackendPort {
             });
           } catch (error) {
             const code = errorCode(error);
-            const rejectedResult = this.toolCalls.failedProposal(error);
             logger.warn(
               {
                 runId: snapshot.id,
@@ -561,14 +528,7 @@ export class NativeAgentBackend implements AgentBackendPort {
               },
               'Agent tool call rejected during batch inspection',
             );
-            batchItems.push({
-              providerCallId: proposal.providerCallId,
-              toolCallId: randomUUID(),
-              toolName: proposal.name,
-              toolVersion: 'unavailable',
-              argumentsJson: proposal.argumentsJson,
-              inspection: rejectedToolInspection(currentRun, proposal, code),
-            });
+            throw error;
           }
         }
         const proposed = await this.stateCommit.commitToolProposalBatch({
