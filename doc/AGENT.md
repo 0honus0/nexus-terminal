@@ -898,7 +898,7 @@ Agent 改动仍必须遵守以下 review invariant：
 - Agent 三个 locale fragment 的 key 与用户可见语义保持同步；新增/修改 UI 文案时同一改动更新 `zh-CN/en-US/ja-JP`，不再设置独立 i18n checker；
 - Frontend 大依赖、编辑器/预览器等重资源继续按 route/feature 懒加载，异常 bundle 增长在变更审查中说明，不再设置独立 bundle-budget gate；
 - Runner 镜像/宿主是否具备所需 runtime 以真实 standalone/container smoke 为准，不用单独的二进制存在性 quality gate 代替行为验证；
-- GitHub Actions grouped E2E 使用长期 GHCR runner image 预装 Node/pnpm/Chromium，并按根 `package.json` + `pnpm-lock.yaml` + `pnpm-workspace.yaml` fingerprint 预热 pnpm content-addressable store；CI 实际拉取 immutable `fingerprint-*` image tag，避免并行分支争写版本 alias；matrix shard 只做 `pnpm install --offline` 链接依赖。依赖 authority 变化时重建一次 runner image，不在每个 shard 重新下载同一依赖；
+- GitHub Actions grouped E2E 使用长期 GHCR runner image 预装 Node/pnpm/Chromium，并按根 `package.json` + `pnpm-lock.yaml` + `pnpm-workspace.yaml` fingerprint 在固定 image path 预热 pnpm content-addressable store 与 supply-chain metadata cache；CI 实际拉取 immutable `fingerprint-*` image tag，避免并行分支争写版本 alias；matrix shard 只做 `pnpm install --offline` 链接依赖。依赖 authority 变化时重建一次 runner image，不在每个 shard 重新下载同一依赖；
 - Provider 同时支持 Chat Completions 与 Responses，但 Provider 网络访问没有 Nexus 内建 private-host/SSRF policy；
 - Agent mutation、StateCommit、approval/lease/reconcile、Plugin 签名与 scope 等安全不变量不得为了减少 CI 项而放宽；它们通过对应产品路径 E2E 与代码审查维持。
 

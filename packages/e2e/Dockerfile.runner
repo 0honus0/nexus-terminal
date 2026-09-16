@@ -5,7 +5,9 @@ ARG PLAYWRIGHT_VERSION=1.63.0
 ARG PNPM_VERSION=11.26.0
 ENV DEBIAN_FRONTEND=noninteractive \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
-    COREPACK_HOME=/corepack
+    COREPACK_HOME=/corepack \
+    PNPM_CONFIG_STORE_DIR=/pnpm/store \
+    PNPM_CONFIG_CACHE_DIR=/pnpm/cache
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
