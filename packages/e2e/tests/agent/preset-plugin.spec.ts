@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { expect, test, type APIRequestContext, type Page } from '../../support/fixtures';
 import { loginAsInitialAdmin, setUiLanguage } from '../../support/auth';
 import { captureFunctionalScreenshot } from '../../support/functional-screenshots';
-import { step } from '../../support/steps';
+import { slowStep, step } from '../../support/steps';
 import { ensureTestSshConnection } from '../../support/ssh';
 import { E2E_URLS } from '../../support/test-env';
 
@@ -872,7 +872,7 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
     data: { installedNow: false, app: { id: 'nexus.agent', enabled: true } },
   });
   expect(threadId).not.toBe('');
-  await step('the merged Nexus Agent renders through the host-owned generic Agent surface', async () => {
+  await slowStep('the merged Nexus Agent renders through the host-owned generic Agent surface', async () => {
     await page.goto('/connections');
     const hub = await openAgentHub(page);
     await hub.getByRole('button', { name: 'Switch to Nexus Agent', exact: true }).click();
