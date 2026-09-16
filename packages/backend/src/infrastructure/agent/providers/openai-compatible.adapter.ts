@@ -208,9 +208,7 @@ export class OpenAiCompatibleAdapter implements LanguageModelPort {
               // OpenAI-compatible providers to honor that execution contract instead of
               // accepting parallel calls and failing the whole Run afterwards.
               transformRequestBody: (body) =>
-                Array.isArray(body.tools) && body.tools.length > 0
-                  ? { ...body, parallel_tool_calls: false }
-                  : body,
+                Array.isArray(body.tools) && body.tools.length > 0 ? { ...body, parallel_tool_calls: false } : body,
             });
             return compatible.chatModel(request.modelId).doStream({
               prompt: promptFor(request) as never,

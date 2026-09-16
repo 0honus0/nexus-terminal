@@ -111,11 +111,7 @@ export const createAppThreadsRouter = (dependencies: AppThreadsRouterDependencie
       agentData(
         request,
         response,
-        await dependencies.conversations.deleteThread(
-          scope,
-          pathParam(request.params.threadId),
-          body.expectedVersion,
-        ),
+        await dependencies.conversations.deleteThread(scope, pathParam(request.params.threadId), body.expectedVersion),
         202,
       );
     }),

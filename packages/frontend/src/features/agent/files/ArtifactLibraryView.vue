@@ -200,7 +200,10 @@
     const filename = name.split('/').at(-1) ?? name;
     const index = filename.lastIndexOf('.');
     if (index <= 0 || index === filename.length - 1) return '';
-    return filename.slice(index + 1).slice(0, 8).toUpperCase();
+    return filename
+      .slice(index + 1)
+      .slice(0, 8)
+      .toUpperCase();
   };
 
   const kindForArtifact = (artifact: AgentArtifactRef): ArtifactFileKind => {
@@ -210,19 +213,74 @@
     if (mediaType.startsWith('audio/') || mediaType.startsWith('video/')) return 'media';
     if (['zip', '7z', 'rar', 'tar', 'tgz', 'gz', 'bz2', 'xz'].includes(extension)) return 'archive';
     if (
-      ['application/zip', 'application/x-7z-compressed', 'application/vnd.rar', 'application/x-rar-compressed', 'application/x-tar', 'application/gzip', 'application/x-gzip', 'application/x-bzip2', 'application/x-xz'].includes(mediaType)
+      [
+        'application/zip',
+        'application/x-7z-compressed',
+        'application/vnd.rar',
+        'application/x-rar-compressed',
+        'application/x-tar',
+        'application/gzip',
+        'application/x-gzip',
+        'application/x-bzip2',
+        'application/x-xz',
+      ].includes(mediaType)
     )
       return 'archive';
     if (
-      ['js', 'jsx', 'ts', 'tsx', 'vue', 'py', 'go', 'rs', 'java', 'c', 'h', 'cpp', 'hpp', 'cs', 'rb', 'php', 'sh', 'sql', 'html', 'css', 'scss', 'less', 'json', 'jsonl', 'yaml', 'yml', 'toml', 'xml'].includes(extension)
+      [
+        'js',
+        'jsx',
+        'ts',
+        'tsx',
+        'vue',
+        'py',
+        'go',
+        'rs',
+        'java',
+        'c',
+        'h',
+        'cpp',
+        'hpp',
+        'cs',
+        'rb',
+        'php',
+        'sh',
+        'sql',
+        'html',
+        'css',
+        'scss',
+        'less',
+        'json',
+        'jsonl',
+        'yaml',
+        'yml',
+        'toml',
+        'xml',
+      ].includes(extension)
     )
       return 'code';
     if (
-      ['application/json', 'application/ld+json', 'application/xml', 'text/xml', 'text/html', 'text/css', 'text/javascript', 'application/javascript', 'application/sql', 'application/x-yaml', 'text/yaml', 'text/x-python', 'text/x-shellscript'].includes(mediaType)
+      [
+        'application/json',
+        'application/ld+json',
+        'application/xml',
+        'text/xml',
+        'text/html',
+        'text/css',
+        'text/javascript',
+        'application/javascript',
+        'application/sql',
+        'application/x-yaml',
+        'text/yaml',
+        'text/x-python',
+        'text/x-shellscript',
+      ].includes(mediaType)
     )
       return 'code';
     if (
-      ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt', 'md', 'rtf', 'odt', 'ods', 'epub'].includes(extension)
+      ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'csv', 'txt', 'md', 'rtf', 'odt', 'ods', 'epub'].includes(
+        extension,
+      )
     )
       return 'document';
     if (
@@ -358,15 +416,21 @@
 
           <div class="grid min-w-full grid-cols-3 gap-2 sm:min-w-[360px] sm:flex-1">
             <div class="border-l border-border/60 px-3 py-1.5">
-              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">{{ $t('agent.files.protected') }}</div>
+              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+                {{ $t('agent.files.protected') }}
+              </div>
               <div class="mt-1 text-[11px] font-semibold text-foreground">{{ bytes(storage.protectedBytes) }}</div>
             </div>
             <div class="border-l border-border/60 px-3 py-1.5">
-              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">{{ $t('agent.files.reclaimable') }}</div>
+              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+                {{ $t('agent.files.reclaimable') }}
+              </div>
               <div class="mt-1 text-[11px] font-semibold text-foreground">{{ bytes(storage.reclaimableBytes) }}</div>
             </div>
             <div class="border-l border-border/60 px-3 py-1.5">
-              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">{{ $t('agent.files.available') }}</div>
+              <div class="text-[8px] font-medium uppercase tracking-wide text-text-secondary">
+                {{ $t('agent.files.available') }}
+              </div>
               <div class="mt-1 text-[11px] font-semibold text-foreground">{{ bytes(availableBytes) }}</div>
             </div>
           </div>
@@ -398,12 +462,14 @@
                 :options="fileKindOptions"
                 size="sm"
                 :highlight="false"
-                :trigger-class="[
-                  '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',
-                  kind === 'all'
-                    ? '!bg-transparent !text-text-secondary hover:!bg-header/55 focus:!bg-header/55'
-                    : '!bg-header/70 !font-medium !text-foreground hover:!bg-header focus:!bg-header',
-                ].join(' ')"
+                :trigger-class="
+                  [
+                    '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',
+                    kind === 'all'
+                      ? '!bg-transparent !text-text-secondary hover:!bg-header/55 focus:!bg-header/55'
+                      : '!bg-header/70 !font-medium !text-foreground hover:!bg-header focus:!bg-header',
+                  ].join(' ')
+                "
                 @update:model-value="load"
               />
             </div>
@@ -413,12 +479,14 @@
                 :options="appOptions"
                 size="sm"
                 :highlight="false"
-                :trigger-class="[
-                  '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',
-                  appId === ''
-                    ? '!bg-transparent !text-text-secondary hover:!bg-header/55 focus:!bg-header/55'
-                    : '!bg-header/70 !font-medium !text-foreground hover:!bg-header focus:!bg-header',
-                ].join(' ')"
+                :trigger-class="
+                  [
+                    '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',
+                    appId === ''
+                      ? '!bg-transparent !text-text-secondary hover:!bg-header/55 focus:!bg-header/55'
+                      : '!bg-header/70 !font-medium !text-foreground hover:!bg-header focus:!bg-header',
+                  ].join(' ')
+                "
                 @update:model-value="load"
               />
             </div>
@@ -428,12 +496,14 @@
                 :options="retentionOptions"
                 size="sm"
                 :highlight="false"
-                :trigger-class="[
-                  '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',
-                  retained === 'all'
-                    ? '!bg-transparent !text-text-secondary hover:!bg-header/55 focus:!bg-header/55'
-                    : '!bg-header/70 !font-medium !text-foreground hover:!bg-header focus:!bg-header',
-                ].join(' ')"
+                :trigger-class="
+                  [
+                    '!h-8 !rounded-lg !border-0 !px-2.5 !shadow-none !ring-0 transition-colors',
+                    retained === 'all'
+                      ? '!bg-transparent !text-text-secondary hover:!bg-header/55 focus:!bg-header/55'
+                      : '!bg-header/70 !font-medium !text-foreground hover:!bg-header focus:!bg-header',
+                  ].join(' ')
+                "
                 @update:model-value="load"
               />
             </div>
@@ -484,8 +554,13 @@
     >
       <div class="relative">
         <div class="absolute -inset-5 rounded-full bg-primary/8 blur-xl"></div>
-        <div class="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-card text-lg text-text-secondary shadow-sm">
-          <i :class="hasFilters ? 'fa-solid fa-filter-circle-xmark' : 'fa-regular fa-folder-open'" aria-hidden="true"></i>
+        <div
+          class="relative flex h-14 w-14 items-center justify-center rounded-2xl border border-border bg-card text-lg text-text-secondary shadow-sm"
+        >
+          <i
+            :class="hasFilters ? 'fa-solid fa-filter-circle-xmark' : 'fa-regular fa-folder-open'"
+            aria-hidden="true"
+          ></i>
         </div>
       </div>
       <p class="mt-4 text-xs font-semibold text-foreground">{{ $t('agent.files.emptyTitle') }}</p>
@@ -500,13 +575,7 @@
       </button>
     </div>
 
-    <RecycleScroller
-      v-else
-      class="min-h-0 flex-1 overflow-y-auto px-4"
-      :items="items"
-      :item-size="58"
-      key-field="id"
-    >
+    <RecycleScroller v-else class="min-h-0 flex-1 overflow-y-auto px-4" :items="items" :item-size="58" key-field="id">
       <template #default="{ item }">
         <article
           class="group grid h-[58px] grid-cols-[minmax(0,1fr)_5rem_4.5rem] items-center gap-3 border-b border-border/55 px-2 transition-colors hover:bg-header/45 sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_4.5rem]"
@@ -529,7 +598,12 @@
                 >
                   {{ extensionOf(item.originalName) }}
                 </span>
-                <i v-if="item.retained" class="fa-solid fa-bookmark shrink-0 text-[8px] text-primary" :title="$t('agent.files.retained')" aria-hidden="true"></i>
+                <i
+                  v-if="item.retained"
+                  class="fa-solid fa-bookmark shrink-0 text-[8px] text-primary"
+                  :title="$t('agent.files.retained')"
+                  aria-hidden="true"
+                ></i>
               </div>
               <div class="mt-0.5 flex min-w-0 items-center gap-1.5 text-[8px] text-text-secondary">
                 <span class="max-w-44 truncate" :title="item.mediaType">{{ item.mediaType }}</span>
