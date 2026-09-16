@@ -1,11 +1,11 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { LanguageModelPort } from '../../ai/language-model.port';
 import type { TokenUsage } from '../../ai/model.types';
 import type { ProviderService } from '../../ai/provider.service';
 import type { LeaseOwner, ResourceLease } from '../../capabilities/lease.port';
 import type { ToolExecutor } from '../../capabilities/tool-executor';
-import type { ToolContext, ToolProposal, ToolResult } from '../../capabilities/tool.types';
+import type { ToolContext, ToolInspection, ToolProposal, ToolResult } from '../../capabilities/tool.types';
 import type { AgentEventHub } from '../events/event-hub';
 import { executionErrorCode, failedToolResult as buildFailedToolResult } from '../execution/execution-errors';
 import { LeaseCoordinator, type LeaseRenewal } from '../execution/lease-coordinator';
@@ -39,6 +39,50 @@ const failedToolResult = (error: unknown): ToolResult =>
     summaryPrefix: 'Subagent tool failed',
     verificationSummary: 'The subagent tool did not return a successful result.',
   });
+
+const rejectedToolInspection = (
+  run: RunView,
+  runtimeId: string,
+  proposal: ToolProposal,
+  failureCode: string,
+): ToolInspection => {
+  const operationHash = createHash('sha256')
+    .update(
+      JSON.stringify({
+        kind: 'rejected_subagent_tool_call',
+        runId: run.id,
+        runtimeId,
+        providerCallId: proposal.providerCallId,
+        toolName: proposal.name,
+        argumentsJson: proposal.argumentsJson,
+        inputRevision: run.inputRevision,
+        failureCode,
+      }),
+      'utf8',
+    )
+    .digest('hex');
+  return {
+    toolName: proposal.name,
+    toolVersion: 'unavailable',
+    normalizedArguments: {},
+    target: {
+      kind: 'run',
+      targetIdentity: `run:${run.id}:subagent:${runtimeId}:rejected-tool:${proposal.providerCallId}`,
+      endpoint: `run:${run.id}`,
+      loginUser: `agent-runtime:${runtimeId}`,
+      configurationHash: operationHash,
+    },
+    resourceKeys: [],
+    risk: 'forbidden',
+    mutation: false,
+    operationHash,
+    operationHashVersion: 1,
+    preconditions: [],
+    secretRefs: [],
+    policyRevision: run.definition.policyRevision,
+    inputRevision: run.inputRevision,
+  };
+};
 
 interface ToolCallAccumulator {
   id?: string;
@@ -479,29 +523,79 @@ export class SubagentParticipantExecutor {
       failureCode = 'DELEGATION_BUDGET_EXCEEDED';
     }
     if (outcome === 'completed' && toolCalls.size > 0) {
-      if (toolMode === 'none' || offeredTools.length === 0 || toolCalls.size !== 1) {
+      if (toolMode === 'none' || offeredTools.length === 0) {
         outcome = 'failed';
-        failureCode =
-          toolMode === 'none' || offeredTools.length === 0
-            ? 'SUBAGENT_TOOL_NOT_ALLOWED'
-            : 'MODEL_PARALLEL_TOOL_CALLS_UNSUPPORTED';
+        failureCode = 'SUBAGENT_TOOL_NOT_ALLOWED';
+      } else if (toolCalls.size > 32) {
+        outcome = 'failed';
+        failureCode = 'MODEL_TOOL_CALL_BATCH_TOO_LARGE';
       } else {
-        const call = [...toolCalls.entries()].sort(([left], [right]) => left - right)[0]?.[1];
-        if (!call?.id || !call.name || !offeredTools.some((tool) => tool.name === call.name)) {
-          outcome = 'failed';
-          failureCode = 'SUBAGENT_TOOL_NOT_ALLOWED';
-        } else {
+        const orderedCalls = [...toolCalls.entries()].sort(([left], [right]) => left - right);
+        const offeredToolNames = new Set(offeredTools.map((tool) => tool.name));
+        const batchItems: Array<{
+          providerCallId: string;
+          toolCallId: string;
+          toolName: string;
+          toolVersion: string;
+          inspection: ToolInspection;
+          rejectedResult?: ToolResult;
+        }> = [];
+        let invalidProviderCall = false;
+        for (const [, call] of orderedCalls) {
+          if (!call?.id || !call.name) {
+            invalidProviderCall = true;
+            break;
+          }
+          const proposal: ToolProposal = {
+            providerCallId: call.id,
+            name: call.name,
+            argumentsJson: call.argumentsJson || '{}',
+          };
+          if (
+            !offeredToolNames.has(proposal.name) ||
+            !this.contextBuilder.allowsTool(scope, delegation, proposal.name)
+          ) {
+            const rejectedResult = failedToolResult(new Error('SUBAGENT_TOOL_NOT_ALLOWED'));
+            batchItems.push({
+              providerCallId: proposal.providerCallId,
+              toolCallId: randomUUID(),
+              toolName: proposal.name,
+              toolVersion: 'unavailable',
+              inspection: rejectedToolInspection(begun.run, work.agentRuntimeId, proposal, 'SUBAGENT_TOOL_NOT_ALLOWED'),
+              rejectedResult,
+            });
+            continue;
+          }
           try {
-            const proposal: ToolProposal = {
-              providerCallId: call.id,
-              name: call.name,
-              argumentsJson: call.argumentsJson || '{}',
-            };
             const inspection = await this.toolExecutor.inspect(
               this.toolContext(begun.run, work.agentRuntimeId, begun.stepId, signal, delegation.deadlineAt),
               proposal,
             );
-            const proposed = await this.stateCommit.commitSubagentToolProposal({
+            batchItems.push({
+              providerCallId: proposal.providerCallId,
+              toolCallId: randomUUID(),
+              toolName: proposal.name,
+              toolVersion: inspection.toolVersion,
+              inspection,
+            });
+          } catch (error) {
+            const code = errorCode(error);
+            batchItems.push({
+              providerCallId: proposal.providerCallId,
+              toolCallId: randomUUID(),
+              toolName: proposal.name,
+              toolVersion: 'unavailable',
+              inspection: rejectedToolInspection(begun.run, work.agentRuntimeId, proposal, code),
+              rejectedResult: failedToolResult(error),
+            });
+          }
+        }
+        if (invalidProviderCall) {
+          outcome = 'failed';
+          failureCode = 'MODEL_TOOL_CALL_INVALID';
+        } else {
+          try {
+            const proposed = await this.stateCommit.commitSubagentToolProposalBatch({
               scope,
               runId: work.runId,
               runtimeId: work.agentRuntimeId,
@@ -511,11 +605,7 @@ export class SubagentParticipantExecutor {
               modelStepId: begun.stepId,
               attemptId: begun.attemptId,
               expectedRunVersion: begun.run.version,
-              providerCallId: proposal.providerCallId,
-              toolCallId: randomUUID(),
-              toolName: proposal.name,
-              toolVersion: inspection.toolVersion,
-              inspection,
+              items: batchItems,
               inputTokens: settledUsage.inputTokens,
               outputTokens: settledUsage.outputTokens,
               cachedInputTokens: settledUsage.cachedInputTokens,

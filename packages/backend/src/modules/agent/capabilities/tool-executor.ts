@@ -115,6 +115,18 @@ export class ToolExecutor {
       throw new Error(fresh.code === 'TARGET_DENIED' ? 'RESOURCE_FORBIDDEN' : 'APP_CAPABILITY_DENIED');
     const inspection = await tool.inspect(previous.normalizedArguments, context, fresh.policyRevision);
     if (inspection.risk === 'forbidden') throw new Error('RESOURCE_FORBIDDEN');
+    if (tool.descriptor.riskClass === 'read' && (inspection.risk !== 'read' || inspection.mutation)) {
+      throw new Error('TOOL_POLICY_INVALID');
+    }
+    if (tool.descriptor.riskClass === 'control' && (inspection.risk !== 'control' || inspection.mutation)) {
+      throw new Error('TOOL_POLICY_INVALID');
+    }
+    if (
+      (tool.descriptor.riskClass === 'mutate' || tool.descriptor.riskClass === 'destructive') &&
+      !inspection.mutation
+    ) {
+      throw new Error('TOOL_POLICY_INVALID');
+    }
     return inspection;
   }
 

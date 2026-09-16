@@ -15,13 +15,14 @@ export interface RunPage {
   nextCursor: string | null;
 }
 
-export interface PendingMutationTool {
+export interface PendingRootTool {
   toolCallId: string;
   stepId: string;
   runtimeId: string;
   providerCallId: string;
-  approvalId: string;
-  approvalVersion: number;
+  status: 'proposed' | 'ready';
+  approvalId: string | null;
+  approvalVersion: number | null;
   inspection: ToolInspection;
 }
 
@@ -58,7 +59,7 @@ export interface HostCursorReaderPort {
 
 export interface RunExecutionReaderPort extends RunSnapshotReaderPort, RunInputReaderPort {
   rootRuntimeId(scope: Scope, runId: string): Promise<string>;
-  pendingMutation(scope: Scope, runId: string): Promise<PendingMutationTool | null>;
+  pendingTools(scope: Scope, runId: string): Promise<PendingRootTool[]>;
   confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null>;
 }
 

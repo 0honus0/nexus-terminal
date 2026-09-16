@@ -31,6 +31,7 @@ export const createSkillReadTool = (skills: SkillRegistry, cryptoHash: CryptoHas
       required: ['id'],
     },
     riskClass: 'read',
+    parallelSafe: true,
     capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {

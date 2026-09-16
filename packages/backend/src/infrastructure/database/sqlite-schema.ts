@@ -610,6 +610,9 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
     run_id TEXT NOT NULL,
     agent_runtime_id TEXT NOT NULL,
     step_id TEXT NOT NULL,
+    source_model_step_id TEXT,
+    batch_index INTEGER NOT NULL DEFAULT 0 CHECK(batch_index >= 0),
+    batch_size INTEGER NOT NULL DEFAULT 1 CHECK(batch_size >= 1),
     provider_call_id TEXT NOT NULL,
     tool_name TEXT NOT NULL,
     tool_version TEXT NOT NULL,
@@ -629,6 +632,7 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
     UNIQUE(step_id, operation_hash),
     UNIQUE(id, run_id),
     FOREIGN KEY(step_id, run_id) REFERENCES agent_steps(id, run_id) ON DELETE CASCADE,
+    FOREIGN KEY(source_model_step_id, run_id) REFERENCES agent_steps(id, run_id) ON DELETE CASCADE,
     FOREIGN KEY(agent_runtime_id, run_id) REFERENCES agent_runtimes(id, run_id) ON DELETE CASCADE
 );
 `;

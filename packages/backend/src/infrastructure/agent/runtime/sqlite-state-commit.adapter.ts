@@ -10,6 +10,7 @@ import type {
   AtomicSetRunGoal,
   BeginModelStepCommand,
   BeginModelStepResult,
+  BeginReadToolBatchCommand,
   BeginSubagentModelStepCommand,
   BeginSubagentToolCommand,
   SettleSubagentModelStepCommand,
@@ -18,9 +19,9 @@ import type {
   BeginReadToolCommand,
   BeginMutationToolCommand,
   CancelRunCommitResult,
-  CommitSubagentToolProposalCommand,
-  CommitToolProposalCommand,
-  CommitToolProposalResult,
+  CommitSubagentToolProposalBatchCommand,
+  CommitToolProposalBatchCommand,
+  CommitToolProposalBatchResult,
   CreateRunCommitResult,
   DeleteRunCommitResult,
   DurableEventInput,
@@ -35,9 +36,12 @@ import type {
   RetryModelStepCommand,
   RetryModelStepResult,
   RequestToolApprovalCommand,
+  RefreshProposedToolCommand,
+  RejectProposedToolCommand,
   ResolveRunReconciliationCommand,
   ResolveToolApprovalCommand,
   SettleModelStepCommand,
+  SettleReadToolBatchCommand,
   SettleReadToolCommand,
   SettleMutationToolCommand,
   StateCommitCommand,
@@ -85,7 +89,7 @@ import { mutatePendingInputTransition } from './state-commit/pending-input-trans
 import {
   beginSubagentModelStepTransition,
   beginSubagentToolTransition,
-  commitSubagentToolProposalTransition,
+  commitSubagentToolProposalBatchTransition,
   parkRuntimeTransition,
   pauseRuntimeForBudgetTransition,
   settleSubagentModelStepTransition,
@@ -94,9 +98,13 @@ import {
 } from './state-commit/subagent-transitions';
 import {
   beginMutationToolTransition,
+  beginReadToolBatchTransition,
   beginReadToolTransition,
-  commitToolProposalTransition,
+  commitToolProposalBatchTransition,
+  refreshProposedToolTransition,
+  rejectProposedToolTransition,
   settleMutationToolTransition,
+  settleReadToolBatchTransition,
   settleReadToolTransition,
   supersedeMutationToolTransition,
 } from './state-commit/tool-transitions';
@@ -156,8 +164,10 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
     return this.db.transaction((tx) => parkModelStepTransition(tx, command));
   }
 
-  async commitSubagentToolProposal(command: CommitSubagentToolProposalCommand): Promise<CommitToolProposalResult> {
-    return this.db.transaction((tx) => commitSubagentToolProposalTransition(tx, command));
+  async commitSubagentToolProposalBatch(
+    command: CommitSubagentToolProposalBatchCommand,
+  ): Promise<CommitToolProposalBatchResult> {
+    return this.db.transaction((tx) => commitSubagentToolProposalBatchTransition(tx, command));
   }
 
   async beginSubagentTool(command: BeginSubagentToolCommand): Promise<StateCommitResult> {
@@ -188,8 +198,16 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
     return this.db.transaction((tx) => settleModelStepTransition(tx, command));
   }
 
-  async commitToolProposal(command: CommitToolProposalCommand): Promise<CommitToolProposalResult> {
-    return this.db.transaction((tx) => commitToolProposalTransition(tx, command));
+  async commitToolProposalBatch(command: CommitToolProposalBatchCommand): Promise<CommitToolProposalBatchResult> {
+    return this.db.transaction((tx) => commitToolProposalBatchTransition(tx, command));
+  }
+
+  async refreshProposedTool(command: RefreshProposedToolCommand): Promise<StateCommitResult> {
+    return this.db.transaction((tx) => refreshProposedToolTransition(tx, command));
+  }
+
+  async rejectProposedTool(command: RejectProposedToolCommand): Promise<StateCommitResult> {
+    return this.db.transaction((tx) => rejectProposedToolTransition(tx, command));
   }
 
   async requestToolApproval(command: RequestToolApprovalCommand): Promise<StateCommitResult> {
@@ -220,8 +238,16 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
     return this.db.transaction((tx) => beginReadToolTransition(tx, command));
   }
 
+  async beginReadToolBatch(command: BeginReadToolBatchCommand): Promise<StateCommitResult> {
+    return this.db.transaction((tx) => beginReadToolBatchTransition(tx, command));
+  }
+
   async settleReadTool(command: SettleReadToolCommand): Promise<StateCommitResult> {
     return this.db.transaction((tx) => settleReadToolTransition(tx, command));
+  }
+
+  async settleReadToolBatch(command: SettleReadToolBatchCommand): Promise<StateCommitResult> {
+    return this.db.transaction((tx) => settleReadToolBatchTransition(tx, command));
   }
 
   async supersedeModelStep(command: SupersedeModelStepCommand): Promise<StateCommitResult> {

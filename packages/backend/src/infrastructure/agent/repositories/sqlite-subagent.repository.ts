@@ -14,6 +14,7 @@ import type {
   RuntimeModelWorkView,
   RuntimeParticipantRepositoryPort,
   RuntimeParticipantView,
+  RuntimeToolExchangeView,
   RuntimeToolWorkView,
   SchedulerWorkClaimPort,
   SchedulerWorkExecutionPort,
@@ -828,28 +829,45 @@ export class SqliteSubagentRepository
     runId: string,
     runtimeId: string,
     limit: number,
-  ): Promise<
-    Array<{ providerCallId: string; toolName: string; arguments: JsonValue; result: JsonValue | null; status: string }>
-  > {
+  ): Promise<RuntimeToolExchangeView[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 32) throw new Error('VALIDATION_FAILED');
     await requireRun(this.db, scope, runId);
     await assertRuntimeInRun(this.db, runId, runtimeId);
     const rows = await this.db.queryAll<{
+      source_model_step_id: string;
+      batch_index: number;
+      batch_size: number;
       provider_call_id: string;
       tool_name: string;
       inspection_json: string;
       result_json: string | null;
       status: string;
     }>(
-      `SELECT provider_call_id, tool_name, inspection_json, result_json, status
-       FROM agent_tool_calls
-       WHERE run_id = ? AND agent_runtime_id = ? AND status IN ('succeeded','failed')
-       ORDER BY created_at DESC, id DESC LIMIT ?`,
-      [runId, runtimeId, limit],
+      `WITH recent_batches AS (
+         SELECT COALESCE(source_model_step_id, 'legacy:' || id) AS batch_key,
+                MAX(created_at) AS batch_created_at
+         FROM agent_tool_calls
+         WHERE run_id = ? AND agent_runtime_id = ? AND status IN ('succeeded','failed')
+         GROUP BY COALESCE(source_model_step_id, 'legacy:' || id)
+         ORDER BY batch_created_at DESC, batch_key DESC
+         LIMIT ?
+       )
+       SELECT COALESCE(t.source_model_step_id, 'legacy:' || t.id) AS source_model_step_id,
+              t.batch_index, t.batch_size, t.provider_call_id, t.tool_name,
+              t.inspection_json, t.result_json, t.status
+       FROM agent_tool_calls t
+       JOIN recent_batches b
+         ON b.batch_key = COALESCE(t.source_model_step_id, 'legacy:' || t.id)
+       WHERE t.run_id = ? AND t.agent_runtime_id = ? AND t.status IN ('succeeded','failed')
+       ORDER BY b.batch_created_at, b.batch_key, t.batch_index, t.created_at, t.id`,
+      [runId, runtimeId, limit, runId, runtimeId],
     );
-    return rows.reverse().map((row) => {
+    return rows.map((row) => {
       const inspection = parseJson<{ normalizedArguments?: JsonValue }>(row.inspection_json);
       return {
+        sourceModelStepId: row.source_model_step_id,
+        batchIndex: row.batch_index,
+        batchSize: row.batch_size,
         providerCallId: row.provider_call_id,
         toolName: row.tool_name,
         arguments: inspection.normalizedArguments ?? null,

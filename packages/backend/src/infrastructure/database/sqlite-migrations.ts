@@ -453,6 +453,25 @@ const definedMigrations: Migration[] = [
             CREATE INDEX agent_approval_scope ON agent_approvals(user_id, app_id, run_id, requested_at);
         `,
   },
+  {
+    id: 23,
+    name: 'Track durable Agent tool-call batch lineage',
+    check: async (db: Database): Promise<boolean> => {
+      const tableAlreadyExists = await tableExists(db, 'agent_tool_calls');
+      if (!tableAlreadyExists) return false;
+      return !(await columnExists(db, 'agent_tool_calls', 'source_model_step_id'));
+    },
+    sql: `
+            ALTER TABLE agent_tool_calls
+              ADD COLUMN source_model_step_id TEXT REFERENCES agent_steps(id);
+            ALTER TABLE agent_tool_calls
+              ADD COLUMN batch_index INTEGER NOT NULL DEFAULT 0 CHECK(batch_index >= 0);
+            ALTER TABLE agent_tool_calls
+              ADD COLUMN batch_size INTEGER NOT NULL DEFAULT 1 CHECK(batch_size >= 1);
+            CREATE INDEX IF NOT EXISTS agent_tool_call_batch_lineage
+              ON agent_tool_calls(run_id, agent_runtime_id, source_model_step_id, batch_index);
+        `,
+  },
 ];
 
 /**

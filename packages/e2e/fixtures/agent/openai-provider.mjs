@@ -227,6 +227,13 @@ const server = http.createServer(async (request, response) => {
   const readFileToolResult = messages.find(
     (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_read_file',
   );
+  const multiToolConnection = /E2E_MULTI_TOOL_CONNECTION_ID=(\d+)/.exec(serializedMessages);
+  const multiToolListResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_multi_list',
+  );
+  const multiToolReadResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_multi_read',
+  );
   const missingFileConnection = /E2E_MISSING_FILE_CONNECTION_ID=(\d+)/.exec(serializedMessages);
   const missingFileToolResult = messages.find(
     (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_missing_file',
@@ -235,12 +242,39 @@ const server = http.createServer(async (request, response) => {
   const controlToolResult = messages.find(
     (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_control_tool',
   );
+  const multiToolBatchRequested = serializedMessages.includes('E2E_MULTI_TOOL_BATCH');
+  const multiToolBatchFirstResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_batch_first',
+  );
+  const multiToolBatchSecondResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_batch_second',
+  );
+  const subagentBatchRequested = serializedMessages.includes('E2E_SUBAGENT_MULTI_TOOL_BATCH');
+  const childBatchRequested = serializedMessages.includes('E2E_CHILD_MULTI_TOOL_BATCH') && !subagentBatchRequested;
+  const subagentDelegateResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_subagent_delegate',
+  );
+  const childBatchFirstResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_child_batch_first',
+  );
+  const childBatchSecondResult = messages.find(
+    (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_child_batch_second',
+  );
   const shellToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_execute_shell');
   const readFileToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_read_file');
+  const listConnectionsToolOffered =
+    Array.isArray(body?.tools) &&
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_list_connections');
+  const delegateSubagentToolOffered =
+    Array.isArray(body?.tools) &&
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'delegate_subagent');
+  const listSubagentsToolOffered =
+    Array.isArray(body?.tools) &&
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'list_subagents');
   const controlToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'plan_update');
@@ -285,6 +319,187 @@ const server = http.createServer(async (request, response) => {
     sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
     response.end('data: [DONE]\n\n');
     return;
+  }
+  if (childBatchRequested && listSubagentsToolOffered) {
+    if (!childBatchFirstResult && !childBatchSecondResult) {
+      sendSse(response, {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_e2e_child_batch_first',
+                  type: 'function',
+                  function: { name: 'list_subagents', arguments: JSON.stringify({ limit: 10 }) },
+                },
+                {
+                  index: 1,
+                  id: 'call_e2e_child_batch_second',
+                  type: 'function',
+                  function: { name: 'list_subagents', arguments: JSON.stringify({ limit: 11 }) },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      });
+      sendSse(response, {
+        choices: [],
+        usage: { prompt_tokens: 11, completion_tokens: 8, prompt_tokens_details: { cached_tokens: 0 } },
+      });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
+    const batchAssistantIndex = messages.findIndex((message) => {
+      if (message?.role !== 'assistant' || !Array.isArray(message?.tool_calls)) return false;
+      return (
+        message.tool_calls.length === 2 &&
+        message.tool_calls[0]?.id === 'call_e2e_child_batch_first' &&
+        message.tool_calls[1]?.id === 'call_e2e_child_batch_second'
+      );
+    });
+    const firstResultIndex = messages.findIndex(
+      (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_child_batch_first',
+    );
+    const secondResultIndex = messages.findIndex(
+      (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_child_batch_second',
+    );
+    if (
+      !childBatchFirstResult ||
+      !childBatchSecondResult ||
+      batchAssistantIndex < 0 ||
+      firstResultIndex <= batchAssistantIndex ||
+      secondResultIndex <= firstResultIndex
+    ) {
+      sendSse(response, { choices: [{ delta: { content: 'E2E_CHILD_BATCH_PROTOCOL_INVALID' }, finish_reason: null }] });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'stop' }] });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
+    sendSse(response, { choices: [{ delta: { content: 'CHILD_BATCH_OK' }, finish_reason: null }] });
+    sendSse(response, {
+      choices: [],
+      usage: { prompt_tokens: 9, completion_tokens: 3, prompt_tokens_details: { cached_tokens: 0 } },
+    });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'stop' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
+  if (subagentBatchRequested && !subagentDelegateResult && delegateSubagentToolOffered) {
+    sendSse(response, {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: 'call_e2e_subagent_delegate',
+                type: 'function',
+                function: {
+                  name: 'delegate_subagent',
+                  arguments: JSON.stringify({
+                    profileId: 'e2e-worker',
+                    objective:
+                      'E2E_CHILD_MULTI_TOOL_BATCH Validate one child assistant turn with two durable tool calls.',
+                    constraints: ['Use only the offered read/control tools.'],
+                    inputArtifactRefs: [],
+                    maxTokens: 1024,
+                    maxSteps: 8,
+                    deadlineAt: Math.floor(Date.now() / 1000) + 120,
+                    completionCriteria: ['Return CHILD_BATCH_OK after both tool results are present.'],
+                    dependsOn: [],
+                    dependencyMode: 'success',
+                    idempotencyKey: '00000000-0000-4000-8000-000000000101',
+                  }),
+                },
+              },
+            ],
+          },
+          finish_reason: null,
+        },
+      ],
+    });
+    sendSse(response, {
+      choices: [],
+      usage: { prompt_tokens: 10, completion_tokens: 6, prompt_tokens_details: { cached_tokens: 0 } },
+    });
+    sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+    response.end('data: [DONE]\n\n');
+    return;
+  }
+  if (multiToolBatchRequested && controlToolOffered) {
+    if (!multiToolBatchFirstResult && !multiToolBatchSecondResult) {
+      sendSse(response, {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_e2e_batch_first',
+                  type: 'function',
+                  function: {
+                    name: 'plan_update',
+                    arguments: JSON.stringify({
+                      items: [{ id: 'multi-tool-first', title: 'First batched tool call', status: 'completed' }],
+                    }),
+                  },
+                },
+                {
+                  index: 1,
+                  id: 'call_e2e_batch_second',
+                  type: 'function',
+                  function: {
+                    name: 'plan_update',
+                    arguments: JSON.stringify({
+                      items: [{ id: 'multi-tool-second', title: 'Second batched tool call', status: 'completed' }],
+                    }),
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      });
+      sendSse(response, {
+        choices: [],
+        usage: { prompt_tokens: 9, completion_tokens: 8, prompt_tokens_details: { cached_tokens: 0 } },
+      });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
+
+    const batchAssistantIndex = messages.findIndex((message) => {
+      if (message?.role !== 'assistant' || !Array.isArray(message?.tool_calls)) return false;
+      return (
+        message.tool_calls.length === 2 &&
+        message.tool_calls[0]?.id === 'call_e2e_batch_first' &&
+        message.tool_calls[1]?.id === 'call_e2e_batch_second'
+      );
+    });
+    const firstResultIndex = messages.findIndex(
+      (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_batch_first',
+    );
+    const secondResultIndex = messages.findIndex(
+      (message) => message?.role === 'tool' && message?.tool_call_id === 'call_e2e_batch_second',
+    );
+    const batchProtocolValid =
+      multiToolBatchFirstResult &&
+      multiToolBatchSecondResult &&
+      batchAssistantIndex >= 0 &&
+      firstResultIndex > batchAssistantIndex &&
+      secondResultIndex > firstResultIndex;
+    if (!batchProtocolValid) {
+      sendSse(response, { choices: [{ delta: { content: 'E2E_BATCH_PROTOCOL_INVALID' }, finish_reason: null }] });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'stop' }] });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
   }
   if (controlToolRequested && !controlToolResult && controlToolOffered) {
     sendSse(response, {
@@ -421,6 +636,67 @@ const server = http.createServer(async (request, response) => {
           },
         }),
       );
+      return;
+    }
+  }
+
+  if (multiToolConnection && readFileToolOffered && listConnectionsToolOffered) {
+    const connectionId = Number(multiToolConnection[1]);
+    if (!multiToolListResult && !multiToolReadResult) {
+      sendSse(response, {
+        choices: [
+          {
+            delta: {
+              tool_calls: [
+                {
+                  index: 0,
+                  id: 'call_e2e_multi_list',
+                  type: 'function',
+                  function: { name: 'machine_list_connections', arguments: '{}' },
+                },
+                {
+                  index: 1,
+                  id: 'call_e2e_multi_read',
+                  type: 'function',
+                  function: {
+                    name: 'machine_read_file',
+                    arguments: JSON.stringify({ connectionId, path: '/seed.txt', maxBytes: 4096, offset: 0 }),
+                  },
+                },
+              ],
+            },
+            finish_reason: null,
+          },
+        ],
+      });
+      sendSse(response, {
+        choices: [],
+        usage: { prompt_tokens: 9, completion_tokens: 8, prompt_tokens_details: { cached_tokens: 0 } },
+      });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
+
+    const assistantBatch = messages.find(
+      (message) =>
+        message?.role === 'assistant' &&
+        Array.isArray(message?.tool_calls) &&
+        message.tool_calls.some((call) => call?.id === 'call_e2e_multi_list') &&
+        message.tool_calls.some((call) => call?.id === 'call_e2e_multi_read'),
+    );
+    if (!assistantBatch || !multiToolListResult || !multiToolReadResult) {
+      sendSse(response, {
+        choices: [{ delta: { content: 'E2E_MULTI_READ_BATCH_PROTOCOL_INVALID' }, finish_reason: null }],
+      });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'stop' }] });
+      response.end('data: [DONE]\n\n');
+      return;
+    }
+    if (!JSON.stringify(multiToolReadResult).includes('nexus-e2e-seed')) {
+      sendSse(response, { choices: [{ delta: { content: 'E2E_MULTI_READ_RESULT_INVALID' }, finish_reason: null }] });
+      sendSse(response, { choices: [{ delta: {}, finish_reason: 'stop' }] });
+      response.end('data: [DONE]\n\n');
       return;
     }
   }

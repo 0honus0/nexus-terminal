@@ -148,6 +148,7 @@ const listSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
       },
     },
     riskClass: 'read',
+    parallelSafe: true,
     capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
@@ -334,6 +335,7 @@ const getFactTool = (facts: SharedFactsService, cryptoHash: CryptoHashPort): Age
       properties: { key: { type: 'string', minLength: 1, maxLength: 128 } },
     },
     riskClass: 'read',
+    parallelSafe: true,
     capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>

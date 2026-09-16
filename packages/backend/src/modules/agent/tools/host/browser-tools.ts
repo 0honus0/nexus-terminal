@@ -371,6 +371,7 @@ export const createBrowserTools = (
         required: ['sessionId'],
       },
       riskClass: 'read',
+      parallelSafe: true,
       capability: 'browser.operate',
     },
     inspect: async (input, context, policyRevision) => {

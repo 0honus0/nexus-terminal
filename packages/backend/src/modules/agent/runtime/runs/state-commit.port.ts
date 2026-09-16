@@ -154,7 +154,16 @@ export interface ParkModelStepCommand {
   now: number;
 }
 
-export interface CommitSubagentToolProposalCommand {
+export interface CommitSubagentToolProposalBatchItem {
+  providerCallId: string;
+  toolCallId: string;
+  toolName: string;
+  toolVersion: string;
+  inspection: ToolInspection;
+  rejectedResult?: ToolResult;
+}
+
+export interface CommitSubagentToolProposalBatchCommand {
   scope: Scope;
   runId: string;
   runtimeId: string;
@@ -164,11 +173,7 @@ export interface CommitSubagentToolProposalCommand {
   modelStepId: string;
   attemptId: string;
   expectedRunVersion: number;
-  providerCallId: string;
-  toolCallId: string;
-  toolName: string;
-  toolVersion: string;
-  inspection: ToolInspection;
+  items: CommitSubagentToolProposalBatchItem[];
   inputTokens: number;
   outputTokens: number;
   cachedInputTokens: number;
@@ -415,21 +420,25 @@ export interface ResolveRunReconciliationCommand {
   now: number;
 }
 
-export interface CommitToolProposalCommand {
+export interface CommitToolProposalBatchItem {
+  providerCallId: string;
+  toolCallId: string;
+  toolName: string;
+  toolVersion: string;
+  argumentsJson: string;
+  inspection: ToolInspection;
+}
+
+export interface CommitToolProposalBatchCommand {
   scope: Scope;
   runId: string;
   runtimeId: string;
   modelStepId: string;
   attemptId: string;
   expectedRunVersion: number;
-  providerCallId: string;
-  toolCallId: string;
-  toolName: string;
-  toolVersion: string;
-  argumentsJson: string;
   assistantEntryId: string;
   assistantText: string;
-  inspection: ToolInspection;
+  items: CommitToolProposalBatchItem[];
   usage: RunUsage;
   inputTokens?: number;
   outputTokens?: number;
@@ -439,9 +448,40 @@ export interface CommitToolProposalCommand {
   now: number;
 }
 
+export interface CommitToolProposalBatchResultItem {
+  providerCallId: string;
+  toolCallId: string;
+  toolStepId: string;
+}
+
+export interface CommitToolProposalBatchResult extends StateCommitResult {
+  items: CommitToolProposalBatchResultItem[];
+}
+
 export interface CommitToolProposalResult extends StateCommitResult {
   toolStepId: string;
   toolCallId: string;
+}
+
+export interface RefreshProposedToolCommand {
+  scope: Scope;
+  runId: string;
+  toolStepId: string;
+  toolCallId: string;
+  expectedRunVersion: number;
+  inspection: ToolInspection;
+  now: number;
+}
+
+export interface RejectProposedToolCommand {
+  scope: Scope;
+  runId: string;
+  toolStepId: string;
+  toolCallId: string;
+  expectedRunVersion: number;
+  providerCallId: string;
+  result: ToolResult;
+  now: number;
 }
 
 export interface RequestToolApprovalCommand {
@@ -512,6 +552,20 @@ export interface BeginReadToolCommand {
   now: number;
 }
 
+export interface ToolBatchIdentity {
+  toolStepId: string;
+  toolCallId: string;
+}
+
+export interface BeginReadToolBatchCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  expectedRunVersion: number;
+  items: ToolBatchIdentity[];
+  now: number;
+}
+
 export interface SettleReadToolCommand {
   scope: Scope;
   runId: string;
@@ -523,6 +577,21 @@ export interface SettleReadToolCommand {
   providerCallId: string;
   result: ToolResult;
   usage: RunUsage;
+  now: number;
+}
+
+export interface SettleReadToolBatchItem extends ToolBatchIdentity {
+  toolResultEntryId: string;
+  providerCallId: string;
+  result: ToolResult;
+}
+
+export interface SettleReadToolBatchCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  expectedRunVersion: number;
+  items: SettleReadToolBatchItem[];
   now: number;
 }
 
@@ -568,7 +637,9 @@ export interface StateCommitPort {
   pauseRuntimeForBudget(command: PauseRuntimeForBudgetCommand): Promise<StateCommitResult>;
   parkRuntime(command: ParkRuntimeCommand): Promise<StateCommitResult>;
   parkModelStep(command: ParkModelStepCommand): Promise<StateCommitResult>;
-  commitSubagentToolProposal(command: CommitSubagentToolProposalCommand): Promise<CommitToolProposalResult>;
+  commitSubagentToolProposalBatch(
+    command: CommitSubagentToolProposalBatchCommand,
+  ): Promise<CommitToolProposalBatchResult>;
   beginSubagentTool(command: BeginSubagentToolCommand): Promise<StateCommitResult>;
   settleSubagentTool(command: SettleSubagentToolCommand): Promise<StateCommitResult>;
   settleSubagentWithoutModel(command: SettleSubagentWithoutModelCommand): Promise<StateCommitResult>;
@@ -576,14 +647,18 @@ export interface StateCommitPort {
   retryModelStep(command: RetryModelStepCommand): Promise<RetryModelStepResult>;
   pauseModelStepForBudget(command: PauseModelStepForBudgetCommand): Promise<StateCommitResult>;
   settleModelStep(command: SettleModelStepCommand): Promise<StateCommitResult>;
-  commitToolProposal(command: CommitToolProposalCommand): Promise<CommitToolProposalResult>;
+  commitToolProposalBatch(command: CommitToolProposalBatchCommand): Promise<CommitToolProposalBatchResult>;
+  refreshProposedTool(command: RefreshProposedToolCommand): Promise<StateCommitResult>;
+  rejectProposedTool(command: RejectProposedToolCommand): Promise<StateCommitResult>;
   requestToolApproval(command: RequestToolApprovalCommand): Promise<StateCommitResult>;
   resolveToolApproval(command: ResolveToolApprovalCommand): Promise<StateCommitResult>;
   supersedeMutationTool(command: SupersedeMutationToolCommand): Promise<StateCommitResult>;
   expireToolApprovals(now: number): Promise<RunView[]>;
   beginReadTool(command: BeginReadToolCommand): Promise<StateCommitResult>;
+  beginReadToolBatch(command: BeginReadToolBatchCommand): Promise<StateCommitResult>;
   beginMutationTool(command: BeginMutationToolCommand): Promise<StateCommitResult>;
   settleReadTool(command: SettleReadToolCommand): Promise<StateCommitResult>;
+  settleReadToolBatch(command: SettleReadToolBatchCommand): Promise<StateCommitResult>;
   settleMutationTool(command: SettleMutationToolCommand): Promise<StateCommitResult>;
   supersedeModelStep(command: SupersedeModelStepCommand): Promise<StateCommitResult>;
   commit(command: StateCommitCommand): Promise<StateCommitResult>;
@@ -613,7 +688,7 @@ export type CollaborationCommitPort = Pick<
   StateCommitPort,
   | 'beginSubagentModelStep'
   | 'beginSubagentTool'
-  | 'commitSubagentToolProposal'
+  | 'commitSubagentToolProposalBatch'
   | 'settleSubagentModelStep'
   | 'settleSubagentTool'
   | 'settleSubagentWithoutModel'
@@ -624,19 +699,23 @@ export type RootExecutionCommitPort = Pick<
   | 'beginModelStep'
   | 'beginMutationTool'
   | 'beginReadTool'
+  | 'beginReadToolBatch'
   | 'commit'
-  | 'commitToolProposal'
+  | 'commitToolProposalBatch'
   | 'interruptUnexpectedRootExecution'
   | 'parkModelStep'
   | 'parkRuntime'
   | 'pauseModelStepForBudget'
   | 'pauseRuntimeForBudget'
   | 'requestToolApproval'
+  | 'refreshProposedTool'
+  | 'rejectProposedTool'
   | 'resolveToolApproval'
   | 'retryModelStep'
   | 'settleModelStep'
   | 'settleMutationTool'
   | 'settleReadTool'
+  | 'settleReadToolBatch'
   | 'supersedeModelStep'
   | 'supersedeMutationTool'
 >;

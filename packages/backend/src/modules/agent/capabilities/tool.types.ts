@@ -11,6 +11,7 @@ export interface ToolDescriptor {
   description: string;
   inputSchema: JsonValue;
   riskClass: ToolRiskClass;
+  parallelSafe?: boolean;
   capability: AgentCapability;
 }
 

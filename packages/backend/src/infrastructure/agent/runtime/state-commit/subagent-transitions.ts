@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
+import type { ToolResult } from '../../../../modules/agent/capabilities/tool.types';
 import type {
   BeginModelStepResult,
   BeginSubagentModelStepCommand,
   BeginSubagentToolCommand,
-  CommitSubagentToolProposalCommand,
-  CommitToolProposalResult,
+  CommitSubagentToolProposalBatchCommand,
+  CommitToolProposalBatchResult,
   DurableEventInput,
   ParkRuntimeCommand,
   PauseRuntimeForBudgetCommand,
@@ -248,17 +249,26 @@ export const parkRuntimeTransition = async (
   return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
 };
 
-export const commitSubagentToolProposalTransition = async (
+export const commitSubagentToolProposalBatchTransition = async (
   tx: RelationalDatabase,
-  command: CommitSubagentToolProposalCommand,
-): Promise<CommitToolProposalResult> => {
+  command: CommitSubagentToolProposalBatchCommand,
+): Promise<CommitToolProposalBatchResult> => {
   const row = await tx.queryOne<RunRow>(
     `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
     [command.runId, command.scope.userId, command.scope.appId],
   );
   if (!row) throw new Error('NOT_FOUND');
   if (row.version < command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
-  if (row.input_revision !== command.inspection.inputRevision) throw new Error('INPUT_REVISION_CONFLICT');
+  if (command.items.length < 1 || command.items.length > 32) throw new Error('VALIDATION_FAILED');
+  if (
+    new Set(command.items.map((item) => item.providerCallId)).size !== command.items.length ||
+    new Set(command.items.map((item) => item.toolCallId)).size !== command.items.length
+  ) {
+    throw new Error('MODEL_TOOL_CALL_INVALID');
+  }
+  if (command.items.some((item) => item.inspection.inputRevision !== row.input_revision)) {
+    throw new Error('INPUT_REVISION_CONFLICT');
+  }
   const work = await tx.queryOne<{ status: string; owner_epoch: number | null; version: number }>(
     `SELECT status, owner_epoch, version FROM agent_scheduler_work
      WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'model_step'`,
@@ -284,12 +294,15 @@ export const commitSubagentToolProposalTransition = async (
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
   const tokenDelta = command.inputTokens + command.outputTokens;
-  if (delegation.used_tokens + tokenDelta > delegation.max_tokens || delegation.used_steps >= delegation.max_steps) {
+  if (
+    delegation.used_tokens + tokenDelta > delegation.max_tokens ||
+    delegation.used_steps + command.items.length > delegation.max_steps
+  ) {
     throw new Error('DELEGATION_BUDGET_EXCEEDED');
   }
   const runUsage = JSON.parse(row.usage_json) as RunUsage;
   const runBudget = JSON.parse(row.budget_json) as RunBudget;
-  if (runUsage.steps >= runBudget.maxRunSteps) throw new Error('RUN_BUDGET_EXCEEDED');
+  if (runUsage.steps + command.items.length > runBudget.maxRunSteps) throw new Error('RUN_BUDGET_EXCEEDED');
   const step = await tx.queryOne<{ status: string }>(
     `SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'model'`,
     [command.modelStepId, command.runId, command.runtimeId],
@@ -325,40 +338,61 @@ export const commitSubagentToolProposalTransition = async (
     'SELECT MAX(step_index) AS max_index FROM agent_steps WHERE run_id = ?',
     [command.runId],
   );
-  const toolStepId = randomUUID();
-  const toolStepIndex = (previous?.max_index ?? 0) + 1;
-  await tx.execute(
-    `INSERT INTO agent_steps
-      (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
-       input_refs_json, output_refs_json, created_at, completed_at)
-     VALUES (?, ?, ?, ?, 'tool', 'created', ?, '[]', '[]', ?, NULL)`,
-    [toolStepId, command.runId, command.runtimeId, toolStepIndex, row.input_revision, command.now],
-  );
-  await tx.execute(
-    `INSERT INTO agent_tool_calls
-      (id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
-       inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
-       created_at, started_at, completed_at, version)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'proposed', NULL, ?, NULL, NULL, 1)`,
-    [
-      command.toolCallId,
-      command.runId,
-      command.runtimeId,
-      toolStepId,
-      command.providerCallId,
-      command.toolName,
-      command.toolVersion,
-      JSON.stringify(command.inspection),
-      command.inspection.operationHash,
-      command.inspection.risk,
-      command.now,
-    ],
-  );
+  const firstToolStepIndex = (previous?.max_index ?? 0) + 1;
+  const resultItems: CommitToolProposalBatchResult['items'] = [];
+  for (const [batchIndex, item] of command.items.entries()) {
+    const toolStepId = randomUUID();
+    const rejected = item.rejectedResult !== undefined;
+    const safeRejectedResult = rejected ? (JSON.parse(JSON.stringify(item.rejectedResult)) as JsonValue) : null;
+    await tx.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES (?, ?, ?, ?, 'tool', ?, ?, '[]', '[]', ?, ?)`,
+      [
+        toolStepId,
+        command.runId,
+        command.runtimeId,
+        firstToolStepIndex + batchIndex,
+        rejected ? 'failed' : 'created',
+        row.input_revision,
+        command.now,
+        rejected ? command.now : null,
+      ],
+    );
+    await tx.execute(
+      `INSERT INTO agent_tool_calls
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+         provider_call_id, tool_name, tool_version, inspection_json, operation_hash,
+         operation_hash_version, risk, status, result_json, created_at, started_at, completed_at, version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL, ?, 1)`,
+      [
+        item.toolCallId,
+        command.runId,
+        command.runtimeId,
+        toolStepId,
+        command.modelStepId,
+        batchIndex,
+        command.items.length,
+        item.providerCallId,
+        item.toolName,
+        item.toolVersion,
+        JSON.stringify(item.inspection),
+        item.inspection.operationHash,
+        item.inspection.risk,
+        rejected ? 'failed' : 'proposed',
+        safeRejectedResult === null ? null : JSON.stringify(safeRejectedResult),
+        command.now,
+        rejected ? command.now : null,
+      ],
+    );
+    resultItems.push({ providerCallId: item.providerCallId, toolCallId: item.toolCallId, toolStepId });
+  }
   const delegationChanged = await tx.execute(
-    `UPDATE agent_delegations SET used_tokens = used_tokens + ?, used_steps = used_steps + 1,
+    `UPDATE agent_delegations SET used_tokens = used_tokens + ?, used_steps = used_steps + ?,
      version = version + 1, updated_at = ?
-     WHERE id = ? AND run_id = ? AND status = 'running' AND used_steps < max_steps`,
-    [tokenDelta, command.now, command.delegationId, command.runId],
+     WHERE id = ? AND run_id = ? AND status = 'running' AND used_steps + ? <= max_steps`,
+    [tokenDelta, command.items.length, command.now, command.delegationId, command.runId, command.items.length],
   );
   if (delegationChanged.changes !== 1) throw new Error('DELEGATION_BUDGET_EXCEEDED');
   const runtimeChanged = await tx.execute(
@@ -372,26 +406,49 @@ export const commitSubagentToolProposalTransition = async (
     [command.now, command.workId, command.ownerEpoch, work.version],
   );
   if (runtimeChanged.changes !== 1 || workChanged.changes !== 1) throw new Error('SCHEDULER_WORK_STALE');
-  await tx.execute(
-    `INSERT INTO agent_scheduler_work
-      (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
-       deadline_at, created_at, updated_at, version)
-     VALUES (?, ?, ?, 'tool_step', 'queued', ?, NULL, ?, ?, ?, ?, 1)`,
-    [
-      `work-${randomUUID()}`,
-      command.runId,
-      command.runtimeId,
-      JSON.stringify({
-        delegationId: command.delegationId,
-        toolStepId,
-        toolCallId: command.toolCallId,
-      }),
-      command.now,
-      Math.min(delegation.deadline_at, command.now + (JSON.parse(row.budget_json) as RunBudget).toolTimeoutSeconds),
-      command.now,
-      command.now,
-    ],
-  );
+  const toolDeadlineAt = Math.min(delegation.deadline_at, command.now + runBudget.toolTimeoutSeconds);
+  const executableItems = resultItems.filter((_, index) => command.items[index]?.rejectedResult === undefined);
+  for (const item of executableItems) {
+    await tx.execute(
+      `INSERT INTO agent_scheduler_work
+        (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
+         deadline_at, created_at, updated_at, version)
+       VALUES (?, ?, ?, 'tool_step', 'queued', ?, NULL, ?, ?, ?, ?, 1)`,
+      [
+        `work-${randomUUID()}`,
+        command.runId,
+        command.runtimeId,
+        JSON.stringify({
+          delegationId: command.delegationId,
+          toolStepId: item.toolStepId,
+          toolCallId: item.toolCallId,
+          sourceModelStepId: command.modelStepId,
+        }),
+        command.now,
+        toolDeadlineAt,
+        command.now,
+        command.now,
+      ],
+    );
+  }
+  if (executableItems.length === 0) {
+    await tx.execute(
+      `INSERT INTO agent_scheduler_work
+        (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
+         deadline_at, created_at, updated_at, version)
+       VALUES (?, ?, ?, 'model_step', 'queued', ?, NULL, ?, ?, ?, ?, 1)`,
+      [
+        `work-${randomUUID()}`,
+        command.runId,
+        command.runtimeId,
+        JSON.stringify({ delegationId: command.delegationId, cause: 'tool_batch_rejected' }),
+        command.now,
+        delegation.deadline_at,
+        command.now,
+        command.now,
+      ],
+    );
+  }
   const events: DurableEventInput[] = [
     {
       type: 'model.completed',
@@ -404,18 +461,36 @@ export const commitSubagentToolProposalTransition = async (
         outputTokens: command.outputTokens,
       },
     },
-    {
-      type: 'tool.proposed',
-      payload: {
-        toolCallId: command.toolCallId,
-        providerCallId: command.providerCallId,
-        toolStepId,
-        toolName: command.toolName,
-        operationHash: command.inspection.operationHash,
-        risk: command.inspection.risk,
-        runtimeId: command.runtimeId,
+    ...command.items.flatMap((item, batchIndex): DurableEventInput[] => [
+      {
+        type: 'tool.proposed',
+        payload: {
+          toolCallId: item.toolCallId,
+          providerCallId: item.providerCallId,
+          toolStepId: resultItems[batchIndex]!.toolStepId,
+          toolName: item.toolName,
+          operationHash: item.inspection.operationHash,
+          risk: item.inspection.risk,
+          runtimeId: command.runtimeId,
+          batchIndex,
+          batchSize: command.items.length,
+        },
       },
-    },
+      ...(item.rejectedResult
+        ? [
+            {
+              type: 'tool.failed',
+              payload: {
+                toolCallId: item.toolCallId,
+                toolStepId: resultItems[batchIndex]!.toolStepId,
+                runtimeId: command.runtimeId,
+                errorCode: item.rejectedResult.errorCode ?? 'SUBAGENT_TOOL_NOT_ALLOWED',
+                summary: item.rejectedResult.summary,
+              },
+            },
+          ]
+        : []),
+    ]),
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
   const mergedUsage = usageWithDelta(row, {
@@ -457,8 +532,7 @@ export const commitSubagentToolProposalTransition = async (
     eventCursor: run.eventCursor,
     ledgerCursor: 0,
     committedEvents,
-    toolStepId,
-    toolCallId: command.toolCallId,
+    items: resultItems,
   };
 };
 
@@ -571,8 +645,9 @@ export const settleSubagentToolTransition = async (
   if (!delegation || delegation.child_runtime_id !== command.runtimeId || delegation.status !== 'running') {
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
-  const tool = await tx.queryOne<{ status: string; version: number }>(
-    `SELECT status, version FROM agent_tool_calls WHERE id = ? AND run_id = ? AND step_id = ? AND agent_runtime_id = ?`,
+  const tool = await tx.queryOne<{ status: string; version: number; source_model_step_id: string | null }>(
+    `SELECT status, version, source_model_step_id FROM agent_tool_calls
+     WHERE id = ? AND run_id = ? AND step_id = ? AND agent_runtime_id = ?`,
     [command.toolCallId, command.runId, command.toolStepId, command.runtimeId],
   );
   if (!tool || tool.status !== 'running') throw new Error('TOOL_STATE_CONFLICT');
@@ -596,9 +671,60 @@ export const settleSubagentToolTransition = async (
   );
   if (toolChanged.changes !== 1 || stepChanged.changes !== 1) throw new Error('TOOL_STATE_CONFLICT');
   const cancelling = row.status === 'cancelling';
-  const waitingBudget = !cancelling && command.continuation === 'waiting_budget';
-  const nextSchedule = cancelling ? 'finished' : command.continuation;
-  const nextDelegationStatus = cancelling ? 'cancelled' : command.continuation === 'runnable' ? 'running' : 'waiting';
+  const batchRows = tool.source_model_step_id
+    ? await tx.queryAll<{ tool_name: string; status: string; result_json: string | null }>(
+        `SELECT tool_name, status, result_json FROM agent_tool_calls
+         WHERE run_id = ? AND agent_runtime_id = ? AND source_model_step_id = ?
+         ORDER BY batch_index, created_at, id`,
+        [command.runId, command.runtimeId, tool.source_model_step_id],
+      )
+    : [];
+  const hasRemainingBatch = batchRows.some((item) => ['proposed', 'running'].includes(item.status));
+  let batchContinuation: SettleSubagentToolCommand['continuation'] = hasRemainingBatch
+    ? 'runnable'
+    : command.continuation;
+  let batchBudgetReason = command.budgetReason;
+  if (!cancelling && !hasRemainingBatch && batchRows.length > 0) {
+    let joinPending = false;
+    for (const item of batchRows) {
+      if (!item.result_json) continue;
+      const result = JSON.parse(item.result_json) as ToolResult;
+      if (
+        item.tool_name === 'send_agent_message' &&
+        (result.errorCode === 'MAILBOX_BUDGET_EXCEEDED' || result.errorCode === 'MAILBOX_HARD_LIMIT_EXCEEDED')
+      ) {
+        const currentUsage = JSON.parse(row.usage_json) as RunUsage;
+        const currentBudget = JSON.parse(row.budget_json) as RunBudget;
+        batchContinuation = 'waiting_budget';
+        batchBudgetReason = {
+          scope: 'mailbox',
+          runtimeId: command.runtimeId,
+          delegationId: command.delegationId,
+          canIncrease: result.errorCode === 'MAILBOX_BUDGET_EXCEEDED',
+          errorCode: result.errorCode,
+          messages: currentUsage.subagentMessages,
+          bytes: currentUsage.subagentMessageBytes,
+          maxMessages: currentBudget.maxSubagentMessages,
+          maxBytes: currentBudget.maxSubagentMessageBytes,
+        };
+        break;
+      }
+      if (
+        item.tool_name === 'join_subagents' &&
+        result.ok &&
+        result.data &&
+        typeof result.data === 'object' &&
+        !Array.isArray(result.data) &&
+        result.data.ready === false
+      ) {
+        joinPending = true;
+      }
+    }
+    if (batchContinuation !== 'waiting_budget' && joinPending) batchContinuation = 'joining';
+  }
+  const waitingBudget = !cancelling && !hasRemainingBatch && batchContinuation === 'waiting_budget';
+  const nextSchedule = cancelling ? 'finished' : batchContinuation;
+  const nextDelegationStatus = cancelling ? 'cancelled' : batchContinuation === 'runnable' ? 'running' : 'waiting';
   const delegationChanged = await tx.execute(
     `UPDATE agent_delegations SET status = ?, version = version + 1, updated_at = ?,
      completed_at = CASE WHEN ? = 'cancelled' THEN ? ELSE completed_at END
@@ -621,7 +747,12 @@ export const settleSubagentToolTransition = async (
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const finalCancellation = cancelling && nextExecuting === 0;
   if (finalCancellation) await cancelRunSubagentWork(tx, row.id, command.now, true);
-  if (!cancelling && (command.continuation === 'runnable' || waitingBudget) && row.status === 'running') {
+  if (
+    !cancelling &&
+    !hasRemainingBatch &&
+    (batchContinuation === 'runnable' || waitingBudget) &&
+    row.status === 'running'
+  ) {
     await tx.execute(
       `INSERT INTO agent_scheduler_work
         (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
@@ -653,7 +784,7 @@ export const settleSubagentToolTransition = async (
     },
     ...(waitingBudget
       ? [
-          { type: 'budget.increase_requested', payload: command.budgetReason ?? { scope: 'subagent_tool' } },
+          { type: 'budget.increase_requested', payload: batchBudgetReason ?? { scope: 'subagent_tool' } },
           { type: 'run.status_changed', payload: { from: 'running', to: 'awaiting_budget' } },
         ]
       : []),

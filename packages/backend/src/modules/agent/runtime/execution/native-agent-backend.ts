@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { TokenUsage } from '../../ai/model.types';
 import type { ClockPort, JsonValue } from '../../agent.types';
-import type { ToolContext, ToolProposal, ToolResult } from '../../capabilities/tool.types';
+import type { ToolContext, ToolInspection, ToolProposal, ToolResult } from '../../capabilities/tool.types';
 import type { AgentBackendPort, BackendSignal } from './agent-backend.port';
 import { executionErrorCode, executionErrorDetail } from './execution-errors';
 import { ModelStepRunner, type ModelToolCall } from './model-step-runner';
 import { estimateTokens } from './model-accounting';
 import { boundedUtf8 } from './text-budget';
 import { ToolCallRunner } from './tool-call-runner';
-import type { PendingMutationTool, RunExecutionReaderPort } from '../runs/run.repository.port';
+import type { PendingRootTool, RunExecutionReaderPort } from '../runs/run.repository.port';
 import type { DelegationReaderPort } from '../collaboration/subagent.repository.port';
 import type { RootExecutionCommitPort } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
@@ -16,6 +16,55 @@ import { requestHash } from '../runs/idempotency';
 import { logger } from '../../../../shared/logging/logger';
 
 const MAX_COLLABORATION_BYTES = 8 * 1024;
+const MAX_TOOL_CALLS_PER_MODEL_STEP = 64;
+const MAX_PARALLEL_READ_TOOLS = 4;
+
+const rejectedToolResult = (errorCode: string, summary: string): ToolResult => ({
+  ok: false,
+  summary,
+  data: { error: { code: errorCode, message: summary } },
+  artifactRefs: [],
+  truncated: false,
+  outcome: 'confirmed',
+  errorCode,
+  verification: { status: 'failed', summary: 'The tool call was not executed.', evidenceRefs: [] },
+});
+
+const rejectedToolInspection = (run: RunView, proposal: ToolProposal, failureCode: string): ToolInspection => {
+  const operationHash = requestHash(1, {
+    kind: 'rejected_tool_call',
+    runId: run.id,
+    providerCallId: proposal.providerCallId,
+    toolName: proposal.name,
+    argumentsJson: proposal.argumentsJson,
+    inputRevision: run.inputRevision,
+    failureCode,
+  });
+  return {
+    toolName: proposal.name,
+    toolVersion: 'unavailable',
+    normalizedArguments: {},
+    target: {
+      kind: 'run',
+      targetIdentity: `run:${run.id}:rejected-tool:${proposal.providerCallId}`,
+      endpoint: `run:${run.id}`,
+      loginUser: `agent-runtime:${run.id}`,
+      configurationHash: operationHash,
+    },
+    resourceKeys: [],
+    risk: 'forbidden',
+    mutation: false,
+    operationHash,
+    operationHashVersion: 1,
+    preconditions: [],
+    secretRefs: [],
+    policyRevision: run.definition.policyRevision,
+    inputRevision: run.inputRevision,
+  };
+};
+
+const inspectionChanged = (left: ToolInspection, right: ToolInspection): boolean =>
+  JSON.stringify(left) !== JSON.stringify(right);
 
 const usageWithModel = (base: RunUsage, delta: TokenUsage): RunUsage => ({
   inputTokens: base.inputTokens + delta.inputTokens,
@@ -136,9 +185,54 @@ export class NativeAgentBackend implements AgentBackendPort {
         return;
       }
 
-      const pendingMutation = await this.repository.pendingMutation(scope, snapshot.id);
-      if (pendingMutation) {
-        yield* this.executePendingMutation(snapshot, pendingMutation, signal);
+      const pendingTools = await this.repository.pendingTools(scope, snapshot.id);
+      if (pendingTools.length > 0) {
+        const first = pendingTools[0]!;
+        if (snapshot.usage.steps >= snapshot.budget.maxRunSteps) {
+          if (first.status === 'ready') {
+            yield* this.supersedePendingMutationForBudget(snapshot, first);
+          } else {
+            yield* this.rejectPendingTool(
+              snapshot,
+              first,
+              rejectedToolResult(
+                'RUN_STEP_BUDGET_EXHAUSTED',
+                'The Run step budget was exhausted before this queued tool call could execute.',
+              ),
+            );
+          }
+          continue;
+        }
+        if (first.status === 'ready') {
+          yield* this.executePendingMutation(snapshot, first, signal);
+          continue;
+        }
+        if (first.inspection.inputRevision !== snapshot.inputRevision) {
+          yield* this.rejectPendingTool(
+            snapshot,
+            first,
+            rejectedToolResult(
+              'TOOL_SUPERSEDED_BY_INPUT',
+              'A newer user input superseded this tool call before it executed.',
+            ),
+          );
+          continue;
+        }
+        if (first.inspection.mutation) {
+          const waiting = yield* this.preparePendingMutation(snapshot, first, signal);
+          if (waiting) return;
+          continue;
+        }
+        const readWave = this.parallelReadWave(snapshot, pendingTools);
+        yield* this.executePendingReadWave(snapshot, readWave, signal);
+        const pendingAbortReason = signalReason(signal);
+        if (
+          pendingAbortReason === 'NEW_INPUT' ||
+          pendingAbortReason === 'GOAL_UPDATED' ||
+          pendingAbortReason === 'AGENT_QUIESCE'
+        ) {
+          return;
+        }
         continue;
       }
 
@@ -420,56 +514,73 @@ export class NativeAgentBackend implements AgentBackendPort {
 
         if (toolMode === 'none') throw new Error('MODEL_TOOL_CALL_UNEXPECTED');
         const orderedToolCalls = [...modelToolCalls.entries()].sort(([left], [right]) => left - right);
-        if (orderedToolCalls.length > 1) {
-          logger.warn(
-            {
-              runId: snapshot.id,
-              threadId: snapshot.threadId,
-              stepId: begun.stepId,
-              toolCallCount: orderedToolCalls.length,
-              toolNames: orderedToolCalls.map(([, candidate]) => candidate.name ?? 'unknown'),
-            },
-            'Model returned parallel tool calls; executing the first call and deferring the remainder',
-          );
-        }
-        const call = orderedToolCalls[0]?.[1];
-        if (!call?.id || !call.name) throw new Error('MODEL_TOOL_CALL_INVALID');
-        const proposal: ToolProposal = {
-          providerCallId: call.id,
-          name: call.name,
-          argumentsJson: call.argumentsJson || '{}',
-        };
+        if (orderedToolCalls.length > MAX_TOOL_CALLS_PER_MODEL_STEP) throw new Error('MODEL_TOOL_CALL_BATCH_TOO_LARGE');
         const inspectionContext = this.toolContext(currentRun, runtimeId, begun.stepId, signal);
-        const { inspection, policyDecision } = await this.toolCalls.inspect(inspectionContext, proposal);
-        logger.info(
-          {
-            runId: snapshot.id,
-            threadId: snapshot.threadId,
-            stepId: begun.stepId,
-            toolName: proposal.name,
-            toolVersion: inspection.toolVersion,
-            policyAction: policyDecision.action,
-            resourceKeyCount: inspection.resourceKeys.length,
-          },
-          'Agent tool call inspected',
-        );
-        if (policyDecision.action === 'deny') throw new Error(policyDecision.reason);
-        const toolCallId = randomUUID();
-        const proposed = await this.stateCommit.commitToolProposal({
+        const batchItems = [];
+        for (const [batchIndex, call] of orderedToolCalls) {
+          if (!call?.id || !call.name) throw new Error('MODEL_TOOL_CALL_INVALID');
+          const proposal: ToolProposal = {
+            providerCallId: call.id,
+            name: call.name,
+            argumentsJson: call.argumentsJson || '{}',
+          };
+          try {
+            const { inspection, policyDecision } = await this.toolCalls.inspect(inspectionContext, proposal);
+            logger.info(
+              {
+                runId: snapshot.id,
+                threadId: snapshot.threadId,
+                stepId: begun.stepId,
+                batchIndex,
+                toolName: proposal.name,
+                toolVersion: inspection.toolVersion,
+                policyAction: policyDecision.action,
+                resourceKeyCount: inspection.resourceKeys.length,
+              },
+              'Agent tool call inspected for model batch',
+            );
+            batchItems.push({
+              providerCallId: proposal.providerCallId,
+              toolCallId: randomUUID(),
+              toolName: proposal.name,
+              toolVersion: inspection.toolVersion,
+              argumentsJson: proposal.argumentsJson,
+              inspection,
+            });
+          } catch (error) {
+            const code = errorCode(error);
+            const rejectedResult = this.toolCalls.failedProposal(error);
+            logger.warn(
+              {
+                runId: snapshot.id,
+                threadId: snapshot.threadId,
+                stepId: begun.stepId,
+                batchIndex,
+                toolName: proposal.name,
+                errorCode: code,
+              },
+              'Agent tool call rejected during batch inspection',
+            );
+            batchItems.push({
+              providerCallId: proposal.providerCallId,
+              toolCallId: randomUUID(),
+              toolName: proposal.name,
+              toolVersion: 'unavailable',
+              argumentsJson: proposal.argumentsJson,
+              inspection: rejectedToolInspection(currentRun, proposal, code),
+            });
+          }
+        }
+        const proposed = await this.stateCommit.commitToolProposalBatch({
           scope,
           runId: snapshot.id,
           runtimeId,
           modelStepId: begun.stepId,
           attemptId: currentAttemptId,
           expectedRunVersion: currentRun.version,
-          providerCallId: proposal.providerCallId,
-          toolCallId,
-          toolName: proposal.name,
-          toolVersion: inspection.toolVersion,
-          argumentsJson: proposal.argumentsJson,
           assistantEntryId: randomUUID(),
           assistantText: text,
-          inspection,
+          items: batchItems,
           usage: afterModelUsage,
           inputTokens: settledUsage.inputTokens,
           outputTokens: settledUsage.outputTokens,
@@ -479,194 +590,17 @@ export class NativeAgentBackend implements AgentBackendPort {
           now: this.clock.nowUnixSeconds(),
         });
         modelStepClosed = true;
+        logger.info(
+          {
+            runId: snapshot.id,
+            threadId: snapshot.threadId,
+            stepId: begun.stepId,
+            toolCallCount: proposed.items.length,
+          },
+          'Agent tool-call batch committed',
+        );
         yield { type: 'durable', runId: snapshot.id, cursor: proposed.eventCursor };
-
-        if (policyDecision.action === 'requireApproval') {
-          const approvalId = randomUUID();
-          const requested = await this.stateCommit.requestToolApproval({
-            scope,
-            runId: proposed.run.id,
-            runtimeId,
-            toolStepId: proposed.toolStepId,
-            toolCallId: proposed.toolCallId,
-            approvalId,
-            expectedRunVersion: proposed.run.version,
-            inspection,
-            expiresAt: this.clock.nowUnixSeconds() + 600,
-            now: this.clock.nowUnixSeconds(),
-          });
-          yield { type: 'durable', runId: snapshot.id, cursor: requested.eventCursor };
-          if ((snapshot.definition.approvalMode ?? 'ask') === 'full_access') {
-            const idempotencyKey = randomUUID();
-            const expectedVersion = 1;
-            const resolved = await this.stateCommit.resolveToolApproval({
-              scope,
-              runId: requested.run.id,
-              approvalId,
-              decision: 'approved',
-              operationHash: inspection.operationHash,
-              expectedApprovalVersion: expectedVersion,
-              expectedRunVersion: requested.run.version,
-              expectedPolicyRevision: inspection.policyRevision,
-              expectedInputRevision: inspection.inputRevision,
-              decidedByUserId: scope.userId,
-              resolutionSource: 'full_access',
-              idempotencyKey,
-              requestHash: requestHash(1, {
-                approvalId,
-                runId: requested.run.id,
-                decision: 'approved',
-                operationHash: inspection.operationHash,
-                expectedVersion,
-              }),
-              now: this.clock.nowUnixSeconds(),
-            });
-            logger.info(
-              {
-                runId: snapshot.id,
-                toolCallId: proposed.toolCallId,
-                toolName: inspection.toolName,
-                approvalId,
-              },
-              'Agent tool approval auto-approved by full access mode',
-            );
-            yield { type: 'durable', runId: snapshot.id, cursor: resolved.eventCursor };
-            continue;
-          }
-          yield { type: 'settled', run: requested.run };
-          return;
-        }
-
-        const readLeaseTtlSeconds = Math.min(300, Math.max(30, proposed.run.budget.toolTimeoutSeconds + 15));
-        let toolSettled: Awaited<ReturnType<RootExecutionCommitPort['settleReadTool']>>;
-        let executedToolResult: ToolResult | null = null;
-        let readLease: Awaited<ReturnType<ToolCallRunner['acquireRead']>> | null = null;
-        try {
-          const started = await this.stateCommit.beginReadTool({
-            scope,
-            runId: proposed.run.id,
-            runtimeId,
-            toolStepId: proposed.toolStepId,
-            toolCallId: proposed.toolCallId,
-            expectedRunVersion: proposed.run.version,
-            now: this.clock.nowUnixSeconds(),
-          });
-          yield { type: 'durable', runId: snapshot.id, cursor: started.eventCursor };
-
-          let toolResult: ToolResult;
-          try {
-            readLease = await this.toolCalls.acquireRead(
-              this.toolContext(started.run, runtimeId, proposed.toolStepId, signal),
-              inspection,
-              readLeaseTtlSeconds,
-            );
-            toolResult = await this.toolCalls.executeRead(
-              readLease,
-              this.toolContext(started.run, runtimeId, proposed.toolStepId, readLease.signal),
-              inspection,
-            );
-          } catch (error) {
-            toolResult = this.toolCalls.failedRead(error);
-            logger.warn(
-              {
-                runId: snapshot.id,
-                threadId: snapshot.threadId,
-                toolCallId: proposed.toolCallId,
-                toolName: inspection.toolName,
-                errorCode: toolResult.errorCode ?? null,
-              },
-              'Agent read tool could not acquire or retain its execution lease',
-            );
-          }
-          executedToolResult = toolResult;
-          logger.info(
-            {
-              runId: snapshot.id,
-              threadId: snapshot.threadId,
-              toolCallId: proposed.toolCallId,
-              toolName: inspection.toolName,
-              ok: toolResult.ok,
-              outcome: toolResult.outcome,
-              errorCode: toolResult.errorCode ?? null,
-              outputBytes: Buffer.byteLength(JSON.stringify(toolResult.data ?? null), 'utf8'),
-            },
-            'Agent read tool execution completed',
-          );
-
-          toolSettled = await this.stateCommit.settleReadTool({
-            scope,
-            runId: started.run.id,
-            runtimeId,
-            toolStepId: proposed.toolStepId,
-            toolCallId: proposed.toolCallId,
-            expectedRunVersion: started.run.version,
-            toolResultEntryId: randomUUID(),
-            providerCallId: proposal.providerCallId,
-            result: toolResult,
-            usage: usageWithToolStep(started.run.usage),
-            now: this.clock.nowUnixSeconds(),
-          });
-          yield { type: 'durable', runId: snapshot.id, cursor: toolSettled.eventCursor };
-        } finally {
-          if (readLease) await this.toolCalls.releaseRead(readLease);
-        }
-
-        if (['cancelled', 'interrupted', 'failed'].includes(toolSettled.run.status)) {
-          yield { type: 'settled', run: toolSettled.run };
-          return;
-        }
-        if (
-          inspection.toolName === 'send_agent_message' &&
-          (executedToolResult?.errorCode === 'MAILBOX_BUDGET_EXCEEDED' ||
-            executedToolResult?.errorCode === 'MAILBOX_HARD_LIMIT_EXCEEDED')
-        ) {
-          const mailboxError = executedToolResult.errorCode;
-          const paused = await this.stateCommit.pauseRuntimeForBudget({
-            scope,
-            runId: toolSettled.run.id,
-            runtimeId,
-            expectedRunVersion: toolSettled.run.version,
-            budgetReason: {
-              scope: 'mailbox',
-              canIncrease: mailboxError === 'MAILBOX_BUDGET_EXCEEDED',
-              errorCode: mailboxError,
-              messages: toolSettled.run.usage.subagentMessages,
-              bytes: toolSettled.run.usage.subagentMessageBytes,
-              maxMessages: toolSettled.run.budget.maxSubagentMessages,
-              maxBytes: toolSettled.run.budget.maxSubagentMessageBytes,
-            },
-            now: this.clock.nowUnixSeconds(),
-          });
-          yield { type: 'durable', runId: snapshot.id, cursor: paused.eventCursor };
-          yield { type: 'settled', run: paused.run };
-          return;
-        }
-        if (
-          inspection.toolName === 'join_subagents' &&
-          executedToolResult?.ok &&
-          executedToolResult.data &&
-          typeof executedToolResult.data === 'object' &&
-          !Array.isArray(executedToolResult.data) &&
-          executedToolResult.data.ready === false
-        ) {
-          const parked = await this.stateCommit.parkRuntime({
-            scope,
-            runId: toolSettled.run.id,
-            runtimeId,
-            expectedRunVersion: toolSettled.run.version,
-            reason: 'waiting_subagents',
-            now: this.clock.nowUnixSeconds(),
-          });
-          yield { type: 'durable', runId: snapshot.id, cursor: parked.eventCursor };
-          yield { type: 'settled', run: parked.run };
-          return;
-        }
-        if (signal.aborted) {
-          const cancelled = await this.cancelAtSafeBoundary(toolSettled.run);
-          yield { type: 'durable', runId: snapshot.id, cursor: cancelled.eventCursor };
-          yield { type: 'settled', run: cancelled.run };
-          return;
-        }
+        continue;
       } catch (error) {
         logger.warn(
           {
@@ -756,20 +690,391 @@ export class NativeAgentBackend implements AgentBackendPort {
     }
   }
 
+  private parallelReadWave(snapshot: RunSnapshot, pendingTools: readonly PendingRootTool[]): PendingRootTool[] {
+    const first = pendingTools[0];
+    if (!first || first.status !== 'proposed' || first.inspection.mutation) return first ? [first] : [];
+    const remainingToolSteps = Math.max(0, snapshot.budget.maxRunSteps - snapshot.usage.steps);
+    const limit = Math.min(MAX_PARALLEL_READ_TOOLS, remainingToolSteps);
+    if (limit <= 1 || first.inspection.risk !== 'read') return [first];
+    const availability = { environment: snapshot.definition.environment ?? null };
+    if (
+      !this.toolCalls.parallelSafe(
+        { userId: snapshot.userId, appId: snapshot.appId },
+        first.inspection.toolName,
+        availability,
+      )
+    ) {
+      return [first];
+    }
+
+    const selected: PendingRootTool[] = [];
+    const resources = new Set<string>();
+    for (const candidate of pendingTools) {
+      if (selected.length >= limit) break;
+      if (
+        candidate.status !== 'proposed' ||
+        candidate.inspection.mutation ||
+        candidate.inspection.risk !== 'read' ||
+        candidate.inspection.inputRevision !== snapshot.inputRevision ||
+        !this.toolCalls.parallelSafe(
+          { userId: snapshot.userId, appId: snapshot.appId },
+          candidate.inspection.toolName,
+          availability,
+        ) ||
+        candidate.inspection.resourceKeys.some((key) => resources.has(key))
+      ) {
+        break;
+      }
+      selected.push(candidate);
+      for (const key of candidate.inspection.resourceKeys) resources.add(key);
+    }
+    return selected.length > 0 ? selected : [first];
+  }
+
+  private async *rejectPendingTool(
+    snapshot: RunSnapshot | RunView,
+    pending: PendingRootTool,
+    result: ToolResult,
+  ): AsyncGenerator<BackendSignal, void> {
+    if (pending.status !== 'proposed') throw new Error('TOOL_STATE_CONFLICT');
+    const rejected = await this.stateCommit.rejectProposedTool({
+      scope: { userId: snapshot.userId, appId: snapshot.appId },
+      runId: snapshot.id,
+      toolStepId: pending.stepId,
+      toolCallId: pending.toolCallId,
+      expectedRunVersion: snapshot.version,
+      providerCallId: pending.providerCallId,
+      result,
+      now: this.clock.nowUnixSeconds(),
+    });
+    yield { type: 'durable', runId: snapshot.id, cursor: rejected.eventCursor };
+  }
+
+  private async *supersedePendingMutationForBudget(
+    snapshot: RunSnapshot,
+    pending: PendingRootTool,
+  ): AsyncGenerator<BackendSignal, void> {
+    if (pending.status !== 'ready' || !pending.approvalId) throw new Error('APPROVAL_STATE_INVALID');
+    const superseded = await this.stateCommit.supersedeMutationTool({
+      scope: { userId: snapshot.userId, appId: snapshot.appId },
+      runId: snapshot.id,
+      toolStepId: pending.stepId,
+      toolCallId: pending.toolCallId,
+      approvalId: pending.approvalId,
+      expectedRunVersion: snapshot.version,
+      reason: 'The Run step budget was exhausted before this approved mutation could execute.',
+      errorCode: 'RUN_STEP_BUDGET_EXHAUSTED',
+      details: { phase: 'budget', resourceKeys: pending.inspection.resourceKeys },
+      now: this.clock.nowUnixSeconds(),
+    });
+    yield { type: 'durable', runId: snapshot.id, cursor: superseded.eventCursor };
+  }
+
+  private async *preparePendingMutation(
+    snapshot: RunSnapshot,
+    pending: PendingRootTool,
+    signal: AbortSignal,
+  ): AsyncGenerator<BackendSignal, boolean> {
+    if (pending.status !== 'proposed' || !pending.inspection.mutation) throw new Error('TOOL_STATE_CONFLICT');
+    const scope = { userId: snapshot.userId, appId: snapshot.appId };
+    let currentRun: RunView = snapshot;
+    let inspection: ToolInspection;
+    let decision;
+    try {
+      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshInspection(
+        this.toolContext(currentRun, pending.runtimeId, pending.stepId, signal),
+        pending.inspection,
+      ));
+    } catch (error) {
+      yield* this.rejectPendingTool(snapshot, pending, this.toolCalls.failedProposal(error));
+      return false;
+    }
+    if (decision.action !== 'requireApproval' || !inspection.mutation) {
+      yield* this.rejectPendingTool(
+        snapshot,
+        pending,
+        this.toolCalls.failedProposal(new Error(decision.action === 'deny' ? decision.reason : 'TOOL_POLICY_INVALID')),
+      );
+      return false;
+    }
+    if (inspectionChanged(pending.inspection, inspection)) {
+      const refreshed = await this.stateCommit.refreshProposedTool({
+        scope,
+        runId: snapshot.id,
+        toolStepId: pending.stepId,
+        toolCallId: pending.toolCallId,
+        expectedRunVersion: currentRun.version,
+        inspection,
+        now: this.clock.nowUnixSeconds(),
+      });
+      currentRun = refreshed.run;
+      yield { type: 'durable', runId: snapshot.id, cursor: refreshed.eventCursor };
+    }
+
+    const confirmedMutation = await this.repository.confirmedMutation(scope, snapshot.id, inspection.operationHash);
+    if (confirmedMutation && confirmedMutation.toolCallId !== pending.toolCallId) {
+      const duplicate = rejectedToolResult(
+        'MUTATION_ALREADY_CONFIRMED',
+        'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
+      );
+      yield* this.rejectPendingTool(currentRun, { ...pending, inspection }, duplicate);
+      return false;
+    }
+
+    const approvalId = randomUUID();
+    const requested = await this.stateCommit.requestToolApproval({
+      scope,
+      runId: currentRun.id,
+      runtimeId: pending.runtimeId,
+      toolStepId: pending.stepId,
+      toolCallId: pending.toolCallId,
+      approvalId,
+      expectedRunVersion: currentRun.version,
+      inspection,
+      expiresAt: this.clock.nowUnixSeconds() + 600,
+      now: this.clock.nowUnixSeconds(),
+    });
+    yield { type: 'durable', runId: snapshot.id, cursor: requested.eventCursor };
+    if ((snapshot.definition.approvalMode ?? 'ask') !== 'full_access') {
+      yield { type: 'settled', run: requested.run };
+      return true;
+    }
+
+    const expectedApprovalVersion = 1;
+    const idempotencyKey = randomUUID();
+    const resolved = await this.stateCommit.resolveToolApproval({
+      scope,
+      runId: requested.run.id,
+      approvalId,
+      decision: 'approved',
+      operationHash: inspection.operationHash,
+      expectedApprovalVersion,
+      expectedRunVersion: requested.run.version,
+      expectedPolicyRevision: inspection.policyRevision,
+      expectedInputRevision: inspection.inputRevision,
+      decidedByUserId: scope.userId,
+      resolutionSource: 'full_access',
+      idempotencyKey,
+      requestHash: requestHash(1, {
+        approvalId,
+        runId: requested.run.id,
+        decision: 'approved',
+        operationHash: inspection.operationHash,
+        expectedVersion: expectedApprovalVersion,
+      }),
+      now: this.clock.nowUnixSeconds(),
+    });
+    logger.info(
+      {
+        runId: snapshot.id,
+        toolCallId: pending.toolCallId,
+        toolName: inspection.toolName,
+        approvalId,
+      },
+      'Agent batch mutation auto-approved by full access mode',
+    );
+    yield { type: 'durable', runId: snapshot.id, cursor: resolved.eventCursor };
+    return false;
+  }
+
+  private async *executePendingReadWave(
+    snapshot: RunSnapshot,
+    wave: readonly PendingRootTool[],
+    signal: AbortSignal,
+  ): AsyncGenerator<BackendSignal, void> {
+    if (wave.length === 0) return;
+    const scope = { userId: snapshot.userId, appId: snapshot.appId };
+    const availability = { environment: snapshot.definition.environment ?? null };
+    let currentRun: RunView = snapshot;
+    const prepared: Array<{ pending: PendingRootTool; inspection: ToolInspection }> = [];
+    const resourceKeys = new Set<string>();
+
+    for (const pending of wave) {
+      if (pending.status !== 'proposed' || pending.inspection.mutation) break;
+      let inspection: ToolInspection;
+      let decision;
+      try {
+        ({ inspection, policyDecision: decision } = await this.toolCalls.refreshInspection(
+          this.toolContext(currentRun, pending.runtimeId, pending.stepId, signal),
+          pending.inspection,
+        ));
+      } catch (error) {
+        if (prepared.length > 0) break;
+        yield* this.rejectPendingTool(currentRun, pending, this.toolCalls.failedProposal(error));
+        return;
+      }
+      if (decision.action !== 'allow' || inspection.mutation || !['read', 'control'].includes(inspection.risk)) {
+        if (prepared.length > 0) break;
+        yield* this.rejectPendingTool(
+          currentRun,
+          pending,
+          this.toolCalls.failedProposal(
+            new Error(decision.action === 'deny' ? decision.reason : 'TOOL_POLICY_INVALID'),
+          ),
+        );
+        return;
+      }
+      if (inspectionChanged(pending.inspection, inspection)) {
+        const refreshed = await this.stateCommit.refreshProposedTool({
+          scope,
+          runId: snapshot.id,
+          toolStepId: pending.stepId,
+          toolCallId: pending.toolCallId,
+          expectedRunVersion: currentRun.version,
+          inspection,
+          now: this.clock.nowUnixSeconds(),
+        });
+        currentRun = refreshed.run;
+        yield { type: 'durable', runId: snapshot.id, cursor: refreshed.eventCursor };
+      }
+      if (prepared.length > 0) {
+        if (
+          inspection.risk !== 'read' ||
+          !this.toolCalls.parallelSafe(scope, inspection.toolName, availability) ||
+          inspection.resourceKeys.some((key) => resourceKeys.has(key))
+        ) {
+          break;
+        }
+      }
+      prepared.push({ pending, inspection });
+      for (const key of inspection.resourceKeys) resourceKeys.add(key);
+      if (inspection.risk === 'control') break;
+    }
+    if (prepared.length === 0) return;
+
+    const begun = await this.stateCommit.beginReadToolBatch({
+      scope,
+      runId: currentRun.id,
+      runtimeId: prepared[0]!.pending.runtimeId,
+      expectedRunVersion: currentRun.version,
+      items: prepared.map(({ pending }) => ({ toolStepId: pending.stepId, toolCallId: pending.toolCallId })),
+      now: this.clock.nowUnixSeconds(),
+    });
+    yield { type: 'durable', runId: snapshot.id, cursor: begun.eventCursor };
+
+    const executions = await Promise.all(
+      prepared.map(async ({ pending, inspection }) => {
+        const readLeaseTtlSeconds = Math.min(300, Math.max(30, begun.run.budget.toolTimeoutSeconds + 15));
+        let lease: Awaited<ReturnType<ToolCallRunner['acquireRead']>> | null = null;
+        let result: ToolResult;
+        try {
+          lease = await this.toolCalls.acquireRead(
+            this.toolContext(begun.run, pending.runtimeId, pending.stepId, signal),
+            inspection,
+            readLeaseTtlSeconds,
+          );
+          result = await this.toolCalls.executeRead(
+            lease,
+            this.toolContext(begun.run, pending.runtimeId, pending.stepId, lease.signal),
+            inspection,
+          );
+        } catch (error) {
+          result = this.toolCalls.failedRead(error);
+        } finally {
+          if (lease) await this.toolCalls.releaseRead(lease);
+        }
+        logger.info(
+          {
+            runId: snapshot.id,
+            threadId: snapshot.threadId,
+            toolCallId: pending.toolCallId,
+            toolName: inspection.toolName,
+            ok: result.ok,
+            outcome: result.outcome,
+            errorCode: result.errorCode ?? null,
+          },
+          'Agent batch read/control tool execution completed',
+        );
+        return { pending, inspection, result };
+      }),
+    );
+
+    const settled = await this.stateCommit.settleReadToolBatch({
+      scope,
+      runId: begun.run.id,
+      runtimeId: prepared[0]!.pending.runtimeId,
+      expectedRunVersion: begun.run.version,
+      items: executions.map(({ pending, result }) => ({
+        toolStepId: pending.stepId,
+        toolCallId: pending.toolCallId,
+        toolResultEntryId: randomUUID(),
+        providerCallId: pending.providerCallId,
+        result,
+      })),
+      now: this.clock.nowUnixSeconds(),
+    });
+    yield { type: 'durable', runId: snapshot.id, cursor: settled.eventCursor };
+    if (['cancelled', 'interrupted', 'failed'].includes(settled.run.status)) {
+      yield { type: 'settled', run: settled.run };
+      return;
+    }
+
+    const mailboxFailure = executions.find(
+      ({ inspection, result }) =>
+        inspection.toolName === 'send_agent_message' &&
+        (result.errorCode === 'MAILBOX_BUDGET_EXCEEDED' || result.errorCode === 'MAILBOX_HARD_LIMIT_EXCEEDED'),
+    );
+    if (mailboxFailure) {
+      const mailboxError = mailboxFailure.result.errorCode!;
+      const paused = await this.stateCommit.pauseRuntimeForBudget({
+        scope,
+        runId: settled.run.id,
+        runtimeId: prepared[0]!.pending.runtimeId,
+        expectedRunVersion: settled.run.version,
+        budgetReason: {
+          scope: 'mailbox',
+          canIncrease: mailboxError === 'MAILBOX_BUDGET_EXCEEDED',
+          errorCode: mailboxError,
+          messages: settled.run.usage.subagentMessages,
+          bytes: settled.run.usage.subagentMessageBytes,
+          maxMessages: settled.run.budget.maxSubagentMessages,
+          maxBytes: settled.run.budget.maxSubagentMessageBytes,
+        },
+        now: this.clock.nowUnixSeconds(),
+      });
+      yield { type: 'durable', runId: snapshot.id, cursor: paused.eventCursor };
+      yield { type: 'settled', run: paused.run };
+      return;
+    }
+
+    const blockedJoin = executions.find(
+      ({ inspection, result }) =>
+        inspection.toolName === 'join_subagents' &&
+        result.ok &&
+        result.data &&
+        typeof result.data === 'object' &&
+        !Array.isArray(result.data) &&
+        result.data.ready === false,
+    );
+    if (blockedJoin) {
+      const parked = await this.stateCommit.parkRuntime({
+        scope,
+        runId: settled.run.id,
+        runtimeId: prepared[0]!.pending.runtimeId,
+        expectedRunVersion: settled.run.version,
+        reason: 'waiting_subagents',
+        now: this.clock.nowUnixSeconds(),
+      });
+      yield { type: 'durable', runId: snapshot.id, cursor: parked.eventCursor };
+      yield { type: 'settled', run: parked.run };
+    }
+  }
+
   private async *executePendingMutation(
     snapshot: RunSnapshot,
-    pending: PendingMutationTool,
+    pending: PendingRootTool,
     signal: AbortSignal,
   ): AsyncIterable<BackendSignal> {
+    if (pending.status !== 'ready' || !pending.approvalId || pending.approvalVersion === null) {
+      throw new Error('APPROVAL_STATE_INVALID');
+    }
+    const approvalId = pending.approvalId;
     const scope = { userId: snapshot.userId, appId: snapshot.appId };
     const context = this.toolContext(snapshot, pending.runtimeId, pending.stepId, signal);
     let inspection;
     let decision;
     try {
-      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshApprovedMutation(
-        context,
-        pending.inspection,
-      ));
+      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshInspection(context, pending.inspection));
     } catch (error) {
       const code = errorCode(error);
       const detail = executionErrorDetail(error, code);
@@ -778,7 +1083,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         runId: snapshot.id,
         toolStepId: pending.stepId,
         toolCallId: pending.toolCallId,
-        approvalId: pending.approvalId,
+        approvalId,
         expectedRunVersion: snapshot.version,
         reason: `Approved operation could not be re-inspected safely: ${detail}${detail === code ? '' : ` [${code}]`}`,
         errorCode: code,
@@ -799,7 +1104,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         runId: snapshot.id,
         toolStepId: pending.stepId,
         toolCallId: pending.toolCallId,
-        approvalId: pending.approvalId,
+        approvalId,
         expectedRunVersion: snapshot.version,
         reason:
           'The target, preconditions, input, or policy changed after approval; the approved mutation was not executed.',
@@ -824,7 +1129,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         runId: snapshot.id,
         toolStepId: pending.stepId,
         toolCallId: pending.toolCallId,
-        approvalId: pending.approvalId,
+        approvalId,
         expectedRunVersion: snapshot.version,
         reason:
           'An identical mutation already completed successfully earlier in this Run. This duplicate proposal was not executed again.',
@@ -860,7 +1165,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         runId: snapshot.id,
         toolStepId: pending.stepId,
         toolCallId: pending.toolCallId,
-        approvalId: pending.approvalId,
+        approvalId,
         expectedRunVersion: snapshot.version,
         reason: mutationLeaseFailureReason(error, code, inspection.resourceKeys),
         errorCode: code,
@@ -877,7 +1182,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         runtimeId: pending.runtimeId,
         toolStepId: pending.stepId,
         toolCallId: pending.toolCallId,
-        approvalId: pending.approvalId,
+        approvalId,
         expectedRunVersion: snapshot.version,
         operationHash: inspection.operationHash,
         expectedPolicyRevision: inspection.policyRevision,

@@ -2,11 +2,15 @@ import { randomUUID } from 'node:crypto';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
 import type {
   BeginMutationToolCommand,
+  BeginReadToolBatchCommand,
   BeginReadToolCommand,
-  CommitToolProposalCommand,
-  CommitToolProposalResult,
+  CommitToolProposalBatchCommand,
+  CommitToolProposalBatchResult,
   DurableEventInput,
+  RefreshProposedToolCommand,
+  RejectProposedToolCommand,
   SettleMutationToolCommand,
+  SettleReadToolBatchCommand,
   SettleReadToolCommand,
   StateCommitResult,
   SupersedeMutationToolCommand,
@@ -330,6 +334,69 @@ export const beginReadToolTransition = async (
   return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
 };
 
+export const beginReadToolBatchTransition = async (
+  tx: RelationalDatabase,
+  command: BeginReadToolBatchCommand,
+): Promise<StateCommitResult> => {
+  const row = await tx.queryOne<RunRow>(
+    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+    [command.runId, command.scope.userId, command.scope.appId],
+  );
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.version !== command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
+  if (command.items.length < 1 || command.items.length > 64) throw new Error('VALIDATION_FAILED');
+  if (
+    new Set(command.items.map((item) => item.toolCallId)).size !== command.items.length ||
+    new Set(command.items.map((item) => item.toolStepId)).size !== command.items.length
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+
+  for (const item of command.items) {
+    const state = await tx.queryOne<{ step_status: string; tool_status: string; risk: string; version: number }>(
+      `SELECT s.status AS step_status, t.status AS tool_status, t.risk, t.version
+       FROM agent_steps s
+       JOIN agent_tool_calls t ON t.step_id = s.id AND t.run_id = s.run_id
+       WHERE s.id = ? AND s.run_id = ? AND s.agent_runtime_id = ? AND t.id = ?`,
+      [item.toolStepId, command.runId, command.runtimeId, item.toolCallId],
+    );
+    if (
+      !state ||
+      state.step_status !== 'created' ||
+      state.tool_status !== 'proposed' ||
+      (state.risk !== 'read' && state.risk !== 'control')
+    ) {
+      throw new Error('TOOL_STATE_CONFLICT');
+    }
+    const stepChanged = await tx.execute(
+      `UPDATE agent_steps SET status = 'running'
+       WHERE id = ? AND run_id = ? AND status = 'created'`,
+      [item.toolStepId, command.runId],
+    );
+    const toolChanged = await tx.execute(
+      `UPDATE agent_tool_calls SET status = 'running', started_at = ?, version = version + 1
+       WHERE id = ? AND run_id = ? AND status = 'proposed' AND version = ?`,
+      [command.now, item.toolCallId, command.runId, state.version],
+    );
+    if (stepChanged.changes !== 1 || toolChanged.changes !== 1) throw new Error('TOOL_STATE_CONFLICT');
+  }
+
+  const events: DurableEventInput[] = command.items.map((item, batchIndex) => ({
+    type: 'tool.started',
+    payload: {
+      toolCallId: item.toolCallId,
+      toolStepId: item.toolStepId,
+      batchIndex,
+      batchSize: command.items.length,
+    },
+  }));
+  const committedEvents = await appendEvents(tx, row, events, command.now);
+  const updatedRow = await patchRun(tx, row, {}, events.length, command.now);
+  const run = mapRunRow(updatedRow);
+  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+  return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
+};
+
 export const settleReadToolTransition = async (
   tx: RelationalDatabase,
   command: SettleReadToolCommand,
@@ -418,10 +485,224 @@ export const settleReadToolTransition = async (
   return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
 };
 
-export const commitToolProposalTransition = async (
+export const settleReadToolBatchTransition = async (
   tx: RelationalDatabase,
-  command: CommitToolProposalCommand,
-): Promise<CommitToolProposalResult> => {
+  command: SettleReadToolBatchCommand,
+): Promise<StateCommitResult> => {
+  const row = await tx.queryOne<RunRow>(
+    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+    [command.runId, command.scope.userId, command.scope.appId],
+  );
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.version < command.expectedRunVersion || !['running', 'cancelling'].includes(row.status)) {
+    throw new Error('STATE_CONFLICT');
+  }
+  if (command.items.length < 1 || command.items.length > 64) throw new Error('VALIDATION_FAILED');
+  if (
+    new Set(command.items.map((item) => item.toolCallId)).size !== command.items.length ||
+    new Set(command.items.map((item) => item.toolStepId)).size !== command.items.length ||
+    new Set(command.items.map((item) => item.providerCallId)).size !== command.items.length
+  ) {
+    throw new Error('VALIDATION_FAILED');
+  }
+
+  const ledgerAppends = [];
+  const events: DurableEventInput[] = [];
+  for (const [batchIndex, item] of command.items.entries()) {
+    const tool = await tx.queryOne<{ status: string; provider_call_id: string; version: number }>(
+      `SELECT status, provider_call_id, version FROM agent_tool_calls
+       WHERE id = ? AND run_id = ? AND step_id = ? AND agent_runtime_id = ?`,
+      [item.toolCallId, row.id, item.toolStepId, command.runtimeId],
+    );
+    if (!tool || tool.status !== 'running' || tool.provider_call_id !== item.providerCallId) {
+      throw new Error('TOOL_STATE_CONFLICT');
+    }
+    const safeResult = JSON.parse(JSON.stringify(item.result)) as JsonValue;
+    const toolStatus = item.result.ok ? 'succeeded' : 'failed';
+    const toolChanged = await tx.execute(
+      `UPDATE agent_tool_calls SET status = ?, result_json = ?, completed_at = ?, version = version + 1
+       WHERE id = ? AND run_id = ? AND status = 'running' AND version = ?`,
+      [toolStatus, JSON.stringify(safeResult), command.now, item.toolCallId, row.id, tool.version],
+    );
+    const stepChanged = await tx.execute(
+      `UPDATE agent_steps SET status = ?, completed_at = ?
+       WHERE id = ? AND run_id = ? AND status = 'running'`,
+      [item.result.ok ? 'completed' : 'failed', command.now, item.toolStepId, row.id],
+    );
+    if (toolChanged.changes !== 1 || stepChanged.changes !== 1) throw new Error('TOOL_STATE_CONFLICT');
+    ledgerAppends.push({
+      id: item.toolResultEntryId,
+      runId: row.id,
+      kind: 'tool_result' as const,
+      payload: { toolCallId: item.providerCallId, text: JSON.stringify(safeResult) },
+    });
+    events.push({
+      type: item.result.ok ? 'tool.completed' : 'tool.failed',
+      payload: {
+        toolCallId: item.toolCallId,
+        toolStepId: item.toolStepId,
+        ok: item.result.ok,
+        summary: item.result.summary,
+        truncated: item.result.truncated,
+        verification: item.result.verification.status,
+        batchIndex,
+        batchSize: command.items.length,
+      },
+    });
+  }
+
+  const ledgerCursor = await appendLedger(tx, row, ledgerAppends, command.now);
+  const cancelling = row.status === 'cancelling';
+  if (cancelling) {
+    events.push(
+      { type: 'run.cancelled', payload: { reason: 'cancel_requested_during_tool_batch' } },
+      { type: 'run.status_changed', payload: { from: 'cancelling', to: 'cancelled' } },
+    );
+  }
+  const committedEvents = await appendEvents(tx, row, events, command.now);
+  const mergedUsage = usageWithDelta(row, { steps: command.items.length });
+  const updatedRow = await patchRun(
+    tx,
+    row,
+    { usage: mergedUsage, ...(cancelling ? { status: 'cancelled', completedAt: command.now } : {}) },
+    events.length,
+    command.now,
+  );
+  if (cancelling) {
+    await tx.execute(
+      `UPDATE agent_runtimes SET status = 'stopped', updated_at = ?
+       WHERE run_id = ? AND status IN ('created','running','stopping')`,
+      [command.now, row.id],
+    );
+    if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, command.now);
+  }
+  const run = mapRunRow(updatedRow);
+  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+  return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
+};
+
+export const refreshProposedToolTransition = async (
+  tx: RelationalDatabase,
+  command: RefreshProposedToolCommand,
+): Promise<StateCommitResult> => {
+  const row = await tx.queryOne<RunRow>(
+    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+    [command.runId, command.scope.userId, command.scope.appId],
+  );
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.version < command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
+  if (row.input_revision !== command.inspection.inputRevision) throw new Error('INPUT_REVISION_CONFLICT');
+  const tool = await tx.queryOne<{ status: string; tool_name: string; tool_version: string; version: number }>(
+    `SELECT status, tool_name, tool_version, version FROM agent_tool_calls
+     WHERE id = ? AND run_id = ? AND step_id = ?`,
+    [command.toolCallId, row.id, command.toolStepId],
+  );
+  if (
+    !tool ||
+    tool.status !== 'proposed' ||
+    tool.tool_name !== command.inspection.toolName ||
+    tool.tool_version !== command.inspection.toolVersion
+  ) {
+    throw new Error('TOOL_STATE_CONFLICT');
+  }
+  const changed = await tx.execute(
+    `UPDATE agent_tool_calls
+     SET inspection_json = ?, operation_hash = ?, risk = ?, version = version + 1
+     WHERE id = ? AND run_id = ? AND status = 'proposed' AND version = ?`,
+    [
+      JSON.stringify(command.inspection),
+      command.inspection.operationHash,
+      command.inspection.risk,
+      command.toolCallId,
+      row.id,
+      tool.version,
+    ],
+  );
+  if (changed.changes !== 1) throw new Error('TOOL_STATE_CONFLICT');
+  const events: DurableEventInput[] = [
+    {
+      type: 'tool.reinspected',
+      payload: {
+        toolCallId: command.toolCallId,
+        toolStepId: command.toolStepId,
+        operationHash: command.inspection.operationHash,
+        risk: command.inspection.risk,
+      },
+    },
+  ];
+  const committedEvents = await appendEvents(tx, row, events, command.now);
+  const updatedRow = await patchRun(tx, row, {}, events.length, command.now);
+  const run = mapRunRow(updatedRow);
+  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+  return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
+};
+
+export const rejectProposedToolTransition = async (
+  tx: RelationalDatabase,
+  command: RejectProposedToolCommand,
+): Promise<StateCommitResult> => {
+  const row = await tx.queryOne<RunRow>(
+    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+    [command.runId, command.scope.userId, command.scope.appId],
+  );
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.version < command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
+  if (command.result.outcome !== 'confirmed' || command.result.ok) throw new Error('TOOL_RESULT_INVALID');
+  const tool = await tx.queryOne<{ status: string; provider_call_id: string; version: number }>(
+    `SELECT status, provider_call_id, version FROM agent_tool_calls
+     WHERE id = ? AND run_id = ? AND step_id = ?`,
+    [command.toolCallId, row.id, command.toolStepId],
+  );
+  if (!tool || tool.status !== 'proposed' || tool.provider_call_id !== command.providerCallId) {
+    throw new Error('TOOL_STATE_CONFLICT');
+  }
+  const safeResult = JSON.parse(JSON.stringify(command.result)) as JsonValue;
+  const toolChanged = await tx.execute(
+    `UPDATE agent_tool_calls SET status = 'failed', result_json = ?, completed_at = ?, version = version + 1
+     WHERE id = ? AND run_id = ? AND status = 'proposed' AND version = ?`,
+    [JSON.stringify(safeResult), command.now, command.toolCallId, row.id, tool.version],
+  );
+  const stepChanged = await tx.execute(
+    `UPDATE agent_steps SET status = 'failed', completed_at = ?
+     WHERE id = ? AND run_id = ? AND status = 'created'`,
+    [command.now, command.toolStepId, row.id],
+  );
+  if (toolChanged.changes !== 1 || stepChanged.changes !== 1) throw new Error('TOOL_STATE_CONFLICT');
+  const ledgerCursor = await appendLedger(
+    tx,
+    row,
+    [
+      {
+        id: randomUUID(),
+        runId: row.id,
+        kind: 'tool_result',
+        payload: { toolCallId: command.providerCallId, text: JSON.stringify(safeResult) },
+      },
+    ],
+    command.now,
+  );
+  const events: DurableEventInput[] = [
+    {
+      type: 'tool.failed',
+      payload: {
+        toolCallId: command.toolCallId,
+        toolStepId: command.toolStepId,
+        errorCode: command.result.errorCode ?? 'TOOL_REJECTED',
+        summary: command.result.summary,
+      },
+    },
+  ];
+  const committedEvents = await appendEvents(tx, row, events, command.now);
+  const updatedRow = await patchRun(tx, row, {}, events.length, command.now);
+  const run = mapRunRow(updatedRow);
+  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+  return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
+};
+
+export const commitToolProposalBatchTransition = async (
+  tx: RelationalDatabase,
+  command: CommitToolProposalBatchCommand,
+): Promise<CommitToolProposalBatchResult> => {
   const row = await tx.queryOne<RunRow>(
     `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
     [command.runId, command.scope.userId, command.scope.appId],
@@ -429,7 +710,16 @@ export const commitToolProposalTransition = async (
   if (!row) throw new Error('NOT_FOUND');
   if (row.version < command.expectedRunVersion) throw new Error('STATE_CONFLICT');
   if (row.status !== 'running') throw new Error('RUN_NOT_SETTLEABLE');
-  if (row.input_revision !== command.inspection.inputRevision) throw new Error('INPUT_REVISION_CONFLICT');
+  if (command.items.length < 1 || command.items.length > 64) throw new Error('VALIDATION_FAILED');
+  if (new Set(command.items.map((item) => item.providerCallId)).size !== command.items.length) {
+    throw new Error('MODEL_TOOL_CALL_INVALID');
+  }
+  if (new Set(command.items.map((item) => item.toolCallId)).size !== command.items.length) {
+    throw new Error('MODEL_TOOL_CALL_INVALID');
+  }
+  if (command.items.some((item) => item.inspection.inputRevision !== row.input_revision)) {
+    throw new Error('INPUT_REVISION_CONFLICT');
+  }
   const step = await tx.queryOne<{ status: string }>(
     'SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ?',
     [command.modelStepId, command.runId, command.runtimeId],
@@ -465,35 +755,55 @@ export const commitToolProposalTransition = async (
     'SELECT MAX(step_index) AS max_index FROM agent_steps WHERE run_id = ?',
     [command.runId],
   );
-  const toolStepId = randomUUID();
-  const toolStepIndex = (previous?.max_index ?? 0) + 1;
-  await tx.execute(
-    `INSERT INTO agent_steps
-      (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
-       input_refs_json, output_refs_json, created_at, completed_at)
-     VALUES (?, ?, ?, ?, 'tool', 'created', ?, '[]', '[]', ?, NULL)`,
-    [toolStepId, command.runId, command.runtimeId, toolStepIndex, row.input_revision, command.now],
-  );
-  await tx.execute(
-    `INSERT INTO agent_tool_calls
-      (id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
-       inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
-       created_at, started_at, completed_at, version)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'proposed', NULL, ?, NULL, NULL, 1)`,
-    [
-      command.toolCallId,
-      command.runId,
-      command.runtimeId,
-      toolStepId,
-      command.providerCallId,
-      command.toolName,
-      command.toolVersion,
-      JSON.stringify(command.inspection),
-      command.inspection.operationHash,
-      command.inspection.risk,
-      command.now,
-    ],
-  );
+  const resultItems: CommitToolProposalBatchResult['items'] = [];
+  const firstToolStepIndex = (previous?.max_index ?? 0) + 1;
+  for (const [index, item] of command.items.entries()) {
+    const toolStepId = randomUUID();
+    await tx.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES (?, ?, ?, ?, 'tool', ?, ?, '[]', '[]', ?, ?)`,
+      [
+        toolStepId,
+        command.runId,
+        command.runtimeId,
+        firstToolStepIndex + index,
+        'created',
+        row.input_revision,
+        command.now,
+        null,
+      ],
+    );
+    await tx.execute(
+      `INSERT INTO agent_tool_calls
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+         provider_call_id, tool_name, tool_version,
+         inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
+         created_at, started_at, completed_at, version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, NULL, ?, 1)`,
+      [
+        item.toolCallId,
+        command.runId,
+        command.runtimeId,
+        toolStepId,
+        command.modelStepId,
+        index,
+        command.items.length,
+        item.providerCallId,
+        item.toolName,
+        item.toolVersion,
+        JSON.stringify(item.inspection),
+        item.inspection.operationHash,
+        item.inspection.risk,
+        'proposed',
+        null,
+        command.now,
+        null,
+      ],
+    );
+    resultItems.push({ providerCallId: item.providerCallId, toolCallId: item.toolCallId, toolStepId });
+  }
 
   const ledgerCursor = await appendLedger(
     tx,
@@ -505,13 +815,11 @@ export const commitToolProposalTransition = async (
         kind: 'assistant_message',
         payload: {
           text: command.assistantText,
-          toolCalls: [
-            {
-              id: command.providerCallId,
-              name: command.toolName,
-              argumentsJson: command.argumentsJson,
-            },
-          ],
+          toolCalls: command.items.map((item) => ({
+            id: item.providerCallId,
+            name: item.toolName,
+            argumentsJson: item.argumentsJson,
+          })),
         },
       },
     ],
@@ -528,18 +836,23 @@ export const commitToolProposalTransition = async (
         outputTokens: command.outputTokens ?? null,
       },
     },
-    {
+  ];
+  for (const [index, item] of command.items.entries()) {
+    const resultItem = resultItems[index]!;
+    events.push({
       type: 'tool.proposed',
       payload: {
-        toolCallId: command.toolCallId,
-        providerCallId: command.providerCallId,
-        toolStepId,
-        toolName: command.toolName,
-        operationHash: command.inspection.operationHash,
-        risk: command.inspection.risk,
+        toolCallId: item.toolCallId,
+        providerCallId: item.providerCallId,
+        toolStepId: resultItem.toolStepId,
+        toolName: item.toolName,
+        operationHash: item.inspection.operationHash,
+        risk: item.inspection.risk,
+        batchIndex: index,
+        batchSize: command.items.length,
       },
-    },
-  ];
+    });
+  }
   const committedEvents = await appendEvents(tx, row, events, command.now);
   const mergedUsage = usageWithDelta(row, {
     inputTokens: command.inputTokens,
@@ -555,7 +868,6 @@ export const commitToolProposalTransition = async (
     eventCursor: run.eventCursor,
     ledgerCursor,
     committedEvents,
-    toolStepId,
-    toolCallId: command.toolCallId,
+    items: resultItems,
   };
 };

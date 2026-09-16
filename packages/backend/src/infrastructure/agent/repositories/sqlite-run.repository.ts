@@ -11,7 +11,7 @@ import type {
 import type {
   ConfirmedMutationTool,
   HostCursorReaderPort,
-  PendingMutationTool,
+  PendingRootTool,
   RunEventReaderPort,
   RunExecutionReaderPort,
   RunPage,
@@ -48,13 +48,14 @@ interface HostEventRow {
   occurred_at: number;
 }
 
-interface PendingMutationRow {
+interface PendingRootToolRow {
   tool_call_id: string;
   step_id: string;
   agent_runtime_id: string;
   provider_call_id: string;
-  approval_id: string;
-  approval_version: number;
+  status: 'proposed' | 'ready';
+  approval_id: string | null;
+  approval_version: number | null;
   inspection_json: string;
 }
 
@@ -295,29 +296,35 @@ export class SqliteRunRepository
     return row.id;
   }
 
-  async pendingMutation(scope: Scope, runId: string): Promise<PendingMutationTool | null> {
-    const row = await this.db.queryOne<PendingMutationRow>(
-      `SELECT t.id AS tool_call_id, t.step_id, t.agent_runtime_id, t.provider_call_id,
+  async pendingTools(scope: Scope, runId: string): Promise<PendingRootTool[]> {
+    const rows = await this.db.queryAll<PendingRootToolRow>(
+      `SELECT t.id AS tool_call_id, t.step_id, t.agent_runtime_id, t.provider_call_id, t.status,
               a.id AS approval_id, a.version AS approval_version, t.inspection_json
        FROM agent_tool_calls t
        JOIN agent_runs r ON r.id = t.run_id
-       JOIN agent_approvals a ON a.tool_call_id = t.id AND a.run_id = t.run_id
-       WHERE t.run_id = ? AND r.user_id = ? AND r.app_id = ?
-         AND t.status = 'ready' AND t.risk <> 'read'
+       JOIN agent_steps s ON s.id = t.step_id AND s.run_id = t.run_id
+       LEFT JOIN agent_approvals a ON a.tool_call_id = t.id AND a.run_id = t.run_id
          AND a.status = 'approved' AND a.consumed_at IS NULL
-       ORDER BY t.created_at, t.id LIMIT 1`,
+       WHERE t.run_id = ? AND r.user_id = ? AND r.app_id = ?
+         AND t.status IN ('proposed','ready')
+       ORDER BY s.step_index, t.created_at, t.id LIMIT 64`,
       [runId, scope.userId, scope.appId],
     );
-    if (!row) return null;
-    return {
-      toolCallId: row.tool_call_id,
-      stepId: row.step_id,
-      runtimeId: row.agent_runtime_id,
-      providerCallId: row.provider_call_id,
-      approvalId: row.approval_id,
-      approvalVersion: row.approval_version,
-      inspection: JSON.parse(row.inspection_json) as ToolInspection,
-    };
+    return rows.map((row) => {
+      if (row.status === 'ready' && (!row.approval_id || row.approval_version === null)) {
+        throw new Error('APPROVAL_STATE_INVALID');
+      }
+      return {
+        toolCallId: row.tool_call_id,
+        stepId: row.step_id,
+        runtimeId: row.agent_runtime_id,
+        providerCallId: row.provider_call_id,
+        status: row.status,
+        approvalId: row.approval_id,
+        approvalVersion: row.approval_version,
+        inspection: JSON.parse(row.inspection_json) as ToolInspection,
+      };
+    });
   }
 
   async confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null> {

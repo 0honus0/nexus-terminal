@@ -70,14 +70,32 @@ export class ToolCallRunner {
     return this.catalog.schemas(scope, availability);
   }
 
+  parallelSafe(scope: Scope, toolName: string, availability?: ToolAvailabilityContext): boolean {
+    try {
+      const tool = this.catalog.require(toolName, scope);
+      if (availability && tool.isAvailable && !tool.isAvailable(availability)) return false;
+      return tool.descriptor.parallelSafe === true;
+    } catch {
+      return false;
+    }
+  }
+
   async inspect(context: ToolContext, proposal: ToolProposal): Promise<InspectedToolCall> {
     const inspection = await this.executor.inspect(context, proposal);
     return { inspection, policyDecision: this.policy.decide(inspection, inspection.policyRevision) };
   }
 
-  async refreshApprovedMutation(context: ToolContext, previous: ToolInspection): Promise<InspectedToolCall> {
+  async refreshInspection(context: ToolContext, previous: ToolInspection): Promise<InspectedToolCall> {
     const inspection = await this.executor.refreshInspection(context, previous);
     return { inspection, policyDecision: this.policy.decide(inspection, inspection.policyRevision) };
+  }
+
+  failedProposal(error: unknown): ToolResult {
+    return buildFailedToolResult(error, {
+      fallbackCode: 'MODEL_TOOL_CALL_INVALID',
+      summaryPrefix: 'Tool call rejected before execution',
+      verificationSummary: 'The tool call was not executed.',
+    });
   }
 
   async acquireRead(context: ToolContext, inspection: ToolInspection, ttlSeconds: number): Promise<ReadToolLease> {

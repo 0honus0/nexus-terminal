@@ -83,6 +83,7 @@ export const createConnectionListTool = (machine: MachineCapabilityPort, cryptoH
       properties: {},
     },
     riskClass: 'read',
+    parallelSafe: true,
     capability: 'machine.diagnostics.read',
   },
   inspect: async (input, context, policyRevision) => {
@@ -153,6 +154,7 @@ export const createDiagnosticsTool = (machine: MachineCapabilityPort, cryptoHash
       required: ['connectionId'],
     },
     riskClass: 'read',
+    parallelSafe: true,
     capability: 'machine.diagnostics.read',
   },
   inspect: async (input, context, policyRevision) => {
@@ -225,6 +227,7 @@ export const createReadFileTool = (machine: MachineCapabilityPort, cryptoHash: C
       required: ['connectionId', 'path'],
     },
     riskClass: 'read',
+    parallelSafe: true,
     capability: 'machine.files.read',
   },
   inspect: async (input, context, policyRevision) => {

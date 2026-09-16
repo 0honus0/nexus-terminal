@@ -298,15 +298,30 @@ export const cancelRunTransition = async (
     accepted = true;
     const immediate = row.executing_runtime_count === 0 || (row.status !== 'running' && row.status !== 'cancelling');
     const nextStatus: RunStatus = immediate ? 'cancelled' : 'cancelling';
-    if (row.status === 'awaiting_approval') {
-      const approvalsChanged = await tx.execute(
-        `UPDATE agent_approvals SET status = 'superseded', decided_at = ?, version = version + 1
-         WHERE run_id = ? AND user_id = ? AND app_id = ? AND status = 'requested'`,
-        [command.now, row.id, row.user_id, row.app_id],
-      );
+    const unresolvedTools = await tx.queryAll<{
+      id: string;
+      step_id: string;
+      provider_call_id: string;
+      participant_id: string;
+    }>(
+      `SELECT t.id, t.step_id, t.provider_call_id, rt.participant_id
+       FROM agent_tool_calls t
+       JOIN agent_steps s ON s.id = t.step_id AND s.run_id = t.run_id
+       JOIN agent_runtimes rt ON rt.id = t.agent_runtime_id AND rt.run_id = t.run_id
+       WHERE t.run_id = ? AND t.status IN ('proposed','awaiting_approval','ready')
+       ORDER BY s.step_index, t.created_at, t.id`,
+      [row.id],
+    );
+    const approvalsChanged = await tx.execute(
+      `UPDATE agent_approvals SET status = 'superseded', decided_at = ?, version = version + 1
+       WHERE run_id = ? AND user_id = ? AND app_id = ?
+         AND (status = 'requested' OR (status = 'approved' AND consumed_at IS NULL))`,
+      [command.now, row.id, row.user_id, row.app_id],
+    );
+    if (unresolvedTools.length > 0) {
       await tx.execute(
         `UPDATE agent_tool_calls SET status = 'cancelled', completed_at = ?, version = version + 1
-         WHERE run_id = ? AND status = 'awaiting_approval'`,
+         WHERE run_id = ? AND status IN ('proposed','awaiting_approval','ready')`,
         [command.now, row.id],
       );
       await tx.execute(
@@ -314,15 +329,46 @@ export const cancelRunTransition = async (
          WHERE run_id = ? AND kind = 'tool' AND status = 'created'`,
         [command.now, row.id],
       );
-      if (approvalsChanged.changes > 0) {
-        await tx.execute(
-          `UPDATE agent_apps SET approval_count = MAX(0, approval_count - ?), updated_at = ?
-           WHERE user_id = ? AND app_id = ?`,
-          [approvalsChanged.changes, command.now, row.user_id, row.app_id],
-        );
-      }
+      const cancelledResult = JSON.stringify({
+        ok: false,
+        outcome: 'confirmed',
+        errorCode: 'RUN_CANCELLED_BEFORE_TOOL_EXECUTION',
+        summary: 'The Run was cancelled before this queued tool call could execute.',
+        artifactRefs: [],
+        truncated: false,
+        verification: {
+          status: 'failed',
+          summary: 'The tool call was not executed because the Run was cancelled.',
+          evidenceRefs: [],
+        },
+      });
+      const rootToolResults = unresolvedTools
+        .filter((tool) => tool.participant_id === 'root')
+        .map((tool) => ({
+          id: randomUUID(),
+          runId: row.id,
+          kind: 'tool_result' as const,
+          payload: { toolCallId: tool.provider_call_id, text: cancelledResult },
+        }));
+      if (rootToolResults.length > 0) await appendLedger(tx, row, rootToolResults, command.now);
     }
+    if (approvalsChanged.changes > 0) {
+      await tx.execute(
+        `UPDATE agent_apps SET approval_count = MAX(0, approval_count - ?), updated_at = ?
+         WHERE user_id = ? AND app_id = ?`,
+        [approvalsChanged.changes, command.now, row.user_id, row.app_id],
+      );
+    }
+    const toolCancellationEvents: DurableEventInput[] = unresolvedTools.map((tool) => ({
+      type: 'tool.cancelled',
+      payload: {
+        toolCallId: tool.id,
+        toolStepId: tool.step_id,
+        errorCode: 'RUN_CANCELLED_BEFORE_TOOL_EXECUTION',
+      },
+    }));
     const events: DurableEventInput[] = [
+      ...toolCancellationEvents,
       { type: 'run.cancel_requested', payload: { previousStatus: row.status } },
       ...(immediate ? [{ type: 'run.cancelled', payload: { reason: 'no_active_participants' } } as const] : []),
       { type: 'run.status_changed', payload: { from: row.status, to: nextStatus } },

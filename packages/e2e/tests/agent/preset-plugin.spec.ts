@@ -413,6 +413,151 @@ const installAndRunNexusAgent = async (
     expect(JSON.stringify(await ledger.json())).toContain('plan_update');
   });
 
+  await step('one model turn persists and completes every tool call before the next inference', async () => {
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
+      headers,
+      data: { title: 'Multi-tool batch E2E thread' },
+    });
+    expect(thread.status(), await thread.text()).toBe(201);
+    const batchThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: batchThreadId,
+        input: {
+          text: 'E2E_MULTI_TOOL_BATCH Execute both tool calls from the same assistant turn before sampling again.',
+          artifactRefs: [],
+        },
+        agentDefinitionId: 'agent.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'ask',
+        connectionIds: [],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const terminal = await waitForTerminalRun(request, ((await created.json()) as Envelope<RunView>).data.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${batchThreadId}/entries?limit=50`);
+    expect(ledger.ok(), await ledger.text()).toBeTruthy();
+    const serialized = JSON.stringify(await ledger.json());
+    expect(serialized).toContain('call_e2e_batch_first');
+    expect(serialized).toContain('call_e2e_batch_second');
+    expect(serialized).not.toContain('E2E_BATCH_PROTOCOL_INVALID');
+    expect(serialized).toContain('OK');
+  });
+
+  await step('parallel-safe read tools from one model turn settle as one complete batch', async () => {
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
+      headers,
+      data: { title: 'Parallel read batch E2E thread' },
+    });
+    expect(thread.status(), await thread.text()).toBe(201);
+    const batchThreadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId: batchThreadId,
+        input: {
+          text: `E2E_MULTI_TOOL_CONNECTION_ID=${connectionId} Execute both parallel-safe read calls from the same assistant turn before sampling again.`,
+          artifactRefs: [],
+        },
+        agentDefinitionId: 'agent.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'ask',
+        connectionIds: [connectionId],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const terminal = await waitForTerminalRun(request, ((await created.json()) as Envelope<RunView>).data.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+
+    const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${batchThreadId}/entries?limit=50`);
+    expect(ledger.ok(), await ledger.text()).toBeTruthy();
+    const serialized = JSON.stringify(await ledger.json());
+    expect(serialized).toContain('call_e2e_multi_list');
+    expect(serialized).toContain('call_e2e_multi_read');
+    expect(serialized).toContain('machine_list_connections');
+    expect(serialized).toContain('machine_read_file');
+    expect(serialized).toContain('nexus-e2e-seed');
+  });
+
+  await step('subagent history preserves one assistant turn with every tool call and result', async () => {
+    const settingsResponse = await request.get('/api/v1/apps/nexus.agent/subagent-settings');
+    expect(settingsResponse.ok(), await settingsResponse.text()).toBeTruthy();
+    const subagentSettings = (
+      (await settingsResponse.json()) as Envelope<{
+        version: number;
+        policy: { profiles: unknown[] };
+      }>
+    ).data;
+    const configured = await request.patch('/api/v1/apps/nexus.agent/subagent-settings', {
+      headers,
+      data: {
+        expectedVersion: subagentSettings.version,
+        profiles: [
+          {
+            id: 'e2e-worker',
+            role: 'Deterministic E2E child agent',
+            defaultModel: {
+              providerId: provider.id,
+              modelId: 'e2e-model',
+              configurationVersion: provider.version,
+            },
+            allowedModels: [
+              {
+                providerId: provider.id,
+                modelId: 'e2e-model',
+                configurationVersion: provider.version,
+              },
+            ],
+            capabilities: ['runs.execute'],
+            peerMessaging: 'parent-child',
+            maxTokens: 2048,
+            maxSteps: 8,
+            failureMode: 'isolate',
+          },
+        ],
+      },
+    });
+    expect(configured.ok(), await configured.text()).toBeTruthy();
+
+    const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
+      headers,
+      data: { title: 'Subagent multi-tool batch E2E thread' },
+    });
+    expect(thread.status(), await thread.text()).toBe(201);
+    const threadId = ((await thread.json()) as Envelope<{ id: string }>).data.id;
+    const created = await request.post('/api/v1/apps/nexus.agent/runs', {
+      headers: { ...headers, 'Idempotency-Key': randomUUID() },
+      data: {
+        schemaVersion: 1,
+        threadId,
+        input: {
+          text: 'E2E_SUBAGENT_MULTI_TOOL_BATCH Delegate the deterministic child and wait for its bounded result.',
+          artifactRefs: [],
+        },
+        agentDefinitionId: 'agent.default',
+        model: { providerId: provider.id, modelId: 'e2e-model', configurationVersion: provider.version },
+        approvalMode: 'ask',
+        connectionIds: [],
+      },
+    });
+    expect(created.status(), await created.text()).toBe(201);
+    const run = ((await created.json()) as Envelope<RunView>).data;
+    const terminal = await waitForTerminalRun(request, run.id);
+    expect(['completed', 'completed_unverified']).toContain(terminal.status);
+
+    const subagents = await request.get(`/api/v1/apps/nexus.agent/runs/${run.id}/subagents?limit=20`);
+    expect(subagents.ok(), await subagents.text()).toBeTruthy();
+    const subagentPayload = JSON.stringify(await subagents.json());
+    expect(subagentPayload).toContain('e2e-worker');
+    expect(subagentPayload).toContain('CHILD_BATCH_OK');
+    expect(subagentPayload).not.toContain('E2E_CHILD_BATCH_PROTOCOL_INVALID');
+  });
+
   await step('machine_read_file reads a selected SSH target through the bounded SFTP capability', async () => {
     const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
       headers,
