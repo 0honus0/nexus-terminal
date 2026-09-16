@@ -472,6 +472,33 @@ const definedMigrations: Migration[] = [
               ON agent_tool_calls(run_id, agent_runtime_id, source_model_step_id, batch_index);
         `,
   },
+  {
+    id: 24,
+    name: 'Enforce Agent tool-call source model step run lineage on upgraded databases',
+    sql: `
+            CREATE TRIGGER IF NOT EXISTS agent_tool_call_source_model_run_insert
+            BEFORE INSERT ON agent_tool_calls
+            WHEN NEW.source_model_step_id IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM agent_steps
+                WHERE id = NEW.source_model_step_id AND run_id = NEW.run_id
+              )
+            BEGIN
+              SELECT RAISE(ABORT, 'agent_tool_call_source_model_run_mismatch');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS agent_tool_call_source_model_run_update
+            BEFORE UPDATE OF source_model_step_id, run_id ON agent_tool_calls
+            WHEN NEW.source_model_step_id IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM agent_steps
+                WHERE id = NEW.source_model_step_id AND run_id = NEW.run_id
+              )
+            BEGIN
+              SELECT RAISE(ABORT, 'agent_tool_call_source_model_run_mismatch');
+            END;
+        `,
+  },
 ];
 
 /**

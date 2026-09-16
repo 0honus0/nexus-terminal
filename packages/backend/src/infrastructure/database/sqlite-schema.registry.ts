@@ -5,7 +5,7 @@ export interface SqliteTableDefinition {
   sql: string;
 }
 
-/** Current base schema. Released/main history uses sqlite-migrations; dev-only Agent schema changes are rebuilt instead of carrying dev→dev migrations. */
+/** Current base schema. Released/main history, including Agent schema changes, evolves through sqlite-migrations. */
 export const sqliteTableDefinitions: readonly SqliteTableDefinition[] = [
   { name: 'settings', sql: schema.createSettingsTableSQL },
   { name: 'settings_migrations', sql: schema.createSettingsMigrationsTableSQL },

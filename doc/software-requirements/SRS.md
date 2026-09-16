@@ -6,7 +6,7 @@
 
 ## 1. 文档目的
 
-本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。v1.5～v1.7 收紧 Workspace/File Manager/Preview/Remote Desktop 等 UI 与交互回归约束；v1.8 在 Owner 明确放行后把冻结的 Agent 设计同步为正式分期研发需求；v1.9 根据源码复核更新 Agent 实现基线；v1.10 进一步以当前 `dev` 为事实源，把全局悬浮 Agent Host、运行中输入打断、Workspace Runtime/Host Runner、ACP/Browser/Workspace Terminal live execution、插件 AgentDefinition、Runner cleanup/journal 安全语义写回正式需求，并把 Agent 架构文档收口为 `doc/AGENT.md`；v1.11 将单用户 native Runner 的 Bearer 认证、显式协议版本、最小 Backend↔Runner wire contract、无效 Workspace limits/network 配置删除、Runner Plugin 假 ACL 移除与 dev Agent schema 不维护 dev→dev migration 兼容同步为正式需求；v1.12 明确 Plugin Frontend target 是完整 Custom App Surface，并把 App-scoped Agent SDK、isolated-origin SDK asset 与 MessagePort 边界写入正式架构。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
+本 SRS 基于当前仓库 Git 历史、规范化 FR/GREQ 追溯、工程约束与当前代码 owner 分析整理，以重构 PR #9 的最终文件/行为差异为基线，并持续纳入之后经回归验证确认的软件需求。v1.5～v1.7 收紧 Workspace/File Manager/Preview/Remote Desktop 等 UI 与交互回归约束；v1.8 在 Owner 明确放行后把冻结的 Agent 设计同步为正式分期研发需求；v1.9 根据源码复核更新 Agent 实现基线；v1.10 以当时 `dev` 分支的已验证实现为事实源，把全局悬浮 Agent Host、运行中输入打断、Workspace Runtime/Host Runner、ACP/Browser/Workspace Terminal live execution、插件 AgentDefinition、Runner cleanup/journal 安全语义写回正式需求，并把 Agent 架构文档收口为 `doc/AGENT.md`；v1.11 记录当时单用户 native Runner 的 Bearer 认证、显式协议版本、最小 Backend↔Runner wire contract、无效 Workspace limits/network 配置删除、Runner Plugin 假 ACL 移除，以及 Agent 尚未进入 `main` 阶段不维护 dev→dev migration 兼容的历史决策；v1.12 明确 Plugin Frontend target 是完整 Custom App Surface，并把 App-scoped Agent SDK、isolated-origin SDK asset 与 MessagePort 边界写入正式架构。规范性需求按“模块 → 功能 → 详细需求 → 特殊设计 / 适用工程约束”组织；历史证据通过 FR/GREQ 与 Git 索引追溯，不在主需求表重复堆叠。
 
 ## 2. 需求解释规则
 

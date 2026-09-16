@@ -2,7 +2,7 @@
 
 > 本文件只保留**尚未闭环、可执行、可验证**的问题。已修复问题、一次性开发环境交接、历史 UI 草案和已经被现行架构/SRS 取代的设计不在这里长期归档；需要追溯时以 Git 历史为准。
 >
-> 本轮审计基线：`origin/archive/main-2026-09-07..main`。该范围共 377 个提交、1574 个变更条目。审计同时使用完整 diff 文件清单、Backend/Frontend 依赖图扫描、构建/typecheck、workspace/package 边界审核、Agent 代码反模式扫描，并对最近 Agent merge/fix 提交与高风险 runtime/provider/persistence/runner 文件做人工复核。
+> 本轮审计以 `origin/archive/main-2026-09-07` 为历史起点；审计启动时到 `main` 的范围为 377 个提交、1574 个变更条目。后续审计修复提交本身不计入这个启动快照。审计同时使用完整 diff 文件清单、Backend/Frontend 依赖图扫描、构建/typecheck、workspace/package 边界审核、Agent 代码反模式扫描，并对 Agent interface/runtime/provider/persistence/runner/frontend/E2E 高风险 owner 做逐批人工复核。
 
 ## 当前架构健康结论
 

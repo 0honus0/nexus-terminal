@@ -58,7 +58,7 @@ pnpm run test:e2e:list
 pnpm --filter @nexus-terminal/e2e run test:docs
 ```
 
-GitHub Actions remote runners provide the canonical complete E2E evidence with the pinned Chromium/runtime dependencies. Local commands remain useful for listing tests, refreshing the seed, running one spec or one focused group, and reproducing failures; local success is not the project-wide release signal. The project-wide requirement is recorded in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001).
+GitHub Actions remote runners provide the canonical complete E2E evidence with the pinned Chromium/runtime dependencies. Local commands remain useful for listing tests, refreshing the seed, running one spec or one focused group, and reproducing failures; local success is not the project-wide release signal. The project-wide requirement is recorded in [Engineering Constraints](../software-requirements/engineering-constraints.md#ec-e2e-001). Automated dependency updates explicitly dispatch this same workflow on their update branch after the PR is created or refreshed; they do not embed a second Playwright/ingress suite in the updater workflow.
 
 ## Parallel groups
 

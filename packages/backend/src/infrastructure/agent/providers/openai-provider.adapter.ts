@@ -221,7 +221,6 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
               maxOutputTokens: request.maxOutputTokens,
               providerOptions: {
                 openai: {
-                  ...(request.tools?.length ? { parallelToolCalls: false } : {}),
                   ...(provider.protocol === 'responses' ? { store: false } : {}),
                   ...(request.reasoningEffort === undefined ? {} : { reasoningEffort: request.reasoningEffort }),
                 },

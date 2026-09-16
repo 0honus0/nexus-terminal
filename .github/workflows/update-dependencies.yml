@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 
@@ -119,4 +120,14 @@ jobs:
             --base "$BASE_BRANCH" \
             --head "$UPDATE_BRANCH" \
             --title "chore(deps): update Nexus dependencies" \
-            --body $'Automated dependency refresh for the Nexus pnpm workspace.\n\nBefore this PR is created or updated, this workflow verifies a frozen install, formatting, production builds, and production dependency audit. The canonical E2E workflow is triggered by the pushed dependency branch/PR and owns the complete grouped browser/API regression plus required Docker smoke. Major-version upgrades remain constrained by the workspace dependency ranges.'
+            --body $'Automated dependency refresh for the Nexus pnpm workspace.\n\nBefore this PR is created or updated, this workflow verifies a frozen install, formatting, production builds, and production dependency audit. This updater then explicitly dispatches the canonical E2E workflow on the dependency branch, which owns the complete grouped browser/API regression plus required Docker smoke. Major-version upgrades remain constrained by the workspace dependency ranges.'
+
+      - name: Dispatch canonical E2E
+        if: steps.changes.outputs.changed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh workflow run e2e.yml --ref "$UPDATE_BRANCH"
+          echo "Dispatched canonical E2E for $UPDATE_BRANCH." >> "$GITHUB_STEP_SUMMARY"

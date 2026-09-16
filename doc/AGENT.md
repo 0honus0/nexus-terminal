@@ -461,7 +461,7 @@ inspect
 
 Read tool 也必须经过 scope/capability/network boundary，只是风险链更轻。
 
-模型单次 step 可以提出有界的 multi-tool batch。整批 proposal 必须先完成 inspection 并写入 durable lineage；可恢复的单项拒绝也必须持久化，不能因同批其他 Tool 合法而丢失。执行阶段只有 `read`、明确 `parallelSafe` 且 `resourceKeys` 不冲突的 Tool 可以小批并行；`control` 保持边界顺序，有副作用 Tool 继续遵守 approval、lease/fence、verify/reconcile 并按安全边界推进。Provider wire 当前仍发送 `parallel_tool_calls=false`；它只是上游生成提示，不代表 Runtime 只能处理一个 Tool proposal。
+模型单次 step 可以提出有界的 multi-tool batch。整批 proposal 必须先完成 inspection 并写入 durable lineage；可恢复的单项拒绝也必须持久化，不能因同批其他 Tool 合法而丢失。执行阶段只有 `read`、明确 `parallelSafe` 且 `resourceKeys` 不冲突的 Tool 可以小批并行；`control` 保持边界顺序，有副作用 Tool 继续遵守 approval、lease/fence、verify/reconcile 并按安全边界推进。Provider transport 不再强制关闭 upstream parallel tool proposals；上游可以返回一个或多个 Tool call，Nexus Runtime 仍以 durable batch、risk、resource conflict、approval 与 verify/reconcile 作为唯一执行权威。
 
 ## 11. Artifact、Memory 与文件交换
 
@@ -841,7 +841,7 @@ Agent 复用 Platform capability，不复用 Workspace runtime transport owner�
 - Root dispatcher process-local；
 - Subagent work durable SQLite claim queue。
 
-Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #23（Thread title ownership、Tool risk enum、durable multi-tool batch lineage）。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
+Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #24（Thread title ownership、Tool risk enum、durable multi-tool batch lineage，以及升级库的 source-model-step same-run 约束补强）。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
 
 如果未来进入多 Backend 实例，不允许只把 Root queue 换成 Redis 就宣称支持分布式。必须同时设计：
 
@@ -886,7 +886,7 @@ CI 保持最小化，只把能够直接证明仓库可交付的通用检查当�
 - 按 group 运行的真实产品 E2E；
 - Docker/Runner 打包相关变更，以及 `main`、定时或手动全量运行时执行 deployment smoke；
 - release 发布前仍执行 production dependency audit 与 Release gate。
-- `Update dependencies` workflow 只负责 workspace 依赖更新、frozen install、格式、production build/audit 与创建更新 PR；依赖分支/PR 触发同一 canonical E2E workflow，不在 updater 内再维护第二套 Chromium/ingress/full-E2E 流程。
+- `Update dependencies` workflow 只负责 workspace 依赖更新、frozen install、格式、production build/audit 与创建/更新 PR；由于 `GITHUB_TOKEN` push 不会递归触发 workflow，updater 在更新分支后显式 `workflow_dispatch` 同一 canonical E2E workflow，不在 updater 内再维护第二套 Chromium/ingress/full-E2E 流程。
 
 不要为 Agent 的每条内部约束继续增加一次性 CI checker。已删除的 package-management、E2E-only test-policy、Runner prerequisite 独立 gate 不再恢复；这些要求作为本文件/工程约束中的 review invariant，由正常 build、真实 E2E 与 Docker smoke 证明最终行为。新增专用 gate 只有在通用 build/E2E 无法观察到一个高风险不变量、并且确有持续回归证据时才考虑。
 
