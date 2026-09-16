@@ -781,7 +781,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     let inspection: ToolInspection;
     let decision;
     try {
-      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshInspection(
+      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshMutationInspection(
         this.toolContext(currentRun, pending.runtimeId, pending.stepId, signal),
         pending.inspection,
       ));
@@ -891,18 +891,8 @@ export class NativeAgentBackend implements AgentBackendPort {
 
     for (const pending of wave) {
       if (pending.status !== 'proposed' || pending.inspection.mutation) break;
-      let inspection: ToolInspection;
-      let decision;
-      try {
-        ({ inspection, policyDecision: decision } = await this.toolCalls.refreshInspection(
-          this.toolContext(currentRun, pending.runtimeId, pending.stepId, signal),
-          pending.inspection,
-        ));
-      } catch (error) {
-        if (prepared.length > 0) break;
-        yield* this.rejectPendingTool(currentRun, pending, this.toolCalls.failedProposal(error));
-        return;
-      }
+      const inspection = pending.inspection;
+      const decision = this.toolCalls.decision(inspection);
       if (decision.action !== 'allow' || inspection.mutation || !['read', 'control'].includes(inspection.risk)) {
         if (prepared.length > 0) break;
         yield* this.rejectPendingTool(
@@ -913,19 +903,6 @@ export class NativeAgentBackend implements AgentBackendPort {
           ),
         );
         return;
-      }
-      if (inspectionChanged(pending.inspection, inspection)) {
-        const refreshed = await this.stateCommit.refreshProposedTool({
-          scope,
-          runId: snapshot.id,
-          toolStepId: pending.stepId,
-          toolCallId: pending.toolCallId,
-          expectedRunVersion: currentRun.version,
-          inspection,
-          now: this.clock.nowUnixSeconds(),
-        });
-        currentRun = refreshed.run;
-        yield { type: 'durable', runId: snapshot.id, cursor: refreshed.eventCursor };
       }
       if (prepared.length > 0) {
         if (
@@ -1074,7 +1051,10 @@ export class NativeAgentBackend implements AgentBackendPort {
     let inspection;
     let decision;
     try {
-      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshInspection(context, pending.inspection));
+      ({ inspection, policyDecision: decision } = await this.toolCalls.refreshMutationInspection(
+        context,
+        pending.inspection,
+      ));
     } catch (error) {
       const code = errorCode(error);
       const detail = executionErrorDetail(error, code);

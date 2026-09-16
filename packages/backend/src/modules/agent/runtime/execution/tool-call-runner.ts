@@ -85,7 +85,12 @@ export class ToolCallRunner {
     return { inspection, policyDecision: this.policy.decide(inspection, inspection.policyRevision) };
   }
 
-  async refreshInspection(context: ToolContext, previous: ToolInspection): Promise<InspectedToolCall> {
+  decision(inspection: ToolInspection): ToolPolicyDecision {
+    return this.policy.decide(inspection, inspection.policyRevision);
+  }
+
+  async refreshMutationInspection(context: ToolContext, previous: ToolInspection): Promise<InspectedToolCall> {
+    if (!previous.mutation) throw new Error('TOOL_POLICY_INVALID');
     const inspection = await this.executor.refreshInspection(context, previous);
     return { inspection, policyDecision: this.policy.decide(inspection, inspection.policyRevision) };
   }
