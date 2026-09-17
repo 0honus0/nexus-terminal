@@ -96,7 +96,7 @@
     return typeof value === 'string' && value ? value : '';
   });
   const friendlyFailureByCode: Readonly<Record<string, string>> = {
-    RESOURCE_QUARANTINED: '目标资源因先前修改结果未确认而处于隔离状态；请先核验现场并完成对账。',
+    RESOURCE_QUARANTINED: '目标资源因先前修改或资源锁状态仍需对账而处于隔离状态；请先核验现场并完成对账。',
     RECONCILIATION_REQUIRED: '先前修改仍需要对账，当前修改没有执行。',
     LEASE_CONFLICT: '目标资源正被另一个操作占用，请等待该操作完成或停止后重试。',
     LEASE_LOST: '执行期间资源锁已丢失，无法确认继续执行是否安全。',

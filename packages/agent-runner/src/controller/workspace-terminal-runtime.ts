@@ -32,6 +32,20 @@ interface TerminalControl {
   signal?: string;
 }
 
+const decodeTerminalControl = (value: unknown): TerminalControl => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('VALIDATION_FAILED');
+  const record = value as Record<string, unknown>;
+  if (record.type === 'close') return { type: 'close' };
+  if (record.type === 'resize') {
+    if (!Number.isSafeInteger(record.columns) || !Number.isSafeInteger(record.rows)) throw new Error('VALIDATION_FAILED');
+    return { type: 'resize', columns: Number(record.columns), rows: Number(record.rows) };
+  }
+  if (record.type === 'signal' && typeof record.signal === 'string' && record.signal.length <= 16) {
+    return { type: 'signal', signal: record.signal };
+  }
+  throw new Error('VALIDATION_FAILED');
+};
+
 const WRAPPER = `#!/bin/sh
 set -eu
 terminal_tty=$(tty)
@@ -348,7 +362,7 @@ export class WorkspaceTerminalRuntime {
         return;
       }
       try {
-        const message = JSON.parse(text) as TerminalControl;
+        const message = decodeTerminalControl(JSON.parse(text) as unknown);
         if (message.type === 'close') {
           active.close();
           return;

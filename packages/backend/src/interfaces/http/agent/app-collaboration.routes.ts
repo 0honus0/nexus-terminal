@@ -114,7 +114,6 @@ export const createAppCollaborationRouter = (dependencies: AppCollaborationRoute
         'objective',
         'constraints',
         'inputArtifactRefs',
-        'maxTokens',
         'maxSteps',
         'deadlineAt',
         'completionCriteria',

@@ -11,6 +11,7 @@ import type {
   StateCommitResult,
   SupersedeModelStepCommand,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
+import type { RunUsage } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import {
@@ -90,9 +91,21 @@ export const beginModelStepTransition = async (
     [command.runId],
   );
   const consumedInputSequence = latestInput?.sequence ?? row.consumed_input_sequence;
+  const currentUsage = JSON.parse(row.usage_json) as RunUsage;
+  const nextUsage: RunUsage = {
+    ...currentUsage,
+    context: {
+      inputTokens: command.estimatedInputTokens,
+      reservedOutputTokens: command.reservedOutputTokens,
+      contextWindowTokens: command.contextWindowTokens,
+      source: 'estimated',
+      updatedAt: command.now,
+    },
+  };
   const updated = await tx.execute(
     `UPDATE agent_runs SET
        status = 'running', goal_status = 'in_progress', started_at = COALESCE(started_at, ?),
+       usage_json = ?,
        active_execution_started_at = CASE WHEN executing_runtime_count = 0 THEN ? ELSE active_execution_started_at END,
        executing_runtime_count = executing_runtime_count + 1,
        consumed_input_sequence = MAX(consumed_input_sequence, ?),
@@ -100,6 +113,7 @@ export const beginModelStepTransition = async (
      WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
     [
       command.now,
+      JSON.stringify(nextUsage),
       command.now,
       consumedInputSequence,
       events.length,

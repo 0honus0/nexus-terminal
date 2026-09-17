@@ -9,12 +9,22 @@ export interface MutationLeaseGuardRequest {
   deadlineAt: number;
 }
 
+export type MutationLeaseFinalizationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason: 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION';
+      errorCode: string;
+      toolCallId: string;
+      resourceKeys: string[];
+    };
+
 export interface MutationLeaseGuardHandle {
   readonly signal: AbortSignal;
   stopRenewal(): Promise<unknown | null>;
   activate(): Promise<void>;
   quarantine(reason: string, evidence: JsonValue): Promise<void>;
-  confirm(): Promise<void>;
+  confirm(): Promise<MutationLeaseFinalizationResult>;
   releaseIfInactive(): Promise<void>;
 }
 

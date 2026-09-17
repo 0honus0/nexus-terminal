@@ -6,7 +6,6 @@ export interface AgentEnvelope<T> {
 export interface AgentHardLimits {
   maxContextTokens: number;
   maxOutputTokens: number;
-  maxRunTokens: number;
   maxRunSteps: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
@@ -35,7 +34,6 @@ export interface AgentSettingsDocument {
   budget: {
     maxContextTokens: number;
     maxOutputTokens: number;
-    maxRunTokens: number;
     maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;

@@ -13,6 +13,21 @@ interface InstallMarker {
   installedAt: number;
 }
 
+const decodeInstallMarker = (value: unknown): InstallMarker => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('WORKSPACE_TOOLCHAIN_MARKER_INVALID');
+  const record = value as Record<string, unknown>;
+  if (
+    record.schemaVersion !== 1 ||
+    typeof record.contentDigest !== 'string' ||
+    !/^sha256:[a-f0-9]{64}$/.test(record.contentDigest) ||
+    !Number.isSafeInteger(record.installedAt) ||
+    Number(record.installedAt) < 0
+  ) {
+    throw new Error('WORKSPACE_TOOLCHAIN_MARKER_INVALID');
+  }
+  return { schemaVersion: 1, contentDigest: record.contentDigest, installedAt: Number(record.installedAt) };
+};
+
 const markerName = '.nexus-install.json';
 const canonicalRoot = '/opt/nexus/packs';
 
@@ -87,7 +102,7 @@ export class ToolchainStore {
   installed(ref: ToolchainPackRef): boolean {
     const marker = path.join(this.path(ref), markerName);
     try {
-      const parsed = JSON.parse(fs.readFileSync(marker, 'utf8')) as Partial<InstallMarker>;
+      const parsed = decodeInstallMarker(JSON.parse(fs.readFileSync(marker, 'utf8')) as unknown);
       const rootMode = fs.statSync(this.path(ref)).mode & 0o777;
       return parsed.schemaVersion === 1 && parsed.contentDigest === ref.contentDigest && (rootMode & 0o200) === 0;
     } catch {

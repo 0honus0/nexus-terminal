@@ -15,9 +15,16 @@ export const NON_TERMINAL = new Set<RunStatus>([
   'running',
   'awaiting_approval',
   'awaiting_budget',
+  'awaiting_input',
   'cancelling',
 ]);
-export const COUNTED_LIVE = new Set<RunStatus>(['running', 'awaiting_approval', 'awaiting_budget', 'cancelling']);
+export const COUNTED_LIVE = new Set<RunStatus>([
+  'running',
+  'awaiting_approval',
+  'awaiting_budget',
+  'awaiting_input',
+  'cancelling',
+]);
 export const CREATED_QUEUE_LIMIT = 20;
 export const IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60;
 const MAX_EVENTS_PER_COMMIT = 64;
@@ -66,6 +73,7 @@ export const usageWithDelta = (
 ): RunUsage => {
   const current = JSON.parse(row.usage_json) as RunUsage;
   return {
+    ...current,
     inputTokens: current.inputTokens + (delta.inputTokens ?? 0),
     outputTokens: current.outputTokens + (delta.outputTokens ?? 0),
     cachedInputTokens: current.cachedInputTokens + (delta.cachedInputTokens ?? 0),

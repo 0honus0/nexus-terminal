@@ -12,7 +12,7 @@ export class SqliteHardLimitUsageAdapter implements HardLimitUsagePort {
     const runtimes = await this.db.queryOne<{ count: number }>(
       `SELECT COALESCE(SUM(executing_runtime_count), 0) AS count
        FROM agent_runs
-       WHERE user_id = ? AND status IN ('running','awaiting_approval','awaiting_budget','cancelling')`,
+       WHERE user_id = ? AND status IN ('running','awaiting_approval','awaiting_budget','awaiting_input','cancelling')`,
       [userId],
     );
     return {

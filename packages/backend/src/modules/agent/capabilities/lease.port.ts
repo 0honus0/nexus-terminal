@@ -1,5 +1,8 @@
 import type { JsonValue } from '../agent.types';
 
+// Port contract rule: expose durable mutations only when an active orchestration owner consumes them.
+// Dead mutation methods are removed rather than kept as alternate paths around the authoritative state transition.
+
 export type LeaseMode = 'read' | 'write';
 export type LeaseOwnerType = 'agent' | 'workspace' | 'system';
 
@@ -60,6 +63,4 @@ export interface LeasePort {
     evidence: JsonValue,
     toolCallId?: string,
   ): Promise<ResourceQuarantine[]>;
-  getQuarantine(resourceKey: string): Promise<ResourceQuarantine | null>;
-  resolveQuarantine(resourceKey: string, expectedVersion: number): Promise<void>;
 }

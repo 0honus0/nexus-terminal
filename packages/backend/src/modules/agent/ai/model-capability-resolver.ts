@@ -143,6 +143,13 @@ export const deriveCapabilityOverrides = (
   return overrides;
 };
 
+/**
+ * Persisted compatibility window for provider rows written before `capabilityOverrides` became
+ * the canonical models_json shape. New writes are normalized by ProviderService and must not
+ * emit the flat fields. Remove this fallback only after a database migration rewrites every
+ * supported persisted models_json row to capabilityOverrides and that migration is part of the
+ * minimum supported database version.
+ */
 const legacyOverrides = (model: PersistedProviderModelConfig): ModelCapabilityOverrides => {
   const overrides: ModelCapabilityOverrides = {};
   if (model.contextWindow !== undefined) overrides.contextWindow = model.contextWindow;

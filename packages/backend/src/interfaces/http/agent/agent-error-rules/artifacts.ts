@@ -22,6 +22,7 @@ export const artifactErrorRules: readonly AgentErrorRule[] = [
     code: 'ARTIFACT_UNAVAILABLE',
     message: 'Artifact payload is unavailable.',
   }),
+  onCodes(['ARTIFACT_NOT_READY'], rawCode(409, 'Artifact is not ready for this operation.')),
   onCodes(['ARTIFACT_UPLOAD_BUSY'], {
     status: 429,
     code: 'ARTIFACT_UPLOAD_BUSY',

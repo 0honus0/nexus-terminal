@@ -1,4 +1,4 @@
-import type { ClockPort } from '../../agent.types';
+import type { ClockPort, Scope } from '../../agent.types';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import type { AgentBackendPort } from '../execution/agent-backend.port';
 import { AgentEventHub } from '../events/event-hub';
@@ -9,11 +9,14 @@ interface QueuedRun {
   run: RunView;
 }
 
+const scopeKey = (scope: Scope): string => `${scope.userId}\u0000${scope.appId}`;
+
 export class AgentScheduler {
   private readonly queues = new Map<string, QueuedRun[]>();
   private readonly appOrder: string[] = [];
-  private readonly active = new Map<string, { controller: AbortController; done: Promise<void> }>();
+  private readonly active = new Map<string, { run: RunView; controller: AbortController; done: Promise<void> }>();
   private readonly activeByUser = new Map<number, number>();
+  private readonly pausedScopes = new Set<string>();
   private appCursor = 0;
   private accepting = true;
   private pumping = false;
@@ -29,7 +32,12 @@ export class AgentScheduler {
   ) {}
 
   enqueue(run: RunView): void {
-    if (!this.accepting || !['created', 'running'].includes(run.status)) return;
+    if (
+      !this.accepting ||
+      this.pausedScopes.has(scopeKey({ userId: run.userId, appId: run.appId })) ||
+      !['created', 'running'].includes(run.status)
+    )
+      return;
     const active = this.active.get(run.id);
     if (active) {
       void active.done.finally(() => this.enqueue(run));
@@ -94,6 +102,45 @@ export class AgentScheduler {
       new Promise<void>((resolve) => setTimeout(resolve, remainingMs)),
     ]);
     if (this.active.size > 0) throw new Error('APP_QUIESCE_TIMEOUT');
+  }
+
+  async quiesceScope(scope: Scope, deadlineUnixSeconds: number): Promise<void> {
+    this.pausedScopes.add(scopeKey(scope));
+    const queue = this.queues.get(scope.appId);
+    if (queue) {
+      const remaining = queue.filter((candidate) => candidate.run.userId !== scope.userId);
+      if (remaining.length > 0) this.queues.set(scope.appId, remaining);
+      else {
+        this.queues.delete(scope.appId);
+        const index = this.appOrder.indexOf(scope.appId);
+        if (index >= 0) this.appOrder.splice(index, 1);
+        if (this.appOrder.length === 0) this.appCursor = 0;
+        else this.appCursor %= this.appOrder.length;
+      }
+    }
+
+    const matching = [...this.active.values()].filter(
+      (active) => active.run.userId === scope.userId && active.run.appId === scope.appId,
+    );
+    for (const active of matching) active.controller.abort(new Error('AGENT_QUIESCE'));
+    const remainingMs = Math.max(0, deadlineUnixSeconds * 1000 - this.clock.nowUnixMilliseconds());
+    if (matching.length === 0 || remainingMs === 0) return;
+    await Promise.race([
+      Promise.allSettled(matching.map((active) => active.done)),
+      new Promise<void>((resolve) => setTimeout(resolve, remainingMs)),
+    ]);
+    if (
+      [...this.active.values()].some(
+        (active) => active.run.userId === scope.userId && active.run.appId === scope.appId,
+      )
+    ) {
+      throw new Error('APP_QUIESCE_TIMEOUT');
+    }
+  }
+
+  resumeScope(scope: Scope): void {
+    this.pausedScopes.delete(scopeKey(scope));
+    void this.pump();
   }
 
   resume(): void {
@@ -212,7 +259,7 @@ export class AgentScheduler {
       }
     })();
     this.incrementActiveUser(run.userId);
-    this.active.set(run.id, { controller, done });
+    this.active.set(run.id, { run, controller, done });
   }
 
   private incrementActiveUser(userId: number): void {

@@ -11,6 +11,7 @@ import type {
   ArtifactLibraryPage,
   ArtifactLibraryQuery,
   ArtifactLimitPolicyPort,
+  ArtifactMaintenancePort,
   ArtifactPort,
   ArtifactReadRange,
   ArtifactRef,
@@ -160,7 +161,7 @@ const artifactProtectionReason = async (
      JOIN agent_runs r ON r.id = l.run_id
      WHERE l.artifact_id = ? AND (
        l.role = 'checkpoint' OR
-       r.status IN ('created','running','awaiting_approval','awaiting_budget','cancelling')
+       r.status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling')
      )
      LIMIT 1`,
     [artifactId],
@@ -182,11 +183,12 @@ const artifactProtectionReason = async (
   return intentGrant ? 'intent_grant' : null;
 };
 
-export class LocalArtifactStore implements ArtifactPort {
+export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort {
   private readonly root: string;
   private readonly tmpRoot: string;
   private readonly objectsRoot: string;
   private readonly uploadTtlSeconds: number;
+  private readonly activeWrites = new Set<string>();
 
   constructor(
     private readonly db: RelationalDatabase,
@@ -284,6 +286,8 @@ export class LocalArtifactStore implements ArtifactPort {
       await this.releaseStaging(row);
       throw new Error('ARTIFACT_UPLOAD_EXPIRED');
     }
+    if (this.activeWrites.has(row.id)) throw new Error('ARTIFACT_UPLOAD_BUSY');
+    this.activeWrites.add(row.id);
 
     const tmpPath = path.join(this.tmpRoot, `${row.storage_key}.part`);
     const objectDirectory = path.join(this.objectsRoot, row.storage_key.slice(0, 2));
@@ -330,23 +334,7 @@ export class LocalArtifactStore implements ArtifactPort {
 
       const sha256 = hash.digest('hex');
       const readyAt = Math.floor(Date.now() / 1000);
-      await this.db.transaction(async (tx) => {
-        const changed = await tx.execute(
-          `UPDATE ai_artifacts SET
-             sha256 = ?, size_bytes = ?, reserved_bytes = 0, status = 'ready',
-             ready_at = ?, expires_at = NULL, version = version + 1
-           WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'staging' AND version = ?`,
-          [sha256, written, readyAt, row.id, row.user_id, row.app_id, row.version],
-        );
-        if (changed.changes !== 1) throw new Error('STATE_CONFLICT');
-        const quotaChanged = await tx.execute(
-          `UPDATE agent_quota_usage SET
-             reserved_bytes = reserved_bytes - ?, used_bytes = used_bytes + ?
-           WHERE scope_key = ? AND reserved_bytes >= ?`,
-          [row.reserved_bytes, written, quotaKey(row.user_id), row.reserved_bytes],
-        );
-        if (quotaChanged.changes !== 1) throw new Error('ARTIFACT_QUOTA_STATE_INVALID');
-      });
+      if (!(await this.finalizeReady(row, sha256, written, readyAt))) throw new Error('STATE_CONFLICT');
 
       const ready = await this.get(scope, artifactId);
       if (!ready) throw new Error('NOT_FOUND');
@@ -358,6 +346,8 @@ export class LocalArtifactStore implements ArtifactPort {
         await this.releaseStaging(row).catch(() => undefined);
       }
       throw error;
+    } finally {
+      this.activeWrites.delete(row.id);
     }
   }
 
@@ -429,23 +419,9 @@ export class LocalArtifactStore implements ArtifactPort {
     );
     if (marked.changes !== 1) throw new Error('STATE_CONFLICT');
 
-    if (row.status === 'ready') await fs.rm(this.objectPath(row.storage_key), { force: true });
-    await this.db.transaction(async (tx) => {
-      const deleted = await tx.execute(
-        `UPDATE ai_artifacts SET status = 'deleted', deleted_at = ?, retained = 0, version = version + 1
-         WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'deleting'`,
-        [now, artifactId, scope.userId, scope.appId],
-      );
-      if (deleted.changes !== 1) throw new Error('STATE_CONFLICT');
-      if (row.size_bytes > 0) {
-        const quotaChanged = await tx.execute(
-          `UPDATE agent_quota_usage SET used_bytes = used_bytes - ?
-           WHERE scope_key = ? AND used_bytes >= ?`,
-          [row.size_bytes, quotaKey(scope.userId), row.size_bytes],
-        );
-        if (quotaChanged.changes !== 1) throw new Error('ARTIFACT_QUOTA_STATE_INVALID');
-      }
-    });
+    if (!(await this.finalizeDeleting({ ...row, status: 'deleting', version: row.version + 1 }, now))) {
+      throw new Error('STATE_CONFLICT');
+    }
   }
 
   async listLibrary(userId: number, query: ArtifactLibraryQuery): Promise<ArtifactLibraryPage> {
@@ -507,7 +483,7 @@ export class LocalArtifactStore implements ArtifactPort {
              SELECT 1 FROM agent_artifact_links l JOIN agent_runs r ON r.id = l.run_id
              WHERE l.artifact_id = a.id AND (
                l.role = 'checkpoint' OR
-               r.status IN ('created','running','awaiting_approval','awaiting_budget','cancelling')
+               r.status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling')
              )
            ) OR EXISTS (
              SELECT 1 FROM agent_artifact_grants g
@@ -523,7 +499,7 @@ export class LocalArtifactStore implements ArtifactPort {
              SELECT 1 FROM agent_artifact_links l JOIN agent_runs r ON r.id = l.run_id
              WHERE l.artifact_id = a.id AND (
                l.role = 'checkpoint' OR
-               r.status IN ('created','running','awaiting_approval','awaiting_budget','cancelling')
+               r.status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling')
              )
            ) OR EXISTS (
              SELECT 1 FROM agent_artifact_grants g
@@ -565,7 +541,7 @@ export class LocalArtifactStore implements ArtifactPort {
            JOIN agent_runs r ON r.id = l.run_id
            WHERE l.artifact_id = a.id AND (
              l.role = 'checkpoint' OR
-             r.status IN ('created','running','awaiting_approval','awaiting_budget','cancelling')
+             r.status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling')
            )
          )
          AND NOT EXISTS (
@@ -677,23 +653,9 @@ export class LocalArtifactStore implements ArtifactPort {
     let failedCount = 0;
     for (const row of marked) {
       try {
-        await fs.rm(this.objectPath(row.storage_key), { force: true });
-        await this.db.transaction(async (tx) => {
-          const deleted = await tx.execute(
-            `UPDATE ai_artifacts SET status = 'deleted', retained = 0, deleted_at = ?, version = version + 1
-             WHERE id = ? AND user_id = ? AND status = 'deleting'`,
-            [now, row.id, userId],
-          );
-          if (deleted.changes !== 1) throw new Error('STATE_CONFLICT');
-          if (row.size_bytes > 0) {
-            const quotaChanged = await tx.execute(
-              `UPDATE agent_quota_usage SET used_bytes = used_bytes - ?
-               WHERE scope_key = ? AND used_bytes >= ?`,
-              [row.size_bytes, quotaKey(userId), row.size_bytes],
-            );
-            if (quotaChanged.changes !== 1) throw new Error('ARTIFACT_QUOTA_STATE_INVALID');
-          }
-        });
+        if (!(await this.finalizeDeleting({ ...row, status: 'deleting', version: row.version + 1 }, now))) {
+          throw new Error('STATE_CONFLICT');
+        }
         deletedCount += 1;
         deletedBytes += row.size_bytes;
       } catch {
@@ -740,7 +702,7 @@ export class LocalArtifactStore implements ArtifactPort {
           [input.runId, input.threadId, userId, input.targetAppId],
         );
         if (!run) throw new Error('NOT_FOUND');
-        if (!['created', 'running', 'awaiting_approval', 'awaiting_budget'].includes(run.status)) {
+        if (!['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input'].includes(run.status)) {
           throw new Error('RUN_NOT_ACCEPTING_INPUT');
         }
       }
@@ -775,6 +737,35 @@ export class LocalArtifactStore implements ArtifactPort {
     });
   }
 
+  async reconcile(limit = 100): Promise<number> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('VALIDATION_FAILED');
+    await this.ensureRoots();
+    const now = Math.floor(Date.now() / 1000);
+    const rows = await this.db.queryAll<ArtifactRow>(
+      `SELECT ${columns} FROM ai_artifacts
+       WHERE status IN ('staging','deleting')
+       ORDER BY CASE WHEN status = 'deleting' THEN 0 ELSE 1 END,
+                COALESCE(expires_at, created_at), id
+       LIMIT ?`,
+      [limit],
+    );
+    let repaired = 0;
+    for (const row of rows) {
+      try {
+        if (row.status === 'deleting') {
+          if (await this.finalizeDeleting(row, now)) repaired += 1;
+          continue;
+        }
+        if (this.activeWrites.has(row.id)) continue;
+        if (await this.reconcileStaging(row, now)) repaired += 1;
+      } catch {
+        // Leave the durable non-terminal row intact. The next bounded sweep retries the same
+        // transition instead of guessing whether a filesystem operation completed.
+      }
+    }
+    return repaired;
+  }
+
   private async getRow(scope: Scope, artifactId: string): Promise<ArtifactRow | null> {
     return this.db.queryOne<ArtifactRow>(
       `SELECT ${columns} FROM ai_artifacts
@@ -783,21 +774,103 @@ export class LocalArtifactStore implements ArtifactPort {
     );
   }
 
-  private async releaseStaging(row: ArtifactRow): Promise<void> {
+  private async reconcileStaging(row: ArtifactRow, now: number): Promise<boolean> {
+    const tmpPath = path.join(this.tmpRoot, `${row.storage_key}.part`);
+    const objectPath = this.objectPath(row.storage_key);
+    let objectInfo: Awaited<ReturnType<typeof fs.lstat>> | null = null;
+    try {
+      objectInfo = await fs.lstat(objectPath);
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
+
+    if (objectInfo) {
+      if (objectInfo.isSymbolicLink() || !objectInfo.isFile() || objectInfo.size !== row.reserved_bytes) {
+        await fs.rm(objectPath, { force: true, recursive: true });
+        await fs.rm(tmpPath, { force: true }).catch(() => undefined);
+        return this.releaseStaging(row);
+      }
+      const sha256 = await this.hashFile(objectPath);
+      const finalized = await this.finalizeReady(row, sha256, objectInfo.size, now);
+      if (finalized) await fs.rm(tmpPath, { force: true }).catch(() => undefined);
+      return finalized;
+    }
+
+    // No object means the side effect has not crossed the rename boundary. A partial tmp file is
+    // safe to remove once no in-process writer owns the reservation; an unexpired reservation stays
+    // staging so the client may retry the upload from byte zero.
+    await fs.rm(tmpPath, { force: true }).catch(() => undefined);
+    if (row.expires_at !== null && row.expires_at <= now) return this.releaseStaging(row);
+    return false;
+  }
+
+  private async hashFile(filePath: string): Promise<string> {
+    const hash = createHash('sha256');
+    const stream = createReadStream(filePath);
+    for await (const chunk of stream) hash.update(Buffer.from(chunk));
+    return hash.digest('hex');
+  }
+
+  private async finalizeReady(row: ArtifactRow, sha256: string, sizeBytes: number, readyAt: number): Promise<boolean> {
+    if (sizeBytes !== row.reserved_bytes) throw new Error('ARTIFACT_SIZE_MISMATCH');
+    return this.db.transaction(async (tx) => {
+      const changed = await tx.execute(
+        `UPDATE ai_artifacts SET
+           sha256 = ?, size_bytes = ?, reserved_bytes = 0, status = 'ready',
+           ready_at = ?, expires_at = NULL, version = version + 1
+         WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'staging' AND version = ?`,
+        [sha256, sizeBytes, readyAt, row.id, row.user_id, row.app_id, row.version],
+      );
+      if (changed.changes !== 1) return false;
+      const quotaChanged = await tx.execute(
+        `UPDATE agent_quota_usage SET
+           reserved_bytes = reserved_bytes - ?, used_bytes = used_bytes + ?
+         WHERE scope_key = ? AND reserved_bytes >= ?`,
+        [row.reserved_bytes, sizeBytes, quotaKey(row.user_id), row.reserved_bytes],
+      );
+      if (quotaChanged.changes !== 1) throw new Error('ARTIFACT_QUOTA_STATE_INVALID');
+      return true;
+    });
+  }
+
+  private async finalizeDeleting(row: ArtifactRow, now: number): Promise<boolean> {
+    await fs.rm(this.objectPath(row.storage_key), { force: true });
+    await fs.rm(path.join(this.tmpRoot, `${row.storage_key}.part`), { force: true }).catch(() => undefined);
+    return this.db.transaction(async (tx) => {
+      const deleted = await tx.execute(
+        `UPDATE ai_artifacts SET status = 'deleted', deleted_at = ?, retained = 0, version = version + 1
+         WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'deleting' AND version = ?`,
+        [now, row.id, row.user_id, row.app_id, row.version],
+      );
+      if (deleted.changes !== 1) return false;
+      if (row.size_bytes > 0) {
+        const quotaChanged = await tx.execute(
+          `UPDATE agent_quota_usage SET used_bytes = used_bytes - ?
+           WHERE scope_key = ? AND used_bytes >= ?`,
+          [row.size_bytes, quotaKey(row.user_id), row.size_bytes],
+        );
+        if (quotaChanged.changes !== 1) throw new Error('ARTIFACT_QUOTA_STATE_INVALID');
+      }
+      return true;
+    });
+  }
+
+  private async releaseStaging(row: ArtifactRow): Promise<boolean> {
     const now = Math.floor(Date.now() / 1000);
-    await this.db.transaction(async (tx) => {
+    return this.db.transaction(async (tx) => {
       const changed = await tx.execute(
         `UPDATE ai_artifacts SET reserved_bytes = 0, status = 'deleted', deleted_at = ?, version = version + 1
-         WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'staging'`,
-        [now, row.id, row.user_id, row.app_id],
+         WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'staging' AND version = ?`,
+        [now, row.id, row.user_id, row.app_id, row.version],
       );
-      if (changed.changes !== 1) return;
+      if (changed.changes !== 1) return false;
       const quotaChanged = await tx.execute(
         `UPDATE agent_quota_usage SET reserved_bytes = reserved_bytes - ?
          WHERE scope_key = ? AND reserved_bytes >= ?`,
         [row.reserved_bytes, quotaKey(row.user_id), row.reserved_bytes],
       );
       if (quotaChanged.changes !== 1) throw new Error('ARTIFACT_QUOTA_STATE_INVALID');
+      return true;
     });
   }
 

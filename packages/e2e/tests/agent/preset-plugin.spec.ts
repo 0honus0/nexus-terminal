@@ -515,7 +515,6 @@ const installAndRunNexusAgent = async (
             ],
             capabilities: ['runs.execute'],
             peerMessaging: 'parent-child',
-            maxTokens: 2048,
             maxSteps: 8,
             failureMode: 'isolate',
           },

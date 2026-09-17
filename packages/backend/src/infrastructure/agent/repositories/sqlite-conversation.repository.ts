@@ -89,7 +89,7 @@ const threadSelect = `
   FROM ai_threads t
 `;
 
-const nonTerminalRunSql = "'created','running','awaiting_approval','awaiting_budget','cancelling'";
+const nonTerminalRunSql = "'created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling'";
 
 const assertThreadDeleteSafe = async (db: RelationalDatabase, scope: Scope, threadId?: string): Promise<void> => {
   const threadFilter = threadId ? ' AND r.thread_id = ?' : '';

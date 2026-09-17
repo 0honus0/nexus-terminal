@@ -93,6 +93,7 @@ interface ToolCallAccumulator {
 export interface SubagentExecutionHost {
   enqueueRootRun(runId: string, scope: Scope): Promise<void>;
   wakeChildScheduler(): void;
+  cancelChildRuntime(runId: string, runtimeId: string): void;
 }
 
 export class SubagentParticipantExecutor {
@@ -164,6 +165,58 @@ export class SubagentParticipantExecutor {
       return;
     }
     if (!child) await this.host.enqueueRootRun(work.runId, scope);
+  }
+
+  async handleJoinResume(scope: Scope, work: SchedulerWorkView, ownerEpoch: number): Promise<void> {
+    const payload = work.payload;
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      return;
+    }
+    const delegationIds = Array.isArray(payload.delegationIds)
+      ? payload.delegationIds.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      : [];
+    const mode = payload.mode === 'any' ? 'any' : payload.mode === 'all' ? 'all' : null;
+    const joinDeadlineAt = payload.joinDeadlineAt;
+    const parentDelegationId =
+      payload.parentDelegationId === null || typeof payload.parentDelegationId === 'string'
+        ? payload.parentDelegationId
+        : undefined;
+    if (
+      delegationIds.length < 1 ||
+      !mode ||
+      !Number.isSafeInteger(joinDeadlineAt) ||
+      parentDelegationId === undefined
+    ) {
+      await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      return;
+    }
+    const values = await Promise.all(
+      delegationIds.map((delegationId) => this.delegations.delegation(scope, work.runId, delegationId)),
+    );
+    if (
+      values.some(
+        (delegation) => delegation === null || delegation.parentRuntimeId !== work.agentRuntimeId,
+      )
+    ) {
+      await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
+      return;
+    }
+    const delegations = values as DelegationView[];
+    const settledCount = delegations.filter((delegation) => terminalDelegation(delegation)).length;
+    const runningCount = delegations.length - settledCount;
+    const timedOut = runningCount > 0 && this.clock.nowUnixSeconds() >= (joinDeadlineAt as number);
+    const ready = timedOut || (mode === 'all' ? runningCount === 0 : settledCount > 0);
+    const resumed = await this.work.completeJoinResume(
+      work.id,
+      ownerEpoch,
+      work.runId,
+      work.agentRuntimeId,
+      parentDelegationId,
+      ready,
+      this.clock.nowUnixSeconds(),
+    );
+    if (resumed && parentDelegationId === null) await this.host.enqueueRootRun(work.runId, scope);
   }
 
   async execute(scope: Scope, work: SchedulerWorkView, ownerEpoch: number, signal: AbortSignal): Promise<void> {
@@ -344,6 +397,25 @@ export class SubagentParticipantExecutor {
       now: this.clock.nowUnixSeconds(),
     });
     this.events.publishRunWake(work.runId, settled.eventCursor);
+    if (continuation === 'runnable' && settled.run.status === 'running') {
+      const guarded = await this.stateCommit.evaluateToolLoopGuard({
+        scope,
+        runId: work.runId,
+        runtimeId: work.agentRuntimeId,
+        delegationId: delegation.id,
+        expectedRunVersion: settled.run.version,
+        observations: [
+          {
+            toolName: toolWork.inspection.toolName,
+            risk: toolWork.inspection.risk,
+            operationHash: toolWork.inspection.operationHash,
+            result: toolResult,
+          },
+        ],
+        now: this.clock.nowUnixSeconds(),
+      });
+      if (guarded.run.version !== settled.run.version) this.events.publishRunWake(work.runId, guarded.eventCursor);
+    }
   }
 
   private async executeChild(
@@ -515,13 +587,6 @@ export class SubagentParticipantExecutor {
       outputTokens: text ? estimateTokens(text) : 0,
       cachedInputTokens: 0,
     };
-    if (
-      outcome === 'completed' &&
-      delegation.usage.tokens + settledUsage.inputTokens + settledUsage.outputTokens > delegation.budget.maxTokens
-    ) {
-      outcome = 'failed';
-      failureCode = 'DELEGATION_BUDGET_EXCEEDED';
-    }
     if (outcome === 'completed' && toolCalls.size > 0) {
       if (toolMode === 'none' || offeredTools.length === 0) {
         outcome = 'failed';
@@ -774,14 +839,16 @@ export class SubagentParticipantExecutor {
       const descendants = await this.delegations.descendants(scope, failed.runId, sibling.childRuntimeId);
       for (const descendant of descendants) {
         if (!terminalDelegation(descendant)) {
-          await this.delegations
+          const cancelled = await this.delegations
             .cancelDelegation(scope, failed.runId, descendant.id, descendant.version, this.clock.nowUnixSeconds())
-            .catch(() => undefined);
+            .catch(() => null);
+          if (cancelled) this.host.cancelChildRuntime(failed.runId, cancelled.childRuntimeId);
         }
       }
-      await this.delegations
+      const cancelled = await this.delegations
         .cancelDelegation(scope, failed.runId, sibling.id, sibling.version, this.clock.nowUnixSeconds())
-        .catch(() => undefined);
+        .catch(() => null);
+      if (cancelled) this.host.cancelChildRuntime(failed.runId, cancelled.childRuntimeId);
     }
   }
 

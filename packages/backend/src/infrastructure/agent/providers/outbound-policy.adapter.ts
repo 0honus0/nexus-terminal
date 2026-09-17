@@ -39,23 +39,23 @@ export class OutboundPolicyAdapter implements OutboundPolicyPort {
     try {
       url = new URL(rawUrl);
     } catch {
-      throw new Error('PROVIDER_ENDPOINT_INVALID');
+      throw new Error('INTEGRATION_ENDPOINT_INVALID');
     }
-    if (url.username || url.password) throw new Error('PROVIDER_ENDPOINT_INVALID');
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('PROVIDER_ENDPOINT_SCHEME_DENIED');
+    if (url.username || url.password) throw new Error('INTEGRATION_ENDPOINT_INVALID');
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') throw new Error('INTEGRATION_ENDPOINT_SCHEME_DENIED');
 
     const hostname = bareHostname(url.hostname);
     const port = url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80;
-    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PROVIDER_ENDPOINT_INVALID');
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('INTEGRATION_ENDPOINT_INVALID');
     const authority = authorityFor(hostname, port);
     const exceptionAllowed = privateHostExceptions.some((value) => value.trim().toLowerCase() === authority);
 
     const addresses = await this.resolveAddresses(hostname);
-    if (addresses.length === 0) throw new Error('PROVIDER_DNS_RESOLUTION_FAILED');
+    if (addresses.length === 0) throw new Error('INTEGRATION_DNS_RESOLUTION_FAILED');
 
     for (const address of addresses) {
-      if (isAlwaysDenied(address)) throw new Error('PROVIDER_ENDPOINT_DENIED');
-      if (isPrivate(address) && !exceptionAllowed) throw new Error('PROVIDER_PRIVATE_ENDPOINT_DENIED');
+      if (isAlwaysDenied(address)) throw new Error('INTEGRATION_ENDPOINT_DENIED');
+      if (isPrivate(address) && !exceptionAllowed) throw new Error('INTEGRATION_PRIVATE_ENDPOINT_DENIED');
     }
 
     if (url.protocol === 'http:') {
@@ -64,7 +64,7 @@ export class OutboundPolicyAdapter implements OutboundPolicyPort {
       const explicitE2ePrivateException =
         this.allowInsecurePrivateHostExceptions && exceptionAllowed && addresses.every((address) => isPrivate(address));
       if (!explicitDevelopmentLoopback && !explicitE2ePrivateException) {
-        throw new Error('PROVIDER_INSECURE_ENDPOINT_DENIED');
+        throw new Error('INTEGRATION_INSECURE_ENDPOINT_DENIED');
       }
     }
 
@@ -85,7 +85,7 @@ export class OutboundPolicyAdapter implements OutboundPolicyPort {
     try {
       results = await dns.lookup(hostname, { all: true, verbatim: true });
     } catch {
-      throw new Error('PROVIDER_DNS_RESOLUTION_FAILED');
+      throw new Error('INTEGRATION_DNS_RESOLUTION_FAILED');
     }
     return [...new Set(results.map((entry) => entry.address))];
   }

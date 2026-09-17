@@ -10,7 +10,7 @@ import type {
   VerifiedPluginFile,
   VerifiedPluginPackage,
 } from '../../../modules/agent/host/package-verifier.port';
-import type { AgentAppManifest, ValidatedManifest } from '../../../modules/agent/host/app.types';
+import type { ValidatedManifest } from '../../../modules/agent/host/app.types';
 
 const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 200 * 1024 * 1024;
@@ -214,7 +214,7 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
     stageId: string,
     appIdHint: string | null,
     resolvePublisherKey: (keyId: string) => Promise<string | null>,
-    validateManifest: (raw: AgentAppManifest) => ValidatedManifest,
+    validateManifest: (raw: unknown) => ValidatedManifest,
   ): Promise<VerifiedPluginPackage> {
     const safeStageId = safeSegment(stageId);
     const stageRoot = this.locateStageDirectory(safeStageId, appIdHint);
@@ -297,9 +297,9 @@ export class TarPackageVerifierAdapter implements PackageVerifierPort {
       const signed = Buffer.concat([SIGNATURE_DOMAIN, manifestBytes, Buffer.from([0]), fileListBytes]);
       if (!verifySignature(null, signed, keyInfo.publicKeyPem, signature)) throw new Error('PLUGIN_SIGNATURE_INVALID');
 
-      let rawManifest: AgentAppManifest;
+      let rawManifest: unknown;
       try {
-        rawManifest = JSON.parse(manifestBytes.toString('utf8')) as AgentAppManifest;
+        rawManifest = JSON.parse(manifestBytes.toString('utf8')) as unknown;
       } catch {
         throw new Error('PLUGIN_MANIFEST_INVALID');
       }

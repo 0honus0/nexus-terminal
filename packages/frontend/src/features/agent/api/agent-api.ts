@@ -38,7 +38,6 @@ export interface RecommendedAgentPluginInstallResult {
 export type AgentContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
 
 export interface AgentExecutionPolicyOverrides {
-  maxRunTokens?: number;
   maxRunSteps?: number;
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
@@ -462,6 +461,7 @@ export type AgentRunStatus =
   | 'running'
   | 'awaiting_approval'
   | 'awaiting_budget'
+  | 'awaiting_input'
   | 'cancelling'
   | 'completed'
   | 'completed_unverified'
@@ -511,7 +511,6 @@ export interface AgentRunView {
   budget: {
     maxContextTokens: number;
     maxOutputTokens: number;
-    maxRunTokens: number;
     maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
@@ -544,6 +543,13 @@ export interface AgentRunView {
     steps: number;
     subagentMessages: number;
     subagentMessageBytes: number;
+    context?: {
+      inputTokens: number;
+      reservedOutputTokens: number;
+      contextWindowTokens: number;
+      source: 'estimated' | 'provider';
+      updatedAt: number;
+    };
   };
   activeExecutionSeconds: number;
   consumedInputSequence: number;
@@ -657,7 +663,7 @@ export interface AgentSubagentView {
   status: 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
   depth: number;
   failureMode: 'isolate' | 'failFast';
-  budget: { maxTokens: number; maxSteps: number; reservedTokens: number; reservedSteps: number };
+  budget: { maxSteps: number };
   usage: { tokens: number; steps: number };
   result: unknown;
   evidenceRefs: string[];
@@ -695,7 +701,6 @@ export interface AgentSubagentProfile {
   allowedModels: Array<{ providerId: string; modelId: string; configurationVersion: number }>;
   capabilities: string[];
   peerMessaging: 'parent-child' | 'same-run';
-  maxTokens: number;
   maxSteps: number;
   failureMode: 'isolate' | 'failFast';
 }
@@ -1617,7 +1622,6 @@ export const agentApi = {
     appId: string,
     run: AgentRunView,
     increase: Partial<{
-      maxRunTokens: number;
       maxRunSteps: number;
       maxActiveExecutionSeconds: number;
       maxSubagentMessages: number;

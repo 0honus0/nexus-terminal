@@ -180,10 +180,6 @@
             "label": "単一出力 Token 上限",
             "hint": "1 回のモデル推論で生成可能な最大 Token 数"
           },
-          "maxRunTokens": {
-            "label": "Run 累積 Token 上限",
-            "hint": "1 回の Run で消費可能な累積 Token の上限"
-          },
           "maxRunSteps": {
             "label": "Run 最大ステップ数",
             "hint": "1 回の Run で許可される思考・ツール実行ループの最大回数"
@@ -290,8 +286,6 @@
           "maxContextTokensHint": "1回のリクエストに含まれるコンテキスト Token の上限",
           "maxOutputTokens": "単一最大出力",
           "maxOutputTokensHint": "モデルの1回の回答で生成される最大 Token 数",
-          "maxRunTokens": "Run 合計 Token 予算",
-          "maxRunTokensHint": "1回の Run で累積消費可能な Token 予算総量",
           "maxRunSteps": "最大実行ステップ数",
           "maxRunStepsHint": "1回の Run で許可される最大ツール呼び出し・推論ステップ数",
           "maxActiveExecutionSeconds": "実行タイムアウト (秒)",
@@ -535,7 +529,6 @@
         "profileId": "プロファイル ID",
         "role": "役割",
         "defaultModel": "既定モデル",
-        "maxTokens": "最大 Token",
         "maxSteps": "最大ステップ",
         "peerMessaging": "Peer messaging",
         "peerParentChild": "親子 Agent のみ",
@@ -548,8 +541,7 @@
         "removeProfile": "プロファイルを削除",
         "noProfiles": "この App には Subagent プロファイルが設定されていません。",
         "saveProfiles": "プロファイルを保存",
-        "messageBytesPlaceholder": "例: 2M, 5M",
-        "maxTokensPlaceholder": "例: 50k, 100k"
+        "messageBytesPlaceholder": "例: 2M, 5M"
       },
       "browserRuntime": {
         "title": "ブラウザーランタイム",
@@ -654,7 +646,6 @@
           "conservative": "保守的"
         },
         "fields": {
-          "maxRunTokens": "Run 総 Token 予算",
           "maxRunSteps": "Run 最大ステップ保険",
           "maxActiveExecutionSeconds": "最大アクティブ実行時間",
           "toolTimeoutSeconds": "ツールタイムアウト",
@@ -719,9 +710,10 @@
       "enableAllTargets": "すべて有効",
       "disableAllTargets": "すべて無効",
       "noTargets": "利用可能な SSH 接続がありません。",
-      "reconciliationRequired": "直前の変更操作の結果が不明です。リソース隔離を解除する前に実際の状態を確認してください。",
+      "reconciliationRequired": "以前の変更操作またはそのリソース／Lease の最終処理に reconciliation が必要です。隔離を解除する前に実際の状態を確認してください。",
       "reconciliationResources": "確認が必要なリソース",
       "reconciliationLoading": "確認対象のリソースを読み込んでいます…",
+      "reconciliationLeaseFinalization": "変更の結果自体は確認済みです。不確かなのは Lease／リソースの最終処理だけです。元の変更を再実行せず、リソース状態を確認して隔離を解除してください。",
       "reconciliationNotePlaceholder": "確認した実際の結果を記入してください。例: リモート側に変更なし / 変更完了を確認し状態も正常",
       "reconciliationHint": "確認しても元の変更操作は再実行されず、隔離だけが解除されます。",
       "reconciliationConfirm": "確認済みとして隔離を解除",
@@ -952,6 +944,12 @@
       "dragCard": "カードをドラッグして並べ替え",
       "current": "現在の Run",
       "tokens": "トークン",
+      "contextUsage": "コンテキスト使用量",
+      "contextReserved": "予約出力 {value}",
+      "contextSource": {
+        "estimated": "推定",
+        "provider": "Provider 実測"
+      },
       "steps": "ステップ",
       "activeTime": "実行時間",
       "verification": "検証",
@@ -971,6 +969,7 @@
         "running": "実行中",
         "awaiting_approval": "承認待ち",
         "awaiting_budget": "予算待ち",
+        "awaiting_input": "入力待ち",
         "cancelling": "キャンセル中",
         "completed": "完了",
         "completed_unverified": "完了・未検証",
@@ -1013,7 +1012,8 @@
       "attention": {
         "reconciliation": "次の変更操作の前に照合が必要です。",
         "approval": "この Run は承認を待っています。",
-        "budget": "この Run は予算の増額待ちで一時停止しています。"
+        "budget": "この Run は予算の増額待ちで一時停止しています。",
+        "input": "進展のない反復操作を検出しました。続行するには指示または新しい情報を追加してください。"
       },
       "totalTokens": "Token 合計",
       "advancedDetails": "詳細設定とチェックポイント",

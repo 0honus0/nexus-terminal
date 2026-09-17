@@ -24,7 +24,6 @@
     description: string;
     badge?: string;
     values: {
-      maxRunTokens: number;
       maxRunSteps: number;
       maxActiveExecutionSeconds: number;
       toolTimeoutSeconds: number;
@@ -42,7 +41,6 @@
       label: t('agent.settings.budget.presetLight'),
       description: t('agent.settings.budget.presetLightDesc'),
       values: {
-        maxRunTokens: 30000,
         maxRunSteps: 25,
         maxActiveExecutionSeconds: 600,
         toolTimeoutSeconds: 30,
@@ -59,7 +57,6 @@
       description: t('agent.settings.budget.presetBalancedDesc'),
       badge: t('agent.settings.budget.recommendedBadge'),
       values: {
-        maxRunTokens: 100000,
         maxRunSteps: 80,
         maxActiveExecutionSeconds: 1800,
         toolTimeoutSeconds: 60,
@@ -75,7 +72,6 @@
       label: t('agent.settings.budget.presetDeep'),
       description: t('agent.settings.budget.presetDeepDesc'),
       values: {
-        maxRunTokens: 300000,
         maxRunSteps: 150,
         maxActiveExecutionSeconds: 3600,
         toolTimeoutSeconds: 120,
@@ -92,7 +88,6 @@
       description: t('agent.settings.budget.presetCustomDesc'),
       badge: t('agent.settings.budget.customBadge'),
       values: {
-        maxRunTokens: 100000,
         maxRunSteps: 80,
         maxActiveExecutionSeconds: 1800,
         toolTimeoutSeconds: 60,
@@ -105,7 +100,6 @@
   ]);
 
   const getFieldType = (key: string): QuantityType => {
-    if (key === 'maxRunTokens') return 'tokens';
     if (['maxToolOutputBytes', 'maxRawToolBytes', 'maxRecallBytes'].includes(key)) return 'bytes';
     if (['maxActiveExecutionSeconds', 'toolTimeoutSeconds'].includes(key)) return 'seconds';
     return 'number';
@@ -203,8 +197,8 @@
   const fieldGroups: FieldGroup[] = [
     {
       id: 'tokens_steps',
-      title: '执行步数与 Token 预算',
-      keys: ['maxRunSteps', 'maxRunTokens'],
+      title: '执行步数保险丝',
+      keys: ['maxRunSteps'],
     },
     {
       id: 'time_control',
@@ -289,7 +283,7 @@
               class="mt-2.5 flex items-center justify-between border-t border-border/40 pt-1.5 text-[10px] text-text-secondary"
             >
               <span v-if="preset.id !== 'custom'"
-                >{{ preset.values.maxRunSteps }} 步 · {{ Math.round(preset.values.maxRunTokens / 1000) }}k Tokens</span
+                >{{ preset.values.maxRunSteps }} 步 · {{ Math.round(preset.values.maxActiveExecutionSeconds / 60) }} min</span
               >
               <span v-else>自定义微调</span>
               <span

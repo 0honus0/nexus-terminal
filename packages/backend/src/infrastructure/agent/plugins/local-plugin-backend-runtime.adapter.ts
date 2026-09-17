@@ -2,7 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import type { Scope } from '../../../modules/agent/agent.types';
+import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type { AppStoragePort } from '../../../modules/agent/host/app-storage.port';
 import type { AppStorageSnapshot } from '../../../modules/agent/host/app-storage-snapshot.port';
 import type {
@@ -26,6 +26,79 @@ type StorageRequest =
 type LifecycleResult =
   | { kind: 'lifecycle.result'; requestId: number; ok: true; value: unknown }
   | { kind: 'lifecycle.result'; requestId: number; ok: false; error: string };
+
+type ProtocolRecord = Record<string, unknown>;
+
+const protocolRecord = (value: unknown): ProtocolRecord => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  return value as ProtocolRecord;
+};
+
+const protocolRequestId = (value: unknown): number => {
+  if (!Number.isSafeInteger(value) || Number(value) < 1) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  return Number(value);
+};
+
+const protocolString = (value: unknown, maxBytes = 4096): string => {
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > maxBytes)
+    throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  return value;
+};
+
+const protocolJsonValue = (value: unknown, depth = 0): JsonValue => {
+  if (depth > 64) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'string') return protocolString(value, MAX_PROTOCOL_BYTES);
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (value.length > 16_384) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+    return value.map((item) => protocolJsonValue(item, depth + 1));
+  }
+  const record = protocolRecord(value);
+  const entries = Object.entries(record);
+  if (entries.length > 16_384) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  return Object.fromEntries(entries.map(([key, item]) => [key, protocolJsonValue(item, depth + 1)]));
+};
+
+const decodeLifecycleResult = (record: ProtocolRecord): LifecycleResult => {
+  const requestId = protocolRequestId(record.requestId);
+  if (record.ok === true) return { kind: 'lifecycle.result', requestId, ok: true, value: record.value };
+  if (record.ok === false) {
+    return { kind: 'lifecycle.result', requestId, ok: false, error: protocolString(record.error, 1024) };
+  }
+  throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+};
+
+const decodeStorageRequest = (record: ProtocolRecord): StorageRequest => {
+  const requestId = protocolRequestId(record.requestId);
+  const key = protocolString(record.key, 1024);
+  switch (record.kind) {
+    case 'storage.get':
+      return { kind: record.kind, requestId, key };
+    case 'storage.put':
+      if (record.expectedVersion !== null && (!Number.isSafeInteger(record.expectedVersion) || Number(record.expectedVersion) < 1))
+        throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+      return {
+        kind: record.kind,
+        requestId,
+        key,
+        value: protocolJsonValue(record.value),
+        expectedVersion: record.expectedVersion === null ? null : Number(record.expectedVersion),
+      };
+    case 'storage.delete':
+      return {
+        kind: record.kind,
+        requestId,
+        key,
+        expectedVersion: protocolRequestId(record.expectedVersion),
+      };
+    default:
+      throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  }
+};
 
 class BackendPluginProcess {
   private readonly pending = new Map<
@@ -93,16 +166,19 @@ class BackendPluginProcess {
       this.child.kill('SIGKILL');
       return;
     }
-    let message: { kind?: unknown; requestId?: unknown; [key: string]: unknown };
+    let message: ProtocolRecord;
     try {
-      message = JSON.parse(line) as { kind?: unknown; requestId?: unknown; [key: string]: unknown };
+      message = protocolRecord(JSON.parse(line) as unknown);
     } catch {
       this.failAll(new Error('PLUGIN_BACKEND_PROTOCOL_INVALID'));
       this.child.kill('SIGKILL');
       return;
     }
     if (message.kind === 'runtime.ready') {
-      if (message.protocolVersion !== PLUGIN_BACKEND_PROTOCOL_VERSION || message.sdkVersion !== this.sdkVersion) {
+      if (
+        message.protocolVersion !== PLUGIN_BACKEND_PROTOCOL_VERSION ||
+        protocolString(message.sdkVersion, 128) !== this.sdkVersion
+      ) {
         this.failAll(new Error('PLUGIN_BACKEND_PROTOCOL_VERSION_MISMATCH'));
         this.child.kill('SIGKILL');
         return;
@@ -111,11 +187,11 @@ class BackendPluginProcess {
       return;
     }
     if (message.kind === 'lifecycle.result') {
-      this.resolveLifecycle(message as LifecycleResult);
+      this.resolveLifecycle(decodeLifecycleResult(message));
       return;
     }
     if (message.kind === 'storage.get' || message.kind === 'storage.put' || message.kind === 'storage.delete') {
-      await this.handleStorage(message as StorageRequest);
+      await this.handleStorage(decodeStorageRequest(message));
       return;
     }
     this.failAll(new Error('PLUGIN_BACKEND_PROTOCOL_INVALID'));

@@ -44,10 +44,7 @@ export interface CreateDelegationRecord {
   dependsOn: string[];
   depth: number;
   failureMode: SubagentFailureMode;
-  maxTokens: number;
   maxSteps: number;
-  reservedTokens: number;
-  reservedSteps: number;
   idempotencyKey: string;
   requestHash: string;
   deadlineAt: number;
@@ -222,10 +219,25 @@ export interface SchedulerWorkClaimPort extends SchedulerWorkSettlementPort {
     now: number,
   ): Promise<SchedulerWorkView | null>;
   resetClaimedWork(ownerEpoch: number, now: number): Promise<number>;
+  recoverOrphanedClaimedWork(
+    ownerEpoch: number,
+    activeWorkIds: readonly string[],
+    staleBefore: number,
+    now: number,
+  ): Promise<number>;
 }
 
 export interface SchedulerWorkExecutionPort extends SchedulerWorkSettlementPort {
   enqueueWork(record: EnqueueWorkRecord): Promise<SchedulerWorkView>;
+  completeJoinResume(
+    workId: string,
+    ownerEpoch: number,
+    runId: string,
+    runtimeId: string,
+    parentDelegationId: string | null,
+    ready: boolean,
+    now: number,
+  ): Promise<boolean>;
 }
 
 export interface SharedFactRepositoryPort {

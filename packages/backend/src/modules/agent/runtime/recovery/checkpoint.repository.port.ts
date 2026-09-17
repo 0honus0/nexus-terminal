@@ -84,5 +84,4 @@ export interface CheckpointRepositoryPort {
   list(scope: Scope, runId: string, limit?: number): Promise<CheckpointView[]>;
   missingArtifactRefs(scope: Scope, checkpointId: string): Promise<string[]>;
   recoveryHazards(scope: Scope, checkpointId: string): Promise<CheckpointRecoveryHazards>;
-  supersedeUnconsumedApprovals(scope: Scope, runId: string, now: number): Promise<number>;
 }

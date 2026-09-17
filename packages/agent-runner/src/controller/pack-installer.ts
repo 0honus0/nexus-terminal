@@ -31,6 +31,42 @@ interface PackManifest {
   dependencies: Array<{ familyId: string; versionId: string }>;
 }
 
+const decodePackManifest = (value: unknown): PackManifest => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
+  const record = value as Record<string, unknown>;
+  if (
+    record.schemaVersion !== 1 ||
+    typeof record.familyId !== 'string' ||
+    typeof record.versionId !== 'string' ||
+    typeof record.architecture !== 'string' ||
+    typeof record.runnerApiRange !== 'string' ||
+    !Array.isArray(record.capabilities) ||
+    record.capabilities.length > 512 ||
+    record.capabilities.some((item) => typeof item !== 'string' || Buffer.byteLength(item, 'utf8') > 1024) ||
+    !Array.isArray(record.dependencies) ||
+    record.dependencies.length > 256
+  ) {
+    throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
+  }
+  const dependencies = record.dependencies.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
+    const dependency = item as Record<string, unknown>;
+    if (typeof dependency.familyId !== 'string' || typeof dependency.versionId !== 'string') {
+      throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
+    }
+    return { familyId: dependency.familyId, versionId: dependency.versionId };
+  });
+  return {
+    schemaVersion: 1,
+    familyId: record.familyId,
+    versionId: record.versionId,
+    architecture: record.architecture,
+    capabilities: record.capabilities as string[],
+    runnerApiRange: record.runnerApiRange,
+    dependencies,
+  };
+};
+
 const safeSegment = (value: string): string => {
   if (!/^[A-Za-z0-9_.-]{1,128}$/.test(value)) throw new Error('WORKSPACE_TOOLCHAIN_REF_INVALID');
   return value;
@@ -382,7 +418,7 @@ export class PackInstaller {
     }
     let manifest: PackManifest;
     try {
-      manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as PackManifest;
+      manifest = decodePackManifest(JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as unknown);
     } catch {
       throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
     }

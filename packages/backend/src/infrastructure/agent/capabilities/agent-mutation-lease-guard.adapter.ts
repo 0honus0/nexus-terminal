@@ -106,11 +106,13 @@ export class AgentMutationLeaseGuardAdapter implements MutationLeaseGuardPort {
           active = false;
           await this.leases.release(leaseIds, owner);
           released = true;
+          return { ok: true as const };
         } catch (error) {
+          const finalizationErrorCode = errorCode(error, 'LEASE_STATE_UNCERTAIN');
           await quarantine('LEASE_STATE_UNCERTAIN_AFTER_MUTATION', {
             toolCallId: request.operationId,
-            errorCode: errorCode(error, 'LEASE_STATE_UNCERTAIN'),
-          }).catch(() => undefined);
+            errorCode: finalizationErrorCode,
+          });
           if (!active && !released) {
             await this.leases
               .release(leaseIds, owner)
@@ -119,6 +121,13 @@ export class AgentMutationLeaseGuardAdapter implements MutationLeaseGuardPort {
               })
               .catch(() => undefined);
           }
+          return {
+            ok: false as const,
+            reason: 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION' as const,
+            errorCode: finalizationErrorCode,
+            toolCallId: request.operationId,
+            resourceKeys: [...request.resourceKeys],
+          };
         }
       },
       releaseIfInactive,

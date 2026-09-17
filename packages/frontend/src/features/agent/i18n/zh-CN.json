@@ -180,10 +180,6 @@
             "label": "单次输出 Token 硬上限",
             "hint": "单次模型调用允许生成的最大 Token 数"
           },
-          "maxRunTokens": {
-            "label": "单次 Run 总 Token 上限",
-            "hint": "整个会话单次任务累计消耗的 Token 熔断上限"
-          },
           "maxRunSteps": {
             "label": "单次 Run 最大步数",
             "hint": "单次任务允许循环执行工具与模型思考的最大步数"
@@ -290,8 +286,6 @@
           "maxContextTokensHint": "单次请求包含的历史上下文 Token 上限",
           "maxOutputTokens": "单次最大输出",
           "maxOutputTokensHint": "模型单次回答的最大生成 Token 数量",
-          "maxRunTokens": "任务总 Token 预算",
-          "maxRunTokensHint": "单次 Run 累计消耗的总 Token 预算上限",
           "maxRunSteps": "最大执行步数",
           "maxRunStepsHint": "单个 Run 允许执行的工具调用与思考最大步数",
           "maxActiveExecutionSeconds": "执行超时时间 (秒)",
@@ -535,7 +529,6 @@
         "profileId": "配置档 ID",
         "role": "角色",
         "defaultModel": "默认模型",
-        "maxTokens": "最大 Token",
         "maxSteps": "最大步骤",
         "peerMessaging": "同伴通信",
         "peerParentChild": "仅父子 Agent",
@@ -548,8 +541,7 @@
         "removeProfile": "移除配置档",
         "noProfiles": "此 App 尚未配置 Subagent 配置档。",
         "saveProfiles": "保存配置档",
-        "messageBytesPlaceholder": "例: 2M, 5M",
-        "maxTokensPlaceholder": "例: 50k, 100k"
+        "messageBytesPlaceholder": "例: 2M, 5M"
       },
       "browserRuntime": {
         "title": "浏览器运行时",
@@ -654,7 +646,6 @@
           "conservative": "保守压缩"
         },
         "fields": {
-          "maxRunTokens": "Run 总 Token 预算",
           "maxRunSteps": "Run 最大步骤保险丝",
           "maxActiveExecutionSeconds": "最长活跃执行时间",
           "toolTimeoutSeconds": "单工具超时",
@@ -719,9 +710,10 @@
       "enableAllTargets": "全部启用",
       "disableAllTargets": "全部停用",
       "noTargets": "当前没有可用的 SSH 连接。",
-      "reconciliationRequired": "上次修改操作结果尚未确认，请先核验实际状态，再解除资源隔离。",
+      "reconciliationRequired": "先前修改操作或其资源/Lease 收尾仍需要对账，请先核验实际状态，再解除资源隔离。",
       "reconciliationResources": "待核验资源",
       "reconciliationLoading": "正在加载待核验资源…",
+      "reconciliationLeaseFinalization": "修改副作用已经确认完成；不确定的是 Lease/资源收尾状态。请核验资源状态并解除隔离，不要重试原修改操作。",
       "reconciliationNotePlaceholder": "填写你已核验到的实际结果，例如：远端未发生修改 / 修改已完成并确认状态正常",
       "reconciliationHint": "确认只会解除隔离，不会重试原修改操作。",
       "reconciliationConfirm": "确认已核验并解除隔离",
@@ -952,6 +944,12 @@
       "dragCard": "拖动卡片排序",
       "current": "当前 Run",
       "tokens": "Token",
+      "contextUsage": "上下文占用",
+      "contextReserved": "预留输出 {value}",
+      "contextSource": {
+        "estimated": "估算",
+        "provider": "Provider 实测"
+      },
       "steps": "步骤",
       "activeTime": "执行时间",
       "verification": "验证",
@@ -971,6 +969,7 @@
         "running": "运行中",
         "awaiting_approval": "等待审批",
         "awaiting_budget": "等待预算",
+        "awaiting_input": "等待输入",
         "cancelling": "取消中",
         "completed": "已完成",
         "completed_unverified": "已完成，未验证",
@@ -1013,7 +1012,8 @@
       "attention": {
         "reconciliation": "下一次修改操作前需要先完成对账。",
         "approval": "此 Run 正在等待你的审批。",
-        "budget": "此 Run 已暂停，需要增加预算后继续。"
+        "budget": "此 Run 已暂停，需要增加预算后继续。",
+        "input": "检测到重复且无进展的操作。请补充指导或新信息后继续。"
       },
       "totalTokens": "Token 总量",
       "advancedDetails": "高级详情与检查点",

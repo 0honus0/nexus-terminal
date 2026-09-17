@@ -14,6 +14,7 @@ import type {
   WorkspaceStatus,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { commandForReplay } from '../idempotency/command-lifecycle';
 
 interface WorkspaceRow {
   id: string;
@@ -109,14 +110,12 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
 
   async createWorkspace(record: CreateWorkspaceRecord): Promise<AgentWorkspaceView> {
     return this.db.transaction(async (tx) => {
-      const existingCommand = await tx.queryOne<{
-        request_hash: string;
-        status: string;
-        result_entity_id: string | null;
-      }>(
-        `SELECT request_hash,status,result_entity_id FROM agent_commands
-         WHERE user_id=? AND app_id=? AND command_name='workspace.create' AND idempotency_key=?`,
-        [record.scope.userId, record.scope.appId, record.idempotencyKey],
+      const existingCommand = await commandForReplay(
+        tx,
+        record.scope,
+        'workspace.create',
+        record.idempotencyKey,
+        record.createdAt,
       );
       if (existingCommand) {
         if (existingCommand.request_hash !== record.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
@@ -131,7 +130,7 @@ export class SqliteWorkspaceRepository implements AgentWorkspaceRepositoryPort {
       const run = await tx.queryOne<{ id: string }>(
         `SELECT r.id FROM agent_runs r JOIN agent_runtimes rt ON rt.run_id=r.id
          WHERE r.id=? AND r.user_id=? AND r.app_id=? AND rt.id=?
-           AND r.status IN ('created','running','awaiting_approval','awaiting_budget')`,
+           AND r.status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input')`,
         [record.runId, record.scope.userId, record.scope.appId, record.agentRuntimeId],
       );
       if (!run) throw new Error('NOT_FOUND');

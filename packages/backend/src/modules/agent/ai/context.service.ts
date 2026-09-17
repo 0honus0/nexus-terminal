@@ -83,6 +83,12 @@ interface CandidateSection {
   source: ContextSourceRange;
 }
 
+interface CandidateGroup {
+  id: string;
+  sections: CandidateSection[];
+  tokens: number;
+}
+
 interface ThreadRecallCandidate extends CandidateSection {
   sequence: number;
   score: number;
@@ -106,6 +112,65 @@ const hasAssistantToolCalls = (entry: LedgerEntryView): boolean => {
   }
   const rawCalls = (entry.payload as Record<string, JsonValue>).toolCalls;
   return Array.isArray(rawCalls) && rawCalls.length > 0;
+};
+
+const assistantToolCallIds = (entry: LedgerEntryView): string[] => {
+  if (!hasAssistantToolCalls(entry)) return [];
+  const rawCalls = (entry.payload as Record<string, JsonValue>).toolCalls as JsonValue[];
+  return rawCalls.flatMap((value) => {
+    if (!value || Array.isArray(value) || typeof value !== 'object') return [];
+    const id = (value as Record<string, JsonValue>).id;
+    return typeof id === 'string' && id ? [id] : [];
+  });
+};
+
+const toolResultCallId = (entry: LedgerEntryView): string | null => {
+  if (entry.kind !== 'tool_result' || !entry.payload || Array.isArray(entry.payload) || typeof entry.payload !== 'object')
+    return null;
+  const id = (entry.payload as Record<string, JsonValue>).toolCallId;
+  return typeof id === 'string' && id ? id : null;
+};
+
+const estimateMessageTokens = (message: ModelMessage): number => {
+  let tokens = estimateTokens(message.content);
+  if (message.role === 'assistant' && message.toolCalls?.length) {
+    tokens += estimateTokens(
+      JSON.stringify(message.toolCalls.map((call) => ({ name: call.name, argumentsJson: call.argumentsJson }))),
+    );
+  }
+  if (message.role === 'tool' && message.toolCallId) tokens += estimateTokens(message.toolCallId);
+  return tokens;
+};
+
+const groupLedgerCandidates = (
+  entries: LedgerEntryView[],
+  candidatesById: ReadonlyMap<string, CandidateSection>,
+): CandidateGroup[] => {
+  const assistantByToolCallId = new Map<string, string>();
+  for (const entry of entries) {
+    for (const toolCallId of assistantToolCallIds(entry)) assistantByToolCallId.set(toolCallId, entry.id);
+  }
+
+  const grouped = new Map<string, CandidateSection[]>();
+  const groupOrder: string[] = [];
+  for (const entry of entries) {
+    const section = candidatesById.get(entry.id);
+    if (!section) continue;
+    const resultCallId = toolResultCallId(entry);
+    const groupId = resultCallId ? (assistantByToolCallId.get(resultCallId) ?? entry.id) : entry.id;
+    let sections = grouped.get(groupId);
+    if (!sections) {
+      sections = [];
+      grouped.set(groupId, sections);
+      groupOrder.push(groupId);
+    }
+    sections.push(section);
+  }
+
+  return groupOrder.map((id) => {
+    const sections = grouped.get(id)!;
+    return { id, sections, tokens: sections.reduce((total, section) => total + section.tokens, 0) };
+  });
 };
 
 const threadRecallScore = (
@@ -340,15 +405,24 @@ export class ContextService {
       return ordered[index] ?? entry;
     });
 
-    const ledgerCandidates = projectedLedgerItems
-      .filter((entry) => entry.kind !== 'system_notice' && entry.id !== input.currentInputEntryId)
+    const ledgerCandidateSections = projectedLedgerItems
+      .filter((entry) => {
+        if (entry.id === input.currentInputEntryId) return false;
+        if (entry.kind !== 'system_notice') return true;
+        return Boolean(
+          entry.payload &&
+            !Array.isArray(entry.payload) &&
+            typeof entry.payload === 'object' &&
+            (entry.payload as Record<string, JsonValue>).kind === 'loop_guard',
+        );
+      })
       .map((entry) => {
         const message = ledgerMessage(entry);
         return message
           ? ({
               id: entry.id,
               message,
-              tokens: estimateTokens(message.content),
+              tokens: estimateMessageTokens(message),
               source: {
                 kind: 'ledger',
                 id: entry.id,
@@ -358,8 +432,9 @@ export class ContextService {
             } satisfies CandidateSection)
           : null;
       })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
-      .reverse();
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+    const ledgerCandidatesById = new Map(ledgerCandidateSections.map((candidate) => [candidate.id, candidate]));
+    const ledgerGroups = groupLedgerCandidates(projectedLedgerItems, ledgerCandidatesById).reverse();
 
     const remainingBeforeHistory = Math.max(0, availableTokens - usedTokens);
     const threadAnchorTokenReserve = Math.min(
@@ -378,16 +453,17 @@ export class ContextService {
       usedTokens,
       availableTokens - threadAnchorTokenReserve - threadRecallTokenReserve,
     );
-    const selectedLedger: CandidateSection[] = [];
-    for (const candidate of ledgerCandidates) {
-      if (usedTokens + candidate.tokens > ledgerTokenCeiling) {
-        droppedSections.push(`ledger:${candidate.id}`);
+    const selectedLedgerGroups: CandidateGroup[] = [];
+    for (const group of ledgerGroups) {
+      if (usedTokens + group.tokens > ledgerTokenCeiling) {
+        for (const candidate of group.sections) droppedSections.push(`ledger:${candidate.id}`);
         continue;
       }
-      selectedLedger.push(candidate);
-      usedTokens += candidate.tokens;
+      selectedLedgerGroups.push(group);
+      usedTokens += group.tokens;
     }
-    selectedLedger.reverse();
+    selectedLedgerGroups.reverse();
+    const selectedLedger = selectedLedgerGroups.flatMap((group) => group.sections);
 
     let threadAnchorTokens = 0;
     const selectedThreadAnchors: CandidateSection[] = [];
@@ -478,19 +554,23 @@ export class ContextService {
     // Once something no longer fits, trim the oldest raw ledger turns to create working
     // headroom. This is a context-management policy, not a smaller model capability limit.
     const compacted = droppedSections.length > 0;
-    if (compacted && selectedLedger.length > 0) {
+    if (compacted && selectedLedgerGroups.length > 0) {
       const targetTokens = Math.max(
         safetyTokens + inputTokens + toolSchemaTokens,
         Math.floor(availableTokens * compactionRatio),
       );
-      for (const candidate of selectedLedger) {
+      for (const group of selectedLedgerGroups) {
         if (usedTokens <= targetTokens) break;
-        const messageIndex = messages.indexOf(candidate.message);
-        if (messageIndex >= 0) messages.splice(messageIndex, 1);
-        const sourceIndex = sourceRanges.findIndex((source) => source.kind === 'ledger' && source.id === candidate.id);
-        if (sourceIndex >= 0) sourceRanges.splice(sourceIndex, 1);
-        usedTokens = Math.max(safetyTokens + inputTokens + toolSchemaTokens, usedTokens - candidate.tokens);
-        if (!droppedSections.includes(`ledger:${candidate.id}`)) droppedSections.push(`ledger:${candidate.id}`);
+        for (const candidate of group.sections) {
+          const messageIndex = messages.indexOf(candidate.message);
+          if (messageIndex >= 0) messages.splice(messageIndex, 1);
+          const sourceIndex = sourceRanges.findIndex(
+            (source) => source.kind === 'ledger' && source.id === candidate.id,
+          );
+          if (sourceIndex >= 0) sourceRanges.splice(sourceIndex, 1);
+          if (!droppedSections.includes(`ledger:${candidate.id}`)) droppedSections.push(`ledger:${candidate.id}`);
+        }
+        usedTokens = Math.max(safetyTokens + inputTokens + toolSchemaTokens, usedTokens - group.tokens);
       }
     }
 
@@ -526,7 +606,7 @@ export class ContextService {
       index,
       role: message.role,
       hash: stableHash(message),
-      estimatedTokens: estimateTokens(message.content),
+      estimatedTokens: estimateMessageTokens(message),
     }));
     const skillMetadataHash = stableHash(
       skillMetadata.map((metadata) => ({

@@ -31,7 +31,7 @@ import type { WorkspaceRuntimeControllerPort } from '../../modules/agent/workspa
 import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type { WorkspaceRuntimeInteractiveSessionPort } from '../../modules/agent/workspace-runtime/workspace-runtime-interactive-session.port';
 import { AGENT_DEFAULTS } from '../../modules/agent/agent-defaults';
-import { systemClock } from '../../modules/agent/agent.types';
+import { systemClock, type Scope } from '../../modules/agent/agent.types';
 import { ArtifactService } from '../../modules/agent/ai/artifact.service';
 import { IntegrationService } from '../../modules/agent/ai/integration.service';
 import type { AcpTransportPort, BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
@@ -161,7 +161,17 @@ export const composeAgent = ({
   const settingsRepository = new SqliteAgentSettingsRepository(database);
   const hardLimitConfirmations = new SqliteHardLimitConfirmationRepository(database);
   const hardLimitUsage = new SqliteHardLimitUsageAdapter(database);
-  const lifecycle = new AppLifecycleService(registry, appStates, appGrants, systemClock, publishHostWake);
+  let quiesceHostExecution: (scope: Scope, deadlineUnixSeconds: number) => Promise<void> = async () => {
+    throw new Error('AGENT_HOST_NOT_READY');
+  };
+  const lifecycle = new AppLifecycleService(
+    registry,
+    appStates,
+    appGrants,
+    systemClock,
+    publishHostWake,
+    (scope, deadlineUnixSeconds) => quiesceHostExecution(scope, deadlineUnixSeconds),
+  );
   const settings = new AgentSettingsService(settingsRepository, hardLimitConfirmations, hardLimitUsage, systemClock);
   const capabilityBroker = new AppCapabilityBroker(registry, appStates, appGrants, targetDenylist);
   const providerRepository = new SqliteProviderRepository(database, cipher);
@@ -260,6 +270,9 @@ export const composeAgent = ({
     eventHub,
     systemClock,
     () => subagentScheduler?.wake(),
+    (runId, runtimeId) => {
+      subagentScheduler?.cancelRuntime(runId, runtimeId);
+    },
   );
   const machine = new MachineCapabilityAdapter(
     connectionResolver,
@@ -381,6 +394,9 @@ export const composeAgent = ({
         if (run && ['created', 'running'].includes(run.status)) scheduler.enqueue(run);
       },
       wakeChildScheduler: () => subagentScheduler?.wake(),
+      cancelChildRuntime: (runId, runtimeId) => {
+        subagentScheduler?.cancelRuntime(runId, runtimeId);
+      },
     },
     systemClock,
   );
@@ -401,6 +417,16 @@ export const composeAgent = ({
     },
     systemClock,
   );
+  quiesceHostExecution = async (scope, deadlineUnixSeconds) => {
+    const stopped = await Promise.allSettled([
+      scheduler.quiesceScope(scope, deadlineUnixSeconds),
+      subagentScheduler!.quiesceScope(scope, deadlineUnixSeconds),
+    ]);
+    await stateCommit.quiesceApp(scope, systemClock.nowUnixSeconds());
+    publishHostWake(scope.userId);
+    const failure = stopped.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failure) throw failure.reason;
+  };
   const notifyCommitted = (run: Parameters<AgentScheduler['enqueue']>[0]) => {
     eventHub.publishRunWake(run.id, run.eventCursor);
     publishHostWake(run.userId);
@@ -445,6 +471,7 @@ export const composeAgent = ({
   const lifecycleSweeps = createAgentLifecycleSweeps({
     stateCommit,
     workspaceRuntime,
+    artifactMaintenance: artifactStore,
     scheduler,
     clock: systemClock,
     notifyCommitted,
@@ -464,6 +491,8 @@ export const composeAgent = ({
         const scope = { userId, appId };
         const updated = await lifecycle.setEnabled(scope, enabled, expectedVersion);
         if (enabled) {
+          scheduler.resumeScope(scope);
+          subagentScheduler?.resumeScope(scope);
           scheduler.resume();
           subagentScheduler?.resume();
           await integrations.syncEnabled(scope);
@@ -520,8 +549,16 @@ export const composeAgent = ({
         if (featureChanged) publishHostWake(userId);
         if (before.effectiveSettings.feature.enabled && !updated.effectiveSettings.feature.enabled) {
           const deadline = systemClock.nowUnixSeconds() + 10;
-          for (const definition of registry.list()) await lifecycle.quiesce(definition.manifest.id, deadline);
+          for (const definition of registry.list()) {
+            await lifecycle.quiesceScope({ userId, appId: definition.manifest.id }, deadline);
+          }
         } else if (!before.effectiveSettings.feature.enabled && updated.effectiveSettings.feature.enabled) {
+          for (const definition of registry.list()) {
+            const scope = { userId, appId: definition.manifest.id };
+            await lifecycle.resumeScope(scope);
+            scheduler.resumeScope(scope);
+            subagentScheduler?.resumeScope(scope);
+          }
           scheduler.resume();
           subagentScheduler?.resume();
         }

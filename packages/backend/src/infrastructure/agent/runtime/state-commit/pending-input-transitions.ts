@@ -4,6 +4,7 @@ import type {
   MutatePendingInputCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
+import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { projectRunUserInputs } from '../../repositories/run-input-projection';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import {
@@ -14,12 +15,6 @@ import {
   summaryPayload,
 } from './transaction-primitives';
 
-interface CommandRow {
-  status: 'pending' | 'committed' | 'unknown';
-  request_hash: string;
-  response_json: string | null;
-}
-
 const idsEqual = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
 
@@ -28,11 +23,7 @@ export const mutatePendingInputTransition = async (
   command: AtomicMutatePendingInput,
 ): Promise<MutatePendingInputCommitResult> => {
   const commandName = `run.pending_input.${command.action}`;
-  const existing = await tx.queryOne<CommandRow>(
-    `SELECT status, request_hash, response_json FROM agent_commands
-     WHERE user_id = ? AND app_id = ? AND command_name = ? AND idempotency_key = ?`,
-    [command.scope.userId, command.scope.appId, commandName, command.idempotencyKey],
-  );
+  const existing = await commandForReplay(tx, command.scope, commandName, command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');

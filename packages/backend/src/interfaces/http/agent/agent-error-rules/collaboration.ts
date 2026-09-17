@@ -4,6 +4,7 @@ import { onCodes, rawCode } from './rule';
 export const collaborationErrorRules: readonly AgentErrorRule[] = [
   onCodes(
     [
+      'RUN_NOT_FOUND',
       'SUBAGENT_PROFILE_NOT_FOUND',
       'DELEGATION_NOT_FOUND',
       'AGENT_RUNTIME_NOT_FOUND',
@@ -23,6 +24,8 @@ export const collaborationErrorRules: readonly AgentErrorRule[] = [
       'DELEGATION_DEADLINE_EXCEEDED',
       'DELEGATION_BUDGET_EXCEEDED',
       'RUN_BUDGET_EXCEEDED',
+      'RUN_NOT_ACTIVE',
+      'DELEGATION_VERSION_CONFLICT',
       'MAILBOX_FULL',
       'MAILBOX_BUDGET_EXCEEDED',
       'MAILBOX_HARD_LIMIT_EXCEEDED',

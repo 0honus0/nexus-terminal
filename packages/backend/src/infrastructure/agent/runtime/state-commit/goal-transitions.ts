@@ -5,24 +5,15 @@ import type {
   SetRunGoalCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
+import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { allocateHostEvent, appendEvents, IDEMPOTENCY_TTL_SECONDS, summaryPayload } from './transaction-primitives';
-
-interface CommandRow {
-  status: 'pending' | 'committed' | 'unknown';
-  request_hash: string;
-  response_json: string | null;
-}
 
 export const setRunGoalTransition = async (
   tx: RelationalDatabase,
   command: AtomicSetRunGoal,
 ): Promise<SetRunGoalCommitResult> => {
-  const existing = await tx.queryOne<CommandRow>(
-    `SELECT status, request_hash, response_json FROM agent_commands
-     WHERE user_id = ? AND app_id = ? AND command_name = 'run.goal.set' AND idempotency_key = ?`,
-    [command.scope.userId, command.scope.appId, command.idempotencyKey],
-  );
+  const existing = await commandForReplay(tx, command.scope, 'run.goal.set', command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');

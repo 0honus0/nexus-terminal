@@ -34,6 +34,42 @@ type WorkerStorageRequestInput =
   | { kind: 'storage.put'; key: string; value: JsonValue; expectedVersion: number | null }
   | { kind: 'storage.delete'; key: string; expectedVersion: number };
 
+const decodeHostMessage = (value: unknown): HostMessage => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  const record = value as Record<string, unknown>;
+  if (!Number.isSafeInteger(record.requestId) || Number(record.requestId) < 1) {
+    throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  }
+  const requestId = Number(record.requestId);
+  switch (record.kind) {
+    case 'lifecycle.activate':
+    case 'lifecycle.health':
+    case 'lifecycle.dispose':
+      return { kind: record.kind, requestId };
+    case 'lifecycle.quiesce':
+      if (!Number.isSafeInteger(record.deadlineUnixSeconds) || Number(record.deadlineUnixSeconds) < 0)
+        throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+      return { kind: record.kind, requestId, deadlineUnixSeconds: Number(record.deadlineUnixSeconds) };
+    case 'lifecycle.migrate':
+      if (record.fromVersion !== null && typeof record.fromVersion !== 'string')
+        throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+      return {
+        kind: record.kind,
+        requestId,
+        fromVersion: record.fromVersion,
+        storage: record.storage,
+      };
+    case 'storage.result':
+      if (record.ok === true) return { kind: record.kind, requestId, ok: true, value: record.value };
+      if (record.ok === false && typeof record.error === 'string' && record.error.length <= 1024) {
+        return { kind: record.kind, requestId, ok: false, error: record.error };
+      }
+      throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+    default:
+      throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  }
+};
+
 const userId = Number(process.env.NEXUS_PLUGIN_USER_ID);
 const appId = process.env.NEXUS_PLUGIN_APP_ID?.trim() ?? '';
 const pluginVersion = process.env.NEXUS_PLUGIN_VERSION?.trim() ?? '';
@@ -148,7 +184,7 @@ const startRuntime = async (): Promise<void> => {
     void (async () => {
       let message: HostMessage;
       try {
-        message = JSON.parse(line) as HostMessage;
+        message = decodeHostMessage(JSON.parse(line) as unknown);
       } catch {
         throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
       }

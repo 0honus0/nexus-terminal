@@ -23,7 +23,6 @@
     type: QuantityType;
   }
   const fields: FieldMeta[] = [
-    { key: 'maxRunTokens', type: 'tokens' },
     { key: 'maxRunSteps', type: 'number' },
     { key: 'maxActiveExecutionSeconds', type: 'seconds' },
     { key: 'toolTimeoutSeconds', type: 'seconds' },

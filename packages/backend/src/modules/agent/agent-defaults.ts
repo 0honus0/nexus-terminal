@@ -1,5 +1,4 @@
 export interface AgentRunBudgetSnapshot {
-  maxRunTokens: number;
   maxRunSteps: number;
   maxActiveExecutionSeconds: number;
 }
@@ -43,7 +42,6 @@ export interface AgentSettingsDocument {
   budget: {
     maxContextTokens: number;
     maxOutputTokens: number;
-    maxRunTokens: number;
     maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
@@ -55,7 +53,6 @@ export interface AgentSettingsDocument {
   hardLimits: {
     maxContextTokens: number;
     maxOutputTokens: number;
-    maxRunTokens: number;
     maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
@@ -120,7 +117,6 @@ export const AGENT_DEFAULTS = {
     budget: {
       maxContextTokens: 32_000,
       maxOutputTokens: 4_096,
-      maxRunTokens: 100_000,
       maxRunSteps: 80,
       maxActiveExecutionSeconds: 1_800,
       toolTimeoutSeconds: 60,
@@ -132,7 +128,6 @@ export const AGENT_DEFAULTS = {
     hardLimits: {
       maxContextTokens: 128_000,
       maxOutputTokens: 16_384,
-      maxRunTokens: 1_000_000,
       maxRunSteps: 400,
       maxActiveExecutionSeconds: 7_200,
       toolTimeoutSeconds: 300,
@@ -381,7 +376,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     budget: {
       maxContextTokens: integer(budget.maxContextTokens, defaults.budget.maxContextTokens, 1),
       maxOutputTokens: integer(budget.maxOutputTokens, defaults.budget.maxOutputTokens, 1),
-      maxRunTokens: integer(budget.maxRunTokens, defaults.budget.maxRunTokens, 1),
       maxRunSteps: integer(budget.maxRunSteps, defaults.budget.maxRunSteps, 1),
       maxActiveExecutionSeconds: integer(
         budget.maxActiveExecutionSeconds,
@@ -397,7 +391,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     hardLimits: {
       maxContextTokens: integer(hardLimits.maxContextTokens, defaults.hardLimits.maxContextTokens, 1),
       maxOutputTokens: integer(hardLimits.maxOutputTokens, defaults.hardLimits.maxOutputTokens, 1),
-      maxRunTokens: integer(hardLimits.maxRunTokens, defaults.hardLimits.maxRunTokens, 1),
       maxRunSteps: integer(hardLimits.maxRunSteps, defaults.hardLimits.maxRunSteps, 1),
       maxActiveExecutionSeconds: integer(
         hardLimits.maxActiveExecutionSeconds,
@@ -509,7 +502,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   const cappedPairs: Array<[keyof AgentSettingsDocument['budget'], keyof AgentSettingsDocument['hardLimits']]> = [
     ['maxContextTokens', 'maxContextTokens'],
     ['maxOutputTokens', 'maxOutputTokens'],
-    ['maxRunTokens', 'maxRunTokens'],
     ['maxRunSteps', 'maxRunSteps'],
     ['maxActiveExecutionSeconds', 'maxActiveExecutionSeconds'],
     ['toolTimeoutSeconds', 'toolTimeoutSeconds'],
@@ -572,7 +564,6 @@ export const normalizeRequestedSettings = (raw: unknown): AgentSettingsDocument 
 export const validateSettings = (raw: unknown): AgentSettingsDocument => normalizeSettings(raw, true);
 
 export const snapshotBudget = (settings: AgentSettingsDocument): AgentRunBudgetSnapshot => ({
-  maxRunTokens: settings.budget.maxRunTokens,
   maxRunSteps: settings.budget.maxRunSteps,
   maxActiveExecutionSeconds: settings.budget.maxActiveExecutionSeconds,
 });

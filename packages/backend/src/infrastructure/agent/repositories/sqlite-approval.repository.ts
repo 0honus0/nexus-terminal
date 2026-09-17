@@ -1,9 +1,4 @@
-import type {
-  ApprovalRepositoryPort,
-  ApprovalView,
-  RequestApprovalInput,
-  ResolveApprovalInput,
-} from '../../../modules/agent/runtime/approvals/approval.repository.port';
+import type { ApprovalRepositoryPort, ApprovalView } from '../../../modules/agent/runtime/approvals/approval.repository.port';
 import type { ToolInspection } from '../../../modules/agent/capabilities/tool.types';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
@@ -58,32 +53,6 @@ const mapRow = (row: ApprovalRow): ApprovalView => ({
 export class SqliteApprovalRepository implements ApprovalRepositoryPort {
   constructor(private readonly db: RelationalDatabase) {}
 
-  async request(input: RequestApprovalInput): Promise<ApprovalView> {
-    await this.db.execute(
-      `INSERT INTO agent_approvals
-        (id, user_id, app_id, run_id, tool_call_id, requested_by_runtime_id, operation_hash,
-         operation_hash_version, status, policy_revision, input_revision, decided_by_user_id,
-         decided_at, consumed_at, requested_at, expires_at, version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'requested', ?, ?, NULL, NULL, NULL, ?, ?, 1)`,
-      [
-        input.id,
-        input.scope.userId,
-        input.scope.appId,
-        input.runId,
-        input.toolCallId,
-        input.requestedByRuntimeId,
-        input.inspection.operationHash,
-        input.inspection.policyRevision,
-        input.inspection.inputRevision,
-        input.requestedAt,
-        input.expiresAt,
-      ],
-    );
-    const created = await this.get(input.scope, input.id);
-    if (!created) throw new Error('APPROVAL_STATE_INVALID');
-    return created;
-  }
-
   async get(scope: Scope, approvalId: string): Promise<ApprovalView | null> {
     const row = await this.db.queryOne<ApprovalRow>(
       `SELECT ${columns} FROM agent_approvals a
@@ -102,67 +71,5 @@ export class SqliteApprovalRepository implements ApprovalRepositoryPort {
       [runId, scope.userId, scope.appId],
     );
     return rows.map(mapRow);
-  }
-
-  async resolve(input: ResolveApprovalInput): Promise<ApprovalView> {
-    const changed = await this.db.execute(
-      `UPDATE agent_approvals SET status = ?, decided_by_user_id = ?, decided_at = ?, version = version + 1
-       WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'requested' AND version = ?
-         AND operation_hash = ? AND policy_revision = ? AND input_revision = ? AND expires_at > ?`,
-      [
-        input.decision,
-        input.decidedByUserId,
-        input.decidedAt,
-        input.approvalId,
-        input.scope.userId,
-        input.scope.appId,
-        input.expectedVersion,
-        input.operationHash,
-        input.expectedPolicyRevision,
-        input.expectedInputRevision,
-        input.decidedAt,
-      ],
-    );
-    if (changed.changes !== 1) throw new Error('APPROVAL_STALE');
-    const result = await this.get(input.scope, input.approvalId);
-    if (!result) throw new Error('NOT_FOUND');
-    return result;
-  }
-
-  async consume(
-    scope: Scope,
-    approvalId: string,
-    operationHash: string,
-    expectedVersion: number,
-    now: number,
-  ): Promise<ApprovalView> {
-    const changed = await this.db.execute(
-      `UPDATE agent_approvals SET consumed_at = ?, version = version + 1
-       WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'approved' AND consumed_at IS NULL
-         AND operation_hash = ? AND version = ? AND expires_at > ?`,
-      [now, approvalId, scope.userId, scope.appId, operationHash, expectedVersion, now],
-    );
-    if (changed.changes !== 1) throw new Error('APPROVAL_STALE');
-    const result = await this.get(scope, approvalId);
-    if (!result) throw new Error('NOT_FOUND');
-    return result;
-  }
-
-  async expire(now: number): Promise<number> {
-    const changed = await this.db.execute(
-      `UPDATE agent_approvals SET status = 'expired', decided_at = ?, version = version + 1
-       WHERE status = 'requested' AND expires_at <= ?`,
-      [now, now],
-    );
-    return changed.changes;
-  }
-
-  async supersedeRun(scope: Scope, runId: string, inputRevision: number, now: number): Promise<number> {
-    const changed = await this.db.execute(
-      `UPDATE agent_approvals SET status = 'superseded', decided_at = ?, version = version + 1
-       WHERE run_id = ? AND user_id = ? AND app_id = ? AND status = 'requested' AND input_revision < ?`,
-      [now, runId, scope.userId, scope.appId, inputRevision],
-    );
-    return changed.changes;
   }
 }

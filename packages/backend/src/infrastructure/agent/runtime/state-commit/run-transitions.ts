@@ -15,6 +15,7 @@ import type {
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import type { RunBudget, RunStatus } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
+import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import {
   allocateHostEvent,
@@ -32,12 +33,6 @@ import {
   updateAppLiveCount,
 } from './transaction-primitives';
 
-interface CommandRow {
-  status: 'pending' | 'committed' | 'unknown';
-  request_hash: string;
-  response_json: string | null;
-}
-
 interface ThreadRow {
   next_sequence: number;
   version: number;
@@ -53,11 +48,7 @@ export const createRunTransition = async (
   tx: RelationalDatabase,
   command: AtomicCreateRun,
 ): Promise<CreateRunCommitResult> => {
-  const existing = await tx.queryOne<CommandRow>(
-    `SELECT status, request_hash, response_json FROM agent_commands
-     WHERE user_id = ? AND app_id = ? AND command_name = 'run.create' AND idempotency_key = ?`,
-    [command.scope.userId, command.scope.appId, command.idempotencyKey],
-  );
+  const existing = await commandForReplay(tx, command.scope, 'run.create', command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
@@ -85,7 +76,7 @@ export const createRunTransition = async (
   if (!thread) throw new Error('NOT_FOUND');
   const live = await tx.queryOne<{ id: string }>(
     `SELECT id FROM agent_runs WHERE thread_id = ?
-     AND status IN ('created','running','awaiting_approval','awaiting_budget','cancelling') LIMIT 1`,
+     AND status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling') LIMIT 1`,
     [command.threadId],
   );
   if (live) throw new Error('THREAD_HAS_ACTIVE_RUN');
@@ -251,11 +242,7 @@ export const cancelRunTransition = async (
   tx: RelationalDatabase,
   command: AtomicCancelRun,
 ): Promise<CancelRunCommitResult> => {
-  const existing = await tx.queryOne<CommandRow>(
-    `SELECT status, request_hash, response_json FROM agent_commands
-     WHERE user_id = ? AND app_id = ? AND command_name = 'run.cancel' AND idempotency_key = ?`,
-    [command.scope.userId, command.scope.appId, command.idempotencyKey],
-  );
+  const existing = await commandForReplay(tx, command.scope, 'run.cancel', command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
@@ -421,11 +408,7 @@ export const increaseRunBudgetTransition = async (
   tx: RelationalDatabase,
   command: AtomicIncreaseRunBudget,
 ): Promise<IncreaseRunBudgetCommitResult> => {
-  const existing = await tx.queryOne<CommandRow>(
-    `SELECT status, request_hash, response_json FROM agent_commands
-     WHERE user_id = ? AND app_id = ? AND command_name = 'run.budget' AND idempotency_key = ?`,
-    [command.scope.userId, command.scope.appId, command.idempotencyKey],
-  );
+  const existing = await commandForReplay(tx, command.scope, 'run.budget', command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
@@ -575,8 +558,8 @@ export const resolveRunReconciliationTransition = async (
       await tx.execute(
         `DELETE FROM agent_leases
          WHERE resource_key = ? AND owner_type = ? AND owner_id = ?
-           AND active_mutation = 1 AND expires_at <= ?`,
-        [quarantine.resource_key, quarantine.owner_type, quarantine.owner_id, command.now],
+           AND active_mutation = 1`,
+        [quarantine.resource_key, quarantine.owner_type, quarantine.owner_id],
       );
     }
 
@@ -585,6 +568,27 @@ export const resolveRunReconciliationTransition = async (
       resource.version,
     ]);
     if (deleted.changes !== 1) throw new Error('STATE_CONFLICT');
+  }
+
+  const reconciledToolCallIds = [
+    ...new Set(current.flatMap((resource) => (resource.tool_call_id ? [resource.tool_call_id] : []))),
+  ];
+  if (reconciledToolCallIds.length > 0) {
+    const placeholders = reconciledToolCallIds.map(() => '?').join(',');
+    await tx.execute(
+      `UPDATE agent_tool_calls
+       SET status = 'failed', completed_at = COALESCE(completed_at, ?), version = version + 1
+       WHERE run_id = ? AND id IN (${placeholders}) AND status = 'reconciling'`,
+      [command.now, row.id, ...reconciledToolCallIds],
+    );
+    await tx.execute(
+      `UPDATE agent_steps
+       SET status = 'failed', completed_at = COALESCE(completed_at, ?)
+       WHERE run_id = ? AND kind = 'tool'
+         AND id IN (SELECT step_id FROM agent_tool_calls WHERE id IN (${placeholders}))
+         AND status IN ('created','running')`,
+      [command.now, row.id, ...reconciledToolCallIds],
+    );
   }
 
   const events: DurableEventInput[] = [
@@ -607,11 +611,7 @@ export const deleteRunTransition = async (
   tx: RelationalDatabase,
   command: AtomicDeleteRun,
 ): Promise<DeleteRunCommitResult> => {
-  const existing = await tx.queryOne<CommandRow>(
-    `SELECT status, request_hash, response_json FROM agent_commands
-     WHERE user_id = ? AND app_id = ? AND command_name = 'run.delete' AND idempotency_key = ?`,
-    [command.scope.userId, command.scope.appId, command.idempotencyKey],
-  );
+  const existing = await commandForReplay(tx, command.scope, 'run.delete', command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');

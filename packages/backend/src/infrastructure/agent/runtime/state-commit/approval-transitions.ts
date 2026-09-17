@@ -7,6 +7,7 @@ import type {
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import type { RunView } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
+import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import {
   allocateHostEvent,
@@ -16,12 +17,6 @@ import {
   patchRun,
   summaryPayload,
 } from './transaction-primitives';
-
-interface CommandRow {
-  status: 'pending' | 'committed' | 'unknown';
-  request_hash: string;
-  response_json: string | null;
-}
 
 export const requestToolApprovalTransition = async (
   tx: RelationalDatabase,
@@ -111,11 +106,7 @@ export const resolveToolApprovalTransition = async (
   tx: RelationalDatabase,
   command: ResolveToolApprovalCommand,
 ): Promise<StateCommitResult> => {
-  const existing = await tx.queryOne<CommandRow>(
-    `SELECT status, request_hash, response_json FROM agent_commands
-     WHERE user_id = ? AND app_id = ? AND command_name = 'approval.resolve' AND idempotency_key = ?`,
-    [command.scope.userId, command.scope.appId, command.idempotencyKey],
-  );
+  const existing = await commandForReplay(tx, command.scope, 'approval.resolve', command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');

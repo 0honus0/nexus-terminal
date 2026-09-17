@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import type { CommandRecord, JobRecord, WorkspaceJobResult, WorkspaceRecord } from '../types';
 import { runnerLog } from '../logging';
+import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
 
 interface JournalState {
   schemaVersion: 4;
@@ -14,6 +15,194 @@ interface JournalState {
 const empty = (): JournalState => ({ schemaVersion: 4, commands: {}, workspaces: {}, jobs: {} });
 const TERMINAL_HISTORY_LIMIT = 4096;
 const TERMINAL_HISTORY_MIN_AGE_SECONDS = 24 * 60 * 60;
+const MAX_JOURNAL_COLLECTION_ITEMS = 16_384;
+const MAX_JOURNAL_STRING_BYTES = 64 * 1024;
+
+type UnknownRecord = Record<string, unknown>;
+
+const invalidJournal = (): never => {
+  throw new Error('JOURNAL_STATE_INVALID');
+};
+
+const recordValue = (value: unknown): UnknownRecord => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return invalidJournal();
+  return value as UnknownRecord;
+};
+
+const stringValue = (value: unknown, nullable = false): string | null => {
+  if (nullable && value === null) return null;
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_JOURNAL_STRING_BYTES) return invalidJournal();
+  return value;
+};
+
+const integerValue = (value: unknown, minimum = 0): number => {
+  if (!Number.isSafeInteger(value) || Number(value) < minimum) return invalidJournal();
+  return Number(value);
+};
+
+const booleanValue = (value: unknown): boolean => {
+  if (typeof value !== 'boolean') return invalidJournal();
+  return value;
+};
+
+const stringArrayValue = (value: unknown, maxItems: number): string[] => {
+  if (!Array.isArray(value) || value.length > maxItems) return invalidJournal();
+  return value.map((item) => stringValue(item) as string);
+};
+
+const decodeToolchain = (value: unknown): WorkspaceRecord['toolchain'] => {
+  if (!Array.isArray(value) || value.length > 32) return invalidJournal();
+  return value.map((item) => {
+    const record = recordValue(item);
+    return {
+      familyId: stringValue(record.familyId) as string,
+      versionId: stringValue(record.versionId) as string,
+      contentDigest: stringValue(record.contentDigest) as string,
+    };
+  });
+};
+
+const decodeRunnerPlugins = (value: unknown): WorkspaceRecord['runnerPlugins'] => {
+  if (!Array.isArray(value) || value.length > 128) return invalidJournal();
+  return value.map((item) => {
+    const record = recordValue(item);
+    if (record.protocolVersion !== PLUGIN_RUNNER_PROTOCOL_VERSION) return invalidJournal();
+    return {
+      pluginId: stringValue(record.pluginId) as string,
+      version: stringValue(record.version) as string,
+      sdkVersion: stringValue(record.sdkVersion) as string,
+      protocolVersion: PLUGIN_RUNNER_PROTOCOL_VERSION,
+      packageHash: stringValue(record.packageHash) as string,
+      entry: stringValue(record.entry) as string,
+    };
+  });
+};
+
+const decodeAcpProfiles = (value: unknown): WorkspaceRecord['acpProfiles'] => {
+  if (!Array.isArray(value) || value.length > 64) return invalidJournal();
+  return value.map((item) => {
+    const record = recordValue(item);
+    return {
+      id: stringValue(record.id) as string,
+      profileRevision: integerValue(record.profileRevision, 1),
+      argv: stringArrayValue(record.argv, 128),
+      cwd: stringValue(record.cwd) as string,
+    };
+  });
+};
+
+const decodeBrowserTarget = (value: unknown): WorkspaceRecord['browserTarget'] => {
+  if (value === null) return null;
+  const record = recordValue(value);
+  if (!Array.isArray(record.endpoints) || record.endpoints.length > 32) return invalidJournal();
+  return {
+    id: stringValue(record.id) as string,
+    profileRevision: integerValue(record.profileRevision, 1),
+    endpoints: record.endpoints.map((item) => {
+      const endpoint = recordValue(item);
+      if (!['docker-network', 'external-network'].includes(String(endpoint.scope))) return invalidJournal();
+      if (!['backend', 'runner'].includes(String(endpoint.via))) return invalidJournal();
+      return {
+        scope: endpoint.scope as 'docker-network' | 'external-network',
+        via: endpoint.via as 'backend' | 'runner',
+        url: stringValue(endpoint.url) as string,
+        priority: integerValue(endpoint.priority),
+        allowPlaintext: booleanValue(endpoint.allowPlaintext),
+        verifyTls: booleanValue(endpoint.verifyTls),
+      };
+    }),
+    allowedUrlPatterns: stringArrayValue(record.allowedUrlPatterns, 256),
+  };
+};
+
+const decodeWorkspaceRecord = (value: unknown): WorkspaceRecord => {
+  const record = recordValue(value);
+  if (!['creating', 'ready', 'running', 'stopped', 'deleted', 'failed'].includes(String(record.status)))
+    return invalidJournal();
+  return {
+    workspaceId: stringValue(record.workspaceId) as string,
+    generation: integerValue(record.generation, 1),
+    status: record.status as WorkspaceRecord['status'],
+    retained: booleanValue(record.retained),
+    toolchain: decodeToolchain(record.toolchain),
+    runnerPlugins: decodeRunnerPlugins(record.runnerPlugins),
+    acpProfiles: decodeAcpProfiles(record.acpProfiles),
+    browserTarget: decodeBrowserTarget(record.browserTarget),
+  };
+};
+
+const decodeCommandRecord = (value: unknown): CommandRecord => {
+  const record = recordValue(value);
+  if (!['pending', 'running', 'succeeded', 'failed', 'unknown'].includes(String(record.status))) return invalidJournal();
+  return {
+    commandId: stringValue(record.commandId) as string,
+    payloadHash: stringValue(record.payloadHash) as string,
+    status: record.status as CommandRecord['status'],
+    action: stringValue(record.action) as string,
+    workspaceId: stringValue(record.workspaceId, true),
+    result: record.result ?? null,
+    error: stringValue(record.error, true),
+    createdAt: integerValue(record.createdAt),
+    completedAt: record.completedAt === null ? null : integerValue(record.completedAt),
+  };
+};
+
+const decodeJobResult = (value: unknown): WorkspaceJobResult => {
+  const record = recordValue(value);
+  return {
+    exitCode: record.exitCode === null ? null : integerValue(record.exitCode),
+    signal: stringValue(record.signal, true),
+    stdout: stringValue(record.stdout) as string,
+    stderr: stringValue(record.stderr) as string,
+    truncated: booleanValue(record.truncated),
+    timedOut: booleanValue(record.timedOut),
+  };
+};
+
+const decodeJobRecord = (value: unknown): JobRecord => {
+  const record = recordValue(value);
+  if (!['pending', 'running', 'succeeded', 'failed', 'unknown', 'cancelled'].includes(String(record.status)))
+    return invalidJournal();
+  return {
+    jobId: stringValue(record.jobId) as string,
+    payloadHash: stringValue(record.payloadHash) as string,
+    workspaceId: stringValue(record.workspaceId) as string,
+    generation: integerValue(record.generation, 1),
+    status: record.status as JobRecord['status'],
+    result: record.result === null ? null : decodeJobResult(record.result),
+    error: stringValue(record.error, true),
+    createdAt: integerValue(record.createdAt),
+    completedAt: record.completedAt === null ? null : integerValue(record.completedAt),
+  };
+};
+
+const decodeRecordCollection = <T>(
+  value: unknown,
+  decode: (entry: unknown) => T,
+  id: (entry: T) => string,
+): Record<string, T> => {
+  const record = recordValue(value);
+  const entries = Object.entries(record);
+  if (entries.length > MAX_JOURNAL_COLLECTION_ITEMS) return invalidJournal();
+  const decoded: Record<string, T> = {};
+  for (const [key, raw] of entries) {
+    const entry = decode(raw);
+    if (key !== id(entry)) return invalidJournal();
+    decoded[key] = entry;
+  }
+  return decoded;
+};
+
+const decodeJournalState = (value: unknown): JournalState => {
+  const record = recordValue(value);
+  if (record.schemaVersion !== 4) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
+  return {
+    schemaVersion: 4,
+    commands: decodeRecordCollection(record.commands, decodeCommandRecord, (entry) => entry.commandId),
+    workspaces: decodeRecordCollection(record.workspaces, decodeWorkspaceRecord, (entry) => entry.workspaceId),
+    jobs: decodeRecordCollection(record.jobs, decodeJobRecord, (entry) => entry.jobId),
+  };
+};
 
 const isMissingFile = (error: unknown): boolean =>
   error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'ENOENT';
@@ -43,21 +232,7 @@ export class RunnerJournal {
   constructor(private readonly filePath: string) {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     try {
-      this.state = JSON.parse(fs.readFileSync(filePath, 'utf8')) as JournalState;
-      if (this.state.schemaVersion !== 4) throw new Error('JOURNAL_SCHEMA_UNSUPPORTED');
-      if (
-        !this.state.commands ||
-        typeof this.state.commands !== 'object' ||
-        Array.isArray(this.state.commands) ||
-        !this.state.workspaces ||
-        typeof this.state.workspaces !== 'object' ||
-        Array.isArray(this.state.workspaces) ||
-        !this.state.jobs ||
-        typeof this.state.jobs !== 'object' ||
-        Array.isArray(this.state.jobs)
-      ) {
-        throw new Error('JOURNAL_STATE_INVALID');
-      }
+      this.state = decodeJournalState(JSON.parse(fs.readFileSync(filePath, 'utf8')) as unknown);
     } catch (error) {
       if (isMissingFile(error)) {
         this.state = empty();

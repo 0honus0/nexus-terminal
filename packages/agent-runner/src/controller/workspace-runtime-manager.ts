@@ -21,6 +21,45 @@ interface WorkspaceRuntimeMetadata {
   toolchainFingerprint: string;
 }
 
+const decodeWorkspaceRuntimeMetadata = (value: unknown): WorkspaceRuntimeMetadata => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('WORKSPACE_METADATA_INVALID');
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.workspaceId !== 'string' ||
+    !SAFE_SEGMENT.test(record.workspaceId) ||
+    !Number.isSafeInteger(record.generation) ||
+    Number(record.generation) < 1 ||
+    typeof record.runtimeDigest !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(record.runtimeDigest) ||
+    typeof record.toolchainFingerprint !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(record.toolchainFingerprint) ||
+    !Array.isArray(record.toolchain) ||
+    record.toolchain.length > 32
+  ) {
+    throw new Error('WORKSPACE_METADATA_INVALID');
+  }
+  const toolchain = record.toolchain.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('WORKSPACE_METADATA_INVALID');
+    const pack = item as Record<string, unknown>;
+    if (
+      typeof pack.familyId !== 'string' ||
+      typeof pack.versionId !== 'string' ||
+      typeof pack.contentDigest !== 'string' ||
+      !/^sha256:[a-f0-9]{64}$/.test(pack.contentDigest)
+    ) {
+      throw new Error('WORKSPACE_METADATA_INVALID');
+    }
+    return { familyId: pack.familyId, versionId: pack.versionId, contentDigest: pack.contentDigest };
+  });
+  return {
+    workspaceId: record.workspaceId,
+    generation: Number(record.generation),
+    toolchain,
+    runtimeDigest: record.runtimeDigest,
+    toolchainFingerprint: record.toolchainFingerprint,
+  };
+};
+
 const safeSegment = (value: string): string => {
   if (!SAFE_SEGMENT.test(value)) throw new Error('WORKSPACE_ID_INVALID');
   return value;
@@ -225,18 +264,12 @@ export class WorkspaceRuntimeManager {
   }
 
   private readMetadata(root: string): WorkspaceRuntimeMetadata {
-    const parsed = JSON.parse(
-      fs.readFileSync(path.join(root, '.control', 'metadata.json'), 'utf8'),
-    ) as WorkspaceRuntimeMetadata;
-    if (
-      !parsed ||
-      typeof parsed !== 'object' ||
-      typeof parsed.workspaceId !== 'string' ||
-      !Number.isSafeInteger(parsed.generation) ||
-      !Array.isArray(parsed.toolchain) ||
-      typeof parsed.runtimeDigest !== 'string' ||
-      !/^[a-f0-9]{64}$/.test(parsed.toolchainFingerprint)
-    ) {
+    let parsed: WorkspaceRuntimeMetadata;
+    try {
+      parsed = decodeWorkspaceRuntimeMetadata(
+        JSON.parse(fs.readFileSync(path.join(root, '.control', 'metadata.json'), 'utf8')) as unknown,
+      );
+    } catch {
       throw new Error('WORKSPACE_METADATA_INVALID');
     }
     return parsed;

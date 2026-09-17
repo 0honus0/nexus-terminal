@@ -1,6 +1,9 @@
 import type { Scope } from '../../agent.types';
 import type { ToolInspection } from '../../capabilities/tool.types';
 
+// Port contract rule: durable side-effect methods need a concrete orchestration owner and caller.
+// Do not retain unused mutation methods "for later"; delete them so StateCommit remains the sole mutation authority.
+
 export type ApprovalStatus = 'requested' | 'approved' | 'denied' | 'expired' | 'superseded';
 
 export interface ApprovalView {
@@ -24,41 +27,7 @@ export interface ApprovalView {
   inspection: ToolInspection;
 }
 
-export interface RequestApprovalInput {
-  scope: Scope;
-  id: string;
-  runId: string;
-  toolCallId: string;
-  requestedByRuntimeId: string;
-  inspection: ToolInspection;
-  requestedAt: number;
-  expiresAt: number;
-}
-
-export interface ResolveApprovalInput {
-  scope: Scope;
-  approvalId: string;
-  decision: 'approved' | 'denied';
-  operationHash: string;
-  expectedVersion: number;
-  expectedPolicyRevision: number;
-  expectedInputRevision: number;
-  decidedByUserId: number;
-  decidedAt: number;
-}
-
 export interface ApprovalRepositoryPort {
-  request(input: RequestApprovalInput): Promise<ApprovalView>;
   get(scope: Scope, approvalId: string): Promise<ApprovalView | null>;
   list(scope: Scope, runId: string): Promise<ApprovalView[]>;
-  resolve(input: ResolveApprovalInput): Promise<ApprovalView>;
-  consume(
-    scope: Scope,
-    approvalId: string,
-    operationHash: string,
-    expectedVersion: number,
-    now: number,
-  ): Promise<ApprovalView>;
-  expire(now: number): Promise<number>;
-  supersedeRun(scope: Scope, runId: string, inputRevision: number, now: number): Promise<number>;
 }

@@ -59,7 +59,6 @@
     resumeCheckpoint: [snapshot: AgentRunView | AgentRunSnapshot, checkpoint: AgentCheckpointView];
     increaseBudget: [
       increase: Partial<{
-        maxRunTokens: number;
         maxRunSteps: number;
         maxActiveExecutionSeconds: number;
       }>,
@@ -80,19 +79,12 @@
       props.detailSnapshot && props.detailSnapshot.status !== 'cancelling' && !props.detailSnapshot.needsReconciliation,
     );
 
-  const tokenUsage = computed(() =>
-    props.current ? props.current.usage.inputTokens + props.current.usage.outputTokens : 0,
-  );
-  const tokenPercent = computed(() =>
-    props.current
-      ? Math.min(100, Math.round((tokenUsage.value / Math.max(1, props.current.budget.maxRunTokens)) * 100))
-      : 0,
-  );
-  const stepPercent = computed(() =>
-    props.current
-      ? Math.min(100, Math.round((props.current.usage.steps / Math.max(1, props.current.budget.maxRunSteps)) * 100))
-      : 0,
-  );
+  const contextUsage = computed(() => props.current?.usage.context ?? null);
+  const contextPercent = computed(() => {
+    const context = contextUsage.value;
+    if (!context) return 0;
+    return Math.min(100, Math.round((context.inputTokens / Math.max(1, context.contextWindowTokens)) * 100));
+  });
   const planItems = computed(() => props.current?.plan.items ?? []);
   const completedPlanItems = computed(() => planItems.value.filter((item) => item.status === 'completed').length);
   const planPercent = computed(() =>
@@ -111,6 +103,7 @@
     if (props.current.needsReconciliation) return 'reconciliation';
     if (props.current.status === 'awaiting_approval') return 'approval';
     if (props.current.status === 'awaiting_budget') return 'budget';
+    if (props.current.status === 'awaiting_input') return 'input';
     return null;
   });
   const historyRuns = computed(() => props.threadRuns.filter((item) => item.id !== props.current?.id).slice(0, 8));
@@ -170,7 +163,6 @@
     const hard = props.hardLimits;
     if (!run || !hard) return;
     const next: Partial<{
-      maxRunTokens: number;
       maxRunSteps: number;
       maxActiveExecutionSeconds: number;
     }> = {};
@@ -178,10 +170,8 @@
       if (current >= ceiling) return undefined;
       return Math.min(ceiling, Math.max(current + 1, Math.ceil(current * 1.5)));
     };
-    const tokens = raise(run.budget.maxRunTokens, hard.maxRunTokens);
     const steps = raise(run.budget.maxRunSteps, hard.maxRunSteps);
     const seconds = raise(run.budget.maxActiveExecutionSeconds, hard.maxActiveExecutionSeconds);
-    if (tokens !== undefined) next.maxRunTokens = tokens;
     if (steps !== undefined) next.maxRunSteps = steps;
     if (seconds !== undefined) next.maxActiveExecutionSeconds = seconds;
     if (Object.keys(next).length) emit('increaseBudget', next);
@@ -547,16 +537,21 @@
                 <div class="mt-3 border-t border-border/50 pt-2.5 space-y-2.5">
                   <div>
                     <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
-                      <span class="font-medium">{{ $t('agent.tasks.tokens') }}</span>
-                      <span class="font-mono"
-                        >{{ tokenUsage }} / {{ current.budget.maxRunTokens }} · {{ tokenPercent }}%</span
-                      >
+                      <span class="font-medium">{{ $t('agent.tasks.contextUsage') }}</span>
+                      <span v-if="contextUsage" class="font-mono">
+                        {{ contextUsage.inputTokens }} / {{ contextUsage.contextWindowTokens }} · {{ contextPercent }}%
+                      </span>
+                      <span v-else class="font-mono">—</span>
                     </div>
                     <div class="h-1.5 overflow-hidden rounded-full bg-header">
                       <div
                         class="h-full rounded-full bg-primary/75 transition-all duration-300"
-                        :style="{ width: `${tokenPercent}%` }"
+                        :style="{ width: `${contextPercent}%` }"
                       ></div>
+                    </div>
+                    <div v-if="contextUsage" class="mt-1 font-mono text-[9px] text-text-secondary/75">
+                      {{ $t('agent.tasks.contextReserved', { value: contextUsage.reservedOutputTokens }) }} ·
+                      {{ $t(`agent.tasks.contextSource.${contextUsage.source}`) }}
                     </div>
                     <div class="mt-1 font-mono text-[9px] text-text-secondary/75">
                       {{
@@ -572,12 +567,6 @@
                     <div class="mb-1 flex items-center justify-between text-[10px] text-text-secondary">
                       <span class="font-medium">{{ $t('agent.tasks.steps') }}</span>
                       <span class="font-mono">{{ current.usage.steps }} / {{ current.budget.maxRunSteps }}</span>
-                    </div>
-                    <div class="h-1.5 overflow-hidden rounded-full bg-header">
-                      <div
-                        class="h-full rounded-full bg-primary/75 transition-all duration-300"
-                        :style="{ width: `${stepPercent}%` }"
-                      ></div>
                     </div>
                   </div>
                   <div class="grid grid-cols-2 gap-2 text-[10px]">

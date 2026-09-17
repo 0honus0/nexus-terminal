@@ -90,7 +90,6 @@
       allowedModels: [{ ...first.ref }],
       capabilities: ['runs.execute'],
       peerMessaging: 'parent-child',
-      maxTokens: Math.min(8192, props.settings.hardLimits.maxRunTokens),
       maxSteps: Math.min(12, props.settings.hardLimits.maxRunSteps),
       failureMode: 'isolate',
     });
@@ -172,8 +171,6 @@
     Boolean(
       profileSettings.value?.policy.profiles.some(
         (profile) =>
-          !Number.isSafeInteger(profile.maxTokens) ||
-          profile.maxTokens < 1 ||
           !Number.isSafeInteger(profile.maxSteps) ||
           profile.maxSteps < 1,
       ),
@@ -292,18 +289,6 @@
                 >
                   <option v-for="model in modelOptions" :key="model.key" :value="model.key">{{ model.label }}</option>
                 </select>
-              </label>
-              <label>
-                <span class="mb-1 block text-xs text-text-secondary">{{
-                  $t('agent.settings.subagents.maxTokens')
-                }}</span>
-                <QuantityInput
-                  v-model="profile.maxTokens"
-                  type="tokens"
-                  :placeholder="$t('agent.settings.subagents.maxTokensPlaceholder')"
-                  :min="1"
-                  :disabled="busy || profileBusy"
-                />
               </label>
               <label>
                 <span class="mb-1 block text-xs text-text-secondary">{{

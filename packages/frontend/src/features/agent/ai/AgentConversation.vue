@@ -37,6 +37,10 @@
 
   const { t } = useI18n();
   const reconciliationNote = ref('');
+  const reconciliationResourceReason = (reason: string): string =>
+    reason === 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION'
+      ? t('agent.operations.reconciliationLeaseFinalization')
+      : reason;
   watch(
     () => props.reconciliation,
     (required) => {
@@ -216,7 +220,7 @@
   const activeRun = computed(() =>
     Boolean(
       props.run &&
-      ['created', 'running', 'awaiting_approval', 'awaiting_budget', 'cancelling'].includes(props.run.status),
+      ['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input', 'cancelling'].includes(props.run.status),
     ),
   );
   const hasDraft = computed(() => Boolean(props.draft.trim()));
@@ -534,7 +538,9 @@
                 class="rounded-lg border border-warning/20 bg-background/60 px-2.5 py-1.5"
               >
                 <div class="font-mono text-[10px] font-semibold text-foreground">{{ resource.resourceKey }}</div>
-                <div class="mt-0.5 text-[10px] leading-4 text-text-secondary">{{ resource.reason }}</div>
+                <div class="mt-0.5 text-[10px] leading-4 text-text-secondary">
+                  {{ reconciliationResourceReason(resource.reason) }}
+                </div>
               </div>
             </div>
             <div v-else class="mb-2 text-[10px] text-text-secondary">
@@ -673,13 +679,10 @@
               <span
                 v-if="run && (totalRunTokens > 0 || run.usage.steps > 0)"
                 class="agent-token-status inline-flex h-7 items-center gap-1.5 rounded-lg border border-border/55 bg-background/50 px-2 text-[9.5px] text-text-secondary select-none"
-                :title="`${$t('agent.tasks.totalTokens')}: ${totalRunTokens} · input ${run.usage.inputTokens} · output ${run.usage.outputTokens} · cache ${runCacheRate}% · steps ${run.usage.steps}${run.budget.maxRunTokens ? ` · budget ${Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100))}%` : ''}`"
+                :title="`${$t('agent.tasks.totalTokens')}: ${totalRunTokens} · input ${run.usage.inputTokens} · output ${run.usage.outputTokens} · cache ${runCacheRate}% · steps ${run.usage.steps}`"
               >
                 <i class="fa-solid fa-chart-simple text-[8px] text-text-secondary/70" aria-hidden="true"></i>
                 <strong class="font-mono font-medium text-foreground/80">{{ formatTokens(totalRunTokens) }}</strong>
-                <span v-if="run.budget.maxRunTokens" class="agent-token-budget text-text-secondary/60">
-                  · {{ Math.min(100, Math.round((totalRunTokens / Math.max(1, run.budget.maxRunTokens)) * 100)) }}%
-                </span>
               </span>
               <button
                 type="button"

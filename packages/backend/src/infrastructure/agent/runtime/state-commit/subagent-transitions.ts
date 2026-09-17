@@ -18,6 +18,7 @@ import type {
 import type { RunBudget, RunUsage } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
+import { enqueueParentJoinResume } from '../subagent-join-wake';
 import {
   allocateHostEvent,
   appendEvents,
@@ -45,13 +46,11 @@ export const beginSubagentModelStepTransition = async (
   const delegation = await tx.queryOne<{
     status: string;
     child_runtime_id: string;
-    max_tokens: number;
     max_steps: number;
-    used_tokens: number;
     used_steps: number;
     deadline_at: number;
   }>(
-    `SELECT status, child_runtime_id, max_tokens, max_steps, used_tokens, used_steps, deadline_at
+    `SELECT status, child_runtime_id, max_steps, used_steps, deadline_at
      FROM agent_delegations WHERE id = ? AND run_id = ?`,
     [command.delegationId, command.runId],
   );
@@ -63,12 +62,7 @@ export const beginSubagentModelStepTransition = async (
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
   if (delegation.deadline_at <= command.now) throw new Error('DELEGATION_DEADLINE_EXCEEDED');
-  if (
-    delegation.used_steps >= delegation.max_steps ||
-    delegation.used_tokens + command.reservedTokens > delegation.max_tokens
-  ) {
-    throw new Error('DELEGATION_BUDGET_EXCEEDED');
-  }
+  if (delegation.used_steps >= delegation.max_steps) throw new Error('DELEGATION_BUDGET_EXCEEDED');
   const work = await tx.queryOne<{ status: string; owner_epoch: number | null }>(
     `SELECT status, owner_epoch FROM agent_scheduler_work
      WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'model_step'`,
@@ -280,13 +274,11 @@ export const commitSubagentToolProposalBatchTransition = async (
   const delegation = await tx.queryOne<{
     status: string;
     child_runtime_id: string;
-    used_tokens: number;
-    max_tokens: number;
     used_steps: number;
     max_steps: number;
     deadline_at: number;
   }>(
-    `SELECT status, child_runtime_id, used_tokens, max_tokens, used_steps, max_steps, deadline_at
+    `SELECT status, child_runtime_id, used_steps, max_steps, deadline_at
      FROM agent_delegations WHERE id = ? AND run_id = ?`,
     [command.delegationId, command.runId],
   );
@@ -294,10 +286,7 @@ export const commitSubagentToolProposalBatchTransition = async (
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
   const tokenDelta = command.inputTokens + command.outputTokens;
-  if (
-    delegation.used_tokens + tokenDelta > delegation.max_tokens ||
-    delegation.used_steps + command.items.length > delegation.max_steps
-  ) {
+  if (delegation.used_steps + command.items.length > delegation.max_steps) {
     throw new Error('DELEGATION_BUDGET_EXCEEDED');
   }
   const runUsage = JSON.parse(row.usage_json) as RunUsage;
@@ -866,8 +855,8 @@ export const settleSubagentWithoutModelTransition = async (
   if (!work || work.status !== 'claimed' || work.owner_epoch !== command.ownerEpoch) {
     throw new Error('SCHEDULER_WORK_STALE');
   }
-  const delegation = await tx.queryOne<{ status: string; child_runtime_id: string }>(
-    `SELECT status, child_runtime_id FROM agent_delegations WHERE id = ? AND run_id = ?`,
+  const delegation = await tx.queryOne<{ status: string; child_runtime_id: string; parent_runtime_id: string }>(
+    `SELECT status, child_runtime_id, parent_runtime_id FROM agent_delegations WHERE id = ? AND run_id = ?`,
     [command.delegationId, command.runId],
   );
   if (
@@ -910,6 +899,7 @@ export const settleSubagentWithoutModelTransition = async (
   if (delegationChanged.changes !== 1 || runtimeChanged.changes !== 1 || workChanged.changes !== 1) {
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
+  await enqueueParentJoinResume(tx, command.runId, delegation.parent_runtime_id, command.delegationId, command.now);
   const events: DurableEventInput[] = [
     {
       type: command.outcome === 'cancelled' ? 'subagent.cancelled' : 'subagent.failed',
@@ -955,9 +945,8 @@ export const settleSubagentModelStepTransition = async (
   const delegation = await tx.queryOne<{
     status: string;
     child_runtime_id: string;
-    used_tokens: number;
-    max_tokens: number;
-  }>(`SELECT status, child_runtime_id, used_tokens, max_tokens FROM agent_delegations WHERE id = ? AND run_id = ?`, [
+    parent_runtime_id: string;
+  }>(`SELECT status, child_runtime_id, parent_runtime_id FROM agent_delegations WHERE id = ? AND run_id = ?`, [
     command.delegationId,
     command.runId,
   ]);
@@ -978,21 +967,9 @@ export const settleSubagentModelStepTransition = async (
   }
   const tokenDelta = command.inputTokens + command.outputTokens;
   const cancelling = row.status === 'cancelling';
-  const delegationBudgetExceeded = delegation.used_tokens + tokenDelta > delegation.max_tokens;
-  const effectiveOutcome = cancelling
-    ? 'cancelled'
-    : delegationBudgetExceeded && command.outcome === 'completed'
-      ? 'failed'
-      : command.outcome;
-  const effectiveErrorCode = delegationBudgetExceeded ? 'DELEGATION_BUDGET_EXCEEDED' : command.errorCode;
-  const effectiveResult = delegationBudgetExceeded
-    ? ({
-        ...(command.result && typeof command.result === 'object' && !Array.isArray(command.result)
-          ? command.result
-          : {}),
-        errorCode: 'DELEGATION_BUDGET_EXCEEDED',
-      } as JsonValue)
-    : command.result;
+  const effectiveOutcome = cancelling ? 'cancelled' : command.outcome;
+  const effectiveErrorCode = command.errorCode;
+  const effectiveResult = command.result;
   const attemptStatus =
     effectiveOutcome === 'completed' ? 'completed' : effectiveOutcome === 'cancelled' ? 'aborted' : 'failed';
   const stepStatus =
@@ -1052,11 +1029,13 @@ export const settleSubagentModelStepTransition = async (
   if (delegationChanged.changes !== 1 || runtimeChanged.changes !== 1 || workChanged.changes !== 1) {
     throw new Error('DELEGATION_STATE_CONFLICT');
   }
+  await enqueueParentJoinResume(tx, command.runId, delegation.parent_runtime_id, command.delegationId, command.now);
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const finalCancellation = cancelling && nextExecuting === 0;
   if (finalCancellation) await cancelRunSubagentWork(tx, row.id, command.now, true);
   const currentUsage = JSON.parse(row.usage_json) as RunUsage;
   const nextUsage: RunUsage = {
+    ...currentUsage,
     inputTokens: currentUsage.inputTokens + command.inputTokens,
     outputTokens: currentUsage.outputTokens + command.outputTokens,
     cachedInputTokens: currentUsage.cachedInputTokens + command.cachedInputTokens,

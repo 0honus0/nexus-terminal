@@ -9,7 +9,7 @@ import type { AgentDefinitionRegistryPort } from '../definitions/agent-definitio
 import type { CheckpointRepositoryPort, CheckpointView } from './checkpoint.repository.port';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
-import type { RunCreationCommitPort } from '../runs/state-commit.port';
+import type { CheckpointRecoveryCommitPort } from '../runs/state-commit.port';
 import { TERMINAL_RUN_STATUSES, type RunBudget, type RunDefinitionSnapshot, type RunView } from '../runs/run.types';
 
 const clampBudget = (
@@ -22,7 +22,6 @@ const clampBudget = (
   return {
     maxContextTokens,
     maxOutputTokens: Math.max(1, Math.min(model.maxOutputTokens, maxContextTokens - 1)),
-    maxRunTokens: Math.min(source.maxRunTokens, hard.maxRunTokens),
     maxRunSteps: Math.min(source.maxRunSteps, hard.maxRunSteps),
     maxActiveExecutionSeconds: Math.min(source.maxActiveExecutionSeconds, hard.maxActiveExecutionSeconds),
     toolTimeoutSeconds: Math.min(source.toolTimeoutSeconds, hard.toolTimeoutSeconds),
@@ -78,7 +77,7 @@ export class CheckpointService {
     private readonly providers: ProviderService,
     private readonly definitions: AgentDefinitionRegistryPort,
     private readonly denylist: TargetDenylistRepositoryPort,
-    private readonly stateCommit: RunCreationCommitPort,
+    private readonly stateCommit: CheckpointRecoveryCommitPort,
     private readonly clock: ClockPort,
     private readonly onCreated: (run: RunView) => void = () => undefined,
     private readonly onCommitted: (run: RunView) => void = () => undefined,
@@ -266,7 +265,7 @@ export class CheckpointService {
       requestId: randomUUID(),
       now: this.clock.nowUnixSeconds(),
     });
-    await this.checkpoints.supersedeUnconsumedApprovals(scope, source.id, this.clock.nowUnixSeconds());
+    await this.stateCommit.supersedeRunApprovals(scope, source.id, this.clock.nowUnixSeconds());
     if (!committed.replayed) {
       this.onCommitted(committed.run);
       this.onCreated(committed.run);

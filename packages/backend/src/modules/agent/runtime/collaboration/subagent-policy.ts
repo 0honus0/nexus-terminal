@@ -51,7 +51,6 @@ const parseProfile = (raw: unknown): SubagentProfile => {
     'allowedModels',
     'capabilities',
     'peerMessaging',
-    'maxTokens',
     'maxSteps',
     'failureMode',
   ]);
@@ -81,7 +80,7 @@ const parseProfile = (raw: unknown): SubagentProfile => {
   }
   const capabilities = [...new Set(raw.capabilities as AgentCapability[])];
   if (!['parent-child', 'same-run'].includes(String(raw.peerMessaging))) throw new Error('VALIDATION_FAILED');
-  if (!positiveInteger(raw.maxTokens) || !positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
+  if (!positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
   if (!['isolate', 'failFast'].includes(String(raw.failureMode))) throw new Error('VALIDATION_FAILED');
   return {
     id: raw.id.trim(),
@@ -90,7 +89,6 @@ const parseProfile = (raw: unknown): SubagentProfile => {
     allowedModels,
     capabilities,
     peerMessaging: raw.peerMessaging as PeerMessaging,
-    maxTokens: raw.maxTokens,
     maxSteps: raw.maxSteps,
     failureMode: raw.failureMode as SubagentFailureMode,
   };
@@ -135,10 +133,7 @@ export class SubagentPolicyService {
     const profiles = parseProfiles(raw);
     const settings = await this.settings.get(scope.userId);
     for (const profile of profiles) {
-      if (
-        profile.maxTokens > settings.effectiveSettings.hardLimits.maxRunTokens ||
-        profile.maxSteps > settings.effectiveSettings.hardLimits.maxRunSteps
-      ) {
+      if (profile.maxSteps > settings.effectiveSettings.hardLimits.maxRunSteps) {
         throw new Error('SUBAGENT_PROFILE_HARD_LIMIT_EXCEEDED');
       }
       for (const model of profile.allowedModels) await this.assertModel(scope.userId, model);

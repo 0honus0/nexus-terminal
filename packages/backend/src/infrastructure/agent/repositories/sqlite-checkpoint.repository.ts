@@ -316,17 +316,4 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
     };
   }
 
-  async supersedeUnconsumedApprovals(
-    scope: { userId: number; appId: string },
-    runId: string,
-    now: number,
-  ): Promise<number> {
-    const result = await this.db.execute(
-      `UPDATE agent_approvals SET status='superseded',decided_at=?,version=version+1
-       WHERE run_id=? AND user_id=? AND app_id=?
-         AND (status='requested' OR (status='approved' AND consumed_at IS NULL))`,
-      [now, runId, scope.userId, scope.appId],
-    );
-    return result.changes;
-  }
 }

@@ -4,6 +4,8 @@ import { onCodes, onCodesOrPrefixes, rawCode } from './rule';
 export const pluginErrorRules: readonly AgentErrorRule[] = [
   onCodes(
     [
+      'APP_STORAGE_KEY_INVALID',
+      'APP_STORAGE_VERSION_INVALID',
       'PUBLISHER_KEY_INVALID',
       'PUBLISHER_KEY_LABEL_INVALID',
       'PLUGIN_FRONTEND_RPC_INVALID',
@@ -12,6 +14,14 @@ export const pluginErrorRules: readonly AgentErrorRule[] = [
     ],
     rawCode(400, 'Invalid Agent plugin request.'),
   ),
+  onCodes(['APP_STORAGE_NOT_FOUND'], {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'Plugin App storage entry was not found.',
+  }),
+  onCodes(['APP_STORAGE_VERSION_CONFLICT'], rawCode(409, 'Plugin App storage changed; refresh and retry.')),
+  onCodes(['APP_STORAGE_VALUE_TOO_LARGE'], rawCode(413, 'Plugin App storage value is too large.')),
+  onCodes(['APP_STORAGE_QUOTA_EXCEEDED'], rawCode(507, 'Plugin App storage quota is exhausted.')),
   onCodes(
     [
       'PUBLISHER_KEY_NOT_FOUND',

@@ -229,7 +229,6 @@ const parseBudgetIncrease = (value: unknown): RunBudgetIncrease => {
   if (
     !isRecord(value) ||
     !hasOnlyKeys(value, [
-      'maxRunTokens',
       'maxRunSteps',
       'maxActiveExecutionSeconds',
       'maxSubagentMessages',
@@ -238,9 +237,10 @@ const parseBudgetIncrease = (value: unknown): RunBudgetIncrease => {
   ) {
     throw new Error('VALIDATION_FAILED');
   }
-  for (const [key, entry] of Object.entries(value)) {
+  for (const entry of Object.values(value)) {
     if (!positiveInteger(entry)) throw new Error('VALIDATION_FAILED');
   }
+  if (Object.keys(value).length === 0) throw new Error('VALIDATION_FAILED');
   return value as RunBudgetIncrease;
 };
 

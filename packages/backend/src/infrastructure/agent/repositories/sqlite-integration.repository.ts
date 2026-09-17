@@ -126,15 +126,33 @@ export class SqliteIntegrationRepository implements IntegrationRepositoryPort, I
   async updateSchemaHash(
     scope: Scope,
     integrationId: string,
+    expectedVersion: number,
+    expectedCredentialRevision: number,
     schemaHash: string | null,
     updatedAt: number,
-  ): Promise<void> {
-    const result = await this.db.execute(
-      `UPDATE agent_integrations SET schema_hash = ?, updated_at = ?
-       WHERE id = ? AND user_id = ? AND app_id = ?`,
-      [schemaHash, updatedAt, integrationId, scope.userId, scope.appId],
-    );
-    if (result.changes !== 1) throw new Error('INTEGRATION_NOT_FOUND');
+  ): Promise<IntegrationView | null> {
+    return this.db.transaction(async (tx) => {
+      const result = await tx.execute(
+        `UPDATE agent_integrations SET schema_hash = ?, updated_at = ?
+         WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND credential_revision = ?`,
+        [
+          schemaHash,
+          updatedAt,
+          integrationId,
+          scope.userId,
+          scope.appId,
+          expectedVersion,
+          expectedCredentialRevision,
+        ],
+      );
+      if (result.changes !== 1) return null;
+      const row = await tx.queryOne<IntegrationRow>(
+        `SELECT ${columns} FROM agent_integrations WHERE id = ? AND user_id = ? AND app_id = ?`,
+        [integrationId, scope.userId, scope.appId],
+      );
+      if (!row) throw new Error('INTEGRATION_NOT_FOUND');
+      return mapRow(row);
+    });
   }
 
   async remove(scope: Scope, integrationId: string, expectedVersion: number): Promise<void> {

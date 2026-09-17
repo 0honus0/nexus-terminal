@@ -32,6 +32,8 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_HOST_WORKSPACE_TRANSFER_BYTES = 256 * 1024 * 1024;
 const WORKSPACE_TRANSFER_TIMEOUT_MS = 120_000;
 const RUNNER_PROTOCOL_VERSION = '2026-09-13';
+const MAX_PROTOCOL_COLLECTION_ITEMS = 4096;
+const MAX_PROTOCOL_STRING_BYTES = 16 * 1024;
 
 const retryableRunnerGetTransportError = (error: unknown): boolean => {
   if (!(error instanceof TypeError)) return false;
@@ -63,12 +65,198 @@ const timeoutSignal = (
 
 const jsonValue = (value: unknown): JsonValue => JSON.parse(JSON.stringify(value)) as JsonValue;
 
+type UnknownRecord = Record<string, unknown>;
+
+const protocolError = (): Error => new Error('WORKSPACE_RUNTIME_PROTOCOL_INVALID');
+
+const parseRunnerJson = (text: string): unknown => {
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    throw protocolError();
+  }
+};
+
+const recordValue = (value: unknown): UnknownRecord => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw protocolError();
+  return value as UnknownRecord;
+};
+
+const stringValue = (value: unknown, nullable = false): string | null => {
+  if (nullable && value === null) return null;
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_PROTOCOL_STRING_BYTES) throw protocolError();
+  return value;
+};
+
+const integerValue = (value: unknown, minimum = 0): number => {
+  if (!Number.isSafeInteger(value) || Number(value) < minimum) throw protocolError();
+  return Number(value);
+};
+
+const booleanValue = (value: unknown): boolean => {
+  if (typeof value !== 'boolean') throw protocolError();
+  return value;
+};
+
+const stringArrayValue = (value: unknown, maxItems = 256): string[] => {
+  if (!Array.isArray(value) || value.length > maxItems) throw protocolError();
+  return value.map((item) => stringValue(item) as string);
+};
+
+const decodeAvailability = (value: unknown): WorkspaceRuntimeAvailability => {
+  const record = recordValue(value);
+  if (record.mode !== 'native' || record.isolation !== 'logical') throw protocolError();
+  return {
+    available: booleanValue(record.available),
+    reason: stringValue(record.reason, true),
+    mode: 'native',
+    isolation: 'logical',
+  };
+};
+
+const decodeCatalog = (value: unknown): WorkspaceRuntimeCatalog => {
+  const record = recordValue(value);
+  if (!Array.isArray(record.recipes) || record.recipes.length > 256) throw protocolError();
+  if (!Array.isArray(record.packs) || record.packs.length > MAX_PROTOCOL_COLLECTION_ITEMS) throw protocolError();
+  return {
+    revision: stringValue(record.revision) as string,
+    runtimeDigest: stringValue(record.runtimeDigest) as string,
+    recipes: record.recipes.map((item) => {
+      const recipe = recordValue(item);
+      if (!['shell', 'code', 'data', 'browser'].includes(String(recipe.kind))) throw protocolError();
+      return {
+        id: stringValue(recipe.id) as string,
+        revision: stringValue(recipe.revision) as string,
+        kind: recipe.kind as WorkspaceRuntimeCatalog['recipes'][number]['kind'],
+        displayName: stringValue(recipe.displayName) as string,
+        allowedFamilies: stringArrayValue(recipe.allowedFamilies),
+        defaultFamilies: stringArrayValue(recipe.defaultFamilies),
+      };
+    }),
+    packs: record.packs.map((item) => {
+      const pack = recordValue(item);
+      if (!['supported', 'deprecated', 'unavailable'].includes(String(pack.status))) throw protocolError();
+      return {
+        familyId: stringValue(pack.familyId) as string,
+        versionId: stringValue(pack.versionId) as string,
+        displayName: stringValue(pack.displayName) as string,
+        contentDigest: stringValue(pack.contentDigest) as string,
+        diskBytes: integerValue(pack.diskBytes),
+        status: pack.status as WorkspaceRuntimeCatalog['packs'][number]['status'],
+        installed: booleanValue(pack.installed),
+        enabled: booleanValue(pack.enabled),
+        inUse: booleanValue(pack.inUse),
+      };
+    }),
+  };
+};
+
+const decodeStorage = (value: unknown): WorkspaceRuntimeStorageView => {
+  const record = recordValue(value);
+  if (!Array.isArray(record.byPack) || record.byPack.length > MAX_PROTOCOL_COLLECTION_ITEMS) throw protocolError();
+  if (!Array.isArray(record.byWorkspace) || record.byWorkspace.length > MAX_PROTOCOL_COLLECTION_ITEMS)
+    throw protocolError();
+  const filesystem = recordValue(record.filesystem);
+  return {
+    stateBytes: integerValue(record.stateBytes),
+    packBytes: integerValue(record.packBytes),
+    cacheBytes: integerValue(record.cacheBytes),
+    runtimeBytes: integerValue(record.runtimeBytes),
+    quarantineBytes: integerValue(record.quarantineBytes),
+    reclaimableBytes: integerValue(record.reclaimableBytes),
+    byPack: record.byPack.map((item) => {
+      const pack = recordValue(item);
+      return {
+        familyId: stringValue(pack.familyId) as string,
+        versionId: stringValue(pack.versionId) as string,
+        bytes: integerValue(pack.bytes),
+        inUse: booleanValue(pack.inUse),
+      };
+    }),
+    byWorkspace: record.byWorkspace.map((item) => {
+      const workspace = recordValue(item);
+      return {
+        workspaceId: stringValue(workspace.workspaceId) as string,
+        runtimeBytes: integerValue(workspace.runtimeBytes),
+        status: stringValue(workspace.status) as string,
+      };
+    }),
+    filesystem: {
+      totalBytes: integerValue(filesystem.totalBytes),
+      freeBytes: integerValue(filesystem.freeBytes),
+    },
+  };
+};
+
 interface RunnerCommandWireResponse {
   commandId: string;
   status: RunnerCommandResult['status'];
   result?: unknown;
   error?: unknown;
 }
+
+const commandStatuses = new Set<RunnerCommandResult['status']>(['pending', 'running', 'succeeded', 'failed', 'unknown']);
+
+const decodeCommandWireResponse = (value: unknown): RunnerCommandWireResponse => {
+  const record = recordValue(value);
+  if (typeof record.status !== 'string' || !commandStatuses.has(record.status as RunnerCommandResult['status']))
+    throw protocolError();
+  if (record.result !== undefined && record.error !== undefined) throw protocolError();
+  return {
+    commandId: stringValue(record.commandId) as string,
+    status: record.status as RunnerCommandResult['status'],
+    ...(record.result === undefined ? {} : { result: record.result }),
+    ...(record.error === undefined ? {} : { error: record.error }),
+  };
+};
+
+const jobStatuses = new Set<WorkspaceJobView['status']>([
+  'pending',
+  'running',
+  'succeeded',
+  'failed',
+  'unknown',
+  'cancelled',
+]);
+
+const decodeWorkspaceJobView = (value: unknown): WorkspaceJobView => {
+  const record = recordValue(value);
+  if (typeof record.status !== 'string' || !jobStatuses.has(record.status as WorkspaceJobView['status']))
+    throw protocolError();
+  let result: WorkspaceJobView['result'] = null;
+  if (record.result !== null) {
+    const rawResult = recordValue(record.result);
+    const exitCode = rawResult.exitCode === null ? null : integerValue(rawResult.exitCode);
+    result = {
+      exitCode,
+      signal: stringValue(rawResult.signal, true),
+      stdout: stringValue(rawResult.stdout) as string,
+      stderr: stringValue(rawResult.stderr) as string,
+      truncated: booleanValue(rawResult.truncated),
+      timedOut: booleanValue(rawResult.timedOut),
+    };
+  }
+  return {
+    jobId: stringValue(record.jobId) as string,
+    workspaceId: stringValue(record.workspaceId) as string,
+    generation: integerValue(record.generation, 1),
+    status: record.status as WorkspaceJobView['status'],
+    result,
+    error: stringValue(record.error, true),
+    createdAt: integerValue(record.createdAt),
+    completedAt: record.completedAt === null ? null : integerValue(record.completedAt),
+  };
+};
+
+const decodeWrittenBytes = (value: unknown): number => {
+  const record = recordValue(value);
+  return integerValue(record.writtenBytes);
+};
+
+const decodeErrorCode = (value: unknown): string | null => {
+  const record = recordValue(value);
+  return typeof record.error === 'string' && /^[A-Z][A-Z0-9_]+$/.test(record.error) ? record.error : null;
+};
 
 const commandResult = (value: RunnerCommandWireResponse): RunnerCommandResult => ({
   commandId: value.commandId,
@@ -287,7 +475,7 @@ export class RunnerHttpAdapter
       };
     }
     try {
-      return await this.get<WorkspaceRuntimeAvailability>('/v1/availability', signal);
+      return decodeAvailability(await this.get('/v1/availability', signal));
     } catch (error) {
       return {
         available: false,
@@ -298,33 +486,35 @@ export class RunnerHttpAdapter
     }
   }
 
-  catalog(signal?: AbortSignal): Promise<WorkspaceRuntimeCatalog> {
-    return this.get('/v1/catalog', signal);
+  async catalog(signal?: AbortSignal): Promise<WorkspaceRuntimeCatalog> {
+    return decodeCatalog(await this.get('/v1/catalog', signal));
   }
 
-  storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView> {
-    return this.get('/v1/storage', signal);
+  async storage(signal?: AbortSignal): Promise<WorkspaceRuntimeStorageView> {
+    return decodeStorage(await this.get('/v1/storage', signal));
   }
 
   async submit(command: RunnerCommandRequest, signal?: AbortSignal): Promise<RunnerCommandResult> {
     if (!command.payload || typeof command.payload !== 'object' || Array.isArray(command.payload)) {
       throw new Error('VALIDATION_FAILED');
     }
-    const response = await this.request<RunnerCommandWireResponse>(
-      '/v1/commands',
-      {
-        method: 'POST',
-        body: {
-          ...command.payload,
-          commandId: command.commandId,
-          action: command.action,
-          ...(['provision', 'start', 'stop', 'restart', 'delete'].includes(command.action)
-            ? { generation: command.generation }
-            : {}),
-          deadlineAt: command.deadlineAt,
+    const response = decodeCommandWireResponse(
+      await this.request(
+        '/v1/commands',
+        {
+          method: 'POST',
+          body: {
+            ...command.payload,
+            commandId: command.commandId,
+            action: command.action,
+            ...(['provision', 'start', 'stop', 'restart', 'delete'].includes(command.action)
+              ? { generation: command.generation }
+              : {}),
+            deadlineAt: command.deadlineAt,
+          },
         },
-      },
-      signal,
+        signal,
+      ),
     );
     return commandResult(response);
   }
@@ -332,7 +522,7 @@ export class RunnerHttpAdapter
   async query(commandId: string, signal?: AbortSignal): Promise<RunnerCommandResult> {
     if (!/^[A-Za-z0-9-]{8,128}$/.test(commandId)) throw new Error('VALIDATION_FAILED');
     return commandResult(
-      await this.get<RunnerCommandWireResponse>(`/v1/commands/${encodeURIComponent(commandId)}`, signal),
+      decodeCommandWireResponse(await this.get(`/v1/commands/${encodeURIComponent(commandId)}`, signal)),
     );
   }
 
@@ -391,10 +581,12 @@ export class RunnerHttpAdapter
 
     let current: WorkspaceJobView;
     try {
-      current = await this.request<WorkspaceJobView>(
-        `/v1/workspaces/${encodeURIComponent(grant.workspaceId)}/jobs`,
-        { method: 'POST', body: request },
-        signal,
+      current = decodeWorkspaceJobView(
+        await this.request(
+          `/v1/workspaces/${encodeURIComponent(grant.workspaceId)}/jobs`,
+          { method: 'POST', body: request },
+          signal,
+        ),
       );
     } catch (error) {
       if (signal.aborted) {
@@ -452,9 +644,9 @@ export class RunnerHttpAdapter
     return current;
   }
 
-  queryJob(jobId: string, signal?: AbortSignal): Promise<WorkspaceJobView> {
+  async queryJob(jobId: string, signal?: AbortSignal): Promise<WorkspaceJobView> {
     if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
-    return this.get(`/v1/jobs/${encodeURIComponent(jobId)}`, signal);
+    return decodeWorkspaceJobView(await this.get(`/v1/jobs/${encodeURIComponent(jobId)}`, signal));
   }
 
   private async openWorkspaceRead(pathname: string, parentSignal?: AbortSignal): Promise<AgentWorkspaceReadHandle> {
@@ -569,13 +761,13 @@ export class RunnerHttpAdapter
       }
       const text = (await response.text()).slice(0, 4096);
       if (text) {
-        let parsed: { writtenBytes?: unknown };
+        let writtenBytes: number;
         try {
-          parsed = JSON.parse(text) as { writtenBytes?: unknown };
+          writtenBytes = decodeWrittenBytes(parseRunnerJson(text));
         } catch {
           throw new Error('WORKSPACE_STREAM_INVALID');
         }
-        if (parsed.writtenBytes !== expectedBytes) throw new Error('WORKSPACE_STREAM_INVALID');
+        if (writtenBytes !== expectedBytes) throw new Error('WORKSPACE_STREAM_INVALID');
       }
     } finally {
       body.destroy();
@@ -639,16 +831,16 @@ export class RunnerHttpAdapter
     });
   }
 
-  private get<T>(pathname: string, signal?: AbortSignal): Promise<T> {
-    return this.request<T>(pathname, { method: 'GET' }, signal);
+  private get(pathname: string, signal?: AbortSignal): Promise<unknown> {
+    return this.request(pathname, { method: 'GET' }, signal);
   }
 
-  private async request<T>(
+  private async request(
     pathname: string,
     input: { method: 'GET' | 'POST'; body?: unknown },
     parentSignal?: AbortSignal,
     limits: { timeoutMs?: number; maxResponseBytes?: number } = {},
-  ): Promise<T> {
+  ): Promise<unknown> {
     if (!this.baseUrl || !this.token) throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
     const target = new URL(pathname, this.baseUrl);
     if (target.origin !== this.baseUrl.origin) throw new Error('WORKSPACE_RUNTIME_URL_INVALID');
@@ -673,10 +865,8 @@ export class RunnerHttpAdapter
             const text = (await response.text()).slice(0, 4096);
             if (response.status === 409) {
               try {
-                const parsed = JSON.parse(text) as { error?: unknown };
-                if (typeof parsed.error === 'string' && /^[A-Z][A-Z0-9_]+$/.test(parsed.error)) {
-                  throw new Error(parsed.error);
-                }
+                const code = decodeErrorCode(parseRunnerJson(text));
+                if (code) throw new Error(code);
               } catch (error) {
                 if (error instanceof Error && /^[A-Z][A-Z0-9_]+$/.test(error.message)) throw error;
               }
@@ -694,7 +884,7 @@ export class RunnerHttpAdapter
           const text = await response.text();
           if (Buffer.byteLength(text, 'utf8') > maxResponseBytes)
             throw new Error('WORKSPACE_RUNTIME_RESPONSE_TOO_LARGE');
-          return JSON.parse(text) as T;
+          return parseRunnerJson(text);
         } catch (error) {
           if (
             input.method !== 'GET' ||

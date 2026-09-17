@@ -300,26 +300,6 @@ export class SqliteLeaseRepository implements LeasePort {
     });
   }
 
-  async getQuarantine(resourceKey: string): Promise<ResourceQuarantine | null> {
-    const [key] = normalizeKeys([resourceKey]);
-    const row = await this.db.queryOne<QuarantineRow>(
-      `SELECT resource_key, tool_call_id, owner_type, owner_id, reason, evidence_json, version, created_at
-       FROM agent_resource_quarantine WHERE resource_key = ?`,
-      [key],
-    );
-    return row ? mapQuarantine(row) : null;
-  }
-
-  async resolveQuarantine(resourceKey: string, expectedVersion: number): Promise<void> {
-    const [key] = normalizeKeys([resourceKey]);
-    if (!Number.isSafeInteger(expectedVersion) || expectedVersion < 1) throw new Error('VALIDATION_FAILED');
-    const changed = await this.db.execute(
-      'DELETE FROM agent_resource_quarantine WHERE resource_key = ? AND version = ?',
-      [key, expectedVersion],
-    );
-    if (changed.changes !== 1) throw new Error('STATE_CONFLICT');
-  }
-
   private normalizeIds(values: readonly string[]): string[] {
     if (!Array.isArray(values) || values.length < 1 || values.length > MAX_KEYS) throw new Error('VALIDATION_FAILED');
     const ids = [...new Set(values)];

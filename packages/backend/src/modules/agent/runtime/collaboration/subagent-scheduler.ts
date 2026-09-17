@@ -6,10 +6,13 @@ import type { RunScopeRepositoryPort, SchedulerWorkClaimPort } from './subagent.
 import type { SchedulerWorkView } from './subagent.types';
 
 const CONTROL_POLL_MS = 500;
+const ORPHAN_CLAIM_SECONDS = 30;
+const scopeKey = (scope: Scope): string => `${scope.userId}\u0000${scope.appId}`;
 
 interface ActiveChild {
   scope: Scope;
   runId: string;
+  runtimeId: string;
   controller: AbortController;
   done: Promise<void>;
 }
@@ -29,6 +32,7 @@ export interface RootSchedulerView {
  */
 export class SubagentScheduler {
   private readonly active = new Map<string, ActiveChild>();
+  private readonly pausedScopes = new Set<string>();
   private readonly ownerEpoch: number;
   private accepting = false;
   private pumping = false;
@@ -80,6 +84,32 @@ export class SubagentScheduler {
     if (this.active.size > 0) throw new Error('APP_QUIESCE_TIMEOUT');
   }
 
+  async quiesceScope(scope: Scope, deadlineUnixSeconds: number): Promise<void> {
+    this.pausedScopes.add(scopeKey(scope));
+    const matching = [...this.active.values()].filter(
+      (active) => active.scope.userId === scope.userId && active.scope.appId === scope.appId,
+    );
+    for (const active of matching) active.controller.abort(new Error('AGENT_QUIESCE'));
+    const remainingMs = Math.max(0, deadlineUnixSeconds * 1000 - this.clock.nowUnixMilliseconds());
+    if (matching.length === 0 || remainingMs === 0) return;
+    await Promise.race([
+      Promise.allSettled(matching.map((active) => active.done)),
+      new Promise<void>((resolve) => setTimeout(resolve, remainingMs)),
+    ]);
+    if (
+      [...this.active.values()].some(
+        (active) => active.scope.userId === scope.userId && active.scope.appId === scope.appId,
+      )
+    ) {
+      throw new Error('APP_QUIESCE_TIMEOUT');
+    }
+  }
+
+  resumeScope(scope: Scope): void {
+    this.pausedScopes.delete(scopeKey(scope));
+    this.wake();
+  }
+
   async dispose(): Promise<void> {
     await this.quiesce(this.clock.nowUnixSeconds() + 10).catch(() => undefined);
   }
@@ -107,10 +137,27 @@ export class SubagentScheduler {
     return cancelled;
   }
 
+  cancelRuntime(runId: string, runtimeId: string): boolean {
+    let cancelled = false;
+    for (const active of this.active.values()) {
+      if (active.runId !== runId || active.runtimeId !== runtimeId) continue;
+      active.controller.abort(new Error('CANCELLED'));
+      cancelled = true;
+    }
+    return cancelled;
+  }
+
   private async pump(): Promise<void> {
     if (this.pumping || !this.accepting) return;
     this.pumping = true;
     try {
+      const recoveryNow = this.clock.nowUnixSeconds();
+      await this.work.recoverOrphanedClaimedWork(
+        this.ownerEpoch,
+        [...this.active.keys()],
+        recoveryNow - ORPHAN_CLAIM_SECONDS,
+        recoveryNow,
+      );
       let safety = 0;
       while (this.accepting && safety < 64) {
         safety += 1;
@@ -151,6 +198,12 @@ export class SubagentScheduler {
             .catch((error) => console.error(`[Agent SubagentScheduler] inbox work ${claimed.id} failed:`, error));
           continue;
         }
+        if (claimed.kind === 'join_resume') {
+          await this.participant
+            .handleJoinResume(scope, claimed, this.ownerEpoch)
+            .catch((error) => console.error(`[Agent SubagentScheduler] join resume ${claimed.id} failed:`, error));
+          continue;
+        }
         if (claimed.kind !== 'model_step' && claimed.kind !== 'tool_step') {
           await this.work
             .settleWork(claimed.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds())
@@ -167,6 +220,7 @@ export class SubagentScheduler {
   private async handleTerminalCandidate(work: SchedulerWorkView): Promise<boolean> {
     const scope = await this.runScopes.scopeForRun(work.runId);
     if (!scope) return false;
+    if (this.pausedScopes.has(scopeKey(scope))) return false;
     const claimed = await this.work.claimWork(work.id, work.version, this.ownerEpoch, this.clock.nowUnixSeconds());
     if (!claimed) return false;
     await this.participant.handleTerminalCandidate(scope, claimed, this.ownerEpoch);
@@ -183,7 +237,7 @@ export class SubagentScheduler {
     const enriched: Array<{ work: SchedulerWorkView; scope: Scope }> = [];
     for (const work of candidates) {
       const scope = await this.runScopes.scopeForRun(work.runId);
-      if (scope) enriched.push({ work, scope });
+      if (scope && !this.pausedScopes.has(scopeKey(scope))) enriched.push({ work, scope });
     }
     if (enriched.length === 0) return null;
     const apps = [...new Set(enriched.map((item) => item.scope.appId))].sort();
@@ -222,12 +276,15 @@ export class SubagentScheduler {
     const controller = new AbortController();
     const done = this.participant
       .execute(scope, work, this.ownerEpoch, controller.signal)
-      .catch((error) => console.error(`[Agent SubagentScheduler] child work ${work.id} failed:`, error))
+      .catch(async (error) => {
+        console.error(`[Agent SubagentScheduler] child work ${work.id} failed:`, error);
+        await this.work.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds()).catch(() => undefined);
+      })
       .finally(() => {
         this.active.delete(work.id);
         this.roots.wake();
         this.wake();
       });
-    this.active.set(work.id, { scope, runId: work.runId, controller, done });
+    this.active.set(work.id, { scope, runId: work.runId, runtimeId: work.agentRuntimeId, controller, done });
   }
 }

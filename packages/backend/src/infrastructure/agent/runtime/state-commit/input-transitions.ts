@@ -6,7 +6,9 @@ import type {
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import type { RunStatus } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
+import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
+import { resetLoopGuard } from './loop-guard';
 import {
   allocateHostEvent,
   appendEvents,
@@ -16,12 +18,6 @@ import {
   NON_TERMINAL,
   summaryPayload,
 } from './transaction-primitives';
-
-interface CommandRow {
-  status: 'pending' | 'committed' | 'unknown';
-  request_hash: string;
-  response_json: string | null;
-}
 
 interface ThreadRow {
   next_sequence: number;
@@ -34,11 +30,7 @@ export const appendInputTransition = async (
   command: AtomicAppendInput,
 ): Promise<AppendInputCommitResult> => {
   const commandName = command.mode === 'interrupt' ? 'run.interrupt' : 'run.input';
-  const existing = await tx.queryOne<CommandRow>(
-    `SELECT status, request_hash, response_json FROM agent_commands
-     WHERE user_id = ? AND app_id = ? AND command_name = ? AND idempotency_key = ?`,
-    [command.scope.userId, command.scope.appId, commandName, command.idempotencyKey],
-  );
+  const existing = await commandForReplay(tx, command.scope, commandName, command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
@@ -98,6 +90,19 @@ export const appendInputTransition = async (
         )
       : null;
   if (row.status === 'awaiting_approval' && !waitingApproval) throw new Error('APPROVAL_STATE_INVALID');
+  const waitingLoopInput =
+    row.status === 'awaiting_input'
+      ? await tx.queryOne<{
+          paused_runtime_id: string | null;
+          paused_delegation_id: string | null;
+        }>(
+          `SELECT paused_runtime_id, paused_delegation_id FROM agent_loop_guards WHERE run_id = ?`,
+          [row.id],
+        )
+      : null;
+  if (row.status === 'awaiting_input' && !waitingLoopInput?.paused_runtime_id) {
+    throw new Error('LOOP_GUARD_STATE_INVALID');
+  }
 
   await tx.execute(
     `INSERT INTO agent_commands
@@ -228,7 +233,45 @@ export const appendInputTransition = async (
       [command.now, row.user_id, row.app_id],
     );
   }
-  const nextStatus: RunStatus = waitingApproval ? 'running' : row.status;
+  if (waitingLoopInput?.paused_runtime_id) {
+    const runtimeChanged = await tx.execute(
+      `UPDATE agent_runtimes SET status = 'running', schedule_state = 'runnable', updated_at = ?
+       WHERE id = ? AND run_id = ? AND status = 'running' AND schedule_state = 'waiting_message'`,
+      [command.now, waitingLoopInput.paused_runtime_id, row.id],
+    );
+    if (runtimeChanged.changes !== 1) throw new Error('LOOP_GUARD_STATE_INVALID');
+    if (waitingLoopInput.paused_delegation_id) {
+      const delegation = await tx.queryOne<{ deadline_at: number }>(
+        `SELECT deadline_at FROM agent_delegations WHERE id = ? AND run_id = ? AND child_runtime_id = ? AND status = 'waiting'`,
+        [waitingLoopInput.paused_delegation_id, row.id, waitingLoopInput.paused_runtime_id],
+      );
+      if (!delegation) throw new Error('LOOP_GUARD_STATE_INVALID');
+      const delegationChanged = await tx.execute(
+        `UPDATE agent_delegations SET status = 'running', version = version + 1, updated_at = ?
+         WHERE id = ? AND run_id = ? AND status = 'waiting'`,
+        [command.now, waitingLoopInput.paused_delegation_id, row.id],
+      );
+      if (delegationChanged.changes !== 1) throw new Error('LOOP_GUARD_STATE_INVALID');
+      await tx.execute(
+        `INSERT INTO agent_scheduler_work
+          (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
+           deadline_at, created_at, updated_at, version)
+         VALUES (?, ?, ?, 'model_step', 'queued', ?, NULL, ?, ?, ?, ?, 1)`,
+        [
+          `work-${randomUUID()}`,
+          row.id,
+          waitingLoopInput.paused_runtime_id,
+          JSON.stringify({ delegationId: waitingLoopInput.paused_delegation_id, cause: 'loop_guard_resumed' }),
+          command.now,
+          delegation.deadline_at,
+          command.now,
+          command.now,
+        ],
+      );
+    }
+    await resetLoopGuard(tx, row.id, command.now);
+  }
+  const nextStatus: RunStatus = waitingApproval || waitingLoopInput ? 'running' : row.status;
   const events: DurableEventInput[] = [
     {
       type: 'input.appended',
@@ -245,6 +288,12 @@ export const appendInputTransition = async (
             },
           },
           { type: 'run.status_changed', payload: { from: 'awaiting_approval', to: 'running' } },
+        ]
+      : []),
+    ...(waitingLoopInput
+      ? [
+          { type: 'run.loop_resumed', payload: { reason: 'new_input' } },
+          { type: 'run.status_changed', payload: { from: 'awaiting_input', to: 'running' } },
         ]
       : []),
   ];
@@ -272,6 +321,6 @@ export const appendInputTransition = async (
     run,
     replayed: false,
     shouldInterruptModel: Boolean(streamingModel),
-    shouldReschedule: Boolean(waitingApproval),
+    shouldReschedule: Boolean(waitingApproval || waitingLoopInput),
   };
 };

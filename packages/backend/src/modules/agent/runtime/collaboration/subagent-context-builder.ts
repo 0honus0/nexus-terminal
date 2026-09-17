@@ -67,17 +67,8 @@ export class SubagentContextBuilder {
     ].join('\n');
     const toolSchemaTokens = offeredTools.length ? estimateTokens(JSON.stringify(offeredTools)) : 0;
     const estimatedInputTokens = estimateTokens(encodedContext) + toolSchemaTokens;
-    const remainingChildTokens = delegation.budget.maxTokens - delegation.usage.tokens;
-    const remainingRunTokens = run.budget.maxRunTokens - run.usage.inputTokens - run.usage.outputTokens;
-    const maxOutputTokens = Math.min(
-      model.maxOutputTokens,
-      Math.max(0, remainingChildTokens - estimatedInputTokens),
-      Math.max(0, remainingRunTokens - estimatedInputTokens),
-    );
+    const maxOutputTokens = Math.min(model.maxOutputTokens, Math.max(0, model.contextWindow - estimatedInputTokens));
     if (maxOutputTokens < 1 || Buffer.byteLength(encodedContext, 'utf8') > MAX_CONTEXT_BYTES) {
-      return { kind: 'fail', code: 'DELEGATION_BUDGET_EXCEEDED' };
-    }
-    if (estimatedInputTokens + maxOutputTokens > model.contextWindow) {
       return { kind: 'fail', code: 'CONTEXT_BUDGET_EXCEEDED' };
     }
     return {

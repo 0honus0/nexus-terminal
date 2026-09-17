@@ -417,7 +417,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     thread_id TEXT NOT NULL,
     parent_run_id TEXT,
     status TEXT NOT NULL CHECK(status IN (
-      'created','running','awaiting_approval','awaiting_budget','cancelling',
+      'created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling',
       'completed','completed_unverified','failed','cancelled','interrupted'
     )),
     goal_status TEXT NOT NULL CHECK(goal_status IN ('unknown','in_progress','satisfied','not_satisfied')),
@@ -447,9 +447,23 @@ CREATE TABLE IF NOT EXISTS agent_runs (
     FOREIGN KEY(thread_id, user_id, app_id) REFERENCES ai_threads(id, user_id, app_id) ON DELETE CASCADE
 );
 CREATE UNIQUE INDEX IF NOT EXISTS agent_one_live_run ON agent_runs(thread_id)
-WHERE status IN ('created','running','awaiting_approval','awaiting_budget','cancelling');
+WHERE status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling');
 CREATE INDEX IF NOT EXISTS agent_runs_scope ON agent_runs(user_id, app_id, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS agent_runs_reconcile ON agent_runs(status, needs_reconciliation, updated_at);
+`;
+
+export const createAgentLoopGuardsTableSQL = `
+CREATE TABLE IF NOT EXISTS agent_loop_guards (
+    run_id TEXT PRIMARY KEY REFERENCES agent_runs(id) ON DELETE CASCADE,
+    epoch INTEGER NOT NULL DEFAULT 1 CHECK(epoch > 0),
+    trajectory_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(trajectory_json)),
+    no_progress_count INTEGER NOT NULL DEFAULT 0 CHECK(no_progress_count >= 0),
+    warning_level INTEGER NOT NULL DEFAULT 0 CHECK(warning_level BETWEEN 0 AND 2),
+    paused_runtime_id TEXT,
+    paused_delegation_id TEXT,
+    last_reason TEXT,
+    updated_at INTEGER NOT NULL
+);
 `;
 
 export const createAiThreadEntriesTableSQL = `
@@ -804,10 +818,7 @@ CREATE TABLE IF NOT EXISTS agent_delegations (
     status TEXT NOT NULL CHECK(status IN ('queued','running','waiting','completed','failed','cancelled')),
     depth INTEGER NOT NULL CHECK(depth >= 1),
     failure_mode TEXT NOT NULL CHECK(failure_mode IN ('isolate','failFast')),
-    max_tokens INTEGER NOT NULL CHECK(max_tokens > 0),
     max_steps INTEGER NOT NULL CHECK(max_steps > 0),
-    reserved_tokens INTEGER NOT NULL DEFAULT 0 CHECK(reserved_tokens >= 0),
-    reserved_steps INTEGER NOT NULL DEFAULT 0 CHECK(reserved_steps >= 0),
     used_tokens INTEGER NOT NULL DEFAULT 0 CHECK(used_tokens >= 0),
     used_steps INTEGER NOT NULL DEFAULT 0 CHECK(used_steps >= 0),
     result_json TEXT CHECK(result_json IS NULL OR json_valid(result_json)),

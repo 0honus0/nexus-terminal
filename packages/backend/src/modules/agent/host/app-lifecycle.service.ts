@@ -15,6 +15,7 @@ export class AppLifecycleService {
     private readonly grants: AppGrantRepositoryPort,
     private readonly clock: ClockPort,
     private readonly onHostStateCommitted: (userId: number) => void = () => undefined,
+    private readonly quiesceHostExecution: (scope: Scope, deadlineUnixSeconds: number) => Promise<void> = async () => undefined,
   ) {}
 
   initializeDefaults(userId: number): Promise<void> {
@@ -85,6 +86,39 @@ export class AppLifecycleService {
   async quiesce(appId: string, deadlineUnixSeconds: number): Promise<void> {
     const definition = this.registry.get(appId);
     await definition.quiesce?.(deadlineUnixSeconds);
+  }
+
+  async quiesceScope(scope: Scope, deadlineUnixSeconds: number): Promise<void> {
+    const current = await this.states.get(scope);
+    if (!current) return;
+    const definition = this.registry.get(scope.appId, current.activeVersion);
+    await this.quiesceHostExecution(scope, deadlineUnixSeconds);
+    if (current.observedState === 'disabled') return;
+    if (definition.quiesceForScope) await definition.quiesceForScope(scope, deadlineUnixSeconds);
+    else await definition.quiesce?.(deadlineUnixSeconds);
+  }
+
+  async resumeScope(scope: Scope): Promise<void> {
+    const current = await this.states.get(scope);
+    if (!current || current.desiredState !== 'enabled') return;
+    const definition = this.registry.get(scope.appId, current.activeVersion);
+    try {
+      if (definition.initializeForScope) await definition.initializeForScope(scope);
+      else await definition.initialize?.();
+      const health = (await definition.health?.(scope)) ?? { status: 'healthy' as const };
+      const observedState =
+        health.status === 'healthy' ? 'running' : health.status === 'degraded' ? 'degraded' : 'failed';
+      const healthReason = health.reason ?? null;
+      if (current.observedState !== observedState || current.healthReason !== healthReason) {
+        await this.compareAndSetState(scope, current.version, { observedState, healthReason });
+      }
+    } catch (error) {
+      await this.compareAndSetState(scope, current.version, {
+        observedState: 'failed',
+        healthReason: error instanceof Error ? error.message : 'APP_INITIALIZATION_FAILED',
+      });
+      throw error;
+    }
   }
 
   async dispose(): Promise<void> {
@@ -172,9 +206,10 @@ export class AppLifecycleService {
 
     try {
       const scope = { userId: stopping.userId, appId: stopping.appId };
-      if (definition.quiesceForScope)
-        await definition.quiesceForScope(scope, this.clock.nowUnixSeconds() + QUIESCE_SECONDS);
-      else await definition.quiesce?.(this.clock.nowUnixSeconds() + QUIESCE_SECONDS);
+      const deadline = this.clock.nowUnixSeconds() + QUIESCE_SECONDS;
+      await this.quiesceHostExecution(scope, deadline);
+      if (definition.quiesceForScope) await definition.quiesceForScope(scope, deadline);
+      else await definition.quiesce?.(deadline);
       if (definition.disposeForScope) await definition.disposeForScope(scope);
       else await definition.dispose?.();
       return await this.compareAndSetState(stopping, stopping.version, {

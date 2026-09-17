@@ -92,6 +92,8 @@ export interface IntegrationServiceHooks {
 }
 
 export class IntegrationService {
+  private readonly refreshTails = new Map<string, Promise<void>>();
+
   constructor(
     private readonly repository: IntegrationRepositoryPort,
     private readonly outbound: OutboundPolicyPort,
@@ -136,8 +138,6 @@ export class IntegrationService {
     }
     const current = await this.get(scope, integrationId);
     const parsed = await this.parseInput(raw, true, current.kind);
-    await this.mcp.close(integrationId);
-    this.hooks.removed(scope, integrationId);
     const updated = await this.repository.update(scope, integrationId, expectedVersion, {
       configuration: parsed.configuration,
       enabled: parsed.enabled,
@@ -145,6 +145,8 @@ export class IntegrationService {
       clearCredential: parsed.clearCredential,
       updatedAt: this.clock.nowUnixSeconds(),
     });
+    await this.mcp.close(integrationId).catch(() => undefined);
+    this.hooks.removed(scope, integrationId);
     if (updated.enabled && updated.kind === 'mcp') void this.refresh(scope, updated.id).catch(() => undefined);
     return updated;
   }
@@ -153,12 +155,16 @@ export class IntegrationService {
     if (!isAgentUuid(integrationId) || !Number.isSafeInteger(expectedVersion) || expectedVersion < 1) {
       throw new Error('VALIDATION_FAILED');
     }
-    await this.mcp.close(integrationId);
-    this.hooks.removed(scope, integrationId);
     await this.repository.remove(scope, integrationId, expectedVersion);
+    await this.mcp.close(integrationId).catch(() => undefined);
+    this.hooks.removed(scope, integrationId);
   }
 
   async refresh(scope: Scope, integrationId: string, signal?: AbortSignal): Promise<IntegrationRefreshView> {
+    return this.serializeRefresh(integrationId, () => this.refreshNow(scope, integrationId, signal));
+  }
+
+  private async refreshNow(scope: Scope, integrationId: string, signal?: AbortSignal): Promise<IntegrationRefreshView> {
     const integration = await this.get(scope, integrationId);
     if (!integration.enabled) throw new Error('INTEGRATION_DISABLED');
     if (integration.kind !== 'mcp') throw new Error('INTEGRATION_REFRESH_UNSUPPORTED');
@@ -184,8 +190,20 @@ export class IntegrationService {
       },
       this.cryptoHash,
     );
-    await this.repository.updateSchemaHash(scope, integration.id, schemaHash, this.clock.nowUnixSeconds());
-    const updated = await this.get(scope, integration.id);
+    const updated = await this.repository.updateSchemaHash(
+      scope,
+      integration.id,
+      integration.version,
+      integration.credentialRevision,
+      schemaHash,
+      this.clock.nowUnixSeconds(),
+    );
+    if (!updated) {
+      // The network result belongs to an older durable generation. Never publish its schema, and
+      // close any session that may have completed after the newer generation invalidated it.
+      await this.mcp.close(integration.id).catch(() => undefined);
+      throw new Error('INTEGRATION_REFRESH_STALE');
+    }
     this.hooks.mcpRefreshed(scope, updated, snapshot, schemaHash);
     return {
       integration: updated,
@@ -194,6 +212,25 @@ export class IntegrationService {
       protocolVersion: snapshot.protocolVersion,
       toolCount: snapshot.tools.length,
     };
+  }
+
+  private async serializeRefresh<T>(integrationId: string, work: () => Promise<T>): Promise<T> {
+    const previous = this.refreshTails.get(integrationId) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.catch(() => undefined).then(() => gate);
+    this.refreshTails.set(integrationId, tail);
+    await previous.catch(() => undefined);
+    try {
+      return await work();
+    } finally {
+      release();
+      void tail.finally(() => {
+        if (this.refreshTails.get(integrationId) === tail) this.refreshTails.delete(integrationId);
+      });
+    }
   }
 
   async syncEnabled(scope: Scope): Promise<void> {

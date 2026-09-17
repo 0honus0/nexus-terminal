@@ -158,6 +158,7 @@ const RUN_STATUSES = new Set<AgentRunStatus>([
   'running',
   'awaiting_approval',
   'awaiting_budget',
+  'awaiting_input',
   'cancelling',
   'completed',
   'completed_unverified',

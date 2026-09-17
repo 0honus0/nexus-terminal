@@ -3,7 +3,6 @@ import type { JsonValue } from '../../../../modules/agent/agent.types';
 import type {
   BeginMutationToolCommand,
   BeginReadToolBatchCommand,
-  BeginReadToolCommand,
   CommitToolProposalBatchCommand,
   CommitToolProposalBatchResult,
   DurableEventInput,
@@ -11,7 +10,6 @@ import type {
   RejectProposedToolCommand,
   SettleMutationToolCommand,
   SettleReadToolBatchCommand,
-  SettleReadToolCommand,
   StateCommitResult,
   SupersedeMutationToolCommand,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
@@ -295,45 +293,6 @@ export const settleMutationToolTransition = async (
   return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
 };
 
-export const beginReadToolTransition = async (
-  tx: RelationalDatabase,
-  command: BeginReadToolCommand,
-): Promise<StateCommitResult> => {
-  const row = await tx.queryOne<RunRow>(
-    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
-    [command.runId, command.scope.userId, command.scope.appId],
-  );
-  if (!row) throw new Error('NOT_FOUND');
-  if (row.version < command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
-  const step = await tx.queryOne<{ status: string }>(
-    'SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ?',
-    [command.toolStepId, command.runId, command.runtimeId],
-  );
-  const tool = await tx.queryOne<{ status: string; version: number }>(
-    'SELECT status, version FROM agent_tool_calls WHERE id = ? AND run_id = ? AND step_id = ?',
-    [command.toolCallId, command.runId, command.toolStepId],
-  );
-  if (!step || step.status !== 'created' || !tool || tool.status !== 'proposed') throw new Error('TOOL_STATE_CONFLICT');
-  const stepChanged = await tx.execute(
-    `UPDATE agent_steps SET status = 'running' WHERE id = ? AND run_id = ? AND status = 'created'`,
-    [command.toolStepId, command.runId],
-  );
-  const toolChanged = await tx.execute(
-    `UPDATE agent_tool_calls SET status = 'running', started_at = ?, version = version + 1
-     WHERE id = ? AND run_id = ? AND status = 'proposed' AND version = ?`,
-    [command.now, command.toolCallId, command.runId, tool.version],
-  );
-  if (stepChanged.changes !== 1 || toolChanged.changes !== 1) throw new Error('TOOL_STATE_CONFLICT');
-  const events: DurableEventInput[] = [
-    { type: 'tool.started', payload: { toolCallId: command.toolCallId, toolStepId: command.toolStepId } },
-  ];
-  const committedEvents = await appendEvents(tx, row, events, command.now);
-  const updatedRow = await patchRun(tx, row, {}, events.length, command.now);
-  const run = mapRunRow(updatedRow);
-  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
-  return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
-};
-
 export const beginReadToolBatchTransition = async (
   tx: RelationalDatabase,
   command: BeginReadToolBatchCommand,
@@ -395,94 +354,6 @@ export const beginReadToolBatchTransition = async (
   const run = mapRunRow(updatedRow);
   await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
   return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
-};
-
-export const settleReadToolTransition = async (
-  tx: RelationalDatabase,
-  command: SettleReadToolCommand,
-): Promise<StateCommitResult> => {
-  const row = await tx.queryOne<RunRow>(
-    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
-    [command.runId, command.scope.userId, command.scope.appId],
-  );
-  if (!row) throw new Error('NOT_FOUND');
-  if (row.version < command.expectedRunVersion || !['running', 'cancelling'].includes(row.status)) {
-    throw new Error('STATE_CONFLICT');
-  }
-  const tool = await tx.queryOne<{ status: string; version: number }>(
-    'SELECT status, version FROM agent_tool_calls WHERE id = ? AND run_id = ? AND step_id = ?',
-    [command.toolCallId, command.runId, command.toolStepId],
-  );
-  if (!tool || tool.status !== 'running') throw new Error('TOOL_STATE_CONFLICT');
-  const safeResult = JSON.parse(JSON.stringify(command.result)) as JsonValue;
-  const toolStatus = command.result.ok ? 'succeeded' : 'failed';
-  const toolChanged = await tx.execute(
-    `UPDATE agent_tool_calls SET status = ?, result_json = ?, completed_at = ?, version = version + 1
-     WHERE id = ? AND run_id = ? AND status = 'running' AND version = ?`,
-    [toolStatus, JSON.stringify(safeResult), command.now, command.toolCallId, command.runId, tool.version],
-  );
-  const stepChanged = await tx.execute(
-    `UPDATE agent_steps SET status = ?, completed_at = ?
-     WHERE id = ? AND run_id = ? AND status = 'running'`,
-    [command.result.ok ? 'completed' : 'failed', command.now, command.toolStepId, command.runId],
-  );
-  if (toolChanged.changes !== 1 || stepChanged.changes !== 1) throw new Error('TOOL_STATE_CONFLICT');
-  const ledgerCursor = await appendLedger(
-    tx,
-    row,
-    [
-      {
-        id: command.toolResultEntryId,
-        runId: command.runId,
-        kind: 'tool_result',
-        payload: {
-          toolCallId: command.providerCallId,
-          text: JSON.stringify(safeResult),
-        },
-      },
-    ],
-    command.now,
-  );
-  const cancelling = row.status === 'cancelling';
-  const events: DurableEventInput[] = [
-    {
-      type: command.result.ok ? 'tool.completed' : 'tool.failed',
-      payload: {
-        toolCallId: command.toolCallId,
-        toolStepId: command.toolStepId,
-        ok: command.result.ok,
-        summary: command.result.summary,
-        truncated: command.result.truncated,
-        verification: command.result.verification.status,
-      },
-    },
-    ...(cancelling
-      ? [
-          { type: 'run.cancelled', payload: { reason: 'cancel_requested_during_tool' } },
-          { type: 'run.status_changed', payload: { from: 'cancelling', to: 'cancelled' } },
-        ]
-      : []),
-  ];
-  const committedEvents = await appendEvents(tx, row, events, command.now);
-  const mergedUsage = usageWithDelta(row, { steps: 1 });
-  const updatedRow = await patchRun(
-    tx,
-    row,
-    { usage: mergedUsage, ...(cancelling ? { status: 'cancelled', completedAt: command.now } : {}) },
-    events.length,
-    command.now,
-  );
-  if (cancelling) {
-    await tx.execute(
-      `UPDATE agent_runtimes SET status = 'stopped', updated_at = ?
-       WHERE run_id = ? AND status IN ('created','running','stopping')`,
-      [command.now, row.id],
-    );
-    if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, command.now);
-  }
-  const run = mapRunRow(updatedRow);
-  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
-  return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
 };
 
 export const settleReadToolBatchTransition = async (

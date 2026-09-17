@@ -180,10 +180,6 @@
             "label": "Hard Max Output Tokens",
             "hint": "Maximum tokens allowed in a single model generation"
           },
-          "maxRunTokens": {
-            "label": "Hard Max Run Tokens",
-            "hint": "Circuit-breaker ceiling for cumulative tokens consumed in a run"
-          },
           "maxRunSteps": {
             "label": "Hard Max Run Steps",
             "hint": "Maximum thinking and tool execution loop steps allowed per run"
@@ -290,8 +286,6 @@
           "maxContextTokensHint": "Maximum context tokens per request",
           "maxOutputTokens": "Max Output Tokens",
           "maxOutputTokensHint": "Maximum tokens generated per model turn",
-          "maxRunTokens": "Total Run Token Budget",
-          "maxRunTokensHint": "Cumulative token budget allowed for the entire run",
           "maxRunSteps": "Max Execution Steps",
           "maxRunStepsHint": "Maximum tool actions and reasoning turns per run",
           "maxActiveExecutionSeconds": "Execution Timeout (sec)",
@@ -535,7 +529,6 @@
         "profileId": "Profile ID",
         "role": "Role",
         "defaultModel": "Default model",
-        "maxTokens": "Maximum tokens",
         "maxSteps": "Maximum steps",
         "peerMessaging": "Peer messaging",
         "peerParentChild": "Parent and child only",
@@ -548,8 +541,7 @@
         "removeProfile": "Remove profile",
         "noProfiles": "No Subagent profiles are configured for this App.",
         "saveProfiles": "Save profiles",
-        "messageBytesPlaceholder": "e.g. 2M, 5M",
-        "maxTokensPlaceholder": "e.g. 50k, 100k"
+        "messageBytesPlaceholder": "e.g. 2M, 5M"
       },
       "browserRuntime": {
         "title": "Browser Runtime",
@@ -654,7 +646,6 @@
           "conservative": "Conservative"
         },
         "fields": {
-          "maxRunTokens": "Run token budget",
           "maxRunSteps": "Run step fuse",
           "maxActiveExecutionSeconds": "Active execution limit",
           "toolTimeoutSeconds": "Tool timeout",
@@ -719,9 +710,10 @@
       "enableAllTargets": "Enable all",
       "disableAllTargets": "Disable all",
       "noTargets": "No SSH connections are available.",
-      "reconciliationRequired": "The previous mutation has an unknown outcome. Verify the actual state before releasing the resource quarantine.",
+      "reconciliationRequired": "A previous mutation or its resource/lease finalization still requires reconciliation. Verify the actual state before releasing the resource quarantine.",
       "reconciliationResources": "Resources to verify",
       "reconciliationLoading": "Loading resources that require verification…",
+      "reconciliationLeaseFinalization": "The mutation outcome was already confirmed. Only the lease/resource finalization became uncertain; verify the resource state and release quarantine without retrying the mutation.",
       "reconciliationNotePlaceholder": "Describe what you verified, for example: no remote change occurred / the change completed and the resulting state is healthy",
       "reconciliationHint": "Confirming only releases quarantine; it does not retry the original mutation.",
       "reconciliationConfirm": "Verified — release quarantine",
@@ -952,6 +944,12 @@
       "dragCard": "Drag card to reorder",
       "current": "Current run",
       "tokens": "Tokens",
+      "contextUsage": "Context usage",
+      "contextReserved": "Reserved output {value}",
+      "contextSource": {
+        "estimated": "Estimated",
+        "provider": "Provider measured"
+      },
       "steps": "Steps",
       "activeTime": "Active time",
       "verification": "Verification",
@@ -971,6 +969,7 @@
         "running": "Running",
         "awaiting_approval": "Awaiting approval",
         "awaiting_budget": "Awaiting budget",
+        "awaiting_input": "Awaiting input",
         "cancelling": "Cancelling",
         "completed": "Completed",
         "completed_unverified": "Completed, unverified",
@@ -1013,7 +1012,8 @@
       "attention": {
         "reconciliation": "Reconciliation is required before the next mutation.",
         "approval": "This run is waiting for your approval.",
-        "budget": "This run is paused until its budget is increased."
+        "budget": "This run is paused until its budget is increased.",
+        "input": "Repeated no-progress actions were detected. Add guidance or new information to continue."
       },
       "totalTokens": "Token total",
       "advancedDetails": "Advanced Details & Checkpoints",

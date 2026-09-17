@@ -107,6 +107,11 @@ export interface ArtifactAttachResult {
   crossApp: boolean;
 }
 
+export interface ArtifactMaintenancePort {
+  /** Reconcile bounded non-terminal filesystem/SQLite Artifact state. Returns repaired rows. */
+  reconcile(limit?: number): Promise<number>;
+}
+
 export interface ArtifactPort {
   begin(scope: Scope, meta: ArtifactBeginMeta): Promise<UploadReservation>;
   get(scope: Scope, artifactId: string): Promise<ArtifactRef | null>;

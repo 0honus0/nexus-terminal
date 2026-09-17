@@ -308,11 +308,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         'Agent model step prepared',
       );
 
-      const budgetWait = await this.reserveModelBudget(
-        snapshot,
-        contextPlan.estimatedInputTokens,
-        contextPlan.reservedOutputTokens,
-      );
+      const budgetWait = await this.reserveModelBudget(snapshot);
       if (budgetWait) {
         yield { type: 'durable', runId: snapshot.id, cursor: budgetWait.eventCursor };
         yield { type: 'settled', run: budgetWait.run };
@@ -327,6 +323,9 @@ export class NativeAgentBackend implements AgentBackendPort {
         expectedRunVersion: snapshot.version,
         inputWatermark: snapshot.inputRevision,
         reservedTokens: worstCaseTokens,
+        estimatedInputTokens: contextPlan.estimatedInputTokens,
+        reservedOutputTokens: contextPlan.reservedOutputTokens,
+        contextWindowTokens: snapshot.budget.maxContextTokens,
         now: this.clock.nowUnixSeconds(),
       });
       logger.debug(
@@ -391,9 +390,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           await this.modelSteps.waitBeforeRetry(attemptError, nextAttemptIndex, signal);
           const budgetReason = this.retryBudgetReason(
             currentRun,
-            contextPlan.estimatedInputTokens,
             usageAfterFailed,
-            contextPlan.reservedOutputTokens,
           );
           if (budgetReason) {
             const paused = await this.stateCommit.pauseModelStepForBudget({
@@ -748,6 +745,27 @@ export class NativeAgentBackend implements AgentBackendPort {
       now: this.clock.nowUnixSeconds(),
     });
     yield { type: 'durable', runId: snapshot.id, cursor: rejected.eventCursor };
+    if (rejected.run.status === 'running') {
+      const guarded = await this.stateCommit.evaluateToolLoopGuard({
+        scope: { userId: snapshot.userId, appId: snapshot.appId },
+        runId: snapshot.id,
+        runtimeId: pending.runtimeId,
+        expectedRunVersion: rejected.run.version,
+        observations: [
+          {
+            toolName: pending.inspection.toolName,
+            risk: pending.inspection.risk,
+            operationHash: pending.inspection.operationHash,
+            result,
+          },
+        ],
+        now: this.clock.nowUnixSeconds(),
+      });
+      if (guarded.run.version !== rejected.run.version) {
+        yield { type: 'durable', runId: snapshot.id, cursor: guarded.eventCursor };
+      }
+      if (guarded.run.status === 'awaiting_input') yield { type: 'settled', run: guarded.run };
+    }
   }
 
   private async *supersedePendingMutationForBudget(
@@ -1034,7 +1052,26 @@ export class NativeAgentBackend implements AgentBackendPort {
       });
       yield { type: 'durable', runId: snapshot.id, cursor: parked.eventCursor };
       yield { type: 'settled', run: parked.run };
+      return;
     }
+
+    const guarded = await this.stateCommit.evaluateToolLoopGuard({
+      scope,
+      runId: settled.run.id,
+      runtimeId: prepared[0]!.pending.runtimeId,
+      expectedRunVersion: settled.run.version,
+      observations: executions.map(({ inspection, result }) => ({
+        toolName: inspection.toolName,
+        risk: inspection.risk,
+        operationHash: inspection.operationHash,
+        result,
+      })),
+      now: this.clock.nowUnixSeconds(),
+    });
+    if (guarded.run.version !== settled.run.version) {
+      yield { type: 'durable', runId: snapshot.id, cursor: guarded.eventCursor };
+    }
+    if (guarded.run.status === 'awaiting_input') yield { type: 'settled', run: guarded.run };
   }
 
   private async *executePendingMutation(
@@ -1211,12 +1248,55 @@ export class NativeAgentBackend implements AgentBackendPort {
         throw error;
       }
 
+      let finalized = settled;
       if (toolResult.outcome === 'confirmed') {
-        await this.toolCalls.confirmMutation(mutationLease);
+        const leaseFinalization = await this.toolCalls.confirmMutation(mutationLease);
+        if (!leaseFinalization.ok) {
+          finalized = await this.stateCommit.commit({
+            scope,
+            runId: settled.run.id,
+            expectedRunVersion: settled.run.version,
+            events: [
+              {
+                type: 'run.reconciliation_required',
+                payload: {
+                  kind: 'lease_finalization',
+                  mutationOutcome: 'confirmed',
+                  toolCallId: leaseFinalization.toolCallId,
+                  resourceKeys: leaseFinalization.resourceKeys,
+                  reason: leaseFinalization.reason,
+                  errorCode: leaseFinalization.errorCode,
+                },
+              },
+            ],
+            runPatch: { needsReconciliation: true },
+            now: this.clock.nowUnixSeconds(),
+          });
+        }
       }
 
-      yield { type: 'durable', runId: snapshot.id, cursor: settled.eventCursor };
-      if (settled.run.status === 'interrupted') yield { type: 'settled', run: settled.run };
+      if (finalized.run.status === 'running' && !finalized.run.needsReconciliation) {
+        finalized = await this.stateCommit.evaluateToolLoopGuard({
+          scope,
+          runId: finalized.run.id,
+          runtimeId: pending.runtimeId,
+          expectedRunVersion: finalized.run.version,
+          observations: [
+            {
+              toolName: inspection.toolName,
+              risk: inspection.risk,
+              operationHash: inspection.operationHash,
+              result: toolResult,
+            },
+          ],
+          now: this.clock.nowUnixSeconds(),
+        });
+      }
+
+      yield { type: 'durable', runId: snapshot.id, cursor: finalized.eventCursor };
+      if (finalized.run.status === 'interrupted' || finalized.run.status === 'awaiting_input') {
+        yield { type: 'settled', run: finalized.run };
+      }
     } finally {
       await this.toolCalls.cleanupMutation(mutationLease);
     }
@@ -1247,31 +1327,20 @@ export class NativeAgentBackend implements AgentBackendPort {
 
   private retryBudgetReason(
     run: RunView,
-    estimatedInputTokens: number,
     usage: RunUsage,
-    maxOutputTokens: number,
   ): JsonValue | null {
-    const requestedTokens = estimatedInputTokens + maxOutputTokens;
-    const remainingTokens = Math.max(0, run.budget.maxRunTokens - usage.inputTokens - usage.outputTokens);
     const activeExecutionSeconds =
       run.activeExecutionSeconds +
       (run.executingRuntimeCount > 0 && run.activeExecutionStartedAt !== null
         ? Math.max(0, this.clock.nowUnixSeconds() - run.activeExecutionStartedAt)
         : 0);
-    const reason =
-      requestedTokens > remainingTokens
-        ? 'token_limit'
-        : activeExecutionSeconds >= run.budget.maxActiveExecutionSeconds
-          ? 'active_time_limit'
-          : null;
+    const reason = activeExecutionSeconds >= run.budget.maxActiveExecutionSeconds ? 'active_time_limit' : null;
     if (!reason) return null;
     return {
       reason,
       retry: true,
       currentSteps: usage.steps,
       requestedSteps: usage.steps + 1,
-      remainingTokens,
-      requestedTokens,
       activeExecutionSeconds,
       maxActiveExecutionSeconds: run.budget.maxActiveExecutionSeconds,
     };
@@ -1279,14 +1348,7 @@ export class NativeAgentBackend implements AgentBackendPort {
 
   private async reserveModelBudget(
     snapshot: RunSnapshot,
-    estimatedInputTokens: number,
-    maxOutputTokens: number,
   ): Promise<Awaited<ReturnType<RootExecutionCommitPort['commit']>> | null> {
-    const worstCaseTokens = estimatedInputTokens + maxOutputTokens;
-    const remainingTokens = Math.max(
-      0,
-      snapshot.budget.maxRunTokens - snapshot.usage.inputTokens - snapshot.usage.outputTokens,
-    );
     const activeSeconds =
       snapshot.activeExecutionSeconds +
       (snapshot.executingRuntimeCount > 0 && snapshot.activeExecutionStartedAt !== null
@@ -1295,11 +1357,9 @@ export class NativeAgentBackend implements AgentBackendPort {
     const reason =
       snapshot.usage.steps >= snapshot.budget.maxRunSteps
         ? 'step_limit'
-        : worstCaseTokens > remainingTokens
-          ? 'token_limit'
-          : activeSeconds >= snapshot.budget.maxActiveExecutionSeconds
-            ? 'active_time_limit'
-            : null;
+        : activeSeconds >= snapshot.budget.maxActiveExecutionSeconds
+          ? 'active_time_limit'
+          : null;
     if (!reason) return null;
 
     const now = this.clock.nowUnixSeconds();
@@ -1314,8 +1374,6 @@ export class NativeAgentBackend implements AgentBackendPort {
             reason,
             currentSteps: snapshot.usage.steps,
             requestedSteps: snapshot.usage.steps + 1,
-            remainingTokens,
-            requestedTokens: worstCaseTokens,
             activeExecutionSeconds: activeSeconds,
             maxActiveExecutionSeconds: snapshot.budget.maxActiveExecutionSeconds,
           },

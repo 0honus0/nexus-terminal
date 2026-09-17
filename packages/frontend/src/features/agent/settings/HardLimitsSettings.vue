@@ -24,7 +24,7 @@
   type HardLimitKey = keyof AgentHardLimits;
 
   const getFieldType = (key: HardLimitKey): QuantityType => {
-    if (['maxContextTokens', 'maxOutputTokens', 'maxRunTokens'].includes(key)) return 'tokens';
+    if (['maxContextTokens', 'maxOutputTokens'].includes(key)) return 'tokens';
     if (
       [
         'maxToolOutputBytes',
@@ -52,7 +52,7 @@
   const fieldGroups: Array<{ id: string; keys: HardLimitKey[] }> = [
     {
       id: 'tokens',
-      keys: ['maxRunTokens', 'maxRunSteps'],
+      keys: ['maxRunSteps'],
     },
     {
       id: 'timeouts',

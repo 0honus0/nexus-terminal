@@ -95,6 +95,39 @@ const validBrowserUrlPattern = (value: string): boolean => {
   return !rawPath || !rawPath.includes('*') || rawPath.endsWith('*');
 };
 
+const decodeBrowserEndpoint = (value: unknown): WorkspaceBrowserEndpoint => {
+  const record = asRecord(value);
+  if (
+    (record.scope !== 'docker-network' && record.scope !== 'external-network') ||
+    record.via !== 'runner' ||
+    typeof record.url !== 'string' ||
+    !record.url ||
+    record.url.length > 4096 ||
+    !Number.isSafeInteger(record.priority) ||
+    Number(record.priority) < 0 ||
+    Number(record.priority) > 10000 ||
+    typeof record.allowPlaintext !== 'boolean' ||
+    typeof record.verifyTls !== 'boolean'
+  ) {
+    throw new Error('BROWSER_ENDPOINT_INVALID');
+  }
+  let url: URL;
+  try {
+    url = new URL(record.url);
+  } catch {
+    throw new Error('BROWSER_ENDPOINT_INVALID');
+  }
+  if (!['http:', 'https:', 'ws:', 'wss:'].includes(url.protocol)) throw new Error('BROWSER_ENDPOINT_INVALID');
+  return {
+    scope: record.scope,
+    via: 'runner',
+    url: record.url,
+    priority: Number(record.priority),
+    allowPlaintext: record.allowPlaintext,
+    verifyTls: record.verifyTls,
+  };
+};
+
 const validateWorkspaceBindings = (command: WorkspaceProvisionCommand): void => {
   if (!Array.isArray(command.acpProfiles) || command.acpProfiles.length > 16) {
     throw new Error('ACP_PROFILE_INVALID');
@@ -281,7 +314,7 @@ export class RunnerControllerServer {
         if (typeof rawEndpoint !== 'string' || rawEndpoint.length > 12_000) throw new Error('BROWSER_ENDPOINT_INVALID');
         let endpoint: WorkspaceBrowserEndpoint;
         try {
-          endpoint = JSON.parse(Buffer.from(rawEndpoint, 'base64url').toString('utf8')) as WorkspaceBrowserEndpoint;
+          endpoint = decodeBrowserEndpoint(JSON.parse(Buffer.from(rawEndpoint, 'base64url').toString('utf8')) as unknown);
         } catch {
           throw new Error('BROWSER_ENDPOINT_INVALID');
         }

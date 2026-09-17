@@ -1,4 +1,7 @@
 import type { JsonValue, Scope } from '../../agent.types';
+
+// Port contract rule: every side-effecting method must have a concrete runtime/lifecycle owner.
+// Unused mutation contracts are deleted instead of preserved as a second durable state path.
 import type { ModelRef } from '../../ai/model.types';
 import type { LedgerEntryKind } from '../../ai/conversation.repository.port';
 import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
@@ -95,6 +98,9 @@ export interface BeginModelStepCommand {
   expectedRunVersion: number;
   inputWatermark: number;
   reservedTokens: number;
+  estimatedInputTokens: number;
+  reservedOutputTokens: number;
+  contextWindowTokens: number;
   now: number;
 }
 
@@ -542,16 +548,6 @@ export interface SupersedeMutationToolCommand {
   now: number;
 }
 
-export interface BeginReadToolCommand {
-  scope: Scope;
-  runId: string;
-  runtimeId: string;
-  toolStepId: string;
-  toolCallId: string;
-  expectedRunVersion: number;
-  now: number;
-}
-
 export interface ToolBatchIdentity {
   toolStepId: string;
   toolCallId: string;
@@ -563,20 +559,6 @@ export interface BeginReadToolBatchCommand {
   runtimeId: string;
   expectedRunVersion: number;
   items: ToolBatchIdentity[];
-  now: number;
-}
-
-export interface SettleReadToolCommand {
-  scope: Scope;
-  runId: string;
-  runtimeId: string;
-  toolStepId: string;
-  toolCallId: string;
-  expectedRunVersion: number;
-  toolResultEntryId: string;
-  providerCallId: string;
-  result: ToolResult;
-  usage: RunUsage;
   now: number;
 }
 
@@ -595,7 +577,18 @@ export interface SettleReadToolBatchCommand {
   now: number;
 }
 
-export interface SettleMutationToolCommand extends SettleReadToolCommand {
+export interface SettleMutationToolCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  toolStepId: string;
+  toolCallId: string;
+  expectedRunVersion: number;
+  toolResultEntryId: string;
+  providerCallId: string;
+  result: ToolResult;
+  usage: RunUsage;
+  now: number;
   needsReconciliation?: boolean;
 }
 
@@ -623,6 +616,21 @@ export interface InterruptUnexpectedRootExecutionCommand {
   now: number;
 }
 
+export interface EvaluateToolLoopGuardCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  delegationId?: string;
+  expectedRunVersion: number;
+  observations: Array<{
+    toolName: string;
+    risk: ToolInspection['risk'];
+    operationHash: string;
+    result: ToolResult;
+  }>;
+  now: number;
+}
+
 export interface StateCommitPort {
   createRun(command: AtomicCreateRun): Promise<CreateRunCommitResult>;
   appendInput(command: AtomicAppendInput): Promise<AppendInputCommitResult>;
@@ -632,6 +640,7 @@ export interface StateCommitPort {
   increaseRunBudget(command: AtomicIncreaseRunBudget): Promise<IncreaseRunBudgetCommitResult>;
   deleteRun(command: AtomicDeleteRun): Promise<DeleteRunCommitResult>;
   resolveRunReconciliation(command: ResolveRunReconciliationCommand): Promise<StateCommitResult>;
+  supersedeRunApprovals(scope: Scope, runId: string, now: number): Promise<number>;
   beginModelStep(command: BeginModelStepCommand): Promise<BeginModelStepResult>;
   beginSubagentModelStep(command: BeginSubagentModelStepCommand): Promise<BeginModelStepResult>;
   pauseRuntimeForBudget(command: PauseRuntimeForBudgetCommand): Promise<StateCommitResult>;
@@ -654,16 +663,16 @@ export interface StateCommitPort {
   resolveToolApproval(command: ResolveToolApprovalCommand): Promise<StateCommitResult>;
   supersedeMutationTool(command: SupersedeMutationToolCommand): Promise<StateCommitResult>;
   expireToolApprovals(now: number): Promise<RunView[]>;
-  beginReadTool(command: BeginReadToolCommand): Promise<StateCommitResult>;
+  cleanupExpiredCommands(now: number, limit?: number): Promise<number>;
   beginReadToolBatch(command: BeginReadToolBatchCommand): Promise<StateCommitResult>;
   beginMutationTool(command: BeginMutationToolCommand): Promise<StateCommitResult>;
-  settleReadTool(command: SettleReadToolCommand): Promise<StateCommitResult>;
   settleReadToolBatch(command: SettleReadToolBatchCommand): Promise<StateCommitResult>;
   settleMutationTool(command: SettleMutationToolCommand): Promise<StateCommitResult>;
+  evaluateToolLoopGuard(command: EvaluateToolLoopGuardCommand): Promise<StateCommitResult>;
   supersedeModelStep(command: SupersedeModelStepCommand): Promise<StateCommitResult>;
   commit(command: StateCommitCommand): Promise<StateCommitResult>;
   interruptUnexpectedRootExecution(command: InterruptUnexpectedRootExecutionCommand): Promise<StateCommitResult | null>;
-  quiesceApp(appId: string, now: number): Promise<number>;
+  quiesceApp(scope: Scope, now: number): Promise<number>;
   interruptNonTerminalRuns(now: number): Promise<number>;
 }
 
@@ -680,8 +689,9 @@ export type RunCommandCommitPort = Pick<
 >;
 
 export type RunCreationCommitPort = Pick<StateCommitPort, 'createRun'>;
+export type CheckpointRecoveryCommitPort = Pick<StateCommitPort, 'createRun' | 'supersedeRunApprovals'>;
 export type ApprovalDecisionCommitPort = Pick<StateCommitPort, 'resolveToolApproval'>;
-export type ApprovalSweepCommitPort = Pick<StateCommitPort, 'expireToolApprovals'>;
+export type ApprovalSweepCommitPort = Pick<StateCommitPort, 'expireToolApprovals' | 'cleanupExpiredCommands'>;
 export type ProjectionCommitPort = Pick<StateCommitPort, 'commit'>;
 
 export type CollaborationCommitPort = Pick<
@@ -692,13 +702,13 @@ export type CollaborationCommitPort = Pick<
   | 'settleSubagentModelStep'
   | 'settleSubagentTool'
   | 'settleSubagentWithoutModel'
+  | 'evaluateToolLoopGuard'
 >;
 
 export type RootExecutionCommitPort = Pick<
   StateCommitPort,
   | 'beginModelStep'
   | 'beginMutationTool'
-  | 'beginReadTool'
   | 'beginReadToolBatch'
   | 'commit'
   | 'commitToolProposalBatch'
@@ -714,8 +724,8 @@ export type RootExecutionCommitPort = Pick<
   | 'retryModelStep'
   | 'settleModelStep'
   | 'settleMutationTool'
-  | 'settleReadTool'
   | 'settleReadToolBatch'
+  | 'evaluateToolLoopGuard'
   | 'supersedeModelStep'
   | 'supersedeMutationTool'
 >;

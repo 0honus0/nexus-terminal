@@ -62,7 +62,6 @@ const runBudgetFrom = (
   // Model context/output are physical capabilities, not Nexus user budgets.
   maxContextTokens: model.contextWindow,
   maxOutputTokens: Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1)),
-  maxRunTokens: policy.effective.maxRunTokens,
   maxRunSteps: policy.effective.maxRunSteps,
   maxActiveExecutionSeconds: policy.effective.maxActiveExecutionSeconds,
   toolTimeoutSeconds: policy.effective.toolTimeoutSeconds,
@@ -84,7 +83,6 @@ const increasedBudget = (
   const raw: unknown = rawIncrease;
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
-    'maxRunTokens',
     'maxRunSteps',
     'maxActiveExecutionSeconds',
     'maxSubagentMessages',
@@ -96,8 +94,7 @@ const increasedBudget = (
   const next: RunBudget = { ...current };
   let changed = false;
   const raiseNumber = (
-    key:
-      'maxRunTokens' | 'maxRunSteps' | 'maxActiveExecutionSeconds' | 'maxSubagentMessages' | 'maxSubagentMessageBytes',
+    key: 'maxRunSteps' | 'maxActiveExecutionSeconds' | 'maxSubagentMessages' | 'maxSubagentMessageBytes',
     hardLimit: number,
   ): void => {
     if (!(key in raw)) return;
@@ -110,7 +107,6 @@ const increasedBudget = (
     next[key] = target;
     changed = true;
   };
-  raiseNumber('maxRunTokens', hardLimits.maxRunTokens);
   raiseNumber('maxRunSteps', hardLimits.maxRunSteps);
   raiseNumber('maxActiveExecutionSeconds', hardLimits.maxActiveExecutionSeconds);
   raiseNumber('maxSubagentMessages', hardLimits.maxSubagentMessagesPerRun);
@@ -264,7 +260,6 @@ export class RunService {
         connectionCount: connectionIds.length,
         artifactCount: input.artifactRefs.length,
         inputBytes: Buffer.byteLength(input.text, 'utf8'),
-        maxRunTokens: budget.maxRunTokens,
         maxRunSteps: budget.maxRunSteps,
         maxOutputTokens: budget.maxOutputTokens,
       },
@@ -470,7 +465,6 @@ export class RunService {
     if (app.desiredState !== 'enabled') throw new Error('AGENT_APP_DISABLED');
     const budget = increasedBudget(current.budget, increase, settings.hardLimits);
     const normalizedIncrease: JsonValue = {
-      ...(increase.maxRunTokens === undefined ? {} : { maxRunTokens: increase.maxRunTokens }),
       ...(increase.maxRunSteps === undefined ? {} : { maxRunSteps: increase.maxRunSteps }),
       ...(increase.maxActiveExecutionSeconds === undefined
         ? {}

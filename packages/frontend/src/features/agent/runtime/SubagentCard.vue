@@ -14,8 +14,8 @@
 
   const terminal = new Set(['completed', 'failed', 'cancelled']);
   const percent = (): number => {
-    const max = Math.max(1, props.delegation.budget.maxTokens);
-    return Math.min(100, Math.round((props.delegation.usage.tokens / max) * 100));
+    const max = Math.max(1, props.delegation.budget.maxSteps);
+    return Math.min(100, Math.round((props.delegation.usage.steps / max) * 100));
   };
 </script>
 
@@ -39,9 +39,7 @@
         <span>{{
           $t('agent.subagents.steps', { used: delegation.usage.steps, max: delegation.budget.maxSteps })
         }}</span>
-        <span>{{
-          $t('agent.subagents.tokens', { used: delegation.usage.tokens, max: delegation.budget.maxTokens })
-        }}</span>
+        <span>{{ delegation.usage.tokens }} tok</span>
       </div>
       <div class="mt-2 h-1 overflow-hidden rounded bg-header">
         <div class="h-full bg-primary" :style="{ width: `${percent()}%` }"></div>

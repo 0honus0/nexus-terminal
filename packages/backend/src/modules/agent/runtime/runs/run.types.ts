@@ -7,6 +7,7 @@ export type RunStatus =
   | 'running'
   | 'awaiting_approval'
   | 'awaiting_budget'
+  | 'awaiting_input'
   | 'cancelling'
   | 'completed'
   | 'completed_unverified'
@@ -70,7 +71,6 @@ export interface CreateRunCommand {
 export interface RunBudget {
   maxContextTokens: number;
   maxOutputTokens: number;
-  maxRunTokens: number;
   maxRunSteps: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
@@ -85,11 +85,18 @@ export interface RunBudget {
 }
 
 export interface RunBudgetIncrease {
-  maxRunTokens?: number;
   maxRunSteps?: number;
   maxActiveExecutionSeconds?: number;
   maxSubagentMessages?: number;
   maxSubagentMessageBytes?: number;
+}
+
+export interface RunContextUsage {
+  inputTokens: number;
+  reservedOutputTokens: number;
+  contextWindowTokens: number;
+  source: 'estimated' | 'provider';
+  updatedAt: number;
 }
 
 export interface RunUsage {
@@ -99,6 +106,7 @@ export interface RunUsage {
   steps: number;
   subagentMessages: number;
   subagentMessageBytes: number;
+  context?: RunContextUsage;
 }
 
 export interface RunContextBoundary {

@@ -78,14 +78,7 @@ export class ModelStepRunner {
     const model = provider.models.find((candidate) => candidate.id === snapshot.definition.model.modelId);
     if (!model) throw new Error('MODEL_NOT_FOUND');
 
-    const remainingRunTokens = Math.max(
-      1,
-      snapshot.budget.maxRunTokens - snapshot.usage.inputTokens - snapshot.usage.outputTokens,
-    );
-    const reservedOutputTokens = Math.max(
-      1,
-      Math.min(model.maxOutputTokens, model.contextWindow - 1, remainingRunTokens),
-    );
+    const reservedOutputTokens = Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1));
 
     const currentProjection = inputProjections[snapshot.id] ?? { ordered: [], pending: [] };
     const currentInput = currentProjection.ordered.at(-1) ?? latestInput(snapshot);
@@ -118,19 +111,7 @@ export class ModelStepRunner {
       maxRecallBytes: snapshot.budget.maxRecallBytes,
       tools,
     });
-    return {
-      model,
-      contextPlan: {
-        ...contextPlan,
-        reservedOutputTokens: Math.max(
-          1,
-          Math.min(
-            contextPlan.reservedOutputTokens,
-            Math.max(1, remainingRunTokens - contextPlan.estimatedInputTokens),
-          ),
-        ),
-      },
-    };
+    return { model, contextPlan };
   }
 
   async *runAttempt(

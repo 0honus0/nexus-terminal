@@ -36,7 +36,6 @@ interface ParsedRequest {
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];
-  maxTokens: number;
   maxSteps: number;
   deadlineAt: number;
   completionCriteria: string[];
@@ -51,7 +50,6 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
     'objective',
     'constraints',
     'inputArtifactRefs',
-    'maxTokens',
     'maxSteps',
     'deadlineAt',
     'completionCriteria',
@@ -61,7 +59,7 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (!nonEmpty(raw.profileId, 64) || !nonEmpty(raw.objective, MAX_OBJECTIVE_BYTES))
     throw new Error('VALIDATION_FAILED');
-  if (!positiveInteger(raw.maxTokens) || !positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
+  if (!positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
   if (!Number.isSafeInteger(raw.deadlineAt) || (raw.deadlineAt as number) <= now) throw new Error('VALIDATION_FAILED');
   if (!['success', 'settled'].includes(String(raw.dependencyMode))) throw new Error('VALIDATION_FAILED');
   return {
@@ -69,7 +67,6 @@ const parseRequest = (raw: unknown, now: number): ParsedRequest => {
     objective: raw.objective.trim(),
     constraints: stringArray(raw.constraints, MAX_CONSTRAINTS, MAX_CONSTRAINT_BYTES),
     inputArtifactRefs: stringArray(raw.inputArtifactRefs, MAX_ARTIFACT_REFS, 256),
-    maxTokens: raw.maxTokens,
     maxSteps: raw.maxSteps,
     deadlineAt: raw.deadlineAt as number,
     completionCriteria: stringArray(raw.completionCriteria, MAX_CRITERIA, MAX_CONSTRAINT_BYTES),
@@ -92,6 +89,7 @@ export class SubagentService {
     private readonly events: AgentEventHub,
     private readonly clock: ClockPort,
     private readonly onWorkAvailable: () => void = () => undefined,
+    private readonly onRuntimeCancelled: (runId: string, runtimeId: string) => void = () => undefined,
   ) {}
 
   async create(
@@ -112,7 +110,7 @@ export class SubagentService {
     ]);
     if (!run) throw new Error('RUN_NOT_FOUND');
     if (!parentRuntime) throw new Error('AGENT_RUNTIME_NOT_FOUND');
-    if (!['created', 'running', 'awaiting_approval', 'awaiting_budget'].includes(run.status))
+    if (!['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input'].includes(run.status))
       throw new Error('RUN_NOT_ACTIVE');
     const parentDelegation = allDelegations.find((delegation) => delegation.childRuntimeId === parentRuntimeId) ?? null;
     const depth = (parentDelegation?.depth ?? 0) + 1;
@@ -144,7 +142,6 @@ export class SubagentService {
       objective: input.objective,
       constraints: input.constraints,
       inputArtifactRefs: input.inputArtifactRefs,
-      maxTokens: Math.min(input.maxTokens, profile.maxTokens),
       maxSteps: Math.min(input.maxSteps, profile.maxSteps),
       deadlineAt: input.deadlineAt,
       completionCriteria: input.completionCriteria,
@@ -173,10 +170,7 @@ export class SubagentService {
       dependsOn: input.dependsOn,
       depth,
       failureMode: profile.failureMode,
-      maxTokens: Math.min(input.maxTokens, profile.maxTokens),
       maxSteps: Math.min(input.maxSteps, profile.maxSteps),
-      reservedTokens: Math.min(input.maxTokens, profile.maxTokens),
-      reservedSteps: Math.min(input.maxSteps, profile.maxSteps),
       idempotencyKey: key,
       requestHash: requestHash(1, payload),
       deadlineAt: input.deadlineAt,
@@ -210,13 +204,14 @@ export class SubagentService {
     const descendants = await this.delegations.descendants(scope, runId, current.childRuntimeId);
     for (const descendant of descendants) {
       if (!['completed', 'failed', 'cancelled'].includes(descendant.status)) {
-        await this.delegations.cancelDelegation(
+        const cancelled = await this.delegations.cancelDelegation(
           scope,
           runId,
           descendant.id,
           descendant.version,
           this.clock.nowUnixSeconds(),
         );
+        this.onRuntimeCancelled(runId, cancelled.childRuntimeId);
       }
     }
     const result = await this.delegations.cancelDelegation(
@@ -226,6 +221,7 @@ export class SubagentService {
       expectedVersion,
       this.clock.nowUnixSeconds(),
     );
+    this.onRuntimeCancelled(runId, result.childRuntimeId);
     await this.wake(scope, runId);
     return result;
   }

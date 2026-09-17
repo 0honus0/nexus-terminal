@@ -1,4 +1,4 @@
-import type { AgentAppManifest, ValidatedManifest } from './app.types';
+import type { ValidatedManifest } from './app.types';
 
 export interface PluginStageSource {
   stageId: string;
@@ -42,7 +42,7 @@ export interface PackageVerifierPort {
     stageId: string,
     appIdHint: string | null,
     resolvePublisherKey: (keyId: string) => Promise<string | null>,
-    validateManifest: (raw: AgentAppManifest) => ValidatedManifest,
+    validateManifest: (raw: unknown) => ValidatedManifest,
   ): Promise<VerifiedPluginPackage>;
   adoptStage(stageId: string, appId: string): Promise<void>;
   install(stageId: string, verified: VerifiedPluginPackage): Promise<void>;

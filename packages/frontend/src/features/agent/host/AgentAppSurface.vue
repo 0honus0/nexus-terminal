@@ -172,7 +172,7 @@
   let threadDeleteArmTimer: number | null = null;
   let deleteAllThreadsArmTimer: number | null = null;
 
-  const nonTerminal = new Set(['created', 'running', 'awaiting_approval', 'awaiting_budget', 'cancelling']);
+  const nonTerminal = new Set(['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input', 'cancelling']);
   const backgroundThreadStatuses = computed(() => {
     const statuses = new Map<string, AgentRunView['status']>();
     for (const candidate of backgroundRuns.value) {

@@ -5,7 +5,6 @@ import type { AppStoragePort } from './app-storage.port';
 export type ContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
 
 export interface AgentExecutionPolicyOverrides {
-  maxRunTokens?: number;
   maxRunSteps?: number;
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
@@ -19,7 +18,6 @@ export interface AgentExecutionPolicyOverrides {
 }
 
 export interface AgentExecutionPolicyEffective {
-  maxRunTokens: number;
   maxRunSteps: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
@@ -45,7 +43,6 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
 
 const defaultsFrom = (settings: AgentSettingsView): AgentExecutionPolicyEffective => ({
-  maxRunTokens: settings.effectiveSettings.budget.maxRunTokens,
   maxRunSteps: settings.effectiveSettings.budget.maxRunSteps,
   maxActiveExecutionSeconds: settings.effectiveSettings.budget.maxActiveExecutionSeconds,
   toolTimeoutSeconds: settings.effectiveSettings.budget.toolTimeoutSeconds,
@@ -61,7 +58,6 @@ const defaultsFrom = (settings: AgentSettingsView): AgentExecutionPolicyEffectiv
 const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
-    'maxRunTokens',
     'maxRunSteps',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
@@ -76,7 +72,6 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   const result: AgentExecutionPolicyOverrides = {};
   for (const key of [
-    'maxRunTokens',
     'maxRunSteps',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
@@ -106,7 +101,6 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
 const assertWithinHardLimits = (overrides: AgentExecutionPolicyOverrides, settings: AgentSettingsView): void => {
   const hard = settings.hardLimits;
   const pairs: Array<[keyof AgentExecutionPolicyOverrides, number]> = [
-    ['maxRunTokens', hard.maxRunTokens],
     ['maxRunSteps', hard.maxRunSteps],
     ['maxActiveExecutionSeconds', hard.maxActiveExecutionSeconds],
     ['toolTimeoutSeconds', hard.toolTimeoutSeconds],

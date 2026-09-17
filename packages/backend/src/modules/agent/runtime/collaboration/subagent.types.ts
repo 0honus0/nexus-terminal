@@ -23,7 +23,6 @@ export interface SubagentProfile {
   allowedModels: ModelRef[];
   capabilities: string[];
   peerMessaging: PeerMessaging;
-  maxTokens: number;
   maxSteps: number;
   failureMode: SubagentFailureMode;
 }
@@ -45,7 +44,6 @@ export interface SubagentRequest {
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];
-  maxTokens: number;
   maxSteps: number;
   deadlineAt: number;
   completionCriteria: string[];
@@ -72,10 +70,7 @@ export interface DelegationView extends Scope {
   depth: number;
   failureMode: SubagentFailureMode;
   budget: {
-    maxTokens: number;
     maxSteps: number;
-    reservedTokens: number;
-    reservedSteps: number;
   };
   usage: { tokens: number; steps: number };
   result: JsonValue | null;

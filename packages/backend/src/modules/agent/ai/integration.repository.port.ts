@@ -29,7 +29,14 @@ export interface IntegrationRepositoryPort {
     expectedVersion: number,
     record: IntegrationUpdateRecord,
   ): Promise<IntegrationView>;
-  updateSchemaHash(scope: Scope, integrationId: string, schemaHash: string | null, updatedAt: number): Promise<void>;
+  updateSchemaHash(
+    scope: Scope,
+    integrationId: string,
+    expectedVersion: number,
+    expectedCredentialRevision: number,
+    schemaHash: string | null,
+    updatedAt: number,
+  ): Promise<IntegrationView | null>;
   remove(scope: Scope, integrationId: string, expectedVersion: number): Promise<void>;
 }
 

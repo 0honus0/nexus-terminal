@@ -2,6 +2,16 @@ import type { AgentErrorRule } from './rule';
 import { onCodes, onCodesOrPrefixes, rawCode } from './rule';
 
 export const workspaceRuntimeErrorRules: readonly AgentErrorRule[] = [
+  onCodes(['ACP_PROFILE_SELECTION_INVALID'], rawCode(400, 'Invalid ACP profile selection.')),
+  onCodes(['ACP_PROFILE_NOT_FOUND', 'BROWSER_TARGET_NOT_FOUND'], {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'The selected Workspace profile or Browser target was not found.',
+  }),
+  onCodes(
+    ['BROWSER_TARGET_REQUIRES_BROWSER_RECIPE'],
+    rawCode(422, 'The selected Browser target is incompatible with this Workspace recipe.'),
+  ),
   onCodes(['WORKSPACE_RUNTIME_CONFIRMATION_NOT_FOUND'], rawCode(404, 'Workspace Runtime confirmation was not found.')),
   onCodes(
     ['WORKSPACE_RUNTIME_CONFIRMATION_EXPIRED'],

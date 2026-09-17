@@ -17,7 +17,11 @@ import {
   failedToolResult as buildFailedToolResult,
 } from './execution-errors';
 import { LeaseCoordinator, type LeaseRenewal } from './lease-coordinator';
-import type { MutationLeaseGuardHandle, MutationLeaseGuardPort } from './mutation-lease-guard.port';
+import type {
+  MutationLeaseFinalizationResult,
+  MutationLeaseGuardHandle,
+  MutationLeaseGuardPort,
+} from './mutation-lease-guard.port';
 
 export interface InspectedToolCall {
   inspection: ToolInspection;
@@ -166,7 +170,7 @@ export class ToolCallRunner {
     return result;
   }
 
-  confirmMutation(lease: MutationLeaseGuardHandle): Promise<void> {
+  confirmMutation(lease: MutationLeaseGuardHandle): Promise<MutationLeaseFinalizationResult> {
     return lease.confirm();
   }
 
