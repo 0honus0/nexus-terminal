@@ -209,3 +209,9 @@ P-095 是 Machine mutation approval 对 Proxy / Jump-chain dependency revision �
 7. execution session/cache 必须与同一 dependency fingerprint 一致失效，不能 inspection 变 stale 但底层仍复用旧 route/credential session。
 8. 验证至少覆盖 direct Connection、Proxy host/credential、任一 Jump hop host/credential、无关 Connection 修改、未变 route 正常审批，以及 inspection/log/ledger 无明文 secret。
 9. P-095 完成后仍按固定规则：更新 `doc/PROBLEM.md`、完整重写本文件、重新实算 Problem 数量，并在同一会话停止，不继续 P-099。
+
+## 新会话启动提示词
+
+新会话直接发送：
+
+> 继续开发 Nexus。进入 `/home/agentdock/AgentDock/nexus-terminal-dev`，先核对 branch/HEAD/status，完整读取 `doc/PROGRESS.md` 和最新 P-095，严格按 handoff 只完成 P-095；先做 regression-first，再实现、全量验证、更新 PROBLEM/PROGRESS，完成后停在 P-099 前。保留所有现有改动，禁止 reset/stash/clean/restore 覆盖。
