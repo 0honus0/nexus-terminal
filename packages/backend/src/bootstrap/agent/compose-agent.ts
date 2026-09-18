@@ -1,3 +1,4 @@
+import { logger } from '../../shared/logging/logger';
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
@@ -9,11 +10,13 @@ import { SqliteHardLimitUsageAdapter } from '../../infrastructure/agent/reposito
 import { SqliteAppGrantRepository } from '../../infrastructure/agent/repositories/sqlite-app-grant.repository';
 import { SqliteAppStateRepository } from '../../infrastructure/agent/repositories/sqlite-app-state.repository';
 import { SqliteConversationRepository } from '../../infrastructure/agent/repositories/sqlite-conversation.repository';
+import { SqliteContextCheckpointRepository } from '../../infrastructure/agent/repositories/sqlite-context-checkpoint.repository';
 import { SqliteApprovalRepository } from '../../infrastructure/agent/repositories/sqlite-approval.repository';
 import { SqliteAppIntentRepository } from '../../infrastructure/agent/repositories/sqlite-app-intent.repository';
 import { SqliteSubagentRepository } from '../../infrastructure/agent/repositories/sqlite-subagent.repository';
 import { SqliteMemoryRepository } from '../../infrastructure/agent/repositories/sqlite-memory.repository';
 import { SqliteMemoryProvenanceAdapter } from '../../infrastructure/agent/repositories/sqlite-memory-provenance.adapter';
+import { SqliteModelContinuationRepository } from '../../infrastructure/agent/repositories/sqlite-model-continuation.repository';
 import { InstalledPluginSkillSourceAdapter } from '../../infrastructure/agent/plugins/installed-plugin-skill-source.adapter';
 import { OpenAiProviderAdapter } from '../../infrastructure/agent/providers/openai-provider.adapter';
 import { McpAdapter } from '../../infrastructure/agent/integrations/mcp.adapter';
@@ -37,8 +40,11 @@ import { IntegrationService } from '../../modules/agent/ai/integration.service';
 import type { AcpTransportPort, BrowserGatewayPort } from '../../modules/agent/ai/integrations.types';
 import type { ArtifactLimitPolicyPort } from '../../modules/agent/ai/artifact.port';
 import { ConversationService } from '../../modules/agent/ai/conversation.service';
+import { ContextCheckpointService } from '../../modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../modules/agent/ai/context.service';
 import { ProviderService } from '../../modules/agent/ai/provider.service';
+import { snapshotProviderModelCapabilities } from '../../modules/agent/ai/model-capability-resolver';
+import { missingRequiredModelCapabilities } from '../../modules/agent/ai/model-capability-requirements';
 import { RecallService } from '../../modules/agent/ai/recall.service';
 import { MemoryService } from '../../modules/agent/ai/memory.service';
 import { SkillRegistry } from '../../modules/agent/ai/skill-registry';
@@ -93,6 +99,8 @@ import type { RemoteDockerService } from '../../platform/docker/remote-docker.se
 import type { RelationalDatabase } from '../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../shared/security/crypto.port';
 import type { AuditLogService } from '../../modules/audit/audit.service';
+import type { NotificationService } from '../../modules/notifications/notification.service';
+import { AgentNotificationBridge } from './agent-notification-bridge';
 import { composePlugins } from './compose-plugins';
 import { composeWorkspaceRuntime } from './compose-workspace-runtime';
 import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
@@ -124,6 +132,7 @@ export interface ComposeAgentOptions {
   acpTransport: AcpTransportPort;
   browserGateway: BrowserGatewayPort;
   audit: AuditLogService;
+  notifications: NotificationService;
 }
 
 export const composeAgent = ({
@@ -145,6 +154,7 @@ export const composeAgent = ({
   acpTransport,
   browserGateway,
   audit,
+  notifications,
 }: ComposeAgentOptions): AgentServices => {
   const registry = new AppRegistryService();
   const runRepository = new SqliteRunRepository(database);
@@ -191,8 +201,9 @@ export const composeAgent = ({
     forUser: async (userId) => {
       const view = await settings.get(userId);
       return {
-        maxSingleArtifactBytes: view.hardLimits.maxSingleArtifactBytes,
-        maxGlobalArtifactBytes: view.hardLimits.maxGlobalArtifactBytes,
+        maxSingleArtifactBytes: view.effectiveSettings.storage.maxSingleArtifactBytes,
+        maxGlobalArtifactBytes: view.effectiveSettings.storage.maxGlobalArtifactBytes,
+        unretainedArtifactTtlSeconds: view.effectiveSettings.storage.unretainedArtifactTtlSeconds,
         minFreeDiskBytes: AGENT_DEFAULTS.minFreeDiskBytes,
       };
     },
@@ -228,8 +239,19 @@ export const composeAgent = ({
   const conversations = new ConversationService(conversationRepository, systemClock, settings, lifecycle);
   const recall = new RecallService(new SqliteRecallRepository(database), systemClock);
   const skills = new SkillRegistry(new InstalledPluginSkillSourceAdapter(database, dataDirectory));
-  const context = new ContextService(conversations, recall, skills);
-  const stateCommit = new SqliteStateCommitAdapter(database);
+  const modelContinuations = new SqliteModelContinuationRepository(database);
+  const contextCheckpoints = new ContextCheckpointService(
+    new SqliteContextCheckpointRepository(database),
+    conversations,
+    systemClock,
+  );
+  const context = new ContextService(conversations, recall, skills, modelContinuations, artifacts, contextCheckpoints);
+  const notificationBridge = new AgentNotificationBridge(notifications, conversationRepository);
+  const stateCommit = new SqliteStateCommitAdapter(database, (run, events) => {
+    void notificationBridge.project(run, events).catch((error) =>
+      logger.warn({ err: error, runId: run.id, appId: run.appId }, 'Agent notification projection failed'),
+    );
+  });
   const subagentRepository = new SqliteSubagentRepository(database);
   const runScopes: RunScopeRepositoryPort = subagentRepository;
   const runtimeParticipants: RuntimeParticipantRepositoryPort = subagentRepository;
@@ -325,6 +347,7 @@ export const composeAgent = ({
   });
   registerRuntimeToolContributions({
     catalog: toolCatalog,
+    artifacts,
     plans,
     runs: runRepository,
     subagents,
@@ -353,7 +376,10 @@ export const composeAgent = ({
   const modelCalls = new ModelCallLimiter(settings);
   const leaseCoordinator = new LeaseCoordinator(leases, systemClock);
   const mutationLeaseGuard = new AgentMutationLeaseGuardAdapter(leases, systemClock);
-  const modelSteps = new ModelStepRunner(providers, context, languageModel, modelCalls);
+  const modelSteps = new ModelStepRunner(providers, context, languageModel, modelCalls, {
+    load: (scope, runId, runtimeId, targetDirectories, signal) =>
+      workspaceRuntime.loadProjectInstructions(scope, runId, runtimeId, targetDirectories, signal),
+  });
   const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
   const nativeBackend = new NativeAgentBackend(
     runRepository,
@@ -372,7 +398,13 @@ export const composeAgent = ({
     (userId) => subagentScheduler?.activeCountForUser(userId) ?? 0,
     (runId) => subagentScheduler?.hasActiveRun(runId) ?? false,
   );
-  const subagentContext = new SubagentContextBuilder(runtimeParticipants, mailboxReader, toolCatalog);
+  const subagentContext = new SubagentContextBuilder(
+    runtimeParticipants,
+    mailboxReader,
+    toolCatalog,
+    modelContinuations,
+    artifacts,
+  );
   const subagentParticipant = new SubagentParticipantExecutor(
     schedulerExecution,
     delegationCancellation,
@@ -628,8 +660,25 @@ export const composeAgent = ({
     runtime: {
       runs: {
         definitions: async (scope) => {
-          const app = await lifecycle.get(scope);
-          return definitions.list(scope.appId, app.activeVersion);
+          const [app, providerViews] = await Promise.all([lifecycle.get(scope), providers.list(scope.userId)]);
+          return definitions.list(scope.appId, app.activeVersion).map((definition) => ({
+            ...definition,
+            modelCompatibility: providerViews.flatMap((provider) =>
+              provider.models.map((model) => {
+                const missingCapabilities = missingRequiredModelCapabilities(
+                  definition.requiredModelCapabilities,
+                  snapshotProviderModelCapabilities(model),
+                );
+                return {
+                  providerId: provider.id,
+                  modelId: model.id,
+                  configurationVersion: provider.version,
+                  compatible: missingCapabilities.length === 0,
+                  missingCapabilities,
+                };
+              }),
+            ),
+          }));
         },
         create: (scope, command) => runs.create(scope, command),
         get: (scope, runId) => runs.get(scope, runId),

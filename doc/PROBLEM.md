@@ -26,15 +26,17 @@
 0. **验证与兼容底座**：`P-079 → P-058 / P-061`。先建立 Backend-level deterministic Agent scenario harness；runtime validation 与持久化兼容窗口是横切规则，随下面各模块触及边界时兑现，不要求为了“先清债”阻塞功能。
 1. **Runtime / Durable correctness**：`P-111 → P-117 → P-102 → P-101 → P-098 → P-097 → P-100 → P-105 → P-106 → P-110 → P-119`。先解决 restart/disable/cancel/reconciliation 与两阶段持久化，再处理 Integration race、idempotency TTL 与 public error contract；后续能力优化都建立在这套状态闭包上。
 2. **Run 执行控制 / 完成语义**：`P-120 → P-045 → P-103 → P-089 → P-074 → P-076 → P-092 → P-091 → P-096 → P-116`。先移除 Root/Child 累计 Token 硬预算，改成 context pressure + progress-aware loop guard；随后收口 Subagent execution limits、finish reason、completion/user-input/plan/notification，并一起清理失效预算/defaults。
-3. **Context / Token / Prompt efficiency**：`P-093 → P-070 → P-069 → P-064 / P-112 → P-063 → P-081 → P-077 → P-075 → P-065 → P-066`。先保证 Tool exchange 不被拆，再统一 context accounting 与 ToolResult projection；之后落 durable compaction、Tool/Skill progressive disclosure、cache hint、Responses continuation、Artifact input 与 Recall。
+3. **Context / Token / Prompt efficiency**：已闭环。Tool exchange atomicity、Context accounting、ToolResult projection、durable compaction/checkpoint、高基数 Tool progressive disclosure、Provider prompt-cache hint、Responses continuation、Artifact input 与 Recall 均已完成；没有新证据时不再在该组重复施工。
 4. **Model / Provider reliability**：`P-054 → P-082 → P-087 → P-086 → P-090`。先统一 capability authority 与 AgentDefinition requirement，再修 retry attempt identity、fallback chain，最后删 Provider 网络策略死字段；Provider transport 不重新引入 SSRF/private-host policy。
-5. **Workspace / Coding / Browser / Remote execution**：`P-071 → P-072 → P-073 → P-067 → P-094 → P-095 → P-099 → P-083 → P-084 → P-107 → P-056 → P-085`。先补 project instructions、coding primitives/background job、repo map，再处理 lifecycle/approval/checkpoint，之后增强 Browser 与跨设备/重启 continuation。
+5. **Workspace / Coding / Browser / Remote execution**：`P-095 → P-099 → P-083 → P-084 → P-107 → P-056 → P-085`。Repo-scoped project instructions、一等 coding read/search/strict patch primitives、durable background job/wait/cancel、bounded Repo Map/code-intel 与 Storage/Workspace lifecycle 假合同已闭环；下一步处理 Machine approval route dependency、checkpoint，之后增强 Browser 与跨设备/重启 continuation。
 6. **Subagent 能力层**：`P-104 → P-068 → P-088`。Mailbox TTL 先正确，再做 profile/template/context inheritance，最后开放 governed mutation worker；`P-101/P-102/P-103` 已在前置 correctness/执行控制模块解决，不在这里重复改状态机。
 7. **MCP / ACP / Plugin 扩展层**：`P-109 → P-078 → P-108 → P-080 → P-115`。先让 MCP health/management 可用，再补 Resources/Prompts/Task 与 ACP inner permission，最后明确 Plugin Tool/AppIntent SDK 边界；`P-105/P-106` 的 race 必须已在前置模块完成。
 8. **Memory / Artifact 产品闭环**：`P-114 → P-113`。先把 Memory candidate review/publish/import 主链真正交付给用户，再补 Artifact 单项删除；底层 Artifact durability 由 P-100 先保证。
 9. **架构与死合同清理**：`P-118 → P-059 → P-060 → P-062`。删 StateCommit 旁路，再拆超大 owner、收日志与残余 `any`。这些清理不抢在功能 correctness 前，但相关模块修改时可以顺手完成局部项。
 
 **实施约束**：同一批修改完成前先把对应 P-079 scenario 写出；P1 correctness 不与大规模 capability expansion 混成一个提交；跨模块 schema/settings 字段删除遵守 P-061 的兼容策略。上面顺序是默认施工顺序，若某一 Problem 被后续证据证明已闭环则直接从本文件删除，不为了编号顺序强行施工。
+
+**会话交接约束**：每次完成一个 Problem 后，先用最终已验证事实更新本文件，再**完整重写** `doc/PROGRESS.md`。前一轮 `PROGRESS.md` 内容必须清空，不保留历史交接，只保存下一次会话所需的完整上下文：repo/branch/HEAD、未提交改动保护规则、最新 deterministic baseline、刚完成 Problem 的 invariant、仍需继承的关键 invariant、下一条 Problem 的真实审计入口、验证要求，以及同一条“完成后先更新 PROBLEM、再重写 PROGRESS、不要同会话继续下一条”的规则。**注意事项、约束和交接细节尽量全部沉淀在 `PROGRESS.md`，不要复制到聊天交接提示词里。** 对用户输出的下一会话启动提示应尽可能短，只要求新会话先读取 `doc/PROGRESS.md` 并按其中要求继续；新会话以 `PROGRESS.md` + 最新 `PROBLEM.md` + 当前代码事实为准，不依赖旧聊天记录。
 
 ---
 
@@ -57,24 +59,26 @@
   3. 至少识别四类异常：**exact failure replay**、**same action + same result/no state delta**、**A↔B oscillation**、**长窗口无 Goal/Plan/evidence/artifact/workspace/result 变化**。Polling/wait Tool 必须比较 authoritative progress cursor/state，而不是仅比较“调用了同一个工具”。
   4. 采用分级响应而非第一次命中就终止：第一次命中只向最新 Tool result 注入简短 strategy-change warning；继续重复则要求换证据源/等待/backoff/compact；仍无进展时进入可恢复的 `loop_detected/awaiting_user`（与 P-076 共用 durable user-input/attention owner），保留现场，用户可 `continue` 后开启新 epoch。
   5. 对天然高 fan-out 且重复几十次几乎一定异常的动作（例如 web search、Subagent spawn）允许单独的 per-turn/per-epoch cap；cap 只阻断该 runaway family，不把整个 Run 的累计 Token 消耗当判断依据。
-  6. Context pressure 与 loop detection 解耦：上下文接近模型窗口由 P-064/P-070 compaction/context usage处理；累计 Run usage只做 telemetry。不要因为“花得多”推断“没进展”，也不要因为 context 低就允许确定性死循环无限重试。
+  6. Context pressure 与 loop detection 解耦：上下文接近模型窗口由已落地的 P-064 durable compaction 与 P-070 context usage 处理；累计 Run usage只做 telemetry。不要因为“花得多”推断“没进展”，也不要因为 context 低就允许确定性死循环无限重试。
 - **明确不做**：不恢复父 Run 总 Token 硬预算；不向模型注入 70%/90% “快没预算了赶紧结束”式压力；不把合法的 edit→test→edit、状态变化中的 polling、瞬态 provider retry 误判为循环；不额外引入 judge LLM 作为每步必经路径。
 - **验证**：健康 coding/research Run 可以稳定超过旧 `maxRunTokens` 对应用量继续完成；相同 deterministic Tool failure / same result replay 在很少几次内被 warning→pause；中间发生 file hash/Plan/evidence/job progress 后 streak 自动重置；正常测试修复循环不误停；用户 continue 后可从 durable 现场继续。
 
 ## P-054 Provider live capability authority 尚未接入 Model Capability Resolver
 
 - **优先级**：P1
-- **状态**：`Registry 主体已实现，Provider live ingestion 未闭环`
-- **当前事实**：
-  - `model-capability-resolver.ts` 已从 reasoning-only 演进为统一 Registry，可提供已知模型的 `contextWindow/maxOutputTokens/supportsTools/reasoning` 默认能力。
-  - 持久化模型可以保存相对 Registry 的人工 capability override；未知/私有模型缺少 context/output/tool 必要能力时会报 `MODEL_CAPABILITY_INCOMPLETE`，不会偷偷回退固定 32K/4K。
-  - `capabilitySources` 当前只有 `registry/manual`；普通 `/models` discovery 仍只信任模型 identifier。
-- **剩余问题**：部分 Provider 如果未来明确返回有版本语义、可验证的 capability metadata，目前没有统一 ingestion/source precedence；若直接在单个 Provider adapter 内特判，会形成第二套能力事实源。
-- **要求**：
-  1. Provider live metadata 只能作为显式扩展点进入统一 resolver，必须逐字段合并，不能“某来源有一个字段就覆盖整条模型记录”。
-  2. 来源优先级、版本、更新时间与冲突处理必须可观察；普通 OpenAI-compatible `/models` 未定义字段不得猜测。
-  3. 模型 alias/date variant 的匹配必须精确，宽泛 regex 不得把物理窗口套给不兼容模型。
-- **验证**：Provider/Registry/Manual 三来源组合与冲突有覆盖；未知代理模型不会误套公开模型能力；Run snapshot 保持创建时 capability 不漂移。
+- **状态**：`已完成（2026-09-18；Provider live capability 以显式 versioned observation 接入统一 resolver，逐字段 Manual > Provider live > Registry；Root/Child 均冻结 durable capability snapshot；普通 OpenAI-compatible /models 不猜能力；Backend/Frontend typecheck 与 deterministic scenarios 27/27 通过）`
+- **完成事实**：
+  - `LanguageModelPort.discoverModels()` 的 capability ingestion 现在只能通过显式 `liveCapabilityReport` 进入，report 必须携带 `source/sourceVersion/capabilities`；`ProviderService` 校验后补 `updatedAt`，再把 observation 持久化到 `ai_providers.live_capabilities_json`。migration 29 只新增 observation 列，不改写既有 `models_json` / manual override authority。
+  - `model-capability-resolver.ts` 是唯一 effective capability authority：每个字段独立按 `Manual > Provider live > Registry` 合并；缺失 live 字段继续从 Registry 补齐，未知/私有模型缺 required capability 仍 fail closed 为 `MODEL_CAPABILITY_INCOMPLETE`。source 与冲突字段只做可观察 projection，不形成第二套 effective truth。
+  - 普通 OpenAI-compatible `/models` 仍只解码 identifier/owned_by/created；没有显式 capability report 就不会根据 model name、proxy 名称或非标准响应字段猜能力，也不会因为一次 identifier-only refresh 擅自抹除已有 versioned observation。
+  - Provider live refresh 与人工 Provider 配置版本分离：刷新 observation 不 bump `configurationVersion`；Root Run 创建时把 resolved capability 写入 durable `RunDefinitionSnapshot.modelCapabilities`，Subagent delegation 也冻结同一 resolver 的 snapshot。后续 live refresh 只影响新 Run/新 delegation，不让已启动 Root/Child 漂移。
+  - OpenAI transport 的 tools/image/file/output-limit 校验会优先使用 request 的 frozen capability snapshot；旧 Run/旧 delegation 没有 snapshot 时保留原兼容路径。
+  - Frontend capability editor 现在能显示 Provider source/version/update time 与冲突字段；恢复 baseline 时按 Provider live 优先、Registry 次之。discovery/manual-add 不再为未知模型伪造 `128000/4096/tools=true` 并保存成 manual fact；required capability 不完整时明确拒绝添加。
+- **验证**：
+  - 新增 deterministic `model/provider-live-capability-authority`，覆盖 Registry-only、Provider-only、partial merge、Manual precedence、三来源冲突、source precedence、unknown/proxy model、精确 date variant、live refresh 与 durable Run snapshot 不漂移。
+  - 完整 deterministic Agent scenarios：`27/27 PASS`；同时明确通过 `model/provider-continuation-roundtrip`、`context/indexed-recall`、`context/skill-progressive-disclosure`。
+  - Backend `tsc --noEmit`、Frontend `vue-tsc --noEmit`、三语言 JSON parse、P-054 targeted `git diff --check` 均通过。
+  - 静态复核确认 P-077 continuation truth 仍只在 `agent_model_attempts.continuation_json`，Ledger 只保留 `modelStepId`；P-065 仍使用 indexed recall；P-066 仍保持 signed Skill metadata search → hash-bound `skill_read` 的 progressive disclosure/trust invariant。
 
 ## P-056 Suspended SSH Session 缺少跨设备 Takeover/Owner Lease
 
@@ -94,13 +98,12 @@
 ## P-058 Agent 跨进程与持久化 JSON 边界仍大量依赖 TypeScript 断言代替 Runtime Validation
 
 - **优先级**：P1
-- **状态**：`本轮 archive→main 审计新增`
-- **证据**：
-  - `packages/backend/src/infrastructure/agent/workspace-runtime/runner-http.adapter.ts` 的泛型 `request<T>()` 在完成 HTTP status/size 检查后直接 `JSON.parse(text) as T`，Runner/Backend 版本漂移或异常响应可以穿过 adapter 边界进入领域层。
-  - `packages/backend/src/infrastructure/agent/repositories/sqlite-subagent.repository.ts` 定义通用 `parseJson<T>() => JSON.parse(...) as T`，durable state 的结构正确性依赖写入端永远正确。
-  - `packages/agent-runner/src/controller/journal.ts` 对 Journal 仅检查 schemaVersion 与顶层 collection 形状，nested `CommandRecord/WorkspaceRecord/JobRecord` 未做完整 runtime decode。
-  - `packages/agent-runner/src/controller/workspace-runtime-catalog.ts` 检查顶层 revision/digest/arrays 后即信任 `RuntimeCatalog` 内部元素。
-  - 其它 SQLite repository 也存在直接 JSON cast；不是所有 cast 都同等危险，`JSON.stringify/parse` 仅用于 clone/JsonValue normalizing 的路径不在本问题范围。
+- **状态**：`已完成（2026-09-17；按当前代码事实收口 Agent durable/IPC/file boundary：Runner HTTP、journal/catalog、Run/Checkpoint/StateCommit、Conversation/Workspace/Integration/Provider/Plugin/Artifact/Memory 等权威路径均先 parse-to-unknown 再由 owner decoder 有界收窄；共享 decoder 只承载跨 repository/transaction 必须一致的 durable domain shape，不引入 safeJson<T> 或第二事实源；新增 boundary/durable-runtime-decode deterministic scenario，完整 Agent scenarios 18/18 通过，Backend 与 Agent Runner build、git diff --check 通过）`
+- **完成事实**：
+  - `runner-http.adapter.ts`、Runner journal/catalog/IPC 与 package manifest 路径均已是 parse-to-unknown + protocol/domain decoder；旧证据中的泛型 cast/浅层检查已不成立。
+  - Backend 新增 Infrastructure-owned durable decoder，统一 Run budget/usage/definition/plan、Tool inspection/result、workspace environment 与 bounded JsonValue；StateCommit Root/Child/replay 与相关 repositories 共用同一 durable contract，corruption/version/enum/type mismatch fail closed。
+  - Provider/Integration/Plugin/Artifact/Workspace/Memory 等各自 owner 保留领域语义 decoder；没有引入无语义 mega `safeJson<T>()`，Module service 不承担 persisted compatibility 判断。
+  - deterministic `boundary/durable-runtime-decode` 覆盖合法 payload，以及 missing field、wrong type、oversized collection、unknown enum、old schema version、broken JSON；完整 scenarios 18/18 全绿。
 - **风险**：
   - 版本偏差、磁盘损坏、旧 schema 残留或边界实现 bug 可能在离真实输入很远的位置才失败，错误被误判为业务逻辑问题。
   - Adapter/Repository 表面上提供强类型，但实际上没有完成“untrusted/persisted bytes → domain value”的转换责任，形成伪类型安全。
@@ -152,17 +155,14 @@
 ## P-061 Agent 已发布持久化兼容仍缺少明确的支持窗口与退出条件
 
 - **优先级**：P2
-- **状态**：`本轮 archive→main 审计新增；无消费者内部 shim 已清理`
-- **当前事实**：
-  1. `PersistedProviderModelConfig` 的 legacy flat capability 字段与 `legacyOverrides()` 用于读取既有 `models_json`；Agent 已进入 `main` 后，这属于真实已发布数据兼容，不能机械删除。
-  2. `sqlite-subagent.repository.ts` 对 migration #23 之前缺少 `source_model_step_id` 的 durable Tool row 使用 `legacy:<id>` 分组；这同样是数据库升级兼容。
-  3. 本轮已删除无真实 caller 的 `resolveModelReasoningCapability()` compatibility helper 及其仅为该 helper 存在的 `ReasoningCapability` 类型，确认 internal-only 历史 shim 不再因“兼容”名义长期存活。
-- **剩余问题**：真实持久化兼容目前能指出来源，但还没有统一写清 from-version、最低支持版本、何时完成数据迁移/回填、何时允许删除 fallback。若长期只写 `legacy*`，最终会无法判断分支是否仍有真实消费者。
-- **要求**：
-  - Persisted/wire/public contract 的兼容逻辑只放在对应 Interface/Infrastructure decoder/migration 边界，并写清 from-version、to-version、removal condition。
-  - 能通过一次 migration 安全规范化的数据优先迁移，不让 Module domain model 永久携带旧字段。
-  - Internal-only rename/helper 没有 consumer 就直接删除，不为分支历史保留 alias/adapter。
-- **验证**：所有保留兼容分支都能指出真实已发布数据/protocol consumer 与退出条件；达到退出条件后删除 fallback，build/E2E contract 不变。
+- **状态**：`已完成（2026-09-17；按“产品尚未正式发布”的当前事实删除无产品语义的 Provider persisted flat-field shim；对仍有 durable recovery 语义的 pre-#23 Tool lineage 用 migration #25 一次性回填/规范化并收紧 fresh+upgraded DB invariant，runtime repository 不再保留 synthetic legacy fallback；新增 compat/current-durable-schema deterministic scenario，完整 Agent scenarios 19/19、Backend typecheck/build、git diff --check 全绿）`
+- **完成事实**：
+  1. `PersistedProviderModelConfig` 现在只保留当前 canonical `{ id, capabilityOverrides? }`；`legacyOverrides()` 与 flat persisted capability fields 已删除，Infrastructure decoder 只接受当前 schema，旧未发布 shape fail closed，不再制造“接受但忽略”的假兼容。
+  2. migration #25 将 migration #23 以前 `source_model_step_id IS NULL` 的 durable Tool row 按同 Run/Runtime 中最近前置 Model step 回填，并重算 `batch_index/batch_size`；无法映射的历史 durable row 会使 migration fail closed。
+  3. fresh schema 将 `source_model_step_id` 收紧为 `NOT NULL`；升级数据库通过 insert/update trigger 强制 source 必须是同 Run/Runtime 的真实 Model step。Root/Child 当前写路径均显式写入 lineage 与 batch metadata。
+  4. `sqlite-subagent.repository.ts::recentRuntimeToolExchanges()` 已删除 `legacy:<tool-call-id>` 分组 fallback，直接消费规范化后的 durable lineage；Module domain model 不再承载旧持久化 schema。
+  5. deterministic `compat/current-durable-schema` 用 migration-24 fixture 验证 3 条旧 Tool row 被恢复成两个真实 batch，并验证后续 NULL lineage 写入被拒绝；同时验证 Provider legacy flat persisted shape 已不能通过 decoder。
+- **验证**：兼容扫描已无 `legacyOverrides`、`legacy:<id>`、旧 flat-field compatibility runtime 分支；完整 deterministic suite 19/19 全绿，Backend typecheck/build 与 `git diff --check` 通过。
 
 ## P-062 少量产品代码仍使用 `any` 绕过已经明确的类型边界
 
@@ -177,87 +177,45 @@
 - **要求**：产品边界输入统一从 `unknown` 开始；已知字段 key 使用显式 key union/generic accessor，不用 `as any` 绕开编译器；修复时不得为了消灭 `any` 引入更差的双重断言 `as unknown as T`。
 - **验证**：上述产品源码 `any` 命中清零或每个剩余例外都有紧邻的第三方/语言限制说明；Backend/Frontend typecheck 与行为 E2E 不变。
 
-## P-063 Agent Tool Surface 仍以“全量 schema 常驻”暴露，MCP/Plugin 扩张后会直接吞噬 Context 与 Prompt Cache
-
-- **优先级**：P1
-- **状态**：`优化设计已立项，待横向方案收敛`
-- **当前事实**：
-  - Root Agent 每个 model step 通过 `ToolCallRunner.schemas()` → `ToolCatalog.schemas()` 暴露当前环境全部可用 Tool schema；内建 Tool 数量尚可，但 MCP refresh 会把远端每个 Tool 都注册成顶层 `AgentTool`。
-  - `ContextService` 已把完整 Tool schema 的 JSON token 计入预算，并记录 `toolSchemaHash/cachedInputTokens/cacheRate`，所以“Tool schema 很贵”已经可观察，但尚未改变暴露策略。
-  - `Skill` 已采用 metadata → `skill_read` 的 progressive disclosure，说明 Nexus 已有“索引常驻、正文按需加载”的先例。
-- **问题**：MCP/Plugin Tool 增长时，每轮重复发送大量 description/schema，不仅直接消耗 input token，还会让 Tool set 变化频繁破坏稳定 prompt prefix；模型面对大量相似 Tool 时选择质量也会下降。
-- **目标方向**：
-  1. 保留 `ToolCatalog` 作为唯一 authoritative catalog，不替换 inspect/policy/lease/approval/execution 链；新增的是 **model-facing Tool projection/router**。
-  2. 第一阶段优先把高基数 MCP Tool 改成 deferred discovery：模型常驻看到轻量 `tool_search`/`tool_invoke`（最终命名待设计），搜索结果返回 bounded handle + description + 必要 schema，实际执行仍回到原 ToolCatalog/ToolExecutor。
-  3. built-in 高频核心 Tool 可以继续直接暴露；是否把 Browser/Workspace/Collaboration 进一步 family 化，必须根据实际 schema token telemetry 决定，不为了“统一”强制所有 Tool 都间接调用。
-  4. Tool metadata search 优先考虑本地 BM25/FTS；第一版不引入 embedding/vector service。
-- **明确不做**：不新建第二套 Tool registry；不绕过现有 mutation risk/approval/lease；read-only Tool discovery 本身不增加额外 approval/security ceremony。
-- **验证**：大 MCP catalog（例如 100+ Tool）下每轮 model request 的 Tool schema token 显著下降；常用 Tool 仍可在有限额外 step 内发现并调用；实际 mutation 的 operation hash、approval、lease、outcome contract 与现状一致；prompt cache 命中率可观测且不因 catalog 小幅变化频繁归零。
-
-## P-064 Context Compaction 仍以丢弃旧 Raw Ledger 为主，缺少 Durable Context Checkpoint / Summary Engine
-
-- **优先级**：P1
-- **状态**：`优化设计已立项，待横向方案收敛`
-- **当前事实**：
-  - `ContextService` 已有 model physical window、reserved output、recent ledger、thread anchor、thread recall、memory recall、goal、plan、collaboration、Skill metadata、Tool schema budgeting，以及 `contextEpoch/stablePrefixHash/messageDiagnostics`。
-  - 当前超预算后的核心 compaction 行为仍是按 compaction ratio 删除较旧 raw ledger turn；canonical ledger 本身不会丢，但模型下一轮可能失去早期决策、失败尝试、关键文件/错误和约束。
-  - Checkpoint/Resume 已是 Run durability 一部分，但尚未产出独立、可验证覆盖范围的 context summary artifact。
-- **问题**：长 coding/research Run 不是简单“记住最后几轮”就足够；只裁旧 raw history 会导致重复探索、重复 Tool 调用、忘记用户约束，最终既损能力又浪费 token。
-- **目标方向**：
-  1. 将 Context 规划从单一 `ContextService` 演进为可替换策略的 `ContextEngine`（最终接口名待设计），至少区分 projection 与 compaction/checkpoint 责任。
-  2. canonical Ledger 仍是事实源；新增 `ContextCheckpoint` 只保存派生摘要，至少包含 covered sequence/prefix hash、summary、生成模型/策略版本、token 统计，使 resume 时能验证“摘要对应哪段 canonical history”。
-  3. 默认 summary 结构优先覆盖：Objective、Constraints/User decisions、Completed work、Current state、Failed/ruled-out attempts、Pending work、Relevant files/artifacts/evidence、Next action；保留 recent verbatim tail。
-  4. 区分 **soft / hard compaction trigger**：soft trigger 只在摘要能产生足够净缩减时运行，并保留稳定的开场 anchor + recent verbatim tail；hard trigger 接近物理 context limit 时必须保证能收敛，摘要失败则回退到现有 drop-only projection。不要为了只省几百 token 固定多打一轮 summarizer。
-  5. compaction 可以使用当前模型或可配置的便宜模型，但生成结果必须带策略/模型版本和最小 shrink telemetry；失败不得阻塞 Run durability。
-  6. summary 只作为 context optimization，不替代 Memory、Plan、Artifact、Ledger 任何 authoritative owner。Subagent lifecycle/result/capacity、pending approval/input/background job 等 durable control state 必须重新 projection，不能只存在于可能被摘要掉的对话文本里；并且应在 history 选择前为当前 Goal / Plan / Collaboration 等 control-state projection 预留预算，不能先让 raw history 占满窗口再把当前控制状态丢掉。
-- **明确不做**：不把 summary 变成新的业务事实源；不为了摘要增加复杂审批/安全状态机；不把全部历史每轮重新摘要。
-- **验证**：长任务跨多次 compaction 后仍能准确保留用户约束、已排除方案和当前工作状态；resume 可验证 checkpoint coverage 后继续；canonical Ledger 可重建 projection；相同 benchmark 下重复读取/重复失败尝试下降，token/step 使用可量化改善。
-
 ## P-065 Recall / Earlier-thread Retrieval 仍采用大范围扫描 + JS Substring 排序，缺少索引化第一阶段检索
 
 - **优先级**：P1
-- **状态**：`优化设计已立项，待横向方案收敛`
-- **当前事实**：
-  - Memory recall 当前从 SQLite 取最多 1000 条 published candidate，再在 JS 中按 query term substring + confidence + freshness 排序。
-  - Earlier-thread recall 最多扫描 800 条 ledger item，并使用类似 lexical substring score。
-  - 当前 Recall 数据规模尚能工作，但每轮扫描与 CJK n-gram 逻辑会随历史增长线性增加，且相关性表达有限。
-- **目标方向**：
-  1. 第一阶段优先使用 SQLite FTS5/BM25（或同等级本地索引能力）在 scope/thread 条件内先选 top candidates，再复用 Nexus 的 confidence/freshness/recency 业务 rerank。
-  2. Memory 与 thread retrieval 可以共享检索思想，但保持各自 repository/owner，不造一个跨领域 mega search service。
-  3. 只有真实评测证明 lexical recall 不够时，再评估 embedding rerank；第一版不引入独立 Vector DB、embedding daemon 或远端检索服务。
-  4. 索引更新必须跟随 authoritative write transaction 或可恢复的增量 rebuild，不让索引成为新的事实源。
-- **明确不做**：不为了“AI 化”默认引入向量数据库；不把所有 Artifact/File 内容无界索引进 memory context。
-- **验证**：同等 recall budget 下相关命中不低于现状；查询不再扫描 800/1000 条候选；CJK/英文典型 query 有覆盖；索引缺失/损坏可以从 canonical 数据重建。
+- **状态**：`已完成（2026-09-18；Memory / Earlier-thread 改为 rebuildable SQLite FTS bounded candidate retrieval，保留 Nexus domain rerank；2 字 CJK 不走 LIKE/full scan；新增 context/indexed-recall scenario，完整 deterministic Agent scenarios 25/25、Backend/Frontend typecheck、targeted git diff --check 全绿）`
+- **完成事实**：
+  1. SQLite 中的 `ai_memories` / `ai_thread_entries` 继续是 canonical truth；新增 `ai_memories_search` / `ai_thread_entries_search` 作为 derived FTS projection。索引由 canonical table trigger 同事务维护，不引入第二份 Memory/Ledger authority。
+  2. database worker 注册 deterministic `nexus_search_terms()` / `nexus_ledger_search_terms()`：英文、identifier/code-ish 文本生成 lexical/substring-friendly tokens；CJK 生成 2/3-gram 派生 token，因此 `项目` 等 2 字查询不需要退回 `LIKE` 或 JS 全表扫描。
+  3. Memory recall repository 改为 FTS/BM25 第一阶段候选，candidate bound 为 `min(64, max(24, limit * 8))`；随后仍由 `RecallService` 使用 lexical + confidence + freshness 做产品层 rerank 和 byte/item budget selection。旧 `publishedCandidates(..., 1000)` 路径已移除。
+  4. Earlier-thread retrieval 下沉到 `ConversationRepositoryPort.searchEarlierEntries()` / SQLite FTS；Context 每次最多读取 64 个 indexed candidates，再使用现有 lexical + sequence recency rerank、去重和 8 KiB/6-item budget。旧 `THREAD_RECALL_SCAN_LIMIT = 800` 分页扫描已移除。
+  5. recent verbatim tail、thread anchors 与已落地的 P-064 checkpoint/compaction 职责保持独立；indexed recall 只负责较早历史的按需候选，不替代 Context 的 recent-history owner。
+  6. search index schema 与 migration #28 都支持从 canonical rows 重建；worker 启动时会检测缺失/不一致的 derived index 并 rebuild。索引被 drop 后可在重启时恢复，canonical rows 不受影响。
+  7. query term normalization 现在保留 camelCase/identifier 边界并做 NFKC 规范化；FTS query 优先使用强 token group，避免简单“任一 trigram 命中”把 bounded candidate 集合污染掉。
+  8. 横向核对 Codex / Claude Code / Hermes 后，本问题明确不迁移 durable authority：Nexus 继续使用 SQLite control/ledger truth；per-session JSONL / immutable compressed segment 若未来用于 portable archive、replay 或 cold history，应单独立项。
+- **明确不做**：不把 Ledger/Memory 主存储迁成 per-session 文件；不引入 Vector DB、embedding daemon 或远端 retrieval service；不把 Artifact/File 内容无界索引进 memory context；不保留短 CJK 的 LIKE/full-scan fallback。
+- **验证**：
+  - 新增 `context/indexed-recall`：构造 1200 条近期 Memory filler 与 1000 条 Thread entries，把目标放到旧 1000/800 扫描范围之外；英文 identifier 与 2 字 CJK 均能命中。
+  - scenario 指标：`memory_rows_beyond_old_scan_found=2`、`thread_rows_beyond_old_scan_found=2`、`two_character_cjk_indexed_queries=2`、`derived_indexes_rebuilt=2`；本 fixture 的 first-stage Memory/Thread candidate 实际均为 1 row。
+  - 完整 deterministic Agent scenarios：25/25 PASS；`model/provider-continuation-roundtrip` 继续 PASS，P-077 continuation authority 未回退。
+  - `pnpm --filter @nexus-terminal/backend exec tsc --noEmit`、`pnpm --filter @nexus-terminal/frontend exec vue-tsc --noEmit`、targeted `git diff --check` 均通过。当前环境仍提示 repo 期望 Node >=24，而 AgentDock 为 Node v22.17.0。
 
 ## P-066 Skill Progressive Disclosure 已有雏形，但格式与发现机制尚未对齐主流 Agent Skills 生态
 
 - **优先级**：P2
-- **状态**：`优化设计已立项，待横向方案收敛`
-- **当前事实**：
-  - Nexus signed plugin Skill 已支持 frontmatter metadata、hash/version/capability/trust 校验；模型默认只看到 metadata，需要时通过 `skill_read` 读取正文。
-  - 当前每轮仍会把全部 Skill metadata 拼入 system instructions；Skill 数量变大后同样会形成固定 token 成本。
-  - Skill 文档结构是 Nexus 自有格式，尚未明确兼容 Agent Skills / `SKILL.md` 生态。
-- **目标方向**：
-  1. 评估兼容主流 Agent Skills 文档约定，使第三方 Skill 内容可以低成本导入；Nexus 继续在外层保留 plugin signature、publisher、capability、hash/version 等产品元数据。
-  2. Skill 数量较少时可以继续直接暴露 metadata；达到阈值后通过 `skill_search`/metadata retrieval 只注入高相关 Skill，再由 `skill_read` 加载正文。
-  3. Skill search 与 P-063 Tool search 尽量共享成熟的 lexical index primitive，但两者 contract/owner 不混在一起。
-- **明确不做**：不因为兼容开放 Skill 格式而取消现有 signed-plugin trust/capability contract；不把 Skill body 常驻 prompt。
-- **验证**：现有 signed Skill 行为不回退；标准 Skill 文档可以映射进 Nexus；大量 Skill 下 system token 不随 Skill 总量线性增长；Skill 触发准确率有可重复测试。
-
-## P-067 Coding Agent 缺少 Repo Map / Symbol Graph，当前主要依赖逐文件 Search/Read 探索代码库
-
-- **优先级**：P1
-- **状态**：`优化设计已立项，待横向方案收敛`
-- **当前事实**：Workspace/SSH/Runner 已能执行命令、读写文件和运行真实开发工具，但 Nexus 没有独立的 code intelligence/context owner；模型需要通过 shell/search/read 反复探索目录和源码关系。
-- **问题**：对大型仓库，盲目 `find/rg/read` 会消耗大量 tool step 与 context；模型在修改前也缺少稳定的 symbol/reference overview，容易漏掉跨文件调用方。
-- **目标方向**：
-  1. 增加 bounded Repo Map / Code Index capability：按 task query 输出文件、symbol signature、import/reference/dependency 的高价值摘要，并设置明确 token budget（优先 1–2K 级，而不是把源码塞进 prompt）。
-  2. 语义 code intelligence 优先复用 Workspace 已安装 toolchain 的 **LSP / compiler service**（definition/references/diagnostics/symbols）；TypeScript/Vue 可直接复用 TS/Vue language tooling，通用轻量 fallback 再使用 tree-sitter/静态 parser。不要用 regex 自研语言 parser，也不把常驻中央 LSP 集群作为 Nexus 启动前提。
-  3. Repo Map 与按需 code-intel 分层：Repo Map 提供 bounded 文件/symbol/import overview；definition/reference/diagnostic 需要时再查询 language service。没有 language server 的语言仍可回退到 static index + `workspace_search/read_file`。
-  4. Repo Map 是导航/检索能力，不替代真实文件读取；Agent 在编辑前仍对目标文件读取 authoritative content。
-  5. 索引允许 lazy build/incremental update，并绑定 workspace generation/revision/文件 hash，避免把陈旧 symbol map 当事实。
-- **明确不做**：不引入常驻重型 language-server 集群作为第一版前提；不把静态索引结果直接授权 mutation。
-- **验证**：代表性 multi-file coding task 的前置 read/search step、input token、漏改引用数下降；索引 stale 时能检测并重建/回退；未支持语言仍可使用现有 shell/read 路径。
+- **状态**：`已完成（2026-09-18；标准 Agent Skills SKILL.md 与 legacy Nexus Skill 共存，signed-plugin authority 不变；低基数继续直接 metadata，高基数改为 bounded lexical discovery + skill_search → skill_read；新增 context/skill-progressive-disclosure deterministic scenario，完整 Agent scenarios 26/26、Backend/Frontend typecheck、targeted git diff --check 全绿）`
+- **完成事实**：
+  1. `SkillRegistry` 现在承担开放 Skill 文档兼容层，而不是 Plugin installer/verifier：标准 `SKILL.md` 接受必需的 `name/description` 与可选 `license/compatibility/metadata/allowed-tools`；标准 Skill 的 Nexus id 由 signed App id + Skill name 稳定派生，version 由 signed plugin version 派生，文档本身不能声明新的 Nexus capability。现有 Nexus `id/version/requiredCapabilities` legacy frontmatter 继续兼容。
+  2. signed-plugin authority 没有迁移进开放文档：publisher trust/signature/package hash/file hash 仍由 package verify/install/source 链负责；legacy `requiredCapabilities` 仍必须属于 signed manifest declared capabilities；标准 `allowed-tools` 只作为兼容 metadata 解析，**不会**转换为 App grant、Tool permission 或 capability authority。
+  3. `SkillRegistry.disclose()` 以 8 个 Skill 为 direct/indexed 阈值：`<= 8` 时继续把全部 `id/name/description` metadata 暴露给模型；高于阈值时只根据当前输入注入最多 6 个相关 metadata，并明确提示使用 `skill_search`。Skill body 仍不进入常驻 prompt。
+  4. 新增只读 `skill_search(query, limit)`，limit 最大 8；返回仅 `id/name/description`，不返回 body/hash/publisher/capability。候选只来自当前 scope 已安装、已签名且 hash 校验通过的 Skill catalog；全文指令仍只能由 `skill_read(id)` 按需读取。
+  5. `skill_read` 原有 TOCTOU contract 保持：inspect 绑定 Skill `id/version/hash`，execute 时重新从当前 installed signed source 加载并复核 version/hash；没有增加第二套 Skill body/cache authority。
+  6. P-065 的 lexical 逻辑抽成无 repository/authority 语义的 `platform/search/lexical-search.ts` primitive，保留 NFKC、identifier/camel boundary 与 CJK 2/3-gram；Memory/Thread 的 SQLite FTS repository 与 Skill 的内存 postings/rerank 仍是各自 owner，没有形成跨领域 mega search service。Skill 的 n-gram 只做候选生成，最终至少要求一个规范化 query term 真正命中 metadata，避免弱 trigram overlap 被注入 prompt。
+  7. `ContextService.skillMetadataHash` 现在只描述实际 model-facing disclosure（mode/total + projected `id/name/description`），不把 signed hash/capability/trust 隐性复制成另一份 prompt-facing authority。
+- **验证**：
+  - 新增 `context/skill-progressive-disclosure`：同时覆盖标准 `SKILL.md` 映射、legacy Skill、2-Skill direct metadata、16/48-Skill indexed disclosure、目标 Skill 命中、`skill_search` metadata-only、`skill_read` body on-demand、跨 scope 不泄漏、signed file hash mismatch fail closed、legacy undeclared capability fail closed。
+  - 48-Skill fixture 实际只注入 1 条相关 metadata；Skill system block 约 114 estimated tokens，并与同 query 的 16-Skill fixture保持相同 token estimate，证明固定 prompt 成本不再随总 Skill 数线性增长；body prompt-resident 指标为 0。
+  - 完整 deterministic Agent scenarios：26/26 PASS；`context/indexed-recall` 与 `model/provider-continuation-roundtrip` 继续 PASS。
+  - P-077 复核：authoritative provider continuation 仍只写 `agent_model_attempts.continuation_json`；Ledger assistant payload 仍只保存 `modelStepId` reference，不新增 continuation durable state，也未引入 hidden reasoning text。
+  - P-065 复核：`ai_memories/ai_thread_entries` 仍为 canonical truth，FTS 表仍为 trigger-maintained/rebuildable projection；Memory candidate bound `min(64, max(24, limit * 8))`、Earlier-thread 64 indexed candidates、2 字 CJK indexed path 均保持，旧 1000/800 scan 与 LIKE fallback 未恢复。
+  - `pnpm --filter @nexus-terminal/backend exec tsc --noEmit`、`pnpm --filter @nexus-terminal/frontend exec vue-tsc --noEmit`、targeted `git diff --check` 均通过。当前 AgentDock 仍为 Node v22.17.0，而 repo 声明 Node >=24；该项仅为既有 environment warning。
 
 ## P-068 Subagent Profile 基础设施已完整，但缺少内建任务模板、委派选择策略与轻量 Context Inheritance
 
@@ -273,217 +231,106 @@
   2. Root model 继续通过 `delegate_subagent(profileId, objective, ...)` 做最终选择，但 Context 中只提供简短 profile manifest 与“适合/不适合委派”的指导；第一版不引入额外 classifier model。
   3. 默认只在任务足够大、可并行或需要隔离大量检索上下文时委派；小任务直接由 Root 完成，避免固定 fan-out overhead。
   4. Child 只继承 objective、constraints、必要 artifacts、与其目标路径相关的 project instructions/Tool family；不复制 Root 的完整 raw history/recall。
-  5. Root Context 始终从 durable collaboration owner 重新投影一个 bounded child lifecycle 摘要（delegation id/profile/status/objective/result/evidence/capacity），不能依赖“之前某轮模型记得自己 spawn 过谁”。因此 P-064 compaction/checkpoint 后不会丢 child 状态，也避免 full-history fork 带来的 token/storage 放大。
+  5. Root Context 始终从 durable collaboration owner 重新投影一个 bounded child lifecycle 摘要（delegation id/profile/status/objective/result/evidence/capacity），不能依赖“之前某轮模型记得自己 spawn 过谁”。因此已落地的 P-064 compaction/checkpoint 后不会丢 child 状态，也避免 full-history fork 带来的 token/storage 放大。
   6. 可继续使用更快/便宜模型处理 Explore/Scout，但只通过现有 Provider/Model capability contract 配置，不写死厂商 model id。
   7. P-120/P-103 落地后，内建模板与 Profile UI 不再展示/依赖 cumulative Child Token ceiling；仍展示累计 token usage telemetry，并只暴露真正有执行语义的 step/iteration、depth、concurrency/fan-out 等 containment。
 - **明确不做**：不引入新的 Multi-Agent framework；不新增第二套 profile storage/router；不强制所有任务 fan-out；不增加 Agent 投票/自治社会等复杂机制；不为了模板管理重新引入 Child cumulative Token budget。
 - **验证**：代表性大型代码探索/资料检索任务中 root context token 或 wall-clock 至少一项改善且质量不回退；小任务不会无意义 spawn child；child context 明显小于 root context；现有自定义 profile 行为保持兼容。
 
-## P-069 Tool Result 仍缺统一的 Model-facing Projection，长日志/搜索/MCP 结果会重复占用 Context
-
-- **优先级**：P1
-- **状态**：`优化设计已立项，待横向方案收敛`
-- **当前事实**：Tool 已有 raw/output byte hard limit、Artifact 引用和部分 tool-specific summary/truncation，但“什么进入下一轮 model context”仍主要由各 Tool 自己决定；shell/build/test/log/search/MCP 大结果容易形成高 token tool message。
-- **目标方向**：
-  1. 增加统一的 `ToolResultProjection`（最终名称待设计）：raw evidence 保留在 Artifact/现有 owner，model 默认看到 bounded summary + error/high-signal lines + head/tail + size/hash + artifactRef。
-  2. 对结构化 Tool 优先返回 schema-aware compact JSON；对文本日志提供行数/错误提取/去重；需要全文时通过已有 Artifact/File 路径按需读取。
-  3. Projection 策略按 Tool family 可扩展，但公共 token/byte budget 与 telemetry 统一，避免每个 Tool 私自发明截断规则。
-  4. MCP 返回的 `content/structuredContent` 要纳入同一 projection，而不是因为来自远端就直接全量进入 context。
-- **明确不做**：不删除 raw evidence；不默认用额外 LLM 调用总结每个 Tool output；第一版优先 deterministic projection。
-- **验证**：大日志/build/search/MCP fixture 下进入下一轮的 tool-result token 明显下降，仍能从 artifactRef 精确追溯完整结果；错误定位/后续修复成功率不低于现状。
-
-## P-070 Context Token Accounting 主要依赖 UTF-8 bytes/4，已有 Provider Usage/Cache 诊断尚未反哺预算模型
-
-- **优先级**：P2
-- **状态**：`优化设计已立项，待横向方案收敛`
-- **当前事实**：
-  - `ContextService` 与 Subagent context 主要以近似 token estimator 做预预算；模型完成后已有真实 `inputTokens/outputTokens/cachedInputTokens`，并记录 `contextEpoch/stablePrefixHash/toolSchemaHash/cacheRate`。
-  - Ledger candidate 与 `messageDiagnostics` 当前只对 `message.content` 调 `estimateTokens()`；assistant Tool-call 的 `toolCalls[].name/argumentsJson` 不计入历史 token。实测一个包含约 2 KiB Tool arguments 的 assistant message 仍只记为 1 token，因此 P-093 的 compaction 边界还会被进一步扭曲。Subagent 的 `encodedContext` 也只拼 `message.content`，同样遗漏历史 Tool-call structured parts。
-- **问题**：对 CJK、JSON schema、代码和不同 tokenizer，bytes/4 会产生较大误差；同时遗漏 Tool-call structured parts 是确定性的系统性低估。预算过保守会浪费 context，过乐观会导致 provider 侧 context overflow、错误 compaction 或把 Tool exchange 拆坏。
-- **目标方向**：
-  1. 保留轻量 heuristic 作为首轮/未知模型 fallback；加入 `ContextUsageAnchor`（最终名称待设计），把上一轮同一 context lineage 的 provider actual usage 作为基准，只估算之后新增/删除 delta。
-  2. 如果 `@ai-sdk/openai` 或 Provider 能稳定暴露模型 tokenizer/usage metadata，可作为可选增强；不要求为每个第三方 compatible model 集成专属 tokenizer。
-  3. 所有 model-facing content part 都必须进入估算：text、assistant tool-call name/arguments、tool-result、未来 P-075 image/file metadata 与 P-077 opaque continuation；候选选择、compaction 与 diagnostics 共用同一个 estimator，不允许 selection 与 telemetry 口径不同。
-  4. 把 context 分项 token telemetry 固化：stable instructions、Tool schema、Skill metadata、raw/recent history、summary checkpoint、recall、tool calls/results、cached vs uncached，作为 P-063/P-064/P-069/P-093 的优化验收依据。
-  5. 为 P-120 提供唯一 `ContextUsage` projection：至少包含 latest prompt `usedTokens`、`contextWindow`、`source=provider|anchored_estimate|estimate` 与可选 `reservedOutputTokens`。UI 的 Context 百分比基于**当前一次模型请求的上下文占用**，而不是 Run 累计 input/output；compaction 后该值应真实下降。
-- **明确不做**：不为了精确 token 计数引入远端 tokenizer service；未知模型仍允许保守 fallback；不拿累计 Run usage 反推当前 context occupancy。
-- **验证**：连续 model step 的 estimated vs actual input token 误差可观测并显著低于纯 bytes/4；compaction threshold 更稳定；不同语言/代码/JSON fixture 有基准测试；长 Run 即使累计 Token 持续增加，Context usage 仍随 projection/compaction 正确升降。
-
-## P-071 Workspace 缺少 Repo-scoped Project Instructions Owner，尚不能自动遵守 `AGENTS.md` 等仓库约定
-
-- **优先级**：P1
-- **状态**：`横向方案基本收敛，待并入最终设计`
-- **当前事实**：全仓当前没有 `AGENTS.md` / `CLAUDE.md` / project-context loader 对应的 Agent runtime owner；Workspace 默认逻辑工作目录为 `/workspace/work`，Coding Run 因此只能依赖用户输入、Skill、Memory 或模型自己读取 README/文档来推断仓库约定。
-- **主流实践对照**：
-  - Codex 将 `AGENTS.md` 作为一等 project instruction：从 repo root → cwd 合并，nested file 对其目录树生效，更深层规则覆盖更泛规则。
-  - Claude Code 使用 `CLAUDE.md`/rules，root→cwd 加载，并在真正进入子目录时才加载 nested instructions，避免启动 prompt 无界膨胀。
-  - Hermes 同样支持 `AGENTS.md` chain + progressive subdirectory discovery；OpenHands 也将 repo instructions / repo skills 作为仓库上下文。
-- **目标方向**：
-  1. Nexus 第一版以 **`AGENTS.md` 为 canonical project instruction filename**；`/workspace/work` 内向上只走到项目 root，不读取 Workspace 外部 HOME/host parent。
-  2. Project root 优先使用 `.git`/worktree metadata 判定；没有 repo marker 时仅使用当前 work root，不向更高目录猜测。
-  3. Root→target directory 按作用域加载；更深层 instruction 后置并覆盖冲突。Nested `AGENTS.md` **按需**在 read/search/patch/execute 涉及对应路径时进入 Context，不在 Run 启动时扫描全树。
-  4. 每个文件与总量有独立 token/byte budget，并记录 path/hash/provenance；ContextCheckpoint 只引用当前有效 instruction snapshot/hash，不把其内容复制成 Memory。
-  5. 可提供 `CLAUDE.md` 等 fallback/import 兼容，但第一版不默认同时合并多个 vendor 格式；有 `AGENTS.md` 时不再自动叠加其它规则文件，避免冲突和 token 膨胀。
-- **安全边界保持轻量**：Repo instruction 是项目上下文，优先级低于 Nexus system contract 和当前用户输入；不额外做复杂 prompt-injection 扫描/审批系统，继续依赖现有 Tool capability/approval 对真实动作做边界控制。
-- **验证**：monorepo root/nested instruction scope 与 precedence 有 E2E；进入 unrelated subtree 不消耗其规则 token；修改/读取文件前能看到正确 scoped instructions；无 `.git` 的普通 Workspace 不会读取 `/workspace` 之外的文件。
-
-## P-072 Workspace Coding Tool Surface 过于底层，缺少一等 Read/Search/Incremental Patch
-
-- **优先级**：P1
-- **状态**：`横向方案基本收敛，待 patch contract 最终确认`
-- **当前事实**：
-  - Coding Workspace 主要依赖 `workspace_execute_argv` 执行任意 argv；该 Tool 作为通用执行能力按 mutation 管理，所以在 `approvalMode=ask` 下连 `rg/git status/test` 这类正常开发读取/验证也会产生额外操作摩擦。
-  - `machine_write_file` 是从 Artifact 做整文件 replacement，并不适合作为频繁代码局部修改 primitive。
-  - Nexus 已有 `approvalMode=ask | full_access` 并完整贯通 Backend；**不需要再新增 autonomy/permission mode**。
-- **主流实践对照**：Codex/Cline/Claude Code 都将 read/search/edit 与通用 shell 分开；Cline 当前 built-in 明确提供 batch read、ripgrep search、unified `apply_patch` 与 bash。Aider 也长期证明 whole-file edit 成本高，search/replace/diff 更适合 Coding Agent；mini-SWE-agent 则提醒 Tool 不应无限细分。
-- **目标方向**：第一版只增加最小高价值集合：
-  1. `workspace_read_file`：支持 path + bounded line/byte range，返回 hash/size/line metadata；read risk。
-  2. `workspace_search`：优先直接使用 Runner 内可用 `rg`（不存在时有受限 fallback），支持 query/path/glob/maxResults/contextLines，输出严格有界；read risk。
-  3. `workspace_apply_patch`：接受受限 unified diff + 每目标文件 `expectedSha256`（或等价 precondition）；使用成熟 patch library 做 **strict apply (`fuzz=0`)**，支持非 Git Workspace，不通过 shell `git apply` 假定 repo 类型；mutation 继续走现有 ask/full_access、operation hash、lease/outcome contract。
-  4. 每次 patch 产出可审计的 change evidence：目标路径、before/after hash、bounded diff summary；大 diff spill 到 Artifact。需要整体 review 时提供一个只读 `workspace_changes`（最终名称待定）汇总本 Run/Workspace 的已确认文件 mutation，Git repo 可复用 `git diff --no-ext-diff` 增强展示，非 Git Workspace 仍以 mutation journal/hash 为事实源。
-  5. `workspace_execute_argv` 保留作为 build/test/git/package-manager/脚本等 escape hatch，不再继续拆出几十个特殊 Coding Tool。
-  6. P-071 Project Instructions 与未来 P-067 Repo Map 都通过这些 path-aware Tool 获得访问事件/目标路径，不各自重复解析 shell 文本。
-- **明确不做**：不新增复杂 shell allow/deny DSL；不实现自有 diff 语法；不要求 Git；不把 Git index/commit 当 Nexus mutation authority；不以 whole-file write 作为普通局部编辑路径；不删除 argv escape hatch。
-- **验证**：常见定位→读取→局部修改任务不需要 shell 拼装；小改动 output token 明显低于 whole-file rewrite；stale hash/ambiguous patch fail cleanly；ask/full_access 语义保持现状；非 Git workspace 也能 patch；用户/Root 可以从 change evidence 精确看到本 Run 改了哪些文件而无需重新扫描整个仓库。
-
-## P-073 Runner 已有 Durable Job Journal，但 Agent-facing Workspace Tool 仍同步轮询，缺少 Background/Wait 语义
-
-- **优先级**：P1
-- **状态**：`横向方案基本收敛，待事件唤醒细节确认`
-- **当前事实**：Agent Runner 已经持久化 `jobId/status/result/error`，Controller 接受 job 后异步执行并可查询；但 Backend `RunnerHttpAdapter.invoke()` 会内部约每 250ms 轮询至 terminal state，`workspace_execute_argv` 因而对模型表现为同步阻塞调用。
-- **问题**：长 build/test/server/CI wait 会占住 Agent step；模型若需要同时做其它分析只能串行等待。若把 polling 暴露给模型又会浪费 model turn/token。
-- **主流实践对照**：Hermes 将 terminal foreground/background 分离，background 返回 session id，`process wait/poll/log/kill` 管理；完成 watcher 可以直接触发新 Agent turn，并且 standing-goal 在等待 background process 时会 park，不消耗 continuation turn。
-- **目标方向**：
-  1. 扩展现有 `workspace_execute_argv`（或同 owner 的兼容版本）支持 `mode: foreground | background`；background 在 Runner 接受 job 后立即返回 durable `jobId/status`。
-  2. 增加一个小型 `workspace_job` 控制 Tool，优先只提供 `status/wait/cancel` 与 bounded output tail；不要为 list/log/tail/wait 各造一个 Tool。完整输出仍走 Artifact/结果投影。
-  3. `wait` 是 **server-side wait**：Backend/Runner 自己等待 terminal/timeout，一次 Tool call 返回，不让模型反复 poll。
-  4. 后续可用 Scheduler/EventHub 在 job terminal 时 wake 对应 Run，实现真正 event-driven resume；第一版如果事件桥会显著扩大改动，可先以 background + explicit `wait` 落地，但不能要求模型 250ms/秒级轮询。
-  5. Background job 绑定 workspaceId/generation/run/runtime provenance；Workspace stop/restart/delete 继续复用 Runner 已有 abort/reconcile 逻辑。
-- **明确不做**：不另建第二个任务队列/进程管理系统；不暴露 host PID 作为产品 identity；不让模型自己实现 busy polling。
-- **验证**：长 test/build 可后台启动后继续其它 read/search；`wait` 不新增 model turn；Run resume 仍能查询已有 durable job；Workspace generation 切换后旧 job 不会被误认为新环境结果。
-
 ## P-074 Run Completion 当前只有 `completed_unverified` 正常成功路径，已有 Tool/Plan Evidence 尚未汇总成 Completion Gate
 
 - **优先级**：P1
-- **状态**：`横向方案基本收敛，待最终 contract 设计`
-- **当前事实**：
-  - ToolResult 已有 `verification.status/evidenceRefs`；Plan item 已有 `evidenceRefs`；Run schema 也定义 `verificationStatus = verified | unverified | failed | not_started`。
-  - 但当前 Root model 在“无 Tool call + 无 active child”时直接 `settleModelStep(... terminalStatus: completed_unverified)`；StateCommit 同时把 `goal_status` 写成 `satisfied`、`verification_status` 写成 `unverified`。当前 main 没有正常路径把成功 Run 提升为 `verification_status='verified'`。
-- **主流实践对照**：Codex 主要通过 project instructions/base prompt 要求先跑相关测试再完成；Hermes 的 persistent goal 进一步提供 completion contract、deterministic quality gate，然后才可选轻量 judge，并且 verify-on-stop 默认可关闭，避免所有任务固定多一次模型调用。
-- **目标方向**：
-  1. 在现有 Run/Plan/Tool verification 字段上增加 **Completion Gate**，不新建第二套 verification 状态模型。
-  2. 默认 deterministic-first：若 Run 有明确 completion criteria / completed Plan item evidence / 最近 mutation 后的 test/build/check Tool evidence，则根据可验证事实判定；配置的 quality gate command 必须 exit 0 才能完成。
-  3. 没有任何需要外部验证的问答/解释型任务仍允许 `completed_unverified`，不要为了形式主义强制跑测试或额外 LLM。
-  4. Coding/mutation Run 若 evidence 明显不足，第一次 model 想结束时返回一个 bounded continuation notice（说明缺什么证据），让同一 Run 继续验证，而不是立刻终止后要求用户说“继续”。
-  5. 可选 `review` subagent/profile 或 auxiliary judge 只用于复杂/用户启用场景；不是默认 completion 前置，也不取代 deterministic gate。
-  6. 与 P-045 Progress Guard 配合：红 gate/新验证证据算 progress；相同 gate failure 重复达到阈值后停止，不无限自我修复。
-- **明确不做**：不默认每个 Run 多调用一次 judge model；不把“模型说已完成”当 verified；不把 unrelated failing test 变成强制修复范围。
-- **验证**：明确要求“测试通过”的 coding task 不会在测试未跑/失败时提前完成；纯解释任务无需额外 Tool/模型调用；verification status 能真实出现 `verified`；重复同一失败 gate 有 bounded stop；resume 保留 completion evidence。
+- **状态**：`已完成（2026-09-17；Root 正常 stop 现在先进入 deterministic Completion Gate；Gate 只读取既有 durable Plan / ToolResult verification / ready Artifact evidence，不新增第二套 verification store；首次缺证据通过 StateCommit durable continuation 继续同一 Run，无 Tool progress 的重复 gate failure bounded 为 COMPLETION_GATE_UNSATISFIED；verified evidence 可真实落 completed + verification=verified；新增 model/completion-gate scenario，完整 Agent scenarios 21/21、Backend typecheck/build、git diff --check 全绿）`
+- **完成事实**：
+  1. `completionGateDecision()` 在 P-089 typed finish-reason policy 之后执行：非正常 finish reason 不会进入 Gate；正常 `stop` 才进入 completion candidate。
+  2. Gate 直接消费现有 durable truth：未完成 Plan item 会阻止结束；confirmed mutation 会触发 evidence 要求；completed Plan evidence 只有在对应 Artifact 已 ready 时才可计入；Tool evidence 使用持久化 `ToolResult.verification`。
+  3. 明确要求 test/build/check/verify 的 coding/mutation Run 必须具有 verified execution evidence（如 foreground `workspace_execute_argv`，或 background job 后续由 `workspace_job` 确认 zero-exit terminal result）或 durable Plan evidence；“写文件成功”或“后台 job 已接受但仍 unverified”不会被误判成无需验证。
+  4. 第一次缺证据时 `continueModelStepForCompletionGate` 原子关闭当前 Model attempt/step、保留 assistant 文本、追加 bounded `system_notice(kind=completion_gate)` 与 `completion.gate_blocked` event，同时 Run/Root Runtime 保持 `running/executing`；下一轮 Context 只读取这条 durable notice，不使用 sleep/retry 或 `awaiting_input` 冒充。
+  5. 若没有任何 Tool progress 又再次触发相同 Gate，直接 `COMPLETION_GATE_UNSATISFIED`，避免 completion 自循环；正常 Tool progress 会重置 Gate-block 计数并由 P-045 继续负责异常 Tool loop。
+  6. 有充分 durable evidence 的 Run 现在可通过 StateCommit 正常落 `status=completed`、`goal_status=satisfied`、`verification_status=verified` 和 `verification.completed(status=verified)`；不需要外部验证的问答/解释任务仍保留 `completed_unverified`，不强制额外 Tool/模型调用。
+- **验证**：`model/completion-gate` 用真实 SQLite + StateCommit 验证 unverified mutation 无测试证据时被阻止、durable continuation 保留 Root execution owner、无 progress 重复停止被 bounded、verified test evidence 后成功进入 `completed/verified`；完整 deterministic suite 21/21、Backend typecheck/build 与 `git diff --check` 通过。
 
 ## P-075 Artifact 已进入 Run/Thread durable contract，但模型没有通用读取/多模态输入路径
 
 - **优先级**：P1
-- **状态**：`功能完备性审计确认，待最终 contract 设计`
-- **当前事实**：
-  - Frontend 已支持 Artifact Library / Picker，创建或追加 Run input 时会提交 `artifactRefs`；Run/Checkpoint/Subagent/mailbox 也都能 durable 保存 Artifact ref。
-  - 但 `ModelMessage.content` 当前仍只有 `string`；`ContextService` 组装 user input 时只投影文本，`artifactRefs` 不会转换成 model-facing text/file/image part。
-  - `ToolCatalog` 当前也没有通用 `artifact_read`；现有 `ArtifactService.read()` 主要由 HTTP/Workspace transfer/plugin package 等 Host 路径消费。因此模型即使知道一个 Artifact UUID，也没有稳定、provider-neutral 的能力读取它。
-  - Subagent 的 `inputArtifactRefs` 同样只是引用列表；`SubagentContextBuilder` 会把 ref 写进 objective/context metadata，但不会读取对应内容。
-- **问题**：产品 UI 表面上已经支持“附件”，但 Agent 目前无法可靠理解附件内容；文档、代码、日志、截图/图片任务都可能退化成模型只看到 UUID。这个断点同时影响 Root Agent、Subagent、Checkpoint resume 与 Plugin App 体验。
-- **目标方向**：
-  1. 先增加 provider-neutral 的 **Artifact read/projection**：提供 bounded metadata + ranged text/binary read，文本类 Artifact 可按 UTF-8/line range 返回，完整大文件继续保留在 Artifact owner，不整包塞入 Context。
-  2. 对 Run input 的附件先注入轻量 metadata（id/name/mediaType/size/hash），让模型按需调用 Artifact read；小型文本附件可在明确 token budget 内直接 projection，避免每个小文件固定多一步 Tool。
-  3. 扩展 `ModelMessage` 为 typed content parts，使支持多模态的模型可直接接收 image/file part；capability resolver 增加显式 multimodal/input capability，不根据 model id 猜测。
-  4. Provider 不支持 native file/image 时必须有 deterministic fallback：文本类走 Artifact read；二进制/图片至少保留 metadata + Artifact ref，并由可用的 Tool/Skill/Integration 决定是否进一步解析。
-  5. Subagent 只继承 delegation 明确列出的 Artifact，且采用同一 read/projection contract，不复制 Root 全部附件内容。
-- **明确不做**：不把所有附件在 Run 启动时全文塞进 prompt；不把实现绑死在 OpenAI Vision/Responses；不新增第二套文件存储；不让 Artifact 内容绕过现有 App/Run scope。
-- **验证**：纯文本/代码附件能被 Root 与 Child 准确读取；大附件只按需消耗 token；支持 image input 的模型能真实收到 image part；不支持多模态的第三方 OpenAI-compatible provider 仍可正常运行；Checkpoint/resume 后 Artifact ref 仍可读取且 hash/provenance 一致。
+- **状态**：`已完成（2026-09-18；新增 Run/runtime-scoped Artifact read/projection、artifacts.read 下的通用 artifact_read、typed image/file ModelMessage parts 与显式 provider input capabilities；Root/Child/attachment-only resume 共用同一 Artifact authority，不复制 bytes 到 Ledger；新增 context/artifact-model-input scenario，完整 deterministic Agent scenarios 24/24、Backend/Frontend typecheck、targeted git diff --check 全绿）`
+- **完成事实**：
+  1. `ArtifactPort/ArtifactService` 增加 Agent 专用 `getForAgent/readForAgent`，底层仍只使用既有 Artifact object store；Root 必须命中当前 Run 的 `agent_artifact_links` 或有效 run-specific grant，Child 还必须是该 Run runtime 且 Artifact 出现在其 delegation 的 `input_artifact_refs_json`。跨 App 输入继续依赖既有 grant，不新增第二套 storage/ACL。
+  2. 新增 provider-neutral `artifact-model-projection`：附件始终投影 bounded metadata（id/name/mediaType/size/hash/sourceApp/projection）；单文件最多 16 KiB、总计最多 32 KiB 的 UTF-8 文本可直接 inline；大文本/二进制继续留在 Artifact owner。文本按 bounded line range 读取（最多扫描 8 MiB、单次最多 200 行），binary 按 bounded byte range 读取（单次最多 48 KiB），UTF-8 扫描边界不会因截断半个多字节字符误报非法内容。
+  3. ToolCatalog 增加通用 read-risk `artifact_read`，沿用既有 `artifacts.read` capability，提供 `metadata | text | bytes` 三种模式；Root/Child Tool execution 都复用同一 Run/runtime Artifact authority，Child 不会因为知道 UUID 就读取未委派的 Root Artifact。
+  4. `ModelMessage` 增加 typed `contentParts`（image/file）；model capability resolver 增加显式 `supportsImageInput/supportsFileInput` Registry/manual override，未知能力默认 false，旧请求字段缺失不会被误写成 false override；已知 `gpt-4o` Registry 显式声明 image input。OpenAI-compatible adapter 只在 effective capability 允许时编码 native image/file part，图片不能通过 file capability 绕过 image capability。
+  5. Root `ContextService` 会从 durable current input refs 构造 metadata/小文本/native part；`SubagentContextBuilder` 只有在 delegation 同时显式授予 `artifacts.read` 且列出对应 Artifact ref 时才做内容 projection。native payload 若挤压 context budget 会确定性降级为 metadata + `artifact_read`；历史 Ledger 只保留 Artifact ref，不复制大文件或 provider payload。
+  6. Checkpoint/resume 的 `projectRunUserInputs()` 继续从 canonical `payload.artifactRefs` 重建输入；Context 现在允许“空文本 + Artifact refs”的 attachment-only resume，并保持 hash/source App provenance。Frontend Provider 设置也可显式查看/编辑 image/file input capability，不依赖运行时 model-name heuristic。
+- **明确不做**：未把所有附件全文塞进 prompt；未绑定 OpenAI Vision/Responses 私有 durable contract；未新增第二套文件存储、Artifact 权限表或 continuation state；未让 Artifact 内容绕过 App/Run/delegation scope。
+- **验证**：新增 `context/artifact-model-input` 使用真实 SQLite + `LocalArtifactStore` 验证 Root scoped text read、大文本 metadata-only + on-demand line read、Child 未委派 Artifact 暴露数为 0、unsupported image native part 为 0、显式 image capability native part 为 1、attachment-only resume 成功且 hash/provenance 一致；完整 deterministic suite 24/24，Backend `tsc --noEmit`、Frontend `vue-tsc --noEmit` 与 targeted `git diff --check` 通过。
 
 ## P-076 Agent 缺少一等 `request_user_input` / Clarification 状态，信息不足时只能猜测、结束或等待用户主动追加
 
 - **优先级**：P1
-- **状态**：`功能完备性审计确认，待状态机设计`
-- **当前事实**：
-  - Nexus 已支持用户主动 `appendInput`、Run input revision、pending input/interrupt/replay，以及 approval/budget 等 durable wait state。
-  - 但 Runtime Tool surface 没有 `request_user_input` / `clarify`，Run status 也没有表达“Agent 已提出一个问题，正在等待用户回答”的一等语义。
-  - Approval 只应用于 governed operation，不应该被复用成普通产品澄清；Mailbox 则是 Agent↔Agent，不是 Agent↔User。
-- **主流实践对照**：Claude Code、Cline/Roo、Hermes 等主流 Agent 都允许 Agent 在执行中主动向用户提问，通常支持结构化选项和自由文本；这能降低不必要猜测、错误 mutation 与无效 token 消耗。
-- **目标方向**：
-  1. 增加 Host-owned read/control Tool `request_user_input`：支持一个 bounded question batch，每题可为自由文本或有限 choices，并允许 optional recommended/default context，但不得替用户作答。
-  2. Tool commit 后 Run 进入明确 `awaiting_input`（或等价的一等 durable wait reason），释放 scheduler/runtime slot，不持续消耗 model turn。
-  3. 用户回答继续复用 canonical `user_input` + input revision；回答与 request id/correlation 关联后唤醒同一 Run，不另建聊天/消息事实源。
-  4. Context 只恢复“问题 + 用户回答 + 必要 surrounding state”，避免等待前完整上下文重复注入；P-064 ContextCheckpoint 可承担长等待恢复。
-  5. UI 在 Conversation 中展示普通问题卡/choice，而不是 Approval Card；没有回答时可取消 Run或继续追加普通输入。
-- **明确不做**：不把 clarification 当 approval；不增加复杂表单 DSL；不允许无限提问循环，P-045 progress/loop guard 继续生效；简单任务不鼓励为了确认而确认。
-- **验证**：需要路径/方案/账号目标等关键信息的任务能 durable park→回答→继续；等待期间没有额外模型调用；refresh/reconnect 后问题仍存在；回答进入 canonical Ledger；连续无进展提问会被 bounded guard 终止。
+- **状态**：`已完成（2026-09-18；新增 Root-only request_user_input 与 durable agent_input_requests owner；专用 StateCommit 原子完成 Tool settle + clarification request + awaiting_input park，并由 appendInput 原子 answer/resume；RunSnapshot/Conversation 提供普通问题卡；重复无进展 clarification 复用 P-045 progress guard；direct cancel / app disable / backend restart 均关闭 pending request；新增 runtime/user-input-clarification scenario，完整 Agent scenarios 22/22、Backend/Frontend typecheck/build、git diff --check 全绿）`
+- **完成事实**：
+  1. 没有新增第二个 Run wait 状态：`awaiting_input` 继续是唯一 Run wait authority；新增 `agent_input_requests` 只持久化“正在等什么问题、由哪个 Root Runtime 提出、是否已回答/取消”的 clarification control fact，用户回答内容仍只写 canonical `user_input` Ledger。
+  2. 新增 Root-only Host control Tool `request_user_input`，支持最多 4 个 bounded 问题、自由文本或有限 choices、optional recommended choice/context；问题结构在 Tool inspect、durable read 两端都显式校验。Subagent 明确不暴露该 Tool，缺失信息继续通过 Parent/Mailbox 协作。
+  3. `settleUserInputRequestTool` 在单个 StateCommit transaction 中原子完成 Tool/Step settle、request 创建、ToolResult Ledger 写入、Run→`awaiting_input`、Root Runtime→`waiting_message` 与 active execution slot 释放，避免“Tool 已成功但 park 未落盘”的 crash window。
+  4. `appendInput` 现在可区分 P-045 loop wait 与 clarification wait；回答先进入 canonical Ledger，再原子把 request 标为 `answered`、关联 `answer_entry_id`、唤醒同一个 Runtime 为 `runnable` 并恢复 Run=`running`。两种 wait 若同时存在必须指向同一 Runtime，否则 fail closed。
+  5. `RunSnapshot.pendingInputRequest` 是 refresh/reconnect 的 authoritative projection；Conversation 展示普通 clarification card/choice，choice 只填充现有 composer，最终仍走 canonical `appendInput`，不复用 Approval Card，也不新增表单提交 API 或第二套聊天事实源。
+  6. 重复相同 clarification 的 operation hash 不因 input revision 伪装成进展，继续进入 P-045 durable trajectory；达到既有 no-progress 阈值时由同一个 loop guard park。用户直接取消、App disable 或 Backend restart terminalization 都会在同一事务中把未回答 request 置为 `cancelled`，避免 terminal Run 留下孤立 requested state；Backend restart 仍遵循项目既有“中断 non-terminal Run”策略，不伪造 provider stream resume。
+- **验证**：`runtime/user-input-clarification` 走真实 SQLite + StateCommit + Tool proposal/read execution 路径，覆盖 6 次 durable park、5 次回答恢复、等待/回答本身 0 个额外 model attempt、1 次 P-045 bounded pause、1 个未回答 request 随 Run cancel 关闭；完整 deterministic suite 22/22，Backend `tsc --noEmit`/build、Frontend `vue-tsc --noEmit`/build 与 `git diff --check` 通过。
 
 ## P-077 Responses + Reasoning Tool Round-trip 丢失 Provider Continuation Metadata，可能破坏无状态推理模型的连续执行
 
 - **优先级**：P1
-- **状态**：`模型协议审计确认，待 provider-neutral continuation contract 设计`
-- **当前事实**：
-  - Provider transport 已统一使用 `@ai-sdk/openai`，并支持 `chat-completions | responses` 双协议；Responses 路径使用 `store:false`。
-  - AI SDK LanguageModel V4 对 Responses reasoning/tool output 会产生 `reasoning-*`、custom/provider metadata，例如 OpenAI `itemId`、`reasoningEncryptedContent` 等；在 `store:false` 下 SDK 会通过 `reasoning.encrypted_content` 支持 stateless continuation。
-  - Nexus 当前 `ModelEvent` 只保留 `message.delta / tool.delta / usage / completed`；`ModelStepRunner` 与 Ledger assistant payload 也只持久化可见 text + toolCalls。上述 continuation metadata 会在 Tool round-trip 前丢失。
-- **问题**：普通 Chat Completions 模型通常不受影响，但 Responses reasoning model 在第一次 Tool call 后，下一次请求可能缺少 provider 需要的 opaque reasoning/item continuation，造成推理质量下降、重复 reasoning、provider warning，甚至部分模型请求失败。
-- **目标方向**：
-  1. 在 LanguageModelPort 增加 **opaque provider continuation part/state**，只允许 JSON-serializable、size-bounded、provider/protocol/version 标记的数据通过；Core 不解释 vendor 内部字段。
-  2. Adapter 从 AI SDK reasoning/custom/tool-call provider metadata 提取 SDK 已公开要求 round-trip 的最小状态；下一次 prompt 重建时原样映射回对应 assistant content part/providerOptions。
-  3. continuation 跟随具体 model step/assistant Tool round 固化，Checkpoint/resume 必须能恢复；协议/provider/model configuration 变化时不得跨边界复用。
-  4. reasoning **文本内容不是产品事实源**：默认不展示、不进入 Memory/Recall/Project Instructions，也不作为 Completion evidence；若 SDK 只需要 encrypted/opaque content，就只保存 opaque content。
-  5. Chat Completions/不返回 continuation 的第三方 provider 继续走当前简单路径，不强制伪造 metadata。
-- **明确不做**：不展示或持久化模型隐藏思维链作为用户可见功能；不自研 OpenAI Responses SSE/事件解析；不让 Core 依赖 OpenAI 私有字段名做业务判断。
-- **验证**：Responses reasoning 模型连续完成“reason→Tool→result→reason→Tool/final”至少两轮；adapter round-trip fixture 验证 opaque metadata 未丢失；Chat Completions 与普通第三方 provider 行为不变；Checkpoint resume 不破坏 continuation provenance。
+- **状态**：`已完成（2026-09-18；引入 provider-neutral、JSON/size-bounded ModelProviderContinuation；OpenAI Responses store:false 仅 round-trip AI SDK 暴露的 reasoning itemId + encrypted content 与 Tool item metadata，隐藏 reasoning 文本不进入产品事实；continuation 以 agent_model_attempts 为唯一 durable truth，Root Ledger 仅保存 modelStepId 引用，Root/Child Context 均按具体 model step 恢复；provider/model/configuration/protocol 变化时不复用 opaque state；migration #27；deterministic 两轮 Tool + fresh reconstruction provenance 场景与完整 Agent scenarios 23/23、Backend typecheck/build、git diff --check 全绿）`
+- **完成事实**：
+  1. Core 增加 `ModelProviderContinuation` envelope，只定义 `schemaVersion/providerId/modelId/configurationVersion/protocol/format/data`；`data` 必须显式 decode 为 JSON value，并受 256 KiB、深度与节点数上限约束。Core 不读取 OpenAI 私有字段，也不把 vendor metadata 当业务状态。
+  2. `OpenAiProviderAdapter` 继续完全复用 AI SDK Responses stream/prompt codec：`store:false` 路径只收集 SDK 暴露的 reasoning `itemId + reasoningEncryptedContent` 与 Tool-call `itemId`，下一轮按 assistant content part/providerOptions 回放；`reasoning-delta` 不进入 Nexus `ModelEvent`、Ledger、Memory/Recall、Completion evidence 或用户展示。Chat Completions 与无 continuation 的 provider 不伪造 metadata，继续走简单路径。
+  3. `agent_model_attempts.continuation_json` 是 continuation 唯一 durable truth，migration #27 为升级库补列；Root Ledger assistant payload 只增加 `modelStepId` 引用，不复制 opaque data。Root `ContextService` 与 Child tool-exchange reconstruction 都通过同一个 model-step continuation repository 恢复，因此 Tool round、Child、fresh process reconstruction 共用同一 authority。
+  4. continuation provenance 绑定冻结的 provider/model/configuration version/protocol；OpenAI adapter 发现 route 不匹配时直接丢弃 opaque continuation，从 canonical text/Tool history 重建，不跨模型/协议搬运。现有 Backend restart 仍遵守“中断 non-terminal Run、不伪造 provider stream resume”的 invariant；已 durable 的历史 model round 可由 fresh repository/context 实例恢复 continuation provenance。
+  5. Context accounting 把 opaque continuation 与 text/tool-call/tool-result 使用同一个 message estimator 纳入 selection/diagnostics；没有恢复累计 Run/Child Token ceiling，也没有改变 P-045 progress-aware loop guard、cancellation 或 reconciliation owner。
+- **验证**：deterministic `model/provider-continuation-roundtrip` 覆盖 Responses 连续两轮 Tool round、adapter metadata extract/replay、256 KiB 上限、configuration/protocol mismatch 不复用、Chat Completions 不伪造、SQLite durable truth 与 fresh Context reconstruction；完整 deterministic Agent scenarios 23/23 通过，Backend `tsc --noEmit`/build 与 `git diff --check` 通过。本机 Node v22.17.0 仅产生仓库 `>=24` engine warning，不是产品失败。
 
 ## P-078 MCP Integration 当前只投影 Tools，尚未利用 Resources/Prompts 与长任务能力，标准协议能力存在明显缺口
 
 - **优先级**：P2
-- **状态**：`协议完备性审计确认，待与 P-063/P-073/P-066 合并设计`
+- **状态**：`协议完备性审计确认，待与 P-063/P-066 合并设计；P-073 durable background-handle contract 已闭环`
 - **当前事实**：
   - Nexus 使用 `@modelcontextprotocol/client@2.0.0`，Integration pin `2026-07-28`，并已实现 Streamable HTTP、schema refresh、`tools/list`、`tools/call`、动态 ToolCatalog contribution。安装的 Client API 本身已经提供 `listResources/readResource`、`listPrompts/getPrompt`、Tasks 与 multi-round `input_required` 支持，因此这部分不需要自研协议 codec。
   - `McpRuntimePort`/`McpAdapter` 当前仍只封装 Tool：没有把 Resources/Prompts/Tasks 暴露为 Nexus product contract，也没有把 resource/prompt metadata 作为 model-facing discovery source。
   - Tool snapshot 已保存 MCP `annotations`，但 `createMcpTools()` 完全不消费它们，当前每个 MCP Tool 都硬编码为 `riskClass: 'mutate'` / `mutation: true`；因此即使 Server 明确声明 `readOnlyHint`，普通读取也会进入 mutation approval 路径。
   - 当前 MCP Client 明确配置 `inputRequired: { autoFulfill: false, maxRounds: 0 }`。在 2026-07-28 的 multi-round-trip 语义下，需要 elicitation/input 的 Tool/Resource/Prompt 无法继续；这与 P-076 的 Agent durable clarification 正好是同一个产品能力。
-  - P-063 已计划高基数 Tool deferred discovery，P-066 已有 Skill progressive disclosure，P-073 计划复用现有 durable background job；因此 MCP 扩展不应各自再造平行机制。
+  - P-063 已落地高基数 MCP Tool deferred discovery（`tool_search` + version-bound `tool_invoke` router），P-066 已有 Skill progressive disclosure，P-073 已落地 Runner durable background job + bounded status/wait/cancel；因此 MCP 扩展不应各自再造平行机制。
 - **目标方向**：
   1. 第一阶段优先补 MCP **Resources metadata discovery + bounded read**，并接入与 Tool/Skill 相同的 deferred/local lexical search 思想；Resources 是远端 evidence，不直接升级为 system instructions。
   2. MCP Prompts 作为可选模板/Skill-like 内容处理：默认只索引 metadata，用户/Agent 明确选择后再 `get`；不要把全部 Prompt 常驻 system context。
   3. 对远端高基数 Tools/Resources 统一考虑 catalog TTL/schema hash/version invalidation，避免每轮全量 refresh/list。
-  4. MCP Tasks 只映射为 P-073 同类的 remote background handle：保存 server/task provenance，提供 bounded status/wait/cancel/result projection；Nexus Run/Workspace job 仍是本地 authoritative lifecycle，不复制第二套 scheduler。
+  4. MCP Tasks 只映射为已落地 Workspace durable job contract 同类的 remote background handle：保存 server/task provenance，提供 bounded status/wait/cancel/result projection；Nexus Run/Workspace job 仍是本地 authoritative lifecycle，不复制第二套 scheduler。
   5. MCP annotations 只作为 **behavior/risk hint**：缺失/未知默认保持当前保守 mutation；只有 Integration 被用户明确标记为可信 annotation source 时，`readOnlyHint=true` 才可映射为 read-only Tool projection，`destructiveHint/idempotentHint/openWorldHint` 用于 warning/retry/telemetry。无论如何 annotations 都不能绕过 capability scope、operation hash、lease 或现有 deterministic policy。
   6. 把 2026-07-28 `input_required` 接到 P-076 的同一个 durable user-input request：MCP call park → 用户回答 → 带 opaque `requestState`/inputResponses 重试原请求；不让 SDK 在 Backend 内弹出隐式交互，也不新建 MCP 专用聊天状态。Client v2 对该协议代际已把旧 server-initiated sampling/roots 标为 deprecated，因此不再把“补 sampling/roots”当 Nexus 完备性目标。
-  7. 远端 Tool/Resource/Prompt/Task result 统一经过 P-069 model-facing projection 与 Artifact spill，避免大结果直接污染 Context。
+  7. 远端 Tool/Resource/Prompt/Task result 统一经过已落地的 P-069 model-facing projection 与 Artifact spill，避免大结果直接污染 Context。
 - **明确不做**：不为追求“协议全覆盖”实现 Nexus 当前没有产品用途或在当前协议代际已 deprecated 的 capability；不把 MCP annotation 当安全保证；不让 MCP Resources 变成 Memory 事实源；不让远端 Prompt 获得高于 Nexus system/user 的优先级。
 - **验证**：支持 Resources/Prompts 的 MCP fixture 可 list/search/read/get 且有明确 byte/token 上限；`input_required` 可 durable park→用户回答→续回原请求；Task 可映射到 bounded wait/result 且不重复提交；高基数 MCP server 不线性膨胀基础 prompt；schema/resource 变化能 invalidation；现有 Tool invoke contract 不回退。
 
 ## P-079 Agent 缺少专门的行为/成本 Eval Harness，后续 Context/Tool 优化没有可重复质量基线
 
 - **优先级**：P1
-- **状态**：`优化前置能力，待 benchmark corpus 设计`
-- **当前事实**：
-  - 当前 Agent 产品 E2E 主要集中在 `host.spec.ts`、`preset-plugin.spec.ts`、`provider.spec.ts`，能覆盖真实产品路径/UI/Provider contract，但没有专门衡量 Agent 多步任务质量、重复 Tool 调用、context token、compaction 后约束保持等行为指标。
-  - Runtime 已拥有 `usage.inputTokens/outputTokens/cachedInputTokens/steps`、context diagnostics、Tool/Plan/verification durable events，实际上已经具备建立 deterministic metrics 的大部分观测面。`messageDiagnostics` 本身只保存 role/hash/token estimate，当前没有为观测而复制整份 prompt 的额外数据膨胀。
-  - Backend package 当前没有独立 Agent unit/integration test harness；Agent correctness 主要压在 `packages/e2e/tests/agent/{host,preset-plugin,provider}.spec.ts` 三个 Playwright spec 上。它们覆盖真实产品主链很好，但 CI 分组里三者目前都落在同一个 Agent group，且每个 group 内 Playwright `workers: 1`。
-  - scripted provider fixture 已覆盖 multi-tool、Skill、interrupt、approval 等确定行为，但还没有专门 fault scenario 覆盖 restart/crash state closure、compaction Tool-exchange boundary、非 stop finish reason、stream partial retry、MCP update/refresh race、Subagent cancel/reservation/mailbox TTL 等本轮已确认 correctness invariants。
-  - P-063/P-064/P-065/P-067/P-069/P-070 等优化都可能出现“token 降了但成功率/约束保持也下降”的 trade-off；仅靠 build/E2E pass 无法发现。
-- **目标方向**：
-  1. 新增 **Backend-level deterministic Agent scenario harness**，优先直接组合真实 StateCommit/Context/Tool/Repository 与 scripted/fake model port，不要求启动浏览器；再由现有 fake OpenAI-compatible fixture 验证 transport/product E2E。覆盖 Tool discovery、compaction、artifact、clarification、multi-tool、background job、completion gate、Responses continuation，以及 restart/crash/race/finish-reason 等 fault contract。
-  2. 增加小型 coding/operations benchmark corpus，记录 task success、steps、model calls、Tool calls、重复 read/search、input/output/cached token、verification result、wall-clock 等；基线按场景存阈值/趋势，不追求单一综合分数。
-  3. 真实模型 eval 作为 manual/nightly/研发对比工具，允许按 provider/model 配置；默认 PR gate 不依赖外部模型稳定性或付费 API。
-  4. Context/Tool 优化合入前至少对对应 deterministic scenarios 做 before/after；真实模型结果作为补充证据，不替代 deterministic contract tests。
-  5. 与现有 canonical E2E 原则一致：产品行为仍由真实 E2E 验证；Eval Harness 用于 Agent 决策/成本质量，不重新引入大量独立 architecture quality gate。
-  6. P-120/P-045 必须有一组专门 trajectory fixture：健康长任务累计消耗超过旧 Run Token 上限仍能完成；exact failure / same-result / A↔B loop 能稳定触发 guard；一次真实 state delta 能重置 streak；Context compaction 后 context-usage meter 下降而 cumulative usage 不清零。
-- **明确不做**：不把 LLM-as-judge 作为唯一质量标准；不在 PR 默认调用收费/不稳定外部模型；不为了“一个总分”掩盖具体 failure mode。
-- **验证**：每个重大 Agent 优化都有可重复 baseline；同一 fixture 多次运行结果稳定；token/step regressions 可直接定位到 Context/Tool phase；长任务/loop/context-meter 三类 P-120 场景可重复；真实模型 nightly 失败不会阻塞与其无关的普通 PR。
+- **状态**：`已完成`
+- **完成情况**：
+  - 已建立 `packages/backend/scripts/agent-scenarios/runner.ts` 的 **Backend-level deterministic Agent scenario harness**，直接组合真实 `StateCommit` / SQLite Repository / Context / Tool / Scheduler / Collaboration / HTTP route owner，不启动浏览器、不依赖外部模型或网络。当前共有 17 个 deterministic scenario，覆盖 compaction Tool-exchange atomicity、restart recovery、app disable scope closure、read-tool batch authority、Subagent cancellation/fail-fast/join resume、mutation finalization/output projection、artifact crash reconciliation、integration CAS/refresh race、idempotency TTL、累计 Token ceiling 删除、progress-aware loop guard 与 public error taxonomy。
+  - harness 已增加可编程 `ScriptedLanguageModel`，通过真实 `ProviderService → ModelStepRunner → ContextService` 消费 streamed model events；benchmark trajectory 会真实经历 `model tool call → ToolCatalog/ToolExecutor → ledger tool_result → next model step`，而不是在测试脚本中复制 Runtime state machine 或 durable truth。
+  - 已增加小型 coding / operations corpus 与统一结构化指标：`task success / model steps / model calls / tool calls / duplicate read-search / input-output-cached token / verification / scenario wall-clock`。当前 deterministic baseline 为 2/2 task success、4 model steps、4 model calls、2 tool calls、0 duplicate read/search、798 input / 79 output / 456 cached tokens、2/2 verified；连续两次运行除 wall-clock 外指标完全一致。
+  - P-120/P-045 的专项 deterministic trajectory 已纳入同一 runner：健康 Root/Child 在累计 1.6M token 后仍可继续 step，旧 delegation token budget columns 已删除；loop guard 覆盖 warning → `awaiting_input` → 用户输入恢复新 progress epoch。累计 token 仅保留 telemetry，不作为 completion ceiling。
+  - canonical Playwright E2E 继续负责真实产品/transport 行为；本 harness 负责快速、可重复的 correctness/成本回归。后续 Problem 若引入新的 background job / completion gate / Responses continuation / finish-reason 等产品语义，必须在对应修改前向同一 harness 增加 scenario，而不是再建第二套 eval/runtime owner。
+- **边界**：不使用 LLM-as-judge 作为 PR gate；默认 scenario 不调用收费/不稳定外部模型；不为 benchmark 复制生产 state machine，不把单一综合分数作为 correctness 结论。
+- **验证**：`pnpm --filter @nexus-terminal/backend exec tsc --noEmit` 通过；`pnpm --filter @nexus-terminal/backend build` 通过；完整 `test:agent-scenarios` 连续两次 17/17 通过且 benchmark metrics 稳定。本机 Node v22 仅触发项目要求 Node >=24 的 engine warning，不是产品失败。
 
 ## P-080 Plugin / App 的 Tool 扩展边界在文档中存在歧义，当前实现并不支持任意 Plugin 直接注册 governed Agent Tool
 
 - **优先级**：P2
-- **状态**：`文档/扩展边界审计确认，待规范收口`
+- **状态**：`部分收口：AGENT/BACKEND architecture 已明确，SRS/traceability 仍残留 Plugin Tool contribution 歧义`
 - **当前事实**：
-  - `doc/AGENT.md` 和部分 SRS 文案把 App 描述为 AgentDefinition、Tool/Skill/插件贡献的隔离边界，容易理解为“安装 Plugin 可以动态注册新的 Host governed Tool”。
-  - 但当前 Plugin manifest 只声明 capability/intents/agents/targets；`composePlugins()` 安装/升级时动态注册的是 AgentDefinition，Skill 从 signed package 读取；Backend/Runner Plugin worker protocol 只提供 lifecycle/storage 等受限 SDK，没有 `AgentTool` descriptor/inspect/execute registration contract。
-  - 当前 `ToolCatalog` 的动态外部 Tool 主要来自 MCP；Host-owned machine/workspace/browser/runtime Tool 由 Core Bootstrap 注册。`doc/AGENT.md` 后文实际上也明确 Host-owned governed Tool 属于 Core，Plugin 通过 grants/AgentDefinition/Skill 使用它们。
+  - `doc/AGENT.md` 与 `doc/architecture/BACKEND.md` 当前已经明确：Host-owned governed Tool implementation 属于 Core；Plugin 通过 grants / AgentDefinition / signed Skill 使用这些 capability，动态外部 Tool 主要走 MCP。
+  - 但 `doc/software-requirements/requirements/agent.md` 的 `SRS-AGENT-001` 仍把 App 描述为 “AgentDefinition、Tool/Skill 与插件贡献”的隔离边界，`traceability/functional-requirements.md` 的 `FR-AGENT-014` 仍写 signed packages 可以贡献 `AgentDefinitions/Skills/tools/...`，与当前实现和 AGENT/BACKEND 规范相冲突。
+  - 当前 Plugin manifest 只声明 capability/intents/agents/targets；`composePlugins()` 安装/升级时动态注册的是 AgentDefinition，Skill 从 signed package 读取；Backend/Runner Plugin worker protocol 只提供 lifecycle/storage 等受限 SDK，没有 `AgentTool` descriptor/inspect/execute registration contract。
 - **目标方向**：
   1. 先统一架构文档/SRS：App 是 Tool **授权/可见性/使用** 的 scope，但 arbitrary governed Tool implementation 第一版不是 Plugin package contribution surface。
   2. 外部动态 Tool 优先通过 MCP；本地高权限 primitive 继续由 Host/Runner Core owner 提供，保持 inspect/policy/operation-hash/lease/approval contract 单一。
@@ -492,41 +339,19 @@
 - **明确不做**：不让安装包通过 dynamic import/IPC 直接获得 Host authority；不复制 MCP 已解决的远端 Tool 扩展；不为了“所有东西都可插件化”破坏现有 Tool governance owner。
 - **验证**：AGENT/SRS 对 Plugin Tool 边界表述一致；官方/第三方 App 可以通过 AgentDefinition + Skill + grants + MCP/现有 Core Tool 完成功能组合；未来 Tool SDK 若立项必须有独立 Problem/contract，不依赖本条隐含承诺。
 
-## P-081 Runtime 已生成 Model Cache Hint，但 Provider Adapter 完全未消费，Prompt Cache 只停留在 telemetry
-
-- **优先级**：P1
-- **状态**：`token/cache 审计确认，待与 P-070/模型 capability contract 合并设计`
-- **当前事实**：
-  - Root `ModelStepRunner` 与 Child participant 每轮都向 `LanguageModelPort` 传 `cache: { scopeKey, affinityKey }`，当前值稳定绑定 Thread；`ContextService` 也已经计算 `stablePrefixHash/toolSchemaHash` 并记录 provider 返回的 `cachedInputTokens/cacheRate`。
-  - `OpenAiProviderAdapter` 当前从不读取 `request.cache`，所以 `ModelCacheHint` 实际是 dead contract；它既没有映射到 `@ai-sdk/openai` provider options，也没有参与任何本地 routing。
-  - 当前 `@ai-sdk/openai` 已支持 OpenAI `promptCacheKey/promptCacheOptions/promptCacheBreakpoint`。OpenAI 端本身会自动缓存符合条件的稳定前缀，而稳定 cache key 可进一步提高相关请求被路由到同一 cache 的概率。
-- **问题**：Nexus 已为稳定 prefix、cache affinity 与实际 cached token 付出了设计/telemetry 成本，却没有把 hint 交给真正能使用它的 Provider；在长 system/tool prefix、多步 coding Run 中会错失延迟和 input cost 优化。
-- **目标方向**：
-  1. `ModelCacheHint` 保持 provider-neutral，并增加明确 capability gate；Adapter 只有在当前 Provider/Model 声明支持相应 cache option 时才映射 vendor-specific 字段。
-  2. OpenAI Responses/Chat 支持时，把 `affinityKey/scopeKey` 做不可逆、长度受限的稳定 hash 后映射为 `promptCacheKey`；不发送 Thread title、用户文本或其它可识别内容作为 key。
-  3. 第一版优先使用 provider 自动 cache + stable key；`promptCacheOptions` / explicit breakpoint 只有模型 capability 明确支持且 P-079 benchmark 证明有收益时再启用，避免给第三方 OpenAI-compatible endpoint 发送其不认识的扩展字段。
-  4. Prefix 布局继续由 P-063/P-064 控制：稳定 system/project/Tool metadata 放前，current input/volatile collaboration 放后；cache hint 不能用来掩盖每轮 schema/context 抖动。
-  5. telemetry 按 provider/model/context lineage 对比 cached/uncached input；cache miss 不影响正确性，第三方 provider 不支持时透明回退。
-- **明确不做**：不自建分布式 prompt cache；不假定所有 OpenAI-compatible API 都接受 OpenAI 专有 cache 字段；不把原始用户/thread identity 发给 Provider 作为 cache key。
-- **验证**：支持 cache key 的 fixture 能看到稳定、匿名化 key；同 Thread 稳定 prefix 的真实 provider benchmark cached token/cache hit 改善；Tool/Project instruction 变化会正确改变 prefix/cache lineage；不支持字段的第三方 endpoint 请求 body 与现状兼容。
-
 ## P-082 AgentDefinition `requiredModelCapabilities` 目前只存不验，模型能力合同无法约束实际 Run
 
 - **优先级**：P1
-- **状态**：`功能 contract 审计确认，P-075/P-077 落地前必须收口`
-- **当前事实**：
-  - Plugin manifest/AgentDefinition 已公开 `requiredModelCapabilities: string[]`；当前官方/E2E definition 声明 `['streaming']`。
-  - `RunService.create()` 会 `definitions.require(...)` 确认 definition 存在，却丢弃返回值，从未把 `requiredModelCapabilities` 与选中的 model 做匹配；Checkpoint resume 同样只校验 definition version/provider/model 是否仍存在。
-  - 当前 `ProviderModelConfig` capability 实际只结构化管理 context window、max output、Tools 与 reasoning；`streaming` 没有显式字段，未来 P-075 的 image/file input、P-081 cache option、以及协议 continuation 支持也缺少统一 capability vocabulary。也就是说现有官方 definition 已经声明了一个当前 model schema 无法表达/验证的 requirement。
-  - `reasoningMandatory/reasoningSupportsMaxTokens` 等字段已经进入持久化/UI，但后者几乎没有实际 execution consumer，说明现有 capability schema 已开始出现“描述字段与运行时行为脱节”。
-- **目标方向**：
-  1. 把 `requiredModelCapabilities` 收敛为 Nexus 定义的 **typed capability vocabulary**，而不是任意字符串；至少覆盖 runtime 真正会选择路径的能力，例如 `tools`、`reasoning`、`image_input`、`file_input`，以及确有必要时的 provider-specific optional feature gate。
-  2. `streaming` 若是 `LanguageModelPort` 的基础合同，就从可选 capability 中移除/视为 baseline，不继续让 manifest 声明一个无法不支持的伪可选项。
-  3. Run 创建时必须验证 AgentDefinition requirements；Frontend model picker 对不兼容 model 禁用/说明原因。Checkpoint/resume 重新验证冻结 definition 的 requirements，不能只看 model id 还存在。
-  4. Provider registry/manual override 只暴露对实际 runtime 有影响的能力；没有 consumer 的 `reasoningSupportsMaxTokens` 等字段要么接入 request construction，要么在兼容窗口后删除，不保留 decorative capability。
-  5. 第三方 OpenAI-compatible model 可由用户手工声明 capability；未知能力默认不推断为支持，不根据 model name 猜 image/file/provider extension。
-- **明确不做**：不建立厂商型号百科式 mega registry；不把 provider 专有选项全部提升为 Core capability；不因 capability 缺失静默切换用户冻结的 Root model。
-- **验证**：要求 Tools/image 等 capability 的 AgentDefinition 无法选择不支持模型；兼容模型正常创建/恢复；UI 与 Backend 判定一致；每个保留 capability 字段都有至少一个明确 runtime consumer 与 E2E/contract test。
+- **状态**：`已完成（2026-09-18；requiredModelCapabilities 收敛为 tools/image_input/file_input/reasoning typed vocabulary，legacy streaming 作为 LanguageModelPort baseline 在 manifest/durable decode 时规范化掉；Run create 与 Checkpoint/resume 共用单一 capability predicate 并冻结 requirements + resolved snapshot；Frontend 只消费 Backend compatibility matrix 禁用不兼容模型；decorative reasoningSupportsMaxTokens 从有效 schema/API/UI 删除并保留 legacy decode tolerance，reasoningMandatory 接入 Run 创建校验；Backend/Frontend typecheck、targeted git diff --check 与 deterministic Agent scenarios 28/28 全绿）`
+- **完成事实**：
+  1. Nexus Core 的 Agent selectable capability vocabulary 现在固定为 `tools | image_input | file_input | reasoning`；`requiredModelCapabilities` 在 manifest、definition、Frontend API 均为 typed contract。旧官方/E2E manifest 的 `streaming` 被明确视为 `LanguageModelPort` baseline：validator 与 persisted manifest decoder 可读取后规范化为零 requirement；未知任意字符串 fail closed。
+  2. `model-capability-requirements.ts` 是 requirement predicate owner，并直接消费 P-054 的 resolved/frozen `ModelCapabilitySnapshot`：Tools/Image/File 对应显式 boolean；Reasoning 要求至少存在一个非 `none` effort。未知/private OpenAI-compatible model 不根据 model name 猜能力，只有 Registry / Provider live / Manual authority 实际解析出的显式事实才能满足 requirement。
+  3. `RunService.create()` 在任何 durable Run 创建前校验 AgentDefinition requirements；成功时把 `requiredModelCapabilities` 与同一次 resolved `modelCapabilities` 一起冻结进 `RunDefinitionSnapshot`。缺能力直接 `MODEL_CAPABILITY_UNSUPPORTED`，不会静默切换用户选择的 Root model。
+  4. Checkpoint validate/resume 使用 source Run 冻结的 requirements + capability snapshot 重新判定；Provider live refresh 不会让既有 Run 语义漂移。旧 durable Run 缺这些冻结字段时只在兼容路径回退当前 definition/current resolved model，并在成功 resume 的新 Run 上重新冻结，避免持续依赖 live truth。
+  5. Runtime definition API 返回 Backend 生成的 per-provider/model/configuration-version compatibility matrix；Frontend model picker 不重写 capability predicate，只消费该矩阵。兼容模型可选；不兼容模型仍可见但 disabled，并显示缺失 capability；restore/default fallback 也只会选择兼容模型，活跃 Run 的 frozen model 不被自动替换。
+  6. Provider capability contract 同批清理 decorative 字段：`reasoningSupportsMaxTokens/supportsMaxTokens` 不再进入有效 Model defaults、resolved model、Run snapshot、HTTP projection 或 Frontend UI；旧 Provider persisted row / old Run snapshot / legacy input 仍做 bounded type validation 后丢弃。保留的 `reasoningMandatory` 现在由 `RunService` 真正消费，显式/默认 effort 为 `none` 时在 durable create 前拒绝。
+  7. 新增 deterministic `model/agent-definition-capability-contract`，真实组合 RunService/CheckpointService 覆盖 typed vocabulary、legacy streaming、unknown/private fail-closed、Manual > Provider live > Registry、create pre-commit rejection、frozen snapshot、checkpoint compatible/incompatible recovery、mandatory reasoning 与 decorative-field normalization；public error taxonomy 同时覆盖 `CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED`。
+- **验证**：2026-09-18 本机 Node v22.17.0（仓库要求 >=24，保留 engine warning）下 Backend `tsc --noEmit`、Frontend `vue-tsc --noEmit`、targeted `git diff --check` 全部通过；完整 deterministic Agent scenarios **28/28 PASS**，其中 `model/provider-live-capability-authority`、`model/provider-continuation-roundtrip`、`context/indexed-recall`、`context/skill-progressive-disclosure` 均明确回归通过。正式 release/CI 仍以 Node 24 canonical environment 为准。
 
 ## P-083 Browser Agent 只有语义 Accessibility Snapshot，没有 Screenshot / Vision fallback，视觉网页无法可靠完成
 
@@ -569,7 +394,7 @@
 ## P-085 Backend 重启当前会安全中断所有非终态 Root Run，但缺少自动 Safe-point Checkpoint / Continuation
 
 - **优先级**：P1
-- **状态**：`durability 审计确认，待与 P-064/P-073 recovery contract 收敛`
+- **状态**：`durability 审计确认；P-064 ContextCheckpoint 与 P-073 durable background job contract 已落地，待 recovery contract 收敛`
 - **当前事实**：
   - Root `AgentScheduler` 的 queue/active state 是进程内存；Backend initialize 时不会盲目重放旧 Root execution，而是先调用 `interruptNonTerminalRuns()`，把 `created/running/awaiting_approval/awaiting_budget/cancelling` 全部转成 `interrupted`。
   - 若重启时存在 running/reconciling mutation，当前逻辑会设置 `needsReconciliation`；未执行的 approval/tool work 会被 supersede/cancel。这个行为避免了未知副作用被重复执行，是正确的保守边界。
@@ -578,9 +403,9 @@
 - **问题**：长 coding/research/background Run 即使所有已完成动作都已 durable，在一次正常 Backend 升级/重启后仍会整体进入 interrupted，用户必须事前手动 checkpoint 才有结构化 resume source。服务端 Agent 因此缺少成熟系统常见的“安全点续跑”。
 - **目标方向**：
   1. 在 deterministic safe boundary 自动生成/更新轻量 **Recovery Checkpoint**：例如 model step 已完整 commit、read batch 完成、confirmed mutation+verification 已 commit、Plan/evidence stable 后；不在 mutation outcome unknown 的窗口创建“可无脑续跑”的 checkpoint。
-  2. Recovery Checkpoint 复用现有 Checkpoint owner 与 P-064 ContextCheckpoint，不新建第三套 snapshot；允许区分 user-pinned checkpoint 与 rolling auto checkpoint/retention。
+  2. Recovery Checkpoint 复用现有 Checkpoint owner 与已落地的 P-064 ContextCheckpoint，不新建第三套 snapshot；允许区分 user-pinned checkpoint 与 rolling auto checkpoint/retention。
   3. Backend startup 先执行现有 mutation reconciliation classification，再对满足严格条件的 interrupted Run 提供/执行 continuation：冻结 definition/provider/model/inputs/context boundary 仍有效、没有 unknown mutation、Artifact/Workspace/background job 状态可重新确认。
-  4. P-073 Workspace background job 可能在独立 Runner 中跨 Backend restart 存活；恢复前必须先按 durable jobId 查询真实结果，不重复提交同一 operation。
+  4. 已落地的 Workspace background job 可能在独立 Runner 中跨 Backend restart 存活；恢复前必须先按 durable jobId 查询真实结果，不重复提交同一 operation；Runner 自身 restart 后仍以既有 journal reconcile 的 terminal/unknown 分类为准。
   5. approval/user-input 等等待状态若要跨重启保留，只在其 policy/input/config revision 仍有效时恢复；否则保持当前 supersede + 重新确认，而不是降低现有 freshness contract。
   6. UI/Ledger 明确记录 `backend_restart` 与 `continued_from_checkpoint`，让用户知道发生过恢复；continuation 失败仍落 interrupted，不隐藏错误。
 - **明确不做**：不在未知 mutation 中途自动重放；不保存活跃进程/socket/lease 伪装“进程级 resume”；不复制 Checkpoint/Runner journal；不为了无缝续跑取消 reconciliation。
@@ -589,7 +414,7 @@
 ## P-086 Root Model 只有同模型短重试，缺少用户显式配置且能力兼容的 Provider/Model Fallback Chain
 
 - **优先级**：P2
-- **状态**：`可靠性能力缺口确认，待 P-082 capability contract 完成后实现`
+- **状态**：`已完成（2026-09-18；用户显式 fallbackModels 在 Run 创建时按 capability contract 解析并冻结；definition.model 保留 primary，rootModelRoutes 只保存 ordered fallback snapshots；root runtime model_ref_json 是 restart-safe 当前 route；Native production path 在同 route retry exhaust 后仅对 transient/provider availability failure 原子 changeModelRoute，durable model.route_changed 与新 attempt 同事务提交；continuation_json 不跨 route 搬运；审查后完整 deterministic scenarios 31/31 PASS）`
 - **当前事实**：
   - `ModelStepRunner.shouldRetry()` 会对 429/502/503/504、连接重置/超时/provider unavailable 等错误在同一冻结 model 上重试，默认最多两次；failed attempt token 也会计入 Run budget。
   - `RunDefinitionSnapshot` 只冻结一个 `ModelRef`；Agent settings 也只有默认 provider/model，没有备用链。
@@ -603,29 +428,36 @@
   5. 如果失败 attempt 已产生 transient text，先按 P-087 reset 当前 attempt presentation；尚未 durable commit 的 partial Tool proposal 不能跨 route 直接执行。
   6. 用户可完全关闭 fallback；默认不做成本/质量“智能路由”，不根据系统猜测自动切更便宜/更贵模型。
 - **明确不做**：不做黑箱 model router；不静默改变用户冻结的能力/价格预期；不跨模型搬 opaque reasoning continuation；不让 fallback 绕开 Run token/step budget。
-- **验证**：primary 连续 429/503 后按冻结顺序切到兼容 fallback 并完成；无 fallback 时行为与现状一致；不兼容候选在 Run 创建前被拒绝；route change 和各 attempt usage 可审计；普通 validation/tool error 不触发 failover。
+- **完成事实**：
+  1. Settings `model.fallbackModels` 是唯一用户配置入口，默认空链；RunService 只冻结显式候选，按顺序去重并要求 provider enabled、model 存在且满足 AgentDefinition required capabilities，不做系统猜测/成本路由。
+  2. Primary 继续冻结在 `RunDefinitionSnapshot.model/modelCapabilities`；`rootModelRoutes` 只保存 ordered fallback snapshots。`runModelRoutes()` / Native execution 组合出 `primary + fallbacks` 的 effective route chain，避免 primary 重复和 8 个 fallback 时 durable decoder 越界；运行中 Settings/Provider 后续变化不会重写既有 Run route chain。
+  3. Root `agent_runtimes.model_ref_json` 作为当前 route 的 durable/restart-safe projection；Native execution 先完成当前 route 的 bounded retry，耗尽后调用 `changeModelRoute`。底层 `retryModelStepTransition` 在该 route change 事务内关闭失败 attempt、更新 runtime route、创建新 attempt并提交 `model.route_changed` / `model.retrying`；普通 `retryModelStep` 不公开 route mutation 字段，没有另建 route/attempt authority。
+  4. `ModelStepRunner` 的 prepare/request 都可绑定冻结 route；fallback 使用自己的 capability snapshot。P-077 continuation authority 仍只在 `agent_model_attempts.continuation_json`，route change 新 attempt 从 canonical context 重建，不复制旧 provider continuation。
+  5. Frontend Settings 已增加 fallback chain 显式选择；默认关闭（空链）。P-087 attempt identity/reset 继续负责失败 partial delta 的 presentation 隔离。
+- **验证**：deterministic `model/provider-fallback-chain` 现在直接驱动 `NativeAgentBackend` production execution，覆盖 primary 三次 transient attempt 后才 fail over、exactly-one durable `model.route_changed`、runtime route persistence、fallback frozen capability decode、attempt usage/audit 与 partial transient isolation；effective route chain 断言 primary 只出现一次。审查后完整 deterministic Agent scenarios `31/31 PASS`。Backend `tsc --noEmit`、Frontend `vue-tsc --noEmit`、`git diff --check` 通过；本机 Node v22.17.0 对仓库 Node >=24 仅有既有 engine warning。
 
 ## P-087 Model Stream Retry 缺少 Attempt Identity / Reset，失败 Attempt 的 Partial Delta 会与重试输出在 UI 临时拼接
 
 - **优先级**：P1
-- **状态**：`实际运行时/UI 一致性缺口确认`
-- **当前事实**：
-  - `runAttempt()` 一收到 provider `message.delta` 就发布 ephemeral event，Frontend 对 Root Run 直接执行 `streamingText += delta`。
-  - 若 stream 在已有 partial text 后发生 retryable error，Backend 会 durable commit `model.retrying` 并开始新 attempt；新 attempt 的 text buffer 从空重新生成，但 Frontend 没有 attempt id，也不会在 `model.retrying` 时清掉旧 partial buffer。
-  - Frontend 当前只在 `transport.disconnected` 或最终 `message.final` 时清空 streaming text，因此用户可能暂时看到类似 `helhello...` 的失败流+重试流拼接；未来 P-086 model failover 也会放大同一问题。
-- **目标方向**：
-  1. ephemeral `message.delta/tool.delta` 增加 `attemptId/attemptIndex`（或等价 generation token），由 model step begin/retry durable event提供当前 authoritative attempt。
-  2. Frontend streaming state 按 attempt identity replace；收到新 attempt/retrying 时丢弃旧 attempt 的非 durable partial buffer，而不是继续 append。
-  3. WebSocket reconnect 继续遵守“ephemeral 不恢复”：清空 buffer，重新从 durable Ledger/Run projection 展示；不要把 delta 本身持久化来解决 UI 问题。
-  4. Tool delta 也使用同一 attempt identity，后续若 UI 展示 streaming Tool args 不会把失败 proposal 与重试 proposal混合。
-  5. retry/fallback UI 可显示轻量 `Retrying…` / route change 状态，但最终对话只以 durable `message.final`/assistant Ledger 为事实源。
-- **明确不做**：不把每个 token delta 写数据库；不把失败 attempt partial text当正式 assistant message；不因为 UI reset 改变现有 retry budget/usage accounting。
-- **验证**：fixture 先流式输出 partial text 后断流，再成功 retry，UI 只显示当前 attempt，不出现重复前缀；断线重连不恢复旧 partial；Tool delta/fallback 使用同一 generation contract。
+- **状态**：`已完成（2026-09-18；agent_model_attempts 继续作为唯一 durable attempt authority；Root/Child transient delta 显式携带 attemptId/attemptIndex；Frontend 按 attempt generation replace/reset，且不依赖 model.retrying 与 ephemeral delta 的到达顺序；断线/永久 stream error 不恢复旧 partial；新增真实 StateCommit retry scenario，完整 deterministic scenarios 29/29 通过）`
+- **完成事实**：
+  1. `agent_model_attempts.id + attempt_index` 仍是 authoritative attempt identity。Root `beginModelStep/retryModelStep` 生成的 identity 显式传入 `ModelStepRunner.runAttempt()`；没有另建 generation durable state，也没有把 transport envelope 变成事实源。
+  2. Backend transient contract 已从 generic `JsonValue` 收紧为 typed `message.delta/tool.delta` payload；两者都必须携带 `attemptId/attemptIndex`。Root message/tool delta 使用同一 identity；Child 当前实际发布的 message delta 也携带其 `beginSubagentModelStep` identity。
+  3. Scheduler 保留 `eventType ↔ payload` discriminated contract，WebSocket 仍只把 transient 作为 `durability: ephemeral` 即时发送；durable replay 与 ephemeral send 的竞态没有被假定成固定顺序。
+  4. Frontend event decoder 现在拒绝缺失/非法 attempt identity 的 delta，并把 durable `model.retrying` 保留为带 `previousAttemptId/attemptId/attemptIndex` 的 typed event，而不是丢成 generic snapshot signal。
+  5. `AgentAppSurface` 维护当前 `streamingAttempt`：同 attempt 多 delta 继续 append；identity 改变时先清旧 partial 再消费新 delta。若新 attempt delta 先于 durable `model.retrying` 到达，后到的 retry event 只有在当前仍等于 `previousAttemptId` 时才 reset，因此不会误清较新的流。
+  6. run selection 切换、transport disconnect、永久 stream error、terminal/final event 与 unmount 都清空 ephemeral presentation；重连只从 durable Run/Ledger projection 恢复，不回放旧 token delta。
+  7. retry accounting / budget / final settlement 语义未改变：失败 attempt 自己的 usage 仍 durable 结算到失败 row 与 Run usage；正式 assistant Ledger 只写成功 attempt 的最终文本；P-077 continuation authority 仍在 `agent_model_attempts.continuation_json`。
+- **验证**：
+  - 新增 deterministic `model/stream-retry-attempt-identity`：真实 SQLite StateCommit 先提交 attempt #1，流出 partial message + tool delta 后制造 `PROVIDER_STREAM_TRUNCATED`，durable retry 创建 attempt #2，再成功完成；同时覆盖 retry event 先到/后到两种 presentation 顺序。
+  - scenario 断言失败 attempt 为 `failed`、成功 attempt 为 `completed`，两次 usage 都进入既有 accounting；assistant Ledger 只有 `hello world`，不存在失败 prefix 拼接；`agent_events` 中 `message.delta/tool.delta` durable row 数为 0。
+  - 完整 deterministic Agent scenarios：`29/29 PASS`，包含 `model/agent-definition-capability-contract`、`model/provider-live-capability-authority`、`model/provider-continuation-roundtrip`、`model/finish-reason-state-machine`、`runtime/restart-recovery-closure`、`context/indexed-recall`、`context/skill-progressive-disclosure`。
+  - Backend `tsc --noEmit`、Frontend `vue-tsc --noEmit`、targeted `git diff --check` 通过；静态扫描未发现 durable persistence 的 `message.delta/tool.delta`。当前本机仍是 Node v22.17.0，仓库要求 Node >=24，此 engine warning 仍按既有环境限制处理。
 
 ## P-088 Subagent Profile 已声明 Capability，但 Child Context 硬过滤所有 Mutation Tool，无法成为真正的 Coding Worker
 
 - **优先级**：P1
-- **状态**：`multi-agent 功能完备性审计确认，待与 P-068/P-072/P-085 Workspace contract 收敛`
+- **状态**：`multi-agent 功能完备性审计确认，待与 P-068/P-085 Workspace contract 收敛；P-072 coding primitives 已闭环`
 - **当前事实**：
   - `SubagentProfile` 当前已有 `capabilities/defaultModel/allowedModels/maxTokens/maxSteps/failureMode`，Delegation 也会冻结实际 capability/model；其中 cumulative `maxTokens` 是现状字段，已由 P-120/P-103 决定退出未来执行合同。Child Runtime、durable mailbox、shared facts、dependency/join、persistent scheduler work 都已具备。
   - 但 `SubagentContextBuilder.toolSchemas()` 当前在 capability 过滤之外又硬编码只保留 `riskClass === 'read' || 'control'`，因此 `machine_write_file`、`machine_execute_shell`、`workspace_create/control/execute` 等 mutation Tool 不会进入 Child model context。
@@ -644,27 +476,19 @@
 ## P-089 Model Finish Reason 只被记录未参与状态机，`length/content-filter/error` 也可能被误判为任务成功
 
 - **优先级**：P1
-- **状态**：`实际完成语义缺口确认，待与 P-074 Completion Gate/P-077 Responses contract 合并修复`
-- **当前事实**：
-  - AI SDK LanguageModel V4 已提供统一 finish reason：`stop | length | content-filter | tool-calls | error | other`。
-  - Nexus `LanguageModelPort` 当前把 finish reason 作为字符串向上透传；Root `NativeAgentBackend` 在 model 没有 Tool call 时，不判断 finish reason 就直接 `settleModelStep(... terminalStatus='completed_unverified')`，StateCommit 随后把 `goal_status` 写成 `satisfied`。
-  - 因此模型因 output token 上限截断（`length`）、content filter 停止或 provider 以非正常 reason 结束时，只要没有 Tool call，仍可能得到正常 assistant Ledger + `completed_unverified/satisfied`。
-  - Subagent 也只把 `finishReason` 写进 result metadata；没有 Tool call 且未抛 transport error 时默认 `outcome='completed'`，存在同类“半截结果算完成”的风险。
-- **问题**：finish reason 是模型执行结果的关键控制信号，不应只是诊断字段。截断输出被标成 satisfied 会误导用户、破坏 P-074 completion/verification，也让长回答或 reasoning model 在预算临界点出现 silent partial success。
-- **目标方向**：
-  1. 将 finish reason 升为 provider-neutral typed contract，直接使用/映射 AI SDK unified reason；Adapter 不再把厂商 raw reason 当 Core 业务语义。
-  2. `stop` 才可作为“模型正常结束”的候选，再进入 P-074 Completion Gate；`tool-calls` 必须与实际 Tool proposal 一致，否则视为 provider/model contract error。
-  3. `length` 不得直接完成：在模型物理 `contextWindow/maxOutputTokens`、P-045 loop/fuse 与当前 Context headroom 允许时，可进行 bounded continuation model step，并把前一段作为 canonical assistant continuation context；若 continuation 已无法安全构造或连续 length 无进展，则进入明确的 `MODEL_OUTPUT_TRUNCATED`/attention 状态，不能写 goal satisfied，也不再用累计 Token `awaiting_budget` 解释截断。
-  4. `content-filter` / `error` 默认走明确失败/受限结果状态并保留可展示原因；`other` 保守处理，只有经明确兼容映射后才能当 stop。
-  5. Root/Subagent 使用同一 finish-reason policy，避免 child 把 truncated completion 发送给 Parent 当完成证据。
-  6. 与 P-077 配合：Responses reasoning continuation 若需要 opaque metadata，`length` continuation 同样必须保留正确 provider continuation；不能靠重新提示“继续”伪装无状态协议连续性。
-- **明确不做**：不把所有非 `stop` 都盲目 retry；不隐藏 content filter/provider error；不因 continuation 临时提高模型物理 `maxOutputTokens/contextWindow`；不恢复父/Child 累计 Token budget；不使用 provider 私有 raw 字符串直接驱动 Core 状态机。
-- **验证**：fixture 分别返回 `stop/length/content-filter/error/tool-calls`；只有合法 stop + Completion Gate 可正常完成，length 能 continuation 或进入明确 truncated/attention 状态且不触发累计 Token budget wait，filter/error 不会写 `goal=satisfied`；Root 与 Subagent 行为一致。
+- **状态**：`已完成（2026-09-17；Core 引入 provider-neutral ModelFinishReason 与共享 Root/Child modelFinishDisposition；OpenAI adapter 只使用 AI SDK unified reason，厂商 raw reason 不再进入 Core；stop/tool-calls 与实际 Tool proposal 做严格一致性校验，length/content-filter/error/other/missing/mismatch 均不得进入成功完成；因 P-077 opaque continuation contract 尚未存在，length 当前明确 fail 为 MODEL_OUTPUT_TRUNCATED，partial assistant text durable 保留但 goal=not_satisfied；deterministic model/finish-reason-state-machine + 完整 Agent scenarios 20/20、Backend typecheck/build、git diff --check 全绿）`
+- **完成事实**：
+  1. `ModelEvent.completed.finishReason` 已从无约束字符串收紧为 `stop | length | content-filter | tool-calls | error | other`；OpenAI adapter 仅映射 AI SDK unified reason，未知值统一为 `other`，不使用 provider raw 字符串驱动状态机。
+  2. `model-finish-policy.ts` 是 Root/Child 共同 policy owner：`stop` 仅允许零 Tool call，`tool-calls` 必须真的存在 Tool proposal；reason/tool 数量不一致、missing、`other` 均 fail closed。
+  3. `length → MODEL_OUTPUT_TRUNCATED`、`content-filter → MODEL_CONTENT_FILTERED`、`error → MODEL_PROVIDER_REPORTED_ERROR`。当前没有 P-077 所需 provider opaque continuation state，因此不伪造“重新提示继续”；后续若补足该 contract，可在同一 policy 上扩展 bounded continuation，而不改变“不允许 truncated satisfied”的 invariant。
+  4. Root failure settle 会把 bounded partial assistant text 与 typed finish reason 一并提交 durable Ledger/event 作为诊断，但 Run 为 `failed / goal=not_satisfied / verification=failed`；不会产生 success final。Child 使用同一 disposition，truncated/filter/error child 不会作为 completed evidence 回传 Parent。
+  5. StateCommit 仍只提交执行层明确给出的 terminal outcome，没有把 provider policy 下沉到 repository，也没有恢复累计 Token ceiling/`awaiting_budget`；`awaiting_input` 仍保持 P-045 loop-guard owner。
+- **验证**：deterministic `model/finish-reason-state-machine` 覆盖 9 个 finish-reason/tool-count 组合，并用真实 SQLite + StateCommit 验证 `length` partial text 可 durable 保留、terminal issue 为 `MODEL_OUTPUT_TRUNCATED`、Run 不 satisfied；完整 deterministic suite 20/20 全绿，P-079 benchmark、restart/cancellation/reconciliation、P-045 loop guard、累计 Token ceiling 删除 invariant 均保持通过。
 
 ## P-090 Provider 网络策略已从产品设计移除，但 Agent Settings 仍公开可 patch 的 `providerPrivateNetworkExceptions` 死字段
 
 - **优先级**：P2
-- **状态**：`清理审计确认，属于已移除 Provider 网络策略的 API 残余`
+- **状态**：`已完成（2026-09-18；Agent Settings 已删除 safety/providerPrivateNetworkExceptions schema/default/patch/frontend contract；legacy persisted safety JSON 读取时由 normalization 直接丢弃；PATCH safety 明确 VALIDATION_FAILED；Provider transport 未增加任何 private-host/SSRF policy；MCP privateHostExceptions 真实 outbound policy 保持不变；deterministic scenarios 31/31 PASS）`
 - **当前事实**：
   - 当前架构与 SRS 已明确：OpenAI-compatible Provider endpoint 只做基础 URL/协议配置校验，不提供 Nexus 内建 Provider private-host exception、DNS pinning、redirect/SSRF policy。
   - 但 `AgentSettingsDocument.safety.providerPrivateNetworkExceptions` 仍存在于 Backend defaults/normalization；`AgentSettingsService.patchableSections` 仍允许 patch 整个 `safety` section；Frontend API type 也继续公开该字段。
@@ -677,13 +501,17 @@
   3. Provider E2E 明确验证 create/get/patch serialization 不出现 private-host exception；文档继续只陈述“Provider 没有 Nexus 内建该 policy”。
   4. MCP `configuration.privateHostExceptions` 保持现状并继续由 Integration owner 管理，避免误删真实安全边界。
 - **明确不做**：不借清理死字段重新实现 Provider SSRF/private-network policy；不把 MCP outbound policy 搬到全局 Agent settings；不保留一个永远无效的兼容 UI 开关。
-- **验证**：Agent settings GET 不再返回该字段，PATCH `safety/providerPrivateNetworkExceptions` 明确拒绝；已有 legacy settings 可正常加载；Provider 请求行为不变；MCP private-host exception fixture 继续通过。
+- **完成事实**：
+  1. `AgentSettingsDocument`、默认 settings、normalization 输出与 Frontend API type 已删除整个 `safety` section；新 GET/serialization 不再暴露无效 Provider 网络例外。
+  2. `AgentSettingsService.patchableSections` 已删除 `safety`，因此 PATCH `safety/providerPrivateNetworkExceptions` fail closed 为 `VALIDATION_FAILED`；旧 persisted JSON 的额外 `safety` 字段仍可读取，normalization 直接忽略并在后续正常写入时自然收敛，无 migration/墓碑。
+  3. Provider transport 没有新增或恢复 SSRF/private-host policy；MCP Integration `privateHostExceptions`、`SafeMcpFetch` 与 outbound policy owner 完全保留。
+- **验证**：deterministic `model/provider-settings-dead-field` 使用真实 SQLite legacy `agent_settings.value_json`，覆盖旧字段可读取但 GET/requested+effective serialization 均丢弃、removed PATCH surface 返回 `VALIDATION_FAILED`、下一次正常 write 自然收敛为当前 schema；完整 deterministic Agent scenarios `31/31 PASS`。Backend `tsc --noEmit`、Frontend `vue-tsc --noEmit`、`git diff --check` 通过；仅有既有 Node v22.17.0 < repo Node >=24 engine warning。
 
 ## P-091 Nexus 已有 Email/Webhook/Telegram 通知系统，但 Agent Run/Attention 生命周期完全未接入
 
 - **优先级**：P2
-- **状态**：`长任务产品闭环缺口确认，可复用现有 NotificationService`
-- **当前事实**：
+- **状态**：`已完成（2026-09-18；现有 NotificationEvent/Settings 增加 6 个 Agent lifecycle 事件；SqliteStateCommitAdapter 在事务成功后提供 durable-event observer，bootstrap AgentNotificationBridge 白名单投影到现有 NotificationService；completed/failed/interrupted、approval/input、loop/step-active-time attention 均按真实 durable transition 触发，notification failure 不回流 Run authority；无 prompt/Tool raw/credential/continuation/reasoning 泄漏，无 Token-budget 专用事件；完整 deterministic scenarios 33/33 PASS）`
+- **施工前事实**：
   - Nexus 通知模块已经支持 Email/Webhook/Telegram，并通过 `NotificationEvent` + user settings 做选择性 fan-out；Auth/SSH/Settings 等模块已在使用。
   - `composeAgent()` 当前没有 Notification dependency；Agent 的 completed/failed/interrupted、`awaiting_approval`、当前 legacy `awaiting_budget`（P-120 后不再用于累计 Token；未来若保留仅对应 step/emergency fuse）以及未来 P-076 `awaiting_input/attention`，都只通过 durable Run/Host event 与 Agent UI/TaskRail 可见。
   - Frontend 已能列出 `backgroundRuns`，但页面隐藏、浏览器关闭或长任务在另一设备运行时，没有现成渠道主动提醒用户回来处理或查看结果。
@@ -695,16 +523,24 @@
   4. 用户继续通过现有 Notification Settings 选择 channel/event；默认是否开启沿用全局通知产品原则，不为 Agent 建第二套偏好页。
   5. Approval/input/attention-required 通知应带可导航的 Nexus deep-link metadata（若现有 channel 支持），但实际 approve/input/continue 仍必须回到认证后的 Nexus contract，不能从 webhook/email 直接执行 mutation。
 - **明确不做**：不做 Agent 专用 push service；不把每个 Tool/model step 都通知；不允许通知 channel 直接批准 mutation；不要求 notification delivery exactly-once 才能让 Run 正常工作。
-- **验证**：后台 Run 完成/失败和 approval/input/attention wait 各只产生一次可配置通知；关闭相应 event 不发送；通知失败不改变 Run 状态；details 不包含敏感 prompt/credential；前台正常运行没有通知风暴；不存在累计 Token budget 专用通知。
+- **完成事实**：
+  1. 现有 `NotificationEvent` 增加 `AGENT_RUN_COMPLETED / AGENT_RUN_FAILED / AGENT_RUN_INTERRUPTED / AGENT_APPROVAL_REQUIRED / AGENT_INPUT_REQUIRED / AGENT_ATTENTION_REQUIRED` 六个事件；Frontend Notification Settings 继续使用同一 `enabledEvents` 选择列表与 Email/Webhook/Telegram channel，没有新增 Agent 专用偏好存储或通知服务。
+  2. `SqliteStateCommitAdapter` 新增可选 post-transaction durable commit observer。普通 event-bearing transition 只有在 `db.transaction()` 成功后才回调；`interruptNonTerminalRuns()` 与 `quiesceApp()` 这两个批量 restart/app-disable 路径也先完整提交事务，再逐 Run 投影已提交 events。observer 同步异常会被 adapter 隔离；bootstrap 对异步 projection 也 fire-and-forget + catch，因此 NotificationService/repository/channel 故障均不能回滚、阻塞或改写 Run durable state。
+  3. `AgentNotificationBridge` 位于 bootstrap composition，不进入 Agent domain authority。它只消费 committed `RunEvent`：`run.status_changed -> completed|completed_unverified / failed / interrupted` 分别投影 terminal 通知；`approval.requested`、`input.requested` 投影明确 attention；`run.loop_detected` 与仍保留的 step/active-time execution fuse (`budget.increase_requested/awaiting_budget`) 都投影统一 `AGENT_ATTENTION_REQUIRED`，没有 Token/budget 专用 NotificationEvent，也没有恢复 P-120 的累计 Token ceiling。
+  4. Notification details 使用显式白名单与长度边界：`appId/runId/threadId/status/threadTitle/eventId/sequence/time`，以及必要的 `approvalId/risk/expiresAt`、`requestId/questionCount`、typed `errorCode/reason/attentionKind`。bridge 不复制 arbitrary durable payload；prompt、Tool raw output、credential/secret、operation hash、Tool/runtime id、问题正文、opaque continuation、reasoning text 均不会进入通知 payload。
+  5. bridge 用 bounded 4096-entry in-memory durable `eventId` set 只抑制同一进程内重复 observer callback；它不是第二套 durable event authority，也不承诺 notification delivery exactly-once。实际 channel fan-out/开关仍由 `NotificationService -> notification_settings.enabled_events` 决定；per-channel failure 继续由既有 `Promise.allSettled` 隔离，repository/settings-level rejection 由 composition projection catch 隔离。
+  6. 当前 Agent surface 是全局 authenticated overlay，现有 Notification formatter/channel 没有 Agent authenticated deep-link contract，因此本条没有伪造 URL 或从 Email/Webhook/Telegram 增加可执行 action；通知提供 bounded app/thread/run identity 供用户回到 Nexus 定位，approve/input/continue 仍只能走既有认证后的 Nexus contract。
+  7. 没有引入 foreground socket/presence 作为新 authority；只投影 lifecycle/attention transition，不通知 Tool/model step，因此前台正常执行不会产生 step notification storm。
+- **验证**：新增 deterministic `runtime/agent-lifecycle-notifications`，先在 no-op bridge 上真实 FAIL，完成后覆盖 completion duplicate callback 去重、failed/interrupted/approval/input/loop/execution-limit 映射、敏感字段注入不外泄、generic attention 无 BUDGET/TOKEN 事件、publisher rejection 隔离、现有 `enabledEvents` 关闭时不发送、channel send rejection 不抛。`runtime/restart-recovery-closure`、`runtime/app-disable-scope-closure`、`runtime/user-input-clarification` 进一步用真实 SQLite 验证 restart/app-disable/P-076 durable transition 每次仅向 post-commit observer 投影一次。完整 deterministic Agent scenarios `33/33 PASS`；Backend `tsc --noEmit` + build、Frontend `vue-tsc --noEmit` + Vite build、Backend/Frontend 三语言 notification locale JSON parse、`git diff --check` 全部通过；仅有既有 Node v22.17.0 < repo Node >=24 engine warning。
 
 ## P-092 `/plan` 目前只显示 Durable Plan，缺少真正的 Read-only / Plan-only Run Execution Mode
 
 - **优先级**：P2
-- **状态**：`产品工作流缺口确认，保持与 approval mode 正交`
+- **状态**：`已完成（2026-09-18；新增 frozen executionMode=execute|plan，与 approvalMode 正交；plan Run 在 model surface 前仅投影 descriptor riskClass=read/control 的 Tool，已知/伪造 mutation Tool fail closed；plan_update/request_user_input 保持可用；Plan 本身作为 plan Run 输出允许含 pending implementation items；确认计划后创建独立 execute Run，复用 parentRunId 单一 lineage authority 并继承 durable Plan/goal，但重新冻结当前 policy/model/approval；现有 /plan 仍只显示 durable Plan；完整 deterministic scenarios 32/32 PASS）`
 - **当前事实**：
   - Nexus 已有 typed durable `RunPlan`、`plan_update` Tool 与 `/plan` slash command；但 `/plan` 当前语义只是读取/显示最近 Run 的 Plan projection。
   - Run 只有 `approvalMode = ask | full_access`。`ask` 仍会把 mutation Tool 暴露给模型，只是在真正执行前进入 approval；它不是“只研究、绝不提出/执行修改”的 planning mode。
-  - P-072/P-071/P-067 落地后，Nexus 会拥有更完整的 read/search/repo-map 能力，天然可以支持低风险的只读探索阶段。
+  - P-071 Repo Project Instructions、P-072 read/search/strict patch primitives 与 P-067 bounded Repo Map/code-intelligence 已落地；现有 plan mode 可使用这些低风险 read/navigation 能力做只读探索，mutation Tool 仍不进入 model surface。
 - **主流实践对照**：Claude Code 的 `plan` permission mode 会限制为只读探索并产出可审阅计划，用户明确批准后才切换到可写执行模式；它与普通“每次写操作询问”是两个不同维度。
 - **目标方向**：
   1. 增加与 `approvalMode` 正交的 `executionMode: execute | plan`（最终命名待定），在 Run 创建时冻结；plan mode 只投影 read/control Tool，mutation Tool 根本不进入 model surface。
@@ -713,47 +549,14 @@
   4. `/plan` 现有“显示计划”语义保持兼容；可以新增 UI mode selector 或 `/plan start`（最终交互待定），不要把旧命令静默改成启动新 Run。
   5. execute Run 仍按 ask/full_access 决定 mutation approval；“批准计划”不等于批准后续每个 mutation，也不能替代 operation-specific approval/reconciliation。
 - **明确不做**：不新增第三套 Tool runtime；不把 `ask` 重命名成 plan；不让 plan approval 自动授权未来 mutation；不为了 planning 默认多调用额外 planner model。
-- **验证**：plan Run 的 model request 中完全没有 mutation Tool schema；模型仍可 read/search/update plan/clarify；用户确认后新 execute Run 能继承计划/evidence lineage但重新走当前 policy/approval；现有 `/plan` show 行为不变。
-
-## P-093 Context Compaction 会拆散 Assistant Tool-call / Tool-result Exchange，实际可产生 `MODEL_TOOL_RESULT_INVALID`
-
-- **优先级**：P1
-- **状态**：`最小真实代码复现确认，属于 runtime correctness bug`
-- **当前事实**：
-  - canonical Ledger 会把一次 Tool round 写成 `assistant_message{toolCalls:[...]}`，随后各 Tool settle/deny/expire 再写 `tool_result{toolCallId,...}`；Provider 下一轮必须收到完整且按顺序的 assistant Tool-call → Tool result exchange。
-  - `ContextService` 当前把每条 Ledger entry 独立变成 `CandidateSection`，按最新优先选择后再按 compaction ratio 从旧端逐条删除；没有任何 exchange/group identity 保证 assistant batch 与其 Tool results 同进同退。
-  - assistant Tool-call candidate 的 token 目前只按 `message.content` 计算，Tool arguments 完全不计；空文本 Tool-call 常被算成 1 token，进一步使 compaction boundary 容易落在 assistant/result 中间（token accounting 本身由 P-070 统一修正）。
-  - 本轮直接调用真实 `ContextService.compose()` 做随机化 budget probe，已得到可达案例：`balanced`、`maxContextTokens=273` 时 `assistant(tool-call id=c1)` 被标记 dropped，但对应 `tool_result(c1)` 留在最终 messages 的第一项。
-  - 再把这个 orphan context 交给真实 `OpenAiProviderAdapter.stream()`，Adapter 在任何网络请求前因为找不到 `toolCallId → toolName` lineage 明确抛出 `MODEL_TOOL_RESULT_INVALID`。因此这不是 provider 差异，而是 Nexus 自己的 Context projection 破坏了模型协议。
-- **目标方向**：
-  1. 在 Context selection 前把 canonical Ledger 投影成 **atomic semantic groups**：普通 user/assistant turn 可单项；一个 assistant Tool-call batch + 该 batch 的所有 terminal tool results 必须组成不可拆 group。multi-tool batch 必须完整保留 batch order 与每个 result。
-  2. candidate budget/compaction 对 group 做选择，输出仍保持 canonical chronological order；若整个 group 放不下就整体丢弃/交给 P-064 summary checkpoint，绝不能输出 orphan assistant Tool-call 或 orphan Tool result。
-  3. denied/expired/superseded/cancelled Tool result 同样属于原 assistant batch；它们是模型后续决策需要的正式 result，不能因为“没执行成功”跳出 grouping。
-  4. Context history boundary/checkpoint resume 也必须在 Tool exchange safe boundary 截断；如果 legacy checkpoint boundary 恰好落在 exchange 中间，projection 应向安全边界收缩或明确拒绝，而不是拼出非法 prompt。
-  5. P-070 修复 structured-part token accounting，使 group token 包含 assistant Tool arguments + 全部 Tool results；P-069 projection 负责缩短大 Tool result，但不能改变 grouping lineage。
-  6. Adapter 保留 defensive validation，并把 orphan exchange 错误作为 Context/runtime invariant violation 记录；不要在 Adapter 里“猜 tool name”或伪造缺失 result 来掩盖上游损坏。
-- **明确不做**：不通过关闭 compaction 回避问题；不把 Tool messages 展平为普通文本；不让 Adapter 根据当前 ToolCatalog 猜历史 Tool name；不丢弃 denied/error Tool result 来凑合法序列。
-- **验证**：deterministic fixture 覆盖单 Tool、多 Tool batch、denied/expired、紧预算与 checkpoint boundary；任意预算下一个 exchange 要么完整出现且 assistant→results 顺序合法，要么整体不出现；上述 `273/balanced` 复现不再产生 orphan；Provider Adapter 不再因合法历史 compaction 抛 `MODEL_TOOL_RESULT_INVALID`。
-
-## P-094 Storage / Workspace 生命周期设置存在“可配置但不生效”的假合同
-
-- **优先级**：P1
-- **状态**：`设置消费链审计确认，需先收口真实语义再决定实现或删字段`
-- **当前事实**：
-  - Frontend Settings 明确暴露 `storage.maxArtifactBytes` 为“单 Run 产物配额”、`storage.unretainedArtifactTtlSeconds` 为“临时产物生命周期 (TTL)”，并同时暴露 `workspaceRuntime.workspaceIdleTtlSeconds`；对应 Hard Limit 也可配置。
-  - `LocalArtifactStore` 的 `ArtifactLimitPolicyPort` 目前只接收 `maxSingleArtifactBytes / maxGlobalArtifactBytes / minFreeDiskBytes`。`maxArtifactBytes` 只参与 Settings 的大小关系校验，没有任何 per-Run Artifact 累计计费/拒绝路径，因此所谓“单 Run 产物配额”实际不生效。
-  - `unretainedArtifactTtlSeconds` 没有进入 Artifact limit policy，也没有 ready Artifact TTL sweeper。Artifact upload 的 `expires_at` 只用于 staging reservation（默认 120 秒），写入 ready 后会明确设为 `NULL`；用户主动 cleanup 是独立的 preview→confirm 行为，并不使用该 TTL。
-  - Workspace 会持久化 `last_active_at`，但全仓没有按 `workspaceIdleTtlSeconds` 停止/删除 non-retained idle Workspace 的 sweeper；这个设置目前同样只有 defaults/normalization/UI contract，没有 runtime consumer。
-  - 其它已抽查的重要执行设置（Run budget、Tool timeout/output、model/runtime concurrency、Workspace count、recipe/tool version/ACP profile）都有明确 runtime owner，因此问题不是“所有 Settings 都是假的”，而是生命周期/配额这组字段实现断链。
-- **问题**：用户能保存这些值并看到 Settings revision 更新，却不会改变真实执行/回收行为；这比隐藏的 dead field 更危险，因为 UI 给出了明确的资源治理承诺。长期还会让 Hard Limit 看似保护资源、实际只保护部分维度。
-- **目标方向**：
-  1. 先定义唯一的 **Artifact retention owner**：`maxSingleArtifactBytes` 限单对象、`maxArtifactBytes` 限单 Run 所有 linked artifact 的累计 ready/reserved bytes、`maxGlobalArtifactBytes` 限用户全局；创建 reservation 与跨 Run link 时都用同一 authoritative accounting，避免只在 upload begin 做局部判断。
-  2. `unretainedArtifactTtlSeconds` 若保留，ready Artifact 需要记录明确的 retention deadline（或按 readyAt + 当前 frozen policy 计算），后台 sweep 只回收未 retained、无 active Run/checkpoint/grant protection 且已到期的对象；与手动 cleanup 复用同一 `artifactProtectionReason`/两阶段删除逻辑，不另造 GC 规则。
-  3. `workspaceIdleTtlSeconds` 若保留，增加轻量 lifecycle sweep：只处理 non-retained、无 active Tool/job/interactive session、超过 last-active deadline 的 Workspace；stop/delete 应继续复用现有 Workspace service/Runner reconcile，而不是直接改 DB。
-  4. 生命周期 policy 要么在资源创建时冻结进 durable snapshot，要么文档明确使用“当前设置”；不能运行中悄悄改变旧资源语义。Hard Limit 与 requested setting 的关系继续由现有 effective-settings normalization 处理。
-  5. 如果当前产品阶段不准备做自动 TTL/idle cleanup，则直接从 Settings/API/Hard Limit 删除这两个 TTL 字段，并把 UI 改成只有显式 cleanup；不要保留无效旋钮。`maxArtifactBytes` 同理：实现 per-Run quota 或删除“单 Run 配额”合同，二选一。
-- **明确不做**：不增加第二套 Artifact store；不以定时任务直接删除文件绕过 DB/quota/protection；不把 retained/checkpoint/active grant Artifact 当普通 TTL 垃圾；不让 idle Workspace sweep 杀死仍在运行的 job/session。
-- **验证**：设置极小 per-Run quota 后第二个/后续 Artifact reservation 能稳定被拒绝；短 TTL fixture 到期后只有真正 reclaimable Artifact 被 sweep；retained/checkpoint/active Run/grant Artifact 不被删；idle Workspace 到期可安全 stop/delete，活跃 Workspace 不受影响；若选择删字段，则 Backend/Frontend/SRS 不再出现任何该设置残余。
+- **完成事实**：
+  1. `RunExecutionMode = execute | plan` 已进入 CreateRun request / `RunDefinitionSnapshot` durable contract；HTTP 省略字段时默认 `execute` 保持旧行为，新 Run 始终冻结具体 mode，durable decoder 对未知值 fail closed。`approvalMode = ask | full_access` 仍独立冻结，不因 plan/execute 改写。
+  2. Root model Tool surface 复用 `ToolDescriptor.riskClass` authority：`ToolCallRunner.schemas(..., 'plan')` 只投影 `read/control`，`inspect(..., 'plan')` 对 catalog 中已知 mutation/destructive Tool 明确 `PLAN_MODE_TOOL_FORBIDDEN`。因此 Machine/Workspace/ACP/MCP/Browser mutation 不进入 model schema，模型即使伪造已知 mutation call 也不能绕过；没有新增 name whitelist 或第三套 Tool runtime。
+  3. `plan_update` 与 `request_user_input` 都是现有 `control + mutation=false` contract，因此 plan Run 可持续更新 durable Plan、提出 P-076 clarification，并使用现有 read/control 能力。Subagent 当前本来就只投影 read/control Tool，未形成 mutation 绕路。MCP Tool 当前 descriptor 全部仍为 `mutate`，所以 plan mode 保守排除 MCP invocation；没有把 untrusted remote annotation 提升为 Nexus read-risk authority，未来若有可信 read-only MCP Resources/contract 再由对应 owner 开放。
+  4. Completion Gate 对 plan Run 使用独立完成语义：必须至少产出一个 durable Plan；Plan 中 pending/in_progress 的未来 implementation item 是计划输出，不再被误判为当前 plan Run 未完成。若 durable evidence 显示 plan Run 实际发生 mutation，则 fail closed 为 `COMPLETION_GATE_UNSATISFIED`。
+  5. 第一版不支持同一 Run 中途切 mode。Frontend 提供独立 Execute / Plan only selector，active Run 显示 frozen mode；完成 plan Run 后用户切回 Execute 并提交新 Run 时发送 `plannedFromRunId`。Backend 只接受同 thread、已完成、确为 plan mode 且已有 Plan 的 source，复用现有 `agent_runs.parent_run_id` 作为单一 durable lineage，并把 source `RunPlan`（含 evidenceRefs）与 goal 作为新 execute Run 初始状态；新 Run 仍重新解析当前 Provider/Definition/Settings/Policy，并使用用户当前选择的 `approvalMode`，计划确认不等于 mutation approval。
+  6. 现有 `/plan` slash command 的 parser/executor 未修改，仍是 `plan.show`，只读取并显示当前 durable Plan；没有静默改成启动新 Run。
+- **验证**：新增 deterministic `model/plan-execution-mode`，先在未实现状态真实 FAIL，完成后覆盖实际 `ModelRequest.tools` 零 mutation schema、`plan_update/request_user_input/read` 可见、伪造 mutation fail closed、HTTP explicit plan / omitted→execute、durable executionMode decoder、plan Completion Gate，以及 plan→execute `parentRunId + initialPlan/evidenceRefs + goal` lineage 且 approvalMode 独立。完整 deterministic Agent scenarios `32/32 PASS`；Backend `tsc --noEmit` + build、Frontend `vue-tsc --noEmit` + Vite build、三语言 JSON parse、`git diff --check` 全部通过；仅有既有 Node v22.17.0 < repo Node >=24 engine warning。
 
 ## P-095 Machine Mutation 审批未绑定 Proxy / Jump-chain 依赖 revision，审批后路由变更可绕过 stale-operation 检测
 
@@ -778,19 +581,27 @@
 ## P-096 Agent Budget / Hard-limit Settings 仍包含三个“可保存但不执行”的假合同
 
 - **优先级**：P1
-- **状态**：`本轮配置合同矩阵确认`
-- **当前事实**：
-  - `hardLimits.maxContextTokens` 与 `hardLimits.maxOutputTokens` 仍存在于 `AgentSettingsDocument`、三语言 Settings UI 和 Hard Limits 编辑器，文案分别承诺“单请求历史 Context 的绝对上限”和“单次模型生成的最大 Token”。
+- **状态**：`已完成（2026-09-18；删除 Settings soft/hard 的 context/output 假预算与 maxRawToolBytes 全链路假合同；RunBudget maxContextTokens/maxOutputTokens 保留为 frozen Model Capability projection；legacy Settings/App policy/Run budget 读时兼容并在下一次正常写入自然收敛；maxRunTokens 继续不存在；完整 deterministic scenarios 34/34 PASS）`
+- **施工前事实**：
+  - `hardLimits.maxContextTokens` 与 `hardLimits.maxOutputTokens` 仍存在于 `AgentSettingsDocument`、API type 与三语言 i18n，Hard-limit preview API 仍可手工提交；但当前 `HardLimitsSettings.vue.fieldGroups` 已不再渲染它们。`budget.maxContextTokens/maxOutputTokens` 也仍在 Backend/API schema 中可 patch，当前 Budget UI 已不显示。
   - 但当前 `RunService` 已明确把 `maxContextTokens = model.contextWindow`、`maxOutputTokens = min(model.maxOutputTokens, contextWindow - 1)` 视为模型物理 capability；全仓没有 `settings.hardLimits.maxContextTokens/maxOutputTokens` 的 runtime consumer。Checkpoint 同样根据当前冻结模型 capability 重建这两个值，而不是应用 Settings hard limit。因此用户修改这两个“硬限制”不会影响任何 Run。
   - `budget.maxRawToolBytes` / `hardLimits.maxRawToolBytes` 会进入 execution policy、Run budget 与 checkpoint snapshot，Frontend 还分别描述为“任务中工具调用原始传输数据累计上限 / 原始工具输出留存大小”；但 Tool executor、StateCommit、Ledger、Artifact 与 Gateway 全部没有消费 `run.budget.maxRawToolBytes`。真实生效的只有单次 model-facing `maxToolOutputBytes`。
-  - 这与 P-094 的 Storage/Workspace lifecycle 假合同属于同一审计类别，但职责不同：P-094 是资源生命周期/配额执行缺失；本条是 model/tool budget API 本身与现行 runtime authority 不一致。
+  - 这与已闭环的 Storage/Workspace lifecycle 假合同属于同一审计类别，但职责不同：Artifact quota/TTL 已有真实 runtime owner，Workspace idle 假设置已删除；本条只处理 model/tool budget API 与现行 runtime authority 的不一致。
 - **目标方向**：
   1. 删除 `hardLimits.maxContextTokens/maxOutputTokens` 这两个已经被 Model Capability authority 取代的设置、API 字段、UI 和历史文案；不要为了让旧字段“看起来有效”而重新用用户 hard limit 反向裁剪模型物理窗口。模型 capability 的补全/authority 继续由 P-054/P-082 负责。
-  2. 对 `maxRawToolBytes` 先确定唯一语义。如果要保留，应定义 Run-scoped raw Tool payload accounting：明确哪些 bytes 计入（Tool input、raw stdout/stderr、MCP raw content、Browser extraction 等）、何时 spill 到 Artifact、超过预算后的 deterministic 行为，并让 Root/Child/Checkpoint 使用同一计数；如果 P-069 ToolResultProjection + Artifact-first 已足够，则直接删除该字段，避免重复 quota。
+  2. 对 `maxRawToolBytes` 先确定唯一语义。如果要保留，应定义 Run-scoped raw Tool payload accounting：明确哪些 bytes 计入（Tool input、raw stdout/stderr、MCP raw content、Browser extraction 等）、何时 spill 到 Artifact、超过预算后的 deterministic 行为，并让 Root/Child/Checkpoint 使用同一计数；如果已落地的 P-069 ToolResultProjection + Artifact-first 已足够，则直接删除该字段，避免重复 quota。
   3. Settings schema/version migration 必须能读取已有文档中的旧字段并规范化掉，不能因为删除 UI/runtime 合同导致旧用户 Settings 无法加载。
-  4. `maxRunTokens` 与本条不同：它当前**确实会影响执行**，但产品方向已由 P-120 决定删除父 Run 累计 Token hard budget；Settings/Hard Limits/App override 中的该字段与 P-120 同批迁移，不要在本条把它重新包装成另一个有效 hard limit。
+  4. 原始 Problem 文案曾把 `maxRunTokens` 视为仍有效的累计预算，但本条施工前 current worktree 已由 P-120 完成删除；P-096 只需确认 production surface 不再存在该字段，并禁止把它重新包装成另一个 hard limit。
 - **明确不做**：不重新引入固定 32K/4K 一类全局 context/output ceiling；不把 Provider model capability 和 User Run budget 混成同一个 owner；不保留仅用于 UI 展示但不影响执行的“装饰性限制”；不以“成本保护”为名恢复 P-120 删除的父 Run 总 Token ceiling。
-- **验证**：Settings 的每个可编辑 budget/hard-limit leaf 都有可定位的 runtime consumer 或已被删除；修改保留字段能在 deterministic E2E 中改变对应执行结果；旧 Settings 文档升级后不会继续暴露无效字段。
+- **完成事实**：
+  1. `AgentSettingsDocument.budget` 已删除 `maxContextTokens / maxOutputTokens / maxRawToolBytes`，`hardLimits` 同样删除这三项；默认值、normalization、soft→hard cap matrix、Frontend API type、Budget/Hard-limit UI 与三语言文案同步收口。当前 Budget UI 原本已经不显示 context/output，但 Backend API 仍可 patch；删除 schema 后 `AgentSettingsService.settingsPatch()` 会对这三项 fail closed 为 `VALIDATION_FAILED`，Hard-limit preview 同理。
+  2. `RunBudget.maxContextTokens / maxOutputTokens` **没有删除**：它们现在只表示 Run 创建时冻结的模型物理 capability。`RunService` 继续使用 `model.contextWindow` 与 `min(model.maxOutputTokens, contextWindow - 1)`，Checkpoint resume 也只按当前允许恢复的 model capability重建这两个值；新增 regression 明确断言它们不再有 User Settings owner。
+  3. `maxRawToolBytes` 选择删除而不是补一套新 quota。P-097 已把 `maxToolOutputBytes` 定义为完整 model-visible `ToolResult` 的真实输出边界，而当前系统没有独立 raw transport capture/retention authority；因此从 Settings、Hard Limits、App execution-policy override/effective、Run durable budget、Checkpoint clamp、Root/Subagent durable decoder、Frontend Run/API/UI/i18n 全链路删除。生产代码仅保留 `delete storedOverrides.maxRawToolBytes` 这一处 legacy App-policy 读兼容。
+  4. Legacy `agent_settings.value_json` 可继续包含上述旧字段：`normalizeRequestedSettings()` 按当前 schema 重建并直接丢弃 extra keys，GET requested/effective 均不再暴露；下一次正常 Settings write 会自然写回当前 schema，无 migration/墓碑。Legacy App execution policy 的 `maxRawToolBytes` 在 GET 时先删除再 parse，下一次正常 replace 自然收敛；新 replace 显式提交该字段会 `VALIDATION_FAILED`。
+  5. Durable Run compatibility 采用同样的 tolerant-extra 策略：`parseRunBudget()` 与 `SqliteSubagentRepository.decodeRunBudget()` 不再要求/返回 `maxRawToolBytes`，因此旧 `budget_json` 多一个旧字段仍可读，新 Run JSON 不带该字段也可读；现有 restart/subagent scenarios 全部继续通过，无 durable migration。
+  6. P-096 范围内仍保留的可编辑 Run/tool/context预算均有明确 runtime consumer：`maxRunSteps`→Root/Subagent step fuse，`maxActiveExecutionSeconds`→active-time fuse，`toolTimeoutSeconds`→Root/Child Tool deadline + lease TTL，`maxToolOutputBytes`→ToolContext→`ToolExecutor.projectToolResult()`，`maxRecallItems/maxRecallBytes`→`ContextService.recall()`；对应 hard limits 继续约束 Settings/App override/Checkpoint。Artifact/Workspace lifecycle 假合同已另行闭环，不在本条重复施工。
+  7. `maxRunTokens` 在 production source 继续为零引用；只保留 deterministic invalid-input fixture，确保旧累计 Token budget 不会被重新接受。没有恢复固定 32K/4K global ceiling，也没有把 Provider capability 与 User budget 混回同一 authority。
+- **验证**：新增 deterministic `runtime/budget-settings-dead-fields`，先在旧 defaults 上真实 FAIL；完成后覆盖 default/legacy normalization 不暴露 3 个死字段、Settings patch/Hard-limit preview removed surface fail closed、legacy App policy raw quota 读时丢弃 + 正常 write 收敛、新 App policy raw quota reject、legacy durable Run budget extra field 可读、新 budget 无该字段可读。`model/agent-definition-capability-contract` 增加 Run context/output == frozen Model capability 断言；`boundary/durable-runtime-decode` 更新为当前 durable budget schema。完整 deterministic Agent scenarios `34/34 PASS`；Backend `tsc --noEmit` + build、Frontend `vue-tsc --noEmit` + Vite build、三语言 Agent i18n JSON parse、`git diff --check` 全部通过；仅有既有 Node v22.17.0 < repo Node >=24 engine warning。
 
 ## P-097 Mutation Tool 的输出大小校验发生在副作用完成之后，可能把已确认完成降级成 reconciliation
 
@@ -804,7 +615,7 @@
 - **目标方向**：
   1. 将 Tool output budget 拆成 raw capture 与 model-visible projection；执行完成后先冻结 `outcome/ok/verification`，再对可见 payload 做 bounded projection。
   2. 对 text/JSON 结果优先结构化截断并设置 `truncated=true`；必要时把完整结果保存成 Artifact，只把 summary + artifact ref 给模型。
-  3. `maxToolOutputBytes` 限制整个 model-visible ToolResult，而不只是 `data`；P-096 的 `maxRawToolBytes` 若保留，则负责 raw-retention 累计预算。
+  3. `maxToolOutputBytes` 限制整个 model-visible ToolResult，而不只是 `data`；P-096 已确认删除无 Consumer 的 `maxRawToolBytes`，当前没有第二套 raw-retention quota。
   4. 只有 transport/lease/state commit 等确实无法确认 mutation outcome 的异常才进入 `unknown/reconciliation`。
 - **明确不做**：不因为结果过大重试 mutation；不把大回包静默丢失；不降低现有 unknown-outcome fail-closed 行为。
 - **验证**：MCP/ACP/Workspace mutation fixture 返回超大 payload 时，副作用只执行一次、Run 保持真实 confirmed outcome、模型只看到 bounded/truncated result；真正的 transport interruption 仍进入 reconciliation。
@@ -864,7 +675,7 @@
   2. upload commit 必须能根据 DB row + tmp/object existence + expected size/hash 幂等完成或回滚：object 已存在且完整则 finalize ready；不完整/过期则清文件并释放 reservation。
   3. deleting reconciliation 以“目标状态是 deleted”为准：file 已不存在时直接 finalize DB/quota；file 仍存在则重试删除，再 finalize。所有 quota 变更必须幂等，不能重复扣减。
   4. storage summary/cleanup 要明确是否展示 repairing state；至少不能让用户只能看到一个永远无法操作的 `deleting` Artifact。
-  5. P-094 的 TTL sweeper 后续只能调用这套 durable transition/reconciler，不能再直接 fs.rm + 改表。
+  5. Artifact TTL sweep 已复用这套 durable transition/reconciler：只把到期且无 protection 的 row 标记 `deleting`，再走既有 finalize/reconcile；不得回退成直接 `fs.rm` + 改表。
 - **明确不做**：不要求文件系统与 SQLite 变成分布式事务；不靠人工删目录/改 quota 表作为正常恢复；不在 crash 后静默把未知文件当 ready。
 - **验证**：在 rename 后/ready DB commit 前、mark deleting 后/fs.rm 前、fs.rm 后/deleted DB commit 前分别注入进程终止或 DB failure；重启后状态自动收敛，quota 与磁盘一致，无永久 staging/deleting/orphan，重复 reconcile 幂等。
 
@@ -925,7 +736,7 @@
   2. Child 的累计 `maxTokens/reservedTokens` 从默认执行合同删除；`usage.tokens` 继续完整累计并展示，用于成本/benchmark/cache telemetry，不参与“还能不能继续”的判断。
   3. Child 保留 `maxSteps/maxIterations` 作为 delegation-local emergency backstop，但默认值应足够宽松，并由 P-045 的 progress-aware loop guard优先处理真正异常；达到 step limit 时返回明确 `partial/max_iterations`，允许 Root拆分、续派或接管，而不是伪装成功。
   4. 并发与递归继续用 `maxConcurrentChildren/maxDepth`（现有能力若命名不同则复用现有 owner）；对 Subagent spawn 采用 P-045 的 per-turn/per-epoch fan-out cap，防止模型一轮无限扩散。
-  5. Context/输出只受各 Child 模型的 physical `contextWindow/maxOutputTokens` + P-064 compaction控制；不要用累计 Token 数限制 Child 长任务。
+  5. Context/输出只受各 Child 模型的 physical `contextWindow/maxOutputTokens` + 已落地的 P-064 compaction控制；不要用累计 Token 数限制 Child 长任务。
   6. `reservedSteps` 若只用于承诺未来 step pool且无法真正兑现，则删除 future reservation语义；每个 Child 开始 step时只原子检查自己的 local iteration limit + 父 Run emergency fuse即可。
   7. 如果未来确实需要 unattended cron/batch 的**成本保护**，另设计显式 optional cost ceiling（优先按 Provider actual cost/金额，且放在 automation/job policy 层），不要恢复 Core Agent 的 cumulative token ceiling。
 - **明确不做**：不实现新的 Run-wide Token reservation ledger；不保留 Child cumulative `maxTokens` 仅为了“看起来有保险”；不让 Root 因某个 Child累计 Token耗尽而整体 `awaiting_budget`；不取消 Child 的 iteration/concurrency/depth/loop backstop；不靠串行禁用 Subagent 回避并发。
@@ -1018,7 +829,7 @@
   2. 用户只选择 `allow_once` / `reject_once`，结果续回原 ACP session；不新增新的全局 autonomy/permission mode。
   3. outer `acp_execute` approval 不能自动授权 inner action；`full_access` 是否覆盖 ACP inner permission需明确产品语义，第一阶段可仍要求显式 once approval。
   4. ACP session transport 在等待用户期间必须可 suspend/resume 或有明确 bounded timeout；Backend restart 若无法保活则返回确定的 interrupted outcome，不伪装完成。
-  5. rawInput 只做 bounded model/UI projection；大型或敏感 payload 不直接复制进 Ledger，沿 P-069/P-097 的 ToolResult/Artifact 规则处理。
+  5. rawInput 只做 bounded model/UI projection；大型或敏感 payload 不直接复制进 Ledger，沿已落地的 P-069 ToolResult projection / P-097 Artifact 规则处理。
 - **明确不做**：不让 ACP 自己决定 Nexus authority；不把所有 inner request 自动 allow；不另造第二套 Approval UI/数据库。
 - **验证**：ACP fixture 发起 allow_once/reject_once permission request，UI 能显示并恢复原 session；拒绝时 agent 收到 reject，一次允许后只授权该 toolCall；未知 option/超时/restart 仍 fail closed。
 
@@ -1082,24 +893,6 @@
 - **明确不做**：不在 restart 后自动假定 mutation 成功或失败；不静默释放 active mutation lease；不要求用户通过“再执行一次同资源操作”来触发 recovery。
 - **验证**：分别在 streaming model、running read Tool、`markMutationActive` 后/side effect 前后注入进程终止；重启后前两类 child state 均已 terminal，mutation Run 立即返回非空 reconciliation resources 并可 resolve；未 resolve 前同资源 write 继续 fail closed，resolve 后 lease/quarantine 被一致清除并允许删除 Run。
 
-## P-112 `ai_context_digests` 是无 Producer/Consumer 的 Durable Schema，当前 Context Summary Contract 实际未落地
-
-- **优先级**：P2
-- **状态**：`本轮 Persistence / durable derived-state 审计确认`
-- **当前事实**：
-  - `ai_context_digests` 仍是 current base schema 的正式表，包含 `thread_id / from_sequence / to_sequence / source_hash / model_config_version / content`，结构明显用于 durable Context digest/summary。
-  - 但全仓没有任何 INSERT/SELECT/UPDATE producer/consumer；当前唯一 runtime 引用是 Run/Thread 删除时执行 DELETE。
-  - 当前 `ContextService` 直接从 Ledger/Goal/Plan/Recall 等现有源投影上下文，不读取该表；Checkpoint 也不使用它。
-  - `doc/AGENT.md` 仍保留“Context digest / summary 不能吞掉控制状态”的架构约束，而 P-064 已计划引入 durable compaction checkpoint，因此现有死表很容易被误认为已存在的 summary owner。
-- **问题**：数据库 schema、删除逻辑和架构语言暗示 Nexus 已有 durable context digest，但真实运行时完全没有该能力。它既增加维护/迁移表面积，也会让 P-064 的 owner 选择产生歧义。
-- **目标方向**：
-  1. P-064 实现前明确唯一 owner：如果新的 durable ContextCheckpoint 采用 `ai_context_digests`，则正式定义 version/schema/hash/boundary/read-write contract，并迁移到真实 producer/consumer；否则新增 migration 删除该表及对应手工 cleanup。
-  2. 不允许同时保留“旧 digest 表 + 新 checkpoint 表”两套相似 derived-state owner。
-  3. 删除/失效规则由真正的 compaction owner负责；Run 删除不应无理由清空整个 Thread 的可复用 summary，除非 source boundary 确实失效。
-  4. 文档与 schema 状态同步：未实现前不把 Context digest 描述成已交付能力。
-- **明确不做**：不因为表已经存在就强行把新 compaction 设计绑在旧 schema 上；不保留永远只有 DELETE 的历史表。
-- **验证**：实现后全仓只能找到一个 authoritative durable summary/checkpoint owner；fresh/upgraded DB schema 与 runtime producer/consumer 一致；Thread mutation/delete 能按 source boundary 精确失效，且没有只写不读/只删不写的 context-derived table。
-
 ## P-113 Artifact Library 没有单项删除入口，只能 Retain/Download 或全局 Cleanup
 
 - **优先级**：P2
@@ -1159,21 +952,29 @@
 ## P-116 `AGENT_DEFAULTS` 顶层仍保留多组无 Consumer 的旧执行策略常量，形成第二事实源
 
 - **优先级**：P2
-- **状态**：`第二轮配置合同反向扫描确认`
-- **当前事实**：
+- **状态**：`已完成（2026-09-18；删除 AGENT_DEFAULTS 中 5 个无 Consumer 的旧执行策略字段；Approval TTL 收口为 runtime/approvals 单一 contract；Root/Child Agent Tool lease TTL 收口为 toolTimeout+15 bounded helper；三个 live lease renewal path 共用单一 10s cadence；minFreeDiskBytes/modelRetryCount 保留真实 consumer；deterministic scenarios 35/35 PASS）`
+- **施工前事实**：
   - `AGENT_DEFAULTS` 仍声明 `approvalTtlSeconds=600`、`leaseTtlSeconds=30`、`leaseRenewSeconds=10`、`estimateMargin=0.15`、`maxConcurrentToolCalls=1`，但全仓除定义外没有任何 consumer。
   - Approval 的真实 TTL 目前在 `NativeAgentBackend` 与 StateCommit validation 中直接使用 `600`；因此 `approvalTtlSeconds` 看似是 authority，实际改它不会改变行为。
   - Root/Child Tool lease TTL 已改成基于 `toolTimeoutSeconds + 15` 的动态值（30～300 秒）；`LeaseCoordinator` 的 renewal cadence则直接 hardcode 为 `10_000ms`。因此旧 `leaseTtlSeconds` 已失效，而 `leaseRenewSeconds=10` 只是与另一处 magic number 重复、改动不会生效。
   - Root read Tool 并行上限由 `MAX_PARALLEL_READ_TOOLS=4` 控制，`maxConcurrentToolCalls=1` 已不是 runtime policy。
-  - Model budget reservation 直接按 `estimatedInputTokens + maxOutputTokens` 处理，`estimateMargin` 没有参与 Root/Child/Context accounting；P-070 将重新定义 usage anchor/estimate contract，也不应受一个无 owner 的历史 margin 影响。
+  - Model budget reservation 直接按 `estimatedInputTokens + maxOutputTokens` 处理，`estimateMargin` 没有参与 Root/Child/Context accounting；P-070 已收口 usage anchor/estimate contract，也不受一个无 owner 的历史 margin 影响。
 - **问题**：同一类执行策略同时存在“看起来官方的 defaults 常量”和真正 runtime 逻辑，修改前者不会产生任何效果。后续优化/排障很容易基于错误事实源做配置，或把已废弃策略意外复活。
 - **目标方向**：
   1. 删除没有 runtime owner 的顶层常量；需要共享的固定值（例如 Approval TTL）提取成离实际 producer/validator最近的单一 typed constant/module，并由两端共同引用。
   2. Lease TTL继续以当前 Tool timeout 动态语义为唯一事实源；renew cadence如果保留固定 10 秒，应在 `LeaseCoordinator` 附近定义唯一常量并解释与最小 TTL 的关系，不要同时保留一个失联的 `AGENT_DEFAULTS.leaseRenewSeconds`。
   3. Read Tool parallelism 若未来需要用户/系统可调，单独定义明确 budget/settings contract；当前先保留 `MAX_PARALLEL_READ_TOOLS` 的 bounded internal policy并删除误导性的 `maxConcurrentToolCalls`。
-  4. `estimateMargin` 直接删除；token estimation/accounting 统一由 P-070 的 provider usage anchor + estimator contract 接管。
+  4. `estimateMargin` 直接删除；token estimation/accounting 已由 P-070 的 provider usage anchor + estimator contract 接管。
 - **明确不做**：不为了消灭 dead code 把每个内部常量都暴露成 Settings；不恢复已经被动态策略替代的固定 lease 参数；不让 Approval producer/validator继续各写一个 magic number。
-- **验证**：`AGENT_DEFAULTS` 每个非 settings 字段都有至少一个明确 runtime consumer；修改/删除策略只有一个 authority；Approval TTL producer/validator 引用同一常量；全仓不再出现上述 5 个 dead defaults。
+- **完成事实**：
+  1. `AGENT_DEFAULTS` 已删除 `approvalTtlSeconds / leaseTtlSeconds / leaseRenewSeconds / estimateMargin / maxConcurrentToolCalls`。当前顶层只剩 `minFreeDiskBytes`、`modelRetryCount` 与 `settings`；deterministic regression 直接锁定这个 shape，避免未来再把无 consumer 策略塞回通用 defaults bag。
+  2. 两个保留字段均继续有真实 owner：`minFreeDiskBytes` 由 `compose-agent` 注入 Artifact limit policy，并在 `LocalArtifactStore.ensureFreeSpace()` reservation/write path消费；`modelRetryCount` 由 `ModelStepRunner.shouldRetry()` 控制 same-route provider retry。它们没有为了“清理整齐”被误删。
+  3. Tool Approval TTL 新增唯一 `runtime/approvals/approval-policy.ts::TOOL_APPROVAL_TTL_SECONDS = 10 * 60`。`NativeAgentBackend` producer 先捕获一个 `now`，使用 `expiresAt = now + TOOL_APPROVAL_TTL_SECONDS`；StateCommit `requestToolApprovalTransition()` validator 使用同一 constant。两处不再存在独立 magic `600`，也没有把 TTL 重新放回 `AGENT_DEFAULTS`。
+  4. Root read、Root mutation、Child read 的 Agent Tool lease TTL 抽成 `runtime/execution/tool-lease-policy.ts::toolLeaseTtlSeconds()`，保持原语义 `min(300, max(30, toolTimeoutSeconds + 15))`。因此 frozen Run `toolTimeoutSeconds` 继续是 Agent Tool lease TTL 的输入 authority，没有恢复固定 30s Agent lease default。
+  5. Lease renewal cadence 抽成 `capabilities/lease-policy.ts::LEASE_RENEW_INTERVAL_MS = 10_000`，由 `LeaseCoordinator`、`AgentMutationLeaseGuardAdapter`、以及 composition-root 中真实被 Workspace services 使用的通用 `LeaseMutationGuardAdapter` 共同引用。该 constant 明确是 infrastructure policy，不是 Settings；注释记录所有当前 lease contract TTL 均不低于 30 秒，因此 10 秒 cadence 在到期前保留多次 renewal 机会。
+  6. 通用 Workspace `LeaseMutationGuardAdapter` 自己的 local `LEASE_TTL_SECONDS=30` 是另一条真实 platform mutation contract，并非 P-116 的 dead `AGENT_DEFAULTS.leaseTtlSeconds`；本条没有把它强行改成 Agent Run 的 `toolTimeout+15` 语义。
+  7. `MAX_PARALLEL_READ_TOOLS=4` 继续作为 `NativeAgentBackend` 内部 bounded policy；没有因为删除 `maxConcurrentToolCalls=1` 就新增用户 Settings。`estimateMargin` 直接删除，未被重新接入 token reservation；P-070 已完成 usage/accounting 统一。
+- **验证**：新增 deterministic `runtime/default-policy-authority`，先在旧 defaults 上真实 FAIL；完成后验证 5 个 dead top-level defaults 为 0、仅 2 个 live non-settings defaults、Approval TTL 单一 authority、lease renewal cadence 单一 authority，以及 Agent Tool lease minimum / timeout+grace / 300s cap 三个 policy case。全仓审计确认 dead defaults 名称零 production 引用、Approval producer/validator 无 magic `600`、Agent Tool TTL 无重复 `toolTimeout+15` 公式、三个 renewal path 无裸 `setInterval(renew, 10_000)`；Backend `tsc --noEmit` + build、Frontend `vue-tsc --noEmit` + Vite build、完整 deterministic Agent scenarios `35/35 PASS`、`git diff --check` 全部通过；仅有既有 Node v22.17.0 < repo Node >=24 engine warning。
 
 ## P-117 App / 全局 Agent Disable 没有收敛 Host-owned Root/Subagent Run，`quiesceApp()` 成为未接线的恢复合同
 
@@ -1245,7 +1046,7 @@
   - Root 每轮用 `maxRunTokens - cumulative inputTokens - cumulative outputTokens` 计算 remaining tokens；接近上限时会缩小本次 output，最终进入 `awaiting_budget`/`RUN_BUDGET_EXCEEDED`。Frontend 还提供“Increase run budget”路径。
   - `AgentConversation` 与 `TaskRail` 当前把 `run.usage.inputTokens + outputTokens` 除以 `run.budget.maxRunTokens` 显示百分比/进度条；这会把“本任务累计花了多少 Token”误表示成“还剩多少可工作空间”。
   - 累计 usage 与 Context occupancy 是两个完全不同的量：每次模型调用都会再次累计 input tokens，cache hit 也仍有 input/cached usage；因此一个健康长 Run 即使 compaction 后当前 prompt 已明显变小，累计 usage 仍只会上升，最终必然撞 `maxRunTokens`。
-  - Nexus 已有正确 Context meter 的基础：冻结模型 `contextWindow`、每次 `ContextPlan.estimatedInputTokens/reservedOutputTokens`、Provider 返回的实际 `inputTokens/cachedInputTokens` 与 stable-prefix/context diagnostics。P-070 只需把它们收口成一份 current-context projection。
+  - Nexus 已有正确 Context meter 的基础：冻结模型 `contextWindow`、每次 `ContextPlan.estimatedInputTokens/reservedOutputTokens`、Provider 返回的实际 `inputTokens/cachedInputTokens` 与 stable-prefix/context diagnostics。P-070 已把它们收口成一份 current-context projection。
 - **外部对照（2026-09）**：
   - OpenAI Codex CLI 已公开显示 `Context XX% used`，同时继续在 turn usage 中报告 input/cached/output tokens；Codex 主要通过 context window + auto/manual compaction维持长会话。到 2026-07 仍有人单独请求 `codex exec --max-agent-turns`，说明 deterministic iteration ceiling是可选执行控制问题，不是 UI 的累计 Token progress。
   - Claude Code 的 prompt box同样显示当前 context-window usage，并提供 `/context` 详情与 auto/manual `/compact`；它把“上下文还有多少空间”和“套餐/usage 消耗”分成不同产品概念。
@@ -1255,8 +1056,8 @@
   1. 从 **父 Run execution contract** 删除 `maxRunTokens`：`AgentSettingsDocument.budget/hardLimits`、App execution override、`RunBudget`、budget increase request、checkpoint budget、Root `remainingRunTokens`/reservation、Subagent parent-pool calculation与对应三语言 UI/文案一起收口。当前产品尚未发布，不为这些未使用字段保留 legacy decoder/兼容分支；旧字段出现在当前 API/持久化 contract 时直接视为无效数据。
   2. **保留累计总 Token 消耗**：`RunUsage.inputTokens/outputTokens/cachedInputTokens` 继续 durable 累加，用于详情、成本诊断、cache rate、benchmark与后续 FinOps；删除的是“达到某累计值就不许继续”，不是 usage telemetry。
   3. Agent 主界面保留现有 Token 总数展示，例如 `123k tok` + tooltip 的 input/output/cache breakdown，但取消 `123k / 100k` 和“budget xx%”语义。累计总数可以无限增长，不映射成红黄进度。
-  4. `TaskRail`/任务使用进度条改成 **Context Usage**：消费 P-070 的 latest `ContextUsage`，显示类似 `74k / 200k · 37%`。百分比表示当前模型请求 prompt 对物理 context window 的占用；`reservedOutputTokens`/source/是否估算放 tooltip/详情，不把历史累计 usage混进去。
-  5. Context pressure只触发 P-064 compaction/projection：soft threshold 提前整理，hard threshold保证下一次模型调用有 headroom；compaction成功后 Context bar 应下降，而累计 Run token counter保持原值。Provider 真实 context overflow 走可恢复 compaction/failure path，不转换成“总预算耗尽”。
+  4. `TaskRail`/任务使用进度条改成 **Context Usage**：消费已落地的 P-070 latest `ContextUsage`，显示类似 `74k / 200k · 37%`。百分比表示当前模型请求 prompt 对物理 context window 的占用；`reservedOutputTokens`/source/是否估算放 tooltip/详情，不把历史累计 usage混进去。
+  5. Context pressure只触发已落地的 P-064 compaction/projection：soft threshold 提前整理，hard threshold保证下一次模型调用有 headroom；compaction成功后 Context bar 应下降，而累计 Run token counter保持原值。Provider 真实 context overflow 走可恢复 compaction/failure path，不转换成“总预算耗尽”。
   6. 正常长任务**不因累计 Token 消耗终止**。Runaway 改由 P-045 负责：exact failure replay、same-result no-progress、A↔B oscillation、长期无 durable progress，以及 web-search/subagent 等特定 runaway cap；必要时 pause/await user，而不是伪装任务完成。
   7. 本批先**不删除 `maxRunSteps/maxActiveExecutionSeconds`**：它们保留为非常规故障/无人值守场景的 emergency fuse，但 TaskRail 不再把 step fuse画成任务完成进度条，只在 usage/details 中显示累计 step 与必要的 fuse 信息；也不向模型做“预算快用完”的中途施压。P-079 数据稳定后再评估默认是否进一步放宽。
   8. Subagent 同样删除 cumulative `profile.maxTokens/reservedTokens` execution ceiling；保留 `usage.tokens` telemetry，并以 Child-local `maxSteps/maxIterations`、concurrency/depth/fan-out、P-045 loop guard 与各自 physical context window做 containment。若未来无人值守任务需要成本 ceiling，另在 automation/job policy 设计显式 optional cost budget，不回灌 Core Agent Token ceiling。

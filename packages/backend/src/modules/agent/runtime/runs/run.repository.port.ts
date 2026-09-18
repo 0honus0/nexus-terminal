@@ -1,5 +1,5 @@
 import type { Scope } from '../../agent.types';
-import type { ToolInspection } from '../../capabilities/tool.types';
+import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type {
   HostEvent,
   PendingRunInputPage,
@@ -31,6 +31,20 @@ export interface ConfirmedMutationTool {
   providerCallId: string;
 }
 
+export interface CompletionToolEvidence {
+  toolCallId: string;
+  stepIndex: number;
+  toolName: string;
+  inspection: ToolInspection;
+  result: ToolResult;
+}
+
+export interface CompletionEvidenceSnapshot {
+  tools: CompletionToolEvidence[];
+  readyEvidenceRefs: string[];
+  gateBlocksSinceToolProgress: number;
+}
+
 export interface RunSnapshotReaderPort {
   snapshot(scope: Scope, runId: string): Promise<RunSnapshot | null>;
 }
@@ -59,8 +73,10 @@ export interface HostCursorReaderPort {
 
 export interface RunExecutionReaderPort extends RunSnapshotReaderPort, RunInputReaderPort {
   rootRuntimeId(scope: Scope, runId: string): Promise<string>;
+  rootRuntimeModel(scope: Scope, runId: string): Promise<import('../../ai/model.types').ModelRef>;
   pendingTools(scope: Scope, runId: string): Promise<PendingRootTool[]>;
   confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null>;
+  completionEvidence(scope: Scope, runId: string): Promise<CompletionEvidenceSnapshot>;
 }
 
 export type { Scope } from '../../agent.types';

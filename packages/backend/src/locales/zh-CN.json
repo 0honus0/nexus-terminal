@@ -30,7 +30,13 @@
     "PASSKEY_AUTH_SUCCESS": "Passkey 认证成功",
     "PASSKEY_AUTH_FAILURE": "Passkey 认证失败",
     "PASSKEY_DELETED": "Passkey 已删除",
-    "IP_BLOCKED": "IP 地址已封禁"
+    "IP_BLOCKED": "IP 地址已封禁",
+    "AGENT_RUN_COMPLETED": "Agent Run 已完成",
+    "AGENT_RUN_FAILED": "Agent Run 失败",
+    "AGENT_RUN_INTERRUPTED": "Agent Run 已中断",
+    "AGENT_APPROVAL_REQUIRED": "Agent 需要批准",
+    "AGENT_INPUT_REQUIRED": "Agent 需要输入",
+    "AGENT_ATTENTION_REQUIRED": "Agent 需要处理"
   },
   "testNotification": {
     "subject": "Nexus Terminal 测试通知（{event}）",

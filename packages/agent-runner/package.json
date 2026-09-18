@@ -14,12 +14,13 @@
   "devDependencies": {
     "@types/node": "catalog:",
     "@types/semver": "7.7.1",
-    "typescript": "catalog:node-build",
     "@types/ws": "^8.18.1"
   },
   "dependencies": {
+    "diff": "9.0.0",
     "semver": "7.7.2",
     "tar": "catalog:",
+    "typescript": "7.0.2",
     "ws": "^8.21.3"
   }
 }

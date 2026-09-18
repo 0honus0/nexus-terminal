@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { JsonValue, Scope, ClockPort } from '../../agent.types';
+import { snapshotProviderModelCapabilities } from '../../ai/model-capability-resolver';
 import type { ProviderService } from '../../ai/provider.service';
 import type { AppCapabilityBroker } from '../../host/app-capability-broker';
 import type { AgentCapability } from '../../host/app.types';
@@ -119,13 +120,15 @@ export class SubagentService {
     if (!profile) throw new Error('SUBAGENT_PROFILE_NOT_FOUND');
     const model = this.selectModel(profile, run.definition.model);
     const provider = await this.providers.get(scope.userId, model.providerId);
+    const configuredModel = provider.models.find((candidate) => candidate.id === model.modelId);
     if (
       !provider.enabled ||
       provider.version !== model.configurationVersion ||
-      !provider.models.some((candidate) => candidate.id === model.modelId)
+      !configuredModel
     ) {
       throw new Error('SUBAGENT_MODEL_UNAVAILABLE');
     }
+    const modelCapabilities = snapshotProviderModelCapabilities(configuredModel);
     const grantedCapabilities: AgentCapability[] = [];
     for (const capability of profile.capabilities as AgentCapability[]) {
       if (parentDelegation && !parentDelegation.capabilities.includes(capability)) continue;
@@ -162,6 +165,7 @@ export class SubagentService {
       capabilities: grantedCapabilities,
       peerMessaging: profile.peerMessaging,
       modelRef: model,
+      modelCapabilities,
       objective: input.objective,
       constraints: input.constraints,
       inputArtifactRefs: input.inputArtifactRefs,

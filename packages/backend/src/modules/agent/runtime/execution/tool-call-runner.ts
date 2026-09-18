@@ -1,9 +1,11 @@
 import type { JsonValue, Scope } from '../../agent.types';
+import type { RunExecutionMode } from '../runs/run.types';
 import type { CatalogToolSchema } from '../../capabilities/tool-catalog';
 import type { ToolPolicyDecision } from '../../capabilities/policy.service';
 import { PolicyService } from '../../capabilities/policy.service';
 import { ToolCatalog } from '../../capabilities/tool-catalog';
 import { ToolExecutor } from '../../capabilities/tool-executor';
+import { modelFacingToolSchemas, resolveDeferredToolProposal } from '../../capabilities/tool-model-surface';
 import type {
   ToolAvailabilityContext,
   ToolContext,
@@ -26,6 +28,10 @@ import type {
 export interface InspectedToolCall {
   inspection: ToolInspection;
   policyDecision: ToolPolicyDecision;
+}
+
+export interface ResolvedInspectedToolCall extends InspectedToolCall {
+  proposal: ToolProposal;
 }
 
 export interface ReadToolLease {
@@ -70,8 +76,12 @@ export class ToolCallRunner {
     private readonly mutationLeases: MutationLeaseGuardPort,
   ) {}
 
-  schemas(scope: Scope, availability?: ToolAvailabilityContext): CatalogToolSchema[] {
-    return this.catalog.schemas(scope, availability);
+  schemas(
+    scope: Scope,
+    availability?: ToolAvailabilityContext,
+    executionMode: RunExecutionMode = 'execute',
+  ): CatalogToolSchema[] {
+    return modelFacingToolSchemas(this.catalog, scope, availability, executionMode);
   }
 
   parallelSafe(scope: Scope, toolName: string, availability?: ToolAvailabilityContext): boolean {
@@ -84,9 +94,24 @@ export class ToolCallRunner {
     }
   }
 
-  async inspect(context: ToolContext, proposal: ToolProposal): Promise<InspectedToolCall> {
-    const inspection = await this.executor.inspect(context, proposal);
-    return { inspection, policyDecision: this.policy.decide(inspection, inspection.policyRevision) };
+  async inspect(
+    context: ToolContext,
+    proposal: ToolProposal,
+    executionMode: RunExecutionMode = 'execute',
+  ): Promise<ResolvedInspectedToolCall> {
+    const resolvedProposal = resolveDeferredToolProposal(this.catalog, context, proposal);
+    if (executionMode === 'plan') {
+      const descriptor = this.catalog.require(resolvedProposal.name, context).descriptor;
+      if (descriptor.riskClass !== 'read' && descriptor.riskClass !== 'control') {
+        throw new Error('PLAN_MODE_TOOL_FORBIDDEN');
+      }
+    }
+    const inspection = await this.executor.inspect(context, resolvedProposal);
+    return {
+      inspection,
+      policyDecision: this.policy.decide(inspection, inspection.policyRevision),
+      proposal: resolvedProposal,
+    };
   }
 
   decision(inspection: ToolInspection): ToolPolicyDecision {

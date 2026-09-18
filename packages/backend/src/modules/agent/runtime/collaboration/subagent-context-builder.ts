@@ -1,7 +1,17 @@
 import type { Scope } from '../../agent.types';
-import type { ModelMessage, ModelToolSchema, ProviderModelConfig } from '../../ai/model.types';
+import { ArtifactService } from '../../ai/artifact.service';
+import { projectArtifactsForModel, type ArtifactModelProjection } from '../../ai/artifact-model-projection';
+import type { ModelContinuationRepositoryPort } from '../../ai/model-continuation.repository.port';
+import type {
+  ModelMessage,
+  ModelProviderContinuation,
+  ModelToolSchema,
+  ProviderModelConfig,
+} from '../../ai/model.types';
 import type { ToolCatalog } from '../../capabilities/tool-catalog';
-import { estimateTokens } from '../execution/model-accounting';
+import { TOOL_SEARCH_NAME } from '../../capabilities/tool-model-surface';
+import { projectToolResult } from '../../capabilities/tool-result-projection';
+import { estimateModelInputTokens } from '../../ai/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
 import type { RunView } from '../runs/run.types';
 import type {
@@ -36,6 +46,8 @@ export class SubagentContextBuilder {
     private readonly runtimes: RuntimeParticipantRepositoryPort,
     private readonly mailboxes: MailboxReaderPort,
     private readonly toolCatalog: ToolCatalog,
+    private readonly continuations: ModelContinuationRepositoryPort,
+    private readonly artifacts: ArtifactService,
   ) {}
 
   async prepare(
@@ -53,6 +65,14 @@ export class SubagentContextBuilder {
       this.mailboxes.readMessages(scope, runId, runtimeId, runtime.consumedMailboxSequence, INBOX_LIMIT),
       this.runtimes.recentRuntimeToolExchanges(scope, runId, runtimeId, 8),
     ]);
+    const continuationViews = await this.continuations.load(
+      scope,
+      [...new Set(toolExchanges.map((exchange) => exchange.sourceModelStepId))].map((modelStepId) => ({
+        runId,
+        modelStepId,
+      })),
+    );
+    const continuationByStep = new Map(continuationViews.map((view) => [view.modelStepId, view.continuation] as const));
     const offeredTools = this.toolSchemas(scope, delegation, model, run);
     const toolMode: 'auto' | 'none' =
       offeredTools.length > 0 &&
@@ -60,14 +80,44 @@ export class SubagentContextBuilder {
       run.usage.steps + 2 <= run.budget.maxRunSteps
         ? 'auto'
         : 'none';
-    const { instructions, messages } = this.messages(delegation, inbox, toolExchanges);
-    const encodedContext = [
+    const artifactProjection =
+      delegation.inputArtifactRefs.length > 0 && delegation.capabilities.includes('artifacts.read')
+        ? await projectArtifactsForModel(
+            this.artifacts,
+            scope,
+            { runId, runtimeId },
+            delegation.inputArtifactRefs,
+            {
+              supportsImageInput: model.supportsImageInput,
+              supportsFileInput: model.supportsFileInput,
+            },
+          )
+        : { textSuffix: '', contentParts: [] };
+    const { instructions, messages } = this.messages(
+      delegation,
+      inbox,
+      toolExchanges,
+      continuationByStep,
+      artifactProjection,
+      run.budget.maxToolOutputBytes,
+    );
+    let encodedContext = [
       ...instructions.map((content) => `system:${content}`),
       ...messages.map((message) => `${message.role}:${message.content}`),
     ].join('\n');
-    const toolSchemaTokens = offeredTools.length ? estimateTokens(JSON.stringify(offeredTools)) : 0;
-    const estimatedInputTokens = estimateTokens(encodedContext) + toolSchemaTokens;
-    const maxOutputTokens = Math.min(model.maxOutputTokens, Math.max(0, model.contextWindow - estimatedInputTokens));
+    let estimatedInputTokens = estimateModelInputTokens(instructions, messages, offeredTools);
+    let maxOutputTokens = Math.min(model.maxOutputTokens, Math.max(0, model.contextWindow - estimatedInputTokens));
+    if (maxOutputTokens < 1 && messages.some((message) => message.contentParts?.length)) {
+      for (const message of messages) delete message.contentParts;
+      const user = messages.find((message) => message.role === 'user');
+      if (user) user.content += '\n[Native Artifact payloads omitted because they exceed the context budget; use artifact_read.]';
+      encodedContext = [
+        ...instructions.map((content) => `system:${content}`),
+        ...messages.map((message) => `${message.role}:${message.content}`),
+      ].join('\n');
+      estimatedInputTokens = estimateModelInputTokens(instructions, messages, offeredTools);
+      maxOutputTokens = Math.min(model.maxOutputTokens, Math.max(0, model.contextWindow - estimatedInputTokens));
+    }
     if (maxOutputTokens < 1 || Buffer.byteLength(encodedContext, 'utf8') > MAX_CONTEXT_BYTES) {
       return { kind: 'fail', code: 'CONTEXT_BUDGET_EXCEEDED' };
     }
@@ -81,6 +131,8 @@ export class SubagentContextBuilder {
     const descriptor = this.toolCatalog.discover(scope, '', 256).find((candidate) => candidate.name === toolName);
     return Boolean(
       descriptor &&
+      toolName !== 'request_user_input' &&
+      toolName !== TOOL_SEARCH_NAME &&
       delegation.capabilities.includes(descriptor.capability) &&
       (descriptor.riskClass === 'read' || descriptor.riskClass === 'control'),
     );
@@ -90,6 +142,9 @@ export class SubagentContextBuilder {
     delegation: DelegationView,
     inbox: AgentMessage[],
     toolExchanges: Awaited<ReturnType<RuntimeParticipantRepositoryPort['recentRuntimeToolExchanges']>>,
+    continuationByStep: ReadonlyMap<string, ModelProviderContinuation>,
+    artifactProjection: ArtifactModelProjection,
+    maxToolOutputBytes: number,
   ): { instructions: string[]; messages: ModelMessage[] } {
     const inboxText = boundedUtf8(
       JSON.stringify(
@@ -116,6 +171,7 @@ export class SubagentContextBuilder {
       const ordered = [...batch].sort((left, right) => left.batchIndex - right.batchIndex);
       const expectedBatchSize = ordered[0]?.batchSize ?? 0;
       if (expectedBatchSize < 1 || ordered.length !== expectedBatchSize) continue;
+      const providerContinuation = continuationByStep.get(ordered[0]!.sourceModelStepId);
       history.push({
         role: 'assistant',
         content: '',
@@ -124,12 +180,15 @@ export class SubagentContextBuilder {
           name: exchange.toolName,
           argumentsJson: boundedUtf8(JSON.stringify(exchange.arguments), 4 * 1024),
         })),
+        ...(providerContinuation ? { providerContinuation } : {}),
       });
       for (const exchange of ordered) {
         history.push({
           role: 'tool',
           toolCallId: exchange.providerCallId,
-          content: boundedUtf8(JSON.stringify(exchange.result), 8 * 1024),
+          content: JSON.stringify(
+            exchange.result === null ? null : projectToolResult(exchange.result, maxToolOutputBytes),
+          ),
         });
       }
     }
@@ -151,7 +210,13 @@ export class SubagentContextBuilder {
         ),
       ],
       messages: [
-        { role: 'user', content: delegation.objective },
+        {
+          role: 'user',
+          content: artifactProjection.textSuffix
+            ? `${delegation.objective}\n\n${artifactProjection.textSuffix}`
+            : delegation.objective,
+          ...(artifactProjection.contentParts.length ? { contentParts: artifactProjection.contentParts } : {}),
+        },
         ...history,
         ...(inbox.length === 0
           ? []
@@ -177,6 +242,8 @@ export class SubagentContextBuilder {
       .discover(scope, '', 256, { environment: run.definition.environment ?? null })
       .filter(
         (descriptor) =>
+          descriptor.name !== 'request_user_input' &&
+          descriptor.name !== TOOL_SEARCH_NAME &&
           allowedCapabilities.has(descriptor.capability) &&
           (descriptor.riskClass === 'read' || descriptor.riskClass === 'control'),
       )

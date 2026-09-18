@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
-import type { ToolResult } from '../../../../modules/agent/capabilities/tool.types';
 import type {
   BeginModelStepResult,
   BeginSubagentModelStepCommand,
@@ -15,10 +14,12 @@ import type {
   SettleSubagentWithoutModelCommand,
   StateCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
-import type { RunBudget, RunUsage } from '../../../../modules/agent/runtime/runs/run.types';
+import { encodeModelProviderContinuation } from '../../../../modules/agent/ai/model-continuation';
+import type { RunUsage } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { enqueueParentJoinResume } from '../subagent-join-wake';
+import { parseRunBudget, parseRunUsage, parseToolResult } from '../durable-state-decoders';
 import {
   allocateHostEvent,
   appendEvents,
@@ -71,8 +72,8 @@ export const beginSubagentModelStepTransition = async (
   if (!work || work.status !== 'claimed' || work.owner_epoch !== command.ownerEpoch) {
     throw new Error('SCHEDULER_WORK_STALE');
   }
-  const budget = JSON.parse(row.budget_json) as RunBudget;
-  const usage = JSON.parse(row.usage_json) as RunUsage;
+  const budget = parseRunBudget(row.budget_json);
+  const usage = parseRunUsage(row.usage_json);
   if (usage.steps >= budget.maxRunSteps) throw new Error('RUN_BUDGET_EXCEEDED');
   const previous = await tx.queryOne<{ max_index: number | null }>(
     'SELECT MAX(step_index) AS max_index FROM agent_steps WHERE run_id = ?',
@@ -289,8 +290,8 @@ export const commitSubagentToolProposalBatchTransition = async (
   if (delegation.used_steps + command.items.length > delegation.max_steps) {
     throw new Error('DELEGATION_BUDGET_EXCEEDED');
   }
-  const runUsage = JSON.parse(row.usage_json) as RunUsage;
-  const runBudget = JSON.parse(row.budget_json) as RunBudget;
+  const runUsage = parseRunUsage(row.usage_json);
+  const runBudget = parseRunBudget(row.budget_json);
   if (runUsage.steps + command.items.length > runBudget.maxRunSteps) throw new Error('RUN_BUDGET_EXCEEDED');
   const step = await tx.queryOne<{ status: string }>(
     `SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'model'`,
@@ -306,13 +307,14 @@ export const commitSubagentToolProposalBatchTransition = async (
   }
   const attemptChanged = await tx.execute(
     `UPDATE agent_model_attempts SET status = 'completed', input_tokens = ?, output_tokens = ?,
-     cached_input_tokens = ?, estimated = ?, error_code = NULL, completed_at = ?
+     cached_input_tokens = ?, estimated = ?, continuation_json = ?, error_code = NULL, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens,
       command.outputTokens,
       command.cachedInputTokens,
       command.estimatedUsage ? 1 : 0,
+      command.providerContinuation ? encodeModelProviderContinuation(command.providerContinuation) : null,
       command.now,
       command.attemptId,
     ],
@@ -445,7 +447,7 @@ export const commitSubagentToolProposalBatchTransition = async (
         stepId: command.modelStepId,
         attemptId: command.attemptId,
         runtimeId: command.runtimeId,
-        finishReason: command.finishReason ?? 'tool_calls',
+        finishReason: command.finishReason ?? 'tool-calls',
         inputTokens: command.inputTokens,
         outputTokens: command.outputTokens,
       },
@@ -677,13 +679,13 @@ export const settleSubagentToolTransition = async (
     let joinPending = false;
     for (const item of batchRows) {
       if (!item.result_json) continue;
-      const result = JSON.parse(item.result_json) as ToolResult;
+      const result = parseToolResult(item.result_json);
       if (
         item.tool_name === 'send_agent_message' &&
         (result.errorCode === 'MAILBOX_BUDGET_EXCEEDED' || result.errorCode === 'MAILBOX_HARD_LIMIT_EXCEEDED')
       ) {
-        const currentUsage = JSON.parse(row.usage_json) as RunUsage;
-        const currentBudget = JSON.parse(row.budget_json) as RunBudget;
+        const currentUsage = parseRunUsage(row.usage_json);
+        const currentBudget = parseRunBudget(row.budget_json);
         batchContinuation = 'waiting_budget';
         batchBudgetReason = {
           scope: 'mailbox',
@@ -977,7 +979,8 @@ export const settleSubagentModelStepTransition = async (
   const delegationStatus =
     effectiveOutcome === 'completed' ? 'completed' : effectiveOutcome === 'cancelled' ? 'cancelled' : 'failed';
   await tx.execute(
-    `UPDATE agent_model_attempts SET status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?, estimated = ?, error_code = ?, completed_at = ?
+    `UPDATE agent_model_attempts SET status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?,
+     estimated = ?, continuation_json = ?, error_code = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       attemptStatus,
@@ -985,6 +988,7 @@ export const settleSubagentModelStepTransition = async (
       command.outputTokens,
       command.cachedInputTokens,
       command.estimatedUsage ? 1 : 0,
+      command.providerContinuation ? encodeModelProviderContinuation(command.providerContinuation) : null,
       effectiveErrorCode ?? null,
       command.now,
       command.attemptId,
@@ -1033,7 +1037,7 @@ export const settleSubagentModelStepTransition = async (
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const finalCancellation = cancelling && nextExecuting === 0;
   if (finalCancellation) await cancelRunSubagentWork(tx, row.id, command.now, true);
-  const currentUsage = JSON.parse(row.usage_json) as RunUsage;
+  const currentUsage = parseRunUsage(row.usage_json);
   const nextUsage: RunUsage = {
     ...currentUsage,
     inputTokens: currentUsage.inputTokens + command.inputTokens,

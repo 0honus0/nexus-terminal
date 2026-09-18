@@ -12,6 +12,12 @@ import type {
 } from '../../../modules/agent/ai/integrations.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import type { SecretCipher } from '../../../shared/security/crypto.port';
+import {
+  decodeDurableStringArray,
+  durableRecord,
+  durableString,
+  parseDurableJson,
+} from '../runtime/durable-state-decoders';
 
 interface IntegrationRow {
   id: string;
@@ -31,12 +37,37 @@ interface IntegrationRow {
 const columns = `id, user_id, app_id, kind, configuration_json, protected_credential,
   credential_revision, schema_hash, enabled, version, created_at, updated_at`;
 
+const decodeConfiguration = (kind: IntegrationKind, raw: string): IntegrationConfiguration => {
+  const record = durableRecord(parseDurableJson(raw));
+  if (kind === 'mcp') {
+    if (record.transport !== 'streamable-http' || record.protocolVersion !== '2026-07-28') {
+      throw new Error('AGENT_DURABLE_STATE_INVALID');
+    }
+    return {
+      displayName: durableString(record.displayName) as string,
+      transport: 'streamable-http',
+      endpoint: durableString(record.endpoint) as string,
+      privateHostExceptions: decodeDurableStringArray(record.privateHostExceptions, 256),
+      protocolVersion: '2026-07-28',
+    };
+  }
+  if (record.transport !== 'workspace-profile' || record.protocolVersion !== '1') {
+    throw new Error('AGENT_DURABLE_STATE_INVALID');
+  }
+  return {
+    displayName: durableString(record.displayName) as string,
+    transport: 'workspace-profile',
+    profileId: durableString(record.profileId) as string,
+    protocolVersion: '1',
+  };
+};
+
 const mapRow = (row: IntegrationRow): IntegrationView => ({
   id: row.id,
   userId: row.user_id,
   appId: row.app_id,
   kind: row.kind,
-  configuration: JSON.parse(row.configuration_json) as IntegrationConfiguration,
+  configuration: decodeConfiguration(row.kind, row.configuration_json),
   hasCredential: Boolean(row.protected_credential),
   credentialRevision: row.credential_revision,
   schemaHash: row.schema_hash,

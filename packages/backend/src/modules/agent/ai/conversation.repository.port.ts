@@ -73,6 +73,13 @@ export interface ConversationRepositoryPort {
   deleteAllThreads(scope: Scope, now: number): Promise<ThreadDeleteAllResult>;
   readEntries(scope: Scope, threadId: string, limit: number, before?: string): Promise<LedgerPage>;
   readOldestEntries(scope: Scope, threadId: string, limit: number): Promise<LedgerPage>;
+  searchEarlierEntries(
+    scope: Scope,
+    threadId: string,
+    queryTerms: readonly string[],
+    beforeSequence: number,
+    limit: number,
+  ): Promise<LedgerEntryView[]>;
   readContextEntries(
     scope: Scope,
     threadId: string,
@@ -80,6 +87,13 @@ export interface ConversationRepositoryPort {
     historyBoundary: ContextHistoryBoundary,
     limit: number,
   ): Promise<LedgerPage>;
+  readVisibleEntriesThrough(
+    scope: Scope,
+    threadId: string,
+    throughSequence: number,
+    runId?: string,
+    historyBoundary?: ContextHistoryBoundary,
+  ): Promise<LedgerEntryView[]>;
   appendEntry(scope: Scope, threadId: string, entry: AppendLedgerEntry): Promise<LedgerEntryView>;
 }
 

@@ -29,6 +29,7 @@ import type {
   SchedulerWorkView,
 } from '../../../modules/agent/runtime/collaboration/subagent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { decodeModelCapabilitySnapshot, parseToolResult } from '../runtime/durable-state-decoders';
 import { enqueueParentJoinResume } from '../runtime/subagent-join-wake';
 
 interface RuntimeRow {
@@ -203,6 +204,18 @@ const decodeModelRef = (value: unknown): ModelRef => {
 
 const parseModelRef = (value: string): ModelRef => decodeModelRef(parsePersistedJson(value));
 
+const parseDelegationModel = (
+  value: string,
+): { modelRef: ModelRef; modelCapabilities?: DelegationView['modelCapabilities'] } => {
+  const record = recordValue(parsePersistedJson(value));
+  return {
+    modelRef: decodeModelRef(record),
+    ...(record.modelCapabilities === undefined
+      ? {}
+      : { modelCapabilities: decodeModelCapabilitySnapshot(record.modelCapabilities) }),
+  };
+};
+
 const decodeRunBudget = (value: string): RunBudget => {
   const record = recordValue(parsePersistedJson(value));
   const compactionMode = record.contextCompactionMode;
@@ -219,7 +232,6 @@ const decodeRunBudget = (value: string): RunBudget => {
     maxActiveExecutionSeconds: integerValue(record.maxActiveExecutionSeconds, 1),
     toolTimeoutSeconds: integerValue(record.toolTimeoutSeconds, 1),
     maxToolOutputBytes: integerValue(record.maxToolOutputBytes, 1),
-    maxRawToolBytes: integerValue(record.maxRawToolBytes, 1),
     maxRecallItems: integerValue(record.maxRecallItems, 1),
     maxRecallBytes: integerValue(record.maxRecallBytes, 1),
     maxSubagentMessages: integerValue(record.maxSubagentMessages, 1),
@@ -234,7 +246,7 @@ const decodeRunBudget = (value: string): RunBudget => {
 const decodeRunUsage = (value: string): RunUsage => {
   const record = recordValue(parsePersistedJson(value));
   const context = record.context === undefined ? null : recordValue(record.context);
-  if (context && !['estimated', 'provider'].includes(String(context.source))) return invalidDurableState();
+  if (context && !['estimated', 'anchored_estimate', 'provider'].includes(String(context.source))) return invalidDurableState();
   return {
     inputTokens: integerValue(record.inputTokens),
     outputTokens: integerValue(record.outputTokens),
@@ -247,9 +259,14 @@ const decodeRunUsage = (value: string): RunUsage => {
       : {
           context: {
             inputTokens: integerValue(context.inputTokens),
+            ...(context.heuristicInputTokens === undefined
+              ? {}
+              : { heuristicInputTokens: integerValue(context.heuristicInputTokens, 1) }),
             reservedOutputTokens: integerValue(context.reservedOutputTokens),
             contextWindowTokens: integerValue(context.contextWindowTokens, 1),
             source: context.source as NonNullable<RunUsage['context']>['source'],
+            ...(context.model === undefined ? {} : { model: decodeModelRef(context.model) }),
+            ...(context.contextEpoch === undefined ? {} : { contextEpoch: stringValue(context.contextEpoch) }),
             updatedAt: integerValue(context.updatedAt),
           },
         }),
@@ -333,37 +350,41 @@ const mapRuntime = (row: RuntimeRow): RuntimeParticipantView => ({
   consumedMailboxSequence: row.consumed_mailbox_sequence,
 });
 
-const mapDelegation = (row: DelegationRow): DelegationView => ({
-  id: row.id,
-  runId: row.run_id,
-  userId: row.user_id,
-  appId: row.app_id,
-  parentRuntimeId: row.parent_runtime_id,
-  childRuntimeId: row.child_runtime_id,
-  profileId: row.profile_id,
-  capabilities: parseStringArray(row.capabilities_json, 512),
-  peerMessaging: row.peer_messaging,
-  modelRef: parseModelRef(row.model_ref_json),
-  objective: row.objective,
-  constraints: parseStringArray(row.constraints_json, 256),
-  inputArtifactRefs: parseStringArray(row.input_artifact_refs_json, 1024),
-  completionCriteria: parseStringArray(row.completion_criteria_json, 256),
-  dependencyMode: row.dependency_mode,
-  status: row.status,
-  depth: row.depth,
-  failureMode: row.failure_mode,
-  budget: {
-    maxSteps: row.max_steps,
-  },
-  usage: { tokens: row.used_tokens, steps: row.used_steps },
-  result: row.result_json === null ? null : parseJsonValue(row.result_json),
-  evidenceRefs: parseStringArray(row.evidence_refs_json, 1024),
-  deadlineAt: row.deadline_at,
-  version: row.version,
-  createdAt: row.created_at,
-  updatedAt: row.updated_at,
-  completedAt: row.completed_at,
-});
+const mapDelegation = (row: DelegationRow): DelegationView => {
+  const model = parseDelegationModel(row.model_ref_json);
+  return {
+    id: row.id,
+    runId: row.run_id,
+    userId: row.user_id,
+    appId: row.app_id,
+    parentRuntimeId: row.parent_runtime_id,
+    childRuntimeId: row.child_runtime_id,
+    profileId: row.profile_id,
+    capabilities: parseStringArray(row.capabilities_json, 512),
+    peerMessaging: row.peer_messaging,
+    modelRef: model.modelRef,
+    ...(model.modelCapabilities === undefined ? {} : { modelCapabilities: model.modelCapabilities }),
+    objective: row.objective,
+    constraints: parseStringArray(row.constraints_json, 256),
+    inputArtifactRefs: parseStringArray(row.input_artifact_refs_json, 1024),
+    completionCriteria: parseStringArray(row.completion_criteria_json, 256),
+    dependencyMode: row.dependency_mode,
+    status: row.status,
+    depth: row.depth,
+    failureMode: row.failure_mode,
+    budget: {
+      maxSteps: row.max_steps,
+    },
+    usage: { tokens: row.used_tokens, steps: row.used_steps },
+    result: row.result_json === null ? null : parseJsonValue(row.result_json),
+    evidenceRefs: parseStringArray(row.evidence_refs_json, 1024),
+    deadlineAt: row.deadline_at,
+    version: row.version,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    completedAt: row.completed_at,
+  };
+};
 
 const mapMessage = (row: MessageRow): AgentMessage => ({
   id: row.id,
@@ -597,7 +618,7 @@ export class SqliteSubagentRepository
           record.childRuntimeId,
           record.runId,
           record.participantId,
-          JSON.stringify(record.modelRef),
+          JSON.stringify({ ...record.modelRef, modelCapabilities: record.modelCapabilities }),
           record.childRuntimeId,
           record.now,
           record.now,
@@ -643,7 +664,7 @@ export class SqliteSubagentRepository
           record.profileId,
           JSON.stringify(record.capabilities),
           record.peerMessaging,
-          JSON.stringify(record.modelRef),
+          JSON.stringify({ ...record.modelRef, modelCapabilities: record.modelCapabilities }),
           record.objective,
           JSON.stringify(record.constraints),
           JSON.stringify(record.inputArtifactRefs),
@@ -1014,24 +1035,20 @@ export class SqliteSubagentRepository
       status: string;
     }>(
       `WITH recent_batches AS (
-         -- Compatibility window: migration #23 added source_model_step_id without backfilling
-         -- pre-#23 durable Tool rows. New rows always carry the real model-step id. Keep the
-         -- synthetic per-call legacy key until the minimum supported DB version includes a
-         -- backfill (or all pre-#23 Tool history is intentionally retired), then remove it.
-         SELECT COALESCE(source_model_step_id, 'legacy:' || id) AS batch_key,
+         SELECT source_model_step_id AS batch_key,
                 MAX(created_at) AS batch_created_at
          FROM agent_tool_calls
          WHERE run_id = ? AND agent_runtime_id = ? AND status IN ('succeeded','failed')
-         GROUP BY COALESCE(source_model_step_id, 'legacy:' || id)
+         GROUP BY source_model_step_id
          ORDER BY batch_created_at DESC, batch_key DESC
          LIMIT ?
        )
-       SELECT COALESCE(t.source_model_step_id, 'legacy:' || t.id) AS source_model_step_id,
+       SELECT t.source_model_step_id,
               t.batch_index, t.batch_size, t.provider_call_id, t.tool_name,
               t.inspection_json, t.result_json, t.status
        FROM agent_tool_calls t
        JOIN recent_batches b
-         ON b.batch_key = COALESCE(t.source_model_step_id, 'legacy:' || t.id)
+         ON b.batch_key = t.source_model_step_id
        WHERE t.run_id = ? AND t.agent_runtime_id = ? AND t.status IN ('succeeded','failed')
        ORDER BY b.batch_created_at, b.batch_key, t.batch_index, t.created_at, t.id`,
       [runId, runtimeId, limit, runId, runtimeId],
@@ -1045,7 +1062,7 @@ export class SqliteSubagentRepository
         providerCallId: row.provider_call_id,
         toolName: row.tool_name,
         arguments: inspection.normalizedArguments ?? null,
-        result: row.result_json ? parseJsonValue(row.result_json) : null,
+        result: row.result_json ? parseToolResult(row.result_json) : null,
         status: row.status,
       };
     });

@@ -1,11 +1,13 @@
-import type { RunPlan } from '../../../modules/agent/runtime/planning/plan.types';
-import type {
-  RunBudget,
-  RunDefinitionSnapshot,
-  RunStatus,
-  RunUsage,
-  RunView,
-} from '../../../modules/agent/runtime/runs/run.types';
+import { normalizePlanItems, type RunPlan } from '../../../modules/agent/runtime/planning/plan.types';
+import type { RunStatus, RunView } from '../../../modules/agent/runtime/runs/run.types';
+import {
+  durableInteger,
+  durableRecord,
+  parseDurableJson,
+  parseRunBudget,
+  parseRunDefinition,
+  parseRunUsage,
+} from '../runtime/durable-state-decoders';
 
 export interface RunRow {
   id: string;
@@ -38,16 +40,13 @@ export interface RunRow {
 }
 
 export const persistedPlan = (raw: string): RunPlan => {
-  const value = JSON.parse(raw) as Partial<RunPlan>;
-  if (
-    value.schemaVersion !== 1 ||
-    !Number.isSafeInteger(value.revision) ||
-    (value.revision ?? -1) < 0 ||
-    !Array.isArray(value.items)
-  ) {
-    return { schemaVersion: 1, revision: 0, items: [] };
-  }
-  return value as RunPlan;
+  const value = durableRecord(parseDurableJson(raw));
+  if (value.schemaVersion !== 1) throw new Error('AGENT_DURABLE_STATE_INVALID');
+  return {
+    schemaVersion: 1,
+    revision: durableInteger(value.revision),
+    items: normalizePlanItems(value.items),
+  };
 };
 
 export const RUN_COLUMNS = `
@@ -57,18 +56,6 @@ export const RUN_COLUMNS = `
   consumed_input_sequence, input_revision, next_event_sequence,
   version, created_at, started_at, completed_at, updated_at
 `;
-
-const persistedBudget = (raw: string): RunBudget => {
-  const value = JSON.parse(raw) as Record<string, unknown>;
-  delete value.maxRunCostMicros;
-  return value as unknown as RunBudget;
-};
-
-const persistedUsage = (raw: string): RunUsage => {
-  const value = JSON.parse(raw) as Record<string, unknown>;
-  delete value.costMicros;
-  return value as unknown as RunUsage;
-};
 
 export const mapRunRow = (row: RunRow): RunView => ({
   id: row.id,
@@ -81,10 +68,10 @@ export const mapRunRow = (row: RunRow): RunView => ({
   goal: { text: row.goal_text, revision: row.goal_revision, updatedAt: row.goal_updated_at },
   verificationStatus: row.verification_status,
   needsReconciliation: row.needs_reconciliation === 1,
-  budget: persistedBudget(row.budget_json),
-  definition: JSON.parse(row.definition_json) as RunDefinitionSnapshot,
+  budget: parseRunBudget(row.budget_json),
+  definition: parseRunDefinition(row.definition_json),
   plan: persistedPlan(row.plan_json),
-  usage: persistedUsage(row.usage_json),
+  usage: parseRunUsage(row.usage_json),
   activeExecutionSeconds: row.active_execution_seconds,
   activeExecutionStartedAt: row.active_execution_started_at,
   executingRuntimeCount: row.executing_runtime_count,

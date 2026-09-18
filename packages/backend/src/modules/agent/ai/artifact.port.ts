@@ -35,6 +35,11 @@ export interface ArtifactReadRange {
   endInclusive: number;
 }
 
+export interface ArtifactAgentAccess {
+  runId: string;
+  runtimeId?: string;
+}
+
 export type ArtifactFileKind = 'image' | 'document' | 'code' | 'archive' | 'media' | 'other';
 
 export interface ArtifactLibraryQuery {
@@ -65,6 +70,7 @@ export interface ArtifactStorageSummary {
 export interface ArtifactLimitSnapshot {
   maxSingleArtifactBytes: number;
   maxGlobalArtifactBytes: number;
+  unretainedArtifactTtlSeconds: number;
   minFreeDiskBytes: number;
 }
 
@@ -110,13 +116,22 @@ export interface ArtifactAttachResult {
 export interface ArtifactMaintenancePort {
   /** Reconcile bounded non-terminal filesystem/SQLite Artifact state. Returns repaired rows. */
   reconcile(limit?: number): Promise<number>;
+  /** Reclaim bounded expired, unretained, unprotected ready Artifacts. Returns deleted rows. */
+  sweepExpired(limit?: number): Promise<number>;
 }
 
 export interface ArtifactPort {
   begin(scope: Scope, meta: ArtifactBeginMeta): Promise<UploadReservation>;
   get(scope: Scope, artifactId: string): Promise<ArtifactRef | null>;
+  getForAgent(scope: Scope, access: ArtifactAgentAccess, artifactId: string): Promise<ArtifactRef | null>;
   write(scope: Scope, artifactId: string, source: AsyncIterable<Uint8Array>, signal: AbortSignal): Promise<ArtifactRef>;
   read(scope: Scope, artifactId: string, range: ArtifactReadRange): AsyncIterable<Uint8Array>;
+  readForAgent(
+    scope: Scope,
+    access: ArtifactAgentAccess,
+    artifactId: string,
+    range: ArtifactReadRange,
+  ): AsyncIterable<Uint8Array>;
   retain(scope: Scope, artifactId: string, retained: boolean, expectedVersion: number): Promise<ArtifactRef>;
   delete(scope: Scope, artifactId: string, expectedVersion: number): Promise<void>;
   listLibrary(userId: number, query: ArtifactLibraryQuery): Promise<ArtifactLibraryPage>;

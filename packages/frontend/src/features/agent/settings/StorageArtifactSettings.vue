@@ -143,7 +143,7 @@
         <span v-if="isDirty" class="text-xs text-warning">
           <i class="fa-solid fa-circle-exclamation mr-1"></i>有尚未保存的存储配额变更
         </span>
-        <span v-else class="text-xs text-text-secondary"> 存储配额在保存后即时应用于新建产物 </span>
+        <span v-else class="text-xs text-text-secondary"> 保存后，容量配额作用于后续创建/Run 关联；TTL 在产物 ready 或取消保留时确定 </span>
 
         <button
           type="button"

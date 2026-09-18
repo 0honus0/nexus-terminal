@@ -7,7 +7,7 @@ export const artifactErrorRules: readonly AgentErrorRule[] = [
     code: 'PAYLOAD_TOO_LARGE',
     message: 'Artifact payload is too large.',
   }),
-  onCodes(['ARTIFACT_QUOTA_EXCEEDED'], {
+  onCodes(['ARTIFACT_QUOTA_EXCEEDED', 'ARTIFACT_RUN_QUOTA_EXCEEDED'], {
     status: 507,
     code: 'ARTIFACT_QUOTA_EXCEEDED',
     message: 'Artifact storage quota is exhausted.',

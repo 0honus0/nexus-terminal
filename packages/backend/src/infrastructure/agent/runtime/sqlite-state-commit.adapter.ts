@@ -22,6 +22,9 @@ import type {
   CommitSubagentToolProposalBatchCommand,
   CommitToolProposalBatchCommand,
   CommitToolProposalBatchResult,
+  ChangeModelRouteCommand,
+  ChangeModelRouteResult,
+  ContinueModelStepForCompletionGateCommand,
   CreateRunCommitResult,
   DeleteRunCommitResult,
   DurableEventInput,
@@ -43,6 +46,7 @@ import type {
   ResolveToolApprovalCommand,
   SettleModelStepCommand,
   SettleReadToolBatchCommand,
+  SettleUserInputRequestToolCommand,
   SettleMutationToolCommand,
   StateCommitCommand,
   StateCommitPort,
@@ -50,12 +54,13 @@ import type {
   SupersedeModelStepCommand,
   SupersedeMutationToolCommand,
 } from '../../../modules/agent/runtime/runs/state-commit.port';
-import type { RunStatus, RunView } from '../../../modules/agent/runtime/runs/run.types';
+import type { RunEvent, RunStatus, RunView } from '../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { cleanupExpiredCommittedCommands } from '../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../repositories/sqlite-run.mapper';
 import {
   beginModelStepTransition,
+  continueModelStepForCompletionGateTransition,
   parkModelStepTransition,
   pauseModelStepForBudgetTransition,
   retryModelStepTransition,
@@ -107,6 +112,7 @@ import {
   rejectProposedToolTransition,
   settleMutationToolTransition,
   settleReadToolBatchTransition,
+  settleUserInputRequestToolTransition,
   supersedeMutationToolTransition,
 } from './state-commit/tool-transitions';
 
@@ -253,6 +259,27 @@ const settleInterruptedRunChildren = async (
   return { needsReconciliation };
 };
 
+const cancelPendingUserInputRequest = async (
+  tx: RelationalDatabase,
+  row: RunRow,
+  now: number,
+): Promise<string | null> => {
+  const pending = await tx.queryOne<{ id: string; version: number }>(
+    `SELECT id, version FROM agent_input_requests
+     WHERE run_id = ? AND user_id = ? AND app_id = ? AND status = 'requested'
+     ORDER BY requested_at DESC, id DESC LIMIT 1`,
+    [row.id, row.user_id, row.app_id],
+  );
+  if (!pending) return null;
+  const changed = await tx.execute(
+    `UPDATE agent_input_requests SET status = 'cancelled', version = version + 1
+     WHERE id = ? AND run_id = ? AND status = 'requested' AND version = ?`,
+    [pending.id, row.id, pending.version],
+  );
+  if (changed.changes !== 1) throw new Error('USER_INPUT_REQUEST_STATE_CONFLICT');
+  return pending.id;
+};
+
 const supersedeUnconsumedRunApprovals = async (
   tx: RelationalDatabase,
   row: RunRow,
@@ -280,8 +307,33 @@ const supersedeUnconsumedRunApprovals = async (
   return changed.changes;
 };
 
+export type AgentDurableCommitObserver = (run: RunView, events: readonly RunEvent[]) => void;
+
 export class SqliteStateCommitAdapter implements StateCommitPort {
-  constructor(private readonly db: RelationalDatabase) {}
+  constructor(
+    private readonly db: RelationalDatabase,
+    private readonly onDurableCommit: AgentDurableCommitObserver = () => undefined,
+  ) {}
+
+  private notify(run: RunView, events: readonly RunEvent[]): void {
+    if (events.length === 0) return;
+    try {
+      this.onDurableCommit(run, events);
+    } catch {
+      // Observation is a post-commit projection. It must never invalidate durable Agent state.
+    }
+  }
+
+  private observe<T extends { run: RunView; committedEvents: RunEvent[] }>(result: T): T {
+    this.notify(result.run, result.committedEvents);
+    return result;
+  }
+
+  private async observedTransaction<T extends { run: RunView; committedEvents: RunEvent[] }>(
+    work: (tx: RelationalDatabase) => Promise<T>,
+  ): Promise<T> {
+    return this.observe(await this.db.transaction(work));
+  }
 
   async createRun(command: AtomicCreateRun): Promise<CreateRunCommitResult> {
     return this.db.transaction((tx) => createRunTransition(tx, command));
@@ -312,7 +364,7 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
   }
 
   async resolveRunReconciliation(command: ResolveRunReconciliationCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => resolveRunReconciliationTransition(tx, command));
+    return this.observedTransaction((tx) => resolveRunReconciliationTransition(tx, command));
   }
 
   async supersedeRunApprovals(scope: Scope, runId: string, now: number): Promise<number> {
@@ -330,77 +382,95 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
   }
 
   async beginModelStep(command: BeginModelStepCommand): Promise<BeginModelStepResult> {
-    return this.db.transaction((tx) => beginModelStepTransition(tx, command));
+    return this.observedTransaction((tx) => beginModelStepTransition(tx, command));
   }
 
   async beginSubagentModelStep(command: BeginSubagentModelStepCommand): Promise<BeginModelStepResult> {
-    return this.db.transaction((tx) => beginSubagentModelStepTransition(tx, command));
+    return this.observedTransaction((tx) => beginSubagentModelStepTransition(tx, command));
   }
 
   async pauseRuntimeForBudget(command: PauseRuntimeForBudgetCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => pauseRuntimeForBudgetTransition(tx, command));
+    return this.observedTransaction((tx) => pauseRuntimeForBudgetTransition(tx, command));
   }
 
   async parkRuntime(command: ParkRuntimeCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => parkRuntimeTransition(tx, command));
+    return this.observedTransaction((tx) => parkRuntimeTransition(tx, command));
   }
 
   async parkModelStep(command: ParkModelStepCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => parkModelStepTransition(tx, command));
+    return this.observedTransaction((tx) => parkModelStepTransition(tx, command));
+  }
+
+  async continueModelStepForCompletionGate(
+    command: ContinueModelStepForCompletionGateCommand,
+  ): Promise<StateCommitResult> {
+    return this.observedTransaction((tx) => continueModelStepForCompletionGateTransition(tx, command));
   }
 
   async commitSubagentToolProposalBatch(
     command: CommitSubagentToolProposalBatchCommand,
   ): Promise<CommitToolProposalBatchResult> {
-    return this.db.transaction((tx) => commitSubagentToolProposalBatchTransition(tx, command));
+    return this.observedTransaction((tx) => commitSubagentToolProposalBatchTransition(tx, command));
   }
 
   async beginSubagentTool(command: BeginSubagentToolCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => beginSubagentToolTransition(tx, command));
+    return this.observedTransaction((tx) => beginSubagentToolTransition(tx, command));
   }
 
   async settleSubagentTool(command: SettleSubagentToolCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => settleSubagentToolTransition(tx, command));
+    return this.observedTransaction((tx) => settleSubagentToolTransition(tx, command));
   }
 
   async settleSubagentWithoutModel(command: SettleSubagentWithoutModelCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => settleSubagentWithoutModelTransition(tx, command));
+    return this.observedTransaction((tx) => settleSubagentWithoutModelTransition(tx, command));
   }
 
   async settleSubagentModelStep(command: SettleSubagentModelStepCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => settleSubagentModelStepTransition(tx, command));
+    return this.observedTransaction((tx) => settleSubagentModelStepTransition(tx, command));
   }
 
   async retryModelStep(command: RetryModelStepCommand): Promise<RetryModelStepResult> {
-    return this.db.transaction((tx) => retryModelStepTransition(tx, command));
+    return this.observedTransaction((tx) => retryModelStepTransition(tx, command));
+  }
+
+  async changeModelRoute(command: ChangeModelRouteCommand): Promise<ChangeModelRouteResult> {
+    const previousAttemptId = command.attemptId;
+    const result = await this.observedTransaction((tx) =>
+      retryModelStepTransition(tx, {
+        ...command,
+        nextModel: command.toModel,
+        routeChange: { from: command.fromModel, to: command.toModel, routeIndex: command.toRouteIndex },
+      }),
+    );
+    return { ...result, previousAttemptId };
   }
 
   async pauseModelStepForBudget(command: PauseModelStepForBudgetCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => pauseModelStepForBudgetTransition(tx, command));
+    return this.observedTransaction((tx) => pauseModelStepForBudgetTransition(tx, command));
   }
 
   async settleModelStep(command: SettleModelStepCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => settleModelStepTransition(tx, command));
+    return this.observedTransaction((tx) => settleModelStepTransition(tx, command));
   }
 
   async commitToolProposalBatch(command: CommitToolProposalBatchCommand): Promise<CommitToolProposalBatchResult> {
-    return this.db.transaction((tx) => commitToolProposalBatchTransition(tx, command));
+    return this.observedTransaction((tx) => commitToolProposalBatchTransition(tx, command));
   }
 
   async refreshProposedTool(command: RefreshProposedToolCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => refreshProposedToolTransition(tx, command));
+    return this.observedTransaction((tx) => refreshProposedToolTransition(tx, command));
   }
 
   async rejectProposedTool(command: RejectProposedToolCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => rejectProposedToolTransition(tx, command));
+    return this.observedTransaction((tx) => rejectProposedToolTransition(tx, command));
   }
 
   async requestToolApproval(command: RequestToolApprovalCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => requestToolApprovalTransition(tx, command));
+    return this.observedTransaction((tx) => requestToolApprovalTransition(tx, command));
   }
 
   async resolveToolApproval(command: ResolveToolApprovalCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => resolveToolApprovalTransition(tx, command));
+    return this.observedTransaction((tx) => resolveToolApprovalTransition(tx, command));
   }
 
   async expireToolApprovals(now: number): Promise<RunView[]> {
@@ -412,27 +482,31 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
   }
 
   async supersedeMutationTool(command: SupersedeMutationToolCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => supersedeMutationToolTransition(tx, command));
+    return this.observedTransaction((tx) => supersedeMutationToolTransition(tx, command));
   }
 
   async beginMutationTool(command: BeginMutationToolCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => beginMutationToolTransition(tx, command));
+    return this.observedTransaction((tx) => beginMutationToolTransition(tx, command));
   }
 
   async settleMutationTool(command: SettleMutationToolCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => settleMutationToolTransition(tx, command));
+    return this.observedTransaction((tx) => settleMutationToolTransition(tx, command));
   }
 
   async beginReadToolBatch(command: BeginReadToolBatchCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => beginReadToolBatchTransition(tx, command));
+    return this.observedTransaction((tx) => beginReadToolBatchTransition(tx, command));
   }
 
   async settleReadToolBatch(command: SettleReadToolBatchCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => settleReadToolBatchTransition(tx, command));
+    return this.observedTransaction((tx) => settleReadToolBatchTransition(tx, command));
+  }
+
+  async settleUserInputRequestTool(command: SettleUserInputRequestToolCommand): Promise<StateCommitResult> {
+    return this.observedTransaction((tx) => settleUserInputRequestToolTransition(tx, command));
   }
 
   async evaluateToolLoopGuard(command: EvaluateToolLoopGuardCommand): Promise<StateCommitResult> {
-    return this.db.transaction(async (tx) => {
+    return this.observedTransaction(async (tx) => {
       const row = await tx.queryOne<RunRow>(
         `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
         [command.runId, command.scope.userId, command.scope.appId],
@@ -451,12 +525,12 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
   }
 
   async supersedeModelStep(command: SupersedeModelStepCommand): Promise<StateCommitResult> {
-    return this.db.transaction((tx) => supersedeModelStepTransition(tx, command));
+    return this.observedTransaction((tx) => supersedeModelStepTransition(tx, command));
   }
 
   async commit(command: StateCommitCommand): Promise<StateCommitResult> {
     validateEvents(command.events);
-    return this.db.transaction(async (tx) => {
+    return this.observedTransaction(async (tx) => {
       const row = await tx.queryOne<RunRow>(
         `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
         [command.runId, command.scope.userId, command.scope.appId],
@@ -489,7 +563,7 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
   async interruptUnexpectedRootExecution(
     command: InterruptUnexpectedRootExecutionCommand,
   ): Promise<StateCommitResult | null> {
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const row = await tx.queryOne<RunRow>(
         `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
         [command.runId, command.scope.userId, command.scope.appId],
@@ -538,10 +612,12 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
       await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(run), command.now);
       return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
     });
+    return result ? this.observe(result) : null;
   }
 
   async quiesceApp(scope: Scope, now: number): Promise<number> {
-    return this.db.transaction(async (tx) => {
+    const observed: Array<{ run: RunView; events: RunEvent[] }> = [];
+    const count = await this.db.transaction(async (tx) => {
       const rows = await tx.queryAll<RunRow>(
         `SELECT ${RUN_COLUMNS} FROM agent_runs
          WHERE user_id = ? AND app_id = ?
@@ -553,14 +629,18 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
         const nextStatus: RunStatus =
           row.status === 'running' || row.status === 'cancelling' ? 'interrupted' : 'cancelled';
         const { needsReconciliation } = await settleInterruptedRunChildren(tx, row, now, 'app_disabled');
+        const pendingInputRequestId = await cancelPendingUserInputRequest(tx, row, now);
         const events: DurableEventInput[] = [
+          ...(pendingInputRequestId
+            ? [{ type: 'input.request_cancelled', payload: { requestId: pendingInputRequestId, reason: 'app_disabled' } }]
+            : []),
           {
             type: nextStatus === 'interrupted' ? 'run.interrupted' : 'run.cancelled',
             payload: { reason: 'app_disabled', needsReconciliation },
           },
           { type: 'run.status_changed', payload: { from: row.status, to: nextStatus } },
         ];
-        await appendEvents(tx, row, events, now);
+        const committedEvents = await appendEvents(tx, row, events, now);
         const changed = await tx.execute(
           `UPDATE agent_runs SET status = ?, needs_reconciliation = ?, completed_at = ?, updated_at = ?,
              version = version + 1, executing_runtime_count = 0, active_execution_started_at = NULL,
@@ -587,15 +667,21 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
         );
         if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, now);
         const updated = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
-        if (updated)
-          await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(mapRunRow(updated)), now);
+        if (updated) {
+          const run = mapRunRow(updated);
+          observed.push({ run, events: committedEvents });
+          await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(run), now);
+        }
       }
       return rows.length;
     });
+    for (const item of observed) this.notify(item.run, item.events);
+    return count;
   }
 
   async interruptNonTerminalRuns(now: number): Promise<number> {
-    return this.db.transaction(async (tx) => {
+    const observed: Array<{ run: RunView; events: RunEvent[] }> = [];
+    const count = await this.db.transaction(async (tx) => {
       const rows = await tx.queryAll<RunRow>(
         `SELECT ${RUN_COLUMNS} FROM agent_runs
          WHERE status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling')
@@ -603,11 +689,15 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
       );
       for (const row of rows) {
         const { needsReconciliation } = await settleInterruptedRunChildren(tx, row, now, 'backend_restart');
+        const pendingInputRequestId = await cancelPendingUserInputRequest(tx, row, now);
         const events: DurableEventInput[] = [
+          ...(pendingInputRequestId
+            ? [{ type: 'input.request_cancelled', payload: { requestId: pendingInputRequestId, reason: 'backend_restart' } }]
+            : []),
           { type: 'run.interrupted', payload: { reason: 'backend_restart', needsReconciliation } },
           { type: 'run.status_changed', payload: { from: row.status, to: 'interrupted' } },
         ];
-        await appendEvents(tx, row, events, now);
+        const committedEvents = await appendEvents(tx, row, events, now);
         const changed = await tx.execute(
           `UPDATE agent_runs SET status = 'interrupted', needs_reconciliation = ?, completed_at = ?, updated_at = ?,
              version = version + 1, executing_runtime_count = 0, active_execution_started_at = NULL,
@@ -644,10 +734,15 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
         await cancelRunSubagentWork(tx, row.id, now, true);
         if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, now);
         const updated = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
-        if (updated)
-          await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(mapRunRow(updated)), now);
+        if (updated) {
+          const run = mapRunRow(updated);
+          observed.push({ run, events: committedEvents });
+          await allocateHostEvent(tx, row.user_id, 'summary.changed', summaryPayload(run), now);
+        }
       }
       return rows.length;
     });
+    for (const item of observed) this.notify(item.run, item.events);
+    return count;
   }
 }

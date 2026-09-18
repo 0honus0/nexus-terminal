@@ -3,6 +3,7 @@ import type {
   WorkspaceRuntimeConfirmationRepositoryPort,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime-confirmation.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 interface Row {
   id: string;
@@ -22,8 +23,8 @@ const mapRow = (row: Row): WorkspaceRuntimeConfirmationRecord => ({
   kind: row.kind,
   expectedSettingsRevision: row.expected_settings_revision,
   catalogRevision: row.catalog_revision,
-  payload: JSON.parse(row.payload_json) as WorkspaceRuntimeConfirmationRecord['payload'],
-  snapshot: JSON.parse(row.snapshot_json) as WorkspaceRuntimeConfirmationRecord['snapshot'],
+  payload: parseDurableJsonValue(row.payload_json),
+  snapshot: parseDurableJsonValue(row.snapshot_json),
   createdAt: row.created_at,
   expiresAt: row.expires_at,
 });

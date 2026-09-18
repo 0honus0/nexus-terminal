@@ -1,5 +1,5 @@
 import { reactive } from 'vue';
-import type { AgentApprovalMode, AgentReasoningEffort } from '../api/agent-api';
+import type { AgentApprovalMode, AgentExecutionMode, AgentReasoningEffort } from '../api/agent-api';
 
 export interface AgentAppViewState {
   threadId?: string;
@@ -9,6 +9,7 @@ export interface AgentAppViewState {
   modelKey?: string;
   reasoningEffort?: AgentReasoningEffort;
   approvalMode?: AgentApprovalMode;
+  executionMode?: AgentExecutionMode;
   connectionIds?: number[];
   environmentRecipeId?: string;
   hubView: 'conversation' | 'files';
@@ -72,6 +73,14 @@ export const agentSurfaceSession = {
     const state = ensure(appId);
     if (approvalMode) state.approvalMode = approvalMode;
     else delete state.approvalMode;
+  },
+  restoreExecutionMode(appId: string): AgentExecutionMode | undefined {
+    return ensure(appId).executionMode;
+  },
+  setExecutionMode(appId: string, executionMode?: AgentExecutionMode): void {
+    const state = ensure(appId);
+    if (executionMode) state.executionMode = executionMode;
+    else delete state.executionMode;
   },
   restoreConnectionIds(appId: string): number[] | undefined {
     const value = ensure(appId).connectionIds;

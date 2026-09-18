@@ -39,12 +39,18 @@ importers:
 
   packages/agent-runner:
     dependencies:
+      diff:
+        specifier: 9.0.0
+        version: 9.0.0
       semver:
         specifier: 7.7.2
         version: 7.7.2
       tar:
         specifier: 'catalog:'
         version: 7.5.22
+      typescript:
+        specifier: 7.0.2
+        version: 7.0.2
       ws:
         specifier: ^8.21.3
         version: 8.21.3
@@ -58,9 +64,6 @@ importers:
       '@types/ws':
         specifier: ^8.18.1
         version: 8.18.1
-      typescript:
-        specifier: catalog:node-build
-        version: 7.0.2
 
   packages/backend:
     dependencies:
@@ -1835,6 +1838,10 @@ packages:
 
   devtools-protocol@0.0.1666840:
     resolution: {integrity: sha512-gCcO42XCHKEs7Ag0S7aGYsnJ7hlgrO3qderYqeiY0Eqk+0GFfuvT13IA0hHreJTa2KCdDVyGMeOhdMNmrrTjVg==}
+
+  diff@9.0.0:
+    resolution: {integrity: sha512-svtcdpS8CgJyqAjEQIXdb3OjhFVVYjzGAPO8WGCmRbrml64SPw/jJD4GoE98aR7r25A0XcgrK3F02yw9R/vhQw==}
+    engines: {node: '>=0.3.1'}
 
   dijkstrajs@1.0.3:
     resolution: {integrity: sha512-qiSlmBq9+BCdCA/L46dw8Uy93mloxsPSbwnm5yrKn2vMPiy8KyAskTF6zuV/j5BMsmOGZDPs7KjU+mjb670kfA==}
@@ -4609,6 +4616,8 @@ snapshots:
   detect-libc@2.1.2: {}
 
   devtools-protocol@0.0.1666840: {}
+
+  diff@9.0.0: {}
 
   dijkstrajs@1.0.3: {}
 

@@ -1,8 +1,33 @@
-import type { JsonValue } from '../../agent.types';
-
-export interface TransientRunEvent {
-  runId: string;
-  type: 'message.delta' | 'tool.delta';
-  payload: JsonValue;
-  occurredAt: number;
+export interface ModelAttemptIdentity {
+  attemptId: string;
+  attemptIndex: number;
 }
+
+export interface TransientMessageDeltaPayload extends ModelAttemptIdentity {
+  text: string;
+  runtimeId?: string;
+  delegationId?: string;
+}
+
+export interface TransientToolDeltaPayload extends ModelAttemptIdentity {
+  index: number;
+  id: string | null;
+  name: string | null;
+  argumentsDelta: string;
+  runtimeId?: string;
+  delegationId?: string;
+}
+
+export type TransientRunEvent =
+  | {
+      runId: string;
+      type: 'message.delta';
+      payload: TransientMessageDeltaPayload;
+      occurredAt: number;
+    }
+  | {
+      runId: string;
+      type: 'tool.delta';
+      payload: TransientToolDeltaPayload;
+      occurredAt: number;
+    };

@@ -4,13 +4,24 @@ import type { AgentSettingsService } from '../host/agent-settings.service';
 import type { AppLifecycleService } from '../host/app-lifecycle.service';
 import type { AppCapabilityBroker } from '../host/app-capability-broker';
 import type { JsonValue, Scope } from '../agent.types';
+import type { ProjectInstructionProjection } from '../ai/project-instruction-source.port';
 import type { CryptoHashPort } from '../crypto-hash.port';
 import { hashOperation } from '../operation-hash';
 import type {
   AgentWorkspaceReadHandle,
   RunnerCommandRequest,
   RunnerCommandResult,
+  WorkspaceApplyPatchRequest,
+  WorkspaceApplyPatchResult,
+  WorkspaceFileReadRequest,
+  WorkspaceFileReadResult,
   WorkspaceRuntimeControllerPort,
+  WorkspaceSearchRequest,
+  WorkspaceSearchResult,
+  WorkspaceRepoMapRequest,
+  WorkspaceRepoMapResult,
+  WorkspaceCodeIntelRequest,
+  WorkspaceCodeIntelResult,
 } from './workspace-runtime-controller.port';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION, type PluginRunnerTargetSourcePort } from '../host/plugin-runner-target.port';
 import type { AgentWorkspaceRepositoryPort } from './workspace-runtime.repository.port';
@@ -144,6 +155,95 @@ export class WorkspaceRuntimeService {
 
   listWorkspaces(scope: Scope, runId?: string): Promise<AgentWorkspaceView[]> {
     return this.repository.listWorkspaces(scope, runId);
+  }
+
+  async loadProjectInstructions(
+    scope: Scope,
+    runId: string,
+    runtimeId: string,
+    targetDirectories: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<ProjectInstructionProjection | null> {
+    const workspaces = await this.repository.listWorkspaces(scope, runId);
+    const workspace = workspaces
+      .filter(
+        (candidate) =>
+          candidate.agentRuntimeId === runtimeId &&
+          ['ready', 'running', 'stopped'].includes(candidate.status),
+      )
+      .sort((left, right) => right.updatedAt - left.updatedAt)[0];
+    if (!workspace) return null;
+    const projection = await this.controller.projectInstructions(
+      workspace.id,
+      workspace.generation,
+      targetDirectories,
+      signal,
+    );
+    return {
+      workspaceId: workspace.id,
+      generation: workspace.generation,
+      ...projection,
+    };
+  }
+
+  async readWorkspaceFile(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileReadRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileReadResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.readWorkspaceFile(workspace.id, workspace.generation, request, signal);
+  }
+
+  async searchWorkspace(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceSearchResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.searchWorkspace(workspace.id, workspace.generation, request, signal);
+  }
+
+  async repoMap(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceRepoMapRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceRepoMapResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.repoMap(workspace.id, workspace.generation, request, signal);
+  }
+
+  async codeIntel(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceCodeIntelRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceCodeIntelResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.codeIntel(workspace.id, workspace.generation, request, signal);
+  }
+
+  async applyWorkspacePatch(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceApplyPatchRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceApplyPatchResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.applyWorkspacePatch(workspace.id, workspace.generation, request, signal);
   }
 
   async getWorkspace(scope: Scope, workspaceId: string): Promise<AgentWorkspaceView> {

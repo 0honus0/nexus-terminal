@@ -34,30 +34,25 @@ export interface AgentSettingsDocument {
   model: {
     defaultProviderId: string | null;
     defaultModelId: string | null;
+    fallbackModels: Array<{ providerId: string; modelId: string }>;
   };
   performance: {
     maxConcurrentRuntimes: number;
     maxConcurrentModelCalls: 'auto' | number;
   };
   budget: {
-    maxContextTokens: number;
-    maxOutputTokens: number;
     maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
-    maxRawToolBytes: number;
     maxRecallItems: number;
     maxRecallBytes: number;
   };
   hardLimits: {
-    maxContextTokens: number;
-    maxOutputTokens: number;
     maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
-    maxRawToolBytes: number;
     maxArtifactBytes: number;
     maxSingleArtifactBytes: number;
     maxGlobalArtifactBytes: number;
@@ -70,7 +65,6 @@ export interface AgentSettingsDocument {
     maxSubagentMessageBytesPerRun: number;
     maxActiveWorkspaces: number;
     unretainedArtifactTtlSeconds: number;
-    workspaceIdleTtlSeconds: number;
   };
   subagents: {
     maxDelegationDepth: number;
@@ -85,7 +79,6 @@ export interface AgentSettingsDocument {
   };
   workspaceRuntime: {
     maxActiveWorkspaces: number;
-    workspaceIdleTtlSeconds: number;
     enabledRecipeIds: string[];
     toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
     acpProfiles: AgentAcpWorkspaceProfileSetting[];
@@ -96,43 +89,29 @@ export interface AgentSettingsDocument {
   plugins: {
     repositories: AgentPluginRepositorySetting[];
   };
-  safety: {
-    providerPrivateNetworkExceptions: string[];
-  };
 }
 
 export const AGENT_DEFAULTS = {
-  approvalTtlSeconds: 600,
-  leaseTtlSeconds: 30,
-  leaseRenewSeconds: 10,
   minFreeDiskBytes: 1_073_741_824,
   modelRetryCount: 2,
-  estimateMargin: 0.15,
-  maxConcurrentToolCalls: 1,
   settings: {
     schemaVersion: 1,
     feature: { enabled: false },
-    model: { defaultProviderId: null, defaultModelId: null },
+    model: { defaultProviderId: null, defaultModelId: null, fallbackModels: [] },
     performance: { maxConcurrentRuntimes: 2, maxConcurrentModelCalls: 'auto' },
     budget: {
-      maxContextTokens: 32_000,
-      maxOutputTokens: 4_096,
       maxRunSteps: 80,
       maxActiveExecutionSeconds: 1_800,
       toolTimeoutSeconds: 60,
       maxToolOutputBytes: 65_536,
-      maxRawToolBytes: 10_485_760,
       maxRecallItems: 5,
       maxRecallBytes: 8_192,
     },
     hardLimits: {
-      maxContextTokens: 128_000,
-      maxOutputTokens: 16_384,
       maxRunSteps: 400,
       maxActiveExecutionSeconds: 7_200,
       toolTimeoutSeconds: 300,
       maxToolOutputBytes: 262_144,
-      maxRawToolBytes: 52_428_800,
       maxArtifactBytes: 1_073_741_824,
       maxSingleArtifactBytes: 268_435_456,
       maxGlobalArtifactBytes: 10_737_418_240,
@@ -145,7 +124,6 @@ export const AGENT_DEFAULTS = {
       maxSubagentMessageBytesPerRun: 8_388_608,
       maxActiveWorkspaces: 8,
       unretainedArtifactTtlSeconds: 2_592_000,
-      workspaceIdleTtlSeconds: 3_600,
     },
     subagents: {
       maxDelegationDepth: 2,
@@ -160,14 +138,12 @@ export const AGENT_DEFAULTS = {
     },
     workspaceRuntime: {
       maxActiveWorkspaces: 4,
-      workspaceIdleTtlSeconds: 900,
       enabledRecipeIds: [],
       toolVersions: {},
       acpProfiles: [],
     },
     browser: { targets: [] },
     plugins: { repositories: [] },
-    safety: { providerPrivateNetworkExceptions: [] },
   } satisfies AgentSettingsDocument,
 } as const;
 
@@ -357,7 +333,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   const workspaceRuntime = section(raw, 'workspaceRuntime');
   const browser = section(raw, 'browser');
   const plugins = section(raw, 'plugins');
-  const safety = section(raw, 'safety');
 
   const normalized: AgentSettingsDocument = {
     schemaVersion: 1,
@@ -365,6 +340,19 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     model: {
       defaultProviderId: stringOrNull(model.defaultProviderId, defaults.model.defaultProviderId),
       defaultModelId: stringOrNull(model.defaultModelId, defaults.model.defaultModelId),
+      fallbackModels: Array.isArray(model.fallbackModels)
+        ? model.fallbackModels
+            .slice(0, 8)
+            .flatMap((candidate) => {
+              if (!isRecord(candidate) || typeof candidate.providerId !== 'string' || typeof candidate.modelId !== 'string') return [];
+              const providerId = candidate.providerId.trim();
+              const modelId = candidate.modelId.trim();
+              return providerId && modelId ? [{ providerId, modelId }] : [];
+            })
+            .filter((candidate, index, values) =>
+              values.findIndex((value) => value.providerId === candidate.providerId && value.modelId === candidate.modelId) === index,
+            )
+        : structuredClone(defaults.model.fallbackModels),
     },
     performance: {
       maxConcurrentRuntimes: integer(performance.maxConcurrentRuntimes, defaults.performance.maxConcurrentRuntimes, 1),
@@ -374,8 +362,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
           : integer(performance.maxConcurrentModelCalls, defaults.performance.maxConcurrentRuntimes, 1),
     },
     budget: {
-      maxContextTokens: integer(budget.maxContextTokens, defaults.budget.maxContextTokens, 1),
-      maxOutputTokens: integer(budget.maxOutputTokens, defaults.budget.maxOutputTokens, 1),
       maxRunSteps: integer(budget.maxRunSteps, defaults.budget.maxRunSteps, 1),
       maxActiveExecutionSeconds: integer(
         budget.maxActiveExecutionSeconds,
@@ -384,13 +370,10 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       ),
       toolTimeoutSeconds: integer(budget.toolTimeoutSeconds, defaults.budget.toolTimeoutSeconds, 1),
       maxToolOutputBytes: integer(budget.maxToolOutputBytes, defaults.budget.maxToolOutputBytes, 1),
-      maxRawToolBytes: integer(budget.maxRawToolBytes, defaults.budget.maxRawToolBytes, 1),
       maxRecallItems: integer(budget.maxRecallItems, defaults.budget.maxRecallItems, 1),
       maxRecallBytes: integer(budget.maxRecallBytes, defaults.budget.maxRecallBytes, 1),
     },
     hardLimits: {
-      maxContextTokens: integer(hardLimits.maxContextTokens, defaults.hardLimits.maxContextTokens, 1),
-      maxOutputTokens: integer(hardLimits.maxOutputTokens, defaults.hardLimits.maxOutputTokens, 1),
       maxRunSteps: integer(hardLimits.maxRunSteps, defaults.hardLimits.maxRunSteps, 1),
       maxActiveExecutionSeconds: integer(
         hardLimits.maxActiveExecutionSeconds,
@@ -399,7 +382,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       ),
       toolTimeoutSeconds: integer(hardLimits.toolTimeoutSeconds, defaults.hardLimits.toolTimeoutSeconds, 1),
       maxToolOutputBytes: integer(hardLimits.maxToolOutputBytes, defaults.hardLimits.maxToolOutputBytes, 1),
-      maxRawToolBytes: integer(hardLimits.maxRawToolBytes, defaults.hardLimits.maxRawToolBytes, 1),
       maxArtifactBytes: integer(hardLimits.maxArtifactBytes, defaults.hardLimits.maxArtifactBytes, 1),
       maxSingleArtifactBytes: integer(hardLimits.maxSingleArtifactBytes, defaults.hardLimits.maxSingleArtifactBytes, 1),
       maxGlobalArtifactBytes: integer(hardLimits.maxGlobalArtifactBytes, defaults.hardLimits.maxGlobalArtifactBytes, 1),
@@ -426,11 +408,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       unretainedArtifactTtlSeconds: integer(
         hardLimits.unretainedArtifactTtlSeconds,
         defaults.hardLimits.unretainedArtifactTtlSeconds,
-        1,
-      ),
-      workspaceIdleTtlSeconds: integer(
-        hardLimits.workspaceIdleTtlSeconds,
-        defaults.hardLimits.workspaceIdleTtlSeconds,
         1,
       ),
     },
@@ -463,11 +440,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         defaults.workspaceRuntime.maxActiveWorkspaces,
         1,
       ),
-      workspaceIdleTtlSeconds: integer(
-        workspaceRuntime.workspaceIdleTtlSeconds,
-        defaults.workspaceRuntime.workspaceIdleTtlSeconds,
-        1,
-      ),
       enabledRecipeIds: stringList(workspaceRuntime.enabledRecipeIds, defaults.workspaceRuntime.enabledRecipeIds),
       toolVersions: packVersionSettings(workspaceRuntime.toolVersions, defaults.workspaceRuntime.toolVersions),
       acpProfiles: acpProfiles(workspaceRuntime.acpProfiles, defaults.workspaceRuntime.acpProfiles),
@@ -477,11 +449,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
     },
     plugins: {
       repositories: pluginRepositories(plugins.repositories, defaults.plugins.repositories),
-    },
-    safety: {
-      providerPrivateNetworkExceptions: Array.isArray(safety.providerPrivateNetworkExceptions)
-        ? safety.providerPrivateNetworkExceptions.filter((value): value is string => typeof value === 'string')
-        : defaults.safety.providerPrivateNetworkExceptions,
     },
   };
 
@@ -500,13 +467,10 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   }
 
   const cappedPairs: Array<[keyof AgentSettingsDocument['budget'], keyof AgentSettingsDocument['hardLimits']]> = [
-    ['maxContextTokens', 'maxContextTokens'],
-    ['maxOutputTokens', 'maxOutputTokens'],
     ['maxRunSteps', 'maxRunSteps'],
     ['maxActiveExecutionSeconds', 'maxActiveExecutionSeconds'],
     ['toolTimeoutSeconds', 'toolTimeoutSeconds'],
     ['maxToolOutputBytes', 'maxToolOutputBytes'],
-    ['maxRawToolBytes', 'maxRawToolBytes'],
     ['maxRecallItems', 'maxRecallItems'],
     ['maxRecallBytes', 'maxRecallBytes'],
   ];
@@ -548,10 +512,6 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
   normalized.workspaceRuntime.maxActiveWorkspaces = Math.min(
     normalized.workspaceRuntime.maxActiveWorkspaces,
     normalized.hardLimits.maxActiveWorkspaces,
-  );
-  normalized.workspaceRuntime.workspaceIdleTtlSeconds = Math.min(
-    normalized.workspaceRuntime.workspaceIdleTtlSeconds,
-    normalized.hardLimits.workspaceIdleTtlSeconds,
   );
 
   return normalized;

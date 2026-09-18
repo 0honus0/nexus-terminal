@@ -1,4 +1,3 @@
-import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { ToolRisk } from '../../../modules/agent/capabilities/tool.types';
 import type {
   CheckpointDelegationRecoveryEntry,
@@ -10,8 +9,17 @@ import type {
   CheckpointView,
   SaveCheckpointCommand,
 } from '../../../modules/agent/runtime/recovery/checkpoint.repository.port';
-import type { RunDefinitionSnapshot } from '../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import {
+  decodeDurableStringArray,
+  decodeRunPlan,
+  durableInteger,
+  durableRecord,
+  durableString,
+  parseDurableJson,
+  parseRunDefinition,
+  parseToolResult,
+} from '../runtime/durable-state-decoders';
 import { persistedPlan, RUN_COLUMNS, type RunRow } from './sqlite-run.mapper';
 
 interface CheckpointRow {
@@ -43,6 +51,84 @@ interface QuarantineRecoveryRow {
   tool_call_id: string | null;
 }
 
+const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
+  try {
+    const record = durableRecord(parseDurableJson(raw));
+    if (record.schemaVersion !== 1) throw new Error('invalid');
+    const goal = record.goal === undefined ? undefined : durableRecord(record.goal);
+    let recoveryManifest: CheckpointSnapshot['recoveryManifest'];
+    if (record.recoveryManifest !== undefined) {
+      const recovery = durableRecord(record.recoveryManifest);
+      if (recovery.schemaVersion !== 1) throw new Error('invalid');
+      const boundary = durableRecord(recovery.contextBoundary);
+      const runThrough = durableRecord(boundary.runThrough);
+      if (Object.keys(runThrough).length > 64) throw new Error('invalid');
+      if (!Array.isArray(recovery.tools) || recovery.tools.length > 4096) throw new Error('invalid');
+      if (!Array.isArray(recovery.delegations) || recovery.delegations.length > 4096) throw new Error('invalid');
+      recoveryManifest = {
+        schemaVersion: 1,
+        eventThrough: durableInteger(recovery.eventThrough),
+        contextBoundary: {
+          baseThrough: durableInteger(boundary.baseThrough),
+          runThrough: Object.fromEntries(
+            Object.entries(runThrough).map(([runId, sequence]) => [runId, durableInteger(sequence)]),
+          ),
+        },
+        tools: recovery.tools.map((item) => {
+          const tool = durableRecord(item);
+          if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(tool.risk))) throw new Error('invalid');
+          if (!['proposed', 'awaiting_approval', 'ready', 'running', 'succeeded', 'verification_failed', 'failed', 'cancelled', 'reconciling'].includes(String(tool.status))) throw new Error('invalid');
+          if (!['not_started', 'confirmed', 'unknown'].includes(String(tool.sideEffectStatus))) throw new Error('invalid');
+          if (!['not_started', 'verified', 'unverified', 'failed'].includes(String(tool.verificationStatus))) throw new Error('invalid');
+          return {
+            toolCallId: durableString(tool.toolCallId) as string,
+            operationHash: durableString(tool.operationHash) as string,
+            risk: tool.risk as CheckpointToolRecoveryEntry['risk'],
+            status: tool.status as CheckpointToolRecoveryEntry['status'],
+            sideEffectStatus: tool.sideEffectStatus as CheckpointToolRecoveryEntry['sideEffectStatus'],
+            verificationStatus: tool.verificationStatus as CheckpointToolRecoveryEntry['verificationStatus'],
+            quarantinedResourceKeys: decodeDurableStringArray(tool.quarantinedResourceKeys, 4096),
+          };
+        }),
+        delegations: recovery.delegations.map((item) => {
+          const delegation = durableRecord(item);
+          if (!['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled'].includes(String(delegation.status))) throw new Error('invalid');
+          return {
+            delegationId: durableString(delegation.delegationId) as string,
+            status: delegation.status as CheckpointDelegationRecoveryEntry['status'],
+          };
+        }),
+        quarantinedResourceKeys: decodeDurableStringArray(recovery.quarantinedResourceKeys, 4096),
+      };
+    }
+    return {
+      schemaVersion: 1,
+      runId: durableString(record.runId) as string,
+      ledgerThrough: durableInteger(record.ledgerThrough),
+      planVersion: durableInteger(record.planVersion),
+      plan: decodeRunPlan(record.plan),
+      ...(goal === undefined
+        ? {}
+        : {
+            goal: {
+              text: durableString(goal.text, true),
+              revision: durableInteger(goal.revision),
+              updatedAt: goal.updatedAt === null ? null : durableInteger(goal.updatedAt),
+            },
+          }),
+      completedStepIds: decodeDurableStringArray(record.completedStepIds, 4096),
+      evidenceRefs: decodeDurableStringArray(record.evidenceRefs, 4096),
+      modelConfigurationVersion: durableInteger(record.modelConfigurationVersion, 1),
+      definitionVersion: durableString(record.definitionVersion) as string,
+      policyRevision: durableInteger(record.policyRevision, 1),
+      workspaceArtifactManifestRefs: decodeDurableStringArray(record.workspaceArtifactManifestRefs, 4096),
+      ...(recoveryManifest === undefined ? {} : { recoveryManifest }),
+    };
+  } catch {
+    throw new Error('CHECKPOINT_STATE_INVALID');
+  }
+};
+
 const terminalToolStatuses: ReadonlySet<CheckpointToolStatus> = new Set([
   'succeeded',
   'verification_failed',
@@ -58,18 +144,11 @@ const toolRecovery = (
   let verificationStatus: CheckpointToolRecoveryEntry['verificationStatus'] = 'not_started';
   if (row.result_json) {
     try {
-      const parsed = JSON.parse(row.result_json) as unknown;
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        const result = parsed as Record<string, unknown>;
-        if (result.outcome === 'confirmed' || result.outcome === 'unknown') outcome = result.outcome;
-        const verification = result.verification;
-        if (verification && typeof verification === 'object' && !Array.isArray(verification)) {
-          const status = (verification as Record<string, unknown>).status;
-          if (status === 'verified' || status === 'unverified' || status === 'failed') verificationStatus = status;
-        }
-      }
+      const result = parseToolResult(row.result_json);
+      outcome = result.outcome;
+      verificationStatus = result.verification.status;
     } catch {
-      outcome = null;
+      throw new Error('CHECKPOINT_STATE_INVALID');
     }
   }
   const mutatingRisk = row.risk === 'mutate' || row.risk === 'destructive';
@@ -92,7 +171,7 @@ const mapRow = (row: CheckpointRow): CheckpointView => ({
   schemaVersion: row.schema_version,
   ledgerThrough: row.ledger_through,
   eventThrough: row.event_through,
-  snapshot: JSON.parse(row.snapshot_json) as CheckpointSnapshot,
+  snapshot: decodeCheckpointSnapshot(row.snapshot_json),
   createdAt: row.created_at,
 });
 
@@ -173,7 +252,7 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         );
         if (!artifact || artifact.status !== 'ready') throw new Error('CHECKPOINT_ARTIFACT_UNAVAILABLE');
       }
-      const definition = JSON.parse(run.definition_json) as RunDefinitionSnapshot;
+      const definition = parseRunDefinition(run.definition_json);
       const eventThrough = run.next_event_sequence - 1;
       const currentRunThrough = ledger?.value ?? 0;
       const contextBoundary = definition.contextBoundary
@@ -288,11 +367,9 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
     const startedToolIds = new Set<string>();
     for (const event of startedEvents) {
       try {
-        const payload = JSON.parse(event.payload_json) as unknown;
-        if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-          const toolCallId = (payload as Record<string, unknown>).toolCallId;
-          if (typeof toolCallId === 'string' && toolCallId) startedToolIds.add(toolCallId);
-        }
+        const payload = durableRecord(parseDurableJson(event.payload_json));
+        const toolCallId = durableString(payload.toolCallId) as string;
+        if (toolCallId) startedToolIds.add(toolCallId);
       } catch {
         throw new Error('CHECKPOINT_STATE_INVALID');
       }

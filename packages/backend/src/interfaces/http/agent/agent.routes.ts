@@ -607,7 +607,6 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
                 defaultEffort: model.defaultReasoningEffort ?? null,
                 source: model.reasoningSource ?? null,
                 mandatory: model.reasoningMandatory ?? false,
-                supportsMaxTokens: model.reasoningSupportsMaxTokens ?? false,
               },
             })),
           ),

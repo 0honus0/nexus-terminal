@@ -1,5 +1,10 @@
 import { compare, major, valid } from 'semver';
 import type { JsonValue } from '../agent.types';
+import { AGENT_MODEL_CAPABILITIES } from '../ai/model.types';
+import {
+  LEGACY_BASELINE_MODEL_CAPABILITIES,
+  normalizeRequiredModelCapabilities,
+} from '../ai/model-capability-requirements';
 import { assertJsonSchema } from '../json-schema-validator';
 import {
   AGENT_CAPABILITIES,
@@ -47,7 +52,11 @@ const MANIFEST_SCHEMA: JsonValue = {
           version: { type: 'string', minLength: 1 },
           displayName: { type: 'string', minLength: 1 },
           description: { type: 'string', minLength: 1 },
-          requiredModelCapabilities: { type: 'array', items: { type: 'string', minLength: 1 }, uniqueItems: true },
+          requiredModelCapabilities: {
+            type: 'array',
+            items: { enum: [...AGENT_MODEL_CAPABILITIES, ...LEGACY_BASELINE_MODEL_CAPABILITIES] },
+            uniqueItems: true,
+          },
         },
       },
     },
@@ -208,12 +217,14 @@ export const validateManifest = (raw: unknown, options: ManifestValidatorOptions
       if (!Array.isArray(agent.requiredModelCapabilities) || agent.requiredModelCapabilities.length > 32) {
         throw new Error('manifest.agents[].requiredModelCapabilities must be an array.');
       }
-      const requiredModelCapabilities = agent.requiredModelCapabilities.map((item) =>
+      const rawRequiredModelCapabilities = agent.requiredModelCapabilities.map((item) =>
         string(item, 'manifest.agents[].requiredModelCapabilities[]'),
       );
-      if (new Set(requiredModelCapabilities).size !== requiredModelCapabilities.length) {
+      if (new Set(rawRequiredModelCapabilities).size !== rawRequiredModelCapabilities.length) {
         throw new Error('Duplicate manifest.agents[].requiredModelCapabilities value.');
       }
+      const requiredModelCapabilities = normalizeRequiredModelCapabilities(rawRequiredModelCapabilities);
+      if (!requiredModelCapabilities) throw new Error('Unknown Agent model capability requirement.');
       agents.push({
         id: agentId,
         version: agentVersion,

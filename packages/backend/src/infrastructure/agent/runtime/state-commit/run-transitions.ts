@@ -18,6 +18,13 @@ import type { RelationalDatabase } from '../../../../platform/storage/relational
 import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import {
+  durableBoolean,
+  durableInteger,
+  durableRecord,
+  durableString,
+  parseDurableJson,
+} from '../durable-state-decoders';
+import {
   allocateHostEvent,
   appendEvents,
   appendLedger,
@@ -54,7 +61,11 @@ export const createRunTransition = async (
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
     if (existing.status === 'unknown') throw new Error('RECONCILIATION_REQUIRED');
     if (!existing.response_json) throw new Error('IDEMPOTENCY_RESPONSE_MISSING');
-    const response = JSON.parse(existing.response_json) as { runId: string; inputSequence: number };
+    const replay = durableRecord(parseDurableJson(existing.response_json));
+    const response = {
+      runId: durableString(replay.runId) as string,
+      inputSequence: durableInteger(replay.inputSequence),
+    };
     const row = await tx.queryOne<RunRow>(
       `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
       [response.runId, command.scope.userId, command.scope.appId],
@@ -248,7 +259,10 @@ export const cancelRunTransition = async (
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
     if (existing.status === 'unknown') throw new Error('RECONCILIATION_REQUIRED');
     const response = existing.response_json
-      ? (JSON.parse(existing.response_json) as { accepted: boolean })
+      ? (() => {
+          const replay = durableRecord(parseDurableJson(existing.response_json!));
+          return { accepted: durableBoolean(replay.accepted) };
+        })()
       : { accepted: false };
     const row = await tx.queryOne<RunRow>(
       `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
@@ -305,6 +319,20 @@ export const cancelRunTransition = async (
          AND (status = 'requested' OR (status = 'approved' AND consumed_at IS NULL))`,
       [command.now, row.id, row.user_id, row.app_id],
     );
+    const pendingInputRequest = await tx.queryOne<{ id: string }>(
+      `SELECT id FROM agent_input_requests
+       WHERE run_id = ? AND user_id = ? AND app_id = ? AND status = 'requested'
+       ORDER BY requested_at DESC, id DESC LIMIT 1`,
+      [row.id, row.user_id, row.app_id],
+    );
+    if (pendingInputRequest) {
+      const requestChanged = await tx.execute(
+        `UPDATE agent_input_requests SET status = 'cancelled', version = version + 1
+         WHERE id = ? AND run_id = ? AND status = 'requested'`,
+        [pendingInputRequest.id, row.id],
+      );
+      if (requestChanged.changes !== 1) throw new Error('USER_INPUT_REQUEST_STATE_CONFLICT');
+    }
     if (unresolvedTools.length > 0) {
       await tx.execute(
         `UPDATE agent_tool_calls SET status = 'cancelled', completed_at = ?, version = version + 1
@@ -356,6 +384,9 @@ export const cancelRunTransition = async (
     }));
     const events: DurableEventInput[] = [
       ...toolCancellationEvents,
+      ...(pendingInputRequest
+        ? [{ type: 'input.request_cancelled', payload: { requestId: pendingInputRequest.id } } as const]
+        : []),
       { type: 'run.cancel_requested', payload: { previousStatus: row.status } },
       ...(immediate ? [{ type: 'run.cancelled', payload: { reason: 'no_active_participants' } } as const] : []),
       { type: 'run.status_changed', payload: { from: row.status, to: nextStatus } },
@@ -414,7 +445,8 @@ export const increaseRunBudgetTransition = async (
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
     if (existing.status === 'unknown') throw new Error('RECONCILIATION_REQUIRED');
     if (!existing.response_json) throw new Error('IDEMPOTENCY_RESPONSE_MISSING');
-    const response = JSON.parse(existing.response_json) as { runId: string };
+    const replay = durableRecord(parseDurableJson(existing.response_json));
+    const response = { runId: durableString(replay.runId) as string };
     const row = await tx.queryOne<RunRow>(
       `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
       [response.runId, command.scope.userId, command.scope.appId],
@@ -617,7 +649,11 @@ export const deleteRunTransition = async (
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
     if (existing.status === 'unknown') throw new Error('RECONCILIATION_REQUIRED');
     if (!existing.response_json) throw new Error('IDEMPOTENCY_RESPONSE_MISSING');
-    const response = JSON.parse(existing.response_json) as { runId: string; hostEventCursor: number };
+    const replay = durableRecord(parseDurableJson(existing.response_json));
+    const response = {
+      runId: durableString(replay.runId) as string,
+      hostEventCursor: durableInteger(replay.hostEventCursor),
+    };
     return { runId: response.runId, deleted: true, replayed: true, hostEventCursor: response.hostEventCursor };
   }
 
@@ -666,7 +702,6 @@ export const deleteRunTransition = async (
     row.user_id,
     row.app_id,
   ]);
-  await tx.execute('DELETE FROM ai_context_digests WHERE thread_id = ?', [row.thread_id]);
   const deleted = await tx.execute(
     `DELETE FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
     [row.id, row.user_id, row.app_id, row.version],

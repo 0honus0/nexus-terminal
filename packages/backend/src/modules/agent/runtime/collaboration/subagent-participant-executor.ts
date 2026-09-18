@@ -1,14 +1,18 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { LanguageModelPort } from '../../ai/language-model.port';
-import type { TokenUsage } from '../../ai/model.types';
+import { applyModelCapabilitySnapshot } from '../../ai/model-capability-resolver';
+import { modelCacheLineageKey } from '../../ai/model-cache-hint';
+import type { ModelFinishReason, ModelProviderContinuation, TokenUsage } from '../../ai/model.types';
 import type { ProviderService } from '../../ai/provider.service';
 import type { LeaseOwner, ResourceLease } from '../../capabilities/lease.port';
 import type { ToolExecutor } from '../../capabilities/tool-executor';
 import type { ToolContext, ToolInspection, ToolProposal, ToolResult } from '../../capabilities/tool.types';
 import type { AgentEventHub } from '../events/event-hub';
 import { executionErrorCode, failedToolResult as buildFailedToolResult } from '../execution/execution-errors';
+import { modelFinishDisposition } from '../execution/model-finish-policy';
 import { LeaseCoordinator, type LeaseRenewal } from '../execution/lease-coordinator';
+import { toolLeaseTtlSeconds } from '../execution/tool-lease-policy';
 import type { ModelCallLimiter } from '../execution/model-call-limiter';
 import { estimateTokens } from '../execution/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
@@ -194,11 +198,7 @@ export class SubagentParticipantExecutor {
     const values = await Promise.all(
       delegationIds.map((delegationId) => this.delegations.delegation(scope, work.runId, delegationId)),
     );
-    if (
-      values.some(
-        (delegation) => delegation === null || delegation.parentRuntimeId !== work.agentRuntimeId,
-      )
-    ) {
+    if (values.some((delegation) => delegation === null || delegation.parentRuntimeId !== work.agentRuntimeId)) {
       await this.work.settleWork(work.id, ownerEpoch, 'cancelled', this.clock.nowUnixSeconds());
       return;
     }
@@ -316,7 +316,7 @@ export class SubagentParticipantExecutor {
         signal,
         Math.min(delegation.deadlineAt, work.deadlineAt),
       );
-      const leaseTtlSeconds = Math.min(300, Math.max(30, activeRun.budget.toolTimeoutSeconds + 15));
+      const leaseTtlSeconds = toolLeaseTtlSeconds(activeRun.budget.toolTimeoutSeconds);
       let leases: ResourceLease[] = [];
       let renewal: LeaseRenewal | null = null;
       try {
@@ -493,11 +493,12 @@ export class SubagentParticipantExecutor {
       await this.failBeforeModel(scope, work, delegation, ownerEpoch, 'SUBAGENT_MODEL_UNAVAILABLE');
       return;
     }
-    const model = provider.models.find((candidate) => candidate.id === delegation.modelRef.modelId);
-    if (!model) {
+    const configuredModel = provider.models.find((candidate) => candidate.id === delegation.modelRef.modelId);
+    if (!configuredModel) {
       await this.failBeforeModel(scope, work, delegation, ownerEpoch, 'SUBAGENT_MODEL_UNAVAILABLE');
       return;
     }
+    const model = applyModelCapabilitySnapshot(configuredModel, delegation.modelCapabilities);
     const preparedContext = await this.contextBuilder.prepare(
       scope,
       work.runId,
@@ -530,7 +531,8 @@ export class SubagentParticipantExecutor {
 
     let text = '';
     let usage: TokenUsage | undefined;
-    let finishReason: string | null = null;
+    let finishReason: ModelFinishReason | null = null;
+    let providerContinuation: ModelProviderContinuation | undefined;
     const toolCalls = new Map<number, ToolCallAccumulator>();
     let outcome: 'completed' | 'failed' | 'cancelled' = 'completed';
     let failureCode: string | undefined;
@@ -542,14 +544,19 @@ export class SubagentParticipantExecutor {
             userId: scope.userId,
             providerId: delegation.modelRef.providerId,
             modelId: delegation.modelRef.modelId,
+            configurationVersion: delegation.modelRef.configurationVersion,
             instructions,
             messages,
             ...(offeredTools.length > 0 ? { tools: offeredTools, toolMode } : {}),
             cache: {
               scopeKey: `nexus:subagent:${work.runId}:${delegation.id}`,
               affinityKey: `nexus:thread:${run.threadId}`,
+              lineageKey: modelCacheLineageKey({ instructions, tools: offeredTools }),
             },
             ...(model.defaultReasoningEffort === undefined ? {} : { reasoningEffort: model.defaultReasoningEffort }),
+            ...(delegation.modelCapabilities === undefined
+              ? {}
+              : { capabilitySnapshot: delegation.modelCapabilities }),
             maxOutputTokens,
           },
           signal,
@@ -560,7 +567,13 @@ export class SubagentParticipantExecutor {
             this.events.publishTransient({
               runId: work.runId,
               type: 'message.delta',
-              payload: { runtimeId: work.agentRuntimeId, delegationId: delegation.id, text: event.text },
+              payload: {
+                attemptId: begun.attemptId,
+                attemptIndex: begun.attemptIndex,
+                runtimeId: work.agentRuntimeId,
+                delegationId: delegation.id,
+                text: event.text,
+              },
               occurredAt: this.clock.nowUnixSeconds(),
             });
           } else if (event.type === 'tool.delta') {
@@ -571,6 +584,8 @@ export class SubagentParticipantExecutor {
             toolCalls.set(event.index, current);
           } else if (event.type === 'usage') {
             usage = event.usage;
+          } else if (event.type === 'continuation') {
+            providerContinuation = event.continuation;
           } else if (event.type === 'completed') {
             finishReason = event.finishReason;
           }
@@ -587,7 +602,12 @@ export class SubagentParticipantExecutor {
       outputTokens: text ? estimateTokens(text) : 0,
       cachedInputTokens: 0,
     };
-    if (outcome === 'completed' && toolCalls.size > 0) {
+    const finishDisposition = outcome === 'completed' ? modelFinishDisposition(finishReason, toolCalls.size) : null;
+    if (finishDisposition?.kind === 'failed') {
+      outcome = 'failed';
+      failureCode = finishDisposition.errorCode;
+    }
+    if (outcome === 'completed' && finishDisposition?.kind === 'tool_calls') {
       if (toolMode === 'none' || offeredTools.length === 0) {
         outcome = 'failed';
         failureCode = 'SUBAGENT_TOOL_NOT_ALLOWED';
@@ -676,6 +696,7 @@ export class SubagentParticipantExecutor {
               cachedInputTokens: settledUsage.cachedInputTokens,
               estimatedUsage: usage === undefined,
               finishReason,
+              ...(providerContinuation ? { providerContinuation } : {}),
               now: this.clock.nowUnixSeconds(),
             });
             this.events.publishRunWake(work.runId, proposed.eventCursor);
@@ -721,6 +742,7 @@ export class SubagentParticipantExecutor {
       cachedInputTokens: settledUsage.cachedInputTokens,
       estimatedUsage: usage === undefined,
       finishReason,
+      ...(outcome === 'completed' && providerContinuation ? { providerContinuation } : {}),
       ...(failureCode ? { errorCode: failureCode } : {}),
       now: this.clock.nowUnixSeconds(),
     });

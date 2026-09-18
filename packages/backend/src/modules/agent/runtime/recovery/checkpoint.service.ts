@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
+import { snapshotProviderModelCapabilities } from '../../ai/model-capability-resolver';
+import { missingRequiredModelCapabilities } from '../../ai/model-capability-requirements';
 import type { ProviderService } from '../../ai/provider.service';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import type { AppLifecycleService } from '../../host/app-lifecycle.service';
@@ -26,7 +28,6 @@ const clampBudget = (
     maxActiveExecutionSeconds: Math.min(source.maxActiveExecutionSeconds, hard.maxActiveExecutionSeconds),
     toolTimeoutSeconds: Math.min(source.toolTimeoutSeconds, hard.toolTimeoutSeconds),
     maxToolOutputBytes: Math.min(source.maxToolOutputBytes, hard.maxToolOutputBytes),
-    maxRawToolBytes: Math.min(source.maxRawToolBytes, hard.maxRawToolBytes),
     maxRecallItems: Math.min(source.maxRecallItems, hard.maxRecallItems),
     maxRecallBytes: Math.min(source.maxRecallBytes, hard.maxRecallBytes),
     maxSubagentMessages: Math.min(source.maxSubagentMessages, hard.maxSubagentMessagesPerRun),
@@ -143,8 +144,17 @@ export class CheckpointService {
     if (provider) {
       if (!provider.enabled || provider.version !== checkpoint.snapshot.modelConfigurationVersion) {
         reasons.push('CHECKPOINT_PROVIDER_STALE');
-      } else if (!provider.models.some((model) => model.id === run.definition.model.modelId)) {
-        reasons.push('CHECKPOINT_MODEL_UNAVAILABLE');
+      } else {
+        const model = provider.models.find((candidate) => candidate.id === run.definition.model.modelId);
+        if (!model) {
+          reasons.push('CHECKPOINT_MODEL_UNAVAILABLE');
+        } else {
+          const requirements = run.definition.requiredModelCapabilities ?? definition.requiredModelCapabilities;
+          const capabilities = run.definition.modelCapabilities ?? snapshotProviderModelCapabilities(model);
+          if (missingRequiredModelCapabilities(requirements, capabilities).length > 0) {
+            reasons.push('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED');
+          }
+        }
       }
     }
     for (const connectionId of run.definition.connectionIds) {
@@ -203,9 +213,16 @@ export class CheckpointService {
     if (definitionInfo.version !== validation.checkpoint.snapshot.definitionVersion) {
       throw new Error('CHECKPOINT_DEFINITION_STALE');
     }
+    const requirements = source.definition.requiredModelCapabilities ?? definitionInfo.requiredModelCapabilities;
+    const capabilities = source.definition.modelCapabilities ?? snapshotProviderModelCapabilities(model);
+    if (missingRequiredModelCapabilities(requirements, capabilities).length > 0) {
+      throw new Error('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED');
+    }
     const budget = clampBudget(source.budget, settings, model);
     const definition: RunDefinitionSnapshot = {
       ...source.definition,
+      requiredModelCapabilities: [...requirements],
+      modelCapabilities: capabilities,
       policyRevision: app.policyRevision,
       settingsRevision: settings.revision,
       contextBoundary: {

@@ -4,13 +4,10 @@ export interface AgentEnvelope<T> {
 }
 
 export interface AgentHardLimits {
-  maxContextTokens: number;
-  maxOutputTokens: number;
   maxRunSteps: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
-  maxRawToolBytes: number;
   maxArtifactBytes: number;
   maxSingleArtifactBytes: number;
   maxGlobalArtifactBytes: number;
@@ -23,23 +20,23 @@ export interface AgentHardLimits {
   maxSubagentMessageBytesPerRun: number;
   maxActiveWorkspaces: number;
   unretainedArtifactTtlSeconds: number;
-  workspaceIdleTtlSeconds: number;
 }
 
 export interface AgentSettingsDocument {
   schemaVersion: 1;
   feature: { enabled: boolean };
-  model: { defaultProviderId: string | null; defaultModelId: string | null };
+  model: {
+    defaultProviderId: string | null;
+    defaultModelId: string | null;
+    fallbackModels: Array<{ providerId: string; modelId: string }>;
+  };
   performance: { maxConcurrentRuntimes: number; maxConcurrentModelCalls: number | 'auto' };
   budget: {
-    maxContextTokens: number;
-    maxOutputTokens: number;
-    maxRunSteps: number;
+        maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
-    maxRawToolBytes: number;
-    maxRecallItems: number;
+      maxRecallItems: number;
     maxRecallBytes: number;
   };
   hardLimits: AgentHardLimits;
@@ -56,8 +53,7 @@ export interface AgentSettingsDocument {
   };
   workspaceRuntime: {
     maxActiveWorkspaces: number;
-    workspaceIdleTtlSeconds: number;
-    enabledRecipeIds: string[];
+      enabledRecipeIds: string[];
     toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
     acpProfiles: Array<{ id: string; argv: string[]; cwd: string }>;
   };
@@ -76,7 +72,6 @@ export interface AgentSettingsDocument {
     }>;
   };
   plugins: { repositories: Array<{ url: string }> };
-  safety: { providerPrivateNetworkExceptions: string[] };
 }
 
 export type AgentAvailabilityState = 'disabled' | 'enabling' | 'enabled' | 'degraded' | 'unavailable';

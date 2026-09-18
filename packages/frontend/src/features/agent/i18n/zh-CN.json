@@ -160,8 +160,6 @@
         "presetCustom": "自定义配额",
         "presetCustomDesc": "自由设定每个系统级硬限制阈值",
         "groups": {
-          "tokens": "模型与 Token 预算上限",
-          "tokensDesc": "限制单任务累计 Token 消耗与执行步数",
           "timeouts": "执行与超时保护",
           "timeoutsDesc": "限制任务最长运行时长与单次工具调用超时",
           "storage": "存储与数据流硬限制",
@@ -169,17 +167,11 @@
           "concurrency": "并发配额与代理环境",
           "concurrencyDesc": "限制并发任务、活跃工作区与子代理委托深度",
           "extra": "其他系统级限制",
-          "extraDesc": "其他扩展策略参数"
+          "extraDesc": "其他扩展策略参数",
+          "execution": "执行步数限制",
+          "executionDesc": "限制单个 Run 最多可执行的模型/工具循环步数"
         },
         "fields": {
-          "maxContextTokens": {
-            "label": "单次上下文窗口硬上限",
-            "hint": "单次请求包含的历史上下文 Token 绝对上限"
-          },
-          "maxOutputTokens": {
-            "label": "单次输出 Token 硬上限",
-            "hint": "单次模型调用允许生成的最大 Token 数"
-          },
           "maxRunSteps": {
             "label": "单次 Run 最大步数",
             "hint": "单次任务允许循环执行工具与模型思考的最大步数"
@@ -192,10 +184,6 @@
             "label": "单工具调用超时",
             "hint": "单次工具（Shell、网络等）允许运行的最长秒数"
           },
-          "workspaceIdleTtlSeconds": {
-            "label": "工作区空闲超时",
-            "hint": "临时工作区无操作后的自动销毁等待时间"
-          },
           "unretainedArtifactTtlSeconds": {
             "label": "未保留产物生存期",
             "hint": "未被显式归档的临时产物保留时长"
@@ -203,10 +191,6 @@
           "maxToolOutputBytes": {
             "label": "工具单次输出体积",
             "hint": "单个工具执行结果允许返回的最大内容大小"
-          },
-          "maxRawToolBytes": {
-            "label": "工具原始数据总体积",
-            "hint": "任务中工具调用原始传输数据的累计上限"
           },
           "maxArtifactBytes": {
             "label": "单会话产物磁盘总额",
@@ -282,10 +266,6 @@
         "recommendedBadge": "推荐",
         "saveSuccess": "预算与上下文配置已保存",
         "fields": {
-          "maxContextTokens": "单次上下文窗口",
-          "maxContextTokensHint": "单次请求包含的历史上下文 Token 上限",
-          "maxOutputTokens": "单次最大输出",
-          "maxOutputTokensHint": "模型单次回答的最大生成 Token 数量",
           "maxRunSteps": "最大执行步数",
           "maxRunStepsHint": "单个 Run 允许执行的工具调用与思考最大步数",
           "maxActiveExecutionSeconds": "执行超时时间 (秒)",
@@ -294,8 +274,6 @@
           "toolTimeoutSecondsHint": "单个工具调用的执行超时时限",
           "maxToolOutputBytes": "工具输出截断 (字节)",
           "maxToolOutputBytesHint": "模型接收的工具单次输出截断上限",
-          "maxRawToolBytes": "原始工具输出上限 (字节)",
-          "maxRawToolBytesHint": "工具输出原始留存大小",
           "maxRecallItems": "记忆召回条数",
           "maxRecallItemsHint": "记忆检索时最多召回的参考条目数",
           "maxRecallBytes": "记忆召回字节上限",
@@ -496,13 +474,19 @@
         "modelPlaceholder": "gpt-4o",
         "capabilityEdit": "能力配置",
         "capabilityTitle": "模型能力",
-        "capabilityDescription": "Nexus Registry 提供默认能力；手动修改只保存覆盖值，可随时恢复当前默认。",
+        "capabilityDescription": "Provider 实时元数据按字段覆盖 Nexus Registry 默认能力；手动修改作为最高优先级覆盖值保存，可随时恢复到当前 Provider/Registry 基线。",
         "registryDefault": "Nexus 默认",
+        "providerLive": "Provider 实时元数据",
         "manualOverride": "自定义",
         "restoreDefault": "恢复默认",
         "restoreAllDefaults": "全部恢复默认",
         "capabilitySaved": "模型能力已保存",
         "capabilityInvalid": "模型能力配置无效：最大输出必须小于上下文窗口。",
+        "capabilityUnavailable": "该模型没有提供足够的能力元数据；使用前需要显式配置完整能力。",
+        "providerMetadata": "Provider 元数据：{source} · {version} · 更新于 {updatedAt}",
+        "capabilityConflict": "能力来源存在冲突：{fields}。生效优先级为 自定义 > Provider 实时元数据 > Nexus 默认。",
+        "imageInput": "图片输入",
+        "fileInput": "文件输入",
         "reasoningCapability": "思考等级",
         "registryManaged": "Registry 管理"
       },
@@ -650,7 +634,6 @@
           "maxActiveExecutionSeconds": "最长活跃执行时间",
           "toolTimeoutSeconds": "单工具超时",
           "maxToolOutputBytes": "模型可见工具输出",
-          "maxRawToolBytes": "工具原始采集上限",
           "maxRecallItems": "Recall 条目数",
           "maxRecallBytes": "Recall 容量",
           "maxSubagentMessages": "Subagent 消息总数",
@@ -726,6 +709,19 @@
       "runModel": "模型",
       "runModelHint": "切换模型",
       "runModelLocked": "当前 Run 活跃期间模型已冻结。",
+      "modelMissingCapabilities": "不可用 — 缺少 {capabilities}",
+      "modelCapability": {
+        "tools": "工具调用",
+        "image_input": "图片输入",
+        "file_input": "文件输入",
+        "reasoning": "推理"
+      },
+      "executionMode": "执行模式",
+      "executionModeHint": "选择下一次 Run 是允许执行修改，还是只使用只读/控制工具进行规划",
+      "executionExecute": "执行",
+      "executionExecuteDesc": "按正常模式运行，写入操作继续由所选批准策略控制。",
+      "executionPlan": "仅规划",
+      "executionPlanDesc": "模型只会看到只读/控制工具，不提供写入工具；确认计划后再新建 Execute Run 执行。",
       "approvalMode": "批准策略",
       "approvalModeHint": "选择下一次 Run 如何处理需要用户确认的写入或破坏性操作",
       "approvalFullAccess": "全授权",
@@ -868,6 +864,10 @@
       "capabilityTools": "受控工具",
       "capabilityEvidence": "结果验证",
       "sendHint": "Enter 发送",
+      "clarificationTitle": "需要更多信息",
+      "clarificationHint": "请在下方回复以继续同一个任务。你可以选择选项，或直接在输入框中回答。",
+      "clarificationRecommended": "推荐",
+      "clarificationTextHint": "请在下方输入框中填写回答。",
       "commands": {
         "resultLabel": "命令结果",
         "dismiss": "关闭命令结果",
@@ -948,6 +948,7 @@
       "contextReserved": "预留输出 {value}",
       "contextSource": {
         "estimated": "估算",
+        "anchored_estimate": "Provider 锚定估算",
         "provider": "Provider 实测"
       },
       "steps": "步骤",
@@ -1013,7 +1014,7 @@
         "reconciliation": "下一次修改操作前需要先完成对账。",
         "approval": "此 Run 正在等待你的审批。",
         "budget": "此 Run 已暂停，需要增加预算后继续。",
-        "input": "检测到重复且无进展的操作。请补充指导或新信息后继续。"
+        "input": "此 Run 正在等待你的输入。请在会话中回复后继续。"
       },
       "totalTokens": "Token 总量",
       "advancedDetails": "高级详情与检查点",

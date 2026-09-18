@@ -348,6 +348,7 @@ CREATE TABLE IF NOT EXISTS ai_providers (
     protected_credential TEXT,
     credential_revision INTEGER NOT NULL DEFAULT 1 CHECK(credential_revision > 0),
     models_json TEXT NOT NULL CHECK(json_valid(models_json)),
+    live_capabilities_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(live_capabilities_json)),
     endpoint_policy_json TEXT NOT NULL CHECK(json_valid(endpoint_policy_json)),
     enabled INTEGER NOT NULL CHECK(enabled IN (0,1)),
     deleted_at INTEGER,
@@ -484,6 +485,32 @@ CREATE TABLE IF NOT EXISTS ai_thread_entries (
 CREATE INDEX IF NOT EXISTS ai_thread_entries_page ON ai_thread_entries(thread_id, sequence DESC);
 `;
 
+
+export const createAiThreadEntrySearchIndexSQL = `
+CREATE VIRTUAL TABLE IF NOT EXISTS ai_thread_entries_search USING fts5(
+    terms,
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS ai_thread_entries_search_insert
+AFTER INSERT ON ai_thread_entries
+BEGIN
+  INSERT INTO ai_thread_entries_search(rowid, terms)
+  VALUES (NEW.rowid, nexus_ledger_search_terms(NEW.payload_json));
+END;
+CREATE TRIGGER IF NOT EXISTS ai_thread_entries_search_update
+AFTER UPDATE OF payload_json ON ai_thread_entries
+BEGIN
+  DELETE FROM ai_thread_entries_search WHERE rowid = OLD.rowid;
+  INSERT INTO ai_thread_entries_search(rowid, terms)
+  VALUES (NEW.rowid, nexus_ledger_search_terms(NEW.payload_json));
+END;
+CREATE TRIGGER IF NOT EXISTS ai_thread_entries_search_delete
+AFTER DELETE ON ai_thread_entries
+BEGIN
+  DELETE FROM ai_thread_entries_search WHERE rowid = OLD.rowid;
+END;
+`;
+
 export const createAgentArtifactLinksTableSQL = `
 CREATE TABLE IF NOT EXISTS agent_artifact_links (
     artifact_id TEXT NOT NULL REFERENCES ai_artifacts(id),
@@ -492,6 +519,40 @@ CREATE TABLE IF NOT EXISTS agent_artifact_links (
     created_at INTEGER NOT NULL,
     PRIMARY KEY(artifact_id, run_id, role)
 );
+CREATE TRIGGER IF NOT EXISTS agent_artifact_links_run_quota_insert
+BEFORE INSERT ON agent_artifact_links
+WHEN NOT EXISTS (
+  SELECT 1 FROM agent_artifact_links existing
+  WHERE existing.artifact_id = NEW.artifact_id AND existing.run_id = NEW.run_id
+)
+AND (
+  COALESCE((
+    SELECT SUM(a.size_bytes)
+    FROM ai_artifacts a
+    WHERE a.id IN (
+      SELECT DISTINCT existing.artifact_id
+      FROM agent_artifact_links existing
+      WHERE existing.run_id = NEW.run_id
+    )
+      AND a.status <> 'deleted'
+  ), 0)
+  + COALESCE((
+    SELECT CASE WHEN incoming.status = 'staging' THEN incoming.reserved_bytes ELSE incoming.size_bytes END
+    FROM ai_artifacts incoming
+    WHERE incoming.id = NEW.artifact_id AND incoming.status <> 'deleted'
+  ), 0)
+) > COALESCE((
+  SELECT MIN(
+    COALESCE(CAST(json_extract(s.value_json, '$.storage.maxArtifactBytes') AS INTEGER), 268435456),
+    COALESCE(CAST(json_extract(s.value_json, '$.hardLimits.maxArtifactBytes') AS INTEGER), 1073741824)
+  )
+  FROM agent_runs r
+  LEFT JOIN agent_settings s ON s.user_id = r.user_id
+  WHERE r.id = NEW.run_id
+), 268435456)
+BEGIN
+  SELECT RAISE(ABORT, 'ARTIFACT_RUN_QUOTA_EXCEEDED');
+END;
 `;
 
 export const createAgentArtifactGrantsTableSQL = `
@@ -527,18 +588,25 @@ CREATE INDEX IF NOT EXISTS agent_artifact_cleanup_expiry
 ON agent_artifact_cleanup_confirmations(expires_at);
 `;
 
-export const createAiContextDigestsTableSQL = `
-CREATE TABLE IF NOT EXISTS ai_context_digests (
+export const createAiContextCheckpointsTableSQL = `
+CREATE TABLE IF NOT EXISTS ai_context_checkpoints (
     id TEXT PRIMARY KEY,
     thread_id TEXT NOT NULL REFERENCES ai_threads(id) ON DELETE CASCADE,
-    from_sequence INTEGER NOT NULL,
+    visibility_hash TEXT NOT NULL,
+    visibility_json TEXT NOT NULL CHECK(json_valid(visibility_json)),
+    from_sequence INTEGER NOT NULL CHECK(from_sequence >= 1),
     to_sequence INTEGER NOT NULL CHECK(to_sequence >= from_sequence),
     source_hash TEXT NOT NULL,
-    model_config_version TEXT NOT NULL,
+    strategy_version TEXT NOT NULL,
+    generator_json TEXT NOT NULL CHECK(json_valid(generator_json)),
+    source_tokens INTEGER NOT NULL CHECK(source_tokens >= 0),
+    summary_tokens INTEGER NOT NULL CHECK(summary_tokens >= 0),
     content TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    UNIQUE(thread_id, from_sequence, to_sequence, source_hash, model_config_version)
+    UNIQUE(thread_id, visibility_hash, from_sequence, to_sequence, strategy_version)
 );
+CREATE INDEX IF NOT EXISTS ai_context_checkpoints_thread_range
+ON ai_context_checkpoints(thread_id, visibility_hash, to_sequence DESC);
 `;
 
 export const createAiMemoriesTableSQL = `
@@ -560,6 +628,32 @@ CREATE TABLE IF NOT EXISTS ai_memories (
     FOREIGN KEY(user_id, app_id) REFERENCES agent_apps(user_id, app_id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS ai_memories_recall ON ai_memories(user_id, app_id, status, updated_at DESC, id DESC);
+`;
+
+
+export const createAiMemorySearchIndexSQL = `
+CREATE VIRTUAL TABLE IF NOT EXISTS ai_memories_search USING fts5(
+    terms,
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER IF NOT EXISTS ai_memories_search_insert
+AFTER INSERT ON ai_memories
+BEGIN
+  INSERT INTO ai_memories_search(rowid, terms)
+  VALUES (NEW.rowid, nexus_search_terms(NEW.content));
+END;
+CREATE TRIGGER IF NOT EXISTS ai_memories_search_update
+AFTER UPDATE OF content ON ai_memories
+BEGIN
+  DELETE FROM ai_memories_search WHERE rowid = OLD.rowid;
+  INSERT INTO ai_memories_search(rowid, terms)
+  VALUES (NEW.rowid, nexus_search_terms(NEW.content));
+END;
+CREATE TRIGGER IF NOT EXISTS ai_memories_search_delete
+AFTER DELETE ON ai_memories
+BEGIN
+  DELETE FROM ai_memories_search WHERE rowid = OLD.rowid;
+END;
 `;
 
 export const createAgentRuntimesTableSQL = `
@@ -611,6 +705,7 @@ CREATE TABLE IF NOT EXISTS agent_model_attempts (
     output_tokens INTEGER,
     cached_input_tokens INTEGER,
     estimated INTEGER NOT NULL DEFAULT 0 CHECK(estimated IN (0,1)),
+    continuation_json TEXT CHECK(continuation_json IS NULL OR json_valid(continuation_json)),
     error_code TEXT,
     created_at INTEGER NOT NULL,
     completed_at INTEGER,
@@ -624,7 +719,7 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
     run_id TEXT NOT NULL,
     agent_runtime_id TEXT NOT NULL,
     step_id TEXT NOT NULL,
-    source_model_step_id TEXT,
+    source_model_step_id TEXT NOT NULL,
     batch_index INTEGER NOT NULL DEFAULT 0 CHECK(batch_index >= 0),
     batch_size INTEGER NOT NULL DEFAULT 1 CHECK(batch_size >= 1),
     provider_call_id TEXT NOT NULL,
@@ -649,6 +744,29 @@ CREATE TABLE IF NOT EXISTS agent_tool_calls (
     FOREIGN KEY(source_model_step_id, run_id) REFERENCES agent_steps(id, run_id) ON DELETE CASCADE,
     FOREIGN KEY(agent_runtime_id, run_id) REFERENCES agent_runtimes(id, run_id) ON DELETE CASCADE
 );
+`;
+
+export const createAgentInputRequestsTableSQL = `
+CREATE TABLE IF NOT EXISTS agent_input_requests (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    app_id TEXT NOT NULL,
+    agent_runtime_id TEXT NOT NULL,
+    tool_call_id TEXT NOT NULL UNIQUE REFERENCES agent_tool_calls(id) ON DELETE CASCADE,
+    provider_call_id TEXT NOT NULL,
+    questions_json TEXT NOT NULL CHECK(json_valid(questions_json)),
+    status TEXT NOT NULL CHECK(status IN ('requested','answered','cancelled')),
+    requested_at INTEGER NOT NULL,
+    answered_at INTEGER,
+    answer_entry_id TEXT,
+    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+    FOREIGN KEY(run_id, user_id, app_id) REFERENCES agent_runs(id, user_id, app_id) ON DELETE CASCADE
+);
+CREATE UNIQUE INDEX IF NOT EXISTS agent_one_active_input_request
+ON agent_input_requests(run_id) WHERE status = 'requested';
+CREATE INDEX IF NOT EXISTS agent_input_request_scope
+ON agent_input_requests(user_id, app_id, run_id, status, requested_at);
 `;
 
 export const createAgentEventsTableSQL = `

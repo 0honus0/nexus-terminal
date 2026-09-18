@@ -15,12 +15,38 @@ interface AgentVersionedEventMetadata extends AgentEventMetadata {
 
 interface AgentMessageDeltaEvent extends AgentEventMetadata {
   type: 'message.delta';
-  payload: { text: string; runtimeId?: string; delegationId?: string };
+  payload: {
+    attemptId: string;
+    attemptIndex: number;
+    text: string;
+    runtimeId?: string;
+    delegationId?: string;
+  };
 }
 
 interface AgentToolDeltaEvent extends AgentEventMetadata {
   type: 'tool.delta';
-  payload: { index: number; id: string | null; name: string | null; argumentsDelta: string };
+  payload: {
+    attemptId: string;
+    attemptIndex: number;
+    index: number;
+    id: string | null;
+    name: string | null;
+    argumentsDelta: string;
+    runtimeId?: string;
+    delegationId?: string;
+  };
+}
+
+interface AgentModelRetryingEvent extends AgentVersionedEventMetadata {
+  type: 'model.retrying';
+  payload: {
+    stepId: string;
+    previousAttemptId: string;
+    attemptId: string;
+    attemptIndex: number;
+    errorCode: string;
+  };
 }
 
 interface AgentMessageFinalEvent extends AgentVersionedEventMetadata {
@@ -65,7 +91,6 @@ const SNAPSHOT_EVENT_TYPES = [
   'model.aborted',
   'model.completed',
   'model.failed',
-  'model.retrying',
   'model.started',
   'plan.updated',
   'subagent.cancelled',
@@ -118,6 +143,7 @@ interface AgentTransportDisconnectedEvent extends AgentEventMetadata {
 export type AgentStreamEvent =
   | AgentMessageDeltaEvent
   | AgentToolDeltaEvent
+  | AgentModelRetryingEvent
   | AgentMessageFinalEvent
   | AgentRunStatusChangedEvent
   | AgentRunErrorEvent
@@ -211,20 +237,41 @@ const unknownEvent = (
   };
 };
 
+const parseAttemptIdentity = (
+  payload: Record<string, unknown>,
+): { attemptId: string; attemptIndex: number } | null => {
+  if (
+    typeof payload.attemptId !== 'string' ||
+    !Number.isSafeInteger(payload.attemptIndex) ||
+    Number(payload.attemptIndex) < 1
+  ) {
+    return null;
+  }
+  return { attemptId: payload.attemptId, attemptIndex: Number(payload.attemptIndex) };
+};
+
+const parseRuntimeIdentity = (
+  payload: Record<string, unknown>,
+): { runtimeId?: string; delegationId?: string } | null => {
+  const runtimeId = payload.runtimeId;
+  const delegationId = payload.delegationId;
+  if (runtimeId === undefined && delegationId === undefined) return {};
+  if (typeof runtimeId !== 'string' || typeof delegationId !== 'string') return null;
+  return { runtimeId, delegationId };
+};
+
 const parseMessageDelta = (event: AgentWireEventPayload): AgentMessageDeltaEvent | null => {
   if (!isRecord(event.payload) || typeof event.payload.text !== 'string') return null;
-  const runtimeId = event.payload.runtimeId;
-  const delegationId = event.payload.delegationId;
-  if (runtimeId !== undefined || delegationId !== undefined) {
-    if (typeof runtimeId !== 'string' || typeof delegationId !== 'string') return null;
-  }
+  const attempt = parseAttemptIdentity(event.payload);
+  const runtime = parseRuntimeIdentity(event.payload);
+  if (!attempt || !runtime) return null;
   return {
     ...eventMetadata(event),
     type: 'message.delta',
     payload: {
+      ...attempt,
       text: event.payload.text,
-      ...(runtimeId === undefined ? {} : { runtimeId }),
-      ...(delegationId === undefined ? {} : { delegationId }),
+      ...runtime,
     },
   };
 };
@@ -242,14 +289,19 @@ const parseToolDelta = (event: AgentWireEventPayload): AgentToolDeltaEvent | nul
   ) {
     return null;
   }
+  const attempt = parseAttemptIdentity(event.payload);
+  const runtime = parseRuntimeIdentity(event.payload);
+  if (!attempt || !runtime) return null;
   return {
     ...eventMetadata(event),
     type: 'tool.delta',
     payload: {
+      ...attempt,
       index: Number(event.payload.index),
       id: event.payload.id,
       name: event.payload.name,
       argumentsDelta: event.payload.argumentsDelta,
+      ...runtime,
     },
   };
 };
@@ -304,6 +356,28 @@ const parseRunEventV1 = (
       return unknownEvent(event, channel, 'invalid_payload');
     }
     return { ...metadata, type: 'run.cancel_requested', payload: { previousStatus: event.payload.previousStatus } };
+  }
+  if (event.eventType === 'model.retrying') {
+    if (
+      !isRecord(event.payload) ||
+      typeof event.payload.stepId !== 'string' ||
+      typeof event.payload.previousAttemptId !== 'string' ||
+      typeof event.payload.errorCode !== 'string'
+    ) {
+      return unknownEvent(event, channel, 'invalid_payload');
+    }
+    const attempt = parseAttemptIdentity(event.payload);
+    if (!attempt) return unknownEvent(event, channel, 'invalid_payload');
+    return {
+      ...metadata,
+      type: 'model.retrying',
+      payload: {
+        stepId: event.payload.stepId,
+        previousAttemptId: event.payload.previousAttemptId,
+        ...attempt,
+        errorCode: event.payload.errorCode,
+      },
+    };
   }
   if (snapshotEventTypes.has(event.eventType)) {
     if (!isRecord(event.payload)) return unknownEvent(event, channel, 'invalid_payload');

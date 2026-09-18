@@ -27,7 +27,6 @@
     { key: 'maxActiveExecutionSeconds', type: 'seconds' },
     { key: 'toolTimeoutSeconds', type: 'seconds' },
     { key: 'maxToolOutputBytes', type: 'bytes' },
-    { key: 'maxRawToolBytes', type: 'bytes' },
     { key: 'maxRecallItems', type: 'number' },
     { key: 'maxRecallBytes', type: 'bytes' },
     { key: 'maxSubagentMessages', type: 'number' },

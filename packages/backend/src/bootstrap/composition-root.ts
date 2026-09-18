@@ -433,6 +433,7 @@ export const createCompositionRoot = (
     acpTransport: workspaceRuntimeController,
     browserGateway: browserRuntime,
     audit,
+    notifications,
   });
 
   const modules: ModuleServices = {

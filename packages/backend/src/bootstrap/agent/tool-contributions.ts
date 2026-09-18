@@ -24,8 +24,21 @@ import {
   createWorkspaceCreateTool,
   createWorkspaceSwitchToolVersionsTool,
 } from '../../modules/agent/tools/host/workspace-runtime-management-tools';
-import { createWorkspaceJobTool } from '../../modules/agent/tools/host/workspace-tools';
-import { createSkillReadTool } from '../../modules/agent/tools/host/skill-tools';
+import {
+  createWorkspaceJobControlTool,
+  createWorkspaceJobTool,
+} from '../../modules/agent/tools/host/workspace-tools';
+import {
+  createWorkspaceApplyPatchTool,
+  createWorkspaceCodeIntelTool,
+  createWorkspaceReadFileTool,
+  createWorkspaceRepoMapTool,
+  createWorkspaceSearchTool,
+} from '../../modules/agent/tools/host/workspace-coding-tools';
+import { createSkillReadTool, createSkillSearchTool } from '../../modules/agent/tools/host/skill-tools';
+import { createRequestUserInputTool } from '../../modules/agent/tools/host/user-input-tools';
+import { createToolSearchTool } from '../../modules/agent/tools/host/tool-discovery-tools';
+import { createArtifactReadTool } from '../../modules/agent/tools/host/artifact-tools';
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
@@ -103,7 +116,15 @@ export const registerWorkspaceToolContributions = ({
     schemaVersion: 1,
     id: 'workspace.runtime.execute',
     capability: 'workspace.runtime.execute',
-    tools: [createWorkspaceJobTool(repository, gateway, cryptoHash)],
+    tools: [
+      createWorkspaceReadFileTool(repository, runtime, cryptoHash),
+      createWorkspaceSearchTool(repository, runtime, cryptoHash),
+      createWorkspaceRepoMapTool(repository, runtime, cryptoHash),
+      createWorkspaceCodeIntelTool(repository, runtime, cryptoHash),
+      createWorkspaceApplyPatchTool(repository, runtime, cryptoHash),
+      createWorkspaceJobTool(repository, gateway, cryptoHash),
+      createWorkspaceJobControlTool(repository, gateway, cryptoHash),
+    ],
   });
   catalog.registerContribution({
     schemaVersion: 1,
@@ -119,6 +140,7 @@ export const registerWorkspaceToolContributions = ({
 
 export interface RuntimeToolContributionOptions {
   catalog: ToolCatalog;
+  artifacts: ArtifactService;
   plans: PlanService;
   runs: RunSnapshotReaderPort;
   subagents: SubagentService;
@@ -131,6 +153,7 @@ export interface RuntimeToolContributionOptions {
 
 export const registerRuntimeToolContributions = ({
   catalog,
+  artifacts,
   plans,
   runs,
   subagents,
@@ -142,15 +165,33 @@ export const registerRuntimeToolContributions = ({
 }: RuntimeToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
+    id: 'runtime.artifacts.read',
+    capability: 'artifacts.read',
+    tools: [createArtifactReadTool(artifacts, cryptoHash)],
+  });
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'runtime.mcp-tool-discovery',
+    capability: 'integration.mcp.invoke',
+    tools: [createToolSearchTool(catalog, cryptoHash)],
+  });
+  catalog.registerContribution({
+    schemaVersion: 1,
     id: 'runtime.skills',
     capability: 'runs.execute',
-    tools: [createSkillReadTool(skills, cryptoHash)],
+    tools: [createSkillSearchTool(skills, cryptoHash), createSkillReadTool(skills, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'runtime.plan',
     capability: 'runs.execute',
     tools: [createPlanUpdateTool(plans, runs, cryptoHash)],
+  });
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'runtime.user-input',
+    capability: 'runs.execute',
+    tools: [createRequestUserInputTool(cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,

@@ -1,29 +1,122 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
+import {
+  PROJECT_INSTRUCTION_LIMITS,
+  resolveProjectInstructions,
+} from '../../../agent-runner/src/controller/project-instructions';
+import {
+  applyWorkspacePatch,
+  readWorkspaceFile,
+  searchWorkspace,
+} from '../../../agent-runner/src/controller/workspace-coding-files';
+import { WorkspaceCodeIntelligence } from '../../../agent-runner/src/controller/workspace-code-intelligence';
+import { RunnerJournal } from '../../../agent-runner/src/controller/journal';
+import { RunnerControllerServer } from '../../../agent-runner/src/controller/server';
+import { DatabaseSync } from 'node:sqlite';
+import { AgentNotificationBridge } from '../../src/bootstrap/agent/agent-notification-bridge';
+import { registerWorkspaceToolContributions } from '../../src/bootstrap/agent/tool-contributions';
 import { LocalArtifactStore } from '../../src/infrastructure/agent/artifacts/local-artifact-store';
+import { decodePersistedAppManifest } from '../../src/infrastructure/agent/plugins/persisted-app-manifest-decoder';
 import { AgentMutationLeaseGuardAdapter } from '../../src/infrastructure/agent/capabilities/agent-mutation-lease-guard.adapter';
 import { SqliteLeaseRepository } from '../../src/infrastructure/agent/repositories/sqlite-lease.repository';
+import { SqliteAgentSettingsRepository } from '../../src/infrastructure/agent/repositories/sqlite-agent-settings.repository';
+import { SqliteConversationRepository } from '../../src/infrastructure/agent/repositories/sqlite-conversation.repository';
+import { SqliteContextCheckpointRepository } from '../../src/infrastructure/agent/repositories/sqlite-context-checkpoint.repository';
+import { SqliteModelContinuationRepository } from '../../src/infrastructure/agent/repositories/sqlite-model-continuation.repository';
+import { SqliteRecallRepository } from '../../src/infrastructure/agent/repositories/sqlite-recall.repository';
+import { decodePersistedProviderModels } from '../../src/infrastructure/agent/repositories/sqlite-provider.repository';
 import { SqliteRunRepository } from '../../src/infrastructure/agent/repositories/sqlite-run.repository';
 import { SqliteSubagentRepository } from '../../src/infrastructure/agent/repositories/sqlite-subagent.repository';
+import {
+  decodeDurableJsonValue,
+  parseRunBudget,
+  parseRunDefinition,
+  parseRunUsage,
+  parseToolInspection,
+  parseToolResult,
+} from '../../src/infrastructure/agent/runtime/durable-state-decoders';
 import { SqliteStateCommitAdapter } from '../../src/infrastructure/agent/runtime/sqlite-state-commit.adapter';
+import { OpenAiProviderAdapter } from '../../src/infrastructure/agent/providers/openai-provider.adapter';
+import { RunnerHttpAdapter } from '../../src/infrastructure/agent/workspace-runtime/runner-http.adapter';
+import {
+  decodeOpenAiResponsesContinuation,
+  OpenAiResponsesContinuationCollector,
+} from '../../src/infrastructure/agent/providers/openai-provider-continuation';
 import { DatabaseAdapter } from '../../src/infrastructure/database/database.adapter';
-import type { ClockPort, Scope } from '../../src/modules/agent/agent.types';
+import { runMigrations } from '../../src/infrastructure/database/sqlite-migrations';
+import { NotificationService } from '../../src/modules/notifications/notification.service';
+import type { ClockPort, JsonValue, Scope } from '../../src/modules/agent/agent.types';
+import { AGENT_DEFAULTS, createDefaultAgentSettings, normalizeRequestedSettings } from '../../src/modules/agent/agent-defaults';
 import type { LeasePort } from '../../src/modules/agent/capabilities/lease.port';
+import { LEASE_RENEW_INTERVAL_MS } from '../../src/modules/agent/capabilities/lease-policy';
 import { ToolCatalog } from '../../src/modules/agent/capabilities/tool-catalog';
-import { ToolExecutor } from '../../src/modules/agent/capabilities/tool-executor';
-import type { AgentTool, ToolContext, ToolInspection } from '../../src/modules/agent/capabilities/tool.types';
+import { modelFacingToolSchemas } from '../../src/modules/agent/capabilities/tool-model-surface';
+import { PolicyService } from '../../src/modules/agent/capabilities/policy.service';
+import { projectToolResult, ToolExecutor } from '../../src/modules/agent/capabilities/tool-executor';
+import type { AgentTool, ToolContext, ToolInspection, ToolResult } from '../../src/modules/agent/capabilities/tool.types';
+import {
+  createWorkspaceApplyPatchTool,
+  createWorkspaceCodeIntelTool,
+  createWorkspaceRepoMapTool,
+} from '../../src/modules/agent/tools/host/workspace-coding-tools';
+import {
+  createWorkspaceJobControlTool,
+  createWorkspaceJobTool,
+} from '../../src/modules/agent/tools/host/workspace-tools';
+import type { AgentWorkspaceRepositoryPort } from '../../src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
+import type { WorkspaceRuntimeService } from '../../src/modules/agent/workspace-runtime/workspace-runtime.service';
+import type { WorkspaceRuntimeGatewayPort } from '../../src/modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type { AppCapabilityBroker } from '../../src/modules/agent/host/app-capability-broker';
-import type { AgentSettingsService } from '../../src/modules/agent/host/agent-settings.service';
+import { AgentSettingsService } from '../../src/modules/agent/host/agent-settings.service';
+import { AgentExecutionPolicyService } from '../../src/modules/agent/host/agent-execution-policy.service';
+import { TOOL_APPROVAL_TTL_SECONDS } from '../../src/modules/agent/runtime/approvals/approval-policy';
+import { toolLeaseTtlSeconds } from '../../src/modules/agent/runtime/execution/tool-lease-policy';
+import { ContextCheckpointService } from '../../src/modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../src/modules/agent/ai/context.service';
+import { ArtifactService } from '../../src/modules/agent/ai/artifact.service';
+import {
+  projectArtifactsForModel,
+  readArtifactTextLinesForAgent,
+} from '../../src/modules/agent/ai/artifact-model-projection';
 import type { ArtifactLimitPolicyPort } from '../../src/modules/agent/ai/artifact.port';
 import type { IntegrationRepositoryPort } from '../../src/modules/agent/ai/integration.repository.port';
 import { IntegrationService } from '../../src/modules/agent/ai/integration.service';
 import type { IntegrationServiceHooks } from '../../src/modules/agent/ai/integration.service';
 import type { IntegrationView, McpRuntimePort } from '../../src/modules/agent/ai/integrations.types';
+import type { LanguageModelPort } from '../../src/modules/agent/ai/language-model.port';
+import type { ModelContinuationRepositoryPort } from '../../src/modules/agent/ai/model-continuation.repository.port';
+import { decodeModelProviderContinuation } from '../../src/modules/agent/ai/model-continuation';
+import {
+  applyModelCapabilitySnapshot,
+  deriveCapabilityOverrides,
+  resolveModelCapabilityDefaults,
+  resolveProviderModelConfig,
+  snapshotProviderModelCapabilities,
+} from '../../src/modules/agent/ai/model-capability-resolver';
+import {
+  missingRequiredModelCapabilities,
+  normalizeRequiredModelCapabilities,
+} from '../../src/modules/agent/ai/model-capability-requirements';
+import { estimateTokens } from '../../src/modules/agent/ai/model-accounting';
+import type {
+  DiscoveredProviderModel,
+  ModelEvent,
+  ModelProviderContinuation,
+  ModelRequest,
+  PersistedProviderView,
+  ProviderModelCapabilityObservation,
+  TokenUsage,
+} from '../../src/modules/agent/ai/model.types';
+import type {
+  ProviderCreateRecord,
+  ProviderRepositoryPort,
+  ProviderUpdateRecord,
+} from '../../src/modules/agent/ai/provider.repository.port';
+import { ProviderService } from '../../src/modules/agent/ai/provider.service';
 import type {
   AppendLedgerEntry,
   ConversationRepositoryPort,
@@ -39,18 +132,47 @@ import { ConversationService } from '../../src/modules/agent/ai/conversation.ser
 import { RecallService } from '../../src/modules/agent/ai/recall.service';
 import type { RecallCandidate, RecallRepositoryPort } from '../../src/modules/agent/ai/recall.repository.port';
 import { SkillRegistry } from '../../src/modules/agent/ai/skill-registry';
+import type { PluginSkillBundle, PluginSkillSourcePort } from '../../src/modules/agent/host/plugin-skill-source.port';
+import { validateManifest } from '../../src/modules/agent/host/app-manifest-validator';
+import type {
+  ContextCheckpointRepositoryPort,
+  ContextCheckpointView,
+  UpsertContextCheckpointRecord,
+} from '../../src/modules/agent/ai/context-checkpoint.repository.port';
 import type { ContextHistoryBoundary } from '../../src/modules/agent/ai/context.types';
-import type { AgentBackendPort } from '../../src/modules/agent/runtime/execution/agent-backend.port';
+import type { AgentBackendPort, BackendSignal } from '../../src/modules/agent/runtime/execution/agent-backend.port';
+import { completionGateDecision } from '../../src/modules/agent/runtime/execution/completion-gate';
+import { ModelCallLimiter } from '../../src/modules/agent/runtime/execution/model-call-limiter';
+import { modelFinishDisposition } from '../../src/modules/agent/runtime/execution/model-finish-policy';
+import { ModelStepRunner } from '../../src/modules/agent/runtime/execution/model-step-runner';
+import { NativeAgentBackend } from '../../src/modules/agent/runtime/execution/native-agent-backend';
 import type { MutationLeaseGuardHandle } from '../../src/modules/agent/runtime/execution/mutation-lease-guard.port';
 import { ToolCallRunner } from '../../src/modules/agent/runtime/execution/tool-call-runner';
+import { createRequestUserInputTool } from '../../src/modules/agent/tools/host/user-input-tools';
+import { createToolSearchTool } from '../../src/modules/agent/tools/host/tool-discovery-tools';
+import { createPlanUpdateTool } from '../../src/modules/agent/runtime/planning/plan-tool';
+import { createSkillReadTool, createSkillSearchTool } from '../../src/modules/agent/tools/host/skill-tools';
 import { AgentEventHub } from '../../src/modules/agent/runtime/events/event-hub';
 import { AgentScheduler } from '../../src/modules/agent/runtime/scheduling/scheduler';
+import { SubagentContextBuilder } from '../../src/modules/agent/runtime/collaboration/subagent-context-builder';
 import { SubagentParticipantExecutor } from '../../src/modules/agent/runtime/collaboration/subagent-participant-executor';
 import { SubagentScheduler } from '../../src/modules/agent/runtime/collaboration/subagent-scheduler';
+import type {
+  MailboxReaderPort,
+  RuntimeParticipantRepositoryPort,
+  RuntimeParticipantView,
+  RuntimeToolExchangeView,
+} from '../../src/modules/agent/runtime/collaboration/subagent.repository.port';
 import type { DelegationView } from '../../src/modules/agent/runtime/collaboration/subagent.types';
-import type { RunView } from '../../src/modules/agent/runtime/runs/run.types';
+import { RunService } from '../../src/modules/agent/runtime/runs/run.service';
+import type { AtomicCreateRun } from '../../src/modules/agent/runtime/runs/state-commit.port';
+import { CheckpointService } from '../../src/modules/agent/runtime/recovery/checkpoint.service';
+import type { CheckpointView } from '../../src/modules/agent/runtime/recovery/checkpoint.repository.port';
+import type { RunDefinitionSnapshot, RunSnapshot, RunView } from '../../src/modules/agent/runtime/runs/run.types';
+import { runModelRoutes } from '../../src/modules/agent/runtime/runs/model-routes';
+import { normalizeUserInputQuestions } from '../../src/modules/agent/runtime/runs/user-input-request';
 import { agentRoute } from '../../src/interfaces/http/agent/agent-http';
-import { parseBudgetIncreaseRequest } from '../../src/interfaces/http/agent/agent-runtime-route-input';
+import { parseBudgetIncreaseRequest, parseCreateRunRequest } from '../../src/interfaces/http/agent/agent-runtime-route-input';
 
 interface ScenarioMetric {
   name: string;
@@ -114,42 +236,336 @@ class StaticConversationRepository implements ConversationRepositoryPort {
   }
 
   async readEntries(_scope: Scope, _threadId: string, limit: number, _before?: string): Promise<LedgerPage> {
-    return { items: this.entries.slice(-limit), nextCursor: null };
+    const items = this.entries.slice(-limit);
+    return { items, nextCursor: this.entries.length > limit ? `before:${items.at(0)?.sequence ?? 0}` : null };
   }
 
   async readOldestEntries(_scope: Scope, _threadId: string, limit: number): Promise<LedgerPage> {
     return { items: this.entries.slice(0, limit), nextCursor: null };
   }
 
+  async searchEarlierEntries(
+    _scope: Scope,
+    _threadId: string,
+    queryTerms: readonly string[],
+    beforeSequence: number,
+    limit: number,
+  ): Promise<LedgerEntryView[]> {
+    const normalizedTerms = queryTerms.map((term) => term.toLowerCase());
+    return this.entries
+      .filter(
+        (item) =>
+          item.sequence < beforeSequence &&
+          ['user_input', 'assistant_message'].includes(item.kind) &&
+          normalizedTerms.some((term) => JSON.stringify(item.payload).toLowerCase().includes(term)),
+      )
+      .slice(-limit);
+  }
+
   async readContextEntries(
     _scope: Scope,
     _threadId: string,
-    _runId: string,
-    _historyBoundary: ContextHistoryBoundary,
+    runId: string,
+    historyBoundary: ContextHistoryBoundary,
     limit: number,
   ): Promise<LedgerPage> {
-    return { items: this.entries.slice(-limit), nextCursor: null };
+    const visible = this.entries.filter((item) => {
+      if (item.sequence <= historyBoundary.baseThrough || item.runId === runId) return true;
+      if (!item.runId) return false;
+      const runThrough = historyBoundary.runThrough[item.runId];
+      return runThrough !== undefined && item.sequence <= runThrough;
+    });
+    const items = visible.slice(-limit);
+    return { items, nextCursor: visible.length > limit ? `before:${items.at(0)?.sequence ?? 0}` : null };
   }
 
-  async appendEntry(_scope: Scope, _threadId: string, _entry: AppendLedgerEntry): Promise<LedgerEntryView> {
+  async readVisibleEntriesThrough(
+    _scope: Scope,
+    _threadId: string,
+    throughSequence: number,
+    runId?: string,
+    historyBoundary?: ContextHistoryBoundary,
+  ): Promise<LedgerEntryView[]> {
+    return this.entries.filter((item) => {
+      if (item.sequence > throughSequence) return false;
+      if (!historyBoundary) return true;
+      if (!runId) return false;
+      if (item.sequence <= historyBoundary.baseThrough || item.runId === runId) return true;
+      if (!item.runId) return false;
+      const runThrough = historyBoundary.runThrough[item.runId];
+      return runThrough !== undefined && item.sequence <= runThrough;
+    });
+  }
+
+  async appendEntry(_scope: Scope, threadId: string, item: AppendLedgerEntry): Promise<LedgerEntryView> {
+    const sequence = (this.entries.at(-1)?.sequence ?? 0) + 1;
+    const entry: LedgerEntryView = {
+      id: item.id,
+      threadId,
+      runId: item.runId ?? null,
+      sequence,
+      kind: item.kind,
+      payload: item.payload,
+      createdAt: item.createdAt,
+    };
+    this.entries.push(entry);
+    return entry;
+  }
+}
+
+class StaticContextCheckpointRepository implements ContextCheckpointRepositoryPort {
+  private readonly rows = new Map<string, ContextCheckpointView>();
+
+  private key(
+    threadId: string,
+    visibilityHash: string,
+    fromSequence: number,
+    toSequence: number,
+    strategyVersion: string,
+  ): string {
+    return [threadId, visibilityHash, fromSequence, toSequence, strategyVersion].join('\u0000');
+  }
+
+  async getExact(
+    _scope: Scope,
+    threadId: string,
+    visibilityHash: string,
+    fromSequence: number,
+    toSequence: number,
+    strategyVersion: string,
+  ): Promise<ContextCheckpointView | null> {
+    return this.rows.get(this.key(threadId, visibilityHash, fromSequence, toSequence, strategyVersion)) ?? null;
+  }
+
+  async upsert(record: UpsertContextCheckpointRecord): Promise<ContextCheckpointView> {
+    const key = this.key(
+      record.threadId,
+      record.visibilityHash,
+      record.fromSequence,
+      record.toSequence,
+      record.strategyVersion,
+    );
+    const previous = this.rows.get(key);
+    const view: ContextCheckpointView = {
+      id: previous?.id ?? record.id,
+      threadId: record.threadId,
+      visibilityHash: record.visibilityHash,
+      visibility: record.visibility,
+      fromSequence: record.fromSequence,
+      toSequence: record.toSequence,
+      sourceHash: record.sourceHash,
+      strategyVersion: record.strategyVersion,
+      generator: record.generator,
+      sourceTokens: record.sourceTokens,
+      summaryTokens: record.summaryTokens,
+      content: record.content,
+      createdAt: record.createdAt,
+    };
+    this.rows.set(key, view);
+    return view;
+  }
+}
+
+class StaticProviderRepository implements ProviderRepositoryPort {
+  constructor(private readonly provider: PersistedProviderView) {}
+
+  async get(userId: number, providerId: string): Promise<PersistedProviderView | null> {
+    return userId === 1 && providerId === this.provider.id ? this.provider : null;
+  }
+
+  async list(userId: number): Promise<PersistedProviderView[]> {
+    return userId === 1 ? [this.provider] : [];
+  }
+
+  async create(_record: ProviderCreateRecord): Promise<PersistedProviderView> {
+    throw new Error('SCENARIO_UNSUPPORTED');
+  }
+
+  async update(
+    _userId: number,
+    _providerId: string,
+    _expectedVersion: number,
+    _record: ProviderUpdateRecord,
+  ): Promise<PersistedProviderView> {
+    throw new Error('SCENARIO_UNSUPPORTED');
+  }
+
+  async replaceLiveCapabilities(
+    userId: number,
+    providerId: string,
+    observations: ProviderModelCapabilityObservation[],
+  ): Promise<void> {
+    if (userId !== 1 || providerId !== this.provider.id) throw new Error('PROVIDER_NOT_FOUND');
+    this.provider.liveCapabilities = observations.map((observation) => ({
+      ...observation,
+      capabilities: {
+        ...observation.capabilities,
+        ...(observation.capabilities.reasoning
+          ? {
+              reasoning: {
+                ...observation.capabilities.reasoning,
+                supportedEfforts: [...observation.capabilities.reasoning.supportedEfforts],
+              },
+            }
+          : {}),
+      },
+    }));
+  }
+
+  async remove(_userId: number, _providerId: string, _expectedVersion: number, _deletedAt: number): Promise<void> {
     throw new Error('SCENARIO_UNSUPPORTED');
   }
 }
 
+class StaticProviderCatalogRepository implements ProviderRepositoryPort {
+  constructor(private readonly providers: PersistedProviderView[]) {}
+
+  async get(userId: number, providerId: string): Promise<PersistedProviderView | null> {
+    return userId === 1 ? (this.providers.find((provider) => provider.id === providerId) ?? null) : null;
+  }
+
+  async list(userId: number): Promise<PersistedProviderView[]> {
+    return userId === 1 ? this.providers : [];
+  }
+
+  async create(_record: ProviderCreateRecord): Promise<PersistedProviderView> {
+    throw new Error('SCENARIO_UNSUPPORTED');
+  }
+
+  async update(
+    _userId: number,
+    _providerId: string,
+    _expectedVersion: number,
+    _record: ProviderUpdateRecord,
+  ): Promise<PersistedProviderView> {
+    throw new Error('SCENARIO_UNSUPPORTED');
+  }
+
+  async replaceLiveCapabilities(
+    userId: number,
+    providerId: string,
+    observations: ProviderModelCapabilityObservation[],
+  ): Promise<void> {
+    const provider = userId === 1 ? this.providers.find((candidate) => candidate.id === providerId) : undefined;
+    if (!provider) throw new Error('PROVIDER_NOT_FOUND');
+    provider.liveCapabilities = observations.map((observation) => ({
+      ...observation,
+      capabilities: {
+        ...observation.capabilities,
+        ...(observation.capabilities.reasoning
+          ? {
+              reasoning: {
+                ...observation.capabilities.reasoning,
+                supportedEfforts: [...observation.capabilities.reasoning.supportedEfforts],
+              },
+            }
+          : {}),
+      },
+    }));
+  }
+
+  async remove(_userId: number, _providerId: string, _expectedVersion: number, _deletedAt: number): Promise<void> {
+    throw new Error('SCENARIO_UNSUPPORTED');
+  }
+}
+
+interface ScriptedModelTurn {
+  events: readonly ModelEvent[];
+  assertRequest?: (request: ModelRequest) => void;
+  error?: Error;
+}
+
+class ScriptedLanguageModel implements LanguageModelPort {
+  readonly requests: ModelRequest[] = [];
+  private cursor = 0;
+
+  constructor(
+    private readonly turns: readonly ScriptedModelTurn[],
+    private readonly discoveries: readonly DiscoveredProviderModel[] = [],
+  ) {}
+
+  async discoverModels(
+    _userId: number,
+    _providerId: string,
+    _signal: AbortSignal,
+  ): Promise<DiscoveredProviderModel[]> {
+    return this.discoveries.map((model) => ({
+      ...model,
+      ...(model.liveCapabilityReport
+        ? {
+            liveCapabilityReport: {
+              ...model.liveCapabilityReport,
+              capabilities: {
+                ...model.liveCapabilityReport.capabilities,
+                ...(model.liveCapabilityReport.capabilities.reasoning
+                  ? {
+                      reasoning: {
+                        ...model.liveCapabilityReport.capabilities.reasoning,
+                        supportedEfforts: [...model.liveCapabilityReport.capabilities.reasoning.supportedEfforts],
+                      },
+                    }
+                  : {}),
+              },
+            },
+          }
+        : {}),
+    }));
+  }
+
+  async *stream(request: ModelRequest, signal: AbortSignal): AsyncIterable<ModelEvent> {
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const turn = this.turns[this.cursor];
+    assert.ok(turn, `unexpected model request at turn ${this.cursor + 1}`);
+    this.cursor += 1;
+    this.requests.push(request);
+    turn.assertRequest?.(request);
+    for (const event of turn.events) {
+      if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+      yield event;
+    }
+    if (turn.error) throw turn.error;
+  }
+
+  assertConsumed(): void {
+    assert.equal(this.cursor, this.turns.length, 'all scripted model turns must be consumed');
+  }
+}
+
+class ScenarioModelCallLimiter extends ModelCallLimiter {
+  constructor() {
+    super(null!);
+  }
+
+  override async acquire(_userId: number, signal: AbortSignal): Promise<() => void> {
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    return () => undefined;
+  }
+}
+
 class EmptyRecallRepository implements RecallRepositoryPort {
-  async publishedCandidates(_scope: Scope, _now: number, _scanLimit: number): Promise<RecallCandidate[]> {
+  async searchPublishedCandidates(
+    _scope: Scope,
+    _now: number,
+    _queryTerms: readonly string[],
+    _candidateLimit: number,
+  ): Promise<RecallCandidate[]> {
     return [];
   }
 }
+
+const emptyModelContinuations: ModelContinuationRepositoryPort = {
+  load: async () => [],
+};
 
 const entry = (
   sequence: number,
   kind: LedgerEntryView['kind'],
   payload: LedgerEntryView['payload'],
+  runId: string | null = 'scenario-run',
 ): LedgerEntryView => ({
   id: `entry-${sequence}`,
   threadId: 'scenario-thread',
-  runId: 'scenario-run',
+  runId,
   sequence,
   kind,
   payload,
@@ -161,7 +577,8 @@ const contextService = (entries: LedgerEntryView[]): ContextService => {
   // These collaborators are used only by mutation/thread-creation paths; scenarios below exercise real read projection.
   const conversations = new ConversationService(repository, clock, null!, null!);
   const recall = new RecallService(new EmptyRecallRepository(), clock);
-  return new ContextService(conversations, recall, new SkillRegistry());
+  const checkpoints = new ContextCheckpointService(new StaticContextCheckpointRepository(), conversations, clock);
+  return new ContextService(conversations, recall, new SkillRegistry(), emptyModelContinuations, null!, checkpoints);
 };
 
 const assertValidToolExchange = (messages: Awaited<ReturnType<ContextService['compose']>>['messages']): void => {
@@ -235,17 +652,5407 @@ const contextToolExchangeScenario: Scenario = async () => {
   );
   assert.ok(assistantDiagnostic, 'structured tool-call arguments must contribute to token accounting');
 
+  const historyEntries = [
+    entry(1, 'user_input', { text: 'Historical request.' }, 'history-run'),
+    entry(
+      2,
+      'assistant_message',
+      {
+        text: '',
+        toolCalls: [
+          { id: 'history-call-a', name: 'workspace_read_file', argumentsJson: '{"path":"a"}' },
+          { id: 'history-call-b', name: 'workspace_search', argumentsJson: '{"query":"b"}' },
+        ],
+      },
+      'history-run',
+    ),
+    entry(3, 'tool_result', { toolCallId: 'history-call-a', content: 'first terminal result' }, 'history-run'),
+    entry(4, 'tool_result', { toolCallId: 'history-call-b', content: 'second terminal result' }, 'history-run'),
+  ];
+  for (const baseThrough of [2, 3]) {
+    const boundaryPlan = await contextService(historyEntries).compose({
+      scope,
+      threadId: 'scenario-thread',
+      runId: 'scenario-run',
+      historyBoundary: { baseThrough, runThrough: {} },
+      currentInput: 'Continue after the checkpoint.',
+      modelContextWindow: 8_192,
+      maxContextTokens: 8_000,
+      reservedOutputTokens: 128,
+      maxRecallItems: 5,
+      maxRecallBytes: 8_192,
+      tools: [],
+    });
+    assertValidToolExchange(boundaryPlan.messages);
+    assert.ok(
+      boundaryPlan.droppedSections.some((section) => section.startsWith('ledger-exchange-incomplete:')),
+      'history boundary fragments must leave an explicit incomplete-exchange diagnostic',
+    );
+  }
+
+  const pageBoundaryEntries = [
+    entry(1, 'assistant_message', {
+      text: '',
+      toolCalls: [{ id: 'page-call', name: 'workspace_read_file', argumentsJson: '{"path":"old"}' }],
+    }),
+    entry(2, 'tool_result', { toolCallId: 'page-call', content: 'old terminal result' }),
+    ...Array.from({ length: 159 }, (_, index) =>
+      entry(index + 3, 'user_input', { text: `later ledger entry ${index + 1}` }),
+    ),
+  ];
+  const pageBoundaryPlan = await contextService(pageBoundaryEntries).compose({
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Continue from the recent page.',
+    modelContextWindow: 8_192,
+    maxContextTokens: 8_000,
+    reservedOutputTokens: 128,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    tools: [],
+  });
+  assertValidToolExchange(pageBoundaryPlan.messages);
+  assert.ok(
+    pageBoundaryPlan.droppedSections.some((section) => section.startsWith('ledger-exchange-incomplete:')),
+    'fixed-size page orphan fragments must leave an explicit incomplete-exchange diagnostic',
+  );
+
+  const terminalOutcomePlan = await contextService([
+    entry(1, 'assistant_message', {
+      text: '',
+      toolCalls: [
+        { id: 'denied-call', name: 'workspace_write', argumentsJson: '{}' },
+        { id: 'expired-call', name: 'workspace_write', argumentsJson: '{}' },
+        { id: 'superseded-call', name: 'workspace_write', argumentsJson: '{}' },
+        { id: 'cancelled-call', name: 'workspace_write', argumentsJson: '{}' },
+      ],
+    }),
+    entry(2, 'tool_result', {
+      toolCallId: 'denied-call',
+      text: JSON.stringify({ ok: false, outcome: 'confirmed', errorCode: 'APPROVAL_DENIED' }),
+    }),
+    entry(3, 'tool_result', {
+      toolCallId: 'expired-call',
+      text: JSON.stringify({ ok: false, outcome: 'confirmed', errorCode: 'APPROVAL_EXPIRED' }),
+    }),
+    entry(4, 'tool_result', {
+      toolCallId: 'superseded-call',
+      text: JSON.stringify({ ok: false, outcome: 'confirmed', errorCode: 'APPROVAL_SUPERSEDED' }),
+    }),
+    entry(5, 'tool_result', {
+      toolCallId: 'cancelled-call',
+      text: JSON.stringify({ ok: false, outcome: 'confirmed', errorCode: 'RUN_CANCELLED_BEFORE_TOOL_EXECUTION' }),
+    }),
+  ]).compose({
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Continue after terminal tool outcomes.',
+    modelContextWindow: 8_192,
+    maxContextTokens: 8_000,
+    reservedOutputTokens: 128,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    tools: [],
+  });
+  assertValidToolExchange(terminalOutcomePlan.messages);
+  assert.equal(
+    terminalOutcomePlan.messages.filter((message) => message.role === 'tool').length,
+    4,
+    'denied/expired/superseded/cancelled canonical tool results must remain in the assistant batch',
+  );
+
   return [
     { name: 'budget_variants', value: 6, unit: 'cases' },
     { name: 'compacted_variants', value: compactedRuns, unit: 'cases' },
     { name: 'tool_argument_estimate', value: assistantDiagnostic.estimatedTokens, unit: 'tokens' },
+    { name: 'boundary_fragment_cases', value: 3, unit: 'cases' },
+    { name: 'terminal_outcome_variants', value: 4, unit: 'cases' },
   ];
+};
+
+const durableContextCheckpointScenario: Scenario = async () => {
+  const history: LedgerEntryView[] = [
+    entry(1, 'user_input', { text: 'Project objective: repair the parser without changing generated files.' }),
+    entry(2, 'assistant_message', { text: 'Confirmed the repository constraint and started inspection.' }),
+    entry(3, 'assistant_message', {
+      text: 'FAILED ATTEMPT: the XML patch approach was ruled out because it corrupts source maps. Never retry XML patch.',
+    }),
+  ];
+  for (let sequence = 4; sequence <= 210; sequence += 1) {
+    history.push(
+      entry(
+        sequence,
+        sequence % 2 === 0 ? 'user_input' : 'assistant_message',
+        {
+          text:
+            sequence % 2 === 0
+              ? `Routine historical request ${sequence}: inspect the parser state and continue safely. ${'history '.repeat(18)}`
+              : `Routine historical response ${sequence}: inspected the parser state. ${'analysis '.repeat(18)}`,
+        },
+      ),
+    );
+  }
+  const service = contextService(history);
+  const plan = await service.compose({
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Proceed with the next implementation step.',
+    goal: 'GOAL_MARKER: preserve parser correctness and generated-file immutability.',
+    taskPlan: 'PLAN_MARKER: inspect, patch source only, run deterministic verification.',
+    collaborationContext: 'COLLAB_MARKER: child parser audit completed; no active child work remains.',
+    modelContextWindow: 4_096,
+    maxContextTokens: 1_050,
+    reservedOutputTokens: 256,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    compactionMode: 'balanced',
+    tools: [],
+  });
+  assert.equal(plan.compacted, true, 'fixture must trigger history compaction');
+  assert.ok(
+    plan.tokenDiagnostics.summaryCheckpointTokens > 0,
+    'compaction must project a durable verified Context checkpoint instead of only dropping old raw Ledger',
+  );
+  const encoded = JSON.stringify(plan.messages);
+  assert.match(
+    encoded,
+    /XML patch approach was ruled out/,
+    'derived checkpoint must retain failed\/ruled-out attempts outside the recent verbatim tail',
+  );
+  assert.match(encoded, /GOAL_MARKER/, 'current Goal must be reserved ahead of raw history');
+  assert.match(encoded, /PLAN_MARKER/, 'current Plan must be reserved ahead of raw history');
+  assert.match(encoded, /COLLAB_MARKER/, 'current Collaboration state must be reserved ahead of raw history');
+  const checkpointSource = plan.sourceRanges.find((source) => source.kind === 'summary_checkpoint');
+  assert.match(
+    checkpointSource?.hash ?? '',
+    /^[a-f0-9]{64}$/,
+    'Context lineage must include the verified checkpoint source hash so regenerated summaries change contextEpoch',
+  );
+  assertValidToolExchange(plan.messages);
+
+  const fallbackRepository = new StaticConversationRepository(history);
+  const fallbackConversations = new ConversationService(fallbackRepository, clock, null!, null!);
+  const failingCheckpoints = new ContextCheckpointService(
+    {
+      getExact: async () => {
+        throw new Error('CHECKPOINT_STORE_UNAVAILABLE');
+      },
+      upsert: async () => {
+        throw new Error('CHECKPOINT_STORE_UNAVAILABLE');
+      },
+    },
+    fallbackConversations,
+    clock,
+  );
+  const fallbackContext = new ContextService(
+    fallbackConversations,
+    new RecallService(new EmptyRecallRepository(), clock),
+    new SkillRegistry(),
+    emptyModelContinuations,
+    null!,
+    failingCheckpoints,
+  );
+  const fallbackPlan = await fallbackContext.compose({
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Proceed despite a checkpoint persistence failure.',
+    goal: 'GOAL_MARKER: preserve parser correctness and generated-file immutability.',
+    taskPlan: 'PLAN_MARKER: inspect, patch source only, run deterministic verification.',
+    collaborationContext: 'COLLAB_MARKER: child parser audit completed; no active child work remains.',
+    modelContextWindow: 4_096,
+    maxContextTokens: 1_050,
+    reservedOutputTokens: 256,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    compactionMode: 'balanced',
+    tools: [],
+  });
+  assert.equal(fallbackPlan.compacted, true);
+  assert.equal(
+    fallbackPlan.tokenDiagnostics.summaryCheckpointTokens,
+    0,
+    'checkpoint failure must fall back to drop-only projection instead of fabricating derived state',
+  );
+  assert.ok(
+    fallbackPlan.droppedSections.includes('summary-checkpoint:unavailable'),
+    'checkpoint failure must be observable without blocking model execution',
+  );
+  assertValidToolExchange(fallbackPlan.messages);
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-context-checkpoint-schema-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'context-checkpoint.sqlite', nodeEnv: 'test' });
+  try {
+    await db.initialize();
+    const checkpointTable = await db.queryOne<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_context_checkpoints'",
+    );
+    assert.equal(checkpointTable?.name, 'ai_context_checkpoints', 'fresh schema must expose the single Context checkpoint owner');
+    const legacyDigest = await db.queryOne<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_context_digests'",
+    );
+    assert.equal(legacyDigest, null, 'legacy ai_context_digests dead owner must be removed');
+
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'context-checkpoint-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 0, ?, ?)`,
+      [clock.nowUnixSeconds(), clock.nowUnixSeconds()],
+    );
+    const durableConversationsRepository = new SqliteConversationRepository(db);
+    await durableConversationsRepository.createThread(
+      scope,
+      'context-checkpoint-thread',
+      'Context checkpoint fixture',
+      'manual',
+      clock.nowUnixSeconds(),
+    );
+    await durableConversationsRepository.appendEntry(scope, 'context-checkpoint-thread', {
+      id: 'context-checkpoint-entry-1',
+      kind: 'user_input',
+      payload: { text: 'Keep the durable constraint marker.' },
+      createdAt: clock.nowUnixSeconds(),
+    });
+    await durableConversationsRepository.appendEntry(scope, 'context-checkpoint-thread', {
+      id: 'context-checkpoint-entry-2',
+      kind: 'assistant_message',
+      payload: { text: 'FAILED ATTEMPT STALE_SOURCE_MARKER: remove this source and never reuse its derived summary.' },
+      createdAt: clock.nowUnixSeconds() + 1,
+    });
+    await durableConversationsRepository.appendEntry(scope, 'context-checkpoint-thread', {
+      id: 'context-checkpoint-entry-3',
+      kind: 'assistant_message',
+      payload: { text: 'Current state remains safe and resumable.' },
+      createdAt: clock.nowUnixSeconds() + 2,
+    });
+    const durableConversations = new ConversationService(durableConversationsRepository, clock, null!, null!);
+    const durableCheckpointRepository = new SqliteContextCheckpointRepository(db);
+    const durableCheckpoints = new ContextCheckpointService(durableCheckpointRepository, durableConversations, clock);
+    const firstCheckpoint = await durableCheckpoints.checkpointForPrefix({
+      scope,
+      threadId: 'context-checkpoint-thread',
+      throughSequence: 3,
+      maxSummaryTokens: 512,
+      hardPressure: true,
+    });
+    assert.ok(firstCheckpoint, 'Context checkpoint producer must persist a derived summary');
+    assert.match(firstCheckpoint!.content, /STALE_SOURCE_MARKER/);
+    const reusedCheckpoint = await durableCheckpoints.checkpointForPrefix({
+      scope,
+      threadId: 'context-checkpoint-thread',
+      throughSequence: 3,
+      maxSummaryTokens: 512,
+      hardPressure: true,
+    });
+    assert.equal(reusedCheckpoint?.id, firstCheckpoint!.id, 'unchanged canonical source must reuse the durable checkpoint');
+    const persistedCount = await db.queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM ai_context_checkpoints WHERE thread_id = 'context-checkpoint-thread'",
+    );
+    assert.equal(persistedCount?.count, 1, 'checkpoint producer/consumer must round-trip through the single durable table');
+
+    await db.execute("DELETE FROM ai_thread_entries WHERE id = 'context-checkpoint-entry-2'");
+    const refreshedCheckpoint = await durableCheckpoints.checkpointForPrefix({
+      scope,
+      threadId: 'context-checkpoint-thread',
+      throughSequence: 3,
+      maxSummaryTokens: 512,
+      hardPressure: true,
+    });
+    assert.ok(refreshedCheckpoint);
+    assert.notEqual(
+      refreshedCheckpoint!.sourceHash,
+      firstCheckpoint!.sourceHash,
+      'source hash mismatch must invalidate stale derived Context state',
+    );
+    assert.doesNotMatch(
+      refreshedCheckpoint!.content,
+      /STALE_SOURCE_MARKER/,
+      'regenerated checkpoint must derive only from the current canonical Ledger source',
+    );
+    const resumedBoundaryCheckpoint = await durableCheckpoints.checkpointForPrefix({
+      scope,
+      threadId: 'context-checkpoint-thread',
+      runId: 'resumed-run',
+      historyBoundary: { baseThrough: 3, runThrough: {} },
+      throughSequence: 3,
+      maxSummaryTokens: 512,
+      hardPressure: true,
+    });
+    assert.ok(resumedBoundaryCheckpoint);
+    assert.equal(
+      resumedBoundaryCheckpoint!.visibility.kind,
+      'run_boundary',
+      'checkpoint resume visibility must remain explicit durable metadata',
+    );
+    assert.notEqual(
+      resumedBoundaryCheckpoint!.id,
+      refreshedCheckpoint!.id,
+      'a resumed Run boundary must not reuse a Thread-prefix checkpoint under a different visibility contract',
+    );
+
+  } finally {
+    await db.close().catch(() => undefined);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+
+  const upgradeDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-context-checkpoint-upgrade-'));
+  const legacyDb = new DatabaseSync(path.join(upgradeDirectory, 'context-checkpoint-upgrade.sqlite'));
+  try {
+    legacyDb.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE migrations (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at INTEGER NOT NULL
+      );
+      INSERT INTO migrations (id, name, applied_at) VALUES (29, 'legacy baseline', 1800000000);
+      CREATE TABLE ai_threads (id TEXT PRIMARY KEY);
+      CREATE TABLE ai_context_digests (
+        id TEXT PRIMARY KEY,
+        thread_id TEXT NOT NULL REFERENCES ai_threads(id) ON DELETE CASCADE,
+        from_sequence INTEGER NOT NULL,
+        to_sequence INTEGER NOT NULL CHECK(to_sequence >= from_sequence),
+        source_hash TEXT NOT NULL,
+        model_config_version TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    `);
+    await runMigrations(legacyDb);
+    const upgradedCheckpoint = legacyDb
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_context_checkpoints'")
+      .get() as { name?: string } | undefined;
+    const upgradedLegacyDigest = legacyDb
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'ai_context_digests'")
+      .get() as { name?: string } | undefined;
+    const migrationVersion = legacyDb.prepare('SELECT MAX(id) AS version FROM migrations').get() as
+      | { version?: number }
+      | undefined;
+    assert.equal(upgradedCheckpoint?.name, 'ai_context_checkpoints', 'migration 30 must create the Context checkpoint owner');
+    assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
+    assert.equal(migrationVersion?.version, 30, 'legacy databases must advance through migration 30');
+  } finally {
+    legacyDb.close();
+    fs.rmSync(upgradeDirectory, { recursive: true, force: true });
+  }
+
+  return [
+    { name: 'summary_checkpoint_tokens', value: plan.tokenDiagnostics.summaryCheckpointTokens, unit: 'tokens' },
+    { name: 'visible_context_messages', value: plan.messages.length, unit: 'messages' },
+    { name: 'checkpoint_failure_fallbacks', value: 1, unit: 'cases' },
+    { name: 'durable_checkpoint_roundtrips', value: 1, unit: 'cases' },
+    { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
+    { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },
+    { name: 'legacy_digest_tables', value: 0, unit: 'tables' },
+    { name: 'migration_version', value: 30, unit: 'version' },
+  ];
+};
+
+const projectInstructionsContextScenario: Scenario = async () => {
+  const service = contextService([]);
+  const baseInput = {
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Update src/parser/index.ts and follow the repository rules.',
+    modelContextWindow: 8_192,
+    maxContextTokens: 8_000,
+    reservedOutputTokens: 256,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    tools: [],
+  } as const;
+  const withoutProject = await service.compose(baseInput);
+  const withProject = await service.compose({
+    ...baseInput,
+    projectInstructions: [
+      {
+        path: '/workspace/work/AGENTS.md',
+        scopePath: '/workspace/work',
+        projectRoot: '/workspace/work',
+        hash: 'a'.repeat(64),
+        content: 'ROOT_RULE_MARKER: run tests before finishing.',
+        sourceBytes: 44,
+        contentBytes: 44,
+        truncated: false,
+        provenance: 'workspace',
+      },
+      {
+        path: '/workspace/work/src/parser/AGENTS.md',
+        scopePath: '/workspace/work/src/parser',
+        projectRoot: '/workspace/work',
+        hash: 'b'.repeat(64),
+        content: 'NESTED_RULE_MARKER: generated parser files are immutable.',
+        sourceBytes: 57,
+        contentBytes: 57,
+        truncated: false,
+        provenance: 'workspace',
+      },
+    ],
+  });
+
+  const encoded = withProject.instructions.join('\n');
+  assert.match(
+    encoded,
+    /ROOT_RULE_MARKER/,
+    'repo-root AGENTS.md must enter the stable model instruction prefix',
+  );
+  assert.match(
+    encoded,
+    /NESTED_RULE_MARKER/,
+    'matching nested AGENTS.md must enter the stable model instruction prefix after root rules',
+  );
+  assert.ok(
+    encoded.indexOf('ROOT_RULE_MARKER') < encoded.indexOf('NESTED_RULE_MARKER'),
+    'deeper project instructions must be ordered after broader root instructions',
+  );
+  assert.notEqual(
+    withProject.stablePrefixHash,
+    withoutProject.stablePrefixHash,
+    'project instruction content must naturally participate in stablePrefixHash and P-081 cache lineage',
+  );
+  assert.ok(
+    withProject.tokenDiagnostics.projectInstructionTokens > 0,
+    'project instruction tokens must be first-class Context telemetry',
+  );
+  assert.equal(
+    withProject.sourceRanges.filter((source) => source.kind === 'project_instruction').length,
+    2,
+    'project instruction provenance must be visible in Context source ranges',
+  );
+
+  const httpDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-project-instructions-http-'));
+  let httpCodecCases = 0;
+  let generationConflictCases = 0;
+  let runnerServer: ReturnType<RunnerControllerServer['createServer']> | null = null;
+  try {
+    const journal = new RunnerJournal(path.join(httpDirectory, 'journal.json'));
+    journal.saveWorkspace({
+      workspaceId: 'scenario-workspace',
+      generation: 7,
+      status: 'running',
+      retained: false,
+      toolchain: [],
+      runnerPlugins: [],
+      acpProfiles: [],
+      browserTarget: null,
+    });
+    runnerServer = new RunnerControllerServer({
+      token: 'scenario-token',
+      journal,
+      runtimeEngine: {
+        projectInstructions: (
+          workspaceId: string,
+          generation: number,
+          targetDirectories: readonly string[],
+        ) => {
+          assert.equal(workspaceId, 'scenario-workspace');
+          assert.equal(generation, 7);
+          return {
+            targetDirectories: [...targetDirectories],
+            instructions: [
+              {
+                path: '/workspace/work/AGENTS.md',
+                scopePath: '/workspace/work',
+                projectRoot: '/workspace/work',
+                hash: 'c'.repeat(64),
+                content: 'HTTP_CODEC_RULE',
+                sourceBytes: 15,
+                contentBytes: 15,
+                truncated: false,
+                provenance: 'workspace' as const,
+              },
+            ],
+            omitted: [],
+          };
+        },
+      },
+      catalog: {},
+      installer: {},
+      storage: {},
+      cleanup: {},
+      pluginRunner: {},
+      acpRuntime: { closeAll: () => undefined },
+      terminalRuntime: { closeAll: () => undefined },
+      browserTunnel: { closeAll: () => undefined },
+    } as unknown as ConstructorParameters<typeof RunnerControllerServer>[0]).createServer();
+    const baseUrl = await new Promise<string>((resolve, reject) => {
+      runnerServer!.once('error', reject);
+      runnerServer!.listen(0, '127.0.0.1', () => {
+        const address = runnerServer!.address();
+        if (!address || typeof address === 'string') {
+          reject(new Error('SCENARIO_RUNNER_ADDRESS_INVALID'));
+          return;
+        }
+        resolve(`http://127.0.0.1:${address.port}`);
+      });
+    });
+    const runnerAdapter = new RunnerHttpAdapter(baseUrl, 'scenario-token');
+    const httpProjection = await runnerAdapter.projectInstructions(
+      'scenario-workspace',
+      7,
+      ['/workspace/work/src/parser'],
+    );
+    assert.deepEqual(httpProjection.targetDirectories, ['/workspace/work/src/parser']);
+    assert.equal(httpProjection.instructions[0]?.content, 'HTTP_CODEC_RULE');
+    httpCodecCases += 1;
+
+    const invalidCodecResponse = await fetch(`${baseUrl}/v1/workspaces/scenario-workspace/project-instructions`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer scenario-token',
+        'Content-Type': 'application/json',
+        'X-Nexus-Agent-Protocol': '2026-09-13',
+      },
+      body: JSON.stringify({
+        generation: 7,
+        targetDirectories: ['/workspace/work'],
+        unexpected: true,
+      }),
+    });
+    assert.equal(invalidCodecResponse.status, 400, 'Runner project-instruction codec must reject unknown fields');
+    httpCodecCases += 1;
+
+    await assert.rejects(
+      () => runnerAdapter.projectInstructions('scenario-workspace', 6, ['/workspace/work']),
+      /WORKSPACE_GENERATION_CONFLICT/,
+      'Runner generation conflicts must survive the Backend HTTP adapter as a stable error code',
+    );
+    generationConflictCases += 1;
+  } finally {
+    if (runnerServer) {
+      await new Promise<void>((resolve, reject) =>
+        runnerServer!.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+    fs.rmSync(httpDirectory, { recursive: true, force: true });
+  }
+
+  const auditBenchmark: AgentBenchmarkCase = {
+    id: 'project-instruction-audit',
+    prompt: 'Inspect the working subtree.',
+    toolName: 'scenario_noop',
+    toolArgumentsJson: '{}',
+    toolDescription: 'No-op scenario tool.',
+    toolInputSchema: { type: 'object', additionalProperties: false },
+    toolSummary: 'noop',
+    finalText: 'done',
+    usage: [
+      { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
+      { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
+    ],
+  };
+  const auditSnapshot = benchmarkSnapshot(auditBenchmark, scope);
+  auditSnapshot.definition = {
+    ...auditSnapshot.definition,
+    environment: {
+      kind: 'code',
+      recipeId: 'scenario-code',
+      recipeRevision: '1',
+      runtimeDigest: 'scenario-runtime',
+      catalogRevision: 'scenario-catalog',
+      toolchain: [],
+      runnerPlugins: [],
+      acpProfiles: [],
+      browserTarget: null,
+    },
+  };
+  auditSnapshot.recentEntries = [
+    ...auditSnapshot.recentEntries,
+    {
+      id: 'project-instruction-audit-tool-calls',
+      sequence: 2,
+      kind: 'assistant_message',
+      payload: {
+        text: '',
+        toolCalls: [
+          {
+            id: 'valid-cwd',
+            name: 'workspace_execute_argv',
+            argumentsJson: JSON.stringify({ cwd: '/workspace/work/src/parser' }),
+          },
+          {
+            id: 'outside-cwd',
+            name: 'workspace_execute_argv',
+            argumentsJson: JSON.stringify({ cwd: '/workspace/work/../outside' }),
+          },
+          {
+            id: 'read-target',
+            name: 'workspace_read_file',
+            argumentsJson: JSON.stringify({ path: '/workspace/work/packages/api/src/index.ts' }),
+          },
+          {
+            id: 'search-target',
+            name: 'workspace_search',
+            argumentsJson: JSON.stringify({ path: '/workspace/work/packages/web' }),
+          },
+          {
+            id: 'patch-target',
+            name: 'workspace_apply_patch',
+            argumentsJson: JSON.stringify({
+              expectedFiles: [
+                { path: 'packages/core/src/a.ts', sha256: 'a'.repeat(64) },
+                { path: '/workspace/work/../../outside.ts', sha256: 'b'.repeat(64) },
+              ],
+            }),
+          },
+        ],
+      },
+      createdAt: auditSnapshot.createdAt + 1,
+    },
+  ];
+  const auditModel = new ScriptedLanguageModel([]);
+  const auditProviders = new ProviderService(new StaticProviderRepository(benchmarkProvider), auditModel, clock);
+  let capturedTargets: string[] = [];
+  const absentWorkspaceRunner = new ModelStepRunner(
+    auditProviders,
+    contextService([]),
+    auditModel,
+    new ScenarioModelCallLimiter(),
+    {
+      load: async (_scope, _runId, _runtimeId, targetDirectories) => {
+        capturedTargets = [...targetDirectories];
+        return null;
+      },
+    },
+  );
+  const absentWorkspacePrepared = await absentWorkspaceRunner.prepare(
+    auditSnapshot,
+    scope,
+    [],
+    {},
+    undefined,
+    undefined,
+    'scenario-runtime-id',
+  );
+  assert.deepEqual(
+    capturedTargets,
+    [
+      '/workspace/work',
+      '/workspace/work/src/parser',
+      '/workspace/work/packages/api/src',
+      '/workspace/work/packages/web',
+      '/workspace/work/packages/core/src',
+    ],
+    'project instruction target extraction must consume path-aware coding tools and reject normalized paths outside /workspace/work',
+  );
+  assert.equal(
+    absentWorkspacePrepared.contextPlan.sourceRanges.some((source) => source.kind === 'project_instruction'),
+    false,
+    'a missing live workspace must remain fail-soft and must not synthesize project instructions',
+  );
+
+  const unavailableRunner = new ModelStepRunner(
+    auditProviders,
+    contextService([]),
+    auditModel,
+    new ScenarioModelCallLimiter(),
+    {
+      load: async () => {
+        throw new Error('WORKSPACE_RUNTIME_UNAVAILABLE');
+      },
+    },
+  );
+  const unavailablePrepared = await unavailableRunner.prepare(
+    auditSnapshot,
+    scope,
+    [],
+    {},
+    undefined,
+    undefined,
+    'scenario-runtime-id',
+  );
+  assert.equal(
+    unavailablePrepared.contextPlan.sourceRanges.some((source) => source.kind === 'project_instruction'),
+    false,
+    'Runner unavailability must remain fail-soft and must not synthesize project instructions',
+  );
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-project-instructions-'));
+  const noRepoDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-project-instructions-no-repo-'));
+  const worktreeDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-project-instructions-worktree-'));
+  const outsideDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-project-instructions-outside-'));
+  let symlinkRejections = 0;
+  let traversalRejections = 0;
+  let unrelatedInstructionFiles = 0;
+  let truncatedInstructionFiles = 0;
+  let oversizedInstructionOmissions = 0;
+  try {
+    fs.mkdirSync(path.join(directory, '.git'));
+    fs.mkdirSync(path.join(directory, 'src', 'parser'), { recursive: true });
+    fs.mkdirSync(path.join(directory, 'docs'), { recursive: true });
+    fs.writeFileSync(path.join(directory, 'AGENTS.md'), 'ROOT_FS_RULE: run parser tests.\n');
+    fs.writeFileSync(path.join(directory, 'src', 'parser', 'AGENTS.md'), 'NESTED_FS_RULE: do not edit generated parser output.\n');
+    fs.writeFileSync(path.join(directory, 'docs', 'AGENTS.md'), 'UNRELATED_FS_RULE: docs only.\n');
+    const scoped = resolveProjectInstructions(directory, ['/workspace/work/src/parser']);
+    assert.deepEqual(
+      scoped.instructions.map((item) => item.path),
+      ['/workspace/work/AGENTS.md', '/workspace/work/src/parser/AGENTS.md'],
+      'Runner projection must load only root-to-target AGENTS.md files in broad-to-deep order',
+    );
+    assert.match(scoped.instructions[0]!.content, /ROOT_FS_RULE/);
+    assert.match(scoped.instructions[1]!.content, /NESTED_FS_RULE/);
+    unrelatedInstructionFiles = scoped.instructions.filter((item) => item.content.includes('UNRELATED_FS_RULE')).length;
+    assert.equal(unrelatedInstructionFiles, 0, 'unrelated subtree AGENTS.md must not enter the projection');
+    assert.equal(scoped.instructions.every((item) => /^[a-f0-9]{64}$/.test(item.hash)), true);
+    assert.equal(scoped.instructions.every((item) => item.projectRoot === '/workspace/work'), true);
+
+    fs.mkdirSync(path.join(noRepoDirectory, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(noRepoDirectory, 'AGENTS.md'), 'NO_REPO_ROOT_RULE\n');
+    fs.writeFileSync(path.join(noRepoDirectory, 'src', 'AGENTS.md'), 'NO_REPO_NESTED_RULE\n');
+    const noRepo = resolveProjectInstructions(noRepoDirectory, ['/workspace/work/src']);
+    assert.deepEqual(
+      noRepo.instructions.map((item) => item.projectRoot),
+      ['/workspace/work', '/workspace/work'],
+      'without a repo marker the current work root must be the only project root',
+    );
+
+    fs.mkdirSync(path.join(worktreeDirectory, 'packages', 'pkg', 'src'), { recursive: true });
+    fs.writeFileSync(path.join(worktreeDirectory, 'AGENTS.md'), 'OUTER_ROOT_RULE\n');
+    fs.writeFileSync(path.join(worktreeDirectory, 'packages', 'pkg', '.git'), 'gitdir: /safe/worktree-metadata\n');
+    fs.writeFileSync(path.join(worktreeDirectory, 'packages', 'pkg', 'AGENTS.md'), 'WORKTREE_ROOT_RULE\n');
+    const worktree = resolveProjectInstructions(worktreeDirectory, ['/workspace/work/packages/pkg/src']);
+    assert.deepEqual(
+      worktree.instructions.map((item) => item.path),
+      ['/workspace/work/packages/pkg/AGENTS.md'],
+      'a deeper .git worktree marker must reset project-root scope and exclude outer instructions',
+    );
+    assert.equal(worktree.instructions[0]!.projectRoot, '/workspace/work/packages/pkg');
+
+    fs.writeFileSync(path.join(outsideDirectory, 'AGENTS.md'), 'OUTSIDE_RULE\n');
+    fs.symlinkSync(outsideDirectory, path.join(directory, 'linked'), 'dir');
+    assert.throws(
+      () => resolveProjectInstructions(directory, ['/workspace/work/linked']),
+      /WORKSPACE_PATH_FORBIDDEN/,
+      'symlinked target directories must fail closed',
+    );
+    symlinkRejections += 1;
+    assert.throws(
+      () => resolveProjectInstructions(directory, ['/workspace/work/../../outside']),
+      /WORKSPACE_PATH_FORBIDDEN/,
+      'logical path traversal outside /workspace/work must fail closed',
+    );
+    traversalRejections += 1;
+
+    const truncatedContent = 'TRUNCATED_RULE_MARKER\n' + 'x'.repeat(PROJECT_INSTRUCTION_LIMITS.maxContentBytesPerFile + 512);
+    fs.writeFileSync(path.join(noRepoDirectory, 'AGENTS.md'), truncatedContent);
+    const truncatedProjection = resolveProjectInstructions(noRepoDirectory, ['/workspace/work']);
+    assert.equal(truncatedProjection.instructions[0]!.truncated, true);
+    assert.ok(
+      truncatedProjection.instructions[0]!.contentBytes <= PROJECT_INSTRUCTION_LIMITS.maxContentBytesPerFile,
+      'project instruction content must respect the per-file byte projection budget',
+    );
+    assert.equal(truncatedProjection.instructions[0]!.sourceBytes, Buffer.byteLength(truncatedContent, 'utf8'));
+    truncatedInstructionFiles += 1;
+
+    fs.writeFileSync(
+      path.join(noRepoDirectory, 'AGENTS.md'),
+      Buffer.alloc(PROJECT_INSTRUCTION_LIMITS.maxSourceFileBytes + 1, 0x61),
+    );
+    const oversizedProjection = resolveProjectInstructions(noRepoDirectory, ['/workspace/work']);
+    assert.equal(oversizedProjection.instructions.length, 0);
+    assert.deepEqual(
+      oversizedProjection.omitted,
+      [{ path: '/workspace/work/AGENTS.md', reason: 'source_too_large' }],
+      'oversized instruction files must be omitted deterministically rather than partially trusted',
+    );
+    oversizedInstructionOmissions += 1;
+
+    return [
+      { name: 'project_instruction_tokens', value: withProject.tokenDiagnostics.projectInstructionTokens, unit: 'tokens' },
+      {
+        name: 'project_instruction_sources',
+        value: withProject.sourceRanges.filter((source) => source.kind === 'project_instruction').length,
+        unit: 'sources',
+      },
+      { name: 'stable_prefix_changed', value: withProject.stablePrefixHash !== withoutProject.stablePrefixHash ? 1 : 0, unit: 'cases' },
+      { name: 'scoped_instruction_files', value: scoped.instructions.length, unit: 'files' },
+      { name: 'unrelated_instruction_files', value: unrelatedInstructionFiles, unit: 'files' },
+      { name: 'symlink_rejections', value: symlinkRejections, unit: 'cases' },
+      { name: 'traversal_rejections', value: traversalRejections, unit: 'cases' },
+      { name: 'truncated_instruction_files', value: truncatedInstructionFiles, unit: 'files' },
+      { name: 'oversized_instruction_omissions', value: oversizedInstructionOmissions, unit: 'files' },
+      { name: 'project_instruction_http_codec_cases', value: httpCodecCases, unit: 'cases' },
+      { name: 'project_instruction_generation_conflicts', value: generationConflictCases, unit: 'cases' },
+      { name: 'project_instruction_fail_soft_cases', value: 2, unit: 'cases' },
+      { name: 'project_instruction_outside_cwd_rejections', value: 1, unit: 'cases' },
+    ];
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+    fs.rmSync(noRepoDirectory, { recursive: true, force: true });
+    fs.rmSync(worktreeDirectory, { recursive: true, force: true });
+    fs.rmSync(outsideDirectory, { recursive: true, force: true });
+  }
+};
+
+const workspaceCodingToolSurfaceScenario: Scenario = async () => {
+  const catalog = new ToolCatalog();
+  registerWorkspaceToolContributions({
+    catalog,
+    repository: null!,
+    runtime: null!,
+    gateway: null!,
+    cryptoHash: {
+      sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+    },
+  });
+  const descriptors = new Map(catalog.list(scope).map((descriptor) => [descriptor.name, descriptor]));
+  assert.equal(
+    descriptors.get('workspace_read_file')?.riskClass,
+    'read',
+    'P-072 must expose a first-class read-only Workspace file tool',
+  );
+  assert.equal(
+    descriptors.get('workspace_search')?.riskClass,
+    'read',
+    'P-072 must expose a first-class read-only Workspace search tool',
+  );
+  assert.equal(
+    descriptors.get('workspace_apply_patch')?.riskClass,
+    'mutate',
+    'P-072 must expose a governed incremental patch mutation tool',
+  );
+  assert.equal(
+    descriptors.get('workspace_execute_argv')?.riskClass,
+    'mutate',
+    'the existing argv escape hatch must remain governed as mutation',
+  );
+  const planToolNames = new Set(
+    modelFacingToolSchemas(
+      catalog,
+      scope,
+      {
+        environment: {
+          kind: 'code',
+          recipeId: 'scenario-code',
+          recipeRevision: '1',
+          runtimeDigest: 'scenario-runtime',
+          catalogRevision: 'scenario-catalog',
+          toolchain: [],
+          runnerPlugins: [],
+          acpProfiles: [],
+          browserTarget: null,
+        },
+      },
+      'plan',
+    ).map((tool) => tool.name),
+  );
+  assert.equal(planToolNames.has('workspace_read_file'), true);
+  assert.equal(planToolNames.has('workspace_search'), true);
+  assert.equal(planToolNames.has('workspace_apply_patch'), false);
+  assert.equal(planToolNames.has('workspace_execute_argv'), false);
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-workspace-coding-'));
+  const workRoot = path.join(directory, 'work');
+  const sourcePath = path.join(workRoot, 'src', 'example.ts');
+  fs.mkdirSync(path.dirname(sourcePath), { recursive: true });
+  const original = 'alpha\nneedle here\nomega\nneedle again\n';
+  fs.writeFileSync(sourcePath, original, 'utf8');
+  let traversalRejections = 0;
+  let symlinkRejections = 0;
+  let staleHashRejections = 0;
+  let strictLocationRejections = 0;
+  let fallbackSearches = 0;
+  let httpCodecCases = 0;
+  let generationConflictCases = 0;
+  try {
+    const read = readWorkspaceFile(workRoot, {
+      path: '/workspace/work/src/example.ts',
+      startLine: 2,
+      endLine: 3,
+      maxBytes: 1024,
+    });
+    assert.equal(read.content, 'needle here\nomega');
+    assert.equal(read.sha256, createHash('sha256').update(original, 'utf8').digest('hex'));
+    assert.equal(read.sizeBytes, Buffer.byteLength(original, 'utf8'));
+    assert.equal(read.startLine, 2);
+    assert.equal(read.endLine, 3);
+
+    assert.throws(
+      () => readWorkspaceFile(workRoot, { path: '/workspace/work/../outside.txt' }),
+      /WORKSPACE_PATH_FORBIDDEN/,
+    );
+    traversalRejections += 1;
+
+    const outside = path.join(directory, 'outside.txt');
+    fs.writeFileSync(outside, 'outside\n', 'utf8');
+    const symlink = path.join(workRoot, 'src', 'linked.txt');
+    fs.symlinkSync(outside, symlink);
+    assert.throws(
+      () => readWorkspaceFile(workRoot, { path: '/workspace/work/src/linked.txt' }),
+      /WORKSPACE_PATH_FORBIDDEN/,
+    );
+    symlinkRejections += 1;
+
+    const originalPath = process.env.PATH;
+    let search;
+    try {
+      process.env.PATH = '';
+      search = searchWorkspace(workRoot, {
+        query: 'needle',
+        path: '/workspace/work/src',
+        maxResults: 1,
+        contextLines: 1,
+        maxOutputBytes: 8 * 1024,
+      });
+    } finally {
+      process.env.PATH = originalPath;
+    }
+    assert.equal(search.engine, 'fallback', 'search must have a bounded no-rg fallback');
+    assert.equal(search.matches.length, 1);
+    assert.equal(search.matches[0]?.path, '/workspace/work/src/example.ts');
+    assert.equal(search.matches[0]?.line, 2);
+    assert.equal(search.truncated, true, 'maxResults must bound search output');
+    fallbackSearches += 1;
+
+    const beforeHash = read.sha256;
+    const patchText = [
+      '--- a/src/example.ts',
+      '+++ b/src/example.ts',
+      '@@ -1,4 +1,4 @@',
+      ' alpha',
+      '-needle here',
+      '+needle fixed',
+      ' omega',
+      ' needle again',
+      '',
+    ].join('\n');
+    const dryRun = applyWorkspacePatch(workRoot, {
+      patch: patchText,
+      expectedFiles: [{ path: '/workspace/work/src/example.ts', sha256: beforeHash }],
+      dryRun: true,
+    });
+    assert.equal(dryRun.applied, false);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), original, 'dry-run must never mutate the Workspace');
+    assert.equal(dryRun.changes.length, 1);
+    assert.equal(dryRun.changes[0]?.beforeSha256, beforeHash);
+
+    const inspectTool = createWorkspaceApplyPatchTool(
+      {
+        getWorkspace: async () => ({
+          ...scope,
+          id: 'workspace-coding',
+          runId: 'workspace-coding-run',
+          agentRuntimeId: 'workspace-coding-runtime',
+          retained: false,
+          profile: {
+            kind: 'code',
+            recipeId: 'scenario-code',
+            recipeRevision: '1',
+            runtimeDigest: 'scenario-runtime',
+            catalogRevision: 'scenario-catalog',
+            toolchain: [],
+            runnerPlugins: [],
+            acpProfiles: [],
+            browserTarget: null,
+          },
+          generation: 4,
+          status: 'running',
+          retainedManifestRef: null,
+          version: 2,
+          lastActiveAt: 1_800_000_000,
+          createdAt: 1_800_000_000,
+          updatedAt: 1_800_000_000,
+        }),
+      } as unknown as AgentWorkspaceRepositoryPort,
+      {
+        applyWorkspacePatch: async () => ({
+          changes: dryRun.changes,
+          applied: false,
+        }),
+      } as unknown as WorkspaceRuntimeService,
+      {
+        sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+      },
+    );
+    const inspectContext: ToolContext = {
+      ...scope,
+      actor: {
+        kind: 'agent',
+        userId: scope.userId,
+        appId: scope.appId,
+        runId: 'workspace-coding-run',
+        agentRuntimeId: 'workspace-coding-runtime',
+      },
+      runId: 'workspace-coding-run',
+      agentRuntimeId: 'workspace-coding-runtime',
+      connectionIds: [],
+      environment: {
+        kind: 'code',
+        recipeId: 'scenario-code',
+        recipeRevision: '1',
+        runtimeDigest: 'scenario-runtime',
+        catalogRevision: 'scenario-catalog',
+        toolchain: [],
+        runnerPlugins: [],
+        acpProfiles: [],
+        browserTarget: null,
+      },
+      stepId: 'workspace-coding-step',
+      signal: new AbortController().signal,
+      deadlineAt: 1_800_500_000,
+      maxOutputBytes: 64 * 1024,
+      inputRevision: 3,
+    };
+    const patchInspection = await inspectTool.inspect(
+      {
+        workspaceId: 'workspace-coding',
+        patch: patchText,
+        expectedFiles: [{ path: '/workspace/work/src/example.ts', sha256: beforeHash }],
+      },
+      inspectContext,
+      7,
+    );
+    assert.equal(patchInspection.risk, 'mutate');
+    assert.equal(patchInspection.mutation, true);
+    assert.ok(
+      patchInspection.preconditions.some(
+        (precondition) =>
+          precondition.kind === 'fileHash' &&
+          precondition.key === '/workspace/work/src/example.ts' &&
+          precondition.observedValue === beforeHash,
+      ),
+      'patch inspection must bind the source SHA-256 into the governed mutation preconditions',
+    );
+    assert.equal(
+      new PolicyService().decide(patchInspection, 7).action,
+      'requireApproval',
+      'workspace_apply_patch must remain on the existing mutation approval path',
+    );
+
+    const applied = applyWorkspacePatch(workRoot, {
+      patch: patchText,
+      expectedFiles: [{ path: '/workspace/work/src/example.ts', sha256: beforeHash }],
+    });
+    assert.equal(applied.applied, true);
+    assert.equal(applied.changes.length, 1);
+    assert.notEqual(applied.changes[0]?.afterSha256, beforeHash);
+    assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'alpha\nneedle fixed\nomega\nneedle again\n');
+
+    assert.throws(
+      () =>
+        applyWorkspacePatch(workRoot, {
+          patch: patchText.replace('needle here', 'needle fixed').replace('needle fixed\n+needle fixed', 'needle fixed\n+needle newer'),
+          expectedFiles: [{ path: '/workspace/work/src/example.ts', sha256: beforeHash }],
+        }),
+      /WORKSPACE_FILE_HASH_CONFLICT/,
+    );
+    staleHashRejections += 1;
+
+    const currentHash = createHash('sha256').update(fs.readFileSync(sourcePath)).digest('hex');
+    const misplacedPatch = [
+      '--- a/src/example.ts',
+      '+++ b/src/example.ts',
+      '@@ -10,2 +10,2 @@',
+      '-needle fixed',
+      '+needle moved',
+      ' omega',
+      '',
+    ].join('\n');
+    assert.throws(
+      () =>
+        applyWorkspacePatch(workRoot, {
+          patch: misplacedPatch,
+          expectedFiles: [{ path: '/workspace/work/src/example.ts', sha256: currentHash }],
+        }),
+      /WORKSPACE_PATCH_CONTEXT_MISMATCH/,
+      'fuzz=0 must not relocate a hunk away from its declared source location',
+    );
+    strictLocationRejections += 1;
+
+    const httpJournal = new RunnerJournal(path.join(directory, 'coding-http-journal.json'));
+    httpJournal.saveWorkspace({
+      workspaceId: 'coding-workspace',
+      generation: 5,
+      status: 'running',
+      retained: false,
+      toolchain: [],
+      runnerPlugins: [],
+      acpProfiles: [],
+      browserTarget: null,
+    });
+    const codingServer = new RunnerControllerServer({
+      token: 'coding-token',
+      journal: httpJournal,
+      runtimeEngine: {
+        readWorkspaceFile: (_workspaceId: string, _generation: number, request: Parameters<typeof readWorkspaceFile>[1]) =>
+          readWorkspaceFile(workRoot, request),
+        searchWorkspace: (_workspaceId: string, _generation: number, request: Parameters<typeof searchWorkspace>[1]) =>
+          searchWorkspace(workRoot, request),
+        applyWorkspacePatch: (
+          _workspaceId: string,
+          _generation: number,
+          request: Parameters<typeof applyWorkspacePatch>[1],
+        ) => applyWorkspacePatch(workRoot, request),
+      },
+      catalog: {},
+      installer: {},
+      storage: {},
+      cleanup: {},
+      pluginRunner: {},
+      acpRuntime: { closeAll: () => undefined },
+      terminalRuntime: { closeAll: () => undefined },
+      browserTunnel: { closeAll: () => undefined },
+    } as unknown as ConstructorParameters<typeof RunnerControllerServer>[0]).createServer();
+    try {
+      const baseUrl = await new Promise<string>((resolve, reject) => {
+        codingServer.once('error', reject);
+        codingServer.listen(0, '127.0.0.1', () => {
+          const address = codingServer.address();
+          if (!address || typeof address === 'string') {
+            reject(new Error('SCENARIO_RUNNER_ADDRESS_INVALID'));
+            return;
+          }
+          resolve(`http://127.0.0.1:${address.port}`);
+        });
+      });
+      const adapter = new RunnerHttpAdapter(baseUrl, 'coding-token');
+      const httpRead = await adapter.readWorkspaceFile('coding-workspace', 5, {
+        path: '/workspace/work/src/example.ts',
+        startLine: 2,
+        endLine: 2,
+        maxBytes: 1024,
+      });
+      assert.equal(httpRead.content, 'needle fixed');
+      const httpSearch = await adapter.searchWorkspace('coding-workspace', 5, {
+        query: 'needle fixed',
+        path: '/workspace/work/src',
+        maxResults: 10,
+        contextLines: 0,
+        maxOutputBytes: 8 * 1024,
+      });
+      assert.equal(httpSearch.matches.length, 1);
+      const httpPatchText = [
+        '--- a/src/example.ts',
+        '+++ b/src/example.ts',
+        '@@ -1,4 +1,4 @@',
+        ' alpha',
+        '-needle fixed',
+        '+needle http',
+        ' omega',
+        ' needle again',
+        '',
+      ].join('\n');
+      const httpDryRun = await adapter.applyWorkspacePatch('coding-workspace', 5, {
+        patch: httpPatchText,
+        expectedFiles: [{ path: '/workspace/work/src/example.ts', sha256: currentHash }],
+        dryRun: true,
+      });
+      assert.equal(httpDryRun.applied, false);
+      assert.equal(httpDryRun.changes.length, 1);
+      assert.equal(fs.readFileSync(sourcePath, 'utf8'), 'alpha\nneedle fixed\nomega\nneedle again\n');
+      httpCodecCases += 3;
+
+      const invalidCodec = await fetch(`${baseUrl}/v1/workspaces/coding-workspace/coding/read-file`, {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer coding-token',
+          'Content-Type': 'application/json',
+          'X-Nexus-Agent-Protocol': '2026-09-13',
+        },
+        body: JSON.stringify({ generation: 5, path: '/workspace/work/src/example.ts', unexpected: true }),
+      });
+      assert.equal(invalidCodec.status, 400);
+      httpCodecCases += 1;
+      await assert.rejects(
+        () =>
+          adapter.readWorkspaceFile('coding-workspace', 4, {
+            path: '/workspace/work/src/example.ts',
+            maxBytes: 1024,
+          }),
+        /WORKSPACE_GENERATION_CONFLICT/,
+      );
+      generationConflictCases += 1;
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        codingServer.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+
+    return [
+      { name: 'workspace_read_tools', value: 2, unit: 'tools' },
+      { name: 'workspace_patch_tools', value: 1, unit: 'tools' },
+      { name: 'workspace_argv_mutation_tools', value: 1, unit: 'tools' },
+      { name: 'workspace_read_hash_cases', value: 1, unit: 'cases' },
+      { name: 'workspace_traversal_rejections', value: traversalRejections, unit: 'cases' },
+      { name: 'workspace_symlink_rejections', value: symlinkRejections, unit: 'cases' },
+      { name: 'workspace_fallback_searches', value: fallbackSearches, unit: 'cases' },
+      { name: 'workspace_stale_hash_rejections', value: staleHashRejections, unit: 'cases' },
+      { name: 'workspace_strict_location_rejections', value: strictLocationRejections, unit: 'cases' },
+      { name: 'workspace_patch_change_evidence', value: applied.changes.length, unit: 'files' },
+      { name: 'workspace_patch_hash_preconditions', value: 1, unit: 'preconditions' },
+      { name: 'workspace_patch_approval_paths', value: 1, unit: 'cases' },
+      { name: 'workspace_plan_mode_read_tools', value: 2, unit: 'tools' },
+      { name: 'workspace_plan_mode_mutation_tools', value: 0, unit: 'tools' },
+      { name: 'workspace_coding_http_codec_cases', value: httpCodecCases, unit: 'cases' },
+      { name: 'workspace_coding_generation_conflicts', value: generationConflictCases, unit: 'cases' },
+    ];
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const workspaceRepoMapCodeIntelScenario: Scenario = async () => {
+  const catalog = new ToolCatalog();
+  registerWorkspaceToolContributions({
+    catalog,
+    repository: null!,
+    runtime: null!,
+    gateway: null!,
+    cryptoHash: {
+      sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+    },
+  });
+  const descriptors = new Map(catalog.list(scope).map((descriptor) => [descriptor.name, descriptor]));
+  assert.equal(
+    descriptors.get('workspace_repo_map')?.riskClass,
+    'read',
+    'P-067 must expose one bounded read-only Repo Map navigation Tool',
+  );
+  assert.equal(
+    descriptors.get('workspace_code_intel')?.riskClass,
+    'read',
+    'P-067 must expose one bounded read-only semantic code-intel Tool',
+  );
+  const planNames = new Set(
+    modelFacingToolSchemas(
+      catalog,
+      scope,
+      {
+        environment: {
+          kind: 'code',
+          recipeId: 'scenario-code',
+          recipeRevision: '1',
+          runtimeDigest: 'scenario-runtime',
+          catalogRevision: 'scenario-catalog',
+          toolchain: [],
+          runnerPlugins: [],
+          acpProfiles: [],
+          browserTarget: null,
+        },
+      },
+      'plan',
+    ).map((tool) => tool.name),
+  );
+  assert.equal(planNames.has('workspace_repo_map'), true);
+  assert.equal(planNames.has('workspace_code_intel'), true);
+
+  const navWorkspace = {
+    ...scope,
+    id: 'code-nav-workspace',
+    runId: 'code-nav-run',
+    agentRuntimeId: 'code-nav-runtime',
+    retained: false,
+    profile: {
+      kind: 'code' as const,
+      recipeId: 'scenario-code',
+      recipeRevision: '1',
+      runtimeDigest: 'scenario-runtime',
+      catalogRevision: 'scenario-catalog',
+      toolchain: [],
+      runnerPlugins: [],
+      acpProfiles: [],
+      browserTarget: null,
+    },
+    generation: 7,
+    status: 'running' as const,
+    retainedManifestRef: null,
+    version: 3,
+    lastActiveAt: 1_800_000_000,
+    createdAt: 1_800_000_000,
+    updatedAt: 1_800_000_000,
+  };
+  const navRepository = {
+    getWorkspace: async () => navWorkspace,
+  } as unknown as AgentWorkspaceRepositoryPort;
+  const navCrypto = {
+    sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+  };
+  const navContext: ToolContext = {
+    ...scope,
+    actor: {
+      kind: 'agent',
+      userId: scope.userId,
+      appId: scope.appId,
+      runId: navWorkspace.runId,
+      agentRuntimeId: navWorkspace.agentRuntimeId,
+    },
+    runId: navWorkspace.runId,
+    agentRuntimeId: navWorkspace.agentRuntimeId,
+    connectionIds: [],
+    environment: navWorkspace.profile,
+    stepId: 'code-nav-step',
+    signal: new AbortController().signal,
+    deadlineAt: 1_800_500_000,
+    maxOutputBytes: 64 * 1024,
+    inputRevision: 4,
+  };
+  const repoMapInspection = await createWorkspaceRepoMapTool(
+    navRepository,
+    null! as WorkspaceRuntimeService,
+    navCrypto,
+  ).inspect({ workspaceId: navWorkspace.id, query: 'makeThing' }, navContext, 7);
+  const codeIntelInspection = await createWorkspaceCodeIntelTool(
+    navRepository,
+    null! as WorkspaceRuntimeService,
+    navCrypto,
+  ).inspect(
+    { workspaceId: navWorkspace.id, action: 'symbols', path: '/workspace/work/src/a.ts' },
+    navContext,
+    7,
+  );
+  for (const inspection of [repoMapInspection, codeIntelInspection]) {
+    assert.equal(inspection.risk, 'read');
+    assert.equal(inspection.mutation, false, 'Repo navigation projections must never become mutation authority');
+    assert.ok(
+      inspection.preconditions.some(
+        (precondition) =>
+          precondition.kind === 'workspaceGeneration' &&
+          precondition.key === navWorkspace.id &&
+          (precondition.observedValue as { generation?: number }).generation === navWorkspace.generation,
+      ),
+      'Repo navigation inspection must bind the current Workspace generation',
+    );
+    assert.equal(new PolicyService().decide(inspection, 7).action, 'allow');
+  }
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-workspace-code-intel-'));
+  const workRoot = path.join(directory, 'work');
+  const srcRoot = path.join(workRoot, 'src');
+  fs.mkdirSync(srcRoot, { recursive: true });
+  fs.writeFileSync(
+    path.join(workRoot, 'tsconfig.json'),
+    JSON.stringify({
+      compilerOptions: {
+        target: 'ES2022',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        strict: true,
+      },
+      include: ['src/**/*.ts'],
+    }),
+    'utf8',
+  );
+  const aPath = path.join(srcRoot, 'a.ts');
+  const bPath = path.join(srcRoot, 'b.ts');
+  const cPath = path.join(srcRoot, 'c.ts');
+  const pyPath = path.join(srcRoot, 'fallback.py');
+  const aSource = [
+    "import { makeThing } from './b.js';",
+    "export const result = makeThing('demo');",
+    '',
+  ].join('\n');
+  const bSource = [
+    'export interface Thing { name: string }',
+    'export function makeThing(name: string): Thing { return { name }; }',
+    "export const broken: number = 'oops';",
+    '',
+  ].join('\n');
+  const cSource = [
+    "import { makeThing } from './b.js';",
+    "export const second = makeThing('second');",
+    '',
+  ].join('\n');
+  fs.writeFileSync(aPath, aSource, 'utf8');
+  fs.writeFileSync(bPath, bSource, 'utf8');
+  fs.writeFileSync(cPath, cSource, 'utf8');
+  fs.writeFileSync(
+    path.join(srcRoot, 'bulk.ts'),
+    Array.from(
+      { length: 24 },
+      (_, index) =>
+        `export function navigationSymbol${index}(input: { id: number; label: string }): string { return input.label + input.id; }`,
+    ).join('\n') + '\n',
+    'utf8',
+  );
+  fs.writeFileSync(pyPath, 'def helper():\n    return 1\n', 'utf8');
+
+  const intelligence = new WorkspaceCodeIntelligence();
+  let revisionRebuilds = 0;
+  let generationIsolationCases = 0;
+  let fallbackCases = 0;
+  let pathRejections = 0;
+  try {
+    const firstMap = await intelligence.repoMap('scenario-workspace\u00007', workRoot, {
+      path: '/workspace/work',
+      query: 'makeThing result',
+      maxFiles: 8,
+      maxSymbols: 32,
+      maxOutputBytes: 8 * 1024,
+    });
+    assert.equal(firstMap.engine, 'typescript-native');
+    assert.match(firstMap.revision, /^[a-f0-9]{64}$/);
+    assert.equal(firstMap.cacheMisses, 1);
+    assert.equal(firstMap.cacheHits, 0);
+    assert.ok(firstMap.files.some((file) => file.path === '/workspace/work/src/a.ts'));
+    const mappedB = firstMap.files.find((file) => file.path === '/workspace/work/src/b.ts');
+    assert.ok(mappedB, 'Repo Map must include relevant imported source files');
+    assert.equal(mappedB.sha256, createHash('sha256').update(bSource, 'utf8').digest('hex'));
+    assert.ok(mappedB.symbols.some((symbol) => symbol.name === 'makeThing'));
+    assert.ok(
+      firstMap.files.some((file) => file.imports.some((item) => item.includes('./b.js'))),
+      'Repo Map must expose AST-derived import relationships',
+    );
+
+    const cachedMap = await intelligence.repoMap('scenario-workspace\u00007', workRoot, {
+      path: '/workspace/work',
+      query: 'makeThing',
+      maxFiles: 8,
+      maxSymbols: 32,
+      maxOutputBytes: 8 * 1024,
+    });
+    assert.equal(cachedMap.revision, firstMap.revision);
+    assert.ok(cachedMap.cacheHits >= 1, 'unchanged file hashes must reuse the rebuildable index cache');
+
+    const callColumn = aSource.split('\n')[1]!.indexOf('makeThing') + 1;
+    const definition = await intelligence.codeIntel('scenario-workspace\u00007', workRoot, {
+      action: 'definition',
+      path: '/workspace/work/src/a.ts',
+      line: 2,
+      column: callColumn,
+      maxResults: 20,
+      maxOutputBytes: 16 * 1024,
+    });
+    assert.equal(definition.supported, true);
+    assert.ok(
+      definition.results.some((item) => 'path' in item && item.path === '/workspace/work/src/b.ts'),
+      'TypeScript native definition must cross the import boundary',
+    );
+
+    const references = await intelligence.codeIntel('scenario-workspace\u00007', workRoot, {
+      action: 'references',
+      path: '/workspace/work/src/a.ts',
+      line: 2,
+      column: callColumn,
+      maxResults: 20,
+      maxOutputBytes: 16 * 1024,
+    });
+    assert.equal(references.supported, true);
+    assert.ok(
+      references.results.some((item) => 'path' in item && item.path === '/workspace/work/src/a.ts'),
+      'TypeScript native references must include the importing caller',
+    );
+    assert.ok(
+      references.results.some((item) => 'path' in item && item.path === '/workspace/work/src/c.ts'),
+      'TypeScript native references must include a second importer in the same project',
+    );
+
+    const diagnostics = await intelligence.codeIntel('scenario-workspace\u00007', workRoot, {
+      action: 'diagnostics',
+      path: '/workspace/work/src/b.ts',
+      maxResults: 20,
+      maxOutputBytes: 16 * 1024,
+    });
+    assert.equal(diagnostics.supported, true);
+    assert.ok(
+      diagnostics.results.some((item) => 'code' in item && item.code === 2322),
+      'TypeScript native diagnostics must surface semantic type errors',
+    );
+
+    const unsupported = await intelligence.codeIntel('scenario-workspace\u00007', workRoot, {
+      action: 'symbols',
+      path: '/workspace/work/src/fallback.py',
+      maxResults: 20,
+      maxOutputBytes: 8 * 1024,
+    });
+    assert.equal(unsupported.supported, false);
+    assert.deepEqual(unsupported.fallback, {
+      reason: 'LANGUAGE_UNSUPPORTED',
+      searchTool: 'workspace_search',
+      readTool: 'workspace_read_file',
+    });
+    fallbackCases += 1;
+
+    const updatedB = bSource + 'export const extra = 1;\n';
+    fs.writeFileSync(bPath, updatedB, 'utf8');
+    const rebuiltMap = await intelligence.repoMap('scenario-workspace\u00007', workRoot, {
+      path: '/workspace/work',
+      query: 'extra makeThing',
+      maxFiles: 8,
+      maxSymbols: 32,
+      maxOutputBytes: 8 * 1024,
+    });
+    assert.notEqual(rebuiltMap.revision, firstMap.revision, 'file hash changes must change the index revision');
+    assert.ok(rebuiltMap.cacheMisses >= 2, 'file hash changes must trigger an incremental snapshot refresh');
+    const rebuiltB = rebuiltMap.files.find((file) => file.path === '/workspace/work/src/b.ts');
+    assert.equal(rebuiltB?.sha256, createHash('sha256').update(updatedB, 'utf8').digest('hex'));
+    revisionRebuilds += 1;
+
+    const nextGeneration = await intelligence.repoMap('scenario-workspace\u00008', workRoot, {
+      path: '/workspace/work',
+      query: 'makeThing',
+      maxFiles: 8,
+      maxSymbols: 32,
+      maxOutputBytes: 8 * 1024,
+    });
+    assert.equal(nextGeneration.cacheHits, 0);
+    assert.equal(nextGeneration.cacheMisses, 1, 'a new Workspace generation must not reuse the prior generation cache');
+    generationIsolationCases += 1;
+
+    const tinyMap = await intelligence.repoMap('scenario-workspace\u00007', workRoot, {
+      path: '/workspace/work',
+      maxFiles: 64,
+      maxSymbols: 160,
+      maxOutputBytes: 1024,
+    });
+    assert.ok(Buffer.byteLength(JSON.stringify(tinyMap.files), 'utf8') <= 1024);
+    assert.equal(tinyMap.truncated, true, 'Repo Map output byte budget must truncate navigation projection');
+
+    await assert.rejects(
+      () =>
+        intelligence.codeIntel('scenario-workspace\u00007', workRoot, {
+          action: 'symbols',
+          path: '/workspace/work/../outside.ts',
+          maxResults: 10,
+          maxOutputBytes: 4096,
+        }),
+      /WORKSPACE_PATH_FORBIDDEN/,
+    );
+    pathRejections += 1;
+
+    const outside = path.join(directory, 'outside.ts');
+    fs.writeFileSync(outside, 'export const outside = 1;\n', 'utf8');
+    fs.symlinkSync(outside, path.join(srcRoot, 'linked.ts'));
+    await assert.rejects(
+      () =>
+        intelligence.codeIntel('scenario-workspace\u00007', workRoot, {
+          action: 'symbols',
+          path: '/workspace/work/src/linked.ts',
+          maxResults: 10,
+          maxOutputBytes: 4096,
+        }),
+      /WORKSPACE_PATH_FORBIDDEN/,
+    );
+    pathRejections += 1;
+
+    let httpCodecCases = 0;
+    let generationConflictCases = 0;
+    let httpValidationCases = 0;
+    const journal = new RunnerJournal(path.join(directory, 'code-intel-journal.json'));
+    journal.saveWorkspace({
+      workspaceId: 'code-intel-workspace',
+      generation: 7,
+      status: 'running',
+      retained: false,
+      toolchain: [],
+      runnerPlugins: [],
+      acpProfiles: [],
+      browserTarget: null,
+    });
+    const server = new RunnerControllerServer({
+      token: 'code-intel-token',
+      journal,
+      runtimeEngine: {
+        repoMap: (_workspaceId: string, generation: number, request: Parameters<WorkspaceCodeIntelligence['repoMap']>[2]) =>
+          intelligence.repoMap('http-workspace\\u0000' + generation, workRoot, request),
+        codeIntel: (
+          _workspaceId: string,
+          generation: number,
+          request: Parameters<WorkspaceCodeIntelligence['codeIntel']>[2],
+        ) => intelligence.codeIntel('http-workspace\\u0000' + generation, workRoot, request),
+      },
+      catalog: {},
+      installer: {},
+      storage: {},
+      cleanup: {},
+      pluginRunner: {},
+      acpRuntime: { closeAll: () => undefined },
+      terminalRuntime: { closeAll: () => undefined },
+      browserTunnel: { closeAll: () => undefined },
+    } as unknown as ConstructorParameters<typeof RunnerControllerServer>[0]).createServer();
+    try {
+      const baseUrl = await new Promise<string>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+          const address = server.address();
+          if (!address || typeof address === 'string') {
+            reject(new Error('SCENARIO_RUNNER_ADDRESS_INVALID'));
+            return;
+          }
+          resolve('http://127.0.0.1:' + address.port);
+        });
+      });
+      const adapter = new RunnerHttpAdapter(baseUrl, 'code-intel-token');
+      const wireMap = await adapter.repoMap(
+        'code-intel-workspace',
+        7,
+        {
+          path: '/workspace/work',
+          query: 'makeThing',
+          maxFiles: 8,
+          maxSymbols: 32,
+          maxOutputBytes: 8 * 1024,
+        },
+        new AbortController().signal,
+      );
+      assert.equal(wireMap.engine, 'typescript-native');
+      assert.ok(wireMap.files.some((file) => file.path === '/workspace/work/src/b.ts'));
+      httpCodecCases += 1;
+
+      const wireDefinition = await adapter.codeIntel(
+        'code-intel-workspace',
+        7,
+        {
+          action: 'definition',
+          path: '/workspace/work/src/a.ts',
+          line: 2,
+          column: callColumn,
+          maxResults: 20,
+          maxOutputBytes: 16 * 1024,
+        },
+        new AbortController().signal,
+      );
+      assert.equal(wireDefinition.supported, true);
+      assert.ok(wireDefinition.results.some((item) => 'path' in item && item.path === '/workspace/work/src/b.ts'));
+      httpCodecCases += 1;
+
+      const invalidResponse = await fetch(baseUrl + '/v1/workspaces/code-intel-workspace/coding/repo-map', {
+        method: 'POST',
+        headers: {
+          Authorization: 'Bearer code-intel-token',
+          'Content-Type': 'application/json',
+          'X-Nexus-Agent-Protocol': '2026-09-13',
+        },
+        body: JSON.stringify({
+          generation: 7,
+          path: '/workspace/work',
+          maxFiles: 8,
+          maxSymbols: 32,
+          maxOutputBytes: 8192,
+          unexpected: true,
+        }),
+      });
+      assert.equal(invalidResponse.status, 400, 'Repo Map HTTP codec must reject unknown request fields');
+      httpValidationCases += 1;
+
+      await assert.rejects(
+        () =>
+          adapter.repoMap(
+            'code-intel-workspace',
+            6,
+            {
+              path: '/workspace/work',
+              maxFiles: 8,
+              maxSymbols: 32,
+              maxOutputBytes: 8192,
+            },
+            new AbortController().signal,
+          ),
+        /WORKSPACE_GENERATION_CONFLICT/,
+      );
+      generationConflictCases += 1;
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+
+    return [
+      { name: 'workspace_repo_map_tools', value: 1, unit: 'tools' },
+      { name: 'workspace_code_intel_tools', value: 1, unit: 'tools' },
+      { name: 'workspace_code_navigation_plan_tools', value: 2, unit: 'tools' },
+      { name: 'workspace_code_navigation_read_inspections', value: 2, unit: 'tools' },
+      { name: 'workspace_code_navigation_generation_preconditions', value: 2, unit: 'preconditions' },
+      { name: 'workspace_repo_map_indexed_files', value: firstMap.indexedFiles, unit: 'files' },
+      { name: 'workspace_repo_map_cache_hits', value: cachedMap.cacheHits, unit: 'hits' },
+      { name: 'workspace_repo_map_revision_rebuilds', value: revisionRebuilds, unit: 'cases' },
+      { name: 'workspace_code_intel_definition_cases', value: 1, unit: 'cases' },
+      { name: 'workspace_code_intel_reference_cases', value: 1, unit: 'cases' },
+      { name: 'workspace_code_intel_diagnostic_cases', value: 1, unit: 'cases' },
+      { name: 'workspace_code_intel_fallback_cases', value: fallbackCases, unit: 'cases' },
+      { name: 'workspace_code_intel_generation_isolation', value: generationIsolationCases, unit: 'cases' },
+      { name: 'workspace_code_intel_path_rejections', value: pathRejections, unit: 'cases' },
+      { name: 'workspace_repo_map_bounded_outputs', value: tinyMap.truncated ? 1 : 0, unit: 'cases' },
+      { name: 'workspace_code_intel_http_codec_cases', value: httpCodecCases, unit: 'cases' },
+      { name: 'workspace_code_intel_http_validation_cases', value: httpValidationCases, unit: 'cases' },
+      { name: 'workspace_code_intel_generation_conflicts', value: generationConflictCases, unit: 'cases' },
+    ];
+  } finally {
+    intelligence.dispose();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
+  const catalog = new ToolCatalog();
+  registerWorkspaceToolContributions({
+    catalog,
+    repository: null!,
+    runtime: null!,
+    gateway: null!,
+    cryptoHash: {
+      sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+    },
+  });
+  const descriptors = new Map(catalog.list(scope).map((descriptor) => [descriptor.name, descriptor]));
+  const execute = descriptors.get('workspace_execute_argv');
+  assert.ok(execute, 'workspace_execute_argv must remain registered');
+  const executeSchema = execute.inputSchema as {
+    properties?: { mode?: { enum?: unknown[] } };
+  };
+  assert.deepEqual(
+    executeSchema.properties?.mode?.enum,
+    ['foreground', 'background'],
+    'P-073 must let workspace_execute_argv explicitly choose foreground/background execution',
+  );
+  assert.equal(
+    descriptors.get('workspace_job')?.riskClass,
+    'control',
+    'P-073 must expose one bounded workspace_job lifecycle control Tool',
+  );
+  const planNames = new Set(
+    modelFacingToolSchemas(
+      catalog,
+      scope,
+      {
+        environment: {
+          kind: 'code',
+          recipeId: 'scenario-code',
+          recipeRevision: '1',
+          runtimeDigest: 'scenario-runtime',
+          catalogRevision: 'scenario-catalog',
+          toolchain: [],
+          runnerPlugins: [],
+          acpProfiles: [],
+          browserTarget: null,
+        },
+      },
+      'plan',
+    ).map((tool) => tool.name),
+  );
+  assert.equal(planNames.has('workspace_job'), true, 'durable job status/wait control should remain plan-visible');
+  assert.equal(planNames.has('workspace_execute_argv'), false, 'plan mode must still hide argv mutation');
+
+  const toolWorkspace = {
+    ...scope,
+    id: 'background-workspace',
+    runId: 'background-run',
+    agentRuntimeId: 'background-runtime',
+    retained: false,
+    profile: {
+      kind: 'code' as const,
+      recipeId: 'scenario-code',
+      recipeRevision: '1',
+      runtimeDigest: 'scenario-runtime',
+      catalogRevision: 'scenario-catalog',
+      toolchain: [],
+      runnerPlugins: [],
+      acpProfiles: [],
+      browserTarget: null,
+    },
+    generation: 7,
+    status: 'running' as const,
+    retainedManifestRef: null,
+    version: 2,
+    lastActiveAt: 1_800_000_000,
+    createdAt: 1_800_000_000,
+    updatedAt: 1_800_000_000,
+  };
+  const toolRepository = {
+    getWorkspace: async () => toolWorkspace,
+  } as unknown as AgentWorkspaceRepositoryPort;
+  const runningJob = {
+    jobId: 'job-' + 'e'.repeat(64),
+    workspaceId: toolWorkspace.id,
+    generation: toolWorkspace.generation,
+    status: 'running' as const,
+    result: null,
+    error: null,
+    createdAt: 1_800_000_000,
+    completedAt: null,
+  };
+  const succeededJob = {
+    ...runningJob,
+    status: 'succeeded' as const,
+    result: {
+      exitCode: 0,
+      signal: null,
+      stdout: 'verified\n',
+      stderr: '',
+      truncated: false,
+      timedOut: false,
+    },
+    completedAt: 1_800_000_010,
+  };
+  const cancelledJob = {
+    ...runningJob,
+    status: 'cancelled' as const,
+    error: 'WORKSPACE_JOB_CANCELLED',
+    completedAt: 1_800_000_005,
+  };
+  const toolGateway: WorkspaceRuntimeGatewayPort = {
+    startJob: async () => runningJob,
+    invoke: async () => succeededJob,
+    queryJob: async () => runningJob,
+    waitJob: async () => succeededJob,
+    cancelJob: async () => cancelledJob,
+  };
+  const toolCrypto = {
+    sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+  };
+  const toolContext: ToolContext = {
+    ...scope,
+    actor: {
+      kind: 'agent',
+      userId: scope.userId,
+      appId: scope.appId,
+      runId: toolWorkspace.runId,
+      agentRuntimeId: toolWorkspace.agentRuntimeId,
+    },
+    runId: toolWorkspace.runId,
+    agentRuntimeId: toolWorkspace.agentRuntimeId,
+    connectionIds: [],
+    environment: toolWorkspace.profile,
+    stepId: 'background-step',
+    signal: new AbortController().signal,
+    deadlineAt: 1_800_500_000,
+    maxOutputBytes: 64 * 1024,
+    inputRevision: 2,
+  };
+  const executeTool = createWorkspaceJobTool(toolRepository, toolGateway, toolCrypto);
+  const backgroundInspection = await executeTool.inspect(
+    {
+      workspaceId: toolWorkspace.id,
+      argv: ['pnpm', 'test'],
+      mode: 'background',
+      timeoutSeconds: 60,
+    },
+    toolContext,
+    7,
+  );
+  assert.equal(backgroundInspection.risk, 'mutate');
+  assert.equal(backgroundInspection.mutation, true);
+  assert.equal(new PolicyService().decide(backgroundInspection, 7).action, 'requireApproval');
+  const backgroundLaunch = await executeTool.execute(backgroundInspection, toolContext);
+  assert.equal(backgroundLaunch.ok, true);
+  assert.equal(backgroundLaunch.outcome, 'confirmed');
+  assert.equal(
+    backgroundLaunch.verification.status,
+    'unverified',
+    'background launch confirms durable acceptance, not command completion',
+  );
+  const legacyArguments = { ...(backgroundInspection.normalizedArguments as Record<string, JsonValue>) };
+  delete legacyArguments.mode;
+  const legacyForegroundResult = await executeTool.execute(
+    { ...backgroundInspection, normalizedArguments: legacyArguments },
+    toolContext,
+  );
+  assert.equal(legacyForegroundResult.ok, true);
+  assert.equal(
+    legacyForegroundResult.verification.status,
+    'verified',
+    'pre-P-073 durable argv inspections without mode must resume as foreground execution',
+  );
+
+  const controlTool = createWorkspaceJobControlTool(toolRepository, toolGateway, toolCrypto);
+  const waitInspection = await controlTool.inspect(
+    { jobId: runningJob.jobId, action: 'wait', waitSeconds: 60 },
+    toolContext,
+    7,
+  );
+  assert.equal(waitInspection.risk, 'control');
+  assert.equal(waitInspection.mutation, false);
+  assert.equal(new PolicyService().decide(waitInspection, 7).action, 'allow');
+  const waitedToolResult = await controlTool.execute(waitInspection, toolContext);
+  assert.equal(waitedToolResult.ok, true);
+  assert.equal(
+    waitedToolResult.verification.status,
+    'verified',
+    'only terminal zero-exit durable job evidence is verified',
+  );
+  const cancelInspection = await controlTool.inspect(
+    { jobId: runningJob.jobId, action: 'cancel' },
+    toolContext,
+    7,
+  );
+  const cancelledToolResult = await controlTool.execute(cancelInspection, toolContext);
+  assert.equal(cancelledToolResult.ok, true, 'confirmed cancellation means the control action succeeded');
+  assert.equal(
+    cancelledToolResult.verification.status,
+    'failed',
+    'cancelled commands must never count as successful execution evidence',
+  );
+  const completionRun = {
+    definition: { executionMode: 'execute' },
+    plan: { items: [] },
+  } as Parameters<typeof completionGateDecision>[0];
+  const backgroundOnlyEvidence = {
+    tools: [
+      {
+        toolName: 'workspace_execute_argv',
+        stepIndex: 1,
+        inspection: backgroundInspection,
+        result: backgroundLaunch,
+      },
+    ],
+    readyEvidenceRefs: [],
+    gateBlocksSinceToolProgress: 0,
+  } as Parameters<typeof completionGateDecision>[1];
+  const backgroundOnlyDecision = completionGateDecision(
+    completionRun,
+    backgroundOnlyEvidence,
+    'Run tests before completing.',
+  );
+  assert.equal(
+    backgroundOnlyDecision.kind,
+    'continue',
+    'background job acceptance alone must not satisfy requested execution verification',
+  );
+  const terminalEvidence = {
+    ...backgroundOnlyEvidence,
+    tools: [
+      ...backgroundOnlyEvidence.tools,
+      {
+        toolName: 'workspace_job',
+        stepIndex: 2,
+        inspection: waitInspection,
+        result: waitedToolResult,
+      },
+    ],
+  } as Parameters<typeof completionGateDecision>[1];
+  assert.deepEqual(completionGateDecision(completionRun, terminalEvidence, 'Run tests before completing.'), {
+    kind: 'complete',
+    terminalStatus: 'completed',
+    summary: 'Verified execution evidence satisfied the requested completion check.',
+  });
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-workspace-background-job-'));
+  const journal = new RunnerJournal(path.join(directory, 'journal.json'));
+  journal.saveWorkspace({
+    workspaceId: 'background-workspace',
+    generation: 7,
+    status: 'running',
+    retained: false,
+    toolchain: [],
+    runnerPlugins: [],
+    acpProfiles: [],
+    browserTarget: null,
+  });
+  const pending = new Map<
+    string,
+    {
+      resolve: (value: {
+        exitCode: number | null;
+        signal: string | null;
+        stdout: string;
+        stderr: string;
+        truncated: boolean;
+        timedOut: boolean;
+      }) => void;
+      reject: (error: Error) => void;
+    }
+  >();
+  let cancelCalls = 0;
+  let patchCalls = 0;
+  const runtimeEngine = {
+    executeJob: (request: { jobId: string; argv: string[] }) =>
+      new Promise<{
+        exitCode: number | null;
+        signal: string | null;
+        stdout: string;
+        stderr: string;
+        truncated: boolean;
+        timedOut: boolean;
+      }>((resolve, reject) => {
+        pending.set(request.jobId, { resolve, reject });
+        if (request.argv[0] === 'complete-later') {
+          setTimeout(() => {
+            const current = pending.get(request.jobId);
+            if (!current) return;
+            pending.delete(request.jobId);
+            current.resolve({
+              exitCode: 0,
+              signal: null,
+              stdout: 'done\n',
+              stderr: '',
+              truncated: false,
+              timedOut: false,
+            });
+          }, 30);
+        }
+      }),
+    cancelJob: (jobId: string) => {
+      const current = pending.get(jobId);
+      if (!current) return false;
+      pending.delete(jobId);
+      cancelCalls += 1;
+      current.reject(new Error('WORKSPACE_JOB_CANCELLED'));
+      return true;
+    },
+    applyWorkspacePatch: () => {
+      patchCalls += 1;
+      return { changes: [], applied: true };
+    },
+  };
+  const server = new RunnerControllerServer({
+    token: 'background-token',
+    journal,
+    runtimeEngine,
+    catalog: {},
+    installer: {},
+    storage: {},
+    cleanup: {},
+    pluginRunner: {},
+    acpRuntime: { closeAll: () => undefined },
+    terminalRuntime: { closeAll: () => undefined },
+    browserTunnel: { closeAll: () => undefined },
+  } as unknown as ConstructorParameters<typeof RunnerControllerServer>[0]).createServer();
+
+  try {
+    const baseUrl = await new Promise<string>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        if (!address || typeof address === 'string') {
+          reject(new Error('SCENARIO_RUNNER_ADDRESS_INVALID'));
+          return;
+        }
+        resolve('http://127.0.0.1:' + address.port);
+      });
+    });
+    const adapter = new RunnerHttpAdapter(baseUrl, 'background-token');
+    const call = (operationChar: string, argv: string[]) => ({
+      operationHash: 'v1:' + operationChar.repeat(64),
+      argv,
+      cwd: '/workspace/work',
+      maxBytes: 8 * 1024,
+      timeoutMs: 2_000,
+    });
+
+    let queryCalls = 0;
+    const originalQueryJob = adapter.queryJob.bind(adapter);
+    adapter.queryJob = async (jobId, signal) => {
+      queryCalls += 1;
+      return originalQueryJob(jobId, signal);
+    };
+    const foreground = await adapter.invoke(
+      { workspaceId: 'background-workspace', generation: 7 },
+      call('a', ['complete-later']),
+      new AbortController().signal,
+    );
+    assert.equal(foreground.status, 'succeeded');
+    assert.equal(foreground.result?.stdout, 'done\n');
+    assert.equal(queryCalls, 0, 'foreground invoke must use Runner server-side wait instead of Backend GET polling');
+    const foregroundQueryCalls = queryCalls;
+
+    const background = await adapter.startJob(
+      { workspaceId: 'background-workspace', generation: 7 },
+      call('b', ['hold']),
+      new AbortController().signal,
+    );
+    assert.equal(background.status, 'running', 'background start must return before terminal completion');
+
+    await assert.rejects(
+      () =>
+        adapter.startJob(
+          { workspaceId: 'background-workspace', generation: 7 },
+          call('c', ['second']),
+          new AbortController().signal,
+        ),
+      /WORKSPACE_JOB_ACTIVE_CONFLICT/,
+      'one active argv job per Workspace generation must protect the background single-writer boundary',
+    );
+
+    const patchConflict = await fetch(baseUrl + '/v1/workspaces/background-workspace/coding/apply-patch', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer background-token',
+        'Content-Type': 'application/json',
+        'X-Nexus-Agent-Protocol': '2026-09-13',
+      },
+      body: JSON.stringify({
+        generation: 7,
+        patch: 'bounded-test-patch',
+        expectedFiles: [],
+      }),
+    });
+    assert.equal(patchConflict.status, 409);
+    assert.equal(patchCalls, 0, 'active background jobs must block actual incremental patch mutation');
+
+    const cancelled = await adapter.cancelJob(background.jobId, new AbortController().signal);
+    assert.equal(cancelled.status, 'cancelled');
+    assert.equal(cancelCalls, 1);
+    const cancelledAgain = await adapter.queryJob(background.jobId);
+    assert.equal(cancelledAgain.status, 'cancelled', 'cancelled must be durable in the existing Runner job journal');
+
+    const waiting = await adapter.startJob(
+      { workspaceId: 'background-workspace', generation: 7 },
+      call('d', ['complete-later']),
+      new AbortController().signal,
+    );
+    assert.equal(waiting.status, 'running');
+    const waited = await adapter.waitJob(waiting.jobId, 1_000, new AbortController().signal);
+    assert.equal(waited.status, 'succeeded');
+    assert.equal(waited.result?.stdout, 'done\n');
+
+    journal.saveWorkspace({
+      workspaceId: 'background-workspace',
+      generation: 8,
+      status: 'running',
+      retained: false,
+      toolchain: [],
+      runnerPlugins: [],
+      acpProfiles: [],
+      browserTarget: null,
+    });
+    const oldGeneration = await adapter.queryJob(waiting.jobId);
+    assert.equal(oldGeneration.generation, 7, 'durable job provenance must not drift to a newer Workspace generation');
+
+    return [
+      { name: 'workspace_background_modes', value: 2, unit: 'modes' },
+      { name: 'workspace_job_control_tools', value: 1, unit: 'tools' },
+      { name: 'workspace_foreground_backend_polls', value: foregroundQueryCalls, unit: 'polls' },
+      { name: 'workspace_server_wait_cases', value: 2, unit: 'cases' },
+      { name: 'workspace_job_cancel_cases', value: cancelCalls, unit: 'cases' },
+      { name: 'workspace_background_mutation_conflicts', value: 2, unit: 'cases' },
+      { name: 'workspace_job_generation_provenance', value: oldGeneration.generation === 7 ? 1 : 0, unit: 'cases' },
+      { name: 'workspace_job_plan_controls', value: planNames.has('workspace_job') ? 1 : 0, unit: 'tools' },
+      { name: 'workspace_background_launch_unverified', value: backgroundLaunch.verification.status === 'unverified' ? 1 : 0, unit: 'cases' },
+      { name: 'workspace_job_verified_terminal_results', value: waitedToolResult.verification.status === 'verified' ? 1 : 0, unit: 'cases' },
+      { name: 'workspace_job_cancelled_verification_rejections', value: cancelledToolResult.verification.status === 'failed' ? 1 : 0, unit: 'cases' },
+      { name: 'workspace_background_completion_blocks', value: backgroundOnlyDecision.kind === 'continue' ? 1 : 0, unit: 'cases' },
+      { name: 'workspace_terminal_completion_evidence', value: 1, unit: 'cases' },
+      { name: 'workspace_legacy_foreground_compatibility', value: legacyForegroundResult.verification.status === 'verified' ? 1 : 0, unit: 'cases' },
+    ];
+  } finally {
+    for (const current of pending.values()) current.reject(new Error('SCENARIO_CLEANUP'));
+    pending.clear();
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const contextTokenAccountingScenario: Scenario = async () => {
+  const anchorService = contextService([
+    entry(1, 'user_input', { text: 'Summarize the repository state.' }),
+    entry(2, 'assistant_message', { text: 'Previous summary.' }),
+  ]);
+  const anchorInput = {
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Continue with the summary.',
+    modelContextWindow: 8_192,
+    maxContextTokens: 8_000,
+    reservedOutputTokens: 128,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    tools: [],
+  } as const;
+  const unanchored = await anchorService.compose(anchorInput);
+  const anchorDelta = 320;
+  const anchored = await anchorService.compose({
+    ...anchorInput,
+    usageAnchor: {
+      heuristicInputTokens: unanchored.estimatedInputTokens,
+      providerInputTokens: unanchored.estimatedInputTokens + anchorDelta,
+    },
+  } as Parameters<ContextService['compose']>[0] & {
+    usageAnchor: { heuristicInputTokens: number; providerInputTokens: number };
+  });
+  assert.equal(
+    anchored.estimatedInputTokens,
+    unanchored.estimatedInputTokens + anchorDelta,
+    'provider actual usage must shift the next same-lineage context estimate by the prior estimator error',
+  );
+
+  const telemetryPlan = await contextService([
+    entry(1, 'assistant_message', {
+      text: '',
+      toolCalls: [{ id: 'telemetry-call', name: 'workspace_search', argumentsJson: '{"query":"needle"}' }],
+    }),
+    entry(2, 'tool_result', { toolCallId: 'telemetry-call', content: 'matched content' }),
+  ]).compose(anchorInput);
+  assert.ok(telemetryPlan.tokenDiagnostics.stableInstructionTokens > 0);
+  assert.ok(telemetryPlan.tokenDiagnostics.rawHistoryTokens > 0);
+  assert.ok(
+    telemetryPlan.tokenDiagnostics.toolExchangeTokens > 0 &&
+      telemetryPlan.tokenDiagnostics.toolExchangeTokens <= telemetryPlan.tokenDiagnostics.rawHistoryTokens,
+    'context token diagnostics must expose Tool exchange cost as a bounded subset of raw history',
+  );
+
+  const runtime: RuntimeParticipantView = {
+    id: 'subagent-context-runtime',
+    runId: 'subagent-context-run',
+    participantId: 'child:subagent-context-delegation',
+    backendKind: 'native',
+    modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    status: 'running',
+    scheduleState: 'runnable',
+    consumedMailboxSequence: 0,
+  };
+  let subagentToolArguments: JsonValue = { query: 'small' };
+  const runtimes = {
+    runtime: async () => runtime,
+    recentRuntimeToolExchanges: async (): Promise<RuntimeToolExchangeView[]> => [
+      {
+        sourceModelStepId: 'subagent-model-step',
+        batchIndex: 0,
+        batchSize: 1,
+        providerCallId: 'subagent-provider-call',
+        toolName: 'workspace_search',
+        arguments: subagentToolArguments,
+        result: {
+          ok: true,
+          summary: 'done',
+          artifactRefs: [],
+          truncated: false,
+          outcome: 'confirmed',
+          verification: { status: 'verified', summary: 'fixture', evidenceRefs: [] },
+        },
+        status: 'succeeded',
+      },
+    ],
+  } as unknown as RuntimeParticipantRepositoryPort;
+  const mailboxes = {
+    readMessages: async () => [],
+    listDelegationMessages: async () => [],
+  } as MailboxReaderPort;
+  const subagentContext = new SubagentContextBuilder(
+    runtimes,
+    mailboxes,
+    { discover: () => [] } as unknown as ToolCatalog,
+    emptyModelContinuations,
+    null!,
+  );
+  const delegation = {
+    id: 'subagent-context-delegation',
+    runId: 'subagent-context-run',
+    parentRuntimeId: 'root-runtime',
+    childRuntimeId: runtime.id,
+    profileId: 'default',
+    capabilities: [],
+    peerMessaging: 'parent-child',
+    modelRef: runtime.modelRef,
+    objective: 'Inspect the repository.',
+    constraints: [],
+    inputArtifactRefs: [],
+    completionCriteria: [],
+    dependencyMode: 'settled',
+    status: 'running',
+    depth: 1,
+    failureMode: 'isolate',
+    budget: { maxSteps: 8 },
+    usage: { tokens: 0, steps: 0 },
+    result: null,
+    evidenceRefs: [],
+    deadlineAt: 1_900_000_000,
+    version: 1,
+    createdAt: 1_800_000_000,
+    updatedAt: 1_800_000_000,
+    completedAt: null,
+    ...scope,
+  } satisfies DelegationView;
+  const subagentRun = {
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      steps: 0,
+      subagentMessages: 0,
+      subagentMessageBytes: 0,
+    },
+    budget: { maxRunSteps: 32 },
+    definition: { environment: null },
+  } as unknown as RunView;
+  const subagentModel = {
+    id: 'scenario-model',
+    contextWindow: 16_384,
+    maxOutputTokens: 2_048,
+    supportsTools: true,
+    supportsImageInput: false,
+    supportsFileInput: false,
+  } as Parameters<SubagentContextBuilder['prepare']>[4];
+  const smallSubagent = await subagentContext.prepare(
+    scope,
+    'subagent-context-run',
+    runtime.id,
+    delegation,
+    subagentModel,
+    subagentRun,
+  );
+  assert.equal(smallSubagent.kind, 'ready');
+  subagentToolArguments = { patch: '界'.repeat(4_000), code: 'const value = '.repeat(200) };
+  const largeSubagent = await subagentContext.prepare(
+    scope,
+    'subagent-context-run',
+    runtime.id,
+    delegation,
+    subagentModel,
+    subagentRun,
+  );
+  assert.equal(largeSubagent.kind, 'ready');
+  if (smallSubagent.kind !== 'ready' || largeSubagent.kind !== 'ready') throw new Error('SCENARIO_INVALID');
+  const subagentArgumentDelta =
+    largeSubagent.plan.estimatedInputTokens - smallSubagent.plan.estimatedInputTokens;
+  assert.ok(
+    subagentArgumentDelta > 500,
+    'Subagent model accounting must include bounded assistant Tool-call arguments, including CJK/code/JSON payloads',
+  );
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-context-token-accounting-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'context-token-accounting.sqlite', nodeEnv: 'test' });
+  const stateCommit = new SqliteStateCommitAdapter(db);
+  const now = 1_801_050_000;
+  const runId = 'context-token-accounting-run';
+  const runtimeId = 'context-token-accounting-runtime';
+  const primaryModel = { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 };
+  const fallbackModel = { providerId: 'scenario-provider', modelId: 'scenario-fallback', configurationVersion: 1 };
+  const budget = JSON.stringify({
+    maxContextTokens: 16_384,
+    maxOutputTokens: 2_048,
+    maxRunSteps: 16,
+    maxActiveExecutionSeconds: 3_600,
+    toolTimeoutSeconds: 120,
+    maxToolOutputBytes: 1_048_576,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    maxSubagentMessages: 100,
+    maxSubagentMessageBytes: 1_048_576,
+    revision: 1,
+  });
+  const definition = JSON.stringify({
+    schemaVersion: 1,
+    agentDefinitionId: 'scenario-agent',
+    model: primaryModel,
+    approvalMode: 'ask',
+    connectionIds: [],
+    policyRevision: 1,
+    settingsRevision: 1,
+  });
+  const usage = JSON.stringify({
+    inputTokens: 1_000,
+    outputTokens: 100,
+    cachedInputTokens: 250,
+    steps: 2,
+    subagentMessages: 0,
+    subagentMessageBytes: 0,
+  });
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'context-token-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+       VALUES ('context-token-thread', 1, 'scenario-app', 'context token accounting', 'manual', ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, verification_status,
+         budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         created_at, started_at, updated_at)
+       VALUES (?, 1, 'scenario-app', 'context-token-thread', 'running', 'in_progress', 'not_started',
+               ?, ?, '{"schemaVersion":1,"revision":0,"items":[]}', ?, 0, ?, ?, ?)`,
+      [runId, budget, definition, usage, now, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES (?, ?, 'root', 'native', ?, 'running', 'runnable', 0, 'context-token-owner', ?, ?)`,
+      [runtimeId, runId, JSON.stringify(primaryModel), now, now],
+    );
+
+    const begun = await stateCommit.beginModelStep({
+      scope,
+      runId,
+      runtimeId,
+      expectedRunVersion: 1,
+      inputWatermark: 0,
+      reservedTokens: 768,
+      estimatedInputTokens: 512,
+      heuristicInputTokens: 192,
+      contextSource: 'anchored_estimate',
+      reservedOutputTokens: 256,
+      contextWindowTokens: 16_384,
+      contextEpoch: 'context-token-primary-epoch',
+      model: primaryModel,
+      now: now + 1,
+    });
+    assert.deepEqual(begun.run.usage.context, {
+      inputTokens: 512,
+      heuristicInputTokens: 192,
+      reservedOutputTokens: 256,
+      contextWindowTokens: 16_384,
+      source: 'anchored_estimate',
+      model: primaryModel,
+      contextEpoch: 'context-token-primary-epoch',
+      updatedAt: now + 1,
+    });
+    const changed = await stateCommit.changeModelRoute({
+      scope,
+      runId,
+      runtimeId,
+      stepId: begun.stepId,
+      attemptId: begun.attemptId,
+      expectedRunVersion: begun.run.version,
+      fromModel: primaryModel,
+      toModel: fallbackModel,
+      toRouteIndex: 1,
+      reservedTokens: 1_024,
+      estimatedInputTokens: 700,
+      heuristicInputTokens: 680,
+      contextSource: 'estimated',
+      reservedOutputTokens: 324,
+      contextWindowTokens: 32_768,
+      contextEpoch: 'context-token-fallback-epoch',
+      usage: begun.run.usage,
+      inputTokens: 600,
+      outputTokens: 10,
+      cachedInputTokens: 100,
+      estimatedUsage: false,
+      errorCode: 'PROVIDER_UNAVAILABLE',
+      now: now + 2,
+    });
+    assert.deepEqual(
+      changed.run.usage.context,
+      {
+        inputTokens: 700,
+        heuristicInputTokens: 680,
+        reservedOutputTokens: 324,
+        contextWindowTokens: 32_768,
+        source: 'estimated',
+        model: fallbackModel,
+        contextEpoch: 'context-token-fallback-epoch',
+        updatedAt: now + 2,
+      },
+      'route failover must replace the previous route context projection before the next attempt',
+    );
+
+    const settled = await stateCommit.settleModelStep({
+      scope,
+      runId,
+      runtimeId,
+      stepId: begun.stepId,
+      attemptId: changed.attemptId,
+      expectedRunVersion: changed.run.version,
+      assistantEntryId: 'context-token-final',
+      assistantText: 'Done.',
+      usage: changed.run.usage,
+      inputTokens: 845,
+      outputTokens: 25,
+      cachedInputTokens: 200,
+      estimatedUsage: false,
+      finishReason: 'stop',
+      terminalStatus: 'completed_unverified',
+      now: now + 3,
+    });
+    assert.deepEqual(
+      settled.run.usage.context,
+      {
+        inputTokens: 845,
+        heuristicInputTokens: 680,
+        reservedOutputTokens: 324,
+        contextWindowTokens: 32_768,
+        source: 'provider',
+        model: fallbackModel,
+        contextEpoch: 'context-token-fallback-epoch',
+        updatedAt: now + 3,
+      },
+      'provider input usage must become the latest prompt context occupancy without changing cumulative usage semantics',
+    );
+    assert.equal(settled.run.usage.inputTokens, 2_445, 'cumulative input usage must remain cumulative across attempts');
+
+    return [
+      { name: 'anchor_delta_tokens', value: anchorDelta, unit: 'tokens' },
+      { name: 'subagent_tool_argument_delta', value: subagentArgumentDelta, unit: 'tokens' },
+      { name: 'provider_context_tokens', value: settled.run.usage.context?.inputTokens ?? 0, unit: 'tokens' },
+      { name: 'cumulative_input_tokens', value: settled.run.usage.inputTokens, unit: 'tokens' },
+    ];
+  } finally {
+    await db.close().catch(() => undefined);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+const providerPromptCacheHintScenario: Scenario = async () => {
+  const capturedBodies: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  const chatStreamBody = [
+    'data: {"id":"chatcmpl-cache-1","created":1,"model":"gpt-5.6-sol","choices":[{"index":0,"delta":{"role":"assistant","content":"ok"},"finish_reason":null}]}',
+    '',
+    'data: {"id":"chatcmpl-cache-1","created":1,"model":"gpt-5.6-sol","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":120,"completion_tokens":4,"total_tokens":124,"prompt_tokens_details":{"cached_tokens":80}}}',
+    '',
+    'data: [DONE]',
+    '',
+  ].join('\n');
+  const responsesStreamBody = [
+    'event: response.output_text.delta',
+    'data: {"type":"response.output_text.delta","item_id":"msg_cache_1","output_index":0,"delta":"ok","logprobs":null}',
+    '',
+    'event: response.completed',
+    'data: {"type":"response.completed","response":{"incomplete_details":null,"usage":{"input_tokens":140,"output_tokens":5,"total_tokens":145,"input_tokens_details":{"cached_tokens":96,"cache_write_tokens":null,"orchestration_input_tokens":null,"orchestration_input_cached_tokens":null},"output_tokens_details":{"reasoning_tokens":0,"orchestration_output_tokens":null}},"reasoning":null,"service_tier":null}}',
+    '',
+    '',
+  ].join('\n');
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    const bodyText =
+      typeof init?.body === 'string'
+        ? init.body
+        : init?.body instanceof Uint8Array
+          ? Buffer.from(init.body).toString('utf8')
+          : '';
+    capturedBodies.push({ url, body: bodyText ? (JSON.parse(bodyText) as Record<string, unknown>) : {} });
+    return new Response(url.endsWith('/responses') ? responsesStreamBody : chatStreamBody, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+  }) as typeof fetch;
+
+  const baseModel = {
+    id: 'gpt-5.6-sol',
+    contextWindow: 1_050_000,
+    maxOutputTokens: 128_000,
+    supportsTools: true,
+    supportsImageInput: true,
+    supportsFileInput: true,
+    supportsPromptCacheKey: true,
+    capabilitySources: {
+      contextWindow: 'registry',
+      maxOutputTokens: 'registry',
+      supportsTools: 'registry',
+      supportsImageInput: 'registry',
+      supportsFileInput: 'registry',
+      supportsPromptCacheKey: 'registry',
+    },
+  };
+  const providers = new Map<string, Record<string, unknown>>([
+    [
+      'official-chat',
+      {
+        id: 'official-chat',
+        kind: 'openai-compatible',
+        displayName: 'Official OpenAI Chat',
+        baseUrl: 'https://api.openai.com/v1',
+        protocol: 'chat-completions',
+        hasCredential: true,
+        credentialRevision: 1,
+        models: [baseModel, { ...baseModel, id: 'gpt-5.6-terra' }],
+        enabled: true,
+        version: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ],
+    [
+      'official-responses',
+      {
+        id: 'official-responses',
+        kind: 'openai-compatible',
+        displayName: 'Official OpenAI Responses',
+        baseUrl: 'https://api.openai.com/v1',
+        protocol: 'responses',
+        hasCredential: true,
+        credentialRevision: 1,
+        models: [baseModel],
+        enabled: true,
+        version: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ],
+    [
+      'third-party',
+      {
+        id: 'third-party',
+        kind: 'openai-compatible',
+        displayName: 'Compatible Proxy',
+        baseUrl: 'https://compat.example/v1',
+        protocol: 'chat-completions',
+        hasCredential: true,
+        credentialRevision: 1,
+        models: [baseModel],
+        enabled: true,
+        version: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ],
+  ]);
+  const adapter = new OpenAiProviderAdapter(
+    {
+      get: async (_userId: number, providerId: string) => providers.get(providerId) as never,
+    },
+    {
+      withCredential: async <T>(
+        _userId: number,
+        _providerId: string,
+        _credentialRevision: number,
+        use: (credential: string | null) => Promise<T>,
+      ) => use('scenario-key'),
+    },
+  );
+
+  const capabilitySnapshot = {
+    contextWindow: 1_050_000,
+    maxOutputTokens: 128_000,
+    supportsTools: true,
+    supportsImageInput: true,
+    supportsFileInput: true,
+    supportsPromptCacheKey: true,
+  } as ModelRequest['capabilitySnapshot'] & { supportsPromptCacheKey: boolean };
+  const requestFor = (
+    providerId: string,
+    modelId = 'gpt-5.6-sol',
+    lineageKey = 'stable-prefix-v1',
+  ): ModelRequest => ({
+    userId: 1,
+    providerId,
+    modelId,
+    configurationVersion: 1,
+    instructions: ['Stable system instruction.'],
+    messages: [{ role: 'user', content: 'volatile user turn' }],
+    cache: {
+      scopeKey: 'nexus:thread:RAW_THREAD_IDENTIFIER_12345',
+      affinityKey: 'nexus:thread:RAW_THREAD_IDENTIFIER_12345',
+      lineageKey,
+    } as ModelRequest['cache'] & { lineageKey: string },
+    capabilitySnapshot,
+    maxOutputTokens: 64,
+  });
+  const streamOnce = async (request: ModelRequest): Promise<TokenUsage | undefined> => {
+    let usage: TokenUsage | undefined;
+    for await (const event of adapter.stream(request, new AbortController().signal)) {
+      if (event.type === 'usage') usage = event.usage;
+    }
+    return usage;
+  };
+
+  try {
+    const firstUsage = await streamOnce(requestFor('official-chat'));
+    const firstBody = capturedBodies.at(-1)?.body ?? {};
+    const firstKey = firstBody.prompt_cache_key;
+    assert.equal(typeof firstKey, 'string', 'supported official OpenAI request must carry a provider prompt_cache_key');
+    assert.match(firstKey as string, /^nxs_pc_[A-Za-z0-9_-]{43}$/);
+    assert.equal((firstKey as string).includes('RAW_THREAD_IDENTIFIER_12345'), false);
+    assert.equal(Buffer.byteLength(firstKey as string, 'utf8') <= 64, true);
+    assert.deepEqual(firstUsage, { inputTokens: 120, outputTokens: 4, cachedInputTokens: 80 });
+
+    await streamOnce(requestFor('official-chat'));
+    const repeatedKey = capturedBodies.at(-1)?.body.prompt_cache_key;
+    assert.equal(repeatedKey, firstKey, 'same provider/model/affinity/lineage must derive a stable cache key');
+
+    const childAffinityRequest = requestFor('official-chat');
+    childAffinityRequest.cache = {
+      ...childAffinityRequest.cache!,
+      scopeKey: 'nexus:subagent:other-run:other-delegation',
+    };
+    await streamOnce(childAffinityRequest);
+    const childAffinityKey = capturedBodies.at(-1)?.body.prompt_cache_key;
+    assert.equal(
+      childAffinityKey,
+      firstKey,
+      'different Root/Child scopes sharing one affinity and lineage must derive the same provider routing key',
+    );
+
+    await streamOnce(requestFor('official-chat', 'gpt-5.6-sol', 'stable-prefix-v2'));
+    const changedLineageKey = capturedBodies.at(-1)?.body.prompt_cache_key;
+    assert.notEqual(changedLineageKey, firstKey, 'stable prefix/tool lineage change must change the provider cache key');
+
+    await streamOnce(requestFor('official-chat', 'gpt-5.6-terra'));
+    const changedModelKey = capturedBodies.at(-1)?.body.prompt_cache_key;
+    assert.notEqual(changedModelKey, firstKey, 'model identity must participate in cache key derivation');
+
+    const responsesUsage = await streamOnce(requestFor('official-responses'));
+    const responsesBody = capturedBodies.at(-1)?.body ?? {};
+    assert.equal(typeof responsesBody.prompt_cache_key, 'string');
+    assert.match(responsesBody.prompt_cache_key as string, /^nxs_pc_[A-Za-z0-9_-]{43}$/);
+    assert.notEqual(
+      responsesBody.prompt_cache_key,
+      firstKey,
+      'provider identity must participate in cache key derivation while both protocols consume the same hint contract',
+    );
+    assert.deepEqual(responsesUsage, { inputTokens: 140, outputTokens: 5, cachedInputTokens: 96 });
+
+    await streamOnce(requestFor('third-party'));
+    const compatibleBody = capturedBodies.at(-1)?.body ?? {};
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(compatibleBody, 'prompt_cache_key'),
+      false,
+      'third-party OpenAI-compatible endpoints must not receive OpenAI vendor cache fields by default',
+    );
+
+    const unsupportedRequest = requestFor('official-chat');
+    unsupportedRequest.capabilitySnapshot = {
+      ...capabilitySnapshot,
+      supportsPromptCacheKey: false,
+    } as typeof capabilitySnapshot;
+    await streamOnce(unsupportedRequest);
+    const unsupportedBody = capturedBodies.at(-1)?.body ?? {};
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(unsupportedBody, 'prompt_cache_key'),
+      false,
+      'model capability gate must suppress prompt_cache_key when support is not frozen',
+    );
+
+    return [
+      { name: 'official_cache_key_bytes', value: Buffer.byteLength(firstKey as string, 'utf8'), unit: 'bytes' },
+      { name: 'chat_cached_input_tokens', value: firstUsage?.cachedInputTokens ?? 0, unit: 'tokens' },
+      { name: 'responses_cached_input_tokens', value: responsesUsage?.cachedInputTokens ?? 0, unit: 'tokens' },
+      { name: 'third_party_cache_fields', value: 0, unit: 'fields' },
+      { name: 'unsupported_model_cache_fields', value: 0, unit: 'fields' },
+      { name: 'stable_cache_key_reuses', value: repeatedKey === firstKey ? 1 : 0, unit: 'cases' },
+      { name: 'root_child_affinity_reuses', value: childAffinityKey === firstKey ? 1 : 0, unit: 'cases' },
+      { name: 'lineage_cache_key_changes', value: changedLineageKey !== firstKey ? 1 : 0, unit: 'cases' },
+      { name: 'model_cache_key_changes', value: changedModelKey !== firstKey ? 1 : 0, unit: 'cases' },
+    ];
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+};
+
+const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
+  const catalog = new ToolCatalog();
+  const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
+  const executedToolNames: string[] = [];
+  const inertTool = (input: {
+    name: string;
+    capability: AgentTool['descriptor']['capability'];
+    riskClass: AgentTool['descriptor']['riskClass'];
+    version: string;
+    description: string;
+    modelExposure?: AgentTool['descriptor']['modelExposure'];
+  }): AgentTool => ({
+    descriptor: {
+      name: input.name,
+      version: input.version,
+      description: input.description,
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          query: { type: 'string', minLength: 1, maxLength: 256 },
+          path: { type: 'string', minLength: 1, maxLength: 512 },
+          options: {
+            type: 'object',
+            additionalProperties: true,
+          },
+        },
+      },
+      riskClass: input.riskClass,
+      ...(input.modelExposure ? { modelExposure: input.modelExposure } : {}),
+      capability: input.capability,
+    },
+    inspect: async (argumentsValue, context, policyRevision) => {
+      const mutation = input.riskClass === 'mutate' || input.riskClass === 'destructive';
+      return {
+        toolName: input.name,
+        toolVersion: input.version,
+        normalizedArguments: argumentsValue,
+        target: {
+          kind: 'run',
+          targetIdentity: `run:${context.runId}:${input.name}`,
+          endpoint: `scenario:${input.name}`,
+          loginUser: `agent-runtime:${context.agentRuntimeId}`,
+          configurationHash: `surface:${input.name}:${input.version}`,
+        },
+        resourceKeys: [`surface:${input.name}`],
+        risk: input.riskClass,
+        mutation,
+        operationHash: `surface:${input.name}:${input.version}:${policyRevision}`,
+        operationHashVersion: 1,
+        preconditions: [],
+        secretRefs: [],
+        policyRevision,
+        inputRevision: context.inputRevision,
+      };
+    },
+    execute: async () => {
+      executedToolNames.push(input.name);
+      return {
+        ok: true,
+        summary: `${input.name} completed.`,
+        data: { tool: input.name },
+        artifactRefs: [],
+        truncated: false,
+        outcome: 'confirmed',
+        verification: { status: 'verified', summary: 'Scenario Tool completed.', evidenceRefs: [] },
+      };
+    },
+  });
+  const core = inertTool({
+    name: 'scenario_core_read',
+    capability: 'runs.execute',
+    riskClass: 'read',
+    version: '1.0.0',
+    description: 'Frequently used built-in read tool that must remain directly available.',
+  });
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.core-tools',
+    capability: 'runs.execute',
+    tools: [core],
+  });
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.tool-discovery',
+    capability: 'integration.mcp.invoke',
+    tools: [createToolSearchTool(catalog, cryptoHash)],
+  });
+  const mcpTools = (count: number, version = 'mcp:surface-v1'): AgentTool[] =>
+    Array.from({ length: count }, (_, index) =>
+      inertTool({
+        name: `mcp_surface_${String(index).padStart(3, '0')}`,
+        capability: 'integration.mcp.invoke',
+        riskClass: 'mutate',
+        version,
+        modelExposure: 'deferred',
+        description:
+          `High-cardinality MCP tool ${index}. ` +
+          'This deliberately verbose description represents remote protocol metadata that should not be sent on every model step. '.repeat(
+            3,
+          ),
+      }),
+    );
+  catalog.replaceOwnedContribution(scope, 'mcp:surface-fixture', {
+    schemaVersion: 1,
+    id: 'scenario.mcp.surface',
+    capability: 'integration.mcp.invoke',
+    tools: mcpTools(120),
+  });
+
+  const authorizedCapabilities: string[] = [];
+  const capabilities = {
+    authorize: async (_context: ToolContext, capability: string) => {
+      authorizedCapabilities.push(capability);
+      return { allowed: true as const, policyRevision: 7 };
+    },
+  } as unknown as AppCapabilityBroker;
+  const executor = new ToolExecutor(catalog, capabilities);
+  const runner = new ToolCallRunner(catalog, executor, new PolicyService(), null!, null!);
+  const context: ToolContext = {
+    ...scope,
+    actor: {
+      kind: 'agent',
+      userId: scope.userId,
+      appId: scope.appId,
+      runId: 'tool-surface-run',
+      agentRuntimeId: 'tool-surface-runtime',
+    },
+    runId: 'tool-surface-run',
+    agentRuntimeId: 'tool-surface-runtime',
+    connectionIds: [],
+    environment: null,
+    stepId: 'tool-surface-step',
+    signal: new AbortController().signal,
+    deadlineAt: 1_800_500_000,
+    maxOutputBytes: 16 * 1024,
+    inputRevision: 3,
+  };
+
+  const fullSchemas = catalog.schemas(scope);
+  const fullTokens = estimateTokens(JSON.stringify(fullSchemas));
+  const projected = runner.schemas(scope, { environment: null }, 'execute');
+  const projectedTokens = estimateTokens(JSON.stringify(projected));
+  const projectedNames = new Set(projected.map((tool) => tool.name));
+
+  assert.equal(fullSchemas.length, 122, 'fixture must expose core/discovery Tools plus 120 MCP Tools in the authoritative catalog');
+  assert.ok(projectedNames.has('scenario_core_read'), 'frequent built-in Tool must remain directly model-visible');
+  assert.ok(projectedNames.has('tool_search'), 'large deferred Tool catalogs must expose bounded discovery');
+  assert.ok(projectedNames.has('tool_invoke'), 'large deferred Tool catalogs must expose one stable invoke router');
+  assert.equal(
+    projected.some((tool) => tool.name.startsWith('mcp_surface_')),
+    false,
+    'individual MCP schemas must not remain resident in the model-facing Tool surface',
+  );
+  assert.ok(
+    projectedTokens < Math.floor(fullTokens * 0.25),
+    `projected Tool schema tokens must materially shrink: full=${fullTokens}, projected=${projectedTokens}`,
+  );
+
+  const searched = await executor.invoke(context, {
+    providerCallId: 'surface-search-call',
+    name: 'tool_search',
+    argumentsJson: JSON.stringify({ query: 'mcp_surface_042', limit: 3 }),
+  });
+  assert.equal(searched.result.ok, true);
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(searched.result), 'utf8') <= context.maxOutputBytes,
+    'tool_search result must remain bounded before the generic ToolResult projector',
+  );
+  const searchData = searched.result.data;
+  assert.ok(searchData && !Array.isArray(searchData) && typeof searchData === 'object');
+  const matches = (searchData as Record<string, JsonValue>).matches;
+  assert.ok(Array.isArray(matches) && matches.length >= 1, 'tool_search must return a matching deferred Tool handle');
+  const firstMatch = matches[0];
+  assert.ok(firstMatch && !Array.isArray(firstMatch) && typeof firstMatch === 'object');
+  const handle = (firstMatch as Record<string, JsonValue>).handle;
+  assert.equal(typeof handle, 'string');
+
+  const routed = await runner.inspect(
+    context,
+    {
+      providerCallId: 'surface-invoke-call',
+      name: 'tool_invoke',
+      argumentsJson: JSON.stringify({ handle, arguments: { query: 'needle' } }),
+    },
+    'execute',
+  );
+  assert.equal(routed.proposal.name, 'mcp_surface_042', 'tool_invoke must resolve to the authoritative MCP Tool before inspect');
+  assert.equal(routed.inspection.toolName, 'mcp_surface_042');
+  assert.equal(routed.inspection.mutation, true);
+  assert.equal(
+    routed.policyDecision.action,
+    'requireApproval',
+    'deferred mutation must retain the original policy/approval decision',
+  );
+  assert.equal(
+    authorizedCapabilities.at(-1),
+    'integration.mcp.invoke',
+    'resolved invocation must authorize the actual Tool capability through ToolExecutor',
+  );
+  let mutationLeaseActivations = 0;
+  const routedLease: MutationLeaseGuardHandle = {
+    signal: context.signal,
+    activate: async () => {
+      mutationLeaseActivations += 1;
+    },
+    stopRenewal: async () => null,
+    quarantine: async () => undefined,
+    confirm: async () => ({ ok: true }),
+    releaseIfInactive: async () => undefined,
+  };
+  const routedResult = await runner.executeMutation(routedLease, context, routed.inspection);
+  assert.equal(routedResult.ok, true);
+  assert.equal(mutationLeaseActivations, 1, 'deferred mutation must still activate the normal mutation lease');
+  assert.equal(
+    executedToolNames.at(-1),
+    'mcp_surface_042',
+    'tool_invoke must execute the resolved authoritative Tool rather than a parallel router implementation',
+  );
+  await assert.rejects(
+    () =>
+      runner.inspect(context, {
+        providerCallId: 'surface-direct-hidden-call',
+        name: 'mcp_surface_042',
+        argumentsJson: JSON.stringify({ query: 'needle' }),
+      }),
+    /MODEL_TOOL_CALL_INVALID/,
+    'a deferred MCP Tool must not be directly callable by guessing its hidden local name',
+  );
+
+  const stableProjection = JSON.stringify(projected);
+  catalog.replaceOwnedContribution(scope, 'mcp:surface-fixture', {
+    schemaVersion: 1,
+    id: 'scenario.mcp.surface',
+    capability: 'integration.mcp.invoke',
+    tools: mcpTools(121),
+  });
+  const refreshedProjection = runner.schemas(scope, { environment: null }, 'execute');
+  assert.equal(
+    JSON.stringify(refreshedProjection),
+    stableProjection,
+    'adding an unrelated deferred MCP Tool must not churn the always-on Tool schema prefix',
+  );
+  const projectionContext = contextService([]);
+  const contextInput = {
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Find and invoke the relevant deferred integration tool.',
+    modelContextWindow: 8_192,
+    maxContextTokens: 8_192,
+    reservedOutputTokens: 256,
+    maxRecallItems: 4,
+    maxRecallBytes: 4_096,
+    tools: projected,
+  } as const;
+  const beforeRefreshContext = await projectionContext.compose(contextInput);
+  const afterRefreshContext = await projectionContext.compose({ ...contextInput, tools: refreshedProjection });
+  assert.equal(
+    afterRefreshContext.toolSchemaHash,
+    beforeRefreshContext.toolSchemaHash,
+    'unrelated deferred MCP catalog changes must preserve the model-facing toolSchemaHash',
+  );
+  assert.equal(afterRefreshContext.tokenDiagnostics.toolSchemaTokens, beforeRefreshContext.tokenDiagnostics.toolSchemaTokens);
+  assert.equal(
+    catalog.require('mcp_surface_120', scope).descriptor.capability,
+    'integration.mcp.invoke',
+    'deferred Tool must remain in the authoritative ToolCatalog',
+  );
+
+  catalog.replaceOwnedContribution(scope, 'mcp:surface-fixture', {
+    schemaVersion: 1,
+    id: 'scenario.mcp.surface',
+    capability: 'integration.mcp.invoke',
+    tools: mcpTools(121, 'mcp:surface-v2'),
+  });
+  await assert.rejects(
+    () =>
+      runner.inspect(context, {
+        providerCallId: 'surface-stale-call',
+        name: 'tool_invoke',
+        argumentsJson: JSON.stringify({ handle, arguments: { query: 'needle' } }),
+      }),
+    /RESOURCE_CHANGED/,
+    'version-bound deferred handles must fail closed after MCP schema refresh',
+  );
+
+  const planProjection = runner.schemas(scope, { environment: null }, 'plan');
+  assert.equal(
+    planProjection.some((tool) => tool.name === 'tool_search' || tool.name === 'tool_invoke' || tool.name.startsWith('mcp_surface_')),
+    false,
+    'plan mode must not expose MCP mutation discovery/router or deferred mutation Tools',
+  );
+
+  const childRuntime: RuntimeParticipantView = {
+    id: 'tool-surface-child-runtime',
+    runId: 'tool-surface-child-run',
+    participantId: 'child:tool-surface-delegation',
+    backendKind: 'native',
+    modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    status: 'running',
+    scheduleState: 'runnable',
+    consumedMailboxSequence: 0,
+  };
+  const childContext = new SubagentContextBuilder(
+    {
+      runtime: async () => childRuntime,
+      recentRuntimeToolExchanges: async () => [],
+    } as unknown as RuntimeParticipantRepositoryPort,
+    {
+      readMessages: async () => [],
+      listDelegationMessages: async () => [],
+    } as MailboxReaderPort,
+    catalog,
+    emptyModelContinuations,
+    null!,
+  );
+  const childDelegation = {
+    id: 'tool-surface-delegation',
+    runId: childRuntime.runId,
+    parentRuntimeId: 'root-runtime',
+    childRuntimeId: childRuntime.id,
+    profileId: 'default',
+    capabilities: ['integration.mcp.invoke'],
+    peerMessaging: 'parent-child',
+    modelRef: childRuntime.modelRef,
+    objective: 'Inspect integration metadata without mutating external state.',
+    constraints: [],
+    inputArtifactRefs: [],
+    completionCriteria: [],
+    dependencyMode: 'settled',
+    status: 'running',
+    depth: 1,
+    failureMode: 'isolate',
+    budget: { maxSteps: 8 },
+    usage: { tokens: 0, steps: 0 },
+    result: null,
+    evidenceRefs: [],
+    deadlineAt: 1_900_000_000,
+    version: 1,
+    createdAt: 1_800_000_000,
+    updatedAt: 1_800_000_000,
+    completedAt: null,
+    ...scope,
+  } satisfies DelegationView;
+  const childPrepared = await childContext.prepare(
+    scope,
+    childRuntime.runId,
+    childRuntime.id,
+    childDelegation,
+    {
+      id: 'scenario-model',
+      contextWindow: 16_384,
+      maxOutputTokens: 2_048,
+      supportsTools: true,
+      supportsImageInput: false,
+      supportsFileInput: false,
+    },
+    {
+      usage: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        steps: 0,
+        subagentMessages: 0,
+        subagentMessageBytes: 0,
+      },
+      budget: { maxRunSteps: 32, maxToolOutputBytes: 16 * 1024 },
+      definition: { environment: null },
+    } as unknown as RunView,
+  );
+  assert.equal(childPrepared.kind, 'ready');
+  if (childPrepared.kind !== 'ready') throw new Error('SCENARIO_INVALID');
+  assert.equal(
+    childPrepared.plan.offeredTools.some(
+      (tool) => tool.name === 'tool_search' || tool.name === 'tool_invoke' || tool.name.startsWith('mcp_surface_'),
+    ),
+    false,
+    'Subagent read/control surface must not accidentally expose the Root-only MCP mutation discovery/router path',
+  );
+
+  return [
+    { name: 'authoritative_catalog_tools', value: 123, unit: 'tools' },
+    { name: 'model_visible_tools', value: projected.length, unit: 'tools' },
+    { name: 'full_schema_tokens', value: fullTokens, unit: 'tokens' },
+    { name: 'projected_schema_tokens', value: projectedTokens, unit: 'tokens' },
+    { name: 'deferred_mcp_tools', value: 121, unit: 'tools' },
+    { name: 'routed_mutation_approval_decisions', value: routed.policyDecision.action === 'requireApproval' ? 1 : 0, unit: 'calls' },
+    { name: 'mutation_lease_activations', value: mutationLeaseActivations, unit: 'calls' },
+    { name: 'child_mcp_router_exposures', value: 0, unit: 'tools' },
+    { name: 'stale_handle_rejections', value: 1, unit: 'calls' },
+    { name: 'direct_hidden_tool_rejections', value: 1, unit: 'calls' },
+    { name: 'stable_tool_schema_hashes', value: 1, unit: 'cases' },
+  ];
+};
+
+const toolResultProjectionScenario: Scenario = async () => {
+  const maxModelBytes = 1_024;
+  const rawLog = [
+    'HEAD marker: compilation started',
+    ...Array.from({ length: 900 }, (_, index) => `noise-${index.toString().padStart(4, '0')} lorem ipsum dolor sit amet`),
+    'ERROR critical failure: unresolved symbol at src/main.ts:42',
+    'TAIL marker: process exited with code 1',
+  ].join('\n');
+  const rawResult: ToolResult = {
+    ok: false,
+    summary: 'Build failed after producing a large diagnostic log.',
+    data: {
+      log: rawLog,
+      exitCode: 1,
+      command: 'pnpm build',
+      nested: { status: 'failed', detail: 'diagnostic payload' },
+    },
+    artifactRefs: ['artifact-raw-log'],
+    truncated: false,
+    outcome: 'confirmed',
+    errorCode: 'BUILD_FAILED',
+    verification: {
+      status: 'failed',
+      summary: 'The build command returned exit code 1.',
+      evidenceRefs: ['artifact-build-evidence'],
+    },
+  };
+  const rawBytes = Buffer.byteLength(JSON.stringify(rawResult), 'utf8');
+  assert.ok(rawBytes > maxModelBytes * 10, 'fixture must be materially larger than the model-facing budget');
+
+  const catalog = new ToolCatalog();
+  const fixtureTool: AgentTool = {
+    descriptor: {
+      name: 'scenario_large_output',
+      version: '1',
+      description: 'Return a deliberately large deterministic ToolResult.',
+      inputSchema: { type: 'object', additionalProperties: false },
+      riskClass: 'read',
+      capability: 'runs.execute',
+    },
+    inspect: async (input, context, policyRevision) => ({
+      toolName: 'scenario_large_output',
+      toolVersion: '1',
+      normalizedArguments: input,
+      target: {
+        kind: 'run',
+        targetIdentity: context.runId,
+        endpoint: context.runId,
+        loginUser: context.agentRuntimeId,
+        configurationHash: 'tool-result-projection',
+      },
+      resourceKeys: ['scenario:tool-result-projection'],
+      risk: 'read',
+      mutation: false,
+      operationHash: 'tool-result-projection',
+      operationHashVersion: 1,
+      preconditions: [],
+      secretRefs: [],
+      policyRevision,
+      inputRevision: context.inputRevision,
+    }),
+    execute: async () => rawResult,
+  };
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.tool-result-projection',
+    capability: 'runs.execute',
+    tools: [fixtureTool],
+  });
+  const executor = new ToolExecutor(
+    catalog,
+    { authorize: async () => ({ allowed: true as const, policyRevision: 1 }) } as unknown as AppCapabilityBroker,
+  );
+  const toolContext: ToolContext = {
+    ...scope,
+    actor: {
+      kind: 'agent',
+      userId: scope.userId,
+      appId: scope.appId,
+      runId: 'tool-result-projection-run',
+      agentRuntimeId: 'tool-result-projection-runtime',
+    },
+    runId: 'tool-result-projection-run',
+    agentRuntimeId: 'tool-result-projection-runtime',
+    connectionIds: [],
+    environment: null,
+    stepId: 'tool-result-projection-step',
+    signal: new AbortController().signal,
+    deadlineAt: 1_900_000_000,
+    maxOutputBytes: maxModelBytes,
+    inputRevision: 1,
+  };
+  const inspection = await executor.inspect(toolContext, {
+    providerCallId: 'provider-large-output',
+    name: 'scenario_large_output',
+    argumentsJson: '{}',
+  });
+  const executed = await executor.execute(toolContext, inspection);
+  assert.equal(
+    (executed.data as { log?: string } | undefined)?.log,
+    rawLog,
+    'ToolExecutor must return the raw execution truth; model-facing projection must not destroy durable evidence before StateCommit',
+  );
+
+  const projected = projectToolResult(rawResult, maxModelBytes);
+  const projectedBytes = Buffer.byteLength(JSON.stringify(projected), 'utf8');
+  assert.ok(projectedBytes <= maxModelBytes, 'model-facing ToolResult projection must respect maxToolOutputBytes');
+  const projectedEncoded = JSON.stringify(projected);
+  assert.match(projectedEncoded, /ERROR critical failure/, 'projection must preserve high-signal error lines');
+  assert.match(projectedEncoded, /TAIL marker/, 'projection must preserve tail diagnostics instead of prefix-only truncation');
+  assert.deepEqual(projected.artifactRefs, ['artifact-raw-log'], 'artifactRefs must survive model projection when budget allows');
+  const projectionMetadata = projected as ToolResult & {
+    projection?: { originalBytes: number; sha256: string };
+  };
+  assert.equal(projectionMetadata.projection?.originalBytes, rawBytes, 'projection must disclose original byte size');
+  assert.match(projectionMetadata.projection?.sha256 ?? '', /^[a-f0-9]{64}$/, 'projection must disclose a stable raw hash');
+
+  const runtime: RuntimeParticipantView = {
+    id: 'tool-result-child-runtime',
+    runId: 'tool-result-child-run',
+    participantId: 'child:tool-result-delegation',
+    backendKind: 'native',
+    modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    status: 'running',
+    scheduleState: 'runnable',
+    consumedMailboxSequence: 0,
+  };
+  const runtimes = {
+    runtime: async () => runtime,
+    recentRuntimeToolExchanges: async (): Promise<RuntimeToolExchangeView[]> => [
+      {
+        sourceModelStepId: 'tool-result-child-model-step',
+        batchIndex: 0,
+        batchSize: 1,
+        providerCallId: 'provider-child-large-output',
+        toolName: 'scenario_large_output',
+        arguments: {},
+        result: rawResult as unknown as JsonValue,
+        status: 'failed',
+      },
+    ],
+  } as unknown as RuntimeParticipantRepositoryPort;
+  const childBuilder = new SubagentContextBuilder(
+    runtimes,
+    { readMessages: async () => [], listDelegationMessages: async () => [] } as MailboxReaderPort,
+    { discover: () => [] } as unknown as ToolCatalog,
+    emptyModelContinuations,
+    null!,
+  );
+  const delegation = {
+    id: 'tool-result-delegation',
+    runId: 'tool-result-child-run',
+    parentRuntimeId: 'root-runtime',
+    childRuntimeId: runtime.id,
+    profileId: 'default',
+    capabilities: [],
+    peerMessaging: 'parent-child',
+    modelRef: runtime.modelRef,
+    objective: 'Inspect a build failure.',
+    constraints: [],
+    inputArtifactRefs: [],
+    completionCriteria: [],
+    dependencyMode: 'settled',
+    status: 'running',
+    depth: 1,
+    failureMode: 'isolate',
+    budget: { maxSteps: 8 },
+    usage: { tokens: 0, steps: 0 },
+    result: null,
+    evidenceRefs: [],
+    deadlineAt: 1_900_000_000,
+    version: 1,
+    createdAt: 1_800_000_000,
+    updatedAt: 1_800_000_000,
+    completedAt: null,
+    ...scope,
+  } satisfies DelegationView;
+  const childRun = {
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      steps: 0,
+      subagentMessages: 0,
+      subagentMessageBytes: 0,
+    },
+    budget: { maxRunSteps: 32, maxToolOutputBytes: maxModelBytes },
+    definition: { environment: null },
+  } as unknown as RunView;
+  const childPrepared = await childBuilder.prepare(
+    scope,
+    'tool-result-child-run',
+    runtime.id,
+    delegation,
+    {
+      id: 'scenario-model',
+      contextWindow: 32_768,
+      maxOutputTokens: 2_048,
+      supportsTools: true,
+      supportsImageInput: false,
+      supportsFileInput: false,
+    },
+    childRun,
+  );
+  assert.equal(childPrepared.kind, 'ready');
+  if (childPrepared.kind !== 'ready') throw new Error('SCENARIO_INVALID');
+  const childToolMessage = childPrepared.plan.messages.find(
+    (message) => message.role === 'tool' && message.toolCallId === 'provider-child-large-output',
+  );
+  assert.ok(childToolMessage, 'Subagent context must retain the completed Tool exchange');
+  assert.ok(
+    Buffer.byteLength(childToolMessage.content, 'utf8') <= maxModelBytes,
+    'Subagent ToolResult projection must use the same model-facing byte budget instead of a separate 8 KiB rule',
+  );
+  assert.match(childToolMessage.content, /ERROR critical failure/, 'Subagent projection must preserve high-signal errors');
+  assert.match(childToolMessage.content, /TAIL marker/, 'Subagent projection must preserve tail diagnostics');
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-tool-result-projection-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'tool-result-projection.sqlite', nodeEnv: 'test' });
+  const stateCommit = new SqliteStateCommitAdapter(db);
+  const now = 1_801_060_000;
+  const budget = JSON.stringify({
+    maxContextTokens: 16_384,
+    maxOutputTokens: 2_048,
+    maxRunSteps: 32,
+    maxActiveExecutionSeconds: 3_600,
+    toolTimeoutSeconds: 120,
+    maxToolOutputBytes: maxModelBytes,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    maxSubagentMessages: 100,
+    maxSubagentMessageBytes: 1_048_576,
+    revision: 1,
+  });
+  const definition = JSON.stringify({
+    schemaVersion: 1,
+    agentDefinitionId: 'scenario-agent',
+    model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    approvalMode: 'ask',
+    connectionIds: [],
+    policyRevision: 1,
+    settingsRevision: 1,
+  });
+  const usage = JSON.stringify({
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    steps: 0,
+    subagentMessages: 0,
+    subagentMessageBytes: 0,
+  });
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'tool-result-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+       VALUES ('tool-result-thread', 1, 'scenario-app', 'tool result projection', 'manual', ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, verification_status,
+         budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         created_at, started_at, updated_at)
+       VALUES ('tool-result-run', 1, 'scenario-app', 'tool-result-thread', 'running', 'in_progress', 'not_started',
+               ?, ?, '{"schemaVersion":1,"revision":0,"items":[]}', ?, 1, ?, ?, ?)`,
+      [budget, definition, usage, now, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES ('tool-result-runtime', 'tool-result-run', 'root', 'native', ?,
+               'running', 'executing', 0, 'tool-result-owner', ?, ?)`,
+      [JSON.stringify(runtime.modelRef), now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES ('tool-result-model-step', 'tool-result-run', 'tool-result-runtime', 1,
+               'model', 'completed', 0, '[]', '[]', ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at)
+       VALUES ('tool-result-step', 'tool-result-run', 'tool-result-runtime', 2,
+               'tool', 'created', 0, '[]', '[]', ?)`,
+      [now],
+    );
+    await db.execute(
+      `INSERT INTO agent_tool_calls
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+         provider_call_id, tool_name, tool_version, inspection_json, operation_hash,
+         operation_hash_version, risk, status, created_at)
+       VALUES ('tool-result-call', 'tool-result-run', 'tool-result-runtime', 'tool-result-step',
+               'tool-result-model-step', 0, 1, 'provider-root-large-output', 'scenario_large_output', '1',
+               '{}', 'tool-result-hash', 1, 'read', 'proposed', ?)`,
+      [now],
+    );
+    const begun = await stateCommit.beginReadToolBatch({
+      scope,
+      runId: 'tool-result-run',
+      runtimeId: 'tool-result-runtime',
+      expectedRunVersion: 1,
+      items: [{ toolStepId: 'tool-result-step', toolCallId: 'tool-result-call' }],
+      now: now + 1,
+    });
+    await stateCommit.settleReadToolBatch({
+      scope,
+      runId: 'tool-result-run',
+      runtimeId: 'tool-result-runtime',
+      expectedRunVersion: begun.run.version,
+      items: [
+        {
+          toolStepId: 'tool-result-step',
+          toolCallId: 'tool-result-call',
+          toolResultEntryId: 'tool-result-ledger-entry',
+          providerCallId: 'provider-root-large-output',
+          result: rawResult,
+        },
+      ],
+      now: now + 2,
+    });
+    const stored = await db.queryOne<{ result_json: string }>(
+      "SELECT result_json FROM agent_tool_calls WHERE id = 'tool-result-call'",
+    );
+    assert.ok(stored?.result_json);
+    assert.equal(
+      (JSON.parse(stored!.result_json) as { data?: { log?: string } }).data?.log,
+      rawLog,
+      'agent_tool_calls.result_json must retain raw Tool evidence',
+    );
+    const ledger = await db.queryOne<{ payload_json: string }>(
+      "SELECT payload_json FROM ai_thread_entries WHERE id = 'tool-result-ledger-entry'",
+    );
+    assert.ok(ledger?.payload_json);
+    const ledgerPayload = JSON.parse(ledger!.payload_json) as { text?: string };
+    assert.equal(typeof ledgerPayload.text, 'string');
+    assert.ok(
+      Buffer.byteLength(ledgerPayload.text!, 'utf8') <= maxModelBytes,
+      'Ledger tool_result must store the bounded model-facing projection, not the raw result',
+    );
+    assert.match(ledgerPayload.text!, /ERROR critical failure/);
+    assert.match(ledgerPayload.text!, /TAIL marker/);
+    assert.ok(!ledgerPayload.text!.includes('noise-0899'), 'projection must not serialize the entire raw log');
+
+    return [
+      { name: 'raw_result_bytes', value: rawBytes, unit: 'bytes' },
+      { name: 'projected_result_bytes', value: projectedBytes, unit: 'bytes' },
+      { name: 'root_ledger_bytes', value: Buffer.byteLength(ledgerPayload.text!, 'utf8'), unit: 'bytes' },
+      { name: 'subagent_tool_result_bytes', value: Buffer.byteLength(childToolMessage.content, 'utf8'), unit: 'bytes' },
+    ];
+  } finally {
+    await db.close().catch(() => undefined);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+interface AgentBenchmarkCase {
+  id: 'coding' | 'operations';
+  prompt: string;
+  toolName: string;
+  toolArgumentsJson: string;
+  toolDescription: string;
+  toolInputSchema: AgentTool['descriptor']['inputSchema'];
+  toolSummary: string;
+  finalText: string;
+  usage: readonly [TokenUsage, TokenUsage];
+}
+
+const benchmarkProvider: PersistedProviderView = {
+  id: 'scenario-provider',
+  kind: 'openai-compatible',
+  displayName: 'Scenario provider',
+  baseUrl: 'http://scenario.invalid/v1',
+  protocol: 'chat-completions',
+  hasCredential: false,
+  credentialRevision: 0,
+  models: [
+    {
+      id: 'scenario-model',
+      capabilityOverrides: {
+        contextWindow: 8_192,
+        maxOutputTokens: 1_024,
+        supportsTools: true,
+      },
+    },
+  ],
+  liveCapabilities: [],
+  enabled: true,
+  version: 1,
+  createdAt: 1_800_000_000,
+  updatedAt: 1_800_000_000,
+};
+
+const drainGenerator = async <T>(generator: AsyncGenerator<unknown, T, void>): Promise<T> => {
+  while (true) {
+    const next = await generator.next();
+    if (next.done) return next.value;
+  }
+};
+
+const collectBackendSignals = async <T>(
+  generator: AsyncGenerator<BackendSignal, T, void>,
+): Promise<{ signals: BackendSignal[]; result: T }> => {
+  const signals: BackendSignal[] = [];
+  while (true) {
+    const next = await generator.next();
+    if (next.done) return { signals, result: next.value };
+    signals.push(next.value);
+  }
+};
+
+const benchmarkSnapshot = (benchmark: AgentBenchmarkCase, benchmarkScope: Scope): RunSnapshot => {
+  const runId = `benchmark-${benchmark.id}-run`;
+  const threadId = `benchmark-${benchmark.id}-thread`;
+  const createdAt = 1_800_000_000;
+  return {
+    ...benchmarkScope,
+    id: runId,
+    threadId,
+    parentRunId: null,
+    status: 'running',
+    goalStatus: 'in_progress',
+    goal: { text: benchmark.prompt, revision: 1, updatedAt: createdAt },
+    verificationStatus: 'not_started',
+    needsReconciliation: false,
+    budget: {
+      maxContextTokens: 8_192,
+      maxOutputTokens: 1_024,
+      maxRunSteps: 100,
+      maxActiveExecutionSeconds: 3_600,
+      toolTimeoutSeconds: 120,
+      maxToolOutputBytes: 64 * 1_024,
+      maxRecallItems: 5,
+      maxRecallBytes: 8_192,
+      maxSubagentMessages: 100,
+      maxSubagentMessageBytes: 1_048_576,
+      contextCompactionMode: 'balanced',
+      revision: 1,
+    },
+    definition: {
+      schemaVersion: 1,
+      agentDefinitionId: 'scenario-agent',
+      model: { providerId: benchmarkProvider.id, modelId: 'scenario-model', configurationVersion: 1 },
+      approvalMode: 'full_access',
+      connectionIds: [],
+      policyRevision: 1,
+      settingsRevision: 1,
+    },
+    plan: { schemaVersion: 1, revision: 0, items: [] },
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      steps: 0,
+      subagentMessages: 0,
+      subagentMessageBytes: 0,
+    },
+    activeExecutionSeconds: 0,
+    activeExecutionStartedAt: createdAt,
+    executingRuntimeCount: 1,
+    consumedInputSequence: 0,
+    inputRevision: 1,
+    eventCursor: 0,
+    version: 1,
+    createdAt,
+    startedAt: createdAt,
+    completedAt: null,
+    updatedAt: createdAt,
+    terminalIssue: null,
+    recentEntries: [
+      {
+        id: `${benchmark.id}-input`,
+        sequence: 1,
+        kind: 'user_input',
+        payload: { text: benchmark.prompt, artifactRefs: [] },
+        createdAt,
+      },
+    ],
+  };
+};
+
+const scriptedAgentBenchmarkScenario: Scenario = async () => {
+  const benchmarks: readonly AgentBenchmarkCase[] = [
+    {
+      id: 'coding',
+      prompt: 'Inspect src/example.ts and report the exported function name.',
+      toolName: 'scenario_read_file',
+      toolArgumentsJson: JSON.stringify({ path: 'src/example.ts' }),
+      toolDescription: 'Read a deterministic source file fixture.',
+      toolInputSchema: {
+        type: 'object',
+        properties: { path: { type: 'string' } },
+        required: ['path'],
+        additionalProperties: false,
+      },
+      toolSummary: 'src/example.ts exports function solveExample().',
+      finalText: 'The exported function is solveExample().',
+      usage: [
+        { inputTokens: 180, outputTokens: 24, cachedInputTokens: 80 },
+        { inputTokens: 236, outputTokens: 18, cachedInputTokens: 160 },
+      ],
+    },
+    {
+      id: 'operations',
+      prompt: 'Check the api service status and report whether it is healthy.',
+      toolName: 'scenario_service_status',
+      toolArgumentsJson: JSON.stringify({ service: 'api' }),
+      toolDescription: 'Read a deterministic service-health fixture.',
+      toolInputSchema: {
+        type: 'object',
+        properties: { service: { type: 'string' } },
+        required: ['service'],
+        additionalProperties: false,
+      },
+      toolSummary: 'api is healthy; desired=1 ready=1.',
+      finalText: 'The api service is healthy (1/1 ready).',
+      usage: [
+        { inputTokens: 164, outputTokens: 20, cachedInputTokens: 72 },
+        { inputTokens: 218, outputTokens: 17, cachedInputTokens: 144 },
+      ],
+    },
+  ];
+
+  let taskSuccesses = 0;
+  let modelSteps = 0;
+  let modelCalls = 0;
+  let toolCalls = 0;
+  let duplicateReadSearchCalls = 0;
+  let verifiedCases = 0;
+  const totalUsage: TokenUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+
+  for (const benchmark of benchmarks) {
+    const benchmarkScope: Scope = { userId: 1, appId: `benchmark-${benchmark.id}-app` };
+    const snapshot = benchmarkSnapshot(benchmark, benchmarkScope);
+    const initialEntry: LedgerEntryView = {
+      id: `${benchmark.id}-input`,
+      threadId: snapshot.threadId,
+      runId: snapshot.id,
+      sequence: 1,
+      kind: 'user_input',
+      payload: { text: benchmark.prompt, artifactRefs: [] },
+      createdAt: snapshot.createdAt,
+    };
+    const conversationRepository = new StaticConversationRepository([initialEntry]);
+    const conversations = new ConversationService(conversationRepository, clock, null!, null!);
+    const context = new ContextService(
+      conversations,
+      new RecallService(new EmptyRecallRepository(), clock),
+      new SkillRegistry(),
+      emptyModelContinuations,
+      null!,
+    );
+
+    const toolCallId = `${benchmark.id}-tool-call`;
+    const argumentMidpoint = Math.max(1, Math.floor(benchmark.toolArgumentsJson.length / 2));
+    const scriptedModel = new ScriptedLanguageModel([
+      {
+        assertRequest: (request) => {
+          assert.ok(
+            request.messages.some((message) => message.role === 'user' && message.content.includes(benchmark.prompt)),
+            `${benchmark.id}: first model step must include current user input`,
+          );
+        },
+        events: [
+          { type: 'tool.delta', index: 0, id: toolCallId, name: benchmark.toolName },
+          { type: 'tool.delta', index: 0, argumentsDelta: benchmark.toolArgumentsJson.slice(0, argumentMidpoint) },
+          { type: 'tool.delta', index: 0, argumentsDelta: benchmark.toolArgumentsJson.slice(argumentMidpoint) },
+          { type: 'usage', usage: benchmark.usage[0] },
+          { type: 'completed', finishReason: 'tool-calls' },
+        ],
+      },
+      {
+        assertRequest: (request) => {
+          const assistant = request.messages.find(
+            (message) => message.role === 'assistant' && message.toolCalls?.some((call) => call.id === toolCallId),
+          );
+          const result = request.messages.find(
+            (message) => message.role === 'tool' && message.toolCallId === toolCallId,
+          );
+          assert.ok(assistant, `${benchmark.id}: second model step must retain the assistant tool call`);
+          assert.ok(
+            result?.content.includes(benchmark.toolSummary),
+            `${benchmark.id}: second model step must include tool output`,
+          );
+        },
+        events: [
+          { type: 'message.delta', text: benchmark.finalText },
+          { type: 'usage', usage: benchmark.usage[1] },
+          { type: 'completed', finishReason: 'stop' },
+        ],
+      },
+    ]);
+    const providers = new ProviderService(new StaticProviderRepository(benchmarkProvider), scriptedModel, clock);
+    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter());
+
+    const catalog = new ToolCatalog();
+    const executedKeys = new Set<string>();
+    let duplicateCallsForCase = 0;
+    const benchmarkTool: AgentTool = {
+      descriptor: {
+        name: benchmark.toolName,
+        version: '1',
+        description: benchmark.toolDescription,
+        inputSchema: benchmark.toolInputSchema,
+        riskClass: 'read',
+        capability: 'runs.execute',
+      },
+      inspect: async (input, toolContext, policyRevision) => ({
+        toolName: benchmark.toolName,
+        toolVersion: '1',
+        normalizedArguments: input,
+        target: {
+          kind: 'run',
+          targetIdentity: `run:${toolContext.runId}`,
+          endpoint: `run:${toolContext.runId}`,
+          loginUser: `agent-runtime:${toolContext.agentRuntimeId}`,
+          configurationHash: createHash('sha256').update(JSON.stringify(input)).digest('hex'),
+        },
+        resourceKeys: [`benchmark:${benchmark.id}`],
+        risk: 'read',
+        mutation: false,
+        operationHash: createHash('sha256')
+          .update(`${benchmark.toolName}:${JSON.stringify(input)}`)
+          .digest('hex'),
+        operationHashVersion: 1,
+        preconditions: [],
+        secretRefs: [],
+        policyRevision,
+        inputRevision: toolContext.inputRevision,
+      }),
+      execute: async (inspection) => {
+        const key = `${inspection.toolName}:${JSON.stringify(inspection.normalizedArguments)}`;
+        if (executedKeys.has(key)) duplicateCallsForCase += 1;
+        executedKeys.add(key);
+        return {
+          ok: true,
+          summary: benchmark.toolSummary,
+          artifactRefs: [],
+          truncated: false,
+          outcome: 'confirmed',
+          verification: { status: 'verified', summary: 'Deterministic fixture verified.', evidenceRefs: [] },
+        };
+      },
+    };
+    catalog.registerContribution({
+      schemaVersion: 1,
+      id: `scenario.benchmark-${benchmark.id}`,
+      capability: 'runs.execute',
+      tools: [benchmarkTool],
+    });
+    const capabilities = {
+      authorize: async () => ({ allowed: true as const, policyRevision: 1 }),
+    } as unknown as AppCapabilityBroker;
+    const executor = new ToolExecutor(catalog, capabilities);
+    const signal = new AbortController().signal;
+
+    const firstPrepared = await modelRunner.prepare(snapshot, benchmarkScope, catalog.schemas(benchmarkScope), {});
+    const first = await drainGenerator(
+      modelRunner.runAttempt(
+        snapshot,
+        firstPrepared.contextPlan,
+        { attemptId: `${benchmark.id}-attempt-1`, attemptIndex: 1 },
+        signal,
+      ),
+    );
+    assert.equal(first.error, undefined, `${benchmark.id}: first model step must succeed`);
+    assert.equal(first.finishReason, 'tool-calls');
+    const proposed = first.toolCalls.get(0);
+    assert.equal(proposed?.id, toolCallId);
+    assert.equal(proposed?.name, benchmark.toolName);
+    assert.equal(proposed?.argumentsJson, benchmark.toolArgumentsJson);
+    assert.ok(first.usage, `${benchmark.id}: first model step must report usage`);
+    modelSteps += 1;
+
+    const toolContext: ToolContext = {
+      ...benchmarkScope,
+      actor: {
+        kind: 'agent',
+        userId: benchmarkScope.userId,
+        appId: benchmarkScope.appId,
+        runId: snapshot.id,
+        agentRuntimeId: `${benchmark.id}-runtime`,
+      },
+      runId: snapshot.id,
+      agentRuntimeId: `${benchmark.id}-runtime`,
+      connectionIds: [],
+      environment: null,
+      stepId: `${benchmark.id}-step-1`,
+      signal,
+      deadlineAt: snapshot.createdAt + 60,
+      maxOutputBytes: snapshot.budget.maxToolOutputBytes,
+      inputRevision: snapshot.inputRevision,
+    };
+    const executed = await executor.invoke(toolContext, {
+      name: proposed!.name!,
+      argumentsJson: proposed!.argumentsJson,
+    });
+    toolCalls += 1;
+    assert.equal(executed.result.outcome, 'confirmed');
+    assert.equal(executed.result.verification.status, 'verified');
+
+    await conversationRepository.appendEntry(benchmarkScope, snapshot.threadId, {
+      id: `${benchmark.id}-assistant-tool`,
+      runId: snapshot.id,
+      kind: 'assistant_message',
+      payload: {
+        text: first.text,
+        toolCalls: [
+          {
+            id: proposed!.id!,
+            name: proposed!.name!,
+            argumentsJson: proposed!.argumentsJson,
+          },
+        ],
+      },
+      createdAt: snapshot.createdAt + 1,
+    });
+    await conversationRepository.appendEntry(benchmarkScope, snapshot.threadId, {
+      id: `${benchmark.id}-tool-result`,
+      runId: snapshot.id,
+      kind: 'tool_result',
+      payload: { toolCallId, content: executed.result.summary },
+      createdAt: snapshot.createdAt + 2,
+    });
+
+    const secondPrepared = await modelRunner.prepare(snapshot, benchmarkScope, catalog.schemas(benchmarkScope), {});
+    assertValidToolExchange(secondPrepared.contextPlan.messages);
+    const second = await drainGenerator(
+      modelRunner.runAttempt(
+        snapshot,
+        secondPrepared.contextPlan,
+        { attemptId: `${benchmark.id}-attempt-2`, attemptIndex: 1 },
+        signal,
+      ),
+    );
+    assert.equal(second.error, undefined, `${benchmark.id}: second model step must succeed`);
+    assert.equal(second.finishReason, 'stop');
+    assert.equal(second.text, benchmark.finalText);
+    assert.ok(second.usage, `${benchmark.id}: second model step must report usage`);
+    modelSteps += 1;
+
+    scriptedModel.assertConsumed();
+    modelCalls += scriptedModel.requests.length;
+    duplicateReadSearchCalls += duplicateCallsForCase;
+    const verified = executed.result.verification.status === 'verified';
+    if (verified) verifiedCases += 1;
+    if (verified && second.text === benchmark.finalText) taskSuccesses += 1;
+    for (const usage of [first.usage!, second.usage!]) {
+      totalUsage.inputTokens += usage.inputTokens;
+      totalUsage.outputTokens += usage.outputTokens;
+      totalUsage.cachedInputTokens += usage.cachedInputTokens;
+    }
+  }
+
+  assert.equal(taskSuccesses, benchmarks.length, 'every deterministic benchmark task must succeed');
+  assert.equal(verifiedCases, benchmarks.length, 'every benchmark tool outcome must be verified');
+  assert.equal(duplicateReadSearchCalls, 0, 'benchmark must not duplicate read/search work');
+
+  return [
+    { name: 'benchmark_cases', value: benchmarks.length, unit: 'cases' },
+    { name: 'task_successes', value: taskSuccesses, unit: 'cases' },
+    { name: 'model_steps', value: modelSteps, unit: 'steps' },
+    { name: 'model_calls', value: modelCalls, unit: 'calls' },
+    { name: 'tool_calls', value: toolCalls, unit: 'calls' },
+    { name: 'duplicate_read_search_calls', value: duplicateReadSearchCalls, unit: 'calls' },
+    { name: 'input_tokens', value: totalUsage.inputTokens, unit: 'tokens' },
+    { name: 'output_tokens', value: totalUsage.outputTokens, unit: 'tokens' },
+    { name: 'cached_input_tokens', value: totalUsage.cachedInputTokens, unit: 'tokens' },
+    { name: 'verified_cases', value: verifiedCases, unit: 'cases' },
+  ];
+};
+
+const modelStreamRetryAttemptIdentityScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-stream-retry-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'stream-retry.sqlite', nodeEnv: 'test' });
+  const stateCommit = new SqliteStateCommitAdapter(db);
+  const repository = new SqliteRunRepository(db);
+  const conversationRepository = new SqliteConversationRepository(db);
+  const now = 1_800_000_000;
+  const runId = 'stream-retry-run';
+  const threadId = 'stream-retry-thread';
+  const runtimeId = 'stream-retry-runtime';
+
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'stream-retry-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads
+        (id, user_id, app_id, title, title_source, next_sequence, created_at, updated_at)
+       VALUES (?, 1, 'scenario-app', 'stream retry', 'manual', 2, ?, ?)`,
+      [threadId, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, goal_text, goal_revision, goal_updated_at,
+         verification_status, budget_json, definition_json, plan_json, usage_json,
+         active_execution_started_at, executing_runtime_count, consumed_input_sequence, input_revision,
+         created_at, started_at, updated_at)
+       VALUES (?, 1, 'scenario-app', ?, 'running', 'in_progress', 'Return a greeting.', 1, ?,
+               'not_started', ?, ?, ?, ?, NULL, 0, 0, 1, ?, ?, ?)`,
+      [
+        runId,
+        threadId,
+        now,
+        JSON.stringify({
+          maxContextTokens: 8_192,
+          maxOutputTokens: 1_024,
+          maxRunSteps: 20,
+          maxActiveExecutionSeconds: 3_600,
+          toolTimeoutSeconds: 120,
+          maxToolOutputBytes: 1_048_576,
+          maxRecallItems: 5,
+          maxRecallBytes: 8_192,
+          maxSubagentMessages: 100,
+          maxSubagentMessageBytes: 1_048_576,
+          revision: 1,
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          agentDefinitionId: 'scenario-agent',
+          model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          approvalMode: 'ask',
+          connectionIds: [],
+          policyRevision: 1,
+          settingsRevision: 1,
+        }),
+        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+        JSON.stringify({
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          steps: 0,
+          subagentMessages: 0,
+          subagentMessageBytes: 0,
+        }),
+        now,
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO ai_thread_entries
+        (id, thread_id, user_id, app_id, run_id, sequence, kind, payload_json, created_at)
+       VALUES ('stream-retry-input', ?, 1, 'scenario-app', ?, 1, 'user_input', ?, ?)`,
+      [threadId, runId, JSON.stringify({ text: 'Say hello world.', artifactRefs: [] }), now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES (?, ?, 'root', 'native', ?, 'running', 'runnable', 0, 'owner-stream-retry', ?, ?)`,
+      [
+        runtimeId,
+        runId,
+        JSON.stringify({ providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 }),
+        now,
+        now,
+      ],
+    );
+
+    const conversations = new ConversationService(conversationRepository, clock, null!, null!);
+    const context = new ContextService(
+      conversations,
+      new RecallService(new EmptyRecallRepository(), clock),
+      new SkillRegistry(),
+      emptyModelContinuations,
+      null!,
+    );
+    const scriptedModel = new ScriptedLanguageModel([
+      {
+        events: [
+          { type: 'message.delta', text: 'hel' },
+          { type: 'tool.delta', index: 0, id: 'failed-call', name: 'scenario_read' },
+          { type: 'tool.delta', index: 0, argumentsDelta: '{"path":"' },
+          { type: 'usage', usage: { inputTokens: 40, outputTokens: 3, cachedInputTokens: 4 } },
+        ],
+        error: new Error('PROVIDER_STREAM_TRUNCATED'),
+      },
+      {
+        events: [
+          { type: 'message.delta', text: 'hello ' },
+          { type: 'message.delta', text: 'world' },
+          { type: 'usage', usage: { inputTokens: 41, outputTokens: 5, cachedInputTokens: 4 } },
+          { type: 'completed', finishReason: 'stop' },
+        ],
+      },
+    ]);
+    const providers = new ProviderService(new StaticProviderRepository(benchmarkProvider), scriptedModel, clock);
+    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter());
+    const snapshot = await repository.snapshot(scope, runId);
+    assert.ok(snapshot, 'stream retry fixture run must exist');
+    const prepared = await modelRunner.prepare(snapshot, scope, [], {});
+    const reservedTokens = prepared.contextPlan.estimatedInputTokens + prepared.contextPlan.reservedOutputTokens;
+    const begun = await stateCommit.beginModelStep({
+      scope,
+      runId,
+      runtimeId,
+      expectedRunVersion: snapshot.version,
+      inputWatermark: snapshot.inputRevision,
+      reservedTokens,
+      estimatedInputTokens: prepared.contextPlan.estimatedInputTokens,
+      reservedOutputTokens: prepared.contextPlan.reservedOutputTokens,
+      contextWindowTokens: snapshot.budget.maxContextTokens,
+      now,
+    });
+
+    const signal = new AbortController().signal;
+    const first = await collectBackendSignals(
+      modelRunner.runAttempt(
+        snapshot,
+        prepared.contextPlan,
+        { attemptId: begun.attemptId, attemptIndex: begun.attemptIndex },
+        signal,
+      ),
+    );
+    assert.equal((first.result.error as Error | undefined)?.message, 'PROVIDER_STREAM_TRUNCATED');
+    assert.equal(modelRunner.shouldRetry(first.result.error, begun.attemptIndex, signal), true);
+    assert.ok(first.result.usage, 'failed streamed attempt must retain provider usage');
+
+    const firstMessageSignals = first.signals.filter(
+      (item): item is Extract<BackendSignal, { type: 'transient'; eventType: 'message.delta' }> =>
+        item.type === 'transient' && item.eventType === 'message.delta',
+    );
+    const firstToolSignals = first.signals.filter(
+      (item): item is Extract<BackendSignal, { type: 'transient'; eventType: 'tool.delta' }> =>
+        item.type === 'transient' && item.eventType === 'tool.delta',
+    );
+    assert.equal(firstMessageSignals.length, 1);
+    assert.ok(firstToolSignals.length >= 1);
+    for (const transient of [...firstMessageSignals, ...firstToolSignals]) {
+      assert.equal(transient.payload.attemptId, begun.attemptId);
+      assert.equal(transient.payload.attemptIndex, begun.attemptIndex);
+    }
+
+    const failedUsage = first.result.usage!;
+    const usageAfterFailed = {
+      ...begun.run.usage,
+      inputTokens: begun.run.usage.inputTokens + failedUsage.inputTokens,
+      outputTokens: begun.run.usage.outputTokens + failedUsage.outputTokens,
+      cachedInputTokens: begun.run.usage.cachedInputTokens + failedUsage.cachedInputTokens,
+    };
+    const retried = await stateCommit.retryModelStep({
+      scope,
+      runId,
+      runtimeId,
+      stepId: begun.stepId,
+      attemptId: begun.attemptId,
+      expectedRunVersion: begun.run.version,
+      reservedTokens,
+      usage: usageAfterFailed,
+      inputTokens: failedUsage.inputTokens,
+      outputTokens: failedUsage.outputTokens,
+      cachedInputTokens: failedUsage.cachedInputTokens,
+      estimatedUsage: false,
+      errorCode: 'PROVIDER_STREAM_TRUNCATED',
+      now: now + 1,
+    });
+    assert.notEqual(retried.attemptId, begun.attemptId);
+    assert.equal(retried.attemptIndex, begun.attemptIndex + 1);
+    const retryEvent = retried.committedEvents.find((event) => event.type === 'model.retrying');
+    assert.ok(retryEvent, 'retry must durably announce the new authoritative attempt');
+    assert.deepEqual(retryEvent.payload, {
+      stepId: begun.stepId,
+      previousAttemptId: begun.attemptId,
+      attemptId: retried.attemptId,
+      attemptIndex: retried.attemptIndex,
+      errorCode: 'PROVIDER_STREAM_TRUNCATED',
+    });
+
+    const second = await collectBackendSignals(
+      modelRunner.runAttempt(
+        snapshot,
+        prepared.contextPlan,
+        { attemptId: retried.attemptId, attemptIndex: retried.attemptIndex },
+        signal,
+      ),
+    );
+    assert.equal(second.result.error, undefined);
+    assert.equal(second.result.finishReason, 'stop');
+    assert.equal(second.result.text, 'hello world');
+    assert.ok(second.result.usage, 'successful retry must retain provider usage');
+    const secondMessageSignals = second.signals.filter(
+      (item): item is Extract<BackendSignal, { type: 'transient'; eventType: 'message.delta' }> =>
+        item.type === 'transient' && item.eventType === 'message.delta',
+    );
+    assert.equal(secondMessageSignals.length, 2, 'same attempt must be allowed to append multiple deltas');
+    for (const transient of secondMessageSignals) {
+      assert.equal(transient.payload.attemptId, retried.attemptId);
+      assert.equal(transient.payload.attemptIndex, retried.attemptIndex);
+    }
+
+    interface PresentationState {
+      attemptId: string | null;
+      attemptIndex: number | null;
+      text: string;
+    }
+    const emptyPresentation = (): PresentationState => ({ attemptId: null, attemptIndex: null, text: '' });
+    const applyTransient = (state: PresentationState, transient: BackendSignal): void => {
+      if (transient.type !== 'transient' || transient.payload.delegationId) return;
+      if (
+        state.attemptId !== transient.payload.attemptId ||
+        state.attemptIndex !== transient.payload.attemptIndex
+      ) {
+        state.attemptId = transient.payload.attemptId;
+        state.attemptIndex = transient.payload.attemptIndex;
+        state.text = '';
+      }
+      if (transient.eventType === 'message.delta') state.text += transient.payload.text;
+    };
+    const applyRetry = (state: PresentationState): void => {
+      if (state.attemptId !== begun.attemptId) return;
+      state.attemptId = retried.attemptId;
+      state.attemptIndex = retried.attemptIndex;
+      state.text = '';
+    };
+
+    const orderedPresentation = emptyPresentation();
+    applyTransient(orderedPresentation, firstMessageSignals[0]!);
+    assert.equal(orderedPresentation.text, 'hel');
+    applyRetry(orderedPresentation);
+    for (const transient of secondMessageSignals) applyTransient(orderedPresentation, transient);
+    assert.equal(orderedPresentation.text, 'hello world');
+
+    const racedPresentation = emptyPresentation();
+    applyTransient(racedPresentation, firstMessageSignals[0]!);
+    applyTransient(racedPresentation, secondMessageSignals[0]!);
+    applyRetry(racedPresentation);
+    applyTransient(racedPresentation, secondMessageSignals[1]!);
+    assert.equal(
+      racedPresentation.text,
+      'hello world',
+      'late durable retry delivery must not erase or concatenate a newer attempt',
+    );
+
+    const disconnectedPresentation = emptyPresentation();
+    applyTransient(disconnectedPresentation, firstMessageSignals[0]!);
+    Object.assign(disconnectedPresentation, emptyPresentation());
+    assert.equal(disconnectedPresentation.text, '');
+    assert.equal(disconnectedPresentation.attemptId, null);
+
+    const successfulUsage = second.result.usage!;
+    const usageAfterSuccess = {
+      ...retried.run.usage,
+      inputTokens: retried.run.usage.inputTokens + successfulUsage.inputTokens,
+      outputTokens: retried.run.usage.outputTokens + successfulUsage.outputTokens,
+      cachedInputTokens: retried.run.usage.cachedInputTokens + successfulUsage.cachedInputTokens,
+      steps: retried.run.usage.steps + 1,
+    };
+    const settled = await stateCommit.settleModelStep({
+      scope,
+      runId,
+      runtimeId,
+      stepId: begun.stepId,
+      attemptId: retried.attemptId,
+      expectedRunVersion: retried.run.version,
+      assistantEntryId: 'stream-retry-final',
+      assistantText: second.result.text,
+      usage: usageAfterSuccess,
+      inputTokens: successfulUsage.inputTokens,
+      outputTokens: successfulUsage.outputTokens,
+      cachedInputTokens: successfulUsage.cachedInputTokens,
+      estimatedUsage: false,
+      finishReason: 'stop',
+      terminalStatus: 'completed_unverified',
+      now: now + 2,
+    });
+    assert.equal(settled.run.status, 'completed_unverified');
+
+    const failedAttempt = await db.queryOne<{
+      status: string;
+      attempt_index: number;
+      input_tokens: number | null;
+      output_tokens: number | null;
+      error_code: string | null;
+    }>(
+      `SELECT status, attempt_index, input_tokens, output_tokens, error_code
+       FROM agent_model_attempts WHERE id = ?`,
+      [begun.attemptId],
+    );
+    const successfulAttempt = await db.queryOne<{
+      status: string;
+      attempt_index: number;
+      input_tokens: number | null;
+      output_tokens: number | null;
+      error_code: string | null;
+    }>(
+      `SELECT status, attempt_index, input_tokens, output_tokens, error_code
+       FROM agent_model_attempts WHERE id = ?`,
+      [retried.attemptId],
+    );
+    assert.deepEqual(failedAttempt, {
+      status: 'failed',
+      attempt_index: 1,
+      input_tokens: 40,
+      output_tokens: 3,
+      error_code: 'PROVIDER_STREAM_TRUNCATED',
+    });
+    assert.deepEqual(successfulAttempt, {
+      status: 'completed',
+      attempt_index: 2,
+      input_tokens: 41,
+      output_tokens: 5,
+      error_code: null,
+    });
+
+    const ledger = await conversationRepository.readEntries(scope, threadId, 20);
+    const assistantEntries = ledger.items.filter((entry) => entry.kind === 'assistant_message');
+    assert.equal(assistantEntries.length, 1);
+    const assistantPayload = assistantEntries[0]?.payload;
+    assert.ok(assistantPayload && typeof assistantPayload === 'object' && !Array.isArray(assistantPayload));
+    assert.equal((assistantPayload as Record<string, unknown>).text, 'hello world');
+    assert.equal(JSON.stringify(assistantPayload).includes('helhello'), false);
+
+    const transientDurableCount = await db.queryOne<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM agent_events
+       WHERE run_id = ? AND type IN ('message.delta', 'tool.delta')`,
+      [runId],
+    );
+    assert.equal(transientDurableCount?.count, 0, 'ephemeral deltas must never become durable run events');
+    const finalSnapshot = await repository.snapshot(scope, runId);
+    assert.ok(finalSnapshot);
+    assert.equal(finalSnapshot.usage.inputTokens, 81);
+    assert.equal(finalSnapshot.usage.outputTokens, 8);
+    assert.equal(finalSnapshot.usage.cachedInputTokens, 8);
+    scriptedModel.assertConsumed();
+
+    return [
+      { name: 'authoritative_attempts', value: 2, unit: 'attempts' },
+      { name: 'failed_attempt_partial_prefix_bytes', value: Buffer.byteLength('hel'), unit: 'bytes' },
+      { name: 'successful_attempt_message_deltas', value: secondMessageSignals.length, unit: 'events' },
+      { name: 'tool_deltas_with_attempt_identity', value: firstToolSignals.length, unit: 'events' },
+      { name: 'durable_transient_delta_rows', value: transientDurableCount?.count ?? -1, unit: 'rows' },
+      { name: 'final_assistant_messages', value: assistantEntries.length, unit: 'messages' },
+    ];
+  } finally {
+    await db.close().catch(() => undefined);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const agentLifecycleNotificationScenario: Scenario = async () => {
+  const benchmark: AgentBenchmarkCase = {
+    id: 'coding',
+    prompt: 'Internal prompt that must never reach notifications.',
+    toolName: 'scenario_notification_read',
+    toolArgumentsJson: '{}',
+    toolDescription: 'notification fixture',
+    toolInputSchema: { type: 'object', additionalProperties: false },
+    toolSummary: 'done',
+    finalText: 'done',
+    usage: [
+      { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
+      { inputTokens: 1, outputTokens: 1, cachedInputTokens: 0 },
+    ],
+  };
+  const run = benchmarkSnapshot(benchmark, { userId: 1, appId: 'notification-app' });
+  const published: Array<{ event: string; details: Record<string, unknown> | string | undefined }> = [];
+  let rejectPublishes = false;
+  const bridge = new AgentNotificationBridge(
+    {
+      publish: async (event, details) => {
+        published.push({ event, details });
+        if (rejectPublishes) throw new Error('SCENARIO_NOTIFICATION_DELIVERY_FAILED');
+      },
+    },
+    {
+      getThread: async () => ({
+        id: run.threadId,
+        appId: run.appId,
+        title: 'Safe thread title',
+        titleSource: 'manual',
+        version: 1,
+        createdAt: run.createdAt,
+        updatedAt: run.updatedAt,
+        latestRunId: run.id,
+      }),
+    },
+  );
+  const event = (sequence: number, type: string, payload: JsonValue) => ({
+    eventId: `notification-event-${sequence}`,
+    runId: run.id,
+    sequence,
+    schemaVersion: 1 as const,
+    type,
+    payload,
+    occurredAt: run.createdAt + sequence,
+  });
+
+  const completedEvent = event(1, 'run.status_changed', { from: 'running', to: 'completed_unverified' });
+  await bridge.project({ ...run, status: 'completed_unverified' }, [completedEvent]);
+  await bridge.project({ ...run, status: 'completed_unverified' }, [completedEvent]);
+  assert.equal(
+    published.filter((item) => item.event === 'AGENT_RUN_COMPLETED').length,
+    1,
+    'one durable completion transition must project at most once even if the observer is called twice',
+  );
+
+  await bridge.project(
+    { ...run, status: 'failed' },
+    [
+      event(2, 'run.error', {
+        code: 'MODEL_PROVIDER_FAILED',
+        prompt: benchmark.prompt,
+        toolRawOutput: 'SECRET_TOOL_OUTPUT',
+        credential: 'SECRET_CREDENTIAL',
+        continuation: 'SECRET_CONTINUATION',
+        reasoning: 'SECRET_REASONING',
+      }),
+      event(3, 'run.status_changed', { from: 'running', to: 'failed' }),
+    ],
+  );
+  await bridge.project(
+    { ...run, status: 'interrupted' },
+    [
+      event(4, 'run.interrupted', { reason: 'backend_restart', errorCode: 'EXECUTION_INTERRUPTED' }),
+      event(5, 'run.status_changed', { from: 'running', to: 'interrupted' }),
+    ],
+  );
+  await bridge.project(
+    { ...run, status: 'awaiting_approval' },
+    [
+      event(6, 'approval.requested', {
+        approvalId: 'approval-safe-id',
+        toolCallId: 'tool-private-id',
+        operationHash: 'PRIVATE_OPERATION_HASH',
+        expiresAt: run.createdAt + 600,
+        risk: 'mutate',
+      }),
+      event(7, 'run.status_changed', { from: 'running', to: 'awaiting_approval' }),
+    ],
+  );
+  await bridge.project(
+    { ...run, status: 'awaiting_input' },
+    [
+      event(8, 'input.requested', {
+        requestId: 'input-safe-id',
+        runtimeId: 'runtime-private-id',
+        toolCallId: 'tool-private-id',
+        questionCount: 2,
+        questions: ['SECRET QUESTION TEXT'],
+      }),
+      event(9, 'run.status_changed', { from: 'running', to: 'awaiting_input' }),
+    ],
+  );
+  await bridge.project(
+    { ...run, status: 'awaiting_input' },
+    [
+      event(10, 'run.loop_detected', { reason: 'repeated_no_progress', runtimeId: 'private-runtime' }),
+      event(11, 'run.status_changed', { from: 'running', to: 'awaiting_input' }),
+    ],
+  );
+  await bridge.project(
+    { ...run, status: 'awaiting_budget' },
+    [
+      event(12, 'budget.increase_requested', {
+        reason: 'step_limit',
+        currentSteps: 100,
+        requestedSteps: 101,
+      }),
+      event(13, 'run.status_changed', { from: 'running', to: 'awaiting_budget' }),
+    ],
+  );
+
+  assert.equal(published.filter((item) => item.event === 'AGENT_RUN_FAILED').length, 1);
+  assert.equal(published.filter((item) => item.event === 'AGENT_RUN_INTERRUPTED').length, 1);
+  assert.equal(published.filter((item) => item.event === 'AGENT_APPROVAL_REQUIRED').length, 1);
+  assert.equal(published.filter((item) => item.event === 'AGENT_INPUT_REQUIRED').length, 1);
+  assert.equal(published.filter((item) => item.event === 'AGENT_ATTENTION_REQUIRED').length, 2);
+  assert.equal(
+    published.some((item) => item.event.includes('BUDGET') || item.event.includes('TOKEN')),
+    false,
+    'step/active-time fuses must use generic attention rather than budget/token-specific notification events',
+  );
+
+  const serialized = JSON.stringify(published.map((item) => item.details));
+  for (const forbidden of [
+    benchmark.prompt,
+    'SECRET_TOOL_OUTPUT',
+    'SECRET_CREDENTIAL',
+    'SECRET_CONTINUATION',
+    'SECRET_REASONING',
+    'SECRET QUESTION TEXT',
+    'PRIVATE_OPERATION_HASH',
+    'tool-private-id',
+    'runtime-private-id',
+    'private-runtime',
+  ]) {
+    assert.equal(serialized.includes(forbidden), false, `notification details must not contain ${forbidden}`);
+  }
+  assert.ok(serialized.includes('Safe thread title'));
+  assert.ok(serialized.includes(run.id));
+  assert.ok(serialized.includes(run.threadId));
+
+  rejectPublishes = true;
+  await assert.doesNotReject(() =>
+    bridge.project(
+      { ...run, status: 'failed' },
+      [event(14, 'run.error', { code: 'SECOND_FAILURE' }), event(15, 'run.status_changed', { from: 'running', to: 'failed' })],
+    ),
+  );
+
+  let channelSends = 0;
+  const setting = {
+    id: 1,
+    channelType: 'webhook' as const,
+    name: 'scenario',
+    enabled: true,
+    config: { url: 'https://notification.invalid' },
+    enabledEvents: ['AGENT_RUN_COMPLETED' as const],
+    createdAt: run.createdAt,
+    updatedAt: run.updatedAt,
+  };
+  const notificationService = new NotificationService(
+    {
+      listEnabledFor: async (notificationEvent: string) =>
+        notificationEvent === 'AGENT_RUN_COMPLETED' ? [setting] : [],
+    } as never,
+    {
+      send: async () => {
+        channelSends += 1;
+        throw new Error('SCENARIO_CHANNEL_FAILURE');
+      },
+    } as never,
+    {
+      prepare: (_setting: unknown, payload: unknown) => ({
+        channelType: 'webhook',
+        config: { url: 'https://notification.invalid' },
+        body: '{}',
+        payload,
+      }),
+    } as never,
+    {
+      defaultLocale: 'en-US',
+      resolveLocale: () => 'en-US',
+    } as never,
+    { getSetting: async () => null } as never,
+  );
+  await assert.doesNotReject(() => notificationService.publish('AGENT_RUN_COMPLETED', { runId: run.id }));
+  assert.equal(channelSends, 1, 'enabled existing notification settings must receive the Agent event');
+  await notificationService.publish('AGENT_RUN_FAILED', { runId: run.id });
+  assert.equal(channelSends, 1, 'disabled Agent events must remain filtered by existing enabledEvents settings');
+
+  return [
+    { name: 'agent_notification_transition_duplicates', value: 0, unit: 'notifications' },
+    { name: 'agent_notification_sensitive_fields', value: 0, unit: 'fields' },
+    { name: 'agent_notification_delivery_failures_blocking', value: 0, unit: 'runs' },
+  ];
+};
+
+const planExecutionModeScenario: Scenario = async () => {
+  const scope: Scope = { userId: 1, appId: 'plan-mode-app' };
+  const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
+  const catalog = new ToolCatalog();
+  const tool = (name: string, riskClass: 'read' | 'mutate'): AgentTool => ({
+    descriptor: {
+      name,
+      version: '1',
+      description: `${riskClass} fixture`,
+      inputSchema: { type: 'object', additionalProperties: false },
+      riskClass,
+      capability: 'runs.execute',
+    },
+    inspect: async (input, context, policyRevision) => ({
+      toolName: name,
+      toolVersion: '1',
+      normalizedArguments: input,
+      target: {
+        kind: 'run',
+        targetIdentity: `run:${context.runId}:${name}`,
+        endpoint: `run:${context.runId}`,
+        loginUser: `agent-runtime:${context.agentRuntimeId}`,
+        configurationHash: `plan-${name}`,
+      },
+      resourceKeys: [],
+      risk: riskClass,
+      mutation: riskClass === 'mutate',
+      operationHash: `plan-${name}`,
+      operationHashVersion: 1,
+      preconditions: [],
+      secretRefs: [],
+      policyRevision,
+      inputRevision: context.inputRevision,
+    }),
+    execute: async () => ({
+      ok: true,
+      summary: `${name} executed`,
+      artifactRefs: [],
+      truncated: false,
+      outcome: 'confirmed',
+      verification: { status: 'verified', summary: 'fixture', evidenceRefs: [] },
+    }),
+  });
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.plan-mode',
+    capability: 'runs.execute',
+    tools: [
+      tool('scenario_plan_read', 'read'),
+      tool('scenario_plan_mutation', 'mutate'),
+      createPlanUpdateTool(null!, null!, cryptoHash),
+      createRequestUserInputTool(cryptoHash),
+    ],
+  });
+  const capabilities = { authorize: async () => ({ allowed: true as const, policyRevision: 1 }) } as unknown as AppCapabilityBroker;
+  const executor = new ToolExecutor(catalog, capabilities);
+  const runner = new ToolCallRunner(
+    catalog,
+    executor,
+    { decide: () => ({ action: 'allow' }) } as never,
+    null!,
+    null!,
+  );
+  const planSchemas = runner.schemas(scope, undefined, 'plan');
+  assert.deepEqual(
+    planSchemas.map((item) => item.name).sort(),
+    ['plan_update', 'request_user_input', 'scenario_plan_read'],
+    'plan mode model surface must retain read/control tools and exclude mutation tools',
+  );
+
+  const context: ToolContext = {
+    ...scope,
+    actor: { kind: 'agent', userId: 1, appId: scope.appId, runId: 'plan-run', agentRuntimeId: 'plan-runtime' },
+    runId: 'plan-run',
+    agentRuntimeId: 'plan-runtime',
+    connectionIds: [],
+    environment: null,
+    stepId: 'plan-step',
+    signal: new AbortController().signal,
+    deadlineAt: 1_800_900_000,
+    maxOutputBytes: 64 * 1024,
+    inputRevision: 1,
+  };
+  await assert.rejects(
+    () => runner.inspect(context, { providerCallId: 'forged', name: 'scenario_plan_mutation', argumentsJson: '{}' }, 'plan'),
+    /PLAN_MODE_TOOL_FORBIDDEN/,
+    'a forged mutation tool call must fail closed even when the tool exists in the catalog',
+  );
+
+  const parsed = parseCreateRunRequest({
+    schemaVersion: 1,
+    threadId: randomUUID(),
+    input: { text: 'Prepare a plan.', artifactRefs: [] },
+    agentDefinitionId: 'scenario-agent',
+    model: { providerId: randomUUID(), modelId: 'scenario-model', configurationVersion: 1 },
+    approvalMode: 'full_access',
+    executionMode: 'plan',
+    connectionIds: [],
+  });
+  assert.equal(parsed.executionMode, 'plan');
+  assert.equal(parsed.approvalMode, 'full_access', 'executionMode must remain orthogonal to approvalMode');
+  const defaultParsed = parseCreateRunRequest({
+    schemaVersion: 1,
+    threadId: randomUUID(),
+    input: { text: 'Execute normally.', artifactRefs: [] },
+    agentDefinitionId: 'scenario-agent',
+    model: { providerId: randomUUID(), modelId: 'scenario-model', configurationVersion: 1 },
+    approvalMode: 'ask',
+    connectionIds: [],
+  });
+  assert.equal(defaultParsed.executionMode, 'execute', 'omitted executionMode must preserve legacy execute behavior');
+
+  const planBenchmark: AgentBenchmarkCase = {
+    id: 'coding',
+    prompt: 'Prepare a durable implementation plan only.',
+    toolName: 'scenario_plan_read',
+    toolArgumentsJson: '{}',
+    toolDescription: 'read fixture',
+    toolInputSchema: { type: 'object', additionalProperties: false },
+    toolSummary: 'read complete',
+    finalText: 'plan ready',
+    usage: [
+      { inputTokens: 10, outputTokens: 2, cachedInputTokens: 0 },
+      { inputTokens: 10, outputTokens: 2, cachedInputTokens: 0 },
+    ],
+  };
+  const snapshot = benchmarkSnapshot(planBenchmark, scope);
+  snapshot.definition.executionMode = 'plan';
+  assert.equal(parseRunDefinition(JSON.stringify(snapshot.definition)).executionMode, 'plan');
+  assert.throws(
+    () => parseRunDefinition(JSON.stringify({ ...snapshot.definition, executionMode: 'unsafe' })),
+    /AGENT_DURABLE_STATE_INVALID/,
+    'durable executionMode decoder must fail closed on unknown values',
+  );
+  const inputEntry: LedgerEntryView = {
+    id: 'plan-mode-input',
+    threadId: snapshot.threadId,
+    runId: snapshot.id,
+    sequence: 1,
+    kind: 'user_input',
+    payload: { text: planBenchmark.prompt, artifactRefs: [] },
+    createdAt: snapshot.createdAt,
+  };
+  const conversations = new ConversationService(new StaticConversationRepository([inputEntry]), clock, null!, null!);
+  const modelContext = new ContextService(
+    conversations,
+    new RecallService(new EmptyRecallRepository(), clock),
+    new SkillRegistry(),
+    emptyModelContinuations,
+    null!,
+  );
+  const scriptedModel = new ScriptedLanguageModel([
+    {
+      assertRequest: (request) => {
+        assert.deepEqual(
+          request.tools.map((item) => item.name).sort(),
+          ['plan_update', 'request_user_input', 'scenario_plan_read'],
+          'the actual model request must not contain mutation tool schemas in plan mode',
+        );
+      },
+      events: [
+        { type: 'usage', usage: { inputTokens: 10, outputTokens: 2, cachedInputTokens: 0 } },
+        { type: 'completed', finishReason: 'stop' },
+      ],
+    },
+  ]);
+  const providers = new ProviderService(new StaticProviderRepository(benchmarkProvider), scriptedModel, clock);
+  const modelRunner = new ModelStepRunner(providers, modelContext, scriptedModel, new ScenarioModelCallLimiter());
+  const prepared = await modelRunner.prepare(snapshot, scope, planSchemas, {});
+  const modelResult = await collectBackendSignals(
+    modelRunner.runAttempt(snapshot, prepared.contextPlan, { attemptId: 'plan-attempt', attemptIndex: 1 }, context.signal),
+  );
+  assert.equal(modelResult.result.error, undefined);
+  scriptedModel.assertConsumed();
+
+  const gate = completionGateDecision(
+    {
+      definition: { executionMode: 'plan' },
+      plan: {
+        schemaVersion: 1,
+        revision: 1,
+        items: [{ id: 'implement', title: 'Implement after approval', detail: null, status: 'pending', dependsOn: [], evidenceRefs: [] }],
+      },
+    } as unknown as RunSnapshot,
+    { tools: [], readyEvidenceRefs: [], gateBlocksSinceToolProgress: 0 },
+    'Prepare a plan.',
+  );
+  assert.equal(gate.kind, 'complete', 'pending durable plan items are the output of a plan-only Run, not unfinished execution');
+
+  const providerId = randomUUID();
+  const threadId = randomUUID();
+  const sourceRunId = randomUUID();
+  const resolvedModel = resolveProviderModelConfig({
+    id: 'plan-lineage-model',
+    capabilityOverrides: { contextWindow: 8_192, maxOutputTokens: 1_024, supportsTools: true },
+  });
+  const sourcePlan: RunSnapshot['plan'] = {
+    schemaVersion: 1,
+    revision: 2,
+    items: [
+      {
+        id: 'implementation',
+        title: 'Implement the approved change',
+        detail: 'Execute in a separate Run.',
+        status: 'pending',
+        dependsOn: [],
+        evidenceRefs: ['artifact:plan-evidence'],
+      },
+    ],
+  };
+  const sourcePlanRun = {
+    ...snapshot,
+    ...scope,
+    id: sourceRunId,
+    threadId,
+    status: 'completed_unverified',
+    completedAt: 1_800_000_100,
+    definition: {
+      ...snapshot.definition,
+      executionMode: 'plan',
+      model: { providerId, modelId: resolvedModel.id, configurationVersion: 1 },
+    },
+    plan: sourcePlan,
+    goal: { text: 'Ship the planned change.', revision: 1, updatedAt: 1_800_000_000 },
+  } as RunSnapshot;
+  let createRecord: AtomicCreateRun | null = null;
+  const lineageRunService = new RunService(
+    {
+      get: async () => ({
+        revision: 1,
+        requestedSettings: { model: { fallbackModels: [] } },
+        effectiveSettings: { feature: { enabled: true } },
+      }),
+    } as never,
+    { get: async () => ({ activeVersion: '1.0.0', desiredState: 'enabled', observedState: 'running', acceptNewRuns: true, policyRevision: 1 }) } as never,
+    { get: async () => ({ id: providerId, enabled: true, version: 1, models: [resolvedModel] }) } as never,
+    {
+      get: async () => ({
+        version: 1,
+        effective: {
+          maxRunSteps: 100,
+          maxActiveExecutionSeconds: 3_600,
+          toolTimeoutSeconds: 120,
+          maxToolOutputBytes: 1_048_576,
+          maxRecallItems: 5,
+          maxRecallBytes: 8_192,
+          maxSubagentMessages: 100,
+          maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
+        },
+      }),
+    } as never,
+    { require: () => ({ id: 'scenario-agent', version: '1.0.0', requiredModelCapabilities: [] }) } as never,
+    async () => { throw new Error('SCENARIO_UNEXPECTED_ENVIRONMENT'); },
+    {
+      createRun: async (record: AtomicCreateRun) => {
+        createRecord = record;
+        return {
+          run: {
+            ...sourcePlanRun,
+            id: record.runId,
+            parentRunId: record.parentRunId ?? null,
+            status: 'created',
+            completedAt: null,
+            definition: record.definition,
+            plan: record.initialPlan ?? { schemaVersion: 1, revision: 0, items: [] },
+            goal: record.initialGoal ?? { text: null, revision: 0, updatedAt: null },
+          },
+          inputSequence: 1,
+          replayed: false,
+        };
+      },
+    } as never,
+    { snapshot: async (_scope: Scope, runId: string) => (runId === sourceRunId ? sourcePlanRun : null) } as never,
+    clock,
+  );
+  const executeFromPlan = await lineageRunService.create(scope, {
+    threadId,
+    input: { text: 'Execute the approved plan.', artifactRefs: [] },
+    agentDefinitionId: 'scenario-agent',
+    model: { providerId, modelId: resolvedModel.id, configurationVersion: 1 },
+    approvalMode: 'full_access',
+    executionMode: 'execute',
+    plannedFromRunId: sourceRunId,
+    connectionIds: [],
+    command: { key: randomUUID(), requestId: randomUUID() },
+  });
+  assert.ok(createRecord);
+  assert.equal(createRecord.parentRunId, sourceRunId, 'parentRunId remains the single durable Run lineage authority');
+  assert.deepEqual(createRecord.initialPlan, sourcePlan, 'execute Run must inherit the durable plan including evidence refs');
+  assert.equal(createRecord.initialGoal?.text, sourcePlanRun.goal.text, 'execute Run inherits the plan Run goal when no new goal is supplied');
+  assert.equal(executeFromPlan.definition.executionMode, 'execute');
+  assert.equal(executeFromPlan.definition.approvalMode, 'full_access', 'plan confirmation must not override execute Run approval mode');
+  await assert.rejects(
+    () => lineageRunService.create(scope, {
+      threadId,
+      input: { text: 'Invalid chained plan.', artifactRefs: [] },
+      agentDefinitionId: 'scenario-agent',
+      model: { providerId, modelId: resolvedModel.id, configurationVersion: 1 },
+      approvalMode: 'ask',
+      executionMode: 'plan',
+      plannedFromRunId: sourceRunId,
+      connectionIds: [],
+      command: { key: randomUUID(), requestId: randomUUID() },
+    }),
+    /VALIDATION_FAILED/,
+    'plannedFromRunId is only valid when starting a separate execute Run',
+  );
+
+  return [
+    { name: 'plan_model_surface_mutations', value: 0, unit: 'tools' },
+    { name: 'forged_plan_mutations_allowed', value: 0, unit: 'tools' },
+    { name: 'plan_control_tools_available', value: 2, unit: 'tools' },
+    { name: 'planned_execute_lineage_links', value: createRecord?.parentRunId === sourceRunId ? 1 : 0, unit: 'runs' },
+  ];
+};
+
+const defaultPolicyAuthorityScenario: Scenario = async () => {
+  const defaults = AGENT_DEFAULTS as unknown as Record<string, unknown>;
+  for (const key of [
+    'approvalTtlSeconds',
+    'leaseTtlSeconds',
+    'leaseRenewSeconds',
+    'estimateMargin',
+    'maxConcurrentToolCalls',
+  ] as const) {
+    assert.equal(key in defaults, false, `AGENT_DEFAULTS.${key} must not remain as a dead policy authority`);
+  }
+  assert.deepEqual(
+    Object.keys(defaults).sort(),
+    ['minFreeDiskBytes', 'modelRetryCount', 'settings'],
+    'AGENT_DEFAULTS top-level policy bag must contain only live runtime defaults plus settings',
+  );
+  assert.equal(typeof defaults.minFreeDiskBytes, 'number', 'artifact free-space default remains a live authority');
+  assert.equal(typeof defaults.modelRetryCount, 'number', 'model retry count remains a live authority');
+  assert.equal(TOOL_APPROVAL_TTL_SECONDS, 600, 'approval producer/validator contract keeps the established 10 minute TTL');
+  assert.equal(LEASE_RENEW_INTERVAL_MS, 10_000, 'all live lease renewal paths share one 10 second cadence');
+  assert.equal(toolLeaseTtlSeconds(1), 30, 'Agent tool leases retain the minimum 30 second TTL');
+  assert.equal(toolLeaseTtlSeconds(60), 75, 'Agent tool lease TTL remains tool timeout plus grace');
+  assert.equal(toolLeaseTtlSeconds(300), 300, 'Agent tool lease TTL remains capped at 300 seconds');
+  return [
+    { name: 'dead_top_level_defaults', value: 0, unit: 'fields' },
+    { name: 'live_top_level_defaults', value: 2, unit: 'fields' },
+    { name: 'approval_ttl_authorities', value: 1, unit: 'authorities' },
+    { name: 'lease_renewal_cadence_authorities', value: 1, unit: 'authorities' },
+    { name: 'agent_tool_lease_policy_cases', value: 3, unit: 'cases' },
+  ];
+};
+
+const budgetSettingsDeadFieldScenario: Scenario = async () => {
+  const deadSettingsKeys = ['maxContextTokens', 'maxOutputTokens', 'maxRawToolBytes'] as const;
+  const assertDeadSettingsAbsent = (value: unknown, label: string): void => {
+    assert.ok(value && typeof value === 'object' && !Array.isArray(value), `${label} must be an object`);
+    const settings = value as Record<string, unknown>;
+    for (const sectionName of ['budget', 'hardLimits'] as const) {
+      const section = settings[sectionName];
+      assert.ok(section && typeof section === 'object' && !Array.isArray(section), `${label}.${sectionName} missing`);
+      for (const key of deadSettingsKeys) {
+        assert.equal(
+          key in (section as Record<string, unknown>),
+          false,
+          `${label}.${sectionName}.${key} must not remain a saveable Agent setting`,
+        );
+      }
+    }
+  };
+
+  assertDeadSettingsAbsent(createDefaultAgentSettings(), 'defaults');
+  const currentDefaults = createDefaultAgentSettings() as unknown as Record<string, unknown>;
+  const legacyPayload = {
+    ...currentDefaults,
+    budget: {
+      ...(currentDefaults.budget as Record<string, unknown>),
+      maxContextTokens: 1_111,
+      maxOutputTokens: 222,
+      maxRawToolBytes: 333,
+    },
+    hardLimits: {
+      ...(currentDefaults.hardLimits as Record<string, unknown>),
+      maxContextTokens: 4_444,
+      maxOutputTokens: 555,
+      maxRawToolBytes: 666,
+    },
+  };
+  assertDeadSettingsAbsent(normalizeRequestedSettings(legacyPayload), 'normalized legacy settings');
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-budget-dead-fields-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'budget-dead-fields.sqlite', nodeEnv: 'test' });
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'budget-dead-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_settings (user_id, value_json, revision, updated_at) VALUES (1, ?, 1, 1)`,
+      [JSON.stringify(legacyPayload)],
+    );
+    const repository = new SqliteAgentSettingsRepository(db);
+    const service = new AgentSettingsService(
+      repository,
+      { get: async () => null, save: async () => undefined, delete: async () => undefined, deleteExpired: async () => undefined } as never,
+      { read: async () => ({ artifactUsedBytes: 0, artifactReservedBytes: 0, executingRuntimes: 0 }) } as never,
+      { nowUnixSeconds: () => 2 },
+    );
+    const loaded = await service.get(1);
+    assertDeadSettingsAbsent(loaded.requestedSettings, 'GET requested settings');
+    assertDeadSettingsAbsent(loaded.effectiveSettings, 'GET effective settings');
+    assertDeadSettingsAbsent({ budget: {}, hardLimits: loaded.hardLimits }, 'GET hard limits');
+
+    for (const key of deadSettingsKeys) {
+      await assert.rejects(
+        () => service.patch(1, { budget: { [key]: 999 } }, 1),
+        /VALIDATION_FAILED/,
+        `removed budget.${key} patch surface must fail closed`,
+      );
+      await assert.rejects(
+        () => service.previewHardLimits(1, { [key]: 999 }, 1),
+        /VALIDATION_FAILED/,
+        `removed hardLimits.${key} preview surface must fail closed`,
+      );
+    }
+
+    let storedPolicy = {
+      key: 'agent.execution-policy.v1',
+      value: {
+        schemaVersion: 1,
+        overrides: { maxRunSteps: 42, maxRawToolBytes: 777 },
+      } as JsonValue,
+      bytes: 1,
+      version: 1,
+      updatedAt: 1,
+    };
+    const executionPolicies = new AgentExecutionPolicyService(
+      {
+        get: async () => storedPolicy,
+        put: async (_scope: Scope, key: string, value: JsonValue, expectedVersion: number | null) => {
+          assert.equal(expectedVersion, storedPolicy.version);
+          storedPolicy = { key, value, bytes: 1, version: storedPolicy.version + 1, updatedAt: 2 };
+          return storedPolicy;
+        },
+        delete: async () => false,
+      },
+      service,
+    );
+    const legacyPolicy = await executionPolicies.get({ userId: 1, appId: 'scenario-app' });
+    assert.equal('maxRawToolBytes' in legacyPolicy.overrides, false, 'legacy app policy raw quota must normalize away');
+    assert.equal('maxRawToolBytes' in legacyPolicy.effective, false, 'effective app policy must not recreate raw quota');
+    assert.equal(legacyPolicy.effective.maxRunSteps, 42);
+    await assert.rejects(
+      () => executionPolicies.replace({ userId: 1, appId: 'scenario-app' }, { maxRawToolBytes: 999 }, 1),
+      /VALIDATION_FAILED/,
+      'new app execution policy writes must reject maxRawToolBytes',
+    );
+    await executionPolicies.replace({ userId: 1, appId: 'scenario-app' }, { maxRunSteps: 43 }, 1);
+    const persistedPolicyOverrides = (storedPolicy.value as { overrides?: Record<string, unknown> }).overrides ?? {};
+    assert.equal(
+      'maxRawToolBytes' in persistedPolicyOverrides,
+      false,
+      'the next normal app policy write must converge legacy raw quota storage',
+    );
+
+    await service.patch(1, { model: { defaultProviderId: 'budget-contract-provider' } }, 1);
+    const storedSettings = await db.queryOne<{ value_json: string }>(
+      'SELECT value_json FROM agent_settings WHERE user_id = 1',
+    );
+    assert.ok(storedSettings);
+    assertDeadSettingsAbsent(JSON.parse(storedSettings.value_json), 'persisted settings after normal write');
+
+    const legacyRunBudget = {
+      maxContextTokens: 16_384,
+      maxOutputTokens: 4_096,
+      maxRunSteps: 80,
+      maxActiveExecutionSeconds: 1_800,
+      toolTimeoutSeconds: 60,
+      maxToolOutputBytes: 65_536,
+      maxRawToolBytes: 10_485_760,
+      maxRecallItems: 5,
+      maxRecallBytes: 8_192,
+      maxSubagentMessages: 1_000,
+      maxSubagentMessageBytes: 1_048_576,
+      contextCompactionMode: 'balanced',
+      revision: 1,
+    };
+    const decodedLegacyBudget = parseRunBudget(JSON.stringify(legacyRunBudget));
+    assert.equal(
+      'maxRawToolBytes' in (decodedLegacyBudget as unknown as Record<string, unknown>),
+      false,
+      'legacy durable Run budget must load while dropping maxRawToolBytes',
+    );
+    const { maxRawToolBytes: _legacyRawQuota, ...currentRunBudget } = legacyRunBudget;
+    assert.deepEqual(
+      parseRunBudget(JSON.stringify(currentRunBudget)),
+      currentRunBudget,
+      'new durable Run budgets without maxRawToolBytes must decode',
+    );
+  } finally {
+    await db.close().catch(() => undefined);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+
+  return [
+    { name: 'saveable_dead_budget_fields', value: 0, unit: 'fields' },
+    { name: 'legacy_raw_quota_runtime_owners', value: 0, unit: 'owners' },
+    { name: 'durable_budget_legacy_decode_failures', value: 0, unit: 'runs' },
+  ];
+};
+
+const providerSettingsDeadFieldScenario: Scenario = async () => {
+  const defaults = createDefaultAgentSettings() as unknown as Record<string, unknown>;
+  assert.equal('safety' in defaults, false, 'new Agent settings must not serialize the removed safety section');
+
+  const legacyPayload = {
+    ...createDefaultAgentSettings(),
+    safety: { providerPrivateNetworkExceptions: ['127.0.0.1', 'internal.example'] },
+  };
+  const normalizedLegacy = normalizeRequestedSettings(legacyPayload);
+  assert.equal(
+    'safety' in (normalizedLegacy as unknown as Record<string, unknown>),
+    false,
+    'legacy provider network exceptions must be ignored during normalization',
+  );
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-settings-dead-field-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'settings-dead-field.sqlite', nodeEnv: 'test' });
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'settings-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_settings (user_id, value_json, revision, updated_at) VALUES (1, ?, 1, 1)`,
+      [JSON.stringify(legacyPayload)],
+    );
+
+    const repository = new SqliteAgentSettingsRepository(db);
+    const service = new AgentSettingsService(
+      repository,
+      { get: async () => null, save: async () => undefined, delete: async () => undefined, deleteExpired: async () => undefined } as never,
+      { read: async () => ({ artifactUsedBytes: 0, artifactReservedBytes: 0 }) } as never,
+      { nowUnixSeconds: () => 2 },
+    );
+    const loaded = await service.get(1);
+    assert.equal(
+      'safety' in (loaded.requestedSettings as unknown as Record<string, unknown>),
+      false,
+      'legacy persisted settings must load while dropping the removed section from GET',
+    );
+    assert.equal(
+      'safety' in (loaded.effectiveSettings as unknown as Record<string, unknown>),
+      false,
+      'effective settings must not recreate the removed section',
+    );
+
+    await assert.rejects(
+      () => service.patch(1, { safety: { providerPrivateNetworkExceptions: ['127.0.0.1'] } }, 1),
+      /VALIDATION_FAILED/,
+      'removed safety patch surface must fail closed',
+    );
+
+    await service.patch(1, { model: { defaultProviderId: 'provider-after-legacy-read' } }, 1);
+    const stored = await db.queryOne<{ value_json: string }>(
+      'SELECT value_json FROM agent_settings WHERE user_id = 1',
+    );
+    assert.ok(stored);
+    assert.equal(
+      'safety' in (JSON.parse(stored.value_json) as Record<string, unknown>),
+      false,
+      'the next normal settings write must naturally converge legacy JSON to the current schema',
+    );
+  } finally {
+    await db.close().catch(() => undefined);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const providerFallbackChainScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-provider-fallback-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'provider-fallback.sqlite', nodeEnv: 'test' });
+  const stateCommit = new SqliteStateCommitAdapter(db);
+  const repository = new SqliteRunRepository(db);
+  const conversationRepository = new SqliteConversationRepository(db);
+  const now = 1_800_000_000;
+  const runId = 'provider-fallback-run';
+  const threadId = 'provider-fallback-thread';
+  const runtimeId = 'provider-fallback-runtime';
+  const primaryRef = { providerId: 'primary-provider', modelId: 'primary-model', configurationVersion: 3 };
+  const fallbackRef = { providerId: 'fallback-provider', modelId: 'fallback-model', configurationVersion: 7 };
+
+  const primaryPersisted: PersistedProviderView = {
+    id: primaryRef.providerId,
+    kind: 'openai-compatible',
+    displayName: 'Primary provider',
+    baseUrl: 'http://primary.invalid/v1',
+    protocol: 'responses',
+    hasCredential: false,
+    credentialRevision: 0,
+    models: [
+      {
+        id: primaryRef.modelId,
+        capabilityOverrides: {
+          contextWindow: 8_192,
+          maxOutputTokens: 1_024,
+          supportsTools: true,
+          supportsImageInput: true,
+          reasoning: { supportedEfforts: ['none', 'medium'], defaultEffort: 'medium' },
+        },
+      },
+    ],
+    liveCapabilities: [],
+    enabled: true,
+    version: primaryRef.configurationVersion,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const fallbackPersisted: PersistedProviderView = {
+    id: fallbackRef.providerId,
+    kind: 'openai-compatible',
+    displayName: 'Fallback provider',
+    baseUrl: 'http://fallback.invalid/v1',
+    protocol: 'responses',
+    hasCredential: false,
+    credentialRevision: 0,
+    models: [
+      {
+        id: fallbackRef.modelId,
+        capabilityOverrides: {
+          contextWindow: 4_096,
+          maxOutputTokens: 512,
+          supportsTools: true,
+          supportsImageInput: true,
+          reasoning: { supportedEfforts: ['none', 'medium'], defaultEffort: 'medium' },
+        },
+      },
+    ],
+    liveCapabilities: [],
+    enabled: true,
+    version: fallbackRef.configurationVersion,
+    createdAt: now,
+    updatedAt: now,
+  };
+  const primaryCapabilities = snapshotProviderModelCapabilities(resolveProviderModelConfig(primaryPersisted.models[0]!));
+  const fallbackCapabilities = snapshotProviderModelCapabilities(resolveProviderModelConfig(fallbackPersisted.models[0]!));
+  const frozenFallbackRoute = { model: fallbackRef, modelCapabilities: fallbackCapabilities };
+
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'fallback-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads
+        (id, user_id, app_id, title, title_source, next_sequence, created_at, updated_at)
+       VALUES (?, 1, 'scenario-app', 'provider fallback', 'manual', 2, ?, ?)`,
+      [threadId, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, goal_text, goal_revision, goal_updated_at,
+         verification_status, budget_json, definition_json, plan_json, usage_json,
+         active_execution_started_at, executing_runtime_count, consumed_input_sequence, input_revision,
+         created_at, started_at, updated_at)
+       VALUES (?, 1, 'scenario-app', ?, 'running', 'in_progress', 'Finish through fallback.', 1, ?,
+               'not_started', ?, ?, ?, ?, NULL, 0, 0, 1, ?, ?, ?)`,
+      [
+        runId,
+        threadId,
+        now,
+        JSON.stringify({
+          maxContextTokens: primaryCapabilities.contextWindow,
+          maxOutputTokens: primaryCapabilities.maxOutputTokens,
+          maxRunSteps: 20,
+          maxActiveExecutionSeconds: 3_600,
+          toolTimeoutSeconds: 120,
+          maxToolOutputBytes: 1_048_576,
+          maxRecallItems: 5,
+          maxRecallBytes: 8_192,
+          maxSubagentMessages: 100,
+          maxSubagentMessageBytes: 1_048_576,
+          revision: 1,
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          agentDefinitionId: 'scenario-agent',
+          requiredModelCapabilities: ['tools', 'image_input', 'reasoning'],
+          model: primaryRef,
+          modelCapabilities: primaryCapabilities,
+          rootModelRoutes: [frozenFallbackRoute],
+          reasoningEffort: 'medium',
+          approvalMode: 'ask',
+          connectionIds: [],
+          policyRevision: 1,
+          settingsRevision: 1,
+        }),
+        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+        JSON.stringify({
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          steps: 0,
+          subagentMessages: 0,
+          subagentMessageBytes: 0,
+        }),
+        now,
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO ai_thread_entries
+        (id, thread_id, user_id, app_id, run_id, sequence, kind, payload_json, created_at)
+       VALUES ('provider-fallback-input', ?, 1, 'scenario-app', ?, 1, 'user_input', ?, ?)`,
+      [threadId, runId, JSON.stringify({ text: 'Use the configured fallback if the primary is unavailable.', artifactRefs: [] }), now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES (?, ?, 'root', 'native', ?, 'running', 'runnable', 0, 'owner-provider-fallback', ?, ?)`,
+      [runtimeId, runId, JSON.stringify(primaryRef), now, now],
+    );
+
+    const conversations = new ConversationService(conversationRepository, clock, null!, null!);
+    const context = new ContextService(
+      conversations,
+      new RecallService(new EmptyRecallRepository(), clock),
+      new SkillRegistry(),
+      emptyModelContinuations,
+      null!,
+    );
+    const scriptedModel = new ScriptedLanguageModel([
+      {
+        events: [{ type: 'usage', usage: { inputTokens: 20, outputTokens: 1, cachedInputTokens: 0 } }],
+        error: new Error('PROVIDER_HTTP_503'),
+        assertRequest: (request) => assert.equal(request.providerId, primaryRef.providerId),
+      },
+      {
+        events: [{ type: 'usage', usage: { inputTokens: 21, outputTokens: 1, cachedInputTokens: 0 } }],
+        error: new Error('PROVIDER_HEADERS_TIMEOUT'),
+        assertRequest: (request) => assert.equal(request.providerId, primaryRef.providerId),
+      },
+      {
+        events: [
+          { type: 'message.delta', text: 'stale-' },
+          { type: 'tool.delta', index: 0, id: 'stale-tool', name: 'scenario_read', argumentsDelta: '{}' },
+          { type: 'usage', usage: { inputTokens: 22, outputTokens: 2, cachedInputTokens: 0 } },
+        ],
+        error: new Error('PROVIDER_UNAVAILABLE'),
+        assertRequest: (request) => assert.equal(request.providerId, primaryRef.providerId),
+      },
+      {
+        events: [
+          { type: 'message.delta', text: 'fallback-ok' },
+          { type: 'usage', usage: { inputTokens: 18, outputTokens: 3, cachedInputTokens: 2 } },
+          { type: 'completed', finishReason: 'stop' },
+        ],
+        assertRequest: (request) => {
+          assert.equal(request.providerId, fallbackRef.providerId);
+          assert.equal(request.modelId, fallbackRef.modelId);
+          assert.equal(request.configurationVersion, fallbackRef.configurationVersion);
+          assert.equal(request.capabilitySnapshot?.contextWindow, fallbackCapabilities.contextWindow);
+        },
+      },
+    ]);
+    const providers = new ProviderService(
+      new StaticProviderCatalogRepository([primaryPersisted, fallbackPersisted]),
+      scriptedModel,
+      clock,
+    );
+    const modelRunner = new ModelStepRunner(providers, context, scriptedModel, new ScenarioModelCallLimiter());
+    const snapshot = await repository.snapshot(scope, runId);
+    assert.ok(snapshot, 'fallback fixture run must exist');
+    assert.equal(snapshot.definition.rootModelRoutes?.length, 1, 'frozen fallback routes must survive durable definition decode');
+    assert.equal(snapshot.definition.rootModelRoutes?.[0]?.modelCapabilities?.contextWindow, fallbackCapabilities.contextWindow);
+    assert.deepEqual(
+      runModelRoutes(snapshot.definition).map((route) => route.model),
+      [primaryRef, fallbackRef],
+      'effective frozen route chain must contain primary exactly once followed by configured fallbacks',
+    );
+
+    modelRunner.waitBeforeRetry = async () => undefined;
+    const signal = new AbortController().signal;
+    const backend = new NativeAgentBackend(
+      repository,
+      { listDelegations: async () => [] } as never,
+      stateCommit,
+      modelRunner,
+      { schemas: () => [] } as unknown as ToolCallRunner,
+      clock,
+    );
+    const backendSignals: BackendSignal[] = [];
+    for await (const backendSignal of backend.execute(snapshot, signal)) backendSignals.push(backendSignal);
+
+    const finalSnapshot = await repository.snapshot(scope, runId);
+    assert.ok(finalSnapshot);
+    assert.equal(finalSnapshot.status, 'completed_unverified');
+    const durableRoute = await repository.rootRuntimeModel(scope, runId);
+    assert.deepEqual(durableRoute, fallbackRef, 'runtime model_ref_json must be the restart-safe current route');
+
+    const transientMessages = backendSignals.filter(
+      (item): item is Extract<BackendSignal, { type: 'transient'; eventType: 'message.delta' }> =>
+        item.type === 'transient' && item.eventType === 'message.delta',
+    );
+    const staleMessage = transientMessages.find((item) => item.payload.text === 'stale-');
+    const fallbackMessage = transientMessages.find((item) => item.payload.text === 'fallback-ok');
+    assert.ok(staleMessage && fallbackMessage);
+    assert.notEqual(staleMessage.payload.attemptId, fallbackMessage.payload.attemptId);
+    assert.notEqual(staleMessage.payload.attemptIndex, fallbackMessage.payload.attemptIndex);
+
+    const routeEvents = await db.queryAll<{ payload_json: string }>(
+      `SELECT payload_json FROM agent_events WHERE run_id = ? AND type = 'model.route_changed' ORDER BY sequence`,
+      [runId],
+    );
+    assert.equal(routeEvents.length, 1, 'production execution must emit exactly one durable route change');
+    const routePayload = JSON.parse(routeEvents[0]!.payload_json) as Record<string, unknown>;
+    assert.deepEqual(routePayload.from, primaryRef);
+    assert.deepEqual(routePayload.to, fallbackRef);
+    assert.equal(routePayload.routeIndex, 1);
+    assert.equal(routePayload.errorCode, 'PROVIDER_UNAVAILABLE');
+
+    const attempts = await db.queryAll<{
+      attempt_index: number;
+      status: string;
+      input_tokens: number | null;
+      output_tokens: number | null;
+      error_code: string | null;
+    }>(
+      `SELECT a.attempt_index, a.status, a.input_tokens, a.output_tokens, a.error_code
+       FROM agent_model_attempts a
+       JOIN agent_steps s ON s.id = a.step_id
+       WHERE s.run_id = ? ORDER BY a.attempt_index`,
+      [runId],
+    );
+    assert.deepEqual(
+      attempts.map((attempt) => [attempt.attempt_index, attempt.status, attempt.input_tokens, attempt.output_tokens]),
+      [
+        [1, 'failed', 20, 1],
+        [2, 'failed', 21, 1],
+        [3, 'failed', 22, 2],
+        [4, 'completed', 18, 3],
+      ],
+      'each route attempt must retain independent durable usage',
+    );
+
+    const fallbackRequest = scriptedModel.requests.at(-1)!;
+    const primaryContinuation: ModelProviderContinuation = {
+      schemaVersion: 1,
+      providerId: primaryRef.providerId,
+      modelId: primaryRef.modelId,
+      configurationVersion: primaryRef.configurationVersion,
+      protocol: 'responses',
+      format: 'openai.responses.stateless.v1',
+      data: { parts: [] },
+    };
+    assert.deepEqual(
+      decodeOpenAiResponsesContinuation(primaryContinuation, fallbackRequest, 'responses'),
+      [],
+      'opaque provider continuation must fail closed across a route change',
+    );
+    scriptedModel.assertConsumed();
+
+    return [
+      { name: 'same_route_failed_attempts_before_fallback', value: 3, unit: 'attempts' },
+      { name: 'durable_route_changes', value: 1, unit: 'events' },
+      { name: 'authoritative_attempts', value: attempts.length, unit: 'attempts' },
+      { name: 'fallback_route_index', value: 1, unit: 'index' },
+      { name: 'cross_route_continuations_reused', value: 0, unit: 'continuations' },
+    ];
+  } finally {
+    await db.close().catch(() => undefined);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 };
 
 const restartRecoveryScenario: Scenario = async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-scenario-'));
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'restart.sqlite', nodeEnv: 'test' });
-  const stateCommit = new SqliteStateCommitAdapter(db);
+  const restartObserverEvents: Array<{ runId: string; type: string }> = [];
+  const stateCommit = new SqliteStateCommitAdapter(db, (run, events) => {
+    for (const event of events) restartObserverEvents.push({ runId: run.id, type: event.type });
+  });
   const leases = new SqliteLeaseRepository(db);
   const now = 1_800_000_000;
 
@@ -256,7 +6063,6 @@ const restartRecoveryScenario: Scenario = async () => {
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
-    maxRawToolBytes: 1_048_576,
     maxRecallItems: 5,
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
@@ -369,15 +6175,17 @@ const restartRecoveryScenario: Scenario = async () => {
     await db.execute(
       `INSERT INTO agent_steps
         (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
-         input_refs_json, output_refs_json, created_at)
-       VALUES ('read-step', 'read-run', 'read-runtime', 1, 'tool', 'running', 0, '[]', '[]', ?)`,
-      [now],
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES
+         ('read-model-step', 'read-run', 'read-runtime', 1, 'model', 'completed', 0, '[]', '[]', ?, ?),
+         ('read-step', 'read-run', 'read-runtime', 2, 'tool', 'running', 0, '[]', '[]', ?, NULL)`,
+      [now, now, now],
     );
     await db.execute(
       `INSERT INTO agent_tool_calls
-        (id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, created_at, started_at)
-       VALUES ('read-tool', 'read-run', 'read-runtime', 'read-step', 'provider-read', 'workspace_read_file', '1',
+       VALUES ('read-tool', 'read-run', 'read-runtime', 'read-step', 'read-model-step', 'provider-read', 'workspace_read_file', '1',
                ?, 'sha256:read', 1, 'read', 'running', ?, ?)`,
       [toolInspection('workspace_read_file', 'workspace:read', 'read', 'sha256:read'), now, now],
     );
@@ -386,21 +6194,21 @@ const restartRecoveryScenario: Scenario = async () => {
     await db.execute(
       `INSERT INTO agent_steps
         (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
-         input_refs_json, output_refs_json, created_at)
-       VALUES ('mutation-step', 'mutation-run', 'mutation-runtime', 1, 'tool', 'running', 0, '[]', '[]', ?)`,
-      [now],
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES
+         ('mutation-model-step', 'mutation-run', 'mutation-runtime', 1, 'model', 'completed', 0, '[]', '[]', ?, ?),
+         ('mutation-step', 'mutation-run', 'mutation-runtime', 2, 'tool', 'running', 0, '[]', '[]', ?, NULL)`,
+      [now, now, now],
     );
     await db.execute(
       `INSERT INTO agent_tool_calls
-        (id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, created_at, started_at)
-       VALUES ('mutation-tool', 'mutation-run', 'mutation-runtime', 'mutation-step', 'provider-mutation',
+       VALUES ('mutation-tool', 'mutation-run', 'mutation-runtime', 'mutation-step', 'mutation-model-step', 'provider-mutation',
                'workspace_write_file', '1', ?, 'sha256:mutation', 1, 'mutate', 'running', ?, ?)`,
       [toolInspection('workspace_write_file', 'workspace:mutation', 'mutate', 'sha256:mutation'), now, now],
     );
-    await db.execute(
-      "INSERT INTO agent_resource_fences (resource_key, next_fence) VALUES ('workspace:mutation', 2)",
-    );
+    await db.execute("INSERT INTO agent_resource_fences (resource_key, next_fence) VALUES ('workspace:mutation', 2)");
     await db.execute(
       `INSERT INTO agent_leases
         (id, resource_key, mode, owner_type, owner_id, fence, acquired_at, expires_at, active_mutation, operation_id)
@@ -410,6 +6218,11 @@ const restartRecoveryScenario: Scenario = async () => {
 
     const interrupted = await stateCommit.interruptNonTerminalRuns(now + 1);
     assert.equal(interrupted, 3);
+    assert.equal(
+      restartObserverEvents.filter((item) => item.type === 'run.interrupted').length,
+      3,
+      'backend restart transitions must reach the post-commit durable observer exactly once per Run',
+    );
 
     const modelAttempt = await db.queryOne<{ status: string; completed_at: number | null; error_code: string | null }>(
       "SELECT status, completed_at, error_code FROM agent_model_attempts WHERE id = 'model-attempt'",
@@ -483,7 +6296,12 @@ const restartRecoveryScenario: Scenario = async () => {
     );
     assert.deepEqual(resolvedRun, { version: 3, needs_reconciliation: 0 });
 
-    const probe = await leases.acquireMany({ type: 'system', id: 'after-reconcile' }, ['workspace:mutation'], 'write', 30);
+    const probe = await leases.acquireMany(
+      { type: 'system', id: 'after-reconcile' },
+      ['workspace:mutation'],
+      'write',
+      30,
+    );
     assert.equal(probe.length, 1);
     await leases.release(
       probe.map((lease) => lease.id),
@@ -515,7 +6333,10 @@ const restartRecoveryScenario: Scenario = async () => {
 const appDisableScopeScenario: Scenario = async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-disable-scenario-'));
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'disable.sqlite', nodeEnv: 'test' });
-  const stateCommit = new SqliteStateCommitAdapter(db);
+  const disableObserverEvents: Array<{ runId: string; type: string }> = [];
+  const stateCommit = new SqliteStateCommitAdapter(db, (run, events) => {
+    for (const event of events) disableObserverEvents.push({ runId: run.id, type: event.type });
+  });
   const now = 1_800_100_000;
   const budget = JSON.stringify({
     maxContextTokens: 16_384,
@@ -524,7 +6345,6 @@ const appDisableScopeScenario: Scenario = async () => {
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
-    maxRawToolBytes: 1_048_576,
     maxRecallItems: 5,
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
@@ -633,6 +6453,11 @@ const appDisableScopeScenario: Scenario = async () => {
 
     const quiesced = await stateCommit.quiesceApp({ userId: 1, appId: 'scope-app-a' }, now + 1);
     assert.equal(quiesced, 1);
+    assert.deepEqual(
+      disableObserverEvents.filter((item) => item.type === 'run.interrupted'),
+      [{ runId: 'scope-run-target', type: 'run.interrupted' }],
+      'app-scope interruption must project only the committed target transition',
+    );
     assert.equal(
       (await db.queryOne<{ status: string }>("SELECT status FROM agent_runs WHERE id = 'scope-run-target'"))?.status,
       'interrupted',
@@ -642,13 +6467,16 @@ const appDisableScopeScenario: Scenario = async () => {
       'running',
     );
     assert.equal(
-      (await db.queryOne<{ status: string }>("SELECT status FROM agent_runs WHERE id = 'scope-run-other-user'"))?.status,
+      (await db.queryOne<{ status: string }>("SELECT status FROM agent_runs WHERE id = 'scope-run-other-user'"))
+        ?.status,
       'running',
     );
     assert.equal(
-      (await db.queryOne<{ status: string }>(
-        "SELECT status FROM agent_delegations WHERE id = 'scope-delegation-target'",
-      ))?.status,
+      (
+        await db.queryOne<{ status: string }>(
+          "SELECT status FROM agent_delegations WHERE id = 'scope-delegation-target'",
+        )
+      )?.status,
       'cancelled',
     );
     assert.equal(
@@ -662,15 +6490,19 @@ const appDisableScopeScenario: Scenario = async () => {
       'stopped',
     );
     assert.equal(
-      (await db.queryOne<{ running_count: number }>(
-        "SELECT running_count FROM agent_apps WHERE user_id = 1 AND app_id = 'scope-app-a'",
-      ))?.running_count,
+      (
+        await db.queryOne<{ running_count: number }>(
+          "SELECT running_count FROM agent_apps WHERE user_id = 1 AND app_id = 'scope-app-a'",
+        )
+      )?.running_count,
       0,
     );
     assert.equal(
-      (await db.queryOne<{ running_count: number }>(
-        "SELECT running_count FROM agent_apps WHERE user_id = 2 AND app_id = 'scope-app-a'",
-      ))?.running_count,
+      (
+        await db.queryOne<{ running_count: number }>(
+          "SELECT running_count FROM agent_apps WHERE user_id = 2 AND app_id = 'scope-app-a'",
+        )
+      )?.running_count,
       1,
     );
   } finally {
@@ -702,13 +6534,7 @@ const appDisableScopeScenario: Scenario = async () => {
       },
     }),
   } as unknown as AgentSettingsService;
-  const scheduler = new AgentScheduler(
-    settings,
-    backend,
-    new AgentEventHub(),
-    schedulerClock,
-    async () => 0,
-  );
+  const scheduler = new AgentScheduler(settings, backend, new AgentEventHub(), schedulerClock, async () => 0);
   const makeRun = (userId: number, appId: string, id: string): RunView => ({
     id,
     userId,
@@ -786,7 +6612,6 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
-    maxRawToolBytes: 1_048_576,
     maxRecallItems: 5,
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
@@ -826,7 +6651,13 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
     verification: { status: 'verified' as const, summary: 'scenario verified', evidenceRefs: [] },
   });
 
-  const insertTool = async (stepIndex: number, suffix: string): Promise<{ toolStepId: string; toolCallId: string }> => {
+  const insertTool = async (
+    stepIndex: number,
+    suffix: string,
+    sourceModelStepId: string,
+    batchIndex: number,
+    batchSize: number,
+  ): Promise<{ toolStepId: string; toolCallId: string }> => {
     const toolStepId = `read-batch-step-${suffix}`;
     const toolCallId = `read-batch-tool-${suffix}`;
     await db.execute(
@@ -838,11 +6669,12 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
     );
     await db.execute(
       `INSERT INTO agent_tool_calls
-        (id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+         provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, created_at)
-       VALUES (?, 'read-batch-run', 'read-batch-runtime', ?, ?, 'workspace_read_file', '1', '{}', ?, 1,
+       VALUES (?, 'read-batch-run', 'read-batch-runtime', ?, ?, ?, ?, ?, 'workspace_read_file', '1', '{}', ?, 1,
                'read', 'proposed', ?)`,
-      [toolCallId, toolStepId, `provider-${suffix}`, `hash-${suffix}`, now],
+      [toolCallId, toolStepId, sourceModelStepId, batchIndex, batchSize, `provider-${suffix}`, `hash-${suffix}`, now],
     );
     return { toolStepId, toolCallId };
   };
@@ -879,7 +6711,15 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
       [modelRef, now, now],
     );
 
-    const single = await insertTool(1, 'single');
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES ('read-batch-model-single', 'read-batch-run', 'read-batch-runtime', 1,
+               'model', 'completed', 0, '[]', '[]', ?, ?)`,
+      [now, now],
+    );
+    const single = await insertTool(2, 'single', 'read-batch-model-single', 0, 1);
     const singleBegun = await stateCommit.beginReadToolBatch({
       scope: { userId: 1, appId: 'read-batch-app' },
       runId: 'read-batch-run',
@@ -912,8 +6752,16 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
     assert.equal(singleSettled.run.version, 3);
     assert.equal(singleSettled.run.usage.steps, 1);
 
-    const first = await insertTool(2, 'parallel-a');
-    const second = await insertTool(3, 'parallel-b');
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES ('read-batch-model-parallel', 'read-batch-run', 'read-batch-runtime', 3,
+               'model', 'completed', 0, '[]', '[]', ?, ?)`,
+      [now + 3, now + 3],
+    );
+    const first = await insertTool(4, 'parallel-a', 'read-batch-model-parallel', 0, 2);
+    const second = await insertTool(5, 'parallel-b', 'read-batch-model-parallel', 1, 2);
     const parallelBegun = await stateCommit.beginReadToolBatch({
       scope: { userId: 1, appId: 'read-batch-app' },
       runId: 'read-batch-run',
@@ -992,7 +6840,6 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
-    maxRawToolBytes: 1_048_576,
     maxRecallItems: 5,
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
@@ -1050,7 +6897,17 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
         (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
          consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
        VALUES (?, ?, ?, 'native', ?, ?, ?, 0, ?, ?, ?)`,
-      [runtimeId, runId, `child:${suffix}`, modelRef, runtimeStatus, scheduleState, `owner-${runtimeId}`, now, updatedAt],
+      [
+        runtimeId,
+        runId,
+        `child:${suffix}`,
+        modelRef,
+        runtimeStatus,
+        scheduleState,
+        `owner-${runtimeId}`,
+        now,
+        updatedAt,
+      ],
     );
     await db.execute(
       `INSERT INTO agent_delegations
@@ -1099,7 +6956,9 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
   let scheduler: SubagentScheduler | null = null;
   try {
     await db.initialize();
-    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'subagent-cancel-user', 'not-used')");
+    await db.execute(
+      "INSERT INTO users (id, username, hashed_password) VALUES (1, 'subagent-cancel-user', 'not-used')",
+    );
     await db.execute(
       `INSERT INTO agent_apps
         (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
@@ -1180,7 +7039,11 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
       await new Promise((resolve) => setTimeout(resolve, 2));
     }
     assert.equal(targetAborted, true, 'durable cancellation must be followed by an AbortSignal for the active child');
-    assert.equal(lateSettleReturned, true, 'a late worker settle must be an idempotent no-op after durable cancellation');
+    assert.equal(
+      lateSettleReturned,
+      true,
+      'a late worker settle must be an idempotent no-op after durable cancellation',
+    );
     assert.ok(started.includes(next.workId), 'another child must continue scheduling without a backend restart');
     assert.deepEqual(
       await db.queryOne<{ status: string; owner_epoch: number | null }>(
@@ -1190,18 +7053,24 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
       { status: 'cancelled', owner_epoch: null },
     );
     assert.equal(
-      (await db.queryOne<{ status: string }>('SELECT status FROM agent_delegations WHERE id = ?', [target.delegationId]))
-        ?.status,
+      (
+        await db.queryOne<{ status: string }>('SELECT status FROM agent_delegations WHERE id = ?', [
+          target.delegationId,
+        ])
+      )?.status,
       'cancelled',
     );
 
     for (let index = 0; index < 100; index += 1) {
-      const status = await db.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [next.workId]);
+      const status = await db.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [
+        next.workId,
+      ]);
       if (status?.status === 'completed') break;
       await new Promise((resolve) => setTimeout(resolve, 2));
     }
     assert.equal(
-      (await db.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [next.workId]))?.status,
+      (await db.queryOne<{ status: string }>('SELECT status FROM agent_scheduler_work WHERE id = ?', [next.workId]))
+        ?.status,
       'completed',
     );
 
@@ -1375,7 +7244,6 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
-    maxRawToolBytes: 1_048_576,
     maxRecallItems: 5,
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
@@ -1508,8 +7376,10 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
       `INSERT INTO agent_steps
         (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
          input_refs_json, output_refs_json, created_at, completed_at)
-       VALUES ('join-control-step', ?, ?, 1, 'tool', 'completed', 0, '[]', '[]', ?, ?)`,
-      [runId, parentRuntimeId, now, now],
+       VALUES
+         ('join-control-model-step', ?, ?, 1, 'model', 'completed', 0, '[]', '[]', ?, ?),
+         ('join-control-step', ?, ?, 2, 'tool', 'completed', 0, '[]', '[]', ?, ?)`,
+      [runId, parentRuntimeId, now, now, runId, parentRuntimeId, now, now],
     );
     const joinInspection = {
       toolName: 'join_subagents',
@@ -1547,12 +7417,23 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     };
     await db.execute(
       `INSERT INTO agent_tool_calls
-        (id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+         provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
          created_at, started_at, completed_at)
-       VALUES (?, ?, ?, 'join-control-step', 'provider-join-control', 'join_subagents', '1', ?,
+       VALUES (?, ?, ?, 'join-control-step', 'join-control-model-step', 0, 1,
+               'provider-join-control', 'join_subagents', '1', ?,
                'join-control-hash', 1, 'control', 'succeeded', ?, ?, ?, ?)`,
-      [joinToolCallId, runId, parentRuntimeId, JSON.stringify(joinInspection), JSON.stringify(waitingResult), now, now, now],
+      [
+        joinToolCallId,
+        runId,
+        parentRuntimeId,
+        JSON.stringify(joinInspection),
+        JSON.stringify(waitingResult),
+        now,
+        now,
+        now,
+      ],
     );
 
     // Completion mailbox is intentionally omitted here: durable control wake must be sufficient by itself.
@@ -1561,7 +7442,10 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
       `SELECT id, status, version FROM agent_scheduler_work WHERE run_id = ? AND kind = 'join_resume'`,
       [runId],
     );
-    assert.deepEqual(resumeRows.map((row) => row.id), [`join-resume:${joinToolCallId}`]);
+    assert.deepEqual(
+      resumeRows.map((row) => row.id),
+      [`join-resume:${joinToolCallId}`],
+    );
     assert.equal(resumeRows[0]?.status, 'queued');
 
     const firstReady = (await repository.readyWork(now + 1, 16)).find((work) => work.kind === 'join_resume');
@@ -1570,8 +7454,11 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     assert.ok(firstClaim);
     assert.equal(await repository.resetClaimedWork(222, now + 2), 1);
     assert.equal(
-      (await db.queryOne<{ schedule_state: string }>('SELECT schedule_state FROM agent_runtimes WHERE id = ?', [parentRuntimeId]))
-        ?.schedule_state,
+      (
+        await db.queryOne<{ schedule_state: string }>('SELECT schedule_state FROM agent_runtimes WHERE id = ?', [
+          parentRuntimeId,
+        ])
+      )?.schedule_state,
       'joining',
       'scheduler epoch recovery must not bypass join re-check',
     );
@@ -1581,8 +7468,11 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     assert.ok(recoveredClaim);
     await participant.handleJoinResume(scenarioScope, recoveredClaim, 222);
     assert.equal(
-      (await db.queryOne<{ schedule_state: string }>('SELECT schedule_state FROM agent_runtimes WHERE id = ?', [parentRuntimeId]))
-        ?.schedule_state,
+      (
+        await db.queryOne<{ schedule_state: string }>('SELECT schedule_state FROM agent_runtimes WHERE id = ?', [
+          parentRuntimeId,
+        ])
+      )?.schedule_state,
       'joining',
       'mode=all must stay joining while another child is still running',
     );
@@ -1600,8 +7490,11 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     assert.ok(finalClaim);
     await participant.handleJoinResume(scenarioScope, finalClaim, 333);
     assert.equal(
-      (await db.queryOne<{ schedule_state: string }>('SELECT schedule_state FROM agent_runtimes WHERE id = ?', [parentRuntimeId]))
-        ?.schedule_state,
+      (
+        await db.queryOne<{ schedule_state: string }>('SELECT schedule_state FROM agent_runtimes WHERE id = ?', [
+          parentRuntimeId,
+        ])
+      )?.schedule_state,
       'runnable',
     );
     const modelResume = await db.queryAll<{ id: string; status: string; payload_json: string }>(
@@ -1612,7 +7505,11 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     assert.equal(modelResume.length, 1);
     assert.equal(modelResume[0]?.status, 'queued');
     assert.equal(JSON.parse(modelResume[0]!.payload_json).delegationId, 'join-parent-delegation');
-    assert.equal(hostRootEnqueues.length, 0, 'nested parent must resume through durable child model work, not Root queue');
+    assert.equal(
+      hostRootEnqueues.length,
+      0,
+      'nested parent must resume through durable child model work, not Root queue',
+    );
 
     await repository.cancelDelegation(scenarioScope, runId, childB.delegationId, 2, now + 4);
     assert.equal(
@@ -1666,8 +7563,10 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
       `INSERT INTO agent_steps
         (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
          input_refs_json, output_refs_json, created_at, completed_at)
-       VALUES ('root-join-control-step', ?, 'join-root-runtime', 2, 'tool', 'completed', 0, '[]', '[]', ?, ?)`,
-      [runId, now + 6, now + 6],
+       VALUES
+         ('root-join-control-model-step', ?, 'join-root-runtime', 3, 'model', 'completed', 0, '[]', '[]', ?, ?),
+         ('root-join-control-step', ?, 'join-root-runtime', 4, 'tool', 'completed', 0, '[]', '[]', ?, ?)`,
+      [runId, now + 6, now + 6, runId, now + 6, now + 6],
     );
     const rootJoinInspection = {
       ...joinInspection,
@@ -1680,10 +7579,12 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     };
     await db.execute(
       `INSERT INTO agent_tool_calls
-        (id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+         provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
          created_at, started_at, completed_at)
        VALUES ('root-join-control-tool-call', ?, 'join-root-runtime', 'root-join-control-step',
+               'root-join-control-model-step', 0, 1,
                'provider-root-join-control', 'join_subagents', '1', ?, 'root-join-control-hash', 1,
                'control', 'succeeded', ?, ?, ?, ?)`,
       [runId, JSON.stringify(rootJoinInspection), JSON.stringify(waitingResult), now + 6, now + 6, now + 6],
@@ -1697,9 +7598,11 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     assert.ok(rootResumeClaim);
     await participant.handleJoinResume(scenarioScope, rootResumeClaim, 444);
     assert.equal(
-      (await db.queryOne<{ schedule_state: string }>(
-        "SELECT schedule_state FROM agent_runtimes WHERE id = 'join-root-runtime'",
-      ))?.schedule_state,
+      (
+        await db.queryOne<{ schedule_state: string }>(
+          "SELECT schedule_state FROM agent_runtimes WHERE id = 'join-root-runtime'",
+        )
+      )?.schedule_state,
       'runnable',
     );
     assert.deepEqual(hostRootEnqueues, [runId]);
@@ -1737,11 +7640,10 @@ const confirmedMutationLeaseFinalizationScenario: Scenario = async () => {
     const budget = {
       maxContextTokens: 16_384,
       maxOutputTokens: 4_096,
-        maxRunSteps: 100,
+      maxRunSteps: 100,
       maxActiveExecutionSeconds: 3_600,
       toolTimeoutSeconds: 120,
       maxToolOutputBytes: 1_048_576,
-      maxRawToolBytes: 1_048_576,
       maxRecallItems: 5,
       maxRecallBytes: 8_192,
       maxSubagentMessages: 100,
@@ -1795,7 +7697,9 @@ const confirmedMutationLeaseFinalizationScenario: Scenario = async () => {
 
     try {
       await db.initialize();
-      await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'lease-finalize-user', 'not-used')");
+      await db.execute(
+        "INSERT INTO users (id, username, hashed_password) VALUES (1, 'lease-finalize-user', 'not-used')",
+      );
       await db.execute(
         `INSERT INTO agent_apps
           (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
@@ -1837,8 +7741,10 @@ const confirmedMutationLeaseFinalizationScenario: Scenario = async () => {
         `INSERT INTO agent_steps
           (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
            input_refs_json, output_refs_json, created_at, completed_at)
-         VALUES (?, ?, ?, 1, 'tool', 'completed', 0, '[]', '[]', ?, ?)`,
-        [`step-${fault}`, runId, runtimeId, now, now],
+         VALUES
+           (?, ?, ?, 1, 'model', 'completed', 0, '[]', '[]', ?, ?),
+           (?, ?, ?, 2, 'tool', 'completed', 0, '[]', '[]', ?, ?)`,
+        [`model-step-${fault}`, runId, runtimeId, now, now, `step-${fault}`, runId, runtimeId, now, now],
       );
       const confirmedResult = {
         ok: true,
@@ -1851,15 +7757,17 @@ const confirmedMutationLeaseFinalizationScenario: Scenario = async () => {
       };
       await db.execute(
         `INSERT INTO agent_tool_calls
-          (id, run_id, agent_runtime_id, step_id, provider_call_id, tool_name, tool_version,
+          (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+           provider_call_id, tool_name, tool_version,
            inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
            created_at, started_at, completed_at)
-         VALUES (?, ?, ?, ?, ?, 'scenario_mutation', '1', '{}', ?, 1, 'mutate', 'succeeded', ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, 0, 1, ?, 'scenario_mutation', '1', '{}', ?, 1, 'mutate', 'succeeded', ?, ?, ?, ?)`,
         [
           toolCallId,
           runId,
           runtimeId,
           `step-${fault}`,
+          `model-step-${fault}`,
           `provider-${fault}`,
           `operation-hash-${fault}`,
           JSON.stringify(confirmedResult),
@@ -1945,8 +7853,11 @@ const confirmedMutationLeaseFinalizationScenario: Scenario = async () => {
         { type: 'agent', id: runtimeId },
       );
       assert.equal(
-        (await db.queryOne<{ count: number }>('SELECT COUNT(*) AS count FROM agent_tool_calls WHERE run_id = ?', [runId]))
-          ?.count,
+        (
+          await db.queryOne<{ count: number }>('SELECT COUNT(*) AS count FROM agent_tool_calls WHERE run_id = ?', [
+            runId,
+          ])
+        )?.count,
         1,
         'lease reconciliation must never replay or duplicate the confirmed mutation tool call',
       );
@@ -2077,10 +7988,16 @@ const mutationOutputProjectionScenario: Scenario = async () => {
   });
 
   for (const tool of transportTools) {
-    const result = await executor.executeMutation(context, inspectionFor(tool.descriptor.name));
-    assert.equal(result.outcome, 'confirmed');
-    assert.equal(result.ok, true);
-    assert.equal(result.verification.status, 'verified');
+    const rawResult = await executor.executeMutation(context, inspectionFor(tool.descriptor.name));
+    assert.equal(rawResult.outcome, 'confirmed');
+    assert.equal(rawResult.ok, true);
+    assert.equal(rawResult.verification.status, 'verified');
+    assert.equal(rawResult.truncated, false, 'ToolExecutor must preserve the raw execution result');
+    assert.ok(
+      Buffer.byteLength(JSON.stringify(rawResult), 'utf8') > context.maxOutputBytes,
+      'fixture raw mutation result must exceed the model-facing projection budget',
+    );
+    const result = projectToolResult(rawResult, context.maxOutputBytes);
     assert.equal(result.truncated, true);
     assert.ok(Buffer.byteLength(JSON.stringify(result), 'utf8') <= context.maxOutputBytes);
     assert.equal(executionCounts.get(tool.descriptor.name), 1, `${tool.descriptor.name} must execute exactly once`);
@@ -2116,6 +8033,7 @@ const artifactCrashReconciliationScenario: Scenario = async () => {
     forUser: async () => ({
       maxSingleArtifactBytes: 1024 * 1024,
       maxGlobalArtifactBytes: 8 * 1024 * 1024,
+      unretainedArtifactTtlSeconds: 60 * 60,
       minFreeDiskBytes: 0,
     }),
   };
@@ -2160,7 +8078,9 @@ const artifactCrashReconciliationScenario: Scenario = async () => {
 
   try {
     await db.initialize();
-    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'artifact-reconcile-user', 'not-used')");
+    await db.execute(
+      "INSERT INTO users (id, username, hashed_password) VALUES (1, 'artifact-reconcile-user', 'not-used')",
+    );
     await db.execute(
       `INSERT INTO agent_apps
         (user_id, app_id, active_version, desired_state, observed_state, created_at, updated_at)
@@ -2260,8 +8180,11 @@ const artifactCrashReconciliationScenario: Scenario = async () => {
       reserved_bytes: 0,
     });
     assert.equal(
-      (await db.queryOne<{ status: string }>('SELECT status FROM ai_artifacts WHERE id = ?', ['artifact-expired-staging']))
-        ?.status,
+      (
+        await db.queryOne<{ status: string }>('SELECT status FROM ai_artifacts WHERE id = ?', [
+          'artifact-expired-staging',
+        ])
+      )?.status,
       'deleted',
     );
     assert.equal(fs.existsSync(path.join(tmpRoot, `${expiredKey}.part`)), false);
@@ -2269,7 +8192,10 @@ const artifactCrashReconciliationScenario: Scenario = async () => {
       ['artifact-deleting-file-present', deletingFileKey],
       ['artifact-deleting-file-gone', deletingGoneKey],
     ] as const) {
-      assert.equal((await db.queryOne<{ status: string }>('SELECT status FROM ai_artifacts WHERE id = ?', [id]))?.status, 'deleted');
+      assert.equal(
+        (await db.queryOne<{ status: string }>('SELECT status FROM ai_artifacts WHERE id = ?', [id]))?.status,
+        'deleted',
+      );
       assert.equal(fs.existsSync(path.join(objectRoot, storageKey.slice(0, 2), storageKey)), false);
     }
     const quota = await db.queryOne<{ used_bytes: number; reserved_bytes: number }>(
@@ -2341,7 +8267,9 @@ const integrationCasBeforeRuntimeScenario: Scenario = async () => {
         enabled: record.enabled,
         schemaHash: null,
         credentialRevision:
-          record.credential !== undefined || record.clearCredential ? current.credentialRevision + 1 : current.credentialRevision,
+          record.credential !== undefined || record.clearCredential
+            ? current.credentialRevision + 1
+            : current.credentialRevision,
         hasCredential: record.credential !== undefined ? true : record.clearCredential ? false : current.hasCredential,
         version: current.version + 1,
         updatedAt: record.updatedAt,
@@ -2523,7 +8451,9 @@ const integrationRefreshGenerationScenario: Scenario = async () => {
         enabled: record.enabled,
         schemaHash: null,
         credentialRevision:
-          record.credential !== undefined || record.clearCredential ? current.credentialRevision + 1 : current.credentialRevision,
+          record.credential !== undefined || record.clearCredential
+            ? current.credentialRevision + 1
+            : current.credentialRevision,
         hasCredential: record.credential !== undefined ? true : record.clearCredential ? false : current.hasCredential,
         version: current.version + 1,
         updatedAt: record.updatedAt,
@@ -2700,7 +8630,6 @@ const idempotencyTtlScenario: Scenario = async () => {
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
-    maxRawToolBytes: 1_048_576,
     maxRecallItems: 5,
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
@@ -2752,7 +8681,9 @@ const idempotencyTtlScenario: Scenario = async () => {
 
   try {
     await db.initialize();
-    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'idempotency-ttl-user', 'not-used')");
+    await db.execute(
+      "INSERT INTO users (id, username, hashed_password) VALUES (1, 'idempotency-ttl-user', 'not-used')",
+    );
     await db.execute(
       `INSERT INTO agent_apps
         (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
@@ -2771,7 +8702,17 @@ const idempotencyTtlScenario: Scenario = async () => {
          created_at, started_at, updated_at)
        VALUES (?, 1, ?, ?, 'running', 'in_progress', 'not_started', ?, ?,
                '{"schemaVersion":1,"revision":0,"items":[]}', ?, 0, ?, ?, ?)`,
-      [runId, scope.appId, threadId, JSON.stringify(budget), JSON.stringify(definition), JSON.stringify(usage), now, now, now],
+      [
+        runId,
+        scope.appId,
+        threadId,
+        JSON.stringify(budget),
+        JSON.stringify(definition),
+        JSON.stringify(usage),
+        now,
+        now,
+        now,
+      ],
     );
 
     const first = await stateCommit.setRunGoal({
@@ -2848,11 +8789,13 @@ const idempotencyTtlScenario: Scenario = async () => {
 
     assert.equal(await stateCommit.cleanupExpiredCommands(now, 2), 2);
     assert.equal(
-      (await db.queryOne<{ count: number }>(
-        `SELECT COUNT(*) AS count FROM agent_commands
+      (
+        await db.queryOne<{ count: number }>(
+          `SELECT COUNT(*) AS count FROM agent_commands
          WHERE command_name = 'scenario.cleanup' AND status = 'committed' AND expires_at <= ?`,
-        [now],
-      ))?.count,
+          [now],
+        )
+      )?.count,
       1,
       'bounded cleanup must leave work for the next sweep',
     );
@@ -2866,7 +8809,8 @@ const idempotencyTtlScenario: Scenario = async () => {
       { id: 'cleanup-unknown', status: 'unknown' },
     ]);
     assert.equal(
-      (await db.queryOne<{ count: number }>("SELECT COUNT(*) AS count FROM agent_commands WHERE id = 'cleanup-future'"))?.count,
+      (await db.queryOne<{ count: number }>("SELECT COUNT(*) AS count FROM agent_commands WHERE id = 'cleanup-future'"))
+        ?.count,
       1,
     );
 
@@ -2904,7 +8848,6 @@ const cumulativeTokenCeilingRemovedScenario: Scenario = async () => {
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
-    maxRawToolBytes: 1_048_576,
     maxRecallItems: 5,
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
@@ -3003,6 +8946,7 @@ const cumulativeTokenCeilingRemovedScenario: Scenario = async () => {
     assert.equal(rootStarted.run.usage.outputTokens, 350_000);
     assert.deepEqual(rootStarted.run.usage.context, {
       inputTokens: 74_000,
+      heuristicInputTokens: 74_000,
       reservedOutputTokens: 8_000,
       contextWindowTokens: 200_000,
       source: 'estimated',
@@ -3072,7 +9016,6 @@ const progressAwareLoopGuardScenario: Scenario = async () => {
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
     maxToolOutputBytes: 1_048_576,
-    maxRawToolBytes: 1_048_576,
     maxRecallItems: 5,
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
@@ -3282,7 +9225,12 @@ const publicAgentErrorTaxonomyScenario: Scenario = async () => {
       status: 409,
       code: 'DELEGATION_VERSION_CONFLICT',
     },
-    { producer: 'workspace ACP selection', raw: 'ACP_PROFILE_SELECTION_INVALID', status: 400, code: 'ACP_PROFILE_SELECTION_INVALID' },
+    {
+      producer: 'workspace ACP selection',
+      raw: 'ACP_PROFILE_SELECTION_INVALID',
+      status: 400,
+      code: 'ACP_PROFILE_SELECTION_INVALID',
+    },
     { producer: 'workspace ACP missing', raw: 'ACP_PROFILE_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
     { producer: 'workspace browser missing', raw: 'BROWSER_TARGET_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
     {
@@ -3291,11 +9239,43 @@ const publicAgentErrorTaxonomyScenario: Scenario = async () => {
       status: 422,
       code: 'BROWSER_TARGET_REQUIRES_BROWSER_RECIPE',
     },
-    { producer: 'plugin storage CAS', raw: 'APP_STORAGE_VERSION_CONFLICT', status: 409, code: 'APP_STORAGE_VERSION_CONFLICT' },
-    { producer: 'plugin storage payload', raw: 'APP_STORAGE_VALUE_TOO_LARGE', status: 413, code: 'APP_STORAGE_VALUE_TOO_LARGE' },
-    { producer: 'plugin storage quota', raw: 'APP_STORAGE_QUOTA_EXCEEDED', status: 507, code: 'APP_STORAGE_QUOTA_EXCEEDED' },
+    {
+      producer: 'plugin storage CAS',
+      raw: 'APP_STORAGE_VERSION_CONFLICT',
+      status: 409,
+      code: 'APP_STORAGE_VERSION_CONFLICT',
+    },
+    {
+      producer: 'plugin storage payload',
+      raw: 'APP_STORAGE_VALUE_TOO_LARGE',
+      status: 413,
+      code: 'APP_STORAGE_VALUE_TOO_LARGE',
+    },
+    {
+      producer: 'plugin storage quota',
+      raw: 'APP_STORAGE_QUOTA_EXCEEDED',
+      status: 507,
+      code: 'APP_STORAGE_QUOTA_EXCEEDED',
+    },
     { producer: 'workspace artifact import', raw: 'ARTIFACT_NOT_READY', status: 409, code: 'ARTIFACT_NOT_READY' },
-    { producer: 'MCP endpoint syntax', raw: 'INTEGRATION_ENDPOINT_INVALID', status: 400, code: 'INTEGRATION_ENDPOINT_INVALID' },
+    {
+      producer: 'per-Run artifact quota',
+      raw: 'ARTIFACT_RUN_QUOTA_EXCEEDED',
+      status: 507,
+      code: 'ARTIFACT_QUOTA_EXCEEDED',
+    },
+    {
+      producer: 'checkpoint model capability contract',
+      raw: 'CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED',
+      status: 422,
+      code: 'CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED',
+    },
+    {
+      producer: 'MCP endpoint syntax',
+      raw: 'INTEGRATION_ENDPOINT_INVALID',
+      status: 400,
+      code: 'INTEGRATION_ENDPOINT_INVALID',
+    },
     {
       producer: 'MCP private endpoint policy',
       raw: 'INTEGRATION_PRIVATE_ENDPOINT_DENIED',
@@ -3322,8 +9302,2978 @@ const publicAgentErrorTaxonomyScenario: Scenario = async () => {
   ];
 };
 
+const durableBoundaryDecodeScenario: Scenario = async () => {
+  const budget = {
+    maxContextTokens: 8_192,
+    maxOutputTokens: 1_024,
+    maxRunSteps: 100,
+    maxActiveExecutionSeconds: 3_600,
+    toolTimeoutSeconds: 120,
+    maxToolOutputBytes: 65_536,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    maxSubagentMessages: 100,
+    maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
+    revision: 1,
+  };
+  const usage = {
+    inputTokens: 10,
+    outputTokens: 2,
+    cachedInputTokens: 4,
+    steps: 1,
+    subagentMessages: 0,
+    subagentMessageBytes: 0,
+  };
+  const definition = {
+    schemaVersion: 1,
+    agentDefinitionId: 'scenario-agent',
+    model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    approvalMode: 'ask',
+    connectionIds: [],
+    policyRevision: 1,
+    settingsRevision: 1,
+  };
+  const inspection = {
+    toolName: 'scenario_read_file',
+    toolVersion: '1',
+    normalizedArguments: { path: 'src/example.ts' },
+    target: {
+      kind: 'run',
+      targetIdentity: 'run:scenario',
+      endpoint: 'run:scenario',
+      loginUser: 'agent-runtime:scenario',
+      configurationHash: 'config-hash',
+    },
+    resourceKeys: ['run:scenario'],
+    risk: 'read',
+    mutation: false,
+    operationHash: 'operation-hash',
+    operationHashVersion: 1,
+    preconditions: [],
+    secretRefs: [],
+    policyRevision: 1,
+    inputRevision: 1,
+  };
+  const result = {
+    ok: true,
+    summary: 'fixture complete',
+    data: { ok: true },
+    artifactRefs: [],
+    truncated: false,
+    outcome: 'confirmed',
+    verification: { status: 'verified', summary: 'verified fixture', evidenceRefs: [] },
+  };
+
+  assert.deepEqual(parseRunBudget(JSON.stringify(budget)), budget);
+  assert.deepEqual(parseRunUsage(JSON.stringify(usage)), usage);
+  assert.deepEqual(parseRunDefinition(JSON.stringify(definition)), definition);
+  assert.deepEqual(parseToolInspection(JSON.stringify(inspection)), inspection);
+  assert.deepEqual(parseToolResult(JSON.stringify(result)), result);
+
+  const rejected = [
+    () => parseRunUsage(JSON.stringify({ ...usage, steps: undefined })),
+    () => parseRunBudget(JSON.stringify({ ...budget, maxContextTokens: '8192' })),
+    () => decodeDurableJsonValue(Array.from({ length: 16_385 }, () => 0)),
+    () => parseToolResult(JSON.stringify({ ...result, outcome: 'maybe' })),
+    () => parseRunDefinition(JSON.stringify({ ...definition, schemaVersion: 2 })),
+    () => parseRunUsage('{broken'),
+  ];
+  for (const reject of rejected) assert.throws(reject, /AGENT_DURABLE_STATE_INVALID/);
+
+  return [
+    { name: 'valid_boundary_payloads', value: 5, unit: 'cases' },
+    { name: 'rejected_invalid_boundary_payloads', value: rejected.length, unit: 'cases' },
+  ];
+};
+
+const currentDurableSchemaScenario: Scenario = async () => {
+  const canonicalModels = JSON.stringify([
+    {
+      id: 'scenario-model',
+      capabilityOverrides: {
+        contextWindow: 32_768,
+        maxOutputTokens: 4_096,
+        supportsTools: true,
+        reasoning: {
+          supportedEfforts: ['low', 'medium', 'high'],
+          defaultEffort: 'medium',
+          mandatory: false,
+          supportsMaxTokens: true,
+        },
+      },
+    },
+  ]);
+  const decodedCanonicalModels = decodePersistedProviderModels(canonicalModels);
+  assert.equal(decodedCanonicalModels[0]?.id, 'scenario-model');
+  assert.equal(
+    'supportsMaxTokens' in (decodedCanonicalModels[0]?.capabilityOverrides?.reasoning ?? {}),
+    false,
+    'legacy decorative reasoning max-token metadata must be tolerated but normalized away',
+  );
+  assert.throws(
+    () =>
+      decodePersistedProviderModels(
+        JSON.stringify([
+          {
+            id: 'scenario-model',
+            contextWindow: 32_768,
+            maxOutputTokens: 4_096,
+            supportsTools: true,
+          },
+        ]),
+      ),
+    /AGENT_DURABLE_STATE_INVALID/,
+    'unreleased flat provider capability schema must not remain as a runtime compatibility shim',
+  );
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-compat-scenario-'));
+  const databasePath = path.join(directory, 'pre-lineage-normalization.sqlite');
+  const legacyDb = new DatabaseSync(databasePath);
+  try {
+    legacyDb.exec(`
+      PRAGMA foreign_keys = ON;
+      CREATE TABLE migrations (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+      );
+      INSERT INTO migrations(id, name) VALUES (24, 'pre-normalization fixture');
+
+      CREATE TABLE agent_steps (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        agent_runtime_id TEXT NOT NULL,
+        step_index INTEGER NOT NULL,
+        kind TEXT NOT NULL
+      );
+      CREATE TABLE agent_tool_calls (
+        id TEXT PRIMARY KEY,
+        run_id TEXT NOT NULL,
+        agent_runtime_id TEXT NOT NULL,
+        step_id TEXT NOT NULL,
+        source_model_step_id TEXT,
+        batch_index INTEGER NOT NULL DEFAULT 0,
+        batch_size INTEGER NOT NULL DEFAULT 1
+      );
+
+      INSERT INTO agent_steps(id, run_id, agent_runtime_id, step_index, kind) VALUES
+        ('model-1', 'run-1', 'runtime-1', 1, 'model'),
+        ('tool-step-1', 'run-1', 'runtime-1', 2, 'tool'),
+        ('tool-step-2', 'run-1', 'runtime-1', 3, 'tool'),
+        ('model-2', 'run-1', 'runtime-1', 4, 'model'),
+        ('tool-step-3', 'run-1', 'runtime-1', 5, 'tool');
+      INSERT INTO agent_tool_calls(id, run_id, agent_runtime_id, step_id) VALUES
+        ('tool-call-1', 'run-1', 'runtime-1', 'tool-step-1'),
+        ('tool-call-2', 'run-1', 'runtime-1', 'tool-step-2'),
+        ('tool-call-3', 'run-1', 'runtime-1', 'tool-step-3');
+    `);
+
+    await runMigrations(legacyDb);
+    const rows = legacyDb
+      .prepare(
+        `SELECT id, source_model_step_id, batch_index, batch_size
+         FROM agent_tool_calls ORDER BY id`,
+      )
+      .all() as Array<{
+      id: string;
+      source_model_step_id: string;
+      batch_index: number;
+      batch_size: number;
+    }>;
+    assert.deepEqual(
+      rows.map((row) => ({ ...row })),
+      [
+        { id: 'tool-call-1', source_model_step_id: 'model-1', batch_index: 0, batch_size: 2 },
+        { id: 'tool-call-2', source_model_step_id: 'model-1', batch_index: 1, batch_size: 2 },
+        { id: 'tool-call-3', source_model_step_id: 'model-2', batch_index: 0, batch_size: 1 },
+      ],
+    );
+    assert.throws(
+      () =>
+        legacyDb
+          .prepare(
+            `INSERT INTO agent_tool_calls(id, run_id, agent_runtime_id, step_id, source_model_step_id)
+             VALUES (?, ?, ?, ?, NULL)`,
+          )
+          .run('tool-call-invalid', 'run-1', 'runtime-1', 'tool-step-3'),
+      /agent_tool_call_source_model_invalid/,
+      'post-migration durable Tool rows must have a real source model step',
+    );
+  } finally {
+    legacyDb.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+
+  return [
+    { name: 'provider_legacy_runtime_shims', value: 0, unit: 'branches' },
+    { name: 'tool_lineage_rows_backfilled', value: 3, unit: 'rows' },
+    { name: 'tool_lineage_null_writes_rejected', value: 1, unit: 'cases' },
+  ];
+};
+
+const completionGateScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-completion-gate-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'completion.sqlite', nodeEnv: 'test' });
+  const stateCommit = new SqliteStateCommitAdapter(db);
+  const repository = new SqliteRunRepository(db);
+  const now = 1_800_000_000;
+  const usage = {
+    inputTokens: 20,
+    outputTokens: 10,
+    cachedInputTokens: 0,
+    steps: 2,
+    subagentMessages: 0,
+    subagentMessageBytes: 0,
+  };
+  const inspection = (toolName: string, normalizedArguments: Record<string, unknown>, operationHash: string): string =>
+    JSON.stringify({
+      toolName,
+      toolVersion: '1.0.0',
+      normalizedArguments,
+      target: {
+        kind: 'workspace',
+        targetIdentity: 'workspace:gate-workspace:1',
+        endpoint: 'workspace:gate-workspace',
+        loginUser: 'runner:65532',
+        configurationHash: 'gate-config',
+        workspaceId: 'gate-workspace',
+        generation: 1,
+      },
+      resourceKeys: ['workspace:gate-workspace:1'],
+      risk: 'mutate',
+      mutation: true,
+      operationHash,
+      operationHashVersion: 1,
+      preconditions: [],
+      secretRefs: [],
+      policyRevision: 1,
+      inputRevision: 0,
+    });
+  const successfulResult = (summary: string, verificationStatus: 'verified' | 'unverified'): string =>
+    JSON.stringify({
+      ok: true,
+      summary,
+      artifactRefs: [],
+      truncated: false,
+      outcome: 'confirmed',
+      verification: {
+        status: verificationStatus,
+        summary: `${summary} ${verificationStatus}`,
+        evidenceRefs: [],
+      },
+    });
+
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'completion-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+       VALUES ('completion-thread', 1, 'scenario-app', 'completion-thread', 'manual', ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, goal_text, goal_revision, goal_updated_at,
+         verification_status, budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         created_at, started_at, updated_at)
+       VALUES ('completion-run', 1, 'scenario-app', 'completion-thread', 'running', 'in_progress',
+               'Update the code and run tests before finishing.', 1, ?, 'not_started', ?, ?, ?, ?, 1, ?, ?, ?)`,
+      [
+        now,
+        JSON.stringify({
+          maxContextTokens: 16_384,
+          maxOutputTokens: 4_096,
+          maxRunSteps: 100,
+          maxActiveExecutionSeconds: 3_600,
+          toolTimeoutSeconds: 120,
+          maxToolOutputBytes: 1_048_576,
+          maxRecallItems: 5,
+          maxRecallBytes: 8_192,
+          maxSubagentMessages: 100,
+          maxSubagentMessageBytes: 1_048_576,
+          revision: 1,
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          agentDefinitionId: 'scenario-agent',
+          model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          approvalMode: 'ask',
+          connectionIds: [],
+          policyRevision: 1,
+          settingsRevision: 1,
+        }),
+        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+        JSON.stringify(usage),
+        now,
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES ('completion-runtime', 'completion-run', 'root', 'native', ?, 'running', 'executing', 0,
+               'owner-completion-runtime', ?, ?)`,
+      [
+        JSON.stringify({ providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 }),
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES
+         ('completion-model-source', 'completion-run', 'completion-runtime', 1, 'model', 'completed', 0, '[]', '[]', ?, ?),
+         ('completion-write-step', 'completion-run', 'completion-runtime', 2, 'tool', 'completed', 0, '[]', '[]', ?, ?),
+         ('completion-stop-step', 'completion-run', 'completion-runtime', 3, 'model', 'running', 0, '[]', '[]', ?, NULL)`,
+      [now, now, now, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_model_attempts
+        (id, step_id, attempt_index, status, reserved_tokens, created_at)
+       VALUES ('completion-stop-attempt', 'completion-stop-step', 1, 'streaming', 4096, ?)`,
+      [now],
+    );
+    await db.execute(
+      `INSERT INTO agent_tool_calls
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, provider_call_id, tool_name, tool_version,
+         inspection_json, operation_hash, operation_hash_version, risk, status, result_json, created_at, started_at, completed_at)
+       VALUES ('completion-write', 'completion-run', 'completion-runtime', 'completion-write-step',
+               'completion-model-source', 'provider-write', 'machine_write_file', '1.0.0', ?, 'gate-write', 1,
+               'mutate', 'succeeded', ?, ?, ?, ?)`,
+      [
+        inspection('machine_write_file', { path: '/workspace/work/example.ts' }, 'gate-write'),
+        successfulResult('File write', 'unverified'),
+        now,
+        now,
+        now,
+      ],
+    );
+
+    const beforeGate = await repository.snapshot(scope, 'completion-run');
+    assert.ok(beforeGate);
+    const initialEvidence = await repository.completionEvidence(scope, 'completion-run');
+    const firstDecision = completionGateDecision(beforeGate, initialEvidence, beforeGate.goal.text ?? '');
+    assert.equal(
+      firstDecision.kind,
+      'continue',
+      'a coding mutation with requested tests must not complete before test evidence',
+    );
+    assert.equal(firstDecision.kind === 'continue' ? firstDecision.reasonCode : null, 'COMPLETION_EVIDENCE_REQUIRED');
+
+    const continued = await stateCommit.continueModelStepForCompletionGate({
+      scope,
+      runId: 'completion-run',
+      runtimeId: 'completion-runtime',
+      stepId: 'completion-stop-step',
+      attemptId: 'completion-stop-attempt',
+      expectedRunVersion: beforeGate.version,
+      assistantEntryId: 'completion-premature-answer',
+      assistantText: 'Implementation is done.',
+      noticeEntryId: 'completion-gate-notice',
+      notice: firstDecision.kind === 'continue' ? firstDecision.notice : 'unexpected',
+      reasonCode: 'COMPLETION_EVIDENCE_REQUIRED',
+      inputTokens: 40,
+      outputTokens: 12,
+      cachedInputTokens: 0,
+      estimatedUsage: false,
+      finishReason: 'stop',
+      now: now + 1,
+    });
+    assert.equal(continued.run.status, 'running');
+    assert.equal(
+      continued.run.executingRuntimeCount,
+      1,
+      'completion gate continuation must retain Root execution ownership',
+    );
+    const notice = await db.queryOne<{ kind: string; payload_json: string }>(
+      "SELECT kind, payload_json FROM ai_thread_entries WHERE id = 'completion-gate-notice'",
+    );
+    assert.equal(notice?.kind, 'system_notice');
+    assert.equal((JSON.parse(notice?.payload_json ?? '{}') as { kind?: unknown }).kind, 'completion_gate');
+
+    const afterGate = await repository.snapshot(scope, 'completion-run');
+    assert.ok(afterGate);
+    const repeatedEvidence = await repository.completionEvidence(scope, 'completion-run');
+    assert.equal(repeatedEvidence.gateBlocksSinceToolProgress, 1);
+    assert.equal(
+      completionGateDecision(afterGate, repeatedEvidence, afterGate.goal.text ?? '').kind,
+      'failed',
+      'stopping again without tool progress must be bounded instead of looping forever',
+    );
+
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES ('completion-test-step', 'completion-run', 'completion-runtime', 4, 'tool', 'completed', 0, '[]', '[]', ?, ?)`,
+      [now + 2, now + 2],
+    );
+    await db.execute(
+      `INSERT INTO agent_tool_calls
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, provider_call_id, tool_name, tool_version,
+         inspection_json, operation_hash, operation_hash_version, risk, status, result_json, created_at, started_at, completed_at)
+       VALUES ('completion-test', 'completion-run', 'completion-runtime', 'completion-test-step',
+               'completion-stop-step', 'provider-test', 'workspace_execute_argv', '1.0.0', ?, 'gate-test', 1,
+               'mutate', 'succeeded', ?, ?, ?, ?)`,
+      [
+        inspection(
+          'workspace_execute_argv',
+          {
+            workspaceId: 'gate-workspace',
+            generation: 1,
+            argv: ['pnpm', 'test'],
+            cwd: '/workspace/work',
+            timeoutSeconds: 60,
+          },
+          'gate-test',
+        ),
+        successfulResult('Test command', 'verified'),
+        now + 2,
+        now + 2,
+        now + 2,
+      ],
+    );
+    const evidenceAfterTest = await repository.completionEvidence(scope, 'completion-run');
+    const completeDecision = completionGateDecision(afterGate, evidenceAfterTest, afterGate.goal.text ?? '');
+    assert.deepEqual(completeDecision, {
+      kind: 'complete',
+      terminalStatus: 'completed',
+      summary: 'Verified execution evidence satisfied the requested completion check.',
+    });
+
+    const begun = await stateCommit.beginModelStep({
+      scope,
+      runId: 'completion-run',
+      runtimeId: 'completion-runtime',
+      expectedRunVersion: afterGate.version,
+      inputWatermark: afterGate.inputRevision,
+      reservedTokens: 4096,
+      estimatedInputTokens: 256,
+      reservedOutputTokens: 1024,
+      contextWindowTokens: 16_384,
+      now: now + 3,
+    });
+    const settled = await stateCommit.settleModelStep({
+      scope,
+      runId: 'completion-run',
+      runtimeId: 'completion-runtime',
+      stepId: begun.stepId,
+      attemptId: begun.attemptId,
+      expectedRunVersion: begun.run.version,
+      assistantEntryId: 'completion-final-answer',
+      assistantText: 'Implementation and tests are complete.',
+      usage: begun.run.usage,
+      inputTokens: 50,
+      outputTokens: 15,
+      cachedInputTokens: 0,
+      estimatedUsage: false,
+      finishReason: 'stop',
+      verificationSummary: completeDecision.kind === 'complete' ? completeDecision.summary : undefined,
+      terminalStatus: completeDecision.kind === 'complete' ? completeDecision.terminalStatus : 'failed',
+      now: now + 4,
+    });
+    assert.equal(settled.run.status, 'completed');
+    assert.equal(settled.run.goalStatus, 'satisfied');
+    assert.equal(settled.run.verificationStatus, 'verified');
+    const verificationEvent = await db.queryOne<{ payload_json: string }>(
+      "SELECT payload_json FROM agent_events WHERE run_id = 'completion-run' AND type = 'verification.completed' ORDER BY sequence DESC LIMIT 1",
+    );
+    assert.equal((JSON.parse(verificationEvent?.payload_json ?? '{}') as { status?: unknown }).status, 'verified');
+  } finally {
+    await db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+
+  return [
+    { name: 'premature_completions_blocked', value: 1, unit: 'runs' },
+    { name: 'gate_loops_without_progress', value: 0, unit: 'loops' },
+    { name: 'verified_completions', value: 1, unit: 'runs' },
+  ];
+};
+
+const userInputClarificationScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-user-input-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'user-input.sqlite', nodeEnv: 'test' });
+  const userInputObserverEvents: string[] = [];
+  const stateCommit = new SqliteStateCommitAdapter(db, (_run, events) => {
+    userInputObserverEvents.push(...events.map((event) => event.type));
+  });
+  const repository = new SqliteRunRepository(db);
+  const requestTool = createRequestUserInputTool({
+    sha256Utf8: (value) => createHash('sha256').update(value, 'utf8').digest('hex'),
+  });
+  const now = 1_800_100_000;
+  const runId = 'clarification-run';
+  const runtimeId = 'clarification-runtime';
+  const threadId = 'clarification-thread';
+  const requestArguments = {
+    questions: [
+      {
+        id: 'target',
+        prompt: 'Which deployment target should I use?',
+        kind: 'choice',
+        choices: [
+          { value: 'staging', label: 'Staging', description: 'Deploy to the non-production environment.' },
+          { value: 'production', label: 'Production', description: 'Deploy to the production environment.' },
+        ],
+        recommendedChoice: 'staging',
+        context: 'The requested deployment target was not specified.',
+      },
+    ],
+  } satisfies JsonValue;
+  const questions = normalizeUserInputQuestions(requestArguments.questions);
+  const modelAttemptCount = async (): Promise<number> =>
+    (
+      await db.queryOne<{ count: number }>(
+        `SELECT COUNT(*) AS count FROM agent_model_attempts a
+         JOIN agent_steps s ON s.id = a.step_id
+         WHERE s.run_id = ?`,
+        [runId],
+      )
+    )?.count ?? 0;
+
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'clarification-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads
+        (id, user_id, app_id, title, title_source, next_sequence, created_at, updated_at)
+       VALUES (?, 1, 'scenario-app', 'clarification-thread', 'manual', 2, ?, ?)`,
+      [threadId, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, goal_text, goal_revision, goal_updated_at,
+         verification_status, budget_json, definition_json, plan_json, usage_json,
+         active_execution_started_at, executing_runtime_count, consumed_input_sequence, input_revision,
+         created_at, started_at, updated_at)
+       VALUES (?, 1, 'scenario-app', ?, 'running', 'in_progress', ?, 1, ?, 'not_started', ?, ?, ?, ?,
+               NULL, 0, 1, 1, ?, ?, ?)`,
+      [
+        runId,
+        threadId,
+        'Deploy the service, but the target is not specified.',
+        now,
+        JSON.stringify({
+          maxContextTokens: 16_384,
+          maxOutputTokens: 4_096,
+          maxRunSteps: 100,
+          maxActiveExecutionSeconds: 3_600,
+          toolTimeoutSeconds: 120,
+          maxToolOutputBytes: 1_048_576,
+          maxRecallItems: 5,
+          maxRecallBytes: 8_192,
+          maxSubagentMessages: 100,
+          maxSubagentMessageBytes: 1_048_576,
+          revision: 1,
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          agentDefinitionId: 'scenario-agent',
+          model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          approvalMode: 'ask',
+          connectionIds: [],
+          policyRevision: 1,
+          settingsRevision: 1,
+        }),
+        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+        JSON.stringify({
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          steps: 0,
+          subagentMessages: 0,
+          subagentMessageBytes: 0,
+        }),
+        now,
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO ai_thread_entries
+        (id, thread_id, user_id, app_id, run_id, sequence, kind, payload_json, created_at)
+       VALUES ('clarification-initial-input', ?, 1, 'scenario-app', ?, 1, 'user_input', ?, ?)`,
+      [threadId, runId, JSON.stringify({ text: 'Deploy the service.', artifactRefs: [] }), now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES (?, ?, 'root', 'native', ?, 'running', 'executing', 0, 'owner-clarification-runtime', ?, ?)`,
+      [
+        runtimeId,
+        runId,
+        JSON.stringify({ providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 }),
+        now,
+        now,
+      ],
+    );
+
+    const simulateRootExecutionClaim = async (cycleNow: number): Promise<void> => {
+      const runtime = await db.queryOne<{ schedule_state: string }>(
+        'SELECT schedule_state FROM agent_runtimes WHERE id = ? AND run_id = ?',
+        [runtimeId, runId],
+      );
+      if (runtime?.schedule_state === 'executing') return;
+      assert.equal(runtime?.schedule_state, 'runnable');
+      const runtimeChanged = await db.execute(
+        `UPDATE agent_runtimes SET schedule_state = 'executing', updated_at = ?
+         WHERE id = ? AND run_id = ? AND status = 'running' AND schedule_state = 'runnable'`,
+        [cycleNow, runtimeId, runId],
+      );
+      assert.equal(runtimeChanged.changes, 1);
+      const run = await db.queryOne<{ executing_runtime_count: number }>(
+        'SELECT executing_runtime_count FROM agent_runs WHERE id = ? AND status = ?',
+        [runId, 'running'],
+      );
+      assert.equal(run?.executing_runtime_count, 0, 'beginModelStep owns the executing runtime counter');
+    };
+
+    const runClarificationCycle = async (index: number) => {
+      const cycleNow = now + index * 20;
+      await simulateRootExecutionClaim(cycleNow);
+      const before = await repository.snapshot(scope, runId);
+      assert.ok(before);
+      assert.equal(before.status, 'running');
+
+      const begunModel = await stateCommit.beginModelStep({
+        scope,
+        runId,
+        runtimeId,
+        expectedRunVersion: before.version,
+        inputWatermark: before.inputRevision,
+        reservedTokens: 1_024,
+        estimatedInputTokens: 64,
+        reservedOutputTokens: 256,
+        contextWindowTokens: 16_384,
+        now: cycleNow,
+      });
+      const inspectionContext: ToolContext = {
+        ...scope,
+        actor: { kind: 'agent', userId: scope.userId, appId: scope.appId, runId, agentRuntimeId: runtimeId },
+        runId,
+        agentRuntimeId: runtimeId,
+        connectionIds: [],
+        environment: null,
+        stepId: begunModel.stepId,
+        signal: new AbortController().signal,
+        deadlineAt: cycleNow + 120,
+        maxOutputBytes: begunModel.run.budget.maxToolOutputBytes,
+        inputRevision: begunModel.run.inputRevision,
+      };
+      const inspection = await requestTool.inspect(requestArguments, inspectionContext, 1);
+      const providerCallId = `clarification-provider-${index}`;
+      const toolCallId = `clarification-tool-${index}`;
+      const proposed = await stateCommit.commitToolProposalBatch({
+        scope,
+        runId,
+        runtimeId,
+        modelStepId: begunModel.stepId,
+        attemptId: begunModel.attemptId,
+        expectedRunVersion: begunModel.run.version,
+        assistantEntryId: `clarification-assistant-${index}`,
+        assistantText: '',
+        items: [
+          {
+            providerCallId,
+            toolCallId,
+            toolName: requestTool.descriptor.name,
+            toolVersion: requestTool.descriptor.version,
+            argumentsJson: JSON.stringify(requestArguments),
+            inspection,
+          },
+        ],
+        usage: begunModel.run.usage,
+        inputTokens: 10,
+        outputTokens: 5,
+        cachedInputTokens: 0,
+        estimatedUsage: false,
+        finishReason: 'tool-calls',
+        now: cycleNow + 1,
+      });
+      const proposal = proposed.items[0]!;
+      const begunTool = await stateCommit.beginReadToolBatch({
+        scope,
+        runId,
+        runtimeId,
+        expectedRunVersion: proposed.run.version,
+        items: [{ toolStepId: proposal.toolStepId, toolCallId }],
+        now: cycleNow + 2,
+      });
+      const executionContext: ToolContext = {
+        ...inspectionContext,
+        stepId: proposal.toolStepId,
+        inputRevision: begunTool.run.inputRevision,
+      };
+      const result = await requestTool.execute(inspection, executionContext);
+      const requestId = `clarification-request-${index}`;
+      const observedRequestedBefore = userInputObserverEvents.filter((type) => type === 'input.requested').length;
+      const parked = await stateCommit.settleUserInputRequestTool({
+        scope,
+        runId,
+        runtimeId,
+        toolStepId: proposal.toolStepId,
+        toolCallId,
+        expectedRunVersion: begunTool.run.version,
+        toolResultEntryId: `clarification-result-${index}`,
+        providerCallId,
+        requestId,
+        questions,
+        result,
+        now: cycleNow + 3,
+      });
+      assert.equal(parked.run.status, 'awaiting_input');
+      assert.equal(
+        userInputObserverEvents.filter((type) => type === 'input.requested').length - observedRequestedBefore,
+        1,
+        'each P-076 input.requested transition must reach the post-commit durable observer exactly once',
+      );
+      assert.equal(parked.run.executingRuntimeCount, 0);
+      const persisted = await repository.snapshot(scope, runId);
+      assert.ok(persisted);
+      assert.deepEqual(persisted.pendingInputRequest, {
+        id: requestId,
+        runtimeId,
+        questions,
+        requestedAt: cycleNow + 3,
+      });
+      const runtime = await db.queryOne<{ schedule_state: string }>(
+        'SELECT schedule_state FROM agent_runtimes WHERE id = ? AND run_id = ?',
+        [runtimeId, runId],
+      );
+      assert.equal(runtime?.schedule_state, 'waiting_message');
+      return { cycleNow, parked, requestId };
+    };
+
+    let answersResumed = 0;
+    let guardPauses = 0;
+    for (let index = 1; index <= 5; index += 1) {
+      const cycle = await runClarificationCycle(index);
+      const attemptsWhileWaiting = await modelAttemptCount();
+      const guard = await db.queryOne<{ paused_runtime_id: string | null; no_progress_count: number }>(
+        'SELECT paused_runtime_id, no_progress_count FROM agent_loop_guards WHERE run_id = ?',
+        [runId],
+      );
+      if (index < 5) assert.equal(guard?.paused_runtime_id ?? null, null);
+      else {
+        assert.equal(
+          guard?.paused_runtime_id,
+          runtimeId,
+          'repeated clarification must use the existing P-045 pause owner',
+        );
+        guardPauses += 1;
+      }
+      const answerEntryId = `clarification-answer-${index}`;
+      const resumed = await stateCommit.appendInput({
+        scope,
+        runId,
+        inputEntryId: answerEntryId,
+        input: { text: 'target: staging', artifactRefs: [] },
+        mode: 'append',
+        expectedRunVersion: cycle.parked.run.version,
+        idempotencyKey: `clarification-answer-key-${index}`,
+        requestHash: `clarification-answer-hash-${index}`,
+        now: cycle.cycleNow + 4,
+      });
+      assert.equal(resumed.run.status, 'running');
+      assert.equal(resumed.shouldReschedule, true);
+      assert.equal(
+        await modelAttemptCount(),
+        attemptsWhileWaiting,
+        'answering must not create an extra model attempt itself',
+      );
+      const request = await db.queryOne<{ status: string; answer_entry_id: string | null }>(
+        'SELECT status, answer_entry_id FROM agent_input_requests WHERE id = ?',
+        [cycle.requestId],
+      );
+      assert.deepEqual(request, { status: 'answered', answer_entry_id: answerEntryId });
+      const resumedSnapshot = await repository.snapshot(scope, runId);
+      assert.ok(resumedSnapshot);
+      assert.equal(resumedSnapshot.pendingInputRequest, null);
+      const runtime = await db.queryOne<{ schedule_state: string }>(
+        'SELECT schedule_state FROM agent_runtimes WHERE id = ? AND run_id = ?',
+        [runtimeId, runId],
+      );
+      assert.equal(runtime?.schedule_state, 'runnable');
+      if (index === 5) {
+        const resetGuard = await db.queryOne<{
+          paused_runtime_id: string | null;
+          no_progress_count: number;
+        }>('SELECT paused_runtime_id, no_progress_count FROM agent_loop_guards WHERE run_id = ?', [runId]);
+        assert.deepEqual(resetGuard, { paused_runtime_id: null, no_progress_count: 0 });
+      }
+      answersResumed += 1;
+    }
+
+    const cancellationCycle = await runClarificationCycle(6);
+    const attemptsBeforeCancel = await modelAttemptCount();
+    const cancelled = await stateCommit.cancelRun({
+      scope,
+      runId,
+      expectedRunVersion: cancellationCycle.parked.run.version,
+      idempotencyKey: 'clarification-cancel-key',
+      requestHash: 'clarification-cancel-hash',
+      now: cancellationCycle.cycleNow + 4,
+    });
+    assert.equal(cancelled.run.status, 'cancelled');
+    assert.equal(await modelAttemptCount(), attemptsBeforeCancel);
+    const cancelledRequest = await db.queryOne<{ status: string }>(
+      'SELECT status FROM agent_input_requests WHERE id = ?',
+      [cancellationCycle.requestId],
+    );
+    assert.deepEqual(cancelledRequest, { status: 'cancelled' });
+    const cancelledSnapshot = await repository.snapshot(scope, runId);
+    assert.ok(cancelledSnapshot);
+    assert.equal(cancelledSnapshot.pendingInputRequest, null);
+
+    const inputRequestEvents = await db.queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM agent_events WHERE run_id = ? AND type = 'input.requested'",
+      [runId],
+    );
+    assert.equal(inputRequestEvents?.count, 6);
+    const loopDetectedEvents = await db.queryOne<{ count: number }>(
+      "SELECT COUNT(*) AS count FROM agent_events WHERE run_id = ? AND type = 'run.loop_detected'",
+      [runId],
+    );
+    assert.equal(loopDetectedEvents?.count, 1);
+
+    return [
+      { name: 'clarification_requests_parked', value: inputRequestEvents?.count ?? 0, unit: 'requests' },
+      { name: 'clarification_answers_resumed', value: answersResumed, unit: 'answers' },
+      { name: 'model_attempts_created_while_waiting', value: 0, unit: 'attempts' },
+      { name: 'clarification_loop_guard_pauses', value: guardPauses, unit: 'pauses' },
+      {
+        name: 'unanswered_requests_cancelled',
+        value: cancelledRequest?.status === 'cancelled' ? 1 : 0,
+        unit: 'requests',
+      },
+    ];
+  } finally {
+    await db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const modelFinishReasonStateMachineScenario: Scenario = async () => {
+  const cases = [
+    { reason: 'stop' as const, toolCalls: 0, expected: { kind: 'complete' } },
+    { reason: 'tool-calls' as const, toolCalls: 2, expected: { kind: 'tool_calls' } },
+    { reason: 'length' as const, toolCalls: 0, expected: { kind: 'failed', errorCode: 'MODEL_OUTPUT_TRUNCATED' } },
+    {
+      reason: 'content-filter' as const,
+      toolCalls: 0,
+      expected: { kind: 'failed', errorCode: 'MODEL_CONTENT_FILTERED' },
+    },
+    {
+      reason: 'error' as const,
+      toolCalls: 0,
+      expected: { kind: 'failed', errorCode: 'MODEL_PROVIDER_REPORTED_ERROR' },
+    },
+    {
+      reason: 'other' as const,
+      toolCalls: 0,
+      expected: { kind: 'failed', errorCode: 'MODEL_FINISH_REASON_UNSUPPORTED' },
+    },
+    {
+      reason: null,
+      toolCalls: 0,
+      expected: { kind: 'failed', errorCode: 'MODEL_FINISH_REASON_MISSING' },
+    },
+    {
+      reason: 'stop' as const,
+      toolCalls: 1,
+      expected: { kind: 'failed', errorCode: 'MODEL_FINISH_REASON_MISMATCH' },
+    },
+    {
+      reason: 'tool-calls' as const,
+      toolCalls: 0,
+      expected: { kind: 'failed', errorCode: 'MODEL_FINISH_REASON_MISMATCH' },
+    },
+  ];
+  for (const item of cases) {
+    assert.deepEqual(modelFinishDisposition(item.reason, item.toolCalls), item.expected);
+  }
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-finish-reason-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'finish.sqlite', nodeEnv: 'test' });
+  const stateCommit = new SqliteStateCommitAdapter(db);
+  const repository = new SqliteRunRepository(db);
+  const now = 1_800_000_000;
+  const runUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedInputTokens: 0,
+    steps: 0,
+    subagentMessages: 0,
+    subagentMessageBytes: 0,
+  };
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'finish-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+       VALUES ('finish-thread', 1, 'scenario-app', 'finish-thread', 'manual', ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, verification_status,
+         budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         created_at, started_at, updated_at)
+       VALUES ('finish-run', 1, 'scenario-app', 'finish-thread', 'running', 'in_progress', 'not_started',
+               ?, ?, ?, ?, 1, ?, ?, ?)`,
+      [
+        JSON.stringify({
+          maxContextTokens: 16_384,
+          maxOutputTokens: 4_096,
+          maxRunSteps: 100,
+          maxActiveExecutionSeconds: 3_600,
+          toolTimeoutSeconds: 120,
+          maxToolOutputBytes: 1_048_576,
+          maxRecallItems: 5,
+          maxRecallBytes: 8_192,
+          maxSubagentMessages: 100,
+          maxSubagentMessageBytes: 1_048_576,
+          revision: 1,
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          agentDefinitionId: 'scenario-agent',
+          model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          approvalMode: 'ask',
+          connectionIds: [],
+          policyRevision: 1,
+          settingsRevision: 1,
+        }),
+        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+        JSON.stringify(runUsage),
+        now,
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES ('finish-runtime', 'finish-run', 'root', 'native', ?, 'running', 'executing', 0,
+               'owner-finish-runtime', ?, ?)`,
+      [
+        JSON.stringify({ providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 }),
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at)
+       VALUES ('finish-step', 'finish-run', 'finish-runtime', 1, 'model', 'running', 0, '[]', '[]', ?)`,
+      [now],
+    );
+    await db.execute(
+      `INSERT INTO agent_model_attempts
+        (id, step_id, attempt_index, status, reserved_tokens, created_at)
+       VALUES ('finish-attempt', 'finish-step', 1, 'streaming', 4096, ?)`,
+      [now],
+    );
+
+    const settled = await stateCommit.settleModelStep({
+      scope,
+      runId: 'finish-run',
+      runtimeId: 'finish-runtime',
+      stepId: 'finish-step',
+      attemptId: 'finish-attempt',
+      expectedRunVersion: 1,
+      assistantEntryId: 'finish-partial-entry',
+      assistantText: 'partial output before provider length stop',
+      usage: { ...runUsage, inputTokens: 120, outputTokens: 64, steps: 1 },
+      inputTokens: 120,
+      outputTokens: 64,
+      cachedInputTokens: 0,
+      estimatedUsage: false,
+      finishReason: 'length',
+      errorCode: 'MODEL_OUTPUT_TRUNCATED',
+      terminalStatus: 'failed',
+      now: now + 1,
+    });
+    assert.equal(settled.run.status, 'failed');
+    assert.equal(settled.run.goalStatus, 'not_satisfied');
+    assert.equal(settled.run.verificationStatus, 'failed');
+
+    const snapshot = await repository.snapshot(scope, 'finish-run');
+    assert.equal(snapshot?.terminalIssue?.errorCode, 'MODEL_OUTPUT_TRUNCATED');
+    const partial = await db.queryOne<{ kind: string; payload_json: string }>(
+      "SELECT kind, payload_json FROM ai_thread_entries WHERE id = 'finish-partial-entry'",
+    );
+    assert.equal(partial?.kind, 'assistant_message');
+    assert.equal(
+      (JSON.parse(partial?.payload_json ?? '{}') as { text?: unknown }).text,
+      'partial output before provider length stop',
+    );
+  } finally {
+    await db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+
+  return [
+    { name: 'finish_reason_policy_cases', value: cases.length, unit: 'cases' },
+    { name: 'unsafe_finish_reasons_marked_success', value: 0, unit: 'cases' },
+    { name: 'truncated_runs_marked_satisfied', value: 0, unit: 'runs' },
+  ];
+};
+
+const providerContinuationRoundTripScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-provider-continuation-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'continuation.sqlite', nodeEnv: 'test' });
+  const stateCommit = new SqliteStateCommitAdapter(db);
+  const repository = new SqliteRunRepository(db);
+  const continuations = new SqliteModelContinuationRepository(db);
+  const now = 1_800_200_000;
+  const runId = 'continuation-run';
+  const runtimeId = 'continuation-runtime';
+  const threadId = 'continuation-thread';
+  const route = {
+    providerId: 'scenario-provider',
+    modelId: 'scenario-model',
+    configurationVersion: 1,
+    protocol: 'responses' as const,
+  };
+  const modelRequest = (providerContinuation?: ModelProviderContinuation): ModelRequest => ({
+    userId: 1,
+    providerId: route.providerId,
+    modelId: route.modelId,
+    configurationVersion: route.configurationVersion,
+    messages: [
+      {
+        role: 'assistant',
+        content: '',
+        toolCalls: [{ id: 'call-1', name: 'scenario_read', argumentsJson: '{}' }],
+        ...(providerContinuation ? { providerContinuation } : {}),
+      },
+    ],
+    maxOutputTokens: 256,
+  });
+  const makeContinuation = (suffix: string, toolCallId: string): ModelProviderContinuation => {
+    const collector = new OpenAiResponsesContinuationCollector();
+    collector.recordReasoning({
+      openai: {
+        itemId: `reasoning-${suffix}`,
+        reasoningEncryptedContent: `encrypted-${suffix}`,
+      },
+    });
+    collector.recordToolCall(toolCallId, { openai: { itemId: `item-${suffix}` } });
+    const continuation = collector.build(route);
+    assert.ok(continuation);
+    return continuation;
+  };
+  const inspection = (toolName: string, operationHash: string): ToolInspection => ({
+    toolName,
+    toolVersion: '1',
+    normalizedArguments: {},
+    target: {
+      kind: 'run',
+      targetIdentity: runId,
+      endpoint: runId,
+      loginUser: runtimeId,
+      configurationHash: 'continuation-fixture',
+    },
+    resourceKeys: [runId],
+    risk: 'read',
+    mutation: false,
+    operationHash,
+    operationHashVersion: 1,
+    preconditions: [],
+    secretRefs: [],
+    policyRevision: 1,
+    inputRevision: 1,
+  });
+  const result = (summary: string): ToolResult => ({
+    ok: true,
+    summary,
+    artifactRefs: [],
+    truncated: false,
+    outcome: 'confirmed',
+    verification: { status: 'verified', summary: 'continuation fixture verified', evidenceRefs: [] },
+  });
+
+  try {
+    const firstContinuation = makeContinuation('one', 'provider-call-1');
+    assert.deepEqual(
+      decodeOpenAiResponsesContinuation(firstContinuation, modelRequest(firstContinuation), 'responses'),
+      [
+        { type: 'reasoning', itemId: 'reasoning-one', reasoningEncryptedContent: 'encrypted-one' },
+        { type: 'tool-call', toolCallId: 'provider-call-1', itemId: 'item-one' },
+      ],
+    );
+    assert.deepEqual(
+      decodeOpenAiResponsesContinuation(
+        firstContinuation,
+        { ...modelRequest(firstContinuation), configurationVersion: 2 },
+        'responses',
+      ),
+      [],
+      'opaque continuation must not cross provider configuration versions',
+    );
+    assert.deepEqual(
+      decodeOpenAiResponsesContinuation(firstContinuation, modelRequest(firstContinuation), 'chat-completions'),
+      [],
+      'Responses continuation must not cross protocol boundaries',
+    );
+    const chatCollector = new OpenAiResponsesContinuationCollector();
+    chatCollector.recordReasoning({
+      openai: { itemId: 'chat-reasoning', reasoningEncryptedContent: 'chat-encrypted' },
+    });
+    assert.equal(
+      chatCollector.build({ ...route, protocol: 'chat-completions' }),
+      undefined,
+      'Chat Completions must keep the simple path without fabricated continuation state',
+    );
+    assert.throws(
+      () =>
+        decodeModelProviderContinuation({
+          ...firstContinuation,
+          data: { payload: 'x'.repeat(300 * 1024) },
+        }),
+      /MODEL_PROVIDER_CONTINUATION_TOO_LARGE/,
+      'opaque continuation envelopes must be size bounded before durability',
+    );
+
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'continuation-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads
+        (id, user_id, app_id, title, title_source, next_sequence, created_at, updated_at)
+       VALUES (?, 1, 'scenario-app', 'continuation', 'manual', 2, ?, ?)`,
+      [threadId, now, now],
+    );
+    const budget = {
+      maxContextTokens: 16_384,
+      maxOutputTokens: 4_096,
+      maxRunSteps: 100,
+      maxActiveExecutionSeconds: 3_600,
+      toolTimeoutSeconds: 120,
+      maxToolOutputBytes: 65_536,
+      maxRecallItems: 5,
+      maxRecallBytes: 8_192,
+      maxSubagentMessages: 100,
+      maxSubagentMessageBytes: 1_048_576,
+      contextCompactionMode: 'balanced',
+      revision: 1,
+    };
+    const definition = {
+      schemaVersion: 1,
+      agentDefinitionId: 'scenario-agent',
+      model: { providerId: route.providerId, modelId: route.modelId, configurationVersion: route.configurationVersion },
+      approvalMode: 'full_access',
+      connectionIds: [],
+      policyRevision: 1,
+      settingsRevision: 1,
+    };
+    const usage = {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      steps: 0,
+      subagentMessages: 0,
+      subagentMessageBytes: 0,
+    };
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, goal_text, goal_revision, goal_updated_at,
+         verification_status, budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         consumed_input_sequence, input_revision, created_at, started_at, updated_at)
+       VALUES (?, 1, 'scenario-app', ?, 'running', 'in_progress', 'Use two read tools.', 1, ?,
+               'not_started', ?, ?, ?, ?, 0, 0, 1, ?, ?, ?)`,
+      [
+        runId,
+        threadId,
+        now,
+        JSON.stringify(budget),
+        JSON.stringify(definition),
+        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+        JSON.stringify(usage),
+        now,
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES (?, ?, 'root', 'native', ?, 'running', 'runnable', 0, 'continuation-owner', ?, ?)`,
+      [runtimeId, runId, JSON.stringify(definition.model), now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_thread_entries
+        (id, thread_id, user_id, app_id, run_id, sequence, kind, payload_json, created_at)
+       VALUES ('continuation-input', ?, 1, 'scenario-app', ?, 1, 'user_input', ?, ?)`,
+      [threadId, runId, JSON.stringify({ text: 'Use two read tools.', artifactRefs: [] }), now],
+    );
+
+    const runToolRound = async (
+      round: number,
+      continuation: ModelProviderContinuation,
+      providerCallId: string,
+    ): Promise<void> => {
+      const before = await repository.snapshot(scope, runId);
+      assert.ok(before);
+      const begun = await stateCommit.beginModelStep({
+        scope,
+        runId,
+        runtimeId,
+        expectedRunVersion: before.version,
+        inputWatermark: before.inputRevision,
+        reservedTokens: 512,
+        estimatedInputTokens: 128,
+        reservedOutputTokens: 256,
+        contextWindowTokens: 16_384,
+        now: now + round * 10,
+      });
+      const proposed = await stateCommit.commitToolProposalBatch({
+        scope,
+        runId,
+        runtimeId,
+        modelStepId: begun.stepId,
+        attemptId: begun.attemptId,
+        expectedRunVersion: begun.run.version,
+        assistantEntryId: `continuation-assistant-${round}`,
+        assistantText: '',
+        items: [
+          {
+            providerCallId,
+            toolCallId: `continuation-tool-${round}`,
+            toolName: 'scenario_read',
+            toolVersion: '1',
+            argumentsJson: '{}',
+            inspection: inspection('scenario_read', `continuation-hash-${round}`),
+          },
+        ],
+        usage: begun.run.usage,
+        inputTokens: 100 + round,
+        outputTokens: 20 + round,
+        cachedInputTokens: 40,
+        estimatedUsage: false,
+        finishReason: 'tool-calls',
+        providerContinuation: continuation,
+        now: now + round * 10 + 1,
+      });
+      const item = proposed.items[0]!;
+      const started = await stateCommit.beginReadToolBatch({
+        scope,
+        runId,
+        runtimeId,
+        expectedRunVersion: proposed.run.version,
+        items: [{ toolStepId: item.toolStepId, toolCallId: item.toolCallId }],
+        now: now + round * 10 + 2,
+      });
+      await stateCommit.settleReadToolBatch({
+        scope,
+        runId,
+        runtimeId,
+        expectedRunVersion: started.run.version,
+        items: [
+          {
+            toolStepId: item.toolStepId,
+            toolCallId: item.toolCallId,
+            toolResultEntryId: `continuation-result-${round}`,
+            providerCallId,
+            result: result(`round ${round} result`),
+          },
+        ],
+        now: now + round * 10 + 3,
+      });
+    };
+
+    await runToolRound(1, firstContinuation, 'provider-call-1');
+    const secondContinuation = makeContinuation('two', 'provider-call-2');
+    await runToolRound(2, secondContinuation, 'provider-call-2');
+
+    const rows = await db.queryAll<{ step_id: string; continuation_json: string | null }>(
+      `SELECT step_id, continuation_json
+       FROM agent_model_attempts
+       WHERE continuation_json IS NOT NULL
+       ORDER BY created_at, attempt_index`,
+    );
+    assert.equal(rows.length, 2, 'each completed Responses Tool round must durably own one continuation envelope');
+
+    const freshContinuationRepository = new SqliteModelContinuationRepository(db);
+    const modelStepRefs = await db.queryAll<{ id: string }>(
+      `SELECT id FROM agent_steps WHERE run_id = ? AND kind = 'model' ORDER BY step_index`,
+      [runId],
+    );
+    const loaded = await freshContinuationRepository.load(
+      scope,
+      modelStepRefs.map((row) => ({ runId, modelStepId: row.id })),
+    );
+    const loadedByStep = new Map(loaded.map((item) => [item.modelStepId, item.continuation] as const));
+    assert.deepEqual(
+      modelStepRefs.map((row) => loadedByStep.get(row.id)),
+      [firstContinuation, secondContinuation],
+      'restart projection must recover the exact opaque continuation envelopes',
+    );
+
+    const freshConversations = new ConversationService(new SqliteConversationRepository(db), clock, null!, null!);
+    const freshContext = new ContextService(
+      freshConversations,
+      new RecallService(new EmptyRecallRepository(), clock),
+      new SkillRegistry(),
+      freshContinuationRepository,
+      null!,
+    );
+    const contextPlan = await freshContext.compose({
+      scope,
+      threadId,
+      runId,
+      currentInput: 'Continue after both tool results.',
+      modelContextWindow: 16_384,
+      maxContextTokens: 16_384,
+      reservedOutputTokens: 512,
+      maxRecallItems: 1,
+      maxRecallBytes: 1024,
+      tools: [],
+    });
+    const assistantRounds = contextPlan.messages.filter(
+      (message) => message.role === 'assistant' && message.toolCalls?.length,
+    );
+    assert.equal(assistantRounds.length, 2);
+    assert.deepEqual(assistantRounds[0]?.providerContinuation, firstContinuation);
+    assert.deepEqual(assistantRounds[1]?.providerContinuation, secondContinuation);
+    assert.ok(
+      contextPlan.estimatedInputTokens > 0 &&
+        JSON.stringify(assistantRounds).includes('encrypted-one') &&
+        JSON.stringify(assistantRounds).includes('encrypted-two'),
+      'opaque continuation must participate in model-facing context reconstruction/accounting',
+    );
+
+    const durableAssistantPayloads = await db.queryAll<{ payload_json: string }>(
+      `SELECT payload_json FROM ai_thread_entries
+       WHERE run_id = ? AND kind = 'assistant_message' ORDER BY sequence`,
+      [runId],
+    );
+    assert.equal(durableAssistantPayloads.length, 2);
+    for (const payload of durableAssistantPayloads) {
+      const parsed = decodeDurableJsonValue(JSON.parse(payload.payload_json));
+      assert.ok(parsed && !Array.isArray(parsed) && typeof parsed === 'object');
+      assert.equal(
+        'providerContinuation' in parsed,
+        false,
+        'Ledger must hold only the model-step reference, not a second truth',
+      );
+      assert.equal(typeof parsed.modelStepId, 'string');
+    }
+
+    return [
+      { name: 'responses_tool_rounds_with_continuation', value: rows.length, unit: 'rounds' },
+      { name: 'restart_continuations_recovered', value: loaded.length, unit: 'rounds' },
+      { name: 'cross_route_continuations_reused', value: 0, unit: 'rounds' },
+      { name: 'chat_continuations_fabricated', value: 0, unit: 'rounds' },
+      { name: 'ledger_duplicate_continuation_truths', value: 0, unit: 'copies' },
+      { name: 'oversized_continuations_rejected', value: 1, unit: 'cases' },
+    ];
+  } finally {
+    await db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const artifactLifecycleSettingsScenario: Scenario = async () => {
+  const defaults = createDefaultAgentSettings();
+  assert.equal(
+    'workspaceIdleTtlSeconds' in defaults.workspaceRuntime,
+    false,
+    'P-094 must not expose an idle Workspace setting until Workspace activity has a trustworthy runtime owner',
+  );
+  assert.equal(
+    'workspaceIdleTtlSeconds' in defaults.hardLimits,
+    false,
+    'P-094 must remove the matching fake Workspace idle hard-limit contract',
+  );
+  const legacyWorkspaceIdle = {
+    ...(defaults as unknown as Record<string, unknown>),
+    workspaceRuntime: {
+      ...(defaults.workspaceRuntime as unknown as Record<string, unknown>),
+      workspaceIdleTtlSeconds: 900,
+    },
+    hardLimits: {
+      ...(defaults.hardLimits as unknown as Record<string, unknown>),
+      workspaceIdleTtlSeconds: 3_600,
+    },
+  };
+  const normalizedLegacyWorkspaceIdle = normalizeRequestedSettings(legacyWorkspaceIdle);
+  assert.equal('workspaceIdleTtlSeconds' in normalizedLegacyWorkspaceIdle.workspaceRuntime, false);
+  assert.equal('workspaceIdleTtlSeconds' in normalizedLegacyWorkspaceIdle.hardLimits, false);
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-artifact-lifecycle-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'artifact-lifecycle.sqlite', nodeEnv: 'test' });
+  const limits = {
+    forUser: async () => ({
+      maxSingleArtifactBytes: 10,
+      maxGlobalArtifactBytes: 100,
+      unretainedArtifactTtlSeconds: 2,
+      minFreeDiskBytes: 0,
+    }),
+  } as unknown as ArtifactLimitPolicyPort;
+  const store = new LocalArtifactStore(db, limits, { dataDirectory: directory, uploadTtlSeconds: 60 });
+  const artifacts = new ArtifactService(store);
+  const scope: Scope = { userId: 1, appId: 'artifact-lifecycle-app' };
+  const now = Math.floor(Date.now() / 1000);
+  const threadId = randomUUID();
+  const runId = randomUUID();
+  const source = (bytes: Buffer): AsyncIterable<Uint8Array> =>
+    (async function* () {
+      yield bytes;
+    })();
+  const writeArtifact = async (name: string, bytes: Buffer) => {
+    const reservation = await artifacts.begin(scope, {
+      name,
+      mediaType: 'application/octet-stream',
+      declaredBytes: bytes.byteLength,
+    });
+    return artifacts.write(scope, reservation.artifactId, source(bytes), new AbortController().signal);
+  };
+
+  try {
+    await db.initialize();
+    await db.execute(
+      "INSERT INTO users (id, username, hashed_password) VALUES (1, 'artifact-lifecycle-user', 'not-used')",
+    );
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, ?, '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [scope.appId, now, now],
+    );
+    const settings = createDefaultAgentSettings();
+    settings.storage.maxArtifactBytes = 10;
+    settings.storage.maxSingleArtifactBytes = 10;
+    settings.storage.maxGlobalArtifactBytes = 100;
+    settings.storage.unretainedArtifactTtlSeconds = 2;
+    settings.hardLimits.maxArtifactBytes = 10;
+    settings.hardLimits.maxSingleArtifactBytes = 10;
+    settings.hardLimits.maxGlobalArtifactBytes = 100;
+    settings.hardLimits.unretainedArtifactTtlSeconds = 2;
+    await db.execute(
+      'INSERT INTO agent_settings (user_id, value_json, revision, updated_at) VALUES (1, ?, 1, ?)',
+      [JSON.stringify(settings), now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+       VALUES (?, 1, ?, 'artifact lifecycle', 'manual', ?, ?)`,
+      [threadId, scope.appId, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, verification_status,
+         budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         created_at, started_at, updated_at)
+       VALUES (?, 1, ?, ?, 'running', 'in_progress', 'not_started', '{}', '{}', '{}', '{}', 1, ?, ?, ?)`,
+      [runId, scope.appId, threadId, now, now, now],
+    );
+
+    const first = await writeArtifact('first.bin', Buffer.alloc(6, 1));
+    const second = await writeArtifact('second.bin', Buffer.alloc(6, 2));
+    assert.ok(
+      first.expiresAt && first.readyAt && first.expiresAt >= first.readyAt + 1,
+      'ready unretained Artifacts must receive a durable retention deadline',
+    );
+    await artifacts.attach(1, first.id, {
+      targetAppId: scope.appId,
+      threadId,
+      runId,
+      role: 'input',
+    });
+    await db.execute(
+      `INSERT INTO agent_artifact_links (artifact_id, run_id, role, created_at)
+       VALUES (?, ?, 'evidence', ?)`,
+      [first.id, runId, now],
+    );
+    await assert.rejects(
+      () =>
+        artifacts.attach(1, second.id, {
+          targetAppId: scope.appId,
+          threadId,
+          runId,
+          role: 'input',
+        }),
+      /ARTIFACT_RUN_QUOTA_EXCEEDED/,
+      'the second first-time link must be rejected when it would cross the current per-Run artifact quota',
+    );
+
+    settings.storage.maxArtifactBytes = 20;
+    settings.hardLimits.maxArtifactBytes = 20;
+    await db.execute('UPDATE agent_settings SET value_json = ?, revision = revision + 1, updated_at = ? WHERE user_id = 1', [
+      JSON.stringify(settings),
+      now + 1,
+    ]);
+    await artifacts.attach(1, second.id, {
+      targetAppId: scope.appId,
+      threadId,
+      runId,
+      role: 'input',
+    });
+
+    const expired = await writeArtifact('expired.bin', Buffer.from('x'));
+    await db.execute('UPDATE ai_artifacts SET expires_at = ? WHERE id = ?', [now - 1, expired.id]);
+    const retained = await writeArtifact('retained.bin', Buffer.from('r'));
+    const retainedUpdated = await artifacts.retain(scope, retained.id, true, retained.version);
+    assert.equal(retainedUpdated.expiresAt, null, 'retained Artifacts must not have an automatic expiry deadline');
+    await db.execute('UPDATE ai_artifacts SET expires_at = ? WHERE id = ?', [now - 1, retained.id]);
+    const protectedArtifact = await writeArtifact('active-run.bin', Buffer.from('p'));
+    await artifacts.attach(1, protectedArtifact.id, {
+      targetAppId: scope.appId,
+      threadId,
+      runId,
+      role: 'input',
+    });
+    await db.execute('UPDATE ai_artifacts SET expires_at = ? WHERE id = ?', [now - 1, protectedArtifact.id]);
+
+    const checkpointArtifact = await writeArtifact('checkpoint.bin', Buffer.from('c'));
+    await db.execute(
+      `INSERT INTO agent_artifact_links (artifact_id, run_id, role, created_at)
+       VALUES (?, ?, 'checkpoint', ?)`,
+      [checkpointArtifact.id, runId, now],
+    );
+    await db.execute('UPDATE ai_artifacts SET expires_at = ? WHERE id = ?', [now - 1, checkpointArtifact.id]);
+
+    const grantedArtifact = await writeArtifact('grant.bin', Buffer.from('g'));
+    await db.execute(
+      `INSERT INTO agent_artifact_grants
+        (id, artifact_id, receiver_user_id, receiver_app_id, receiver_thread_id, receiver_run_id,
+         scope_key, role, expires_at, revoked_at, created_at)
+       VALUES (?, ?, 1, ?, ?, ?, ?, 'input', ?, NULL, ?)`,
+      [
+        randomUUID(),
+        grantedArtifact.id,
+        scope.appId,
+        threadId,
+        runId,
+        `run:${runId}`,
+        now + 60,
+        now,
+      ],
+    );
+    await db.execute('UPDATE ai_artifacts SET expires_at = ? WHERE id = ?', [now - 1, grantedArtifact.id]);
+
+    const swept = await (
+      store as LocalArtifactStore & { sweepExpired(limit?: number): Promise<number> }
+    ).sweepExpired(20);
+    assert.ok(swept >= 1, 'expired reclaimable Artifacts must be swept');
+    assert.equal(await artifacts.get(scope, expired.id), null, 'expired reclaimable Artifact must be deleted');
+    assert.equal((await artifacts.get(scope, retained.id))?.status, 'ready');
+    assert.equal((await artifacts.get(scope, protectedArtifact.id))?.status, 'ready');
+    assert.equal((await artifacts.get(scope, checkpointArtifact.id))?.status, 'ready');
+    assert.equal((await artifacts.get(scope, grantedArtifact.id))?.status, 'ready');
+
+    return [
+      { name: 'artifact_run_quota_rejections', value: 1, unit: 'cases' },
+      { name: 'artifact_run_quota_current_setting_updates', value: 1, unit: 'cases' },
+      { name: 'artifact_run_quota_distinct_link_accounting', value: 1, unit: 'cases' },
+      { name: 'artifact_ready_ttl_deadlines', value: 1, unit: 'cases' },
+      { name: 'artifact_expiry_sweeps', value: swept, unit: 'artifacts' },
+      { name: 'artifact_expiry_protected_cases', value: 4, unit: 'artifacts' },
+      { name: 'workspace_idle_fake_settings', value: 0, unit: 'settings' },
+    ];
+  } finally {
+    await db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const artifactModelInputScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-artifact-model-input-'));
+  const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'artifact-model-input.sqlite', nodeEnv: 'test' });
+  const limits: ArtifactLimitPolicyPort = {
+    forUser: async () => ({
+      maxSingleArtifactBytes: 16 * 1024 * 1024,
+      maxGlobalArtifactBytes: 64 * 1024 * 1024,
+      unretainedArtifactTtlSeconds: 60 * 60,
+      minFreeDiskBytes: 0,
+    }),
+  };
+  const store = new LocalArtifactStore(db, limits, { dataDirectory: directory, uploadTtlSeconds: 60 });
+  const artifacts = new ArtifactService(store);
+  const artifactScope: Scope = { userId: 1, appId: 'artifact-model-app' };
+  const now = Math.floor(Date.now() / 1000);
+  const threadId = randomUUID();
+  const runId = randomUUID();
+  const rootRuntimeId = randomUUID();
+  const childRuntimeId = randomUUID();
+  const delegationId = randomUUID();
+  const modelRef = JSON.stringify({
+    providerId: 'scenario-provider',
+    modelId: 'scenario-model',
+    configurationVersion: 1,
+  });
+  const source = (bytes: Buffer): AsyncIterable<Uint8Array> =>
+    (async function* () {
+      yield bytes;
+    })();
+
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'artifact-model-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, ?, '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [artifactScope.appId, now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+       VALUES (?, 1, ?, 'artifact model input', 'manual', ?, ?)`,
+      [threadId, artifactScope.appId, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, verification_status,
+         budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         created_at, started_at, updated_at)
+       VALUES (?, 1, ?, ?, 'running', 'in_progress', 'not_started', '{}', '{}', '{}', '{}', 2, ?, ?, ?)`,
+      [runId, artifactScope.appId, threadId, now, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES (?, ?, 'root', 'native', ?, 'running', 'executing', 0, ?, ?, ?)`,
+      [rootRuntimeId, runId, modelRef, `owner-${rootRuntimeId}`, now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES (?, ?, 'child:artifact', 'native', ?, 'running', 'executing', 0, ?, ?, ?)`,
+      [childRuntimeId, runId, modelRef, `owner-${childRuntimeId}`, now, now],
+    );
+
+    const textBytes = Buffer.from('alpha\nbeta\ngamma\n', 'utf8');
+    const largeTextBytes = Buffer.from(
+      Array.from({ length: 2400 }, (_, index) => `line-${String(index + 1).padStart(4, '0')} ${'x'.repeat(12)}`).join('\n'),
+      'utf8',
+    );
+    const imageBytes = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex');
+
+    const writeArtifact = async (name: string, mediaType: string, bytes: Buffer) => {
+      const reservation = await artifacts.begin(artifactScope, {
+        name,
+        mediaType,
+        declaredBytes: bytes.byteLength,
+      });
+      return artifacts.write(artifactScope, reservation.artifactId, source(bytes), new AbortController().signal);
+    };
+
+    const textArtifact = await writeArtifact('notes.txt', 'text/plain', textBytes);
+    const largeArtifact = await writeArtifact('large.txt', 'text/plain', largeTextBytes);
+    const imageArtifact = await writeArtifact('image.png', 'image/png', imageBytes);
+
+    for (const artifactId of [textArtifact.id, largeArtifact.id, imageArtifact.id]) {
+      await db.execute(
+        `INSERT INTO agent_artifact_links (artifact_id, run_id, role, created_at)
+         VALUES (?, ?, 'input', ?)`,
+        [artifactId, runId, now],
+      );
+    }
+    await db.execute(
+      `INSERT INTO agent_delegations
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+         model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
+         dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
+         deadline_at, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'default', ?, 'parent-child', ?, 'read delegated text artifact', '[]', ?, '[]',
+               'settled', 'running', 1, 'isolate', 10, ?, ?, ?, ?, ?)`,
+      [
+        delegationId,
+        runId,
+        rootRuntimeId,
+        childRuntimeId,
+        JSON.stringify(['artifacts.read']),
+        modelRef,
+        JSON.stringify([textArtifact.id, largeArtifact.id]),
+        `artifact-model-key-${delegationId}`,
+        `artifact-model-hash-${delegationId}`,
+        now + 600,
+        now,
+        now,
+      ],
+    );
+
+    const rootText = await readArtifactTextLinesForAgent(
+      artifacts,
+      artifactScope,
+      { runId, runtimeId: rootRuntimeId },
+      textArtifact.id,
+      2,
+      1,
+    );
+    assert.equal(rootText.text, 'beta');
+
+    const largeProjection = await projectArtifactsForModel(
+      artifacts,
+      artifactScope,
+      { runId },
+      [largeArtifact.id],
+      { supportsImageInput: false, supportsFileInput: false },
+    );
+    assert.equal(largeProjection.contentParts.length, 0, 'large text must stay in Artifact storage');
+    assert.ok(
+      largeProjection.textSuffix.includes('"projection":"metadata"'),
+      'large text must project metadata instead of full contents',
+    );
+    const largeRead = await readArtifactTextLinesForAgent(
+      artifacts,
+      artifactScope,
+      { runId, runtimeId: rootRuntimeId },
+      largeArtifact.id,
+      1500,
+      2,
+    );
+    assert.ok(largeRead.text.startsWith('line-1500 '), 'large Artifact must remain readable on demand');
+
+    const childText = await artifacts.getForAgent(
+      artifactScope,
+      { runId, runtimeId: childRuntimeId },
+      textArtifact.id,
+    );
+    const childImage = await artifacts.getForAgent(
+      artifactScope,
+      { runId, runtimeId: childRuntimeId },
+      imageArtifact.id,
+    );
+    assert.equal(childText?.id, textArtifact.id, 'Child must read explicitly delegated Artifact');
+    assert.equal(childImage, null, 'Child must not inherit non-delegated Root Artifact');
+
+    const unsupportedImage = await projectArtifactsForModel(
+      artifacts,
+      artifactScope,
+      { runId },
+      [imageArtifact.id],
+      { supportsImageInput: false, supportsFileInput: true },
+    );
+    assert.equal(unsupportedImage.contentParts.length, 0, 'file capability must not bypass missing image capability');
+    assert.ok(unsupportedImage.textSuffix.includes('"projection":"metadata"'));
+
+    const nativeImage = await projectArtifactsForModel(
+      artifacts,
+      artifactScope,
+      { runId },
+      [imageArtifact.id],
+      { supportsImageInput: true, supportsFileInput: false },
+    );
+    assert.equal(nativeImage.contentParts.length, 1);
+    assert.equal(nativeImage.contentParts[0]?.type, 'image');
+    assert.equal(nativeImage.contentParts[0]?.artifactId, imageArtifact.id);
+    assert.equal(
+      nativeImage.contentParts[0]?.dataBase64,
+      imageBytes.toString('base64'),
+      'native image payload must be sourced from canonical Artifact bytes',
+    );
+    assert.ok(nativeImage.textSuffix.includes(imageArtifact.sha256!), 'model-facing metadata must retain Artifact hash');
+    assert.ok(nativeImage.textSuffix.includes(artifactScope.appId), 'model-facing metadata must retain source App provenance');
+
+    const conversations = new ConversationService(new StaticConversationRepository([]), clock, null!, null!);
+    const context = new ContextService(
+      conversations,
+      new RecallService(new EmptyRecallRepository(), clock),
+      new SkillRegistry(),
+      emptyModelContinuations,
+      artifacts,
+    );
+    const resumed = await context.compose({
+      scope: artifactScope,
+      threadId,
+      runId,
+      currentInput: '',
+      currentInputArtifactRefs: [textArtifact.id],
+      modelInputCapabilities: { supportsImageInput: false, supportsFileInput: false },
+      modelContextWindow: 16_384,
+      maxContextTokens: 16_384,
+      reservedOutputTokens: 512,
+      maxRecallItems: 1,
+      maxRecallBytes: 1024,
+      tools: [],
+    });
+    const resumedUser = resumed.messages.find((message) => message.role === 'user');
+    assert.ok(resumedUser?.content.includes('alpha\nbeta\ngamma'), 'attachment-only resume must project the durable Artifact');
+    assert.ok(resumedUser?.content.includes(textArtifact.sha256!), 'resume projection must preserve Artifact hash provenance');
+
+    return [
+      { name: 'run_scoped_text_reads', value: 1, unit: 'reads' },
+      { name: 'large_artifacts_kept_on_demand', value: 1, unit: 'artifacts' },
+      { name: 'child_non_delegated_artifacts_exposed', value: childImage ? 1 : 0, unit: 'artifacts' },
+      { name: 'unsupported_images_sent_native', value: unsupportedImage.contentParts.length, unit: 'parts' },
+      { name: 'explicit_native_image_parts', value: nativeImage.contentParts.length, unit: 'parts' },
+      { name: 'attachment_only_resumes', value: resumedUser ? 1 : 0, unit: 'runs' },
+    ];
+  } finally {
+    await db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+
+const skillProgressiveDisclosureScenario: Scenario = async () => {
+  const skillScope: Scope = { userId: 1, appId: 'scenario.skills' };
+  const sha256 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex');
+  const standardDocument = (name: string, description: string, body: string) => {
+    const content = [
+      '---',
+      `name: ${name}`,
+      `description: "${description}"`,
+      'license: Apache-2.0',
+      'metadata:',
+      '  scenario: "true"',
+      'allowed-tools: "Read Grep"',
+      '---',
+      '',
+      `# ${name}`,
+      '',
+      body,
+      '',
+    ].join('\n');
+    return { path: `skills/${name}/SKILL.md`, content, sha256: sha256(content) };
+  };
+  const legacyContent = [
+    '---',
+    'id: scenario.legacy',
+    'name: Legacy Operations',
+    'version: 1.0.0',
+    'description: Legacy Nexus Skill metadata remains compatible.',
+    'requiredCapabilities: runs.execute',
+    '---',
+    '',
+    '# Legacy Operations',
+    '',
+    'LEGACY_BODY_ON_DEMAND_ONLY',
+    '',
+  ].join('\n');
+  const legacyDocument = {
+    path: 'skills/legacy/SKILL.md',
+    content: legacyContent,
+    sha256: sha256(legacyContent),
+  };
+  const bundle = (documents: PluginSkillBundle['documents']): PluginSkillBundle => ({
+    appId: skillScope.appId,
+    version: '1.2.3',
+    packageHash: sha256(documents.map((document) => document.sha256).join(':')),
+    capabilities: ['runs.execute'],
+    documents,
+  });
+  class StaticSkillSource implements PluginSkillSourcePort {
+    constructor(
+      private readonly value: PluginSkillBundle,
+      private readonly allowedScope: Scope = skillScope,
+    ) {}
+
+    async load(requested: Scope): Promise<PluginSkillBundle | null> {
+      if (requested.userId !== this.allowedScope.userId || requested.appId !== this.allowedScope.appId) return null;
+      return this.value;
+    }
+  }
+  const composeWithSkills = async (registry: SkillRegistry, currentInput: string, targetScope = skillScope) => {
+    const conversations = new ConversationService(new StaticConversationRepository([]), clock, null!, null!);
+    return new ContextService(
+      conversations,
+      new RecallService(new EmptyRecallRepository(), clock),
+      registry,
+      emptyModelContinuations,
+      null!,
+    ).compose({
+      scope: targetScope,
+      threadId: 'skill-progressive-thread',
+      runId: 'skill-progressive-run',
+      currentInput,
+      modelContextWindow: 16_384,
+      maxContextTokens: 16_384,
+      reservedOutputTokens: 512,
+      maxRecallItems: 1,
+      maxRecallBytes: 1024,
+      tools: [],
+    });
+  };
+
+  const lowDocuments = [
+    standardDocument(
+      'project-planner',
+      'Plan implementation work while keeping signed Skill instructions on demand.',
+      'STANDARD_BODY_ON_DEMAND_ONLY',
+    ),
+    legacyDocument,
+  ];
+  const lowRegistry = new SkillRegistry(new StaticSkillSource(bundle(lowDocuments)));
+  const lowMetadata = await lowRegistry.list(skillScope);
+  assert.deepEqual(
+    lowMetadata.map((item) => item.id).sort(),
+    ['scenario.legacy', 'scenario.skills.project-planner'],
+    'standard SKILL.md must derive stable identity from the signed App id and Skill name while legacy identity remains intact',
+  );
+  assert.equal(
+    lowMetadata.find((item) => item.id === 'scenario.skills.project-planner')?.version,
+    '1.2.3',
+    'standard SKILL.md version must derive from the signed plugin version rather than document-authored authority',
+  );
+  const lowPlan = await composeWithSkills(lowRegistry, 'Plan a small implementation.');
+  const lowSkillInstructions = lowPlan.instructions.find((item) =>
+    item.startsWith('[Available signed plugin Skills;'),
+  );
+  assert.ok(lowSkillInstructions?.includes('scenario.skills.project-planner'));
+  assert.ok(lowSkillInstructions?.includes('scenario.legacy'));
+  assert.ok(!lowSkillInstructions?.includes('STANDARD_BODY_ON_DEMAND_ONLY'));
+  assert.ok(!lowSkillInstructions?.includes('LEGACY_BODY_ON_DEMAND_ONLY'));
+  assert.ok(
+    !lowSkillInstructions?.includes('allowed-tools'),
+    'Agent Skills allowed-tools is compatibility metadata and must not become Nexus model-facing authority',
+  );
+
+  const targetDocument = standardDocument(
+    'incident-triage',
+    'Investigate orbital telemetry 项目 regression and canary drift with bounded evidence.',
+    'HIGH_TARGET_BODY_ON_DEMAND_ONLY',
+  );
+  const fillerDocuments = Array.from({ length: 47 }, (_, index) =>
+    standardDocument(
+      `skill-${String(index).padStart(2, '0')}`,
+      `Routine maintenance workflow ${String(index).padStart(2, '0')} for ordinary service checks.`,
+      `FILLER_BODY_${index}`,
+    ),
+  );
+  const mediumRegistry = new SkillRegistry(new StaticSkillSource(bundle([targetDocument, ...fillerDocuments.slice(0, 15)])));
+  const highRegistry = new SkillRegistry(new StaticSkillSource(bundle([targetDocument, ...fillerDocuments])));
+  const highInput = 'Investigate the orbital telemetry 项目 regression and canary drift.';
+  const [mediumPlan, highPlan] = await Promise.all([
+    composeWithSkills(mediumRegistry, highInput),
+    composeWithSkills(highRegistry, highInput),
+  ]);
+  const mediumInstructions = mediumPlan.instructions.find((item) =>
+    item.startsWith('[Available signed plugin Skills;'),
+  );
+  const highInstructions = highPlan.instructions.find((item) =>
+    item.startsWith('[Available signed plugin Skills;'),
+  );
+  assert.ok(mediumInstructions?.includes('indexed metadata projection'));
+  assert.ok(highInstructions?.includes('indexed metadata projection'));
+  assert.ok(highInstructions?.includes('scenario.skills.incident-triage'), 'relevant high-cardinality Skill must be injected');
+  assert.ok(highInstructions?.includes('skill_search'), 'indexed projection must teach the model how to discover more Skills');
+  assert.ok(!highInstructions?.includes('HIGH_TARGET_BODY_ON_DEMAND_ONLY'), 'Skill body must remain out of the prompt');
+  const injectedMetadataCount = highInstructions?.match(/\n- id:/g)?.length ?? 0;
+  assert.ok(injectedMetadataCount <= 6, 'high-cardinality prompt metadata must remain bounded');
+  const mediumSkillTokens = Math.ceil(Buffer.byteLength(mediumInstructions ?? '', 'utf8') / 4);
+  const highSkillTokens = Math.ceil(Buffer.byteLength(highInstructions ?? '', 'utf8') / 4);
+  assert.equal(
+    highSkillTokens,
+    mediumSkillTokens,
+    'growing the catalog from 16 to 48 Skills with the same relevant match must not linearly grow Skill system tokens',
+  );
+
+  const searchMatches = await highRegistry.search(skillScope, 'orbital telemetry 项目 regression', 3);
+  assert.equal(searchMatches[0]?.id, 'scenario.skills.incident-triage', 'bounded indexed discovery must rank the target first');
+  assert.ok(searchMatches.length <= 3);
+
+  const cryptoHash = { sha256Utf8: sha256 };
+  const toolContext: ToolContext = {
+    ...skillScope,
+    actor: {
+      kind: 'agent',
+      userId: skillScope.userId,
+      appId: skillScope.appId,
+      runId: 'skill-progressive-run',
+      agentRuntimeId: 'skill-progressive-runtime',
+    },
+    runId: 'skill-progressive-run',
+    agentRuntimeId: 'skill-progressive-runtime',
+    connectionIds: [],
+    environment: null,
+    stepId: 'skill-progressive-step',
+    signal: new AbortController().signal,
+    deadlineAt: clock.nowUnixSeconds() + 60,
+    maxOutputBytes: 16 * 1024,
+    inputRevision: 1,
+  };
+  const searchTool = createSkillSearchTool(highRegistry, cryptoHash);
+  const searchInspection = await searchTool.inspect(
+    { query: 'orbital telemetry 项目 regression', limit: 3 },
+    toolContext,
+    1,
+  );
+  const searchResult = await searchTool.execute(searchInspection, toolContext);
+  assert.ok(JSON.stringify(searchResult.data).includes('scenario.skills.incident-triage'));
+  assert.ok(
+    !JSON.stringify(searchResult.data).includes('HIGH_TARGET_BODY_ON_DEMAND_ONLY'),
+    'skill_search must return metadata only',
+  );
+
+  const readTool = createSkillReadTool(highRegistry, cryptoHash);
+  const readInspection = await readTool.inspect({ id: 'scenario.skills.incident-triage' }, toolContext, 1);
+  const readResult = await readTool.execute(readInspection, toolContext);
+  assert.ok(
+    JSON.stringify(readResult.data).includes('HIGH_TARGET_BODY_ON_DEMAND_ONLY'),
+    'skill_read must load the signed body only after explicit selection',
+  );
+
+  const unauthorizedScope: Scope = { userId: 2, appId: skillScope.appId };
+  assert.deepEqual(
+    await highRegistry.search(unauthorizedScope, 'orbital telemetry 项目 regression', 3),
+    [],
+    'a scope that cannot load the installed signed plugin must not discover Skill metadata',
+  );
+  const unauthorizedPlan = await composeWithSkills(highRegistry, highInput, unauthorizedScope);
+  assert.equal(
+    unauthorizedPlan.instructions.some((item) => item.startsWith('[Available signed plugin Skills;')),
+    false,
+    'unauthorized scope must not receive Skill prompt metadata',
+  );
+
+  const tamperedTarget = { ...targetDocument, sha256: '0'.repeat(64) };
+  const tamperedRegistry = new SkillRegistry(new StaticSkillSource(bundle([tamperedTarget])));
+  await assert.rejects(
+    tamperedRegistry.list(skillScope),
+    /PLUGIN_SKILL_CHANGED/,
+    'a Skill whose bytes do not match the signed file hash must fail closed before metadata disclosure',
+  );
+  const undeclaredLegacy = legacyContent.replace('requiredCapabilities: runs.execute', 'requiredCapabilities: machine.files.read');
+  const undeclaredRegistry = new SkillRegistry(
+    new StaticSkillSource(
+      bundle([
+        {
+          path: legacyDocument.path,
+          content: undeclaredLegacy,
+          sha256: sha256(undeclaredLegacy),
+        },
+      ]),
+    ),
+  );
+  await assert.rejects(
+    undeclaredRegistry.list(skillScope),
+    /PLUGIN_SKILL_CAPABILITY_UNDECLARED/,
+    'legacy Nexus capability metadata must remain constrained by the signed plugin manifest',
+  );
+
+  return [
+    { name: 'low_cardinality_metadata_exposed', value: lowMetadata.length, unit: 'skills' },
+    { name: 'high_cardinality_catalog_size', value: 48, unit: 'skills' },
+    { name: 'high_cardinality_prompt_metadata', value: injectedMetadataCount, unit: 'skills' },
+    { name: 'high_cardinality_skill_tokens', value: highSkillTokens, unit: 'tokens' },
+    { name: 'bounded_search_results', value: searchMatches.length, unit: 'skills' },
+    { name: 'skill_bodies_prompt_resident', value: 0, unit: 'bodies' },
+    { name: 'trust_scope_leaks', value: 0, unit: 'skills' },
+  ];
+};
+
+
+const indexedRecallScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-indexed-recall-'));
+  const databasePath = path.join(directory, 'indexed-recall.sqlite');
+  let db: DatabaseAdapter | null = new DatabaseAdapter({
+    dataDirectory: directory,
+    filename: 'indexed-recall.sqlite',
+    nodeEnv: 'test',
+  });
+  const indexedScope: Scope = { userId: 1, appId: 'indexed-recall-app' };
+  const threadId = 'indexed-recall-thread';
+  const now = 1_800_950_000;
+
+  try {
+    await db.initialize();
+    await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'indexed-recall-user', 'not-used')");
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
+       VALUES (1, ?, '1.0.0', 'enabled', 'running', 1, ?, ?)`,
+      [indexedScope.appId, now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads
+        (id, user_id, app_id, title, title_source, next_sequence, created_at, updated_at)
+       VALUES (?, 1, ?, 'Indexed recall', 'manual', 1001, ?, ?)`,
+      [threadId, indexedScope.appId, now, now],
+    );
+
+    await db.execute(
+      `WITH RECURSIVE seq(x) AS (
+         SELECT 1
+         UNION ALL
+         SELECT x + 1 FROM seq WHERE x < 1200
+       )
+       INSERT INTO ai_memories
+         (id, user_id, app_id, content, source_refs_json, confidence, status, created_at, updated_at)
+       SELECT printf('memory-filler-%04d', x), 1, ?, 'irrelevant memory filler ' || x, '[]', 0.5, 'published', ?, ?
+       FROM seq`,
+      [indexedScope.appId, now - 1, now - 1],
+    );
+    await db.execute(
+      `INSERT INTO ai_memories
+        (id, user_id, app_id, content, source_refs_json, confidence, status, created_at, updated_at)
+       VALUES
+        ('memory-english-target', 1, ?, 'Keep ContinuationNeedleID as the durable continuation authority.', '[]', 0.9, 'published', ?, ?),
+        ('memory-cjk-target', 1, ?, '项目约束：索引必须支持两个汉字的查询。', '[]', 0.9, 'published', ?, ?)`,
+      [indexedScope.appId, now - 10_000, now - 10_000, indexedScope.appId, now - 10_000, now - 10_000],
+    );
+
+    await db.execute(
+      `WITH RECURSIVE seq(x) AS (
+         SELECT 1
+         UNION ALL
+         SELECT x + 1 FROM seq WHERE x < 1000
+       )
+       INSERT INTO ai_thread_entries
+         (id, thread_id, user_id, app_id, sequence, kind, payload_json, created_at)
+       SELECT printf('entry-%04d', x), ?, 1, ?, x, 'user_input',
+              json_object('text', 'historical filler ' || x), ?
+       FROM seq`,
+      [threadId, indexedScope.appId, now],
+    );
+    await db.execute(
+      `UPDATE ai_thread_entries
+       SET payload_json = json_object('text', 'Earlier decision: keep ContinuationNeedleID authority in durable state.')
+       WHERE thread_id = ? AND sequence = 20`,
+      [threadId],
+    );
+    await db.execute(
+      `UPDATE ai_thread_entries
+       SET payload_json = json_object('text', '项目历史约束：短中文检索必须命中索引。')
+       WHERE thread_id = ? AND sequence = 21`,
+      [threadId],
+    );
+
+    const indexedClock: ClockPort = { nowUnixSeconds: () => now };
+    const recall = new RecallService(new SqliteRecallRepository(db), indexedClock);
+    const englishMemory = await recall.recall(indexedScope, 'ContinuationNeedleID', 5, 8_192);
+    assert.equal(
+      englishMemory[0]?.id,
+      'memory-english-target',
+      'indexed Memory recall must find a target older than the former 1000-row recency scan',
+    );
+    const cjkMemory = await recall.recall(indexedScope, '项目', 5, 8_192);
+    assert.equal(cjkMemory[0]?.id, 'memory-cjk-target', 'two-character CJK Memory query must use indexed retrieval');
+
+    const conversationRepository = new SqliteConversationRepository(db);
+    const conversations = new ConversationService(conversationRepository, indexedClock, null!, null!);
+    const context = new ContextService(
+      conversations,
+      new RecallService(new EmptyRecallRepository(), indexedClock),
+      new SkillRegistry(),
+      emptyModelContinuations,
+      null!,
+    );
+
+    const englishContext = await context.compose({
+      scope: indexedScope,
+      threadId,
+      currentInput: 'ContinuationNeedleID',
+      modelContextWindow: 32_768,
+      maxContextTokens: 32_768,
+      reservedOutputTokens: 1_024,
+      maxRecallItems: 5,
+      maxRecallBytes: 8_192,
+      tools: [],
+    });
+    assert.ok(
+      englishContext.sourceRanges.some((source) => source.kind === 'thread_recall' && source.id === 'entry-0020'),
+      'Earlier-thread indexed retrieval must find an entry outside the former 800-row scan',
+    );
+
+    const cjkContext = await context.compose({
+      scope: indexedScope,
+      threadId,
+      currentInput: '项目',
+      modelContextWindow: 32_768,
+      maxContextTokens: 32_768,
+      reservedOutputTokens: 1_024,
+      maxRecallItems: 5,
+      maxRecallBytes: 8_192,
+      tools: [],
+    });
+    assert.ok(
+      cjkContext.sourceRanges.some((source) => source.kind === 'thread_recall' && source.id === 'entry-0021'),
+      'two-character CJK Earlier-thread query must use indexed retrieval',
+    );
+
+    const boundedMemoryCandidates = await new SqliteRecallRepository(db).searchPublishedCandidates(
+      indexedScope,
+      now,
+      ['ContinuationNeedleID'],
+      24,
+    );
+    assert.ok(boundedMemoryCandidates.length <= 24, 'Memory first-stage retrieval must obey its candidate bound');
+    const boundedThreadCandidates = await conversationRepository.searchEarlierEntries(
+      indexedScope,
+      threadId,
+      ['ContinuationNeedleID'],
+      841,
+      64,
+    );
+    assert.ok(boundedThreadCandidates.length <= 64, 'Earlier-thread first-stage retrieval must obey its candidate bound');
+
+    await db.close();
+    db = null;
+
+    const raw = new DatabaseSync(databasePath);
+    try {
+      raw.exec('DROP TABLE ai_memories_search; DROP TABLE ai_thread_entries_search;');
+    } finally {
+      raw.close();
+    }
+
+    db = new DatabaseAdapter({ dataDirectory: directory, filename: 'indexed-recall.sqlite', nodeEnv: 'test' });
+    await db.initialize();
+    const repairedRecall = await new RecallService(new SqliteRecallRepository(db), indexedClock).recall(
+      indexedScope,
+      '项目',
+      5,
+      8_192,
+    );
+    assert.equal(
+      repairedRecall[0]?.id,
+      'memory-cjk-target',
+      'missing derived FTS tables must rebuild from canonical Memory/Ledger rows on startup',
+    );
+    const repairedThread = await new SqliteConversationRepository(db).searchEarlierEntries(
+      indexedScope,
+      threadId,
+      ['项目'],
+      841,
+      64,
+    );
+    assert.ok(
+      repairedThread.some((entry) => entry.id === 'entry-0021'),
+      'rebuilt Earlier-thread index must recover canonical CJK history',
+    );
+
+    return [
+      { name: 'memory_rows_beyond_old_scan_found', value: 2, unit: 'queries' },
+      { name: 'thread_rows_beyond_old_scan_found', value: 2, unit: 'queries' },
+      { name: 'max_memory_candidate_rows', value: boundedMemoryCandidates.length, unit: 'rows' },
+      { name: 'max_thread_candidate_rows', value: boundedThreadCandidates.length, unit: 'rows' },
+      { name: 'two_character_cjk_indexed_queries', value: 2, unit: 'queries' },
+      { name: 'derived_indexes_rebuilt', value: 2, unit: 'indexes' },
+    ];
+  } finally {
+    await db?.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+
+const providerLiveCapabilityAuthorityScenario: Scenario = async () => {
+  const registryOnly = resolveProviderModelConfig({ id: 'gpt-4o' });
+  assert.equal(registryOnly.contextWindow, 128_000);
+  assert.equal(registryOnly.maxOutputTokens, 16_384);
+  assert.equal(registryOnly.capabilitySources.contextWindow, 'registry');
+  assert.equal(registryOnly.capabilitySources.supportsImageInput, 'registry');
+
+  const providerOnly: ProviderModelCapabilityObservation = {
+    modelId: 'private-live-model',
+    source: 'scenario-provider',
+    sourceVersion: 'capabilities-v1',
+    capabilities: {
+      contextWindow: 64_000,
+      maxOutputTokens: 8_000,
+      supportsTools: false,
+      supportsImageInput: true,
+      reasoning: {
+        supportedEfforts: ['low', 'high'],
+        defaultEffort: 'low',
+      },
+    },
+    updatedAt: clock.nowUnixSeconds(),
+  };
+  const providerOnlyResolved = resolveProviderModelConfig({ id: providerOnly.modelId }, providerOnly);
+  assert.equal(providerOnlyResolved.contextWindow, 64_000);
+  assert.equal(providerOnlyResolved.maxOutputTokens, 8_000);
+  assert.equal(providerOnlyResolved.capabilitySources.contextWindow, 'provider');
+  assert.equal(providerOnlyResolved.capabilitySources.supportsTools, 'provider');
+  assert.equal(providerOnlyResolved.capabilitySources.reasoning, 'provider');
+
+  const mixedObservation: ProviderModelCapabilityObservation = {
+    modelId: 'gpt-4o',
+    source: 'scenario-provider',
+    sourceVersion: 'partial-v1',
+    capabilities: { maxOutputTokens: 8_192 },
+    updatedAt: clock.nowUnixSeconds(),
+  };
+  const mixed = resolveProviderModelConfig({ id: 'gpt-4o' }, mixedObservation);
+  assert.equal(mixed.contextWindow, 128_000);
+  assert.equal(mixed.maxOutputTokens, 8_192);
+  assert.equal(mixed.supportsTools, true);
+  assert.equal(mixed.capabilitySources.contextWindow, 'registry');
+  assert.equal(mixed.capabilitySources.maxOutputTokens, 'provider');
+  assert.equal(mixed.capabilitySources.supportsTools, 'registry');
+  assert.ok(mixed.capabilityConflicts?.includes('maxOutputTokens'));
+
+  const allThree = resolveProviderModelConfig(
+    {
+      id: 'gpt-4o',
+      capabilityOverrides: {
+        maxOutputTokens: 4_096,
+        supportsTools: false,
+      },
+    },
+    {
+      ...mixedObservation,
+      capabilities: { maxOutputTokens: 8_192, supportsTools: true },
+    },
+  );
+  assert.equal(allThree.maxOutputTokens, 4_096);
+  assert.equal(allThree.supportsTools, false);
+  assert.equal(allThree.capabilitySources.maxOutputTokens, 'manual');
+  assert.equal(allThree.capabilitySources.supportsTools, 'manual');
+  assert.ok(allThree.capabilityConflicts?.includes('maxOutputTokens'));
+  assert.ok(allThree.capabilityConflicts?.includes('supportsTools'));
+
+  assert.deepEqual(
+    deriveCapabilityOverrides(
+      providerOnly.modelId,
+      {
+        contextWindow: providerOnlyResolved.contextWindow,
+        maxOutputTokens: providerOnlyResolved.maxOutputTokens,
+        supportsTools: providerOnlyResolved.supportsTools,
+        supportsImageInput: providerOnlyResolved.supportsImageInput,
+        supportsFileInput: providerOnlyResolved.supportsFileInput,
+        reasoningEfforts: providerOnlyResolved.reasoningEfforts,
+        defaultReasoningEffort: providerOnlyResolved.defaultReasoningEffort,
+      },
+      providerOnly,
+    ),
+    {},
+    'Posting provider-derived effective values must not manufacture manual overrides',
+  );
+  assert.deepEqual(
+    deriveCapabilityOverrides(
+      providerOnly.modelId,
+      {
+        contextWindow: 48_000,
+        maxOutputTokens: providerOnlyResolved.maxOutputTokens,
+        supportsTools: providerOnlyResolved.supportsTools,
+        supportsImageInput: providerOnlyResolved.supportsImageInput,
+        supportsFileInput: providerOnlyResolved.supportsFileInput,
+        reasoningEfforts: providerOnlyResolved.reasoningEfforts,
+        defaultReasoningEffort: providerOnlyResolved.defaultReasoningEffort,
+      },
+      providerOnly,
+    ),
+    { contextWindow: 48_000 },
+  );
+
+  assert.ok(resolveModelCapabilityDefaults('gpt-5.6-sol-2026-09-18'));
+  assert.equal(resolveModelCapabilityDefaults('gpt-5.6-sol-preview'), null);
+  assert.equal(resolveModelCapabilityDefaults('proxy-gpt-4o'), null);
+  assert.throws(() => resolveProviderModelConfig({ id: 'proxy-gpt-4o' }), /MODEL_CAPABILITY_INCOMPLETE/);
+
+  const persisted: PersistedProviderView = {
+    id: 'live-authority-provider',
+    kind: 'openai-compatible',
+    displayName: 'Live authority provider',
+    baseUrl: 'http://scenario.invalid/v1',
+    protocol: 'chat-completions',
+    hasCredential: false,
+    credentialRevision: 1,
+    models: [{ id: providerOnly.modelId }],
+    liveCapabilities: [],
+    enabled: true,
+    version: 7,
+    createdAt: clock.nowUnixSeconds(),
+    updatedAt: clock.nowUnixSeconds(),
+  };
+  const repository = new StaticProviderRepository(persisted);
+  const v1Discovery = new ScriptedLanguageModel([], [
+    {
+      id: providerOnly.modelId,
+      liveCapabilityReport: {
+        source: providerOnly.source,
+        sourceVersion: providerOnly.sourceVersion,
+        capabilities: providerOnly.capabilities,
+      },
+    },
+  ]);
+  const serviceV1 = new ProviderService(repository, v1Discovery, clock);
+  const discoveredV1 = await serviceV1.discoverModels(1, persisted.id);
+  assert.equal(discoveredV1[0]?.providerCapabilities?.sourceVersion, 'capabilities-v1');
+  assert.equal(persisted.version, 7, 'Live capability refresh must not bump provider configurationVersion');
+  const effectiveV1 = await serviceV1.get(1, persisted.id);
+  assert.equal(effectiveV1.models[0]?.contextWindow, 64_000);
+  assert.equal(effectiveV1.models[0]?.capabilitySources.contextWindow, 'provider');
+
+  const frozen = snapshotProviderModelCapabilities(effectiveV1.models[0]!);
+  const durableDefinition = parseRunDefinition(
+    JSON.stringify({
+      schemaVersion: 1,
+      agentDefinitionId: 'scenario-agent',
+      model: {
+        providerId: persisted.id,
+        modelId: providerOnly.modelId,
+        configurationVersion: persisted.version,
+      },
+      modelCapabilities: frozen,
+      approvalMode: 'ask',
+      connectionIds: [],
+      policyRevision: 1,
+      settingsRevision: 1,
+    }),
+  );
+  assert.deepEqual(durableDefinition.modelCapabilities, frozen);
+
+  const v2Discovery = new ScriptedLanguageModel([], [
+    {
+      id: providerOnly.modelId,
+      liveCapabilityReport: {
+        source: providerOnly.source,
+        sourceVersion: 'capabilities-v2',
+        capabilities: {
+          contextWindow: 96_000,
+          maxOutputTokens: 12_000,
+          supportsTools: true,
+          supportsImageInput: false,
+        },
+      },
+    },
+  ]);
+  const serviceV2 = new ProviderService(repository, v2Discovery, clock);
+  await serviceV2.discoverModels(1, persisted.id);
+  const effectiveV2 = await serviceV2.get(1, persisted.id);
+  assert.equal(effectiveV2.models[0]?.contextWindow, 96_000);
+  assert.equal(effectiveV2.models[0]?.providerCapabilities?.sourceVersion, 'capabilities-v2');
+  assert.equal(persisted.version, 7);
+
+  const frozenDuringRefresh = applyModelCapabilitySnapshot(effectiveV2.models[0]!, durableDefinition.modelCapabilities);
+  assert.equal(frozenDuringRefresh.contextWindow, 64_000);
+  assert.equal(frozenDuringRefresh.maxOutputTokens, 8_000);
+  assert.equal(frozenDuringRefresh.supportsTools, false);
+  assert.equal(frozenDuringRefresh.supportsImageInput, true);
+
+  const genericDiscovery = new ProviderService(
+    repository,
+    new ScriptedLanguageModel([], [{ id: providerOnly.modelId, ownedBy: 'generic-compatible' }]),
+    clock,
+  );
+  const genericResult = await genericDiscovery.discoverModels(1, persisted.id);
+  assert.equal(genericResult[0]?.providerCapabilities?.sourceVersion, 'capabilities-v2');
+  assert.equal(
+    persisted.liveCapabilities[0]?.sourceVersion,
+    'capabilities-v2',
+    'Identifier-only /models discovery must not invent or erase capability observations',
+  );
+
+  return [
+    { name: 'source_precedence_levels', value: 3, unit: 'sources' },
+    { name: 'field_merge_cases', value: 5, unit: 'cases' },
+    { name: 'provider_refreshes_without_config_version_bump', value: 2, unit: 'refreshes' },
+    { name: 'durable_run_snapshots_survive_refresh', value: 1, unit: 'snapshots' },
+  ];
+};
+
+
+const agentDefinitionCapabilityContractScenario: Scenario = async () => {
+  const legacyManifest = {
+    schemaVersion: 1,
+    id: 'scenario.capability-contract',
+    version: '1.0.0',
+    displayName: 'Capability contract',
+    sdkVersion: '1.0.0',
+    nexus: { minVersion: '1.0.0', maxVersion: '9.0.0' },
+    capabilities: [],
+    intents: [],
+    agents: [
+      {
+        id: 'scenario.agent',
+        version: '1.0.0',
+        displayName: 'Scenario Agent',
+        description: 'Exercises AgentDefinition model capability requirements.',
+        requiredModelCapabilities: ['streaming'],
+      },
+    ],
+  };
+  const validatedLegacy = validateManifest(legacyManifest, {
+    nexusVersion: '1.0.0',
+    supportedSdkMajor: 1,
+  });
+  assert.deepEqual(validatedLegacy.agents?.[0]?.requiredModelCapabilities, []);
+  assert.deepEqual(
+    decodePersistedAppManifest(JSON.stringify(legacyManifest)).agents?.[0]?.requiredModelCapabilities,
+    [],
+  );
+  assert.throws(
+    () =>
+      validateManifest(
+        {
+          ...legacyManifest,
+          agents: [
+            {
+              ...legacyManifest.agents[0],
+              requiredModelCapabilities: ['provider_magic'],
+            },
+          ],
+        },
+        { nexusVersion: '1.0.0', supportedSdkMajor: 1 },
+      ),
+    /AGENT_MANIFEST_SCHEMA_INVALID|Unknown Agent model capability requirement/,
+  );
+  assert.equal(normalizeRequiredModelCapabilities(['provider_magic']), null);
+
+  const privateModel = resolveProviderModelConfig({
+    id: 'private-explicit-model',
+    capabilityOverrides: {
+      contextWindow: 16_384,
+      maxOutputTokens: 2_048,
+      supportsTools: true,
+      supportsImageInput: true,
+      supportsFileInput: false,
+      reasoning: {
+        supportedEfforts: ['none', 'medium'],
+        defaultEffort: 'medium',
+      },
+    },
+  });
+  const privateSnapshot = snapshotProviderModelCapabilities(privateModel);
+  assert.deepEqual(
+    missingRequiredModelCapabilities(['tools', 'image_input', 'reasoning'], privateSnapshot),
+    [],
+  );
+  assert.deepEqual(missingRequiredModelCapabilities(['file_input'], privateSnapshot), ['file_input']);
+
+  const unknownPrivateModel = resolveProviderModelConfig({
+    id: 'private-unknown-model',
+    capabilityOverrides: {
+      contextWindow: 16_384,
+      maxOutputTokens: 2_048,
+      supportsTools: true,
+    },
+  });
+  assert.deepEqual(
+    missingRequiredModelCapabilities(['image_input', 'file_input', 'reasoning'], snapshotProviderModelCapabilities(unknownPrivateModel)),
+    ['image_input', 'file_input', 'reasoning'],
+    'unknown private-model capabilities must fail closed instead of using model-name guesses',
+  );
+
+  const providerObserved: ProviderModelCapabilityObservation = {
+    modelId: 'private-precedence-model',
+    source: 'scenario-provider',
+    sourceVersion: 'v1',
+    capabilities: {
+      contextWindow: 32_768,
+      maxOutputTokens: 4_096,
+      supportsTools: true,
+      supportsImageInput: false,
+      supportsFileInput: true,
+    },
+    updatedAt: clock.nowUnixSeconds(),
+  };
+  const precedenceModel = resolveProviderModelConfig(
+    {
+      id: providerObserved.modelId,
+      capabilityOverrides: { supportsImageInput: true },
+    },
+    providerObserved,
+  );
+  assert.deepEqual(
+    missingRequiredModelCapabilities(
+      ['image_input', 'file_input'],
+      snapshotProviderModelCapabilities(precedenceModel),
+    ),
+    [],
+    'manual override must remain above provider live capability facts',
+  );
+
+  const frozenCapabilities = snapshotProviderModelCapabilities(precedenceModel);
+  const refreshedModel = resolveProviderModelConfig(
+    { id: providerObserved.modelId },
+    {
+      ...providerObserved,
+      sourceVersion: 'v2',
+      capabilities: { ...providerObserved.capabilities, supportsImageInput: false },
+    },
+  );
+  assert.deepEqual(missingRequiredModelCapabilities(['image_input'], frozenCapabilities), []);
+  assert.deepEqual(
+    missingRequiredModelCapabilities(['image_input'], snapshotProviderModelCapabilities(refreshedModel)),
+    ['image_input'],
+  );
+
+  const providerId = randomUUID();
+  const threadId = randomUUID();
+  const definitionId = 'scenario.agent';
+  const compatibleModel = resolveProviderModelConfig({
+    id: 'private-run-model',
+    capabilityOverrides: {
+      contextWindow: 16_384,
+      maxOutputTokens: 2_048,
+      supportsTools: true,
+      supportsImageInput: true,
+      supportsFileInput: false,
+      reasoning: { supportedEfforts: ['low', 'medium'], defaultEffort: 'medium' },
+    },
+  });
+  const incompatibleModel = resolveProviderModelConfig({
+    id: 'private-run-model',
+    capabilityOverrides: {
+      contextWindow: 16_384,
+      maxOutputTokens: 2_048,
+      supportsTools: true,
+      supportsImageInput: false,
+      supportsFileInput: false,
+    },
+  });
+  const definitionInfo = {
+    id: definitionId,
+    version: '1.0.0',
+    displayName: 'Scenario Agent',
+    description: 'Capability contract fixture',
+    requiredModelCapabilities: ['tools', 'image_input'] as const,
+  };
+  const settingsView = {
+    revision: 1,
+    effectiveSettings: { feature: { enabled: true } },
+    hardLimits: {
+      maxRunSteps: 1_000,
+      maxActiveExecutionSeconds: 86_400,
+      toolTimeoutSeconds: 600,
+      maxToolOutputBytes: 16 * 1024 * 1024,
+      maxRecallItems: 100,
+      maxRecallBytes: 16 * 1024 * 1024,
+      maxSubagentMessagesPerRun: 10_000,
+      maxSubagentMessageBytesPerRun: 16 * 1024 * 1024,
+    },
+  };
+  const appView = {
+    activeVersion: '1.0.0',
+    desiredState: 'enabled',
+    observedState: 'running',
+    acceptNewRuns: true,
+    policyRevision: 1,
+  };
+  const executionPolicy = {
+    version: 1,
+    effective: {
+      maxRunSteps: 100,
+      maxActiveExecutionSeconds: 3_600,
+      toolTimeoutSeconds: 120,
+      maxToolOutputBytes: 1_048_576,
+      maxRecallItems: 10,
+      maxRecallBytes: 65_536,
+      maxSubagentMessages: 100,
+      maxSubagentMessageBytes: 1_048_576,
+      contextCompactionMode: 'balanced',
+    },
+  };
+  let currentModel = incompatibleModel;
+  let createCommits = 0;
+  const runFromCreate = (record: AtomicCreateRun, status: RunView['status'] = 'created'): RunView => ({
+    ...record.scope,
+    id: record.runId,
+    threadId: record.threadId,
+    parentRunId: record.parentRunId ?? null,
+    status,
+    goalStatus: record.initialGoal ? 'in_progress' : 'unknown',
+    goal: record.initialGoal ?? { text: null, revision: 0, updatedAt: null },
+    verificationStatus: 'not_started',
+    needsReconciliation: false,
+    budget: record.budget,
+    definition: record.definition,
+    plan: record.initialPlan ?? { schemaVersion: 1, revision: 0, items: [] },
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      steps: 0,
+      subagentMessages: 0,
+      subagentMessageBytes: 0,
+    },
+    activeExecutionSeconds: 0,
+    activeExecutionStartedAt: null,
+    executingRuntimeCount: 0,
+    consumedInputSequence: 0,
+    inputRevision: 1,
+    eventCursor: 0,
+    version: 1,
+    createdAt: record.now,
+    startedAt: null,
+    completedAt: null,
+    updatedAt: record.now,
+  });
+  const runService = new RunService(
+    { get: async () => settingsView } as never,
+    { get: async () => appView } as never,
+    {
+      get: async () => ({
+        id: providerId,
+        enabled: true,
+        version: 1,
+        models: [currentModel],
+      }),
+    } as never,
+    { get: async () => executionPolicy } as never,
+    {
+      require: () => ({
+        ...definitionInfo,
+        requiredModelCapabilities: [...definitionInfo.requiredModelCapabilities],
+      }),
+    } as never,
+    async () => {
+      throw new Error('SCENARIO_UNEXPECTED_ENVIRONMENT');
+    },
+    {
+      createRun: async (record: AtomicCreateRun) => {
+        createCommits += 1;
+        return { run: runFromCreate(record), inputSequence: 1, replayed: false };
+      },
+    } as never,
+    null!,
+    clock,
+  );
+  const createCommand = () => ({
+    threadId,
+    input: { text: 'Exercise the capability contract.', artifactRefs: [] },
+    agentDefinitionId: definitionId,
+    model: { providerId, modelId: 'private-run-model', configurationVersion: 1 },
+    approvalMode: 'ask' as const,
+    connectionIds: [],
+    command: { key: randomUUID(), requestId: randomUUID() },
+  });
+  await assert.rejects(
+    () => runService.create(scope, createCommand()),
+    /MODEL_CAPABILITY_UNSUPPORTED/,
+  );
+  assert.equal(createCommits, 0, 'incompatible Run must fail before durable creation');
+
+  currentModel = compatibleModel;
+  const createdRun = await runService.create(scope, createCommand());
+  assert.equal(createCommits, 1);
+  assert.deepEqual(createdRun.definition.requiredModelCapabilities, ['tools', 'image_input']);
+  assert.equal(createdRun.definition.modelCapabilities?.supportsImageInput, true);
+  assert.equal(
+    createdRun.budget.maxContextTokens,
+    compatibleModel.contextWindow,
+    'Run context must come from the frozen model capability, not user settings',
+  );
+  assert.equal(
+    createdRun.budget.maxOutputTokens,
+    Math.min(compatibleModel.maxOutputTokens, compatibleModel.contextWindow - 1),
+    'Run output ceiling must come from the frozen model capability, not user settings',
+  );
+
+  currentModel = resolveProviderModelConfig({
+    id: 'private-run-model',
+    capabilityOverrides: {
+      contextWindow: 16_384,
+      maxOutputTokens: 2_048,
+      supportsTools: true,
+      supportsImageInput: true,
+      supportsFileInput: false,
+      reasoning: {
+        supportedEfforts: ['none', 'medium'],
+        defaultEffort: 'medium',
+        mandatory: true,
+      },
+    },
+  });
+  await assert.rejects(
+    () => runService.create(scope, { ...createCommand(), reasoningEffort: 'none' }),
+    /MODEL_REASONING_EFFORT_UNSUPPORTED/,
+  );
+  assert.equal(createCommits, 1, 'mandatory reasoning rejection must happen before durable creation');
+
+  const checkpointId = randomUUID();
+  const terminalSource: RunSnapshot = {
+    ...createdRun,
+    status: 'cancelled',
+    completedAt: clock.nowUnixSeconds(),
+    terminalIssue: null,
+    recentEntries: [],
+  };
+  const checkpoint: CheckpointView = {
+    id: checkpointId,
+    runId: terminalSource.id,
+    schemaVersion: 1,
+    ledgerThrough: 0,
+    eventThrough: 0,
+    snapshot: {
+      schemaVersion: 1,
+      runId: terminalSource.id,
+      ledgerThrough: 0,
+      planVersion: terminalSource.plan.revision,
+      plan: terminalSource.plan,
+      completedStepIds: [],
+      evidenceRefs: [],
+      modelConfigurationVersion: 1,
+      definitionVersion: definitionInfo.version,
+      policyRevision: 1,
+      workspaceArtifactManifestRefs: [],
+      recoveryManifest: {
+        schemaVersion: 1,
+        eventThrough: 0,
+        contextBoundary: { baseThrough: 0, runThrough: {} },
+        tools: [],
+        delegations: [],
+        quarantinedResourceKeys: [],
+      },
+    },
+    createdAt: clock.nowUnixSeconds(),
+  };
+  let checkpointSource = terminalSource;
+  let checkpointCreateCommits = 0;
+  currentModel = incompatibleModel;
+  const checkpointService = new CheckpointService(
+    {
+      get: async () => checkpoint,
+      missingArtifactRefs: async () => [],
+      recoveryHazards: async () => ({ postCheckpointMutationToolCallIds: [], quarantinedResourceKeys: [] }),
+    } as never,
+    { snapshot: async () => checkpointSource } as never,
+    { get: async () => settingsView } as never,
+    { get: async () => appView } as never,
+    {
+      get: async () => ({
+        id: providerId,
+        enabled: true,
+        version: 1,
+        models: [currentModel],
+      }),
+    } as never,
+    {
+      require: () => ({
+        ...definitionInfo,
+        requiredModelCapabilities: [...definitionInfo.requiredModelCapabilities],
+      }),
+    } as never,
+    { isDenied: async () => false } as never,
+    {
+      createRun: async (record: AtomicCreateRun) => {
+        checkpointCreateCommits += 1;
+        return { run: runFromCreate(record), inputSequence: 0, replayed: false };
+      },
+      supersedeRunApprovals: async () => 0,
+    } as never,
+    clock,
+  );
+  const compatibleValidation = await checkpointService.validate(
+    scope,
+    terminalSource.id,
+    checkpointId,
+    terminalSource.version,
+  );
+  assert.equal(
+    compatibleValidation.valid,
+    true,
+    'provider refresh must not invalidate a checkpoint whose frozen model snapshot satisfies frozen requirements',
+  );
+  const resumed = await checkpointService.resume(
+    scope,
+    terminalSource.id,
+    checkpointId,
+    terminalSource.version,
+    randomUUID(),
+  );
+  assert.equal(checkpointCreateCommits, 1);
+  assert.deepEqual(resumed.definition.requiredModelCapabilities, ['tools', 'image_input']);
+  assert.equal(resumed.definition.modelCapabilities?.supportsImageInput, true);
+
+  currentModel = compatibleModel;
+  checkpointSource = {
+    ...terminalSource,
+    definition: {
+      ...terminalSource.definition,
+      requiredModelCapabilities: ['image_input'],
+      modelCapabilities: {
+        ...terminalSource.definition.modelCapabilities!,
+        supportsImageInput: false,
+      },
+    },
+  };
+  const incompatibleValidation = await checkpointService.validate(
+    scope,
+    checkpointSource.id,
+    checkpointId,
+    checkpointSource.version,
+  );
+  assert.equal(incompatibleValidation.valid, false);
+  assert.ok(incompatibleValidation.reasons.includes('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED'));
+  await assert.rejects(
+    () =>
+      checkpointService.resume(
+        scope,
+        checkpointSource.id,
+        checkpointId,
+        checkpointSource.version,
+        randomUUID(),
+      ),
+    /CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED/,
+  );
+  assert.equal(
+    checkpointCreateCommits,
+    1,
+    'incompatible frozen checkpoint must fail before resumed Run creation even when live model capabilities improved',
+  );
+
+  return [
+    { name: 'typed_requirements', value: 4, unit: 'capabilities' },
+    { name: 'legacy_streaming_requirements', value: 0, unit: 'requirements' },
+    { name: 'incompatible_run_commits', value: 0, unit: 'runs' },
+    { name: 'compatible_run_commits', value: createCommits, unit: 'runs' },
+    { name: 'compatible_checkpoint_resumes', value: checkpointCreateCommits, unit: 'runs' },
+    { name: 'frozen_checkpoint_capability_rejections', value: 1, unit: 'runs' },
+  ];
+};
+
 const scenarios = new Map<string, Scenario>([
   ['context/tool-exchange-atomicity', contextToolExchangeScenario],
+  ['context/durable-compaction-checkpoint', durableContextCheckpointScenario],
+  ['context/token-accounting', contextTokenAccountingScenario],
+  ['context/project-instructions', projectInstructionsContextScenario],
+  ['workspace/coding-tool-surface', workspaceCodingToolSurfaceScenario],
+  ['workspace/repo-map-code-intel', workspaceRepoMapCodeIntelScenario],
+  ['workspace/background-job-lifecycle', workspaceBackgroundJobLifecycleScenario],
+  ['context/tool-result-projection', toolResultProjectionScenario],
+  ['context/tool-surface-progressive-disclosure', toolSurfaceProgressiveDisclosureScenario],
+  ['provider/prompt-cache-hint', providerPromptCacheHintScenario],
+  ['context/artifact-model-input', artifactModelInputScenario],
+  ['context/skill-progressive-disclosure', skillProgressiveDisclosureScenario],
+  ['context/indexed-recall', indexedRecallScenario],
+  ['benchmark/scripted-agent-trajectories', scriptedAgentBenchmarkScenario],
+  ['boundary/durable-runtime-decode', durableBoundaryDecodeScenario],
+  ['compat/current-durable-schema', currentDurableSchemaScenario],
+  ['model/provider-live-capability-authority', providerLiveCapabilityAuthorityScenario],
+  ['model/stream-retry-attempt-identity', modelStreamRetryAttemptIdentityScenario],
+  ['runtime/agent-lifecycle-notifications', agentLifecycleNotificationScenario],
+  ['model/plan-execution-mode', planExecutionModeScenario],
+  ['runtime/default-policy-authority', defaultPolicyAuthorityScenario],
+  ['runtime/budget-settings-dead-fields', budgetSettingsDeadFieldScenario],
+  ['model/provider-settings-dead-field', providerSettingsDeadFieldScenario],
+  ['model/provider-fallback-chain', providerFallbackChainScenario],
+  ['model/agent-definition-capability-contract', agentDefinitionCapabilityContractScenario],
+  ['model/completion-gate', completionGateScenario],
+  ['model/finish-reason-state-machine', modelFinishReasonStateMachineScenario],
+  ['model/provider-continuation-roundtrip', providerContinuationRoundTripScenario],
+  ['runtime/user-input-clarification', userInputClarificationScenario],
   ['runtime/restart-recovery-closure', restartRecoveryScenario],
   ['runtime/app-disable-scope-closure', appDisableScopeScenario],
   ['runtime/read-tool-batch-authority', readToolBatchAuthorityScenario],
@@ -3332,6 +12282,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/nested-join-durable-wake', nestedJoinDurableWakeScenario],
   ['runtime/confirmed-mutation-lease-finalization', confirmedMutationLeaseFinalizationScenario],
   ['runtime/mutation-output-projection', mutationOutputProjectionScenario],
+  ['storage/artifact-lifecycle-settings', artifactLifecycleSettingsScenario],
   ['runtime/artifact-crash-reconciliation', artifactCrashReconciliationScenario],
   ['runtime/integration-cas-before-runtime', integrationCasBeforeRuntimeScenario],
   ['runtime/integration-refresh-generation', integrationRefreshGenerationScenario],

@@ -12,6 +12,7 @@
   import { agentApi, formatAgentApiError } from '../api/agent-api';
   import type {
     AgentApprovalMode,
+    AgentExecutionMode,
     AgentApprovalBatch,
     AgentApprovalView,
     AgentCheckpointView,
@@ -19,8 +20,10 @@
     AgentDefinitionView,
     AgentHardLimits,
     AgentLedgerEntry,
+    AgentModelCapability,
     AgentProviderView,
     AgentReasoningEffort,
+    AgentPendingUserInputRequest,
     AgentRunReconciliationView,
     AgentRunSnapshot,
     AgentRunView,
@@ -55,6 +58,12 @@
   const entries = ref<AgentLedgerEntry[]>([]);
   const nextCursor = ref<string | null>(null);
   const run = ref<AgentRunView | null>(null);
+  const pendingInputRequest = computed<AgentPendingUserInputRequest | null>(() => {
+    const current = run.value;
+    return current && 'pendingInputRequest' in current
+      ? ((current as AgentRunSnapshot).pendingInputRequest ?? null)
+      : null;
+  });
   const reconciliationDetails = ref<AgentRunReconciliationView | null>(null);
   const reconciliationBusy = ref(false);
   const threadRuns = ref<AgentRunView[]>([]);
@@ -117,6 +126,9 @@
   const selectedApprovalMode = ref<AgentApprovalMode>(
     agentSurfaceSession.restoreApprovalMode(props.appId) ?? props.defaultApprovalMode,
   );
+  const selectedExecutionMode = ref<AgentExecutionMode>(
+    agentSurfaceSession.restoreExecutionMode(props.appId) ?? 'execute',
+  );
   const selectedEnvironmentRecipeId = ref(agentSurfaceSession.restoreEnvironmentRecipeId(props.appId) ?? '');
   let taskRailWideViewport = typeof window !== 'undefined' ? window.innerWidth > 1040 : false;
   const taskRailVisible = ref(false);
@@ -154,6 +166,17 @@
   });
   let threadListResizeObserver: ResizeObserver | null = null;
   const streamingText = ref('');
+  const streamingAttempt = ref<{ attemptId: string; attemptIndex: number } | null>(null);
+  const resetStreamingPresentation = (): void => {
+    streamingText.value = '';
+    streamingAttempt.value = null;
+  };
+  const activateStreamingAttempt = (attemptId: string, attemptIndex: number): void => {
+    const current = streamingAttempt.value;
+    if (current?.attemptId === attemptId && current.attemptIndex === attemptIndex) return;
+    streamingAttempt.value = { attemptId, attemptIndex };
+    streamingText.value = '';
+  };
   const busy = ref(false);
   const loading = ref(true);
   const selectingThread = ref(false);
@@ -247,22 +270,58 @@
     const isToday = date.toDateString() === now.toDateString();
     return isToday ? threadTimeFormatter.value.format(date) : threadDateFormatter.value.format(date);
   };
-  const modelOptions = computed(() =>
-    providers.value
+  type ModelOption = {
+    key: string;
+    provider: AgentProviderView;
+    model: AgentProviderView['models'][number];
+    compatible: boolean;
+    missingCapabilities: AgentModelCapability[];
+  };
+  const modelOptions = computed<ModelOption[]>(() => {
+    const definition = definitions.value[0];
+    return providers.value
       .filter((provider) => provider.enabled)
       .flatMap((provider) =>
-        provider.models.map((model) => ({
-          key: `${provider.id}\u0000${model.id}\u0000${provider.version}`,
-          provider,
-          model,
-        })),
-      ),
-  );
+        provider.models.map((model) => {
+          const compatibility = definition?.modelCompatibility.find(
+            (candidate) =>
+              candidate.providerId === provider.id &&
+              candidate.modelId === model.id &&
+              candidate.configurationVersion === provider.version,
+          );
+          return {
+            key: `${provider.id}\u0000${model.id}\u0000${provider.version}`,
+            provider,
+            model,
+            compatible: compatibility?.compatible ?? false,
+            missingCapabilities: compatibility?.missingCapabilities ?? [],
+          };
+        }),
+      );
+  });
   const providerSelection = computed(
     () =>
-      modelOptions.value.find((candidate) => candidate.key === selectedModelKey.value) ?? modelOptions.value[0] ?? null,
+      modelOptions.value.find((candidate) => candidate.key === selectedModelKey.value && candidate.compatible) ??
+      modelOptions.value.find((candidate) => candidate.compatible) ??
+      null,
   );
+  const modelCapabilityLabel = (capability: AgentModelCapability): string =>
+    t(`agent.operations.modelCapability.${capability}`);
+  const modelOptionHint = (option: ModelOption): string =>
+    option.compatible
+      ? option.provider.displayName
+      : t('agent.operations.modelMissingCapabilities', {
+          capabilities: option.missingCapabilities.map(modelCapabilityLabel).join(', '),
+        });
   const modelSelectionLocked = computed(() => Boolean(run.value && nonTerminal.has(run.value.status)));
+  const executionModeValue = computed<AgentExecutionMode>(() =>
+    modelSelectionLocked.value ? (run.value?.definition.executionMode ?? 'execute') : selectedExecutionMode.value,
+  );
+  const setExecutionMode = (mode: AgentExecutionMode): void => {
+    if (modelSelectionLocked.value) return;
+    selectedExecutionMode.value = mode;
+    agentSurfaceSession.setExecutionMode(props.appId, mode);
+  };
   const approvalModeValue = computed<AgentApprovalMode>(() =>
     modelSelectionLocked.value ? (run.value?.definition.approvalMode ?? 'ask') : selectedApprovalMode.value,
   );
@@ -468,7 +527,7 @@
   const setModelSelection = (key: string): void => {
     if (modelSelectionLocked.value) return;
     const option = modelOptions.value.find((candidate) => candidate.key === key);
-    if (!option) return;
+    if (!option?.compatible) return;
     selectedModelKey.value = option.key;
     agentSurfaceSession.setModelKey(props.appId, option.key);
     const nextEffort = option.model.defaultReasoningEffort ?? null;
@@ -642,11 +701,11 @@
 
   const stopRunStream = (): void => {
     facade.selectRun(null);
-    streamingText.value = '';
+    resetStreamingPresentation();
   };
 
   const startRunStream = (initial: AgentRunView): void => {
-    streamingText.value = '';
+    resetStreamingPresentation();
     logger.debug(
       {
         appId: props.appId,
@@ -674,13 +733,26 @@
             'Agent UI run event received',
           );
         }
-        if (event.type === 'transport.disconnected') streamingText.value = '';
+        if (event.type === 'transport.disconnected') resetStreamingPresentation();
+        if (event.type === 'model.retrying') {
+          if (streamingAttempt.value?.attemptId === event.payload.previousAttemptId) {
+            activateStreamingAttempt(event.payload.attemptId, event.payload.attemptIndex);
+          }
+        }
         if (event.type === 'message.delta') {
-          if (!event.payload.delegationId) streamingText.value += event.payload.text;
+          if (!event.payload.delegationId) {
+            activateStreamingAttempt(event.payload.attemptId, event.payload.attemptIndex);
+            streamingText.value += event.payload.text;
+          }
           return;
         }
-        if (event.type === 'tool.delta') return;
-        if (event.type === 'message.final') streamingText.value = '';
+        if (event.type === 'tool.delta') {
+          if (!event.payload.delegationId) {
+            activateStreamingAttempt(event.payload.attemptId, event.payload.attemptIndex);
+          }
+          return;
+        }
+        if (event.type === 'message.final') resetStreamingPresentation();
         const durableCursor = event.id === undefined ? 0 : Number(event.id);
         const next = await refreshRun(
           initial.id,
@@ -697,11 +769,12 @@
         ]);
         if (signal.aborted) return;
         if (!next || !nonTerminal.has(next.status)) {
-          streamingText.value = '';
+          resetStreamingPresentation();
           facade.selectRun(null);
         }
       },
       onError: (cause) => {
+        resetStreamingPresentation();
         logger.warn(
           { appId: props.appId, runId: initial.id, threadId: initial.threadId, err: cause },
           'Agent UI run stream failed',
@@ -838,13 +911,16 @@
       ? await agentApi.workspaceRuntimeCatalog().catch(() => null)
       : null;
     const restoredModelKey = agentSurfaceSession.restoreModelKey(props.appId);
-    const restoredModel = modelOptions.value.find((candidate) => candidate.key === restoredModelKey);
+    const restoredModel = modelOptions.value.find(
+      (candidate) => candidate.key === restoredModelKey && candidate.compatible,
+    );
     const preferredModel = modelOptions.value.find(
       (candidate) =>
+        candidate.compatible &&
         candidate.provider.id === settings.effectiveSettings.model.defaultProviderId &&
         candidate.model.id === settings.effectiveSettings.model.defaultModelId,
     );
-    const selectedModel = restoredModel ?? preferredModel ?? modelOptions.value[0] ?? null;
+    const selectedModel = restoredModel ?? preferredModel ?? modelOptions.value.find((candidate) => candidate.compatible) ?? null;
     selectedModelKey.value = selectedModel?.key ?? '';
     agentSurfaceSession.setModelKey(props.appId, selectedModel?.key);
     const restoredReasoningEffort = agentSurfaceSession.restoreReasoningEffort(props.appId);
@@ -932,6 +1008,7 @@
         modelId: selection.model.id,
         reasoningEffort: selectedReasoningEffort.value,
         approvalMode: selectedApprovalMode.value,
+        executionMode: selectedExecutionMode.value,
         inputBytes: new TextEncoder().encode(text).byteLength,
         artifactCount: artifactRefs.length,
         connectionCount: selectedConnectionIds.value.length,
@@ -939,6 +1016,14 @@
       },
       'Agent UI creating run',
     );
+    const plannedFromRunId =
+      selectedExecutionMode.value === 'execute' &&
+      run.value &&
+      ['completed', 'completed_unverified'].includes(run.value.status) &&
+      (run.value.definition.executionMode ?? 'execute') === 'plan' &&
+      run.value.plan.items.length > 0
+        ? run.value.id
+        : undefined;
     const created = await facade.createRun({
       threadId: thread.id,
       text,
@@ -951,6 +1036,8 @@
       },
       ...(selectedReasoningEffort.value === null ? {} : { reasoningEffort: selectedReasoningEffort.value }),
       approvalMode: selectedApprovalMode.value,
+      executionMode: selectedExecutionMode.value,
+      ...(plannedFromRunId ? { plannedFromRunId } : {}),
       connectionIds: selectedConnectionIds.value,
       environment: selectedEnvironmentRecipe.value
         ? {
@@ -971,6 +1058,8 @@
         modelId: created.definition.model.modelId,
         reasoningEffort: created.definition.reasoningEffort ?? null,
         approvalMode: created.definition.approvalMode ?? 'ask',
+        executionMode: created.definition.executionMode ?? 'execute',
+        parentRunId: created.parentRunId,
       },
       'Agent UI run created',
     );
@@ -1542,7 +1631,7 @@
     window.removeEventListener('nexus:agent:thread-changed', onThreadChanged);
     window.removeEventListener('nexus:agent:authorization-changed', onAuthorizationChanged);
     facade.dispose();
-    streamingText.value = '';
+    resetStreamingPresentation();
   });
 </script>
 
@@ -1927,6 +2016,7 @@
             :entries="entries"
             :next-cursor="nextCursor"
             :run="run"
+            :input-request="pendingInputRequest"
             :streaming-text="streamingText"
             :draft="draft"
             :busy="mutationLocked"
@@ -2008,12 +2098,13 @@
                         :key="option.key"
                         type="button"
                         class="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left transition-colors"
-                        :class="
+                        :class="[
                           option.key === selectedModelKey
                             ? 'border border-border/80 bg-card font-medium text-foreground shadow-xs'
-                            : 'border border-transparent text-text-secondary hover:bg-card/70'
-                        "
-                        :disabled="busy"
+                            : 'border border-transparent text-text-secondary',
+                          option.compatible ? 'hover:bg-card/70' : 'cursor-not-allowed opacity-55',
+                        ]"
+                        :disabled="busy || !option.compatible"
                         @click="
                           setModelSelection(option.key);
                           close(true);
@@ -2031,8 +2122,8 @@
                         </span>
                         <span class="min-w-0 flex-1">
                           <span class="block truncate text-xs font-medium text-foreground">{{ option.model.id }}</span>
-                          <span class="block truncate text-[10px] text-text-secondary">
-                            {{ option.provider.displayName }}
+                          <span class="block text-[10px] text-text-secondary">
+                            {{ modelOptionHint(option) }}
                           </span>
                         </span>
                         <i
@@ -2047,6 +2138,118 @@
                 <span v-else class="min-w-32 flex-1 px-2 text-xs text-text-secondary">
                   {{ $t('agent.operations.providerMissing') }}
                 </span>
+
+                <!-- Run 执行模式：与批准策略正交；plan 模式在 model surface 前移除 mutation Tool -->
+                <AgentConfigPopover
+                  :ariaLabel="$t('agent.operations.executionMode')"
+                  :title="`${$t('agent.operations.executionModeHint')}: ${
+                    executionModeValue === 'plan'
+                      ? $t('agent.operations.executionPlan')
+                      : $t('agent.operations.executionExecute')
+                  }`"
+                  panel-class="w-72"
+                >
+                  <template #trigger>
+                    <i
+                      :class="executionModeValue === 'plan' ? 'fa-solid fa-list-check text-primary' : 'fa-solid fa-play text-success'"
+                      class="text-[9px]"
+                      aria-hidden="true"
+                    ></i>
+                    <span class="agent-config-verbose max-w-24 truncate whitespace-nowrap text-left">
+                      {{
+                        executionModeValue === 'plan'
+                          ? $t('agent.operations.executionPlan')
+                          : $t('agent.operations.executionExecute')
+                      }}
+                    </span>
+                    <i
+                      :class="modelSelectionLocked ? 'fa-solid fa-lock' : 'fa-solid fa-chevron-down'"
+                      class="agent-config-affordance text-[7px] text-text-secondary"
+                      aria-hidden="true"
+                    ></i>
+                  </template>
+                  <template #panel="{ close }">
+                    <div class="mb-2 flex items-center justify-between gap-2 px-1">
+                      <div>
+                        <div class="text-xs font-semibold">{{ $t('agent.operations.executionMode') }}</div>
+                        <div class="mt-1 text-[10px] leading-4 text-text-secondary">
+                          {{ $t('agent.operations.executionModeHint') }}
+                        </div>
+                      </div>
+                      <span
+                        v-if="modelSelectionLocked"
+                        class="rounded-full bg-header px-2 py-0.5 text-[9px] text-text-secondary"
+                      >
+                        <i class="fa-solid fa-lock mr-1 text-[7px]" aria-hidden="true"></i
+                        >{{ $t('agent.operations.frozen') }}
+                      </span>
+                    </div>
+                    <div class="space-y-1">
+                      <button
+                        type="button"
+                        class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
+                        :class="
+                          executionModeValue === 'execute'
+                            ? 'border-success/25 bg-success/[0.06] text-foreground'
+                            : 'border-transparent text-text-secondary hover:bg-card/70'
+                        "
+                        :disabled="modelSelectionLocked || busy"
+                        @click="
+                          setExecutionMode('execute');
+                          close(true);
+                        "
+                      >
+                        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
+                          <i class="fa-solid fa-play text-[9px]" aria-hidden="true"></i>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                          <span class="block text-xs font-semibold text-foreground">{{
+                            $t('agent.operations.executionExecute')
+                          }}</span>
+                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                            $t('agent.operations.executionExecuteDesc')
+                          }}</span>
+                        </span>
+                        <i
+                          v-if="executionModeValue === 'execute'"
+                          class="fa-solid fa-check mt-1.5 text-[9px] text-success"
+                          aria-hidden="true"
+                        ></i>
+                      </button>
+                      <button
+                        type="button"
+                        class="flex w-full items-start gap-2.5 rounded-xl border px-2.5 py-2.5 text-left transition-colors disabled:cursor-default"
+                        :class="
+                          executionModeValue === 'plan'
+                            ? 'border-primary/25 bg-primary/[0.06] text-foreground'
+                            : 'border-transparent text-text-secondary hover:bg-card/70'
+                        "
+                        :disabled="modelSelectionLocked || busy"
+                        @click="
+                          setExecutionMode('plan');
+                          close(true);
+                        "
+                      >
+                        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <i class="fa-solid fa-list-check text-[9px]" aria-hidden="true"></i>
+                        </span>
+                        <span class="min-w-0 flex-1">
+                          <span class="block text-xs font-semibold text-foreground">{{
+                            $t('agent.operations.executionPlan')
+                          }}</span>
+                          <span class="mt-0.5 block text-[10px] leading-4 text-text-secondary">{{
+                            $t('agent.operations.executionPlanDesc')
+                          }}</span>
+                        </span>
+                        <i
+                          v-if="executionModeValue === 'plan'"
+                          class="fa-solid fa-check mt-1.5 text-[9px] text-primary"
+                          aria-hidden="true"
+                        ></i>
+                      </button>
+                    </div>
+                  </template>
+                </AgentConfigPopover>
 
                 <!-- Run 级批准策略：新 Run 创建时冻结，运行中只读 -->
                 <AgentConfigPopover

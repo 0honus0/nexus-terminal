@@ -1,5 +1,5 @@
 import type { JsonValue } from '../../agent.types';
-import type { SkillRegistry } from '../../ai/skill-registry';
+import { MAX_SKILL_SEARCH_RESULTS, type SkillRegistry } from '../../ai/skill-registry';
 import type { AgentTool, ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
@@ -15,6 +15,121 @@ const skillId = (value: JsonValue | undefined): string => {
   }
   return value;
 };
+
+const searchQuery = (value: JsonValue | undefined): string => {
+  if (typeof value !== 'string' || !value.trim() || Buffer.byteLength(value, 'utf8') > 512) {
+    throw new Error('TOOL_ARGUMENTS_INVALID');
+  }
+  return value.trim();
+};
+
+const searchLimit = (value: JsonValue | undefined): number => {
+  if (value === undefined) return MAX_SKILL_SEARCH_RESULTS;
+  if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > MAX_SKILL_SEARCH_RESULTS) {
+    throw new Error('TOOL_ARGUMENTS_INVALID');
+  }
+  return value as number;
+};
+
+export const createSkillSearchTool = (skills: SkillRegistry, cryptoHash: CryptoHashPort): AgentTool => ({
+  descriptor: {
+    name: 'skill_search',
+    version: '1.0.0',
+    description:
+      'Search bounded metadata for signed Skills installed in the current App. Use this when the prompt says the Skill catalog is indexed, then call skill_read with a returned id to load full instructions.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        query: { type: 'string', minLength: 1, maxLength: 512 },
+        limit: { type: 'integer', minimum: 1, maximum: MAX_SKILL_SEARCH_RESULTS },
+      },
+      required: ['query'],
+    },
+    riskClass: 'read',
+    parallelSafe: true,
+    capability: 'runs.execute',
+  },
+  inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
+    const args = asRecord(input);
+    if (Object.keys(args).some((key) => !['query', 'limit'].includes(key))) throw new Error('TOOL_ARGUMENTS_INVALID');
+    const query = searchQuery(args.query);
+    const limit = searchLimit(args.limit);
+    const normalizedArguments: JsonValue = { query, limit };
+    const configurationHash = hashOperation(
+      {
+        schemaVersion: 1,
+        appId: context.appId,
+        discovery: 'signed-skill-metadata',
+      },
+      cryptoHash,
+    );
+    const target = {
+      kind: 'run' as const,
+      targetIdentity: `run:${context.runId}:skill-catalog`,
+      endpoint: 'skill:catalog',
+      loginUser: `agent-runtime:${context.agentRuntimeId}`,
+      configurationHash,
+    };
+    const resourceKeys = [`app:${context.appId}:skill-catalog`];
+    return {
+      toolName: 'skill_search',
+      toolVersion: '1.0.0',
+      normalizedArguments,
+      target,
+      resourceKeys,
+      risk: 'read',
+      mutation: false,
+      operationHash: hashOperation(
+        {
+          schemaVersion: 1,
+          scope: {
+            userId: context.userId,
+            appId: context.appId,
+            runId: context.runId,
+            agentRuntimeId: context.agentRuntimeId,
+          },
+          tool: { name: 'skill_search', version: '1.0.0' },
+          query,
+          limit,
+          policyRevision,
+          inputRevision: context.inputRevision,
+        },
+        cryptoHash,
+      ),
+      operationHashVersion: 1,
+      preconditions: [],
+      secretRefs: [],
+      policyRevision,
+      inputRevision: context.inputRevision,
+    };
+  },
+  execute: async (inspection, context): Promise<ToolResult> => {
+    const args = asRecord(inspection.normalizedArguments);
+    const query = searchQuery(args.query);
+    const limit = searchLimit(args.limit);
+    const matches = await skills.search(context, query, limit);
+    return {
+      ok: true,
+      summary: `Found ${matches.length} relevant signed Skill metadata entr${matches.length === 1 ? 'y' : 'ies'}.`,
+      data: {
+        matches: matches.map((skill) => ({
+          id: skill.id,
+          name: skill.name,
+          description: skill.description,
+        })),
+      },
+      artifactRefs: [],
+      truncated: false,
+      outcome: 'confirmed',
+      verification: {
+        status: 'verified',
+        summary: 'Skill metadata was projected from the current App installed signed Skill catalog.',
+        evidenceRefs: [],
+      },
+    };
+  },
+});
 
 export const createSkillReadTool = (skills: SkillRegistry, cryptoHash: CryptoHashPort): AgentTool => ({
   descriptor: {

@@ -324,12 +324,16 @@
       t('agent.settings.providers.saveNoticeDefault'),
     );
 
+  const setFallbackModels = (fallbackModels: Array<{ providerId: string; modelId: string }>) =>
+    patchSection('model', { fallbackModels }, t('agent.settings.providers.saveNoticeDefault'));
+
   const discoverProviderModels = (provider: AgentProviderView) =>
     execute(async () => {
       discoveredModels.value = {
         ...discoveredModels.value,
         [provider.id]: await agentApi.discoverProviderModels(provider.id),
       };
+      providers.value = await agentApi.providers();
     }, null);
 
   const addProviderModel = (
@@ -505,6 +509,7 @@
               :discoveries="discoveredModels"
               :default-provider-id="settings.requestedSettings.model.defaultProviderId"
               :default-model-id="settings.requestedSettings.model.defaultModelId"
+              :fallback-models="settings.requestedSettings.model.fallbackModels"
               :create-provider="createProvider"
               @toggle="toggleProvider"
               @protocol="changeProviderProtocol"
@@ -512,6 +517,7 @@
               :add-provider-model="addProviderModel"
               :update-provider-models="updateProviderModels"
               @default-model="setDefaultModel"
+              @fallback-models="setFallbackModels"
               @delete="deleteProvider"
             />
 

@@ -1,5 +1,5 @@
 import type { AgentRunEnvironmentSelection, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../../agent.types';
-import type { ModelRef, ReasoningEffort } from '../../ai/model.types';
+import type { AgentModelCapability, ModelCapabilitySnapshot, ModelRef, ReasoningEffort } from '../../ai/model.types';
 import type { RunPlan } from '../planning/plan.types';
 
 export type RunStatus =
@@ -38,6 +38,28 @@ export interface PendingRunInputPage {
   hasMore: boolean;
 }
 
+export interface UserInputChoice {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+export interface UserInputQuestion {
+  id: string;
+  prompt: string;
+  kind: 'text' | 'choice';
+  choices?: UserInputChoice[];
+  recommendedChoice?: string;
+  context?: string;
+}
+
+export interface PendingUserInputRequest {
+  id: string;
+  runtimeId: string;
+  questions: UserInputQuestion[];
+  requestedAt: number;
+}
+
 export interface RunInputProjection {
   ordered: PendingRunInput[];
   pending: PendingRunInput[];
@@ -54,6 +76,7 @@ export interface CommandIdentity {
 }
 
 export type RunApprovalMode = 'ask' | 'full_access';
+export type RunExecutionMode = 'execute' | 'plan';
 
 export interface CreateRunCommand {
   threadId: string;
@@ -62,6 +85,8 @@ export interface CreateRunCommand {
   model: ModelRef;
   reasoningEffort?: ReasoningEffort;
   approvalMode: RunApprovalMode;
+  executionMode?: RunExecutionMode;
+  plannedFromRunId?: string;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
@@ -75,7 +100,6 @@ export interface RunBudget {
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
-  maxRawToolBytes: number;
   maxRecallItems: number;
   maxRecallBytes: number;
   maxSubagentMessages: number;
@@ -93,9 +117,12 @@ export interface RunBudgetIncrease {
 
 export interface RunContextUsage {
   inputTokens: number;
+  heuristicInputTokens?: number;
   reservedOutputTokens: number;
   contextWindowTokens: number;
-  source: 'estimated' | 'provider';
+  source: 'estimated' | 'anchored_estimate' | 'provider';
+  model?: ModelRef;
+  contextEpoch?: string;
   updatedAt: number;
 }
 
@@ -114,12 +141,21 @@ export interface RunContextBoundary {
   runThrough: Record<string, number>;
 }
 
+export interface RunModelRouteSnapshot {
+  model: ModelRef;
+  modelCapabilities?: ModelCapabilitySnapshot;
+}
+
 export interface RunDefinitionSnapshot {
   schemaVersion: 1;
   agentDefinitionId: string;
+  requiredModelCapabilities?: AgentModelCapability[];
   model: ModelRef;
+  modelCapabilities?: ModelCapabilitySnapshot;
+  rootModelRoutes?: RunModelRouteSnapshot[];
   reasoningEffort?: ReasoningEffort;
   approvalMode?: RunApprovalMode;
+  executionMode?: RunExecutionMode;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSnapshot | null;
   policyRevision: number;
@@ -194,6 +230,7 @@ export interface RunTerminalIssue {
 
 export interface RunSnapshot extends RunView {
   terminalIssue: RunTerminalIssue | null;
+  pendingInputRequest: PendingUserInputRequest | null;
   recentEntries: Array<{
     id: string;
     sequence: number;

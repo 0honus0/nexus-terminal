@@ -1,4 +1,5 @@
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
+import { lexicalQueryTerms } from '../../../platform/search/lexical-search';
 import type { RecallRepositoryPort } from './recall.repository.port';
 
 export interface RecallItem {
@@ -10,30 +11,7 @@ export interface RecallItem {
   updatedAt: number;
 }
 
-const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
-
-export const recallTerms = (value: string): string[] => {
-  const selected = new Set<string>();
-  const chunks = value
-    .toLowerCase()
-    .split(/[^\p{L}\p{N}_-]+/u)
-    .filter(Boolean);
-  for (const chunk of chunks) {
-    const characters = [...chunk];
-    if (CJK.test(chunk)) {
-      if (characters.length >= 2 && characters.length <= 32) selected.add(chunk);
-      for (const width of [2, 3]) {
-        for (let index = 0; index + width <= characters.length && selected.size < 64; index += 1) {
-          selected.add(characters.slice(index, index + width).join(''));
-        }
-      }
-    } else if (chunk.length >= 2) {
-      selected.add(chunk);
-    }
-    if (selected.size >= 64) break;
-  }
-  return [...selected].slice(0, 64);
-};
+export const recallTerms = (value: string): string[] => lexicalQueryTerms(value, 64);
 
 export class RecallService {
   constructor(
@@ -48,7 +26,8 @@ export class RecallService {
     if (queryTerms.length === 0) return [];
 
     const now = this.clock.nowUnixSeconds();
-    const candidates = await this.repository.publishedCandidates(scope, now, 1000);
+    const candidateLimit = Math.min(64, Math.max(24, limit * 8));
+    const candidates = await this.repository.searchPublishedCandidates(scope, now, queryTerms, candidateLimit);
     const ranked = candidates
       .map((candidate) => {
         const content = candidate.content.toLowerCase();

@@ -1,3 +1,4 @@
+import { normalizeRequestedSettings } from '../../../modules/agent/agent-defaults';
 import type {
   AgentSettingsDocument,
   AgentSettingsRecord,
@@ -5,6 +6,7 @@ import type {
 } from '../../../modules/agent/host/agent-settings.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { appendHostEvent } from '../events/host-event-outbox';
+import { parseDurableJson } from '../runtime/durable-state-decoders';
 
 interface SettingsRow {
   user_id: number;
@@ -15,7 +17,7 @@ interface SettingsRow {
 
 const mapRow = (row: SettingsRow): AgentSettingsRecord => ({
   userId: row.user_id,
-  settings: JSON.parse(row.value_json) as AgentSettingsDocument,
+  settings: normalizeRequestedSettings(parseDurableJson(row.value_json)),
   revision: row.revision,
   updatedAt: row.updated_at,
 });

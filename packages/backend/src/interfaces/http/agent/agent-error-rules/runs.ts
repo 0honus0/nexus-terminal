@@ -59,6 +59,10 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     ['CHECKPOINT_PROVIDER_UNAVAILABLE', 'CHECKPOINT_MODEL_UNAVAILABLE'],
     rawCode(422, 'The checkpoint model is unavailable.'),
   ),
+  onCodes(
+    ['CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED'],
+    rawCode(422, 'The checkpoint model does not satisfy this Agent definition.'),
+  ),
   onCodes(['CHECKPOINT_TARGET_DENIED'], rawCode(403, 'A checkpoint target is denied by current Host policy.')),
   onCodes(['CHECKPOINT_INVALID'], rawCode(409, 'The checkpoint is no longer valid.')),
   onCodes(

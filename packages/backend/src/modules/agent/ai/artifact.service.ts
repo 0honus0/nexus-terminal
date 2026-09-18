@@ -1,4 +1,5 @@
 import type {
+  ArtifactAgentAccess,
   ArtifactAttachInput,
   ArtifactAttachResult,
   ArtifactCleanupPreview,
@@ -53,6 +54,13 @@ export class ArtifactService {
     return this.store.get(scope, artifactId);
   }
 
+  getForAgent(scope: Scope, access: ArtifactAgentAccess, artifactId: string): Promise<ArtifactRef | null> {
+    if (!isAgentUuid(access.runId) || (access.runtimeId !== undefined && !isAgentUuid(access.runtimeId)) || !isAgentUuid(artifactId)) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    return this.store.getForAgent(scope, access, artifactId);
+  }
+
   write(
     scope: Scope,
     artifactId: string,
@@ -64,6 +72,18 @@ export class ArtifactService {
 
   read(scope: Scope, artifactId: string, range: ArtifactReadRange): AsyncIterable<Uint8Array> {
     return this.store.read(scope, artifactId, range);
+  }
+
+  readForAgent(
+    scope: Scope,
+    access: ArtifactAgentAccess,
+    artifactId: string,
+    range: ArtifactReadRange,
+  ): AsyncIterable<Uint8Array> {
+    if (!isAgentUuid(access.runId) || (access.runtimeId !== undefined && !isAgentUuid(access.runtimeId)) || !isAgentUuid(artifactId)) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    return this.store.readForAgent(scope, access, artifactId, range);
   }
 
   retain(scope: Scope, artifactId: string, retained: boolean, expectedVersion: number): Promise<ArtifactRef> {

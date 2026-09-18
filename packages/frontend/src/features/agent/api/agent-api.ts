@@ -42,7 +42,6 @@ export interface AgentExecutionPolicyOverrides {
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
   maxToolOutputBytes?: number;
-  maxRawToolBytes?: number;
   maxRecallItems?: number;
   maxRecallBytes?: number;
   maxSubagentMessages?: number;
@@ -185,7 +184,7 @@ export interface PluginManifestView {
     version: string;
     displayName: string;
     description: string;
-    requiredModelCapabilities: string[];
+    requiredModelCapabilities: AgentModelCapability[];
   }>;
   targets?: {
     frontend?: { entry: string };
@@ -287,17 +286,21 @@ export interface PluginUninstallResult {
 
 export type AgentReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
+export type AgentModelCapability = 'tools' | 'image_input' | 'file_input' | 'reasoning';
+
 export interface ModelReasoningDefaults {
   supportedEfforts: AgentReasoningEffort[];
   defaultEffort?: AgentReasoningEffort;
   mandatory?: boolean;
-  supportsMaxTokens?: boolean;
 }
 
 export interface ModelCapabilityDefaults {
   contextWindow?: number;
   maxOutputTokens?: number;
   supportsTools?: boolean;
+  supportsImageInput?: boolean;
+  supportsFileInput?: boolean;
+  supportsPromptCacheKey?: boolean;
   reasoning?: ModelReasoningDefaults;
 }
 
@@ -305,7 +308,18 @@ export interface ModelCapabilityOverrides {
   contextWindow?: number;
   maxOutputTokens?: number;
   supportsTools?: boolean;
+  supportsImageInput?: boolean;
+  supportsFileInput?: boolean;
+  supportsPromptCacheKey?: boolean;
   reasoning?: ModelReasoningDefaults;
+}
+
+export interface ProviderModelCapabilityObservation {
+  modelId: string;
+  source: string;
+  sourceVersion: string;
+  capabilities: ModelCapabilityDefaults;
+  updatedAt: number;
 }
 
 export interface ProviderModel {
@@ -313,19 +327,34 @@ export interface ProviderModel {
   contextWindow: number;
   maxOutputTokens: number;
   supportsTools: boolean;
+  supportsImageInput: boolean;
+  supportsFileInput: boolean;
+  supportsPromptCacheKey?: boolean;
   capabilitySources: {
-    contextWindow: 'registry' | 'manual';
-    maxOutputTokens: 'registry' | 'manual';
-    supportsTools: 'registry' | 'manual';
-    reasoning?: 'registry' | 'manual';
+    contextWindow: 'registry' | 'provider' | 'manual';
+    maxOutputTokens: 'registry' | 'provider' | 'manual';
+    supportsTools: 'registry' | 'provider' | 'manual';
+    supportsImageInput?: 'registry' | 'provider' | 'manual';
+    supportsFileInput?: 'registry' | 'provider' | 'manual';
+    supportsPromptCacheKey?: 'registry' | 'provider' | 'manual';
+    reasoning?: 'registry' | 'provider' | 'manual';
   };
   registryDefaults?: ModelCapabilityDefaults;
+  providerCapabilities?: ProviderModelCapabilityObservation;
+  capabilityConflicts?: Array<
+    | 'contextWindow'
+    | 'maxOutputTokens'
+    | 'supportsTools'
+    | 'supportsImageInput'
+    | 'supportsFileInput'
+    | 'supportsPromptCacheKey'
+    | 'reasoning'
+  >;
   capabilityOverrides?: ModelCapabilityOverrides;
   reasoningEfforts?: AgentReasoningEffort[];
   defaultReasoningEffort?: AgentReasoningEffort;
   reasoningSource?: 'provider' | 'registry' | 'manual';
   reasoningMandatory?: boolean;
-  reasoningSupportsMaxTokens?: boolean;
 }
 
 export interface AgentDiscoveredProviderModel {
@@ -333,6 +362,7 @@ export interface AgentDiscoveredProviderModel {
   ownedBy?: string;
   createdAt?: number;
   registryDefaults?: ModelCapabilityDefaults;
+  providerCapabilities?: ProviderModelCapabilityObservation;
 }
 
 export interface AgentProviderView {
@@ -470,6 +500,7 @@ export type AgentRunStatus =
   | 'interrupted';
 
 export type AgentApprovalMode = 'ask' | 'full_access';
+export type AgentExecutionMode = 'execute' | 'plan';
 export type AgentToolRisk = 'read' | 'control' | 'mutate' | 'destructive' | 'forbidden';
 
 export type AgentPlanItemStatus = 'pending' | 'in_progress' | 'blocked' | 'completed' | 'cancelled';
@@ -496,6 +527,28 @@ export interface AgentRunTerminalIssue {
   occurredAt: number;
 }
 
+export interface AgentUserInputChoice {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+export interface AgentUserInputQuestion {
+  id: string;
+  prompt: string;
+  kind: 'text' | 'choice';
+  choices?: AgentUserInputChoice[];
+  recommendedChoice?: string;
+  context?: string;
+}
+
+export interface AgentPendingUserInputRequest {
+  id: string;
+  runtimeId: string;
+  questions: AgentUserInputQuestion[];
+  requestedAt: number;
+}
+
 export interface AgentRunView {
   id: string;
   userId: number;
@@ -515,7 +568,6 @@ export interface AgentRunView {
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
-    maxRawToolBytes: number;
     maxRecallItems: number;
     maxRecallBytes: number;
     maxSubagentMessages: number;
@@ -529,6 +581,7 @@ export interface AgentRunView {
     model: { providerId: string; modelId: string; configurationVersion: number };
     reasoningEffort?: AgentReasoningEffort;
     approvalMode?: AgentApprovalMode;
+    executionMode?: AgentExecutionMode;
     connectionIds: number[];
     environment?: WorkspaceProfileView | null;
     policyRevision: number;
@@ -545,9 +598,12 @@ export interface AgentRunView {
     subagentMessageBytes: number;
     context?: {
       inputTokens: number;
+      heuristicInputTokens?: number;
       reservedOutputTokens: number;
       contextWindowTokens: number;
-      source: 'estimated' | 'provider';
+      source: 'estimated' | 'anchored_estimate' | 'provider';
+      model?: { providerId: string; modelId: string; configurationVersion: number };
+      contextEpoch?: string;
       updatedAt: number;
     };
   };
@@ -630,6 +686,7 @@ export interface AgentCheckpointView {
 }
 
 export interface AgentRunSnapshot extends AgentRunView {
+  pendingInputRequest: AgentPendingUserInputRequest | null;
   recentEntries: Array<{
     id: string;
     sequence: number;
@@ -779,12 +836,21 @@ export interface AgentApprovalView {
   inspection: AgentToolInspection;
 }
 
+export interface AgentDefinitionModelCompatibility {
+  providerId: string;
+  modelId: string;
+  configurationVersion: number;
+  compatible: boolean;
+  missingCapabilities: AgentModelCapability[];
+}
+
 export interface AgentDefinitionView {
   id: string;
   version: string;
   displayName: string;
   description: string;
-  requiredModelCapabilities: string[];
+  requiredModelCapabilities: AgentModelCapability[];
+  modelCompatibility: AgentDefinitionModelCompatibility[];
 }
 
 export interface TargetDenylistEntry {
@@ -1545,6 +1611,8 @@ export const agentApi = {
       model: { providerId: string; modelId: string; configurationVersion: number };
       reasoningEffort?: AgentReasoningEffort;
       approvalMode: AgentApprovalMode;
+      executionMode?: AgentExecutionMode;
+      plannedFromRunId?: string;
       connectionIds?: number[];
       environment?: AgentRunEnvironmentSelection | null;
       initialGoal?: string;
@@ -1561,6 +1629,8 @@ export const agentApi = {
             model: input.model,
             ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
             approvalMode: input.approvalMode,
+            ...(input.executionMode === undefined ? {} : { executionMode: input.executionMode }),
+            ...(input.plannedFromRunId === undefined ? {} : { plannedFromRunId: input.plannedFromRunId }),
             connectionIds: input.connectionIds ?? [],
             ...(input.environment === undefined ? {} : { environment: input.environment }),
             ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),

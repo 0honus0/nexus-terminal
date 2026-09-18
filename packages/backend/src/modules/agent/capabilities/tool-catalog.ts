@@ -66,23 +66,26 @@ export class ToolCatalog {
     return registered.tool;
   }
 
-  discover(scope: Scope, query = '', max = 12, availability?: ToolAvailabilityContext): ToolDescriptor[] {
-    if (!Number.isSafeInteger(max) || max < 1 || max > 256) throw new Error('VALIDATION_FAILED');
-    const needle = query.trim().toLowerCase();
+  list(scope: Scope, availability?: ToolAvailabilityContext): ToolDescriptor[] {
     return [...this.tools.values()]
       .filter(
         (registered) =>
           (!registered.scope || sameScope(registered.scope, scope)) &&
           (!availability || !registered.tool.isAvailable || registered.tool.isAvailable(availability)),
       )
-      .map((registered) => registered.tool.descriptor)
+      .map((registered) => ({
+        ...registered.tool.descriptor,
+        inputSchema: canonicalJson(registered.tool.descriptor.inputSchema),
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
+  discover(scope: Scope, query = '', max = 12, availability?: ToolAvailabilityContext): ToolDescriptor[] {
+    if (!Number.isSafeInteger(max) || max < 1 || max > 256) throw new Error('VALIDATION_FAILED');
+    const needle = query.trim().toLowerCase();
+    return this.list(scope, availability)
       .filter((descriptor) => !needle || `${descriptor.name} ${descriptor.description}`.toLowerCase().includes(needle))
-      .sort((left, right) => left.name.localeCompare(right.name))
-      .slice(0, max)
-      .map((descriptor) => ({
-        ...descriptor,
-        inputSchema: canonicalJson(descriptor.inputSchema),
-      }));
+      .slice(0, max);
   }
 
   schemas(scope: Scope, availability?: ToolAvailabilityContext): CatalogToolSchema[] {

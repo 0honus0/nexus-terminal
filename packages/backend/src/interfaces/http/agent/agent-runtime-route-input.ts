@@ -1,7 +1,7 @@
 import type { AgentRunEnvironmentSelection, JsonValue } from '../../../modules/agent/agent.types';
 import type { ReasoningEffort } from '../../../modules/agent/ai/model.types';
 import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
-import type { RunApprovalMode, RunBudgetIncrease, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
+import type { RunApprovalMode, RunBudgetIncrease, RunExecutionMode, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
 import { hasOnlyKeys, isJsonValue, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
@@ -16,6 +16,8 @@ export interface CreateRunRequestDto {
   model: { providerId: string; modelId: string; configurationVersion: number };
   reasoningEffort?: ReasoningEffort;
   approvalMode: RunApprovalMode;
+  executionMode: RunExecutionMode;
+  plannedFromRunId?: string;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSelection | null;
   initialGoal?: string;
@@ -84,6 +86,8 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     'model',
     'reasoningEffort',
     'approvalMode',
+    'executionMode',
+    'plannedFromRunId',
     'connectionIds',
     'environment',
     'initialGoal',
@@ -93,6 +97,7 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     throw new Error('VALIDATION_FAILED');
   }
   const approvalMode = value.approvalMode === undefined ? 'ask' : value.approvalMode;
+  const executionMode = value.executionMode === undefined ? 'execute' : value.executionMode;
   if (
     typeof value.threadId !== 'string' ||
     typeof value.agentDefinitionId !== 'string' ||
@@ -101,6 +106,8 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     !positiveInteger(model.configurationVersion) ||
     (value.reasoningEffort !== undefined && !isReasoningEffort(value.reasoningEffort)) ||
     (approvalMode !== 'ask' && approvalMode !== 'full_access') ||
+    (executionMode !== 'execute' && executionMode !== 'plan') ||
+    (value.plannedFromRunId !== undefined && typeof value.plannedFromRunId !== 'string') ||
     !Array.isArray(value.connectionIds) ||
     value.connectionIds.length > 50 ||
     value.connectionIds.some((connectionId) => !positiveInteger(connectionId)) ||
@@ -122,6 +129,8 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     },
     ...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort as ReasoningEffort }),
     approvalMode: approvalMode as RunApprovalMode,
+    executionMode: executionMode as RunExecutionMode,
+    ...(typeof value.plannedFromRunId === 'string' ? { plannedFromRunId: value.plannedFromRunId } : {}),
     connectionIds: value.connectionIds as number[],
     ...(value.environment === undefined ? {} : { environment: parseRunEnvironmentSelection(value.environment) }),
     ...(typeof value.initialGoal === 'string' && value.initialGoal.trim()

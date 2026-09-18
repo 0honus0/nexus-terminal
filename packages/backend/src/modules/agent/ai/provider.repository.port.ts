@@ -2,6 +2,7 @@ import type {
   OpenAiCompatibleProtocol,
   PersistedProviderModelConfig,
   PersistedProviderView,
+  ProviderModelCapabilityObservation,
   ProviderModelConfig,
   ProviderView,
 } from './model.types';
@@ -41,6 +42,11 @@ export interface ProviderRepositoryPort {
     expectedVersion: number,
     record: ProviderUpdateRecord,
   ): Promise<PersistedProviderView>;
+  replaceLiveCapabilities(
+    userId: number,
+    providerId: string,
+    observations: ProviderModelCapabilityObservation[],
+  ): Promise<void>;
   remove(userId: number, providerId: string, expectedVersion: number, deletedAt: number): Promise<void>;
 }
 

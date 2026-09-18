@@ -100,6 +100,19 @@ export class ConversationService {
     return this.repository.readOldestEntries(scope, threadId, validateLimit(limit, 32));
   }
 
+  searchEarlier(
+    scope: Scope,
+    threadId: string,
+    queryTerms: readonly string[],
+    beforeSequence: number,
+    limit = 64,
+  ): Promise<LedgerEntryView[]> {
+    if (!Number.isSafeInteger(beforeSequence) || beforeSequence < 1 || queryTerms.length === 0) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    return this.repository.searchEarlierEntries(scope, threadId, queryTerms, beforeSequence, validateLimit(limit, 128));
+  }
+
   readContextPage(
     scope: Scope,
     threadId: string,
@@ -118,6 +131,20 @@ export class ConversationService {
       throw new Error('VALIDATION_FAILED');
     }
     return this.repository.readContextEntries(scope, threadId, runId, historyBoundary, validateLimit(limit, 200));
+  }
+
+  readVisibleThrough(
+    scope: Scope,
+    threadId: string,
+    throughSequence: number,
+    runId?: string,
+    historyBoundary?: ContextHistoryBoundary,
+  ): Promise<LedgerEntryView[]> {
+    if (!Number.isSafeInteger(throughSequence) || throughSequence < 1) throw new Error('VALIDATION_FAILED');
+    if ((historyBoundary === undefined) !== (runId === undefined)) {
+      if (historyBoundary !== undefined || runId !== undefined) throw new Error('VALIDATION_FAILED');
+    }
+    return this.repository.readVisibleEntriesThrough(scope, threadId, throughSequence, runId, historyBoundary);
   }
 
   append(

@@ -48,7 +48,6 @@ const patchableSections = [
   'workspaceRuntime',
   'browser',
   'plugins',
-  'safety',
 ] as const;
 
 type PatchableSection = (typeof patchableSections)[number];

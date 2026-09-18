@@ -222,12 +222,22 @@ export class AgentScheduler {
               .then((cursor) => this.events.publishHostWake(run.userId, cursor))
               .catch(() => undefined);
           } else if (signal.type === 'transient') {
-            this.events.publishTransient({
-              runId: signal.runId,
-              type: signal.eventType,
-              payload: signal.payload,
-              occurredAt: this.clock.nowUnixSeconds(),
-            });
+            const occurredAt = this.clock.nowUnixSeconds();
+            if (signal.eventType === 'message.delta') {
+              this.events.publishTransient({
+                runId: signal.runId,
+                type: 'message.delta',
+                payload: signal.payload,
+                occurredAt,
+              });
+            } else {
+              this.events.publishTransient({
+                runId: signal.runId,
+                type: 'tool.delta',
+                payload: signal.payload,
+                occurredAt,
+              });
+            }
           }
         }
       } catch (error) {

@@ -1,14 +1,15 @@
-import type { JsonValue } from '../../../modules/agent/agent.types';
-import type { ToolInspection } from '../../../modules/agent/capabilities/tool.types';
 import type {
   PendingRunInputPage,
   HostEvent,
+  PendingUserInputRequest,
   RunEvent,
   RunInputProjection,
   RunReconciliationView,
   RunSnapshot,
 } from '../../../modules/agent/runtime/runs/run.types';
+import { normalizeUserInputQuestions } from '../../../modules/agent/runtime/runs/user-input-request';
 import type {
+  CompletionEvidenceSnapshot,
   ConfirmedMutationTool,
   HostCursorReaderPort,
   PendingRootTool,
@@ -19,6 +20,15 @@ import type {
   Scope,
 } from '../../../modules/agent/runtime/runs/run.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import {
+  durableInteger,
+  durableRecord,
+  durableString,
+  parseDurableJson,
+  parseDurableJsonValue,
+  parseToolInspection,
+  parseToolResult,
+} from '../runtime/durable-state-decoders';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from './sqlite-run.mapper';
 import { projectRunUserInputs } from './run-input-projection';
 
@@ -67,17 +77,40 @@ interface ReconciliationResourceRow {
   created_at: number;
 }
 
+interface CompletionToolRow {
+  tool_call_id: string;
+  step_index: number;
+  tool_name: string;
+  inspection_json: string;
+  result_json: string;
+}
+
+interface PendingUserInputRequestRow {
+  id: string;
+  agent_runtime_id: string;
+  questions_json: string;
+  requested_at: number;
+}
+
+const mapPendingUserInputRequest = (row: PendingUserInputRequestRow | null): PendingUserInputRequest | null =>
+  row
+    ? {
+        id: row.id,
+        runtimeId: row.agent_runtime_id,
+        questions: normalizeUserInputQuestions(parseDurableJson(row.questions_json)),
+        requestedAt: row.requested_at,
+      }
+    : null;
+
 const encodeCursor = (createdAt: number, id: string): string =>
   Buffer.from(JSON.stringify({ createdAt, id }), 'utf8').toString('base64url');
 
 const decodeCursor = (cursor: string): { createdAt: number; id: string } => {
   try {
-    const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
-      createdAt?: unknown;
-      id?: unknown;
-    };
-    if (!Number.isSafeInteger(value.createdAt) || typeof value.id !== 'string' || !value.id) throw new Error('invalid');
-    return { createdAt: value.createdAt as number, id: value.id };
+    const value = durableRecord(parseDurableJson(Buffer.from(cursor, 'base64url').toString('utf8')));
+    const id = durableString(value.id) as string;
+    if (!id) throw new Error('invalid');
+    return { createdAt: durableInteger(value.createdAt), id };
   } catch {
     throw new Error('CURSOR_INVALID');
   }
@@ -89,7 +122,7 @@ const mapEvent = (row: EventRow): RunEvent => ({
   sequence: row.sequence,
   schemaVersion: 1,
   type: row.type,
-  payload: JSON.parse(row.payload_json) as JsonValue,
+  payload: parseDurableJsonValue(row.payload_json),
   occurredAt: row.occurred_at,
 });
 
@@ -111,7 +144,7 @@ export class SqliteRunRepository
       const historyClause = historyBoundary
         ? `AND (${['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')].join(' OR ')})`
         : '';
-      const [entries, issueRow] = await Promise.all([
+      const [entries, issueRow, pendingInputRequestRow] = await Promise.all([
         tx.queryAll<EntryRow>(
           `SELECT id, sequence, kind, payload_json, created_at
            FROM ai_thread_entries
@@ -138,10 +171,20 @@ export class SqliteRunRepository
               [row.id],
             )
           : Promise.resolve(null),
+        run.status === 'awaiting_input'
+          ? tx.queryOne<PendingUserInputRequestRow>(
+              `SELECT id, agent_runtime_id, questions_json, requested_at
+               FROM agent_input_requests
+               WHERE run_id = ? AND user_id = ? AND app_id = ? AND status = 'requested'
+               ORDER BY requested_at DESC, id DESC LIMIT 1`,
+              [row.id, scope.userId, scope.appId],
+            )
+          : Promise.resolve(null),
       ]);
-      const issuePayload = issueRow ? (JSON.parse(issueRow.payload_json) as Record<string, JsonValue>) : null;
+      const issuePayload = issueRow ? durableRecord(parseDurableJsonValue(issueRow.payload_json)) : null;
       return {
         ...run,
+        pendingInputRequest: mapPendingUserInputRequest(pendingInputRequestRow),
         terminalIssue: issueRow
           ? {
               eventType: issueRow.type,
@@ -159,7 +202,7 @@ export class SqliteRunRepository
           id: entry.id,
           sequence: entry.sequence,
           kind: entry.kind,
-          payload: JSON.parse(entry.payload_json) as JsonValue,
+          payload: parseDurableJsonValue(entry.payload_json),
           createdAt: entry.created_at,
         })),
       };
@@ -272,7 +315,7 @@ export class SqliteRunRepository
       userId: row.user_id,
       sequence: row.sequence,
       type: row.type,
-      payload: JSON.parse(row.payload_json) as JsonValue,
+      payload: parseDurableJsonValue(row.payload_json),
       occurredAt: row.occurred_at,
     }));
   }
@@ -295,6 +338,24 @@ export class SqliteRunRepository
     if (!row) throw new Error('NOT_FOUND');
     return row.id;
   }
+
+  async rootRuntimeModel(scope: Scope, runId: string): Promise<import('../../../modules/agent/ai/model.types').ModelRef> {
+    const row = await this.db.queryOne<{ model_ref_json: string }>(
+      `SELECT rt.model_ref_json FROM agent_runtimes rt
+       JOIN agent_runs r ON r.id = rt.run_id
+       WHERE rt.run_id = ? AND rt.participant_id = 'root' AND r.user_id = ? AND r.app_id = ? LIMIT 1`,
+      [runId, scope.userId, scope.appId],
+    );
+    if (!row) throw new Error('RUNTIME_NOT_FOUND');
+    const record = parseDurableJsonValue(row.model_ref_json);
+    if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('DURABLE_STATE_INVALID');
+    const model = record as Record<string, unknown>;
+    if (typeof model.providerId !== 'string' || typeof model.modelId !== 'string' || !Number.isSafeInteger(model.configurationVersion)) {
+      throw new Error('DURABLE_STATE_INVALID');
+    }
+    return { providerId: model.providerId, modelId: model.modelId, configurationVersion: model.configurationVersion as number };
+  }
+
 
   async pendingTools(scope: Scope, runId: string): Promise<PendingRootTool[]> {
     const rows = await this.db.queryAll<PendingRootToolRow>(
@@ -322,7 +383,7 @@ export class SqliteRunRepository
         status: row.status,
         approvalId: row.approval_id,
         approvalVersion: row.approval_version,
-        inspection: JSON.parse(row.inspection_json) as ToolInspection,
+        inspection: parseToolInspection(row.inspection_json),
       };
     });
   }
@@ -338,5 +399,49 @@ export class SqliteRunRepository
       [runId, scope.userId, scope.appId, operationHash],
     );
     return row ? { toolCallId: row.tool_call_id, providerCallId: row.provider_call_id } : null;
+  }
+
+  async completionEvidence(scope: Scope, runId: string): Promise<CompletionEvidenceSnapshot> {
+    const owned = await this.db.queryOne<{ id: string }>(
+      'SELECT id FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?',
+      [runId, scope.userId, scope.appId],
+    );
+    if (!owned) throw new Error('NOT_FOUND');
+    const rows = await this.db.queryAll<CompletionToolRow>(
+      `SELECT t.id AS tool_call_id, s.step_index, t.tool_name, t.inspection_json, t.result_json
+       FROM agent_tool_calls t
+       JOIN agent_steps s ON s.id = t.step_id AND s.run_id = t.run_id
+       WHERE t.run_id = ? AND t.result_json IS NOT NULL
+       ORDER BY s.step_index, t.completed_at, t.id`,
+      [runId],
+    );
+    const readyEvidence = await this.db.queryAll<{ artifact_id: string }>(
+      `SELECT l.artifact_id FROM agent_artifact_links l
+       JOIN ai_artifacts a ON a.id = l.artifact_id
+       WHERE l.run_id = ? AND l.role = 'evidence' AND a.user_id = ? AND a.app_id = ? AND a.status = 'ready'
+       ORDER BY l.artifact_id`,
+      [runId, scope.userId, scope.appId],
+    );
+    const latestToolProgress = await this.db.queryOne<{ sequence: number | null }>(
+      `SELECT MAX(sequence) AS sequence FROM agent_events
+       WHERE run_id = ? AND type IN ('tool.completed','tool.failed','tool.reconciliation_required')`,
+      [runId],
+    );
+    const gateBlocks = await this.db.queryOne<{ count: number }>(
+      `SELECT COUNT(*) AS count FROM agent_events
+       WHERE run_id = ? AND type = 'completion.gate_blocked' AND sequence > ?`,
+      [runId, latestToolProgress?.sequence ?? 0],
+    );
+    return {
+      tools: rows.map((row) => ({
+        toolCallId: row.tool_call_id,
+        stepIndex: row.step_index,
+        toolName: row.tool_name,
+        inspection: parseToolInspection(row.inspection_json),
+        result: parseToolResult(row.result_json),
+      })),
+      readyEvidenceRefs: readyEvidence.map((row) => row.artifact_id),
+      gateBlocksSinceToolProgress: gateBlocks?.count ?? 0,
+    };
   }
 }

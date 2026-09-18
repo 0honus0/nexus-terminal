@@ -1,5 +1,11 @@
 import type { DatabaseSync as Database } from 'node:sqlite';
 import { logger } from '../../shared/logging/logger';
+import {
+  createAgentInputRequestsTableSQL,
+  createAiContextCheckpointsTableSQL,
+  createAiMemorySearchIndexSQL,
+  createAiThreadEntrySearchIndexSQL,
+} from './sqlite-schema';
 
 // 1. 定义 migrations 表 SQL
 const createMigrationsTableSQL = `
@@ -497,6 +503,162 @@ const definedMigrations: Migration[] = [
             BEGIN
               SELECT RAISE(ABORT, 'agent_tool_call_source_model_run_mismatch');
             END;
+        `,
+  },
+  {
+    id: 25,
+    name: 'Normalize Agent tool-call batch lineage and require model-step ownership',
+    sql: `
+            -- Migration #23 could only add a nullable lineage column to already-populated
+            -- databases. Recover the canonical source model step from the durable step order:
+            -- a Tool step belongs to the nearest preceding Model step in the same Runtime.
+            UPDATE agent_tool_calls AS target
+            SET source_model_step_id = (
+              SELECT model_step.id
+              FROM agent_steps AS tool_step
+              JOIN agent_steps AS model_step
+                ON model_step.run_id = target.run_id
+               AND model_step.agent_runtime_id = target.agent_runtime_id
+               AND model_step.kind = 'model'
+               AND model_step.step_index < tool_step.step_index
+              WHERE tool_step.id = target.step_id
+                AND tool_step.run_id = target.run_id
+              ORDER BY model_step.step_index DESC
+              LIMIT 1
+            )
+            WHERE target.source_model_step_id IS NULL;
+
+            -- Batch metadata added by #23 defaulted to 0/1 for historical rows. Recompute it
+            -- from canonical Tool-step ordering for every source model step so upgraded and
+            -- freshly-created databases expose the same projection.
+            UPDATE agent_tool_calls AS target
+            SET batch_index = (
+                  SELECT COUNT(*)
+                  FROM agent_tool_calls AS sibling
+                  JOIN agent_steps AS sibling_step
+                    ON sibling_step.id = sibling.step_id AND sibling_step.run_id = sibling.run_id
+                  JOIN agent_steps AS target_step
+                    ON target_step.id = target.step_id AND target_step.run_id = target.run_id
+                  WHERE sibling.run_id = target.run_id
+                    AND sibling.agent_runtime_id = target.agent_runtime_id
+                    AND sibling.source_model_step_id = target.source_model_step_id
+                    AND (
+                      sibling_step.step_index < target_step.step_index OR
+                      (sibling_step.step_index = target_step.step_index AND sibling.id < target.id)
+                    )
+                ),
+                batch_size = (
+                  SELECT COUNT(*)
+                  FROM agent_tool_calls AS sibling
+                  WHERE sibling.run_id = target.run_id
+                    AND sibling.agent_runtime_id = target.agent_runtime_id
+                    AND sibling.source_model_step_id = target.source_model_step_id
+                )
+            WHERE target.source_model_step_id IS NOT NULL;
+
+            -- Fail the migration instead of preserving a runtime fallback if any durable Tool
+            -- row cannot be mapped to a real Model step in the same Run/Runtime.
+            CREATE TEMP TABLE agent_tool_lineage_migration_guard (
+              invalid_count INTEGER NOT NULL CHECK(invalid_count = 0)
+            );
+            INSERT INTO agent_tool_lineage_migration_guard(invalid_count)
+            SELECT COUNT(*)
+            FROM agent_tool_calls AS target
+            WHERE target.source_model_step_id IS NULL
+               OR NOT EXISTS (
+                    SELECT 1 FROM agent_steps AS model_step
+                    WHERE model_step.id = target.source_model_step_id
+                      AND model_step.run_id = target.run_id
+                      AND model_step.agent_runtime_id = target.agent_runtime_id
+                      AND model_step.kind = 'model'
+                  );
+            DROP TABLE agent_tool_lineage_migration_guard;
+
+            DROP TRIGGER IF EXISTS agent_tool_call_source_model_run_insert;
+            DROP TRIGGER IF EXISTS agent_tool_call_source_model_run_update;
+
+            CREATE TRIGGER IF NOT EXISTS agent_tool_call_source_model_invariant_insert
+            BEFORE INSERT ON agent_tool_calls
+            WHEN NEW.source_model_step_id IS NULL
+              OR NOT EXISTS (
+                SELECT 1 FROM agent_steps
+                WHERE id = NEW.source_model_step_id
+                  AND run_id = NEW.run_id
+                  AND agent_runtime_id = NEW.agent_runtime_id
+                  AND kind = 'model'
+              )
+            BEGIN
+              SELECT RAISE(ABORT, 'agent_tool_call_source_model_invalid');
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS agent_tool_call_source_model_invariant_update
+            BEFORE UPDATE OF source_model_step_id, run_id, agent_runtime_id ON agent_tool_calls
+            WHEN NEW.source_model_step_id IS NULL
+              OR NOT EXISTS (
+                SELECT 1 FROM agent_steps
+                WHERE id = NEW.source_model_step_id
+                  AND run_id = NEW.run_id
+                  AND agent_runtime_id = NEW.agent_runtime_id
+                  AND kind = 'model'
+              )
+            BEGIN
+              SELECT RAISE(ABORT, 'agent_tool_call_source_model_invalid');
+            END;
+        `,
+  },
+  {
+    id: 26,
+    name: 'Add durable Agent user-input clarification requests',
+    check: async (db: Database): Promise<boolean> => !(await tableExists(db, 'agent_input_requests')),
+    sql: createAgentInputRequestsTableSQL,
+  },
+  {
+    id: 27,
+    name: 'Add durable model provider continuation state',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_model_attempts')) &&
+      !(await columnExists(db, 'agent_model_attempts', 'continuation_json')),
+    sql: `
+            ALTER TABLE agent_model_attempts
+              ADD COLUMN continuation_json TEXT
+              CHECK(continuation_json IS NULL OR json_valid(continuation_json));
+        `,
+  },
+  {
+    id: 28,
+    name: 'Add rebuildable indexed Agent recall projections',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'ai_memories')) && (await tableExists(db, 'ai_thread_entries')),
+    sql: `
+            ${createAiThreadEntrySearchIndexSQL}
+            ${createAiMemorySearchIndexSQL}
+            DELETE FROM ai_memories_search;
+            INSERT INTO ai_memories_search(rowid, terms)
+            SELECT rowid, nexus_search_terms(content) FROM ai_memories;
+            DELETE FROM ai_thread_entries_search;
+            INSERT INTO ai_thread_entries_search(rowid, terms)
+            SELECT rowid, nexus_ledger_search_terms(payload_json) FROM ai_thread_entries;
+        `,
+  },
+  {
+    id: 29,
+    name: 'Add Provider live capability observations',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'ai_providers')) && !(await columnExists(db, 'ai_providers', 'live_capabilities_json')),
+    sql: `
+            ALTER TABLE ai_providers
+              ADD COLUMN live_capabilities_json TEXT NOT NULL DEFAULT '[]'
+              CHECK(json_valid(live_capabilities_json));
+        `,
+  },
+  {
+    id: 30,
+    name: 'Replace dead Context digests with durable Context checkpoints',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'ai_context_digests')) || !(await tableExists(db, 'ai_context_checkpoints')),
+    sql: `
+            DROP TABLE IF EXISTS ai_context_digests;
+            ${createAiContextCheckpointsTableSQL}
         `,
   },
 ];

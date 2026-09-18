@@ -9,7 +9,6 @@ export interface AgentExecutionPolicyOverrides {
   maxActiveExecutionSeconds?: number;
   toolTimeoutSeconds?: number;
   maxToolOutputBytes?: number;
-  maxRawToolBytes?: number;
   maxRecallItems?: number;
   maxRecallBytes?: number;
   maxSubagentMessages?: number;
@@ -22,7 +21,6 @@ export interface AgentExecutionPolicyEffective {
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;
   maxToolOutputBytes: number;
-  maxRawToolBytes: number;
   maxRecallItems: number;
   maxRecallBytes: number;
   maxSubagentMessages: number;
@@ -47,7 +45,6 @@ const defaultsFrom = (settings: AgentSettingsView): AgentExecutionPolicyEffectiv
   maxActiveExecutionSeconds: settings.effectiveSettings.budget.maxActiveExecutionSeconds,
   toolTimeoutSeconds: settings.effectiveSettings.budget.toolTimeoutSeconds,
   maxToolOutputBytes: settings.effectiveSettings.budget.maxToolOutputBytes,
-  maxRawToolBytes: settings.effectiveSettings.budget.maxRawToolBytes,
   maxRecallItems: settings.effectiveSettings.budget.maxRecallItems,
   maxRecallBytes: settings.effectiveSettings.budget.maxRecallBytes,
   maxSubagentMessages: settings.effectiveSettings.subagents.maxSubagentMessagesPerRun,
@@ -62,7 +59,6 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
-    'maxRawToolBytes',
     'maxRecallItems',
     'maxRecallBytes',
     'maxSubagentMessages',
@@ -76,7 +72,6 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
     'maxToolOutputBytes',
-    'maxRawToolBytes',
     'maxRecallItems',
     'maxRecallBytes',
     'maxSubagentMessages',
@@ -105,7 +100,6 @@ const assertWithinHardLimits = (overrides: AgentExecutionPolicyOverrides, settin
     ['maxActiveExecutionSeconds', hard.maxActiveExecutionSeconds],
     ['toolTimeoutSeconds', hard.toolTimeoutSeconds],
     ['maxToolOutputBytes', hard.maxToolOutputBytes],
-    ['maxRawToolBytes', hard.maxRawToolBytes],
     ['maxRecallItems', hard.maxRecallItems],
     ['maxRecallBytes', hard.maxRecallBytes],
     ['maxSubagentMessages', hard.maxSubagentMessagesPerRun],
@@ -137,6 +131,7 @@ export class AgentExecutionPolicyService {
       : {};
     const storedOverrides = { ...rawOverrides };
     delete storedOverrides.maxRunCostMicros;
+    delete storedOverrides.maxRawToolBytes;
     const overrides = parseOverrides(storedOverrides);
     assertWithinHardLimits(overrides, settings);
     return {

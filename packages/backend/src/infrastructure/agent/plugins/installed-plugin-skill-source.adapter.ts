@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
-import type { AgentAppManifest } from '../../../modules/agent/host/app.types';
 import type { PluginSkillBundle, PluginSkillSourcePort } from '../../../modules/agent/host/plugin-skill-source.port';
 import type { Scope } from '../../../modules/agent/agent.types';
+import { durableRecord, parseDurableJson } from '../runtime/durable-state-decoders';
+import { decodePersistedAppManifest } from './persisted-app-manifest-decoder';
 
 const MAX_SKILL_FILES = 64;
 const MAX_SKILL_BYTES = 12 * 1024;
@@ -42,7 +43,7 @@ export class InstalledPluginSkillSourceAdapter implements PluginSkillSourcePort 
       [scope.appId, installation.version],
     );
     if (!plugin || plugin.status !== 'installed') return null;
-    const skillFiles = JSON.parse(plugin.skill_files_json) as unknown;
+    const skillFiles = parseDurableJson(plugin.skill_files_json);
     if (
       !Array.isArray(skillFiles) ||
       skillFiles.length > MAX_SKILL_FILES ||
@@ -50,7 +51,7 @@ export class InstalledPluginSkillSourceAdapter implements PluginSkillSourcePort 
     ) {
       throw new Error('PLUGIN_SKILL_FILE_LIST_INVALID');
     }
-    const manifest = JSON.parse(plugin.manifest_json) as AgentAppManifest;
+    const manifest = decodePersistedAppManifest(plugin.manifest_json);
     const root = path.join(
       this.dataDirectory,
       'agent',
@@ -66,7 +67,12 @@ export class InstalledPluginSkillSourceAdapter implements PluginSkillSourcePort 
     if (!listStat.isFile() || listStat.isSymbolicLink() || listStat.size > MAX_FILE_LIST_BYTES) {
       throw new Error('PLUGIN_FILE_LIST_INVALID');
     }
-    const fileList = JSON.parse(fs.readFileSync(listPath, 'utf8')) as { files?: unknown };
+    let fileList: Record<string, unknown>;
+    try {
+      fileList = durableRecord(parseDurableJson(fs.readFileSync(listPath, 'utf8')));
+    } catch {
+      throw new Error('PLUGIN_FILE_LIST_INVALID');
+    }
     if (!Array.isArray(fileList.files)) throw new Error('PLUGIN_FILE_LIST_INVALID');
     const hashes = new Map<string, string>();
     for (const raw of fileList.files) {

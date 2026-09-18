@@ -1,5 +1,5 @@
 import type { JsonValue, Scope } from '../../agent.types';
-import type { ModelRef } from '../../ai/model.types';
+import type { ModelCapabilitySnapshot, ModelRef } from '../../ai/model.types';
 import type { CommandIdentity } from '../runs/run.types';
 
 export type SubagentStatus = 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
@@ -61,6 +61,7 @@ export interface DelegationView extends Scope {
   capabilities: string[];
   peerMessaging: PeerMessaging;
   modelRef: ModelRef;
+  modelCapabilities?: ModelCapabilitySnapshot;
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];

@@ -12,6 +12,7 @@ export interface ToolDescriptor {
   inputSchema: JsonValue;
   riskClass: ToolRiskClass;
   parallelSafe?: boolean;
+  modelExposure?: 'direct' | 'deferred';
   capability: AgentCapability;
 }
 
@@ -67,6 +68,7 @@ export interface ToolResult {
   truncated: boolean;
   outcome: 'confirmed' | 'unknown';
   errorCode?: string;
+  projection?: { originalBytes: number; sha256: string };
   verification: {
     status: 'verified' | 'unverified' | 'failed';
     summary: string;

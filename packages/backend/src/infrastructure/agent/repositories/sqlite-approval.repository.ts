@@ -1,7 +1,7 @@
 import type { ApprovalRepositoryPort, ApprovalView } from '../../../modules/agent/runtime/approvals/approval.repository.port';
-import type { ToolInspection } from '../../../modules/agent/capabilities/tool.types';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { parseToolInspection } from '../runtime/durable-state-decoders';
 
 interface ApprovalRow {
   id: string;
@@ -47,7 +47,7 @@ const mapRow = (row: ApprovalRow): ApprovalView => ({
   requestedAt: row.requested_at,
   expiresAt: row.expires_at,
   version: row.version,
-  inspection: JSON.parse(row.inspection_json) as ToolInspection,
+  inspection: parseToolInspection(row.inspection_json),
 });
 
 export class SqliteApprovalRepository implements ApprovalRepositoryPort {

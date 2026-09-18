@@ -5,10 +5,12 @@ import type {
   ResolveToolApprovalCommand,
   StateCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
+import { TOOL_APPROVAL_TTL_SECONDS } from '../../../../modules/agent/runtime/approvals/approval-policy';
 import type { RunView } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
+import { durableRecord, durableString, parseDurableJson } from '../durable-state-decoders';
 import {
   allocateHostEvent,
   appendEvents,
@@ -46,7 +48,10 @@ export const requestToolApprovalTransition = async (
   ) {
     throw new Error('TOOL_STATE_CONFLICT');
   }
-  if (command.expiresAt <= command.now || command.expiresAt > command.now + 600) throw new Error('VALIDATION_FAILED');
+  if (
+    command.expiresAt <= command.now ||
+    command.expiresAt > command.now + TOOL_APPROVAL_TTL_SECONDS
+  ) throw new Error('VALIDATION_FAILED');
   await tx.execute(
     `INSERT INTO agent_approvals
       (id, user_id, app_id, run_id, tool_call_id, requested_by_runtime_id, operation_hash,
@@ -112,7 +117,11 @@ export const resolveToolApprovalTransition = async (
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
     if (existing.status === 'unknown') throw new Error('RECONCILIATION_REQUIRED');
     if (!existing.response_json) throw new Error('IDEMPOTENCY_RESPONSE_MISSING');
-    const replay = JSON.parse(existing.response_json) as { runId: string; approvalId: string };
+    const replayRecord = durableRecord(parseDurableJson(existing.response_json));
+    const replay = {
+      runId: durableString(replayRecord.runId) as string,
+      approvalId: durableString(replayRecord.approvalId) as string,
+    };
     if (replay.approvalId !== command.approvalId) throw new Error('RECONCILIATION_REQUIRED');
     const replayRow = await tx.queryOne<RunRow>(
       `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,

@@ -1,6 +1,6 @@
 import type { JsonValue, Scope } from '../../agent.types';
-import type { ModelRef } from '../../ai/model.types';
-import type { ToolInspection } from '../../capabilities/tool.types';
+import type { ModelCapabilitySnapshot, ModelRef } from '../../ai/model.types';
+import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type {
   AgentMessage,
   AgentMessageKind,
@@ -36,6 +36,7 @@ export interface CreateDelegationRecord {
   capabilities: string[];
   peerMessaging: PeerMessaging;
   modelRef: ModelRef;
+  modelCapabilities: ModelCapabilitySnapshot;
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];
@@ -98,7 +99,7 @@ export interface RuntimeToolExchangeView {
   providerCallId: string;
   toolName: string;
   arguments: JsonValue;
-  result: JsonValue | null;
+  result: ToolResult | null;
   status: string;
 }
 

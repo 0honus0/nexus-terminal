@@ -11,7 +11,12 @@ export interface RecallCandidate {
 }
 
 export interface RecallRepositoryPort {
-  publishedCandidates(scope: Scope, now: number, scanLimit: number): Promise<RecallCandidate[]>;
+  searchPublishedCandidates(
+    scope: Scope,
+    now: number,
+    queryTerms: readonly string[],
+    candidateLimit: number,
+  ): Promise<RecallCandidate[]>;
 }
 
 export type { JsonValue, Scope } from '../agent.types';

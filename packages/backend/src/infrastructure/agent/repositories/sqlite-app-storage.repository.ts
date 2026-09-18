@@ -5,6 +5,7 @@ import type {
   AppStorageStats,
 } from '../../../modules/agent/host/app-storage-snapshot.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 const MAX_VALUE_BYTES = 64 * 1024;
 const MAX_APP_BYTES = 16 * 1024 * 1024;
@@ -19,7 +20,7 @@ interface StorageRow {
 
 const mapRow = (row: StorageRow): AppStorageRecord => ({
   key: row.key,
-  value: JSON.parse(row.value_json) as JsonValue,
+  value: parseDurableJsonValue(row.value_json),
   bytes: row.bytes,
   version: row.version,
   updatedAt: row.updated_at,

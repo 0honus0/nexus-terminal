@@ -66,9 +66,15 @@ export const createAgentLifecycleSweeps = ({
 
   const sweepArtifactReconciliation = (): void => {
     artifactReconcileSweep = artifactReconcileSweep
-      .then(() => artifactMaintenance.reconcile())
-      .then((repaired) => {
-        if (repaired > 0) logger.debug({ repairedArtifacts: repaired }, 'Agent Artifact reconciliation sweep repaired rows');
+      .then(async () => {
+        const repaired = await artifactMaintenance.reconcile();
+        const expired = await artifactMaintenance.sweepExpired();
+        if (repaired > 0) {
+          logger.debug({ repairedArtifacts: repaired }, 'Agent Artifact reconciliation sweep repaired rows');
+        }
+        if (expired > 0) {
+          logger.debug({ expiredArtifacts: expired }, 'Agent Artifact retention sweep reclaimed rows');
+        }
       })
       .catch((error) => logger.warn({ err: error }, 'Agent Artifact reconciliation sweep failed'));
   };

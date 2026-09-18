@@ -416,9 +416,11 @@ Backend 的 `ModelCapabilityResolver` 统一解析模型物理能力。当前 Ne
 
 每个 Run 冻结 Provider configuration version、最终 model capability 与 reasoning effort。模型/Registry 能力在 Run 创建后发生变化，不得改写已有 Run 的 definition snapshot；下一次 Run 才使用新能力。`maxContextTokens`/`maxOutputTokens` 来自模型物理 capability，不是用户预算；累计 `maxRunTokens`、step/time/tool/recall/subagent 等执行预算来自 User defaults + App-scoped execution policy，并在 Run 创建时冻结且受 System/User hard limit 约束。
 
-OpenAI-compatible Provider 支持 `chat-completions` 与 `responses` 两种协议，由 Provider 配置显式选择。两种协议统一通过 `@ai-sdk/openai` 的 `createOpenAI({ baseURL, ... })` 接入：Chat 使用 `openai.chat(modelId)`，Responses 使用 `openai.responses(modelId)`；Nexus 不再维护独立 Responses payload/SSE codec，SDK 的统一 `LanguageModelV4` stream 再映射为 Core `ModelEvent`。第三方 endpoint 仍必须真实兼容所选 OpenAI wire，不能因使用该 SDK 就假定任意第三方 API 自动支持 Responses。两种协议都不得重新引入 caller-owned `prompt_cache_key`、Codex 专属 thread/turn metadata 或为了 cache 命中而扩散 provider-specific identity header；`affinityKey` 只作为 provider-neutral routing hint。Provider 双协议不等于恢复 Nexus 内建 DNS pinning、redirect/SSRF policy 或 private-host exception。
+OpenAI-compatible Provider 支持 `chat-completions` 与 `responses` 两种协议，由 Provider 配置显式选择。两种协议统一通过唯一的 `@ai-sdk/openai` `createOpenAI({ baseURL, ... })` 接入：Chat 使用 `openai.chat(modelId)`，Responses 使用 `openai.responses(modelId)`；Nexus 不再维护独立 Responses payload/SSE codec，SDK 的统一 `LanguageModelV4` stream 再映射为 Core `ModelEvent`。第三方 endpoint 仍必须真实兼容所选 OpenAI wire，不能因使用该 SDK 就假定任意第三方 API 自动支持 Responses。两种协议都不得透传 caller-owned/raw `prompt_cache_key`、Codex 专属 thread/turn metadata 或为了 cache 命中而扩散 provider-specific identity header；`ModelCacheHint.affinityKey` 仍是 provider-neutral routing hint。只有 frozen model capability `supportsPromptCacheKey=true` 且 endpoint 精确为官方 `https://api.openai.com/v1` 时，Adapter 才可把 `affinityKey ?? scopeKey`、provider/model/config 与稳定 prefix lineage 做不可逆、长度受限的 hash 后映射为 `promptCacheKey`；第三方 OpenAI-compatible endpoint 默认不发送该 vendor 字段。第一版不启用 `promptCacheOptions` 或 explicit cache breakpoint。Provider 双协议不等于恢复 Nexus 内建 DNS pinning、redirect/SSRF policy 或 private-host exception。
 
-Core model input 还必须保持 cache-friendly 且与 Provider 无关：稳定 instructions（safety + 已签名 Skill metadata）在前，append-oriented Ledger/tool chronology 随后，本轮 user input 再后，Goal/Plan/Collaboration/Recall 等易变 snapshot 放在尾部。`runId/attemptId/contextEpoch/credential revision/routing identity` 等控制面事实不得为了 cache 或诊断进入模型正文。Tool schema 要确定性 canonicalize/稳定排序；达到 step budget 时通过 `toolMode=none` 禁止新 Tool，而不是删除 schema 破坏前缀。长上下文压缩采用 generation boundary：一次生成稳定 summary 后开启新 generation，不得每轮重写旧 history。
+Core model input 还必须保持 cache-friendly 且与 Provider 无关：稳定 instructions（Nexus safety → 当前 scope 的 Repo Project Instructions → 已签名 Skill metadata）在前，append-oriented Ledger/tool chronology 随后，本轮 user input 再后，Goal/Plan/Collaboration/Recall 等易变 snapshot 放在尾部。`runId/attemptId/contextEpoch/credential revision/routing identity` 等控制面事实不得为了 cache 或诊断进入模型正文。Tool schema 要确定性 canonicalize/稳定排序；达到 step budget 时通过 `toolMode=none` 禁止新 Tool，而不是删除 schema 破坏前缀。长上下文压缩采用 generation boundary：一次生成稳定 summary 后开启新 generation，不得每轮重写旧 history。
+
+Repo Project Instructions 第一版只认 Workspace 内的 canonical `AGENTS.md`。Runner 以 `/workspace/work` 为 logical work root，按目标路径向上寻找最近的 `.git` directory 或 worktree-style `.git` file 作为 project root；没有 repo marker 时只使用 work root。只加载 project root → target directory 的 progressive scope，deeper instruction 后置，不扫描 unrelated subtree。Project instruction snapshot 的 path/scope/projectRoot/source SHA-256/byte provenance 只作为当次 Context 的 transient source；它不进入 Memory，不成为 Ledger 或 ContextCheckpoint 的 business truth，也不获得 Tool approval、capability 或安全策略权威。源 hash 进入 stable instruction，因此文件变化通过既有 `stablePrefixHash` / cache lineage 自然失效，不建立第二套 cache invalidation owner。
 
 上下文构建必须有界：
 
@@ -433,7 +435,7 @@ Core model input 还必须保持 cache-friendly 且与 Provider 无关：稳定 
 
 预算不足时进入 `awaiting_budget`，用户可以通过 versioned increase-budget mutation 提升到 Hard Limit 以内。
 
-Context digest / summary 不能吞掉尚未消费的用户输入、授权状态、approval 或 reconciliation 事实。
+Context checkpoint / summary 只是可验证的 derived state，不能吞掉尚未消费的用户输入、授权状态、approval 或 reconciliation 事实；canonical Ledger 与各控制状态 owner 继续 authoritative。
 
 ## 10. Tool 与安全执行链
 
@@ -476,7 +478,13 @@ Artifact 是 Agent 文件能力的统一持久边界：
 - Workspace exchange；
 - plugin input/output。
 
-写入遵循 reserve -> temp -> flush/hash/size -> atomic rename -> metadata commit。
+写入遵循 reserve -> temp -> flush/hash/size -> atomic rename -> metadata commit。Artifact 容量与生命周期设置必须由真实 owner 消费，不能只停留在 Settings/UI：
+
+- `storage.maxSingleArtifactBytes` 与 `storage.maxGlobalArtifactBytes` 由 `LocalArtifactStore` 的 effective storage policy 消费；requested value 先经既有 hard-limit normalization，再进入 reservation/global quota 判断。
+- `storage.maxArtifactBytes` 是 per-Run linked Artifact quota，authority 位于 durable `agent_artifact_links` 写入边界。第一次把某个未删除 Artifact link 到 Run 时，SQLite trigger 按该 Run 已有 distinct Artifact bytes + 新 Artifact bytes 与**当前 effective setting**比较；同一 Artifact 在同一 Run 的 input/output/evidence/checkpoint 多 role 不重复计费。它不新建第二套 usage table，也不把 Library 中尚未 link 到 Run 的普通 Artifact 伪计入某个 Run。
+- `storage.unretainedArtifactTtlSeconds` 在 Artifact 进入 ready 时冻结为 durable `expires_at`；retain 会清除 deadline，之后取消 retain 会按当时 effective TTL 从当前时间重新建立 deadline。旧 ready row 若历史上没有 deadline，bounded maintenance sweep 首次看到时按其 readyAt（无则 createdAt）+ 当前 effective TTL 补成 durable deadline。
+- Artifact lifecycle sweep 复用既有 maintenance timer、`artifactProtectionReason` 与 `ready/unavailable -> deleting -> deleted` two-phase delete/reconcile；只回收已到期、未 retained、且没有 active Run/checkpoint/active grant/AppIntent grant protection 的对象。自动 TTL 不直接删文件，也不绕过 quota reconciliation。
+- Workspace 当前没有足够准确的 activity authority：普通 read/search/argv/terminal 活动不会统一维护一个可信 idle timestamp。因此产品不暴露 `workspaceIdleTtlSeconds`，也没有基于不完整 `last_active_at` 的自动 idle cleanup；在出现单一可信 activity owner 前，不得重新加回这个“可配置但不生效”的设置。
 
 跨 App 可见不等于跨 App 授权。读取仍要 grant/link。
 
@@ -529,12 +537,15 @@ Runner 提供：
 
 - availability/catalog；
 - Workspace provision/start/stop/delete；
-- native Workspace job；
+- durable native Workspace job start/query/server-side wait/cancel；
 - Tool Store materialization；
 - multi-version Node/Python/Go runtime switching；
 - ACP stream；
 - Workspace local direct PTY terminal；
 - Browser tunnel；
+- bounded Repo Project Instructions projection；
+- bounded Workspace coding file read/search/strict patch；
+- bounded Workspace Repo Map / TypeScript-native code-intelligence projection；
 - storage report；
 - cleanup planning/execution；
 - journal/reconcile。
@@ -543,7 +554,19 @@ Runner 永远不获得 host Docker socket、不启动 dockerd、不使用 nested
 
 Backend ↔ Runner 控制面统一使用至少 32 字符的 `NEXUS_AGENT_RUNNER_TOKEN` Bearer token，并要求 `X-Nexus-Agent-Protocol: 2026-09-13`；HTTP 与 WebSocket upgrade 在路由分发前使用同一认证。Runner token 代表该 Nexus 实例对 Runner 的完整控制权，不是 per-user credential，不能暴露给浏览器、日志或第三方 Plugin。
 
-Runner wire 只传执行所需事实：`provision` 发送完整冻结 Workspace profile；`start/stop/restart/delete` 只发送 `workspaceId + generation`；Workspace job 只发送 generation 与执行参数。`userId/appId/runId/agentRuntimeId`、Backend optimistic `expectedVersion`、Agent operation hash 仍由 Backend 自己授权、持久化和 reconcile，不重复镜像到 Runner。
+Runner wire 只传执行所需事实：`provision` 发送完整冻结 Workspace profile；`start/stop/restart/delete` 只发送 `workspaceId + generation`；Workspace job 只发送 generation 与执行参数；Repo Project Instructions 使用窄 `POST /v1/workspaces/:workspaceId/project-instructions` contract，只携带当前 generation 与最多 8 个 logical target directories，由 Runner 内部只读 resolver 读取当前 Workspace。该读取不借 `workspace_execute_argv` mutation Tool，也不是通用 filesystem API；live Workspace 不存在或 Runner 不可用时 Model Context fail-soft，不伪造 Repo rules。`userId/appId/runId/agentRuntimeId`、Backend optimistic `expectedVersion`、Agent operation hash 仍由 Backend 自己授权、持久化和 reconcile，不重复镜像到 Runner。
+
+Coding Workspace 的模型文件面不再要求把所有操作拼成 shell：Host 在既有 `workspace.runtime.execute` capability 下提供 `workspace_read_file`、`workspace_search`、`workspace_repo_map`、`workspace_code_intel` 与 `workspace_apply_patch`。前四者是 read risk，可进入 plan mode，并继续走 read lease；`workspace_apply_patch` 是 mutation，plan mode 不暴露，execute mode 继续走现有 policy/approval、operation hash、mutation lease、outcome/finalization owner。`workspace_execute_argv` 继续保留为 build/test/git/package-manager 等 escape hatch，风险级别仍是 mutation，不因为新增 read/navigation Tool 而降级。
+
+`workspace_read_file` / `workspace_search` / `workspace_apply_patch` 的文件 authority 位于 Runner 的独立 `workspace-coding-files` owner，不复用/扩张 P-071 Project Instructions resolver。logical root 固定为 `/workspace/work`，path traversal 与 symlink fail closed；read 只投影 bounded UTF-8 range，并返回完整源文件 SHA-256/size；search 优先使用 Runner 可用的 `rg`，缺失时使用有文件数/总扫描字节/结果数/上下文行/output bytes 上限的 fallback。Patch 使用 `diff@9.0.0` 的 unified-diff parser/apply engine，要求每个现有 UTF-8 目标文件携带 expected SHA-256，inspect 先做 dry-run 并把 canonical `fileHash` precondition 固定进 operation hash；真正 apply 使用精确 declared hunk location + `fuzzFactor=0`，不调用 shell `git apply`，因此非 Git Workspace 也可工作。每次成功 patch 的 ToolResult 返回 path、before/after SHA-256、before/after bytes、additions/deletions，继续由既有 durable Tool-call/ToolResult lineage 作为 change evidence；不另建 Runner mutation journal 或第二个 `workspace_changes` truth owner。
+
+P-067 的 Repo Map/code-intelligence 使用另一个只读 Runner owner `workspace-code-intelligence`，仍不成为代码事实源或 mutation authority。第一版直接复用 Runner production dependency `typescript@7.0.2` 的 native `typescript/unstable/sync` compiler service：`workspace_repo_map` 返回 bounded TypeScript/JavaScript file SHA-256、imports 与 symbol signatures；`workspace_code_intel` 按需提供 `symbols | definition | references | diagnostics`，references 可跨同一 TS project 的多个 importer。索引为可重建运行时 cache，key 绑定 `workspaceId + generation`，revision 由纳入索引的 source/config SHA-256 集合确定；文件 hash 或 config 变化时刷新 native snapshot，新 generation 不复用旧 cache。扫描上限为 512 个 source files、单文件 2 MiB、总 source 16 MiB；Repo Map 单次最多 64 files / 160 symbols / 16 KiB JSON projection，code-intel 单次最多 100 results / 64 KiB。logical path traversal 与 symlink 继续 fail closed；未支持语言（例如 Python/Vue 第一版）明确返回 `workspace_search` + `workspace_read_file` fallback，不用 regex 自研 parser、不启动 Nexus-wide 常驻 LSP 集群。Repo Map/code-intel 只用于导航；编辑前 authoritative content 仍必须来自真实 Workspace read，所有 mutation 继续由既有 patch/argv owner 治理。
+
+Workspace command 的长任务生命周期继续只由 Runner 已有 durable Job Journal 持有，不另建 Backend job queue。`workspace_execute_argv` 新调用可显式选择 `mode: foreground | background`，省略时默认 `foreground`；P-073 之前已持久化、没有 `mode` 的旧 Tool inspection 在恢复执行时同样按 foreground 处理，不改写旧 operation hash。foreground 仍向模型返回 terminal command result，但 Backend 不再每约 250ms GET poll；`RunnerHttpAdapter.invoke()` 提交后只调用 Runner 的 server-side `POST /v1/jobs/:jobId/wait`。background 在 Runner 已把 job 写入 durable journal 后立即返回 `jobId/workspaceId/generation/status`，该 Tool mutation 的提交 outcome 是 confirmed，但 verification 必须保持 unverified，不能把“后台任务已接受”伪装成“命令已成功完成”。
+
+同一 `workspace.runtime.execute` capability 下提供一个 `workspace_job` control Tool，只包含 `status | wait | cancel`；它不为 list/log/tail/wait 各造 Tool，也不暴露 host PID。Tool inspect 先查询 durable job，再用 Backend Workspace repository 验证该 stable Workspace 仍属于当前 `runId + agentRuntimeId`；job 自己冻结的 generation 保持 provenance，即使 Workspace 后续切到新 generation，旧 job 仍只能以旧 generation 身份查询。status/wait/cancel result 的 stdout/stderr 只投影 bounded UTF-8 tail；只有 durable terminal zero-exit result 才是 verified execution evidence，pending/running 只 unverified，cancelled/failed 不得计为成功验证。Completion Gate 因此可由后续 `workspace_job` terminal evidence 满足 test/build/check 要求，而 background launch 自身不能提前放行。
+
+Runner 仍复用每个 Workspace generation 的原生 process-group/AbortController owner：`workspace_job cancel` 请求取消当前 job 并等待 journal 确认 `cancelled`；Workspace stop/restart/delete 继续按 generation 中断在跑 job。由于 background Tool 返回后 Backend mutation lease 已结束，第一版用**同一个 Runner durable job journal**做 fail-closed single-writer guard：一个 generation 存在 pending/running argv job 时，拒绝第二个 argv job 与实际 `workspace_apply_patch`，但 read/search 与 patch dry-run 仍可继续；这不是第二套 lock/journal。Runner restart 的既有 reconcile 仍把无法证明 outcome 的遗留 running job 标为 unknown。第一版不增加 Scheduler/EventHub 自动 job-terminal wake；模型可在后台任务运行期间继续 read/search，需要结果时发一次 `workspace_job wait`，wait 在 Runner server-side 完成，不要求模型 busy-poll。
 
 ### 12.4 单用户 native Workspace Runtime
 

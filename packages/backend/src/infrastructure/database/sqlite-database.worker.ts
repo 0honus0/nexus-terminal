@@ -10,6 +10,11 @@ import type {
 } from './database-worker.protocol';
 import { runMigrations } from './sqlite-migrations';
 import { sqliteTableDefinitions } from './sqlite-schema.registry';
+import {
+  createAiMemorySearchIndexSQL,
+  createAiThreadEntrySearchIndexSQL,
+} from './sqlite-schema';
+import { sqliteLedgerSearchTerms, sqliteSearchTerms } from './sqlite-search-index';
 import { setBackendLogLevel } from '../../shared/logging/logger';
 
 const STATEMENT_CACHE_LIMIT = 256;
@@ -77,6 +82,49 @@ const configureDatabase = (db: DatabaseSync): void => {
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec('PRAGMA synchronous = NORMAL;');
   db.exec('PRAGMA busy_timeout = 5000;');
+  db.function('nexus_search_terms', { deterministic: true }, (value) =>
+    sqliteSearchTerms(typeof value === 'string' ? value : String(value ?? '')),
+  );
+  db.function('nexus_ledger_search_terms', { deterministic: true }, (value) =>
+    sqliteLedgerSearchTerms(typeof value === 'string' ? value : String(value ?? '')),
+  );
+};
+
+const rebuildAgentSearchIndexes = (db: DatabaseSync): void => {
+  const rebuild = (): void => {
+    db.exec(`
+      DELETE FROM ai_memories_search;
+      INSERT INTO ai_memories_search(rowid, terms)
+      SELECT rowid, nexus_search_terms(content) FROM ai_memories;
+      DELETE FROM ai_thread_entries_search;
+      INSERT INTO ai_thread_entries_search(rowid, terms)
+      SELECT rowid, nexus_ledger_search_terms(payload_json) FROM ai_thread_entries;
+    `);
+  };
+
+  try {
+    const memoryCounts = db
+      .prepare(`SELECT
+        (SELECT COUNT(*) FROM ai_memories) AS canonical_count,
+        (SELECT COUNT(*) FROM ai_memories_search) AS index_count`)
+      .get() as { canonical_count: number; index_count: number };
+    const threadCounts = db
+      .prepare(`SELECT
+        (SELECT COUNT(*) FROM ai_thread_entries) AS canonical_count,
+        (SELECT COUNT(*) FROM ai_thread_entries_search) AS index_count`)
+      .get() as { canonical_count: number; index_count: number };
+    if (
+      Number(memoryCounts.canonical_count) !== Number(memoryCounts.index_count) ||
+      Number(threadCounts.canonical_count) !== Number(threadCounts.index_count)
+    ) {
+      rebuild();
+    }
+  } catch {
+    db.exec('DROP TABLE IF EXISTS ai_memories_search; DROP TABLE IF EXISTS ai_thread_entries_search;');
+    db.exec(createAiThreadEntrySearchIndexSQL);
+    db.exec(createAiMemorySearchIndexSQL);
+    rebuild();
+  }
 };
 
 const openDatabase = async (): Promise<DatabaseSync> => {
@@ -87,6 +135,7 @@ const openDatabase = async (): Promise<DatabaseSync> => {
     configureDatabase(db);
     for (const definition of sqliteTableDefinitions) db.exec(definition.sql);
     await runMigrations(db);
+    rebuildAgentSearchIndexes(db);
     clearStatementCache();
     database = db;
     return db;

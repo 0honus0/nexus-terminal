@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
+  ArtifactAgentAccess,
   ArtifactAttachInput,
   ArtifactAttachResult,
   ArtifactBeginMeta,
@@ -20,6 +21,12 @@ import type {
   UploadReservation,
 } from '../../../modules/agent/ai/artifact.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import {
+  durableInteger,
+  durableRecord,
+  durableString,
+  parseDurableJson,
+} from '../runtime/durable-state-decoders';
 
 interface LocalArtifactStoreOptions {
   dataDirectory: string;
@@ -57,6 +64,9 @@ const MAX_RANGE_BYTES = 8 * 1024 * 1024;
 const MAX_UPLOADS_PER_USER = 2;
 const CLEANUP_CONFIRMATION_TTL_SECONDS = 10 * 60;
 
+const retentionDeadline = (readyAt: number, ttlSeconds: number): number =>
+  ttlSeconds > Number.MAX_SAFE_INTEGER - readyAt ? Number.MAX_SAFE_INTEGER : readyAt + ttlSeconds;
+
 const publicRef = (row: ArtifactRow): ArtifactRef => ({
   id: row.id,
   appId: row.app_id,
@@ -76,6 +86,11 @@ const publicRef = (row: ArtifactRow): ArtifactRef => ({
 const columns = `
   id, user_id, app_id, original_name, media_type, storage_key, sha256,
   size_bytes, reserved_bytes, status, retained, version, created_at, ready_at, expires_at, deleted_at
+`;
+
+const qualifiedArtifactColumns = `
+  a.id, a.user_id, a.app_id, a.original_name, a.media_type, a.storage_key, a.sha256,
+  a.size_bytes, a.reserved_bytes, a.status, a.retained, a.version, a.created_at, a.ready_at, a.expires_at, a.deleted_at
 `;
 
 const imageArtifactPredicate = `(LOWER(media_type) LIKE 'image/%')`;
@@ -137,17 +152,28 @@ const encodeCursor = (createdAt: number, id: string): string =>
 
 const decodeCursor = (value: string): { createdAt: number; id: string } => {
   try {
-    const parsed = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as {
-      createdAt?: unknown;
-      id?: unknown;
-    };
-    if (!Number.isSafeInteger(parsed.createdAt) || typeof parsed.id !== 'string' || parsed.id.length === 0) {
-      throw new Error('invalid');
-    }
-    return { createdAt: parsed.createdAt as number, id: parsed.id };
+    const parsed = durableRecord(parseDurableJson(Buffer.from(value, 'base64url').toString('utf8')));
+    const id = durableString(parsed.id) as string;
+    if (!id) throw new Error('invalid');
+    return { createdAt: durableInteger(parsed.createdAt), id };
   } catch {
     throw new Error('CURSOR_INVALID');
   }
+};
+
+const decodeCleanupSelection = (raw: string): CleanupSelectionItem[] => {
+  const value = parseDurableJson(raw);
+  if (!Array.isArray(value) || value.length > 10_000) throw new Error('CLEANUP_CONFIRMATION_INVALID');
+  return value.map((item) => {
+    const record = durableRecord(item);
+    return {
+      id: durableString(record.id) as string,
+      appId: durableString(record.appId) as string,
+      version: durableInteger(record.version, 1),
+      sizeBytes: durableInteger(record.sizeBytes),
+      storageKey: durableString(record.storageKey) as string,
+    };
+  });
 };
 
 const artifactProtectionReason = async (
@@ -271,6 +297,11 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
     return row ? publicRef(row) : null;
   }
 
+  async getForAgent(scope: Scope, access: ArtifactAgentAccess, artifactId: string): Promise<ArtifactRef | null> {
+    const row = await this.getAgentRow(scope, access, artifactId);
+    return row ? publicRef(row) : null;
+  }
+
   async write(
     scope: Scope,
     artifactId: string,
@@ -334,7 +365,17 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
 
       const sha256 = hash.digest('hex');
       const readyAt = Math.floor(Date.now() / 1000);
-      if (!(await this.finalizeReady(row, sha256, written, readyAt))) throw new Error('STATE_CONFLICT');
+      if (
+        !(await this.finalizeReady(
+          row,
+          sha256,
+          written,
+          readyAt,
+          retentionDeadline(readyAt, writeLimits.unretainedArtifactTtlSeconds),
+        ))
+      ) {
+        throw new Error('STATE_CONFLICT');
+      }
 
       const ready = await this.get(scope, artifactId);
       if (!ready) throw new Error('NOT_FOUND');
@@ -354,6 +395,21 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
   async *read(scope: Scope, artifactId: string, range: ArtifactReadRange): AsyncIterable<Uint8Array> {
     const row = await this.getRow(scope, artifactId);
     if (!row) throw new Error('NOT_FOUND');
+    yield* this.readRow(row, range);
+  }
+
+  async *readForAgent(
+    scope: Scope,
+    access: ArtifactAgentAccess,
+    artifactId: string,
+    range: ArtifactReadRange,
+  ): AsyncIterable<Uint8Array> {
+    const row = await this.getAgentRow(scope, access, artifactId);
+    if (!row) throw new Error('ARTIFACT_NOT_AUTHORIZED_FOR_RUN');
+    yield* this.readRow(row, range);
+  }
+
+  private async *readRow(row: ArtifactRow, range: ArtifactReadRange): AsyncIterable<Uint8Array> {
     if (row.status === 'unavailable') throw new Error('ARTIFACT_UNAVAILABLE');
     if (row.status !== 'ready') throw new Error('STATE_CONFLICT');
     const length = range.endInclusive - range.start + 1;
@@ -383,10 +439,16 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
   }
 
   async retain(scope: Scope, artifactId: string, retained: boolean, expectedVersion: number): Promise<ArtifactRef> {
+    const expiresAt = retained
+      ? null
+      : retentionDeadline(
+          Math.floor(Date.now() / 1000),
+          (await this.limits.forUser(scope.userId)).unretainedArtifactTtlSeconds,
+        );
     const result = await this.db.execute(
-      `UPDATE ai_artifacts SET retained = ?, version = version + 1
+      `UPDATE ai_artifacts SET retained = ?, expires_at = ?, version = version + 1
        WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND status IN ('ready','unavailable')`,
-      [retained ? 1 : 0, artifactId, scope.userId, scope.appId, expectedVersion],
+      [retained ? 1 : 0, expiresAt, artifactId, scope.userId, scope.appId, expectedVersion],
     );
     if (result.changes !== 1) {
       if (await this.get(scope, artifactId)) throw new Error('STATE_CONFLICT');
@@ -612,7 +674,7 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
         ]);
         throw new Error('CLEANUP_CONFIRMATION_EXPIRED');
       }
-      const selection = JSON.parse(confirmation.selection_json) as CleanupSelectionItem[];
+      const selection = decodeCleanupSelection(confirmation.selection_json);
       for (const item of selection) {
         const row = await tx.queryOne<ArtifactRow>(`SELECT ${columns} FROM ai_artifacts WHERE id = ? AND user_id = ?`, [
           item.id,
@@ -766,11 +828,120 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
     return repaired;
   }
 
+  async sweepExpired(limit = 100): Promise<number> {
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('VALIDATION_FAILED');
+    const now = Math.floor(Date.now() / 1000);
+    const rows = await this.db.queryAll<ArtifactRow>(
+      `SELECT ${columns} FROM ai_artifacts
+       WHERE status IN ('ready','unavailable') AND retained = 0
+         AND (expires_at IS NULL OR expires_at <= ?)
+       ORDER BY COALESCE(expires_at, ready_at, created_at), id
+       LIMIT ?`,
+      [now, limit],
+    );
+    const policies = new Map<number, Awaited<ReturnType<ArtifactLimitPolicyPort['forUser']>>>();
+    let deleted = 0;
+    for (const row of rows) {
+      try {
+        let candidate = row;
+        if (candidate.expires_at === null) {
+          let policy = policies.get(candidate.user_id);
+          if (!policy) {
+            policy = await this.limits.forUser(candidate.user_id);
+            policies.set(candidate.user_id, policy);
+          }
+          const expiresAt = retentionDeadline(
+            candidate.ready_at ?? candidate.created_at,
+            policy.unretainedArtifactTtlSeconds,
+          );
+          const updated = await this.db.execute(
+            `UPDATE ai_artifacts SET expires_at = ?, version = version + 1
+             WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?
+               AND status IN ('ready','unavailable') AND retained = 0 AND expires_at IS NULL`,
+            [expiresAt, candidate.id, candidate.user_id, candidate.app_id, candidate.version],
+          );
+          if (updated.changes !== 1) continue;
+          candidate = { ...candidate, expires_at: expiresAt, version: candidate.version + 1 };
+        }
+        if (candidate.expires_at === null || candidate.expires_at > now) continue;
+        if (await artifactProtectionReason(this.db, candidate.id, now)) continue;
+        const marked = await this.db.execute(
+          `UPDATE ai_artifacts SET status = 'deleting', version = version + 1
+           WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?
+             AND status IN ('ready','unavailable') AND retained = 0 AND expires_at <= ?`,
+          [candidate.id, candidate.user_id, candidate.app_id, candidate.version, now],
+        );
+        if (marked.changes !== 1) continue;
+        if (await this.finalizeDeleting({ ...candidate, status: 'deleting', version: candidate.version + 1 }, now)) {
+          deleted += 1;
+        }
+      } catch {
+        // The next bounded maintenance pass retries any durable non-terminal state.
+      }
+    }
+    return deleted;
+  }
+
   private async getRow(scope: Scope, artifactId: string): Promise<ArtifactRow | null> {
     return this.db.queryOne<ArtifactRow>(
       `SELECT ${columns} FROM ai_artifacts
        WHERE id = ? AND user_id = ? AND app_id = ? AND status <> 'deleted'`,
       [artifactId, scope.userId, scope.appId],
+    );
+  }
+
+  private async getAgentRow(
+    scope: Scope,
+    access: ArtifactAgentAccess,
+    artifactId: string,
+  ): Promise<ArtifactRow | null> {
+    const now = Math.floor(Date.now() / 1000);
+    return this.db.queryOne<ArtifactRow>(
+      `SELECT ${qualifiedArtifactColumns} FROM ai_artifacts a
+       JOIN agent_runs r ON r.id = ? AND r.user_id = ? AND r.app_id = ?
+       WHERE a.id = ? AND a.user_id = ? AND a.status <> 'deleted'
+         AND (
+           EXISTS (
+             SELECT 1 FROM agent_artifact_links l
+             WHERE l.artifact_id = a.id AND l.run_id = r.id
+           ) OR EXISTS (
+             SELECT 1 FROM agent_artifact_grants g
+             WHERE g.artifact_id = a.id AND g.receiver_user_id = r.user_id
+               AND g.receiver_app_id = r.app_id AND g.receiver_run_id = r.id
+               AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at > ?)
+           )
+         )
+         AND (
+           (? IS NULL AND EXISTS (
+             SELECT 1 FROM agent_runtimes root
+             WHERE root.run_id = r.id AND root.participant_id = 'root'
+           )) OR
+           (? IS NOT NULL AND EXISTS (
+             SELECT 1 FROM agent_runtimes rt
+             WHERE rt.id = ? AND rt.run_id = r.id AND (
+               rt.participant_id = 'root' OR EXISTS (
+                 SELECT 1 FROM agent_delegations d
+                 WHERE d.run_id = r.id AND d.child_runtime_id = rt.id
+                   AND EXISTS (
+                     SELECT 1 FROM json_each(d.input_artifact_refs_json) refs
+                     WHERE refs.value = a.id
+                   )
+               )
+             )
+           ))
+         )
+       LIMIT 1`,
+      [
+        access.runId,
+        scope.userId,
+        scope.appId,
+        artifactId,
+        scope.userId,
+        now,
+        access.runtimeId ?? null,
+        access.runtimeId ?? null,
+        access.runtimeId ?? null,
+      ],
     );
   }
 
@@ -791,7 +962,14 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
         return this.releaseStaging(row);
       }
       const sha256 = await this.hashFile(objectPath);
-      const finalized = await this.finalizeReady(row, sha256, objectInfo.size, now);
+      const limits = await this.limits.forUser(row.user_id);
+      const finalized = await this.finalizeReady(
+        row,
+        sha256,
+        objectInfo.size,
+        now,
+        retentionDeadline(now, limits.unretainedArtifactTtlSeconds),
+      );
       if (finalized) await fs.rm(tmpPath, { force: true }).catch(() => undefined);
       return finalized;
     }
@@ -811,15 +989,21 @@ export class LocalArtifactStore implements ArtifactPort, ArtifactMaintenancePort
     return hash.digest('hex');
   }
 
-  private async finalizeReady(row: ArtifactRow, sha256: string, sizeBytes: number, readyAt: number): Promise<boolean> {
+  private async finalizeReady(
+    row: ArtifactRow,
+    sha256: string,
+    sizeBytes: number,
+    readyAt: number,
+    expiresAt: number,
+  ): Promise<boolean> {
     if (sizeBytes !== row.reserved_bytes) throw new Error('ARTIFACT_SIZE_MISMATCH');
     return this.db.transaction(async (tx) => {
       const changed = await tx.execute(
         `UPDATE ai_artifacts SET
            sha256 = ?, size_bytes = ?, reserved_bytes = 0, status = 'ready',
-           ready_at = ?, expires_at = NULL, version = version + 1
+           ready_at = ?, expires_at = ?, version = version + 1
          WHERE id = ? AND user_id = ? AND app_id = ? AND status = 'staging' AND version = ?`,
-        [sha256, sizeBytes, readyAt, row.id, row.user_id, row.app_id, row.version],
+        [sha256, sizeBytes, readyAt, expiresAt, row.id, row.user_id, row.app_id, row.version],
       );
       if (changed.changes !== 1) return false;
       const quotaChanged = await tx.execute(

@@ -45,6 +45,12 @@
     'SSH_SHELL_FAILURE',
     'DATABASE_MIGRATION',
     'ADMIN_SETUP_COMPLETE',
+    'AGENT_RUN_COMPLETED',
+    'AGENT_RUN_FAILED',
+    'AGENT_RUN_INTERRUPTED',
+    'AGENT_APPROVAL_REQUIRED',
+    'AGENT_INPUT_REQUIRED',
+    'AGENT_ATTENTION_REQUIRED',
   ];
   const form = reactive({
     channelType: 'webhook' as NotificationChannelType,

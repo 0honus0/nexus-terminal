@@ -3,6 +3,7 @@ import type { CapabilityGrant } from '../../../modules/agent/host/app.types';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { appendHostEvent } from '../events/host-event-outbox';
+import { parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 interface GrantRow {
   capability: CapabilityGrant['capability'];
@@ -14,7 +15,7 @@ interface GrantRow {
 const mapRow = (row: GrantRow): CapabilityGrant => ({
   capability: row.capability,
   schemaVersion: row.schema_version,
-  scope: JSON.parse(row.scope_json) as CapabilityGrant['scope'],
+  scope: parseDurableJsonValue(row.scope_json),
   grantedAt: row.granted_at,
 });
 

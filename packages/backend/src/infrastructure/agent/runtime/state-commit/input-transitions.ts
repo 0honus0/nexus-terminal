@@ -8,6 +8,7 @@ import type { RunStatus } from '../../../../modules/agent/runtime/runs/run.types
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { commandForReplay } from '../../idempotency/command-lifecycle';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
+import { durableInteger, durableRecord, durableString, parseDurableJson } from '../durable-state-decoders';
 import { resetLoopGuard } from './loop-guard';
 import {
   allocateHostEvent,
@@ -36,10 +37,11 @@ export const appendInputTransition = async (
     if (existing.status === 'pending') throw new Error('IDEMPOTENCY_IN_PROGRESS');
     if (existing.status === 'unknown') throw new Error('RECONCILIATION_REQUIRED');
     if (!existing.response_json) throw new Error('IDEMPOTENCY_RESPONSE_MISSING');
-    const response = JSON.parse(existing.response_json) as {
-      inputId: string;
-      sequence: number;
-      runVersion: number;
+    const replay = durableRecord(parseDurableJson(existing.response_json));
+    const response = {
+      inputId: durableString(replay.inputId) as string,
+      sequence: durableInteger(replay.sequence, 1),
+      runVersion: durableInteger(replay.runVersion, 1),
     };
     const row = await tx.queryOne<RunRow>(
       `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
@@ -100,8 +102,25 @@ export const appendInputTransition = async (
           [row.id],
         )
       : null;
-  if (row.status === 'awaiting_input' && !waitingLoopInput?.paused_runtime_id) {
-    throw new Error('LOOP_GUARD_STATE_INVALID');
+  const waitingClarification =
+    row.status === 'awaiting_input'
+      ? await tx.queryOne<{ id: string; agent_runtime_id: string; version: number }>(
+          `SELECT id, agent_runtime_id, version FROM agent_input_requests
+           WHERE run_id = ? AND user_id = ? AND app_id = ? AND status = 'requested'
+           ORDER BY requested_at DESC, id DESC LIMIT 1`,
+          [row.id, row.user_id, row.app_id],
+        )
+      : null;
+  const waitingLoopRuntimeId = waitingLoopInput?.paused_runtime_id ?? null;
+  if (
+    row.status === 'awaiting_input' &&
+    !waitingLoopRuntimeId &&
+    !waitingClarification
+  ) {
+    throw new Error('AWAITING_INPUT_STATE_INVALID');
+  }
+  if (waitingLoopRuntimeId && waitingClarification && waitingLoopRuntimeId !== waitingClarification.agent_runtime_id) {
+    throw new Error('AWAITING_INPUT_STATE_INVALID');
   }
 
   await tx.execute(
@@ -233,17 +252,26 @@ export const appendInputTransition = async (
       [command.now, row.user_id, row.app_id],
     );
   }
-  if (waitingLoopInput?.paused_runtime_id) {
+  if (waitingClarification) {
+    const requestChanged = await tx.execute(
+      `UPDATE agent_input_requests SET status = 'answered', answered_at = ?, answer_entry_id = ?, version = version + 1
+       WHERE id = ? AND run_id = ? AND status = 'requested' AND version = ?`,
+      [command.now, command.inputEntryId, waitingClarification.id, row.id, waitingClarification.version],
+    );
+    if (requestChanged.changes !== 1) throw new Error('USER_INPUT_REQUEST_STATE_CONFLICT');
+  }
+  const waitingRuntimeId = waitingLoopRuntimeId ?? waitingClarification?.agent_runtime_id ?? null;
+  if (waitingRuntimeId) {
     const runtimeChanged = await tx.execute(
       `UPDATE agent_runtimes SET status = 'running', schedule_state = 'runnable', updated_at = ?
        WHERE id = ? AND run_id = ? AND status = 'running' AND schedule_state = 'waiting_message'`,
-      [command.now, waitingLoopInput.paused_runtime_id, row.id],
+      [command.now, waitingRuntimeId, row.id],
     );
-    if (runtimeChanged.changes !== 1) throw new Error('LOOP_GUARD_STATE_INVALID');
-    if (waitingLoopInput.paused_delegation_id) {
+    if (runtimeChanged.changes !== 1) throw new Error('AWAITING_INPUT_STATE_INVALID');
+    if (waitingLoopInput?.paused_delegation_id) {
       const delegation = await tx.queryOne<{ deadline_at: number }>(
         `SELECT deadline_at FROM agent_delegations WHERE id = ? AND run_id = ? AND child_runtime_id = ? AND status = 'waiting'`,
-        [waitingLoopInput.paused_delegation_id, row.id, waitingLoopInput.paused_runtime_id],
+        [waitingLoopInput.paused_delegation_id, row.id, waitingRuntimeId],
       );
       if (!delegation) throw new Error('LOOP_GUARD_STATE_INVALID');
       const delegationChanged = await tx.execute(
@@ -260,7 +288,7 @@ export const appendInputTransition = async (
         [
           `work-${randomUUID()}`,
           row.id,
-          waitingLoopInput.paused_runtime_id,
+          waitingRuntimeId,
           JSON.stringify({ delegationId: waitingLoopInput.paused_delegation_id, cause: 'loop_guard_resumed' }),
           command.now,
           delegation.deadline_at,
@@ -269,9 +297,10 @@ export const appendInputTransition = async (
         ],
       );
     }
-    await resetLoopGuard(tx, row.id, command.now);
+    if (waitingLoopRuntimeId) await resetLoopGuard(tx, row.id, command.now);
   }
-  const nextStatus: RunStatus = waitingApproval || waitingLoopInput ? 'running' : row.status;
+  const resumesAwaitingInput = Boolean(waitingRuntimeId);
+  const nextStatus: RunStatus = waitingApproval || resumesAwaitingInput ? 'running' : row.status;
   const events: DurableEventInput[] = [
     {
       type: 'input.appended',
@@ -290,11 +319,17 @@ export const appendInputTransition = async (
           { type: 'run.status_changed', payload: { from: 'awaiting_approval', to: 'running' } },
         ]
       : []),
-    ...(waitingLoopInput
+    ...(waitingClarification
       ? [
-          { type: 'run.loop_resumed', payload: { reason: 'new_input' } },
-          { type: 'run.status_changed', payload: { from: 'awaiting_input', to: 'running' } },
+          {
+            type: 'input.request_answered',
+            payload: { requestId: waitingClarification.id, inputId: command.inputEntryId },
+          },
         ]
+      : []),
+    ...(waitingLoopRuntimeId ? [{ type: 'run.loop_resumed', payload: { reason: 'new_input' } }] : []),
+    ...(resumesAwaitingInput
+      ? [{ type: 'run.status_changed', payload: { from: 'awaiting_input', to: 'running' } }]
       : []),
   ];
   await appendEvents(tx, row, events, command.now);
@@ -321,6 +356,6 @@ export const appendInputTransition = async (
     run,
     replayed: false,
     shouldInterruptModel: Boolean(streamingModel),
-    shouldReschedule: Boolean(waitingApproval || waitingLoopInput),
+    shouldReschedule: Boolean(waitingApproval || resumesAwaitingInput),
   };
 };

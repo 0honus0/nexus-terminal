@@ -96,7 +96,13 @@
         "SSH_SHELL_FAILURE": "SSH Shell 打开失败",
         "DATABASE_MIGRATION": "数据库迁移",
         "ADMIN_SETUP_COMPLETE": "初始管理员设置完成",
-        "CONNECTIONS_EXPORTED": "连接已导出"
+        "CONNECTIONS_EXPORTED": "连接已导出",
+        "AGENT_RUN_COMPLETED": "Agent Run 已完成",
+        "AGENT_RUN_FAILED": "Agent Run 失败",
+        "AGENT_RUN_INTERRUPTED": "Agent Run 已中断",
+        "AGENT_APPROVAL_REQUIRED": "Agent 需要批准",
+        "AGENT_INPUT_REQUIRED": "Agent 需要输入",
+        "AGENT_ATTENTION_REQUIRED": "Agent 需要处理"
       },
       "channels": {
         "webhook": "Webhook",

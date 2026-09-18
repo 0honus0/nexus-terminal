@@ -1,5 +1,6 @@
 import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { LeaseOwner, LeasePort } from '../../../modules/agent/capabilities/lease.port';
+import { LEASE_RENEW_INTERVAL_MS } from '../../../modules/agent/capabilities/lease-policy';
 import type {
   MutationGuardHandle,
   MutationGuardPort,
@@ -97,7 +98,7 @@ export class LeaseMutationGuardAdapter implements MutationGuardPort {
         }
       });
     };
-    const timer = setInterval(renew, 10_000);
+    const timer = setInterval(renew, LEASE_RENEW_INTERVAL_MS);
     timer.unref?.();
 
     const finish = async (known: boolean, reason?: string, evidence?: Record<string, unknown>): Promise<void> => {

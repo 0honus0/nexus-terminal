@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { TokenUsage } from '../../ai/model.types';
+import type { ModelFinishReason, ModelProviderContinuation, TokenUsage } from '../../ai/model.types';
 import type { ClockPort, JsonValue } from '../../agent.types';
 import type { ToolContext, ToolInspection, ToolProposal, ToolResult } from '../../capabilities/tool.types';
 import type { AgentBackendPort, BackendSignal } from './agent-backend.port';
+import { completionGateDecision } from './completion-gate';
 import { executionErrorCode, executionErrorDetail } from './execution-errors';
+import { modelFinishDisposition } from './model-finish-policy';
 import { ModelStepRunner, type ModelToolCall } from './model-step-runner';
 import { estimateTokens } from './model-accounting';
 import { boundedUtf8 } from './text-budget';
@@ -12,12 +14,33 @@ import type { PendingRootTool, RunExecutionReaderPort } from '../runs/run.reposi
 import type { DelegationReaderPort } from '../collaboration/subagent.repository.port';
 import type { RootExecutionCommitPort } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
+import { runModelRoutes } from '../runs/model-routes';
+import { normalizeUserInputQuestions } from '../runs/user-input-request';
+import { TOOL_APPROVAL_TTL_SECONDS } from '../approvals/approval-policy';
+import { toolLeaseTtlSeconds } from './tool-lease-policy';
 import { requestHash } from '../runs/idempotency';
 import { logger } from '../../../../shared/logging/logger';
 
 const MAX_COLLABORATION_BYTES = 8 * 1024;
 const MAX_TOOL_CALLS_PER_MODEL_STEP = 64;
 const MAX_PARALLEL_READ_TOOLS = 4;
+
+const latestRunInputText = (run: RunSnapshot): string => {
+  for (let index = run.recentEntries.length - 1; index >= 0; index -= 1) {
+    const entry = run.recentEntries[index]!;
+    if (
+      entry.kind !== 'user_input' ||
+      !entry.payload ||
+      Array.isArray(entry.payload) ||
+      typeof entry.payload !== 'object'
+    ) {
+      continue;
+    }
+    const text = (entry.payload as Record<string, JsonValue>).text;
+    if (typeof text === 'string') return text;
+  }
+  return '';
+};
 
 const rejectedToolResult = (errorCode: string, summary: string): ToolResult => ({
   ok: false,
@@ -237,7 +260,12 @@ export class NativeAgentBackend implements AgentBackendPort {
       }
 
       const remainingSteps = snapshot.budget.maxRunSteps - snapshot.usage.steps;
-      const offeredTools = this.toolCalls.schemas(scope, { environment: snapshot.definition.environment ?? null });
+      const executionMode = snapshot.definition.executionMode ?? 'execute';
+      const offeredTools = this.toolCalls.schemas(
+        scope,
+        { environment: snapshot.definition.environment ?? null },
+        executionMode,
+      );
       const toolMode: 'auto' | 'none' = remainingSteps >= 2 ? 'auto' : 'none';
       const projectionRunIds = [
         snapshot.id,
@@ -271,6 +299,16 @@ export class NativeAgentBackend implements AgentBackendPort {
               ),
               MAX_COLLABORATION_BYTES,
             );
+      const currentModelRef = await this.repository.rootRuntimeModel(scope, snapshot.id);
+      const frozenRoutes = runModelRoutes(snapshot.definition);
+      let routeIndex = frozenRoutes.findIndex(
+        (route) =>
+          route.model.providerId === currentModelRef.providerId &&
+          route.model.modelId === currentModelRef.modelId &&
+          route.model.configurationVersion === currentModelRef.configurationVersion,
+      );
+      if (routeIndex < 0) routeIndex = 0;
+      let activeRoute = frozenRoutes[routeIndex]!;
       let preparedModelStep;
       try {
         preparedModelStep = await this.modelSteps.prepare(
@@ -279,6 +317,8 @@ export class NativeAgentBackend implements AgentBackendPort {
           offeredTools,
           inputProjections,
           collaborationContext,
+          { model: activeRoute.model, capabilities: activeRoute.modelCapabilities },
+          runtimeId,
         );
       } catch (error) {
         const code = errorCode(error);
@@ -288,7 +328,7 @@ export class NativeAgentBackend implements AgentBackendPort {
         yield { type: 'settled', run: failed.run };
         return;
       }
-      const { model, contextPlan } = preparedModelStep;
+      let { model, contextPlan } = preparedModelStep;
       logger.debug(
         {
           runId: snapshot.id,
@@ -324,8 +364,12 @@ export class NativeAgentBackend implements AgentBackendPort {
         inputWatermark: snapshot.inputRevision,
         reservedTokens: worstCaseTokens,
         estimatedInputTokens: contextPlan.estimatedInputTokens,
+        heuristicInputTokens: contextPlan.heuristicInputTokens,
+        contextSource: contextPlan.estimationSource,
         reservedOutputTokens: contextPlan.reservedOutputTokens,
-        contextWindowTokens: snapshot.budget.maxContextTokens,
+        contextWindowTokens: model.contextWindow,
+        contextEpoch: contextPlan.contextEpoch,
+        model: activeRoute.model,
         now: this.clock.nowUnixSeconds(),
       });
       logger.debug(
@@ -345,18 +389,28 @@ export class NativeAgentBackend implements AgentBackendPort {
       let currentRun = begun.run;
       let currentAttemptId = begun.attemptId;
       let currentAttemptIndex = begun.attemptIndex;
+      let routeAttemptIndex = 1;
       let text = '';
       let usage: TokenUsage | undefined;
-      let finishReason: string | null = null;
+      let finishReason: ModelFinishReason | null = null;
+      let providerContinuation: ModelProviderContinuation | undefined;
       let modelStepClosed = false;
       let modelToolCalls = new Map<number, ModelToolCall>();
 
       try {
         while (true) {
-          const attempt = yield* this.modelSteps.runAttempt(snapshot, contextPlan, signal, toolMode);
+          const attempt = yield* this.modelSteps.runAttempt(
+            snapshot,
+            contextPlan,
+            { attemptId: currentAttemptId, attemptIndex: currentAttemptIndex },
+            signal,
+            toolMode,
+            { model: activeRoute.model, capabilities: activeRoute.modelCapabilities },
+          );
           text = attempt.text;
           usage = attempt.usage;
           finishReason = attempt.finishReason;
+          providerContinuation = attempt.providerContinuation;
           modelToolCalls = attempt.toolCalls;
           logger.debug(
             {
@@ -377,7 +431,6 @@ export class NativeAgentBackend implements AgentBackendPort {
           if (!attempt.error) break;
 
           const attemptError = attempt.error;
-          if (!this.modelSteps.shouldRetry(attemptError, currentAttemptIndex, signal)) throw attemptError;
           const failedUsage: TokenUsage =
             usage ??
             ({
@@ -386,12 +439,7 @@ export class NativeAgentBackend implements AgentBackendPort {
               cachedInputTokens: 0,
             } satisfies TokenUsage);
           const usageAfterFailed = usageWithAttempt(currentRun.usage, failedUsage);
-          const nextAttemptIndex = currentAttemptIndex + 1;
-          await this.modelSteps.waitBeforeRetry(attemptError, nextAttemptIndex, signal);
-          const budgetReason = this.retryBudgetReason(
-            currentRun,
-            usageAfterFailed,
-          );
+          const budgetReason = this.retryBudgetReason(currentRun, usageAfterFailed);
           if (budgetReason) {
             const paused = await this.stateCommit.pauseModelStepForBudget({
               scope,
@@ -413,14 +461,64 @@ export class NativeAgentBackend implements AgentBackendPort {
             yield { type: 'settled', run: paused.run };
             return;
           }
-          const retried = await this.stateCommit.retryModelStep({
+
+          if (this.modelSteps.shouldRetry(attemptError, routeAttemptIndex, signal)) {
+            const nextAttemptIndex = currentAttemptIndex + 1;
+            await this.modelSteps.waitBeforeRetry(attemptError, nextAttemptIndex, signal);
+            const retried = await this.stateCommit.retryModelStep({
+              scope,
+              runId: snapshot.id,
+              runtimeId,
+              stepId: begun.stepId,
+              attemptId: currentAttemptId,
+              expectedRunVersion: currentRun.version,
+              reservedTokens: contextPlan.estimatedInputTokens + contextPlan.reservedOutputTokens,
+              usage: usageAfterFailed,
+              inputTokens: failedUsage.inputTokens,
+              outputTokens: failedUsage.outputTokens,
+              cachedInputTokens: failedUsage.cachedInputTokens,
+              estimatedUsage: usage === undefined,
+              errorCode: errorCode(attemptError),
+              now: this.clock.nowUnixSeconds(),
+            });
+            currentRun = retried.run;
+            currentAttemptId = retried.attemptId;
+            currentAttemptIndex = retried.attemptIndex;
+            routeAttemptIndex += 1;
+            yield { type: 'durable', runId: snapshot.id, cursor: retried.eventCursor };
+            continue;
+          }
+
+          const nextRoute = this.modelSteps.shouldFailover(attemptError, signal)
+            ? frozenRoutes[routeIndex + 1]
+            : undefined;
+          if (!nextRoute) throw attemptError;
+          const nextPrepared = await this.modelSteps.prepare(
+            snapshot,
+            scope,
+            offeredTools,
+            inputProjections,
+            collaborationContext,
+            { model: nextRoute.model, capabilities: nextRoute.modelCapabilities },
+            runtimeId,
+          );
+          const changed = await this.stateCommit.changeModelRoute({
             scope,
             runId: snapshot.id,
             runtimeId,
             stepId: begun.stepId,
             attemptId: currentAttemptId,
             expectedRunVersion: currentRun.version,
-            reservedTokens: worstCaseTokens,
+            fromModel: activeRoute.model,
+            toModel: nextRoute.model,
+            toRouteIndex: routeIndex + 1,
+            reservedTokens: nextPrepared.contextPlan.estimatedInputTokens + nextPrepared.contextPlan.reservedOutputTokens,
+            estimatedInputTokens: nextPrepared.contextPlan.estimatedInputTokens,
+            heuristicInputTokens: nextPrepared.contextPlan.heuristicInputTokens,
+            contextSource: nextPrepared.contextPlan.estimationSource,
+            reservedOutputTokens: nextPrepared.contextPlan.reservedOutputTokens,
+            contextWindowTokens: nextPrepared.model.contextWindow,
+            contextEpoch: nextPrepared.contextPlan.contextEpoch,
             usage: usageAfterFailed,
             inputTokens: failedUsage.inputTokens,
             outputTokens: failedUsage.outputTokens,
@@ -429,10 +527,16 @@ export class NativeAgentBackend implements AgentBackendPort {
             errorCode: errorCode(attemptError),
             now: this.clock.nowUnixSeconds(),
           });
-          currentRun = retried.run;
-          currentAttemptId = retried.attemptId;
-          currentAttemptIndex = retried.attemptIndex;
-          yield { type: 'durable', runId: snapshot.id, cursor: retried.eventCursor };
+          currentRun = changed.run;
+          currentAttemptId = changed.attemptId;
+          currentAttemptIndex = changed.attemptIndex;
+          routeAttemptIndex = 1;
+          routeIndex += 1;
+          activeRoute = nextRoute;
+          preparedModelStep = nextPrepared;
+          model = nextPrepared.model;
+          contextPlan = nextPrepared.contextPlan;
+          yield { type: 'durable', runId: snapshot.id, cursor: changed.eventCursor };
         }
 
         const settledUsage: TokenUsage =
@@ -443,8 +547,11 @@ export class NativeAgentBackend implements AgentBackendPort {
             cachedInputTokens: 0,
           } satisfies TokenUsage);
         const afterModelUsage = usageWithModel(currentRun.usage, settledUsage);
+        const finishDisposition = modelFinishDisposition(finishReason, modelToolCalls.size);
+        if (finishDisposition.kind === 'failed') throw new Error(finishDisposition.errorCode);
 
-        if (modelToolCalls.size === 0) {
+        if (finishDisposition.kind === 'complete') {
+          if (finishReason === null) throw new Error('MODEL_FINISH_REASON_MISSING');
           const activeChildren = (await this.delegations.listDelegations(scope, snapshot.id, runtimeId, 100)).filter(
             (delegation) => !['completed', 'failed', 'cancelled'].includes(delegation.status),
           );
@@ -464,6 +571,7 @@ export class NativeAgentBackend implements AgentBackendPort {
               cachedInputTokens: settledUsage.cachedInputTokens,
               estimatedUsage: usage === undefined,
               finishReason,
+              ...(providerContinuation ? { providerContinuation } : {}),
               reason: 'waiting_subagents',
               now: this.clock.nowUnixSeconds(),
             });
@@ -471,6 +579,38 @@ export class NativeAgentBackend implements AgentBackendPort {
             yield { type: 'settled', run: parked.run };
             return;
           }
+          const completionEvidence = await this.repository.completionEvidence(scope, snapshot.id);
+          const gate = completionGateDecision(
+            snapshot,
+            completionEvidence,
+            [snapshot.goal.text ?? '', latestRunInputText(snapshot)].filter(Boolean).join('\n'),
+          );
+          if (gate.kind === 'continue') {
+            const continued = await this.stateCommit.continueModelStepForCompletionGate({
+              scope,
+              runId: snapshot.id,
+              runtimeId,
+              stepId: begun.stepId,
+              attemptId: currentAttemptId,
+              expectedRunVersion: currentRun.version,
+              assistantEntryId: randomUUID(),
+              assistantText: text,
+              noticeEntryId: randomUUID(),
+              notice: gate.notice,
+              reasonCode: gate.reasonCode,
+              inputTokens: settledUsage.inputTokens,
+              outputTokens: settledUsage.outputTokens,
+              cachedInputTokens: settledUsage.cachedInputTokens,
+              estimatedUsage: usage === undefined,
+              finishReason,
+              ...(providerContinuation ? { providerContinuation } : {}),
+              now: this.clock.nowUnixSeconds(),
+            });
+            modelStepClosed = true;
+            yield { type: 'durable', runId: snapshot.id, cursor: continued.eventCursor };
+            continue;
+          }
+          if (gate.kind === 'failed') throw new Error(gate.errorCode);
           const settled = await this.stateCommit.settleModelStep({
             scope,
             runId: snapshot.id,
@@ -486,7 +626,9 @@ export class NativeAgentBackend implements AgentBackendPort {
             cachedInputTokens: settledUsage.cachedInputTokens,
             estimatedUsage: usage === undefined,
             finishReason,
-            terminalStatus: 'completed_unverified',
+            ...(providerContinuation ? { providerContinuation } : {}),
+            verificationSummary: gate.summary,
+            terminalStatus: gate.terminalStatus,
             now: this.clock.nowUnixSeconds(),
           });
           logger.info(
@@ -509,6 +651,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           return;
         }
 
+        if (finishDisposition.kind !== 'tool_calls') throw new Error('MODEL_FINISH_REASON_MISMATCH');
         if (toolMode === 'none') throw new Error('MODEL_TOOL_CALL_UNEXPECTED');
         const orderedToolCalls = [...modelToolCalls.entries()].sort(([left], [right]) => left - right);
         if (orderedToolCalls.length > MAX_TOOL_CALLS_PER_MODEL_STEP) throw new Error('MODEL_TOOL_CALL_BATCH_TOO_LARGE');
@@ -516,19 +659,24 @@ export class NativeAgentBackend implements AgentBackendPort {
         const batchItems = [];
         for (const [batchIndex, call] of orderedToolCalls) {
           if (!call?.id || !call.name) throw new Error('MODEL_TOOL_CALL_INVALID');
-          const proposal: ToolProposal = {
+          const modelProposal: ToolProposal = {
             providerCallId: call.id,
             name: call.name,
             argumentsJson: call.argumentsJson || '{}',
           };
           try {
-            const { inspection, policyDecision } = await this.toolCalls.inspect(inspectionContext, proposal);
+            const { inspection, policyDecision, proposal } = await this.toolCalls.inspect(
+              inspectionContext,
+              modelProposal,
+              executionMode,
+            );
             logger.info(
               {
                 runId: snapshot.id,
                 threadId: snapshot.threadId,
                 stepId: begun.stepId,
                 batchIndex,
+                modelToolName: modelProposal.name,
                 toolName: proposal.name,
                 toolVersion: inspection.toolVersion,
                 policyAction: policyDecision.action,
@@ -542,6 +690,12 @@ export class NativeAgentBackend implements AgentBackendPort {
               toolName: proposal.name,
               toolVersion: inspection.toolVersion,
               argumentsJson: proposal.argumentsJson,
+              ...(proposal.name === modelProposal.name && proposal.argumentsJson === modelProposal.argumentsJson
+                ? {}
+                : {
+                    modelToolName: modelProposal.name,
+                    modelArgumentsJson: modelProposal.argumentsJson,
+                  }),
               inspection,
             });
           } catch (error) {
@@ -552,19 +706,19 @@ export class NativeAgentBackend implements AgentBackendPort {
                 threadId: snapshot.threadId,
                 stepId: begun.stepId,
                 batchIndex,
-                toolName: proposal.name,
+                toolName: modelProposal.name,
                 errorCode: code,
               },
               'Agent tool call rejected during batch inspection',
             );
             if (code === 'TOOL_NOT_FOUND') throw error;
             batchItems.push({
-              providerCallId: proposal.providerCallId,
+              providerCallId: modelProposal.providerCallId,
               toolCallId: randomUUID(),
-              toolName: proposal.name,
+              toolName: modelProposal.name,
               toolVersion: 'unavailable',
-              argumentsJson: proposal.argumentsJson,
-              inspection: rejectedToolInspection(currentRun, proposal, code),
+              argumentsJson: modelProposal.argumentsJson,
+              inspection: rejectedToolInspection(currentRun, modelProposal, code),
             });
           }
         }
@@ -584,6 +738,7 @@ export class NativeAgentBackend implements AgentBackendPort {
           cachedInputTokens: settledUsage.cachedInputTokens,
           estimatedUsage: usage === undefined,
           finishReason,
+          ...(providerContinuation ? { providerContinuation } : {}),
           now: this.clock.nowUnixSeconds(),
         });
         modelStepClosed = true;
@@ -676,6 +831,13 @@ export class NativeAgentBackend implements AgentBackendPort {
           outputTokens: failedUsage.outputTokens,
           cachedInputTokens: failedUsage.cachedInputTokens,
           estimatedUsage: usage === undefined,
+          ...(text
+            ? {
+                assistantEntryId: randomUUID(),
+                assistantText: text,
+              }
+            : {}),
+          finishReason,
           errorCode: cancelled ? 'CANCELLED' : errorCode(error),
           terminalStatus: cancelled ? 'cancelled' : 'failed',
           now: this.clock.nowUnixSeconds(),
@@ -840,6 +1002,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     }
 
     const approvalId = randomUUID();
+    const now = this.clock.nowUnixSeconds();
     const requested = await this.stateCommit.requestToolApproval({
       scope,
       runId: currentRun.id,
@@ -849,8 +1012,8 @@ export class NativeAgentBackend implements AgentBackendPort {
       approvalId,
       expectedRunVersion: currentRun.version,
       inspection,
-      expiresAt: this.clock.nowUnixSeconds() + 600,
-      now: this.clock.nowUnixSeconds(),
+      expiresAt: now + TOOL_APPROVAL_TTL_SECONDS,
+      now,
     });
     yield { type: 'durable', runId: snapshot.id, cursor: requested.eventCursor };
     if ((snapshot.definition.approvalMode ?? 'ask') !== 'full_access') {
@@ -949,7 +1112,7 @@ export class NativeAgentBackend implements AgentBackendPort {
 
     const executions = await Promise.all(
       prepared.map(async ({ pending, inspection }) => {
-        const readLeaseTtlSeconds = Math.min(300, Math.max(30, begun.run.budget.toolTimeoutSeconds + 15));
+        const readLeaseTtlSeconds = toolLeaseTtlSeconds(begun.run.budget.toolTimeoutSeconds);
         let lease: Awaited<ReturnType<ToolCallRunner['acquireRead']>> | null = null;
         let result: ToolResult;
         try {
@@ -983,6 +1146,38 @@ export class NativeAgentBackend implements AgentBackendPort {
         return { pending, inspection, result };
       }),
     );
+
+    const inputRequestExecution =
+      executions.length === 1 &&
+      executions[0]?.inspection.toolName === 'request_user_input' &&
+      executions[0].result.ok &&
+      executions[0].result.outcome === 'confirmed'
+        ? executions[0]
+        : null;
+    if (inputRequestExecution) {
+      const normalized = inputRequestExecution.inspection.normalizedArguments;
+      if (!normalized || typeof normalized !== 'object' || Array.isArray(normalized)) {
+        throw new Error('USER_INPUT_REQUEST_INVALID');
+      }
+      const questions = normalizeUserInputQuestions((normalized as Record<string, JsonValue>).questions);
+      const parked = await this.stateCommit.settleUserInputRequestTool({
+        scope,
+        runId: begun.run.id,
+        runtimeId: inputRequestExecution.pending.runtimeId,
+        toolStepId: inputRequestExecution.pending.stepId,
+        toolCallId: inputRequestExecution.pending.toolCallId,
+        expectedRunVersion: begun.run.version,
+        toolResultEntryId: randomUUID(),
+        providerCallId: inputRequestExecution.pending.providerCallId,
+        requestId: randomUUID(),
+        questions,
+        result: inputRequestExecution.result,
+        now: this.clock.nowUnixSeconds(),
+      });
+      yield { type: 'durable', runId: snapshot.id, cursor: parked.eventCursor };
+      yield { type: 'settled', run: parked.run };
+      return;
+    }
 
     const settled = await this.stateCommit.settleReadToolBatch({
       scope,
@@ -1164,7 +1359,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       return;
     }
 
-    const leaseTtlSeconds = Math.min(300, Math.max(30, snapshot.budget.toolTimeoutSeconds + 15));
+    const leaseTtlSeconds = toolLeaseTtlSeconds(snapshot.budget.toolTimeoutSeconds);
     let mutationLease: Awaited<ReturnType<ToolCallRunner['acquireMutation']>>;
     try {
       mutationLease = await this.toolCalls.acquireMutation({
@@ -1325,10 +1520,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     };
   }
 
-  private retryBudgetReason(
-    run: RunView,
-    usage: RunUsage,
-  ): JsonValue | null {
+  private retryBudgetReason(run: RunView, usage: RunUsage): JsonValue | null {
     const activeExecutionSeconds =
       run.activeExecutionSeconds +
       (run.executingRuntimeCount > 0 && run.activeExecutionStartedAt !== null

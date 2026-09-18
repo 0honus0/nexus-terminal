@@ -9,6 +9,7 @@ import type { RunEvent, RunStatus, RunUsage, RunView } from '../../../../modules
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { appendHostEvent } from '../../events/host-event-outbox';
 import { RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
+import { parseRunUsage } from '../durable-state-decoders';
 
 export const NON_TERMINAL = new Set<RunStatus>([
   'created',
@@ -71,7 +72,7 @@ export const usageWithDelta = (
     steps?: number;
   },
 ): RunUsage => {
-  const current = JSON.parse(row.usage_json) as RunUsage;
+  const current = parseRunUsage(row.usage_json);
   return {
     ...current,
     inputTokens: current.inputTokens + (delta.inputTokens ?? 0),
@@ -80,6 +81,24 @@ export const usageWithDelta = (
     steps: current.steps + (delta.steps ?? 0),
     subagentMessages: current.subagentMessages ?? 0,
     subagentMessageBytes: current.subagentMessageBytes ?? 0,
+  };
+};
+
+export const usageWithProviderContext = (
+  usage: RunUsage,
+  inputTokens: number | null | undefined,
+  estimatedUsage: boolean | undefined,
+  now: number,
+): RunUsage => {
+  if (!usage.context || inputTokens === undefined || inputTokens === null || estimatedUsage !== false) return usage;
+  return {
+    ...usage,
+    context: {
+      ...usage.context,
+      inputTokens,
+      source: 'provider',
+      updatedAt: now,
+    },
   };
 };
 

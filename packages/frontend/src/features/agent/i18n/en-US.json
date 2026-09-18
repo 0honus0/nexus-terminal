@@ -160,8 +160,6 @@
         "presetCustom": "Custom Quota",
         "presetCustomDesc": "Fine-tune each instance-level hard constraint individually",
         "groups": {
-          "tokens": "Tokens and Budget Limits",
-          "tokensDesc": "Caps per-run token consumption and execution steps",
           "timeouts": "Execution and Timeout Protections",
           "timeoutsDesc": "Limits maximum task duration and individual tool execution timeouts",
           "storage": "Storage and Data Stream Limits",
@@ -169,17 +167,11 @@
           "concurrency": "Concurrency and Runtime Quotas",
           "concurrencyDesc": "Limits concurrent runs, active workspaces, and subagent delegation depth",
           "extra": "Additional System Limits",
-          "extraDesc": "Other instance-level policy parameters"
+          "extraDesc": "Other instance-level policy parameters",
+          "execution": "Execution Step Limit",
+          "executionDesc": "Caps the maximum number of model/tool loop steps per Run"
         },
         "fields": {
-          "maxContextTokens": {
-            "label": "Hard Context Window Limit",
-            "hint": "Absolute ceiling for historical context tokens per request"
-          },
-          "maxOutputTokens": {
-            "label": "Hard Max Output Tokens",
-            "hint": "Maximum tokens allowed in a single model generation"
-          },
           "maxRunSteps": {
             "label": "Hard Max Run Steps",
             "hint": "Maximum thinking and tool execution loop steps allowed per run"
@@ -192,10 +184,6 @@
             "label": "Tool Execution Timeout",
             "hint": "Maximum seconds allowed for a single tool call (Shell, Web, etc.)"
           },
-          "workspaceIdleTtlSeconds": {
-            "label": "Workspace Idle Timeout",
-            "hint": "Idle duration before temporary workspace cleanup"
-          },
           "unretainedArtifactTtlSeconds": {
             "label": "Unretained Artifact TTL",
             "hint": "Retention duration for temporary unarchived artifacts"
@@ -203,10 +191,6 @@
           "maxToolOutputBytes": {
             "label": "Max Tool Output Size",
             "hint": "Maximum payload bytes returned by a single tool execution"
-          },
-          "maxRawToolBytes": {
-            "label": "Max Raw Tool Stream Size",
-            "hint": "Cumulative limit on raw input/output tool data transferred"
           },
           "maxArtifactBytes": {
             "label": "Run Artifact Disk Quota",
@@ -282,10 +266,6 @@
         "recommendedBadge": "Recommended",
         "saveSuccess": "Budget & context settings saved successfully",
         "fields": {
-          "maxContextTokens": "Context Window",
-          "maxContextTokensHint": "Maximum context tokens per request",
-          "maxOutputTokens": "Max Output Tokens",
-          "maxOutputTokensHint": "Maximum tokens generated per model turn",
           "maxRunSteps": "Max Execution Steps",
           "maxRunStepsHint": "Maximum tool actions and reasoning turns per run",
           "maxActiveExecutionSeconds": "Execution Timeout (sec)",
@@ -294,8 +274,6 @@
           "toolTimeoutSecondsHint": "Timeout for individual tool executions",
           "maxToolOutputBytes": "Tool Output Truncation (Bytes)",
           "maxToolOutputBytesHint": "Maximum output bytes returned to model",
-          "maxRawToolBytes": "Raw Tool Output Limit (Bytes)",
-          "maxRawToolBytesHint": "Maximum raw tool output saved in ledger",
           "maxRecallItems": "Memory Recall Items",
           "maxRecallItemsHint": "Maximum relevant memory snippets to recall",
           "maxRecallBytes": "Memory Recall Bytes",
@@ -496,13 +474,19 @@
         "modelPlaceholder": "gpt-4o",
         "capabilityEdit": "Capabilities",
         "capabilityTitle": "Model capabilities",
-        "capabilityDescription": "Nexus Registry provides defaults. Manual changes are stored as overrides and can be restored at any time.",
+        "capabilityDescription": "Provider live metadata overrides Nexus Registry defaults field by field. Manual changes are stored as the highest-priority overrides and can be restored to the current provider/registry baseline.",
         "registryDefault": "Nexus default",
+        "providerLive": "Provider live",
         "manualOverride": "Custom",
         "restoreDefault": "Restore default",
         "restoreAllDefaults": "Restore all defaults",
         "capabilitySaved": "Model capabilities saved",
         "capabilityInvalid": "Invalid model capabilities: max output must be smaller than the context window.",
+        "capabilityUnavailable": "This model does not expose enough capability metadata. Configure explicit capabilities before using it.",
+        "providerMetadata": "Provider metadata: {source} · {version} · updated {updatedAt}",
+        "capabilityConflict": "Conflicting capability sources: {fields}. Effective precedence is Custom > Provider live > Nexus default.",
+        "imageInput": "Image input",
+        "fileInput": "File input",
         "reasoningCapability": "Reasoning levels",
         "registryManaged": "Registry managed"
       },
@@ -650,7 +634,6 @@
           "maxActiveExecutionSeconds": "Active execution limit",
           "toolTimeoutSeconds": "Tool timeout",
           "maxToolOutputBytes": "Model-visible tool output",
-          "maxRawToolBytes": "Raw tool collection limit",
           "maxRecallItems": "Recall items",
           "maxRecallBytes": "Recall bytes",
           "maxSubagentMessages": "Subagent messages",
@@ -726,6 +709,19 @@
       "runModel": "Model",
       "runModelHint": "Switch model",
       "runModelLocked": "The model is frozen while the current Run is active.",
+      "modelMissingCapabilities": "Unavailable — missing {capabilities}",
+      "modelCapability": {
+        "tools": "tools",
+        "image_input": "image input",
+        "file_input": "file input",
+        "reasoning": "reasoning"
+      },
+      "executionMode": "Execution mode",
+      "executionModeHint": "Choose whether the next Run may execute changes or is limited to read/control planning tools",
+      "executionExecute": "Execute",
+      "executionExecuteDesc": "Run normally with the selected approval mode governing mutations.",
+      "executionPlan": "Plan only",
+      "executionPlanDesc": "Expose only read/control tools to the model. Mutations are not available; submit a later Execute Run to carry out the plan.",
       "approvalMode": "Approval mode",
       "approvalModeHint": "Choose how the next Run handles write or destructive operations that require confirmation",
       "approvalFullAccess": "Full access",
@@ -868,6 +864,10 @@
       "capabilityTools": "Controlled tools",
       "capabilityEvidence": "Verified outcomes",
       "sendHint": "Enter to send",
+      "clarificationTitle": "More information needed",
+      "clarificationHint": "Reply below to continue this same run. Choose an option or type your answer in the composer.",
+      "clarificationRecommended": "Recommended",
+      "clarificationTextHint": "Type your answer in the composer below.",
       "commands": {
         "resultLabel": "Command result",
         "dismiss": "Dismiss command result",
@@ -948,6 +948,7 @@
       "contextReserved": "Reserved output {value}",
       "contextSource": {
         "estimated": "Estimated",
+        "anchored_estimate": "Provider-anchored estimate",
         "provider": "Provider measured"
       },
       "steps": "Steps",
@@ -1013,7 +1014,7 @@
         "reconciliation": "Reconciliation is required before the next mutation.",
         "approval": "This run is waiting for your approval.",
         "budget": "This run is paused until its budget is increased.",
-        "input": "Repeated no-progress actions were detected. Add guidance or new information to continue."
+        "input": "This run is waiting for your input. Reply in the conversation to continue."
       },
       "totalTokens": "Token total",
       "advancedDetails": "Advanced Details & Checkpoints",

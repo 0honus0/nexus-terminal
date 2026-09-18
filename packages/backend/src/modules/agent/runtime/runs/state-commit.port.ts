@@ -2,7 +2,7 @@ import type { JsonValue, Scope } from '../../agent.types';
 
 // Port contract rule: every side-effecting method must have a concrete runtime/lifecycle owner.
 // Unused mutation contracts are deleted instead of preserved as a second durable state path.
-import type { ModelRef } from '../../ai/model.types';
+import type { ModelFinishReason, ModelProviderContinuation, ModelRef } from '../../ai/model.types';
 import type { LedgerEntryKind } from '../../ai/conversation.repository.port';
 import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type { RunPlan } from '../planning/plan.types';
@@ -14,6 +14,7 @@ import type {
   RunUsage,
   RunView,
   UserInputData,
+  UserInputQuestion,
 } from './run.types';
 
 export interface AtomicCreateRun {
@@ -99,8 +100,12 @@ export interface BeginModelStepCommand {
   inputWatermark: number;
   reservedTokens: number;
   estimatedInputTokens: number;
+  heuristicInputTokens?: number;
+  contextSource?: 'estimated' | 'anchored_estimate';
   reservedOutputTokens: number;
   contextWindowTokens: number;
+  contextEpoch?: string;
+  model?: ModelRef;
   now: number;
 }
 
@@ -155,8 +160,30 @@ export interface ParkModelStepCommand {
   outputTokens: number;
   cachedInputTokens: number;
   estimatedUsage: boolean;
-  finishReason: string | null;
+  finishReason: ModelFinishReason | null;
+  providerContinuation?: ModelProviderContinuation;
   reason: 'waiting_subagents' | 'waiting_message';
+  now: number;
+}
+
+export interface ContinueModelStepForCompletionGateCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  stepId: string;
+  attemptId: string;
+  expectedRunVersion: number;
+  assistantEntryId: string;
+  assistantText: string;
+  noticeEntryId: string;
+  notice: string;
+  reasonCode: 'COMPLETION_PLAN_INCOMPLETE' | 'COMPLETION_EVIDENCE_REQUIRED';
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  estimatedUsage: boolean;
+  finishReason: ModelFinishReason;
+  providerContinuation?: ModelProviderContinuation;
   now: number;
 }
 
@@ -184,7 +211,8 @@ export interface CommitSubagentToolProposalBatchCommand {
   outputTokens: number;
   cachedInputTokens: number;
   estimatedUsage: boolean;
-  finishReason: string | null;
+  finishReason: ModelFinishReason | null;
+  providerContinuation?: ModelProviderContinuation;
   now: number;
 }
 
@@ -244,7 +272,8 @@ export interface SettleSubagentModelStepCommand {
   outputTokens: number;
   cachedInputTokens: number;
   estimatedUsage: boolean;
-  finishReason: string | null;
+  finishReason: ModelFinishReason | null;
+  providerContinuation?: ModelProviderContinuation;
   errorCode?: string;
   now: number;
 }
@@ -269,6 +298,22 @@ export interface RetryModelStepCommand {
 export interface RetryModelStepResult extends StateCommitResult {
   attemptId: string;
   attemptIndex: number;
+}
+
+export interface ChangeModelRouteCommand extends RetryModelStepCommand {
+  fromModel: ModelRef;
+  toModel: ModelRef;
+  toRouteIndex: number;
+  estimatedInputTokens: number;
+  heuristicInputTokens?: number;
+  contextSource?: 'estimated' | 'anchored_estimate';
+  reservedOutputTokens: number;
+  contextWindowTokens: number;
+  contextEpoch?: string;
+}
+
+export interface ChangeModelRouteResult extends RetryModelStepResult {
+  previousAttemptId: string;
 }
 
 export interface PauseModelStepForBudgetCommand {
@@ -302,9 +347,11 @@ export interface SettleModelStepCommand {
   outputTokens?: number;
   cachedInputTokens?: number;
   estimatedUsage?: boolean;
-  finishReason?: string | null;
+  finishReason?: ModelFinishReason | null;
+  providerContinuation?: ModelProviderContinuation;
   errorCode?: string;
-  terminalStatus: 'completed_unverified' | 'failed' | 'cancelled';
+  verificationSummary?: string;
+  terminalStatus: 'completed' | 'completed_unverified' | 'failed' | 'cancelled';
   now: number;
 }
 
@@ -432,6 +479,8 @@ export interface CommitToolProposalBatchItem {
   toolName: string;
   toolVersion: string;
   argumentsJson: string;
+  modelToolName?: string;
+  modelArgumentsJson?: string;
   inspection: ToolInspection;
 }
 
@@ -450,7 +499,8 @@ export interface CommitToolProposalBatchCommand {
   outputTokens?: number;
   cachedInputTokens?: number;
   estimatedUsage?: boolean;
-  finishReason?: string | null;
+  finishReason?: ModelFinishReason | null;
+  providerContinuation?: ModelProviderContinuation;
   now: number;
 }
 
@@ -577,6 +627,21 @@ export interface SettleReadToolBatchCommand {
   now: number;
 }
 
+export interface SettleUserInputRequestToolCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  toolStepId: string;
+  toolCallId: string;
+  expectedRunVersion: number;
+  toolResultEntryId: string;
+  providerCallId: string;
+  requestId: string;
+  questions: UserInputQuestion[];
+  result: ToolResult;
+  now: number;
+}
+
 export interface SettleMutationToolCommand {
   scope: Scope;
   runId: string;
@@ -646,6 +711,7 @@ export interface StateCommitPort {
   pauseRuntimeForBudget(command: PauseRuntimeForBudgetCommand): Promise<StateCommitResult>;
   parkRuntime(command: ParkRuntimeCommand): Promise<StateCommitResult>;
   parkModelStep(command: ParkModelStepCommand): Promise<StateCommitResult>;
+  continueModelStepForCompletionGate(command: ContinueModelStepForCompletionGateCommand): Promise<StateCommitResult>;
   commitSubagentToolProposalBatch(
     command: CommitSubagentToolProposalBatchCommand,
   ): Promise<CommitToolProposalBatchResult>;
@@ -654,6 +720,7 @@ export interface StateCommitPort {
   settleSubagentWithoutModel(command: SettleSubagentWithoutModelCommand): Promise<StateCommitResult>;
   settleSubagentModelStep(command: SettleSubagentModelStepCommand): Promise<StateCommitResult>;
   retryModelStep(command: RetryModelStepCommand): Promise<RetryModelStepResult>;
+  changeModelRoute(command: ChangeModelRouteCommand): Promise<ChangeModelRouteResult>;
   pauseModelStepForBudget(command: PauseModelStepForBudgetCommand): Promise<StateCommitResult>;
   settleModelStep(command: SettleModelStepCommand): Promise<StateCommitResult>;
   commitToolProposalBatch(command: CommitToolProposalBatchCommand): Promise<CommitToolProposalBatchResult>;
@@ -667,6 +734,7 @@ export interface StateCommitPort {
   beginReadToolBatch(command: BeginReadToolBatchCommand): Promise<StateCommitResult>;
   beginMutationTool(command: BeginMutationToolCommand): Promise<StateCommitResult>;
   settleReadToolBatch(command: SettleReadToolBatchCommand): Promise<StateCommitResult>;
+  settleUserInputRequestTool(command: SettleUserInputRequestToolCommand): Promise<StateCommitResult>;
   settleMutationTool(command: SettleMutationToolCommand): Promise<StateCommitResult>;
   evaluateToolLoopGuard(command: EvaluateToolLoopGuardCommand): Promise<StateCommitResult>;
   supersedeModelStep(command: SupersedeModelStepCommand): Promise<StateCommitResult>;
@@ -712,6 +780,7 @@ export type RootExecutionCommitPort = Pick<
   | 'beginReadToolBatch'
   | 'commit'
   | 'commitToolProposalBatch'
+  | 'continueModelStepForCompletionGate'
   | 'interruptUnexpectedRootExecution'
   | 'parkModelStep'
   | 'parkRuntime'
@@ -722,9 +791,11 @@ export type RootExecutionCommitPort = Pick<
   | 'rejectProposedTool'
   | 'resolveToolApproval'
   | 'retryModelStep'
+  | 'changeModelRoute'
   | 'settleModelStep'
   | 'settleMutationTool'
   | 'settleReadToolBatch'
+  | 'settleUserInputRequestTool'
   | 'evaluateToolLoopGuard'
   | 'supersedeModelStep'
   | 'supersedeMutationTool'

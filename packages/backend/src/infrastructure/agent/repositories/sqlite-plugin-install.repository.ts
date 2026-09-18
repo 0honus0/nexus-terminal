@@ -9,7 +9,14 @@ import type {
   PluginVersionStatus,
   TrustedPublisherKey,
 } from '../../../modules/agent/host/plugin-install.repository.port';
-import type { AgentAppManifest, AppRecord } from '../../../modules/agent/host/app.types';
+import type { AppRecord } from '../../../modules/agent/host/app.types';
+import { decodePersistedAppManifest } from '../plugins/persisted-app-manifest-decoder';
+import {
+  decodeDurableStringArray,
+  durableRecord,
+  durableString,
+  parseDurableJson,
+} from '../runtime/durable-state-decoders';
 
 interface PublisherRow {
   user_id: number;
@@ -88,16 +95,36 @@ const mapPublisher = (row: PublisherRow): TrustedPublisherKey => ({
   revokedAt: row.revoked_at,
 });
 
+const decodeStageSource = (raw: string): PluginStageRecord['source'] => {
+  const record = durableRecord(parseDurableJson(raw));
+  if (record.kind === 'artifact') {
+    return {
+      kind: 'artifact',
+      appId: durableString(record.appId) as string,
+      id: durableString(record.id) as string,
+    };
+  }
+  if (record.kind === 'remote') {
+    return {
+      kind: 'remote',
+      repositoryUrl: durableString(record.repositoryUrl) as string,
+      appId: durableString(record.appId) as string,
+      version: durableString(record.version) as string,
+    };
+  }
+  throw new Error('AGENT_DURABLE_STATE_INVALID');
+};
+
 const mapStage = (row: StageRow): PluginStageRecord => ({
   id: row.id,
   userId: row.user_id,
-  source: JSON.parse(row.source_json) as PluginStageRecord['source'],
+  source: decodeStageSource(row.source_json),
   packageHash: row.package_hash,
   sizeBytes: row.size_bytes,
   publisherKeyId: row.publisher_key_id,
   appId: row.app_id,
   version: row.app_version,
-  manifest: row.manifest_json ? (JSON.parse(row.manifest_json) as AgentAppManifest) : null,
+  manifest: row.manifest_json ? decodePersistedAppManifest(row.manifest_json) : null,
   status: row.status,
   errorCode: row.error_code,
   createdAt: row.created_at,
@@ -136,11 +163,11 @@ const mapVersion = (row: VersionRow): PluginVersionRecord => ({
   version: row.version,
   packageHash: row.package_hash,
   publisherKeyId: row.publisher_key_id,
-  manifest: JSON.parse(row.manifest_json) as AgentAppManifest,
+  manifest: decodePersistedAppManifest(row.manifest_json),
   frontendEntry: row.frontend_entry,
   backendEntry: row.backend_entry,
   runnerEntry: row.runner_entry,
-  skillFiles: JSON.parse(row.skill_files_json) as string[],
+  skillFiles: decodeDurableStringArray(parseDurableJson(row.skill_files_json), 64),
   status: row.status,
   installedAt: row.installed_at,
   updatedAt: row.updated_at,

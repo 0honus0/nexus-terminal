@@ -7,6 +7,7 @@ import type {
   MemoryView,
 } from '../../../modules/agent/ai/memory.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 interface MemoryRow {
   id: string;
@@ -45,7 +46,7 @@ const mapMemory = (row: MemoryRow): MemoryView => ({
   userId: row.user_id,
   appId: row.app_id,
   content: row.content,
-  sourceRefs: JSON.parse(row.source_refs_json) as JsonValue,
+  sourceRefs: parseDurableJsonValue(row.source_refs_json),
   confidence: row.confidence,
   status: row.status,
   expiresAt: row.expires_at,
@@ -64,7 +65,7 @@ const mapConfirmation = (row: ConfirmationRow): MemoryImportConfirmation => ({
   sourceAppId: row.source_app_id,
   sourceMemoryId: row.source_memory_id,
   sourceVersion: row.source_version,
-  snapshot: JSON.parse(row.snapshot_json) as JsonValue,
+  snapshot: parseDurableJsonValue(row.snapshot_json),
   createdAt: row.created_at,
   expiresAt: row.expires_at,
 });

@@ -4,12 +4,33 @@ import type { WorkspaceJobRequest, WorkspaceJobResult, WorkspaceRecord, Workspac
 import { JobRunner } from '../worker/job-runner';
 import { WorkspaceRuntimeManager } from './workspace-runtime-manager';
 import type { ToolchainStore } from './toolchain-store';
+import { resolveProjectInstructions, type RunnerProjectInstructionProjection } from './project-instructions';
+import {
+  applyWorkspacePatch,
+  readWorkspaceFile,
+  searchWorkspace,
+  type RunnerWorkspaceApplyPatchRequest,
+  type RunnerWorkspaceApplyPatchResult,
+  type RunnerWorkspaceFileReadRequest,
+  type RunnerWorkspaceFileReadResult,
+  type RunnerWorkspaceSearchRequest,
+  type RunnerWorkspaceSearchResult,
+} from './workspace-coding-files';
+import {
+  WorkspaceCodeIntelligence,
+  type RunnerWorkspaceCodeIntelRequest,
+  type RunnerWorkspaceCodeIntelResult,
+  type RunnerWorkspaceRepoMapRequest,
+  type RunnerWorkspaceRepoMapResult,
+} from './workspace-code-intelligence';
 
 const workspaceKey = (workspaceId: string, generation: number): string => `${workspaceId}\u0000${generation}`;
 
 export class WorkspaceRuntimeEngine {
   private readonly runtime: WorkspaceRuntimeManager;
+  private readonly codeIntelligence = new WorkspaceCodeIntelligence();
   private readonly jobs = new Map<string, Set<AbortController>>();
+  private readonly jobControllers = new Map<string, AbortController>();
 
   constructor(runtimeRoot: string, store: ToolchainStore) {
     this.runtime = new WorkspaceRuntimeManager(runtimeRoot, store);
@@ -35,6 +56,7 @@ export class WorkspaceRuntimeEngine {
 
   async remove(workspaceId: string, generation: number): Promise<void> {
     this.abortJobs(workspaceId, generation);
+    this.codeIntelligence.dispose(workspaceKey(workspaceId, generation));
     this.runtime.remove(workspaceId, generation);
   }
 
@@ -46,26 +68,100 @@ export class WorkspaceRuntimeEngine {
     return this.runtime.prepareTerminalProcess(workspaceId, generation);
   }
 
+  projectInstructions(
+    workspaceId: string,
+    generation: number,
+    targetDirectories: readonly string[],
+  ): RunnerProjectInstructionProjection {
+    this.runtime.generationRoot(workspaceId, generation);
+    const status = this.runtime.status(workspaceId, generation);
+    if (status === 'deleted' || status === 'failed') throw new Error('WORKSPACE_NOT_FOUND');
+    return resolveProjectInstructions(
+      path.join(this.runtime.coreWorkspaceRoot(workspaceId), 'work'),
+      targetDirectories,
+    );
+  }
+
+  readWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceFileReadRequest,
+  ): RunnerWorkspaceFileReadResult {
+    return readWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
+  }
+
+  searchWorkspace(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceSearchRequest,
+  ): RunnerWorkspaceSearchResult {
+    return searchWorkspace(this.codingWorkRoot(workspaceId, generation), request);
+  }
+
+  repoMap(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceRepoMapRequest,
+  ): Promise<RunnerWorkspaceRepoMapResult> {
+    return this.codeIntelligence.repoMap(
+      workspaceKey(workspaceId, generation),
+      this.codingWorkRoot(workspaceId, generation),
+      request,
+    );
+  }
+
+  codeIntel(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceCodeIntelRequest,
+  ): Promise<RunnerWorkspaceCodeIntelResult> {
+    return this.codeIntelligence.codeIntel(
+      workspaceKey(workspaceId, generation),
+      this.codingWorkRoot(workspaceId, generation),
+      request,
+    );
+  }
+
+  applyWorkspacePatch(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceApplyPatchRequest,
+  ): RunnerWorkspaceApplyPatchResult {
+    return applyWorkspacePatch(this.codingWorkRoot(workspaceId, generation), request);
+  }
+
   async executeJob(request: WorkspaceJobRequest): Promise<WorkspaceJobResult> {
     const execution = this.runtime.prepareJob(request);
     const key = workspaceKey(request.workspaceId, request.generation);
     const controller = new AbortController();
+    if (this.jobControllers.has(request.jobId)) throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
     let active = this.jobs.get(key);
     if (!active) {
       active = new Set();
       this.jobs.set(key, active);
     }
     active.add(controller);
+    this.jobControllers.set(request.jobId, controller);
     try {
-      return await new JobRunner().run(execution.argv, execution.cwd, request.maxBytes, request.timeoutMs, {
+      const result = await new JobRunner().run(execution.argv, execution.cwd, request.maxBytes, request.timeoutMs, {
         executable: execution.file,
         env: execution.env,
         signal: controller.signal,
       });
+      if (controller.signal.aborted) throw new Error('WORKSPACE_JOB_CANCELLED');
+      return result;
     } finally {
+      this.jobControllers.delete(request.jobId);
       active.delete(controller);
       if (active.size === 0) this.jobs.delete(key);
     }
+  }
+
+  cancelJob(jobId: string): boolean {
+    const controller = this.jobControllers.get(jobId);
+    if (!controller) return false;
+    controller.abort(new Error('WORKSPACE_JOB_CANCELLED'));
+    return true;
   }
 
   async status(workspaceId: string, generation: number): Promise<string> {
@@ -117,5 +213,12 @@ export class WorkspaceRuntimeEngine {
     const key = workspaceKey(workspaceId, generation);
     for (const controller of this.jobs.get(key) ?? []) controller.abort();
     this.jobs.delete(key);
+  }
+
+  private codingWorkRoot(workspaceId: string, generation: number): string {
+    this.runtime.generationRoot(workspaceId, generation);
+    const status = this.runtime.status(workspaceId, generation);
+    if (status !== 'running') throw new Error(status === 'deleted' ? 'WORKSPACE_NOT_FOUND' : 'WORKSPACE_NOT_RUNNING');
+    return path.join(this.runtime.coreWorkspaceRoot(workspaceId), 'work');
   }
 }

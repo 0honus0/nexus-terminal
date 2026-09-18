@@ -9,9 +9,12 @@ import {
 } from './model-capability-resolver';
 import type {
   DiscoveredProviderModel,
+  ModelCapabilityDefaults,
   PersistedProviderModelConfig,
   PersistedProviderView,
   ProviderInput,
+  ProviderModelCapabilityObservation,
+  ProviderModelCapabilityReport,
   ProviderModelConfig,
   ProviderTestResult,
   ProviderView,
@@ -28,15 +31,23 @@ const positiveInteger = (value: unknown): value is number => Number.isSafeIntege
 const reasoningEffort = (value: unknown): value is ReasoningEffort =>
   typeof value === 'string' && (REASONING_EFFORTS as readonly string[]).includes(value);
 
-const validateModel = (raw: unknown): PersistedProviderModelConfig => {
+const validateModel = (
+  raw: unknown,
+  providerCapabilities?: ProviderModelCapabilityObservation,
+): PersistedProviderModelConfig => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
     'id',
     'contextWindow',
     'maxOutputTokens',
     'supportsTools',
+    'supportsImageInput',
+    'supportsFileInput',
+    'supportsPromptCacheKey',
     'capabilitySources',
     'registryDefaults',
+    'providerCapabilities',
+    'capabilityConflicts',
     'capabilityOverrides',
     'reasoningEfforts',
     'defaultReasoningEffort',
@@ -50,7 +61,10 @@ const validateModel = (raw: unknown): PersistedProviderModelConfig => {
     !positiveInteger(raw.contextWindow) ||
     !positiveInteger(raw.maxOutputTokens) ||
     raw.maxOutputTokens > raw.contextWindow ||
-    typeof raw.supportsTools !== 'boolean'
+    typeof raw.supportsTools !== 'boolean' ||
+    (raw.supportsImageInput !== undefined && typeof raw.supportsImageInput !== 'boolean') ||
+    (raw.supportsFileInput !== undefined && typeof raw.supportsFileInput !== 'boolean') ||
+    (raw.supportsPromptCacheKey !== undefined && typeof raw.supportsPromptCacheKey !== 'boolean')
   ) {
     throw new Error('VALIDATION_FAILED');
   }
@@ -83,27 +97,30 @@ const validateModel = (raw: unknown): PersistedProviderModelConfig => {
     contextWindow: raw.contextWindow,
     maxOutputTokens: raw.maxOutputTokens,
     supportsTools: raw.supportsTools,
+    ...(raw.supportsImageInput === undefined ? {} : { supportsImageInput: raw.supportsImageInput }),
+    ...(raw.supportsFileInput === undefined ? {} : { supportsFileInput: raw.supportsFileInput }),
+    ...(raw.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: raw.supportsPromptCacheKey }),
     ...(Array.isArray(raw.reasoningEfforts) ? { reasoningEfforts: raw.reasoningEfforts as ReasoningEffort[] } : {}),
     ...(raw.defaultReasoningEffort === undefined
       ? {}
       : { defaultReasoningEffort: raw.defaultReasoningEffort as ReasoningEffort }),
     ...(raw.reasoningMandatory === undefined ? {} : { reasoningMandatory: raw.reasoningMandatory }),
-    ...(raw.reasoningSupportsMaxTokens === undefined
-      ? {}
-      : { reasoningSupportsMaxTokens: raw.reasoningSupportsMaxTokens }),
-  });
+  }, providerCapabilities);
   const model: PersistedProviderModelConfig = {
     id,
     ...(Object.keys(capabilityOverrides).length ? { capabilityOverrides } : {}),
   };
   // Resolve once here so incomplete/invalid Registry + override combinations fail before persistence.
-  resolveProviderModelConfig(model);
+  resolveProviderModelConfig(model, providerCapabilities);
   return model;
 };
 
 type ValidatedProviderInput = Omit<ProviderInput, 'models'> & { models: PersistedProviderModelConfig[] };
 
-const validateProviderInput = (raw: unknown): ValidatedProviderInput => {
+const validateProviderInput = (
+  raw: unknown,
+  liveCapabilities: readonly ProviderModelCapabilityObservation[] = [],
+): ValidatedProviderInput => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set([
     'kind',
@@ -131,7 +148,11 @@ const validateProviderInput = (raw: unknown): ValidatedProviderInput => {
   if (!Array.isArray(raw.models) || raw.models.length < 1 || raw.models.length > 100) {
     throw new Error('VALIDATION_FAILED');
   }
-  const models = raw.models.map(validateModel);
+  const liveByModel = new Map(liveCapabilities.map((observation) => [observation.modelId, observation]));
+  const models = raw.models.map((model) => {
+    if (!isRecord(model) || typeof model.id !== 'string') return validateModel(model);
+    return validateModel(model, liveByModel.get(model.id.trim()));
+  });
   if (new Set(models.map((model) => model.id)).size !== models.length) throw new Error('VALIDATION_FAILED');
   if (typeof raw.enabled !== 'boolean') throw new Error('VALIDATION_FAILED');
 
@@ -158,6 +179,95 @@ const validateProviderInput = (raw: unknown): ValidatedProviderInput => {
   };
 };
 
+const boundedMetadataString = (value: unknown, maxBytes: number): string => {
+  if (!nonEmptyString(value)) throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+  const normalized = value.trim();
+  if (Buffer.byteLength(normalized, 'utf8') > maxBytes) throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+  return normalized;
+};
+
+const validateCapabilityDefaults = (raw: unknown): ModelCapabilityDefaults => {
+  if (!isRecord(raw)) throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+  const allowed = new Set([
+    'contextWindow',
+    'maxOutputTokens',
+    'supportsTools',
+    'supportsImageInput',
+    'supportsFileInput',
+    'supportsPromptCacheKey',
+    'reasoning',
+  ]);
+  if (Object.keys(raw).length === 0 || Object.keys(raw).some((key) => !allowed.has(key))) {
+    throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+  }
+  const contextWindow = raw.contextWindow === undefined ? undefined : positiveInteger(raw.contextWindow) ? raw.contextWindow : null;
+  const maxOutputTokens =
+    raw.maxOutputTokens === undefined ? undefined : positiveInteger(raw.maxOutputTokens) ? raw.maxOutputTokens : null;
+  if (contextWindow === null || maxOutputTokens === null) throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+  if (contextWindow !== undefined && maxOutputTokens !== undefined && maxOutputTokens > contextWindow) {
+    throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+  }
+  for (const field of ['supportsTools', 'supportsImageInput', 'supportsFileInput', 'supportsPromptCacheKey'] as const) {
+    if (raw[field] !== undefined && typeof raw[field] !== 'boolean') {
+      throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+    }
+  }
+  const supportsTools = raw.supportsTools as boolean | undefined;
+  const supportsImageInput = raw.supportsImageInput as boolean | undefined;
+  const supportsFileInput = raw.supportsFileInput as boolean | undefined;
+  const supportsPromptCacheKey = raw.supportsPromptCacheKey as boolean | undefined;
+  let reasoning: ModelCapabilityDefaults['reasoning'];
+  if (raw.reasoning !== undefined) {
+    if (!isRecord(raw.reasoning)) throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+    const reasoningAllowed = new Set(['supportedEfforts', 'defaultEffort', 'mandatory', 'supportsMaxTokens']);
+    if (
+      Object.keys(raw.reasoning).some((key) => !reasoningAllowed.has(key)) ||
+      !Array.isArray(raw.reasoning.supportedEfforts) ||
+      raw.reasoning.supportedEfforts.length === 0 ||
+      raw.reasoning.supportedEfforts.length > REASONING_EFFORTS.length ||
+      raw.reasoning.supportedEfforts.some((effort) => !reasoningEffort(effort)) ||
+      new Set(raw.reasoning.supportedEfforts).size !== raw.reasoning.supportedEfforts.length
+    ) {
+      throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+    }
+    if (
+      raw.reasoning.defaultEffort !== undefined &&
+      (!reasoningEffort(raw.reasoning.defaultEffort) ||
+        !raw.reasoning.supportedEfforts.includes(raw.reasoning.defaultEffort))
+    ) {
+      throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+    }
+    if (raw.reasoning.mandatory !== undefined && typeof raw.reasoning.mandatory !== 'boolean') {
+      throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+    }
+    if (raw.reasoning.supportsMaxTokens !== undefined && typeof raw.reasoning.supportsMaxTokens !== 'boolean') {
+      throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
+    }
+    reasoning = {
+      supportedEfforts: [...raw.reasoning.supportedEfforts] as ReasoningEffort[],
+      ...(raw.reasoning.defaultEffort === undefined
+        ? {}
+        : { defaultEffort: raw.reasoning.defaultEffort as ReasoningEffort }),
+      ...(raw.reasoning.mandatory === undefined ? {} : { mandatory: raw.reasoning.mandatory }),
+    };
+  }
+  return {
+    ...(contextWindow === undefined ? {} : { contextWindow }),
+    ...(maxOutputTokens === undefined ? {} : { maxOutputTokens }),
+    ...(supportsTools === undefined ? {} : { supportsTools }),
+    ...(supportsImageInput === undefined ? {} : { supportsImageInput }),
+    ...(supportsFileInput === undefined ? {} : { supportsFileInput }),
+    ...(supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey }),
+    ...(reasoning === undefined ? {} : { reasoning }),
+  };
+};
+
+const validateLiveCapabilityReport = (raw: ProviderModelCapabilityReport): ProviderModelCapabilityReport => ({
+  source: boundedMetadataString(raw.source, 128),
+  sourceVersion: boundedMetadataString(raw.sourceVersion, 256),
+  capabilities: validateCapabilityDefaults(raw.capabilities),
+});
+
 const testErrorCode = (error: unknown): string => {
   const code = error instanceof Error ? error.message : 'PROVIDER_UNAVAILABLE';
   if (/^[A-Z0-9_]+$/.test(code)) return code;
@@ -174,9 +284,11 @@ export class ProviderService {
   ) {}
 
   private toView(provider: PersistedProviderView): ProviderView {
+    const liveByModel = new Map(provider.liveCapabilities.map((observation) => [observation.modelId, observation]));
+    const { liveCapabilities: _liveCapabilities, ...view } = provider;
     return {
-      ...provider,
-      models: provider.models.map(resolveProviderModelConfig),
+      ...view,
+      models: provider.models.map((model) => resolveProviderModelConfig(model, liveByModel.get(model.id))),
     };
   }
 
@@ -211,7 +323,9 @@ export class ProviderService {
   }
 
   async update(userId: number, providerId: string, expectedVersion: number, raw: unknown): Promise<ProviderView> {
-    const input = validateProviderInput(raw);
+    const current = await this.repository.get(userId, providerId);
+    if (!current) throw new Error('PROVIDER_NOT_FOUND');
+    const input = validateProviderInput(raw, current.liveCapabilities);
     const updated = await this.repository.update(userId, providerId, expectedVersion, {
       displayName: input.displayName,
       baseUrl: input.baseUrl,
@@ -232,14 +346,45 @@ export class ProviderService {
   }
 
   async discoverModels(userId: number, providerId: string): Promise<DiscoveredProviderModel[]> {
-    await this.get(userId, providerId);
+    const persisted = await this.repository.get(userId, providerId);
+    if (!persisted) throw new Error('PROVIDER_NOT_FOUND');
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(new Error('PROVIDER_DISCOVERY_TIMEOUT')), 10_000);
     try {
-      return (await this.languageModel.discoverModels(userId, providerId, controller.signal)).map((model) => {
+      const discovered = await this.languageModel.discoverModels(userId, providerId, controller.signal);
+      const observedAt = this.clock.nowUnixSeconds();
+      const existingByModel = new Map(persisted.liveCapabilities.map((item) => [item.modelId, item]));
+      let changed = false;
+      const result = discovered.map((model) => {
         const registryDefaults = resolveModelCapabilityDefaults(model.id);
-        return { ...model, ...(registryDefaults ? { registryDefaults } : {}) };
+        const report = model.liveCapabilityReport ? validateLiveCapabilityReport(model.liveCapabilityReport) : undefined;
+        const observation = report
+          ? {
+              modelId: model.id,
+              ...report,
+              updatedAt: observedAt,
+            } satisfies ProviderModelCapabilityObservation
+          : existingByModel.get(model.id);
+        if (report) {
+          existingByModel.set(model.id, observation!);
+          changed = true;
+        }
+        return {
+          id: model.id,
+          ...(model.ownedBy === undefined ? {} : { ownedBy: model.ownedBy }),
+          ...(model.createdAt === undefined ? {} : { createdAt: model.createdAt }),
+          ...(registryDefaults ? { registryDefaults } : {}),
+          ...(observation ? { providerCapabilities: observation } : {}),
+        };
       });
+      if (changed) {
+        await this.repository.replaceLiveCapabilities(
+          userId,
+          providerId,
+          [...existingByModel.values()].sort((left, right) => left.modelId.localeCompare(right.modelId)),
+        );
+      }
+      return result;
     } finally {
       clearTimeout(timeout);
     }
@@ -259,6 +404,7 @@ export class ProviderService {
           userId,
           providerId,
           modelId,
+          configurationVersion: provider.version,
           messages: [{ role: 'user', content: 'Reply with OK.' }],
           ...(model.defaultReasoningEffort === undefined ? {} : { reasoningEffort: model.defaultReasoningEffort }),
           maxOutputTokens: Math.min(16, model.maxOutputTokens),

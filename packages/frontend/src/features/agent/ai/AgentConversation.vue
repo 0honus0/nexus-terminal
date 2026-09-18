@@ -1,7 +1,13 @@
 <script setup lang="ts">
   import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { AgentArtifactRef, AgentLedgerEntry, AgentRunReconciliationView, AgentRunView } from '../api/agent-api';
+  import type {
+    AgentArtifactRef,
+    AgentLedgerEntry,
+    AgentPendingUserInputRequest,
+    AgentRunReconciliationView,
+    AgentRunView,
+  } from '../api/agent-api';
   import type { ConversationCommandResult } from './conversation-command-executor';
   import ArtifactPicker from '../files/ArtifactPicker.vue';
   import AgentMessageBody from './AgentMessageBody.vue';
@@ -17,6 +23,7 @@
     entries: AgentLedgerEntry[];
     nextCursor: string | null;
     run: AgentRunView | null;
+    inputRequest: AgentPendingUserInputRequest | null;
     streamingText: string;
     draft: string;
     busy: boolean;
@@ -216,6 +223,18 @@
   const applyCommandSuggestion = (suggestion: ConversationCommandSuggestion): void => {
     const needsArgument = suggestion.command === '/goal' || suggestion.command === '/interrupt';
     emit('updateDraft', needsArgument ? `${suggestion.command} ` : suggestion.command);
+  };
+  const applyInputChoice = (questionId: string, value: string): void => {
+    const prefix = `${questionId}:`;
+    const answer = `${prefix} ${value}`;
+    const lines = props.draft
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const existing = lines.findIndex((line) => line.startsWith(prefix));
+    if (existing >= 0) lines[existing] = answer;
+    else lines.push(answer);
+    emit('updateDraft', lines.join('\n'));
   };
   const activeRun = computed(() =>
     Boolean(
@@ -486,6 +505,65 @@
               <span class="flex gap-0.5" aria-hidden="true"><span>·</span><span>·</span><span>·</span></span>
             </div>
             <AgentMessageBody :text="streamingText" />
+          </div>
+        </div>
+        <div
+          v-if="inputRequest"
+          class="mx-auto mb-5 w-full max-w-3xl rounded-2xl border border-primary/25 bg-primary/[0.035] p-3 shadow-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <div class="flex items-start gap-2.5">
+            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <i class="fa-solid fa-circle-question text-[10px]" aria-hidden="true"></i>
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-semibold text-foreground">{{ $t('agent.conversation.clarificationTitle') }}</div>
+              <div class="mt-0.5 text-[11px] leading-4 text-text-secondary/80">
+                {{ $t('agent.conversation.clarificationHint') }}
+              </div>
+            </div>
+          </div>
+          <div class="mt-3 space-y-2.5">
+            <div
+              v-for="question in inputRequest.questions"
+              :key="question.id"
+              class="rounded-xl border border-border/65 bg-card/70 px-3 py-2.5"
+            >
+              <div class="text-xs font-medium leading-5 text-foreground">{{ question.prompt }}</div>
+              <div v-if="question.context" class="mt-0.5 text-[10px] leading-4 text-text-secondary/70">
+                {{ question.context }}
+              </div>
+              <div v-if="question.kind === 'choice' && question.choices?.length" class="mt-2 flex flex-wrap gap-1.5">
+                <button
+                  v-for="choice in question.choices"
+                  :key="choice.value"
+                  type="button"
+                  class="rounded-lg border px-2.5 py-1.5 text-left text-[11px] transition-colors hover:border-primary/45 hover:bg-primary/[0.06]"
+                  :class="
+                    choice.value === question.recommendedChoice
+                      ? 'border-primary/35 bg-primary/[0.045] text-foreground'
+                      : 'border-border/70 bg-background/55 text-text-secondary'
+                  "
+                  :disabled="busy"
+                  @click="applyInputChoice(question.id, choice.value)"
+                >
+                  <span class="font-medium">{{ choice.label }}</span>
+                  <span
+                    v-if="choice.value === question.recommendedChoice"
+                    class="ml-1 text-[9px] font-semibold uppercase tracking-wide text-primary"
+                  >
+                    {{ $t('agent.conversation.clarificationRecommended') }}
+                  </span>
+                  <span v-if="choice.description" class="mt-0.5 block max-w-sm text-[10px] leading-4 opacity-75">
+                    {{ choice.description }}
+                  </span>
+                </button>
+              </div>
+              <div v-else class="mt-1 text-[10px] text-text-secondary/65">
+                {{ $t('agent.conversation.clarificationTextHint') }}
+              </div>
+            </div>
           </div>
         </div>
         <slot name="approvals" />

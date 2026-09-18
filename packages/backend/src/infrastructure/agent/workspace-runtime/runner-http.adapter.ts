@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import { setTimeout as delay } from 'node:timers/promises';
 import WebSocket from 'ws';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
+import type { ProjectInstructionProjection } from '../../../modules/agent/ai/project-instruction-source.port';
 import type {
   AcpByteTransport,
   AcpTransportOpenRequest,
@@ -21,6 +22,16 @@ import type {
   AgentWorkspaceReadHandle,
   RunnerCommandRequest,
   RunnerCommandResult,
+  WorkspaceApplyPatchRequest,
+  WorkspaceApplyPatchResult,
+  WorkspaceFileReadRequest,
+  WorkspaceFileReadResult,
+  WorkspaceSearchRequest,
+  WorkspaceSearchResult,
+  WorkspaceRepoMapRequest,
+  WorkspaceRepoMapResult,
+  WorkspaceCodeIntelRequest,
+  WorkspaceCodeIntelResult,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import type {
   WorkspaceRuntimeAvailability,
@@ -85,6 +96,11 @@ const recordValue = (value: unknown): UnknownRecord => {
 const stringValue = (value: unknown, nullable = false): string | null => {
   if (nullable && value === null) return null;
   if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_PROTOCOL_STRING_BYTES) throw protocolError();
+  return value;
+};
+
+const boundedStringValue = (value: unknown, maxBytes: number): string => {
+  if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > maxBytes) throw protocolError();
   return value;
 };
 
@@ -253,6 +269,264 @@ const decodeWrittenBytes = (value: unknown): number => {
   return integerValue(record.writtenBytes);
 };
 
+const decodeProjectInstructionProjection = (
+  value: unknown,
+): Omit<ProjectInstructionProjection, 'workspaceId' | 'generation'> => {
+  const record = recordValue(value);
+  const targetDirectories = stringArrayValue(record.targetDirectories, 8);
+  if (!Array.isArray(record.instructions) || record.instructions.length > 16) throw protocolError();
+  if (!Array.isArray(record.omitted) || record.omitted.length > 32) throw protocolError();
+  const instructions = record.instructions.map((item) => {
+    const entry = recordValue(item);
+    const hash = stringValue(entry.hash) as string;
+    if (!/^[a-f0-9]{64}$/.test(hash) || entry.provenance !== 'workspace') throw protocolError();
+    return {
+      path: stringValue(entry.path) as string,
+      scopePath: stringValue(entry.scopePath) as string,
+      projectRoot: stringValue(entry.projectRoot) as string,
+      hash,
+      content: stringValue(entry.content) as string,
+      sourceBytes: integerValue(entry.sourceBytes),
+      contentBytes: integerValue(entry.contentBytes),
+      truncated: booleanValue(entry.truncated),
+      provenance: 'workspace' as const,
+    };
+  });
+  const omitted = record.omitted.map((item) => {
+    const entry = recordValue(item);
+    if (!['source_too_large', 'invalid_utf8', 'total_budget', 'too_many_files'].includes(String(entry.reason))) {
+      throw protocolError();
+    }
+    return {
+      path: stringValue(entry.path) as string,
+      reason: entry.reason as 'source_too_large' | 'invalid_utf8' | 'total_budget' | 'too_many_files',
+    };
+  });
+  return { targetDirectories, instructions, omitted };
+};
+
+const decodeWorkspaceFileRead = (value: unknown): WorkspaceFileReadResult => {
+  const record = recordValue(value);
+  const digest = stringValue(record.sha256) as string;
+  if (!/^[a-f0-9]{64}$/.test(digest)) throw protocolError();
+  const nullableInteger = (item: unknown): number | null => (item === null ? null : integerValue(item));
+  return {
+    path: stringValue(record.path) as string,
+    sha256: digest,
+    sizeBytes: integerValue(record.sizeBytes),
+    content: boundedStringValue(record.content, 64 * 1024),
+    startLine: nullableInteger(record.startLine),
+    endLine: nullableInteger(record.endLine),
+    offsetBytes: nullableInteger(record.offsetBytes),
+    contentBytes: integerValue(record.contentBytes),
+    truncated: booleanValue(record.truncated),
+  };
+};
+
+const decodeWorkspaceSearch = (value: unknown): WorkspaceSearchResult => {
+  const record = recordValue(value);
+  if ((record.engine !== 'rg' && record.engine !== 'fallback') || !Array.isArray(record.matches) || record.matches.length > 100) {
+    throw protocolError();
+  }
+  return {
+    query: boundedStringValue(record.query, 1024),
+    path: stringValue(record.path) as string,
+    engine: record.engine,
+    matches: record.matches.map((item) => {
+      const match = recordValue(item);
+      return {
+        path: stringValue(match.path) as string,
+        line: integerValue(match.line, 1),
+        column: integerValue(match.column, 1),
+        text: boundedStringValue(match.text, 4 * 1024),
+        before: stringArrayValue(match.before, 5),
+        after: stringArrayValue(match.after, 5),
+      };
+    }),
+    truncated: booleanValue(record.truncated),
+    scannedFiles: integerValue(record.scannedFiles),
+    scannedBytes: integerValue(record.scannedBytes),
+  };
+};
+
+
+const decodeWorkspaceRepoMap = (value: unknown): WorkspaceRepoMapResult => {
+  const record = recordValue(value);
+  if (
+    record.engine !== 'typescript-native' ||
+    !Array.isArray(record.files) ||
+    record.files.length > 64 ||
+    !record.fallback ||
+    typeof record.fallback !== 'object' ||
+    Array.isArray(record.fallback)
+  ) {
+    throw protocolError();
+  }
+  const fallback = recordValue(record.fallback);
+  if (
+    fallback.searchTool !== 'workspace_search' ||
+    fallback.readTool !== 'workspace_read_file' ||
+    fallback.unsupportedLanguages !== true
+  ) {
+    throw protocolError();
+  }
+  const revision = stringValue(record.revision) as string;
+  if (!/^[a-f0-9]{64}$/.test(revision)) throw protocolError();
+  return {
+    engine: 'typescript-native',
+    path: stringValue(record.path) as string,
+    query: record.query === null ? null : boundedStringValue(record.query, 1024),
+    revision,
+    indexedFiles: integerValue(record.indexedFiles),
+    indexedBytes: integerValue(record.indexedBytes),
+    cacheHits: integerValue(record.cacheHits),
+    cacheMisses: integerValue(record.cacheMisses),
+    files: record.files.map((item) => {
+      const file = recordValue(item);
+      const digest = stringValue(file.sha256) as string;
+      if (!/^[a-f0-9]{64}$/.test(digest) || !Array.isArray(file.symbols) || file.symbols.length > 160) {
+        throw protocolError();
+      }
+      return {
+        path: stringValue(file.path) as string,
+        sha256: digest,
+        sizeBytes: integerValue(file.sizeBytes),
+        imports: stringArrayValue(file.imports, 32),
+        symbols: file.symbols.map((entry) => {
+          const symbol = recordValue(entry);
+          return {
+            name: boundedStringValue(symbol.name, 160),
+            kind: boundedStringValue(symbol.kind, 128),
+            line: integerValue(symbol.line, 1),
+            column: integerValue(symbol.column, 1),
+            signature: boundedStringValue(symbol.signature, 320),
+          };
+        }),
+      };
+    }),
+    truncated: booleanValue(record.truncated),
+    fallback: {
+      searchTool: 'workspace_search',
+      readTool: 'workspace_read_file',
+      unsupportedLanguages: true,
+    },
+  };
+};
+
+const decodeWorkspaceCodeIntel = (value: unknown): WorkspaceCodeIntelResult => {
+  const record = recordValue(value);
+  if (
+    !['symbols', 'definition', 'references', 'diagnostics'].includes(String(record.action)) ||
+    (record.engine !== 'typescript-native' && record.engine !== 'fallback') ||
+    !Array.isArray(record.results) ||
+    record.results.length > 100
+  ) {
+    throw protocolError();
+  }
+  const revision =
+    record.revision === null
+      ? null
+      : (() => {
+          const candidate = stringValue(record.revision) as string;
+          if (!/^[a-f0-9]{64}$/.test(candidate)) throw protocolError();
+          return candidate;
+        })();
+  const digest =
+    record.sha256 === null
+      ? null
+      : (() => {
+          const candidate = stringValue(record.sha256) as string;
+          if (!/^[a-f0-9]{64}$/.test(candidate)) throw protocolError();
+          return candidate;
+        })();
+  const fallback =
+    record.fallback === null
+      ? null
+      : (() => {
+          const item = recordValue(record.fallback);
+          if (
+            (item.reason !== 'LANGUAGE_UNSUPPORTED' && item.reason !== 'FILE_NOT_INDEXED') ||
+            item.searchTool !== 'workspace_search' ||
+            item.readTool !== 'workspace_read_file'
+          ) {
+            throw protocolError();
+          }
+          return {
+            reason: item.reason as 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED',
+            searchTool: 'workspace_search' as const,
+            readTool: 'workspace_read_file' as const,
+          };
+        })();
+
+  return {
+    action: record.action as WorkspaceCodeIntelResult['action'],
+    path: stringValue(record.path) as string,
+    engine: record.engine,
+    supported: booleanValue(record.supported),
+    revision,
+    sha256: digest,
+    results: record.results.map((entry) => {
+      const item = recordValue(entry);
+      if ('code' in item) {
+        return {
+          path: stringValue(item.path) as string,
+          line: integerValue(item.line, 1),
+          column: integerValue(item.column, 1),
+          endLine: integerValue(item.endLine, 1),
+          endColumn: integerValue(item.endColumn, 1),
+          code: integerValue(item.code),
+          category: boundedStringValue(item.category, 128),
+          text: boundedStringValue(item.text, 1024),
+        };
+      }
+      if ('path' in item) {
+        return {
+          path: stringValue(item.path) as string,
+          line: integerValue(item.line, 1),
+          column: integerValue(item.column, 1),
+          endLine: integerValue(item.endLine, 1),
+          endColumn: integerValue(item.endColumn, 1),
+          ...(item.name === undefined ? {} : { name: boundedStringValue(item.name, 160) }),
+          ...(item.kind === undefined ? {} : { kind: boundedStringValue(item.kind, 128) }),
+          ...(item.signature === undefined ? {} : { signature: boundedStringValue(item.signature, 320) }),
+        };
+      }
+      return {
+        name: boundedStringValue(item.name, 160),
+        kind: boundedStringValue(item.kind, 128),
+        line: integerValue(item.line, 1),
+        column: integerValue(item.column, 1),
+        signature: boundedStringValue(item.signature, 320),
+      };
+    }),
+    truncated: booleanValue(record.truncated),
+    fallback,
+  };
+};
+
+const decodeWorkspaceApplyPatch = (value: unknown): WorkspaceApplyPatchResult => {
+  const record = recordValue(value);
+  if (!Array.isArray(record.changes) || record.changes.length > 16) throw protocolError();
+  return {
+    changes: record.changes.map((item) => {
+      const change = recordValue(item);
+      const beforeSha256 = stringValue(change.beforeSha256) as string;
+      const afterSha256 = stringValue(change.afterSha256) as string;
+      if (!/^[a-f0-9]{64}$/.test(beforeSha256) || !/^[a-f0-9]{64}$/.test(afterSha256)) throw protocolError();
+      return {
+        path: stringValue(change.path) as string,
+        beforeSha256,
+        afterSha256,
+        beforeBytes: integerValue(change.beforeBytes),
+        afterBytes: integerValue(change.afterBytes),
+        additions: integerValue(change.additions),
+        deletions: integerValue(change.deletions),
+      };
+    }),
+    applied: booleanValue(record.applied),
+  };
+};
+
 const decodeErrorCode = (value: unknown): string | null => {
   const record = recordValue(value);
   return typeof record.error === 'string' && /^[A-Z][A-Z0-9_]+$/.test(record.error) ? record.error : null;
@@ -268,23 +542,6 @@ const commandResult = (value: RunnerCommandWireResponse): RunnerCommandResult =>
         ? { errorCode: value.error.slice(0, 1024) }
         : null,
 });
-
-const waitForJob = (milliseconds: number, signal: AbortSignal): Promise<void> =>
-  new Promise<void>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(signal.reason ?? new Error('ABORTED'));
-      return;
-    }
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, milliseconds);
-    const onAbort = () => {
-      clearTimeout(timer);
-      reject(signal.reason ?? new Error('ABORTED'));
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
 
 export class RunnerHttpAdapter
   implements WorkspaceRuntimeControllerPort, WorkspaceRuntimeGatewayPort, AcpTransportPort, BrowserTunnelPort
@@ -526,6 +783,113 @@ export class RunnerHttpAdapter
     );
   }
 
+  async projectInstructions(
+    workspaceId: string,
+    generation: number,
+    targetDirectories: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<Omit<ProjectInstructionProjection, 'workspaceId' | 'generation'>> {
+    if (
+      !workspaceId ||
+      workspaceId.length > 128 ||
+      !Number.isSafeInteger(generation) ||
+      generation < 1 ||
+      targetDirectories.length > 8 ||
+      targetDirectories.some((value) => typeof value !== 'string' || !value || value.length > 4096)
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    return decodeProjectInstructionProjection(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/project-instructions`,
+        { method: 'POST', body: { generation, targetDirectories: [...targetDirectories] } },
+        signal,
+        { maxResponseBytes: 256 * 1024 },
+      ),
+    );
+  }
+
+  async readWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileReadRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileReadResult> {
+    return decodeWorkspaceFileRead(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/read-file`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 128 * 1024 },
+      ),
+    );
+  }
+
+  async searchWorkspace(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceSearchRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceSearchResult> {
+    return decodeWorkspaceSearch(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/search`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 384 * 1024 },
+      ),
+    );
+  }
+
+
+  async repoMap(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceRepoMapRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceRepoMapResult> {
+    return decodeWorkspaceRepoMap(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/repo-map`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 128 * 1024 },
+      ),
+    );
+  }
+
+  async codeIntel(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceCodeIntelRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceCodeIntelResult> {
+    return decodeWorkspaceCodeIntel(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/code-intel`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 128 * 1024 },
+      ),
+    );
+  }
+
+  async applyWorkspacePatch(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceApplyPatchRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceApplyPatchResult> {
+    return decodeWorkspaceApplyPatch(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/apply-patch`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 128 * 1024 },
+      ),
+    );
+  }
+
   openWorkspaceFileRead(
     workspaceId: string,
     generation: number,
@@ -565,8 +929,13 @@ export class RunnerHttpAdapter
     );
   }
 
-  async invoke(grant: WorkspaceExecutionGrant, call: WorkspaceJobCall, signal: AbortSignal): Promise<WorkspaceJobView> {
+  async startJob(
+    grant: WorkspaceExecutionGrant,
+    call: WorkspaceJobCall,
+    signal: AbortSignal,
+  ): Promise<WorkspaceJobView> {
     const jobId = `job-${call.operationHash.slice(3)}`;
+    if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
     const createdAt = Math.floor(Date.now() / 1000);
     const deadlineAt = createdAt + Math.ceil(call.timeoutMs / 1000) + 15;
     const request = {
@@ -578,10 +947,8 @@ export class RunnerHttpAdapter
       maxBytes: call.maxBytes,
       timeoutMs: call.timeoutMs,
     };
-
-    let current: WorkspaceJobView;
     try {
-      current = decodeWorkspaceJobView(
+      return decodeWorkspaceJobView(
         await this.request(
           `/v1/workspaces/${encodeURIComponent(grant.workspaceId)}/jobs`,
           { method: 'POST', body: request },
@@ -589,20 +956,9 @@ export class RunnerHttpAdapter
         ),
       );
     } catch (error) {
-      if (signal.aborted) {
-        return {
-          jobId,
-          workspaceId: grant.workspaceId,
-          generation: grant.generation,
-          status: 'unknown',
-          result: null,
-          error: 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
-          createdAt,
-          completedAt: Math.floor(Date.now() / 1000),
-        };
-      }
+      if (error instanceof Error && error.message === 'WORKSPACE_JOB_ACTIVE_CONFLICT') throw error;
       try {
-        current = await this.queryJob(jobId);
+        return await this.queryJob(jobId);
       } catch {
         return {
           jobId,
@@ -610,43 +966,80 @@ export class RunnerHttpAdapter
           generation: grant.generation,
           status: 'unknown',
           result: null,
-          error: error instanceof Error ? error.message.slice(0, 256) : 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
+          error:
+            signal.aborted
+              ? 'WORKSPACE_JOB_OUTCOME_UNKNOWN'
+              : error instanceof Error
+                ? error.message.slice(0, 256)
+                : 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
           createdAt,
           completedAt: Math.floor(Date.now() / 1000),
         };
       }
     }
+  }
 
-    while (current.status === 'pending' || current.status === 'running') {
-      if (signal.aborted) {
-        const final = await this.queryJob(jobId).catch(() => null);
-        if (final && !['pending', 'running'].includes(final.status)) return final;
-        return {
-          ...current,
-          status: 'unknown',
-          result: null,
-          error: 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
-          completedAt: Math.floor(Date.now() / 1000),
-        };
-      }
-      if (Math.floor(Date.now() / 1000) > deadlineAt) {
-        return {
-          ...current,
-          status: 'unknown',
-          result: null,
-          error: 'WORKSPACE_JOB_QUERY_TIMEOUT',
-          completedAt: Math.floor(Date.now() / 1000),
-        };
-      }
-      await waitForJob(250, signal).catch(() => undefined);
-      if (!signal.aborted) current = await this.queryJob(jobId, signal);
+  async invoke(grant: WorkspaceExecutionGrant, call: WorkspaceJobCall, signal: AbortSignal): Promise<WorkspaceJobView> {
+    const current = await this.startJob(grant, call, signal);
+    if (current.status !== 'pending' && current.status !== 'running') return current;
+    const waitMs = Math.min(5 * 60 * 1000, call.timeoutMs + 15_000);
+    try {
+      const terminal = await this.waitJob(current.jobId, waitMs, signal);
+      if (terminal.status !== 'pending' && terminal.status !== 'running') return terminal;
+      return {
+        ...terminal,
+        status: 'unknown',
+        result: null,
+        error: 'WORKSPACE_JOB_QUERY_TIMEOUT',
+        completedAt: Math.floor(Date.now() / 1000),
+      };
+    } catch {
+      const final = await this.queryJob(current.jobId).catch(() => null);
+      if (final && final.status !== 'pending' && final.status !== 'running') return final;
+      return {
+        ...current,
+        status: 'unknown',
+        result: null,
+        error: 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
+        completedAt: Math.floor(Date.now() / 1000),
+      };
     }
-    return current;
   }
 
   async queryJob(jobId: string, signal?: AbortSignal): Promise<WorkspaceJobView> {
     if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
     return decodeWorkspaceJobView(await this.get(`/v1/jobs/${encodeURIComponent(jobId)}`, signal));
+  }
+
+  async waitJob(jobId: string, timeoutMs: number, signal?: AbortSignal): Promise<WorkspaceJobView> {
+    if (
+      !/^job-[a-f0-9]{64}$/.test(jobId) ||
+      !Number.isSafeInteger(timeoutMs) ||
+      timeoutMs < 1 ||
+      timeoutMs > 5 * 60 * 1000
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    return decodeWorkspaceJobView(
+      await this.request(
+        `/v1/jobs/${encodeURIComponent(jobId)}/wait`,
+        { method: 'POST', body: { timeoutMs } },
+        signal,
+        { timeoutMs: timeoutMs + 5_000 },
+      ),
+    );
+  }
+
+  async cancelJob(jobId: string, signal?: AbortSignal): Promise<WorkspaceJobView> {
+    if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
+    return decodeWorkspaceJobView(
+      await this.request(
+        `/v1/jobs/${encodeURIComponent(jobId)}/cancel`,
+        { method: 'POST', body: {} },
+        signal,
+        { timeoutMs: 10_000 },
+      ),
+    );
   }
 
   private async openWorkspaceRead(pathname: string, parentSignal?: AbortSignal): Promise<AgentWorkspaceReadHandle> {

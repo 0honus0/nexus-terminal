@@ -9,6 +9,7 @@ import type {
   ResourceQuarantine,
 } from '../../../modules/agent/capabilities/lease.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 const DEFAULT_TTL_SECONDS = 30;
 const MAX_KEYS = 64;
@@ -90,7 +91,7 @@ const mapQuarantine = (row: QuarantineRow): ResourceQuarantine => ({
   toolCallId: row.tool_call_id,
   owner: { type: row.owner_type, id: row.owner_id },
   reason: row.reason,
-  evidence: JSON.parse(row.evidence_json) as JsonValue,
+  evidence: parseDurableJsonValue(row.evidence_json),
   version: row.version,
   createdAt: row.created_at,
 });

@@ -160,8 +160,6 @@
         "presetCustom": "カスタムクォータ",
         "presetCustomDesc": "各システム制約の閾値を手動で細かく調整します",
         "groups": {
-          "tokens": "モデルと Token 予算上限",
-          "tokensDesc": "Run 単位の Token 消費量と実行ステップ数を制限します",
           "timeouts": "実行とタイムアウト保護",
           "timeoutsDesc": "タスクの最長実行時間とツール呼び出しタイムアウトを制限します",
           "storage": "ストレージとデータ流量の制限",
@@ -169,17 +167,11 @@
           "concurrency": "並列クォータとエージェント環境",
           "concurrencyDesc": "並列タスク数、有効なワークスペース、サブエージェント委譲深度を制限します",
           "extra": "その他のシステム制限",
-          "extraDesc": "その他の拡張ポリシーパラメータ"
+          "extraDesc": "その他の拡張ポリシーパラメータ",
+          "execution": "実行ステップ上限",
+          "executionDesc": "1 Run あたりのモデル/ツールループの最大ステップ数を制限します"
         },
         "fields": {
-          "maxContextTokens": {
-            "label": "コンテキストウィンドウ上限",
-            "hint": "1 回のリクエストに含まれる履歴コンテキスト Token の絶対上限"
-          },
-          "maxOutputTokens": {
-            "label": "単一出力 Token 上限",
-            "hint": "1 回のモデル推論で生成可能な最大 Token 数"
-          },
           "maxRunSteps": {
             "label": "Run 最大ステップ数",
             "hint": "1 回の Run で許可される思考・ツール実行ループの最大回数"
@@ -192,10 +184,6 @@
             "label": "ツール実行タイムアウト",
             "hint": "単一のツール呼び出しに許可される最大秒数"
           },
-          "workspaceIdleTtlSeconds": {
-            "label": "ワークスペース待機 TTL",
-            "hint": "無操作の一時ワークスペースが破棄されるまでの待機時間"
-          },
           "unretainedArtifactTtlSeconds": {
             "label": "未保存成果物の生存期間",
             "hint": "明示的に保持されていない一時成果物の保存期間"
@@ -203,10 +191,6 @@
           "maxToolOutputBytes": {
             "label": "ツール出力サイズ上限",
             "hint": "単一ツールの実行結果が返却可能な最大バイト数"
-          },
-          "maxRawToolBytes": {
-            "label": "ツール通信総バイト上限",
-            "hint": "ツール呼び出しで転送される未加工データの累積上限"
           },
           "maxArtifactBytes": {
             "label": "セッション成果物クォータ",
@@ -282,10 +266,6 @@
         "recommendedBadge": "推奨",
         "saveSuccess": "予算とコンテキスト設定を保存しました",
         "fields": {
-          "maxContextTokens": "単一コンテキストウィンドウ",
-          "maxContextTokensHint": "1回のリクエストに含まれるコンテキスト Token の上限",
-          "maxOutputTokens": "単一最大出力",
-          "maxOutputTokensHint": "モデルの1回の回答で生成される最大 Token 数",
           "maxRunSteps": "最大実行ステップ数",
           "maxRunStepsHint": "1回の Run で許可される最大ツール呼び出し・推論ステップ数",
           "maxActiveExecutionSeconds": "実行タイムアウト (秒)",
@@ -294,8 +274,6 @@
           "toolTimeoutSecondsHint": "個別ツール実行のタイムアウト制限",
           "maxToolOutputBytes": "ツール出力切り詰め (バイト)",
           "maxToolOutputBytesHint": "モデルに返されるツール出力の切り詰め上限",
-          "maxRawToolBytes": "生ツール出力上限 (バイト)",
-          "maxRawToolBytesHint": "台帳に保存される生のツール出力の最大サイズ",
           "maxRecallItems": "記憶想起件数",
           "maxRecallItemsHint": "検索時に想起する最大リファレンス件数",
           "maxRecallBytes": "記憶想起バイト上限",
@@ -496,13 +474,19 @@
         "modelPlaceholder": "gpt-4o",
         "capabilityEdit": "能力設定",
         "capabilityTitle": "モデル能力",
-        "capabilityDescription": "Nexus Registry が既定値を提供します。手動変更は上書き値として保存され、いつでも現在の既定値へ戻せます。",
+        "capabilityDescription": "Provider のライブメタデータがフィールド単位で Nexus Registry の既定値を上書きします。手動変更は最優先の上書き値として保存され、現在の Provider/Registry 基準へ戻せます。",
         "registryDefault": "Nexus 既定",
+        "providerLive": "Provider ライブ",
         "manualOverride": "カスタム",
         "restoreDefault": "既定に戻す",
         "restoreAllDefaults": "すべて既定に戻す",
         "capabilitySaved": "モデル能力を保存しました",
         "capabilityInvalid": "モデル能力の設定が無効です。最大出力はコンテキストウィンドウより小さくしてください。",
+        "capabilityUnavailable": "このモデルは十分な能力メタデータを公開していません。使用前に能力を明示的に設定してください。",
+        "providerMetadata": "Provider メタデータ: {source} · {version} · 更新 {updatedAt}",
+        "capabilityConflict": "能力ソースが競合しています: {fields}。優先順位は カスタム > Provider ライブ > Nexus 既定 です。",
+        "imageInput": "画像入力",
+        "fileInput": "ファイル入力",
         "reasoningCapability": "推論レベル",
         "registryManaged": "Registry 管理"
       },
@@ -650,7 +634,6 @@
           "maxActiveExecutionSeconds": "最大アクティブ実行時間",
           "toolTimeoutSeconds": "ツールタイムアウト",
           "maxToolOutputBytes": "モデル可視ツール出力",
-          "maxRawToolBytes": "ツール生データ上限",
           "maxRecallItems": "Recall 件数",
           "maxRecallBytes": "Recall 容量",
           "maxSubagentMessages": "Subagent メッセージ数",
@@ -726,6 +709,19 @@
       "runModel": "モデル",
       "runModelHint": "モデルを切り替え",
       "runModelLocked": "現在の Run が実行中の間、モデルは固定されています。",
+      "modelMissingCapabilities": "利用不可 — 不足: {capabilities}",
+      "modelCapability": {
+        "tools": "ツール呼び出し",
+        "image_input": "画像入力",
+        "file_input": "ファイル入力",
+        "reasoning": "推論"
+      },
+      "executionMode": "実行モード",
+      "executionModeHint": "次の Run で変更を実行できるか、読み取り/制御ツールだけで計画するかを選びます",
+      "executionExecute": "実行",
+      "executionExecuteDesc": "通常どおり実行し、変更操作は選択した承認モードで制御します。",
+      "executionPlan": "計画のみ",
+      "executionPlanDesc": "モデルには読み取り/制御ツールのみを公開し、変更ツールは公開しません。計画確認後に別の Execute Run で実行します。",
       "approvalMode": "承認モード",
       "approvalModeHint": "次の Run で確認が必要な書き込み・破壊的操作をどう扱うか選択します",
       "approvalFullAccess": "フルアクセス",
@@ -868,6 +864,10 @@
       "capabilityTools": "制御されたツール",
       "capabilityEvidence": "結果を検証",
       "sendHint": "Enter で送信",
+      "clarificationTitle": "追加情報が必要です",
+      "clarificationHint": "同じタスクを続けるため、下で回答してください。選択肢を選ぶか、入力欄に直接回答できます。",
+      "clarificationRecommended": "推奨",
+      "clarificationTextHint": "下の入力欄に回答を入力してください。",
       "commands": {
         "resultLabel": "コマンド結果",
         "dismiss": "コマンド結果を閉じる",
@@ -948,6 +948,7 @@
       "contextReserved": "予約出力 {value}",
       "contextSource": {
         "estimated": "推定",
+        "anchored_estimate": "Provider アンカー推定",
         "provider": "Provider 実測"
       },
       "steps": "ステップ",
@@ -1013,7 +1014,7 @@
         "reconciliation": "次の変更操作の前に照合が必要です。",
         "approval": "この Run は承認を待っています。",
         "budget": "この Run は予算の増額待ちで一時停止しています。",
-        "input": "進展のない反復操作を検出しました。続行するには指示または新しい情報を追加してください。"
+        "input": "この Run は入力を待っています。会話で回答すると続行します。"
       },
       "totalTokens": "Token 合計",
       "advancedDetails": "詳細設定とチェックポイント",

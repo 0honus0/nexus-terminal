@@ -96,7 +96,13 @@
         "SSH_SHELL_FAILURE": "SSH Shell オープン失敗",
         "DATABASE_MIGRATION": "データベース移行",
         "ADMIN_SETUP_COMPLETE": "初期管理者設定完了",
-        "CONNECTIONS_EXPORTED": "接続がエクスポートされました"
+        "CONNECTIONS_EXPORTED": "接続がエクスポートされました",
+        "AGENT_RUN_COMPLETED": "Agent Run 完了",
+        "AGENT_RUN_FAILED": "Agent Run 失敗",
+        "AGENT_RUN_INTERRUPTED": "Agent Run 中断",
+        "AGENT_APPROVAL_REQUIRED": "Agent の承認が必要",
+        "AGENT_INPUT_REQUIRED": "Agent への入力が必要",
+        "AGENT_ATTENTION_REQUIRED": "Agent の確認が必要"
       },
       "channels": {
         "webhook": "Webhook",

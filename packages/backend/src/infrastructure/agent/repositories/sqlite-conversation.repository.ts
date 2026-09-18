@@ -1,7 +1,6 @@
 import type {
   AppendLedgerEntry,
   ConversationRepositoryPort,
-  JsonValue,
   LedgerEntryKind,
   LedgerEntryView,
   LedgerPage,
@@ -14,7 +13,15 @@ import type {
 } from '../../../modules/agent/ai/conversation.repository.port';
 import type { ContextHistoryBoundary } from '../../../modules/agent/ai/context.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { sqliteSearchMatchQuery } from '../../database/sqlite-search-index';
 import { appendHostEvent } from '../events/host-event-outbox';
+import {
+  durableInteger,
+  durableRecord,
+  durableString,
+  parseDurableJson,
+  parseDurableJsonValue,
+} from '../runtime/durable-state-decoders';
 
 interface ThreadRow {
   id: string;
@@ -54,7 +61,7 @@ const mapEntry = (row: EntryRow): LedgerEntryView => ({
   runId: row.run_id,
   sequence: row.sequence,
   kind: row.kind,
-  payload: JSON.parse(row.payload_json) as JsonValue,
+  payload: parseDurableJsonValue(row.payload_json),
   createdAt: row.created_at,
 });
 
@@ -63,12 +70,10 @@ const encodeThreadCursor = (updatedAt: number, id: string): string =>
 
 const decodeThreadCursor = (cursor: string): { updatedAt: number; id: string } => {
   try {
-    const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as {
-      updatedAt?: unknown;
-      id?: unknown;
-    };
-    if (!Number.isSafeInteger(value.updatedAt) || typeof value.id !== 'string' || !value.id) throw new Error('invalid');
-    return { updatedAt: value.updatedAt as number, id: value.id };
+    const value = durableRecord(parseDurableJson(Buffer.from(cursor, 'base64url').toString('utf8')));
+    const id = durableString(value.id) as string;
+    if (!id) throw new Error('invalid');
+    return { updatedAt: durableInteger(value.updatedAt), id };
   } catch {
     throw new Error('CURSOR_INVALID');
   }
@@ -148,7 +153,6 @@ const cleanupThreadRunReferences = async (db: RelationalDatabase, scope: Scope, 
       scope.appId,
       threadId,
     ]);
-    await db.execute('DELETE FROM ai_context_digests WHERE thread_id = ?', [threadId]);
     await db.execute('UPDATE agent_runs SET parent_run_id = NULL WHERE user_id = ? AND app_id = ? AND thread_id = ?', [
       scope.userId,
       scope.appId,
@@ -162,10 +166,6 @@ const cleanupThreadRunReferences = async (db: RelationalDatabase, scope: Scope, 
     scope.appId,
   ]);
   await db.execute('DELETE FROM ai_thread_entries WHERE user_id = ? AND app_id = ?', [scope.userId, scope.appId]);
-  await db.execute(
-    'DELETE FROM ai_context_digests WHERE thread_id IN (SELECT id FROM ai_threads WHERE user_id = ? AND app_id = ?)',
-    [scope.userId, scope.appId],
-  );
   await db.execute('UPDATE agent_runs SET parent_run_id = NULL WHERE user_id = ? AND app_id = ?', [
     scope.userId,
     scope.appId,
@@ -340,6 +340,30 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
     };
   }
 
+  async searchEarlierEntries(
+    scope: Scope,
+    threadId: string,
+    queryTerms: readonly string[],
+    beforeSequence: number,
+    limit: number,
+  ): Promise<LedgerEntryView[]> {
+    const matchQuery = sqliteSearchMatchQuery(queryTerms);
+    if (!matchQuery) return [];
+    const rows = await this.db.queryAll<EntryRow>(
+      `SELECT e.id, e.thread_id, e.run_id, e.sequence, e.kind, e.payload_json, e.created_at
+       FROM ai_thread_entries_search
+       JOIN ai_thread_entries e ON e.rowid = ai_thread_entries_search.rowid
+       WHERE ai_thread_entries_search MATCH ?
+         AND e.thread_id = ? AND e.user_id = ? AND e.app_id = ?
+         AND e.sequence < ?
+         AND e.kind IN ('user_input','assistant_message')
+       ORDER BY bm25(ai_thread_entries_search), e.sequence DESC, e.id ASC
+       LIMIT ?`,
+      [matchQuery, threadId, scope.userId, scope.appId, beforeSequence, limit],
+    );
+    return rows.map(mapEntry);
+  }
+
   async readOldestEntries(scope: Scope, threadId: string, limit: number): Promise<LedgerPage> {
     if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
     const rows = await this.db.queryAll<EntryRow>(
@@ -369,7 +393,7 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
       historyBoundary.baseThrough,
       runId,
       ...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
-      limit,
+      limit + 1,
     ];
     const rows = await this.db.queryAll<EntryRow>(
       `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
@@ -379,7 +403,53 @@ export class SqliteConversationRepository implements ConversationRepositoryPort 
        ORDER BY sequence DESC LIMIT ?`,
       parameters,
     );
-    return { items: rows.map(mapEntry).reverse(), nextCursor: null };
+    const page = rows.slice(0, limit);
+    const last = page.at(-1);
+    return {
+      items: page.map(mapEntry).reverse(),
+      nextCursor: rows.length > limit && last ? encodeEntryCursor(last.sequence) : null,
+    };
+  }
+
+  async readVisibleEntriesThrough(
+    scope: Scope,
+    threadId: string,
+    throughSequence: number,
+    runId?: string,
+    historyBoundary?: ContextHistoryBoundary,
+  ): Promise<LedgerEntryView[]> {
+    if (!(await this.getThread(scope, threadId))) throw new Error('NOT_FOUND');
+    if (historyBoundary === undefined) {
+      const rows = await this.db.queryAll<EntryRow>(
+        `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+         FROM ai_thread_entries
+         WHERE thread_id = ? AND user_id = ? AND app_id = ? AND sequence <= ?
+         ORDER BY sequence ASC`,
+        [threadId, scope.userId, scope.appId, throughSequence],
+      );
+      return rows.map(mapEntry);
+    }
+    if (!runId) throw new Error('VALIDATION_FAILED');
+    const inherited = Object.entries(historyBoundary.runThrough);
+    const clauses = ['sequence <= ?', 'run_id = ?', ...inherited.map(() => '(run_id = ? AND sequence <= ?)')];
+    const parameters: unknown[] = [
+      threadId,
+      scope.userId,
+      scope.appId,
+      throughSequence,
+      historyBoundary.baseThrough,
+      runId,
+      ...inherited.flatMap(([historyRunId, through]) => [historyRunId, through]),
+    ];
+    const rows = await this.db.queryAll<EntryRow>(
+      `SELECT id, thread_id, run_id, sequence, kind, payload_json, created_at
+       FROM ai_thread_entries
+       WHERE thread_id = ? AND user_id = ? AND app_id = ? AND sequence <= ?
+         AND (${clauses.join(' OR ')})
+       ORDER BY sequence ASC`,
+      parameters,
+    );
+    return rows.map(mapEntry);
   }
 
   async appendEntry(scope: Scope, threadId: string, entry: AppendLedgerEntry): Promise<LedgerEntryView> {

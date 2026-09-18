@@ -8,134 +8,7 @@ const MAX_TOOL_INPUT_BYTES = 32 * 1024;
 const MAX_TOOL_DEPTH = 16;
 const MAX_ARRAY_ITEMS = 1000;
 
-const jsonBytes = (value: JsonValue | ToolResult): number => Buffer.byteLength(JSON.stringify(value), 'utf8');
-
-const truncateJsonString = (value: string, maxBytes: number): string => {
-  if (maxBytes <= 2) return '';
-  if (Buffer.byteLength(JSON.stringify(value), 'utf8') <= maxBytes) return value;
-  const characters = Array.from(value);
-  let low = 0;
-  let high = characters.length;
-  let best = '';
-  while (low <= high) {
-    const middle = Math.floor((low + high) / 2);
-    const candidate = `${characters.slice(0, middle).join('')}…`;
-    if (Buffer.byteLength(JSON.stringify(candidate), 'utf8') <= maxBytes) {
-      best = candidate;
-      low = middle + 1;
-    } else {
-      high = middle - 1;
-    }
-  }
-  return best;
-};
-
-const jsonProjectionPriority = (value: JsonValue): number => {
-  if (value === null || typeof value === 'boolean' || typeof value === 'number') return 0;
-  if (typeof value === 'string') return 1;
-  if (Array.isArray(value)) return 3;
-  return 2;
-};
-
-const projectJsonValue = (value: JsonValue, maxBytes: number): JsonValue => {
-  if (maxBytes < 4) return null;
-  if (jsonBytes(value) <= maxBytes) return value;
-  if (typeof value === 'string') return truncateJsonString(value, maxBytes);
-  if (value === null || typeof value === 'boolean' || typeof value === 'number') return null;
-  if (Array.isArray(value)) {
-    const projected: JsonValue[] = [];
-    for (const item of value) {
-      const remaining = maxBytes - jsonBytes(projected) - 1;
-      if (remaining < 4) break;
-      const candidate = [...projected, projectJsonValue(item, remaining)];
-      if (jsonBytes(candidate) > maxBytes) break;
-      projected.push(candidate[candidate.length - 1]!);
-    }
-    return projected;
-  }
-  const projected: Record<string, JsonValue> = {};
-  const entries = Object.entries(value)
-    .map(([key, item], index) => ({ key, item, index }))
-    .sort((left, right) => jsonProjectionPriority(left.item) - jsonProjectionPriority(right.item) || left.index - right.index);
-  for (const { key, item } of entries) {
-    const currentBytes = jsonBytes(projected as JsonValue);
-    const keyOverhead = Buffer.byteLength(JSON.stringify(key), 'utf8') + 2;
-    const remaining = maxBytes - currentBytes - keyOverhead;
-    if (remaining < 4) continue;
-    const candidate = { ...projected, [key]: projectJsonValue(item, remaining) };
-    if (jsonBytes(candidate as JsonValue) <= maxBytes) projected[key] = candidate[key]!;
-  }
-  return projected;
-};
-
-const appendRefsWithinBudget = (
-  base: ToolResult,
-  refs: readonly string[],
-  field: 'artifactRefs' | 'evidenceRefs',
-  maxBytes: number,
-): ToolResult => {
-  let current = base;
-  for (const ref of refs) {
-    const candidate: ToolResult =
-      field === 'artifactRefs'
-        ? { ...current, artifactRefs: [...current.artifactRefs, ref] }
-        : {
-            ...current,
-            verification: { ...current.verification, evidenceRefs: [...current.verification.evidenceRefs, ref] },
-          };
-    if (jsonBytes(candidate) > maxBytes) break;
-    current = candidate;
-  }
-  return current;
-};
-
-/**
- * Bound the complete model-visible ToolResult without changing the already-known side-effect outcome.
- * Raw transport retention is a separate concern; this projection is deliberately post-execution.
- */
-export const projectToolResult = (result: ToolResult, maxOutputBytes: number): ToolResult => {
-  if (jsonBytes(result) <= maxOutputBytes) return result;
-  const minimal: ToolResult = {
-    ok: result.ok,
-    summary: '',
-    artifactRefs: [],
-    truncated: true,
-    outcome: result.outcome,
-    ...(result.errorCode ? { errorCode: result.errorCode } : {}),
-    verification: {
-      status: result.verification.status,
-      summary: '',
-      evidenceRefs: [],
-    },
-  };
-  // A ToolResult has a non-zero structural envelope. Preserve semantic truth even if a corrupted
-  // historical setting supplies a byte limit smaller than that irreducible JSON representation.
-  const effectiveLimit = Math.max(maxOutputBytes, jsonBytes(minimal));
-  let projected = appendRefsWithinBudget(minimal, result.artifactRefs, 'artifactRefs', effectiveLimit);
-  projected = appendRefsWithinBudget(projected, result.verification.evidenceRefs, 'evidenceRefs', effectiveLimit);
-
-  const summaryBudget = Math.min(4096, Math.max(32, Math.floor(effectiveLimit * 0.15)));
-  let candidate: ToolResult = { ...projected, summary: truncateJsonString(result.summary, summaryBudget) };
-  if (jsonBytes(candidate) <= effectiveLimit) projected = candidate;
-  const verificationBudget = Math.min(2048, Math.max(32, Math.floor(effectiveLimit * 0.1)));
-  candidate = {
-    ...projected,
-    verification: {
-      ...projected.verification,
-      summary: truncateJsonString(result.verification.summary, verificationBudget),
-    },
-  };
-  if (jsonBytes(candidate) <= effectiveLimit) projected = candidate;
-
-  if (result.data !== undefined) {
-    const envelopeBytes = jsonBytes(projected);
-    const dataBudget = Math.max(4, effectiveLimit - envelopeBytes - Buffer.byteLength(',"data":', 'utf8') - 2);
-    const data = projectJsonValue(result.data, dataBudget);
-    candidate = { ...projected, data };
-    if (jsonBytes(candidate) <= effectiveLimit) projected = candidate;
-  }
-  return projected;
-};
+export { projectToolResult } from './tool-result-projection';
 
 const validateJsonShape = (value: JsonValue, depth = 0): void => {
   if (depth > MAX_TOOL_DEPTH) throw new Error('TOOL_INPUT_TOO_DEEP');
@@ -266,8 +139,7 @@ export class ToolExecutor {
     });
     if (!fresh.allowed || fresh.policyRevision !== inspection.policyRevision)
       throw new Error('POLICY_REVISION_CONFLICT');
-    const result = await tool.execute(inspection, context);
-    return projectToolResult(result, context.maxOutputBytes);
+    return tool.execute(inspection, context);
   }
 
   async invoke(context: ToolContext, proposal: ToolProposal): Promise<ToolExecutionResult> {

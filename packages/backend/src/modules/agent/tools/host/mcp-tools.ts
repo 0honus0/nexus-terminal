@@ -51,6 +51,7 @@ export const createMcpTools = (
         description: `[MCP ${integration.configuration.displayName}] ${descriptor.description}`.slice(0, 1024),
         inputSchema: descriptor.inputSchema,
         riskClass: 'mutate',
+        modelExposure: 'deferred',
         capability: 'integration.mcp.invoke',
       },
       inspect: async (input: JsonValue, context: ToolContext, policyRevision: number): Promise<ToolInspection> => {

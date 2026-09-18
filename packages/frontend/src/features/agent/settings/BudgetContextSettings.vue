@@ -28,7 +28,6 @@
       maxActiveExecutionSeconds: number;
       toolTimeoutSeconds: number;
       maxToolOutputBytes: number;
-      maxRawToolBytes: number;
       maxRecallItems: number;
       maxRecallBytes: number;
     };
@@ -45,7 +44,6 @@
         maxActiveExecutionSeconds: 600,
         toolTimeoutSeconds: 30,
         maxToolOutputBytes: 32768,
-        maxRawToolBytes: 2097152,
         maxRecallItems: 3,
         maxRecallBytes: 4096,
       },
@@ -61,7 +59,6 @@
         maxActiveExecutionSeconds: 1800,
         toolTimeoutSeconds: 60,
         maxToolOutputBytes: 65536,
-        maxRawToolBytes: 10485760,
         maxRecallItems: 5,
         maxRecallBytes: 8192,
       },
@@ -76,7 +73,6 @@
         maxActiveExecutionSeconds: 3600,
         toolTimeoutSeconds: 120,
         maxToolOutputBytes: 131072,
-        maxRawToolBytes: 20971520,
         maxRecallItems: 10,
         maxRecallBytes: 16384,
       },
@@ -92,7 +88,6 @@
         maxActiveExecutionSeconds: 1800,
         toolTimeoutSeconds: 60,
         maxToolOutputBytes: 65536,
-        maxRawToolBytes: 10485760,
         maxRecallItems: 5,
         maxRecallBytes: 8192,
       },
@@ -100,7 +95,7 @@
   ]);
 
   const getFieldType = (key: string): QuantityType => {
-    if (['maxToolOutputBytes', 'maxRawToolBytes', 'maxRecallBytes'].includes(key)) return 'bytes';
+    if (['maxToolOutputBytes', 'maxRecallBytes'].includes(key)) return 'bytes';
     if (['maxActiveExecutionSeconds', 'toolTimeoutSeconds'].includes(key)) return 'seconds';
     return 'number';
   };
@@ -208,7 +203,7 @@
     {
       id: 'tools_data',
       title: '工具截断与上下文记忆',
-      keys: ['maxToolOutputBytes', 'maxRawToolBytes', 'maxRecallItems', 'maxRecallBytes'],
+      keys: ['maxToolOutputBytes', 'maxRecallItems', 'maxRecallBytes'],
     },
   ];
 </script>

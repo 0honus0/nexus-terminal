@@ -1,5 +1,4 @@
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
-import type { PluginRunnerTarget } from '../../../modules/agent/host/plugin-runner-target.port';
 import type {
   AgentWorkspaceRepositoryPort,
   CreateWorkspaceRecord,
@@ -8,13 +7,13 @@ import type {
 } from '../../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type {
   AgentWorkspaceView,
-  ToolchainPackRef,
   WorkspaceProfileView,
   WorkspaceRuntimeCommandView,
   WorkspaceStatus,
 } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { commandForReplay } from '../idempotency/command-lifecycle';
+import { decodeRunEnvironment, parseDurableJson, parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 interface WorkspaceRow {
   id: string;
@@ -68,19 +67,17 @@ const workspaceView = (row: WorkspaceRow): AgentWorkspaceView => ({
   runId: row.run_id,
   agentRuntimeId: row.agent_runtime_id,
   retained: row.retained === 1,
-  profile: {
+  profile: decodeRunEnvironment({
     kind: row.kind,
     recipeId: row.recipe_id,
     recipeRevision: row.recipe_revision,
     runtimeDigest: row.runtime_digest,
     catalogRevision: row.catalog_revision,
-    toolchain: JSON.parse(row.toolchain_json) as ToolchainPackRef[],
-    runnerPlugins: JSON.parse(row.runner_plugins_json) as PluginRunnerTarget[],
-    acpProfiles: JSON.parse(row.acp_profiles_json || '[]') as WorkspaceProfileView['acpProfiles'],
-    browserTarget: row.browser_target_json
-      ? (JSON.parse(row.browser_target_json) as WorkspaceProfileView['browserTarget'])
-      : null,
-  },
+    toolchain: parseDurableJson(row.toolchain_json),
+    runnerPlugins: parseDurableJson(row.runner_plugins_json),
+    acpProfiles: parseDurableJson(row.acp_profiles_json || '[]'),
+    browserTarget: row.browser_target_json ? parseDurableJson(row.browser_target_json) : null,
+  }),
   generation: row.generation,
   status: row.status,
   retainedManifestRef: row.retained_manifest_ref,
@@ -99,7 +96,7 @@ const commandView = (row: CommandRow): WorkspaceRuntimeCommandView => ({
   operationHash: row.operation_hash,
   generation: row.generation,
   status: row.status,
-  result: row.result_json ? (JSON.parse(row.result_json) as JsonValue) : null,
+  result: row.result_json ? parseDurableJsonValue(row.result_json) : null,
   deadlineAt: row.deadline_at,
   createdAt: row.created_at,
   completedAt: row.completed_at,

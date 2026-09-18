@@ -316,6 +316,14 @@ export class RunnerJournal {
     });
   }
 
+  cancelJob(jobId: string, error = 'WORKSPACE_JOB_CANCELLED'): void {
+    this.patchJob(jobId, {
+      status: 'cancelled',
+      error: error.slice(0, 1024),
+      completedAt: Math.floor(Date.now() / 1000),
+    });
+  }
+
   unknownJob(jobId: string, error: string): void {
     this.patchJob(jobId, {
       status: 'unknown',

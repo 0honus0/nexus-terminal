@@ -47,7 +47,13 @@
     "PASSKEY_DELETE_UNAUTHORIZED": "Passkey Deletion Unauthorized",
     "PASSKEY_NAME_UPDATED": "Passkey Name Updated",
     "PASSKEY_NAME_UPDATE_UNAUTHORIZED": "Passkey Name Update Unauthorized",
-    "IP_BLOCKED": "IP Address Blocked"
+    "IP_BLOCKED": "IP Address Blocked",
+    "AGENT_RUN_COMPLETED": "Agent Run Completed",
+    "AGENT_RUN_FAILED": "Agent Run Failed",
+    "AGENT_RUN_INTERRUPTED": "Agent Run Interrupted",
+    "AGENT_APPROVAL_REQUIRED": "Agent Approval Required",
+    "AGENT_INPUT_REQUIRED": "Agent Input Required",
+    "AGENT_ATTENTION_REQUIRED": "Agent Attention Required"
   },
   "notification": {
     "email": {

@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
-import type { JsonValue } from '../../../modules/agent/agent.types';
 import type {
   AppIntentReceipt,
   AppIntentReceiptCreate,
   AppIntentRepositoryPort,
 } from '../../../modules/agent/host/app-intent.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { decodeDurableStringArray, parseDurableJson, parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 interface ReceiptRow {
   id: string;
@@ -28,8 +28,8 @@ const mapReceipt = (row: ReceiptRow): AppIntentReceipt => ({
   receiverAppId: row.receiver_app_id,
   intentId: row.intent_id,
   schemaVersion: row.schema_version,
-  input: JSON.parse(row.input_json) as JsonValue,
-  artifactIds: JSON.parse(row.artifact_ids_json) as string[],
+  input: parseDurableJsonValue(row.input_json),
+  artifactIds: decodeDurableStringArray(parseDurableJson(row.artifact_ids_json), 4096),
   createdAt: row.created_at,
   expiresAt: row.expires_at,
   revokedAt: row.revoked_at,

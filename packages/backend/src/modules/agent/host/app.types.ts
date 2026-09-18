@@ -1,4 +1,5 @@
 import type { JsonValue, Scope } from '../agent.types';
+import type { AgentModelCapability } from '../ai/model.types';
 
 export const AGENT_CAPABILITIES = [
   'ai.model.use',
@@ -44,7 +45,7 @@ export interface AgentAppAgentDefinition {
   version: string;
   displayName: string;
   description: string;
-  requiredModelCapabilities: string[];
+  requiredModelCapabilities: AgentModelCapability[];
 }
 
 export interface AgentAppManifest {

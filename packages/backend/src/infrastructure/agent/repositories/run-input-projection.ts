@@ -1,6 +1,12 @@
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { PendingRunInput } from '../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import {
+  decodeDurableStringArray,
+  durableRecord,
+  durableString,
+  parseDurableJson,
+} from '../runtime/durable-state-decoders';
 
 interface InputRow {
   id: string;
@@ -14,20 +20,13 @@ interface MutationEventRow {
   payload_json: string;
 }
 
-interface MutationPayload {
-  inputId?: unknown;
-  beforeInputId?: unknown;
-}
-
 const mapInput = (row: InputRow): PendingRunInput => {
-  const payload = JSON.parse(row.payload_json) as { text?: unknown; artifactRefs?: unknown };
+  const payload = durableRecord(parseDurableJson(row.payload_json));
   return {
     id: row.id,
     sequence: row.sequence,
-    text: typeof payload.text === 'string' ? payload.text : '',
-    artifactRefs: Array.isArray(payload.artifactRefs)
-      ? payload.artifactRefs.filter((value): value is string => typeof value === 'string')
-      : [],
+    text: durableString(payload.text) as string,
+    artifactRefs: decodeDurableStringArray(payload.artifactRefs, 4096),
     createdAt: row.created_at,
   };
 };
@@ -60,24 +59,25 @@ export const projectRunUserInputs = async (
   const byId = new Map(rows.map((row) => [row.id, mapInput(row)]));
   const orderedIds = rows.map((row) => row.id);
   for (const event of events) {
-    const payload = JSON.parse(event.payload_json) as MutationPayload;
-    if (typeof payload.inputId !== 'string' || !byId.has(payload.inputId)) continue;
-    const sourceIndex = orderedIds.indexOf(payload.inputId);
+    const payload = durableRecord(parseDurableJson(event.payload_json));
+    const inputId = durableString(payload.inputId) as string;
+    const beforeInputId = payload.beforeInputId === null ? null : durableString(payload.beforeInputId) as string;
+    if (!byId.has(inputId)) continue;
+    const sourceIndex = orderedIds.indexOf(inputId);
     if (sourceIndex < 0) continue;
     orderedIds.splice(sourceIndex, 1);
     if (event.type === 'input.pending_removed') continue;
-    if (payload.beforeInputId === null || payload.beforeInputId === undefined) {
-      orderedIds.push(payload.inputId);
+    if (beforeInputId === null) {
+      orderedIds.push(inputId);
       continue;
     }
-    if (typeof payload.beforeInputId !== 'string') continue;
-    const targetIndex = orderedIds.indexOf(payload.beforeInputId);
+    const targetIndex = orderedIds.indexOf(beforeInputId);
     if (targetIndex < 0) {
       // The target may have been removed by a later queue mutation. Keep deterministic order.
-      orderedIds.push(payload.inputId);
+      orderedIds.push(inputId);
       continue;
     }
-    orderedIds.splice(targetIndex, 0, payload.inputId);
+    orderedIds.splice(targetIndex, 0, inputId);
   }
   return orderedIds.map((id) => byId.get(id)!).filter(Boolean);
 };

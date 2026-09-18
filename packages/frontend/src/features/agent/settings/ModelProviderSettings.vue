@@ -27,6 +27,7 @@
     discoveries: Record<string, AgentDiscoveredProviderModel[]>;
     defaultProviderId: string | null;
     defaultModelId: string | null;
+    fallbackModels: Array<{ providerId: string; modelId: string }>;
   }>();
 
   const emit = defineEmits<{
@@ -34,6 +35,7 @@
     protocol: [provider: AgentProviderView, protocol: AgentProviderView['protocol']];
     discover: [provider: AgentProviderView];
     defaultModel: [providerId: string, modelId: string];
+    fallbackModels: [models: Array<{ providerId: string; modelId: string }>];
     delete: [provider: AgentProviderView];
   }>();
 
@@ -117,6 +119,8 @@
     contextWindow: 128000,
     maxOutputTokens: 4096,
     supportsTools: true,
+    supportsImageInput: false,
+    supportsFileInput: false,
   });
 
   const openAddModal = () => {
@@ -128,6 +132,8 @@
     form.contextWindow = 128000;
     form.maxOutputTokens = 4096;
     form.supportsTools = true;
+    form.supportsImageInput = false;
+    form.supportsFileInput = false;
     modalError.value = '';
     modalTestResult.value = null;
     createdProviderId.value = null;
@@ -206,6 +212,8 @@
               contextWindow: form.contextWindow,
               maxOutputTokens: form.maxOutputTokens,
               supportsTools: form.supportsTools,
+              supportsImageInput: form.supportsImageInput,
+              supportsFileInput: form.supportsFileInput,
             },
           ],
           enabled: true,
@@ -280,6 +288,8 @@
             contextWindow: form.contextWindow,
             maxOutputTokens: form.maxOutputTokens,
             supportsTools: form.supportsTools,
+            supportsImageInput: form.supportsImageInput,
+            supportsFileInput: form.supportsFileInput,
           },
         ],
         enabled: true,
@@ -398,46 +408,62 @@
     }
   };
 
-  const discoveredModelConfig = (provider: AgentProviderView, modelId: string): AgentProviderView['models'][number] => {
+  const discoveredModelConfig = (
+    provider: AgentProviderView,
+    modelId: string,
+  ): AgentProviderView['models'][number] | null => {
     const discovered = (props.discoveries[provider.id] ?? []).find((model) => model.id === modelId);
-    const defaults = discovered?.registryDefaults;
-    const hasRegistryDefaults =
-      defaults?.contextWindow !== undefined &&
-      defaults.maxOutputTokens !== undefined &&
-      defaults.supportsTools !== undefined;
-    const contextWindow = hasRegistryDefaults ? defaults.contextWindow! : 128000;
-    const maxOutputTokens = hasRegistryDefaults ? defaults.maxOutputTokens! : 4096;
-    const supportsTools = hasRegistryDefaults ? defaults.supportsTools! : true;
+    const registry = discovered?.registryDefaults;
+    const providerObservation = discovered?.providerCapabilities;
+    const live = providerObservation?.capabilities;
+    const contextWindow = live?.contextWindow ?? registry?.contextWindow;
+    const maxOutputTokens = live?.maxOutputTokens ?? registry?.maxOutputTokens;
+    const supportsTools = live?.supportsTools ?? registry?.supportsTools;
+    if (contextWindow === undefined || maxOutputTokens === undefined || supportsTools === undefined) return null;
+
+    const sourceFor = (
+      field: 'contextWindow' | 'maxOutputTokens' | 'supportsTools' | 'supportsImageInput' | 'supportsFileInput',
+    ): 'provider' | 'registry' | undefined =>
+      live?.[field] !== undefined ? 'provider' : registry?.[field] !== undefined ? 'registry' : undefined;
+    const reasoning = live?.reasoning ?? registry?.reasoning;
+    const reasoningSource = live?.reasoning ? ('provider' as const) : registry?.reasoning ? ('registry' as const) : undefined;
+
     return {
       id: modelId,
       contextWindow,
       maxOutputTokens,
       supportsTools,
+      supportsImageInput: live?.supportsImageInput ?? registry?.supportsImageInput ?? false,
+      supportsFileInput: live?.supportsFileInput ?? registry?.supportsFileInput ?? false,
       capabilitySources: {
-        contextWindow: hasRegistryDefaults ? 'registry' : 'manual',
-        maxOutputTokens: hasRegistryDefaults ? 'registry' : 'manual',
-        supportsTools: hasRegistryDefaults ? 'registry' : 'manual',
-        ...(defaults?.reasoning ? { reasoning: 'registry' as const } : {}),
+        contextWindow: sourceFor('contextWindow')!,
+        maxOutputTokens: sourceFor('maxOutputTokens')!,
+        supportsTools: sourceFor('supportsTools')!,
+        ...(sourceFor('supportsImageInput') ? { supportsImageInput: sourceFor('supportsImageInput')! } : {}),
+        ...(sourceFor('supportsFileInput') ? { supportsFileInput: sourceFor('supportsFileInput')! } : {}),
+        ...(reasoningSource ? { reasoning: reasoningSource } : {}),
       },
-      ...(defaults ? { registryDefaults: defaults } : {}),
-      ...(defaults?.reasoning
+      ...(registry ? { registryDefaults: registry } : {}),
+      ...(providerObservation ? { providerCapabilities: providerObservation } : {}),
+      ...(reasoning
         ? {
-            reasoningEfforts: [...defaults.reasoning.supportedEfforts],
-            ...(defaults.reasoning.defaultEffort === undefined
-              ? {}
-              : { defaultReasoningEffort: defaults.reasoning.defaultEffort }),
-            reasoningSource: 'registry' as const,
-            ...(defaults.reasoning.mandatory === undefined ? {} : { reasoningMandatory: defaults.reasoning.mandatory }),
-            ...(defaults.reasoning.supportsMaxTokens === undefined
-              ? {}
-              : { reasoningSupportsMaxTokens: defaults.reasoning.supportsMaxTokens }),
+            reasoningEfforts: [...reasoning.supportedEfforts],
+            ...(reasoning.defaultEffort === undefined ? {} : { defaultReasoningEffort: reasoning.defaultEffort }),
+            ...(reasoningSource ? { reasoningSource } : {}),
+            ...(reasoning.mandatory === undefined ? {} : { reasoningMandatory: reasoning.mandatory }),
           }
         : {}),
     };
   };
 
   const capabilityEditor = ref<{ providerId: string; modelId: string } | null>(null);
-  const capabilityForm = reactive({ contextWindow: 1, maxOutputTokens: 1, supportsTools: false });
+  const capabilityForm = reactive({
+    contextWindow: 1,
+    maxOutputTokens: 1,
+    supportsTools: false,
+    supportsImageInput: false,
+    supportsFileInput: false,
+  });
 
   const capabilityEditorProvider = computed(() =>
     capabilityEditor.value
@@ -455,6 +481,8 @@
     capabilityForm.contextWindow = model.contextWindow;
     capabilityForm.maxOutputTokens = model.maxOutputTokens;
     capabilityForm.supportsTools = model.supportsTools;
+    capabilityForm.supportsImageInput = model.supportsImageInput;
+    capabilityForm.supportsFileInput = model.supportsFileInput;
   };
 
   const closeCapabilityEditor = (): void => {
@@ -462,24 +490,59 @@
     capabilityEditor.value = null;
   };
 
-  const restoreCapabilityField = (field: 'contextWindow' | 'maxOutputTokens' | 'supportsTools'): void => {
-    const defaults = capabilityEditorModel.value?.registryDefaults;
-    if (!defaults || defaults[field] === undefined) return;
-    if (field === 'supportsTools') capabilityForm.supportsTools = Boolean(defaults.supportsTools);
-    else capabilityForm[field] = Number(defaults[field]);
+  type CapabilityField =
+    | 'contextWindow'
+    | 'maxOutputTokens'
+    | 'supportsTools'
+    | 'supportsImageInput'
+    | 'supportsFileInput';
+
+  const capabilityBaseline = (field: CapabilityField): number | boolean | undefined => {
+    const model = capabilityEditorModel.value;
+    if (!model) return undefined;
+    return model.providerCapabilities?.capabilities[field] ?? model.registryDefaults?.[field];
+  };
+
+  const capabilityBaselineSource = (field: CapabilityField): 'provider' | 'registry' | undefined => {
+    const model = capabilityEditorModel.value;
+    if (!model) return undefined;
+    if (model.providerCapabilities?.capabilities[field] !== undefined) return 'provider';
+    if (model.registryDefaults?.[field] !== undefined) return 'registry';
+    return undefined;
+  };
+
+  const restoreCapabilityField = (field: CapabilityField): void => {
+    const baseline = capabilityBaseline(field);
+    if (baseline === undefined) return;
+    if (field === 'supportsTools') capabilityForm.supportsTools = Boolean(baseline);
+    else if (field === 'supportsImageInput') capabilityForm.supportsImageInput = Boolean(baseline);
+    else if (field === 'supportsFileInput') capabilityForm.supportsFileInput = Boolean(baseline);
+    else capabilityForm[field] = Number(baseline);
   };
 
   const restoreAllCapabilities = (): void => {
     restoreCapabilityField('contextWindow');
     restoreCapabilityField('maxOutputTokens');
     restoreCapabilityField('supportsTools');
+    restoreCapabilityField('supportsImageInput');
+    restoreCapabilityField('supportsFileInput');
   };
 
-  const capabilityFieldIsDefault = (field: 'contextWindow' | 'maxOutputTokens' | 'supportsTools'): boolean => {
-    const defaults = capabilityEditorModel.value?.registryDefaults;
-    if (!defaults || defaults[field] === undefined) return false;
-    return capabilityForm[field] === defaults[field];
+  const capabilityFieldHasBaseline = (field: CapabilityField): boolean => capabilityBaseline(field) !== undefined;
+
+  const capabilityFieldIsDefault = (field: CapabilityField): boolean => {
+    const baseline = capabilityBaseline(field);
+    return baseline !== undefined && capabilityForm[field] === baseline;
   };
+
+  const capabilitySourceLabel = (field: CapabilityField): string => {
+    if (!capabilityFieldIsDefault(field)) return t('agent.settings.providers.manualOverride');
+    return capabilityBaselineSource(field) === 'provider'
+      ? t('agent.settings.providers.providerLive')
+      : t('agent.settings.providers.registryDefault');
+  };
+
+  const formatCapabilityTimestamp = (value: number): string => new Date(value * 1000).toLocaleString();
 
   const saveCapabilities = async (): Promise<void> => {
     const provider = capabilityEditorProvider.value;
@@ -502,6 +565,8 @@
             contextWindow: capabilityForm.contextWindow,
             maxOutputTokens: capabilityForm.maxOutputTokens,
             supportsTools: capabilityForm.supportsTools,
+            supportsImageInput: capabilityForm.supportsImageInput,
+            supportsFileInput: capabilityForm.supportsFileInput,
           }
         : candidate,
     );
@@ -516,8 +581,16 @@
     isSavingModels[provider.id] = true;
     try {
       const newModels = available.map((model) => discoveredModelConfig(provider, model.id));
+      if (newModels.some((model) => model === null)) {
+        feedback.notifyError(t('agent.settings.providers.capabilityUnavailable'));
+        return;
+      }
       const noticeAdded = t('agent.settings.providers.saveNoticeAdded', { count: available.length });
-      const saved = await updateModels(provider, [...provider.models, ...newModels], noticeAdded);
+      const saved = await updateModels(
+        provider,
+        [...provider.models, ...(newModels as AgentProviderView['models'])],
+        noticeAdded,
+      );
       if (!saved) return;
       selectedDiscovered[provider.id] = {};
       flashNotice(provider.id, noticeAdded);
@@ -534,8 +607,16 @@
     isSavingModels[provider.id] = true;
     try {
       const newModels = selectedIds.map((id) => discoveredModelConfig(provider, id));
+      if (newModels.some((model) => model === null)) {
+        feedback.notifyError(t('agent.settings.providers.capabilityUnavailable'));
+        return;
+      }
       const noticeSelected = t('agent.settings.providers.saveNoticeAdded', { count: selectedIds.length });
-      const saved = await updateModels(provider, [...provider.models, ...newModels], noticeSelected);
+      const saved = await updateModels(
+        provider,
+        [...provider.models, ...(newModels as AgentProviderView['models'])],
+        noticeSelected,
+      );
       if (!saved) return;
       selectedDiscovered[provider.id] = {};
       flashNotice(provider.id, noticeSelected);
@@ -549,6 +630,10 @@
     isSavingModels[provider.id] = true;
     try {
       const newModel = discoveredModelConfig(provider, modelId);
+      if (!newModel) {
+        feedback.notifyError(t('agent.settings.providers.capabilityUnavailable'));
+        return;
+      }
       const noticeSingle = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
       const saved = await updateModels(provider, [...provider.models, newModel], noticeSingle);
       if (!saved) return;
@@ -666,6 +751,10 @@
     isSavingModels[provider.id] = true;
     try {
       const newModel = discoveredModelConfig(provider, id);
+      if (!newModel) {
+        feedback.notifyError(t('agent.settings.providers.capabilityUnavailable'));
+        return;
+      }
       const noticeManual = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
       const saved = await updateModels(provider, [...provider.models, newModel], noticeManual);
       if (!saved) return;
@@ -740,6 +829,14 @@
         })),
       ),
   );
+
+  const fallbackModelKeys = computed(() => new Set(props.fallbackModels.map((item) => `${item.providerId} ${item.modelId}`)));
+  const toggleFallbackModel = (providerId: string, modelId: string) => {
+    const exists = props.fallbackModels.some((item) => item.providerId === providerId && item.modelId === modelId);
+    emit('fallbackModels', exists
+      ? props.fallbackModels.filter((item) => item.providerId !== providerId || item.modelId !== modelId)
+      : [...props.fallbackModels, { providerId, modelId }].slice(0, 8));
+  };
 
   const defaultModelKey = computed(() =>
     props.defaultProviderId && props.defaultModelId ? `${props.defaultProviderId}\u0000${props.defaultModelId}` : '',
@@ -945,6 +1042,19 @@
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-border/70 bg-header/20 p-3.5">
+        <div class="mb-2 text-xs font-semibold text-foreground">Fallback chain</div>
+        <div class="mb-3 text-[11px] text-text-secondary">按顺序勾选备用模型；新 Run 会冻结兼容 route，运行中设置变更不会改写既有 Run。</div>
+        <div class="flex flex-wrap gap-2">
+          <button v-for="option in modelOptions.filter((item) => item.key !== defaultModelKey)" :key="`fallback-${option.key}`" type="button"
+            class="rounded-lg border px-2.5 py-1.5 text-[11px] transition-all"
+            :class="fallbackModelKeys.has(option.key) ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border/70 text-text-secondary hover:text-foreground'"
+            :disabled="busy" @click="toggleFallbackModel(option.provider.id, option.model.id)">
+            {{ option.model.id }} · {{ option.provider.displayName }}
+          </button>
         </div>
       </div>
 
@@ -1589,10 +1699,20 @@
               <i class="fa-solid fa-cubes text-primary text-[10px]"></i>
               <span>{{ $t('agent.settings.providers.initialModel') }}</span>
             </span>
-            <label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none">
-              <input v-model="form.supportsTools" type="checkbox" class="rounded accent-primary" />
-              <span>{{ $t('agent.settings.providers.tools') }}</span>
-            </label>
+            <div class="flex flex-wrap items-center justify-end gap-2">
+              <label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none">
+                <input v-model="form.supportsTools" type="checkbox" class="rounded accent-primary" />
+                <span>{{ $t('agent.settings.providers.tools') }}</span>
+              </label>
+              <label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none">
+                <input v-model="form.supportsImageInput" type="checkbox" class="rounded accent-primary" />
+                <span>{{ $t('agent.settings.providers.imageInput') }}</span>
+              </label>
+              <label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none">
+                <input v-model="form.supportsFileInput" type="checkbox" class="rounded accent-primary" />
+                <span>{{ $t('agent.settings.providers.fileInput') }}</span>
+              </label>
+            </div>
           </div>
 
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
@@ -1799,6 +1919,18 @@
                   Tools
                 </span>
                 <span
+                  v-if="model.supportsImageInput"
+                  class="rounded bg-sky-500/10 text-sky-600 dark:text-sky-400 border border-sky-500/20 px-1.5 py-0.2 font-medium"
+                >
+                  {{ $t('agent.settings.providers.imageInput') }}
+                </span>
+                <span
+                  v-if="model.supportsFileInput"
+                  class="rounded bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 px-1.5 py-0.2 font-medium"
+                >
+                  {{ $t('agent.settings.providers.fileInput') }}
+                </span>
+                <span
                   v-if="model.reasoningEfforts?.length"
                   class="inline-flex items-center gap-1 rounded bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.2 font-medium"
                 >
@@ -1939,6 +2071,28 @@
       <div>
         <div class="font-mono text-sm font-semibold text-foreground">{{ capabilityEditorModel.id }}</div>
         <div class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.providers.capabilityDescription') }}</div>
+        <div
+          v-if="capabilityEditorModel.providerCapabilities"
+          class="mt-2 rounded-lg border border-border/70 bg-header/20 px-3 py-2 text-[11px] text-text-secondary"
+        >
+          {{
+            $t('agent.settings.providers.providerMetadata', {
+              source: capabilityEditorModel.providerCapabilities.source,
+              version: capabilityEditorModel.providerCapabilities.sourceVersion,
+              updatedAt: formatCapabilityTimestamp(capabilityEditorModel.providerCapabilities.updatedAt),
+            })
+          }}
+        </div>
+        <div
+          v-if="capabilityEditorModel.capabilityConflicts?.length"
+          class="mt-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[11px] text-warning"
+        >
+          {{
+            $t('agent.settings.providers.capabilityConflict', {
+              fields: capabilityEditorModel.capabilityConflicts.join(', '),
+            })
+          }}
+        </div>
       </div>
 
       <div class="space-y-3">
@@ -1947,14 +2101,10 @@
             <span class="text-xs font-medium text-foreground">{{ $t('agent.settings.providers.contextWindow') }}</span>
             <div class="flex items-center gap-2 text-[10px]">
               <span :class="capabilityFieldIsDefault('contextWindow') ? 'text-primary' : 'text-text-secondary'">
-                {{
-                  capabilityFieldIsDefault('contextWindow')
-                    ? $t('agent.settings.providers.registryDefault')
-                    : $t('agent.settings.providers.manualOverride')
-                }}
+                {{ capabilitySourceLabel('contextWindow') }}
               </span>
               <button
-                v-if="capabilityEditorModel.registryDefaults?.contextWindow !== undefined"
+                v-if="capabilityFieldHasBaseline('contextWindow')"
                 type="button"
                 class="text-primary hover:underline disabled:opacity-40"
                 :disabled="capabilityFieldIsDefault('contextWindow')"
@@ -1980,14 +2130,10 @@
             }}</span>
             <div class="flex items-center gap-2 text-[10px]">
               <span :class="capabilityFieldIsDefault('maxOutputTokens') ? 'text-primary' : 'text-text-secondary'">
-                {{
-                  capabilityFieldIsDefault('maxOutputTokens')
-                    ? $t('agent.settings.providers.registryDefault')
-                    : $t('agent.settings.providers.manualOverride')
-                }}
+                {{ capabilitySourceLabel('maxOutputTokens') }}
               </span>
               <button
-                v-if="capabilityEditorModel.registryDefaults?.maxOutputTokens !== undefined"
+                v-if="capabilityFieldHasBaseline('maxOutputTokens')"
                 type="button"
                 class="text-primary hover:underline disabled:opacity-40"
                 :disabled="capabilityFieldIsDefault('maxOutputTokens')"
@@ -2014,18 +2160,60 @@
             </label>
             <div class="flex items-center gap-2 text-[10px]">
               <span :class="capabilityFieldIsDefault('supportsTools') ? 'text-primary' : 'text-text-secondary'">
-                {{
-                  capabilityFieldIsDefault('supportsTools')
-                    ? $t('agent.settings.providers.registryDefault')
-                    : $t('agent.settings.providers.manualOverride')
-                }}
+                {{ capabilitySourceLabel('supportsTools') }}
               </span>
               <button
-                v-if="capabilityEditorModel.registryDefaults?.supportsTools !== undefined"
+                v-if="capabilityFieldHasBaseline('supportsTools')"
                 type="button"
                 class="text-primary hover:underline disabled:opacity-40"
                 :disabled="capabilityFieldIsDefault('supportsTools')"
                 @click="restoreCapabilityField('supportsTools')"
+              >
+                {{ $t('agent.settings.providers.restoreDefault') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5">
+          <div class="flex items-center justify-between gap-3">
+            <label class="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
+              <input v-model="capabilityForm.supportsImageInput" type="checkbox" class="rounded accent-primary" />
+              <span>{{ $t('agent.settings.providers.imageInput') }}</span>
+            </label>
+            <div class="flex items-center gap-2 text-[10px]">
+              <span :class="capabilityFieldIsDefault('supportsImageInput') ? 'text-primary' : 'text-text-secondary'">
+                {{ capabilitySourceLabel('supportsImageInput') }}
+              </span>
+              <button
+                v-if="capabilityFieldHasBaseline('supportsImageInput')"
+                type="button"
+                class="text-primary hover:underline disabled:opacity-40"
+                :disabled="capabilityFieldIsDefault('supportsImageInput')"
+                @click="restoreCapabilityField('supportsImageInput')"
+              >
+                {{ $t('agent.settings.providers.restoreDefault') }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5">
+          <div class="flex items-center justify-between gap-3">
+            <label class="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
+              <input v-model="capabilityForm.supportsFileInput" type="checkbox" class="rounded accent-primary" />
+              <span>{{ $t('agent.settings.providers.fileInput') }}</span>
+            </label>
+            <div class="flex items-center gap-2 text-[10px]">
+              <span :class="capabilityFieldIsDefault('supportsFileInput') ? 'text-primary' : 'text-text-secondary'">
+                {{ capabilitySourceLabel('supportsFileInput') }}
+              </span>
+              <button
+                v-if="capabilityFieldHasBaseline('supportsFileInput')"
+                type="button"
+                class="text-primary hover:underline disabled:opacity-40"
+                :disabled="capabilityFieldIsDefault('supportsFileInput')"
+                @click="restoreCapabilityField('supportsFileInput')"
               >
                 {{ $t('agent.settings.providers.restoreDefault') }}
               </button>
@@ -2039,7 +2227,15 @@
         >
           <div class="flex items-center justify-between gap-2">
             <span class="font-medium text-foreground">{{ $t('agent.settings.providers.reasoningCapability') }}</span>
-            <span class="text-[10px] text-primary">{{ $t('agent.settings.providers.registryManaged') }}</span>
+            <span class="text-[10px] text-primary">
+              {{
+                capabilityEditorModel.reasoningSource === 'provider'
+                  ? $t('agent.settings.providers.providerLive')
+                  : capabilityEditorModel.reasoningSource === 'manual'
+                    ? $t('agent.settings.providers.manualOverride')
+                    : $t('agent.settings.providers.registryManaged')
+              }}
+            </span>
           </div>
           <div class="mt-1 font-mono text-[11px] text-text-secondary">
             {{ capabilityEditorModel.reasoningEfforts.join(' · ') }}
@@ -2051,7 +2247,7 @@
     <template #footer>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <button
-          v-if="capabilityEditorModel?.registryDefaults"
+          v-if="capabilityEditorModel?.providerCapabilities || capabilityEditorModel?.registryDefaults"
           type="button"
           class="rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-primary hover:bg-header disabled:opacity-50"
           :disabled="busy"

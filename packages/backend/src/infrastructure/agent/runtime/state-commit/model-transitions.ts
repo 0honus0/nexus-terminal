@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   BeginModelStepCommand,
   BeginModelStepResult,
+  ContinueModelStepForCompletionGateCommand,
   DurableEventInput,
   ParkModelStepCommand,
   PauseModelStepForBudgetCommand,
@@ -11,9 +12,12 @@ import type {
   StateCommitResult,
   SupersedeModelStepCommand,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
+import { encodeModelProviderContinuation } from '../../../../modules/agent/ai/model-continuation';
+import type { ModelRef } from '../../../../modules/agent/ai/model.types';
 import type { RunUsage } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
+import { parseRunUsage } from '../durable-state-decoders';
 import {
   allocateHostEvent,
   appendEvents,
@@ -22,6 +26,7 @@ import {
   summaryPayload,
   updateAppLiveCount,
   usageWithDelta,
+  usageWithProviderContext,
 } from './transaction-primitives';
 
 export const beginModelStepTransition = async (
@@ -91,14 +96,17 @@ export const beginModelStepTransition = async (
     [command.runId],
   );
   const consumedInputSequence = latestInput?.sequence ?? row.consumed_input_sequence;
-  const currentUsage = JSON.parse(row.usage_json) as RunUsage;
+  const currentUsage = parseRunUsage(row.usage_json);
   const nextUsage: RunUsage = {
     ...currentUsage,
     context: {
       inputTokens: command.estimatedInputTokens,
+      heuristicInputTokens: command.heuristicInputTokens ?? command.estimatedInputTokens,
       reservedOutputTokens: command.reservedOutputTokens,
       contextWindowTokens: command.contextWindowTokens,
-      source: 'estimated',
+      source: command.contextSource ?? 'estimated',
+      ...(command.model ? { model: command.model } : {}),
+      ...(command.contextEpoch ? { contextEpoch: command.contextEpoch } : {}),
       updatedAt: command.now,
     },
   };
@@ -157,13 +165,14 @@ export const parkModelStepTransition = async (
   }
   await tx.execute(
     `UPDATE agent_model_attempts SET status = 'completed', input_tokens = ?, output_tokens = ?,
-     cached_input_tokens = ?, estimated = ?, error_code = NULL, completed_at = ?
+     cached_input_tokens = ?, estimated = ?, continuation_json = ?, error_code = NULL, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       command.inputTokens,
       command.outputTokens,
       command.cachedInputTokens,
       command.estimatedUsage ? 1 : 0,
+      command.providerContinuation ? encodeModelProviderContinuation(command.providerContinuation) : null,
       command.now,
       command.attemptId,
     ],
@@ -191,6 +200,7 @@ export const parkModelStepTransition = async (
           runId: command.runId,
           kind: 'assistant_message',
           payload: {
+            modelStepId: command.stepId,
             text: command.assistantText,
             usage:
               command.inputTokens !== undefined || command.outputTokens !== undefined
@@ -237,12 +247,17 @@ export const parkModelStepTransition = async (
      WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND status = 'running'`,
     [
       JSON.stringify(
-        usageWithDelta(row, {
-          inputTokens: command.inputTokens,
-          outputTokens: command.outputTokens,
-          cachedInputTokens: command.cachedInputTokens,
-          steps: 1,
-        }),
+        usageWithProviderContext(
+          usageWithDelta(row, {
+            inputTokens: command.inputTokens,
+            outputTokens: command.outputTokens,
+            cachedInputTokens: command.cachedInputTokens,
+            steps: 1,
+          }),
+          command.inputTokens,
+          command.estimatedUsage,
+          command.now,
+        ),
       ),
       activeDelta,
       nextExecuting,
@@ -263,9 +278,138 @@ export const parkModelStepTransition = async (
   return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
 };
 
+export const continueModelStepForCompletionGateTransition = async (
+  tx: RelationalDatabase,
+  command: ContinueModelStepForCompletionGateCommand,
+): Promise<StateCommitResult> => {
+  if (!command.notice || Buffer.byteLength(command.notice, 'utf8') > 4096) throw new Error('VALIDATION_FAILED');
+  const row = await tx.queryOne<RunRow>(
+    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+    [command.runId, command.scope.userId, command.scope.appId],
+  );
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.version < command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
+  const step = await tx.queryOne<{ status: string }>(
+    `SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'model'`,
+    [command.stepId, command.runId, command.runtimeId],
+  );
+  const attempt = await tx.queryOne<{ status: string }>(
+    `SELECT a.status FROM agent_model_attempts a JOIN agent_steps s ON s.id = a.step_id
+     WHERE a.id = ? AND a.step_id = ? AND s.run_id = ?`,
+    [command.attemptId, command.stepId, command.runId],
+  );
+  if (!step || step.status !== 'running' || !attempt || attempt.status !== 'streaming') {
+    throw new Error('ATTEMPT_STATE_CONFLICT');
+  }
+  await tx.execute(
+    `UPDATE agent_model_attempts SET status = 'completed', input_tokens = ?, output_tokens = ?,
+     cached_input_tokens = ?, estimated = ?, continuation_json = ?, error_code = NULL, completed_at = ?
+     WHERE id = ? AND status = 'streaming'`,
+    [
+      command.inputTokens,
+      command.outputTokens,
+      command.cachedInputTokens,
+      command.estimatedUsage ? 1 : 0,
+      command.providerContinuation ? encodeModelProviderContinuation(command.providerContinuation) : null,
+      command.now,
+      command.attemptId,
+    ],
+  );
+  await tx.execute(
+    `UPDATE agent_steps SET status = 'completed', completed_at = ?
+     WHERE id = ? AND run_id = ? AND status = 'running'`,
+    [command.now, command.stepId, command.runId],
+  );
+  const runtimeChanged = await tx.execute(
+    `UPDATE agent_runtimes SET status = 'running', schedule_state = 'executing', updated_at = ?
+     WHERE id = ? AND run_id = ? AND status = 'running'`,
+    [command.now, command.runtimeId, command.runId],
+  );
+  if (runtimeChanged.changes !== 1) throw new Error('RUNTIME_NOT_SCHEDULABLE');
+  const ledgerCursor = await appendLedger(
+    tx,
+    row,
+    [
+      {
+        id: command.assistantEntryId,
+        runId: command.runId,
+        kind: 'assistant_message',
+        payload: {
+          modelStepId: command.stepId,
+          text: command.assistantText,
+          usage: {
+            inputTokens: command.inputTokens,
+            outputTokens: command.outputTokens,
+            cachedInputTokens: command.cachedInputTokens,
+            estimatedUsage: command.estimatedUsage,
+          },
+        },
+      },
+      {
+        id: command.noticeEntryId,
+        runId: command.runId,
+        kind: 'system_notice',
+        payload: { kind: 'completion_gate', reasonCode: command.reasonCode, text: command.notice },
+      },
+    ],
+    command.now,
+  );
+  const events: DurableEventInput[] = [
+    {
+      type: 'model.completed',
+      payload: {
+        stepId: command.stepId,
+        attemptId: command.attemptId,
+        runtimeId: command.runtimeId,
+        finishReason: command.finishReason,
+        inputTokens: command.inputTokens,
+        outputTokens: command.outputTokens,
+      },
+    },
+    {
+      type: 'completion.gate_blocked',
+      payload: { runtimeId: command.runtimeId, reasonCode: command.reasonCode },
+    },
+  ];
+  const committedEvents = await appendEvents(tx, row, events, command.now);
+  const updatedRow = await patchRun(
+    tx,
+    row,
+    {
+      usage: usageWithProviderContext(
+        usageWithDelta(row, {
+          inputTokens: command.inputTokens,
+          outputTokens: command.outputTokens,
+          cachedInputTokens: command.cachedInputTokens,
+          steps: 1,
+        }),
+        command.inputTokens,
+        command.estimatedUsage,
+        command.now,
+      ),
+    },
+    events.length,
+    command.now,
+  );
+  const run = mapRunRow(updatedRow);
+  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+  return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
+};
+
+interface RetryModelStepTransitionCommand extends RetryModelStepCommand {
+  nextModel?: ModelRef;
+  routeChange?: { from: ModelRef; to: ModelRef; routeIndex: number };
+  estimatedInputTokens?: number;
+  heuristicInputTokens?: number;
+  contextSource?: 'estimated' | 'anchored_estimate';
+  reservedOutputTokens?: number;
+  contextWindowTokens?: number;
+  contextEpoch?: string;
+}
+
 export const retryModelStepTransition = async (
   tx: RelationalDatabase,
-  command: RetryModelStepCommand,
+  command: RetryModelStepTransitionCommand,
 ): Promise<RetryModelStepResult> => {
   const row = await tx.queryOne<RunRow>(
     `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
@@ -302,6 +446,15 @@ export const retryModelStepTransition = async (
   );
   if (closed.changes !== 1) throw new Error('ATTEMPT_STATE_CONFLICT');
 
+  if (command.nextModel) {
+    const updatedRuntime = await tx.execute(
+      `UPDATE agent_runtimes SET model_ref_json = ?, updated_at = ?
+       WHERE id = ? AND run_id = ? AND participant_id = 'root'`,
+      [JSON.stringify(command.nextModel), command.now, command.runtimeId, command.runId],
+    );
+    if (updatedRuntime.changes !== 1) throw new Error('RUNTIME_STATE_CONFLICT');
+  }
+
   const attemptIndex = attempt.attempt_index + 1;
   const attemptId = randomUUID();
   await tx.execute(
@@ -312,6 +465,21 @@ export const retryModelStepTransition = async (
     [attemptId, command.stepId, attemptIndex, command.reservedTokens, command.now],
   );
   const events: DurableEventInput[] = [
+    ...(command.routeChange
+      ? [{
+          type: 'model.route_changed',
+          payload: {
+            stepId: command.stepId,
+            previousAttemptId: command.attemptId,
+            attemptId,
+            attemptIndex,
+            from: { ...command.routeChange.from },
+            to: { ...command.routeChange.to },
+            routeIndex: command.routeChange.routeIndex,
+            errorCode: command.errorCode,
+          },
+        } satisfies DurableEventInput]
+      : []),
     {
       type: 'model.retrying',
       payload: {
@@ -320,15 +488,42 @@ export const retryModelStepTransition = async (
         attemptId,
         attemptIndex,
         errorCode: command.errorCode,
+        ...(command.nextModel ? { model: { ...command.nextModel } } : {}),
       },
     },
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
-  const mergedUsage = usageWithDelta(row, {
-    inputTokens: command.inputTokens,
-    outputTokens: command.outputTokens,
-    cachedInputTokens: command.cachedInputTokens,
-  });
+  let mergedUsage = usageWithProviderContext(
+    usageWithDelta(row, {
+      inputTokens: command.inputTokens,
+      outputTokens: command.outputTokens,
+      cachedInputTokens: command.cachedInputTokens,
+    }),
+    command.inputTokens,
+    command.estimatedUsage,
+    command.now,
+  );
+  if (
+    command.routeChange &&
+    command.nextModel &&
+    command.estimatedInputTokens !== undefined &&
+    command.reservedOutputTokens !== undefined &&
+    command.contextWindowTokens !== undefined
+  ) {
+    mergedUsage = {
+      ...mergedUsage,
+      context: {
+        inputTokens: command.estimatedInputTokens,
+        heuristicInputTokens: command.heuristicInputTokens ?? command.estimatedInputTokens,
+        reservedOutputTokens: command.reservedOutputTokens,
+        contextWindowTokens: command.contextWindowTokens,
+        source: command.contextSource ?? 'estimated',
+        model: command.nextModel,
+        ...(command.contextEpoch ? { contextEpoch: command.contextEpoch } : {}),
+        updatedAt: command.now,
+      },
+    };
+  }
   const updatedRow = await patchRun(tx, row, { usage: mergedUsage }, events.length, command.now);
   const run = mapRunRow(updatedRow);
   await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
@@ -401,11 +596,16 @@ export const pauseModelStepForBudgetTransition = async (
     { type: 'run.status_changed', payload: { from: 'running', to: 'awaiting_budget' } },
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
-  const mergedUsage = usageWithDelta(row, {
-    inputTokens: command.inputTokens,
-    outputTokens: command.outputTokens,
-    cachedInputTokens: command.cachedInputTokens,
-  });
+  const mergedUsage = usageWithProviderContext(
+    usageWithDelta(row, {
+      inputTokens: command.inputTokens,
+      outputTokens: command.outputTokens,
+      cachedInputTokens: command.cachedInputTokens,
+    }),
+    command.inputTokens,
+    command.estimatedUsage,
+    command.now,
+  );
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const activeDelta =
     nextExecuting === 0 && row.active_execution_started_at !== null
@@ -466,10 +666,12 @@ export const settleModelStepTransition = async (
   );
   if (!attempt || attempt.status !== 'streaming') throw new Error('ATTEMPT_STATE_CONFLICT');
 
-  const succeeded = command.terminalStatus === 'completed_unverified';
+  const verifiedSuccess = command.terminalStatus === 'completed';
+  const succeeded = verifiedSuccess || command.terminalStatus === 'completed_unverified';
   await tx.execute(
     `UPDATE agent_model_attempts SET
-       status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?, estimated = ?, error_code = ?, completed_at = ?
+       status = ?, input_tokens = ?, output_tokens = ?, cached_input_tokens = ?, estimated = ?,
+       continuation_json = ?, error_code = ?, completed_at = ?
      WHERE id = ? AND status = 'streaming'`,
     [
       succeeded ? 'completed' : command.terminalStatus === 'cancelled' ? 'aborted' : 'failed',
@@ -477,6 +679,7 @@ export const settleModelStepTransition = async (
       command.outputTokens ?? null,
       command.cachedInputTokens ?? null,
       command.estimatedUsage ? 1 : 0,
+      command.providerContinuation ? encodeModelProviderContinuation(command.providerContinuation) : null,
       command.errorCode ?? null,
       command.now,
       command.attemptId,
@@ -513,6 +716,7 @@ export const settleModelStepTransition = async (
           runId: command.runId,
           kind: 'assistant_message',
           payload: {
+            modelStepId: command.stepId,
             text: command.assistantText,
             usage:
               command.inputTokens !== undefined || command.outputTokens !== undefined
@@ -544,14 +748,26 @@ export const settleModelStepTransition = async (
         { type: 'message.final', payload: { text: command.assistantText ?? '' } },
         {
           type: 'verification.completed',
-          payload: { status: 'unverified', summary: 'No tool evidence was required.' },
+          payload: {
+            status: verifiedSuccess ? 'verified' : 'unverified',
+            summary:
+              command.verificationSummary ??
+              (verifiedSuccess
+                ? 'Durable completion evidence satisfied the Completion Gate.'
+                : 'No external verification was required.'),
+          },
         },
         { type: 'run.status_changed', payload: { from: row.status, to: command.terminalStatus } },
       ]
     : [
         {
           type: command.terminalStatus === 'cancelled' ? 'model.aborted' : 'model.failed',
-          payload: { stepId: command.stepId, attemptId: command.attemptId, errorCode: command.errorCode ?? null },
+          payload: {
+            stepId: command.stepId,
+            attemptId: command.attemptId,
+            finishReason: command.finishReason ?? null,
+            errorCode: command.errorCode ?? null,
+          },
         },
         { type: 'run.status_changed', payload: { from: row.status, to: command.terminalStatus } },
       ];
@@ -563,12 +779,17 @@ export const settleModelStepTransition = async (
   const activeDelta = activeStarted?.active_execution_started_at
     ? Math.max(0, command.now - activeStarted.active_execution_started_at)
     : 0;
-  const mergedUsage = usageWithDelta(row, {
-    inputTokens: command.inputTokens,
-    outputTokens: command.outputTokens,
-    cachedInputTokens: command.cachedInputTokens,
-    steps: 1,
-  });
+  const mergedUsage = usageWithProviderContext(
+    usageWithDelta(row, {
+      inputTokens: command.inputTokens,
+      outputTokens: command.outputTokens,
+      cachedInputTokens: command.cachedInputTokens,
+      steps: 1,
+    }),
+    command.inputTokens,
+    command.estimatedUsage,
+    command.now,
+  );
   const updated = await tx.execute(
     `UPDATE agent_runs SET
        status = ?, verification_status = ?, goal_status = ?, needs_reconciliation = 0,
@@ -578,7 +799,13 @@ export const settleModelStepTransition = async (
      WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
     [
       command.terminalStatus,
-      succeeded ? 'unverified' : command.terminalStatus === 'cancelled' ? 'not_started' : 'failed',
+      verifiedSuccess
+        ? 'verified'
+        : succeeded
+          ? 'unverified'
+          : command.terminalStatus === 'cancelled'
+            ? 'not_started'
+            : 'failed',
       succeeded ? 'satisfied' : command.terminalStatus === 'cancelled' ? row.goal_status : 'not_satisfied',
       JSON.stringify(mergedUsage),
       activeDelta,
@@ -673,12 +900,17 @@ export const supersedeModelStepTransition = async (
     },
   ];
   const committedEvents = await appendEvents(tx, row, events, command.now);
-  const mergedUsage = usageWithDelta(row, {
-    inputTokens: command.inputTokens,
-    outputTokens: command.outputTokens,
-    cachedInputTokens: command.cachedInputTokens,
-    steps: 1,
-  });
+  const mergedUsage = usageWithProviderContext(
+    usageWithDelta(row, {
+      inputTokens: command.inputTokens,
+      outputTokens: command.outputTokens,
+      cachedInputTokens: command.cachedInputTokens,
+      steps: 1,
+    }),
+    command.inputTokens,
+    command.estimatedUsage,
+    command.now,
+  );
   const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
   const activeDelta =
     nextExecuting === 0 && row.active_execution_started_at !== null

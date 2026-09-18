@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import { ProviderService } from '../../ai/provider.service';
+import { snapshotProviderModelCapabilities } from '../../ai/model-capability-resolver';
+import { missingRequiredModelCapabilities } from '../../ai/model-capability-requirements';
 import type { ProviderModelConfig } from '../../ai/model.types';
 import { deriveAutomaticThreadTitle } from '../../ai/thread-title';
 import { AgentSettingsService } from '../../host/agent-settings.service';
@@ -66,7 +68,6 @@ const runBudgetFrom = (
   maxActiveExecutionSeconds: policy.effective.maxActiveExecutionSeconds,
   toolTimeoutSeconds: policy.effective.toolTimeoutSeconds,
   maxToolOutputBytes: policy.effective.maxToolOutputBytes,
-  maxRawToolBytes: policy.effective.maxRawToolBytes,
   maxRecallItems: policy.effective.maxRecallItems,
   maxRecallBytes: policy.effective.maxRecallBytes,
   maxSubagentMessages: policy.effective.maxSubagentMessages,
@@ -163,29 +164,74 @@ export class RunService {
       throw new Error('VALIDATION_FAILED');
     }
     const environmentSelection = command.environment ?? null;
-    const initialGoal = command.initialGoal === undefined ? undefined : normalizeGoalText(command.initialGoal);
+    const executionMode = command.executionMode ?? 'execute';
+    if (executionMode !== 'execute' && executionMode !== 'plan') throw new Error('VALIDATION_FAILED');
+    if (command.plannedFromRunId !== undefined) {
+      if (!isAgentUuid(command.plannedFromRunId) || executionMode !== 'execute') throw new Error('VALIDATION_FAILED');
+    }
+    const explicitInitialGoal = command.initialGoal === undefined ? undefined : normalizeGoalText(command.initialGoal);
     if (Buffer.byteLength(JSON.stringify({ ...command, input, connectionIds }), 'utf8') > 1024 * 1024) {
       throw new Error('PAYLOAD_TOO_LARGE');
     }
 
-    const [settings, app, provider, executionPolicy] = await Promise.all([
+    const [settings, app, provider, executionPolicy, plannedFrom] = await Promise.all([
       this.settings.get(scope.userId),
       this.lifecycle.get(scope),
       this.providers.get(scope.userId, command.model.providerId),
       this.executionPolicies.get(scope),
+      command.plannedFromRunId ? this.repository.snapshot(scope, command.plannedFromRunId) : Promise.resolve(null),
     ]);
     if (!settings.effectiveSettings.feature.enabled) throw new Error('AGENT_DISABLED');
     if (app.desiredState !== 'enabled' || !['running', 'degraded'].includes(app.observedState))
       throw new Error('AGENT_APP_DISABLED');
     if (!app.acceptNewRuns) throw new Error('AGENT_APP_DRAINING');
-    this.definitions.require(scope.appId, app.activeVersion, command.agentDefinitionId);
+    if (command.plannedFromRunId) {
+      if (
+        !plannedFrom ||
+        plannedFrom.threadId !== command.threadId ||
+        (plannedFrom.definition.executionMode ?? 'execute') !== 'plan' ||
+        !['completed', 'completed_unverified'].includes(plannedFrom.status) ||
+        plannedFrom.plan.items.length === 0
+      ) {
+        throw new Error('VALIDATION_FAILED');
+      }
+    }
+    const initialGoal = explicitInitialGoal ?? plannedFrom?.goal.text ?? undefined;
+    const definitionInfo = this.definitions.require(scope.appId, app.activeVersion, command.agentDefinitionId);
     if (!provider.enabled || provider.version !== command.model.configurationVersion)
       throw new Error('PROVIDER_CONFIGURATION_STALE');
     const model = provider.models.find((candidate) => candidate.id === command.model.modelId);
     if (!model) throw new Error('MODEL_NOT_FOUND');
+    const modelCapabilities = snapshotProviderModelCapabilities(model);
+    if (missingRequiredModelCapabilities(definitionInfo.requiredModelCapabilities, modelCapabilities).length > 0) {
+      throw new Error('MODEL_CAPABILITY_UNSUPPORTED');
+    }
     const reasoningEffort = command.reasoningEffort ?? model.defaultReasoningEffort;
-    if (reasoningEffort !== undefined && !model.reasoningEfforts?.includes(reasoningEffort)) {
-      throw new Error('MODEL_REASONING_EFFORT_UNSUPPORTED');
+    const supportsFrozenReasoningEffort = (candidate: ProviderModelConfig): boolean => {
+      if (candidate.reasoningMandatory && (reasoningEffort === undefined || reasoningEffort === 'none')) return false;
+      return reasoningEffort === undefined || Boolean(candidate.reasoningEfforts?.includes(reasoningEffort));
+    };
+    if (!supportsFrozenReasoningEffort(model)) throw new Error('MODEL_REASONING_EFFORT_UNSUPPORTED');
+
+    const rootModelRoutes: NonNullable<RunDefinitionSnapshot['rootModelRoutes']> = [];
+    const seenRootRoutes = new Set([`${command.model.providerId}\u0000${command.model.modelId}`]);
+    for (const fallback of settings.requestedSettings?.model?.fallbackModels ?? []) {
+      const key = `${fallback.providerId}\u0000${fallback.modelId}`;
+      if (seenRootRoutes.has(key)) continue;
+      const fallbackProvider = await this.providers.get(scope.userId, fallback.providerId);
+      if (!fallbackProvider.enabled) throw new Error('PROVIDER_CONFIGURATION_STALE');
+      const fallbackModel = fallbackProvider.models.find((candidate) => candidate.id === fallback.modelId);
+      if (!fallbackModel) throw new Error('MODEL_NOT_FOUND');
+      const capabilities = snapshotProviderModelCapabilities(fallbackModel);
+      if (missingRequiredModelCapabilities(definitionInfo.requiredModelCapabilities, capabilities).length > 0) {
+        throw new Error('MODEL_CAPABILITY_UNSUPPORTED');
+      }
+      if (!supportsFrozenReasoningEffort(fallbackModel)) throw new Error('MODEL_REASONING_EFFORT_UNSUPPORTED');
+      seenRootRoutes.add(key);
+      rootModelRoutes.push({
+        model: { providerId: fallbackProvider.id, modelId: fallbackModel.id, configurationVersion: fallbackProvider.version },
+        modelCapabilities: capabilities,
+      });
     }
 
     const budget = runBudgetFrom(settings, executionPolicy, model);
@@ -195,9 +241,13 @@ export class RunService {
     const definition: RunDefinitionSnapshot = {
       schemaVersion: 1,
       agentDefinitionId: command.agentDefinitionId,
+      requiredModelCapabilities: [...definitionInfo.requiredModelCapabilities],
       model: { ...command.model },
+      modelCapabilities,
+      rootModelRoutes,
       ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
       approvalMode: command.approvalMode,
+      executionMode,
       connectionIds,
       environment,
       policyRevision: app.policyRevision,
@@ -214,6 +264,8 @@ export class RunService {
       },
       ...(reasoningEffort === undefined ? {} : { reasoningEffort }),
       approvalMode: command.approvalMode,
+      executionMode,
+      ...(command.plannedFromRunId ? { plannedFromRunId: command.plannedFromRunId } : {}),
       connectionIds,
       environment: environmentSelection ? (JSON.parse(JSON.stringify(environmentSelection)) as JsonValue) : null,
       ...(initialGoal ? { initialGoal } : {}),
@@ -226,6 +278,7 @@ export class RunService {
       inputEntryId: randomUUID(),
       input,
       ...(automaticThreadTitle ? { automaticThreadTitle } : {}),
+      ...(plannedFrom ? { parentRunId: plannedFrom.id, initialPlan: plannedFrom.plan } : {}),
       ...(initialGoal
         ? { initialGoal: { text: initialGoal, revision: 1, updatedAt: this.clock.nowUnixSeconds() } }
         : {}),
@@ -257,6 +310,8 @@ export class RunService {
         modelId: command.model.modelId,
         reasoningEffort: reasoningEffort ?? null,
         approvalMode: command.approvalMode,
+        executionMode,
+        plannedFromRunId: plannedFrom?.id ?? null,
         connectionCount: connectionIds.length,
         artifactCount: input.artifactRefs.length,
         inputBytes: Buffer.byteLength(input.text, 'utf8'),

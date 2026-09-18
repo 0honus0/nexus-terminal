@@ -1,4 +1,5 @@
 import type { ClockPort, JsonValue } from '../../agent.types';
+import { LEASE_RENEW_INTERVAL_MS } from '../../capabilities/lease-policy';
 import type {
   LeaseMode,
   LeaseOwner,
@@ -74,7 +75,7 @@ export class LeaseCoordinator {
         }
       });
     };
-    const timer = setInterval(renew, 10_000);
+    const timer = setInterval(renew, LEASE_RENEW_INTERVAL_MS);
     timer.unref?.();
     return {
       signal: controller.signal,

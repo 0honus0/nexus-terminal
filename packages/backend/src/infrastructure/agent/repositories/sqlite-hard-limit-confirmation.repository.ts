@@ -2,7 +2,9 @@ import type {
   HardLimitConfirmationRecord,
   HardLimitConfirmationRepositoryPort,
 } from '../../../modules/agent/host/hard-limit-confirmation.repository.port';
+import { createDefaultAgentSettings } from '../../../modules/agent/agent-defaults';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { durableInteger, durableRecord, parseDurableJson } from '../runtime/durable-state-decoders';
 
 interface ConfirmationRow {
   id: string;
@@ -13,11 +15,21 @@ interface ConfirmationRow {
   expires_at: number;
 }
 
+const decodeHardLimits = (raw: string): HardLimitConfirmationRecord['proposed'] => {
+  const record = durableRecord(parseDurableJson(raw));
+  const defaults = createDefaultAgentSettings().hardLimits;
+  const expected = Object.keys(defaults) as Array<keyof typeof defaults>;
+  if (Object.keys(record).length !== expected.length || expected.some((key) => !(key in record))) {
+    throw new Error('AGENT_DURABLE_STATE_INVALID');
+  }
+  return Object.fromEntries(expected.map((key) => [key, durableInteger(record[key], 1)])) as unknown as HardLimitConfirmationRecord['proposed'];
+};
+
 const mapRow = (row: ConfirmationRow): HardLimitConfirmationRecord => ({
   id: row.id,
   userId: row.user_id,
   expectedRevision: row.expected_revision,
-  proposed: JSON.parse(row.proposed_json) as HardLimitConfirmationRecord['proposed'],
+  proposed: decodeHardLimits(row.proposed_json),
   createdAt: row.created_at,
   expiresAt: row.expires_at,
 });
