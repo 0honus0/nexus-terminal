@@ -99,7 +99,6 @@ export const createSkillSearchTool = (skills: SkillRegistry, cryptoHash: CryptoH
       ),
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -204,7 +203,6 @@ export const createSkillReadTool = (skills: SkillRegistry, cryptoHash: CryptoHas
           observedValue: { version: metadata.version, hash: metadata.hash },
         },
       ],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

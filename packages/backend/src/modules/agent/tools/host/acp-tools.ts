@@ -181,7 +181,6 @@ export const createAcpExecuteTool = (
       operationHash,
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

@@ -154,7 +154,6 @@ export const createArtifactReadTool = (artifacts: ArtifactService, cryptoHash: C
           arguments: normalizedArguments,
           resourceKeys,
           preconditions: [],
-          secretRefs: [],
           policyRevision,
           inputRevision: context.inputRevision,
         },
@@ -162,7 +161,6 @@ export const createArtifactReadTool = (artifacts: ArtifactService, cryptoHash: C
       ),
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

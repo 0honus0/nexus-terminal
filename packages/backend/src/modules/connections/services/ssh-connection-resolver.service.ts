@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { ResolvedJumpHost, ResolvedSshConnection } from '../../../platform/connection/ssh-connection';
 import type { ProxyService } from '../../proxies/proxy.service';
 import type { ConnectionCredentialService } from '../connection-credential.service';
@@ -14,6 +15,11 @@ export class SshConnectionResolver {
 
   resolveStored(connectionId: number): Promise<ResolvedSshConnection> {
     return this.resolveStoredInternal(connectionId, []);
+  }
+
+  async fingerprintStored(connectionId: number): Promise<string> {
+    const dependency = await this.dependencySnapshot(connectionId, []);
+    return createHash('sha256').update(JSON.stringify(dependency), 'utf8').digest('hex');
   }
 
   async resolveUnsaved(input: UnsavedSshConnectionInput): Promise<ResolvedSshConnection> {
@@ -40,6 +46,47 @@ export class SshConnectionResolver {
             },
           }
         : {}),
+    };
+  }
+
+  private async dependencySnapshot(connectionId: number, chain: number[]): Promise<Record<string, unknown>> {
+    if (chain.includes(connectionId)) throw new Error(`检测到跳板机循环: ${[...chain, connectionId].join(' -> ')}`);
+    const record = await this.repository.getStored(connectionId);
+    if (!record) throw new Error(`连接配置 ID ${connectionId} 未找到。`);
+    if (record.type !== 'SSH') throw new Error(`连接配置 ID ${connectionId} 不是 SSH 类型。`);
+
+    const credentialRevision = await this.credentials.opaqueCredentialRevision(record);
+    let proxyFingerprint: string | null = null;
+    let jumpDependencies: Record<string, unknown>[] = [];
+
+    if (record.route === 'proxy') {
+      if (!record.proxyId) throw new Error(`连接 ${connectionId} 配置为 proxy 路由但没有 proxyId。`);
+      proxyFingerprint = await this.proxies.dependencyFingerprint(record.proxyId);
+      if (!proxyFingerprint) throw new Error(`代理 ID ${record.proxyId} 未找到。`);
+    }
+    if (record.route === 'jump') {
+      if (!record.jumpChain?.length) throw new Error('跳板机路由缺少 jumpChain。');
+      jumpDependencies = [];
+      for (const id of record.jumpChain) {
+        jumpDependencies.push(await this.dependencySnapshot(id, [...chain, connectionId]));
+      }
+    }
+
+    return {
+      id: record.id,
+      type: record.type,
+      host: record.host.trim().toLowerCase(),
+      port: record.port,
+      username: record.username,
+      authMethod: record.authMethod,
+      sshKeyId: record.sshKeyId,
+      proxyId: record.proxyId,
+      route: record.route,
+      jumpChain: record.jumpChain ?? [],
+      updatedAt: record.updatedAt,
+      credentialRevision,
+      proxyFingerprint,
+      jumpDependencies,
     };
   }
 

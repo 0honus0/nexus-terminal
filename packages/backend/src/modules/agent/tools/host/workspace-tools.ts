@@ -90,7 +90,6 @@ const operationHash = (
         key: precondition.key,
         observedValue: precondition.observedValue,
       })),
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     },
@@ -200,7 +199,6 @@ export const createWorkspaceJobTool = (
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -544,7 +542,6 @@ export const createWorkspaceJobControlTool = (
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

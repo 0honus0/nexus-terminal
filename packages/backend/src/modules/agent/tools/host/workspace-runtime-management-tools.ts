@@ -122,7 +122,6 @@ const operation = (
         key: item.key,
         observedValue: item.observedValue,
       })),
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     },
@@ -211,7 +210,6 @@ export const createWorkspaceCreateTool = (
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -334,7 +332,6 @@ export const createWorkspaceControlTool = (
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -461,7 +458,6 @@ export const createWorkspaceSwitchToolVersionsTool = (
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

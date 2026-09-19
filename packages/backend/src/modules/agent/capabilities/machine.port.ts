@@ -16,7 +16,7 @@ export interface AgentConnectionView {
 export interface AgentConnectionResolverPort {
   list(): Promise<AgentConnectionView[]>;
   get(connectionId: number): Promise<AgentConnectionView | null>;
-  resolve(connectionId: number): Promise<ResolvedSshConnection>;
+  resolve(connectionId: number, expectedConfigurationHash?: string): Promise<ResolvedSshConnection>;
 }
 
 export interface MachineConnectionSummary {
@@ -109,24 +109,32 @@ export interface MachineCapabilityPort {
     actorId: string,
     signal: AbortSignal,
   ): Promise<AgentDiagnosticReport>;
-  inspectFile(context: MachineToolContext, connectionId: number, remotePath: string): Promise<FileMutationInspection>;
+  inspectFile(
+    context: MachineToolContext,
+    connectionId: number,
+    remotePath: string,
+    expectedConfigurationHash: string,
+  ): Promise<FileMutationInspection>;
   writeFile(
     context: MachineToolContext,
     connectionId: number,
     remotePath: string,
     content: Uint8Array,
     expectedSha256: string | null,
+    expectedConfigurationHash: string,
   ): Promise<FileMutationResult>;
   executeShell(
     context: MachineToolContext,
     connectionId: number,
     command: string,
     timeoutSeconds: number,
+    expectedConfigurationHash: string,
   ): Promise<ShellMutationResult>;
   inspectDockerContainer(
     context: MachineToolContext,
     connectionId: number,
     containerId: string,
+    expectedConfigurationHash: string,
   ): Promise<DockerMutationInspection>;
   mutateDockerContainer(
     context: MachineToolContext,
@@ -134,6 +142,7 @@ export interface MachineCapabilityPort {
     containerId: string,
     action: 'start' | 'stop' | 'restart' | 'remove',
     expectedState: string,
+    expectedConfigurationHash: string,
   ): Promise<DockerMutationResult>;
   readFile(
     context: MachineToolContext,

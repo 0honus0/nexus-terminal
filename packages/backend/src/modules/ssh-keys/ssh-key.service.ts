@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SecretCipher } from '../../shared/security/crypto.port';
 import type { SshKeyRepository, UpdateStoredSshKeyRecord } from './ssh-key.repository.port';
 import type { DecryptedSshKey, SshKeyInput, SshKeySummary } from './ssh-key.types';
@@ -35,6 +36,22 @@ export class SshKeyService {
       privateKey: this.cipher.decrypt(row.encryptedPrivateKey),
       passphrase: row.encryptedPassphrase ? this.cipher.decrypt(row.encryptedPassphrase) : undefined,
     };
+  }
+
+  async opaqueCredentialRevision(id: number): Promise<string | null> {
+    const row = await this.repository.get(id);
+    if (!row) return null;
+    return createHash('sha256')
+      .update(
+        JSON.stringify({
+          id: row.id,
+          updatedAt: row.updatedAt,
+          encryptedPrivateKey: row.encryptedPrivateKey,
+          encryptedPassphrase: row.encryptedPassphrase,
+        }),
+        'utf8',
+      )
+      .digest('hex');
   }
   async update(id: number, input: Partial<SshKeyInput>): Promise<SshKeySummary | null> {
     const existing = await this.repository.get(id);

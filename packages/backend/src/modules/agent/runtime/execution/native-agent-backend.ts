@@ -80,7 +80,6 @@ const rejectedToolInspection = (run: RunView, proposal: ToolProposal, failureCod
     operationHash,
     operationHashVersion: 1,
     preconditions: [],
-    secretRefs: [],
     policyRevision: run.definition.policyRevision,
     inputRevision: run.inputRevision,
   };

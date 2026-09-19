@@ -50,7 +50,6 @@ const operation = (
       arguments: args,
       resourceKeys: [...new Set(resourceKeys)].sort(),
       preconditions: [],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     },
@@ -126,7 +125,6 @@ export const createConnectionListTool = (machine: MachineCapabilityPort, cryptoH
       ),
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -188,7 +186,6 @@ export const createDiagnosticsTool = (machine: MachineCapabilityPort, cryptoHash
       ),
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -263,7 +260,6 @@ export const createReadFileTool = (machine: MachineCapabilityPort, cryptoHash: C
       ),
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

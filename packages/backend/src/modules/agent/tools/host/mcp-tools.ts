@@ -123,7 +123,6 @@ export const createMcpTools = (
           operationHash: operation,
           operationHashVersion: 1,
           preconditions,
-          secretRefs: [],
           policyRevision,
           inputRevision: context.inputRevision,
         };

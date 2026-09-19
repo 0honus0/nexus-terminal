@@ -348,7 +348,14 @@ export const parseToolInspection = (raw: string): ToolInspection => {
   const target = durableRecord(record.target);
   if (!['machine', 'workspace', 'integration', 'browser', 'run'].includes(String(target.kind))) return invalid();
   if (!Array.isArray(record.preconditions) || record.preconditions.length > 256) return invalid();
-  if (!Array.isArray(record.secretRefs) || record.secretRefs.length > 256) return invalid();
+  if (record.secretRefs !== undefined) {
+    if (!Array.isArray(record.secretRefs) || record.secretRefs.length > 256) return invalid();
+    for (const item of record.secretRefs) {
+      const secret = durableRecord(item);
+      durableString(secret.id);
+      durableInteger(secret.version, 1);
+    }
+  }
   return {
     toolName: durableString(record.toolName) as string,
     toolVersion: durableString(record.toolVersion) as string,
@@ -385,10 +392,6 @@ export const parseToolInspection = (raw: string): ToolInspection => {
         key: durableString(precondition.key) as string,
         observedValue: decodeDurableJsonValue(precondition.observedValue),
       };
-    }),
-    secretRefs: record.secretRefs.map((item) => {
-      const secret = durableRecord(item);
-      return { id: durableString(secret.id) as string, version: durableInteger(secret.version, 1) };
     }),
     policyRevision: durableInteger(record.policyRevision, 1),
     inputRevision: durableInteger(record.inputRevision),

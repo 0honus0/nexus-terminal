@@ -83,7 +83,6 @@ const rejectedToolInspection = (
     operationHash,
     operationHashVersion: 1,
     preconditions: [],
-    secretRefs: [],
     policyRevision: run.definition.policyRevision,
     inputRevision: run.inputRevision,
   };

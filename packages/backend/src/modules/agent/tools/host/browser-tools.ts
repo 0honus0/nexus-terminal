@@ -259,7 +259,6 @@ const inspection = (
     ),
     operationHashVersion: 1,
     preconditions,
-    secretRefs: [],
     policyRevision,
     inputRevision: context.inputRevision,
   };

@@ -94,7 +94,6 @@ export const createRequestUserInputTool = (cryptoHash: CryptoHashPort): AgentToo
       ),
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

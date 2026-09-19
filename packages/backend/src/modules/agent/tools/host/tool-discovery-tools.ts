@@ -178,7 +178,6 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
       ),
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

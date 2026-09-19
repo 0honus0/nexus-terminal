@@ -22,11 +22,6 @@ export interface ToolPrecondition {
   observedValue: JsonValue;
 }
 
-export interface ToolSecretRef {
-  id: string;
-  version: number;
-}
-
 export interface ToolInspection {
   toolName: string;
   toolVersion: string;
@@ -38,7 +33,6 @@ export interface ToolInspection {
   operationHash: string;
   operationHashVersion: 1;
   preconditions: ToolPrecondition[];
-  secretRefs: ToolSecretRef[];
   policyRevision: number;
   inputRevision: number;
 }

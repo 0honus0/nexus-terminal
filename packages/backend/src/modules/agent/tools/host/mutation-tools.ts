@@ -73,7 +73,6 @@ const operation = (
           key: precondition.key,
           observedValue: precondition.observedValue,
         })),
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     },
@@ -170,11 +169,11 @@ export const createWriteFileTool = (
     const connectionId = positiveInteger(args.connectionId);
     const remotePath = stringValue(args.path, 4096);
     const contentArtifactRef = stringValue(args.contentArtifactRef, 128);
-    const [target, file, artifact] = await Promise.all([
+    const [target, artifact] = await Promise.all([
       machine.target(context, connectionId),
-      machine.inspectFile(context, connectionId, remotePath),
       artifacts.get(context, contentArtifactRef),
     ]);
+    const file = await machine.inspectFile(context, connectionId, remotePath, target.configurationHash);
     if (!artifact || artifact.status !== 'ready' || !artifact.sha256 || artifact.sizeBytes > MAX_WRITE_BYTES) {
       throw new Error('ARTIFACT_UNAVAILABLE');
     }
@@ -230,7 +229,6 @@ export const createWriteFileTool = (
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -250,6 +248,7 @@ export const createWriteFileTool = (
       stringValue(args.path, 4096),
       content,
       fileHash as string | null,
+      inspection.target.configurationHash,
     );
     return result(
       true,
@@ -333,7 +332,6 @@ export const createShellTool = (machine: MachineCapabilityPort, cryptoHash: Cryp
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -346,6 +344,7 @@ export const createShellTool = (machine: MachineCapabilityPort, cryptoHash: Cryp
       positiveInteger(args.connectionId),
       stringValue(args.command, MAX_SHELL_BYTES),
       positiveInteger(args.timeoutSeconds),
+      inspection.target.configurationHash,
     );
     const ok = shell.exitCode === 0;
     return result(
@@ -392,10 +391,13 @@ export const createDockerMutationTool = (machine: MachineCapabilityPort, cryptoH
     const containerId = stringValue(args.containerId, 64);
     const action = stringValue(args.action, 16);
     if (!['start', 'stop', 'restart', 'remove'].includes(action)) throw new Error('TOOL_ARGUMENTS_INVALID');
-    const [target, container] = await Promise.all([
-      machine.target(context, connectionId),
-      machine.inspectDockerContainer(context, connectionId, containerId),
-    ]);
+    const target = await machine.target(context, connectionId);
+    const container = await machine.inspectDockerContainer(
+      context,
+      connectionId,
+      containerId,
+      target.configurationHash,
+    );
     const normalizedArguments: JsonValue = { connectionId, containerId: container.containerId, action };
     const resourceKeys = [`connection:${connectionId}`, `connection:${connectionId}:docker:${container.containerId}`];
     const preconditions: ToolPrecondition[] = [
@@ -427,7 +429,6 @@ export const createDockerMutationTool = (machine: MachineCapabilityPort, cryptoH
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -452,6 +453,7 @@ export const createDockerMutationTool = (machine: MachineCapabilityPort, cryptoH
       stringValue(args.containerId, 64),
       action,
       observed.state,
+      inspection.target.configurationHash,
     );
     return result(
       true,

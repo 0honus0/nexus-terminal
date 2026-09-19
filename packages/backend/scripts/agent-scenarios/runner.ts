@@ -19,6 +19,7 @@ import { RunnerJournal } from '../../../agent-runner/src/controller/journal';
 import { RunnerControllerServer } from '../../../agent-runner/src/controller/server';
 import { DatabaseSync } from 'node:sqlite';
 import { AgentNotificationBridge } from '../../src/bootstrap/agent/agent-notification-bridge';
+import { createAgentConnectionResolver } from '../../src/bootstrap/agent/machine-support';
 import { registerWorkspaceToolContributions } from '../../src/bootstrap/agent/tool-contributions';
 import { LocalArtifactStore } from '../../src/infrastructure/agent/artifacts/local-artifact-store';
 import { decodePersistedAppManifest } from '../../src/infrastructure/agent/plugins/persisted-app-manifest-decoder';
@@ -50,6 +51,19 @@ import {
 import { DatabaseAdapter } from '../../src/infrastructure/database/database.adapter';
 import { runMigrations } from '../../src/infrastructure/database/sqlite-migrations';
 import { NotificationService } from '../../src/modules/notifications/notification.service';
+import { ConnectionCredentialService } from '../../src/modules/connections/connection-credential.service';
+import type {
+  ConnectionRepository,
+  StoredConnectionRecord,
+} from '../../src/modules/connections/connection.repository.port';
+import type { ConnectionService } from '../../src/modules/connections/connection.service';
+import type { Connection } from '../../src/modules/connections/connection.types';
+import { SshConnectionResolver } from '../../src/modules/connections/services/ssh-connection-resolver.service';
+import type { ProxyRepository, StoredProxyRecord } from '../../src/modules/proxies/proxy.repository.port';
+import { ProxyService } from '../../src/modules/proxies/proxy.service';
+import type { SshKeyRepository, StoredSshKeyRecord } from '../../src/modules/ssh-keys/ssh-key.repository.port';
+import { SshKeyService } from '../../src/modules/ssh-keys/ssh-key.service';
+import type { SecretCipher } from '../../src/shared/security/crypto.port';
 import { logErrorCode } from '../../src/shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../src/modules/agent/agent.types';
 import { AGENT_DEFAULTS, createDefaultAgentSettings, normalizeRequestedSettings } from '../../src/modules/agent/agent-defaults';
@@ -3464,8 +3478,7 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
         operationHash: `surface:${input.name}:${input.version}:${policyRevision}`,
         operationHashVersion: 1,
         preconditions: [],
-        secretRefs: [],
-        policyRevision,
+            policyRevision,
         inputRevision: context.inputRevision,
       };
     },
@@ -3866,8 +3879,7 @@ const toolResultProjectionScenario: Scenario = async () => {
       operationHash: 'tool-result-projection',
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
-      policyRevision,
+        policyRevision,
       inputRevision: context.inputRevision,
     }),
     execute: async () => rawResult,
@@ -4446,8 +4458,7 @@ const scriptedAgentBenchmarkScenario: Scenario = async () => {
           .digest('hex'),
         operationHashVersion: 1,
         preconditions: [],
-        secretRefs: [],
-        policyRevision,
+            policyRevision,
         inputRevision: toolContext.inputRevision,
       }),
       execute: async (inspection) => {
@@ -5205,8 +5216,7 @@ const planExecutionModeScenario: Scenario = async () => {
       operationHash: `plan-${name}`,
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
-      policyRevision,
+        policyRevision,
       inputRevision: context.inputRevision,
     }),
     execute: async () => ({
@@ -6143,8 +6153,7 @@ const restartRecoveryScenario: Scenario = async () => {
       operationHash,
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
-      policyRevision: 1,
+        policyRevision: 1,
       inputRevision: 0,
     });
 
@@ -7404,8 +7413,7 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
       operationHash: 'join-control-hash',
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
-      policyRevision: 1,
+        policyRevision: 1,
       inputRevision: 0,
     };
     const waitingResult = {
@@ -7922,7 +7930,6 @@ const mutationOutputProjectionScenario: Scenario = async () => {
     operationHash: `projection-${toolName}`,
     operationHashVersion: 1,
     preconditions: [],
-    secretRefs: [],
     policyRevision: 1,
     inputRevision: 0,
   });
@@ -9353,7 +9360,6 @@ const durableBoundaryDecodeScenario: Scenario = async () => {
     operationHash: 'operation-hash',
     operationHashVersion: 1,
     preconditions: [],
-    secretRefs: [],
     policyRevision: 1,
     inputRevision: 1,
   };
@@ -9371,6 +9377,11 @@ const durableBoundaryDecodeScenario: Scenario = async () => {
   assert.deepEqual(parseRunUsage(JSON.stringify(usage)), usage);
   assert.deepEqual(parseRunDefinition(JSON.stringify(definition)), definition);
   assert.deepEqual(parseToolInspection(JSON.stringify(inspection)), inspection);
+  assert.deepEqual(
+    parseToolInspection(JSON.stringify({ ...inspection, secretRefs: [{ id: 'legacy-secret-ref', version: 1 }] })),
+    inspection,
+    'legacy durable ToolInspection secretRefs must remain readable but must not re-enter the product type',
+  );
   assert.deepEqual(parseToolResult(JSON.stringify(result)), result);
 
   const rejected = [
@@ -9379,12 +9390,13 @@ const durableBoundaryDecodeScenario: Scenario = async () => {
     () => decodeDurableJsonValue(Array.from({ length: 16_385 }, () => 0)),
     () => parseToolResult(JSON.stringify({ ...result, outcome: 'maybe' })),
     () => parseRunDefinition(JSON.stringify({ ...definition, schemaVersion: 2 })),
+    () => parseToolInspection(JSON.stringify({ ...inspection, secretRefs: [{ id: 'legacy-secret-ref', version: 0 }] })),
     () => parseRunUsage('{broken'),
   ];
   for (const reject of rejected) assert.throws(reject, /AGENT_DURABLE_STATE_INVALID/);
 
   return [
-    { name: 'valid_boundary_payloads', value: 5, unit: 'cases' },
+    { name: 'valid_boundary_payloads', value: 6, unit: 'cases' },
     { name: 'rejected_invalid_boundary_payloads', value: rejected.length, unit: 'cases' },
   ];
 };
@@ -9548,8 +9560,7 @@ const completionGateScenario: Scenario = async () => {
       operationHash,
       operationHashVersion: 1,
       preconditions: [],
-      secretRefs: [],
-      policyRevision: 1,
+        policyRevision: 1,
       inputRevision: 0,
     });
   const successfulResult = (summary: string, verificationStatus: 'verified' | 'unverified'): string =>
@@ -10410,7 +10421,6 @@ const providerContinuationRoundTripScenario: Scenario = async () => {
     operationHash,
     operationHashVersion: 1,
     preconditions: [],
-    secretRefs: [],
     policyRevision: 1,
     inputRevision: 1,
   });
@@ -12421,6 +12431,297 @@ const artifactSingleDeleteProductScenario: Scenario = async () => {
   }
 };
 
+const machineRouteDependencyApprovalScenario: Scenario = async () => {
+  const baseConnection = (id: number, host: string): Connection => ({
+    id,
+    name: `machine-${id}`,
+    type: 'SSH',
+    host,
+    port: 22,
+    username: 'deploy',
+    authMethod: 'password',
+    sshKeyId: null,
+    proxyId: id === 1 ? 41 : null,
+    route: id === 1 ? 'proxy' : null,
+    tagIds: [],
+    notes: null,
+    jumpChain: null,
+    rdpOptions: null,
+    createdAt: 1_700_000_000,
+    updatedAt: 1_700_000_100,
+    lastConnectedAt: null,
+  });
+  const records = new Map<number, Connection>([
+    [1, baseConnection(1, 'prod.example.test')],
+    [2, baseConnection(2, 'unrelated.example.test')],
+  ]);
+  const dependencyFingerprints = new Map<number, string>([
+    [1, 'route:proxy:v1'],
+    [2, 'route:direct:v1'],
+  ]);
+
+  const connectionService = {
+    list: async () => [...records.values()],
+    get: async (id: number) => records.get(id) ?? null,
+  } as unknown as ConnectionService;
+  const sshResolverStub = {
+    resolveStored: async () => {
+      throw new Error('scenario does not open a transport');
+    },
+    fingerprintStored: async (id: number) =>
+      `${records.get(id)?.updatedAt ?? 'missing'}:${dependencyFingerprints.get(id) ?? 'missing'}`,
+  } as unknown as SshConnectionResolver;
+  const resolver = createAgentConnectionResolver(connectionService, sshResolverStub);
+
+  const approved = await resolver.get(1);
+  assert.ok(approved);
+
+  dependencyFingerprints.set(1, 'route:proxy:v2');
+  const proxyChanged = await resolver.get(1);
+  assert.ok(proxyChanged);
+  assert.notEqual(
+    proxyChanged.configurationHash,
+    approved.configurationHash,
+    'Proxy dependency revision changes must invalidate the approved Machine target fingerprint even when the parent Connection row is unchanged',
+  );
+
+  dependencyFingerprints.set(1, 'route:jump:v3');
+  const jumpChanged = await resolver.get(1);
+  assert.ok(jumpChanged);
+  assert.notEqual(
+    jumpChanged.configurationHash,
+    proxyChanged.configurationHash,
+    'Jump-chain dependency revision changes must invalidate the approved Machine target fingerprint',
+  );
+
+  const stable = await resolver.get(1);
+  assert.ok(stable);
+  assert.equal(
+    stable.configurationHash,
+    jumpChanged.configurationHash,
+    'An unchanged Machine route dependency graph must keep the approval fingerprint stable',
+  );
+
+  dependencyFingerprints.set(2, 'route:direct:v2');
+  const unrelatedChanged = await resolver.get(1);
+  assert.ok(unrelatedChanged);
+  assert.equal(
+    unrelatedChanged.configurationHash,
+    stable.configurationHash,
+    'Updating an unrelated Connection must not invalidate this Machine approval fingerprint',
+  );
+
+  const direct = records.get(1)!;
+  records.set(1, { ...direct, updatedAt: direct.updatedAt + 1 });
+  const directChanged = await resolver.get(1);
+  assert.ok(directChanged);
+  assert.notEqual(
+    directChanged.configurationHash,
+    unrelatedChanged.configurationHash,
+    'Direct Connection changes must continue invalidating the Machine target fingerprint',
+  );
+
+  const storedConnection = (
+    id: number,
+    host: string,
+    overrides: Partial<StoredConnectionRecord> = {},
+  ): StoredConnectionRecord => ({
+    id,
+    name: `stored-${id}`,
+    type: 'SSH',
+    host,
+    port: 22,
+    username: 'deploy',
+    authMethod: 'password',
+    sshKeyId: null,
+    proxyId: null,
+    route: null,
+    notes: null,
+    jumpChain: null,
+    rdpOptions: null,
+    createdAt: 1_700_000_000,
+    updatedAt: 1_700_000_100,
+    lastConnectedAt: null,
+    encryptedPassword: `opaque-password-${id}-v1`,
+    encryptedPrivateKey: null,
+    encryptedPassphrase: null,
+    ...overrides,
+  });
+  const storedConnections = new Map<number, StoredConnectionRecord>([
+    [10, storedConnection(10, 'direct.example.test')],
+    [11, storedConnection(11, 'proxy-target.example.test', { route: 'proxy', proxyId: 71 })],
+    [12, storedConnection(12, 'jump-target.example.test', { route: 'jump', jumpChain: [13] })],
+    [13, storedConnection(13, 'jump-hop.example.test')],
+    [14, storedConnection(14, 'unrelated.example.test')],
+    [
+      15,
+      storedConnection(15, 'keyed.example.test', {
+        authMethod: 'key',
+        sshKeyId: 91,
+        encryptedPassword: null,
+      }),
+    ],
+  ]);
+  const proxies = new Map<number, StoredProxyRecord>([
+    [
+      71,
+      {
+        id: 71,
+        name: 'route-proxy',
+        type: 'SOCKS5',
+        host: 'proxy.example.test',
+        port: 1080,
+        username: 'proxy-user',
+        authMethod: 'password',
+        encryptedPassword: 'opaque-proxy-password-v1',
+        encryptedPrivateKey: null,
+        encryptedPassphrase: null,
+        createdAt: 1_700_000_000,
+        updatedAt: 1_700_000_100,
+      },
+    ],
+  ]);
+  const sshKeys = new Map<number, StoredSshKeyRecord>([
+    [
+      91,
+      {
+        id: 91,
+        name: 'route-key',
+        encryptedPrivateKey: 'opaque-key-v1',
+        encryptedPassphrase: 'opaque-passphrase-v1',
+        createdAt: 1_700_000_000,
+        updatedAt: 1_700_000_100,
+      },
+    ],
+  ]);
+  const cipher: SecretCipher = {
+    encrypt: (value) => `opaque:${value}`,
+    decrypt: (value) => (value.startsWith('opaque:') ? value.slice('opaque:'.length) : value),
+  };
+  const connectionRepository = {
+    getStored: async (id: number) => storedConnections.get(id) ?? null,
+  } as unknown as ConnectionRepository;
+  const proxyRepository = {
+    get: async (id: number) => proxies.get(id) ?? null,
+  } as unknown as ProxyRepository;
+  const sshKeyRepository = {
+    get: async (id: number) => sshKeys.get(id) ?? null,
+  } as unknown as SshKeyRepository;
+  const keyService = new SshKeyService(sshKeyRepository, cipher);
+  const credentialService = new ConnectionCredentialService(cipher, keyService);
+  const proxyService = new ProxyService(proxyRepository, cipher);
+  const realResolver = new SshConnectionResolver(connectionRepository, credentialService, proxyService);
+
+  const directV1 = await realResolver.fingerprintStored(10);
+  storedConnections.set(10, { ...storedConnections.get(10)!, encryptedPassword: 'opaque-password-10-v2' });
+  const directCredentialV2 = await realResolver.fingerprintStored(10);
+  assert.notEqual(
+    directCredentialV2,
+    directV1,
+    'A direct Connection credential change must invalidate the fingerprint even when updatedAt stays in the same second',
+  );
+
+  const proxyV1 = await realResolver.fingerprintStored(11);
+  proxies.set(71, { ...proxies.get(71)!, host: 'proxy-rotated.example.test' });
+  const proxyHostV2 = await realResolver.fingerprintStored(11);
+  assert.notEqual(proxyHostV2, proxyV1, 'Proxy host changes must invalidate the Machine route fingerprint');
+  proxies.set(71, { ...proxies.get(71)!, encryptedPassword: 'opaque-proxy-password-v2' });
+  const proxyCredentialV3 = await realResolver.fingerprintStored(11);
+  assert.notEqual(
+    proxyCredentialV3,
+    proxyHostV2,
+    'Proxy credential changes must invalidate the fingerprint even when updatedAt stays in the same second',
+  );
+
+  const jumpV1 = await realResolver.fingerprintStored(12);
+  storedConnections.set(13, { ...storedConnections.get(13)!, host: 'jump-hop-rotated.example.test' });
+  const jumpHostV2 = await realResolver.fingerprintStored(12);
+  assert.notEqual(jumpHostV2, jumpV1, 'Any Jump hop host change must invalidate the Machine route fingerprint');
+  storedConnections.set(13, {
+    ...storedConnections.get(13)!,
+    encryptedPassword: 'opaque-password-13-v2',
+  });
+  const jumpCredentialV3 = await realResolver.fingerprintStored(12);
+  assert.notEqual(
+    jumpCredentialV3,
+    jumpHostV2,
+    'Any Jump hop credential change must invalidate the fingerprint even when updatedAt stays in the same second',
+  );
+
+  const keyedV1 = await realResolver.fingerprintStored(15);
+  sshKeys.set(91, { ...sshKeys.get(91)!, encryptedPrivateKey: 'opaque-key-v2' });
+  const keyedV2 = await realResolver.fingerprintStored(15);
+  assert.notEqual(
+    keyedV2,
+    keyedV1,
+    'A referenced SSH key credential change must invalidate the parent Connection fingerprint',
+  );
+
+  const unchangedV1 = await realResolver.fingerprintStored(12);
+  const unchangedV2 = await realResolver.fingerprintStored(12);
+  assert.equal(unchangedV2, unchangedV1, 'An unchanged route graph must produce a stable fingerprint');
+
+  const unaffectedBefore = await realResolver.fingerprintStored(12);
+  storedConnections.set(14, {
+    ...storedConnections.get(14)!,
+    host: 'unrelated-rotated.example.test',
+    encryptedPassword: 'opaque-password-14-v2',
+  });
+  const unaffectedAfter = await realResolver.fingerprintStored(12);
+  assert.equal(
+    unaffectedAfter,
+    unaffectedBefore,
+    'An unrelated Connection revision must not invalidate another Machine route fingerprint',
+  );
+
+  for (const fingerprint of [directCredentialV2, proxyCredentialV3, jumpCredentialV3, keyedV2]) {
+    assert.match(fingerprint, /^[a-f0-9]{64}$/);
+    assert.equal(fingerprint.includes('opaque-'), false, 'Machine fingerprints must never expose credential material');
+  }
+
+  const stablePinnedResolver = createAgentConnectionResolver(connectionService, realResolver);
+  const stablePinnedHash = await realResolver.fingerprintStored(11);
+  const stablePinnedConnection = await stablePinnedResolver.resolve(11, stablePinnedHash);
+  assert.equal(stablePinnedConnection.host, 'proxy-target.example.test');
+
+  let pinnedRevision = 'pinned-v1';
+  const pinnedHash = createHash('sha256').update(pinnedRevision).digest('hex');
+  const changingResolver = {
+    fingerprintStored: async () => createHash('sha256').update(pinnedRevision).digest('hex'),
+    resolveStored: async () => {
+      pinnedRevision = 'pinned-v2';
+      return {
+        connectionId: 1,
+        displayName: 'changing-target',
+        host: 'prod.example.test',
+        port: 22,
+        username: 'deploy',
+        authMethod: 'password',
+        route: null,
+      };
+    },
+  } as unknown as SshConnectionResolver;
+  const changingPinnedResolver = createAgentConnectionResolver(connectionService, changingResolver);
+  await assert.rejects(
+    () => changingPinnedResolver.resolve(1, pinnedHash),
+    /RESOURCE_CHANGED/,
+    'A route dependency change during live resolution must be rejected before an SSH transport can be opened',
+  );
+
+  return [
+    { name: 'machine_direct_credential_stale_rejections', value: 1, unit: 'cases' },
+    { name: 'machine_proxy_host_stale_rejections', value: 1, unit: 'cases' },
+    { name: 'machine_proxy_credential_stale_rejections', value: 1, unit: 'cases' },
+    { name: 'machine_jump_host_stale_rejections', value: 1, unit: 'cases' },
+    { name: 'machine_jump_credential_stale_rejections', value: 1, unit: 'cases' },
+    { name: 'machine_ssh_key_credential_stale_rejections', value: 1, unit: 'cases' },
+    { name: 'machine_unrelated_connection_invalidations', value: 0, unit: 'cases' },
+    { name: 'machine_unchanged_route_stability', value: 1, unit: 'cases' },
+    { name: 'machine_plaintext_secret_fingerprint_leaks', value: 0, unit: 'cases' },
+    { name: 'machine_pinned_resolve_midflight_stale_rejections', value: 1, unit: 'cases' },
+  ];
+};
+
 const agentStructuredLoggingScenario: Scenario = async () => {
   const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
     ? path.join(process.cwd(), 'src')
@@ -12592,6 +12893,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/cumulative-token-ceiling-removed', cumulativeTokenCeilingRemovedScenario],
   ['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],
   ['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],
+  ['machine/route-dependency-approval', machineRouteDependencyApprovalScenario],
   ['runtime/artifact-single-delete-product', artifactSingleDeleteProductScenario],
   ['architecture/agent-structured-logging', agentStructuredLoggingScenario],
   ['architecture/product-type-boundaries', productTypeBoundaryScenario],

@@ -115,7 +115,6 @@ export const createPlanUpdateTool = (
       preconditions: [
         { kind: 'metadata', key: `run:${context.runId}:plan`, observedValue: { revision: snapshot.plan.revision } },
       ],
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

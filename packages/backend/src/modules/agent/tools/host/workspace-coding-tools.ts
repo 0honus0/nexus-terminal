@@ -84,7 +84,6 @@ const operationHash = (
         key: precondition.key,
         observedValue: precondition.observedValue,
       })),
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     },
@@ -227,7 +226,6 @@ export const createWorkspaceReadFileTool = (
       ),
       operationHashVersion: 1,
       preconditions: binding.preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -329,7 +327,6 @@ export const createWorkspaceSearchTool = (
       ),
       operationHashVersion: 1,
       preconditions: binding.preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -440,7 +437,6 @@ export const createWorkspaceRepoMapTool = (
       ),
       operationHashVersion: 1,
       preconditions: binding.preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -570,7 +566,6 @@ export const createWorkspaceCodeIntelTool = (
       ),
       operationHashVersion: 1,
       preconditions: binding.preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };
@@ -728,7 +723,6 @@ export const createWorkspaceApplyPatchTool = (
       ),
       operationHashVersion: 1,
       preconditions,
-      secretRefs: [],
       policyRevision,
       inputRevision: context.inputRevision,
     };

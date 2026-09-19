@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SecretCipher } from '../../shared/security/crypto.port';
 import type { SshKeyService } from '../ssh-keys/ssh-key.service';
 import type { StoredConnectionRecord, UpdateStoredConnection } from './connection.repository.port';
@@ -96,6 +97,34 @@ export class ConnectionCredentialService {
       privateKey: record.encryptedPrivateKey ? this.cipher.decrypt(record.encryptedPrivateKey) : undefined,
       passphrase: record.encryptedPassphrase ? this.cipher.decrypt(record.encryptedPassphrase) : undefined,
     };
+  }
+
+  async opaqueCredentialRevision(record: StoredConnectionRecord): Promise<string> {
+    if (record.authMethod === 'key' && record.sshKeyId) {
+      const keyRevision = await this.sshKeys.opaqueCredentialRevision(record.sshKeyId);
+      if (!keyRevision) throw new Error(`关联的 SSH 密钥 (ID: ${record.sshKeyId}) 未找到。`);
+      return createHash('sha256')
+        .update(
+          JSON.stringify({
+            authMethod: record.authMethod,
+            sshKeyId: record.sshKeyId,
+            keyRevision,
+          }),
+          'utf8',
+        )
+        .digest('hex');
+    }
+    return createHash('sha256')
+      .update(
+        JSON.stringify({
+          authMethod: record.authMethod,
+          encryptedPassword: record.encryptedPassword,
+          encryptedPrivateKey: record.encryptedPrivateKey,
+          encryptedPassphrase: record.encryptedPassphrase,
+        }),
+        'utf8',
+      )
+      .digest('hex');
   }
 
   async resolveUnsaved(input: {

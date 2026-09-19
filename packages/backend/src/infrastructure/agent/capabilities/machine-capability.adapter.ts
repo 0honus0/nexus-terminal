@@ -137,11 +137,17 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     context: MachineToolContext,
     connectionId: number,
     remotePath: string,
+    expectedConfigurationHash: string,
   ): Promise<FileMutationInspection> {
-    return this.withSession(context, connectionId, async (session) => {
-      const filesystem = await session.fileSystem('control');
-      return this.inspectFileWithFilesystem(context, filesystem, remotePath);
-    });
+    return this.withSession(
+      context,
+      connectionId,
+      async (session) => {
+        const filesystem = await session.fileSystem('control');
+        return this.inspectFileWithFilesystem(context, filesystem, remotePath);
+      },
+      expectedConfigurationHash,
+    );
   }
 
   async writeFile(
@@ -150,44 +156,50 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     remotePath: string,
     content: Uint8Array,
     expectedSha256: string | null,
+    expectedConfigurationHash: string,
   ): Promise<FileMutationResult> {
     assertDeadline(context);
     if (!(content instanceof Uint8Array) || content.byteLength > MAX_MUTATION_FILE_BYTES)
       throw new Error('TOOL_INPUT_TOO_LARGE');
     if (expectedSha256 !== null && !/^[a-f0-9]{64}$/.test(expectedSha256)) throw new Error('VALIDATION_FAILED');
-    return this.withSession(context, connectionId, async (session) => {
-      const filesystem = await session.fileSystem('control');
-      const before = await this.inspectFileWithFilesystem(context, filesystem, remotePath);
-      if ((before.exists ? before.sha256 : null) !== expectedSha256) throw new Error('RESOURCE_CHANGED');
-      const directory = path.posix.dirname(before.resolvedPath);
-      const temporary = path.posix.join(
-        directory,
-        `.nexus-agent-${createHash('sha256').update(`${Date.now()}-${Math.random()}`).digest('hex')}.tmp`,
-      );
-      if (hardDeniedPath(temporary)) throw new Error('RESOURCE_FORBIDDEN');
-      const bytes = Buffer.from(content);
-      let temporaryCreated = false;
-      try {
-        const stream = await filesystem.openWrite(temporary, {
-          flags: 'wx',
-          ...(before.mode !== null ? { mode: before.mode } : {}),
-        });
-        temporaryCreated = true;
-        stream.end(bytes);
-        await finished(stream);
-        assertDeadline(context);
-        const current = await this.inspectFileWithFilesystem(context, filesystem, remotePath);
-        if ((current.exists ? current.sha256 : null) !== expectedSha256) throw new Error('RESOURCE_CHANGED');
-        await filesystem.replaceFile(temporary, before.resolvedPath);
-        temporaryCreated = false;
-        const after = await this.inspectFileWithFilesystem(context, filesystem, before.resolvedPath);
-        const expectedNewHash = createHash('sha256').update(bytes).digest('hex');
-        if (!after.exists || after.sha256 !== expectedNewHash) throw new Error('VERIFICATION_FAILED');
-        return { ...after, bytesWritten: bytes.byteLength };
-      } finally {
-        if (temporaryCreated) await filesystem.removeFile(temporary, { ignoreMissing: true }).catch(() => undefined);
-      }
-    });
+    return this.withSession(
+      context,
+      connectionId,
+      async (session) => {
+        const filesystem = await session.fileSystem('control');
+        const before = await this.inspectFileWithFilesystem(context, filesystem, remotePath);
+        if ((before.exists ? before.sha256 : null) !== expectedSha256) throw new Error('RESOURCE_CHANGED');
+        const directory = path.posix.dirname(before.resolvedPath);
+        const temporary = path.posix.join(
+          directory,
+          `.nexus-agent-${createHash('sha256').update(`${Date.now()}-${Math.random()}`).digest('hex')}.tmp`,
+        );
+        if (hardDeniedPath(temporary)) throw new Error('RESOURCE_FORBIDDEN');
+        const bytes = Buffer.from(content);
+        let temporaryCreated = false;
+        try {
+          const stream = await filesystem.openWrite(temporary, {
+            flags: 'wx',
+            ...(before.mode !== null ? { mode: before.mode } : {}),
+          });
+          temporaryCreated = true;
+          stream.end(bytes);
+          await finished(stream);
+          assertDeadline(context);
+          const current = await this.inspectFileWithFilesystem(context, filesystem, remotePath);
+          if ((current.exists ? current.sha256 : null) !== expectedSha256) throw new Error('RESOURCE_CHANGED');
+          await filesystem.replaceFile(temporary, before.resolvedPath);
+          temporaryCreated = false;
+          const after = await this.inspectFileWithFilesystem(context, filesystem, before.resolvedPath);
+          const expectedNewHash = createHash('sha256').update(bytes).digest('hex');
+          if (!after.exists || after.sha256 !== expectedNewHash) throw new Error('VERIFICATION_FAILED');
+          return { ...after, bytesWritten: bytes.byteLength };
+        } finally {
+          if (temporaryCreated) await filesystem.removeFile(temporary, { ignoreMissing: true }).catch(() => undefined);
+        }
+      },
+      expectedConfigurationHash,
+    );
   }
 
   async executeShell(
@@ -195,6 +207,7 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     connectionId: number,
     command: string,
     timeoutSeconds: number,
+    expectedConfigurationHash: string,
   ): Promise<ShellMutationResult> {
     assertDeadline(context);
     if (
@@ -208,32 +221,41 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     ) {
       throw new Error('VALIDATION_FAILED');
     }
-    return this.withSession(context, connectionId, async (session) => {
-      const remainingMs = Math.max(1, context.deadlineAt * 1000 - Date.now());
-      const result = await session.execute({
-        command,
-        timeoutMs: Math.min(timeoutSeconds * 1000, remainingMs),
-        maxOutputBytes: context.maxOutputBytes,
-        signal: context.signal,
-      });
-      return {
-        exitCode: result.exitCode,
-        signal: result.signal ?? null,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        truncated: result.truncated,
-      };
-    });
+    return this.withSession(
+      context,
+      connectionId,
+      async (session) => {
+        const remainingMs = Math.max(1, context.deadlineAt * 1000 - Date.now());
+        const result = await session.execute({
+          command,
+          timeoutMs: Math.min(timeoutSeconds * 1000, remainingMs),
+          maxOutputBytes: context.maxOutputBytes,
+          signal: context.signal,
+        });
+        return {
+          exitCode: result.exitCode,
+          signal: result.signal ?? null,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          truncated: result.truncated,
+        };
+      },
+      expectedConfigurationHash,
+    );
   }
 
   async inspectDockerContainer(
     context: MachineToolContext,
     connectionId: number,
     containerId: string,
+    expectedConfigurationHash: string,
   ): Promise<DockerMutationInspection> {
     if (!/^[a-fA-F0-9]{12,64}$/.test(containerId)) throw new Error('VALIDATION_FAILED');
-    return this.withSession(context, connectionId, async (session) =>
-      this.inspectDockerWithSession(session, containerId),
+    return this.withSession(
+      context,
+      connectionId,
+      async (session) => this.inspectDockerWithSession(session, containerId),
+      expectedConfigurationHash,
     );
   }
 
@@ -243,26 +265,32 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     containerId: string,
     action: 'start' | 'stop' | 'restart' | 'remove',
     expectedState: string,
+    expectedConfigurationHash: string,
   ): Promise<DockerMutationResult> {
     if (!['start', 'stop', 'restart', 'remove'].includes(action) || !expectedState || expectedState.length > 64) {
       throw new Error('VALIDATION_FAILED');
     }
-    return this.withSession(context, connectionId, async (session) => {
-      const before = await this.inspectDockerWithSession(session, containerId);
-      if (before.state !== expectedState) throw new Error('RESOURCE_CHANGED');
-      await this.docker.executeCommand(session, before.containerId, action);
-      assertDeadline(context);
-      if (action === 'remove') {
-        const status = await this.docker.getStatus(session);
-        const remains = status.containers.some((candidate) => candidate.id === before.containerId);
-        if (remains) throw new Error('VERIFICATION_FAILED');
-        return { ...before, action, confirmed: true };
-      }
-      const after = await this.inspectDockerWithSession(session, before.containerId);
-      const expectedAfter = action === 'stop' ? 'exited' : 'running';
-      if (after.state !== expectedAfter) throw new Error('VERIFICATION_FAILED');
-      return { ...after, action, confirmed: true };
-    });
+    return this.withSession(
+      context,
+      connectionId,
+      async (session) => {
+        const before = await this.inspectDockerWithSession(session, containerId);
+        if (before.state !== expectedState) throw new Error('RESOURCE_CHANGED');
+        await this.docker.executeCommand(session, before.containerId, action);
+        assertDeadline(context);
+        if (action === 'remove') {
+          const status = await this.docker.getStatus(session);
+          const remains = status.containers.some((candidate) => candidate.id === before.containerId);
+          if (remains) throw new Error('VERIFICATION_FAILED');
+          return { ...before, action, confirmed: true };
+        }
+        const after = await this.inspectDockerWithSession(session, before.containerId);
+        const expectedAfter = action === 'stop' ? 'exited' : 'running';
+        if (after.state !== expectedAfter) throw new Error('VERIFICATION_FAILED');
+        return { ...after, action, confirmed: true };
+      },
+      expectedConfigurationHash,
+    );
   }
 
   async readFile(
@@ -412,13 +440,17 @@ export class MachineCapabilityAdapter implements MachineCapabilityPort {
     context: MachineToolContext,
     connectionId: number,
     work: (session: ExecutionSession) => Promise<T>,
+    expectedConfigurationHash?: string,
   ): Promise<T> {
     assertDeadline(context);
     if (!Number.isSafeInteger(connectionId) || connectionId < 1) throw new Error('VALIDATION_FAILED');
     assertConnectionSelected(context, connectionId);
     const safe = await this.connections.get(connectionId);
     if (!safe || safe.type !== 'SSH') throw new Error('NOT_FOUND');
-    const resolved = await this.connections.resolve(connectionId);
+    if (expectedConfigurationHash !== undefined && safe.configurationHash !== expectedConfigurationHash) {
+      throw new Error('RESOURCE_CHANGED');
+    }
+    const resolved = await this.connections.resolve(connectionId, expectedConfigurationHash);
     const session = await this.sessions.connect({
       ownerType: 'agent',
       ownerId: context.agentRuntimeId,

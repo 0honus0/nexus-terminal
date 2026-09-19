@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { SecretCipher } from '../../shared/security/crypto.port';
 import type { ProxyRepository, StoredProxyRecord, UpdateStoredProxyRecord } from './proxy.repository.port';
 import type { DecryptedProxy, Proxy, ProxyAuthMethod, ProxyInput } from './proxy.types';
@@ -46,6 +47,28 @@ export class ProxyService {
       privateKey: record.encryptedPrivateKey ? this.cipher.decrypt(record.encryptedPrivateKey) : undefined,
       passphrase: record.encryptedPassphrase ? this.cipher.decrypt(record.encryptedPassphrase) : undefined,
     };
+  }
+
+  async dependencyFingerprint(id: number): Promise<string | null> {
+    const record = await this.repository.get(id);
+    if (!record) return null;
+    return createHash('sha256')
+      .update(
+        JSON.stringify({
+          id: record.id,
+          type: record.type,
+          host: record.host.trim().toLowerCase(),
+          port: record.port,
+          username: record.username,
+          authMethod: record.authMethod,
+          updatedAt: record.updatedAt,
+          encryptedPassword: record.encryptedPassword,
+          encryptedPrivateKey: record.encryptedPrivateKey,
+          encryptedPassphrase: record.encryptedPassphrase,
+        }),
+        'utf8',
+      )
+      .digest('hex');
   }
 
   async create(input: ProxyInput): Promise<Proxy> {

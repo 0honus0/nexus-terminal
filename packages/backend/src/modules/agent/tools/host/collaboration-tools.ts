@@ -78,7 +78,6 @@ const localInspection = (
     ),
     operationHashVersion: 1,
     preconditions: [],
-    secretRefs: [],
     policyRevision,
     inputRevision: context.inputRevision,
   };

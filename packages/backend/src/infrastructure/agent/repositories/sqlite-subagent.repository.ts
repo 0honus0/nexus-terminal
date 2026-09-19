@@ -282,7 +282,14 @@ const decodeToolInspection = (value: string): RuntimeToolWorkView['inspection'] 
   if (!['machine', 'workspace', 'integration', 'browser', 'run'].includes(String(target.kind)))
     return invalidDurableState();
   if (!Array.isArray(record.preconditions) || record.preconditions.length > 256) return invalidDurableState();
-  if (!Array.isArray(record.secretRefs) || record.secretRefs.length > 256) return invalidDurableState();
+  if (record.secretRefs !== undefined) {
+    if (!Array.isArray(record.secretRefs) || record.secretRefs.length > 256) return invalidDurableState();
+    for (const item of record.secretRefs) {
+      const secret = recordValue(item);
+      stringValue(secret.id);
+      integerValue(secret.version, 1);
+    }
+  }
   return {
     toolName: stringValue(record.toolName),
     toolVersion: stringValue(record.toolVersion),
@@ -320,10 +327,6 @@ const decodeToolInspection = (value: string): RuntimeToolWorkView['inspection'] 
         key: stringValue(precondition.key),
         observedValue: decodeJsonValue(precondition.observedValue),
       };
-    }),
-    secretRefs: record.secretRefs.map((item) => {
-      const secret = recordValue(item);
-      return { id: stringValue(secret.id), version: integerValue(secret.version, 1) };
     }),
     policyRevision: integerValue(record.policyRevision, 1),
     inputRevision: integerValue(record.inputRevision),
