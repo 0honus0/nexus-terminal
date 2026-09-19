@@ -7,13 +7,18 @@ import puppeteer, {
   type CDPSession,
   type ConnectionTransport,
   type HTTPRequest,
+  type KeyInput,
   type Page,
 } from 'puppeteer-core';
 import WebSocket, { type RawData } from 'ws';
 import type {
   BrowserEndpointSetting,
+  BrowserConsoleEntry,
+  BrowserConsoleView,
+  BrowserDownloadView,
   BrowserGatewayPort,
   BrowserMessageTransport,
+  BrowserPostActionView,
   BrowserSessionRequest,
   BrowserSessionView,
   BrowserScreenshotView,
@@ -26,8 +31,15 @@ import type {
 const DEFAULT_MAX_NODES = 2_000;
 const DEFAULT_MAX_BYTES = 64 * 1024;
 const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024;
+const MAX_TRANSFER_BYTES = 8 * 1024 * 1024;
 const MAX_TYPE_BYTES = 16 * 1024;
 const MAX_NAME_BYTES = 2 * 1024;
+const MAX_SETTLE_MS = 2_000;
+const MAX_WAIT_MS = 5_000;
+const MAX_SCROLL_DELTA = 10_000;
+const MAX_CONSOLE_ENTRIES = 200;
+const MAX_CONSOLE_BYTES = 64 * 1024;
+const MAX_CONSOLE_ENTRY_BYTES = 4 * 1024;
 const MAX_CDP_MESSAGE_BYTES = 16 * 1024 * 1024;
 const MAX_BUFFERED_BYTES = 16 * 1024 * 1024;
 const DISCOVERY_MAX_BYTES = 64 * 1024;
@@ -37,6 +49,9 @@ const INTERACTIVE_TAGS = new Set(['a', 'button', 'input', 'select', 'textarea', 
 
 interface NodeBinding {
   backendNodeId: number;
+  tag: string;
+  href: string | null;
+  inputType: string | null;
 }
 
 interface ActiveBrowserSession {
@@ -50,6 +65,8 @@ interface ActiveBrowserSession {
   createdAt: number;
   snapshotId: string | null;
   nodes: Map<string, NodeBinding>;
+  consoleSequence: number;
+  consoleEntries: BrowserConsoleEntry[];
 }
 
 interface ParsedPattern {
@@ -92,6 +109,15 @@ const boundedText = (value: string | null): string | null => {
   return result;
 };
 
+const nodeName = (attributes: Map<string, string>, text: string | null): string | null =>
+  boundedText(
+    attributes.get('aria-label') ??
+      attributes.get('title') ??
+      attributes.get('alt') ??
+      attributes.get('placeholder') ??
+      text,
+  );
+
 const pngDimensions = (bytes: Uint8Array): { width: number; height: number } => {
   if (
     bytes.byteLength < 24 ||
@@ -113,14 +139,87 @@ const pngDimensions = (bytes: Uint8Array): { width: number; height: number } => 
   return { width, height };
 };
 
-const nodeName = (attributes: Map<string, string>, text: string | null): string | null =>
-  boundedText(
-    attributes.get('aria-label') ??
-      attributes.get('title') ??
-      attributes.get('alt') ??
-      attributes.get('placeholder') ??
-      text,
-  );
+const PRESS_KEYS = new Set([
+  'Enter',
+  'Tab',
+  'Escape',
+  'Backspace',
+  'Delete',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'PageUp',
+  'PageDown',
+  'Home',
+  'End',
+  'Space',
+]);
+const PRESS_MODIFIERS = new Set(['Alt', 'Control', 'Meta', 'Shift']);
+
+const boundedUtf8Text = (value: string, maxBytes: number): string => {
+  if (Buffer.byteLength(value, 'utf8') <= maxBytes) return value;
+  let result = '';
+  for (const character of value) {
+    if (Buffer.byteLength(result + character, 'utf8') > maxBytes) break;
+    result += character;
+  }
+  return result;
+};
+
+const consoleType = (value: string): BrowserConsoleEntry['type'] => {
+  if (value === 'log' || value === 'debug' || value === 'info' || value === 'error') return value;
+  if (value === 'warn' || value === 'warning') return 'warning';
+  return 'other';
+};
+
+const waitBounded = (milliseconds: number, signal: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason ?? new Error('ABORTED'));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, milliseconds);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', onAbort);
+      reject(signal.reason ?? new Error('ABORTED'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+
+const boundedFilename = (value: string): string => {
+  const normalized = value
+    .replace(/[\\/\0\r\n]/g, '_')
+    .replace(/^\.+$/, '_')
+    .trim();
+  const candidate = normalized || 'download.bin';
+  return boundedUtf8Text(candidate, 255) || 'download.bin';
+};
+
+const filenameFromDownload = (url: string, contentDisposition: string | null): string => {
+  if (contentDisposition) {
+    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(contentDisposition)?.[1];
+    if (encoded) {
+      try {
+        return boundedFilename(decodeURIComponent(encoded.replace(/^["']|["']$/g, '')));
+      } catch {
+        // Fall back to the plain filename/URL path below.
+      }
+    }
+    const plain = /filename="?([^";]+)"?/i.exec(contentDisposition)?.[1];
+    if (plain) return boundedFilename(plain);
+  }
+  try {
+    const segment = new URL(url).pathname.split('/').filter(Boolean).at(-1);
+    return boundedFilename(segment ? decodeURIComponent(segment) : 'download.bin');
+  } catch {
+    return 'download.bin';
+  }
+};
 
 const roleFor = (tag: string, attributes: Map<string, string>): string | null => {
   const explicit = boundedText(attributes.get('role') ?? null);
@@ -410,7 +509,12 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
   async createSession(request: BrowserSessionRequest, signal: AbortSignal): Promise<BrowserSessionView> {
     if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
     const target = request.target;
-    if (!target.endpoints.length || !target.allowedUrlPatterns.length) throw new Error('BROWSER_TARGET_INVALID');
+    if (
+      !target.endpoints.length ||
+      !target.allowedUrlPatterns.length
+    ) {
+      throw new Error('BROWSER_TARGET_INVALID');
+    }
     for (const pattern of target.allowedUrlPatterns) parsePattern(pattern);
     if ((request.workspaceId === undefined) !== (request.generation === undefined)) {
       throw new Error('BROWSER_WORKSPACE_BINDING_INVALID');
@@ -473,7 +577,25 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
           createdAt: Math.floor(Date.now() / 1000),
           snapshotId: null,
           nodes: new Map(),
+          consoleSequence: 0,
+          consoleEntries: [],
         };
+        page.on('console', (message) => {
+          const location = message.location();
+          this.recordConsole(active, {
+            type: consoleType(message.type()),
+            text: boundedUtf8Text(message.text(), MAX_CONSOLE_ENTRY_BYTES),
+            url: location.url ? boundedUtf8Text(location.url, MAX_NAME_BYTES) : null,
+            line:
+              typeof location.lineNumber === 'number' && Number.isSafeInteger(location.lineNumber)
+                ? location.lineNumber
+                : null,
+            column:
+              typeof location.columnNumber === 'number' && Number.isSafeInteger(location.columnNumber)
+                ? location.columnNumber
+                : null,
+          });
+        });
         this.sessions.set(sessionId, active);
         return this.view(sessionId, active);
       } catch (error) {
@@ -490,13 +612,19 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     return this.view(sessionId, this.requireSession(sessionId));
   }
 
-  async navigate(sessionId: string, value: string, signal: AbortSignal): Promise<BrowserSessionView> {
+  async navigate(
+    sessionId: string,
+    value: string,
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
     const active = this.requireSession(sessionId);
     if (!urlAllowed(value, active.target.allowedUrlPatterns)) throw new Error('BROWSER_URL_DENIED');
     if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
     await active.page.goto(value, { waitUntil: 'domcontentloaded', timeout: PROTOCOL_TIMEOUT_MS });
     this.invalidateSnapshot(active);
-    return this.view(sessionId, active);
+    return this.postAction(sessionId, active, beforeUrl, options.settleMs, signal);
   }
 
   async snapshot(
@@ -576,7 +704,7 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
       }
       result.push(candidate);
       refByIndex.set(index, nodeRef);
-      bindings.set(nodeRef, { backendNodeId });
+      bindings.set(nodeRef, { backendNodeId, tag, href, inputType: candidate.inputType });
     }
     active.snapshotId = snapshotId;
     active.nodes = bindings;
@@ -624,10 +752,18 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     };
   }
 
-  async click(sessionId: string, snapshotId: string, nodeRef: string, signal: AbortSignal): Promise<void> {
+  async click(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
     const active = this.requireNode(sessionId, snapshotId, nodeRef);
     if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
     const binding = active.nodes.get(nodeRef)!;
+    await active.cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: binding.backendNodeId });
     const model = await active.cdp.send('DOM.getBoxModel', { backendNodeId: binding.backendNodeId });
     const quad = model.model.content;
     if (quad.length < 8) throw new Error('BROWSER_NODE_NOT_INTERACTABLE');
@@ -636,13 +772,23 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     await active.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
     await active.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
     this.invalidateSnapshot(active);
+    return this.postAction(sessionId, active, beforeUrl, options.settleMs, signal);
   }
 
-  async type(sessionId: string, snapshotId: string, nodeRef: string, text: string, signal: AbortSignal): Promise<void> {
+  async type(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    text: string,
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
     if (Buffer.byteLength(text, 'utf8') > MAX_TYPE_BYTES) throw new Error('BROWSER_INPUT_TOO_LARGE');
     const active = this.requireNode(sessionId, snapshotId, nodeRef);
     if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
     const binding = active.nodes.get(nodeRef)!;
+    await active.cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: binding.backendNodeId });
     await active.cdp.send('DOM.focus', { backendNodeId: binding.backendNodeId });
     await active.cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2 });
     await active.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2 });
@@ -650,6 +796,332 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     await active.cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace' });
     if (text) await active.cdp.send('Input.insertText', { text });
     this.invalidateSnapshot(active);
+    return this.postAction(sessionId, active, beforeUrl, options.settleMs, signal);
+  }
+
+  async scroll(
+    sessionId: string,
+    options: { deltaX: number; deltaY: number; settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
+    const active = this.requireSession(sessionId);
+    if (
+      !Number.isFinite(options.deltaX) ||
+      !Number.isFinite(options.deltaY) ||
+      Math.abs(options.deltaX) > MAX_SCROLL_DELTA ||
+      Math.abs(options.deltaY) > MAX_SCROLL_DELTA
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
+    await active.page.mouse.wheel({ deltaX: options.deltaX, deltaY: options.deltaY });
+    this.invalidateSnapshot(active);
+    return this.postAction(sessionId, active, beforeUrl, options.settleMs, signal);
+  }
+
+  async press(
+    sessionId: string,
+    options: {
+      key: string;
+      modifiers?: string[];
+      snapshotId?: string;
+      nodeRef?: string;
+      settleMs?: number;
+    },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
+    const hasNode = options.nodeRef !== undefined || options.snapshotId !== undefined;
+    if ((options.nodeRef === undefined) !== (options.snapshotId === undefined)) throw new Error('VALIDATION_FAILED');
+    if (!PRESS_KEYS.has(options.key) && !/^Key[A-Z]$/.test(options.key) && !/^Digit[0-9]$/.test(options.key)) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const modifiers = [...new Set(options.modifiers ?? [])];
+    if (modifiers.some((modifier) => !PRESS_MODIFIERS.has(modifier))) throw new Error('VALIDATION_FAILED');
+    const active = hasNode
+      ? this.requireNode(sessionId, options.snapshotId!, options.nodeRef!)
+      : this.requireSession(sessionId);
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
+    if (hasNode) {
+      const binding = active.nodes.get(options.nodeRef!)!;
+      await active.cdp.send('DOM.scrollIntoViewIfNeeded', { backendNodeId: binding.backendNodeId });
+      await active.cdp.send('DOM.focus', { backendNodeId: binding.backendNodeId });
+    }
+    for (const modifier of modifiers) await active.page.keyboard.down(modifier as KeyInput);
+    try {
+      await active.page.keyboard.press(options.key as KeyInput);
+    } finally {
+      for (const modifier of [...modifiers].reverse()) await active.page.keyboard.up(modifier as KeyInput);
+    }
+    this.invalidateSnapshot(active);
+    return this.postAction(sessionId, active, beforeUrl, options.settleMs, signal);
+  }
+
+  async back(sessionId: string, options: { settleMs?: number }, signal: AbortSignal): Promise<BrowserPostActionView> {
+    const active = this.requireSession(sessionId);
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
+    await active.page.goBack({ waitUntil: 'domcontentloaded', timeout: PROTOCOL_TIMEOUT_MS });
+    this.invalidateSnapshot(active);
+    return this.postAction(sessionId, active, beforeUrl, options.settleMs, signal);
+  }
+
+  async select(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    values: string[],
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
+    if (values.length < 1 || values.length > 16 || values.some((value) => Buffer.byteLength(value, 'utf8') > 512)) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const active = this.requireNode(sessionId, snapshotId, nodeRef);
+    const binding = active.nodes.get(nodeRef)!;
+    if (binding.tag !== 'select') throw new Error('BROWSER_NODE_NOT_SELECT');
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
+    const resolved = await active.cdp.send('DOM.resolveNode', { backendNodeId: binding.backendNodeId });
+    const objectId = resolved.object.objectId;
+    if (!objectId) throw new Error('BROWSER_NODE_NOT_INTERACTABLE');
+    const called = await active.cdp.send('Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration:
+        'function(values){if(!(this instanceof HTMLSelectElement))throw new Error("not-select");const wanted=new Set(values);const matched=new Set();for(const option of this.options){const selected=wanted.has(option.value);option.selected=selected;if(selected)matched.add(option.value);}if(matched.size!==wanted.size)throw new Error("option-not-found");if(!this.multiple&&matched.size>1){let seen=false;for(const option of this.options){if(option.selected){if(seen)option.selected=false;else seen=true;}}}this.dispatchEvent(new Event("input",{bubbles:true}));this.dispatchEvent(new Event("change",{bubbles:true}));return Array.from(this.selectedOptions).map((option)=>option.value);}',
+      arguments: [{ value: values }],
+      returnByValue: true,
+      awaitPromise: false,
+      userGesture: true,
+    });
+    if (called.exceptionDetails) throw new Error('BROWSER_SELECT_FAILED');
+    this.invalidateSnapshot(active);
+    return this.postAction(sessionId, active, beforeUrl, options.settleMs, signal);
+  }
+
+  async wait(
+    sessionId: string,
+    options: { mode: 'timeout' | 'networkIdle'; maxMillis: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
+    const active = this.requireSession(sessionId);
+    if (!Number.isSafeInteger(options.maxMillis) || options.maxMillis < 1 || options.maxMillis > MAX_WAIT_MS) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
+    if (options.mode === 'timeout') {
+      await waitBounded(options.maxMillis, signal);
+    } else if (options.mode === 'networkIdle') {
+      try {
+        await active.page.waitForNetworkIdle({
+          idleTime: Math.min(250, options.maxMillis),
+          timeout: options.maxMillis,
+        });
+      } catch {
+        if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+        throw new Error('BROWSER_WAIT_TIMEOUT');
+      }
+    } else {
+      throw new Error('VALIDATION_FAILED');
+    }
+    this.invalidateSnapshot(active);
+    return this.postAction(sessionId, active, beforeUrl, 0, signal);
+  }
+
+  async console(
+    sessionId: string,
+    options: { afterCursor?: number; limit?: number; maxBytes?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserConsoleView> {
+    const active = this.requireSession(sessionId);
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const afterCursor = options.afterCursor ?? 0;
+    const limit = options.limit ?? 50;
+    const maxBytes = options.maxBytes ?? 16 * 1024;
+    if (
+      !Number.isSafeInteger(afterCursor) ||
+      afterCursor < 0 ||
+      !Number.isSafeInteger(limit) ||
+      limit < 1 ||
+      limit > 100 ||
+      !Number.isSafeInteger(maxBytes) ||
+      maxBytes < 256 ||
+      maxBytes > MAX_CONSOLE_BYTES
+    ) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const firstAvailable = active.consoleEntries[0]?.sequence ?? active.consoleSequence + 1;
+    let bytes = 0;
+    let truncated = afterCursor < firstAvailable - 1;
+    let nextCursor = afterCursor;
+    const entries: BrowserConsoleEntry[] = [];
+    const eligible = active.consoleEntries.filter((entry) => entry.sequence > afterCursor);
+    for (const entry of eligible) {
+      if (entries.length >= limit) {
+        truncated = true;
+        break;
+      }
+      const entryBytes = Buffer.byteLength(JSON.stringify(entry), 'utf8');
+      if (entries.length > 0 && bytes + entryBytes > maxBytes) {
+        truncated = true;
+        break;
+      }
+      if (entryBytes > maxBytes) {
+        truncated = true;
+        nextCursor = entry.sequence;
+        continue;
+      }
+      entries.push(entry);
+      bytes += entryBytes;
+      nextCursor = entry.sequence;
+    }
+    if (nextCursor < (eligible.at(-1)?.sequence ?? afterCursor)) truncated = true;
+    return {
+      sessionId,
+      entries,
+      nextCursor,
+      truncated,
+    };
+  }
+
+  async upload(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    file: { name: string; mediaType: string; bytes: Uint8Array },
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
+    if (
+      file.bytes.byteLength > MAX_TRANSFER_BYTES ||
+      Buffer.byteLength(file.name, 'utf8') > 255 ||
+      Buffer.byteLength(file.mediaType, 'utf8') > 128
+    ) {
+      throw new Error('BROWSER_UPLOAD_TOO_LARGE');
+    }
+    const active = this.requireNode(sessionId, snapshotId, nodeRef);
+    const binding = active.nodes.get(nodeRef)!;
+    if (binding.tag !== 'input' || binding.inputType !== 'file') throw new Error('BROWSER_NODE_NOT_FILE_INPUT');
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const beforeUrl = active.page.url();
+    const resolved = await active.cdp.send('DOM.resolveNode', { backendNodeId: binding.backendNodeId });
+    const objectId = resolved.object.objectId;
+    if (!objectId) throw new Error('BROWSER_NODE_NOT_INTERACTABLE');
+    const called = await active.cdp.send('Runtime.callFunctionOn', {
+      objectId,
+      functionDeclaration:
+        'function(base64,name,mediaType){if(!(this instanceof HTMLInputElement)||this.type!=="file")throw new Error("not-file-input");const binary=atob(base64);const bytes=new Uint8Array(binary.length);for(let i=0;i<binary.length;i+=1)bytes[i]=binary.charCodeAt(i);const file=new File([bytes],name,{type:mediaType});const transfer=new DataTransfer();transfer.items.add(file);this.files=transfer.files;this.dispatchEvent(new Event("input",{bubbles:true}));this.dispatchEvent(new Event("change",{bubbles:true}));return {count:this.files?.length??0,name:this.files?.[0]?.name??""};}',
+      arguments: [
+        { value: Buffer.from(file.bytes).toString('base64') },
+        { value: file.name },
+        { value: file.mediaType },
+      ],
+      returnByValue: true,
+      awaitPromise: false,
+      userGesture: true,
+    });
+    if (called.exceptionDetails) throw new Error('BROWSER_UPLOAD_FAILED');
+    this.invalidateSnapshot(active);
+    return this.postAction(sessionId, active, beforeUrl, options.settleMs, signal);
+  }
+
+  async download(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    options: { maxBytes?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserDownloadView> {
+    const active = this.requireNode(sessionId, snapshotId, nodeRef);
+    const binding = active.nodes.get(nodeRef)!;
+    if (!binding.href || (binding.tag !== 'a' && binding.tag !== 'area')) throw new Error('BROWSER_NODE_NOT_DOWNLOAD');
+    const maxBytes = options.maxBytes ?? MAX_TRANSFER_BYTES;
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_TRANSFER_BYTES) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const url = new URL(binding.href, active.page.url()).toString();
+    if (!urlAllowed(url, active.target.allowedUrlPatterns)) throw new Error('BROWSER_URL_DENIED');
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    let payload: {
+      ok: boolean;
+      error?: string;
+      url?: string;
+      mediaType?: string;
+      disposition?: string | null;
+      base64?: string;
+    };
+    try {
+      payload = await active.page.evaluate(
+        async ({ targetUrl, ceiling }) => {
+          const response = await fetch(targetUrl, { credentials: 'include', redirect: 'follow' });
+          if (!response.ok) return { ok: false, error: `http-${response.status}` };
+          const reader = response.body?.getReader();
+          if (!reader) return { ok: false, error: 'body-unavailable' };
+          const chunks: Uint8Array[] = [];
+          let total = 0;
+          while (true) {
+            const next = await reader.read();
+            if (next.done) break;
+            if (!next.value) continue;
+            total += next.value.byteLength;
+            if (total > ceiling) {
+              await reader.cancel();
+              return { ok: false, error: 'too-large' };
+            }
+            chunks.push(next.value);
+          }
+          const merged = new Uint8Array(total);
+          let offset = 0;
+          for (const chunk of chunks) {
+            merged.set(chunk, offset);
+            offset += chunk.byteLength;
+          }
+          let binary = '';
+          for (let index = 0; index < merged.length; index += 0x8000) {
+            binary += String.fromCharCode(...merged.subarray(index, Math.min(index + 0x8000, merged.length)));
+          }
+          return {
+            ok: true,
+            url: response.url,
+            mediaType:
+              response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() || 'application/octet-stream',
+            disposition: response.headers.get('content-disposition'),
+            base64: btoa(binary),
+          };
+        },
+        { targetUrl: url, ceiling: maxBytes },
+      );
+    } catch {
+      if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+      throw new Error('BROWSER_DOWNLOAD_FAILED');
+    }
+    if (!payload.ok) {
+      if (payload.error === 'too-large') throw new Error('BROWSER_DOWNLOAD_TOO_LARGE');
+      throw new Error('BROWSER_DOWNLOAD_FAILED');
+    }
+    if (
+      !payload.url ||
+      payload.base64 === undefined ||
+      !urlAllowed(payload.url, active.target.allowedUrlPatterns) ||
+      !payload.mediaType ||
+      payload.mediaType.length > 128 ||
+      /[\r\n\0]/.test(payload.mediaType)
+    ) {
+      throw new Error('BROWSER_DOWNLOAD_INVALID');
+    }
+    const bytes = Buffer.from(payload.base64, 'base64');
+    if (bytes.byteLength > maxBytes) throw new Error('BROWSER_DOWNLOAD_INVALID');
+    return {
+      sessionId,
+      generation: active.request.generation ?? null,
+      targetId: active.target.id,
+      url: payload.url,
+      name: filenameFromDownload(payload.url, payload.disposition ?? null),
+      mediaType: payload.mediaType,
+      bytes,
+    };
   }
 
   async close(sessionId: string): Promise<void> {
@@ -675,6 +1147,50 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
 
   async closeAll(): Promise<void> {
     await Promise.all([...this.sessions.keys()].map((sessionId) => this.close(sessionId)));
+  }
+
+  private async postAction(
+    sessionId: string,
+    active: ActiveBrowserSession,
+    beforeUrl: string,
+    settleMs: number | undefined,
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView> {
+    const boundedSettle = settleMs ?? 250;
+    if (!Number.isSafeInteger(boundedSettle) || boundedSettle < 0 || boundedSettle > MAX_SETTLE_MS) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    if (boundedSettle > 0) {
+      try {
+        await active.page.waitForNetworkIdle({
+          idleTime: Math.min(100, boundedSettle),
+          timeout: boundedSettle,
+        });
+      } catch {
+        // Post-action settle is best-effort and bounded; explicit browser_wait provides strict waiting.
+      }
+    }
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const url = active.page.url();
+    return {
+      sessionId,
+      generation: active.request.generation ?? null,
+      targetId: active.target.id,
+      url,
+      title: boundedText(await active.page.title()) ?? '',
+      navigationChanged: url !== beforeUrl,
+    };
+  }
+
+  private recordConsole(active: ActiveBrowserSession, entry: Omit<BrowserConsoleEntry, 'sequence'>): void {
+    active.consoleSequence += 1;
+    active.consoleEntries.push({ sequence: active.consoleSequence, ...entry });
+    while (
+      active.consoleEntries.length > MAX_CONSOLE_ENTRIES ||
+      Buffer.byteLength(JSON.stringify(active.consoleEntries), 'utf8') > MAX_CONSOLE_BYTES
+    ) {
+      active.consoleEntries.shift();
+    }
   }
 
   private async filterRequest(request: HTTPRequest, target: BrowserTargetSnapshot): Promise<void> {

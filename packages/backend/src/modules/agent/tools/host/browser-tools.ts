@@ -18,6 +18,11 @@ const MAX_URL_BYTES = 8 * 1024;
 const MAX_TYPE_BYTES = 16 * 1024;
 const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024;
 const MIN_SCREENSHOT_BYTES = 64 * 1024;
+const MAX_TRANSFER_BYTES = 8 * 1024 * 1024;
+const MAX_SETTLE_MS = 2_000;
+const MAX_WAIT_MS = 5_000;
+const MAX_SCROLL_DELTA = 10_000;
+const MAX_OPTION_BYTES = 512;
 const MAX_ID_BYTES = 128;
 const TOOL_VERSION = '1.0.0';
 
@@ -47,6 +52,56 @@ const integer = (value: JsonValue | undefined, fallback: number, min: number, ma
   const candidate = value === undefined ? fallback : Number(value);
   if (!Number.isSafeInteger(candidate) || candidate < min || candidate > max) throw new Error('TOOL_ARGUMENTS_INVALID');
   return candidate;
+};
+
+const stringArray = (
+  value: JsonValue | undefined,
+  options: { minItems: number; maxItems: number; maxBytes: number },
+): string[] => {
+  if (
+    !Array.isArray(value) ||
+    value.length < options.minItems ||
+    value.length > options.maxItems ||
+    value.some((item) => typeof item !== 'string' || Buffer.byteLength(item, 'utf8') > options.maxBytes)
+  ) {
+    throw new Error('TOOL_ARGUMENTS_INVALID');
+  }
+  return value as string[];
+};
+
+const artifactBytesForAgent = async (
+  artifacts: ArtifactService,
+  context: ToolContext,
+  artifactId: string,
+): Promise<{ id: string; name: string; mediaType: string; sha256: string; sizeBytes: number; bytes: Uint8Array }> => {
+  const artifact = await artifacts.getForAgent(
+    context,
+    { runId: context.runId, runtimeId: context.agentRuntimeId },
+    artifactId,
+  );
+  if (!artifact || artifact.status !== 'ready' || !artifact.sha256) throw new Error('ARTIFACT_NOT_AUTHORIZED_FOR_RUN');
+  if (artifact.sizeBytes > MAX_TRANSFER_BYTES) throw new Error('BROWSER_UPLOAD_TOO_LARGE');
+  const chunks: Uint8Array[] = [];
+  if (artifact.sizeBytes > 0) {
+    for await (const chunk of artifacts.readForAgent(
+      context,
+      { runId: context.runId, runtimeId: context.agentRuntimeId },
+      artifact.id,
+      { start: 0, endInclusive: artifact.sizeBytes - 1 },
+    )) {
+      chunks.push(chunk);
+    }
+  }
+  const bytes = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
+  if (bytes.byteLength !== artifact.sizeBytes) throw new Error('ARTIFACT_UNAVAILABLE');
+  return {
+    id: artifact.id,
+    name: artifact.originalName,
+    mediaType: artifact.mediaType,
+    sha256: artifact.sha256,
+    sizeBytes: artifact.sizeBytes,
+    bytes,
+  };
 };
 
 const workspaceForContext = async (
@@ -530,15 +585,16 @@ export const createBrowserTools = (
       version: TOOL_VERSION,
       description:
         action === 'navigate'
-          ? 'Navigate an existing Browser session to an allowlisted URL.'
+          ? 'Navigate an existing Browser session to an allowlisted URL and return bounded post-action state.'
           : action === 'click'
-            ? 'Click an opaque nodeRef from the latest Browser snapshot.'
-            : 'Type bounded text into an opaque nodeRef from the latest Browser snapshot.',
+            ? 'Click an opaque nodeRef from the latest Browser snapshot and return bounded post-action state.'
+            : 'Type bounded text into an opaque nodeRef from the latest Browser snapshot and return bounded post-action state.',
       inputSchema: {
         type: 'object',
         additionalProperties: false,
         properties: {
           sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          settleMs: { type: 'integer', minimum: 0, maximum: MAX_SETTLE_MS },
           ...(action === 'navigate'
             ? { url: { type: 'string', minLength: 1, maxLength: MAX_URL_BYTES } }
             : {
@@ -559,7 +615,10 @@ export const createBrowserTools = (
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
       const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
-      const normalized: Record<string, JsonValue> = { sessionId };
+      const normalized: Record<string, JsonValue> = {
+        sessionId,
+        settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS),
+      };
       if (action === 'navigate') normalized.url = string(args.url, MAX_URL_BYTES);
       else {
         normalized.snapshotId = string(args.snapshotId, MAX_ID_BYTES);
@@ -582,17 +641,567 @@ export const createBrowserTools = (
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
       await sessionBinding(repository, settings, gateway, context, sessionId);
+      const settleMs = integer(args.settleMs, 250, 0, MAX_SETTLE_MS);
       if (action === 'navigate') {
-        const session = await gateway.navigate(sessionId, string(args.url, MAX_URL_BYTES), context.signal);
-        return result('Browser navigation completed.', session as unknown as JsonValue);
+        const state = await gateway.navigate(sessionId, string(args.url, MAX_URL_BYTES), { settleMs }, context.signal);
+        return result('Browser navigation completed.', state as unknown as JsonValue);
       }
       const snapshotId = string(args.snapshotId, MAX_ID_BYTES);
       const nodeRef = string(args.nodeRef, MAX_ID_BYTES);
-      if (action === 'click') await gateway.click(sessionId, snapshotId, nodeRef, context.signal);
-      else await gateway.type(sessionId, snapshotId, nodeRef, string(args.text, MAX_TYPE_BYTES, true), context.signal);
-      return result(`Browser ${action} completed.`);
+      const state =
+        action === 'click'
+          ? await gateway.click(sessionId, snapshotId, nodeRef, { settleMs }, context.signal)
+          : await gateway.type(
+              sessionId,
+              snapshotId,
+              nodeRef,
+              string(args.text, MAX_TYPE_BYTES, true),
+              { settleMs },
+              context.signal,
+            );
+      return result(`Browser ${action} completed.`, state as unknown as JsonValue);
     },
   })),
+  {
+    descriptor: {
+      name: 'browser_scroll',
+      version: TOOL_VERSION,
+      description:
+        'Scroll the current Browser page by bounded CSS-pixel deltas and return lightweight post-action state.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          deltaX: { type: 'integer', minimum: -MAX_SCROLL_DELTA, maximum: MAX_SCROLL_DELTA },
+          deltaY: { type: 'integer', minimum: -MAX_SCROLL_DELTA, maximum: MAX_SCROLL_DELTA },
+          settleMs: { type: 'integer', minimum: 0, maximum: MAX_SETTLE_MS },
+        },
+        required: ['sessionId', 'deltaY'],
+      },
+      riskClass: 'mutate',
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_scroll',
+        {
+          sessionId,
+          deltaX: integer(args.deltaX, 0, -MAX_SCROLL_DELTA, MAX_SCROLL_DELTA),
+          deltaY: integer(args.deltaY, 0, -MAX_SCROLL_DELTA, MAX_SCROLL_DELTA),
+          settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS),
+        },
+        binding,
+        sessionId,
+        'mutate',
+        true,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const state = await gateway.scroll(
+        sessionId,
+        {
+          deltaX: integer(args.deltaX, 0, -MAX_SCROLL_DELTA, MAX_SCROLL_DELTA),
+          deltaY: integer(args.deltaY, 0, -MAX_SCROLL_DELTA, MAX_SCROLL_DELTA),
+          settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS),
+        },
+        context.signal,
+      );
+      return result('Browser scroll completed.', state as unknown as JsonValue);
+    },
+  },
+  {
+    descriptor: {
+      name: 'browser_press',
+      version: TOOL_VERSION,
+      description:
+        'Press a bounded keyboard key or shortcut at page level or on an opaque nodeRef, then return lightweight post-action state.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          snapshotId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          nodeRef: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          key: { type: 'string', minLength: 1, maxLength: 32 },
+          modifiers: {
+            type: 'array',
+            maxItems: 4,
+            uniqueItems: true,
+            items: { type: 'string', enum: ['Alt', 'Control', 'Meta', 'Shift'] },
+          },
+          settleMs: { type: 'integer', minimum: 0, maximum: MAX_SETTLE_MS },
+        },
+        required: ['sessionId', 'key'],
+      },
+      riskClass: 'mutate',
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const hasSnapshot = args.snapshotId !== undefined;
+      const hasNode = args.nodeRef !== undefined;
+      if (hasSnapshot !== hasNode) throw new Error('TOOL_ARGUMENTS_INVALID');
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const modifiers =
+        args.modifiers === undefined ? [] : stringArray(args.modifiers, { minItems: 0, maxItems: 4, maxBytes: 16 });
+      if (modifiers.some((modifier) => !['Alt', 'Control', 'Meta', 'Shift'].includes(modifier))) {
+        throw new Error('TOOL_ARGUMENTS_INVALID');
+      }
+      const normalized: Record<string, JsonValue> = {
+        sessionId,
+        key: string(args.key, 32),
+        modifiers,
+        settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS),
+      };
+      if (hasSnapshot) {
+        normalized.snapshotId = string(args.snapshotId, MAX_ID_BYTES);
+        normalized.nodeRef = string(args.nodeRef, MAX_ID_BYTES);
+      }
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_press',
+        normalized,
+        binding,
+        sessionId,
+        'mutate',
+        true,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const state = await gateway.press(
+        sessionId,
+        {
+          key: string(args.key, 32),
+          modifiers: stringArray(args.modifiers, { minItems: 0, maxItems: 4, maxBytes: 16 }),
+          ...(args.snapshotId !== undefined
+            ? {
+                snapshotId: string(args.snapshotId, MAX_ID_BYTES),
+                nodeRef: string(args.nodeRef, MAX_ID_BYTES),
+              }
+            : {}),
+          settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS),
+        },
+        context.signal,
+      );
+      return result('Browser key press completed.', state as unknown as JsonValue);
+    },
+  },
+  {
+    descriptor: {
+      name: 'browser_back',
+      version: TOOL_VERSION,
+      description: 'Navigate one history entry back and return lightweight post-action state.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          settleMs: { type: 'integer', minimum: 0, maximum: MAX_SETTLE_MS },
+        },
+        required: ['sessionId'],
+      },
+      riskClass: 'mutate',
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_back',
+        { sessionId, settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS) },
+        binding,
+        sessionId,
+        'mutate',
+        true,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const state = await gateway.back(
+        sessionId,
+        { settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS) },
+        context.signal,
+      );
+      return result('Browser back navigation completed.', state as unknown as JsonValue);
+    },
+  },
+  {
+    descriptor: {
+      name: 'browser_select',
+      version: TOOL_VERSION,
+      description:
+        'Select one or more option values on an opaque select nodeRef from the latest Browser snapshot and return post-action state.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          snapshotId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          nodeRef: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          values: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 16,
+            items: { type: 'string', maxLength: MAX_OPTION_BYTES },
+          },
+          settleMs: { type: 'integer', minimum: 0, maximum: MAX_SETTLE_MS },
+        },
+        required: ['sessionId', 'snapshotId', 'nodeRef', 'values'],
+      },
+      riskClass: 'mutate',
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_select',
+        {
+          sessionId,
+          snapshotId: string(args.snapshotId, MAX_ID_BYTES),
+          nodeRef: string(args.nodeRef, MAX_ID_BYTES),
+          values: stringArray(args.values, { minItems: 1, maxItems: 16, maxBytes: MAX_OPTION_BYTES }),
+          settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS),
+        },
+        binding,
+        sessionId,
+        'mutate',
+        true,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const state = await gateway.select(
+        sessionId,
+        string(args.snapshotId, MAX_ID_BYTES),
+        string(args.nodeRef, MAX_ID_BYTES),
+        stringArray(args.values, { minItems: 1, maxItems: 16, maxBytes: MAX_OPTION_BYTES }),
+        { settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS) },
+        context.signal,
+      );
+      return result('Browser selection completed.', state as unknown as JsonValue);
+    },
+  },
+  {
+    descriptor: {
+      name: 'browser_wait',
+      version: TOOL_VERSION,
+      description:
+        'Wait for a bounded timeout or network-idle condition. Waiting invalidates old nodeRefs because the page may change asynchronously.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          mode: { type: 'string', enum: ['timeout', 'networkIdle'] },
+          maxMillis: { type: 'integer', minimum: 1, maximum: MAX_WAIT_MS },
+        },
+        required: ['sessionId', 'mode', 'maxMillis'],
+      },
+      riskClass: 'control',
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const mode = string(args.mode, 32);
+      if (mode !== 'timeout' && mode !== 'networkIdle') throw new Error('TOOL_ARGUMENTS_INVALID');
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_wait',
+        { sessionId, mode, maxMillis: integer(args.maxMillis, 1000, 1, MAX_WAIT_MS) },
+        binding,
+        sessionId,
+        'control',
+        false,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const mode = string(args.mode, 32);
+      if (mode !== 'timeout' && mode !== 'networkIdle') throw new Error('TOOL_ARGUMENTS_INVALID');
+      const state = await gateway.wait(
+        sessionId,
+        { mode, maxMillis: integer(args.maxMillis, 1000, 1, MAX_WAIT_MS) },
+        context.signal,
+      );
+      return result('Browser wait completed.', state as unknown as JsonValue);
+    },
+  },
+  {
+    descriptor: {
+      name: 'browser_console',
+      version: TOOL_VERSION,
+      description:
+        'Read a bounded cursor-based slice of Browser console output. This is read-only and does not expose JavaScript evaluation.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          afterCursor: { type: 'integer', minimum: 0 },
+          limit: { type: 'integer', minimum: 1, maximum: 100 },
+          maxBytes: { type: 'integer', minimum: 256, maximum: 65536 },
+        },
+        required: ['sessionId'],
+      },
+      riskClass: 'read',
+      parallelSafe: true,
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_console',
+        {
+          sessionId,
+          afterCursor: integer(args.afterCursor, 0, 0, Number.MAX_SAFE_INTEGER),
+          limit: integer(args.limit, 50, 1, 100),
+          maxBytes: integer(args.maxBytes, Math.min(16 * 1024, context.maxOutputBytes), 256, 65536),
+        },
+        binding,
+        sessionId,
+        'read',
+        false,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const view = await gateway.console(
+        sessionId,
+        {
+          afterCursor: integer(args.afterCursor, 0, 0, Number.MAX_SAFE_INTEGER),
+          limit: integer(args.limit, 50, 1, 100),
+          maxBytes: integer(args.maxBytes, Math.min(16 * 1024, context.maxOutputBytes), 256, 65536),
+        },
+        context.signal,
+      );
+      return { ...result('Browser console read completed.', view as unknown as JsonValue), truncated: view.truncated };
+    },
+  },
+  {
+    descriptor: {
+      name: 'browser_upload',
+      version: TOOL_VERSION,
+      description:
+        'Upload one Run-authorized Nexus Artifact into an opaque file-input nodeRef. No Backend or Browser host path is accepted.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          snapshotId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          nodeRef: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          artifactId: { type: 'string', minLength: 36, maxLength: 36 },
+          settleMs: { type: 'integer', minimum: 0, maximum: MAX_SETTLE_MS },
+        },
+        required: ['sessionId', 'snapshotId', 'nodeRef', 'artifactId'],
+      },
+      riskClass: 'mutate',
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const artifactId = string(args.artifactId, 36);
+      const source = await artifacts.getForAgent(
+        context,
+        { runId: context.runId, runtimeId: context.agentRuntimeId },
+        artifactId,
+      );
+      if (!source || source.status !== 'ready' || !source.sha256) throw new Error('ARTIFACT_NOT_AUTHORIZED_FOR_RUN');
+      if (source.sizeBytes > MAX_TRANSFER_BYTES) throw new Error('BROWSER_UPLOAD_TOO_LARGE');
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_upload',
+        {
+          sessionId,
+          snapshotId: string(args.snapshotId, MAX_ID_BYTES),
+          nodeRef: string(args.nodeRef, MAX_ID_BYTES),
+          artifactId,
+          sourceSha256: source.sha256,
+          sourceSizeBytes: source.sizeBytes,
+          settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS),
+        },
+        binding,
+        sessionId,
+        'mutate',
+        true,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const source = await artifactBytesForAgent(artifacts, context, string(args.artifactId, 36));
+      if (
+        source.sha256 !== string(args.sourceSha256, 128) ||
+        source.sizeBytes !== integer(args.sourceSizeBytes, -1, 0, MAX_TRANSFER_BYTES)
+      ) {
+        throw new Error('RESOURCE_CHANGED');
+      }
+      const state = await gateway.upload(
+        sessionId,
+        string(args.snapshotId, MAX_ID_BYTES),
+        string(args.nodeRef, MAX_ID_BYTES),
+        { name: source.name, mediaType: source.mediaType, bytes: source.bytes },
+        { settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS) },
+        context.signal,
+      );
+      return {
+        ...result('Browser Artifact upload completed.', {
+          state: state as unknown as JsonValue,
+          sourceArtifact: {
+            id: source.id,
+            name: source.name,
+            mediaType: source.mediaType,
+            sha256: source.sha256,
+            sizeBytes: source.sizeBytes,
+          },
+        }),
+        artifactRefs: [source.id],
+      };
+    },
+  },
+  {
+    descriptor: {
+      name: 'browser_download',
+      version: TOOL_VERSION,
+      description:
+        'Fetch a download link from the latest Browser snapshot through the live page session, bound bytes, and persist the result as a Nexus Artifact. No Browser host filesystem path is exposed.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          snapshotId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          nodeRef: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          maxBytes: { type: 'integer', minimum: 1, maximum: MAX_TRANSFER_BYTES },
+        },
+        required: ['sessionId', 'snapshotId', 'nodeRef'],
+      },
+      riskClass: 'read',
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_download',
+        {
+          sessionId,
+          snapshotId: string(args.snapshotId, MAX_ID_BYTES),
+          nodeRef: string(args.nodeRef, MAX_ID_BYTES),
+          maxBytes: integer(args.maxBytes, MAX_TRANSFER_BYTES, 1, MAX_TRANSFER_BYTES),
+        },
+        binding,
+        sessionId,
+        'read',
+        false,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const downloaded = await gateway.download(
+        sessionId,
+        string(args.snapshotId, MAX_ID_BYTES),
+        string(args.nodeRef, MAX_ID_BYTES),
+        { maxBytes: integer(args.maxBytes, MAX_TRANSFER_BYTES, 1, MAX_TRANSFER_BYTES) },
+        context.signal,
+      );
+      const reservation = await artifacts.begin(context, {
+        name: downloaded.name,
+        mediaType: downloaded.mediaType,
+        declaredBytes: downloaded.bytes.byteLength,
+      });
+      const artifact = await artifacts.write(
+        context,
+        reservation.artifactId,
+        byteSource(downloaded.bytes),
+        context.signal,
+      );
+      if (artifact.status !== 'ready' || !artifact.sha256) throw new Error('BROWSER_DOWNLOAD_ARTIFACT_UNAVAILABLE');
+      return {
+        ok: true,
+        summary: 'Browser download persisted as a ready Artifact.',
+        data: {
+          sessionId: downloaded.sessionId,
+          targetId: downloaded.targetId,
+          generation: downloaded.generation,
+          url: downloaded.url,
+          artifact: {
+            id: artifact.id,
+            name: artifact.originalName,
+            mediaType: artifact.mediaType,
+            sha256: artifact.sha256,
+            sizeBytes: artifact.sizeBytes,
+          },
+        },
+        artifactRefs: [artifact.id],
+        truncated: false,
+        outcome: 'confirmed',
+        verification: {
+          status: 'verified',
+          summary:
+            'The bounded response bytes were fetched through the live Browser page session and persisted as a ready Artifact.',
+          evidenceRefs: [artifact.id],
+        },
+      };
+    },
+  },
   {
     descriptor: {
       name: 'browser_close',

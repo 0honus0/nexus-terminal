@@ -205,18 +205,127 @@ export interface BrowserScreenshotView {
   bytes: Uint8Array;
 }
 
+export interface BrowserPostActionView {
+  sessionId: string;
+  generation: number | null;
+  targetId: string;
+  url: string;
+  title: string;
+  navigationChanged: boolean;
+}
+
+export interface BrowserConsoleEntry {
+  sequence: number;
+  type: 'log' | 'debug' | 'info' | 'error' | 'warning' | 'other';
+  text: string;
+  url: string | null;
+  line: number | null;
+  column: number | null;
+}
+
+export interface BrowserConsoleView {
+  sessionId: string;
+  entries: BrowserConsoleEntry[];
+  nextCursor: number;
+  truncated: boolean;
+}
+
+export interface BrowserUploadFile {
+  name: string;
+  mediaType: string;
+  bytes: Uint8Array;
+}
+
+export interface BrowserDownloadView {
+  sessionId: string;
+  generation: number | null;
+  targetId: string;
+  url: string;
+  name: string;
+  mediaType: string;
+  bytes: Uint8Array;
+}
+
 export interface BrowserGatewayPort {
   createSession(request: BrowserSessionRequest, signal: AbortSignal): Promise<BrowserSessionView>;
   getSession(sessionId: string, signal?: AbortSignal): Promise<BrowserSessionView>;
-  navigate(sessionId: string, url: string, signal: AbortSignal): Promise<BrowserSessionView>;
+  navigate(
+    sessionId: string,
+    url: string,
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView>;
   snapshot(
     sessionId: string,
     options: { maxNodes?: number; maxBytes?: number },
     signal: AbortSignal,
   ): Promise<BrowserSnapshotView>;
   screenshot(sessionId: string, options: { maxBytes?: number }, signal: AbortSignal): Promise<BrowserScreenshotView>;
-  click(sessionId: string, snapshotId: string, nodeRef: string, signal: AbortSignal): Promise<void>;
-  type(sessionId: string, snapshotId: string, nodeRef: string, text: string, signal: AbortSignal): Promise<void>;
+  click(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView>;
+  type(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    text: string,
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView>;
+  scroll(
+    sessionId: string,
+    options: { deltaX: number; deltaY: number; settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView>;
+  press(
+    sessionId: string,
+    options: {
+      key: string;
+      modifiers?: string[];
+      snapshotId?: string;
+      nodeRef?: string;
+      settleMs?: number;
+    },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView>;
+  back(sessionId: string, options: { settleMs?: number }, signal: AbortSignal): Promise<BrowserPostActionView>;
+  select(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    values: string[],
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView>;
+  wait(
+    sessionId: string,
+    options: { mode: 'timeout' | 'networkIdle'; maxMillis: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView>;
+  console(
+    sessionId: string,
+    options: { afterCursor?: number; limit?: number; maxBytes?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserConsoleView>;
+  upload(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    file: BrowserUploadFile,
+    options: { settleMs?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserPostActionView>;
+  download(
+    sessionId: string,
+    snapshotId: string,
+    nodeRef: string,
+    options: { maxBytes?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserDownloadView>;
   close(sessionId: string): Promise<void>;
   closeWorkspace(workspaceId: string, generation?: number): void;
   closeAll(): Promise<void>;
