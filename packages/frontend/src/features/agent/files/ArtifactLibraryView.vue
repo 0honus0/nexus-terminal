@@ -9,7 +9,7 @@
     ArtifactCleanupPreview,
     ArtifactStorageSummary,
   } from '../api/agent-api';
-  import { agentApi, formatAgentApiError } from '../api/agent-api';
+  import { agentApi, formatAgentApiError, toAgentApiError } from '../api/agent-api';
 
   type ArtifactFileKind = 'image' | 'document' | 'code' | 'archive' | 'media' | 'other';
   type ArtifactFileKindFilter = 'all' | ArtifactFileKind;
@@ -71,6 +71,7 @@
   const nextCursor = ref<string | null>(null);
   const storage = ref<ArtifactStorageSummary | null>(null);
   const cleanupPreview = ref<ArtifactCleanupPreview | null>(null);
+  const deleteTarget = ref<AgentArtifactRef | null>(null);
   const query = ref('');
   const appId = ref('');
   const retained = ref<'all' | 'retained' | 'unretained'>('all');
@@ -78,6 +79,7 @@
   const busy = ref(false);
   const error = ref('');
   const notice = ref('');
+  const deleteNotice = ref('');
 
   const bytes = (value: number): string => {
     if (value < 1024) return `${value} B`;
@@ -157,6 +159,39 @@
       storage.value = await agentApi.storage();
     } catch (cause) {
       error.value = explain(cause);
+    } finally {
+      busy.value = false;
+    }
+  };
+
+  const requestDelete = (artifact: AgentArtifactRef): void => {
+    deleteTarget.value = artifact;
+    error.value = '';
+    deleteNotice.value = '';
+  };
+
+  const confirmDelete = async (): Promise<void> => {
+    const target = deleteTarget.value;
+    if (!target || busy.value) return;
+    busy.value = true;
+    error.value = '';
+    notice.value = '';
+    deleteNotice.value = '';
+    try {
+      await agentApi.deleteArtifact(target);
+      deleteTarget.value = null;
+      await load();
+      deleteNotice.value = t('agent.files.deleteDone', { name: target.originalName });
+    } catch (cause) {
+      const apiError = toAgentApiError(cause);
+      if (['STATE_CONFLICT', 'NOT_FOUND', 'ARTIFACT_PROTECTED'].includes(apiError.code)) {
+        await load();
+      }
+      if (apiError.code === 'STATE_CONFLICT') error.value = t('agent.files.deleteConflict');
+      else if (apiError.code === 'NOT_FOUND') error.value = t('agent.files.deleteNotFound');
+      else if (apiError.code === 'ARTIFACT_PROTECTED') error.value = t('agent.files.deleteProtected');
+      else error.value = explain(cause);
+      deleteTarget.value = null;
     } finally {
       busy.value = false;
     }
@@ -341,10 +376,48 @@
         </div>
 
         <div class="flex flex-wrap items-center justify-end gap-2">
+          <span v-if="deleteNotice" class="rounded-xl bg-success/10 px-2.5 py-1.5 text-[10px] font-medium text-success">
+            <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
+            {{ deleteNotice }}
+          </span>
+
           <span v-if="notice" class="rounded-xl bg-success/10 px-2.5 py-1.5 text-[10px] font-medium text-success">
             <i class="fa-solid fa-circle-check mr-1" aria-hidden="true"></i>
             {{ $t('agent.files.cleanupDone', { count: notice }) }}
           </span>
+
+          <div
+            v-if="deleteTarget"
+            class="flex flex-wrap items-center gap-2 rounded-xl border border-error/30 bg-error/6 px-3 py-1.5 text-[10px] shadow-2xs"
+          >
+            <i class="fa-solid fa-trash-can text-error" aria-hidden="true"></i>
+            <span class="font-medium text-foreground">
+              {{
+                $t('agent.files.deletePreview', {
+                  name: deleteTarget.originalName,
+                  bytes: bytes(deleteTarget.sizeBytes),
+                })
+              }}
+            </span>
+            <div class="flex items-center gap-1 border-l border-error/20 pl-2">
+              <button
+                type="button"
+                class="rounded-lg px-2 py-1 text-text-secondary transition-colors hover:bg-header hover:text-foreground"
+                :disabled="busy"
+                @click="deleteTarget = null"
+              >
+                {{ $t('common.cancel') }}
+              </button>
+              <button
+                type="button"
+                class="rounded-lg bg-error px-2.5 py-1 font-semibold text-white transition-colors hover:bg-error/90 disabled:opacity-50"
+                :disabled="busy"
+                @click="confirmDelete"
+              >
+                {{ $t('agent.files.deleteConfirm') }}
+              </button>
+            </div>
+          </div>
 
           <button
             v-if="!cleanupPreview"
@@ -538,7 +611,7 @@
 
     <div v-if="items.length > 0" class="shrink-0 border-b border-border/60 bg-card/30 px-4">
       <div
-        class="grid h-8 grid-cols-[minmax(0,1fr)_5rem_4.5rem] items-center gap-3 px-2 text-[8px] font-semibold uppercase tracking-[0.08em] text-text-secondary sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_4.5rem]"
+        class="grid h-8 grid-cols-[minmax(0,1fr)_5rem_5.5rem] items-center gap-3 px-2 text-[8px] font-semibold uppercase tracking-[0.08em] text-text-secondary sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_5.5rem]"
       >
         <span>{{ $t('agent.files.columns.name') }}</span>
         <span class="hidden sm:block">{{ $t('agent.files.columns.source') }}</span>
@@ -578,7 +651,7 @@
     <RecycleScroller v-else class="min-h-0 flex-1 overflow-y-auto px-4" :items="items" :item-size="58" key-field="id">
       <template #default="{ item }">
         <article
-          class="group grid h-[58px] grid-cols-[minmax(0,1fr)_5rem_4.5rem] items-center gap-3 border-b border-border/55 px-2 transition-colors hover:bg-header/45 sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_4.5rem]"
+          class="group grid h-[58px] grid-cols-[minmax(0,1fr)_5rem_5.5rem] items-center gap-3 border-b border-border/55 px-2 transition-colors hover:bg-header/45 sm:grid-cols-[minmax(0,1fr)_7rem_5rem_5rem_5.5rem]"
         >
           <div class="flex min-w-0 items-center gap-2.5">
             <div
@@ -631,6 +704,15 @@
               @click="toggleRetain(item)"
             >
               <i :class="item.retained ? 'fa-solid fa-bookmark' : 'fa-regular fa-bookmark'" aria-hidden="true"></i>
+            </button>
+            <button
+              type="button"
+              class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-error/10 hover:text-error disabled:opacity-35"
+              :disabled="busy"
+              :title="$t('agent.files.delete')"
+              @click="requestDelete(item)"
+            >
+              <i class="fa-regular fa-trash-can text-[9px]" aria-hidden="true"></i>
             </button>
             <a
               class="flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-header hover:text-foreground"
