@@ -102,6 +102,7 @@ export interface WorkspaceToolContributionOptions {
   repository: AgentWorkspaceRepositoryPort;
   runtime: WorkspaceRuntimeService;
   gateway: WorkspaceRuntimeGatewayPort;
+  artifacts: ArtifactService;
   cryptoHash: CryptoHashPort;
 }
 
@@ -110,6 +111,7 @@ export const registerWorkspaceToolContributions = ({
   repository,
   runtime,
   gateway,
+  artifacts,
   cryptoHash,
 }: WorkspaceToolContributionOptions): void => {
   catalog.registerContribution({
@@ -121,7 +123,7 @@ export const registerWorkspaceToolContributions = ({
       createWorkspaceSearchTool(repository, runtime, cryptoHash),
       createWorkspaceRepoMapTool(repository, runtime, cryptoHash),
       createWorkspaceCodeIntelTool(repository, runtime, cryptoHash),
-      createWorkspaceApplyPatchTool(repository, runtime, cryptoHash),
+      createWorkspaceApplyPatchTool(repository, runtime, cryptoHash, artifacts),
       createWorkspaceJobTool(repository, gateway, cryptoHash),
       createWorkspaceJobControlTool(repository, gateway, cryptoHash),
     ],

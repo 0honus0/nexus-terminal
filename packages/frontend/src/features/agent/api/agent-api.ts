@@ -723,6 +723,7 @@ export interface AgentSubagentView {
   profileId: string;
   capabilities: string[];
   peerMessaging: 'parent-child' | 'same-run';
+  mutationMode: 'read-only' | 'governed';
   modelRef: { providerId: string; modelId: string; configurationVersion: number };
   objective: string;
   constraints: string[];
@@ -770,16 +771,18 @@ export interface AgentSubagentProfile {
   allowedModels: Array<{ providerId: string; modelId: string; configurationVersion: number }>;
   capabilities: string[];
   peerMessaging: 'parent-child' | 'same-run';
+  mutationMode: 'read-only' | 'governed';
   maxSteps: number;
   failureMode: 'isolate' | 'failFast';
 }
 
 export interface AgentSubagentProfileTemplate {
-  id: 'explore' | 'scout' | 'review' | 'general';
+  id: 'explore' | 'scout' | 'review' | 'general' | 'worker';
   role: string;
   delegationHint: string;
   capabilities: string[];
   peerMessaging: 'parent-child' | 'same-run';
+  mutationMode: 'read-only' | 'governed';
   maxSteps: number;
   failureMode: 'isolate' | 'failFast';
 }

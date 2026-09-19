@@ -674,6 +674,17 @@ const definedMigrations: Migration[] = [
               ON agent_checkpoints(run_id) WHERE kind = 'recovery';
         `,
   },
+  {
+    id: 32,
+    name: 'Freeze Subagent mutation governance mode on delegations',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_delegations')) && !(await columnExists(db, 'agent_delegations', 'mutation_mode')),
+    sql: `
+            ALTER TABLE agent_delegations
+              ADD COLUMN mutation_mode TEXT NOT NULL DEFAULT 'read-only'
+              CHECK(mutation_mode IN ('read-only','governed'));
+        `,
+  },
 ];
 
 /**

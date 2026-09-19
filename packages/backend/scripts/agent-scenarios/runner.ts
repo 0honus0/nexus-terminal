@@ -179,15 +179,18 @@ import { SubagentContextBuilder } from '../../src/modules/agent/runtime/collabor
 import { SubagentParticipantExecutor } from '../../src/modules/agent/runtime/collaboration/subagent-participant-executor';
 import { SubagentScheduler } from '../../src/modules/agent/runtime/collaboration/subagent-scheduler';
 import { SubagentPolicyService } from '../../src/modules/agent/runtime/collaboration/subagent-policy';
+import { builtInSubagentProfileTemplates } from '../../src/modules/agent/runtime/collaboration/subagent-profile-templates';
 import { projectSubagentCollaborationContext } from '../../src/modules/agent/runtime/collaboration/subagent-context-projection';
+import { governedSubagentWorkspaceMutation } from '../../src/modules/agent/runtime/collaboration/subagent-mutation-policy';
 import type {
   MailboxReaderPort,
   RuntimeParticipantRepositoryPort,
   RuntimeParticipantView,
   RuntimeToolExchangeView,
 } from '../../src/modules/agent/runtime/collaboration/subagent.repository.port';
-import type { DelegationView } from '../../src/modules/agent/runtime/collaboration/subagent.types';
+import type { DelegationView, SchedulerWorkView } from '../../src/modules/agent/runtime/collaboration/subagent.types';
 import { RunService } from '../../src/modules/agent/runtime/runs/run.service';
+import { requestHash } from '../../src/modules/agent/runtime/runs/idempotency';
 import type { AtomicCreateRun } from '../../src/modules/agent/runtime/runs/state-commit.port';
 import { CheckpointService } from '../../src/modules/agent/runtime/recovery/checkpoint.service';
 import { WorkspaceCheckpointService } from '../../src/modules/agent/runtime/recovery/workspace-checkpoint.service';
@@ -1064,7 +1067,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
       | undefined;
     assert.equal(upgradedCheckpoint?.name, 'ai_context_checkpoints', 'migration 30 must create the Context checkpoint owner');
     assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
-    assert.equal(migrationVersion?.version, 31, 'legacy databases must advance through migration 31');
+    assert.equal(migrationVersion?.version, 32, 'legacy databases must advance through migration 32');
   } finally {
     legacyDb.close();
     fs.rmSync(upgradeDirectory, { recursive: true, force: true });
@@ -1078,7 +1081,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
     { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
     { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },
     { name: 'legacy_digest_tables', value: 0, unit: 'tables' },
-    { name: 'migration_version', value: 31, unit: 'version' },
+    { name: 'migration_version', value: 32, unit: 'version' },
   ];
 };
 
@@ -1661,6 +1664,8 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
     assert.equal(dryRun.changes.length, 1);
     assert.equal(dryRun.changes[0]?.beforeSha256, beforeHash);
 
+    const patchArtifactId = '11111111-1111-4111-8111-111111111111';
+    let patchArtifactBytes = '';
     const inspectTool = createWorkspaceApplyPatchTool(
       {
         getWorkspace: async () => ({
@@ -1690,13 +1695,27 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
         }),
       } as unknown as AgentWorkspaceRepositoryPort,
       {
-        applyWorkspacePatch: async () => ({
+        applyWorkspacePatch: async (_scope, _workspaceId, _generation, request) => ({
           changes: dryRun.changes,
-          applied: false,
+          applied: request.dryRun === true ? false : true,
         }),
       } as unknown as WorkspaceRuntimeService,
       {
         sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+      },
+      {
+        begin: async (_scope, meta) => {
+          assert.equal(meta.mediaType, 'text/x-diff');
+          assert.equal(meta.declaredBytes, Buffer.byteLength(patchText, 'utf8'));
+          return { artifactId: patchArtifactId, declaredBytes: meta.declaredBytes, expiresAt: 1_800_600_000 };
+        },
+        write: async (_scope, artifactId, source) => {
+          assert.equal(artifactId, patchArtifactId);
+          const chunks: Buffer[] = [];
+          for await (const chunk of source) chunks.push(Buffer.from(chunk));
+          patchArtifactBytes = Buffer.concat(chunks).toString('utf8');
+          return { id: patchArtifactId } as never;
+        },
       },
     );
     const inspectContext: ToolContext = {
@@ -1752,6 +1771,14 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
       new PolicyService().decide(patchInspection, 7).action,
       'requireApproval',
       'workspace_apply_patch must remain on the existing mutation approval path',
+    );
+    const toolPatchResult = await inspectTool.execute(patchInspection, inspectContext);
+    assert.deepEqual(toolPatchResult.artifactRefs, [patchArtifactId]);
+    assert.deepEqual(toolPatchResult.verification.evidenceRefs, [patchArtifactId]);
+    assert.equal(
+      patchArtifactBytes,
+      patchText,
+      'workspace patch Artifact must preserve the exact strict diff that was applied',
     );
 
     const applied = applyWorkspacePatch(workRoot, {
@@ -8057,6 +8084,1077 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
   }
 };
 
+const subagentGovernedMutationScenario: Scenario = async () => {
+  const scenarioScope: Scope = { userId: 1, appId: 'subagent-governed-mutation-app' };
+  const executionOrder: string[] = [];
+  let scenarioMutationExecutions = 0;
+  const catalog = new ToolCatalog();
+  const mutationTool: AgentTool = {
+    descriptor: {
+      name: 'scenario_workspace_mutate',
+      version: '1',
+      description: 'Scenario-only governed Workspace mutation.',
+      inputSchema: { type: 'object', additionalProperties: false },
+      riskClass: 'mutate',
+      capability: 'workspace.runtime.execute',
+    },
+    inspect: async (_input, context, policyRevision) => ({
+      toolName: 'scenario_workspace_mutate',
+      toolVersion: '1',
+      normalizedArguments: {},
+      target: {
+        kind: 'workspace',
+        workspaceId: 'scenario-child',
+        generation: 1,
+        targetIdentity: 'workspace:scenario-child:1',
+        endpoint: 'workspace:scenario-child',
+        loginUser: 'agent-runtime',
+        configurationHash: 'scenario-workspace-generation-1',
+      },
+      resourceKeys: ['workspace:scenario-child:1:file:src/example.ts'],
+      risk: 'mutate',
+      mutation: true,
+      operationHash: 'scenario-subagent-mutation-operation',
+      operationHashVersion: 1,
+      preconditions: [],
+      policyRevision,
+      inputRevision: context.inputRevision,
+    }),
+    execute: async () => {
+      executionOrder.push('tool.execute');
+      scenarioMutationExecutions += 1;
+      return {
+        ok: true,
+        summary: 'Scenario mutation completed.',
+        data: null,
+        artifactRefs: ['artifact:scenario-diff', 'artifact:scenario-test'],
+        truncated: false,
+        outcome: 'confirmed',
+        verification: {
+          status: 'verified',
+          summary: 'Scenario verification.',
+          evidenceRefs: ['artifact:scenario-diff', 'artifact:scenario-test'],
+        },
+      };
+    },
+  };
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.subagent-governed-mutation',
+    capability: 'workspace.runtime.execute',
+    tools: [mutationTool],
+  });
+  const machineMutationTool: AgentTool = {
+    ...mutationTool,
+    descriptor: {
+      ...mutationTool.descriptor,
+      name: 'scenario_machine_mutate',
+      capability: 'machine.files.write',
+    },
+  };
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.subagent-machine-mutation',
+    capability: 'machine.files.write',
+    tools: [machineMutationTool],
+  });
+  let forbiddenTargetExecutions = 0;
+  const misdeclaredWorkspaceMutationTool: AgentTool = {
+    ...mutationTool,
+    descriptor: {
+      ...mutationTool.descriptor,
+      name: 'scenario_misdeclared_workspace_mutate',
+      capability: 'workspace.runtime.execute',
+    },
+    inspect: async (_input, context, policyRevision) => ({
+      ...(await mutationTool.inspect({}, context, policyRevision)),
+      toolName: 'scenario_misdeclared_workspace_mutate',
+      target: {
+        kind: 'machine',
+        connectionId: 42,
+        targetIdentity: 'machine:42',
+        endpoint: 'ssh://example.invalid',
+        loginUser: 'root',
+        configurationHash: 'misdeclared-workspace-target',
+        hostKeyTrust: 'unavailable',
+      },
+      resourceKeys: ['connection:42:path:/tmp/not-a-workspace'],
+      operationHash: 'scenario-misdeclared-workspace-operation',
+    }),
+    execute: async () => {
+      forbiddenTargetExecutions += 1;
+      return {
+        ok: true,
+        summary: 'forbidden target executed',
+        data: null,
+        artifactRefs: [],
+        truncated: false,
+        outcome: 'confirmed',
+        verification: { status: 'verified', summary: 'unexpected', evidenceRefs: [] },
+      };
+    },
+  };
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.subagent-misdeclared-workspace-mutation',
+    capability: 'workspace.runtime.execute',
+    tools: [misdeclaredWorkspaceMutationTool],
+  });
+  const builder = new SubagentContextBuilder(null!, null!, catalog, emptyModelContinuations, null!, {
+    nowUnixSeconds: () => 1_800_570_000,
+  } as ClockPort);
+  const baseDelegation = {
+    userId: 1,
+    appId: scenarioScope.appId,
+    id: 'scenario-governed-delegation',
+    runId: 'scenario-governed-run',
+    parentRuntimeId: 'scenario-root-runtime',
+    childRuntimeId: 'scenario-child-runtime',
+    profileId: 'scenario-worker',
+    capabilities: ['workspace.runtime.execute'],
+    peerMessaging: 'parent-child',
+    modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    objective: 'Modify only src/example.ts and run the focused test.',
+    constraints: ['Use only the isolated child Workspace.'],
+    inputArtifactRefs: [],
+    completionCriteria: ['Return verified mutation evidence.'],
+    dependencyMode: 'settled',
+    status: 'running',
+    depth: 1,
+    failureMode: 'isolate',
+    budget: { maxSteps: 12 },
+    usage: { tokens: 0, steps: 0 },
+    result: null,
+    evidenceRefs: [],
+    deadlineAt: 1_900_000_000,
+    version: 1,
+    createdAt: 1_800_570_000,
+    updatedAt: 1_800_570_000,
+    completedAt: null,
+  } satisfies DelegationView;
+  assert.equal(
+    builder.allowsTool(scenarioScope, baseDelegation, mutationTool.descriptor.name),
+    false,
+    'read-only Subagents must continue rejecting mutation Tools even when the capability is present',
+  );
+  const governedDelegation = {
+    ...baseDelegation,
+    mutationMode: 'governed',
+  } as unknown as DelegationView;
+  assert.equal(
+    builder.allowsTool(scenarioScope, governedDelegation, mutationTool.descriptor.name),
+    true,
+    'explicit governed workers must expose mutation Tools through the existing capability-filtered surface',
+  );
+  assert.equal(
+    builder.allowsTool(
+      scenarioScope,
+      { ...governedDelegation, capabilities: [...governedDelegation.capabilities, 'machine.files.write'] },
+      machineMutationTool.descriptor.name,
+    ),
+    false,
+    'governed workers must stay confined to Workspace mutations even when a custom profile declares raw Machine write capability',
+  );
+  assert.deepEqual(
+    builtInSubagentProfileTemplates(64).map((template) => template.id),
+    ['explore', 'scout', 'review', 'general', 'worker'],
+    'the built-in catalog must expose an explicit governed worker preset without mutating read-only templates',
+  );
+  const toolSchemas = (
+    builder as unknown as {
+      toolSchemas(
+        scope: Scope,
+        delegation: DelegationView,
+        model: { supportsTools: boolean },
+        run: RunView,
+      ): Array<{ name: string }>;
+    }
+  ).toolSchemas.bind(builder);
+  const runForMode = (approvalMode: 'ask' | 'full_access') =>
+    ({
+      id: baseDelegation.runId,
+      userId: 1,
+      appId: scenarioScope.appId,
+      definition: { approvalMode, environment: { transport: 'workspace-profile' } },
+    }) as unknown as RunView;
+  assert.equal(
+    toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('ask')).some(
+      (schema) => schema.name === mutationTool.descriptor.name,
+    ),
+    false,
+    'ask-mode Runs must not expose mutation Tools to governed workers because Child approval cannot be parked safely',
+  );
+  assert.equal(
+    toolSchemas(scenarioScope, governedDelegation, { supportsTools: true }, runForMode('full_access')).some(
+      (schema) => schema.name === mutationTool.descriptor.name,
+    ),
+    true,
+    'governed workers on explicit Full Access Runs may expose Workspace mutation Tools',
+  );
+  assert.equal(
+    toolSchemas(scenarioScope, baseDelegation, { supportsTools: true }, runForMode('full_access')).some(
+      (schema) => schema.name === mutationTool.descriptor.name,
+    ),
+    false,
+    'Full Access must not override a read-only Subagent profile',
+  );
+
+  const fullAccessRun = {
+    id: baseDelegation.runId,
+    userId: scenarioScope.userId,
+    appId: scenarioScope.appId,
+    status: 'running',
+    needsReconciliation: false,
+    version: 1,
+    inputRevision: 1,
+    definition: {
+      approvalMode: 'full_access',
+      connectionIds: [],
+      policyRevision: 1,
+      environment: null,
+    },
+    budget: { toolTimeoutSeconds: 120, maxToolOutputBytes: 1_048_576 },
+    usage: {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedInputTokens: 0,
+      steps: 0,
+      subagentMessages: 0,
+      subagentMessageBytes: 0,
+    },
+  } as unknown as RunView;
+  const toolStepId = 'scenario-governed-tool-step';
+  const toolCallId = 'scenario-governed-tool-call';
+  const work: SchedulerWorkView = {
+    id: 'scenario-governed-tool-work',
+    enqueueSequence: 1,
+    runId: fullAccessRun.id,
+    agentRuntimeId: baseDelegation.childRuntimeId,
+    kind: 'tool_step',
+    status: 'claimed',
+    payload: { delegationId: baseDelegation.id, toolStepId, toolCallId },
+    ownerEpoch: 7,
+    notBefore: 1_800_570_000,
+    deadlineAt: 1_900_000_000,
+    createdAt: 1_800_570_000,
+    updatedAt: 1_800_570_000,
+    version: 2,
+  };
+  const signal = new AbortController().signal;
+  const mutationContext: ToolContext = {
+    userId: scenarioScope.userId,
+    appId: scenarioScope.appId,
+    actor: {
+      kind: 'agent',
+      userId: scenarioScope.userId,
+      appId: scenarioScope.appId,
+      runId: fullAccessRun.id,
+      agentRuntimeId: baseDelegation.childRuntimeId,
+    },
+    runId: fullAccessRun.id,
+    agentRuntimeId: baseDelegation.childRuntimeId,
+    connectionIds: [],
+    environment: null,
+    stepId: toolStepId,
+    signal,
+    deadlineAt: work.deadlineAt,
+    maxOutputBytes: 1_048_576,
+    inputRevision: 1,
+  };
+  const persistedInspection = await mutationTool.inspect({}, mutationContext, 1);
+  const pendingWorkspaceResource = `workspace:new:${fullAccessRun.id}:${baseDelegation.childRuntimeId}`;
+  assert.equal(
+    governedSubagentWorkspaceMutation(
+      {
+        ...persistedInspection,
+        target: {
+          kind: 'workspace',
+          targetIdentity: pendingWorkspaceResource,
+          endpoint: 'workspace:new',
+          loginUser: 'runner:65532',
+          configurationHash: 'scenario-pending-workspace',
+        },
+        resourceKeys: [pendingWorkspaceResource],
+      },
+      fullAccessRun.id,
+      baseDelegation.childRuntimeId,
+    ),
+    true,
+    'governed Child must be able to provision a Workspace bound to its own Run/runtime before an id exists',
+  );
+  let mutationLeaseAcquisitions = 0;
+  const mutationLeasePort = {
+    acquire: async () => {
+      mutationLeaseAcquisitions += 1;
+      executionOrder.push('lease.acquire');
+      let active = false;
+      return {
+        signal,
+        stopRenewal: async () => null,
+        activate: async () => {
+          active = true;
+          executionOrder.push('lease.activate');
+        },
+        quarantine: async () => {
+          executionOrder.push('lease.quarantine');
+        },
+        confirm: async () => {
+          assert.equal(active, true, 'mutation lease must be active before it is confirmed');
+          active = false;
+          executionOrder.push('lease.confirm');
+          return { ok: true as const };
+        },
+        releaseIfInactive: async () => {
+          assert.equal(active, false, 'cleanup must not release an active mutation lease');
+          executionOrder.push('lease.release');
+        },
+      };
+    },
+  };
+  const toolRunner = new ToolCallRunner(
+    catalog,
+    new ToolExecutor(catalog, {
+      authorize: async () => ({ allowed: true, policyRevision: 1 }),
+    } as never),
+    new PolicyService(),
+    null!,
+    mutationLeasePort as never,
+  );
+  let lastSettledMutation: { result: ToolResult; needsReconciliation?: boolean } | undefined;
+  const runAt = (version: number, status: RunView['status'] = 'running'): RunView =>
+    ({ ...fullAccessRun, version, status }) as RunView;
+  const stateCommit = {
+    beginSubagentTool: async () => {
+      executionOrder.push('state.begin-read');
+      return { run: runAt(2), eventCursor: 2, ledgerCursor: 0, committedEvents: [] };
+    },
+    requestToolApproval: async () => {
+      executionOrder.push('approval.request');
+      return { run: runAt(2, 'awaiting_approval'), eventCursor: 2, ledgerCursor: 0, committedEvents: [] };
+    },
+    resolveToolApproval: async () => {
+      executionOrder.push('approval.approve');
+      return { run: runAt(3), eventCursor: 3, ledgerCursor: 0, committedEvents: [] };
+    },
+    beginSubagentMutationTool: async () => {
+      executionOrder.push('state.begin');
+      return { run: runAt(4), eventCursor: 4, ledgerCursor: 0, committedEvents: [] };
+    },
+    settleSubagentTool: async (command: { result: ToolResult; needsReconciliation?: boolean }) => {
+      executionOrder.push('state.settle');
+      lastSettledMutation = {
+        result: command.result,
+        ...(command.needsReconciliation ? { needsReconciliation: true } : {}),
+      };
+      return {
+        run:
+          command.result.outcome === 'unknown'
+            ? ({ ...runAt(5, 'interrupted'), needsReconciliation: true } as RunView)
+            : runAt(5),
+        eventCursor: 5,
+        ledgerCursor: 0,
+        committedEvents: [],
+      };
+    },
+    evaluateToolLoopGuard: async () => {
+      executionOrder.push('loop.guard');
+      return { run: runAt(6), eventCursor: 6, ledgerCursor: 0, committedEvents: [] };
+    },
+    refreshProposedTool: async () => {
+      throw new Error('SCENARIO_UNEXPECTED_REFRESH');
+    },
+    commit: async () => {
+      throw new Error('SCENARIO_UNEXPECTED_RECONCILIATION_COMMIT');
+    },
+  };
+  const mutationExecutor = new SubagentParticipantExecutor(
+    null!,
+    null!,
+    {
+      recentRuntimeToolExchanges: async () => [
+        {
+          sourceModelStepId: 'scenario-mutation-model-step',
+          batchIndex: 0,
+          batchSize: 2,
+          providerCallId: 'scenario-verified-call',
+          toolName: mutationTool.descriptor.name,
+          arguments: {},
+          status: 'succeeded',
+          result: {
+            ok: true,
+            summary: 'Verified worker evidence.',
+            data: null,
+            artifactRefs: ['artifact:scenario-diff'],
+            truncated: false,
+            outcome: 'confirmed',
+            verification: {
+              status: 'verified',
+              summary: 'Focused test passed.',
+              evidenceRefs: ['artifact:scenario-test'],
+            },
+          },
+        },
+        {
+          sourceModelStepId: 'scenario-mutation-model-step',
+          batchIndex: 1,
+          batchSize: 2,
+          providerCallId: 'scenario-unverified-call',
+          toolName: 'scenario_unverified_claim',
+          arguments: {},
+          status: 'failed',
+          result: {
+            ok: false,
+            summary: 'Model-visible but unverified claim.',
+            data: null,
+            artifactRefs: ['artifact:must-not-propagate'],
+            truncated: false,
+            outcome: 'confirmed',
+            verification: {
+              status: 'unverified',
+              summary: 'No durable verification.',
+              evidenceRefs: ['artifact:also-must-not-propagate'],
+            },
+          },
+        },
+      ],
+    } as never,
+    null!,
+    { confirmedMutation: async () => null } as never,
+    null!,
+    null!,
+    null!,
+    stateCommit as never,
+    null!,
+    null!,
+    null!,
+    null!,
+    new AgentEventHub(),
+    {
+      enqueueRootRun: async () => undefined,
+      wakeChildScheduler: () => undefined,
+      cancelChildRuntime: () => undefined,
+    },
+    { nowUnixSeconds: () => 1_800_570_000 } as ClockPort,
+    toolRunner,
+    async (_run, reason) => {
+      assert.equal(reason, 'mutation_confirmed');
+      executionOrder.push('recovery.checkpoint');
+    },
+  );
+  const forbiddenInspection = await misdeclaredWorkspaceMutationTool.inspect({}, mutationContext, 1);
+  executionOrder.length = 0;
+  await (
+    mutationExecutor as unknown as {
+      executeChildMutation(
+        scope: Scope,
+        work: SchedulerWorkView,
+        ownerEpoch: number,
+        signal: AbortSignal,
+        delegation: DelegationView,
+        run: RunView,
+        toolWork: {
+          toolStepId: string;
+          toolCallId: string;
+          providerCallId: string;
+          status: string;
+          approvalId: string | null;
+          inspection: ToolInspection;
+        },
+      ): Promise<void>;
+    }
+  ).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
+    toolStepId,
+    toolCallId,
+    providerCallId: 'scenario-forbidden-target-call',
+    status: 'proposed',
+    approvalId: null,
+    inspection: forbiddenInspection,
+  });
+  assert.equal(forbiddenTargetExecutions, 0, 'governed Child must never execute a non-Workspace mutation target');
+  assert.equal(
+    mutationLeaseAcquisitions,
+    0,
+    'non-Workspace mutation targets must be rejected before acquiring any mutation lease',
+  );
+  assert.deepEqual(
+    executionOrder,
+    ['state.begin-read', 'state.settle'],
+    'misdeclared Workspace-capability mutations must settle as failed without approval or side effects',
+  );
+
+  executionOrder.length = 0;
+  await (
+    mutationExecutor as unknown as {
+      executeChildMutation(
+        scope: Scope,
+        work: SchedulerWorkView,
+        ownerEpoch: number,
+        signal: AbortSignal,
+        delegation: DelegationView,
+        run: RunView,
+        toolWork: {
+          toolStepId: string;
+          toolCallId: string;
+          providerCallId: string;
+          status: string;
+          approvalId: string | null;
+          inspection: ToolInspection;
+        },
+      ): Promise<void>;
+    }
+  ).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
+    toolStepId,
+    toolCallId,
+    providerCallId: 'scenario-provider-call',
+    status: 'proposed',
+    approvalId: null,
+    inspection: persistedInspection,
+  });
+  assert.deepEqual(
+    executionOrder,
+    [
+      'approval.request',
+      'approval.approve',
+      'lease.acquire',
+      'state.begin',
+      'lease.activate',
+      'tool.execute',
+      'state.settle',
+      'lease.confirm',
+      'loop.guard',
+      'recovery.checkpoint',
+      'lease.release',
+    ],
+    'fresh governed mutation must preserve the existing approval/lease/StateCommit/verification/recovery authority order',
+  );
+  assert.equal(scenarioMutationExecutions, 1);
+  assert.deepEqual(lastSettledMutation?.result.verification.evidenceRefs, [
+    'artifact:scenario-diff',
+    'artifact:scenario-test',
+  ]);
+  const workerEvidence = await (
+    mutationExecutor as unknown as {
+      verifiedRuntimeEvidenceRefs(scope: Scope, runId: string, runtimeId: string): Promise<string[]>;
+    }
+  ).verifiedRuntimeEvidenceRefs(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId);
+  assert.deepEqual(
+    workerEvidence,
+    ['artifact:scenario-diff', 'artifact:scenario-test'],
+    'Worker completion evidence must come only from confirmed + verified Tool results, never unverified model claims',
+  );
+  const workerEvidenceProjection = await (
+    mutationExecutor as unknown as {
+      verifiedRuntimeEvidence(
+        scope: Scope,
+        runId: string,
+        runtimeId: string,
+      ): Promise<{
+        artifactRefs: string[];
+        tools: Array<{ toolName: string; summary: string; verificationSummary: string; evidenceRefs: string[] }>;
+      }>;
+    }
+  ).verifiedRuntimeEvidence(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId);
+  assert.deepEqual(
+    workerEvidenceProjection.tools.map((tool) => tool.toolName),
+    [mutationTool.descriptor.name],
+    'durable Worker result must summarize only confirmed + verified Tool facts, not unverified natural-language claims',
+  );
+
+  executionOrder.length = 0;
+  lastSettledMutation = undefined;
+  await (
+    mutationExecutor as unknown as {
+      executeChildMutation(
+        scope: Scope,
+        work: SchedulerWorkView,
+        ownerEpoch: number,
+        signal: AbortSignal,
+        delegation: DelegationView,
+        run: RunView,
+        toolWork: {
+          toolStepId: string;
+          toolCallId: string;
+          providerCallId: string;
+          status: string;
+          approvalId: string | null;
+          inspection: ToolInspection;
+        },
+      ): Promise<void>;
+    }
+  ).executeChildMutation(scenarioScope, work, 7, signal, governedDelegation, fullAccessRun, {
+    toolStepId,
+    toolCallId,
+    providerCallId: 'scenario-provider-call',
+    status: 'running',
+    approvalId: null,
+    inspection: persistedInspection,
+  });
+  assert.equal(
+    scenarioMutationExecutions,
+    1,
+    'a reclaimed Child mutation already in durable running state must never replay its side effect',
+  );
+  assert.equal(lastSettledMutation?.result.outcome, 'unknown');
+  assert.equal(lastSettledMutation?.needsReconciliation, true);
+  assert.deepEqual(
+    executionOrder,
+    ['state.settle'],
+    'restart recovery must go directly to reconciliation without approval, lease acquisition, or mutation execution',
+  );
+
+  const durableDirectory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-subagent-governed-mutation-'));
+  const durableDb = new DatabaseAdapter({
+    dataDirectory: durableDirectory,
+    filename: 'governed-mutation.sqlite',
+    nodeEnv: 'test',
+  });
+  try {
+    await durableDb.initialize();
+    const durableCommit = new SqliteStateCommitAdapter(durableDb);
+    const durableNow = 1_800_570_000;
+    const durableRunId = 'governed-mutation-run';
+    const durableRootRuntimeId = 'governed-mutation-root';
+    const durableChildRuntimeId = 'governed-mutation-child';
+    const durableDelegationId = 'governed-mutation-delegation';
+    const durableModelStepId = 'governed-mutation-model-step';
+    const durableToolStepId = 'governed-mutation-tool-step';
+    const durableToolCallId = 'governed-mutation-tool-call';
+    const durableWorkId = 'governed-mutation-work';
+    const durableApprovalId = 'governed-mutation-approval';
+    const durableOperationHash = 'governed-mutation-operation-hash';
+    const durableModelRef = JSON.stringify({
+      providerId: 'scenario-provider',
+      modelId: 'scenario-model',
+      configurationVersion: 1,
+    });
+    await durableDb.execute(
+      "INSERT INTO users (id, username, hashed_password) VALUES (1, 'governed-mutation-user', 'not-used')",
+    );
+    await durableDb.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, policy_revision, created_at, updated_at)
+       VALUES (1, ?, '1.0.0', 'enabled', 'running', 1, 1, ?, ?)`,
+      [scenarioScope.appId, durableNow, durableNow],
+    );
+    await durableDb.execute(
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+       VALUES ('governed-mutation-thread', 1, ?, 'governed mutation', 'manual', ?, ?)`,
+      [scenarioScope.appId, durableNow, durableNow],
+    );
+    await durableDb.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, verification_status,
+         budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         input_revision, created_at, started_at, updated_at)
+       VALUES (?, 1, ?, 'governed-mutation-thread', 'running', 'in_progress', 'not_started',
+               ?, ?, ?, ?, 0, 1, ?, ?, ?)`,
+      [
+        durableRunId,
+        scenarioScope.appId,
+        JSON.stringify({
+          maxContextTokens: 16_384,
+          maxOutputTokens: 4_096,
+          maxRunSteps: 100,
+          maxActiveExecutionSeconds: 3_600,
+          toolTimeoutSeconds: 120,
+          maxToolOutputBytes: 1_048_576,
+          maxRecallItems: 5,
+          maxRecallBytes: 8_192,
+          maxSubagentMessages: 100,
+          maxSubagentMessageBytes: 1_048_576,
+          revision: 1,
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          agentDefinitionId: 'scenario-agent',
+          model: JSON.parse(durableModelRef),
+          approvalMode: 'full_access',
+          connectionIds: [],
+          policyRevision: 1,
+          settingsRevision: 1,
+        }),
+        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+        JSON.stringify({
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          steps: 0,
+          subagentMessages: 0,
+          subagentMessageBytes: 0,
+        }),
+        durableNow,
+        durableNow,
+        durableNow,
+      ],
+    );
+    await durableDb.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES
+        (?, ?, 'root', 'native', ?, 'running', 'runnable', 0, 'owner-governed-root', ?, ?),
+        (?, ?, 'subagent:governed', 'native', ?, 'running', 'runnable', 0, 'owner-governed-child', ?, ?)`,
+      [
+        durableRootRuntimeId,
+        durableRunId,
+        durableModelRef,
+        durableNow,
+        durableNow,
+        durableChildRuntimeId,
+        durableRunId,
+        durableModelRef,
+        durableNow,
+        durableNow,
+      ],
+    );
+    await durableDb.execute(
+      `INSERT INTO agent_delegations
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+         mutation_mode, model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
+         dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
+         deadline_at, version, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'worker', ?, 'parent-child', 'governed', ?, 'Edit isolated workspace',
+               '[]', '[]', '[]', 'settled', 'running', 1, 'isolate', 12, 'governed-key',
+               'governed-request-hash', ?, 1, ?, ?)`,
+      [
+        durableDelegationId,
+        durableRunId,
+        durableRootRuntimeId,
+        durableChildRuntimeId,
+        JSON.stringify(['runs.execute', 'workspace.runtime.execute']),
+        durableModelRef,
+        durableNow + 600,
+        durableNow,
+        durableNow,
+      ],
+    );
+    await durableDb.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES
+        (?, ?, ?, 1, 'model', 'completed', 1, '[]', '[]', ?, ?),
+        (?, ?, ?, 2, 'tool', 'created', 1, '[]', '[]', ?, NULL)`,
+      [
+        durableModelStepId,
+        durableRunId,
+        durableChildRuntimeId,
+        durableNow,
+        durableNow,
+        durableToolStepId,
+        durableRunId,
+        durableChildRuntimeId,
+        durableNow,
+      ],
+    );
+    const durableInspection: ToolInspection = {
+      toolName: 'scenario_workspace_mutate',
+      toolVersion: '1',
+      normalizedArguments: {},
+      target: {
+        kind: 'workspace',
+        workspaceId: 'governed-child',
+        generation: 1,
+        targetIdentity: 'workspace:governed-child:1',
+        endpoint: 'workspace:governed-child',
+        loginUser: 'agent-runtime',
+        configurationHash: 'workspace-generation-1',
+      },
+      resourceKeys: ['workspace:governed-child:1:file:src/example.ts'],
+      risk: 'mutate',
+      mutation: true,
+      operationHash: durableOperationHash,
+      operationHashVersion: 1,
+      preconditions: [],
+      policyRevision: 1,
+      inputRevision: 1,
+    };
+    await durableDb.execute(
+      `INSERT INTO agent_tool_calls
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+         provider_call_id, tool_name, tool_version, inspection_json, operation_hash,
+         operation_hash_version, risk, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 0, 1, 'provider-governed-mutation', 'scenario_workspace_mutate', '1',
+               ?, ?, 1, 'mutate', 'proposed', ?)`,
+      [
+        durableToolCallId,
+        durableRunId,
+        durableChildRuntimeId,
+        durableToolStepId,
+        durableModelStepId,
+        JSON.stringify(durableInspection),
+        durableOperationHash,
+        durableNow,
+      ],
+    );
+    await durableDb.execute(
+      `INSERT INTO agent_scheduler_work
+        (id, run_id, agent_runtime_id, kind, status, payload_json, owner_epoch, not_before,
+         deadline_at, created_at, updated_at, version)
+       VALUES (?, ?, ?, 'tool_step', 'claimed', ?, 7, ?, ?, ?, ?, 1)`,
+      [
+        durableWorkId,
+        durableRunId,
+        durableChildRuntimeId,
+        JSON.stringify({
+          delegationId: durableDelegationId,
+          toolStepId: durableToolStepId,
+          toolCallId: durableToolCallId,
+        }),
+        durableNow,
+        durableNow + 600,
+        durableNow,
+        durableNow,
+      ],
+    );
+
+    const requested = await durableCommit.requestToolApproval({
+      scope: scenarioScope,
+      runId: durableRunId,
+      runtimeId: durableChildRuntimeId,
+      toolStepId: durableToolStepId,
+      toolCallId: durableToolCallId,
+      approvalId: durableApprovalId,
+      expectedRunVersion: 1,
+      inspection: durableInspection,
+      expiresAt: durableNow + 300,
+      now: durableNow,
+    });
+    assert.equal(requested.run.status, 'awaiting_approval');
+    const resolved = await durableCommit.resolveToolApproval({
+      scope: scenarioScope,
+      runId: durableRunId,
+      approvalId: durableApprovalId,
+      decision: 'approved',
+      operationHash: durableOperationHash,
+      expectedApprovalVersion: 1,
+      expectedRunVersion: requested.run.version,
+      expectedPolicyRevision: 1,
+      expectedInputRevision: 1,
+      decidedByUserId: scenarioScope.userId,
+      resolutionSource: 'full_access',
+      idempotencyKey: 'governed-mutation-approval-resolution',
+      requestHash: requestHash(1, {
+        approvalId: durableApprovalId,
+        runId: durableRunId,
+        decision: 'approved',
+        operationHash: durableOperationHash,
+        expectedVersion: 1,
+      }),
+      now: durableNow,
+    });
+    assert.equal(resolved.run.status, 'running');
+    const beginDurableMutation = () =>
+      durableCommit.beginSubagentMutationTool({
+        scope: scenarioScope,
+        runId: durableRunId,
+        runtimeId: durableChildRuntimeId,
+        delegationId: durableDelegationId,
+        workId: durableWorkId,
+        ownerEpoch: 7,
+        toolStepId: durableToolStepId,
+        toolCallId: durableToolCallId,
+        approvalId: durableApprovalId,
+        operationHash: durableOperationHash,
+        expectedPolicyRevision: 1,
+        expectedInputRevision: 1,
+        now: durableNow + 1,
+      });
+
+    await durableDb.execute("UPDATE agent_delegations SET mutation_mode = 'read-only' WHERE id = ?", [
+      durableDelegationId,
+    ]);
+    await assert.rejects(
+      beginDurableMutation,
+      (error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_NOT_GOVERNED',
+      'StateCommit must reject a durable Child mutation when the frozen delegation is read-only',
+    );
+    await durableDb.execute("UPDATE agent_delegations SET mutation_mode = 'governed' WHERE id = ?", [
+      durableDelegationId,
+    ]);
+
+    const definitionRow = await durableDb.queryOne<{ definition_json: string }>(
+      'SELECT definition_json FROM agent_runs WHERE id = ?',
+      [durableRunId],
+    );
+    assert.ok(definitionRow);
+    const askDefinition = { ...JSON.parse(definitionRow.definition_json), approvalMode: 'ask' };
+    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+      JSON.stringify(askDefinition),
+      durableRunId,
+    ]);
+    await assert.rejects(
+      beginDurableMutation,
+      (error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_NOT_GOVERNED',
+      'StateCommit must reject a durable Child mutation when the Run is no longer Full Access',
+    );
+    await durableDb.execute('UPDATE agent_runs SET definition_json = ? WHERE id = ?', [
+      definitionRow.definition_json,
+      durableRunId,
+    ]);
+    const forbiddenDurableInspection: ToolInspection = {
+      ...durableInspection,
+      target: {
+        kind: 'machine',
+        connectionId: 42,
+        targetIdentity: 'machine:42',
+        endpoint: 'ssh://example.invalid',
+        loginUser: 'root',
+        configurationHash: 'forbidden-durable-target',
+        hostKeyTrust: 'unavailable',
+      },
+      resourceKeys: ['connection:42:path:/tmp/not-a-workspace'],
+    };
+    await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
+      JSON.stringify(forbiddenDurableInspection),
+      durableToolCallId,
+    ]);
+    await assert.rejects(
+      beginDurableMutation,
+      (error: unknown) => error instanceof Error && error.message === 'SUBAGENT_MUTATION_TARGET_FORBIDDEN',
+      'StateCommit must independently reject a non-Workspace Child mutation target before consuming approval',
+    );
+    await durableDb.execute('UPDATE agent_tool_calls SET inspection_json = ? WHERE id = ?', [
+      JSON.stringify(durableInspection),
+      durableToolCallId,
+    ]);
+    assert.equal(
+      (
+        await durableDb.queryOne<{ consumed_at: number | null }>(
+          'SELECT consumed_at FROM agent_approvals WHERE id = ?',
+          [durableApprovalId],
+        )
+      )?.consumed_at,
+      null,
+      'rejected durable governance checks must not consume the approved mutation',
+    );
+    assert.equal(
+      (
+        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
+          durableToolCallId,
+        ])
+      )?.status,
+      'ready',
+      'rejected durable governance checks must not advance the Tool state',
+    );
+
+    const begun = await beginDurableMutation();
+    assert.equal(begun.run.executingRuntimeCount, 1);
+    assert.equal(
+      (
+        await durableDb.queryOne<{ consumed_at: number | null }>(
+          'SELECT consumed_at FROM agent_approvals WHERE id = ?',
+          [durableApprovalId],
+        )
+      )?.consumed_at,
+      durableNow + 1,
+      'approved Child mutation must consume its approval in the same durable begin transition',
+    );
+    assert.equal(
+      (
+        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
+          durableToolCallId,
+        ])
+      )?.status,
+      'running',
+    );
+    assert.equal(
+      (
+        await durableDb.queryOne<{ schedule_state: string }>('SELECT schedule_state FROM agent_runtimes WHERE id = ?', [
+          durableChildRuntimeId,
+        ])
+      )?.schedule_state,
+      'executing',
+    );
+    const approvalEvents = await durableDb.queryAll<{ type: string }>(
+      `SELECT type FROM agent_events WHERE run_id = ?
+       AND type IN ('approval.requested','approval.approved','approval.consumed')
+       ORDER BY sequence`,
+      [durableRunId],
+    );
+    assert.deepEqual(
+      approvalEvents.map((event) => event.type),
+      ['approval.requested', 'approval.approved', 'approval.consumed'],
+      'Child mutation approval must use the same durable requested/approved/consumed audit events as Root mutation',
+    );
+
+    const unknownResult: ToolResult = {
+      ok: false,
+      summary: 'Scenario mutation outcome unknown.',
+      data: { error: { code: 'SCENARIO_MUTATION_UNKNOWN' } },
+      artifactRefs: [],
+      truncated: false,
+      outcome: 'unknown',
+      errorCode: 'SCENARIO_MUTATION_UNKNOWN',
+      verification: { status: 'unverified', summary: 'Reconciliation required.', evidenceRefs: [] },
+    };
+    const interrupted = await durableCommit.settleSubagentTool({
+      scope: scenarioScope,
+      runId: durableRunId,
+      runtimeId: durableChildRuntimeId,
+      delegationId: durableDelegationId,
+      workId: durableWorkId,
+      ownerEpoch: 7,
+      toolStepId: durableToolStepId,
+      toolCallId: durableToolCallId,
+      result: unknownResult,
+      needsReconciliation: true,
+      continuation: 'runnable',
+      now: durableNow + 2,
+    });
+    assert.equal(interrupted.run.status, 'interrupted');
+    assert.equal(interrupted.run.needsReconciliation, true);
+    assert.equal(
+      (
+        await durableDb.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [
+          durableToolCallId,
+        ])
+      )?.status,
+      'reconciling',
+    );
+    assert.equal(
+      (
+        await durableDb.queryOne<{ status: string; mutation_mode: string }>(
+          'SELECT status, mutation_mode FROM agent_delegations WHERE id = ?',
+          [durableDelegationId],
+        )
+      )?.status,
+      'failed',
+    );
+    assert.equal(
+      (
+        await durableDb.queryOne<{ mutation_mode: string }>(
+          'SELECT mutation_mode FROM agent_delegations WHERE id = ?',
+          [durableDelegationId],
+        )
+      )?.mutation_mode,
+      'governed',
+      'delegation must durably freeze the mutation governance mode',
+    );
+  } finally {
+    await durableDb.close().catch(() => undefined);
+    fs.rmSync(durableDirectory, { recursive: true, force: true });
+  }
+
+  return [
+    { name: 'read_only_mutation_tools', value: 0, unit: 'tools' },
+    { name: 'governed_worker_mutation_tools', value: 1, unit: 'tools' },
+    { name: 'raw_machine_mutation_tools', value: 0, unit: 'tools' },
+    {
+      name: 'governed_subagent_non_workspace_target_rejections',
+      value: forbiddenTargetExecutions === 0 ? 1 : 0,
+      unit: 'cases',
+    },
+    { name: 'durable_non_workspace_target_rejections', value: 1, unit: 'cases' },
+    { name: 'governed_worker_templates', value: 1, unit: 'templates' },
+    { name: 'fresh_mutation_executions', value: scenarioMutationExecutions, unit: 'mutations' },
+    { name: 'restart_mutation_replays', value: 0, unit: 'mutations' },
+    { name: 'verified_worker_evidence_refs', value: workerEvidence.length, unit: 'artifacts' },
+    { name: 'verified_worker_tool_facts', value: workerEvidenceProjection.tools.length, unit: 'tools' },
+    { name: 'durable_unknown_reconciliations', value: 1, unit: 'runs' },
+  ];
+};
+
 const subagentMailboxTtlScenario: Scenario = async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-mailbox-ttl-'));
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'mailbox-ttl.sqlite', nodeEnv: 'test' });
@@ -8386,8 +9484,8 @@ const subagentProfileStrategyScenario: Scenario = async () => {
   const templates = view.templates;
   assert.deepEqual(
     templates.map((template) => template.id),
-    ['explore', 'scout', 'review', 'general'],
-    'Subagent settings must expose the bounded provider-neutral built-in template catalog',
+    ['explore', 'scout', 'review', 'general', 'worker'],
+    'Subagent settings must expose the bounded built-in template catalog including the explicit governed worker',
   );
   assert.ok(
     templates.every((template) => template.capabilities.includes('runs.execute')),
@@ -15946,6 +17044,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/nested-join-durable-wake', nestedJoinDurableWakeScenario],
   ['runtime/subagent-mailbox-ttl', subagentMailboxTtlScenario],
   ['runtime/subagent-profile-strategy', subagentProfileStrategyScenario],
+  ['runtime/subagent-governed-mutation', subagentGovernedMutationScenario],
   ['runtime/confirmed-mutation-lease-finalization', confirmedMutationLeaseFinalizationScenario],
   ['runtime/mutation-output-projection', mutationOutputProjectionScenario],
   ['storage/artifact-lifecycle-settings', artifactLifecycleSettingsScenario],

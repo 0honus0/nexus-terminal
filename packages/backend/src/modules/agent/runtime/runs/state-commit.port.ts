@@ -228,6 +228,13 @@ export interface BeginSubagentToolCommand {
   now: number;
 }
 
+export interface BeginSubagentMutationToolCommand extends BeginSubagentToolCommand {
+  approvalId: string;
+  operationHash: string;
+  expectedPolicyRevision: number;
+  expectedInputRevision: number;
+}
+
 export interface SettleSubagentToolCommand {
   scope: Scope;
   runId: string;
@@ -238,6 +245,7 @@ export interface SettleSubagentToolCommand {
   toolStepId: string;
   toolCallId: string;
   result: ToolResult;
+  needsReconciliation?: boolean;
   continuation: 'runnable' | 'joining' | 'waiting_message' | 'waiting_budget';
   budgetReason?: JsonValue;
   now: number;
@@ -716,6 +724,7 @@ export interface StateCommitPort {
     command: CommitSubagentToolProposalBatchCommand,
   ): Promise<CommitToolProposalBatchResult>;
   beginSubagentTool(command: BeginSubagentToolCommand): Promise<StateCommitResult>;
+  beginSubagentMutationTool(command: BeginSubagentMutationToolCommand): Promise<StateCommitResult>;
   settleSubagentTool(command: SettleSubagentToolCommand): Promise<StateCommitResult>;
   settleSubagentWithoutModel(command: SettleSubagentWithoutModelCommand): Promise<StateCommitResult>;
   settleSubagentModelStep(command: SettleSubagentModelStepCommand): Promise<StateCommitResult>;
@@ -765,8 +774,13 @@ export type ProjectionCommitPort = Pick<StateCommitPort, 'commit'>;
 export type CollaborationCommitPort = Pick<
   StateCommitPort,
   | 'beginSubagentModelStep'
+  | 'beginSubagentMutationTool'
   | 'beginSubagentTool'
   | 'commitSubagentToolProposalBatch'
+  | 'commit'
+  | 'refreshProposedTool'
+  | 'requestToolApproval'
+  | 'resolveToolApproval'
   | 'settleSubagentModelStep'
   | 'settleSubagentTool'
   | 'settleSubagentWithoutModel'

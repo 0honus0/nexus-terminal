@@ -12,6 +12,7 @@ import type {
   SchedulerWorkKind,
   SchedulerWorkView,
   SubagentFailureMode,
+  SubagentMutationMode,
 } from './subagent.types';
 
 export interface RuntimeParticipantView {
@@ -35,6 +36,7 @@ export interface CreateDelegationRecord {
   profileId: string;
   capabilities: string[];
   peerMessaging: PeerMessaging;
+  mutationMode: SubagentMutationMode;
   modelRef: ModelRef;
   modelCapabilities: ModelCapabilitySnapshot;
   objective: string;
@@ -108,6 +110,7 @@ export interface RuntimeToolWorkView {
   toolCallId: string;
   providerCallId: string;
   status: string;
+  approvalId: string | null;
   inspection: ToolInspection;
 }
 

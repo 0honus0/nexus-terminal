@@ -102,6 +102,7 @@
       allowedModels: [{ ...first.ref }],
       capabilities: ['runs.execute'],
       peerMessaging: 'parent-child',
+      mutationMode: 'read-only',
       maxSteps: Math.min(12, props.settings.hardLimits.maxRunSteps),
       failureMode: 'isolate',
     });
@@ -129,6 +130,7 @@
       allowedModels: [{ ...model }],
       capabilities: [...template.capabilities],
       peerMessaging: template.peerMessaging,
+      mutationMode: template.mutationMode,
       maxSteps: Math.min(template.maxSteps, props.settings.hardLimits.maxRunSteps),
       failureMode: template.failureMode,
     });
@@ -209,9 +211,7 @@
   const invalidProfileLimits = computed(() =>
     Boolean(
       profileSettings.value?.policy.profiles.some(
-        (profile) =>
-          !Number.isSafeInteger(profile.maxSteps) ||
-          profile.maxSteps < 1,
+        (profile) => !Number.isSafeInteger(profile.maxSteps) || profile.maxSteps < 1,
       ),
     ),
   );
@@ -382,6 +382,18 @@
               </label>
               <label>
                 <span class="mb-1 block text-xs text-text-secondary">{{
+                  $t('agent.settings.subagents.mutationMode')
+                }}</span>
+                <select
+                  v-model="profile.mutationMode"
+                  class="w-full rounded border border-border bg-card px-2 py-1.5 text-sm"
+                >
+                  <option value="read-only">{{ $t('agent.settings.subagents.mutationReadOnly') }}</option>
+                  <option value="governed">{{ $t('agent.settings.subagents.mutationGoverned') }}</option>
+                </select>
+              </label>
+              <label>
+                <span class="mb-1 block text-xs text-text-secondary">{{
                   $t('agent.settings.subagents.failureMode')
                 }}</span>
                 <select
@@ -393,6 +405,9 @@
                 </select>
               </label>
             </div>
+            <p v-if="profile.mutationMode === 'governed'" class="mt-2 text-[11px] leading-relaxed text-text-secondary">
+              {{ $t('agent.settings.subagents.mutationHint') }}
+            </p>
 
             <div class="mt-3">
               <div class="text-xs text-text-secondary">{{ $t('agent.settings.subagents.allowedModels') }}</div>

@@ -121,11 +121,7 @@ export class SubagentService {
     const model = this.selectModel(profile, run.definition.model);
     const provider = await this.providers.get(scope.userId, model.providerId);
     const configuredModel = provider.models.find((candidate) => candidate.id === model.modelId);
-    if (
-      !provider.enabled ||
-      provider.version !== model.configurationVersion ||
-      !configuredModel
-    ) {
+    if (!provider.enabled || provider.version !== model.configurationVersion || !configuredModel) {
       throw new Error('SUBAGENT_MODEL_UNAVAILABLE');
     }
     const modelCapabilities = snapshotProviderModelCapabilities(configuredModel);
@@ -153,6 +149,7 @@ export class SubagentService {
       model: model as unknown as JsonValue,
       capabilities: grantedCapabilities,
       peerMessaging: profile.peerMessaging,
+      mutationMode: profile.mutationMode,
     } satisfies JsonValue;
     const created = await this.delegations.createDelegation({
       scope,
@@ -164,6 +161,7 @@ export class SubagentService {
       profileId: profile.id,
       capabilities: grantedCapabilities,
       peerMessaging: profile.peerMessaging,
+      mutationMode: profile.mutationMode,
       modelRef: model,
       modelCapabilities,
       objective: input.objective,

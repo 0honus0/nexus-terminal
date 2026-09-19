@@ -27,6 +27,7 @@ export const projectSubagentCollaborationContext = (
     role: boundedUtf8(profile.role, 256),
     maxSteps: profile.maxSteps,
     peerMessaging: profile.peerMessaging,
+    mutationMode: profile.mutationMode,
     failureMode: profile.failureMode,
     capabilities: profile.capabilities.slice(0, MAX_CAPABILITIES_PER_PROFILE),
     defaultModel: profile.defaultModel,
@@ -37,12 +38,14 @@ export const projectSubagentCollaborationContext = (
     delegationHint: boundedUtf8(template.delegationHint, 256),
     maxSteps: template.maxSteps,
     capabilities: template.capabilities.slice(0, MAX_CAPABILITIES_PER_PROFILE),
+    mutationMode: template.mutationMode,
     presetOnly: true,
   }));
   const delegationViews = directSubagents.map((delegation) => ({
     delegationId: delegation.id,
     childRuntimeId: delegation.childRuntimeId,
     profileId: delegation.profileId,
+    mutationMode: delegation.mutationMode,
     modelRef: delegation.modelRef,
     objective: boundedUtf8(delegation.objective, 512),
     status: delegation.status,
@@ -56,6 +59,7 @@ export const projectSubagentCollaborationContext = (
     guidance: [
       'Delegate only when work is substantial, parallelizable, or would isolate a large retrieval/review context. Handle small local tasks in the Root agent.',
       'Only configuredProfiles are executable profileId values. Built-in templates are configuration presets until copied and saved for this App.',
+      'Governed mutation profiles are for substantial coding assignments only. They expose Workspace mutations only on Full Access Runs; each worker must use a Workspace owned by its own child runtime and return verification/evidence.',
       'Pass a narrow objective, explicit constraints, only necessary Artifact refs, and a bounded step/deadline envelope. Child agents do not inherit the Root raw conversation or Recall.',
       'Treat this durable projection as the current child lifecycle truth; use collaboration tools for fresh detail instead of relying on memory of earlier spawn calls.',
     ],

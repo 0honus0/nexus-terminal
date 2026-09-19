@@ -12,6 +12,7 @@ import type {
   BeginModelStepCommand,
   BeginModelStepResult,
   BeginReadToolBatchCommand,
+  BeginSubagentMutationToolCommand,
   BeginSubagentModelStepCommand,
   BeginSubagentToolCommand,
   SettleSubagentModelStepCommand,
@@ -95,6 +96,7 @@ import { appendInputTransition } from './state-commit/input-transitions';
 import { mutatePendingInputTransition } from './state-commit/pending-input-transitions';
 import { evaluateLoopGuard } from './state-commit/loop-guard';
 import {
+  beginSubagentMutationToolTransition,
   beginSubagentModelStepTransition,
   beginSubagentToolTransition,
   commitSubagentToolProposalBatchTransition,
@@ -415,6 +417,10 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
 
   async beginSubagentTool(command: BeginSubagentToolCommand): Promise<StateCommitResult> {
     return this.observedTransaction((tx) => beginSubagentToolTransition(tx, command));
+  }
+
+  async beginSubagentMutationTool(command: BeginSubagentMutationToolCommand): Promise<StateCommitResult> {
+    return this.observedTransaction((tx) => beginSubagentMutationToolTransition(tx, command));
   }
 
   async settleSubagentTool(command: SettleSubagentToolCommand): Promise<StateCommitResult> {

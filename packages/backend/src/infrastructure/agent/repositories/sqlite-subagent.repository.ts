@@ -53,6 +53,7 @@ interface DelegationRow {
   profile_id: string;
   capabilities_json: string;
   peer_messaging: DelegationView['peerMessaging'];
+  mutation_mode: DelegationView['mutationMode'];
   model_ref_json: string;
   objective: string;
   constraints_json: string;
@@ -333,7 +334,7 @@ const decodeToolInspection = (value: string): RuntimeToolWorkView['inspection'] 
   };
 };
 const delegationColumns = `d.id, d.run_id, r.user_id, r.app_id, d.parent_runtime_id, d.child_runtime_id,
-  d.profile_id, d.capabilities_json, d.peer_messaging, d.model_ref_json, d.objective, d.constraints_json, d.input_artifact_refs_json,
+  d.profile_id, d.capabilities_json, d.peer_messaging, d.mutation_mode, d.model_ref_json, d.objective, d.constraints_json, d.input_artifact_refs_json,
   d.completion_criteria_json, d.dependency_mode, d.status, d.depth, d.failure_mode, d.max_steps,
   d.used_tokens, d.used_steps, d.result_json, d.evidence_refs_json,
   d.deadline_at, d.version, d.created_at, d.updated_at, d.completed_at, d.request_hash`;
@@ -365,6 +366,7 @@ const mapDelegation = (row: DelegationRow): DelegationView => {
     profileId: row.profile_id,
     capabilities: parseStringArray(row.capabilities_json, 512),
     peerMessaging: row.peer_messaging,
+    mutationMode: row.mutation_mode,
     modelRef: model.modelRef,
     ...(model.modelCapabilities === undefined ? {} : { modelCapabilities: model.modelCapabilities }),
     objective: row.objective,
@@ -654,11 +656,11 @@ export class SqliteSubagentRepository
       await tx.execute(
         `INSERT INTO agent_delegations
           (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
-           model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
+           mutation_mode, model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
            dependency_mode, status, depth, failure_mode, max_steps,
            used_tokens, used_steps, result_json, evidence_refs_json, idempotency_key, request_hash, deadline_at,
            version, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, 0, 0, NULL, '[]', ?, ?, ?, 1, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, 0, 0, NULL, '[]', ?, ?, ?, 1, ?, ?)`,
         [
           record.id,
           record.runId,
@@ -667,6 +669,7 @@ export class SqliteSubagentRepository
           record.profileId,
           JSON.stringify(record.capabilities),
           record.peerMessaging,
+          record.mutationMode,
           JSON.stringify({ ...record.modelRef, modelCapabilities: record.modelCapabilities }),
           record.objective,
           JSON.stringify(record.constraints),
@@ -1105,11 +1108,14 @@ export class SqliteSubagentRepository
       id: string;
       provider_call_id: string;
       status: string;
+      approval_id: string | null;
       inspection_json: string;
     }>(
-      `SELECT step_id, id, provider_call_id, status, inspection_json
-       FROM agent_tool_calls
-       WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND step_id = ?`,
+      `SELECT t.step_id, t.id, t.provider_call_id, t.status, a.id AS approval_id, t.inspection_json
+       FROM agent_tool_calls t
+       LEFT JOIN agent_approvals a ON a.tool_call_id = t.id AND a.run_id = t.run_id
+         AND a.status = 'approved' AND a.consumed_at IS NULL
+       WHERE t.id = ? AND t.run_id = ? AND t.agent_runtime_id = ? AND t.step_id = ?`,
       [toolCallId, runId, runtimeId, toolStepId],
     );
     if (!row) return null;
@@ -1118,6 +1124,7 @@ export class SqliteSubagentRepository
       toolCallId: row.id,
       providerCallId: row.provider_call_id,
       status: row.status,
+      approvalId: row.approval_id,
       inspection: decodeToolInspection(row.inspection_json),
     };
   }

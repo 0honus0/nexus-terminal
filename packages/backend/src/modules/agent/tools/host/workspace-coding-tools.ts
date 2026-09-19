@@ -1,4 +1,5 @@
 import type { JsonValue } from '../../agent.types';
+import type { ArtifactService } from '../../ai/artifact.service';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 import type {
@@ -637,6 +638,7 @@ export const createWorkspaceApplyPatchTool = (
   repository: AgentWorkspaceRepositoryPort,
   runtime: WorkspaceRuntimeService,
   cryptoHash: CryptoHashPort,
+  artifacts: Pick<ArtifactService, 'begin' | 'write'> | null = null,
 ): AgentTool => ({
   descriptor: {
     name: 'workspace_apply_patch',
@@ -731,12 +733,27 @@ export const createWorkspaceApplyPatchTool = (
     const args = record(inspection.normalizedArguments);
     const workspaceId = stringValue(args.workspaceId, 128);
     const generation = Number(args.generation);
+    const patch = stringValue(args.patch, MAX_PATCH_BYTES);
+    let patchArtifactId: string | null = null;
+    if (artifacts) {
+      const bytes = Buffer.from(patch, 'utf8');
+      const reservation = await artifacts.begin(context, {
+        name: `workspace-${workspaceId}-g${generation}.diff`,
+        mediaType: 'text/x-diff',
+        declaredBytes: bytes.byteLength,
+      });
+      const source = (async function* (): AsyncGenerator<Uint8Array> {
+        yield bytes;
+      })();
+      const artifact = await artifacts.write(context, reservation.artifactId, source, context.signal);
+      patchArtifactId = artifact.id;
+    }
     const result = await runtime.applyWorkspacePatch(
       context,
       workspaceId,
       generation,
       {
-        patch: stringValue(args.patch, MAX_PATCH_BYTES),
+        patch,
         expectedFiles: expectedFilesValue(args.expectedFiles),
       },
       context.signal,
@@ -752,13 +769,14 @@ export const createWorkspaceApplyPatchTool = (
         additions,
         deletions,
       } as unknown as JsonValue,
-      artifactRefs: [],
+      artifactRefs: patchArtifactId ? [patchArtifactId] : [],
       truncated: false,
       outcome: 'confirmed',
       verification: {
         status: 'verified',
-        summary: 'Runner applied the strict patch and returned before/after SHA-256 change evidence.',
-        evidenceRefs: [],
+        summary:
+          'Runner applied the strict patch and returned before/after SHA-256 change evidence; the applied patch is preserved as an Artifact when Artifact storage is available.',
+        evidenceRefs: patchArtifactId ? [patchArtifactId] : [],
       },
     };
   },

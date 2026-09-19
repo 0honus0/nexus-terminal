@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { JsonValue } from '../../../../modules/agent/agent.types';
 import type {
   BeginModelStepResult,
+  BeginSubagentMutationToolCommand,
   BeginSubagentModelStepCommand,
   BeginSubagentToolCommand,
   CommitSubagentToolProposalBatchCommand,
@@ -15,16 +16,18 @@ import type {
   StateCommitResult,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import { encodeModelProviderContinuation } from '../../../../modules/agent/ai/model-continuation';
+import { governedSubagentWorkspaceMutation } from '../../../../modules/agent/runtime/collaboration/subagent-mutation-policy';
 import type { RunUsage } from '../../../../modules/agent/runtime/runs/run.types';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { enqueueParentJoinResume } from '../subagent-join-wake';
 import { linkVerifiedToolEvidence } from './artifact-evidence';
-import { parseRunBudget, parseRunUsage, parseToolResult } from '../durable-state-decoders';
+import { parseRunBudget, parseRunUsage, parseToolInspection, parseToolResult } from '../durable-state-decoders';
 import {
   allocateHostEvent,
   appendEvents,
   cancelRunSubagentWork,
+  COUNTED_LIVE,
   summaryPayload,
   updateAppLiveCount,
   usageWithDelta,
@@ -528,6 +531,158 @@ export const commitSubagentToolProposalBatchTransition = async (
   };
 };
 
+export const beginSubagentMutationToolTransition = async (
+  tx: RelationalDatabase,
+  command: BeginSubagentMutationToolCommand,
+): Promise<StateCommitResult> => {
+  const row = await tx.queryOne<RunRow>(
+    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+    [command.runId, command.scope.userId, command.scope.appId],
+  );
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.status !== 'running') throw new Error('RUN_NOT_SCHEDULABLE');
+  if ((mapRunRow(row).definition.approvalMode ?? 'ask') !== 'full_access') {
+    throw new Error('SUBAGENT_MUTATION_NOT_GOVERNED');
+  }
+  if (row.input_revision !== command.expectedInputRevision) throw new Error('APPROVAL_STALE');
+  const app = await tx.queryOne<{ policy_revision: number }>(
+    'SELECT policy_revision FROM agent_apps WHERE user_id = ? AND app_id = ?',
+    [row.user_id, row.app_id],
+  );
+  if (!app || app.policy_revision !== command.expectedPolicyRevision) throw new Error('APPROVAL_STALE');
+
+  const work = await tx.queryOne<{ status: string; owner_epoch: number | null }>(
+    `SELECT status, owner_epoch FROM agent_scheduler_work
+     WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'tool_step'`,
+    [command.workId, command.runId, command.runtimeId],
+  );
+  if (!work || work.status !== 'claimed' || work.owner_epoch !== command.ownerEpoch) {
+    throw new Error('SCHEDULER_WORK_STALE');
+  }
+  const delegation = await tx.queryOne<{
+    status: string;
+    child_runtime_id: string;
+    mutation_mode: string;
+    deadline_at: number;
+  }>(
+    'SELECT status, child_runtime_id, mutation_mode, deadline_at FROM agent_delegations WHERE id = ? AND run_id = ?',
+    [command.delegationId, command.runId],
+  );
+  if (
+    !delegation ||
+    delegation.child_runtime_id !== command.runtimeId ||
+    delegation.mutation_mode !== 'governed' ||
+    !['running', 'waiting'].includes(delegation.status) ||
+    delegation.deadline_at <= command.now
+  ) {
+    throw new Error(delegation?.mutation_mode === 'read-only' ? 'SUBAGENT_MUTATION_NOT_GOVERNED' : 'DELEGATION_STATE_CONFLICT');
+  }
+
+  const approval = await tx.queryOne<{
+    status: string;
+    consumed_at: number | null;
+    operation_hash: string;
+    expires_at: number;
+    version: number;
+  }>(
+    `SELECT status, consumed_at, operation_hash, expires_at, version FROM agent_approvals
+     WHERE id = ? AND user_id = ? AND app_id = ? AND run_id = ? AND tool_call_id = ?`,
+    [command.approvalId, row.user_id, row.app_id, row.id, command.toolCallId],
+  );
+  if (
+    !approval ||
+    approval.status !== 'approved' ||
+    approval.consumed_at !== null ||
+    approval.operation_hash !== command.operationHash ||
+    approval.expires_at <= command.now
+  ) {
+    throw new Error('APPROVAL_STALE');
+  }
+  const step = await tx.queryOne<{ status: string }>(
+    "SELECT status FROM agent_steps WHERE id = ? AND run_id = ? AND agent_runtime_id = ? AND kind = 'tool'",
+    [command.toolStepId, command.runId, command.runtimeId],
+  );
+  const tool = await tx.queryOne<{
+    status: string;
+    operation_hash: string;
+    risk: string;
+    inspection_json: string;
+    version: number;
+  }>(
+    `SELECT status, operation_hash, risk, inspection_json, version FROM agent_tool_calls
+     WHERE id = ? AND run_id = ? AND step_id = ? AND agent_runtime_id = ?`,
+    [command.toolCallId, command.runId, command.toolStepId, command.runtimeId],
+  );
+  if (
+    !step ||
+    step.status !== 'created' ||
+    !tool ||
+    tool.status !== 'ready' ||
+    tool.operation_hash !== command.operationHash ||
+    !['mutate', 'destructive'].includes(tool.risk)
+  ) {
+    throw new Error('TOOL_STATE_CONFLICT');
+  }
+  const persistedInspection = parseToolInspection(tool.inspection_json);
+  if (
+    persistedInspection.operationHash !== tool.operation_hash ||
+    !governedSubagentWorkspaceMutation(persistedInspection, command.runId, command.runtimeId)
+  ) {
+    throw new Error('SUBAGENT_MUTATION_TARGET_FORBIDDEN');
+  }
+
+  const approvalChanged = await tx.execute(
+    `UPDATE agent_approvals SET consumed_at = ?, version = version + 1
+     WHERE id = ? AND status = 'approved' AND consumed_at IS NULL AND version = ? AND expires_at > ?`,
+    [command.now, command.approvalId, approval.version, command.now],
+  );
+  const stepChanged = await tx.execute(
+    "UPDATE agent_steps SET status = 'running' WHERE id = ? AND run_id = ? AND status = 'created'",
+    [command.toolStepId, command.runId],
+  );
+  const toolChanged = await tx.execute(
+    `UPDATE agent_tool_calls SET status = 'running', started_at = ?, version = version + 1
+     WHERE id = ? AND run_id = ? AND status = 'ready' AND version = ?`,
+    [command.now, command.toolCallId, command.runId, tool.version],
+  );
+  const runtimeChanged = await tx.execute(
+    `UPDATE agent_runtimes SET schedule_state = 'executing', updated_at = ?
+     WHERE id = ? AND run_id = ? AND status = 'running' AND schedule_state IN ('runnable','executing')`,
+    [command.now, command.runtimeId, command.runId],
+  );
+  if (
+    approvalChanged.changes !== 1 ||
+    stepChanged.changes !== 1 ||
+    toolChanged.changes !== 1 ||
+    runtimeChanged.changes !== 1
+  ) {
+    throw new Error('APPROVAL_STALE');
+  }
+
+  const events: DurableEventInput[] = [
+    { type: 'approval.consumed', payload: { approvalId: command.approvalId, toolCallId: command.toolCallId } },
+    {
+      type: 'tool.started',
+      payload: { toolCallId: command.toolCallId, toolStepId: command.toolStepId, runtimeId: command.runtimeId },
+    },
+  ];
+  const committedEvents = await appendEvents(tx, row, events, command.now);
+  const changedRun = await tx.execute(
+    `UPDATE agent_runs SET
+       active_execution_started_at = CASE WHEN executing_runtime_count = 0 THEN ? ELSE active_execution_started_at END,
+       executing_runtime_count = executing_runtime_count + 1,
+       next_event_sequence = next_event_sequence + ?, version = version + 1, updated_at = ?
+     WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND status = 'running'`,
+    [command.now, events.length, command.now, row.id, row.user_id, row.app_id, row.version],
+  );
+  if (changedRun.changes !== 1) throw new Error('STATE_CONFLICT');
+  const updated = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
+  if (!updated) throw new Error('NOT_FOUND');
+  const run = mapRunRow(updated);
+  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+  return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
+};
+
 export const beginSubagentToolTransition = async (
   tx: RelationalDatabase,
   command: BeginSubagentToolCommand,
@@ -645,6 +800,98 @@ export const settleSubagentToolTransition = async (
   if (!tool || tool.status !== 'running') throw new Error('TOOL_STATE_CONFLICT');
   const safeResult = JSON.parse(JSON.stringify(command.result)) as JsonValue;
   await linkVerifiedToolEvidence(tx, row, command.result, command.now);
+  const unknownMutation = command.result.outcome === 'unknown' || command.needsReconciliation === true;
+  if (unknownMutation) {
+    const toolChanged = await tx.execute(
+      `UPDATE agent_tool_calls SET status = 'reconciling', result_json = ?, completed_at = ?, version = version + 1
+       WHERE id = ? AND run_id = ? AND status = 'running' AND version = ?`,
+      [JSON.stringify(safeResult), command.now, command.toolCallId, command.runId, tool.version],
+    );
+    const stepChanged = await tx.execute(
+      `UPDATE agent_steps SET status = 'failed', output_refs_json = ?, completed_at = ?
+       WHERE id = ? AND run_id = ? AND status = 'running'`,
+      [JSON.stringify(command.result.artifactRefs), command.now, command.toolStepId, command.runId],
+    );
+    const delegationChanged = await tx.execute(
+      `UPDATE agent_delegations SET status = 'failed', result_json = ?, version = version + 1,
+       updated_at = ?, completed_at = ?
+       WHERE id = ? AND run_id = ? AND status = 'running'`,
+      [
+        JSON.stringify({ errorCode: command.result.errorCode ?? 'MUTATION_OUTCOME_UNKNOWN' }),
+        command.now,
+        command.now,
+        command.delegationId,
+        command.runId,
+      ],
+    );
+    const workChanged = await tx.execute(
+      `UPDATE agent_scheduler_work SET status = 'completed', version = version + 1, updated_at = ?
+       WHERE id = ? AND status = 'claimed' AND owner_epoch = ? AND version = ?`,
+      [command.now, command.workId, command.ownerEpoch, work.version],
+    );
+    if (
+      toolChanged.changes !== 1 ||
+      stepChanged.changes !== 1 ||
+      delegationChanged.changes !== 1 ||
+      workChanged.changes !== 1
+    ) {
+      throw new Error('TOOL_STATE_CONFLICT');
+    }
+    await cancelRunSubagentWork(tx, row.id, command.now, true);
+    await tx.execute(
+      `UPDATE agent_runtimes SET status = 'failed', schedule_state = 'finished', updated_at = ?
+       WHERE run_id = ? AND status IN ('created','running','stopping')`,
+      [command.now, row.id],
+    );
+    const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
+    const events: DurableEventInput[] = [
+      {
+        type: 'tool.reconciliation_required',
+        payload: {
+          toolCallId: command.toolCallId,
+          toolStepId: command.toolStepId,
+          runtimeId: command.runtimeId,
+          outcome: command.result.outcome,
+        },
+      },
+      { type: 'run.interrupted', payload: { reason: 'mutation_outcome_unknown', needsReconciliation: true } },
+      { type: 'run.status_changed', payload: { from: row.status, to: 'interrupted' } },
+    ];
+    const committedEvents = await appendEvents(tx, row, events, command.now);
+    const activeDelta =
+      nextExecuting === 0 && row.active_execution_started_at !== null
+        ? Math.max(0, command.now - row.active_execution_started_at)
+        : 0;
+    const mergedUsage = usageWithDelta(row, { steps: 1 });
+    const changedRun = await tx.execute(
+      `UPDATE agent_runs SET status = 'interrupted', needs_reconciliation = 1, completed_at = ?,
+       usage_json = ?, active_execution_seconds = active_execution_seconds + ?,
+       active_execution_started_at = CASE WHEN ? = 0 THEN NULL ELSE active_execution_started_at END,
+       executing_runtime_count = ?, next_event_sequence = next_event_sequence + ?,
+       version = version + 1, updated_at = ?
+       WHERE id = ? AND user_id = ? AND app_id = ? AND version = ?`,
+      [
+        command.now,
+        JSON.stringify(mergedUsage),
+        activeDelta,
+        nextExecuting,
+        nextExecuting,
+        events.length,
+        command.now,
+        row.id,
+        row.user_id,
+        row.app_id,
+        row.version,
+      ],
+    );
+    if (changedRun.changes !== 1) throw new Error('STATE_CONFLICT');
+    if (COUNTED_LIVE.has(row.status)) await updateAppLiveCount(tx, row.user_id, row.app_id, -1, command.now);
+    const updated = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
+    if (!updated) throw new Error('NOT_FOUND');
+    const run = mapRunRow(updated);
+    await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+    return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
+  }
   const toolStatus = command.result.ok ? 'succeeded' : 'failed';
   const toolChanged = await tx.execute(
     `UPDATE agent_tool_calls SET status = ?, result_json = ?, completed_at = ?, version = version + 1

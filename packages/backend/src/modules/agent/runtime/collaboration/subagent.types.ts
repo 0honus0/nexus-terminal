@@ -15,6 +15,7 @@ export type ScheduleState =
 export type DependencyMode = 'success' | 'settled';
 export type SubagentFailureMode = 'isolate' | 'failFast';
 export type PeerMessaging = 'parent-child' | 'same-run';
+export type SubagentMutationMode = 'read-only' | 'governed';
 
 export interface SubagentProfile {
   id: string;
@@ -23,16 +24,18 @@ export interface SubagentProfile {
   allowedModels: ModelRef[];
   capabilities: string[];
   peerMessaging: PeerMessaging;
+  mutationMode: SubagentMutationMode;
   maxSteps: number;
   failureMode: SubagentFailureMode;
 }
 
 export interface SubagentProfileTemplate {
-  id: 'explore' | 'scout' | 'review' | 'general';
+  id: 'explore' | 'scout' | 'review' | 'general' | 'worker';
   role: string;
   delegationHint: string;
   capabilities: string[];
   peerMessaging: PeerMessaging;
+  mutationMode: SubagentMutationMode;
   maxSteps: number;
   failureMode: SubagentFailureMode;
 }
@@ -71,6 +74,7 @@ export interface DelegationView extends Scope {
   profileId: string;
   capabilities: string[];
   peerMessaging: PeerMessaging;
+  mutationMode: SubagentMutationMode;
   modelRef: ModelRef;
   modelCapabilities?: ModelCapabilitySnapshot;
   objective: string;

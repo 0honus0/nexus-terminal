@@ -52,6 +52,7 @@ const parseProfile = (raw: unknown): SubagentProfile => {
     'allowedModels',
     'capabilities',
     'peerMessaging',
+    'mutationMode',
     'maxSteps',
     'failureMode',
   ]);
@@ -81,6 +82,8 @@ const parseProfile = (raw: unknown): SubagentProfile => {
   }
   const capabilities = [...new Set(raw.capabilities as AgentCapability[])];
   if (!['parent-child', 'same-run'].includes(String(raw.peerMessaging))) throw new Error('VALIDATION_FAILED');
+  const mutationMode = raw.mutationMode === undefined ? 'read-only' : String(raw.mutationMode);
+  if (!['read-only', 'governed'].includes(mutationMode)) throw new Error('VALIDATION_FAILED');
   if (!positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
   if (!['isolate', 'failFast'].includes(String(raw.failureMode))) throw new Error('VALIDATION_FAILED');
   return {
@@ -90,6 +93,7 @@ const parseProfile = (raw: unknown): SubagentProfile => {
     allowedModels,
     capabilities,
     peerMessaging: raw.peerMessaging as PeerMessaging,
+    mutationMode: mutationMode as SubagentProfile['mutationMode'],
     maxSteps: raw.maxSteps,
     failureMode: raw.failureMode as SubagentFailureMode,
   };

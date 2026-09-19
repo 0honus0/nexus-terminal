@@ -330,6 +330,7 @@ export const composeAgent = ({
     repository: workspaceRepository,
     runtime: workspaceRuntime,
     gateway: workspaceRuntimeController,
+    artifacts,
     cryptoHash,
   });
   registerAcpToolContribution({
@@ -444,6 +445,8 @@ export const composeAgent = ({
       },
     },
     systemClock,
+    toolCalls,
+    (run, reason) => recordRecoverySafePoint(run, reason),
   );
   subagentScheduler = new SubagentScheduler(
     settings,
