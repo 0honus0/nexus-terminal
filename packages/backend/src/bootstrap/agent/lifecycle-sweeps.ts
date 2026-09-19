@@ -19,6 +19,7 @@ export interface CreateAgentLifecycleSweepsOptions {
   scheduler: AgentScheduler;
   clock: ClockPort;
   notifyCommitted(run: SchedulerRun): void;
+  retryRestartRecovery?: () => Promise<number>;
 }
 
 export const createAgentLifecycleSweeps = ({
@@ -28,6 +29,7 @@ export const createAgentLifecycleSweeps = ({
   scheduler,
   clock,
   notifyCommitted,
+  retryRestartRecovery,
 }: CreateAgentLifecycleSweepsOptions): AgentLifecycleSweeps => {
   let approvalExpiryTimer: NodeJS.Timeout | null = null;
   let approvalExpirySweep = Promise.resolve();
@@ -35,6 +37,8 @@ export const createAgentLifecycleSweeps = ({
   let workspaceReconcileSweep = Promise.resolve();
   let artifactReconcileTimer: NodeJS.Timeout | null = null;
   let artifactReconcileSweep = Promise.resolve();
+  let restartRecoveryTimer: NodeJS.Timeout | null = null;
+  let restartRecoverySweep = Promise.resolve();
 
   const sweepExpiredApprovals = (): void => {
     approvalExpirySweep = approvalExpirySweep
@@ -79,34 +83,53 @@ export const createAgentLifecycleSweeps = ({
       .catch((error) => logger.warn({ err: error }, 'Agent Artifact reconciliation sweep failed'));
   };
 
+  const sweepRestartRecovery = (): void => {
+    if (!retryRestartRecovery) return;
+    restartRecoverySweep = restartRecoverySweep
+      .then(async () => {
+        const recovered = await retryRestartRecovery();
+        if (recovered > 0) {
+          logger.info({ recoveredRuns: recovered }, 'Agent deferred backend-restart recovery continued Runs');
+        }
+      })
+      .catch((error) => logger.warn({ err: error }, 'Agent deferred backend-restart recovery sweep failed'));
+  };
+
   return {
     start: () => {
       logger.debug('Agent lifecycle sweeps starting');
       if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
       if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
       if (artifactReconcileTimer) clearInterval(artifactReconcileTimer);
+      if (restartRecoveryTimer) clearInterval(restartRecoveryTimer);
       sweepExpiredApprovals();
       sweepWorkspaceReconciliation();
       sweepArtifactReconciliation();
+      sweepRestartRecovery();
       approvalExpiryTimer = setInterval(sweepExpiredApprovals, 15_000);
       workspaceReconcileTimer = setInterval(sweepWorkspaceReconciliation, 15_000);
       artifactReconcileTimer = setInterval(sweepArtifactReconciliation, 15_000);
+      restartRecoveryTimer = setInterval(sweepRestartRecovery, 15_000);
       approvalExpiryTimer.unref?.();
       workspaceReconcileTimer.unref?.();
       artifactReconcileTimer.unref?.();
+      restartRecoveryTimer.unref?.();
     },
     stop: async () => {
       logger.debug('Agent lifecycle sweeps stopping');
       if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
       if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
       if (artifactReconcileTimer) clearInterval(artifactReconcileTimer);
+      if (restartRecoveryTimer) clearInterval(restartRecoveryTimer);
       approvalExpiryTimer = null;
       workspaceReconcileTimer = null;
       artifactReconcileTimer = null;
+      restartRecoveryTimer = null;
       await Promise.all([
         approvalExpirySweep.catch(() => undefined),
         workspaceReconcileSweep.catch(() => undefined),
         artifactReconcileSweep.catch(() => undefined),
+        restartRecoverySweep.catch(() => undefined),
       ]);
     },
   };

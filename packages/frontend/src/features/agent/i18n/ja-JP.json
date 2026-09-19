@@ -762,7 +762,8 @@
       "environmentRunContract": "Workspace の作成はこの Run に固定された Environment スナップショットだけを使用し、Run の途中で recipe やツールチェーンを切り替えることはできません。",
       "frozen": "固定済み",
       "openThreads": "会話一覧を開く",
-      "closeThreads": "会話一覧を閉じる"
+      "closeThreads": "会話一覧を閉じる",
+      "restartRecoveryFailed": "Backend 再起動後の自動復旧は復旧チェックポイントから続行できませんでした: {reasons}"
     },
     "files": {
       "search": "ファイルを検索",
@@ -1026,7 +1027,9 @@
       "totalTokens": "Token 合計",
       "advancedDetails": "詳細設定とチェックポイント",
       "backToTasks": "タスク一覧に戻る",
-      "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}"
+      "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}",
+      "userCheckpoint": "手動保存",
+      "autoRecoveryCheckpoint": "自動復旧"
     },
     "workspaceRuntime": {
       "title": "Workspace 開発環境",

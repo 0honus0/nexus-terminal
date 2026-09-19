@@ -383,6 +383,10 @@ export const composeAgent = ({
       workspaceRuntime.loadProjectInstructions(scope, runId, runtimeId, targetDirectories, signal),
   });
   const toolCalls = new ToolCallRunner(toolCatalog, toolExecutor, policy, leaseCoordinator, mutationLeaseGuard);
+  let recordRecoverySafePoint: (
+    run: Parameters<AgentScheduler['enqueue']>[0],
+    reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed',
+  ) => Promise<void> = async () => undefined;
   const nativeBackend = new NativeAgentBackend(
     runRepository,
     delegationReader,
@@ -390,6 +394,7 @@ export const composeAgent = ({
     modelSteps,
     toolCalls,
     systemClock,
+    (run, reason) => recordRecoverySafePoint(run, reason),
   );
   const scheduler = new AgentScheduler(
     settings,
@@ -495,6 +500,8 @@ export const composeAgent = ({
     workspaceRuntimeController,
     artifacts,
   );
+  let recoveringStartup = false;
+  const startupRecoveredRuns: Parameters<AgentScheduler['enqueue']>[0][] = [];
   const checkpoints = new CheckpointService(
     checkpointRepository,
     runRepository,
@@ -505,10 +512,17 @@ export const composeAgent = ({
     targetDenylist,
     stateCommit,
     systemClock,
-    (run) => scheduler.enqueue(run),
+    (run) => {
+      if (recoveringStartup) startupRecoveredRuns.push(run);
+      else scheduler.enqueue(run);
+    },
     (run) => notifyCommitted(run),
     workspaceCheckpoints,
+    workspaceRuntimeController,
   );
+  recordRecoverySafePoint = async (run, reason) => {
+    await checkpoints.recordSafePoint(run, reason);
+  };
   const lifecycleSweeps = createAgentLifecycleSweeps({
     stateCommit,
     workspaceRuntime,
@@ -516,6 +530,7 @@ export const composeAgent = ({
     scheduler,
     clock: systemClock,
     notifyCommitted,
+    retryRestartRecovery: () => checkpoints.retryDeferredRecoveries(),
   });
 
   const approvalRepository = new SqliteApprovalRepository(database);
@@ -757,9 +772,16 @@ export const composeAgent = ({
     },
     initialize: async () => {
       await plugins.initializeInstalledVersions();
-      await stateCommit.interruptNonTerminalRuns(systemClock.nowUnixSeconds());
+      const interrupted = await stateCommit.interruptNonTerminalRuns(systemClock.nowUnixSeconds());
+      recoveringStartup = true;
+      try {
+        await checkpoints.recoverInterrupted(interrupted);
+        await subagentScheduler?.initialize();
+      } finally {
+        recoveringStartup = false;
+      }
       scheduler.resume();
-      await subagentScheduler?.initialize();
+      for (const run of startupRecoveredRuns.splice(0)) scheduler.enqueue(run);
       lifecycleSweeps.start();
     },
     initializeForUser: async (userId) => {

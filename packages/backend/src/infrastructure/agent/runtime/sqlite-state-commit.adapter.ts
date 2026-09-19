@@ -679,9 +679,9 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
     return count;
   }
 
-  async interruptNonTerminalRuns(now: number): Promise<number> {
+  async interruptNonTerminalRuns(now: number): Promise<RunView[]> {
     const observed: Array<{ run: RunView; events: RunEvent[] }> = [];
-    const count = await this.db.transaction(async (tx) => {
+    await this.db.transaction(async (tx) => {
       const rows = await tx.queryAll<RunRow>(
         `SELECT ${RUN_COLUMNS} FROM agent_runs
          WHERE status IN ('created','running','awaiting_approval','awaiting_budget','awaiting_input','cancelling')
@@ -692,7 +692,12 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
         const pendingInputRequestId = await cancelPendingUserInputRequest(tx, row, now);
         const events: DurableEventInput[] = [
           ...(pendingInputRequestId
-            ? [{ type: 'input.request_cancelled', payload: { requestId: pendingInputRequestId, reason: 'backend_restart' } }]
+            ? [
+                {
+                  type: 'input.request_cancelled',
+                  payload: { requestId: pendingInputRequestId, reason: 'backend_restart' },
+                },
+              ]
             : []),
           { type: 'run.interrupted', payload: { reason: 'backend_restart', needsReconciliation } },
           { type: 'run.status_changed', payload: { from: row.status, to: 'interrupted' } },
@@ -743,6 +748,35 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
       return rows.length;
     });
     for (const item of observed) this.notify(item.run, item.events);
-    return count;
+
+    const recoveryCandidates = new Map(observed.map((item) => [item.run.id, item.run] as const));
+    const prior = await this.db.queryAll<{ id: string; type: string; payload_json: string }>(
+      `SELECT r.id,e.type,e.payload_json
+       FROM agent_runs r
+       JOIN agent_events e ON e.run_id=r.id
+       WHERE r.status='interrupted' AND r.needs_reconciliation=0
+         AND e.sequence=(
+           SELECT MAX(e2.sequence) FROM agent_events e2
+           WHERE e2.run_id=r.id
+             AND e2.type IN ('run.interrupted','run.recovery_deferred','run.recovery_continued','run.recovery_failed')
+         )
+       ORDER BY r.created_at,r.id`,
+    );
+    for (const candidate of prior) {
+      if (recoveryCandidates.has(candidate.id)) continue;
+      let eligible = candidate.type === 'run.recovery_deferred';
+      if (candidate.type === 'run.interrupted') {
+        try {
+          const payload = JSON.parse(candidate.payload_json) as { reason?: unknown };
+          eligible = payload.reason === 'backend_restart';
+        } catch {
+          eligible = false;
+        }
+      }
+      if (!eligible) continue;
+      const row = await this.db.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id=?`, [candidate.id]);
+      if (row) recoveryCandidates.set(row.id, mapRunRow(row));
+    }
+    return [...recoveryCandidates.values()];
   }
 }

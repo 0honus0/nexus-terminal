@@ -9,7 +9,7 @@ import type {
   SerializedDatabaseWorkerError,
 } from './database-worker.protocol';
 import { runMigrations } from './sqlite-migrations';
-import { sqliteTableDefinitions } from './sqlite-schema.registry';
+import { sqlitePostMigrationDefinitions, sqliteTableDefinitions } from './sqlite-schema.registry';
 import {
   createAiMemorySearchIndexSQL,
   createAiThreadEntrySearchIndexSQL,
@@ -135,6 +135,7 @@ const openDatabase = async (): Promise<DatabaseSync> => {
     configureDatabase(db);
     for (const definition of sqliteTableDefinitions) db.exec(definition.sql);
     await runMigrations(db);
+    for (const definition of sqlitePostMigrationDefinitions) db.exec(definition.sql);
     rebuildAgentSearchIndexes(db);
     clearStatementCache();
     database = db;

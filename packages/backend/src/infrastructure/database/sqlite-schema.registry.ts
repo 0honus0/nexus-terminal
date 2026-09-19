@@ -79,3 +79,7 @@ export const sqliteTableDefinitions: readonly SqliteTableDefinition[] = [
   { name: 'agent_app_intent_receipts', sql: schema.createAgentAppIntentReceiptsTableSQL },
   { name: 'agent_app_intent_artifact_grants', sql: schema.createAgentAppIntentArtifactGrantsTableSQL },
 ];
+
+export const sqlitePostMigrationDefinitions: readonly SqliteTableDefinition[] = [
+  { name: 'agent_one_recovery_checkpoint_per_run', sql: schema.createAgentRecoveryCheckpointIndexSQL },
+];

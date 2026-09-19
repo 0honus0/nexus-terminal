@@ -79,6 +79,34 @@ interface AgentRunCancelRequestedEvent extends AgentVersionedEventMetadata {
   payload: { previousStatus: AgentRunStatus };
 }
 
+interface AgentRunRecoveryContinuedEvent extends AgentVersionedEventMetadata {
+  type: 'run.recovery_continued';
+  payload: {
+    reason: 'backend_restart';
+    checkpointId: string;
+    continuedRunId: string;
+  };
+}
+
+interface AgentRunRecoveryDeferredEvent extends AgentVersionedEventMetadata {
+  type: 'run.recovery_deferred';
+  payload: {
+    reason: 'backend_restart';
+    checkpointId: string;
+    waitingFor: 'workspace_background_jobs';
+    jobIds: string[];
+  };
+}
+
+interface AgentRunRecoveryFailedEvent extends AgentVersionedEventMetadata {
+  type: 'run.recovery_failed';
+  payload: {
+    reason: 'backend_restart';
+    checkpointId: string | null;
+    reasons: string[];
+  };
+}
+
 const SNAPSHOT_EVENT_TYPES = [
   'approval.consumed',
   'approval.expired',
@@ -150,6 +178,9 @@ export type AgentStreamEvent =
   | AgentRunCancelledEvent
   | AgentRunInterruptedEvent
   | AgentRunCancelRequestedEvent
+  | AgentRunRecoveryContinuedEvent
+  | AgentRunRecoveryDeferredEvent
+  | AgentRunRecoveryFailedEvent
   | AgentSnapshotChangedEvent
   | AgentHostChangedEvent
   | AgentUnknownEvent
@@ -356,6 +387,67 @@ const parseRunEventV1 = (
       return unknownEvent(event, channel, 'invalid_payload');
     }
     return { ...metadata, type: 'run.cancel_requested', payload: { previousStatus: event.payload.previousStatus } };
+  }
+  if (event.eventType === 'run.recovery_continued') {
+    if (
+      !isRecord(event.payload) ||
+      event.payload.reason !== 'backend_restart' ||
+      typeof event.payload.checkpointId !== 'string' ||
+      typeof event.payload.continuedRunId !== 'string'
+    ) {
+      return unknownEvent(event, channel, 'invalid_payload');
+    }
+    return {
+      ...metadata,
+      type: 'run.recovery_continued',
+      payload: {
+        reason: 'backend_restart',
+        checkpointId: event.payload.checkpointId,
+        continuedRunId: event.payload.continuedRunId,
+      },
+    };
+  }
+  if (event.eventType === 'run.recovery_deferred') {
+    if (
+      !isRecord(event.payload) ||
+      event.payload.reason !== 'backend_restart' ||
+      typeof event.payload.checkpointId !== 'string' ||
+      event.payload.waitingFor !== 'workspace_background_jobs' ||
+      !Array.isArray(event.payload.jobIds) ||
+      event.payload.jobIds.some((jobId) => typeof jobId !== 'string')
+    ) {
+      return unknownEvent(event, channel, 'invalid_payload');
+    }
+    return {
+      ...metadata,
+      type: 'run.recovery_deferred',
+      payload: {
+        reason: 'backend_restart',
+        checkpointId: event.payload.checkpointId,
+        waitingFor: 'workspace_background_jobs',
+        jobIds: [...event.payload.jobIds] as string[],
+      },
+    };
+  }
+  if (event.eventType === 'run.recovery_failed') {
+    if (
+      !isRecord(event.payload) ||
+      event.payload.reason !== 'backend_restart' ||
+      (event.payload.checkpointId !== null && typeof event.payload.checkpointId !== 'string') ||
+      !Array.isArray(event.payload.reasons) ||
+      event.payload.reasons.some((reason) => typeof reason !== 'string')
+    ) {
+      return unknownEvent(event, channel, 'invalid_payload');
+    }
+    return {
+      ...metadata,
+      type: 'run.recovery_failed',
+      payload: {
+        reason: 'backend_restart',
+        checkpointId: event.payload.checkpointId,
+        reasons: [...event.payload.reasons] as string[],
+      },
+    };
   }
   if (event.eventType === 'model.retrying') {
     if (

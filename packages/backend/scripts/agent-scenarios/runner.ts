@@ -1062,7 +1062,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
       | undefined;
     assert.equal(upgradedCheckpoint?.name, 'ai_context_checkpoints', 'migration 30 must create the Context checkpoint owner');
     assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
-    assert.equal(migrationVersion?.version, 30, 'legacy databases must advance through migration 30');
+    assert.equal(migrationVersion?.version, 31, 'legacy databases must advance through migration 31');
   } finally {
     legacyDb.close();
     fs.rmSync(upgradeDirectory, { recursive: true, force: true });
@@ -1076,7 +1076,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
     { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
     { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },
     { name: 'legacy_digest_tables', value: 0, unit: 'tables' },
-    { name: 'migration_version', value: 30, unit: 'version' },
+    { name: 'migration_version', value: 31, unit: 'version' },
   ];
 };
 
@@ -6165,7 +6165,7 @@ const restartRecoveryScenario: Scenario = async () => {
       operationHash,
       operationHashVersion: 1,
       preconditions: [],
-        policyRevision: 1,
+      policyRevision: 1,
       inputRevision: 0,
     });
 
@@ -6175,7 +6175,7 @@ const restartRecoveryScenario: Scenario = async () => {
     await db.execute(
       `INSERT INTO agent_apps
         (user_id, app_id, active_version, desired_state, observed_state, running_count, created_at, updated_at)
-       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 3, ?, ?)`,
+       VALUES (1, 'scenario-app', '1.0.0', 'enabled', 'running', 6, ?, ?)`,
       [now, now],
     );
 
@@ -6239,31 +6239,434 @@ const restartRecoveryScenario: Scenario = async () => {
       [now, now + 300],
     );
 
-    const interrupted = await stateCommit.interruptNonTerminalRuns(now + 1);
-    assert.equal(interrupted, 3);
+    const safeRunId = randomUUID();
+    const safeThreadId = randomUUID();
+    const safeRuntimeId = randomUUID();
+    await insertRun(safeRunId, safeThreadId, safeRuntimeId);
+    const fallbackRef = {
+      providerId: 'scenario-provider',
+      modelId: 'scenario-fallback-model',
+      configurationVersion: 1,
+    };
+    await db.execute('UPDATE agent_runs SET definition_json=? WHERE id=?', [
+      JSON.stringify({
+        ...(JSON.parse(definition) as Record<string, unknown>),
+        rootModelRoutes: [{ model: fallbackRef }],
+      }),
+      safeRunId,
+    ]);
+    await db.execute('UPDATE agent_runtimes SET model_ref_json=? WHERE id=?', [
+      JSON.stringify(fallbackRef),
+      safeRuntimeId,
+    ]);
+    const runRepository = new SqliteRunRepository(db);
+    const checkpointRepository = new SqliteCheckpointRepository(db);
+    let recoveryNow = now;
+    const recoveryModel = resolveProviderModelConfig({
+      id: 'scenario-model',
+      capabilityOverrides: {
+        contextWindow: 16_384,
+        maxOutputTokens: 4_096,
+        supportsTools: true,
+        supportsImageInput: false,
+        supportsFileInput: false,
+      },
+    });
+    const recoveryFallbackModel = resolveProviderModelConfig({
+      id: fallbackRef.modelId,
+      capabilityOverrides: {
+        contextWindow: 16_384,
+        maxOutputTokens: 4_096,
+        supportsTools: true,
+        supportsImageInput: false,
+        supportsFileInput: false,
+      },
+    });
+    const recoveredRuns: RunView[] = [];
+    const restartJobId = `job-${'a'.repeat(64)}`;
+    let restartJobStatus: 'running' | 'succeeded' = 'running';
+    let restartJobQueries = 0;
+    let restartJobStarts = 0;
+    const restartJobGateway = {
+      queryJob: async (jobId: string) => {
+        restartJobQueries += 1;
+        assert.equal(jobId, restartJobId);
+        return {
+          jobId,
+          workspaceId: 'restart-job-workspace',
+          generation: 1,
+          status: restartJobStatus,
+          result:
+            restartJobStatus === 'succeeded'
+              ? {
+                  exitCode: 0,
+                  signal: null,
+                  stdout: 'done',
+                  stderr: '',
+                  truncated: false,
+                  timedOut: false,
+                }
+              : null,
+          error: null,
+          createdAt: now,
+          completedAt: restartJobStatus === 'succeeded' ? recoveryNow : null,
+        };
+      },
+      startJob: async () => {
+        restartJobStarts += 1;
+        throw new Error('P-085 recovery must never resubmit a durable background job');
+      },
+    };
+    const recoveryService = new CheckpointService(
+      checkpointRepository,
+      runRepository,
+      {
+        get: async () => ({
+          revision: 1,
+          effectiveSettings: { feature: { enabled: true } },
+          hardLimits: {
+            maxRunSteps: 1_000,
+            maxActiveExecutionSeconds: 86_400,
+            toolTimeoutSeconds: 600,
+            maxToolOutputBytes: 16 * 1024 * 1024,
+            maxRecallItems: 100,
+            maxRecallBytes: 16 * 1024 * 1024,
+            maxSubagentMessagesPerRun: 10_000,
+            maxSubagentMessageBytesPerRun: 16 * 1024 * 1024,
+          },
+        }),
+      } as never,
+      {
+        get: async () => ({
+          activeVersion: '1.0.0',
+          desiredState: 'enabled',
+          observedState: 'running',
+          acceptNewRuns: true,
+          policyRevision: 1,
+        }),
+      } as never,
+      {
+        get: async () => ({
+          id: 'scenario-provider',
+          enabled: true,
+          version: 1,
+          models: [recoveryModel, recoveryFallbackModel],
+        }),
+      } as never,
+      {
+        require: () => ({
+          id: 'scenario-agent',
+          version: 'scenario-definition-v1',
+          displayName: 'Restart recovery scenario',
+          description: 'P-085 safe-point fixture',
+          requiredModelCapabilities: [],
+        }),
+      } as never,
+      { isDenied: async () => false } as never,
+      stateCommit,
+      { nowUnixSeconds: () => recoveryNow } as never,
+      (run) => recoveredRuns.push(run),
+      () => undefined,
+      null,
+      restartJobGateway as never,
+    );
+    const mutationBeforeRestart = await runRepository.snapshot(scope, 'mutation-run');
+    assert.ok(mutationBeforeRestart);
+    assert.equal(
+      await recoveryService.recordSafePoint(mutationBeforeRestart, 'model_boundary', true),
+      null,
+      'a running/unknown mutation must not produce a recovery checkpoint even if a caller reaches the writer',
+    );
+    assert.equal(await checkpointRepository.latestRecovery(scope, 'mutation-run'), null);
+
+    const safeBeforeRestart = await runRepository.snapshot(scope, safeRunId);
+    assert.ok(safeBeforeRestart);
+    const firstRecoveryCheckpoint = await recoveryService.recordSafePoint(safeBeforeRestart, 'model_boundary');
+    assert.ok(firstRecoveryCheckpoint);
+    assert.equal(firstRecoveryCheckpoint.kind, 'recovery');
+    assert.deepEqual(
+      firstRecoveryCheckpoint.snapshot.activeModel,
+      fallbackRef,
+      'rolling recovery checkpoint must freeze the active fallback route, not silently revert to the primary model',
+    );
+    recoveryNow += 31;
+    const secondRecoveryCheckpoint = await recoveryService.recordSafePoint(safeBeforeRestart, 'read_batch');
+    assert.ok(secondRecoveryCheckpoint);
+    assert.notEqual(
+      secondRecoveryCheckpoint.id,
+      firstRecoveryCheckpoint.id,
+      'rolling recovery checkpoint must replace the prior safe point after the bounded interval',
+    );
+    const recoveryRowsBeforeRestart = (await checkpointRepository.list(scope, safeRunId)).filter(
+      (checkpoint) => checkpoint.kind === 'recovery',
+    );
+    assert.equal(recoveryRowsBeforeRestart.length, 1, 'each Run must retain only one rolling recovery checkpoint');
+
+    const jobRunId = randomUUID();
+    const jobThreadId = randomUUID();
+    const jobRuntimeId = randomUUID();
+    await insertRun(jobRunId, jobThreadId, jobRuntimeId);
+    const jobBeforeLaunch = await runRepository.snapshot(scope, jobRunId);
+    assert.ok(jobBeforeLaunch);
+    const preJobCheckpoint = await recoveryService.recordSafePoint(jobBeforeLaunch, 'model_boundary', true);
+    assert.ok(preJobCheckpoint);
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES
+         ('restart-job-model-step', ?, ?, 1, 'model', 'completed', 0, '[]', '[]', ?, ?),
+         ('restart-job-tool-step', ?, ?, 2, 'tool', 'completed', 0, '[]', '[]', ?, ?)`,
+      [jobRunId, jobRuntimeId, now, now, jobRunId, jobRuntimeId, now, now],
+    );
+    const restartJobResult = JSON.stringify({
+      ok: true,
+      summary: 'Background workspace job accepted.',
+      data: {
+        jobId: restartJobId,
+        workspaceId: 'restart-job-workspace',
+        generation: 1,
+        status: 'running',
+      },
+      artifactRefs: [],
+      truncated: false,
+      outcome: 'confirmed',
+      verification: {
+        status: 'unverified',
+        summary: 'Background acceptance is not terminal execution evidence.',
+        evidenceRefs: [],
+      },
+    });
+    await db.execute(
+      `INSERT INTO agent_tool_calls
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, provider_call_id, tool_name, tool_version,
+         inspection_json, operation_hash, operation_hash_version, risk, status, result_json,
+         created_at, started_at, completed_at)
+       VALUES ('restart-job-tool', ?, ?, 'restart-job-tool-step', 'restart-job-model-step', 'provider-restart-job',
+               'workspace_execute_argv', '1', ?, 'sha256:restart-job', 1, 'mutate', 'succeeded', ?, ?, ?, ?)`,
+      [
+        jobRunId,
+        jobRuntimeId,
+        toolInspection('workspace_execute_argv', 'workspace:restart-job', 'mutate', 'sha256:restart-job'),
+        restartJobResult,
+        now,
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO agent_events (event_id,run_id,sequence,schema_version,type,payload_json,occurred_at)
+       VALUES (?, ?, 1, 1, 'tool.started', ?, ?)`,
+      [randomUUID(), jobRunId, JSON.stringify({ toolCallId: 'restart-job-tool' }), now],
+    );
+    await db.execute('UPDATE agent_runs SET next_event_sequence=2 WHERE id=?', [jobRunId]);
+    const jobRunWithActiveBackground = await runRepository.snapshot(scope, jobRunId);
+    assert.ok(jobRunWithActiveBackground);
+    const manualCheckpointWithActiveBackground = await recoveryService.save(
+      scope,
+      jobRunId,
+      jobRunWithActiveBackground.version,
+    );
+    assert.equal(
+      manualCheckpointWithActiveBackground.kind,
+      'user',
+      'manual checkpoints must remain saveable while a durable background job is running',
+    );
+    assert.deepEqual(
+      manualCheckpointWithActiveBackground.snapshot.recoveryManifest?.backgroundJobs ?? [],
+      [],
+      'restart-only background-job recovery state must not pollute the manual checkpoint contract',
+    );
+
+    const staleInputRunId = randomUUID();
+    const staleInputThreadId = randomUUID();
+    const staleInputRuntimeId = randomUUID();
+    await insertRun(staleInputRunId, staleInputThreadId, staleInputRuntimeId);
+    const staleInputBeforeChange = await runRepository.snapshot(scope, staleInputRunId);
+    assert.ok(staleInputBeforeChange);
+    const staleInputCheckpoint = await recoveryService.recordSafePoint(staleInputBeforeChange, 'model_boundary', true);
+    assert.ok(staleInputCheckpoint);
+    await db.execute(
+      `UPDATE agent_runs
+       SET input_revision=input_revision+1, version=version+1, updated_at=?
+       WHERE id=?`,
+      [recoveryNow, staleInputRunId],
+    );
+
+    const restartAt = recoveryNow + 1;
+    const interruptedResult = await stateCommit.interruptNonTerminalRuns(restartAt);
+    assert.ok(
+      Array.isArray(interruptedResult),
+      'P-085 startup recovery requires authoritative interrupted Run identities, not only a count, so rolling recovery checkpoints can be validated after reconciliation',
+    );
+    const interrupted = interruptedResult;
+    recoveryNow = restartAt + 1;
+    assert.equal(interrupted.length, 6);
     assert.equal(
       restartObserverEvents.filter((item) => item.type === 'run.interrupted').length,
-      3,
+      6,
       'backend restart transitions must reach the post-commit durable observer exactly once per Run',
+    );
+
+    const interruptedSafeRun = interrupted.find((run) => run.id === safeRunId);
+    assert.ok(interruptedSafeRun);
+    await assert.rejects(
+      () =>
+        recoveryService.resume(
+          scope,
+          safeRunId,
+          secondRecoveryCheckpoint.id,
+          interruptedSafeRun.version,
+          randomUUID(),
+        ),
+      (error: unknown) => error instanceof Error && error.message === 'CHECKPOINT_USER_KIND_REQUIRED',
+      'rolling recovery checkpoints must not be resumable through the user/manual resume API',
+    );
+
+    const continued = await recoveryService.recoverInterrupted(interrupted);
+    assert.equal(continued.length, 1, 'only the Run with a valid rolling recovery checkpoint may auto-continue');
+    assert.equal(recoveredRuns.length, 1);
+    for (const runId of ['model-run', 'read-run']) {
+      const missingCheckpointFailure = await db.queryOne<{ payload_json: string }>(
+        `SELECT payload_json FROM agent_events
+         WHERE run_id=? AND type='run.recovery_failed' ORDER BY sequence DESC LIMIT 1`,
+        [runId],
+      );
+      assert.ok(missingCheckpointFailure, 'an interrupted Run without a rolling checkpoint must fail visibly');
+      assert.equal(
+        (JSON.parse(missingCheckpointFailure.payload_json) as { reasons?: string[] }).reasons?.includes(
+          'CHECKPOINT_NOT_FOUND',
+        ),
+        true,
+        'missing recovery checkpoints must be auditable instead of silently leaving the Run interrupted',
+      );
+    }
+    assert.equal(continued[0]!.parentRunId, safeRunId);
+    assert.equal(
+      continued[0]!.definition.model.modelId,
+      'scenario-model',
+      'Run definition primary model remains frozen even when the active runtime route is a fallback',
+    );
+    assert.deepEqual(
+      await runRepository.rootRuntimeModel(scope, continued[0]!.id),
+      fallbackRef,
+      'restart continuation must preserve the checkpointed active fallback route in the new root runtime',
+    );
+    const staleInputSource = await runRepository.snapshot(scope, staleInputRunId);
+    assert.ok(staleInputSource);
+    assert.equal(staleInputSource.status, 'interrupted');
+    const staleInputFailure = await db.queryOne<{ payload_json: string }>(
+      `SELECT payload_json FROM agent_events
+       WHERE run_id=? AND type='run.recovery_failed' ORDER BY sequence DESC LIMIT 1`,
+      [staleInputRunId],
+    );
+    assert.ok(staleInputFailure, 'stale input revision must leave an auditable recovery failure');
+    assert.equal(
+      (JSON.parse(staleInputFailure.payload_json) as { reasons?: string[] }).reasons?.includes(
+        'CHECKPOINT_INPUT_STALE',
+      ),
+      true,
+      'restart continuation must fail closed when inputRevision changed after the rolling checkpoint',
+    );
+    const safeSourceAfterRecovery = await runRepository.snapshot(scope, safeRunId);
+    assert.equal(safeSourceAfterRecovery?.status, 'interrupted');
+    assert.equal(
+      restartObserverEvents.some((item) => item.runId === safeRunId && item.type === 'run.recovery_continued'),
+      true,
+      'source Run must durably record backend restart continuation',
+    );
+    const continuationNotice = await db.queryOne<{ payload_json: string }>(
+      `SELECT payload_json FROM ai_thread_entries
+       WHERE run_id=? AND kind='system_notice' ORDER BY sequence DESC LIMIT 1`,
+      [continued[0]!.id],
+    );
+    assert.ok(continuationNotice);
+    assert.equal(
+      (JSON.parse(continuationNotice.payload_json) as { type?: string; reason?: string }).type,
+      'continued_from_checkpoint',
+    );
+    assert.equal(
+      (JSON.parse(continuationNotice.payload_json) as { type?: string; reason?: string }).reason,
+      'backend_restart',
+    );
+
+    const deferredJobSource = await runRepository.snapshot(scope, jobRunId);
+    assert.ok(deferredJobSource);
+    assert.equal(deferredJobSource.status, 'interrupted');
+    assert.equal(
+      restartObserverEvents.some((item) => item.runId === jobRunId && item.type === 'run.recovery_deferred'),
+      true,
+      'a still-running durable background job must leave the source interrupted with an auditable deferred recovery',
+    );
+    assert.equal(
+      restartObserverEvents.some((item) => item.runId === jobRunId && item.type === 'run.recovery_failed'),
+      false,
+      'a healthy still-running durable job is not a recovery failure',
+    );
+    assert.equal(restartJobStarts, 0, 'restart recovery must query Runner journal state and never resubmit the job');
+    assert.ok(
+      restartJobQueries >= 1,
+      'restart recovery must query the durable Runner job before deciding continuation',
+    );
+
+    const originalLatestRecovery = checkpointRepository.latestRecovery.bind(checkpointRepository);
+    let failDeferredLookupOnce = true;
+    checkpointRepository.latestRecovery = async (candidateScope, candidateRunId) => {
+      if (candidateRunId === jobRunId && failDeferredLookupOnce) {
+        failDeferredLookupOnce = false;
+        throw new Error('TRANSIENT_CHECKPOINT_LOOKUP');
+      }
+      return originalLatestRecovery(candidateScope, candidateRunId);
+    };
+    assert.equal(
+      await recoveryService.retryDeferredRecoveries(),
+      0,
+      'a transient checkpoint lookup failure must leave deferred recovery scheduled for the next sweep',
+    );
+    checkpointRepository.latestRecovery = originalLatestRecovery;
+    assert.equal(
+      restartObserverEvents.some((item) => item.runId === jobRunId && item.type === 'run.recovery_failed'),
+      false,
+      'transient deferred-recovery lookup failures must not be misclassified as terminal recovery failures',
+    );
+
+    restartJobStatus = 'succeeded';
+    recoveryNow += 1;
+    const deferredRecovered = await recoveryService.retryDeferredRecoveries();
+    assert.equal(
+      deferredRecovered,
+      1,
+      'the recovery sweep must retry a deferred Run after its durable job becomes terminal',
+    );
+    const continuedJob = recoveredRuns.find((run) => run.parentRunId === jobRunId);
+    assert.ok(continuedJob, 'terminal durable background job recovery must create one continuation Run');
+    assert.equal(continuedJob.parentRunId, jobRunId);
+    assert.equal(restartJobStarts, 0, 'terminal job recovery must still avoid duplicate submission');
+    const terminalJobCheckpoint = await checkpointRepository.latestRecovery(scope, jobRunId);
+    assert.ok(terminalJobCheckpoint);
+    assert.deepEqual(
+      terminalJobCheckpoint.snapshot.recoveryManifest?.backgroundJobs.map((job) => [job.jobId, job.status]),
+      [[restartJobId, 'succeeded']],
+      'restart recapture must freeze the terminal Runner journal observation in the existing recovery manifest',
     );
 
     const modelAttempt = await db.queryOne<{ status: string; completed_at: number | null; error_code: string | null }>(
       "SELECT status, completed_at, error_code FROM agent_model_attempts WHERE id = 'model-attempt'",
     );
-    assert.deepEqual(modelAttempt, { status: 'aborted', completed_at: now + 1, error_code: 'BACKEND_RESTART' });
+    assert.deepEqual(modelAttempt, { status: 'aborted', completed_at: restartAt, error_code: 'BACKEND_RESTART' });
     const modelStep = await db.queryOne<{ status: string; completed_at: number | null }>(
       "SELECT status, completed_at FROM agent_steps WHERE id = 'model-step'",
     );
-    assert.deepEqual(modelStep, { status: 'cancelled', completed_at: now + 1 });
+    assert.deepEqual(modelStep, { status: 'cancelled', completed_at: restartAt });
 
     const readTool = await db.queryOne<{ status: string; completed_at: number | null }>(
       "SELECT status, completed_at FROM agent_tool_calls WHERE id = 'read-tool'",
     );
-    assert.deepEqual(readTool, { status: 'cancelled', completed_at: now + 1 });
+    assert.deepEqual(readTool, { status: 'cancelled', completed_at: restartAt });
     const readStep = await db.queryOne<{ status: string; completed_at: number | null }>(
       "SELECT status, completed_at FROM agent_steps WHERE id = 'read-step'",
     );
-    assert.deepEqual(readStep, { status: 'cancelled', completed_at: now + 1 });
+    assert.deepEqual(readStep, { status: 'cancelled', completed_at: restartAt });
 
     const mutationRun = await db.queryOne<{ version: number; needs_reconciliation: number; status: string }>(
       "SELECT version, needs_reconciliation, status FROM agent_runs WHERE id = 'mutation-run'",
@@ -6303,7 +6706,7 @@ const restartRecoveryScenario: Scenario = async () => {
       expectedRunVersion: 2,
       note: 'scenario verified the external mutation outcome',
       resources: [{ resourceKey: quarantine!.resource_key, version: quarantine!.version }],
-      now: now + 2,
+      now: restartAt + 2,
     });
     assert.equal(
       await db.queryOne("SELECT resource_key FROM agent_resource_quarantine WHERE resource_key = 'workspace:mutation'"),
@@ -6337,13 +6740,21 @@ const restartRecoveryScenario: Scenario = async () => {
       expectedRunVersion: 3,
       idempotencyKey: 'scenario-delete-mutation',
       requestHash: 'scenario-delete-mutation-v1',
-      now: now + 3,
+      now: restartAt + 3,
     });
     assert.equal(deleted.deleted, true);
     assert.equal(await db.queryOne("SELECT id FROM agent_runs WHERE id = 'mutation-run'"), null);
 
     return [
-      { name: 'interrupted_runs', value: interrupted, unit: 'runs' },
+      { name: 'interrupted_runs', value: interrupted.length, unit: 'runs' },
+      { name: 'restart_auto_continuations', value: recoveredRuns.length, unit: 'runs' },
+      { name: 'deferred_background_recoveries', value: deferredRecovered, unit: 'runs' },
+      { name: 'rolling_recovery_checkpoint_rows', value: recoveryRowsBeforeRestart.length, unit: 'checkpoints' },
+      { name: 'restart_background_job_queries', value: restartJobQueries, unit: 'queries' },
+      { name: 'restart_background_job_resubmits', value: restartJobStarts, unit: 'jobs' },
+      { name: 'restart_fallback_routes_preserved', value: 1, unit: 'runs' },
+      { name: 'restart_stale_input_rejections', value: 1, unit: 'runs' },
+      { name: 'restart_manual_recovery_resume_rejections', value: 1, unit: 'runs' },
       { name: 'materialized_quarantines', value: 1, unit: 'resources' },
       { name: 'resolved_mutations', value: 1, unit: 'tools' },
     ];
@@ -12641,6 +13052,7 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
   const checkpoint: CheckpointView = {
     id: checkpointId,
     runId: terminalSource.id,
+    kind: 'user',
     schemaVersion: 1,
     ledgerThrough: 0,
     eventThrough: 0,

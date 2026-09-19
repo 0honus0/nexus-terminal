@@ -823,12 +823,18 @@ export const createAgentCheckpointsTableSQL = `
 CREATE TABLE IF NOT EXISTS agent_checkpoints (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL REFERENCES agent_runs(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'user' CHECK(kind IN ('user','recovery')),
     schema_version INTEGER NOT NULL CHECK(schema_version = 1),
     ledger_through INTEGER NOT NULL,
     event_through INTEGER NOT NULL,
     snapshot_json TEXT NOT NULL CHECK(json_valid(snapshot_json)),
     created_at INTEGER NOT NULL
 );
+`;
+
+export const createAgentRecoveryCheckpointIndexSQL = `
+CREATE UNIQUE INDEX IF NOT EXISTS agent_one_recovery_checkpoint_per_run
+    ON agent_checkpoints(run_id) WHERE kind = 'recovery';
 `;
 
 export const createAgentApprovalsTableSQL = `

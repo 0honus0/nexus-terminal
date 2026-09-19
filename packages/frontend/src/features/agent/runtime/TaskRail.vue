@@ -397,8 +397,19 @@
           >
             <div class="flex items-center justify-between gap-2">
               <div class="min-w-0">
-                <div class="truncate font-mono text-[10px] font-medium text-foreground">
-                  #{{ checkpoint.id.slice(-8) }}
+                <div class="flex min-w-0 items-center gap-1.5">
+                  <div class="truncate font-mono text-[10px] font-medium text-foreground">
+                    #{{ checkpoint.id.slice(-8) }}
+                  </div>
+                  <span class="shrink-0 rounded bg-header px-1.5 py-0.5 text-[8px] text-text-secondary">
+                    {{
+                      $t(
+                        checkpoint.kind === 'recovery'
+                          ? 'agent.tasks.autoRecoveryCheckpoint'
+                          : 'agent.tasks.userCheckpoint',
+                      )
+                    }}
+                  </span>
                 </div>
                 <div class="mt-0.5 text-[9px] text-text-secondary">
                   {{
@@ -410,7 +421,7 @@
                 </div>
               </div>
               <button
-                v-if="terminal.has(detailSnapshot.status)"
+                v-if="terminal.has(detailSnapshot.status) && checkpoint.kind === 'user'"
                 type="button"
                 class="shrink-0 rounded-md bg-primary px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-50"
                 :disabled="busy || detailSnapshot.needsReconciliation"
@@ -646,9 +657,20 @@
                             :key="cp.id"
                             class="flex items-center justify-between gap-1 rounded-md border border-border/40 bg-card/80 px-2 py-1 text-[9px]"
                           >
-                            <div class="min-w-0 truncate font-mono text-foreground">#{{ cp.id.slice(-6) }}</div>
+                            <div class="flex min-w-0 items-center gap-1">
+                              <div class="truncate font-mono text-foreground">#{{ cp.id.slice(-6) }}</div>
+                              <span class="shrink-0 rounded bg-header px-1 py-0.5 text-[8px] text-text-secondary">
+                                {{
+                                  $t(
+                                    cp.kind === 'recovery'
+                                      ? 'agent.tasks.autoRecoveryCheckpoint'
+                                      : 'agent.tasks.userCheckpoint',
+                                  )
+                                }}
+                              </span>
+                            </div>
                             <button
-                              v-if="terminal.has(current.status)"
+                              v-if="terminal.has(current.status) && cp.kind === 'user'"
                               type="button"
                               class="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary hover:bg-primary/20"
                               :disabled="busy || current.needsReconciliation"

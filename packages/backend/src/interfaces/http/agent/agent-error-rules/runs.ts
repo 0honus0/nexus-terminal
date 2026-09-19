@@ -45,6 +45,7 @@ export const runErrorRules: readonly AgentErrorRule[] = [
     [
       'CHECKPOINT_NOT_SAFE',
       'CHECKPOINT_RECOVERY_MANIFEST_MISSING',
+      'CHECKPOINT_USER_KIND_REQUIRED',
       'CHECKPOINT_SIDE_EFFECT_DIVERGED',
       'RUN_RESUME_SOURCE_NOT_TERMINAL',
     ],

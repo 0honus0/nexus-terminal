@@ -1,5 +1,5 @@
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -12,6 +12,7 @@ const repoRoot = path.resolve(e2eRoot, '../..');
 const backendRoot = path.join(repoRoot, 'packages', 'backend');
 const tsxBin = path.join(backendRoot, 'node_modules', '.bin', 'tsx');
 const ENCRYPTION_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+const seededDatabasePath = path.join(e2eRoot, 'fixtures', 'seeded-data', 'nexus-terminal.db');
 
 const reservePort = async (): Promise<number> =>
   new Promise((resolve, reject) => {
@@ -192,6 +193,73 @@ const readUpgradeEvidence = (
   `;
   return JSON.parse(execFileSync(process.execPath, ['-e', script, databasePath], { cwd: repoRoot, encoding: 'utf8' }));
 };
+
+test('seeded Agent checkpoint schema migrates before recovery index bootstrap', async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), 'nexus-agent-checkpoint-migration-e2e-'));
+  const databasePath = path.join(dataDir, 'nexus-terminal.db');
+  await copyFile(seededDatabasePath, databasePath);
+  const port = await reservePort();
+  const baseURL = 'http://127.0.0.1:' + port;
+  let output = '';
+
+  const child = spawn(tsxBin, ['src/index.ts'], {
+    cwd: backendRoot,
+    env: {
+      ...process.env,
+      HOST: '127.0.0.1',
+      PORT: String(port),
+      NODE_ENV: 'test',
+      NEXUS_DATA_DIR: dataDir,
+      NEXUS_E2E_RESET_ENABLED: '0',
+      SESSION_COOKIE_NAME: 'nexus.checkpoint.migration.e2e.sid',
+      SESSION_SECRET: 'checkpoint-migration-e2e-session-secret-do-not-use-outside-tests-0000000000',
+      ENCRYPTION_KEY,
+      RP_ID: '127.0.0.1',
+      RP_ORIGIN: baseURL,
+    },
+    stdio: 'pipe',
+  });
+  child.stdin.end();
+  child.stdout.on('data', (chunk) => {
+    output = (output + String(chunk)).slice(-20_000);
+  });
+  child.stderr.on('data', (chunk) => {
+    output = (output + String(chunk)).slice(-20_000);
+  });
+
+  try {
+    await waitForBackend(baseURL, child, () => output);
+  } finally {
+    await stopProcess(child);
+  }
+
+  try {
+    const script =
+      "const { DatabaseSync } = require('node:sqlite');" +
+      "const db = new DatabaseSync(process.argv[1], { readOnly: true });" +
+      "try {" +
+      "const columns = db.prepare('PRAGMA table_info(agent_checkpoints)').all();" +
+      "const migration = db.prepare('SELECT id, name FROM migrations WHERE id = 31').get() ?? null;" +
+      "const recoveryIndex = db.prepare(\"SELECT sql FROM sqlite_master WHERE type='index' AND name='agent_one_recovery_checkpoint_per_run'\").get()?.sql ?? null;" +
+      "process.stdout.write(JSON.stringify({ hasKind: columns.some((column) => column.name === 'kind'), migration, recoveryIndex }));" +
+      "} finally { db.close(); }";
+    const evidence = JSON.parse(
+      execFileSync(process.execPath, ['-e', script, databasePath], { cwd: repoRoot, encoding: 'utf8' }),
+    ) as {
+      hasKind: boolean;
+      migration: { id: number; name: string } | null;
+      recoveryIndex: string | null;
+    };
+    expect(evidence.hasKind, output).toBeTruthy();
+    expect(evidence.migration).toEqual({
+      id: 31,
+      name: 'Distinguish rolling Agent recovery checkpoints',
+    });
+    expect(evidence.recoveryIndex).toContain("WHERE kind = 'recovery'");
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
 
 test('historical databases apply current connection and settings migrations through normal backend startup', async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), 'nexus-connection-migration-e2e-'));

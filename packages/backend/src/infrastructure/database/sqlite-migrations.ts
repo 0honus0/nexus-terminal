@@ -661,6 +661,19 @@ const definedMigrations: Migration[] = [
             ${createAiContextCheckpointsTableSQL}
         `,
   },
+  {
+    id: 31,
+    name: 'Distinguish rolling Agent recovery checkpoints',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_checkpoints')) && !(await columnExists(db, 'agent_checkpoints', 'kind')),
+    sql: `
+            ALTER TABLE agent_checkpoints
+              ADD COLUMN kind TEXT NOT NULL DEFAULT 'user'
+              CHECK(kind IN ('user','recovery'));
+            CREATE UNIQUE INDEX IF NOT EXISTS agent_one_recovery_checkpoint_per_run
+              ON agent_checkpoints(run_id) WHERE kind = 'recovery';
+        `,
+  },
 ];
 
 /**

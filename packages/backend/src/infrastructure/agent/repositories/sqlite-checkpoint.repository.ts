@@ -1,8 +1,11 @@
 import type { ToolRisk } from '../../../modules/agent/capabilities/tool.types';
 import type {
+  CheckpointBackgroundJobEntry,
+  CheckpointBackgroundJobStatus,
   CheckpointDelegationRecoveryEntry,
   CheckpointRecoveryHazards,
   CheckpointRepositoryPort,
+  CheckpointRunBackgroundJob,
   CheckpointSnapshot,
   CheckpointToolRecoveryEntry,
   CheckpointToolStatus,
@@ -25,6 +28,7 @@ import { persistedPlan, RUN_COLUMNS, type RunRow } from './sqlite-run.mapper';
 interface CheckpointRow {
   id: string;
   run_id: string;
+  kind: CheckpointView['kind'];
   schema_version: 1;
   ledger_through: number;
   event_through: number;
@@ -34,11 +38,13 @@ interface CheckpointRow {
 
 interface ToolRecoveryRow {
   id: string;
+  tool_name: string;
   operation_hash: string;
   risk: ToolRisk;
   status: CheckpointToolStatus;
   result_json: string | null;
   started_at: number | null;
+  created_at: number;
 }
 
 interface DelegationRecoveryRow {
@@ -51,11 +57,47 @@ interface QuarantineRecoveryRow {
   tool_call_id: string | null;
 }
 
+const backgroundJobStatuses: ReadonlySet<CheckpointBackgroundJobStatus> = new Set([
+  'pending',
+  'running',
+  'succeeded',
+  'failed',
+  'unknown',
+  'cancelled',
+]);
+
+const backgroundJobFromTool = (row: ToolRecoveryRow): CheckpointBackgroundJobEntry | null => {
+  if (!['workspace_execute_argv', 'workspace_job'].includes(row.tool_name) || !row.result_json) return null;
+  const result = parseToolResult(row.result_json);
+  if (!result.data || Array.isArray(result.data) || typeof result.data !== 'object') return null;
+  const data = result.data as Record<string, unknown>;
+  if (
+    typeof data.jobId !== 'string' ||
+    !/^job-[a-f0-9]{64}$/.test(data.jobId) ||
+    typeof data.workspaceId !== 'string' ||
+    data.workspaceId.length < 1 ||
+    data.workspaceId.length > 128 ||
+    !Number.isSafeInteger(data.generation) ||
+    Number(data.generation) < 1 ||
+    typeof data.status !== 'string' ||
+    !backgroundJobStatuses.has(data.status as CheckpointBackgroundJobStatus)
+  ) {
+    return null;
+  }
+  return {
+    jobId: data.jobId,
+    workspaceId: data.workspaceId,
+    generation: Number(data.generation),
+    status: data.status as CheckpointBackgroundJobStatus,
+  };
+};
+
 const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
   try {
     const record = durableRecord(parseDurableJson(raw));
     if (record.schemaVersion !== 1) throw new Error('invalid');
     const goal = record.goal === undefined ? undefined : durableRecord(record.goal);
+    const activeModel = record.activeModel === undefined ? undefined : durableRecord(record.activeModel);
     let recoveryManifest: CheckpointSnapshot['recoveryManifest'];
     if (record.recoveryManifest !== undefined) {
       const recovery = durableRecord(record.recoveryManifest);
@@ -65,6 +107,12 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
       if (Object.keys(runThrough).length > 64) throw new Error('invalid');
       if (!Array.isArray(recovery.tools) || recovery.tools.length > 4096) throw new Error('invalid');
       if (!Array.isArray(recovery.delegations) || recovery.delegations.length > 4096) throw new Error('invalid');
+      if (
+        recovery.backgroundJobs !== undefined &&
+        (!Array.isArray(recovery.backgroundJobs) || recovery.backgroundJobs.length > 256)
+      ) {
+        throw new Error('invalid');
+      }
       recoveryManifest = {
         schemaVersion: 1,
         eventThrough: durableInteger(recovery.eventThrough),
@@ -76,10 +124,26 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
         },
         tools: recovery.tools.map((item) => {
           const tool = durableRecord(item);
-          if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(tool.risk))) throw new Error('invalid');
-          if (!['proposed', 'awaiting_approval', 'ready', 'running', 'succeeded', 'verification_failed', 'failed', 'cancelled', 'reconciling'].includes(String(tool.status))) throw new Error('invalid');
-          if (!['not_started', 'confirmed', 'unknown'].includes(String(tool.sideEffectStatus))) throw new Error('invalid');
-          if (!['not_started', 'verified', 'unverified', 'failed'].includes(String(tool.verificationStatus))) throw new Error('invalid');
+          if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(tool.risk)))
+            throw new Error('invalid');
+          if (
+            ![
+              'proposed',
+              'awaiting_approval',
+              'ready',
+              'running',
+              'succeeded',
+              'verification_failed',
+              'failed',
+              'cancelled',
+              'reconciling',
+            ].includes(String(tool.status))
+          )
+            throw new Error('invalid');
+          if (!['not_started', 'confirmed', 'unknown'].includes(String(tool.sideEffectStatus)))
+            throw new Error('invalid');
+          if (!['not_started', 'verified', 'unverified', 'failed'].includes(String(tool.verificationStatus)))
+            throw new Error('invalid');
           return {
             toolCallId: durableString(tool.toolCallId) as string,
             operationHash: durableString(tool.operationHash) as string,
@@ -92,10 +156,23 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
         }),
         delegations: recovery.delegations.map((item) => {
           const delegation = durableRecord(item);
-          if (!['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled'].includes(String(delegation.status))) throw new Error('invalid');
+          if (!['queued', 'running', 'waiting', 'completed', 'failed', 'cancelled'].includes(String(delegation.status)))
+            throw new Error('invalid');
           return {
             delegationId: durableString(delegation.delegationId) as string,
             status: delegation.status as CheckpointDelegationRecoveryEntry['status'],
+          };
+        }),
+        backgroundJobs: (recovery.backgroundJobs ?? []).map((item) => {
+          const job = durableRecord(item);
+          if (!backgroundJobStatuses.has(String(job.status) as CheckpointBackgroundJobStatus)) {
+            throw new Error('invalid');
+          }
+          return {
+            jobId: durableString(job.jobId) as string,
+            workspaceId: durableString(job.workspaceId) as string,
+            generation: durableInteger(job.generation, 1),
+            status: job.status as CheckpointBackgroundJobStatus,
           };
         }),
         quarantinedResourceKeys: decodeDurableStringArray(recovery.quarantinedResourceKeys, 4096),
@@ -106,6 +183,10 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
       runId: durableString(record.runId) as string,
       ledgerThrough: durableInteger(record.ledgerThrough),
       planVersion: durableInteger(record.planVersion),
+      ...(record.inputRevision === undefined ? {} : { inputRevision: durableInteger(record.inputRevision) }),
+      ...(record.settingsRevision === undefined
+        ? {}
+        : { settingsRevision: durableInteger(record.settingsRevision, 1) }),
       plan: decodeRunPlan(record.plan),
       ...(goal === undefined
         ? {}
@@ -118,7 +199,19 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
           }),
       completedStepIds: decodeDurableStringArray(record.completedStepIds, 4096),
       evidenceRefs: decodeDurableStringArray(record.evidenceRefs, 4096),
+      ...(record.checkpointArtifactRefs === undefined
+        ? {}
+        : { checkpointArtifactRefs: decodeDurableStringArray(record.checkpointArtifactRefs, 8192) }),
       modelConfigurationVersion: durableInteger(record.modelConfigurationVersion, 1),
+      ...(activeModel === undefined
+        ? {}
+        : {
+            activeModel: {
+              providerId: durableString(activeModel.providerId) as string,
+              modelId: durableString(activeModel.modelId) as string,
+              configurationVersion: durableInteger(activeModel.configurationVersion, 1),
+            },
+          }),
       definitionVersion: durableString(record.definitionVersion) as string,
       policyRevision: durableInteger(record.policyRevision, 1),
       workspaceArtifactManifestRefs: decodeDurableStringArray(record.workspaceArtifactManifestRefs, 4096),
@@ -129,6 +222,51 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
     };
   } catch {
     throw new Error('CHECKPOINT_STATE_INVALID');
+  }
+};
+
+const checkpointArtifactRefs = (snapshot: CheckpointSnapshot): string[] =>
+  snapshot.checkpointArtifactRefs
+    ? [...snapshot.checkpointArtifactRefs]
+    : [
+        ...new Set([
+          ...snapshot.evidenceRefs,
+          ...(snapshot.workspaceArtifactRefs ?? snapshot.workspaceArtifactManifestRefs),
+        ]),
+      ];
+
+const cleanupCheckpointArtifactLinks = async (
+  db: RelationalDatabase,
+  runId: string,
+  releasedArtifactRefs: readonly string[],
+): Promise<void> => {
+  if (releasedArtifactRefs.length === 0) return;
+  const remainingRows = await db.queryAll<{ snapshot_json: string }>(
+    `SELECT snapshot_json FROM agent_checkpoints WHERE run_id=? ORDER BY created_at,id`,
+    [runId],
+  );
+  const retained = new Set<string>();
+  for (const row of remainingRows) {
+    for (const artifactId of checkpointArtifactRefs(decodeCheckpointSnapshot(row.snapshot_json)))
+      retained.add(artifactId);
+  }
+  const releasedManifestRefs = new Set<string>();
+  for (const artifactId of releasedArtifactRefs) {
+    if (retained.has(artifactId)) continue;
+    await db.execute(`DELETE FROM agent_artifact_links WHERE artifact_id=? AND run_id=? AND role='checkpoint'`, [
+      artifactId,
+      runId,
+    ]);
+    releasedManifestRefs.add(artifactId);
+  }
+  if (releasedManifestRefs.size > 0) {
+    for (const artifactId of releasedManifestRefs) {
+      await db.execute(
+        `UPDATE agent_workspaces SET retained_manifest_ref=NULL
+         WHERE run_id=? AND retained_manifest_ref=?`,
+        [runId, artifactId],
+      );
+    }
   }
 };
 
@@ -171,6 +309,7 @@ const toolRecovery = (
 const mapRow = (row: CheckpointRow): CheckpointView => ({
   id: row.id,
   runId: row.run_id,
+  kind: row.kind,
   schemaVersion: row.schema_version,
   ledgerThrough: row.ledger_through,
   eventThrough: row.event_through,
@@ -191,7 +330,7 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
       if (run.version !== command.expectedRunVersion) throw new Error('STATE_CONFLICT');
       if (run.status === 'cancelling' || run.needs_reconciliation === 1) throw new Error('CHECKPOINT_NOT_SAFE');
       const tools = await tx.queryAll<ToolRecoveryRow>(
-        `SELECT id, operation_hash, risk, status, result_json, started_at
+        `SELECT id, tool_name, operation_hash, risk, status, result_json, started_at, created_at
          FROM agent_tool_calls WHERE run_id=? ORDER BY created_at,id`,
         [run.id],
       );
@@ -239,8 +378,27 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         `SELECT artifact_id FROM agent_artifact_links WHERE run_id=? AND role='evidence' ORDER BY artifact_id`,
         [run.id],
       );
-      const workspaceCaptures = command.workspaceCaptures ?? [];
+      const backgroundJobs = command.backgroundJobs ?? [];
       if (
+        backgroundJobs.length > 256 ||
+        new Set(backgroundJobs.map((job) => job.jobId)).size !== backgroundJobs.length ||
+        backgroundJobs.some(
+          (job) =>
+            !/^job-[a-f0-9]{64}$/.test(job.jobId) ||
+            !job.workspaceId ||
+            job.workspaceId.length > 128 ||
+            !Number.isSafeInteger(job.generation) ||
+            job.generation < 1 ||
+            !['succeeded', 'failed', 'cancelled'].includes(job.status),
+        )
+      ) {
+        throw new Error('CHECKPOINT_NOT_SAFE');
+      }
+
+      const workspaceCaptures = command.workspaceCaptures ?? [];
+      const workspaceReference = command.workspaceReference;
+      if (
+        (workspaceCaptures.length > 0 && workspaceReference !== undefined) ||
         workspaceCaptures.length > 64 ||
         new Set(workspaceCaptures.map((capture) => capture.workspaceId)).size !== workspaceCaptures.length
       ) {
@@ -269,8 +427,22 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
           throw new Error('CHECKPOINT_NOT_SAFE');
         }
       }
-      const workspaceArtifactRefs = workspaceCaptures.flatMap((capture) => capture.artifactRefs);
-      const manifestRefs = workspaceCaptures.map((capture) => capture.manifestArtifactId);
+      if (
+        workspaceReference &&
+        (workspaceReference.manifestArtifactIds.length > 64 ||
+          workspaceReference.artifactRefs.length > 1024 ||
+          new Set(workspaceReference.manifestArtifactIds).size !== workspaceReference.manifestArtifactIds.length ||
+          new Set(workspaceReference.artifactRefs).size !== workspaceReference.artifactRefs.length ||
+          workspaceReference.manifestArtifactIds.some(
+            (artifactId) => !workspaceReference.artifactRefs.includes(artifactId),
+          ))
+      ) {
+        throw new Error('CHECKPOINT_STATE_INVALID');
+      }
+      const workspaceArtifactRefs =
+        workspaceReference?.artifactRefs ?? workspaceCaptures.flatMap((capture) => capture.artifactRefs);
+      const manifestRefs =
+        workspaceReference?.manifestArtifactIds ?? workspaceCaptures.map((capture) => capture.manifestArtifactId);
       const artifactRefs = [...new Set([...evidence.map((row) => row.artifact_id), ...workspaceArtifactRefs])];
       for (const artifactId of artifactRefs) {
         const artifact = await tx.queryOne<{ status: string }>(
@@ -304,11 +476,15 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         runId: run.id,
         ledgerThrough: currentRunThrough,
         planVersion: run.version,
+        inputRevision: run.input_revision,
+        settingsRevision: definition.settingsRevision,
         plan: persistedPlan(run.plan_json),
         goal: { text: run.goal_text, revision: run.goal_revision, updatedAt: run.goal_updated_at },
         completedStepIds: completed.map((row) => row.id),
         evidenceRefs: evidence.map((row) => row.artifact_id),
-        modelConfigurationVersion: definition.model.configurationVersion,
+        checkpointArtifactRefs: [...artifactRefs].sort(),
+        modelConfigurationVersion: (command.activeModel ?? definition.model).configurationVersion,
+        ...(command.activeModel ? { activeModel: { ...command.activeModel } } : {}),
         definitionVersion: command.definitionVersion,
         policyRevision: definition.policyRevision,
         workspaceArtifactManifestRefs: [...manifestRefs].sort(),
@@ -319,13 +495,37 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
           contextBoundary,
           tools: toolManifest,
           delegations: delegations.map((delegation) => ({ delegationId: delegation.id, status: delegation.status })),
+          backgroundJobs: backgroundJobs.map((job) => ({ ...job })),
           quarantinedResourceKeys: quarantines.map((quarantine) => quarantine.resource_key),
         },
       };
+      const kind = command.kind ?? 'user';
+      const supersededRecoveryArtifactRefs = new Set<string>();
+      if (kind === 'recovery') {
+        const superseded = await tx.queryAll<{ snapshot_json: string }>(
+          `SELECT snapshot_json FROM agent_checkpoints WHERE run_id=? AND kind='recovery'`,
+          [run.id],
+        );
+        for (const row of superseded) {
+          const previous = decodeCheckpointSnapshot(row.snapshot_json);
+          for (const artifactId of checkpointArtifactRefs(previous)) {
+            supersededRecoveryArtifactRefs.add(artifactId);
+          }
+        }
+        await tx.execute(`DELETE FROM agent_checkpoints WHERE run_id=? AND kind='recovery'`, [run.id]);
+      }
       await tx.execute(
-        `INSERT INTO agent_checkpoints (id,run_id,schema_version,ledger_through,event_through,snapshot_json,created_at)
-         VALUES (?,?,1,?,?,?,?)`,
-        [command.checkpointId, run.id, snapshot.ledgerThrough, eventThrough, JSON.stringify(snapshot), command.now],
+        `INSERT INTO agent_checkpoints (id,run_id,kind,schema_version,ledger_through,event_through,snapshot_json,created_at)
+         VALUES (?,?,?,1,?,?,?,?)`,
+        [
+          command.checkpointId,
+          run.id,
+          kind,
+          snapshot.ledgerThrough,
+          eventThrough,
+          JSON.stringify(snapshot),
+          command.now,
+        ],
       );
       for (const capture of workspaceCaptures) {
         const changed = await tx.execute(
@@ -351,8 +551,9 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
           [artifactId, run.id, command.now],
         );
       }
+      await cleanupCheckpointArtifactLinks(tx, run.id, [...supersededRecoveryArtifactRefs]);
       const row = await tx.queryOne<CheckpointRow>(
-        `SELECT id,run_id,schema_version,ledger_through,event_through,snapshot_json,created_at
+        `SELECT id,run_id,kind,schema_version,ledger_through,event_through,snapshot_json,created_at
          FROM agent_checkpoints WHERE id=?`,
         [command.checkpointId],
       );
@@ -363,7 +564,7 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
 
   async get(scope: { userId: number; appId: string }, checkpointId: string): Promise<CheckpointView | null> {
     const row = await this.db.queryOne<CheckpointRow>(
-      `SELECT c.id,c.run_id,c.schema_version,c.ledger_through,c.event_through,c.snapshot_json,c.created_at
+      `SELECT c.id,c.run_id,c.kind,c.schema_version,c.ledger_through,c.event_through,c.snapshot_json,c.created_at
        FROM agent_checkpoints c JOIN agent_runs r ON r.id=c.run_id
        WHERE c.id=? AND r.user_id=? AND r.app_id=?`,
       [checkpointId, scope.userId, scope.appId],
@@ -374,7 +575,7 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
   async list(scope: { userId: number; appId: string }, runId: string, limit = 50): Promise<CheckpointView[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error('VALIDATION_FAILED');
     const rows = await this.db.queryAll<CheckpointRow>(
-      `SELECT c.id,c.run_id,c.schema_version,c.ledger_through,c.event_through,c.snapshot_json,c.created_at
+      `SELECT c.id,c.run_id,c.kind,c.schema_version,c.ledger_through,c.event_through,c.snapshot_json,c.created_at
        FROM agent_checkpoints c JOIN agent_runs r ON r.id=c.run_id
        WHERE c.run_id=? AND r.user_id=? AND r.app_id=? ORDER BY c.created_at DESC,c.id DESC LIMIT ?`,
       [runId, scope.userId, scope.appId, limit],
@@ -382,15 +583,69 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
     return rows.map(mapRow);
   }
 
+  async latestRecovery(scope: { userId: number; appId: string }, runId: string): Promise<CheckpointView | null> {
+    const row = await this.db.queryOne<CheckpointRow>(
+      `SELECT c.id,c.run_id,c.kind,c.schema_version,c.ledger_through,c.event_through,c.snapshot_json,c.created_at
+       FROM agent_checkpoints c JOIN agent_runs r ON r.id=c.run_id
+       WHERE c.run_id=? AND c.kind='recovery' AND r.user_id=? AND r.app_id=?
+       ORDER BY c.created_at DESC,c.id DESC LIMIT 1`,
+      [runId, scope.userId, scope.appId],
+    );
+    return row ? mapRow(row) : null;
+  }
+
+  async deleteRecovery(scope: { userId: number; appId: string }, runId: string, checkpointId: string): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      const row = await tx.queryOne<CheckpointRow>(
+        `SELECT c.id,c.run_id,c.kind,c.schema_version,c.ledger_through,c.event_through,c.snapshot_json,c.created_at
+         FROM agent_checkpoints c JOIN agent_runs r ON r.id=c.run_id
+         WHERE c.id=? AND c.run_id=? AND c.kind='recovery' AND r.user_id=? AND r.app_id=?`,
+        [checkpointId, runId, scope.userId, scope.appId],
+      );
+      if (!row) return;
+      const released = checkpointArtifactRefs(decodeCheckpointSnapshot(row.snapshot_json));
+      await tx.execute(`DELETE FROM agent_checkpoints WHERE id=? AND run_id=? AND kind='recovery'`, [
+        checkpointId,
+        runId,
+      ]);
+      await cleanupCheckpointArtifactLinks(tx, runId, released);
+    });
+  }
+
+  async runBackgroundJobs(
+    scope: { userId: number; appId: string },
+    runId: string,
+  ): Promise<CheckpointRunBackgroundJob[]> {
+    const rows = await this.db.queryAll<ToolRecoveryRow>(
+      `SELECT t.id,t.tool_name,t.operation_hash,t.risk,t.status,t.result_json,t.started_at,t.created_at
+       FROM agent_tool_calls t
+       JOIN agent_runs r ON r.id=t.run_id
+       WHERE t.run_id=? AND r.user_id=? AND r.app_id=?
+         AND t.tool_name IN ('workspace_execute_argv','workspace_job')
+         AND t.result_json IS NOT NULL
+       ORDER BY t.created_at,t.id`,
+      [runId, scope.userId, scope.appId],
+    );
+    const jobs = new Map<string, CheckpointRunBackgroundJob>();
+    for (const row of rows) {
+      const projected = backgroundJobFromTool(row);
+      if (!projected) continue;
+      const current = jobs.get(projected.jobId);
+      if (current && (current.workspaceId !== projected.workspaceId || current.generation !== projected.generation)) {
+        throw new Error('CHECKPOINT_STATE_INVALID');
+      }
+      jobs.set(projected.jobId, {
+        ...projected,
+        toolCallIds: [...new Set([...(current?.toolCallIds ?? []), row.id])],
+      });
+    }
+    return [...jobs.values()].sort((left, right) => left.jobId.localeCompare(right.jobId));
+  }
+
   async missingArtifactRefs(scope: { userId: number; appId: string }, checkpointId: string): Promise<string[]> {
     const checkpoint = await this.get(scope, checkpointId);
     if (!checkpoint) throw new Error('NOT_FOUND');
-    const refs = [
-      ...new Set([
-        ...checkpoint.snapshot.evidenceRefs,
-        ...(checkpoint.snapshot.workspaceArtifactRefs ?? checkpoint.snapshot.workspaceArtifactManifestRefs),
-      ]),
-    ];
+    const refs = checkpointArtifactRefs(checkpoint.snapshot);
     const missing: string[] = [];
     for (const artifactId of refs) {
       const artifact = await this.db.queryOne<{ status: string }>(
@@ -441,5 +696,4 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
       quarantinedResourceKeys: [...new Set(quarantines.map((row) => row.resource_key))],
     };
   }
-
 }

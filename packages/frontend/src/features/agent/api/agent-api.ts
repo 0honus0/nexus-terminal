@@ -649,6 +649,7 @@ export interface AgentPendingRunInputPage {
 export interface AgentCheckpointView {
   id: string;
   runId: string;
+  kind: 'user' | 'recovery';
   schemaVersion: 1;
   ledgerThrough: number;
   eventThrough: number;
@@ -657,14 +658,19 @@ export interface AgentCheckpointView {
     runId: string;
     ledgerThrough: number;
     planVersion: number;
+    inputRevision?: number;
+    settingsRevision?: number;
     plan: AgentRunPlan;
     goal?: { text: string | null; revision: number; updatedAt: number | null };
     completedStepIds: string[];
     evidenceRefs: string[];
+    checkpointArtifactRefs?: string[];
     modelConfigurationVersion: number;
+    activeModel?: { providerId: string; modelId: string; configurationVersion: number };
     definitionVersion: string;
     policyRevision: number;
     workspaceArtifactManifestRefs: string[];
+    workspaceArtifactRefs?: string[];
     recoveryManifest?: {
       schemaVersion: 1;
       eventThrough: number;
@@ -679,6 +685,12 @@ export interface AgentCheckpointView {
         quarantinedResourceKeys: string[];
       }>;
       delegations: Array<{ delegationId: string; status: string }>;
+      backgroundJobs: Array<{
+        jobId: string;
+        workspaceId: string;
+        generation: number;
+        status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
+      }>;
       quarantinedResourceKeys: string[];
     };
   };

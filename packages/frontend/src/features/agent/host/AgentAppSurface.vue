@@ -753,6 +753,15 @@
           return;
         }
         if (event.type === 'message.final') resetStreamingPresentation();
+        const recoveryEvent =
+          event.type === 'run.recovery_continued' ||
+          event.type === 'run.recovery_deferred' ||
+          event.type === 'run.recovery_failed';
+        if (event.type === 'run.recovery_failed') {
+          error.value = t('agent.operations.restartRecoveryFailed', {
+            reasons: event.payload.reasons.join(', '),
+          });
+        }
         const durableCursor = event.id === undefined ? 0 : Number(event.id);
         const next = await refreshRun(
           initial.id,
@@ -763,6 +772,16 @@
           refreshLedger(),
           refreshApprovals(initial.id),
           refreshBackgroundRuns(),
+          ...(recoveryEvent
+            ? [
+                facade.listCheckpoints(initial.id).then((checkpoints) => {
+                  if (run.value?.id === initial.id) currentRunCheckpoints.value = checkpoints;
+                  if (detailVisible.value && detailSnapshot.value?.id === initial.id) {
+                    detailCheckpoints.value = checkpoints;
+                  }
+                }),
+              ]
+            : []),
           ...(detailVisible.value && detailSnapshot.value?.id === initial.id
             ? [refreshDetailSubagents(initial.id), refreshDetailApprovalBatch(initial.id)]
             : []),

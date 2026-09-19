@@ -762,7 +762,8 @@
       "environmentRunContract": "Workspace creation consumes this Run's frozen Environment snapshot; recipe and toolchain choices cannot change mid-Run.",
       "frozen": "Frozen",
       "openThreads": "Open conversations",
-      "closeThreads": "Close conversations"
+      "closeThreads": "Close conversations",
+      "restartRecoveryFailed": "Automatic recovery after the backend restart could not continue from its checkpoint: {reasons}"
     },
     "files": {
       "search": "Search files",
@@ -1026,7 +1027,9 @@
       "totalTokens": "Token total",
       "advancedDetails": "Advanced Details & Checkpoints",
       "backToTasks": "Back to Tasks",
-      "tokenBreakdown": "In {input} · Out {output} · Cached {cached}"
+      "tokenBreakdown": "In {input} · Out {output} · Cached {cached}",
+      "userCheckpoint": "Saved",
+      "autoRecoveryCheckpoint": "Auto recovery"
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",

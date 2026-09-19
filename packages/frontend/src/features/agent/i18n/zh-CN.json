@@ -762,7 +762,8 @@
       "environmentRunContract": "Workspace 创建只能消费当前 Run 已冻结的 Environment 快照；Run 执行过程中不能切换 recipe 或工具链。",
       "frozen": "已冻结",
       "openThreads": "打开会话列表",
-      "closeThreads": "关闭会话列表"
+      "closeThreads": "关闭会话列表",
+      "restartRecoveryFailed": "Backend 重启后的自动恢复未能从恢复检查点继续：{reasons}"
     },
     "files": {
       "search": "搜索文件",
@@ -1026,7 +1027,9 @@
       "totalTokens": "Token 总量",
       "advancedDetails": "高级详情与检查点",
       "backToTasks": "返回任务列表",
-      "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}"
+      "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}",
+      "userCheckpoint": "手动保存",
+      "autoRecoveryCheckpoint": "自动恢复"
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",

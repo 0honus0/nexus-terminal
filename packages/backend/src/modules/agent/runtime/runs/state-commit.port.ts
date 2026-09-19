@@ -741,7 +741,7 @@ export interface StateCommitPort {
   commit(command: StateCommitCommand): Promise<StateCommitResult>;
   interruptUnexpectedRootExecution(command: InterruptUnexpectedRootExecutionCommand): Promise<StateCommitResult | null>;
   quiesceApp(scope: Scope, now: number): Promise<number>;
-  interruptNonTerminalRuns(now: number): Promise<number>;
+  interruptNonTerminalRuns(now: number): Promise<RunView[]>;
 }
 
 export type RunCommandCommitPort = Pick<
@@ -757,7 +757,7 @@ export type RunCommandCommitPort = Pick<
 >;
 
 export type RunCreationCommitPort = Pick<StateCommitPort, 'createRun'>;
-export type CheckpointRecoveryCommitPort = Pick<StateCommitPort, 'createRun' | 'supersedeRunApprovals'>;
+export type CheckpointRecoveryCommitPort = Pick<StateCommitPort, 'createRun' | 'supersedeRunApprovals' | 'commit'>;
 export type ApprovalDecisionCommitPort = Pick<StateCommitPort, 'resolveToolApproval'>;
 export type ApprovalSweepCommitPort = Pick<StateCommitPort, 'expireToolApprovals' | 'cleanupExpiredCommands'>;
 export type ProjectionCommitPort = Pick<StateCommitPort, 'commit'>;

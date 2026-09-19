@@ -140,6 +140,10 @@ export class NativeAgentBackend implements AgentBackendPort {
     private readonly modelSteps: ModelStepRunner,
     private readonly toolCalls: ToolCallRunner,
     private readonly clock: ClockPort,
+    private readonly recoverySafePoint: (
+      run: RunView,
+      reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed',
+    ) => Promise<void> = async () => undefined,
   ) {}
 
   async *execute(initial: RunView, signal: AbortSignal): AsyncIterable<BackendSignal> {
@@ -257,6 +261,8 @@ export class NativeAgentBackend implements AgentBackendPort {
         }
         continue;
       }
+
+      await this.recoverySafePoint(snapshot, 'model_boundary');
 
       const remainingSteps = snapshot.budget.maxRunSteps - snapshot.usage.steps;
       const executionMode = snapshot.definition.executionMode ?? 'execute';
@@ -1265,6 +1271,9 @@ export class NativeAgentBackend implements AgentBackendPort {
     if (guarded.run.version !== settled.run.version) {
       yield { type: 'durable', runId: snapshot.id, cursor: guarded.eventCursor };
     }
+    if (guarded.run.status === 'running' && !guarded.run.needsReconciliation) {
+      await this.recoverySafePoint(guarded.run, 'read_batch');
+    }
     if (guarded.run.status === 'awaiting_input') yield { type: 'settled', run: guarded.run };
   }
 
@@ -1488,6 +1497,13 @@ export class NativeAgentBackend implements AgentBackendPort {
       }
 
       yield { type: 'durable', runId: snapshot.id, cursor: finalized.eventCursor };
+      if (
+        toolResult.outcome === 'confirmed' &&
+        finalized.run.status === 'running' &&
+        !finalized.run.needsReconciliation
+      ) {
+        await this.recoverySafePoint(finalized.run, 'mutation_confirmed');
+      }
       if (finalized.run.status === 'interrupted' || finalized.run.status === 'awaiting_input') {
         yield { type: 'settled', run: finalized.run };
       }
