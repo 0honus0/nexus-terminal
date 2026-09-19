@@ -248,9 +248,13 @@
                 >
                   {{
                     t(
-                      session.status === 'active'
-                        ? 'suspendedSshSessions.status.hanging'
-                        : 'suspendedSshSessions.status.disconnected',
+                      session.status !== 'active'
+                        ? 'suspendedSshSessions.status.disconnected'
+                        : session.ownershipState === 'attached'
+                          ? 'suspendedSshSessions.status.attached'
+                          : session.ownershipState === 'resuming'
+                            ? 'suspendedSshSessions.status.resuming'
+                            : 'suspendedSshSessions.status.hanging',
                     )
                   }}
                 </span>

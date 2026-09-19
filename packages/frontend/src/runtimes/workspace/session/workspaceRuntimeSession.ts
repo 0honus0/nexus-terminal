@@ -24,6 +24,7 @@ export interface WorkspaceRuntimeSessionOptions {
 
 const RECONNECT_MAX_DELAY_MS = 30_000;
 const INITIAL_RECONNECT_ATTEMPT_LIMIT = 5;
+const SUSPEND_OWNER_HEARTBEAT_MS = 15_000;
 
 export class WorkspaceRuntimeSession {
   readonly id: string;
@@ -46,6 +47,7 @@ export class WorkspaceRuntimeSession {
   private reconnectAttempt = 0;
   private reconnectTimer?: number;
   private reconnectInFlight = false;
+  private suspendOwnerHeartbeat?: number;
   private disposed = false;
   private closing = false;
   private lastViewport?: TerminalViewport;
@@ -130,6 +132,26 @@ export class WorkspaceRuntimeSession {
       this.socket.on<{ suspendedSessionId: string; reason: string }>('suspend.autoTerminated', (event) =>
         options.onSuspendedAutoTerminated?.(event),
       ),
+      this.socket.on<{
+        suspendedSessionId: string;
+        generation: number;
+        reason: 'takeover' | 'lease_expired';
+        message: string;
+      }>('suspend.revoked', (event) => {
+        this.clearSuspendOwnerHeartbeat();
+        this.markCapabilitiesDisconnected();
+        this.state.value = 'disconnected';
+        this.statusMessage.value = event.message;
+        logger.warn(
+          {
+            workspaceId: this.id,
+            suspendedSessionId: event.suspendedSessionId,
+            generation: event.generation,
+            reason: event.reason,
+          },
+          'Workspace suspended-session ownership revoked',
+        );
+      }),
     );
   }
 
@@ -215,7 +237,11 @@ export class WorkspaceRuntimeSession {
     }
   }
 
-  async resume(suspendedSessionId: string, markedAt?: string): Promise<WorkspaceConnectResult> {
+  async resume(
+    suspendedSessionId: string,
+    markedAt?: string,
+    options: { takeover?: boolean } = {},
+  ): Promise<WorkspaceConnectResult> {
     if (this.disposed) throw new Error('Workspace session has been disposed.');
     this.clearReconnectTimer();
     this.closing = false;
@@ -228,12 +254,11 @@ export class WorkspaceRuntimeSession {
     );
     try {
       const viewport = this.adapters.terminalViewport();
-      const result = await this.socket.request<
-        WorkspaceConnectResult & { resumedFrom: string; historyAvailable?: boolean }
-      >('suspend.resume', {
+      const result = await this.socket.request<WorkspaceConnectResult>('suspend.resume', {
         suspendedSessionId,
         workspaceId: this.id,
         ...(viewport ? { viewport } : {}),
+        ...(options.takeover ? { takeover: true } : {}),
       });
       if (result.binaryProtocolVersion !== WORKSPACE_BINARY_PROTOCOL_VERSION) {
         throw new Error('Workspace binary protocol version mismatch.');
@@ -246,6 +271,7 @@ export class WorkspaceRuntimeSession {
       this.markedForSuspend.value = true;
       this.markedForSuspendAt.value = markedAt ?? new Date().toISOString();
       this.state.value = 'connected';
+      this.startSuspendOwnerHeartbeat();
       logger.debug(
         {
           workspaceId: this.id,
@@ -291,6 +317,7 @@ export class WorkspaceRuntimeSession {
 
   async unmarkSuspend(): Promise<void> {
     await this.adapters.suspend.unmark(this.id);
+    this.clearSuspendOwnerHeartbeat();
     this.markedForSuspend.value = false;
     this.markedForSuspendAt.value = null;
   }
@@ -333,6 +360,7 @@ export class WorkspaceRuntimeSession {
     else logger.debug(context, 'Workspace runtime close requested');
     this.closing = true;
     this.clearReconnectTimer();
+    this.clearSuspendOwnerHeartbeat();
     this.statusController.workspaceDisconnected();
     this.dockerController.workspaceDisconnected();
     this.socket.close(reason);
@@ -355,6 +383,7 @@ export class WorkspaceRuntimeSession {
     this.disposed = true;
     this.closing = true;
     this.clearReconnectTimer();
+    this.clearSuspendOwnerHeartbeat();
     this.transferController.dispose();
     this.filesystemState.dispose();
     this.statusController.dispose();
@@ -366,6 +395,7 @@ export class WorkspaceRuntimeSession {
   }
 
   private handleTransportClosed(reason?: string): void {
+    this.clearSuspendOwnerHeartbeat();
     if (this.disposed || this.closing) return;
     const context = {
       workspaceId: this.id,
@@ -448,6 +478,30 @@ export class WorkspaceRuntimeSession {
     this.adapters.workspaceDisconnected();
     this.statusController.workspaceDisconnected();
     this.dockerController.workspaceDisconnected();
+  }
+
+  private startSuspendOwnerHeartbeat(): void {
+    this.clearSuspendOwnerHeartbeat();
+    const renew = async (): Promise<void> => {
+      if (this.disposed || this.closing || !this.markedForSuspend.value || !this.socket.connected) return;
+      try {
+        await this.socket.request('suspend.owner.renew');
+      } catch (cause) {
+        const error = cause instanceof Error ? cause : new Error(String(cause));
+        logger.warn(
+          { err: error, workspaceId: this.id, connectionId: this.connection.id },
+          'Suspended-session owner lease renewal failed',
+        );
+        this.statusMessage.value = error.message;
+      }
+    };
+    this.suspendOwnerHeartbeat = window.setInterval(() => void renew(), SUSPEND_OWNER_HEARTBEAT_MS);
+  }
+
+  private clearSuspendOwnerHeartbeat(): void {
+    if (this.suspendOwnerHeartbeat === undefined) return;
+    window.clearInterval(this.suspendOwnerHeartbeat);
+    this.suspendOwnerHeartbeat = undefined;
   }
 
   private clearReconnectTimer(): void {

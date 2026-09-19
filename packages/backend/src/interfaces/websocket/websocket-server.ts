@@ -31,7 +31,7 @@ interface SessionRequest extends Request {
 interface ClientRecord {
   socket: WebSocket;
   kind: 'workspace' | 'upload' | 'remote-desktop' | 'agent' | 'agent-terminal';
-  protocol?: { close(): Promise<void> | void };
+  protocol?: { close(): Promise<void> | void; touchOwnership?(): void };
   agentProtocol?: AgentProtocolSession;
   agentSessionKey?: string;
   isAlive: boolean;
@@ -164,6 +164,7 @@ export const attachWebSocketServer = (options: WebSocketServerOptions): BackendW
     const alive = () => {
       record.isAlive = true;
       record.missed = 0;
+      record.protocol?.touchOwnership?.();
     };
     record.socket.on('pong', alive);
     record.socket.on('message', alive);

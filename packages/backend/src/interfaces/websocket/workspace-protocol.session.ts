@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import WebSocket, { type RawData } from 'ws';
 import type { WorkspaceCommandService } from '../../modules/workspace/services/workspace-command.service';
 import type { WorkspaceDockerService } from '../../modules/workspace/services/workspace-docker.service';
@@ -31,7 +32,7 @@ const WORKSPACE_ID_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 const MAX_JSON_MESSAGE_BYTES = 1024 * 1024;
 const BINARY_HIGH_WATER_BYTES = 1024 * 1024;
 const BINARY_BACKPRESSURE_POLL_MS = 10;
-const HIGH_FREQUENCY_OPERATIONS = new Set(['terminal.input', 'terminal.resize', 'docker.stats']);
+const HIGH_FREQUENCY_OPERATIONS = new Set(['terminal.input', 'terminal.resize', 'docker.stats', 'suspend.owner.renew']);
 
 type JsonRecord = Record<string, unknown>;
 const record = (value: unknown): JsonRecord =>
@@ -119,7 +120,10 @@ export class WorkspaceProtocolSession {
   private eventUnsubscribe?: () => void;
   private closed = false;
   private readonly terminalTransport: TerminalStreamTransport;
+  private readonly consumerId = randomUUID();
+  private ownershipRevokedReason?: string;
   private readonly autoTerminationUnsubscribe: () => void;
+  private readonly ownershipRevokedUnsubscribe: () => void;
 
   constructor(
     private readonly socket: WebSocket,
@@ -134,10 +138,25 @@ export class WorkspaceProtocolSession {
         reason: event.reason,
       });
     });
+    this.ownershipRevokedUnsubscribe = dependencies.suspended.onOwnershipRevoked((event) => {
+      if (event.userId !== identity.userId || event.ownerId !== this.consumerId) return;
+      const reason =
+        event.reason === 'takeover'
+          ? 'Suspended session ownership was taken over by another device.'
+          : 'Suspended session owner lease expired.';
+      this.ownershipRevokedReason = reason;
+      this.sendEvent('suspend.revoked', {
+        suspendedSessionId: event.suspendSessionId,
+        generation: event.generation,
+        reason: event.reason,
+        message: reason,
+      });
+      if (this.socket.readyState === WebSocket.OPEN) this.socket.close(4009, reason);
+    });
   }
 
   async handleMessage(raw: RawData, isBinary: boolean): Promise<void> {
-    if (this.closed) return;
+    if (this.closed || this.ownershipRevokedReason) return;
     if (isBinary) {
       logger.debug({ workspaceId: this.workspaceId }, 'Rejected binary Workspace protocol request');
       this.socket.close(
@@ -217,10 +236,21 @@ export class WorkspaceProtocolSession {
     }
   }
 
+  touchOwnership(): void {
+    if (!this.workspaceId || this.closed || this.ownershipRevokedReason) return;
+    try {
+      this.dependencies.suspendCoordinator.renewOwnership(this.workspaceId, this.identity.userId, this.consumerId);
+    } catch {
+      // Ordinary Workspaces have no suspended-session owner. A stale/revoked owner is handled by
+      // the authoritative revoke event/close path rather than turning heartbeat traffic into errors.
+    }
+  }
+
   async close(context?: WorkspaceProtocolCloseContext): Promise<void> {
     if (this.closed) return;
     this.closed = true;
     this.autoTerminationUnsubscribe();
+    this.ownershipRevokedUnsubscribe();
     this.eventUnsubscribe?.();
     this.eventUnsubscribe = undefined;
     this.terminalTransport.dispose();
@@ -337,9 +367,15 @@ export class WorkspaceProtocolSession {
           customName: session.customSuspendName,
           status: session.backendSshStatus === 'hanging' ? 'active' : 'disconnected',
           disconnectedAt: session.disconnectionTimestamp,
+          ownershipState: session.ownershipState,
+          ownershipGeneration: session.ownershipGeneration,
+          ownershipLeaseExpiresAt: session.ownershipLeaseExpiresAt,
+          attachedWorkspaceId: session.attachedWorkspaceId,
         }));
       case 'suspend.resume':
         return this.resume(payload);
+      case 'suspend.owner.renew':
+        return this.suspendOwnerRenew();
       case 'suspend.history.previous':
         return this.suspendHistoryPrevious();
       case 'suspend.history.reset':
@@ -630,6 +666,7 @@ export class WorkspaceProtocolSession {
         suspendedSessionId,
         workspaceId,
         viewport,
+        { ownerId: this.consumerId, takeover: payload.takeover === true },
       );
       began = true;
       if (this.closed) throw new Error('Workspace socket closed during suspended-session resume.');
@@ -644,6 +681,8 @@ export class WorkspaceProtocolSession {
         connectionName: result.connectionName,
         resumedFrom: suspendedSessionId,
         historyAvailable: result.historyAvailable,
+        ownershipGeneration: result.ownershipGeneration,
+        ownershipLeaseExpiresAt: result.ownershipLeaseExpiresAt,
         binaryProtocolVersion: WORKSPACE_BINARY_PROTOCOL_VERSION,
       };
     } catch (error) {
@@ -651,6 +690,14 @@ export class WorkspaceProtocolSession {
       this.unbindWorkspace();
       throw error;
     }
+  }
+
+  private suspendOwnerRenew() {
+    return this.dependencies.suspendCoordinator.renewOwnership(
+      this.requireWorkspace(),
+      this.identity.userId,
+      this.consumerId,
+    );
   }
 
   private async suspendHistoryPrevious() {

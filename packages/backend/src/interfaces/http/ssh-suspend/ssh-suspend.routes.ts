@@ -13,6 +13,12 @@ const suspendedSessionDto = (session: ReturnType<SshSuspendService['list']>[numb
   suspendedAt: session.suspendStartTime,
   ...(session.customSuspendName === undefined ? {} : { customName: session.customSuspendName }),
   status: session.backendSshStatus === 'hanging' ? ('active' as const) : ('disconnected' as const),
+  ownershipState: session.ownershipState,
+  ownershipGeneration: session.ownershipGeneration,
+  ...(session.ownershipLeaseExpiresAt === undefined
+    ? {}
+    : { ownershipLeaseExpiresAt: session.ownershipLeaseExpiresAt }),
+  ...(session.attachedWorkspaceId === undefined ? {} : { attachedWorkspaceId: session.attachedWorkspaceId }),
   ...(session.disconnectionTimestamp === undefined ? {} : { disconnectedAt: session.disconnectionTimestamp }),
 });
 

@@ -15,7 +15,9 @@
     "disconnectedAt": "{time} に切断されました",
     "status": {
       "marked": "終了待ち",
-      "hanging": "アクティブ",
+      "hanging": "再開可能",
+      "resuming": "再開中",
+      "attached": "使用中",
       "disconnected": "切断済み"
     },
     "action": {
@@ -25,6 +27,9 @@
     }
   },
   "sshSuspend": {
+    "prompts": {
+      "confirmTakeover": "セッション「{name}」は別のデバイスで使用中です。同じ SSH セッションを引き継ぎますか？現在の所有デバイスは切断されます。"
+    },
     "notifications": {
       "markedForSuspendInfo": "セッション {id} は中断マークが付けられました。タブを閉じるかアプリケーションを終了すると中断されます。",
       "wsNotConnectedError": "WebSocket が接続されていません。中断/再開アクションを実行できません。",

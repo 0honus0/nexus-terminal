@@ -502,6 +502,12 @@
 
   const resumeSuspended = async (suspended: SuspendedSession, options: { silent?: boolean } = {}): Promise<boolean> => {
     try {
+      const takeover = suspended.ownershipState !== 'available';
+      if (takeover) {
+        if (options.silent) return false;
+        const name = suspended.customName ?? suspended.connectionName;
+        if (!(await feedback.confirm({ message: t('sshSuspend.prompts.confirmTakeover', { name }) }))) return false;
+      }
       const replacement = registry.sessions.get(suspended.originalWorkspaceId);
       const shouldReplace = Boolean(
         replacement?.markedForSuspend.value &&
@@ -509,8 +515,8 @@
       );
       const connection = shouldReplace ? replacement!.connection : await connectionService.get(suspended.connectionId);
       if (connection.type !== 'SSH') throw new Error(t('workspace.errors.suspendedConnectionNotSsh'));
-      if (shouldReplace) await registry.resumeReplacing(suspended, connection, replacement!.id);
-      else await registry.resume(suspended, connection);
+      if (shouldReplace) await registry.resumeReplacing(suspended, connection, replacement!.id, { takeover });
+      else await registry.resume(suspended, connection, { takeover });
       suspendedVisible.value = false;
       if (!options.silent)
         feedback.notifySuccess(

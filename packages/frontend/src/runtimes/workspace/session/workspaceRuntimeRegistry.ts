@@ -5,7 +5,6 @@ import {
   applySuspendedAutoTermination,
   refreshSuspendedSessionsAfterHandoff,
   refreshSuspendedSessionsCatalog,
-  removeSuspendedSessionFromCatalog,
   type SuspendedAutoTerminationNotice,
   type SuspendedSession,
 } from '@/features/ssh-suspend/public';
@@ -85,6 +84,7 @@ const runResume = (
   suspended: SuspendedSession,
   connection: Connection,
   replaceWorkspaceId?: string,
+  options: { takeover?: boolean } = {},
 ): Promise<WorkspaceRuntimeSession> => {
   const existing = resumeInFlight.get(suspended.id);
   if (existing) {
@@ -136,8 +136,8 @@ const runResume = (
 
     try {
       await nextTick();
-      await session.resume(suspended.id, suspended.suspendedAt);
-      removeSuspendedSessionFromCatalog(suspended.id);
+      await session.resume(suspended.id, suspended.suspendedAt, options);
+      void refreshSuspendedSessionsCatalog();
       if (oldSession && sessions.get(oldSession.id) === oldSession) {
         removeRuntime(oldSession.id, 'Replaced by resumed suspended session');
       }
@@ -196,16 +196,21 @@ export const workspaceRuntimeRegistry = {
     }
   },
 
-  resume(suspended: SuspendedSession, connection: Connection): Promise<WorkspaceRuntimeSession> {
-    return runResume(suspended, connection);
+  resume(
+    suspended: SuspendedSession,
+    connection: Connection,
+    options: { takeover?: boolean } = {},
+  ): Promise<WorkspaceRuntimeSession> {
+    return runResume(suspended, connection, undefined, options);
   },
 
   resumeReplacing(
     suspended: SuspendedSession,
     connection: Connection,
     replaceWorkspaceId: string,
+    options: { takeover?: boolean } = {},
   ): Promise<WorkspaceRuntimeSession> {
-    return runResume(suspended, connection, replaceWorkspaceId);
+    return runResume(suspended, connection, replaceWorkspaceId, options);
   },
 
   activate(id: string): void {

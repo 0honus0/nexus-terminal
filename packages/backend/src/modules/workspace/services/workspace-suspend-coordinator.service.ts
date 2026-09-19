@@ -1,5 +1,6 @@
 import { Readable } from 'node:stream';
 import type { SshSuspendService } from '../../ssh-suspend/ssh-suspend.service';
+import type { SuspendedSessionOwnershipRevoked } from '../../ssh-suspend/ssh-suspend.types';
 import { logger } from '../../../shared/logging/logger';
 import type { SuspendedSessionLogStore } from '../../ssh-suspend/suspended-session-log.port';
 import type {
@@ -25,11 +26,17 @@ interface SuspendMark {
   writeChain: Promise<void>;
   checkpoint?: SuspendedTerminalCheckpoint;
   stopOutput?: () => void;
+  suspendSessionId?: string;
+  ownerId?: string;
+  ownershipGeneration?: number;
 }
 interface PendingResume {
   userId: number;
   suspendSessionId: string;
   workspaceId: string;
+  ownerId: string;
+  ownershipGeneration?: number;
+  ownershipLeaseExpiresAt?: number;
   logIdentifier?: string;
   historyCursor: number;
   checkpoint?: SuspendedTerminalCheckpoint;
@@ -51,6 +58,8 @@ export interface BeginWorkspaceResumeResult {
   connectionName: string;
   logStream: Readable;
   historyAvailable: boolean;
+  ownershipGeneration: number;
+  ownershipLeaseExpiresAt: number;
 }
 
 export interface PreviousWorkspaceHistoryResult {
@@ -67,6 +76,7 @@ export class WorkspaceSuspendCoordinatorService {
   private readonly pending = new Map<string, PendingResume>();
   private readonly resumedHistory = new Map<string, ResumedHistory>();
   private readonly suspendHandoffs = new Map<string, Promise<{ suspended: boolean; suspendSessionId?: string }>>();
+  private readonly ownershipRevocationUnsubscribe: () => void;
   constructor(
     private readonly workspaces: WorkspaceService,
     private readonly terminal: WorkspaceTerminalService,
@@ -78,7 +88,11 @@ export class WorkspaceSuspendCoordinatorService {
     private readonly logs: SuspendedSessionLogStore,
     private readonly checkpoints: SuspendedTerminalCheckpointFactory,
     private readonly events: WorkspaceEventHub,
-  ) {}
+  ) {
+    this.ownershipRevocationUnsubscribe = suspended.onOwnershipRevoked((event) => {
+      void this.handleOwnershipRevoked(event);
+    });
+  }
 
   async markForSuspend(workspaceId: string, userId: number, initialBuffer?: string): Promise<void> {
     const session = this.workspaces.requireSession(workspaceId);
@@ -119,6 +133,18 @@ export class WorkspaceSuspendCoordinatorService {
     if (this.marks.get(workspaceId) !== mark) return;
     this.marks.delete(workspaceId);
     await this.finishMark(mark);
+    if (
+      mark.suspendSessionId &&
+      mark.ownerId &&
+      mark.ownershipGeneration !== undefined &&
+      !this.suspended.forgetAttached(userId, mark.suspendSessionId, {
+        ownerId: mark.ownerId,
+        generation: mark.ownershipGeneration,
+        workspaceId,
+      })
+    ) {
+      throw new Error('SUSPENDED_SESSION_OWNER_STALE');
+    }
     mark.checkpoint?.dispose();
     mark.checkpoint = undefined;
     if (!this.resumedHistory.has(workspaceId)) await this.logs.delete(mark.logIdentifier).catch(() => undefined);
@@ -201,23 +227,40 @@ export class WorkspaceSuspendCoordinatorService {
 
     let suspendSessionId: string | null;
     try {
-      suspendSessionId = await this.suspended.takeOver({
-        userId: session.userId,
-        originalSessionId: session.id,
-        connectionName: session.connectionName,
-        connectionId: session.connectionId,
-        logIdentifier: mark.logIdentifier,
-        transport: detached.transport,
-        shell: session.shell,
-        checkpoint: mark.checkpoint,
-        ...this.toSuspendSnapshot(snapshot),
-      });
+      if (mark.suspendSessionId) {
+        if (!mark.ownerId || mark.ownershipGeneration === undefined) {
+          throw new Error('SUSPENDED_SESSION_OWNERSHIP_INVALID');
+        }
+        const returned = this.suspended.returnAttached(session.userId, mark.suspendSessionId, {
+          ownerId: mark.ownerId,
+          generation: mark.ownershipGeneration,
+          workspaceId,
+          transport: detached.transport,
+          shell: session.shell,
+          checkpoint: mark.checkpoint,
+          ...this.toSuspendSnapshot(snapshot),
+        });
+        if (!returned) throw new Error('SUSPENDED_SESSION_RETURN_FAILED');
+        suspendSessionId = mark.suspendSessionId;
+      } else {
+        suspendSessionId = await this.suspended.takeOver({
+          userId: session.userId,
+          originalSessionId: session.id,
+          connectionName: session.connectionName,
+          connectionId: session.connectionId,
+          logIdentifier: mark.logIdentifier,
+          transport: detached.transport,
+          shell: session.shell,
+          checkpoint: mark.checkpoint,
+          ...this.toSuspendSnapshot(snapshot),
+        });
+      }
     } catch (error) {
       mark.checkpoint?.dispose();
       mark.checkpoint = undefined;
       await this.operations.cleanup(workspaceId).catch(() => undefined);
       await detached.transport.close().catch(() => undefined);
-      await this.logs.delete(mark.logIdentifier).catch(() => undefined);
+      if (!mark.suspendSessionId) await this.logs.delete(mark.logIdentifier).catch(() => undefined);
       throw error;
     }
     if (!suspendSessionId) {
@@ -242,7 +285,8 @@ export class WorkspaceSuspendCoordinatorService {
     userId: number,
     suspendSessionId: string,
     newWorkspaceId: string,
-    viewport?: SuspendedTerminalViewport,
+    viewport: SuspendedTerminalViewport | undefined,
+    ownership: { ownerId: string; takeover?: boolean },
   ): Promise<BeginWorkspaceResumeResult> {
     if (this.pending.has(newWorkspaceId)) throw new Error(`Workspace resume ${newWorkspaceId} is already pending.`);
 
@@ -254,6 +298,7 @@ export class WorkspaceSuspendCoordinatorService {
       userId,
       suspendSessionId,
       workspaceId: newWorkspaceId,
+      ownerId: ownership.ownerId,
       historyCursor: 0,
     };
     this.pending.set(newWorkspaceId, pending);
@@ -265,11 +310,13 @@ export class WorkspaceSuspendCoordinatorService {
     let prepared: Awaited<ReturnType<SshSuspendService['prepareResume']>>;
     let attached = false;
     try {
-      prepared = await this.suspended.prepareResume(userId, suspendSessionId, viewport);
+      prepared = await this.suspended.prepareResume(userId, suspendSessionId, viewport, ownership);
       if (!prepared) throw new Error('服务未能恢复会话，或会话不存在/状态不正确。');
       if (this.pending.get(newWorkspaceId) !== pending) {
         throw new Error('挂起恢复已被客户端关闭操作取消。');
       }
+      pending.ownershipGeneration = prepared.ownership.generation;
+      pending.ownershipLeaseExpiresAt = prepared.ownership.leaseExpiresAt;
       pending.logIdentifier = prepared.logIdentifier;
       pending.checkpoint = prepared.checkpoint;
       pending.viewport = prepared.viewport;
@@ -312,6 +359,8 @@ export class WorkspaceSuspendCoordinatorService {
         connectionName: session.connectionName,
         logStream,
         historyAvailable: pending.historyCursor > 0,
+        ownershipGeneration: prepared.ownership.generation,
+        ownershipLeaseExpiresAt: prepared.ownership.leaseExpiresAt,
       };
     } catch (error) {
       // If closeWorkspace() already consumed this reservation, it has also detached/rolled back
@@ -332,7 +381,15 @@ export class WorkspaceSuspendCoordinatorService {
             /* same transport still belongs to suspended record */
           }
         }
-        await this.suspended.rollbackResume(userId, suspendSessionId).catch(() => false);
+        await this.suspended
+          .rollbackResume(
+            userId,
+            suspendSessionId,
+            pending.ownershipGeneration === undefined
+              ? undefined
+              : { ownerId: pending.ownerId, generation: pending.ownershipGeneration },
+          )
+          .catch(() => false);
       }
       throw error;
     }
@@ -345,8 +402,16 @@ export class WorkspaceSuspendCoordinatorService {
     // now, while the shell is still paused, so the first resumed PTY bytes are ordered strictly after
     // the cached history already delivered on the WebSocket.
     this.terminal.attach(workspaceId, pending.viewport ?? { columns: 80, rows: 24 });
-    if (!(await this.suspended.commitResume(pending.userId, pending.suspendSessionId, true)))
+    if (
+      pending.ownershipGeneration === undefined ||
+      !(await this.suspended.commitResume(pending.userId, pending.suspendSessionId, {
+        ownerId: pending.ownerId,
+        generation: pending.ownershipGeneration,
+        workspaceId,
+      }))
+    ) {
       throw new Error('挂起恢复事务提交失败。');
+    }
     this.pending.delete(workspaceId);
     if (pending.historyCursor > 0) {
       this.resumedHistory.set(workspaceId, {
@@ -365,6 +430,11 @@ export class WorkspaceSuspendCoordinatorService {
       undefined,
       pending.checkpoint,
       pending.viewport ?? { columns: 80, rows: 24 },
+      {
+        suspendSessionId: pending.suspendSessionId,
+        ownerId: pending.ownerId,
+        ownershipGeneration: pending.ownershipGeneration,
+      },
     );
     const session = this.workspaces.requireSession(workspaceId);
     session.shell.resume();
@@ -415,7 +485,36 @@ export class WorkspaceSuspendCoordinatorService {
     } catch {
       /* suspended record still references the same transport */
     }
-    return this.suspended.rollbackResume(pending.userId, pending.suspendSessionId);
+    return this.suspended.rollbackResume(
+      pending.userId,
+      pending.suspendSessionId,
+      pending.ownershipGeneration === undefined
+        ? undefined
+        : { ownerId: pending.ownerId, generation: pending.ownershipGeneration },
+    );
+  }
+
+  renewOwnership(workspaceId: string, userId: number, ownerId: string): { generation: number; leaseExpiresAt: number } {
+    const mark = this.marks.get(workspaceId);
+    if (
+      !mark ||
+      mark.userId !== userId ||
+      !mark.suspendSessionId ||
+      !mark.ownerId ||
+      mark.ownerId !== ownerId ||
+      mark.ownershipGeneration === undefined
+    ) {
+      throw new Error('SUSPENDED_SESSION_OWNER_STALE');
+    }
+    const renewed = this.suspended.renewOwnership(
+      userId,
+      mark.suspendSessionId,
+      ownerId,
+      mark.ownershipGeneration,
+      workspaceId,
+    );
+    if (!renewed) throw new Error('SUSPENDED_SESSION_OWNER_STALE');
+    return renewed;
   }
 
   async closeWorkspace(workspaceId: string): Promise<void> {
@@ -439,6 +538,7 @@ export class WorkspaceSuspendCoordinatorService {
   }
 
   async dispose(): Promise<void> {
+    this.ownershipRevocationUnsubscribe();
     for (const workspaceId of [...this.pending.keys()]) await this.rollbackResume(workspaceId).catch(() => false);
     for (const session of [...this.workspaces.listAllSessions()]) {
       this.status.clear(session.id);
@@ -465,6 +565,29 @@ export class WorkspaceSuspendCoordinatorService {
     if (!this.marks.has(workspaceId)) await this.logs.delete(history.logIdentifier).catch(() => undefined);
   }
 
+  private async handleOwnershipRevoked(event: SuspendedSessionOwnershipRevoked): Promise<void> {
+    for (const [workspaceId, pending] of [...this.pending.entries()]) {
+      if (
+        pending.userId === event.userId &&
+        pending.suspendSessionId === event.suspendSessionId &&
+        pending.ownerId === event.ownerId &&
+        pending.ownershipGeneration === event.generation
+      ) {
+        await this.rollbackResume(workspaceId).catch(() => false);
+      }
+    }
+    for (const [workspaceId, mark] of [...this.marks.entries()]) {
+      if (
+        mark.userId === event.userId &&
+        mark.suspendSessionId === event.suspendSessionId &&
+        mark.ownerId === event.ownerId &&
+        mark.ownershipGeneration === event.generation
+      ) {
+        await this.closeWorkspace(workspaceId).catch(() => undefined);
+      }
+    }
+  }
+
   private createMark(
     workspaceId: string,
     userId: number,
@@ -472,6 +595,7 @@ export class WorkspaceSuspendCoordinatorService {
     initialBuffer?: string,
     checkpoint?: SuspendedTerminalCheckpoint,
     viewport: SuspendedTerminalViewport = { columns: 80, rows: 24 },
+    ownership?: { suspendSessionId: string; ownerId: string; ownershipGeneration: number },
   ): SuspendMark {
     const ownedCheckpoint = checkpoint ?? this.checkpoints.create(initialBuffer, viewport);
     const initialWrite = initialBuffer
@@ -483,6 +607,7 @@ export class WorkspaceSuspendCoordinatorService {
       ready: initialWrite.then(() => this.logs.flush(logIdentifier)),
       writeChain: initialWrite,
       checkpoint: ownedCheckpoint,
+      ...(ownership ?? {}),
     };
     // Publish the transaction before awaiting I/O so disconnect cannot bypass suspend takeover.
     this.marks.set(workspaceId, mark);

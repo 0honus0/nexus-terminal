@@ -6,6 +6,8 @@ import type {
 } from './suspended-terminal-checkpoint.port';
 
 export type SuspendedSessionStatus = 'hanging' | 'disconnected_by_backend';
+export type SuspendedSessionOwnershipState = 'available' | 'resuming' | 'attached';
+export type SuspendedSessionOwnershipRevokeReason = 'takeover' | 'lease_expired';
 export type ShellKind = 'bash' | 'zsh' | 'other';
 
 export interface SuspendedSessionInfo {
@@ -17,6 +19,10 @@ export interface SuspendedSessionInfo {
   customSuspendName?: string;
   backendSshStatus: SuspendedSessionStatus;
   disconnectionTimestamp?: string;
+  ownershipState: SuspendedSessionOwnershipState;
+  ownershipGeneration: number;
+  ownershipLeaseExpiresAt?: number;
+  attachedWorkspaceId?: string;
 }
 
 export interface SuspendedTerminalCheckpointView extends SuspendedTerminalCheckpointSnapshot {
@@ -41,6 +47,25 @@ export interface SuspendTakeoverRequest {
   shellAtPrompt?: boolean;
 }
 
+export interface SuspendResumeOwnershipRequest {
+  ownerId: string;
+  takeover?: boolean;
+}
+
+export interface SuspendedSessionOwnershipRevoked {
+  userId: number;
+  suspendSessionId: string;
+  ownerId: string;
+  generation: number;
+  reason: SuspendedSessionOwnershipRevokeReason;
+}
+
+export interface SuspendedSessionOwnershipToken {
+  ownerId: string;
+  generation: number;
+  leaseExpiresAt: number;
+}
+
 export interface PreparedResumeSession {
   transport: RemoteExecutionTransport;
   shell: RemoteShellSession;
@@ -54,4 +79,5 @@ export interface PreparedResumeSession {
   shellKind?: ShellKind;
   shellIntegrationReady?: boolean;
   shellAtPrompt?: boolean;
+  ownership: SuspendedSessionOwnershipToken;
 }

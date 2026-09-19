@@ -6,6 +6,7 @@ export interface MarkedSuspendedSession {
 }
 
 export type SuspendedSessionStatus = 'active' | 'disconnected';
+export type SuspendedSessionOwnershipState = 'available' | 'resuming' | 'attached';
 
 export interface SuspendedSession {
   id: string;
@@ -15,10 +16,15 @@ export interface SuspendedSession {
   suspendedAt: string;
   customName?: string;
   status: SuspendedSessionStatus;
+  ownershipState: SuspendedSessionOwnershipState;
+  ownershipGeneration: number;
+  ownershipLeaseExpiresAt?: number;
+  attachedWorkspaceId?: string;
   disconnectedAt?: string;
 }
 
 export interface ResumeSuspendedSessionRequest {
   suspendedSessionId: string;
   workspaceId: string;
+  takeover?: boolean;
 }

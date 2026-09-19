@@ -19,4 +19,8 @@ export interface WorkspaceConnectResult {
   connectionName: string;
   binaryProtocolVersion: number;
   lastConnectedAt?: number;
+  resumedFrom?: string;
+  historyAvailable?: boolean;
+  ownershipGeneration?: number;
+  ownershipLeaseExpiresAt?: number;
 }

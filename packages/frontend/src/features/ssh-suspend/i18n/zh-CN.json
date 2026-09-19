@@ -15,7 +15,9 @@
     "disconnectedAt": "已于 {time} 断开",
     "status": {
       "marked": "待关闭",
-      "hanging": "活跃",
+      "hanging": "可恢复",
+      "resuming": "恢复中",
+      "attached": "使用中",
       "disconnected": "已断开"
     },
     "action": {
@@ -25,6 +27,9 @@
     }
   },
   "sshSuspend": {
+    "prompts": {
+      "confirmTakeover": "会话“{name}”当前由另一台设备使用。是否接管同一个 SSH 会话？原设备将被断开。"
+    },
     "notifications": {
       "markedForSuspendInfo": "会话 {id} 已标记为挂起。关闭标签页时，该会话将被挂起。",
       "wsNotConnectedError": "WebSocket 未连接。无法执行挂起/恢复操作。",
