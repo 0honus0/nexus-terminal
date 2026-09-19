@@ -51,6 +51,7 @@ export interface CheckpointSnapshot {
   definitionVersion: string;
   policyRevision: number;
   workspaceArtifactManifestRefs: string[];
+  workspaceArtifactRefs?: string[];
   recoveryManifest?: CheckpointRecoveryManifest;
 }
 
@@ -69,12 +70,21 @@ export interface CheckpointRecoveryHazards {
   quarantinedResourceKeys: string[];
 }
 
+export interface CheckpointWorkspaceCapture {
+  workspaceId: string;
+  generation: number;
+  expectedVersion: number;
+  manifestArtifactId: string;
+  artifactRefs: string[];
+}
+
 export interface SaveCheckpointCommand {
   scope: Scope;
   checkpointId: string;
   runId: string;
   expectedRunVersion: number;
   definitionVersion: string;
+  workspaceCaptures?: CheckpointWorkspaceCapture[];
   now: number;
 }
 

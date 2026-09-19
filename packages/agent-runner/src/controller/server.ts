@@ -635,6 +635,27 @@ export class RunnerControllerServer {
         );
         return;
       }
+      const checkpointArchiveMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/checkpoint\/archive$/);
+      if (checkpointArchiveMatch && (request.method === 'GET' || request.method === 'PUT')) {
+        const workspaceId = decodeURIComponent(checkpointArchiveMatch[1]!);
+        const generation = Number(url.searchParams.get('generation'));
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('WORKSPACE_NOT_FOUND');
+        if (generation !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        if (request.method === 'GET') {
+          const read = await this.dependencies.runtimeEngine.openCheckpointArchive(workspaceId, generation);
+          try {
+            await binary(response, read.sizeBytes, read.source);
+          } finally {
+            await read.close();
+          }
+          return;
+        }
+        const expectedBytes = workspaceContentLength(request);
+        await this.dependencies.runtimeEngine.restoreCheckpointArchive(workspaceId, generation, request, expectedBytes);
+        json(response, 200, { restoredBytes: expectedBytes });
+        return;
+      }
       const workspaceFileMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/plugins\/([^/]+)\/file$/);
       if (workspaceFileMatch && (request.method === 'GET' || request.method === 'PUT')) {
         const workspaceId = decodeURIComponent(workspaceFileMatch[1]!);

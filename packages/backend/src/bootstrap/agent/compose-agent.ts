@@ -70,6 +70,7 @@ import { ModelStepRunner } from '../../modules/agent/runtime/execution/model-ste
 import { ToolCallRunner } from '../../modules/agent/runtime/execution/tool-call-runner';
 import { RunService } from '../../modules/agent/runtime/runs/run.service';
 import { CheckpointService } from '../../modules/agent/runtime/recovery/checkpoint.service';
+import { WorkspaceCheckpointService } from '../../modules/agent/runtime/recovery/workspace-checkpoint.service';
 import { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
 import { SubagentContextBuilder } from '../../modules/agent/runtime/collaboration/subagent-context-builder';
 import { SubagentPolicyService } from '../../modules/agent/runtime/collaboration/subagent-policy';
@@ -487,6 +488,12 @@ export const composeAgent = ({
     (userId, cursor) => eventHub.publishHostWake(userId, cursor),
   );
   const checkpointRepository = new SqliteCheckpointRepository(database);
+  const workspaceCheckpoints = new WorkspaceCheckpointService(
+    workspaceRepository,
+    workspaceRuntime,
+    workspaceRuntimeController,
+    artifacts,
+  );
   const checkpoints = new CheckpointService(
     checkpointRepository,
     runRepository,
@@ -499,6 +506,7 @@ export const composeAgent = ({
     systemClock,
     (run) => scheduler.enqueue(run),
     (run) => notifyCommitted(run),
+    workspaceCheckpoints,
   );
   const lifecycleSweeps = createAgentLifecycleSweeps({
     stateCommit,

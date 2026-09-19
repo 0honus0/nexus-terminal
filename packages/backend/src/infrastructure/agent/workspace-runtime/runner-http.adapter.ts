@@ -929,6 +929,41 @@ export class RunnerHttpAdapter
     );
   }
 
+  openWorkspaceCheckpointArchive(
+    workspaceId: string,
+    generation: number,
+    signal?: AbortSignal,
+  ): Promise<AgentWorkspaceReadHandle> {
+    const query = new URLSearchParams({ generation: String(generation) });
+    return this.openWorkspaceRead(
+      `/v1/workspaces/${encodeURIComponent(workspaceId)}/checkpoint/archive?${query.toString()}`,
+      signal,
+    );
+  }
+
+  async restoreWorkspaceCheckpointArchive(
+    workspaceId: string,
+    generation: number,
+    source: AsyncIterable<Uint8Array>,
+    expectedBytes: number,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    if (
+      !Number.isSafeInteger(expectedBytes) ||
+      expectedBytes < 1 ||
+      expectedBytes > MAX_HOST_WORKSPACE_TRANSFER_BYTES
+    ) {
+      throw new Error('WORKSPACE_CHECKPOINT_ARCHIVE_TOO_LARGE');
+    }
+    const query = new URLSearchParams({ generation: String(generation) });
+    await this.writeWorkspaceStream(
+      `/v1/workspaces/${encodeURIComponent(workspaceId)}/checkpoint/archive?${query.toString()}`,
+      source,
+      expectedBytes,
+      signal,
+    );
+  }
+
   async startJob(
     grant: WorkspaceExecutionGrant,
     call: WorkspaceJobCall,

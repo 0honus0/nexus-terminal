@@ -19,6 +19,7 @@ import type { RunUsage } from '../../../../modules/agent/runtime/runs/run.types'
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { enqueueParentJoinResume } from '../subagent-join-wake';
+import { linkVerifiedToolEvidence } from './artifact-evidence';
 import { parseRunBudget, parseRunUsage, parseToolResult } from '../durable-state-decoders';
 import {
   allocateHostEvent,
@@ -643,6 +644,7 @@ export const settleSubagentToolTransition = async (
   );
   if (!tool || tool.status !== 'running') throw new Error('TOOL_STATE_CONFLICT');
   const safeResult = JSON.parse(JSON.stringify(command.result)) as JsonValue;
+  await linkVerifiedToolEvidence(tx, row, command.result, command.now);
   const toolStatus = command.result.ok ? 'succeeded' : 'failed';
   const toolChanged = await tx.execute(
     `UPDATE agent_tool_calls SET status = ?, result_json = ?, completed_at = ?, version = version + 1

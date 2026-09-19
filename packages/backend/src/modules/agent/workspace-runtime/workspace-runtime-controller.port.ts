@@ -251,4 +251,17 @@ export interface WorkspaceRuntimeControllerPort {
     expectedBytes: number,
     signal?: AbortSignal,
   ): Promise<void>;
+  openWorkspaceCheckpointArchive(
+    workspaceId: string,
+    generation: number,
+    signal?: AbortSignal,
+  ): Promise<AgentWorkspaceReadHandle>;
+  restoreWorkspaceCheckpointArchive(
+    workspaceId: string,
+    generation: number,
+    source: AsyncIterable<Uint8Array>,
+    expectedBytes: number,
+    signal?: AbortSignal,
+  ): Promise<void>;
+
 }

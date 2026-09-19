@@ -122,6 +122,9 @@ const decodeCheckpointSnapshot = (raw: string): CheckpointSnapshot => {
       definitionVersion: durableString(record.definitionVersion) as string,
       policyRevision: durableInteger(record.policyRevision, 1),
       workspaceArtifactManifestRefs: decodeDurableStringArray(record.workspaceArtifactManifestRefs, 4096),
+      ...(record.workspaceArtifactRefs === undefined
+        ? {}
+        : { workspaceArtifactRefs: decodeDurableStringArray(record.workspaceArtifactRefs, 4096) }),
       ...(recoveryManifest === undefined ? {} : { recoveryManifest }),
     };
   } catch {
@@ -236,15 +239,39 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         `SELECT artifact_id FROM agent_artifact_links WHERE run_id=? AND role='evidence' ORDER BY artifact_id`,
         [run.id],
       );
-      const manifests = await tx.queryAll<{ retained_manifest_ref: string }>(
-        `SELECT retained_manifest_ref FROM agent_workspaces
-         WHERE run_id=? AND user_id=? AND app_id=? AND retained_manifest_ref IS NOT NULL
-         ORDER BY retained_manifest_ref`,
-        [run.id, command.scope.userId, command.scope.appId],
-      );
-      const artifactRefs = [
-        ...new Set([...evidence.map((row) => row.artifact_id), ...manifests.map((row) => row.retained_manifest_ref)]),
-      ];
+      const workspaceCaptures = command.workspaceCaptures ?? [];
+      if (
+        workspaceCaptures.length > 64 ||
+        new Set(workspaceCaptures.map((capture) => capture.workspaceId)).size !== workspaceCaptures.length
+      ) {
+        throw new Error('CHECKPOINT_STATE_INVALID');
+      }
+      for (const capture of workspaceCaptures) {
+        if (
+          !capture.artifactRefs.includes(capture.manifestArtifactId) ||
+          capture.artifactRefs.length < 2 ||
+          capture.artifactRefs.length > 16 ||
+          new Set(capture.artifactRefs).size !== capture.artifactRefs.length
+        ) {
+          throw new Error('CHECKPOINT_STATE_INVALID');
+        }
+        const workspace = await tx.queryOne<{ id: string; generation: number; version: number; status: string }>(
+          `SELECT id,generation,version,status FROM agent_workspaces
+           WHERE id=? AND run_id=? AND user_id=? AND app_id=?`,
+          [capture.workspaceId, run.id, command.scope.userId, command.scope.appId],
+        );
+        if (
+          !workspace ||
+          workspace.generation !== capture.generation ||
+          workspace.version !== capture.expectedVersion ||
+          !['ready', 'running', 'stopped'].includes(workspace.status)
+        ) {
+          throw new Error('CHECKPOINT_NOT_SAFE');
+        }
+      }
+      const workspaceArtifactRefs = workspaceCaptures.flatMap((capture) => capture.artifactRefs);
+      const manifestRefs = workspaceCaptures.map((capture) => capture.manifestArtifactId);
+      const artifactRefs = [...new Set([...evidence.map((row) => row.artifact_id), ...workspaceArtifactRefs])];
       for (const artifactId of artifactRefs) {
         const artifact = await tx.queryOne<{ status: string }>(
           `SELECT status FROM ai_artifacts WHERE id=? AND user_id=? AND app_id=?`,
@@ -284,7 +311,8 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
         modelConfigurationVersion: definition.model.configurationVersion,
         definitionVersion: command.definitionVersion,
         policyRevision: definition.policyRevision,
-        workspaceArtifactManifestRefs: manifests.map((row) => row.retained_manifest_ref),
+        workspaceArtifactManifestRefs: [...manifestRefs].sort(),
+        workspaceArtifactRefs: [...new Set(workspaceArtifactRefs)].sort(),
         recoveryManifest: {
           schemaVersion: 1,
           eventThrough,
@@ -299,6 +327,24 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
          VALUES (?,?,1,?,?,?,?)`,
         [command.checkpointId, run.id, snapshot.ledgerThrough, eventThrough, JSON.stringify(snapshot), command.now],
       );
+      for (const capture of workspaceCaptures) {
+        const changed = await tx.execute(
+          `UPDATE agent_workspaces
+           SET retained_manifest_ref=?, version=version+1, updated_at=?
+           WHERE id=? AND run_id=? AND user_id=? AND app_id=? AND generation=? AND version=?`,
+          [
+            capture.manifestArtifactId,
+            command.now,
+            capture.workspaceId,
+            run.id,
+            command.scope.userId,
+            command.scope.appId,
+            capture.generation,
+            capture.expectedVersion,
+          ],
+        );
+        if (changed.changes !== 1) throw new Error('CHECKPOINT_NOT_SAFE');
+      }
       for (const artifactId of artifactRefs) {
         await tx.execute(
           `INSERT OR IGNORE INTO agent_artifact_links (artifact_id,run_id,role,created_at) VALUES (?,?,'checkpoint',?)`,
@@ -340,7 +386,10 @@ export class SqliteCheckpointRepository implements CheckpointRepositoryPort {
     const checkpoint = await this.get(scope, checkpointId);
     if (!checkpoint) throw new Error('NOT_FOUND');
     const refs = [
-      ...new Set([...checkpoint.snapshot.evidenceRefs, ...checkpoint.snapshot.workspaceArtifactManifestRefs]),
+      ...new Set([
+        ...checkpoint.snapshot.evidenceRefs,
+        ...(checkpoint.snapshot.workspaceArtifactRefs ?? checkpoint.snapshot.workspaceArtifactManifestRefs),
+      ]),
     ];
     const missing: string[] = [];
     for (const artifactId of refs) {

@@ -23,6 +23,11 @@ import {
   type RunnerWorkspaceRepoMapRequest,
   type RunnerWorkspaceRepoMapResult,
 } from './workspace-code-intelligence';
+import {
+  createWorkspaceCheckpointArchive,
+  restoreWorkspaceCheckpointArchive,
+  type WorkspaceCheckpointArchiveReadHandle,
+} from './workspace-checkpoint-archive';
 
 const workspaceKey = (workspaceId: string, generation: number): string => `${workspaceId}\u0000${generation}`;
 
@@ -128,6 +133,42 @@ export class WorkspaceRuntimeEngine {
     request: RunnerWorkspaceApplyPatchRequest,
   ): RunnerWorkspaceApplyPatchResult {
     return applyWorkspacePatch(this.codingWorkRoot(workspaceId, generation), request);
+  }
+
+  async openCheckpointArchive(workspaceId: string, generation: number): Promise<WorkspaceCheckpointArchiveReadHandle> {
+    const status = this.runtime.status(workspaceId, generation);
+    if (!['ready', 'running', 'stopped'].includes(status)) {
+      throw new Error(status === 'deleted' ? 'WORKSPACE_NOT_FOUND' : 'WORKSPACE_CHECKPOINT_NOT_SAFE');
+    }
+    if ((this.jobs.get(workspaceKey(workspaceId, generation))?.size ?? 0) > 0) {
+      throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
+    }
+    return createWorkspaceCheckpointArchive(
+      path.join(this.runtime.coreWorkspaceRoot(workspaceId), 'work'),
+      path.join(this.runtime.workspaceRoot(workspaceId), '.control', 'checkpoints'),
+    );
+  }
+
+  async restoreCheckpointArchive(
+    workspaceId: string,
+    generation: number,
+    source: AsyncIterable<Uint8Array>,
+    expectedBytes: number,
+  ): Promise<void> {
+    const status = this.runtime.status(workspaceId, generation);
+    if (status !== 'ready') {
+      throw new Error(status === 'deleted' ? 'WORKSPACE_NOT_FOUND' : 'WORKSPACE_CHECKPOINT_RESTORE_NOT_READY');
+    }
+    if ((this.jobs.get(workspaceKey(workspaceId, generation))?.size ?? 0) > 0) {
+      throw new Error('WORKSPACE_CHECKPOINT_NOT_SAFE');
+    }
+    await restoreWorkspaceCheckpointArchive(
+      path.join(this.runtime.coreWorkspaceRoot(workspaceId), 'work'),
+      path.join(this.runtime.workspaceRoot(workspaceId), '.control', 'checkpoints'),
+      source,
+      expectedBytes,
+    );
+    this.codeIntelligence.dispose(workspaceKey(workspaceId, generation));
   }
 
   async executeJob(request: WorkspaceJobRequest): Promise<WorkspaceJobResult> {

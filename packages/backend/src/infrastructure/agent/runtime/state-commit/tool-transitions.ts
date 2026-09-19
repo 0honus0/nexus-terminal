@@ -22,6 +22,7 @@ import { normalizeUserInputQuestions } from '../../../../modules/agent/runtime/r
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
 import { mapRunRow, RUN_COLUMNS, type RunRow } from '../../repositories/sqlite-run.mapper';
 import { evaluateLoopGuard } from './loop-guard';
+import { linkVerifiedToolEvidence } from './artifact-evidence';
 import {
   allocateHostEvent,
   appendEvents,
@@ -234,6 +235,7 @@ export const settleMutationToolTransition = async (
   const unknown = command.result.outcome === 'unknown' || command.needsReconciliation === true;
   const toolStatus = unknown ? 'reconciling' : command.result.ok ? 'succeeded' : 'failed';
   const safeResult = JSON.parse(JSON.stringify(command.result)) as ToolResult;
+  await linkVerifiedToolEvidence(tx, row, safeResult, command.now);
   const toolChanged = await tx.execute(
     `UPDATE agent_tool_calls SET status = ?, result_json = ?, completed_at = ?, version = version + 1
      WHERE id = ? AND run_id = ? AND status = 'running' AND version = ?`,
@@ -433,6 +435,7 @@ export const settleUserInputRequestToolTransition = async (
     throw new Error('LOOP_GUARD_STATE_INVALID');
   }
 
+  await linkVerifiedToolEvidence(tx, currentRow, command.result, command.now);
   const resultJson = JSON.stringify(command.result);
   const modelResultJson = modelToolResultJson(currentRow, command.result);
   const toolChanged = await tx.execute(
@@ -587,6 +590,7 @@ export const settleReadToolBatchTransition = async (
       throw new Error('TOOL_STATE_CONFLICT');
     }
     const safeResult = JSON.parse(JSON.stringify(item.result)) as ToolResult;
+    await linkVerifiedToolEvidence(tx, row, safeResult, command.now);
     const toolStatus = item.result.ok ? 'succeeded' : 'failed';
     const toolChanged = await tx.execute(
       `UPDATE agent_tool_calls SET status = ?, result_json = ?, completed_at = ?, version = version + 1

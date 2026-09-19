@@ -9,8 +9,9 @@ import type { TargetDenylistRepositoryPort } from '../../host/target-denylist.re
 import { isAgentUuid } from '../../uuid';
 import type { AgentDefinitionRegistryPort } from '../definitions/agent-definition.port';
 import type { CheckpointRepositoryPort, CheckpointView } from './checkpoint.repository.port';
+import type { WorkspaceCheckpointService } from './workspace-checkpoint.service';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
-import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
+import type { RunExecutionReaderPort, RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { CheckpointRecoveryCommitPort } from '../runs/state-commit.port';
 import { TERMINAL_RUN_STATUSES, type RunBudget, type RunDefinitionSnapshot, type RunView } from '../runs/run.types';
 
@@ -72,7 +73,7 @@ const checkpointRecoveryReasons = (checkpoint: CheckpointView): string[] => {
 export class CheckpointService {
   constructor(
     private readonly checkpoints: CheckpointRepositoryPort,
-    private readonly runs: RunSnapshotReaderPort,
+    private readonly runs: RunSnapshotReaderPort & Pick<RunExecutionReaderPort, 'rootRuntimeId'>,
     private readonly settings: AgentSettingsService,
     private readonly lifecycle: AppLifecycleService,
     private readonly providers: ProviderService,
@@ -82,6 +83,7 @@ export class CheckpointService {
     private readonly clock: ClockPort,
     private readonly onCreated: (run: RunView) => void = () => undefined,
     private readonly onCommitted: (run: RunView) => void = () => undefined,
+    private readonly workspaceCheckpoints: WorkspaceCheckpointService | null = null,
   ) {}
 
   async save(scope: Scope, runId: string, expectedVersion: number): Promise<CheckpointView> {
@@ -90,14 +92,17 @@ export class CheckpointService {
     }
     const run = await this.runs.snapshot(scope, runId);
     if (!run) throw new Error('NOT_FOUND');
+    if (run.version !== expectedVersion) throw new Error('STATE_CONFLICT');
     const app = await this.lifecycle.get(scope);
     const definition = this.definitions.require(scope.appId, app.activeVersion, run.definition.agentDefinitionId);
+    const workspaceCaptures = this.workspaceCheckpoints ? await this.workspaceCheckpoints.capture(scope, run.id) : [];
     return this.checkpoints.save({
       scope,
       checkpointId: randomUUID(),
       runId,
       expectedRunVersion: expectedVersion,
       definitionVersion: definition.version,
+      workspaceCaptures,
       now: this.clock.nowUnixSeconds(),
     });
   }
@@ -168,6 +173,22 @@ export class CheckpointService {
       this.checkpoints.recoveryHazards(scope, checkpointId),
     ]);
     if (missingArtifactRefs.length) reasons.push('CHECKPOINT_ARTIFACT_UNAVAILABLE');
+    if (checkpoint.snapshot.workspaceArtifactManifestRefs.length > 0) {
+      if (!this.workspaceCheckpoints) {
+        reasons.push('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
+      } else {
+        try {
+          await this.workspaceCheckpoints.validate(
+            scope,
+            runId,
+            run.definition.environment,
+            checkpoint.snapshot.workspaceArtifactManifestRefs,
+          );
+        } catch {
+          reasons.push('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
+        }
+      }
+    }
     if (
       recoveryHazards.postCheckpointMutationToolCallIds.length > 0 ||
       recoveryHazards.quarantinedResourceKeys.length > 0
@@ -219,6 +240,19 @@ export class CheckpointService {
       throw new Error('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED');
     }
     const budget = clampBudget(source.budget, settings, model);
+    const workspaceManifests =
+      validation.checkpoint.snapshot.workspaceArtifactManifestRefs.length === 0
+        ? []
+        : this.workspaceCheckpoints
+          ? await this.workspaceCheckpoints.validate(
+              scope,
+              source.id,
+              source.definition.environment,
+              validation.checkpoint.snapshot.workspaceArtifactManifestRefs,
+            )
+          : (() => {
+              throw new Error('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
+            })();
     const definition: RunDefinitionSnapshot = {
       ...source.definition,
       requiredModelCapabilities: [...requirements],
@@ -282,6 +316,11 @@ export class CheckpointService {
       requestId: randomUUID(),
       now: this.clock.nowUnixSeconds(),
     });
+    if (workspaceManifests.length > 0) {
+      if (!this.workspaceCheckpoints) throw new Error('CHECKPOINT_WORKSPACE_MANIFEST_INVALID');
+      const resumedRuntimeId = await this.runs.rootRuntimeId(scope, committed.run.id);
+      await this.workspaceCheckpoints.restore(scope, committed.run.id, resumedRuntimeId, workspaceManifests);
+    }
     await this.stateCommit.supersedeRunApprovals(scope, source.id, this.clock.nowUnixSeconds());
     if (!committed.replayed) {
       this.onCommitted(committed.run);
