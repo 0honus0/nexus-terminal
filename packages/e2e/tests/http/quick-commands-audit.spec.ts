@@ -12,7 +12,7 @@ test('quick command CRUD and audit logs remain functional', async ({ request }) 
         name: 'E2E Quick Command',
         command: 'echo ${TARGET}',
         tagIds: [],
-        variables: { TARGET: { default: 'nexus-e2e' } },
+        variables: { TARGET: 'nexus-e2e' },
       },
     });
     expect(response.status()).toBe(201);
@@ -27,7 +27,7 @@ test('quick command CRUD and audit logs remain functional', async ({ request }) 
         name: 'E2E Quick Command Updated',
         command: 'printf "%s\\n" "${TARGET}"',
         tagIds: [],
-        variables: { TARGET: { default: 'updated' } },
+        variables: { TARGET: 'updated' },
       },
     });
     expect(update.ok()).toBeTruthy();

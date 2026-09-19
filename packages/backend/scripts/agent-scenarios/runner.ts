@@ -12244,6 +12244,80 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
   ];
 };
 
+const productTypeBoundaryScenario: Scenario = async () => {
+  const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
+    ? path.join(process.cwd(), 'src')
+    : path.join(process.cwd(), 'packages', 'backend', 'src');
+  const frontendSourceRoot = path.resolve(backendSourceRoot, '../../frontend/src');
+  const targets = [
+    [frontendSourceRoot, 'features/agent/settings/BudgetContextSettings.vue'],
+    [backendSourceRoot, 'modules/settings/settings.service.ts'],
+    [backendSourceRoot, 'interfaces/http/quick-commands/quick-commands.routes.ts'],
+    [backendSourceRoot, 'infrastructure/database/sqlite-migrations.ts'],
+  ] as const;
+  const sources = new Map(
+    targets.map(([root, relative]) => [relative, fs.readFileSync(path.join(root, relative), 'utf8')] as const),
+  );
+  const explicitAny = /\bas any\b|:\s*any\b|catch\s*\([^)]*:\s*any\b[^)]*\)/g;
+  let escapeCount = 0;
+  for (const [relative, source] of sources) {
+    const matches = source.match(explicitAny) ?? [];
+    escapeCount += matches.length;
+    assert.equal(matches.length, 0, `${relative} must not use explicit TypeScript any escapes`);
+  }
+
+  const budget = sources.get('features/agent/settings/BudgetContextSettings.vue')!;
+  assert.match(
+    budget,
+    /type BudgetKey = keyof AgentSettingsDocument\['budget'\]/,
+    'Budget settings must derive dynamic keys from the declared settings budget contract',
+  );
+  assert.match(budget, /keys: BudgetKey\[\]/, 'Budget field groups must use the typed budget key union');
+  assert.doesNotMatch(budget, /as unknown as/, 'Budget settings must not replace any with a double assertion');
+
+  const settings = sources.get('modules/settings/settings.service.ts')!;
+  assert.match(
+    settings,
+    /valid: \(value: unknown\) => value is T/,
+    'persisted Settings JSON must be accepted only through a real type predicate',
+  );
+  assert.match(settings, /const value: unknown = JSON\.parse\(raw\)/, 'JSON.parse must enter the decoder as unknown');
+  assert.doesNotMatch(settings, /\bas T\b/, 'generic Settings JSON decoding must not escape through as T');
+  assert.match(
+    settings,
+    /validFocus\(value: unknown\): value is FocusSwitcherFullConfig/,
+    'focus settings must narrow unknown at the persisted JSON boundary',
+  );
+
+  const quickCommands = sources.get('interfaces/http/quick-commands/quick-commands.routes.ts')!;
+  assert.match(quickCommands, /parseBody = \(body: unknown\)/, 'Quick Commands request bodies must start from unknown');
+  assert.match(quickCommands, /\bisRecord\(/, 'Quick Commands request bodies must use the shared record guard');
+  assert.match(
+    quickCommands,
+    /typeof .*value.* !== 'string'|typeof .*entry.* !== 'string'/,
+    'Quick Commands variables must validate string values before reaching the service',
+  );
+  assert.match(
+    quickCommands,
+    /Number\.isInteger/,
+    'Quick Commands tag ids must be validated as integers before reaching the service',
+  );
+
+  const migrations = sources.get('infrastructure/database/sqlite-migrations.ts')!;
+  assert.doesNotMatch(migrations, /catch\s*\([^)]*:\s*any\b/, 'migration catches must not type errors as any');
+  assert.match(
+    migrations,
+    /error instanceof Error/,
+    'migration errors must be narrowed from unknown before message access',
+  );
+
+  return [
+    { name: 'product_type_boundary_any_escapes', value: escapeCount, unit: 'escapes' },
+    { name: 'product_type_boundary_scoped_files', value: targets.length, unit: 'files' },
+    { name: 'product_type_boundary_double_assertions', value: 0, unit: 'assertions' },
+  ];
+};
+
 const scenarios = new Map<string, Scenario>([
   ['context/tool-exchange-atomicity', contextToolExchangeScenario],
   ['context/durable-compaction-checkpoint', durableContextCheckpointScenario],
@@ -12290,6 +12364,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/cumulative-token-ceiling-removed', cumulativeTokenCeilingRemovedScenario],
   ['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],
   ['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],
+  ['architecture/product-type-boundaries', productTypeBoundaryScenario],
 ]);
 
 const main = async (): Promise<void> => {

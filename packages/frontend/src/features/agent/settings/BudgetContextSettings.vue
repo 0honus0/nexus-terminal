@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import type { AgentSettingsView } from '../api/agent-api';
+  import type { AgentSettingsDocument, AgentSettingsView } from '../api/agent-api';
   import QuantityInput from './QuantityInput.vue';
   import {
     parseQuantity,
@@ -16,6 +16,18 @@
   const { t } = useI18n();
 
   type PresetId = 'light' | 'balanced' | 'deep' | 'custom';
+  type BudgetSettings = AgentSettingsDocument['budget'];
+  type BudgetKey = keyof AgentSettingsDocument['budget'];
+  type BudgetDraft = Record<BudgetKey, string | number | null>;
+
+  const budgetKeys: readonly BudgetKey[] = [
+    'maxRunSteps',
+    'maxActiveExecutionSeconds',
+    'toolTimeoutSeconds',
+    'maxToolOutputBytes',
+    'maxRecallItems',
+    'maxRecallBytes',
+  ];
 
   interface BudgetPreset {
     id: PresetId;
@@ -23,14 +35,7 @@
     label: string;
     description: string;
     badge?: string;
-    values: {
-      maxRunSteps: number;
-      maxActiveExecutionSeconds: number;
-      toolTimeoutSeconds: number;
-      maxToolOutputBytes: number;
-      maxRecallItems: number;
-      maxRecallBytes: number;
-    };
+    values: BudgetSettings;
   }
 
   const presets = computed<BudgetPreset[]>(() => [
@@ -94,25 +99,31 @@
     },
   ]);
 
-  const getFieldType = (key: string): QuantityType => {
-    if (['maxToolOutputBytes', 'maxRecallBytes'].includes(key)) return 'bytes';
-    if (['maxActiveExecutionSeconds', 'toolTimeoutSeconds'].includes(key)) return 'seconds';
+  const getFieldType = (key: BudgetKey): QuantityType => {
+    if (key === 'maxToolOutputBytes' || key === 'maxRecallBytes') return 'bytes';
+    if (key === 'maxActiveExecutionSeconds' || key === 'toolTimeoutSeconds') return 'seconds';
     return 'number';
   };
 
-  const getParsedValue = (key: string, raw: string | number | null): number | null => {
-    const type = getFieldType(key);
-    return parseQuantity(raw, type);
-  };
-  const draft = ref<Record<string, string | number | null>>({});
+  const getParsedValue = (key: BudgetKey, raw: string | number | null): number | null =>
+    parseQuantity(raw, getFieldType(key));
+
+  const draftFromBudget = (budget: BudgetSettings): BudgetDraft => ({
+    maxRunSteps: toCompactQuantityString(budget.maxRunSteps, getFieldType('maxRunSteps')),
+    maxActiveExecutionSeconds: toCompactQuantityString(
+      budget.maxActiveExecutionSeconds,
+      getFieldType('maxActiveExecutionSeconds'),
+    ),
+    toolTimeoutSeconds: toCompactQuantityString(budget.toolTimeoutSeconds, getFieldType('toolTimeoutSeconds')),
+    maxToolOutputBytes: toCompactQuantityString(budget.maxToolOutputBytes, getFieldType('maxToolOutputBytes')),
+    maxRecallItems: toCompactQuantityString(budget.maxRecallItems, getFieldType('maxRecallItems')),
+    maxRecallBytes: toCompactQuantityString(budget.maxRecallBytes, getFieldType('maxRecallBytes')),
+  });
+
+  const draft = ref<BudgetDraft>(draftFromBudget(props.settings.requestedSettings.budget));
 
   const syncFromProps = () => {
-    draft.value = Object.fromEntries(
-      Object.entries(props.settings.requestedSettings.budget).map(([key, value]) => [
-        key,
-        value === null ? '' : toCompactQuantityString(value, getFieldType(key)),
-      ]),
-    );
+    draft.value = draftFromBudget(props.settings.requestedSettings.budget);
   };
 
   watch(() => props.settings.revision, syncFromProps, { immediate: true });
@@ -120,11 +131,9 @@
   const activePreset = computed<PresetId>(() => {
     for (const preset of presets.value) {
       if (preset.id === 'custom') continue;
-      const isMatch = Object.entries(preset.values).every(([key, expected]) => {
-        const currentRaw = draft.value[key];
-        const type = getFieldType(key);
-        return areQuantitiesEquivalent(currentRaw, expected, type);
-      });
+      const isMatch = budgetKeys.every((key) =>
+        areQuantitiesEquivalent(draft.value[key], preset.values[key], getFieldType(key)),
+      );
       if (isMatch) return preset.id;
     }
     return 'custom';
@@ -136,49 +145,39 @@
 
   const applyPreset = (preset: BudgetPreset) => {
     if (preset.id === 'custom') return;
-    const limits = props.settings.hardLimits as unknown as Record<string, number | null>;
-    const nextDraft: Record<string, string | number | null> = { ...draft.value };
-    for (const [key, rawValue] of Object.entries(preset.values)) {
-      if (rawValue === null) {
-        nextDraft[key] = '';
-      } else {
-        const hardLimit = limits[key];
-        const safeVal = typeof hardLimit === 'number' ? Math.min(rawValue, hardLimit) : rawValue;
-        nextDraft[key] = toCompactQuantityString(safeVal, getFieldType(key));
-      }
+    const nextDraft: BudgetDraft = { ...draft.value };
+    for (const key of budgetKeys) {
+      const rawValue = preset.values[key];
+      const hardLimit = props.settings.hardLimits[key];
+      const safeValue = Math.min(rawValue, hardLimit);
+      nextDraft[key] = toCompactQuantityString(safeValue, getFieldType(key));
     }
     draft.value = nextDraft;
   };
 
-  const isDirty = computed(() => {
-    const current = props.settings.requestedSettings.budget as Record<string, number | null>;
-    return Object.entries(draft.value).some(([key, raw]) => {
-      const orig = current[key];
-      const type = getFieldType(key);
-      return !areQuantitiesEquivalent(orig, raw, type);
-    });
-  });
+  const isDirty = computed(() =>
+    budgetKeys.some(
+      (key) =>
+        !areQuantitiesEquivalent(props.settings.requestedSettings.budget[key], draft.value[key], getFieldType(key)),
+    ),
+  );
 
   const hasInvalidDraft = computed(() =>
-    Object.entries(draft.value).some(([key, raw]) => {
-      const parsed = getParsedValue(key, raw);
+    budgetKeys.some((key) => {
+      const parsed = getParsedValue(key, draft.value[key]);
       return parsed === null || parsed < 1;
     }),
   );
 
   const save = () => {
     if (hasInvalidDraft.value) return;
-    const patch: Record<string, number | null> = {};
-    const current = props.settings.requestedSettings.budget as Record<string, number | null>;
-    for (const [key, raw] of Object.entries(draft.value)) {
-      const parsed = getParsedValue(key, raw);
-      const orig = current[key];
-      const type = getFieldType(key);
-      if (orig !== null && parsed !== null && areQuantitiesEquivalent(orig, parsed, type)) {
-        patch[key] = orig;
-      } else {
-        patch[key] = parsed;
-      }
+    const current = props.settings.requestedSettings.budget;
+    const patch: BudgetSettings = { ...current };
+    for (const key of budgetKeys) {
+      const parsed = getParsedValue(key, draft.value[key]);
+      if (parsed === null) return;
+      const original = current[key];
+      patch[key] = areQuantitiesEquivalent(original, parsed, getFieldType(key)) ? original : parsed;
     }
     emit('save', patch);
   };
@@ -186,7 +185,7 @@
   interface FieldGroup {
     id: string;
     title: string;
-    keys: string[];
+    keys: BudgetKey[];
   }
 
   const fieldGroups: FieldGroup[] = [
@@ -278,7 +277,8 @@
               class="mt-2.5 flex items-center justify-between border-t border-border/40 pt-1.5 text-[10px] text-text-secondary"
             >
               <span v-if="preset.id !== 'custom'"
-                >{{ preset.values.maxRunSteps }} 步 · {{ Math.round(preset.values.maxActiveExecutionSeconds / 60) }} min</span
+                >{{ preset.values.maxRunSteps }} 步 ·
+                {{ Math.round(preset.values.maxActiveExecutionSeconds / 60) }} min</span
               >
               <span v-else>自定义微调</span>
               <span
@@ -309,13 +309,10 @@
                     {{ $t(`agent.settings.budget.fields.${key}`) }}
                   </span>
                   <span
-                    v-if="
-                      (settings.requestedSettings.budget as any)[key] !==
-                      (settings.effectiveSettings.budget as any)[key]
-                    "
+                    v-if="settings.requestedSettings.budget[key] !== settings.effectiveSettings.budget[key]"
                     class="text-[10px] text-warning"
                   >
-                    有效: {{ formatQuantity((settings.effectiveSettings.budget as any)[key], getFieldType(key)) }}
+                    有效: {{ formatQuantity(settings.effectiveSettings.budget[key], getFieldType(key)) }}
                   </span>
                 </div>
                 <p class="mb-1.5 text-[10px] text-text-secondary">

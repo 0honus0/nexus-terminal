@@ -57,6 +57,33 @@ const DEFAULT_CAPTCHA: CaptchaSettings = {
   recaptchaSiteKey: '',
   recaptchaSecretKey: '',
 };
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isPaneName = (value: unknown): value is PaneName =>
+  typeof value === 'string' && VALID_PANES.has(value as PaneName);
+
+const isSidebarConfig = (value: unknown): value is SidebarConfig =>
+  isRecord(value) &&
+  Array.isArray(value.left) &&
+  value.left.every(isPaneName) &&
+  Array.isArray(value.right) &&
+  value.right.every(isPaneName);
+
+const isCaptchaProvider = (value: unknown): value is CaptchaProvider =>
+  value === 'hcaptcha' || value === 'recaptcha' || value === 'none';
+
+const isOptionalString = (value: unknown): boolean => value === undefined || typeof value === 'string';
+
+const isCaptchaSettings = (value: unknown): value is CaptchaSettings =>
+  isRecord(value) &&
+  typeof value.enabled === 'boolean' &&
+  isCaptchaProvider(value.provider) &&
+  isOptionalString(value.hcaptchaSiteKey) &&
+  isOptionalString(value.hcaptchaSecretKey) &&
+  isOptionalString(value.recaptchaSiteKey) &&
+  isOptionalString(value.recaptchaSecretKey);
 const DEFAULT_LAYOUT: Omit<LayoutNode, 'id'> = {
   type: 'container',
   direction: 'horizontal',
@@ -170,7 +197,7 @@ export class SettingsService {
     const raw = await this.repository.get(KEYS.focus);
     if (!raw) return { sequence: [], shortcuts: {} };
     try {
-      const value = JSON.parse(raw);
+      const value: unknown = JSON.parse(raw);
       return this.validFocus(value) ? value : { sequence: [], shortcuts: {} };
     } catch {
       return { sequence: [], shortcuts: {} };
@@ -210,23 +237,18 @@ export class SettingsService {
     await this.repository.set(KEYS.remoteRefresh, String(v));
   }
   async getSidebarConfig(): Promise<SidebarConfig> {
-    return this.readJson(KEYS.sidebar, DEFAULT_SIDEBAR, (value) =>
-      Boolean(value && Array.isArray(value.left) && Array.isArray(value.right)),
-    );
+    return this.readJson(KEYS.sidebar, DEFAULT_SIDEBAR, isSidebarConfig);
   }
   async setSidebarConfig(config: UpdateSidebarConfigDto) {
     await this.repository.set(KEYS.sidebar, JSON.stringify(this.normalizeSidebarConfig(config)));
   }
   async getCaptchaConfig(): Promise<CaptchaSettings> {
-    return this.readJson(KEYS.captcha, DEFAULT_CAPTCHA, (value) =>
-      Boolean(value && typeof value.enabled === 'boolean' && typeof value.provider === 'string'),
-    );
+    return this.readJson(KEYS.captcha, DEFAULT_CAPTCHA, isCaptchaSettings);
   }
   async setCaptchaConfig(dto: UpdateCaptchaSettingsDto) {
     const current = await this.getCaptchaConfig();
     const next = { ...current, ...dto };
-    const providers: CaptchaProvider[] = ['hcaptcha', 'recaptcha', 'none'];
-    if (typeof next.enabled !== 'boolean' || !providers.includes(next.provider))
+    if (typeof next.enabled !== 'boolean' || !isCaptchaProvider(next.provider))
       throw new Error('Invalid CAPTCHA configuration.');
     for (const key of ['hcaptchaSiteKey', 'hcaptchaSecretKey', 'recaptchaSiteKey', 'recaptchaSecretKey'] as const)
       if (next[key] !== undefined && typeof next[key] !== 'string') throw new Error(`${key} must be a string.`);
@@ -240,12 +262,12 @@ export class SettingsService {
     if (!Number.isInteger(value) || value < min || value > max)
       throw new Error(`Value must be an integer from ${min} to ${max}.`);
   }
-  private async readJson<T>(key: string, fallback: T, valid: (v: any) => boolean): Promise<T> {
+  private async readJson<T>(key: string, fallback: T, valid: (value: unknown) => value is T): Promise<T> {
     const raw = await this.repository.get(key);
     if (!raw) return fallback;
     try {
-      const v = JSON.parse(raw);
-      return valid(v) ? (v as T) : fallback;
+      const value: unknown = JSON.parse(raw);
+      return valid(value) ? value : fallback;
     } catch {
       return fallback;
     }
@@ -264,16 +286,17 @@ export class SettingsService {
     if (new Set(panes).size !== panes.length) throw new Error('Duplicate sidebar panes are not allowed.');
     return { left: [...candidate.left] as PaneName[], right: [...candidate.right] as PaneName[] };
   }
-  private validFocus(value: any): value is FocusSwitcherFullConfig {
-    return Boolean(
-      value &&
-      Array.isArray(value.sequence) &&
-      value.sequence.every((v: any) => typeof v === 'string') &&
-      value.shortcuts &&
-      typeof value.shortcuts === 'object' &&
-      Object.values(value.shortcuts).every(
-        (v: any) => v && typeof v === 'object' && (v.shortcut === undefined || typeof v.shortcut === 'string'),
-      ),
+  private validFocus(value: unknown): value is FocusSwitcherFullConfig {
+    if (
+      !isRecord(value) ||
+      !Array.isArray(value.sequence) ||
+      !value.sequence.every((entry) => typeof entry === 'string')
+    ) {
+      return false;
+    }
+    if (!isRecord(value.shortcuts)) return false;
+    return Object.values(value.shortcuts).every(
+      (entry) => isRecord(entry) && (entry.shortcut === undefined || typeof entry.shortcut === 'string'),
     );
   }
 }

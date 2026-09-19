@@ -715,8 +715,9 @@ export const runMigrations = async (db: Database): Promise<void> => {
         logger.info(`[Migrations] 执行迁移 #${migration.id} 的 SQL...`);
         try {
           db.exec(migration.sql);
-        } catch (error: any) {
-          if (error.message.includes('duplicate column name')) {
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.includes('duplicate column name')) {
             logger.warn(
               `[Migrations] 迁移 #${migration.id} SQL 执行时出现 'duplicate column name' 错误，视为可接受并继续。`,
             );
@@ -730,14 +731,15 @@ export const runMigrations = async (db: Database): Promise<void> => {
       insertMigration.run(migration.id, migration.name);
       db.exec('COMMIT');
       logger.info(`[Migrations] 迁移 #${migration.id}: ${migration.name} 应用成功 (SQL 可能已跳过)。`);
-    } catch (error: any) {
+    } catch (error) {
       logger.error(`[Migrations] 迁移 #${migration.id} 步骤失败，正在回滚事务...`);
       try {
         db.exec('ROLLBACK');
       } catch (rollbackError) {
         logger.error({ err: rollbackError, migrationId: migration.id }, 'Failed to roll back database migration');
       }
-      throw new Error(`迁移 #${migration.id} 失败: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`迁移 #${migration.id} 失败: ${message}`);
     }
   }
 

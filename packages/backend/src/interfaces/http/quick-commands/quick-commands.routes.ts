@@ -1,18 +1,70 @@
 import { Router } from 'express';
 import type { QuickCommandService } from '../../../modules/quick-commands/quick-command.service';
 import { requireAuthenticated } from '../auth/auth.middleware';
-import { errorMessage, parsePositiveId } from '../shared/http-utils';
+import { errorMessage, isRecord, parsePositiveId } from '../shared/http-utils';
 import { route } from '../shared/route-handler';
 
-const parseBody = (body: any) => ({
-  name: body?.name === null ? null : typeof body?.name === 'string' ? body.name : null,
-  command: typeof body?.command === 'string' ? body.command : '',
-  tagIds: Array.isArray(body?.tagIds) ? body.tagIds : [],
-  variables:
-    body?.variables && typeof body.variables === 'object' && !Array.isArray(body.variables)
-      ? body.variables
-      : undefined,
-});
+interface ParsedQuickCommandBody {
+  name: string | null;
+  command: string;
+  tagIds: number[];
+  variables?: Record<string, string>;
+  validName: boolean;
+  validTagIds: boolean;
+  validVariables: boolean;
+}
+
+const decodeVariables = (value: unknown): Record<string, string> | null => {
+  if (!isRecord(value)) return null;
+  const variables: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (typeof entry !== 'string') return null;
+    variables[key] = entry;
+  }
+  return variables;
+};
+
+const parseBody = (body: unknown): ParsedQuickCommandBody => {
+  if (!isRecord(body)) {
+    return {
+      name: null,
+      command: '',
+      tagIds: [],
+      validName: true,
+      validTagIds: true,
+      validVariables: true,
+    };
+  }
+
+  const validName = body.name === undefined || body.name === null || typeof body.name === 'string';
+  const validTagIds =
+    body.tagIds === undefined ||
+    (Array.isArray(body.tagIds) &&
+      body.tagIds.every((value): value is number => typeof value === 'number' && Number.isInteger(value)));
+  const decodedVariables = body.variables === undefined ? undefined : decodeVariables(body.variables);
+  const validVariables = body.variables === undefined || decodedVariables !== null;
+
+  return {
+    name: body.name === null ? null : typeof body.name === 'string' ? body.name : null,
+    command: typeof body.command === 'string' ? body.command : '',
+    tagIds:
+      Array.isArray(body.tagIds) &&
+      body.tagIds.every((value): value is number => typeof value === 'number' && Number.isInteger(value))
+        ? body.tagIds
+        : [],
+    ...(decodedVariables ? { variables: decodedVariables } : {}),
+    validName,
+    validTagIds,
+    validVariables,
+  };
+};
+
+const validateBody = (input: ParsedQuickCommandBody): string | null => {
+  if (!input.validName) return '名称必须是字符串或 null';
+  if (!input.validTagIds) return 'tagIds 必须是一个数字数组';
+  if (!input.validVariables) return 'variables 必须是字符串映射';
+  return null;
+};
 
 export const createQuickCommandsRouter = (commands: QuickCommandService): Router => {
   const router = Router();
@@ -46,15 +98,9 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
         response.status(400).json({ message: '指令内容不能为空' });
         return;
       }
-      if (request.body?.name !== null && request.body?.name !== undefined && typeof request.body.name !== 'string') {
-        response.status(400).json({ message: '名称必须是字符串或 null' });
-        return;
-      }
-      if (
-        request.body?.tagIds !== undefined &&
-        (!Array.isArray(request.body.tagIds) || !request.body.tagIds.every(Number.isInteger))
-      ) {
-        response.status(400).json({ message: 'tagIds 必须是一个数字数组' });
+      const validationError = validateBody(input);
+      if (validationError) {
+        response.status(400).json({ message: validationError });
         return;
       }
       try {
@@ -79,6 +125,11 @@ export const createQuickCommandsRouter = (commands: QuickCommandService): Router
       const input = parseBody(request.body);
       if (!input.command.trim()) {
         response.status(400).json({ message: '指令内容不能为空' });
+        return;
+      }
+      const validationError = validateBody(input);
+      if (validationError) {
+        response.status(400).json({ message: validationError });
         return;
       }
       if (!(await commands.update(id, input.name, input.command, input.tagIds, input.variables))) {
