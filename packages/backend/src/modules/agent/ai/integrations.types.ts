@@ -9,6 +9,7 @@ export interface McpIntegrationConfiguration {
   endpoint: string;
   privateHostExceptions: string[];
   protocolVersion: '2026-07-28';
+  trustToolAnnotations?: boolean;
 }
 
 export interface AcpIntegrationConfiguration {
@@ -42,17 +43,64 @@ export interface McpToolDescriptor {
   annotations: JsonValue | null;
 }
 
+export interface McpResourceDescriptor {
+  uri: string;
+  name: string;
+  title: string | null;
+  description: string;
+  mimeType: string | null;
+  annotations: JsonValue | null;
+}
+
+export interface McpPromptDescriptor {
+  name: string;
+  title: string | null;
+  description: string;
+  arguments: Array<{ name: string; description: string | null; required: boolean }>;
+}
+
 export interface McpConnectionSnapshot {
   serverName: string;
   serverVersion: string;
   protocolVersion: string;
   tools: McpToolDescriptor[];
+  resources: McpResourceDescriptor[];
+  prompts: McpPromptDescriptor[];
 }
 
-export interface McpInvocationResult {
+export interface McpInputRequiredResult {
+  kind: 'input_required';
+  inputRequests: JsonValue;
+  requestState: string | null;
+}
+
+export interface McpInvocationCompleteResult {
+  kind: 'complete';
   isError: boolean;
   content: JsonValue;
   structuredContent: JsonValue | null;
+}
+
+export type McpInvocationResult = McpInvocationCompleteResult | McpInputRequiredResult;
+
+export interface McpResourceReadCompleteResult {
+  kind: 'complete';
+  contents: JsonValue;
+}
+
+export type McpResourceReadResult = McpResourceReadCompleteResult | McpInputRequiredResult;
+
+export interface McpPromptGetCompleteResult {
+  kind: 'complete';
+  description: string | null;
+  messages: JsonValue;
+}
+
+export type McpPromptGetResult = McpPromptGetCompleteResult | McpInputRequiredResult;
+
+export interface McpInputResume {
+  requestState?: string;
+  inputResponses: JsonValue;
 }
 
 export interface McpRuntimePort {
@@ -62,7 +110,21 @@ export interface McpRuntimePort {
     remoteToolName: string,
     argumentsValue: JsonValue,
     signal: AbortSignal,
+    resume?: McpInputResume,
   ): Promise<McpInvocationResult>;
+  readResource(
+    integration: IntegrationView,
+    uri: string,
+    signal: AbortSignal,
+    resume?: McpInputResume,
+  ): Promise<McpResourceReadResult>;
+  getPrompt(
+    integration: IntegrationView,
+    name: string,
+    argumentsValue: JsonValue,
+    signal: AbortSignal,
+    resume?: McpInputResume,
+  ): Promise<McpPromptGetResult>;
   close(integrationId: string): Promise<void>;
   closeAll(): Promise<void>;
 }
@@ -73,6 +135,8 @@ export interface IntegrationRefreshView {
   serverVersion: string;
   protocolVersion: string;
   toolCount: number;
+  resourceCount: number;
+  promptCount: number;
 }
 
 export interface AcpByteTransport {

@@ -1,11 +1,15 @@
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
+import { Client, isInputRequiredResult, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type { IntegrationSecretPort } from '../../../modules/agent/ai/integration.repository.port';
 import type {
   IntegrationView,
   McpConnectionSnapshot,
+  McpInputRequiredResult,
+  McpInputResume,
   McpIntegrationConfiguration,
   McpInvocationResult,
+  McpPromptGetResult,
+  McpResourceReadResult,
   McpRuntimePort,
 } from '../../../modules/agent/ai/integrations.types';
 import type { OutboundPolicyPort } from '../../../modules/agent/ai/outbound-policy.port';
@@ -13,6 +17,8 @@ import { SafeMcpFetch } from './safe-mcp-fetch';
 
 const PROTOCOL_VERSION = '2026-07-28';
 const MAX_TOOLS = 256;
+const MAX_RESOURCES = 2_048;
+const MAX_PROMPTS = 512;
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 60_000;
 
@@ -36,6 +42,23 @@ const mcpConfig = (integration: IntegrationView): McpIntegrationConfiguration =>
   return integration.configuration;
 };
 
+const inputRequired = (value: unknown): McpInputRequiredResult | null => {
+  if (!isInputRequiredResult(value)) return null;
+  return {
+    kind: 'input_required',
+    inputRequests: jsonValue(value.inputRequests ?? {}),
+    requestState: value.requestState ?? null,
+  };
+};
+
+const resumeParams = (resume: McpInputResume | undefined): Record<string, unknown> =>
+  resume
+    ? {
+        inputResponses: resume.inputResponses,
+        ...(resume.requestState === undefined ? {} : { requestState: resume.requestState }),
+      }
+    : {};
+
 export class McpAdapter implements McpRuntimePort {
   private readonly sessions = new Map<string, ActiveMcpSession>();
 
@@ -46,12 +69,33 @@ export class McpAdapter implements McpRuntimePort {
 
   async refresh(integration: IntegrationView, signal?: AbortSignal): Promise<McpConnectionSnapshot> {
     const session = await this.session(integration, signal);
-    const listed = await session.client.listTools(undefined, {
-      signal,
-      timeout: REQUEST_TIMEOUT_MS,
-      cacheMode: 'refresh',
-    });
+    const capabilities = session.client.getServerCapabilities();
+    const [listed, listedResources, listedPrompts] = await Promise.all([
+      capabilities?.tools
+        ? session.client.listTools(undefined, {
+            signal,
+            timeout: REQUEST_TIMEOUT_MS,
+            cacheMode: 'refresh',
+          })
+        : Promise.resolve({ tools: [] }),
+      capabilities?.resources
+        ? session.client.listResources(undefined, {
+            signal,
+            timeout: REQUEST_TIMEOUT_MS,
+            cacheMode: 'refresh',
+          })
+        : Promise.resolve({ resources: [] }),
+      capabilities?.prompts
+        ? session.client.listPrompts(undefined, {
+            signal,
+            timeout: REQUEST_TIMEOUT_MS,
+            cacheMode: 'refresh',
+          })
+        : Promise.resolve({ prompts: [] }),
+    ]);
     if (listed.tools.length > MAX_TOOLS) throw new Error('MCP_TOOL_LIMIT_EXCEEDED');
+    if (listedResources.resources.length > MAX_RESOURCES) throw new Error('MCP_RESOURCE_LIMIT_EXCEEDED');
+    if (listedPrompts.prompts.length > MAX_PROMPTS) throw new Error('MCP_PROMPT_LIMIT_EXCEEDED');
     return {
       serverName: session.client.getServerVersion()?.name ?? 'unknown',
       serverVersion: session.client.getServerVersion()?.version ?? 'unknown',
@@ -64,6 +108,24 @@ export class McpAdapter implements McpRuntimePort {
         outputSchema: tool.outputSchema === undefined ? null : jsonValue(tool.outputSchema),
         annotations: tool.annotations === undefined ? null : jsonValue(tool.annotations),
       })),
+      resources: listedResources.resources.map((resource) => ({
+        uri: resource.uri,
+        name: resource.name,
+        title: resource.title ?? null,
+        description: resource.description ?? resource.title ?? resource.name,
+        mimeType: resource.mimeType ?? null,
+        annotations: resource.annotations === undefined ? null : jsonValue(resource.annotations),
+      })),
+      prompts: listedPrompts.prompts.map((prompt) => ({
+        name: prompt.name,
+        title: prompt.title ?? null,
+        description: prompt.description ?? prompt.title ?? prompt.name,
+        arguments: (prompt.arguments ?? []).map((argument) => ({
+          name: argument.name,
+          description: argument.description ?? null,
+          required: argument.required === true,
+        })),
+      })),
     };
   }
 
@@ -72,16 +134,69 @@ export class McpAdapter implements McpRuntimePort {
     remoteToolName: string,
     argumentsValue: JsonValue,
     signal: AbortSignal,
+    resume?: McpInputResume,
   ): Promise<McpInvocationResult> {
     const session = await this.session(integration, signal);
-    const result = await session.client.callTool(
-      { name: remoteToolName, arguments: argumentsValue as Record<string, unknown> },
-      { signal, timeout: REQUEST_TIMEOUT_MS },
+    const result: unknown = await session.client.callTool(
+      {
+        name: remoteToolName,
+        arguments: argumentsValue as Record<string, unknown>,
+        ...resumeParams(resume),
+      } as never,
+      { signal, timeout: REQUEST_TIMEOUT_MS, allowInputRequired: true },
     );
+    const pending = inputRequired(result);
+    if (pending) return pending;
+    const complete = result as { isError?: boolean; content: unknown; structuredContent?: unknown };
     return {
-      isError: result.isError === true,
-      content: jsonValue(result.content),
-      structuredContent: result.structuredContent === undefined ? null : jsonValue(result.structuredContent),
+      kind: 'complete',
+      isError: complete.isError === true,
+      content: jsonValue(complete.content),
+      structuredContent: complete.structuredContent === undefined ? null : jsonValue(complete.structuredContent),
+    };
+  }
+
+  async readResource(
+    integration: IntegrationView,
+    uri: string,
+    signal: AbortSignal,
+    resume?: McpInputResume,
+  ): Promise<McpResourceReadResult> {
+    const session = await this.session(integration, signal);
+    const result: unknown = await session.client.readResource({ uri, ...resumeParams(resume) } as never, {
+      signal,
+      timeout: REQUEST_TIMEOUT_MS,
+      allowInputRequired: true,
+      cacheMode: resume ? 'bypass' : 'use',
+    });
+    const pending = inputRequired(result);
+    if (pending) return pending;
+    return { kind: 'complete', contents: jsonValue((result as { contents: unknown }).contents) };
+  }
+
+  async getPrompt(
+    integration: IntegrationView,
+    name: string,
+    argumentsValue: JsonValue,
+    signal: AbortSignal,
+    resume?: McpInputResume,
+  ): Promise<McpPromptGetResult> {
+    const session = await this.session(integration, signal);
+    const result: unknown = await session.client.getPrompt(
+      {
+        name,
+        arguments: argumentsValue as Record<string, string>,
+        ...resumeParams(resume),
+      } as never,
+      { signal, timeout: REQUEST_TIMEOUT_MS, allowInputRequired: true },
+    );
+    const pending = inputRequired(result);
+    if (pending) return pending;
+    const complete = result as { description?: string; messages: unknown };
+    return {
+      kind: 'complete',
+      description: complete.description ?? null,
+      messages: jsonValue(complete.messages),
     };
   }
 

@@ -13,6 +13,7 @@ import type {
   ConfirmedMutationTool,
   HostCursorReaderPort,
   PendingRootTool,
+  PendingToolInputContinuation,
   RunEventReaderPort,
   RunExecutionReaderPort,
   RunPage,
@@ -386,6 +387,37 @@ export class SqliteRunRepository
         inspection: parseToolInspection(row.inspection_json),
       };
     });
+  }
+
+  async inputContinuationForTool(
+    scope: Scope,
+    runId: string,
+    toolCallId: string,
+  ): Promise<PendingToolInputContinuation | null> {
+    const row = await this.db.queryOne<{
+      request_id: string;
+      continuation_json: string;
+      payload_json: string;
+    }>(
+      `SELECT r.id AS request_id, r.continuation_json, e.payload_json
+       FROM agent_input_requests r
+       JOIN agent_runs run ON run.id = r.run_id
+       JOIN ai_thread_entries e ON e.id = r.answer_entry_id AND e.run_id = r.run_id
+       WHERE r.run_id = ? AND r.tool_call_id = ? AND r.status = 'answered'
+         AND r.continuation_json IS NOT NULL
+         AND run.user_id = ? AND run.app_id = ?
+       ORDER BY r.answered_at DESC, r.id DESC LIMIT 1`,
+      [runId, toolCallId, scope.userId, scope.appId],
+    );
+    if (!row) return null;
+    const payload = durableRecord(parseDurableJson(row.payload_json));
+    const answerText = durableString(payload.text);
+    if (!answerText) throw new Error('DURABLE_STATE_INVALID');
+    return {
+      requestId: row.request_id,
+      continuation: parseDurableJsonValue(row.continuation_json),
+      answerText,
+    };
   }
 
   async confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null> {

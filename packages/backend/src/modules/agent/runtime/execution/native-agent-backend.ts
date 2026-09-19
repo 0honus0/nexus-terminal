@@ -17,6 +17,7 @@ import type { RootExecutionCommitPort } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
 import { runModelRoutes } from '../runs/model-routes';
 import { normalizeUserInputQuestions } from '../runs/user-input-request';
+import { mcpInputRequestFromToolResult } from '../runs/mcp-input-required';
 import { TOOL_APPROVAL_TTL_SECONDS } from '../approvals/approval-policy';
 import { toolLeaseTtlSeconds } from './tool-lease-policy';
 import { requestHash } from '../runs/idempotency';
@@ -235,6 +236,45 @@ export class NativeAgentBackend implements AgentBackendPort {
           continue;
         }
         if (first.inspection.inputRevision !== snapshot.inputRevision) {
+          const continuation = await this.repository.inputContinuationForTool(scope, snapshot.id, first.toolCallId);
+          if (continuation && !first.inspection.mutation) {
+            let inspection: ToolInspection;
+            let decision;
+            try {
+              ({ inspection, policyDecision: decision } = await this.toolCalls.refreshReadInspection(
+                this.toolContext(snapshot, first.runtimeId, first.stepId, signal),
+                first.inspection,
+              ));
+            } catch (error) {
+              yield* this.rejectPendingTool(snapshot, first, this.toolCalls.failedProposal(error));
+              continue;
+            }
+            if (
+              decision.action !== 'allow' ||
+              inspection.mutation ||
+              (inspection.risk !== 'read' && inspection.risk !== 'control')
+            ) {
+              yield* this.rejectPendingTool(
+                snapshot,
+                first,
+                this.toolCalls.failedProposal(
+                  new Error(decision.action === 'deny' ? decision.reason : 'TOOL_POLICY_INVALID'),
+                ),
+              );
+              continue;
+            }
+            const refreshed = await this.stateCommit.refreshProposedTool({
+              scope,
+              runId: snapshot.id,
+              toolStepId: first.stepId,
+              toolCallId: first.toolCallId,
+              expectedRunVersion: snapshot.version,
+              inspection,
+              now: this.clock.nowUnixSeconds(),
+            });
+            yield { type: 'durable', runId: snapshot.id, cursor: refreshed.eventCursor };
+            continue;
+          }
           yield* this.rejectPendingTool(
             snapshot,
             first,
@@ -1100,17 +1140,28 @@ export class NativeAgentBackend implements AgentBackendPort {
     const executions = await Promise.all(
       prepared.map(async ({ pending, inspection }) => {
         const readLeaseTtlSeconds = toolLeaseTtlSeconds(begun.run.budget.toolTimeoutSeconds);
+        const inputContinuation = await this.repository.inputContinuationForTool(
+          scope,
+          begun.run.id,
+          pending.toolCallId,
+        );
+        const continuation = inputContinuation
+          ? ({
+              continuation: inputContinuation.continuation,
+              answerText: inputContinuation.answerText,
+            } satisfies JsonValue)
+          : undefined;
         let lease: Awaited<ReturnType<ToolCallRunner['acquireRead']>> | null = null;
         let result: ToolResult;
         try {
           lease = await this.toolCalls.acquireRead(
-            this.toolContext(begun.run, pending.runtimeId, pending.stepId, signal),
+            this.toolContext(begun.run, pending.runtimeId, pending.stepId, signal, continuation),
             inspection,
             readLeaseTtlSeconds,
           );
           result = await this.toolCalls.executeRead(
             lease,
-            this.toolContext(begun.run, pending.runtimeId, pending.stepId, lease.signal),
+            this.toolContext(begun.run, pending.runtimeId, pending.stepId, lease.signal, continuation),
             inspection,
           );
         } catch (error) {
@@ -1133,6 +1184,33 @@ export class NativeAgentBackend implements AgentBackendPort {
         return { pending, inspection, result };
       }),
     );
+
+    const mcpInputExecution =
+      executions.length === 1 && executions[0]?.result.errorCode === 'MCP_INPUT_REQUIRED' ? executions[0] : null;
+    if (mcpInputExecution) {
+      try {
+        const request = mcpInputRequestFromToolResult(mcpInputExecution.result);
+        if (!request) throw new Error('MCP_INPUT_REQUIRED_INVALID');
+        const parked = await this.stateCommit.parkMcpInputRequiredTool({
+          scope,
+          runId: begun.run.id,
+          runtimeId: mcpInputExecution.pending.runtimeId,
+          toolStepId: mcpInputExecution.pending.stepId,
+          toolCallId: mcpInputExecution.pending.toolCallId,
+          expectedRunVersion: begun.run.version,
+          providerCallId: mcpInputExecution.pending.providerCallId,
+          requestId: randomUUID(),
+          questions: request.questions,
+          continuation: request.continuation,
+          now: this.clock.nowUnixSeconds(),
+        });
+        yield { type: 'durable', runId: snapshot.id, cursor: parked.eventCursor };
+        yield { type: 'settled', run: parked.run };
+        return;
+      } catch (error) {
+        mcpInputExecution.result = this.toolCalls.failedRead(error);
+      }
+    }
 
     const inputRequestExecution =
       executions.length === 1 &&
@@ -1494,7 +1572,13 @@ export class NativeAgentBackend implements AgentBackendPort {
     }
   }
 
-  private toolContext(run: RunView, runtimeId: string, stepId: string, signal: AbortSignal): ToolContext {
+  private toolContext(
+    run: RunView,
+    runtimeId: string,
+    stepId: string,
+    signal: AbortSignal,
+    continuation?: JsonValue,
+  ): ToolContext {
     return {
       userId: run.userId,
       appId: run.appId,
@@ -1514,6 +1598,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       deadlineAt: this.clock.nowUnixSeconds() + run.budget.toolTimeoutSeconds,
       maxOutputBytes: run.budget.maxToolOutputBytes,
       inputRevision: run.inputRevision,
+      ...(continuation === undefined ? {} : { continuation }),
     };
   }
 

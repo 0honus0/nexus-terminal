@@ -1,4 +1,4 @@
-import type { Scope } from '../../agent.types';
+import type { JsonValue, Scope } from '../../agent.types';
 import type { ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type {
   HostEvent,
@@ -29,6 +29,12 @@ export interface PendingRootTool {
 export interface ConfirmedMutationTool {
   toolCallId: string;
   providerCallId: string;
+}
+
+export interface PendingToolInputContinuation {
+  requestId: string;
+  continuation: JsonValue;
+  answerText: string;
 }
 
 export interface CompletionToolEvidence {
@@ -75,6 +81,11 @@ export interface RunExecutionReaderPort extends RunSnapshotReaderPort, RunInputR
   rootRuntimeId(scope: Scope, runId: string): Promise<string>;
   rootRuntimeModel(scope: Scope, runId: string): Promise<import('../../ai/model.types').ModelRef>;
   pendingTools(scope: Scope, runId: string): Promise<PendingRootTool[]>;
+  inputContinuationForTool(
+    scope: Scope,
+    runId: string,
+    toolCallId: string,
+  ): Promise<PendingToolInputContinuation | null>;
   confirmedMutation(scope: Scope, runId: string, operationHash: string): Promise<ConfirmedMutationTool | null>;
   completionEvidence(scope: Scope, runId: string): Promise<CompletionEvidenceSnapshot>;
 }

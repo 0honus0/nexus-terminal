@@ -32,13 +32,21 @@ const validateException = (value: string): string => {
 
 const validateMcp = async (raw: unknown, outbound: OutboundPolicyPort): Promise<McpIntegrationConfiguration> => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
-  const allowed = new Set(['displayName', 'transport', 'endpoint', 'privateHostExceptions', 'protocolVersion']);
+  const allowed = new Set([
+    'displayName',
+    'transport',
+    'endpoint',
+    'privateHostExceptions',
+    'protocolVersion',
+    'trustToolAnnotations',
+  ]);
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (
     !nonEmpty(raw.displayName, 256) ||
     raw.transport !== 'streamable-http' ||
     !nonEmpty(raw.endpoint, 2048) ||
     raw.protocolVersion !== '2026-07-28' ||
+    (raw.trustToolAnnotations !== undefined && typeof raw.trustToolAnnotations !== 'boolean') ||
     !Array.isArray(raw.privateHostExceptions) ||
     raw.privateHostExceptions.length > 32 ||
     raw.privateHostExceptions.some((value) => !nonEmpty(value, 512))
@@ -62,6 +70,7 @@ const validateMcp = async (raw: unknown, outbound: OutboundPolicyPort): Promise<
     endpoint: normalizedEndpoint,
     privateHostExceptions,
     protocolVersion: '2026-07-28',
+    trustToolAnnotations: raw.trustToolAnnotations === true,
   };
 };
 
@@ -187,6 +196,20 @@ export class IntegrationService {
           outputSchema: tool.outputSchema,
           annotations: tool.annotations,
         })),
+        resources: snapshot.resources.map((resource) => ({
+          uri: resource.uri,
+          name: resource.name,
+          title: resource.title,
+          description: resource.description,
+          mimeType: resource.mimeType,
+          annotations: resource.annotations,
+        })),
+        prompts: snapshot.prompts.map((prompt) => ({
+          name: prompt.name,
+          title: prompt.title,
+          description: prompt.description,
+          arguments: prompt.arguments,
+        })),
       },
       this.cryptoHash,
     );
@@ -211,6 +234,8 @@ export class IntegrationService {
       serverVersion: snapshot.serverVersion,
       protocolVersion: snapshot.protocolVersion,
       toolCount: snapshot.tools.length,
+      resourceCount: snapshot.resources.length,
+      promptCount: snapshot.prompts.length,
     };
   }
 

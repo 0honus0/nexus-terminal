@@ -8,6 +8,7 @@ import type {
   CommitToolProposalBatchCommand,
   CommitToolProposalBatchResult,
   DurableEventInput,
+  ParkMcpInputRequiredToolCommand,
   RefreshProposedToolCommand,
   RejectProposedToolCommand,
   SettleMutationToolCommand,
@@ -555,6 +556,156 @@ export const settleUserInputRequestToolTransition = async (
   const run = mapRunRow(updated);
   await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
   return { run, eventCursor: run.eventCursor, ledgerCursor, committedEvents };
+};
+
+export const parkMcpInputRequiredToolTransition = async (
+  tx: RelationalDatabase,
+  command: ParkMcpInputRequiredToolCommand,
+): Promise<StateCommitResult> => {
+  const row = await tx.queryOne<RunRow>(
+    `SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ? AND user_id = ? AND app_id = ?`,
+    [command.runId, command.scope.userId, command.scope.appId],
+  );
+  if (!row) throw new Error('NOT_FOUND');
+  if (row.version !== command.expectedRunVersion || row.status !== 'running') throw new Error('STATE_CONFLICT');
+  const questions = normalizeUserInputQuestions(command.questions);
+  const continuation = JSON.parse(JSON.stringify(command.continuation)) as JsonValue;
+  const runtime = await tx.queryOne<{ participant_id: string; schedule_state: string; status: string }>(
+    `SELECT participant_id, schedule_state, status FROM agent_runtimes WHERE id = ? AND run_id = ?`,
+    [command.runtimeId, command.runId],
+  );
+  if (!runtime || runtime.participant_id !== 'root') throw new Error('MCP_INPUT_REQUIRED_ROOT_ONLY');
+  if (runtime.status !== 'running' || runtime.schedule_state !== 'executing') {
+    throw new Error('RUNTIME_NOT_SCHEDULABLE');
+  }
+  const tool = await tx.queryOne<{ status: string; provider_call_id: string; risk: string; version: number }>(
+    `SELECT status, provider_call_id, risk, version FROM agent_tool_calls
+     WHERE id = ? AND run_id = ? AND step_id = ? AND agent_runtime_id = ?`,
+    [command.toolCallId, command.runId, command.toolStepId, command.runtimeId],
+  );
+  if (
+    !tool ||
+    tool.status !== 'running' ||
+    tool.provider_call_id !== command.providerCallId ||
+    (tool.risk !== 'read' && tool.risk !== 'control')
+  ) {
+    throw new Error('TOOL_STATE_CONFLICT');
+  }
+  const existing = await tx.queryOne<{ id: string }>(
+    `SELECT id FROM agent_input_requests WHERE run_id = ? AND status = 'requested' LIMIT 1`,
+    [command.runId],
+  );
+  if (existing) throw new Error('USER_INPUT_REQUEST_ALREADY_PENDING');
+  const previousForTool = await tx.queryOne<{ id: string; status: string; version: number }>(
+    `SELECT id, status, version FROM agent_input_requests WHERE run_id = ? AND tool_call_id = ? LIMIT 1`,
+    [command.runId, command.toolCallId],
+  );
+  if (previousForTool && previousForTool.status !== 'answered') {
+    throw new Error('USER_INPUT_REQUEST_STATE_CONFLICT');
+  }
+  const requestId = previousForTool?.id ?? command.requestId;
+
+  const toolChanged = await tx.execute(
+    `UPDATE agent_tool_calls
+     SET status = 'proposed', started_at = NULL, result_json = NULL, completed_at = NULL, version = version + 1
+     WHERE id = ? AND run_id = ? AND status = 'running' AND version = ?`,
+    [command.toolCallId, command.runId, tool.version],
+  );
+  const stepChanged = await tx.execute(
+    `UPDATE agent_steps SET status = 'created', completed_at = NULL
+     WHERE id = ? AND run_id = ? AND status = 'running'`,
+    [command.toolStepId, command.runId],
+  );
+  const runtimeChanged = await tx.execute(
+    `UPDATE agent_runtimes SET schedule_state = 'waiting_message', updated_at = ?
+     WHERE id = ? AND run_id = ? AND status = 'running' AND schedule_state = 'executing'`,
+    [command.now, command.runtimeId, command.runId],
+  );
+  if (toolChanged.changes !== 1 || stepChanged.changes !== 1 || runtimeChanged.changes !== 1) {
+    throw new Error('TOOL_STATE_CONFLICT');
+  }
+  if (previousForTool) {
+    const requestChanged = await tx.execute(
+      `UPDATE agent_input_requests
+       SET questions_json = ?, continuation_json = ?, status = 'requested', requested_at = ?,
+           answered_at = NULL, answer_entry_id = NULL, version = version + 1
+       WHERE id = ? AND run_id = ? AND tool_call_id = ? AND status = 'answered' AND version = ?`,
+      [
+        JSON.stringify(questions),
+        JSON.stringify(continuation),
+        command.now,
+        previousForTool.id,
+        command.runId,
+        command.toolCallId,
+        previousForTool.version,
+      ],
+    );
+    if (requestChanged.changes !== 1) throw new Error('USER_INPUT_REQUEST_STATE_CONFLICT');
+  } else {
+    await tx.execute(
+      `INSERT INTO agent_input_requests
+        (id, run_id, user_id, app_id, agent_runtime_id, tool_call_id, provider_call_id, questions_json,
+         continuation_json, status, requested_at, answered_at, answer_entry_id, version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'requested', ?, NULL, NULL, 1)`,
+      [
+        requestId,
+        command.runId,
+        row.user_id,
+        row.app_id,
+        command.runtimeId,
+        command.toolCallId,
+        command.providerCallId,
+        JSON.stringify(questions),
+        JSON.stringify(continuation),
+        command.now,
+      ],
+    );
+  }
+  const events: DurableEventInput[] = [
+    {
+      type: 'input.requested',
+      payload: {
+        requestId,
+        runtimeId: command.runtimeId,
+        toolCallId: command.toolCallId,
+        questionCount: questions.length,
+        source: 'mcp_input_required',
+      },
+    },
+    { type: 'run.status_changed', payload: { from: 'running', to: 'awaiting_input' } },
+  ];
+  const committedEvents = await appendEvents(tx, row, events, command.now);
+  const nextExecuting = Math.max(0, row.executing_runtime_count - 1);
+  const activeDelta =
+    row.executing_runtime_count <= 1 && row.active_execution_started_at !== null
+      ? Math.max(0, command.now - row.active_execution_started_at)
+      : 0;
+  const mergedUsage = usageWithDelta(row, { steps: 1 });
+  const changedRun = await tx.execute(
+    `UPDATE agent_runs SET status = 'awaiting_input', usage_json = ?,
+       active_execution_seconds = active_execution_seconds + ?,
+       active_execution_started_at = CASE WHEN ? = 0 THEN NULL ELSE active_execution_started_at END,
+       executing_runtime_count = ?, next_event_sequence = next_event_sequence + ?, version = version + 1, updated_at = ?
+     WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND status = 'running'`,
+    [
+      JSON.stringify(mergedUsage),
+      activeDelta,
+      nextExecuting,
+      nextExecuting,
+      events.length,
+      command.now,
+      row.id,
+      row.user_id,
+      row.app_id,
+      row.version,
+    ],
+  );
+  if (changedRun.changes !== 1) throw new Error('STATE_CONFLICT');
+  const updated = await tx.queryOne<RunRow>(`SELECT ${RUN_COLUMNS} FROM agent_runs WHERE id = ?`, [row.id]);
+  if (!updated) throw new Error('NOT_FOUND');
+  const run = mapRunRow(updated);
+  await allocateHostEvent(tx, run.userId, 'summary.changed', summaryPayload(run), command.now);
+  return { run, eventCursor: run.eventCursor, ledgerCursor: 0, committedEvents };
 };
 
 export const settleReadToolBatchTransition = async (

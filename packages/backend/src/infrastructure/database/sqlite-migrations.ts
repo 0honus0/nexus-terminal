@@ -685,6 +685,18 @@ const definedMigrations: Migration[] = [
               CHECK(mutation_mode IN ('read-only','governed'));
         `,
   },
+  {
+    id: 33,
+    name: 'Add durable continuation payload to Agent input requests',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_input_requests')) &&
+      !(await columnExists(db, 'agent_input_requests', 'continuation_json')),
+    sql: `
+            ALTER TABLE agent_input_requests
+              ADD COLUMN continuation_json TEXT
+              CHECK(continuation_json IS NULL OR json_valid(continuation_json));
+        `,
+  },
 ];
 
 /**

@@ -371,6 +371,7 @@ export const composeAgent = ({
       catalog: toolCatalog,
       repository: integrationRepository,
       runtime: mcpRuntime,
+      artifacts,
       cryptoHash,
     }),
   );

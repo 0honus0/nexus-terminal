@@ -36,6 +36,7 @@ import type {
   InterruptUnexpectedRootExecutionCommand,
   PauseModelStepForBudgetCommand,
   PauseRuntimeForBudgetCommand,
+  ParkMcpInputRequiredToolCommand,
   ParkModelStepCommand,
   ParkRuntimeCommand,
   RetryModelStepCommand,
@@ -110,6 +111,7 @@ import {
   beginMutationToolTransition,
   beginReadToolBatchTransition,
   commitToolProposalBatchTransition,
+  parkMcpInputRequiredToolTransition,
   refreshProposedToolTransition,
   rejectProposedToolTransition,
   settleMutationToolTransition,
@@ -505,6 +507,10 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
 
   async settleReadToolBatch(command: SettleReadToolBatchCommand): Promise<StateCommitResult> {
     return this.observedTransaction((tx) => settleReadToolBatchTransition(tx, command));
+  }
+
+  async parkMcpInputRequiredTool(command: ParkMcpInputRequiredToolCommand): Promise<StateCommitResult> {
+    return this.observedTransaction((tx) => parkMcpInputRequiredToolTransition(tx, command));
   }
 
   async settleUserInputRequestTool(command: SettleUserInputRequestToolCommand): Promise<StateCommitResult> {

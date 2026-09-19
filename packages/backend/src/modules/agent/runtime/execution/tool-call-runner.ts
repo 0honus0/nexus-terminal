@@ -124,6 +124,14 @@ export class ToolCallRunner {
     return { inspection, policyDecision: this.policy.decide(inspection, inspection.policyRevision) };
   }
 
+  async refreshReadInspection(context: ToolContext, previous: ToolInspection): Promise<InspectedToolCall> {
+    if (previous.mutation || (previous.risk !== 'read' && previous.risk !== 'control')) {
+      throw new Error('TOOL_POLICY_INVALID');
+    }
+    const inspection = await this.executor.refreshInspection(context, previous);
+    return { inspection, policyDecision: this.policy.decide(inspection, inspection.policyRevision) };
+  }
+
   failedProposal(error: unknown): ToolResult {
     return buildFailedToolResult(error, {
       fallbackCode: 'MODEL_TOOL_CALL_INVALID',

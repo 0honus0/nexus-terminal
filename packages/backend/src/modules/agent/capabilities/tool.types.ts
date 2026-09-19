@@ -52,6 +52,7 @@ export interface ToolContext extends Scope {
   deadlineAt: number;
   maxOutputBytes: number;
   inputRevision: number;
+  continuation?: JsonValue;
 }
 
 export interface ToolResult {

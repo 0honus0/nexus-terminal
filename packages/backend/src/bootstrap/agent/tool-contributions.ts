@@ -255,6 +255,7 @@ export interface McpToolContributionOptions {
   catalog: ToolCatalog;
   repository: IntegrationRepositoryPort;
   runtime: McpRuntimePort;
+  artifacts: ArtifactService;
   cryptoHash: CryptoHashPort;
 }
 
@@ -262,6 +263,7 @@ export const createMcpToolContributionHooks = ({
   catalog,
   repository,
   runtime,
+  artifacts,
   cryptoHash,
 }: McpToolContributionOptions): IntegrationServiceHooks => ({
   mcpRefreshed: (scope, integration, snapshot, schemaHash) => {
@@ -269,7 +271,7 @@ export const createMcpToolContributionHooks = ({
       schemaVersion: 1,
       id: `integration.mcp.${integration.id}`,
       capability: 'integration.mcp.invoke',
-      tools: createMcpTools(scope, integration, schemaHash, snapshot.tools, repository, runtime, cryptoHash),
+      tools: createMcpTools(scope, integration, schemaHash, snapshot, repository, runtime, cryptoHash, artifacts),
     });
   },
   removed: (scope, integrationId) => catalog.removeOwned(scope, `mcp:${integrationId}`),

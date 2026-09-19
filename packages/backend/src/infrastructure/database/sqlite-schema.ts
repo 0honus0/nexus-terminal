@@ -756,6 +756,7 @@ CREATE TABLE IF NOT EXISTS agent_input_requests (
     tool_call_id TEXT NOT NULL UNIQUE REFERENCES agent_tool_calls(id) ON DELETE CASCADE,
     provider_call_id TEXT NOT NULL,
     questions_json TEXT NOT NULL CHECK(json_valid(questions_json)),
+    continuation_json TEXT CHECK(continuation_json IS NULL OR json_valid(continuation_json)),
     status TEXT NOT NULL CHECK(status IN ('requested','answered','cancelled')),
     requested_at INTEGER NOT NULL,
     answered_at INTEGER,

@@ -650,6 +650,20 @@ export interface SettleUserInputRequestToolCommand {
   now: number;
 }
 
+export interface ParkMcpInputRequiredToolCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  toolStepId: string;
+  toolCallId: string;
+  expectedRunVersion: number;
+  providerCallId: string;
+  requestId: string;
+  questions: UserInputQuestion[];
+  continuation: JsonValue;
+  now: number;
+}
+
 export interface SettleMutationToolCommand {
   scope: Scope;
   runId: string;
@@ -744,6 +758,7 @@ export interface StateCommitPort {
   beginMutationTool(command: BeginMutationToolCommand): Promise<StateCommitResult>;
   settleReadToolBatch(command: SettleReadToolBatchCommand): Promise<StateCommitResult>;
   settleUserInputRequestTool(command: SettleUserInputRequestToolCommand): Promise<StateCommitResult>;
+  parkMcpInputRequiredTool(command: ParkMcpInputRequiredToolCommand): Promise<StateCommitResult>;
   settleMutationTool(command: SettleMutationToolCommand): Promise<StateCommitResult>;
   evaluateToolLoopGuard(command: EvaluateToolLoopGuardCommand): Promise<StateCommitResult>;
   supersedeModelStep(command: SupersedeModelStepCommand): Promise<StateCommitResult>;
@@ -810,6 +825,7 @@ export type RootExecutionCommitPort = Pick<
   | 'settleMutationTool'
   | 'settleReadToolBatch'
   | 'settleUserInputRequestTool'
+  | 'parkMcpInputRequiredTool'
   | 'evaluateToolLoopGuard'
   | 'supersedeModelStep'
   | 'supersedeMutationTool'
