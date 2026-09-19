@@ -1,4 +1,5 @@
 import type { JsonValue } from '../../agent.types';
+import type { ArtifactService } from '../../ai/artifact.service';
 import type { BrowserGatewayPort, BrowserSessionView, BrowserTargetSnapshot } from '../../ai/integrations.types';
 import type {
   AgentTool,
@@ -15,6 +16,8 @@ import type { AgentWorkspaceView } from '../../workspace-runtime/workspace-runti
 
 const MAX_URL_BYTES = 8 * 1024;
 const MAX_TYPE_BYTES = 16 * 1024;
+const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024;
+const MIN_SCREENSHOT_BYTES = 64 * 1024;
 const MAX_ID_BYTES = 128;
 const TOOL_VERSION = '1.0.0';
 
@@ -278,11 +281,17 @@ const result = (summary: string, data?: JsonValue): ToolResult => ({
   },
 });
 
+const byteSource = (bytes: Uint8Array): AsyncIterable<Uint8Array> =>
+  (async function* () {
+    yield bytes;
+  })();
+
 export const createBrowserTools = (
   repository: AgentWorkspaceRepositoryPort,
   settings: AgentSettingsService,
   gateway: BrowserGatewayPort,
   cryptoHash: CryptoHashPort,
+  artifacts?: ArtifactService,
 ): AgentTool[] => [
   {
     descriptor: {
@@ -409,6 +418,109 @@ export const createBrowserTools = (
       return {
         ...result('Browser snapshot captured.', snapshot as unknown as JsonValue),
         truncated: snapshot.truncated,
+      };
+    },
+  },
+  {
+    descriptor: {
+      name: 'browser_screenshot',
+      version: TOOL_VERSION,
+      description:
+        'Capture the current Browser viewport as a bounded PNG Artifact for on-demand visual inspection. Use semantic browser_snapshot by default and call this only when page pixels are needed.',
+      inputSchema: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          sessionId: { type: 'string', minLength: 1, maxLength: MAX_ID_BYTES },
+          maxBytes: {
+            type: 'integer',
+            minimum: MIN_SCREENSHOT_BYTES,
+            maximum: MAX_SCREENSHOT_BYTES,
+          },
+        },
+        required: ['sessionId'],
+      },
+      riskClass: 'read',
+      parallelSafe: true,
+      capability: 'browser.operate',
+    },
+    inspect: async (input, context, policyRevision) => {
+      const args = object(input);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const normalized: JsonValue = {
+        sessionId,
+        maxBytes: integer(args.maxBytes, MAX_SCREENSHOT_BYTES, MIN_SCREENSHOT_BYTES, MAX_SCREENSHOT_BYTES),
+      };
+      return inspection(
+        cryptoHash,
+        context,
+        'browser_screenshot',
+        normalized,
+        binding,
+        sessionId,
+        'read',
+        false,
+        policyRevision,
+      );
+    },
+    execute: async (value, context) => {
+      if (!artifacts) throw new Error('BROWSER_SCREENSHOT_ARTIFACT_STORE_UNAVAILABLE');
+      const args = object(value.normalizedArguments);
+      const sessionId = string(args.sessionId, MAX_ID_BYTES);
+      await sessionBinding(repository, settings, gateway, context, sessionId);
+      const maxBytes = integer(args.maxBytes, MAX_SCREENSHOT_BYTES, MIN_SCREENSHOT_BYTES, MAX_SCREENSHOT_BYTES);
+      const capture = await gateway.screenshot(sessionId, { maxBytes }, context.signal);
+      if (
+        capture.mediaType !== 'image/png' ||
+        capture.bytes.byteLength < 1 ||
+        capture.bytes.byteLength > maxBytes ||
+        !Number.isSafeInteger(capture.width) ||
+        capture.width < 1 ||
+        !Number.isSafeInteger(capture.height) ||
+        capture.height < 1
+      ) {
+        throw new Error('BROWSER_SCREENSHOT_INVALID');
+      }
+      const reservation = await artifacts.begin(context, {
+        name: `browser-${sessionId}.png`,
+        mediaType: capture.mediaType,
+        declaredBytes: capture.bytes.byteLength,
+      });
+      const artifact = await artifacts.write(
+        context,
+        reservation.artifactId,
+        byteSource(capture.bytes),
+        context.signal,
+      );
+      if (artifact.status !== 'ready' || !artifact.sha256) throw new Error('BROWSER_SCREENSHOT_ARTIFACT_UNAVAILABLE');
+      return {
+        ok: true,
+        summary: 'Browser viewport screenshot captured as an image Artifact.',
+        data: {
+          type: 'browser_screenshot',
+          sessionId: capture.sessionId,
+          targetId: capture.targetId,
+          generation: capture.generation,
+          url: capture.url,
+          title: capture.title,
+          viewport: { width: capture.width, height: capture.height },
+          artifact: {
+            id: artifact.id,
+            mediaType: artifact.mediaType,
+            sha256: artifact.sha256,
+            sizeBytes: artifact.sizeBytes,
+          },
+        },
+        artifactRefs: [artifact.id],
+        truncated: false,
+        outcome: 'confirmed',
+        verification: {
+          status: 'verified',
+          summary:
+            'The screenshot bytes were captured from the current Browser viewport and persisted as a ready Artifact.',
+          evidenceRefs: [artifact.id],
+        },
       };
     },
   },

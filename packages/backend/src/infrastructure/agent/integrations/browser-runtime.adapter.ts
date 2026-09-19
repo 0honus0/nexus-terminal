@@ -16,6 +16,7 @@ import type {
   BrowserMessageTransport,
   BrowserSessionRequest,
   BrowserSessionView,
+  BrowserScreenshotView,
   BrowserSnapshotNode,
   BrowserSnapshotView,
   BrowserTargetSnapshot,
@@ -24,6 +25,7 @@ import type {
 
 const DEFAULT_MAX_NODES = 2_000;
 const DEFAULT_MAX_BYTES = 64 * 1024;
+const MAX_SCREENSHOT_BYTES = 4 * 1024 * 1024;
 const MAX_TYPE_BYTES = 16 * 1024;
 const MAX_NAME_BYTES = 2 * 1024;
 const MAX_CDP_MESSAGE_BYTES = 16 * 1024 * 1024;
@@ -88,6 +90,27 @@ const boundedText = (value: string | null): string | null => {
     result += character;
   }
   return result;
+};
+
+const pngDimensions = (bytes: Uint8Array): { width: number; height: number } => {
+  if (
+    bytes.byteLength < 24 ||
+    bytes[0] !== 0x89 ||
+    bytes[1] !== 0x50 ||
+    bytes[2] !== 0x4e ||
+    bytes[3] !== 0x47 ||
+    bytes[12] !== 0x49 ||
+    bytes[13] !== 0x48 ||
+    bytes[14] !== 0x44 ||
+    bytes[15] !== 0x52
+  ) {
+    throw new Error('BROWSER_SCREENSHOT_INVALID');
+  }
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const width = view.getUint32(16);
+  const height = view.getUint32(20);
+  if (width < 1 || height < 1 || width > 32768 || height > 32768) throw new Error('BROWSER_SCREENSHOT_INVALID');
+  return { width, height };
 };
 
 const nodeName = (attributes: Map<string, string>, text: string | null): string | null =>
@@ -566,6 +589,38 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
       title: boundedText(await active.page.title()) ?? '',
       nodes: result,
       truncated,
+    };
+  }
+
+  async screenshot(
+    sessionId: string,
+    options: { maxBytes?: number },
+    signal: AbortSignal,
+  ): Promise<BrowserScreenshotView> {
+    const active = this.requireSession(sessionId);
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    const maxBytes = options.maxBytes ?? MAX_SCREENSHOT_BYTES;
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_SCREENSHOT_BYTES) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    const bytes = await active.page.screenshot({
+      type: 'png',
+      fullPage: false,
+      captureBeyondViewport: false,
+    });
+    if (signal.aborted) throw signal.reason ?? new Error('ABORTED');
+    if (bytes.byteLength < 1 || bytes.byteLength > maxBytes) throw new Error('BROWSER_SCREENSHOT_TOO_LARGE');
+    const dimensions = pngDimensions(bytes);
+    return {
+      sessionId,
+      generation: active.request.generation ?? null,
+      targetId: active.target.id,
+      url: active.page.url(),
+      title: boundedText(await active.page.title()) ?? '',
+      mediaType: 'image/png',
+      width: dimensions.width,
+      height: dimensions.height,
+      bytes,
     };
   }
 

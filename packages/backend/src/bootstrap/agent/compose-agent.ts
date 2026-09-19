@@ -345,6 +345,7 @@ export const composeAgent = ({
     settings,
     gateway: browserGateway,
     cryptoHash,
+    artifacts,
   });
   registerRuntimeToolContributions({
     catalog: toolCatalog,

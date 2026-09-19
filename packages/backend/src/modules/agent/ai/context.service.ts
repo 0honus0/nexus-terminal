@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import type { JsonValue } from '../agent.types';
 import type { LedgerEntryView, LedgerPage } from './conversation.repository.port';
 import { ConversationService } from './conversation.service';
-import { projectArtifactsForModel } from './artifact-model-projection';
+import { projectArtifactsForModel, projectBrowserScreenshotObservation } from './artifact-model-projection';
 import { ArtifactService } from './artifact.service';
 import { ContextCheckpointService } from './context-checkpoint.service';
 import type { ContextPlan, ContextRequest, ContextSourceRange } from './context.types';
@@ -133,6 +133,7 @@ const ledgerMessage = (
 interface CandidateSection {
   id: string;
   message: ModelMessage;
+  afterMessages?: ModelMessage[];
   tokens: number;
   source: ContextSourceRange;
 }
@@ -193,6 +194,24 @@ const toolResultCallId = (entry: LedgerEntryView): string | null => {
     return null;
   const id = (entry.payload as Record<string, JsonValue>).toolCallId;
   return typeof id === 'string' && id ? id : null;
+};
+
+const projectedToolResult = (entry: LedgerEntryView): unknown => {
+  if (
+    entry.kind !== 'tool_result' ||
+    !entry.payload ||
+    Array.isArray(entry.payload) ||
+    typeof entry.payload !== 'object'
+  ) {
+    return null;
+  }
+  const text = (entry.payload as Record<string, JsonValue>).text;
+  if (typeof text !== 'string') return null;
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return null;
+  }
 };
 
 const groupLedgerCandidates = (
@@ -259,7 +278,19 @@ const groupLedgerCandidates = (
       incompleteEntryIds.push(...sections.map((section) => section.id));
       continue;
     }
-    groups.push({ id, sections, tokens: sections.reduce((total, section) => total + section.tokens, 0) });
+    const afterMessages = sections.flatMap((section) => section.afterMessages ?? []);
+    const normalizedSections =
+      afterMessages.length === 0
+        ? sections
+        : sections.map((section, index) => ({
+            ...section,
+            ...(index === sections.length - 1 ? { afterMessages } : { afterMessages: undefined }),
+          }));
+    groups.push({
+      id,
+      sections: normalizedSections,
+      tokens: sections.reduce((total, section) => total + section.tokens, 0),
+    });
   }
   return { groups, incompleteEntryIds };
 };
@@ -614,31 +645,70 @@ export class ContextService {
       continuationViews.map((view) => [continuationKey(view.runId, view.modelStepId), view.continuation]),
     );
 
-    const ledgerCandidateSections = projectedLedgerItems
-      .filter((entry) => {
-        if (entry.id === input.currentInputEntryId) return false;
-        if (entry.kind !== 'system_notice') return true;
-        if (!entry.payload || Array.isArray(entry.payload) || typeof entry.payload !== 'object') return false;
-        const kind = (entry.payload as Record<string, JsonValue>).kind;
-        return kind === 'loop_guard' || kind === 'completion_gate';
-      })
-      .map((entry) => {
-        const message = ledgerMessage(entry, continuationByStep);
-        return message
-          ? ({
+    const browserScreenshotCallIds = new Set(
+      projectedLedgerItems.flatMap((entry) => {
+        if (
+          entry.kind !== 'assistant_message' ||
+          !entry.payload ||
+          Array.isArray(entry.payload) ||
+          typeof entry.payload !== 'object'
+        ) {
+          return [];
+        }
+        const calls = (entry.payload as Record<string, JsonValue>).toolCalls;
+        if (!Array.isArray(calls)) return [];
+        return calls.flatMap((value) => {
+          if (!value || Array.isArray(value) || typeof value !== 'object') return [];
+          const call = value as Record<string, JsonValue>;
+          return call.name === 'browser_screenshot' && typeof call.id === 'string' ? [call.id] : [];
+        });
+      }),
+    );
+    const ledgerCandidateSections = (
+      await Promise.all(
+        projectedLedgerItems
+          .filter((entry) => {
+            if (entry.id === input.currentInputEntryId) return false;
+            if (entry.kind !== 'system_notice') return true;
+            if (!entry.payload || Array.isArray(entry.payload) || typeof entry.payload !== 'object') return false;
+            const kind = (entry.payload as Record<string, JsonValue>).kind;
+            return kind === 'loop_guard' || kind === 'completion_gate';
+          })
+          .map(async (entry) => {
+            const message = ledgerMessage(entry, continuationByStep);
+            if (!message) return null;
+            const callId = toolResultCallId(entry);
+            const browserObservation =
+              input.runId &&
+              entry.runId === input.runId &&
+              callId &&
+              browserScreenshotCallIds.has(callId) &&
+              input.modelInputCapabilities?.supportsImageInput === true
+                ? await projectBrowserScreenshotObservation(
+                    this.artifacts,
+                    input.scope,
+                    { runId: input.runId },
+                    projectedToolResult(entry),
+                    true,
+                  )
+                : null;
+            return {
               id: entry.id,
               message,
-              tokens: estimateModelMessageTokens(message),
+              ...(browserObservation ? { afterMessages: [browserObservation] } : {}),
+              tokens:
+                estimateModelMessageTokens(message) +
+                (browserObservation ? estimateModelMessageTokens(browserObservation) : 0),
               source: {
                 kind: 'ledger',
                 id: entry.id,
                 fromSequence: entry.sequence,
                 toSequence: entry.sequence,
               },
-            } satisfies CandidateSection)
-          : null;
-      })
-      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+            } satisfies CandidateSection;
+          }),
+      )
+    ).filter((entry): entry is NonNullable<typeof entry> => entry !== null);
     const ledgerCandidatesById = new Map(ledgerCandidateSections.map((candidate) => [candidate.id, candidate]));
     const ledgerGrouping = groupLedgerCandidates(projectedLedgerItems, ledgerCandidatesById);
     for (const entryId of ledgerGrouping.incompleteEntryIds) {
@@ -760,7 +830,7 @@ export class ContextService {
       addTokens(candidate.tokens);
     }
     for (const candidate of [...selectedThreadAnchors, ...selectedThreadRecall, ...selectedLedger]) {
-      messages.push(candidate.message);
+      messages.push(candidate.message, ...(candidate.afterMessages ?? []));
       sourceRanges.push(candidate.source);
     }
 

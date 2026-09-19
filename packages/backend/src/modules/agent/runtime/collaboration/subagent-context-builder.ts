@@ -1,6 +1,10 @@
 import type { Scope } from '../../agent.types';
 import { ArtifactService } from '../../ai/artifact.service';
-import { projectArtifactsForModel, type ArtifactModelProjection } from '../../ai/artifact-model-projection';
+import {
+  projectArtifactsForModel,
+  projectBrowserScreenshotObservation,
+  type ArtifactModelProjection,
+} from '../../ai/artifact-model-projection';
 import type { ModelContinuationRepositoryPort } from '../../ai/model-continuation.repository.port';
 import type {
   ModelMessage,
@@ -93,13 +97,16 @@ export class SubagentContextBuilder {
             },
           )
         : { textSuffix: '', contentParts: [] };
-    const { instructions, messages } = this.messages(
+    const { instructions, messages } = await this.messages(
+      scope,
+      runId,
       delegation,
       inbox,
       toolExchanges,
       continuationByStep,
       artifactProjection,
       run.budget.maxToolOutputBytes,
+      model.supportsImageInput,
     );
     let encodedContext = [
       ...instructions.map((content) => `system:${content}`),
@@ -138,14 +145,17 @@ export class SubagentContextBuilder {
     );
   }
 
-  private messages(
+  private async messages(
+    scope: Scope,
+    runId: string,
     delegation: DelegationView,
     inbox: AgentMessage[],
     toolExchanges: Awaited<ReturnType<RuntimeParticipantRepositoryPort['recentRuntimeToolExchanges']>>,
     continuationByStep: ReadonlyMap<string, ModelProviderContinuation>,
     artifactProjection: ArtifactModelProjection,
     maxToolOutputBytes: number,
-  ): { instructions: string[]; messages: ModelMessage[] } {
+    supportsImageInput: boolean,
+  ): Promise<{ instructions: string[]; messages: ModelMessage[] }> {
     const inboxText = boundedUtf8(
       JSON.stringify(
         inbox.map((message) => ({
@@ -182,6 +192,7 @@ export class SubagentContextBuilder {
         })),
         ...(providerContinuation ? { providerContinuation } : {}),
       });
+      const browserObservations: ModelMessage[] = [];
       for (const exchange of ordered) {
         history.push({
           role: 'tool',
@@ -190,7 +201,18 @@ export class SubagentContextBuilder {
             exchange.result === null ? null : projectToolResult(exchange.result, maxToolOutputBytes),
           ),
         });
+        if (exchange.toolName === 'browser_screenshot' && exchange.result) {
+          const observation = await projectBrowserScreenshotObservation(
+            this.artifacts,
+            scope,
+            { runId },
+            exchange.result,
+            supportsImageInput,
+          );
+          if (observation) browserObservations.push(observation);
+        }
       }
+      history.push(...browserObservations);
     }
     return {
       instructions: [

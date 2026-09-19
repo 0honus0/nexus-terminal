@@ -193,6 +193,18 @@ export interface BrowserSnapshotView {
   truncated: boolean;
 }
 
+export interface BrowserScreenshotView {
+  sessionId: string;
+  generation: number | null;
+  targetId: string;
+  url: string;
+  title: string;
+  mediaType: 'image/png';
+  width: number;
+  height: number;
+  bytes: Uint8Array;
+}
+
 export interface BrowserGatewayPort {
   createSession(request: BrowserSessionRequest, signal: AbortSignal): Promise<BrowserSessionView>;
   getSession(sessionId: string, signal?: AbortSignal): Promise<BrowserSessionView>;
@@ -202,6 +214,7 @@ export interface BrowserGatewayPort {
     options: { maxNodes?: number; maxBytes?: number },
     signal: AbortSignal,
   ): Promise<BrowserSnapshotView>;
+  screenshot(sessionId: string, options: { maxBytes?: number }, signal: AbortSignal): Promise<BrowserScreenshotView>;
   click(sessionId: string, snapshotId: string, nodeRef: string, signal: AbortSignal): Promise<void>;
   type(sessionId: string, snapshotId: string, nodeRef: string, text: string, signal: AbortSignal): Promise<void>;
   close(sessionId: string): Promise<void>;

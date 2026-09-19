@@ -230,6 +230,7 @@ export interface BrowserToolContributionOptions {
   settings: AgentSettingsService;
   gateway: BrowserGatewayPort;
   cryptoHash: CryptoHashPort;
+  artifacts: ArtifactService;
 }
 
 export const registerBrowserToolContribution = ({
@@ -238,12 +239,13 @@ export const registerBrowserToolContribution = ({
   settings,
   gateway,
   cryptoHash,
+  artifacts,
 }: BrowserToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'browser.operate',
     capability: 'browser.operate',
-    tools: createBrowserTools(workspaces, settings, gateway, cryptoHash),
+    tools: createBrowserTools(workspaces, settings, gateway, cryptoHash, artifacts),
   });
 };
 
