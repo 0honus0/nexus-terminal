@@ -3,6 +3,22 @@ import { normalizeLogLevel, type LogLevel } from './log-level';
 
 const levelListeners = new Set<(level: LogLevel) => void>();
 
+const LOG_ERROR_CODE = /^[A-Z][A-Z0-9_]{1,127}$/;
+
+const stableLogErrorCode = (value: unknown): string | null =>
+  typeof value === 'string' && LOG_ERROR_CODE.test(value) ? value : null;
+
+export const logErrorCode = (error: unknown, fallbackCode = 'UNEXPECTED_ERROR'): string => {
+  if (error instanceof Error) {
+    if (error.name === 'AbortError') return 'ABORTED';
+    const messageCode = stableLogErrorCode(error.message);
+    if (messageCode) return messageCode;
+    const coded = 'code' in error ? stableLogErrorCode(error.code) : null;
+    if (coded) return coded;
+  }
+  return stableLogErrorCode(fallbackCode) ?? 'UNEXPECTED_ERROR';
+};
+
 export const logger = pino({
   level: 'info',
   base: { service: 'nexus-backend' },

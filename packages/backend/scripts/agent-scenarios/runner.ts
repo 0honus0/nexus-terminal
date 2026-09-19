@@ -49,6 +49,7 @@ import {
 import { DatabaseAdapter } from '../../src/infrastructure/database/database.adapter';
 import { runMigrations } from '../../src/infrastructure/database/sqlite-migrations';
 import { NotificationService } from '../../src/modules/notifications/notification.service';
+import { logErrorCode } from '../../src/shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../src/modules/agent/agent.types';
 import { AGENT_DEFAULTS, createDefaultAgentSettings, normalizeRequestedSettings } from '../../src/modules/agent/agent-defaults';
 import type { LeasePort } from '../../src/modules/agent/capabilities/lease.port';
@@ -12244,6 +12245,57 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
   ];
 };
 
+const agentStructuredLoggingScenario: Scenario = async () => {
+  const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
+    ? path.join(process.cwd(), 'src')
+    : path.join(process.cwd(), 'packages', 'backend', 'src');
+  const targets = [
+    'interfaces/http/agent/agent-http.ts',
+    'modules/agent/runtime/events/event-hub.ts',
+    'modules/agent/runtime/collaboration/subagent-scheduler.ts',
+    'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+  ];
+  const expectedMessages = [
+    'Agent HTTP route failed unexpectedly',
+    'Agent EventHub listener failed',
+    'Agent Subagent scheduler work failed',
+    'Agent Subagent completion mailbox projection failed',
+  ];
+
+  for (let index = 0; index < targets.length; index += 1) {
+    const relative = targets[index]!;
+    const source = fs.readFileSync(path.join(backendSourceRoot, relative), 'utf8');
+    assert.doesNotMatch(source, /\bconsole\./, `${relative} must not bypass the structured logger`);
+    assert.match(source, /shared\/logging\/logger/, `${relative} must import the shared structured logger boundary`);
+    assert.match(source, /\blogErrorCode\(/, `${relative} must narrow unknown failures to a safe error code`);
+    assert.match(source, /\blogger\.(?:warn|error)\(/, `${relative} must emit a structured failure event`);
+    assert.ok(source.includes(expectedMessages[index]!), `${relative} must use a stable structured log event message`);
+    assert.doesNotMatch(
+      source,
+      /\berr\s*:/,
+      `${relative} must not serialize raw Error objects on this logging boundary`,
+    );
+  }
+
+  assert.equal(logErrorCode(new Error('STATE_CONFLICT'), 'SAFE_FALLBACK'), 'STATE_CONFLICT');
+  assert.equal(
+    logErrorCode(new Error('upstream response body contained credential material'), 'SAFE_FALLBACK'),
+    'SAFE_FALLBACK',
+  );
+  assert.equal(
+    logErrorCode(Object.assign(new Error('socket failed'), { code: 'ECONNRESET' }), 'SAFE_FALLBACK'),
+    'ECONNRESET',
+  );
+  assert.equal(logErrorCode('opaque failure', 'not-safe'), 'UNEXPECTED_ERROR');
+
+  return [
+    { name: 'agent_core_direct_console_sinks', value: 0, unit: 'sinks' },
+    { name: 'agent_core_structured_log_owners', value: targets.length, unit: 'files' },
+    { name: 'agent_core_raw_error_serializers', value: 0, unit: 'fields' },
+    { name: 'agent_core_arbitrary_error_messages_logged', value: 0, unit: 'messages' },
+  ];
+};
+
 const productTypeBoundaryScenario: Scenario = async () => {
   const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
     ? path.join(process.cwd(), 'src')
@@ -12364,6 +12416,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/cumulative-token-ceiling-removed', cumulativeTokenCeilingRemovedScenario],
   ['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],
   ['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],
+  ['architecture/agent-structured-logging', agentStructuredLoggingScenario],
   ['architecture/product-type-boundaries', productTypeBoundaryScenario],
 ]);
 

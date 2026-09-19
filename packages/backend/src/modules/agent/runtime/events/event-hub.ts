@@ -1,3 +1,4 @@
+import { logErrorCode, logger } from '../../../../shared/logging/logger';
 import type { TransientRunEvent } from './event.types';
 
 type Listener<T> = (event: T) => void;
@@ -8,15 +9,19 @@ export class AgentEventHub {
   private readonly transientListeners = new Map<string, Set<Listener<TransientRunEvent>>>();
 
   publishRunWake(runId: string, cursor: number): void {
-    this.publish(this.runWakeListeners.get(runId), cursor);
+    this.publish(this.runWakeListeners.get(runId), cursor, { channel: 'run_wake', runId, cursor });
   }
 
   publishHostWake(userId: number, cursor: number): void {
-    this.publish(this.hostWakeListeners.get(userId), cursor);
+    this.publish(this.hostWakeListeners.get(userId), cursor, { channel: 'host_wake', userId, cursor });
   }
 
   publishTransient(event: TransientRunEvent): void {
-    this.publish(this.transientListeners.get(event.runId), event);
+    this.publish(this.transientListeners.get(event.runId), event, {
+      channel: 'transient',
+      runId: event.runId,
+      eventType: event.type,
+    });
   }
 
   onRunWake(runId: string, listener: Listener<number>): () => void {
@@ -37,12 +42,19 @@ export class AgentEventHub {
     this.transientListeners.clear();
   }
 
-  private publish<TEvent>(listeners: Set<Listener<TEvent>> | undefined, event: TEvent): void {
+  private publish<TEvent>(
+    listeners: Set<Listener<TEvent>> | undefined,
+    event: TEvent,
+    context: Record<string, string | number>,
+  ): void {
     for (const listener of [...(listeners ?? [])]) {
       try {
         listener(event);
       } catch (error) {
-        console.error('[Agent EventHub] listener failed:', error);
+        logger.error(
+          { ...context, errorCode: logErrorCode(error, 'AGENT_EVENT_LISTENER_FAILED') },
+          'Agent EventHub listener failed',
+        );
       }
     }
   }

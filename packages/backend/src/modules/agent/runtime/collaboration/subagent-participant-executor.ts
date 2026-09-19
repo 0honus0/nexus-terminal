@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { logErrorCode, logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
 import type { LanguageModelPort } from '../../ai/language-model.port';
 import { applyModelCapabilitySnapshot } from '../../ai/model-capability-resolver';
@@ -761,8 +762,22 @@ export class SubagentParticipantExecutor {
         )
         .catch(() => undefined);
     }
-    await this.sendCompletion(scope, work.runId, delegation, outcome, completion, failureCode).catch((error) =>
-      console.error(`[Agent SubagentParticipantExecutor] completion mailbox failed for ${delegation.id}:`, error),
+    await this.sendCompletion(scope, work.runId, delegation, outcome, completion, failureCode).catch(
+      (error) => {
+        logger.warn(
+          {
+            userId: scope.userId,
+            appId: scope.appId,
+            runId: work.runId,
+            runtimeId: work.agentRuntimeId,
+            workId: work.id,
+            delegationId: delegation.id,
+            outcome,
+            errorCode: logErrorCode(error, 'SUBAGENT_COMPLETION_MAILBOX_FAILED'),
+          },
+          'Agent Subagent completion mailbox projection failed',
+        );
+      },
     );
     if (outcome === 'failed' && delegation.failureMode === 'failFast') await this.cancelSiblings(scope, delegation);
     await this.resumeParent(scope, work.runId, delegation);

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import { mapAgentError } from './agent-error-rules';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,7 +47,17 @@ export const agentRoute =
     agentRequestId(request, response);
     void Promise.resolve(handler(request, response, next)).catch((error) => {
       const mapped = mapAgentError(error);
-      if (mapped.status === 500) console.error('[Agent HTTP] Unhandled route error:', error);
+      if (mapped.status === 500) {
+        logger.error(
+          {
+            requestId: agentRequestId(request, response),
+            method: request.method,
+            status: mapped.status,
+            errorCode: logErrorCode(error, mapped.code),
+          },
+          'Agent HTTP route failed unexpectedly',
+        );
+      }
       if (!response.headersSent)
         agentError(request, response, mapped.status, mapped.code, mapped.message, mapped.details);
     });

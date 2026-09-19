@@ -1,4 +1,5 @@
 import { randomInt } from 'node:crypto';
+import { logErrorCode, logger } from '../../../../shared/logging/logger';
 import type { ClockPort, Scope } from '../../agent.types';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
 import type { SubagentParticipantExecutor } from './subagent-participant-executor';
@@ -193,15 +194,15 @@ export class SubagentScheduler {
         );
         if (!claimed) continue;
         if (claimed.kind === 'consume_inbox') {
-          await this.participant
-            .handleInboxWake(scope, claimed, this.ownerEpoch)
-            .catch((error) => console.error(`[Agent SubagentScheduler] inbox work ${claimed.id} failed:`, error));
+          await this.participant.handleInboxWake(scope, claimed, this.ownerEpoch).catch((error) => {
+            this.logWorkFailure(scope, claimed, 'consume_inbox', error);
+          });
           continue;
         }
         if (claimed.kind === 'join_resume') {
-          await this.participant
-            .handleJoinResume(scope, claimed, this.ownerEpoch)
-            .catch((error) => console.error(`[Agent SubagentScheduler] join resume ${claimed.id} failed:`, error));
+          await this.participant.handleJoinResume(scope, claimed, this.ownerEpoch).catch((error) => {
+            this.logWorkFailure(scope, claimed, 'join_resume', error);
+          });
           continue;
         }
         if (claimed.kind !== 'model_step' && claimed.kind !== 'tool_step') {
@@ -272,13 +273,36 @@ export class SubagentScheduler {
     return null;
   }
 
+  private logWorkFailure(
+    scope: Scope,
+    work: SchedulerWorkView,
+    phase: 'consume_inbox' | 'join_resume' | 'child_execute',
+    error: unknown,
+  ): void {
+    logger.error(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        runId: work.runId,
+        runtimeId: work.agentRuntimeId,
+        workId: work.id,
+        workKind: work.kind,
+        phase,
+        errorCode: logErrorCode(error, 'SUBAGENT_SCHEDULER_WORK_FAILED'),
+      },
+      'Agent Subagent scheduler work failed',
+    );
+  }
+
   private start(scope: Scope, work: SchedulerWorkView): void {
     const controller = new AbortController();
     const done = this.participant
       .execute(scope, work, this.ownerEpoch, controller.signal)
       .catch(async (error) => {
-        console.error(`[Agent SubagentScheduler] child work ${work.id} failed:`, error);
-        await this.work.settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds()).catch(() => undefined);
+        this.logWorkFailure(scope, work, 'child_execute', error);
+        await this.work
+          .settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds())
+          .catch(() => undefined);
       })
       .finally(() => {
         this.active.delete(work.id);
