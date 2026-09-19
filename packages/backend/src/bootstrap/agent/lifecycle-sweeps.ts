@@ -1,6 +1,7 @@
 import { logger } from '../../shared/logging/logger';
 import type { ClockPort } from '../../modules/agent/agent.types';
 import type { ArtifactMaintenancePort } from '../../modules/agent/ai/artifact.port';
+import type { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
 import type { ApprovalSweepCommitPort } from '../../modules/agent/runtime/runs/state-commit.port';
 import type { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
 import type { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
@@ -16,6 +17,7 @@ export interface CreateAgentLifecycleSweepsOptions {
   stateCommit: ApprovalSweepCommitPort;
   workspaceRuntime: WorkspaceRuntimeService;
   artifactMaintenance: ArtifactMaintenancePort;
+  mailbox: Pick<MailboxService, 'sweepExpired'>;
   scheduler: AgentScheduler;
   clock: ClockPort;
   notifyCommitted(run: SchedulerRun): void;
@@ -26,6 +28,7 @@ export const createAgentLifecycleSweeps = ({
   stateCommit,
   workspaceRuntime,
   artifactMaintenance,
+  mailbox,
   scheduler,
   clock,
   notifyCommitted,
@@ -37,6 +40,8 @@ export const createAgentLifecycleSweeps = ({
   let workspaceReconcileSweep = Promise.resolve();
   let artifactReconcileTimer: NodeJS.Timeout | null = null;
   let artifactReconcileSweep = Promise.resolve();
+  let mailboxExpiryTimer: NodeJS.Timeout | null = null;
+  let mailboxExpirySweep = Promise.resolve();
   let restartRecoveryTimer: NodeJS.Timeout | null = null;
   let restartRecoverySweep = Promise.resolve();
 
@@ -83,6 +88,17 @@ export const createAgentLifecycleSweeps = ({
       .catch((error) => logger.warn({ err: error }, 'Agent Artifact reconciliation sweep failed'));
   };
 
+  const sweepExpiredMailbox = (): void => {
+    mailboxExpirySweep = mailboxExpirySweep
+      .then(async () => {
+        const expired = await mailbox.sweepExpired();
+        if (expired > 0) {
+          logger.debug({ expiredMessages: expired }, 'Agent Subagent mailbox TTL sweep expired messages');
+        }
+      })
+      .catch((error) => logger.warn({ err: error }, 'Agent Subagent mailbox TTL sweep failed'));
+  };
+
   const sweepRestartRecovery = (): void => {
     if (!retryRestartRecovery) return;
     restartRecoverySweep = restartRecoverySweep
@@ -101,18 +117,22 @@ export const createAgentLifecycleSweeps = ({
       if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
       if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
       if (artifactReconcileTimer) clearInterval(artifactReconcileTimer);
+      if (mailboxExpiryTimer) clearInterval(mailboxExpiryTimer);
       if (restartRecoveryTimer) clearInterval(restartRecoveryTimer);
       sweepExpiredApprovals();
       sweepWorkspaceReconciliation();
       sweepArtifactReconciliation();
+      sweepExpiredMailbox();
       sweepRestartRecovery();
       approvalExpiryTimer = setInterval(sweepExpiredApprovals, 15_000);
       workspaceReconcileTimer = setInterval(sweepWorkspaceReconciliation, 15_000);
       artifactReconcileTimer = setInterval(sweepArtifactReconciliation, 15_000);
+      mailboxExpiryTimer = setInterval(sweepExpiredMailbox, 15_000);
       restartRecoveryTimer = setInterval(sweepRestartRecovery, 15_000);
       approvalExpiryTimer.unref?.();
       workspaceReconcileTimer.unref?.();
       artifactReconcileTimer.unref?.();
+      mailboxExpiryTimer.unref?.();
       restartRecoveryTimer.unref?.();
     },
     stop: async () => {
@@ -120,15 +140,18 @@ export const createAgentLifecycleSweeps = ({
       if (approvalExpiryTimer) clearInterval(approvalExpiryTimer);
       if (workspaceReconcileTimer) clearInterval(workspaceReconcileTimer);
       if (artifactReconcileTimer) clearInterval(artifactReconcileTimer);
+      if (mailboxExpiryTimer) clearInterval(mailboxExpiryTimer);
       if (restartRecoveryTimer) clearInterval(restartRecoveryTimer);
       approvalExpiryTimer = null;
       workspaceReconcileTimer = null;
       artifactReconcileTimer = null;
+      mailboxExpiryTimer = null;
       restartRecoveryTimer = null;
       await Promise.all([
         approvalExpirySweep.catch(() => undefined),
         workspaceReconcileSweep.catch(() => undefined),
         artifactReconcileSweep.catch(() => undefined),
+        mailboxExpirySweep.catch(() => undefined),
         restartRecoverySweep.catch(() => undefined),
       ]);
     },

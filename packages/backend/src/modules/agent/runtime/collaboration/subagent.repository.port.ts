@@ -175,7 +175,14 @@ export interface DelegationRepositoryPort extends DelegationCancellationPort {
 }
 
 export interface MailboxReaderPort {
-  readMessages(scope: Scope, runId: string, runtimeId: string, after: number, limit: number): Promise<AgentMessage[]>;
+  readMessages(
+    scope: Scope,
+    runId: string,
+    runtimeId: string,
+    after: number,
+    limit: number,
+    now: number,
+  ): Promise<AgentMessage[]>;
   listDelegationMessages(
     scope: Scope,
     runId: string,

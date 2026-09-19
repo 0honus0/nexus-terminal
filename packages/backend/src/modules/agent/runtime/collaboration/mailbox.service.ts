@@ -183,7 +183,7 @@ export class MailboxService {
     ) {
       throw new Error('VALIDATION_FAILED');
     }
-    return this.mailboxes.readMessages(scope, runId, runtimeId, after, limit);
+    return this.mailboxes.readMessages(scope, runId, runtimeId, after, limit, this.clock.nowUnixSeconds());
   }
 
   async consume(

@@ -411,6 +411,7 @@ export const composeAgent = ({
     toolCatalog,
     modelContinuations,
     artifacts,
+    systemClock,
   );
   const subagentParticipant = new SubagentParticipantExecutor(
     schedulerExecution,
@@ -527,6 +528,7 @@ export const composeAgent = ({
     stateCommit,
     workspaceRuntime,
     artifactMaintenance: artifactStore,
+    mailbox,
     scheduler,
     clock: systemClock,
     notifyCommitted,

@@ -822,8 +822,8 @@ export class SqliteSubagentRepository
       const controlCompletion = record.kind === 'completion';
       const pending = await tx.queryOne<{ count: number }>(
         `SELECT COUNT(*) AS count FROM agent_messages
-         WHERE recipient_runtime_id = ? AND status IN ('accepted','delivered')`,
-        [record.recipientRuntimeId],
+         WHERE recipient_runtime_id = ? AND status IN ('accepted','delivered') AND expires_at > ?`,
+        [record.recipientRuntimeId, record.now],
       );
       if (!controlCompletion && (pending?.count ?? 0) >= record.maxPending) throw new Error('MAILBOX_FULL');
       const totals = await tx.queryOne<{ count: number; bytes: number }>(
@@ -928,9 +928,11 @@ export class SqliteSubagentRepository
         );
       } else {
         await tx.execute(
-          `UPDATE agent_scheduler_work SET status = 'queued', not_before = MIN(not_before, ?),
-           deadline_at = MAX(deadline_at, ?), version = version + 1, updated_at = ?
-           WHERE id = ? AND status = 'waiting'`,
+          `UPDATE agent_scheduler_work
+           SET status = CASE WHEN status = 'waiting' THEN 'queued' ELSE status END,
+               not_before = CASE WHEN status = 'waiting' THEN MIN(not_before, ?) ELSE not_before END,
+               deadline_at = MAX(deadline_at, ?), version = version + 1, updated_at = ?
+           WHERE id = ? AND status IN ('queued','waiting')`,
           [record.now, record.expiresAt, record.now, existingWork.id],
         );
       }
@@ -965,17 +967,35 @@ export class SqliteSubagentRepository
     runtimeId: string,
     after: number,
     limit: number,
+    now: number,
   ): Promise<AgentMessage[]> {
     return this.db.transaction(async (tx) => {
       await requireRun(tx, scope, runId);
       await assertRuntimeInRun(tx, runId, runtimeId);
+      const expiredRows = await tx.queryAll<{ id: string }>(
+        `SELECT id FROM agent_messages
+         WHERE run_id = ? AND recipient_runtime_id = ? AND recipient_sequence > ?
+           AND status IN ('accepted','delivered') AND expires_at <= ?
+         ORDER BY recipient_sequence LIMIT 256`,
+        [runId, runtimeId, after, now],
+      );
+      if (expiredRows.length > 0) {
+        const placeholders = expiredRows.map(() => '?').join(',');
+        await tx.execute(
+          `UPDATE agent_messages SET status = 'expired'
+           WHERE id IN (${placeholders}) AND status IN ('accepted','delivered') AND expires_at <= ?`,
+          [...expiredRows.map((row) => row.id), now],
+        );
+      }
       const rows = await tx.queryAll<MessageRow>(
         `SELECT id, run_id, sender_runtime_id, recipient_runtime_id, delegation_id, recipient_sequence, kind,
                 correlation_id, reply_to, causation_id, task_revision, body_json, artifact_refs_json, status,
                 created_at, expires_at, consumed_at
-         FROM agent_messages WHERE run_id = ? AND recipient_runtime_id = ? AND recipient_sequence > ?
+         FROM agent_messages
+         WHERE run_id = ? AND recipient_runtime_id = ? AND recipient_sequence > ?
+           AND status IN ('accepted','delivered') AND expires_at > ?
          ORDER BY recipient_sequence LIMIT ?`,
-        [runId, runtimeId, after, limit],
+        [runId, runtimeId, after, now, limit],
       );
       const accepted = rows.filter((row) => row.status === 'accepted');
       if (accepted.length > 0) {
@@ -1144,10 +1164,16 @@ export class SqliteSubagentRepository
         throw new Error('MESSAGE_STALE');
       }
       await tx.execute(
+        `UPDATE agent_messages SET status = 'expired'
+         WHERE run_id = ? AND recipient_runtime_id = ? AND recipient_sequence > ? AND recipient_sequence <= ?
+           AND status IN ('accepted','delivered') AND expires_at <= ?`,
+        [runId, runtimeId, expectedConsumedSequence, through, now],
+      );
+      await tx.execute(
         `UPDATE agent_messages SET status = 'consumed', consumed_at = ?
          WHERE run_id = ? AND recipient_runtime_id = ? AND recipient_sequence > ? AND recipient_sequence <= ?
-           AND status IN ('accepted','delivered')`,
-        [now, runId, runtimeId, expectedConsumedSequence, through],
+           AND status IN ('accepted','delivered') AND expires_at > ?`,
+        [now, runId, runtimeId, expectedConsumedSequence, through, now],
       );
       const updated = await tx.execute(
         `UPDATE agent_runtimes SET consumed_mailbox_sequence = ?, updated_at = ?
@@ -1307,7 +1333,7 @@ export class SqliteSubagentRepository
        JOIN agent_runs r ON r.id = w.run_id
        JOIN agent_runtimes rt ON rt.id = w.agent_runtime_id AND rt.run_id = w.run_id
        LEFT JOIN agent_delegations d ON d.child_runtime_id = w.agent_runtime_id AND d.run_id = w.run_id
-       WHERE w.status = 'queued' AND w.kind IN ('model_step','tool_step') AND w.not_before <= ?
+       WHERE w.status = 'queued' AND w.kind IN ('model_step','tool_step','consume_inbox') AND w.not_before <= ?
          AND r.status IN ('running','cancelling') AND rt.schedule_state IN ('queued','runnable')
          AND (
            w.deadline_at <= ? OR EXISTS (

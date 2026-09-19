@@ -1,4 +1,4 @@
-import type { Scope } from '../../agent.types';
+import type { ClockPort, Scope } from '../../agent.types';
 import { ArtifactService } from '../../ai/artifact.service';
 import {
   projectArtifactsForModel,
@@ -52,6 +52,7 @@ export class SubagentContextBuilder {
     private readonly toolCatalog: ToolCatalog,
     private readonly continuations: ModelContinuationRepositoryPort,
     private readonly artifacts: ArtifactService,
+    private readonly clock: ClockPort,
   ) {}
 
   async prepare(
@@ -66,7 +67,14 @@ export class SubagentContextBuilder {
     if (!runtime) return { kind: 'cancel' };
 
     const [inbox, toolExchanges] = await Promise.all([
-      this.mailboxes.readMessages(scope, runId, runtimeId, runtime.consumedMailboxSequence, INBOX_LIMIT),
+      this.mailboxes.readMessages(
+        scope,
+        runId,
+        runtimeId,
+        runtime.consumedMailboxSequence,
+        INBOX_LIMIT,
+        this.clock.nowUnixSeconds(),
+      ),
       this.runtimes.recentRuntimeToolExchanges(scope, runId, runtimeId, 8),
     ]);
     const continuationViews = await this.continuations.load(
