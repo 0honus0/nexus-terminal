@@ -395,6 +395,7 @@ export const composeAgent = ({
     toolCalls,
     systemClock,
     (run, reason) => recordRecoverySafePoint(run, reason),
+    subagentPolicy,
   );
   const scheduler = new AgentScheduler(
     settings,
@@ -412,6 +413,10 @@ export const composeAgent = ({
     modelContinuations,
     artifacts,
     systemClock,
+    {
+      load: (scope, runId, runtimeId, targetDirectories, signal) =>
+        workspaceRuntime.loadProjectInstructions(scope, runId, runtimeId, targetDirectories, signal),
+    },
   );
   const subagentParticipant = new SubagentParticipantExecutor(
     schedulerExecution,

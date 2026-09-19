@@ -11,6 +11,7 @@ import type {
   SubagentProfile,
   SubagentSettingsView,
 } from './subagent.types';
+import { builtInSubagentProfileTemplates } from './subagent-profile-templates';
 
 const STORAGE_KEY = 'subagent.profiles.v1';
 const MAX_PROFILES = 32;
@@ -124,6 +125,7 @@ export class SubagentPolicyService {
         maxMessageBytesPerRun: settings.effectiveSettings.subagents.maxSubagentMessageBytesPerRun,
         profiles,
       },
+      templates: builtInSubagentProfileTemplates(settings.effectiveSettings.hardLimits.maxRunSteps),
       version: stored?.version ?? 0,
     };
   }
@@ -153,7 +155,11 @@ export class SubagentPolicyService {
       maxMessageBytesPerRun: currentSettings.effectiveSettings.subagents.maxSubagentMessageBytesPerRun,
       profiles,
     };
-    return { policy, version: stored.version };
+    return {
+      policy,
+      templates: builtInSubagentProfileTemplates(currentSettings.effectiveSettings.hardLimits.maxRunSteps),
+      version: stored.version,
+    };
   }
 
   private async assertModel(userId: number, model: ModelRef): Promise<void> {

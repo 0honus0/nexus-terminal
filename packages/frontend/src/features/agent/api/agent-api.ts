@@ -774,6 +774,16 @@ export interface AgentSubagentProfile {
   failureMode: 'isolate' | 'failFast';
 }
 
+export interface AgentSubagentProfileTemplate {
+  id: 'explore' | 'scout' | 'review' | 'general';
+  role: string;
+  delegationHint: string;
+  capabilities: string[];
+  peerMessaging: 'parent-child' | 'same-run';
+  maxSteps: number;
+  failureMode: 'isolate' | 'failFast';
+}
+
 export interface AgentSubagentSettingsView {
   policy: {
     maxDelegationDepth: number;
@@ -781,6 +791,7 @@ export interface AgentSubagentSettingsView {
     maxMessageBytesPerRun: number;
     profiles: AgentSubagentProfile[];
   };
+  templates: AgentSubagentProfileTemplate[];
   version: number;
 }
 

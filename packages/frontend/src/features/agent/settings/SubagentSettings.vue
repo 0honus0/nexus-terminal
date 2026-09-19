@@ -7,6 +7,7 @@
     type AgentProviderView,
     type AgentSettingsView,
     type AgentSubagentProfile,
+    type AgentSubagentProfileTemplate,
     type AgentSubagentSettingsView,
   } from '../api/agent-api';
 
@@ -22,6 +23,7 @@
   const profileSettings = ref<AgentSubagentSettingsView | null>(null);
   const profileBusy = ref(false);
   const profileError = ref('');
+  const selectedTemplateId = ref<AgentSubagentProfileTemplate['id']>('explore');
 
   const capabilityOptions = [
     'ai.model.use',
@@ -55,6 +57,16 @@
 
   const modelKey = (model: AgentSubagentProfile['defaultModel']): string =>
     model ? `${model.providerId}\u0000${model.modelId}\u0000${model.configurationVersion}` : '';
+  const preferredModel = computed(() => {
+    const requested = props.settings.requestedSettings.model;
+    return (
+      modelOptions.value.find(
+        (candidate) =>
+          candidate.ref.providerId === requested.defaultProviderId &&
+          candidate.ref.modelId === requested.defaultModelId,
+      ) ?? modelOptions.value[0]
+    );
+  });
 
   const cloneProfiles = (profiles: AgentSubagentProfile[]): AgentSubagentProfile[] =>
     JSON.parse(JSON.stringify(profiles)) as AgentSubagentProfile[];
@@ -80,8 +92,8 @@
   };
 
   const addProfile = (): void => {
-    if (!profileSettings.value || modelOptions.value.length === 0) return;
-    const first = modelOptions.value[0]!;
+    if (!profileSettings.value || !preferredModel.value) return;
+    const first = preferredModel.value;
     const nextIndex = profileSettings.value.policy.profiles.length + 1;
     profileSettings.value.policy.profiles.push({
       id: `worker-${nextIndex}`,
@@ -92,6 +104,33 @@
       peerMessaging: 'parent-child',
       maxSteps: Math.min(12, props.settings.hardLimits.maxRunSteps),
       failureMode: 'isolate',
+    });
+  };
+
+  const availableProfileId = (base: string): string => {
+    const used = new Set(profileSettings.value?.policy.profiles.map((profile) => profile.id) ?? []);
+    if (!used.has(base)) return base;
+    for (let suffix = 2; suffix <= 99; suffix += 1) {
+      const candidate = `${base}-${suffix}`;
+      if (!used.has(candidate)) return candidate;
+    }
+    return `${base}-copy`;
+  };
+
+  const addTemplateProfile = (): void => {
+    if (!profileSettings.value || !preferredModel.value) return;
+    const template = profileSettings.value.templates.find((candidate) => candidate.id === selectedTemplateId.value);
+    if (!template) return;
+    const model = preferredModel.value.ref;
+    profileSettings.value.policy.profiles.push({
+      id: availableProfileId(template.id),
+      role: template.role,
+      defaultModel: { ...model },
+      allowedModels: [{ ...model }],
+      capabilities: [...template.capabilities],
+      peerMessaging: template.peerMessaging,
+      maxSteps: Math.min(template.maxSteps, props.settings.hardLimits.maxRunSteps),
+      failureMode: template.failureMode,
     });
   };
 
@@ -249,16 +288,44 @@
               <option v-for="app in apps" :key="app.id" :value="app.id">{{ app.displayName }}</option>
             </select>
           </label>
-          <button
-            type="button"
-            class="rounded-md border border-border px-3 py-2 text-xs disabled:opacity-50"
-            :disabled="profileBusy || modelOptions.length === 0"
-            @click="addProfile"
-          >
-            {{ $t('agent.settings.subagents.addProfile') }}
-          </button>
+          <div class="flex flex-wrap items-end gap-2">
+            <label v-if="profileSettings?.templates.length" class="min-w-40">
+              <span class="mb-1 block text-xs font-medium text-text-secondary">{{
+                $t('agent.settings.subagents.templatePreset')
+              }}</span>
+              <select
+                v-model="selectedTemplateId"
+                class="w-full rounded-md border border-border bg-background px-3 py-2 text-xs"
+                :disabled="profileBusy"
+              >
+                <option v-for="template in profileSettings.templates" :key="template.id" :value="template.id">
+                  {{ $t(`agent.settings.subagents.template${template.id[0]!.toUpperCase()}${template.id.slice(1)}`) }}
+                </option>
+              </select>
+            </label>
+            <button
+              v-if="profileSettings?.templates.length"
+              type="button"
+              class="rounded-md border border-border px-3 py-2 text-xs disabled:opacity-50"
+              :disabled="profileBusy || !preferredModel"
+              @click="addTemplateProfile"
+            >
+              {{ $t('agent.settings.subagents.addTemplate') }}
+            </button>
+            <button
+              type="button"
+              class="rounded-md border border-border px-3 py-2 text-xs disabled:opacity-50"
+              :disabled="profileBusy || !preferredModel"
+              @click="addProfile"
+            >
+              {{ $t('agent.settings.subagents.addProfile') }}
+            </button>
+          </div>
         </div>
         <p class="mt-2 text-xs text-text-secondary">{{ $t('agent.settings.subagents.profileHint') }}</p>
+        <p v-if="profileSettings?.templates.length" class="mt-1 text-xs text-text-secondary">
+          {{ $t('agent.settings.subagents.templateHint') }}
+        </p>
         <p v-if="profileError" class="mt-2 text-xs text-error">{{ profileError }}</p>
 
         <div v-if="profileSettings" class="mt-3 space-y-3">

@@ -8,10 +8,11 @@ import { executionErrorCode, executionErrorDetail } from './execution-errors';
 import { modelFinishDisposition } from './model-finish-policy';
 import { ModelStepRunner, type ModelToolCall } from './model-step-runner';
 import { estimateTokens } from './model-accounting';
-import { boundedUtf8 } from './text-budget';
 import { ToolCallRunner } from './tool-call-runner';
 import type { PendingRootTool, RunExecutionReaderPort } from '../runs/run.repository.port';
 import type { DelegationReaderPort } from '../collaboration/subagent.repository.port';
+import type { SubagentPolicyService } from '../collaboration/subagent-policy';
+import { projectSubagentCollaborationContext } from '../collaboration/subagent-context-projection';
 import type { RootExecutionCommitPort } from '../runs/state-commit.port';
 import type { RunSnapshot, RunUsage, RunView } from '../runs/run.types';
 import { runModelRoutes } from '../runs/model-routes';
@@ -21,7 +22,6 @@ import { toolLeaseTtlSeconds } from './tool-lease-policy';
 import { requestHash } from '../runs/idempotency';
 import { logger } from '../../../../shared/logging/logger';
 
-const MAX_COLLABORATION_BYTES = 8 * 1024;
 const MAX_TOOL_CALLS_PER_MODEL_STEP = 64;
 const MAX_PARALLEL_READ_TOOLS = 4;
 
@@ -144,6 +144,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       run: RunView,
       reason: 'model_boundary' | 'read_batch' | 'mutation_confirmed',
     ) => Promise<void> = async () => undefined,
+    private readonly subagentPolicy: Pick<SubagentPolicyService, 'get'> | null = null,
   ) {}
 
   async *execute(initial: RunView, signal: AbortSignal): AsyncIterable<BackendSignal> {
@@ -276,34 +277,15 @@ export class NativeAgentBackend implements AgentBackendPort {
         snapshot.id,
         ...Object.keys(snapshot.definition.contextBoundary?.runThrough ?? {}),
       ].filter((runId, index, values) => values.indexOf(runId) === index);
-      const [projectionEntries, directSubagents] = await Promise.all([
+      const [projectionEntries, directSubagents, subagentSettings] = await Promise.all([
         Promise.all(
           projectionRunIds.map(async (runId) => [runId, await this.repository.inputProjection(scope, runId)] as const),
         ),
         this.delegations.listDelegations(scope, snapshot.id, runtimeId, 50),
+        this.subagentPolicy?.get(scope) ?? Promise.resolve(null),
       ]);
       const inputProjections = Object.fromEntries(projectionEntries);
-      const collaborationContext =
-        directSubagents.length === 0
-          ? undefined
-          : boundedUtf8(
-              JSON.stringify(
-                directSubagents.map((delegation) => ({
-                  delegationId: delegation.id,
-                  childRuntimeId: delegation.childRuntimeId,
-                  profileId: delegation.profileId,
-                  modelRef: delegation.modelRef,
-                  objective: delegation.objective,
-                  status: delegation.status,
-                  budget: delegation.budget,
-                  usage: delegation.usage,
-                  result: delegation.result,
-                  evidenceRefs: delegation.evidenceRefs,
-                  deadlineAt: delegation.deadlineAt,
-                })),
-              ),
-              MAX_COLLABORATION_BYTES,
-            );
+      const collaborationContext = projectSubagentCollaborationContext(subagentSettings, directSubagents);
       const currentModelRef = await this.repository.rootRuntimeModel(scope, snapshot.id);
       const frozenRoutes = runModelRoutes(snapshot.definition);
       let routeIndex = frozenRoutes.findIndex(

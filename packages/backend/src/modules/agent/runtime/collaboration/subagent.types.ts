@@ -27,6 +27,16 @@ export interface SubagentProfile {
   failureMode: SubagentFailureMode;
 }
 
+export interface SubagentProfileTemplate {
+  id: 'explore' | 'scout' | 'review' | 'general';
+  role: string;
+  delegationHint: string;
+  capabilities: string[];
+  peerMessaging: PeerMessaging;
+  maxSteps: number;
+  failureMode: SubagentFailureMode;
+}
+
 export interface SubagentPolicy {
   maxDelegationDepth: number;
   maxMessagesPerRun: number;
@@ -36,6 +46,7 @@ export interface SubagentPolicy {
 
 export interface SubagentSettingsView {
   policy: SubagentPolicy;
+  templates: SubagentProfileTemplate[];
   version: number;
 }
 
