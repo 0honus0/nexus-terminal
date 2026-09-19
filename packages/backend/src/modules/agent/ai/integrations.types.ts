@@ -131,6 +131,7 @@ export type BrowserEndpointSetting = AgentBrowserEndpointSetting;
 export interface BrowserTargetSnapshot {
   id: string;
   profileRevision: number;
+  configurationHash: string;
   endpoints: BrowserEndpointSetting[];
   allowedUrlPatterns: string[];
 }
@@ -149,6 +150,7 @@ export interface BrowserSessionView extends Scope {
   agentRuntimeId: string;
   targetId: string;
   targetRevision: number;
+  targetConfigurationHash: string;
   workspaceId: string | null;
   generation: number | null;
   url: string;

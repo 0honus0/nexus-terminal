@@ -31,6 +31,28 @@ interface ResolvedBrowserBinding {
   workspace: AgentWorkspaceView | null;
 }
 
+const browserTargetConfigurationHash = (
+  target: Pick<BrowserTargetSnapshot, 'id' | 'endpoints' | 'allowedUrlPatterns'>,
+  cryptoHash: CryptoHashPort,
+): string =>
+  hashOperation(
+    {
+      schemaVersion: 1,
+      kind: 'browser-target',
+      id: target.id,
+      endpoints: target.endpoints.map((endpoint) => ({ ...endpoint })),
+      allowedUrlPatterns: [...target.allowedUrlPatterns],
+    },
+    cryptoHash,
+  );
+
+const standaloneTargetRevision = (configurationHash: string): number => {
+  const digest = configurationHash.startsWith('v1:') ? configurationHash.slice(3) : configurationHash;
+  const revision = Number.parseInt(digest.slice(0, 13), 16) + 1;
+  if (!Number.isSafeInteger(revision) || revision < 1) throw new Error('BROWSER_TARGET_HASH_INVALID');
+  return revision;
+};
+
 const object = (value: JsonValue): Record<string, JsonValue> => {
   if (!value || Array.isArray(value) || typeof value !== 'object') throw new Error('TOOL_ARGUMENTS_INVALID');
   return value as Record<string, JsonValue>;
@@ -121,37 +143,48 @@ const workspaceForContext = async (
 
 const workspaceBinding = async (
   repository: AgentWorkspaceRepositoryPort,
+  cryptoHash: CryptoHashPort,
   context: ToolContext,
   workspaceId: string,
 ): Promise<ResolvedBrowserBinding> => {
   const workspace = await workspaceForContext(repository, context, workspaceId);
   const frozen = workspace.profile.browserTarget!;
+  const target = {
+    id: frozen.id,
+    profileRevision: frozen.profileRevision,
+    endpoints: frozen.endpoints.map((endpoint) => ({ ...endpoint })),
+    allowedUrlPatterns: [...frozen.allowedUrlPatterns],
+  };
   return {
     workspace,
     target: {
-      id: frozen.id,
-      profileRevision: frozen.profileRevision,
-      endpoints: frozen.endpoints.map((endpoint) => ({ ...endpoint })),
-      allowedUrlPatterns: [...frozen.allowedUrlPatterns],
+      ...target,
+      configurationHash: browserTargetConfigurationHash(target, cryptoHash),
     },
   };
 };
 
 const standaloneBinding = async (
   settings: AgentSettingsService,
+  cryptoHash: CryptoHashPort,
   context: ToolContext,
   targetId: string,
 ): Promise<ResolvedBrowserBinding> => {
   const view = await settings.get(context.userId);
   const configured = view.effectiveSettings.browser.targets.find((candidate) => candidate.id === targetId);
   if (!configured) throw new Error('BROWSER_TARGET_NOT_FOUND');
+  const target = {
+    id: configured.id,
+    endpoints: configured.endpoints.map((endpoint) => ({ ...endpoint })),
+    allowedUrlPatterns: [...configured.allowedUrlPatterns],
+  };
+  const configurationHash = browserTargetConfigurationHash(target, cryptoHash);
   return {
     workspace: null,
     target: {
-      id: configured.id,
-      profileRevision: view.revision,
-      endpoints: configured.endpoints.map((endpoint) => ({ ...endpoint })),
-      allowedUrlPatterns: [...configured.allowedUrlPatterns],
+      ...target,
+      profileRevision: standaloneTargetRevision(configurationHash),
+      configurationHash,
     },
   };
 };
@@ -159,6 +192,7 @@ const standaloneBinding = async (
 const createBinding = async (
   repository: AgentWorkspaceRepositoryPort,
   settings: AgentSettingsService,
+  cryptoHash: CryptoHashPort,
   context: ToolContext,
   args: Record<string, JsonValue>,
 ): Promise<ResolvedBrowserBinding> => {
@@ -166,14 +200,15 @@ const createBinding = async (
   const hasTarget = args.targetId !== undefined;
   if (hasWorkspace === hasTarget) throw new Error('TOOL_ARGUMENTS_INVALID');
   return hasWorkspace
-    ? workspaceBinding(repository, context, string(args.workspaceId, MAX_ID_BYTES))
-    : standaloneBinding(settings, context, string(args.targetId, MAX_ID_BYTES));
+    ? workspaceBinding(repository, cryptoHash, context, string(args.workspaceId, MAX_ID_BYTES))
+    : standaloneBinding(settings, cryptoHash, context, string(args.targetId, MAX_ID_BYTES));
 };
 
 const sessionBinding = async (
   repository: AgentWorkspaceRepositoryPort,
   settings: AgentSettingsService,
   gateway: BrowserGatewayPort,
+  cryptoHash: CryptoHashPort,
   context: ToolContext,
   sessionId: string,
 ): Promise<{ session: BrowserSessionView; binding: ResolvedBrowserBinding }> => {
@@ -188,11 +223,12 @@ const sessionBinding = async (
   }
   if (session.workspaceId) {
     if (session.generation === null) throw new Error('BROWSER_WORKSPACE_BINDING_INVALID');
-    const binding = await workspaceBinding(repository, context, session.workspaceId);
+    const binding = await workspaceBinding(repository, cryptoHash, context, session.workspaceId);
     if (
       binding.workspace!.generation !== session.generation ||
       binding.target.id !== session.targetId ||
-      binding.target.profileRevision !== session.targetRevision
+      binding.target.profileRevision !== session.targetRevision ||
+      binding.target.configurationHash !== session.targetConfigurationHash
     ) {
       await gateway.close(sessionId).catch(() => undefined);
       throw new Error('BROWSER_WORKSPACE_STALE');
@@ -200,8 +236,17 @@ const sessionBinding = async (
     return { session, binding };
   }
   if (session.generation !== null) throw new Error('BROWSER_WORKSPACE_BINDING_INVALID');
-  const binding = await standaloneBinding(settings, context, session.targetId);
-  if (binding.target.profileRevision !== session.targetRevision) {
+  let binding: ResolvedBrowserBinding;
+  try {
+    binding = await standaloneBinding(settings, cryptoHash, context, session.targetId);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'BROWSER_TARGET_NOT_FOUND') {
+      await gateway.close(sessionId).catch(() => undefined);
+      throw new Error('BROWSER_TARGET_STALE');
+    }
+    throw error;
+  }
+  if (binding.target.configurationHash !== session.targetConfigurationHash) {
     await gateway.close(sessionId).catch(() => undefined);
     throw new Error('BROWSER_TARGET_STALE');
   }
@@ -222,8 +267,8 @@ const toolTarget = (
     targetIdentity: [
       'browser',
       target.id,
-      String(target.profileRevision),
-      workspace ? `${workspace.id}:${workspace.generation}` : 'standalone',
+      target.configurationHash,
+      workspace ? `${workspace.id}:${workspace.generation}:${target.profileRevision}` : 'standalone',
       sessionId ?? 'new',
     ].join(':'),
     endpoint: `browser-target:${target.id}`,
@@ -257,7 +302,7 @@ const inspection = (
 ): ToolInspection => {
   const target = toolTarget(binding, cryptoHash, sessionId);
   const resourceKeys = [
-    `browser-target:${binding.target.id}:${binding.target.profileRevision}`,
+    `browser-target:${binding.target.id}:${binding.target.configurationHash}`,
     ...(binding.workspace ? [`workspace:${binding.workspace.id}:${binding.workspace.generation}`] : []),
     ...(sessionId ? [`browser:${sessionId}`] : []),
   ];
@@ -367,10 +412,11 @@ export const createBrowserTools = (
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
-      const binding = await createBinding(repository, settings, context, args);
+      const binding = await createBinding(repository, settings, cryptoHash, context, args);
       const normalized: Record<string, JsonValue> = {
         targetId: binding.target.id,
         targetRevision: binding.target.profileRevision,
+        targetConfigurationHash: binding.target.configurationHash,
       };
       if (binding.workspace) {
         normalized.workspaceId = binding.workspace.id;
@@ -393,9 +439,13 @@ export const createBrowserTools = (
       const targetId = string(args.targetId, MAX_ID_BYTES);
       const targetRevision = integer(args.targetRevision, 0, 1, Number.MAX_SAFE_INTEGER);
       const binding = args.workspaceId
-        ? await workspaceBinding(repository, context, string(args.workspaceId, MAX_ID_BYTES))
-        : await standaloneBinding(settings, context, targetId);
-      if (binding.target.id !== targetId || binding.target.profileRevision !== targetRevision) {
+        ? await workspaceBinding(repository, cryptoHash, context, string(args.workspaceId, MAX_ID_BYTES))
+        : await standaloneBinding(settings, cryptoHash, context, targetId);
+      if (
+        binding.target.id !== targetId ||
+        binding.target.profileRevision !== targetRevision ||
+        binding.target.configurationHash !== string(args.targetConfigurationHash, 96)
+      ) {
         throw new Error('RESOURCE_CHANGED');
       }
       if (
@@ -440,7 +490,7 @@ export const createBrowserTools = (
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const normalized: JsonValue = {
         sessionId,
         maxNodes: integer(args.maxNodes, 1000, 1, 2000),
@@ -461,7 +511,7 @@ export const createBrowserTools = (
     execute: async (value, context) => {
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const snapshot = await gateway.snapshot(
         sessionId,
         {
@@ -502,7 +552,7 @@ export const createBrowserTools = (
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const normalized: JsonValue = {
         sessionId,
         maxBytes: integer(args.maxBytes, MAX_SCREENSHOT_BYTES, MIN_SCREENSHOT_BYTES, MAX_SCREENSHOT_BYTES),
@@ -523,7 +573,7 @@ export const createBrowserTools = (
       if (!artifacts) throw new Error('BROWSER_SCREENSHOT_ARTIFACT_STORE_UNAVAILABLE');
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const maxBytes = integer(args.maxBytes, MAX_SCREENSHOT_BYTES, MIN_SCREENSHOT_BYTES, MAX_SCREENSHOT_BYTES);
       const capture = await gateway.screenshot(sessionId, { maxBytes }, context.signal);
       if (
@@ -614,7 +664,7 @@ export const createBrowserTools = (
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const normalized: Record<string, JsonValue> = {
         sessionId,
         settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS),
@@ -640,7 +690,7 @@ export const createBrowserTools = (
     execute: async (value, context) => {
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const settleMs = integer(args.settleMs, 250, 0, MAX_SETTLE_MS);
       if (action === 'navigate') {
         const state = await gateway.navigate(sessionId, string(args.url, MAX_URL_BYTES), { settleMs }, context.signal);
@@ -685,7 +735,7 @@ export const createBrowserTools = (
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       return inspection(
         cryptoHash,
         context,
@@ -706,7 +756,7 @@ export const createBrowserTools = (
     execute: async (value, context) => {
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const state = await gateway.scroll(
         sessionId,
         {
@@ -752,7 +802,7 @@ export const createBrowserTools = (
       const hasSnapshot = args.snapshotId !== undefined;
       const hasNode = args.nodeRef !== undefined;
       if (hasSnapshot !== hasNode) throw new Error('TOOL_ARGUMENTS_INVALID');
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const modifiers =
         args.modifiers === undefined ? [] : stringArray(args.modifiers, { minItems: 0, maxItems: 4, maxBytes: 16 });
       if (modifiers.some((modifier) => !['Alt', 'Control', 'Meta', 'Shift'].includes(modifier))) {
@@ -783,7 +833,7 @@ export const createBrowserTools = (
     execute: async (value, context) => {
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const state = await gateway.press(
         sessionId,
         {
@@ -822,7 +872,7 @@ export const createBrowserTools = (
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       return inspection(
         cryptoHash,
         context,
@@ -838,7 +888,7 @@ export const createBrowserTools = (
     execute: async (value, context) => {
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const state = await gateway.back(
         sessionId,
         { settleMs: integer(args.settleMs, 250, 0, MAX_SETTLE_MS) },
@@ -876,7 +926,7 @@ export const createBrowserTools = (
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       return inspection(
         cryptoHash,
         context,
@@ -898,7 +948,7 @@ export const createBrowserTools = (
     execute: async (value, context) => {
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const state = await gateway.select(
         sessionId,
         string(args.snapshotId, MAX_ID_BYTES),
@@ -934,7 +984,7 @@ export const createBrowserTools = (
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
       const mode = string(args.mode, 32);
       if (mode !== 'timeout' && mode !== 'networkIdle') throw new Error('TOOL_ARGUMENTS_INVALID');
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       return inspection(
         cryptoHash,
         context,
@@ -950,7 +1000,7 @@ export const createBrowserTools = (
     execute: async (value, context) => {
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const mode = string(args.mode, 32);
       if (mode !== 'timeout' && mode !== 'networkIdle') throw new Error('TOOL_ARGUMENTS_INVALID');
       const state = await gateway.wait(
@@ -985,7 +1035,7 @@ export const createBrowserTools = (
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       return inspection(
         cryptoHash,
         context,
@@ -1006,7 +1056,7 @@ export const createBrowserTools = (
     execute: async (value, context) => {
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const view = await gateway.console(
         sessionId,
         {
@@ -1052,7 +1102,7 @@ export const createBrowserTools = (
       );
       if (!source || source.status !== 'ready' || !source.sha256) throw new Error('ARTIFACT_NOT_AUTHORIZED_FOR_RUN');
       if (source.sizeBytes > MAX_TRANSFER_BYTES) throw new Error('BROWSER_UPLOAD_TOO_LARGE');
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       return inspection(
         cryptoHash,
         context,
@@ -1077,7 +1127,7 @@ export const createBrowserTools = (
       if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const source = await artifactBytesForAgent(artifacts, context, string(args.artifactId, 36));
       if (
         source.sha256 !== string(args.sourceSha256, 128) ||
@@ -1132,7 +1182,7 @@ export const createBrowserTools = (
       if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
       const args = object(input);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       return inspection(
         cryptoHash,
         context,
@@ -1154,7 +1204,7 @@ export const createBrowserTools = (
       if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
       const args = object(value.normalizedArguments);
       const sessionId = string(args.sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       const downloaded = await gateway.download(
         sessionId,
         string(args.snapshotId, MAX_ID_BYTES),
@@ -1218,7 +1268,7 @@ export const createBrowserTools = (
     },
     inspect: async (input, context, policyRevision) => {
       const sessionId = string(object(input).sessionId, MAX_ID_BYTES);
-      const { binding } = await sessionBinding(repository, settings, gateway, context, sessionId);
+      const { binding } = await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       return inspection(
         cryptoHash,
         context,
@@ -1233,7 +1283,7 @@ export const createBrowserTools = (
     },
     execute: async (value, context) => {
       const sessionId = string(object(value.normalizedArguments).sessionId, MAX_ID_BYTES);
-      await sessionBinding(repository, settings, gateway, context, sessionId);
+      await sessionBinding(repository, settings, gateway, cryptoHash, context, sessionId);
       await gateway.close(sessionId);
       return result('Browser session closed.');
     },

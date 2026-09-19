@@ -511,7 +511,8 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
     const target = request.target;
     if (
       !target.endpoints.length ||
-      !target.allowedUrlPatterns.length
+      !target.allowedUrlPatterns.length ||
+      !/^v1:[0-9a-f]{64}$/.test(target.configurationHash)
     ) {
       throw new Error('BROWSER_TARGET_INVALID');
     }
@@ -1228,6 +1229,7 @@ export class BrowserRuntimeAdapter implements BrowserGatewayPort {
       sessionId,
       targetId: active.target.id,
       targetRevision: active.target.profileRevision,
+      targetConfigurationHash: active.target.configurationHash,
       workspaceId: active.request.workspaceId ?? null,
       generation: active.request.generation ?? null,
       url: active.page.url(),
