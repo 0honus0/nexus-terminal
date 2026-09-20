@@ -571,7 +571,7 @@ rl.on('line', (line) => {
   if (message?.id === 'permission-1' && message.method === undefined) {
     const outcome = message.result?.outcome;
     if (outcome?.outcome !== 'selected' || outcome.optionId !== 'reject') {
-      fail('ACP permission did not fail closed');
+      fail(`ACP permission did not fail closed: ${JSON.stringify(message)}`);
     }
     send({
       jsonrpc: '2.0',
