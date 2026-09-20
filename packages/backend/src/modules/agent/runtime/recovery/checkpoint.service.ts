@@ -29,13 +29,10 @@ const RECOVERY_CHECKPOINT_MIN_INTERVAL_SECONDS = 30;
 const clampBudget = (
   source: RunBudget,
   settings: Awaited<ReturnType<AgentSettingsService['get']>>,
-  model: { contextWindow: number; maxOutputTokens: number },
 ): RunBudget => {
   const hard = settings.hardLimits;
-  const maxContextTokens = Math.max(2, model.contextWindow);
   return {
-    maxContextTokens,
-    maxOutputTokens: Math.max(1, Math.min(model.maxOutputTokens, maxContextTokens - 1)),
+    contextPolicy: { ...source.contextPolicy },
     maxRunSteps: Math.min(source.maxRunSteps, hard.maxRunSteps),
     maxActiveExecutionSeconds: Math.min(source.maxActiveExecutionSeconds, hard.maxActiveExecutionSeconds),
     toolTimeoutSeconds: Math.min(source.toolTimeoutSeconds, hard.toolTimeoutSeconds),
@@ -620,7 +617,7 @@ export class CheckpointService {
     if (missingRequiredModelCapabilities(requirements, capabilities).length > 0) {
       throw new Error('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED');
     }
-    const budget = clampBudget(source.budget, settings, model);
+    const budget = clampBudget(source.budget, settings);
     const workspaceManifests =
       validation.checkpoint.snapshot.workspaceArtifactManifestRefs.length === 0
         ? []

@@ -768,8 +768,16 @@ export class ContextService {
       this.checkpoints && historyPressure && summaryCapacity >= 64
         ? Math.min(2_048, Math.floor(availableTokens * 0.2), summaryCapacity)
         : 0;
+    const mandatoryLedgerFloor = projectedTokens(heuristicUsedTokens + controlTokenReserve);
+    const newestLedgerGroup = ledgerGroups[0];
+    const newestLedgerCeiling = newestLedgerGroup
+      ? projectedTokens(heuristicUsedTokens + controlTokenReserve + newestLedgerGroup.tokens)
+      : mandatoryLedgerFloor;
+    const protectedNewestLedgerCeiling =
+      newestLedgerCeiling <= availableTokens ? newestLedgerCeiling : mandatoryLedgerFloor;
     const ledgerTokenCeiling = Math.max(
-      projectedTokens(heuristicUsedTokens + controlTokenReserve),
+      mandatoryLedgerFloor,
+      protectedNewestLedgerCeiling,
       availableTokens - threadAnchorTokenReserve - threadRecallTokenReserve - summaryTokenReserve,
     );
     const selectedLedgerGroups: CandidateGroup[] = [];

@@ -12878,7 +12878,7 @@ const modelAwareContextBudgetScenario: Scenario = async () => {
     runId: 'scenario-run',
     currentInput: 'Continue.',
     modelContextWindow: 8_192,
-    maxContextTokens: 7_000,
+    maxContextTokens: 2_300,
     softContextTokens: 900,
     reservedOutputTokens: 512,
     maxRecallItems: 1,
@@ -12927,7 +12927,7 @@ const modelAwareContextBudgetScenario: Scenario = async () => {
     }),
     entry(3, 'tool_result', {
       toolCallId: latestToolCallId,
-      text: 'latest tool result '.repeat(260),
+      text: 'latest tool result '.repeat(380),
     }),
   ]).compose({
     scope,
@@ -12943,9 +12943,10 @@ const modelAwareContextBudgetScenario: Scenario = async () => {
     maxRecallBytes: 1_024,
     tools: [],
   });
+  assert.equal(latestExchangePlan.compacted, true, 'latest causal exchange regression must exercise compaction');
   assert.ok(
     latestExchangePlan.messages.some((message) => message.role === 'tool' && message.toolCallId === latestToolCallId),
-    'soft-pressure compaction must retain the newest complete Tool exchange for the next inference',
+    'soft-pressure selection must retain the newest complete Tool exchange before reserving summary/recall space',
   );
 
   return [
