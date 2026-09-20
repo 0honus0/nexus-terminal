@@ -131,6 +131,8 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
       connectionId: number;
       connectionName: string;
       status: 'active' | 'disconnected';
+      ownershipState: 'available' | 'resuming' | 'attached';
+      attachedWorkspaceId?: string;
     };
     let suspended: SuspendedSession | undefined;
     for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
@@ -165,7 +167,13 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
     await waitForFilesystemReady(recoverySocket);
 
     const listAfter = await requestWorkspace<SuspendedSession[]>(recoverySocket, 'suspend.list');
-    expect(listAfter.some((session) => session.id === suspended!.id)).toBeFalsy();
+    expect(listAfter.find((session) => session.id === suspended!.id)).toMatchObject({
+      originalWorkspaceId: original.workspaceId,
+      connectionId,
+      status: 'active',
+      ownershipState: 'attached',
+      attachedWorkspaceId: resumedWorkspaceId,
+    });
 
     // Resume does not cancel the suspend mark. Closing the restored Workspace must hand
     // the same live shell back to the suspend service under the replacement workspace id.

@@ -17753,10 +17753,16 @@ const suspendedSessionOwnershipScenario: Scenario = async () => {
       true,
       'failed takeover preparation must rollback the same suspended resource',
     );
+    const afterTakeoverRollback = suspended.list(1).find((session) => session.suspendSessionId === suspendSessionId);
     assert.equal(
-      suspended.list(1).find((session) => session.suspendSessionId === suspendSessionId)?.ownershipState,
+      afterTakeoverRollback?.ownershipState,
       'available',
       'rollback must make the same resource recoverable again',
+    );
+    assert.equal(
+      afterTakeoverRollback?.originalSessionId,
+      'workspace-a',
+      'returning attached ownership must rebase recovery identity to the Workspace that handed the live shell back',
     );
 
     const preparedC = await suspended.prepareResume(1, suspendSessionId!, undefined, { ownerId: 'device-c' });

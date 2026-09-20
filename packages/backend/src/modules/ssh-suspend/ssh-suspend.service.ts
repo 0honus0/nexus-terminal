@@ -315,6 +315,7 @@ export class SshSuspendService {
     record.shellKind = ownership.shellKind;
     record.shellIntegrationReady = ownership.shellIntegrationReady;
     record.shellAtPrompt = ownership.shellAtPrompt;
+    record.originalSessionId = ownership.workspaceId;
     this.releaseToAvailable(id, record);
     if (!record.transport.isOpen || !record.shell.isOpen) {
       this.markDisconnected(id, record, 'SSH connection terminated while returning attached ownership.');
