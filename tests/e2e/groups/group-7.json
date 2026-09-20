@@ -3,7 +3,6 @@
   "group": 7,
   "workers": 8,
   "specs": [
-    "specs/auth/setup-login.spec.ts",
     "specs/http/auth-2fa.spec.ts",
     "specs/http/auth-api.spec.ts",
     "specs/http/backup.spec.ts",
@@ -20,6 +19,7 @@
     "specs/ui/protected-navigation.spec.ts",
     "specs/ui/ssh-key-management.spec.ts",
     "specs/websocket/authenticated-session.spec.ts",
-    "specs/ssh/progress-display-baseline.spec.ts"
+    "specs/ssh/progress-display-baseline.spec.ts",
+    "specs/ssh/suspend-resume.spec.ts"
   ]
 }

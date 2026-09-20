@@ -3,13 +3,12 @@
   "group": 8,
   "workers": 8,
   "specs": [
-    "specs/agent/host.spec.ts",
-    "specs/agent/preset-plugin.spec.ts",
-    "specs/agent/provider.spec.ts",
-    "specs/ssh/command-history-management.spec.ts",
-    "specs/ssh/quick-command-collapsible-search.spec.ts",
-    "specs/ssh/quick-command-management.spec.ts",
-    "specs/ssh/quick-command-tags-variables.spec.ts",
+    "specs/mobile/dashboard-mobile.spec.ts",
+    "specs/mobile/ssh-workspace.spec.ts",
+    "specs/mobile/suspend-resume-ui.spec.ts",
+    "specs/mobile/terminal-touch.spec.ts",
+    "specs/mobile/touch-advanced.spec.ts",
+    "specs/mobile/touch-workflows.spec.ts",
     "specs/ssh/progress-display-copy-cancel.spec.ts"
   ]
 }
