@@ -208,7 +208,16 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
       if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['method', 'params']))
         throw new Error('VALIDATION_FAILED');
       if (
-        !['host.appInfo', 'storage.get', 'storage.put', 'storage.delete'].includes(String(request.body.method)) ||
+        ![
+          'host.appInfo',
+          'storage.get',
+          'storage.put',
+          'storage.delete',
+          'intents.create',
+          'intents.listReceived',
+          'intents.revoke',
+          'intents.artifacts.get',
+        ].includes(String(request.body.method)) ||
         !Object.prototype.hasOwnProperty.call(request.body, 'params') ||
         !isJsonValue(request.body.params)
       ) {
@@ -218,7 +227,15 @@ export const createPluginRouter = (plugins: AgentPluginFacade, mutationSecurity:
         request,
         response,
         await plugins.frontendRpc(agentUserId(request), pathParam(request.params.appId), {
-          method: request.body.method as 'host.appInfo' | 'storage.get' | 'storage.put' | 'storage.delete',
+          method: request.body.method as
+            | 'host.appInfo'
+            | 'storage.get'
+            | 'storage.put'
+            | 'storage.delete'
+            | 'intents.create'
+            | 'intents.listReceived'
+            | 'intents.revoke'
+            | 'intents.artifacts.get',
           params: request.body.params,
         }),
       );

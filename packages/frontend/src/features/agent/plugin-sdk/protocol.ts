@@ -1,6 +1,8 @@
 import type {
   AgentApprovalBatch,
   AgentApprovalView,
+  AgentAppIntentArtifactView,
+  AgentAppIntentReceipt,
   AgentDefinitionView,
   AgentLedgerPage,
   AgentProviderView,
@@ -23,7 +25,13 @@ export const PLUGIN_FRONTEND_BACKEND_RPC_METHODS = [
   'storage.get',
   'storage.put',
   'storage.delete',
+  'intents.create',
+  'intents.listReceived',
+  'intents.revoke',
+  'intents.artifacts.get',
 ] as const;
+
+export const PLUGIN_FRONTEND_BINARY_RPC_METHODS = ['intents.artifacts.readRange'] as const;
 
 export const PLUGIN_FRONTEND_AGENT_RPC_METHODS = [
   'agent.definitions.list',
@@ -49,11 +57,15 @@ export const PLUGIN_FRONTEND_AGENT_RPC_METHODS = [
 export const PLUGIN_FRONTEND_RPC_METHODS = [
   ...PLUGIN_FRONTEND_BACKEND_RPC_METHODS,
   ...PLUGIN_FRONTEND_AGENT_RPC_METHODS,
+  ...PLUGIN_FRONTEND_BINARY_RPC_METHODS,
 ] as const;
 
 export type PluginFrontendBackendRpcMethod = (typeof PLUGIN_FRONTEND_BACKEND_RPC_METHODS)[number];
 export type PluginFrontendAgentRpcMethod = (typeof PLUGIN_FRONTEND_AGENT_RPC_METHODS)[number];
+export type PluginFrontendBinaryRpcMethod = (typeof PLUGIN_FRONTEND_BINARY_RPC_METHODS)[number];
 export type PluginFrontendRpcMethod = (typeof PLUGIN_FRONTEND_RPC_METHODS)[number];
+
+export const PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES = 128 * 1024;
 
 export interface PluginFrontendAppInfo {
   appId: string;
@@ -88,6 +100,21 @@ export interface PluginFrontendSdkV1 {
     get(key: string): Promise<PluginFrontendStorageRecord | null>;
     put(key: string, value: unknown, expectedVersion: number | null): Promise<PluginFrontendStorageRecord>;
     delete(key: string, expectedVersion: number): Promise<boolean>;
+  };
+  intents: {
+    create(input: {
+      receiverAppId: string;
+      intentId: string;
+      input: unknown;
+      artifactRefs?: Array<{ appId: string; id: string }>;
+      confirmed: true;
+    }): Promise<AgentAppIntentReceipt>;
+    listReceived(limit?: number): Promise<AgentAppIntentReceipt[]>;
+    revoke(receiptId: string): Promise<void>;
+    artifacts: {
+      get(receiptId: string, artifactId: string): Promise<AgentAppIntentArtifactView>;
+      readRange(receiptId: string, artifactId: string, start: number, endInclusive: number): Promise<ArrayBuffer>;
+    };
   };
   agent: {
     definitions: {

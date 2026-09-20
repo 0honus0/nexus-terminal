@@ -1,15 +1,18 @@
 import path from 'node:path';
 import readline from 'node:readline';
 import { pathToFileURL } from 'node:url';
-import type {
-  PluginBackendModuleV1,
-  PluginBackendSdkV1,
-  PluginBackendStorageRecord,
-  PLUGIN_BACKEND_PROTOCOL_VERSION as PluginBackendProtocolVersion,
+import {
+  type PluginBackendAppIntentArtifact,
+  type PluginBackendAppIntentReceipt,
+  type PluginBackendModuleV1,
+  type PluginBackendSdkV1,
+  type PluginBackendStorageRecord,
+  type PLUGIN_BACKEND_PROTOCOL_VERSION as PluginBackendProtocolVersion,
 } from '../../../modules/agent/host/plugin-sdk.types';
 import type { JsonValue } from '../../../modules/agent/agent.types';
 
 const PLUGIN_BACKEND_PROTOCOL_VERSION: typeof PluginBackendProtocolVersion = 1;
+const PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES = 128 * 1024;
 
 type HostLifecycleRequest =
   | { kind: 'lifecycle.activate'; requestId: number }
@@ -18,11 +21,13 @@ type HostLifecycleRequest =
   | { kind: 'lifecycle.dispose'; requestId: number }
   | { kind: 'lifecycle.migrate'; requestId: number; fromVersion: string | null; storage: unknown };
 
-type HostStorageResponse =
+type HostSdkResponse =
   | { kind: 'storage.result'; requestId: number; ok: true; value: unknown }
-  | { kind: 'storage.result'; requestId: number; ok: false; error: string };
+  | { kind: 'storage.result'; requestId: number; ok: false; error: string }
+  | { kind: 'intent.result'; requestId: number; ok: true; value: unknown }
+  | { kind: 'intent.result'; requestId: number; ok: false; error: string };
 
-type HostMessage = HostLifecycleRequest | HostStorageResponse;
+type HostMessage = HostLifecycleRequest | HostSdkResponse;
 
 type WorkerStorageRequest =
   | { kind: 'storage.get'; requestId: number; key: string }
@@ -33,6 +38,20 @@ type WorkerStorageRequestInput =
   | { kind: 'storage.get'; key: string }
   | { kind: 'storage.put'; key: string; value: JsonValue; expectedVersion: number | null }
   | { kind: 'storage.delete'; key: string; expectedVersion: number };
+
+type WorkerIntentRequestInput =
+  | {
+      kind: 'intent.create';
+      receiverAppId: string;
+      intentId: string;
+      input: JsonValue;
+      artifactRefs: Array<{ appId: string; id: string }>;
+      confirmed: true;
+    }
+  | { kind: 'intent.listReceived'; limit?: number }
+  | { kind: 'intent.revoke'; receiptId: string }
+  | { kind: 'intent.artifact.get'; receiptId: string; artifactId: string }
+  | { kind: 'intent.artifact.read'; receiptId: string; artifactId: string; start: number; endInclusive: number };
 
 const decodeHostMessage = (value: unknown): HostMessage => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
@@ -60,6 +79,7 @@ const decodeHostMessage = (value: unknown): HostMessage => {
         storage: record.storage,
       };
     case 'storage.result':
+    case 'intent.result':
       if (record.ok === true) return { kind: record.kind, requestId, ok: true, value: record.value };
       if (record.ok === false && typeof record.error === 'string' && record.error.length <= 1024) {
         return { kind: record.kind, requestId, ok: false, error: record.error };
@@ -106,11 +126,45 @@ const send = (message: unknown): void => {
 };
 let sdkRequestId = 0;
 const pendingStorage = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
+const pendingIntents = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
 
 const storageRequest = (request: WorkerStorageRequestInput): Promise<unknown> => {
   const requestId = ++sdkRequestId;
   send({ ...request, requestId });
   return new Promise((resolve, reject) => pendingStorage.set(requestId, { resolve, reject }));
+};
+
+const intentRequest = (request: WorkerIntentRequestInput): Promise<unknown> => {
+  const requestId = ++sdkRequestId;
+  send({ ...request, requestId });
+  return new Promise((resolve, reject) => pendingIntents.set(requestId, { resolve, reject }));
+};
+
+const intentReceipt = (value: unknown): PluginBackendAppIntentReceipt => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('PLUGIN_BACKEND_INTENT_RESPONSE_INVALID');
+  }
+  return value as PluginBackendAppIntentReceipt;
+};
+
+const intentArtifact = (value: unknown): PluginBackendAppIntentArtifact => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('PLUGIN_BACKEND_INTENT_RESPONSE_INVALID');
+  }
+  return value as PluginBackendAppIntentArtifact;
+};
+
+const intentArtifactBytes = (value: unknown): Uint8Array => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('PLUGIN_BACKEND_INTENT_RESPONSE_INVALID');
+  }
+  const dataBase64 = (value as Record<string, unknown>).dataBase64;
+  if (typeof dataBase64 !== 'string') throw new Error('PLUGIN_BACKEND_INTENT_RESPONSE_INVALID');
+  const bytes = Buffer.from(dataBase64, 'base64');
+  if (bytes.byteLength > PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES) {
+    throw new Error('PLUGIN_BACKEND_INTENT_RESPONSE_INVALID');
+  }
+  return bytes;
 };
 
 const storageRecord = (value: unknown): PluginBackendStorageRecord | null => {
@@ -141,6 +195,43 @@ const sdk: PluginBackendSdkV1 = Object.freeze({
     },
     delete: async (key: string, expectedVersion: number) =>
       Boolean(await storageRequest({ kind: 'storage.delete', key, expectedVersion })),
+  }),
+  intents: Object.freeze({
+    create: async (request: Parameters<PluginBackendSdkV1['intents']['create']>[0]) => {
+      const { receiverAppId, intentId, input, artifactRefs = [], confirmed } = request;
+      return intentReceipt(
+        await intentRequest({ kind: 'intent.create', receiverAppId, intentId, input, artifactRefs, confirmed }),
+      );
+    },
+    listReceived: async (limit?: number) => {
+      const result = await intentRequest({
+        kind: 'intent.listReceived',
+        ...(limit === undefined ? {} : { limit }),
+      });
+      if (!Array.isArray(result)) throw new Error('PLUGIN_BACKEND_INTENT_RESPONSE_INVALID');
+      return result.map(intentReceipt);
+    },
+    revoke: async (receiptId: string) => {
+      await intentRequest({ kind: 'intent.revoke', receiptId });
+    },
+    artifacts: Object.freeze({
+      get: async (receiptId: string, artifactId: string) =>
+        intentArtifact(await intentRequest({ kind: 'intent.artifact.get', receiptId, artifactId })),
+      readRange: async (receiptId: string, artifactId: string, start: number, endInclusive: number) => {
+        if (
+          !Number.isSafeInteger(start) ||
+          !Number.isSafeInteger(endInclusive) ||
+          start < 0 ||
+          endInclusive < start ||
+          endInclusive - start + 1 > PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES
+        ) {
+          throw new Error('PLUGIN_BACKEND_INTENT_RANGE_INVALID');
+        }
+        return intentArtifactBytes(
+          await intentRequest({ kind: 'intent.artifact.read', receiptId, artifactId, start, endInclusive }),
+        );
+      },
+    }),
   }),
 });
 const scope = Object.freeze({ userId, appId });
@@ -188,10 +279,10 @@ const startRuntime = async (): Promise<void> => {
       } catch {
         throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
       }
-      if (message.kind === 'storage.result') {
-        const pending = pendingStorage.get(message.requestId);
+      if (message.kind === 'storage.result' || message.kind === 'intent.result') {
+        const pending = (message.kind === 'storage.result' ? pendingStorage : pendingIntents).get(message.requestId);
         if (!pending) return;
-        pendingStorage.delete(message.requestId);
+        (message.kind === 'storage.result' ? pendingStorage : pendingIntents).delete(message.requestId);
         if (message.ok) pending.resolve(message.value);
         else pending.reject(new Error(message.error));
         return;

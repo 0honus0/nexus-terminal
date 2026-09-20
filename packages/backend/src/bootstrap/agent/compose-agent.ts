@@ -229,6 +229,7 @@ export const composeAgent = ({
     registry,
     appStates,
     capabilityBroker,
+    appIntents,
     artifactStore,
     settings,
     definitions,

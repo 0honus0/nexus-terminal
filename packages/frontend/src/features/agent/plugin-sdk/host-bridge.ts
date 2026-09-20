@@ -1,12 +1,15 @@
-import { agentApi, type PluginFrontendDescriptor } from '../api/agent-api';
+import { agentApi, toAgentApiError, type PluginFrontendDescriptor } from '../api/agent-api';
 import { PluginAgentSdkDispatcher } from './agent-dispatcher';
 import {
   PLUGIN_FRONTEND_AGENT_RPC_METHODS,
   PLUGIN_FRONTEND_BACKEND_RPC_METHODS,
+  PLUGIN_FRONTEND_BINARY_RPC_METHODS,
   PLUGIN_FRONTEND_PROTOCOL_VERSION,
   PLUGIN_FRONTEND_RPC_METHODS,
+  PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES,
   type PluginFrontendAgentRpcMethod,
   type PluginFrontendBackendRpcMethod,
+  type PluginFrontendBinaryRpcMethod,
   type PluginFrontendRpcMethod,
   type PluginFrontendRunEvent,
 } from './protocol';
@@ -17,6 +20,7 @@ const textEncoder = new TextEncoder();
 const allowedMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_RPC_METHODS);
 const backendMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_BACKEND_RPC_METHODS);
 const agentMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_AGENT_RPC_METHODS);
+const binaryMethods = new Set<PluginFrontendRpcMethod>(PLUGIN_FRONTEND_BINARY_RPC_METHODS);
 
 interface PluginReadyMessage {
   type: 'nexus.plugin.ready';
@@ -52,6 +56,12 @@ const serializedBytes = (value: unknown): number => {
     return Number.POSITIVE_INFINITY;
   }
 };
+
+const transferBytes = (transfer: readonly Transferable[]): number =>
+  transfer.reduce<number>((total, value) => total + (value instanceof ArrayBuffer ? value.byteLength : 0), 0);
+
+const hasOnlyKeys = (record: Record<string, unknown>, allowed: readonly string[]): boolean =>
+  Object.keys(record).every((key) => allowed.includes(key));
 
 const nonce = (): string => {
   const bytes = new Uint8Array(24);
@@ -200,6 +210,7 @@ export class PluginFrontendHostBridge {
     const timer = window.setTimeout(() => controller.abort(), this.descriptor.requestTimeoutMs);
     try {
       let result: unknown;
+      let transfer: Transferable[] = [];
       if (backendMethods.has(request.method)) {
         result = await agentApi.pluginFrontendRpc(
           this.appId,
@@ -209,6 +220,14 @@ export class PluginFrontendHostBridge {
         );
       } else if (agentMethods.has(request.method)) {
         result = await this.agent.dispatch(request.method as PluginFrontendAgentRpcMethod, request.params);
+      } else if (binaryMethods.has(request.method)) {
+        const binary = await this.dispatchBinary(
+          request.method as PluginFrontendBinaryRpcMethod,
+          request.params,
+          controller.signal,
+        );
+        result = binary.result;
+        transfer = binary.transfer;
       } else {
         throw new Error('PLUGIN_FRONTEND_RPC_METHOD_DENIED');
       }
@@ -225,22 +244,64 @@ export class PluginFrontendHostBridge {
         ok: true,
         result,
       };
-      if (serializedBytes(response) > this.descriptor.maxMessageBytes) {
+      if (serializedBytes(response) + transferBytes(transfer) > this.descriptor.maxMessageBytes) {
         this.post(errorResponse(request, 'HOST_RPC_RESPONSE_TOO_LARGE'));
       } else {
-        this.post(response);
+        this.post(response, transfer);
       }
     } catch (cause) {
+      const apiError = toAgentApiError(cause);
       const code = controller.signal.aborted
         ? 'HOST_RPC_TIMEOUT'
         : cause instanceof Error && /^PLUGIN_[A-Z0-9_]+$/.test(cause.message)
           ? cause.message
-          : 'HOST_RPC_FAILED';
+          : /^APP_INTENT_[A-Z0-9_]+$/.test(apiError.code)
+            ? apiError.code
+            : 'HOST_RPC_FAILED';
       this.post(errorResponse(request, code));
     } finally {
       window.clearTimeout(timer);
       this.pending.delete(request.id);
     }
+  }
+
+  private async dispatchBinary(
+    method: PluginFrontendBinaryRpcMethod,
+    params: unknown,
+    signal: AbortSignal,
+  ): Promise<{ result: ArrayBuffer; transfer: Transferable[] }> {
+    if (method !== 'intents.artifacts.readRange' || !isRecord(params)) {
+      throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
+    }
+    if (!hasOnlyKeys(params, ['receiptId', 'artifactId', 'start', 'endInclusive'])) {
+      throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
+    }
+    if (
+      typeof params.receiptId !== 'string' ||
+      typeof params.artifactId !== 'string' ||
+      !Number.isSafeInteger(params.start) ||
+      !Number.isSafeInteger(params.endInclusive)
+    ) {
+      throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
+    }
+    const start = Number(params.start);
+    const endInclusive = Number(params.endInclusive);
+    const expectedBytes = endInclusive - start + 1;
+    if (start < 0 || endInclusive < start || expectedBytes > PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES) {
+      throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
+    }
+    const content = await agentApi.readReceivedAppIntentArtifactRange(
+      this.appId,
+      params.receiptId,
+      params.artifactId,
+      start,
+      endInclusive,
+      signal,
+    );
+    if (content.byteLength !== expectedBytes || content.byteLength > PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES) {
+      throw new Error('APP_INTENT_ARTIFACT_RANGE_INVALID');
+    }
+    return { result: content, transfer: [content] };
   }
 
   private postRunEvent(event: PluginFrontendRunEvent): void {
@@ -253,9 +314,13 @@ export class PluginFrontendHostBridge {
     });
   }
 
-  private post(message: unknown): void {
-    if (!this.closed && this.port && serializedBytes(message) <= this.descriptor.maxMessageBytes) {
-      this.port.postMessage(message);
+  private post(message: unknown, transfer: Transferable[] = []): void {
+    if (
+      !this.closed &&
+      this.port &&
+      serializedBytes(message) + transferBytes(transfer) <= this.descriptor.maxMessageBytes
+    ) {
+      this.port.postMessage(message, transfer);
     }
   }
 

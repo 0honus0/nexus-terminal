@@ -11,6 +11,16 @@ const serializedBytes = (value) => {
   }
 };
 
+const transferredBytes = (value, seen = new Set(), depth = 0) => {
+  if (depth > 32 || value === null || value === undefined) return 0;
+  if (value instanceof ArrayBuffer) return value.byteLength;
+  if (ArrayBuffer.isView(value)) return value.byteLength;
+  if (typeof value !== 'object' || seen.has(value)) return 0;
+  seen.add(value);
+  if (Array.isArray(value)) return value.reduce((total, item) => total + transferredBytes(item, seen, depth + 1), 0);
+  return Object.values(value).reduce((total, item) => total + transferredBytes(item, seen, depth + 1), 0);
+};
+
 const randomId = () => crypto.randomUUID();
 
 const connect = () =>
@@ -79,7 +89,11 @@ const createSdk = ({ port, nonce }) => {
 
   const onMessage = (event) => {
     const message = event.data;
-    if (!message || typeof message !== 'object' || serializedBytes(message) > MAX_MESSAGE_BYTES) {
+    if (
+      !message ||
+      typeof message !== 'object' ||
+      serializedBytes(message) + transferredBytes(message) > MAX_MESSAGE_BYTES
+    ) {
       failAll('NEXUS_PLUGIN_PROTOCOL_INVALID');
       return;
     }
@@ -136,6 +150,19 @@ const createSdk = ({ port, nonce }) => {
       get: (key) => request('storage.get', { key }),
       put: (key, value, expectedVersion = null) => request('storage.put', { key, value, expectedVersion }),
       delete: (key, expectedVersion) => request('storage.delete', { key, expectedVersion }),
+    }),
+    intents: Object.freeze({
+      create: ({ receiverAppId, intentId, input, artifactRefs = [], confirmed }) =>
+        request('intents.create', { receiverAppId, intentId, input, artifactRefs, confirmed }),
+      listReceived: (limit) => request('intents.listReceived', limit === undefined ? {} : { limit }),
+      revoke: async (receiptId) => {
+        await request('intents.revoke', { receiptId });
+      },
+      artifacts: Object.freeze({
+        get: (receiptId, artifactId) => request('intents.artifacts.get', { receiptId, artifactId }),
+        readRange: (receiptId, artifactId, start, endInclusive) =>
+          request('intents.artifacts.readRange', { receiptId, artifactId, start, endInclusive }),
+      }),
     }),
     agent: Object.freeze({
       definitions: Object.freeze({ list: () => request('agent.definitions.list') }),

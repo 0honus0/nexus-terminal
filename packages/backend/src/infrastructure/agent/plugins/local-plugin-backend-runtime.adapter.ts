@@ -5,13 +5,17 @@ import readline from 'node:readline';
 import type { JsonValue, Scope } from '../../../modules/agent/agent.types';
 import type { AppStoragePort } from '../../../modules/agent/host/app-storage.port';
 import type { AppStorageSnapshot } from '../../../modules/agent/host/app-storage-snapshot.port';
+import type { AppIntentService } from '../../../modules/agent/host/app-intent.service';
 import type {
   PluginBackendRuntimeHealth,
   PluginBackendRuntimePort,
   PluginBackendRuntimeReconcileTarget,
 } from '../../../modules/agent/host/plugin-backend-runtime.port';
 import type { PluginVersionRecord } from '../../../modules/agent/host/plugin-install.repository.port';
-import type { PLUGIN_BACKEND_PROTOCOL_VERSION as PluginBackendProtocolVersion } from '../../../modules/agent/host/plugin-sdk.types';
+import {
+  PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES,
+  type PLUGIN_BACKEND_PROTOCOL_VERSION as PluginBackendProtocolVersion,
+} from '../../../modules/agent/host/plugin-sdk.types';
 
 const MAX_PROTOCOL_BYTES = 20 * 1024 * 1024;
 const CONTROL_TIMEOUT_MS = 30_000;
@@ -22,6 +26,28 @@ type StorageRequest =
   | { kind: 'storage.get'; requestId: number; key: string }
   | { kind: 'storage.put'; requestId: number; key: string; value: unknown; expectedVersion: number | null }
   | { kind: 'storage.delete'; requestId: number; key: string; expectedVersion: number };
+
+type IntentRequest =
+  | {
+      kind: 'intent.create';
+      requestId: number;
+      receiverAppId: string;
+      intentId: string;
+      input: JsonValue;
+      artifactRefs: Array<{ appId: string; id: string }>;
+      confirmed: true;
+    }
+  | { kind: 'intent.listReceived'; requestId: number; limit?: number }
+  | { kind: 'intent.revoke'; requestId: number; receiptId: string }
+  | { kind: 'intent.artifact.get'; requestId: number; receiptId: string; artifactId: string }
+  | {
+      kind: 'intent.artifact.read';
+      requestId: number;
+      receiptId: string;
+      artifactId: string;
+      start: number;
+      endInclusive: number;
+    };
 
 type LifecycleResult =
   | { kind: 'lifecycle.result'; requestId: number; ok: true; value: unknown }
@@ -63,6 +89,11 @@ const protocolJsonValue = (value: unknown, depth = 0): JsonValue => {
   return Object.fromEntries(entries.map(([key, item]) => [key, protocolJsonValue(item, depth + 1)]));
 };
 
+const requireProtocolKeys = (record: ProtocolRecord, allowed: readonly string[]): void => {
+  const keys = new Set(['kind', 'requestId', ...allowed]);
+  if (Object.keys(record).some((key) => !keys.has(key))) throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+};
+
 const decodeLifecycleResult = (record: ProtocolRecord): LifecycleResult => {
   const requestId = protocolRequestId(record.requestId);
   if (record.ok === true) return { kind: 'lifecycle.result', requestId, ok: true, value: record.value };
@@ -79,7 +110,10 @@ const decodeStorageRequest = (record: ProtocolRecord): StorageRequest => {
     case 'storage.get':
       return { kind: record.kind, requestId, key };
     case 'storage.put':
-      if (record.expectedVersion !== null && (!Number.isSafeInteger(record.expectedVersion) || Number(record.expectedVersion) < 1))
+      if (
+        record.expectedVersion !== null &&
+        (!Number.isSafeInteger(record.expectedVersion) || Number(record.expectedVersion) < 1)
+      )
         throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
       return {
         kind: record.kind,
@@ -95,6 +129,81 @@ const decodeStorageRequest = (record: ProtocolRecord): StorageRequest => {
         key,
         expectedVersion: protocolRequestId(record.expectedVersion),
       };
+    default:
+      throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+  }
+};
+
+const decodeIntentRequest = (record: ProtocolRecord): IntentRequest => {
+  const requestId = protocolRequestId(record.requestId);
+  switch (record.kind) {
+    case 'intent.create': {
+      requireProtocolKeys(record, ['receiverAppId', 'intentId', 'input', 'artifactRefs', 'confirmed']);
+      if (record.confirmed !== true || !Array.isArray(record.artifactRefs) || record.artifactRefs.length > 16) {
+        throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+      }
+      const artifactRefs = record.artifactRefs.map((value) => {
+        const ref = protocolRecord(value);
+        if (Object.keys(ref).some((key) => !['appId', 'id'].includes(key))) {
+          throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+        }
+        return { appId: protocolString(ref.appId, 256), id: protocolString(ref.id, 256) };
+      });
+      return {
+        kind: record.kind,
+        requestId,
+        receiverAppId: protocolString(record.receiverAppId, 256),
+        intentId: protocolString(record.intentId, 256),
+        input: protocolJsonValue(record.input),
+        artifactRefs,
+        confirmed: true,
+      };
+    }
+    case 'intent.listReceived': {
+      requireProtocolKeys(record, ['limit']);
+      if (
+        record.limit !== undefined &&
+        (!Number.isSafeInteger(record.limit) || Number(record.limit) < 1 || Number(record.limit) > 100)
+      ) {
+        throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+      }
+      return {
+        kind: record.kind,
+        requestId,
+        ...(record.limit === undefined ? {} : { limit: Number(record.limit) }),
+      };
+    }
+    case 'intent.revoke':
+      requireProtocolKeys(record, ['receiptId']);
+      return { kind: record.kind, requestId, receiptId: protocolString(record.receiptId, 128) };
+    case 'intent.artifact.get':
+      requireProtocolKeys(record, ['receiptId', 'artifactId']);
+      return {
+        kind: record.kind,
+        requestId,
+        receiptId: protocolString(record.receiptId, 128),
+        artifactId: protocolString(record.artifactId, 256),
+      };
+    case 'intent.artifact.read': {
+      requireProtocolKeys(record, ['receiptId', 'artifactId', 'start', 'endInclusive']);
+      if (
+        !Number.isSafeInteger(record.start) ||
+        !Number.isSafeInteger(record.endInclusive) ||
+        Number(record.start) < 0 ||
+        Number(record.endInclusive) < Number(record.start) ||
+        Number(record.endInclusive) - Number(record.start) + 1 > PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES
+      ) {
+        throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
+      }
+      return {
+        kind: record.kind,
+        requestId,
+        receiptId: protocolString(record.receiptId, 128),
+        artifactId: protocolString(record.artifactId, 256),
+        start: Number(record.start),
+        endInclusive: Number(record.endInclusive),
+      };
+    }
     default:
       throw new Error('PLUGIN_BACKEND_PROTOCOL_INVALID');
   }
@@ -117,6 +226,7 @@ class BackendPluginProcess {
     private readonly child: ChildProcessWithoutNullStreams,
     private readonly scope: Scope,
     private readonly storage: AppStoragePort,
+    private readonly appIntents: AppIntentService,
     private readonly sdkVersion: string,
   ) {
     const lines = readline.createInterface({ input: child.stdout, crlfDelay: Infinity });
@@ -194,6 +304,16 @@ class BackendPluginProcess {
       await this.handleStorage(decodeStorageRequest(message));
       return;
     }
+    if (
+      message.kind === 'intent.create' ||
+      message.kind === 'intent.listReceived' ||
+      message.kind === 'intent.revoke' ||
+      message.kind === 'intent.artifact.get' ||
+      message.kind === 'intent.artifact.read'
+    ) {
+      await this.handleIntent(decodeIntentRequest(message));
+      return;
+    }
     this.failAll(new Error('PLUGIN_BACKEND_PROTOCOL_INVALID'));
     this.child.kill('SIGKILL');
   }
@@ -241,6 +361,65 @@ class BackendPluginProcess {
     this.child.stdin.write(`${encoded}\n`);
   }
 
+  private async handleIntent(message: IntentRequest): Promise<void> {
+    try {
+      let value: unknown;
+      switch (message.kind) {
+        case 'intent.create':
+          value = await this.appIntents.createConfirmed(this.scope, {
+            receiverAppId: message.receiverAppId,
+            intentId: message.intentId,
+            input: message.input,
+            artifactRefs: message.artifactRefs,
+            confirmed: true,
+          });
+          break;
+        case 'intent.listReceived':
+          value = await this.appIntents.listReceived(this.scope, message.limit);
+          break;
+        case 'intent.revoke':
+          await this.appIntents.revoke(this.scope, message.receiptId);
+          value = { revoked: true };
+          break;
+        case 'intent.artifact.get':
+          value = await this.appIntents.getReceivedArtifact(this.scope, message.receiptId, message.artifactId);
+          break;
+        case 'intent.artifact.read': {
+          const chunks: Buffer[] = [];
+          let total = 0;
+          const expectedBytes = message.endInclusive - message.start + 1;
+          const read = await this.appIntents.readReceivedArtifact(this.scope, message.receiptId, message.artifactId, {
+            start: message.start,
+            endInclusive: message.endInclusive,
+          });
+          for await (const chunk of read.source) {
+            const bytes = Buffer.from(chunk);
+            total += bytes.byteLength;
+            if (total > expectedBytes || total > PLUGIN_APP_INTENT_ARTIFACT_CHUNK_BYTES) {
+              throw new Error('APP_INTENT_ARTIFACT_RANGE_INVALID');
+            }
+            chunks.push(bytes);
+          }
+          if (total !== expectedBytes) throw new Error('APP_INTENT_ARTIFACT_RANGE_INVALID');
+          value = { dataBase64: Buffer.concat(chunks, total).toString('base64') };
+          break;
+        }
+      }
+      this.sendIntentResult(message.requestId, true, value);
+    } catch (error) {
+      this.sendIntentResult(message.requestId, false, error instanceof Error ? error.message : 'APP_INTENT_FAILED');
+    }
+  }
+
+  private sendIntentResult(requestId: number, ok: boolean, value: unknown): void {
+    const message = ok
+      ? { kind: 'intent.result', requestId, ok: true, value }
+      : { kind: 'intent.result', requestId, ok: false, error: String(value).slice(0, 1024) };
+    const encoded = JSON.stringify(message);
+    if (Buffer.byteLength(encoded, 'utf8') > MAX_PROTOCOL_BYTES) throw new Error('PLUGIN_BACKEND_RESPONSE_TOO_LARGE');
+    this.child.stdin.write(`${encoded}\n`);
+  }
+
   private failAll(error: Error): void {
     this.readyReject(error);
     for (const pending of this.pending.values()) {
@@ -257,6 +436,7 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
   constructor(
     private readonly dataDirectory: string,
     private readonly storage: AppStoragePort,
+    private readonly appIntents: AppIntentService,
   ) {}
 
   async reconcileUser(userId: number, targets: readonly PluginBackendRuntimeReconcileTarget[]): Promise<void> {
@@ -380,6 +560,7 @@ export class LocalPluginBackendRuntimeAdapter implements PluginBackendRuntimePor
       child,
       { userId: scope.userId, appId: plugin.appId },
       this.storage,
+      this.appIntents,
       plugin.manifest.sdkVersion,
     );
   }

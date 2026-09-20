@@ -139,6 +139,29 @@ export interface PluginFrontendDescriptor {
   requestTimeoutMs: 15_000;
 }
 
+export interface AgentAppIntentReceipt {
+  id: string;
+  userId: number;
+  senderAppId: string;
+  receiverAppId: string;
+  intentId: string;
+  schemaVersion: number;
+  input: unknown;
+  artifactIds: string[];
+  createdAt: number;
+  expiresAt: number;
+  revokedAt: number | null;
+}
+
+export interface AgentAppIntentArtifactView {
+  id: string;
+  appId: string;
+  originalName: string;
+  mediaType: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
 export type {
   AgentWorkspaceView,
   PluginRunnerTargetView,
@@ -1200,9 +1223,84 @@ export const agentApi = {
       ).data,
     );
   },
+  async createAppIntent(
+    appId: string,
+    input: {
+      receiverAppId: string;
+      intentId: string;
+      input: unknown;
+      artifactRefs: Array<{ appId: string; id: string }>;
+      confirmed: true;
+    },
+  ): Promise<AgentAppIntentReceipt> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentAppIntentReceipt>>(
+          `/agent/apps/${encodeURIComponent(appId)}/plugin-intents`,
+          input,
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async listReceivedAppIntents(appId: string, limit?: number): Promise<AgentAppIntentReceipt[]> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<AgentAppIntentReceipt[]>>(
+          `/agent/apps/${encodeURIComponent(appId)}/plugin-intents`,
+          limit === undefined ? undefined : { params: { limit } },
+        )
+      ).data,
+    );
+  },
+  async revokeAppIntent(appId: string, receiptId: string): Promise<void> {
+    await httpClient.delete(
+      `/agent/apps/${encodeURIComponent(appId)}/plugin-intents/${encodeURIComponent(receiptId)}`,
+      { headers: await mutationHeaders() },
+    );
+  },
+  async getReceivedAppIntentArtifact(
+    appId: string,
+    receiptId: string,
+    artifactId: string,
+  ): Promise<AgentAppIntentArtifactView> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<AgentAppIntentArtifactView>>(
+          `/agent/apps/${encodeURIComponent(appId)}/plugin-intents/${encodeURIComponent(receiptId)}/artifacts/${encodeURIComponent(artifactId)}`,
+        )
+      ).data,
+    );
+  },
+  async readReceivedAppIntentArtifactRange(
+    appId: string,
+    receiptId: string,
+    artifactId: string,
+    start: number,
+    endInclusive: number,
+    signal?: AbortSignal,
+  ): Promise<ArrayBuffer> {
+    const response = await httpClient.get<ArrayBuffer>(
+      `/agent/apps/${encodeURIComponent(appId)}/plugin-intents/${encodeURIComponent(receiptId)}/artifacts/${encodeURIComponent(artifactId)}/content`,
+      {
+        headers: { Range: `bytes=${start}-${endInclusive}` },
+        responseType: 'arraybuffer',
+        signal,
+      },
+    );
+    return response.data;
+  },
   async pluginFrontendRpc(
     appId: string,
-    method: 'host.appInfo' | 'storage.get' | 'storage.put' | 'storage.delete',
+    method:
+      | 'host.appInfo'
+      | 'storage.get'
+      | 'storage.put'
+      | 'storage.delete'
+      | 'intents.create'
+      | 'intents.listReceived'
+      | 'intents.revoke'
+      | 'intents.artifacts.get',
     params: unknown,
     signal?: AbortSignal,
   ): Promise<unknown> {

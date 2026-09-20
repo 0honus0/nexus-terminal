@@ -6,6 +6,7 @@ import { AppRegistryService } from './app-registry.service';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
 import type { AppStoragePort, AppStorageRecord } from './app-storage.port';
 import type { AppCapabilityBroker } from './app-capability-broker';
+import type { AppIntentService } from './app-intent.service';
 import type { AppStorageSnapshotPort } from './app-storage-snapshot.port';
 import type { AgentAppDefinition, AppRecord, AppStatePatch, AppView } from './app.types';
 import type { PackageVerifierPort, VerifiedPluginPackage } from './package-verifier.port';
@@ -48,6 +49,22 @@ const requireStorageKey = (value: JsonValue | undefined): string => {
     throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
   }
   return value;
+};
+
+const requireRpcString = (value: JsonValue | undefined, maxBytes = 256): string => {
+  if (typeof value !== 'string' || value.length < 1 || Buffer.byteLength(value, 'utf8') > maxBytes) {
+    throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
+  }
+  return value;
+};
+
+const requireIntentArtifactRefs = (value: JsonValue | undefined): Array<{ appId: string; id: string }> => {
+  if (!Array.isArray(value) || value.length > 16) throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
+  return value.map((candidate) => {
+    const record = asRecord(candidate);
+    requireOnlyKeys(record, ['appId', 'id']);
+    return { appId: requireRpcString(record.appId), id: requireRpcString(record.id) };
+  });
 };
 
 const storageRecordJson = (record: AppStorageRecord | null): JsonValue =>
@@ -107,7 +124,15 @@ export interface PluginFrontendDescriptor {
 }
 
 export interface PluginFrontendRpcRequest {
-  method: 'host.appInfo' | 'storage.get' | 'storage.put' | 'storage.delete';
+  method:
+    | 'host.appInfo'
+    | 'storage.get'
+    | 'storage.put'
+    | 'storage.delete'
+    | 'intents.create'
+    | 'intents.listReceived'
+    | 'intents.revoke'
+    | 'intents.artifacts.get';
   params: JsonValue;
 }
 
@@ -132,6 +157,7 @@ export class PluginInstallService {
     private readonly states: AppStateRepositoryPort,
     private readonly storage: AppStoragePort & AppStorageSnapshotPort,
     private readonly capabilities: AppCapabilityBroker,
+    private readonly appIntents: AppIntentService,
     private readonly runtime: PluginBackendRuntimePort,
     private readonly clock: ClockPort,
     private readonly nexusVersion: string,
@@ -638,6 +664,44 @@ export class PluginInstallService {
         return {
           deleted: await this.storage.delete(scope, requireStorageKey(params.key), params.expectedVersion as number),
         };
+      }
+      case 'intents.create': {
+        const params = asRecord(request.params);
+        requireOnlyKeys(params, ['receiverAppId', 'intentId', 'input', 'artifactRefs', 'confirmed']);
+        if (!Object.prototype.hasOwnProperty.call(params, 'input') || params.confirmed !== true) {
+          throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
+        }
+        return (await this.appIntents.createConfirmed(scope, {
+          receiverAppId: requireRpcString(params.receiverAppId),
+          intentId: requireRpcString(params.intentId),
+          input: params.input as JsonValue,
+          artifactRefs: requireIntentArtifactRefs(params.artifactRefs),
+          confirmed: true,
+        })) as unknown as JsonValue;
+      }
+      case 'intents.listReceived': {
+        const params = asRecord(request.params);
+        requireOnlyKeys(params, ['limit']);
+        const limit = params.limit;
+        if (limit !== undefined && (!Number.isSafeInteger(limit) || (limit as number) < 1 || (limit as number) > 100)) {
+          throw new Error('PLUGIN_FRONTEND_RPC_INVALID');
+        }
+        return (await this.appIntents.listReceived(scope, limit as number | undefined)) as unknown as JsonValue;
+      }
+      case 'intents.revoke': {
+        const params = asRecord(request.params);
+        requireOnlyKeys(params, ['receiptId']);
+        await this.appIntents.revoke(scope, requireRpcString(params.receiptId, 128));
+        return { revoked: true };
+      }
+      case 'intents.artifacts.get': {
+        const params = asRecord(request.params);
+        requireOnlyKeys(params, ['receiptId', 'artifactId']);
+        return (await this.appIntents.getReceivedArtifact(
+          scope,
+          requireRpcString(params.receiptId, 128),
+          requireRpcString(params.artifactId),
+        )) as unknown as JsonValue;
       }
       default:
         throw new Error('PLUGIN_FRONTEND_RPC_METHOD_DENIED');

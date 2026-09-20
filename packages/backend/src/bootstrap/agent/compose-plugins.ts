@@ -10,6 +10,7 @@ import type { RelationalDatabase } from '../../platform/storage/relational-datab
 import type { ClockPort } from '../../modules/agent/agent.types';
 import type { AgentSettingsService } from '../../modules/agent/host/agent-settings.service';
 import type { AppCapabilityBroker } from '../../modules/agent/host/app-capability-broker';
+import type { AppIntentService } from '../../modules/agent/host/app-intent.service';
 import type { AppRegistryService } from '../../modules/agent/host/app-registry.service';
 import type { AppStoragePort } from '../../modules/agent/host/app-storage.port';
 import { PluginInstallService } from '../../modules/agent/host/plugin-install.service';
@@ -23,6 +24,7 @@ export interface ComposePluginsOptions {
   registry: AppRegistryService;
   appStates: SqliteAppStateRepository;
   capabilityBroker: AppCapabilityBroker;
+  appIntents: AppIntentService;
   artifactStore: LocalArtifactStore;
   settings: AgentSettingsService;
   definitions: AgentDefinitionRegistry;
@@ -43,6 +45,7 @@ export const composePlugins = ({
   registry,
   appStates,
   capabilityBroker,
+  appIntents,
   artifactStore,
   settings,
   definitions,
@@ -67,7 +70,7 @@ export const composePlugins = ({
       return appStorage.delete(scope, key, expectedVersion);
     },
   };
-  const pluginBackendRuntime = new LocalPluginBackendRuntimeAdapter(dataDirectory, pluginSdkStorage);
+  const pluginBackendRuntime = new LocalPluginBackendRuntimeAdapter(dataDirectory, pluginSdkStorage, appIntents);
   const pluginRepository = new SqlitePluginInstallRepository(database);
   const plugins = new PluginInstallService(
     pluginRepository,
@@ -79,6 +82,7 @@ export const composePlugins = ({
     appStates,
     appStorage,
     capabilityBroker,
+    appIntents,
     pluginBackendRuntime,
     clock,
     nexusVersion,

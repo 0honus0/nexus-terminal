@@ -22,10 +22,14 @@ import { AgentNotificationBridge } from '../../src/bootstrap/agent/agent-notific
 import { createAgentConnectionResolver } from '../../src/bootstrap/agent/machine-support';
 import { registerWorkspaceToolContributions } from '../../src/bootstrap/agent/tool-contributions';
 import { LocalArtifactStore } from '../../src/infrastructure/agent/artifacts/local-artifact-store';
+import { AppIntentArtifactAdapter } from '../../src/infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { decodePersistedAppManifest } from '../../src/infrastructure/agent/plugins/persisted-app-manifest-decoder';
 import { AgentMutationLeaseGuardAdapter } from '../../src/infrastructure/agent/capabilities/agent-mutation-lease-guard.adapter';
 import { SqliteLeaseRepository } from '../../src/infrastructure/agent/repositories/sqlite-lease.repository';
 import { SqliteAgentSettingsRepository } from '../../src/infrastructure/agent/repositories/sqlite-agent-settings.repository';
+import { SqliteAppGrantRepository } from '../../src/infrastructure/agent/repositories/sqlite-app-grant.repository';
+import { SqliteAppIntentRepository } from '../../src/infrastructure/agent/repositories/sqlite-app-intent.repository';
+import { SqliteAppStateRepository } from '../../src/infrastructure/agent/repositories/sqlite-app-state.repository';
 import { SqliteConversationRepository } from '../../src/infrastructure/agent/repositories/sqlite-conversation.repository';
 import { SqliteContextCheckpointRepository } from '../../src/infrastructure/agent/repositories/sqlite-context-checkpoint.repository';
 import { SqliteModelContinuationRepository } from '../../src/infrastructure/agent/repositories/sqlite-model-continuation.repository';
@@ -92,6 +96,8 @@ import type { AgentWorkspaceRepositoryPort } from '../../src/modules/agent/works
 import type { WorkspaceRuntimeService } from '../../src/modules/agent/workspace-runtime/workspace-runtime.service';
 import type { WorkspaceRuntimeGatewayPort } from '../../src/modules/agent/workspace-runtime/workspace-runtime-gateway.port';
 import type { AppCapabilityBroker } from '../../src/modules/agent/host/app-capability-broker';
+import { AppIntentService } from '../../src/modules/agent/host/app-intent.service';
+import { AppRegistryService } from '../../src/modules/agent/host/app-registry.service';
 import { AgentSettingsService } from '../../src/modules/agent/host/agent-settings.service';
 import { AgentExecutionPolicyService } from '../../src/modules/agent/host/agent-execution-policy.service';
 import { TOOL_APPROVAL_TTL_SECONDS } from '../../src/modules/agent/runtime/approvals/approval-policy';
@@ -16437,6 +16443,272 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
   ];
 };
 
+const pluginAppIntentSdkScenario: Scenario = async () => {
+  const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
+    ? path.join(process.cwd(), 'src')
+    : path.join(process.cwd(), 'packages', 'backend', 'src');
+  const frontendSourceRoot = path.resolve(backendSourceRoot, '../../frontend/src');
+  const readSource = (root: string, relative: string): string => fs.readFileSync(path.join(root, relative), 'utf8');
+
+  const frontendProtocol = readSource(frontendSourceRoot, 'features/agent/plugin-sdk/protocol.ts');
+  const frontendHostBridge = readSource(frontendSourceRoot, 'features/agent/plugin-sdk/host-bridge.ts');
+  const frontendSdk = readSource(backendSourceRoot, 'infrastructure/agent/plugins/frontend-sdk/frontend-v1.mjs');
+  const backendSdkTypes = readSource(backendSourceRoot, 'modules/agent/host/plugin-sdk.types.ts');
+  const backendWorker = readSource(backendSourceRoot, 'infrastructure/agent/plugins/plugin-backend-runtime.worker.ts');
+  const backendAdapter = readSource(
+    backendSourceRoot,
+    'infrastructure/agent/plugins/local-plugin-backend-runtime.adapter.ts',
+  );
+  const staticServer = readSource(backendSourceRoot, 'infrastructure/agent/plugins/plugin-frontend-static-server.ts');
+
+  for (const method of [
+    'intents.create',
+    'intents.listReceived',
+    'intents.revoke',
+    'intents.artifacts.get',
+    'intents.artifacts.readRange',
+  ]) {
+    assert.ok(
+      frontendProtocol.includes(`'${method}'`),
+      `Plugin Frontend HostBridge must whitelist ${method} instead of requiring sandbox network access`,
+    );
+  }
+  assert.match(frontendSdk, /\bintents:\s*Object\.freeze\(/, 'Plugin Frontend SDK must expose AppIntent APIs');
+  assert.match(backendSdkTypes, /\bintents:\s*\{/, 'Plugin Backend SDK type must expose AppIntent APIs');
+  assert.match(backendWorker, /intent\.create/, 'Plugin Backend worker must proxy AppIntent create through Host IPC');
+  assert.match(backendAdapter, /intent\.create/, 'Host worker adapter must receive AppIntent SDK requests');
+  assert.match(staticServer, /connect-src 'none'/, 'Plugin iframe CSP must remain network-isolated');
+  assert.doesNotMatch(
+    frontendSdk,
+    /dataBase64|contentBase64/,
+    'Plugin Frontend AppIntent Artifact reads must not encode large content into postMessage JSON',
+  );
+  assert.match(
+    frontendHostBridge,
+    /content\.byteLength !== expectedBytes[\s\S]*APP_INTENT_ARTIFACT_RANGE_INVALID[\s\S]*transfer: \[content\]/,
+    'Plugin Frontend HostBridge must verify the exact Artifact range length before transferring bytes to the sandbox',
+  );
+
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-plugin-app-intent-sdk-'));
+  const db = new DatabaseAdapter({
+    dataDirectory: directory,
+    filename: 'plugin-app-intent-sdk.sqlite',
+    nodeEnv: 'test',
+  });
+  const limits: ArtifactLimitPolicyPort = {
+    forUser: async () => ({
+      maxSingleArtifactBytes: 1024 * 1024,
+      maxGlobalArtifactBytes: 8 * 1024 * 1024,
+      unretainedArtifactTtlSeconds: 60 * 60,
+      minFreeDiskBytes: 0,
+    }),
+  };
+  const store = new LocalArtifactStore(db, limits, { dataDirectory: directory, uploadTtlSeconds: 60 });
+  const artifacts = new ArtifactService(store);
+  const registry = new AppRegistryService();
+  const states = new SqliteAppStateRepository(db);
+  const grants = new SqliteAppGrantRepository(db);
+  const intentRepository = new SqliteAppIntentRepository(db);
+  let intentNow = Math.floor(Date.now() / 1000);
+  const intentClock: ClockPort = { nowUnixSeconds: () => intentNow };
+  const intents = new AppIntentService(
+    intentRepository,
+    registry,
+    states,
+    grants,
+    new AppIntentArtifactAdapter(store),
+    intentClock,
+  );
+  const sender: Scope = { userId: 1, appId: 'fixture.sender' };
+  const receiver: Scope = { userId: 1, appId: 'fixture.receiver' };
+  const receiverIntent = 'fixture.receive';
+  const manifest = (id: string, declaredIntents: Array<{ id: string; schemaVersion: number }>) =>
+    validateManifest(
+      {
+        schemaVersion: 1,
+        id,
+        version: '1.0.0',
+        displayName: id,
+        sdkVersion: '1.0.0',
+        nexus: { minVersion: '1.0.0', maxVersion: '99.0.0' },
+        capabilities: ['artifacts.read'],
+        intents: declaredIntents,
+      },
+      { nexusVersion: '1.0.0', supportedSdkMajor: 1 },
+    );
+  const source = (bytes: Buffer): AsyncIterable<Uint8Array> =>
+    (async function* () {
+      yield bytes;
+    })();
+  const writeArtifact = async (name: string, bytes: Buffer) => {
+    const reservation = await artifacts.begin(sender, {
+      name,
+      mediaType: 'application/octet-stream',
+      declaredBytes: bytes.byteLength,
+    });
+    return artifacts.write(sender, reservation.artifactId, source(bytes), new AbortController().signal);
+  };
+  const readAll = async (stream: AsyncIterable<Uint8Array>): Promise<Buffer> => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+    return Buffer.concat(chunks);
+  };
+  const grant = {
+    capability: 'artifacts.read' as const,
+    schemaVersion: 1,
+    scope: {} as JsonValue,
+    grantedAt: intentNow,
+  };
+
+  try {
+    await db.initialize();
+    await db.execute(
+      "INSERT INTO users (id, username, hashed_password) VALUES (1, 'plugin-app-intent-sdk-user', 'not-used')",
+    );
+    registry.registerVersion({
+      manifest: manifest(sender.appId, []),
+      defaultEnabled: true,
+      defaultGrants: [],
+    });
+    registry.registerVersion({
+      manifest: manifest(receiver.appId, [{ id: receiverIntent, schemaVersion: 1 }]),
+      defaultEnabled: true,
+      defaultGrants: [],
+    });
+    for (const scope of [sender, receiver]) {
+      await states.insertDefault({
+        userId: scope.userId,
+        appId: scope.appId,
+        activeVersion: '1.0.0',
+        desiredState: 'enabled',
+        observedState: 'running',
+        healthReason: null,
+        policyRevision: 1,
+        runningCount: 0,
+        approvalCount: 0,
+        budgetRequestCount: 0,
+        acceptNewRuns: true,
+        version: 1,
+        createdAt: intentNow,
+        updatedAt: intentNow,
+      });
+      await grants.insertDefaults(scope, [grant]);
+    }
+
+    const primaryBytes = Buffer.from('plugin-app-intent-range');
+    const primaryArtifact = await writeArtifact('primary.bin', primaryBytes);
+    await assert.rejects(
+      () =>
+        intents.createConfirmed(sender, {
+          receiverAppId: receiver.appId,
+          intentId: 'fixture.undeclared',
+          input: { kind: 'undeclared' },
+          artifactRefs: [],
+          confirmed: true,
+        }),
+      /APP_INTENT_UNDECLARED/,
+      'Plugin AppIntent must reject an intent not declared by the receiver manifest',
+    );
+
+    await db.execute('DELETE FROM agent_app_grants WHERE user_id = ? AND app_id = ?', [
+      receiver.userId,
+      receiver.appId,
+    ]);
+    await assert.rejects(
+      () =>
+        intents.createConfirmed(sender, {
+          receiverAppId: receiver.appId,
+          intentId: receiverIntent,
+          input: { kind: 'missing-grant' },
+          artifactRefs: [{ appId: sender.appId, id: primaryArtifact.id }],
+          confirmed: true,
+        }),
+      /APP_INTENT_RECEIVER_GRANT_DENIED/,
+      'Plugin AppIntent Artifact transfer must reject a receiver without artifacts.read grant',
+    );
+    await grants.insertDefaults(receiver, [grant]);
+
+    const receipt = await intents.createConfirmed(sender, {
+      receiverAppId: receiver.appId,
+      intentId: receiverIntent,
+      input: { kind: 'bounded', label: 'fixture' },
+      artifactRefs: [{ appId: sender.appId, id: primaryArtifact.id }],
+      confirmed: true,
+    });
+    const received = await intents.listReceived(receiver);
+    assert.ok(
+      received.some((candidate) => candidate.id === receipt.id),
+      'Receiver Plugin must list its AppIntent receipt',
+    );
+    const metadata = await intents.getReceivedArtifact(receiver, receipt.id, primaryArtifact.id);
+    assert.equal(metadata.id, primaryArtifact.id);
+    assert.equal(metadata.sizeBytes, primaryBytes.byteLength);
+    const range = await intents.readReceivedArtifact(receiver, receipt.id, primaryArtifact.id, {
+      start: 7,
+      endInclusive: 16,
+    });
+    assert.equal((await readAll(range.source)).toString('utf8'), primaryBytes.subarray(7, 17).toString('utf8'));
+
+    await intents.revoke(sender, receipt.id);
+    await assert.rejects(
+      () => intents.getReceivedArtifact(receiver, receipt.id, primaryArtifact.id),
+      /APP_INTENT_NOT_FOUND/,
+      'Revoked AppIntent receipts must stop granting Artifact access',
+    );
+
+    const ttlArtifact = await writeArtifact('ttl.bin', Buffer.from('ttl'));
+    const ttlReceipt = await intents.createConfirmed(sender, {
+      receiverAppId: receiver.appId,
+      intentId: receiverIntent,
+      input: { kind: 'ttl' },
+      artifactRefs: [{ appId: sender.appId, id: ttlArtifact.id }],
+      confirmed: true,
+    });
+    const expiredArtifact = await writeArtifact('expired.bin', Buffer.from('expired'));
+    const expiredArtifactReceipt = await intents.createConfirmed(sender, {
+      receiverAppId: receiver.appId,
+      intentId: receiverIntent,
+      input: { kind: 'artifact-expired' },
+      artifactRefs: [{ appId: sender.appId, id: expiredArtifact.id }],
+      confirmed: true,
+    });
+    await db.execute("UPDATE ai_artifacts SET status = 'deleted', expires_at = ?, deleted_at = ? WHERE id = ?", [
+      intentNow - 1,
+      intentNow,
+      expiredArtifact.id,
+    ]);
+    await assert.rejects(
+      () => intents.getReceivedArtifact(receiver, expiredArtifactReceipt.id, expiredArtifact.id),
+      /APP_INTENT_ARTIFACT_NOT_FOUND/,
+      'An expired or swept source Artifact must not stay readable through an AppIntent receipt',
+    );
+
+    intentNow += 601;
+    assert.ok(
+      !(await intents.listReceived(receiver)).some((candidate) => candidate.id === ttlReceipt.id),
+      'Expired AppIntent receipts must disappear from receiver listing',
+    );
+    await assert.rejects(
+      () => intents.getReceivedArtifact(receiver, ttlReceipt.id, ttlArtifact.id),
+      /APP_INTENT_NOT_FOUND/,
+      'Expired AppIntent receipts must stop granting Artifact access',
+    );
+
+    return [
+      { name: 'plugin_frontend_app_intent_methods', value: 5, unit: 'methods' },
+      { name: 'plugin_backend_app_intent_methods', value: 5, unit: 'methods' },
+      { name: 'plugin_app_intent_authority_roundtrips', value: 1, unit: 'cases' },
+      { name: 'plugin_app_intent_authority_rejections', value: 5, unit: 'cases' },
+      { name: 'plugin_iframe_network_connect_sources', value: 0, unit: 'origins' },
+      { name: 'plugin_frontend_artifact_json_encodings', value: 0, unit: 'encodings' },
+      { name: 'plugin_frontend_artifact_exact_range_checks', value: 1, unit: 'checks' },
+    ];
+  } finally {
+    await db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
 const artifactSingleDeleteProductScenario: Scenario = async () => {
   const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
     ? path.join(process.cwd(), 'src')
@@ -18668,6 +18940,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/cumulative-token-ceiling-removed', cumulativeTokenCeilingRemovedScenario],
   ['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],
   ['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],
+  ['runtime/plugin-app-intent-sdk', pluginAppIntentSdkScenario],
   ['workspace/suspended-session-ownership', suspendedSessionOwnershipScenario],
   ['browser/target-scoped-revision', browserTargetScopedRevisionScenario],
   ['browser/interaction-primitives', browserInteractionPrimitivesScenario],
