@@ -170,7 +170,8 @@ test('Agent settings surface exposes the production control plane and captures f
   const defaultModel = providersSection.getByRole('button', { name: 'Default model for new runs', exact: true });
   await expect(defaultModel).toBeEnabled();
   await defaultModel.click();
-  const defaultOption = providersSection.getByRole('button', {
+  const defaultDropdown = defaultModel.locator('xpath=..');
+  const defaultOption = defaultDropdown.getByRole('button', {
     name: 'e2e-model · Settings UI Provider',
     exact: true,
   });

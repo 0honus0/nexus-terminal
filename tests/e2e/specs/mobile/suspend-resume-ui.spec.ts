@@ -15,6 +15,8 @@ type SuspendedSession = {
   connectionName: string;
   customName?: string;
   status: 'active' | 'disconnected';
+  ownershipState: 'available' | 'resuming' | 'attached';
+  attachedWorkspaceId?: string;
 };
 
 async function suspendedSessions(request: Parameters<typeof loginAsInitialAdmin>[0]): Promise<SuspendedSession[]> {
@@ -259,11 +261,32 @@ test('mobile resume replaces an immediately suspended tab without exposing a tem
     await hanging.getByRole('button', { name: 'Resume', exact: true }).click();
 
     await expect.poll(() => tabBar.locator('[data-session-id]').count(), { timeout: 30_000 }).toBe(1);
+    const resumedSessionId =
+      (await tabBar
+        .locator('[data-session-id]')
+        .filter({ hasText: 'E2E SSH' })
+        .first()
+        .getAttribute('data-session-id')) ?? '';
+    expect(resumedSessionId).not.toBe('');
     await expect
-      .poll(async () => (await suspendedSessions(context.request)).some((session) => session.id === suspended!.id), {
-        timeout: 30_000,
-      })
-      .toBeFalsy();
+      .poll(
+        async () => {
+          const record = (await suspendedSessions(context.request)).find((session) => session.id === suspended!.id);
+          return record
+            ? {
+                status: record.status,
+                ownershipState: record.ownershipState,
+                attachedWorkspaceId: record.attachedWorkspaceId,
+              }
+            : null;
+        },
+        { timeout: 30_000 },
+      )
+      .toEqual({
+        status: 'active',
+        ownershipState: 'attached',
+        attachedWorkspaceId: resumedSessionId,
+      });
 
     const maxTabs = await page.evaluate(() => {
       return (window as typeof window & { __suspendTabState?: { maxTabs: number } }).__suspendTabState?.maxTabs ?? 0;

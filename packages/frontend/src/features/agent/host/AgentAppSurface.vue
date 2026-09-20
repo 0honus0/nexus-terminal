@@ -2620,7 +2620,7 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .agent-thread-sidebar {
+    :deep(.agent-thread-sidebar) {
       position: absolute;
       inset: 0 auto 0 0;
       z-index: 30;
@@ -2631,12 +2631,12 @@
       transition: transform 160ms ease;
     }
 
-    .agent-thread-sidebar.is-open {
+    :deep(.agent-thread-sidebar.is-open) {
       visibility: visible;
       transform: translateX(0);
     }
 
-    .agent-thread-backdrop.is-open {
+    :deep(.agent-thread-backdrop.is-open) {
       display: block;
     }
 
@@ -2694,22 +2694,22 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .agent-thread-sidebar {
+    :deep(.agent-thread-sidebar) {
       transition: none;
     }
   }
 
-  .agent-thread-sidebar ::-webkit-scrollbar {
+  :deep(.agent-thread-sidebar) ::-webkit-scrollbar {
     width: 4px;
   }
-  .agent-thread-sidebar ::-webkit-scrollbar-track {
+  :deep(.agent-thread-sidebar) ::-webkit-scrollbar-track {
     background: transparent;
   }
-  .agent-thread-sidebar ::-webkit-scrollbar-thumb {
+  :deep(.agent-thread-sidebar) ::-webkit-scrollbar-thumb {
     background: var(--border-color);
     border-radius: 9999px;
   }
-  .agent-thread-sidebar ::-webkit-scrollbar-thumb:hover {
+  :deep(.agent-thread-sidebar) ::-webkit-scrollbar-thumb:hover {
     background: var(--text-color-secondary);
   }
 </style>
