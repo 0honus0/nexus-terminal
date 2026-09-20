@@ -119,6 +119,7 @@ export const createConversationCommandExecutor = (dependencies: ConversationComm
       } else if (command.kind === 'goal.set') {
         const updated = await dependencies.setGoal(current, command.text);
         dependencies.adoptRun(updated);
+        await dependencies.refreshBackgroundRuns();
         dependencies.setResult({
           title: t('agent.conversation.commands.goalTitle'),
           lines: [
@@ -127,7 +128,6 @@ export const createConversationCommandExecutor = (dependencies: ConversationComm
           ],
           tone: 'info',
         });
-        await dependencies.refreshBackgroundRuns();
       } else if (command.kind === 'plan.show') {
         const latest = await dependencies.getRunSnapshot(current.id);
         dependencies.adoptRun(latest);
@@ -209,6 +209,7 @@ export const createConversationCommandExecutor = (dependencies: ConversationComm
         );
         dependencies.adoptRun(updated);
         const refreshed = await dependencies.pendingInputs(current.id);
+        await dependencies.refreshBackgroundRuns();
         dependencies.setResult({
           title: t('agent.conversation.commands.queueTitle'),
           lines: [
@@ -222,7 +223,6 @@ export const createConversationCommandExecutor = (dependencies: ConversationComm
           ],
           tone: 'info',
         });
-        await dependencies.refreshBackgroundRuns();
       } else if (command.kind === 'interrupt') {
         if (!dependencies.isActiveRun(current)) {
           setError(t('agent.conversation.commands.requiresActiveRun'));
