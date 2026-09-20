@@ -1,6 +1,7 @@
 import { logger } from '../../shared/logging/logger';
 import type { JsonValue, Scope } from '../../modules/agent/agent.types';
 import type { ConversationRepositoryPort } from '../../modules/agent/ai/conversation.repository.port';
+import type { MemoryView } from '../../modules/agent/ai/memory.repository.port';
 import type { RunEvent, RunView } from '../../modules/agent/runtime/runs/run.types';
 import type { NotificationEvent } from '../../modules/notifications/notification.types';
 
@@ -191,6 +192,29 @@ export class AgentNotificationBridge {
           appId: run.appId,
         },
         'Agent lifecycle notification projection failed',
+      );
+    }
+  }
+
+  async projectMemoryCandidate(memory: MemoryView, provenance: { runId: string; runtimeId: string }): Promise<void> {
+    if (memory.status !== 'candidate') return;
+    const projectionId = `memory:${memory.id}:v${memory.version}`;
+    if (this.seenEventIds.has(projectionId)) return;
+    this.remember(projectionId);
+    try {
+      await this.notifications.publish('AGENT_ATTENTION_REQUIRED', {
+        attentionKind: 'memory_review',
+        appId: memory.appId.slice(0, 256),
+        memoryId: memory.id.slice(0, 128),
+        status: 'candidate',
+        confidence: memory.confidence,
+        ...(memory.expiresAt === null ? {} : { expiresAt: memory.expiresAt }),
+        runId: provenance.runId.slice(0, 128),
+      });
+    } catch (error) {
+      logger.warn(
+        { err: error, appId: memory.appId, memoryId: memory.id, runId: provenance.runId },
+        'Agent Memory review notification projection failed',
       );
     }
   }

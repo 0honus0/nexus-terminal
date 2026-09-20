@@ -27,6 +27,10 @@
     window.dispatchEvent(new CustomEvent('nexus:agent:authorization-changed', { detail: payload }));
   };
 
+  const dispatchMemoryChanged = (payload: Record<string, unknown>): void => {
+    window.dispatchEvent(new CustomEvent('nexus:agent:memory-changed', { detail: payload }));
+  };
+
   const chooseDefaultApp = (next: HostSummaryView): void => {
     const enabled = next.apps.filter((app) => app.enabled);
     if (enabled.length === 0) {
@@ -113,6 +117,9 @@
       }
       if (event.type === 'host.changed' && event.sourceType === 'authorization.changed') {
         dispatchAuthorizationChanged(event.payload);
+      }
+      if (event.type === 'host.changed' && event.sourceType === 'memory.changed') {
+        dispatchMemoryChanged(event.payload);
       }
       await refresh('host-event');
       if (activeUserId !== null) {
@@ -216,6 +223,14 @@
           ? (message.payload as Record<string, unknown>)
           : {},
       );
+    }
+    if (
+      message.sourceType === 'memory.changed' &&
+      message.payload &&
+      typeof message.payload === 'object' &&
+      !Array.isArray(message.payload)
+    ) {
+      dispatchMemoryChanged(message.payload as Record<string, unknown>);
     }
     void refresh('host-event');
   };

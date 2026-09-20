@@ -24,6 +24,7 @@
   import BudgetContextSettings from './BudgetContextSettings.vue';
   import BrowserRuntimeSettings from './BrowserRuntimeSettings.vue';
   import McpIntegrationSettings from './McpIntegrationSettings.vue';
+  import MemorySettings from './MemorySettings.vue';
   import WorkspaceRuntimeSettings from './WorkspaceRuntimeSettings.vue';
   import HardLimitsSettings from './HardLimitsSettings.vue';
   import ModelProviderSettings from './ModelProviderSettings.vue';
@@ -643,6 +644,9 @@
           >
             <!-- Agent App 与能力授权 -->
             <AppManagementSettings :apps="apps" :busy="busy" @toggle="toggleApp" @refresh="load" />
+
+            <!-- Durable Memory 审核、发布、撤销与跨 App 导入 -->
+            <MemorySettings :apps="apps" :busy="busy" />
 
             <!-- 插件市场与签名包管理 -->
             <PluginManagementSettings

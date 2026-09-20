@@ -7,6 +7,7 @@ import type {
   MemoryView,
 } from '../../../modules/agent/ai/memory.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
+import { appendHostEvent } from '../events/host-event-outbox';
 import { parseDurableJsonValue } from '../runtime/durable-state-decoders';
 
 interface MemoryRow {
@@ -105,27 +106,40 @@ export class SqliteMemoryRepository implements MemoryRepositoryPort {
     proposedByRuntimeId: string | null;
     now: number;
   }): Promise<MemoryView> {
-    await this.db.execute(
-      `INSERT INTO ai_memories
-        (id, user_id, app_id, content, source_refs_json, confidence, status, expires_at,
-         proposed_by_runtime_id, review_action, reviewed_at, version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'candidate', ?, ?, NULL, NULL, 1, ?, ?)`,
-      [
-        record.id,
+    return this.db.transaction(async (tx) => {
+      await tx.execute(
+        `INSERT INTO ai_memories
+          (id, user_id, app_id, content, source_refs_json, confidence, status, expires_at,
+           proposed_by_runtime_id, review_action, reviewed_at, version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'candidate', ?, ?, NULL, NULL, 1, ?, ?)`,
+        [
+          record.id,
+          record.scope.userId,
+          record.scope.appId,
+          record.content,
+          JSON.stringify(record.sourceRefs),
+          record.confidence,
+          record.expiresAt,
+          record.proposedByRuntimeId,
+          record.now,
+          record.now,
+        ],
+      );
+      const created = await tx.queryOne<MemoryRow>(
+        `SELECT ${MEMORY_COLUMNS} FROM ai_memories WHERE id = ? AND user_id = ? AND app_id = ?`,
+        [record.id, record.scope.userId, record.scope.appId],
+      );
+      if (!created) throw new Error('MEMORY_NOT_FOUND');
+      const memory = mapMemory(created);
+      await appendHostEvent(
+        tx,
         record.scope.userId,
-        record.scope.appId,
-        record.content,
-        JSON.stringify(record.sourceRefs),
-        record.confidence,
-        record.expiresAt,
-        record.proposedByRuntimeId,
+        'memory.changed',
+        { appId: record.scope.appId, memoryId: record.id, status: memory.status, action: 'proposed' },
         record.now,
-        record.now,
-      ],
-    );
-    const created = await this.get(record.scope, record.id);
-    if (!created) throw new Error('MEMORY_NOT_FOUND');
-    return created;
+      );
+      return memory;
+    });
   }
 
   async importPublished(record: {
@@ -137,27 +151,40 @@ export class SqliteMemoryRepository implements MemoryRepositoryPort {
     expiresAt: number | null;
     now: number;
   }): Promise<MemoryView> {
-    await this.db.execute(
-      `INSERT INTO ai_memories
-        (id, user_id, app_id, content, source_refs_json, confidence, status, expires_at,
-         proposed_by_runtime_id, review_action, reviewed_at, version, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, 'published', ?, NULL, 'publish', ?, 1, ?, ?)`,
-      [
-        record.id,
+    return this.db.transaction(async (tx) => {
+      await tx.execute(
+        `INSERT INTO ai_memories
+          (id, user_id, app_id, content, source_refs_json, confidence, status, expires_at,
+           proposed_by_runtime_id, review_action, reviewed_at, version, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'published', ?, NULL, 'publish', ?, 1, ?, ?)`,
+        [
+          record.id,
+          record.scope.userId,
+          record.scope.appId,
+          record.content,
+          JSON.stringify(record.sourceRefs),
+          record.confidence,
+          record.expiresAt,
+          record.now,
+          record.now,
+          record.now,
+        ],
+      );
+      const created = await tx.queryOne<MemoryRow>(
+        `SELECT ${MEMORY_COLUMNS} FROM ai_memories WHERE id = ? AND user_id = ? AND app_id = ?`,
+        [record.id, record.scope.userId, record.scope.appId],
+      );
+      if (!created) throw new Error('MEMORY_NOT_FOUND');
+      const memory = mapMemory(created);
+      await appendHostEvent(
+        tx,
         record.scope.userId,
-        record.scope.appId,
-        record.content,
-        JSON.stringify(record.sourceRefs),
-        record.confidence,
-        record.expiresAt,
+        'memory.changed',
+        { appId: record.scope.appId, memoryId: record.id, status: memory.status, action: 'imported' },
         record.now,
-        record.now,
-        record.now,
-      ],
-    );
-    const created = await this.get(record.scope, record.id);
-    if (!created) throw new Error('MEMORY_NOT_FOUND');
-    return created;
+      );
+      return memory;
+    });
   }
 
   async review(record: {
@@ -205,7 +232,15 @@ export class SqliteMemoryRepository implements MemoryRepositoryPort {
         [record.id, record.scope.userId, record.scope.appId],
       );
       if (!result) throw new Error('MEMORY_NOT_FOUND');
-      return mapMemory(result);
+      const memory = mapMemory(result);
+      await appendHostEvent(
+        tx,
+        record.scope.userId,
+        'memory.changed',
+        { appId: record.scope.appId, memoryId: record.id, status: memory.status, action: record.decision },
+        record.now,
+      );
+      return memory;
     });
   }
 
@@ -228,22 +263,22 @@ export class SqliteMemoryRepository implements MemoryRepositoryPort {
     );
   }
 
-  async getImportConfirmation(scope: Scope, confirmationId: string): Promise<MemoryImportConfirmation | null> {
-    const row = await this.db.queryOne<ConfirmationRow>(
-      `SELECT id, user_id, source_app_id, source_memory_id, target_app_id, source_version,
-              snapshot_json, created_at, expires_at
-       FROM agent_memory_import_confirmations
-       WHERE id = ? AND user_id = ? AND target_app_id = ?`,
-      [confirmationId, scope.userId, scope.appId],
-    );
-    return row ? mapConfirmation(row) : null;
-  }
-
-  async deleteImportConfirmation(scope: Scope, confirmationId: string): Promise<void> {
-    await this.db.execute(
-      'DELETE FROM agent_memory_import_confirmations WHERE id = ? AND user_id = ? AND target_app_id = ?',
-      [confirmationId, scope.userId, scope.appId],
-    );
+  async takeImportConfirmation(scope: Scope, confirmationId: string): Promise<MemoryImportConfirmation | null> {
+    return this.db.transaction(async (tx) => {
+      const row = await tx.queryOne<ConfirmationRow>(
+        `SELECT id, user_id, source_app_id, source_memory_id, target_app_id, source_version,
+                snapshot_json, created_at, expires_at
+         FROM agent_memory_import_confirmations
+         WHERE id = ? AND user_id = ? AND target_app_id = ?`,
+        [confirmationId, scope.userId, scope.appId],
+      );
+      if (!row) return null;
+      const deleted = await tx.execute(
+        'DELETE FROM agent_memory_import_confirmations WHERE id = ? AND user_id = ? AND target_app_id = ?',
+        [confirmationId, scope.userId, scope.appId],
+      );
+      return deleted.changes === 1 ? mapConfirmation(row) : null;
+    });
   }
 
   async deleteExpiredImportConfirmations(now: number): Promise<number> {

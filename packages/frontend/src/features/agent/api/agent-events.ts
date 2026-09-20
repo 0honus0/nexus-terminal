@@ -148,6 +148,7 @@ const HOST_EVENT_TYPES = [
   'app.changed',
   'authorization.changed',
   'thread.changed',
+  'memory.changed',
 ] as const;
 type AgentHostEventType = (typeof HOST_EVENT_TYPES)[number];
 const hostEventTypes = new Set<string>(HOST_EVENT_TYPES);

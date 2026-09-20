@@ -162,6 +162,38 @@ export interface AgentAppIntentArtifactView {
   sha256: string;
 }
 
+export type AgentMemoryStatus = 'candidate' | 'published' | 'revoked';
+export type AgentMemoryReviewAction = 'publish' | 'reject' | 'revoke';
+
+export interface AgentMemoryView {
+  id: string;
+  userId: number;
+  appId: string;
+  content: string;
+  sourceRefs: unknown;
+  confidence: number;
+  status: AgentMemoryStatus;
+  expiresAt: number | null;
+  proposedByRuntimeId: string | null;
+  reviewAction: AgentMemoryReviewAction | null;
+  reviewedAt: number | null;
+  version: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface AgentMemoryImportConfirmation {
+  id: string;
+  userId: number;
+  appId: string;
+  sourceAppId: string;
+  sourceMemoryId: string;
+  sourceVersion: number;
+  snapshot: unknown;
+  createdAt: number;
+  expiresAt: number;
+}
+
 export type {
   AgentWorkspaceView,
   PluginRunnerTargetView,
@@ -1708,6 +1740,61 @@ export const agentApi = {
         await httpClient.patch<AgentEnvelope<AgentSubagentSettingsView>>(
           `/apps/${encodeURIComponent(appId)}/subagent-settings`,
           { profiles, expectedVersion },
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async memories(appId: string, status: AgentMemoryStatus | 'all' = 'all', limit = 100): Promise<AgentMemoryView[]> {
+    return unwrap(
+      (
+        await httpClient.get<AgentEnvelope<AgentMemoryView[]>>(`/apps/${encodeURIComponent(appId)}/memories`, {
+          params: { status, limit },
+        })
+      ).data,
+    );
+  },
+  async reviewMemory(
+    appId: string,
+    memory: AgentMemoryView,
+    decision: AgentMemoryReviewAction,
+    content?: string,
+  ): Promise<AgentMemoryView> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentMemoryView>>(
+          `/apps/${encodeURIComponent(appId)}/memories/${encodeURIComponent(memory.id)}/review`,
+          {
+            decision,
+            expectedVersion: memory.version,
+            ...(content === undefined ? {} : { content }),
+          },
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async previewMemoryImport(
+    appId: string,
+    sourceAppId: string,
+    sourceMemoryId: string,
+  ): Promise<AgentMemoryImportConfirmation> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentMemoryImportConfirmation>>(
+          `/apps/${encodeURIComponent(appId)}/memories/imports/preview`,
+          { sourceAppId, sourceMemoryId },
+          { headers: await mutationHeaders() },
+        )
+      ).data,
+    );
+  },
+  async confirmMemoryImport(appId: string, confirmationId: string): Promise<AgentMemoryView> {
+    return unwrap(
+      (
+        await httpClient.post<AgentEnvelope<AgentMemoryView>>(
+          `/apps/${encodeURIComponent(appId)}/memories/imports/${encodeURIComponent(confirmationId)}/confirm`,
+          {},
           { headers: await mutationHeaders() },
         )
       ).data,

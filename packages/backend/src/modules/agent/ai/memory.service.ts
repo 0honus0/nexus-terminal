@@ -39,6 +39,18 @@ interface ParsedProposal {
   expiresAt: number | null;
 }
 
+export interface MemoryServiceHooks {
+  memoryChanged(
+    memory: MemoryView,
+    action: 'proposed' | 'publish' | 'reject' | 'revoke' | 'imported',
+    provenance?: { runId: string; runtimeId: string },
+  ): Promise<void> | void;
+}
+
+const NOOP_MEMORY_HOOKS: MemoryServiceHooks = {
+  memoryChanged: () => undefined,
+};
+
 const parseProposal = (raw: unknown, now: number): ParsedProposal => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
   const allowed = new Set(['content', 'sourceRefs', 'confidence', 'expiresAt']);
@@ -85,6 +97,7 @@ export class MemoryService {
     private readonly provenance: MemoryProvenancePort,
     private readonly audit: AuditLogService,
     private readonly clock: ClockPort,
+    private readonly hooks: MemoryServiceHooks = NOOP_MEMORY_HOOKS,
   ) {}
 
   async propose(scope: Scope, raw: unknown, provenance?: { runId: string; runtimeId: string }): Promise<MemoryView> {
@@ -108,6 +121,7 @@ export class MemoryService {
         proposedByRuntimeId: provenance?.runtimeId ?? null,
       })
       .catch(() => undefined);
+    await Promise.resolve(this.hooks.memoryChanged(memory, 'proposed', provenance)).catch(() => undefined);
     return memory;
   }
 
@@ -134,6 +148,7 @@ export class MemoryService {
           ? 'AGENT_MEMORY_REJECTED'
           : 'AGENT_MEMORY_REVOKED';
     await this.audit.logAction(action, { userId: scope.userId, appId: scope.appId, memoryId }).catch(() => undefined);
+    await Promise.resolve(this.hooks.memoryChanged(memory, review.decision)).catch(() => undefined);
     return memory;
   }
 
@@ -173,10 +188,9 @@ export class MemoryService {
   async confirmImport(scope: Scope, confirmationId: string): Promise<MemoryView> {
     if (!nonEmpty(confirmationId, 128)) throw new Error('VALIDATION_FAILED');
     const now = this.clock.nowUnixSeconds();
-    const confirmation = await this.repository.getImportConfirmation(scope, confirmationId);
+    const confirmation = await this.repository.takeImportConfirmation(scope, confirmationId);
     if (!confirmation) throw new Error('MEMORY_IMPORT_CONFIRMATION_NOT_FOUND');
     if (confirmation.expiresAt <= now) {
-      await this.repository.deleteImportConfirmation(scope, confirmationId);
       throw new Error('MEMORY_IMPORT_CONFIRMATION_EXPIRED');
     }
     const target = this.registry.get(scope.appId);
@@ -205,7 +219,6 @@ export class MemoryService {
       expiresAt: source.expiresAt,
       now,
     });
-    await this.repository.deleteImportConfirmation(scope, confirmationId);
     await this.audit
       .logAction('AGENT_MEMORY_IMPORTED', {
         userId: scope.userId,
@@ -215,6 +228,7 @@ export class MemoryService {
         memoryId: memory.id,
       })
       .catch(() => undefined);
+    await Promise.resolve(this.hooks.memoryChanged(memory, 'imported')).catch(() => undefined);
     return memory;
   }
 }

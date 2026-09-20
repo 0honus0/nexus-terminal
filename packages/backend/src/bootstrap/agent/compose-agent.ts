@@ -284,6 +284,13 @@ export const composeAgent = ({
     new SqliteMemoryProvenanceAdapter(database),
     audit,
     systemClock,
+    {
+      memoryChanged: (memory, action, provenance) => {
+        publishHostWake(memory.userId);
+        if (action !== 'proposed' || !provenance) return;
+        void notificationBridge.projectMemoryCandidate(memory, provenance);
+      },
+    },
   );
   const subagents = new SubagentService(
     delegationRepository,

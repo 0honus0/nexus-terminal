@@ -60,7 +60,6 @@ export interface MemoryRepositoryPort {
     now: number;
   }): Promise<MemoryView>;
   saveImportConfirmation(record: MemoryImportConfirmation): Promise<void>;
-  getImportConfirmation(scope: Scope, confirmationId: string): Promise<MemoryImportConfirmation | null>;
-  deleteImportConfirmation(scope: Scope, confirmationId: string): Promise<void>;
+  takeImportConfirmation(scope: Scope, confirmationId: string): Promise<MemoryImportConfirmation | null>;
   deleteExpiredImportConfirmations(now: number): Promise<number>;
 }
