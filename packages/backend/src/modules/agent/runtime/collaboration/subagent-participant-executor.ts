@@ -174,7 +174,21 @@ export class SubagentParticipantExecutor {
       now: this.clock.nowUnixSeconds(),
     });
     this.events.publishRunWake(claimed.runId, settled.eventCursor);
-    await this.sendCompletion(scope, claimed.runId, delegation, 'failed', '', code).catch(() => undefined);
+    await this.sendCompletion(scope, claimed.runId, delegation, 'failed', '', code).catch((error) =>
+      logger.warn(
+        {
+          errorCode: logErrorCode(error, 'SUBAGENT_COMPLETION_MAILBOX_FAILED'),
+          userId: scope.userId,
+          appId: scope.appId,
+          runId: claimed.runId,
+          runtimeId: claimed.agentRuntimeId,
+          workId: claimed.id,
+          delegationId: delegation.id,
+          outcome: 'failed',
+        },
+        'Agent Subagent terminal completion notification failed',
+      ),
+    );
     if (delegation.failureMode === 'failFast') await this.cancelSiblings(scope, delegation);
     await this.resumeParent(scope, claimed.runId, delegation);
   }
@@ -377,13 +391,40 @@ export class SubagentParticipantExecutor {
       } catch (error) {
         toolResult = failedToolResult(error);
       } finally {
-        await renewal?.stop().catch(() => undefined);
+        await renewal?.stop().catch((error) =>
+          logger.warn(
+            {
+              errorCode: logErrorCode(error, 'LEASE_LOST'),
+              userId: scope.userId,
+              appId: scope.appId,
+              runId: work.runId,
+              runtimeId: work.agentRuntimeId,
+              workId: work.id,
+              delegationId: delegation.id,
+            },
+            'Agent Subagent tool lease renewal cleanup failed',
+          ),
+        );
         await this.leaseCoordinator
           .release(
             leases.map((lease) => lease.id),
             owner,
           )
-          .catch(() => undefined);
+          .catch((error) =>
+            logger.warn(
+              {
+                errorCode: logErrorCode(error, 'LEASE_LOST'),
+                userId: scope.userId,
+                appId: scope.appId,
+                runId: work.runId,
+                runtimeId: work.agentRuntimeId,
+                workId: work.id,
+                delegationId: delegation.id,
+                leaseCount: leases.length,
+              },
+              'Agent Subagent tool lease release failed',
+            ),
+          );
       }
     }
 
@@ -1203,7 +1244,20 @@ export class SubagentParticipantExecutor {
           runtime.consumedMailboxSequence,
           this.clock.nowUnixSeconds(),
         )
-        .catch(() => undefined);
+        .catch((error) =>
+          logger.warn(
+            {
+              errorCode: logErrorCode(error, 'MAILBOX_CONSUME_FAILED'),
+              userId: scope.userId,
+              appId: scope.appId,
+              runId: work.runId,
+              runtimeId: work.agentRuntimeId,
+              workId: work.id,
+              delegationId: delegation.id,
+            },
+            'Agent Subagent mailbox consumption after completion failed',
+          ),
+        );
     }
     await this.sendCompletion(scope, work.runId, delegation, outcome, completion, failureCode, evidenceRefs).catch(
       (error) => {
@@ -1277,7 +1331,21 @@ export class SubagentParticipantExecutor {
       now: this.clock.nowUnixSeconds(),
     });
     this.events.publishRunWake(work.runId, settled.eventCursor);
-    await this.sendCompletion(scope, work.runId, delegation, 'failed', '', code).catch(() => undefined);
+    await this.sendCompletion(scope, work.runId, delegation, 'failed', '', code).catch((error) =>
+      logger.warn(
+        {
+          errorCode: logErrorCode(error, 'SUBAGENT_COMPLETION_MAILBOX_FAILED'),
+          userId: scope.userId,
+          appId: scope.appId,
+          runId: work.runId,
+          runtimeId: work.agentRuntimeId,
+          workId: work.id,
+          delegationId: delegation.id,
+          failureCode: code,
+        },
+        'Agent Subagent pre-model failure notification failed',
+      ),
+    );
     if (delegation.failureMode === 'failFast') await this.cancelSiblings(scope, delegation);
     await this.resumeParent(scope, work.runId, delegation);
   }

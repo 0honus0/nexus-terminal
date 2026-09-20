@@ -2,7 +2,7 @@
   import { computed, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseModal } from '@/foundation/ui';
-  import { useFeedback } from '@/shared/feedback/public';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import { agentApi, formatAgentApiError, type AgentAppGrantView, type AgentAppSummary } from '../api/agent-api';
 
   const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
@@ -12,26 +12,33 @@
     refresh: [];
   }>();
   const { t } = useI18n();
-  const feedback = useFeedback();
+  const operationFeedback = useOperationFeedback('agent.settings.apps');
 
   const grantViews = ref<Record<string, AgentAppGrantView>>({});
   const drafts = ref<Record<string, string[]>>({});
   const grantBusy = ref<Record<string, boolean>>({});
   const grantErrors = ref<Record<string, string>>({});
   const expandedGrants = ref<Record<string, boolean>>({});
+  const grantLoadGeneration = new Map<string, number>();
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
 
   const loadGrant = async (appId: string): Promise<void> => {
+    const generation = (grantLoadGeneration.get(appId) ?? 0) + 1;
+    grantLoadGeneration.set(appId, generation);
     try {
       const view = await agentApi.appGrants(appId);
+      if (grantLoadGeneration.get(appId) !== generation) return;
       grantViews.value = { ...grantViews.value, [appId]: view };
       drafts.value = { ...drafts.value, [appId]: view.grants.map((grant) => grant.capability) };
       const next = { ...grantErrors.value };
       delete next[appId];
       grantErrors.value = next;
     } catch (cause) {
-      grantErrors.value = { ...grantErrors.value, [appId]: explain(cause) };
+      if (grantLoadGeneration.get(appId) !== generation) return;
+      const message = explain(cause);
+      grantErrors.value = { ...grantErrors.value, [appId]: message };
+      operationFeedback.logError({ operation: 'load-grants', message, cause, context: { appId } });
     }
   };
 
@@ -106,7 +113,7 @@
       grantErrors.value = next;
       emit('grantsUpdated', updated.app);
     } catch (cause) {
-      grantErrors.value = { ...grantErrors.value, [appId]: explain(cause) };
+      operationFeedback.notifyError({ operation: 'save-grants', message: explain(cause), cause, context: { appId } });
       await loadGrant(appId);
     } finally {
       grantBusy.value = { ...grantBusy.value, [appId]: false };
@@ -119,14 +126,12 @@
   const uninstallModalOpen = ref(false);
   const targetUninstallApp = ref<AgentAppSummary | null>(null);
   const uninstallBusy = ref(false);
-  const uninstallError = ref('');
   const deleteDataOnUninstall = ref(false);
 
   const requestUninstall = (app: AgentAppSummary) => {
     if (app.enabled || app.surface === 'builtin') return;
     targetUninstallApp.value = app;
     deleteDataOnUninstall.value = false;
-    uninstallError.value = '';
     uninstallModalOpen.value = true;
   };
 
@@ -134,29 +139,38 @@
     const app = targetUninstallApp.value;
     if (!app || uninstallBusy.value || props.busy) return;
     uninstallBusy.value = true;
-    uninstallError.value = '';
     try {
       const result = await agentApi.uninstallPlugin(app.id, app.stateVersion);
       if (result.state === 'draining') {
         uninstallModalOpen.value = false;
         targetUninstallApp.value = null;
         emit('refresh');
-        feedback.notifyWarning(t('agent.settings.apps.drainingNotice'));
+        operationFeedback.notifyWarning(t('agent.settings.apps.drainingNotice'));
         return;
       }
       if (deleteDataOnUninstall.value) {
         try {
           await agentApi.deletePluginData(app.id, true);
         } catch (cause) {
-          feedback.notifyError(formatAgentApiError(cause, t('agent.settings.apps.deleteDataFailed')));
+          operationFeedback.notifyError({
+            operation: 'delete-plugin-data',
+            message: formatAgentApiError(cause, t('agent.settings.apps.deleteDataFailed')),
+            cause,
+            context: { appId: app.id },
+          });
         }
       }
       uninstallModalOpen.value = false;
       targetUninstallApp.value = null;
       emit('refresh');
-      feedback.notifySuccess(t('agent.settings.apps.uninstallSuccess'));
+      operationFeedback.notifySuccess(t('agent.settings.apps.uninstallSuccess'));
     } catch (cause) {
-      uninstallError.value = formatAgentApiError(cause, t('agent.settings.apps.uninstallFailed'));
+      operationFeedback.notifyError({
+        operation: 'uninstall-plugin',
+        message: formatAgentApiError(cause, t('agent.settings.apps.uninstallFailed')),
+        cause,
+        context: { appId: app.id },
+      });
     } finally {
       uninstallBusy.value = false;
     }
@@ -690,10 +704,6 @@
         <input v-model="deleteDataOnUninstall" type="checkbox" class="mt-0.5 rounded accent-error cursor-pointer" />
         <span class="text-xs text-text-secondary leading-tight"> 同时彻底删除此插件专属的独立持久化数据空间 </span>
       </label>
-
-      <div v-if="uninstallError" class="rounded-lg border border-error/30 bg-error/10 p-2.5 text-xs text-error">
-        {{ uninstallError }}
-      </div>
     </div>
 
     <template #footer>

@@ -2,7 +2,7 @@
   import { computed, reactive, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseModal } from '@/foundation/ui';
-  import { useFeedback } from '@/shared/feedback/public';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import type { AgentProviderView } from '../api/agent-api';
 
   type ProviderModel = AgentProviderView['models'][number];
@@ -22,7 +22,7 @@
   }>();
 
   const { t } = useI18n();
-  const feedback = useFeedback();
+  const operationFeedback = useOperationFeedback('agent.settings.model-capabilities');
   const capabilityEditorProvider = computed(() => props.provider);
   const capabilityEditorModel = computed(() => props.model);
   const capabilityForm = reactive({
@@ -106,7 +106,11 @@
       capabilityForm.maxOutputTokens < 1 ||
       capabilityForm.maxOutputTokens >= capabilityForm.contextWindow
     ) {
-      feedback.notifyError(t('agent.settings.providers.capabilityInvalid'));
+      operationFeedback.notifyError({
+        operation: 'validate-capability-edit',
+        message: t('agent.settings.providers.capabilityInvalid'),
+        context: { providerId: capabilityEditorProvider.value.id, modelId: model.id },
+      });
       return;
     }
     emit('save', {

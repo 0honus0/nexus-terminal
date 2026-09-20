@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import type { AuditLogService } from '../../audit/audit.service';
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import type { AppRegistryService } from '../host/app-registry.service';
@@ -120,8 +121,42 @@ export class MemoryService {
         memoryId: memory.id,
         proposedByRuntimeId: provenance?.runtimeId ?? null,
       })
-      .catch(() => undefined);
-    await Promise.resolve(this.hooks.memoryChanged(memory, 'proposed', provenance)).catch(() => undefined);
+      .catch((error) =>
+        logger.warn(
+          {
+            err: error,
+            errorCode: logErrorCode(error, 'AGENT_MEMORY_AUDIT_FAILED'),
+            userId: scope.userId,
+            appId: scope.appId,
+            memoryId: memory.id,
+            action: 'proposed',
+          },
+          'Agent Memory audit write failed',
+        ),
+      );
+    await Promise.resolve(this.hooks.memoryChanged(memory, 'proposed', provenance)).catch((error) =>
+      logger.warn(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'AGENT_MEMORY_HOOK_FAILED'),
+          userId: scope.userId,
+          appId: scope.appId,
+          memoryId: memory.id,
+          action: 'proposed',
+        },
+        'Agent Memory change hook failed',
+      ),
+    );
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        memoryId: memory.id,
+        runtimeId: provenance?.runtimeId ?? null,
+        runId: provenance?.runId ?? null,
+      },
+      'Agent Memory proposed',
+    );
     return memory;
   }
 
@@ -147,8 +182,36 @@ export class MemoryService {
         : review.decision === 'reject'
           ? 'AGENT_MEMORY_REJECTED'
           : 'AGENT_MEMORY_REVOKED';
-    await this.audit.logAction(action, { userId: scope.userId, appId: scope.appId, memoryId }).catch(() => undefined);
-    await Promise.resolve(this.hooks.memoryChanged(memory, review.decision)).catch(() => undefined);
+    await this.audit.logAction(action, { userId: scope.userId, appId: scope.appId, memoryId }).catch((error) =>
+      logger.warn(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'AGENT_MEMORY_AUDIT_FAILED'),
+          userId: scope.userId,
+          appId: scope.appId,
+          memoryId,
+          action: review.decision,
+        },
+        'Agent Memory review audit write failed',
+      ),
+    );
+    await Promise.resolve(this.hooks.memoryChanged(memory, review.decision)).catch((error) =>
+      logger.warn(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'AGENT_MEMORY_HOOK_FAILED'),
+          userId: scope.userId,
+          appId: scope.appId,
+          memoryId,
+          action: review.decision,
+        },
+        'Agent Memory review hook failed',
+      ),
+    );
+    logger.info(
+      { userId: scope.userId, appId: scope.appId, memoryId, decision: review.decision, version: memory.version },
+      'Agent Memory reviewed',
+    );
     return memory;
   }
 
@@ -227,8 +290,44 @@ export class MemoryService {
         targetAppId: scope.appId,
         memoryId: memory.id,
       })
-      .catch(() => undefined);
-    await Promise.resolve(this.hooks.memoryChanged(memory, 'imported')).catch(() => undefined);
+      .catch((error) =>
+        logger.warn(
+          {
+            err: error,
+            errorCode: logErrorCode(error, 'AGENT_MEMORY_AUDIT_FAILED'),
+            userId: scope.userId,
+            sourceAppId: confirmation.sourceAppId,
+            sourceMemoryId: confirmation.sourceMemoryId,
+            appId: scope.appId,
+            memoryId: memory.id,
+            action: 'imported',
+          },
+          'Agent Memory import audit write failed',
+        ),
+      );
+    await Promise.resolve(this.hooks.memoryChanged(memory, 'imported')).catch((error) =>
+      logger.warn(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'AGENT_MEMORY_HOOK_FAILED'),
+          userId: scope.userId,
+          appId: scope.appId,
+          memoryId: memory.id,
+          action: 'imported',
+        },
+        'Agent Memory import hook failed',
+      ),
+    );
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        memoryId: memory.id,
+        sourceAppId: confirmation.sourceAppId,
+        sourceMemoryId: confirmation.sourceMemoryId,
+      },
+      'Agent Memory imported',
+    );
     return memory;
   }
 }

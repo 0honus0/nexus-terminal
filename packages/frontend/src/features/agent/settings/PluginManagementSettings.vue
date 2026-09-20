@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     formatAgentApiError,
@@ -20,6 +21,7 @@
   const props = defineProps<{ apps: AgentAppSummary[]; settings: AgentSettingsView; busy: boolean }>();
   const emit = defineEmits<{ refresh: []; settingsUpdated: [AgentSettingsView] }>();
   const { t } = useI18n();
+  const operationFeedback = useOperationFeedback('agent.settings.plugins');
 
   const repositoryUrl = ref('');
   const officialCatalog = ref<RemotePluginCatalog | null>(null);
@@ -32,8 +34,6 @@
   const candidate = ref<PluginVerifyResult | null>(null);
   const candidateArtifactName = ref('');
   const localBusy = ref(false);
-  const error = ref('');
-  const notice = ref('');
   const packageInput = ref<HTMLInputElement | null>(null);
   const drainingUpgradeVersion = ref<number | null>(null);
   const drainingUninstallVersions = ref<Record<string, number>>({});
@@ -48,8 +48,8 @@
     ...(officialCatalog.value ? [{ catalog: officialCatalog.value, official: true as const }] : []),
     ...remoteCatalogs.value.map((catalog) => ({ catalog, official: false as const })),
   ]);
-  const noticeText = computed(() => {
-    switch (notice.value) {
+  const noticeMessage = (notice: string): string => {
+    switch (notice) {
       case 'PUBLISHER_TRUSTED':
         return t('agent.settings.plugins.notices.publisherTrusted');
       case 'PUBLISHER_REVOKED':
@@ -67,9 +67,10 @@
       case 'PLUGIN_DATA_DELETED':
         return t('agent.settings.plugins.notices.pluginDataDeleted');
       default:
-        return '';
+        return notice;
     }
-  });
+  };
+  const notifyNotice = (notice: string): void => operationFeedback.notifySuccess(noticeMessage(notice));
   const activeInstallations = computed(() => installations.value.filter((item) => item.status === 'installed'));
   const removedInstallations = computed(() =>
     installations.value.filter((item) => item.status === 'removed' && item.retainedDataEntries > 0),
@@ -117,7 +118,9 @@
           : [],
       ),
     ];
-    if (failures.length > 0) error.value = failures.join(' · ');
+    if (failures.length > 0) {
+      operationFeedback.notifyError({ operation: 'load-catalogs', message: failures.join(' · ') });
+    }
   };
 
   const refresh = async (): Promise<void> => {
@@ -132,15 +135,13 @@
     await loadRemoteCatalogs();
   };
 
-  const run = async (action: () => Promise<void>): Promise<void> => {
+  const run = async (operation: string, action: () => Promise<void>): Promise<void> => {
     if (locked.value) return;
     localBusy.value = true;
-    error.value = '';
-    notice.value = '';
     try {
       await action();
     } catch (cause) {
-      error.value = explain(cause);
+      operationFeedback.notifyError({ operation, message: explain(cause), cause });
     } finally {
       localBusy.value = false;
     }
@@ -159,24 +160,26 @@
       repositoryUrl.value = '';
       return;
     }
-    void run(async () => {
+    void run('add-repository', async () => {
       await saveRepositories([...configuredRepositories.value, { url: trimmed }]);
       repositoryUrl.value = '';
     });
   };
 
   const removeRepository = (url: string): void => {
-    void run(async () => saveRepositories(configuredRepositories.value.filter((candidate) => candidate.url !== url)));
+    void run('remove-repository', async () =>
+      saveRepositories(configuredRepositories.value.filter((candidate) => candidate.url !== url)),
+    );
   };
 
   const publisherTrusted = (keyId: string): boolean =>
     publishers.value.some((publisher) => publisher.keyId === keyId && publisher.revokedAt === null);
 
   const trustRemotePublisher = (publisher: RemotePluginPublisher): void => {
-    void run(async () => {
+    void run('trust-remote-publisher', async () => {
       await agentApi.trustPluginPublisher(publisher.publicKeyPem, publisher.label);
       await refresh();
-      notice.value = 'PUBLISHER_TRUSTED';
+      notifyNotice('PUBLISHER_TRUSTED');
     });
   };
 
@@ -186,7 +189,7 @@
     official: boolean,
   ): void => {
     if (entry.compatible !== true || (!official && !publisherTrusted(entry.publisherKeyId))) return;
-    void run(async () => {
+    void run('prepare-remote-package', async () => {
       candidate.value = null;
       drainingUpgradeVersion.value = null;
       candidateArtifactName.value = `${entry.appId}@${entry.version}`;
@@ -194,25 +197,25 @@
         ? await agentApi.stageOfficialPlugin(entry.appId, entry.version)
         : await agentApi.stageRemotePlugin(catalog.repositoryUrl, entry.appId, entry.version);
       candidate.value = await agentApi.verifyPlugin(stage.id);
-      notice.value = 'PACKAGE_VERIFIED';
+      notifyNotice('PACKAGE_VERIFIED');
     });
   };
 
   const trustPublisher = (): void => {
-    void run(async () => {
+    void run('trust-publisher', async () => {
       await agentApi.trustPluginPublisher(publisherPem.value, publisherLabel.value);
       publisherLabel.value = '';
       publisherPem.value = '';
       await refresh();
-      notice.value = 'PUBLISHER_TRUSTED';
+      notifyNotice('PUBLISHER_TRUSTED');
     });
   };
 
   const revokePublisher = (keyId: string): void => {
-    void run(async () => {
+    void run('revoke-publisher', async () => {
       await agentApi.revokePluginPublisher(keyId);
       await refresh();
-      notice.value = 'PUBLISHER_REVOKED';
+      notifyNotice('PUBLISHER_REVOKED');
     });
   };
 
@@ -223,21 +226,21 @@
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
-    void run(async () => {
+    void run('prepare-package', async () => {
       candidate.value = null;
       drainingUpgradeVersion.value = null;
       candidateArtifactName.value = file.name;
       const artifact = await agentApi.uploadArtifact(PLUGIN_STAGING_ARTIFACT_SCOPE, file);
       const stage = await agentApi.stagePlugin(artifact);
       candidate.value = await agentApi.verifyPlugin(stage.id);
-      notice.value = 'PACKAGE_VERIFIED';
+      notifyNotice('PACKAGE_VERIFIED');
     });
   };
 
   const applyCandidate = (): void => {
     const current = candidate.value;
     if (!current) return;
-    void run(async () => {
+    void run('apply-candidate', async () => {
       const installation = installations.value.find(
         (item) => item.appId === current.plugin.appId && item.status === 'installed',
       );
@@ -247,7 +250,7 @@
         candidateArtifactName.value = '';
         await refresh();
         emit('refresh');
-        notice.value = 'PLUGIN_INSTALLED';
+        notifyNotice('PLUGIN_INSTALLED');
         return;
       }
       const app = appSummary(current.plugin.appId);
@@ -257,7 +260,7 @@
       if (result.state === 'draining') {
         drainingUpgradeVersion.value = result.app.version;
         emit('refresh');
-        notice.value = 'PLUGIN_DRAINING';
+        notifyNotice('PLUGIN_DRAINING');
         return;
       }
       drainingUpgradeVersion.value = null;
@@ -265,12 +268,12 @@
       candidateArtifactName.value = '';
       await refresh();
       emit('refresh');
-      notice.value = 'PLUGIN_UPGRADED';
+      notifyNotice('PLUGIN_UPGRADED');
     });
   };
 
   const uninstall = (installation: PluginInstallation): void => {
-    void run(async () => {
+    void run('uninstall-plugin', async () => {
       const app = appSummary(installation.appId);
       const expectedVersion = drainingUninstallVersions.value[installation.appId] ?? app?.stateVersion;
       if (!expectedVersion) throw new Error('PLUGIN_APP_STATE_UNAVAILABLE');
@@ -281,7 +284,7 @@
           [installation.appId]: result.app.version,
         };
         emit('refresh');
-        notice.value = 'PLUGIN_DRAINING';
+        notifyNotice('PLUGIN_DRAINING');
         return;
       }
       const next = { ...drainingUninstallVersions.value };
@@ -289,15 +292,13 @@
       drainingUninstallVersions.value = next;
       await refresh();
       emit('refresh');
-      notice.value = 'PLUGIN_UNINSTALLED_DATA_RETAINED';
+      notifyNotice('PLUGIN_UNINSTALLED_DATA_RETAINED');
     });
   };
 
   const requestDeleteData = (installation: PluginInstallation): void => {
     if (locked.value) return;
     pendingDataDeletionAppId.value = installation.appId;
-    error.value = '';
-    notice.value = '';
   };
 
   const cancelDeleteData = (): void => {
@@ -307,16 +308,16 @@
 
   const deleteData = (installation: PluginInstallation): void => {
     if (pendingDataDeletionAppId.value !== installation.appId) return;
-    void run(async () => {
+    void run('delete-plugin-data', async () => {
       await agentApi.deletePluginData(installation.appId, true);
       await refresh();
       emit('refresh');
       pendingDataDeletionAppId.value = null;
-      notice.value = 'PLUGIN_DATA_DELETED';
+      notifyNotice('PLUGIN_DATA_DELETED');
     });
   };
 
-  onMounted(() => void run(refresh));
+  onMounted(() => void run('refresh', refresh));
 </script>
 
 <template>
@@ -343,7 +344,7 @@
           type="button"
           class="inline-flex items-center gap-1.5 rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
           :disabled="locked"
-          @click="run(refresh)"
+          @click="run('refresh', refresh)"
         >
           <i
             :class="
@@ -371,21 +372,6 @@
     </div>
 
     <div class="space-y-5 p-4 sm:p-5">
-      <!-- 报错与通知提示条 -->
-      <p
-        v-if="error"
-        class="rounded-xl border border-error/30 bg-error/10 px-3.5 py-2.5 text-xs text-error shadow-2xs"
-        role="alert"
-      >
-        {{ error }}
-      </p>
-      <p
-        v-if="noticeText"
-        class="rounded-xl border border-success/30 bg-success/10 px-3.5 py-2.5 text-xs text-success shadow-2xs"
-      >
-        {{ noticeText }}
-      </p>
-
       <!-- 待安装包验真就绪卡片 (Candidate Package) -->
       <div
         v-if="candidate"

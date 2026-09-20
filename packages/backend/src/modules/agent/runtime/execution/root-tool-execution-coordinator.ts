@@ -828,7 +828,20 @@ export class RootToolExecutionCoordinator {
             toolCallId: pending.toolCallId,
             errorCode: toolResult.errorCode ?? 'UNKNOWN',
           })
-          .catch(() => undefined);
+          .catch((error) =>
+            logger.error(
+              {
+                err: error,
+                errorCode: errorCode(error),
+                userId: snapshot.userId,
+                appId: snapshot.appId,
+                runId: snapshot.id,
+                toolCallId: pending.toolCallId,
+                toolName: inspection.toolName,
+              },
+              'Agent mutation quarantine failed after unknown tool outcome',
+            ),
+          );
       }
 
       let settled: Awaited<ReturnType<RootExecutionCommitPort['settleMutationTool']>>;
@@ -853,7 +866,34 @@ export class RootToolExecutionCoordinator {
             toolCallId: pending.toolCallId,
             errorCode: errorCode(error),
           })
-          .catch(() => undefined);
+          .catch((quarantineError) =>
+            logger.error(
+              {
+                err: quarantineError,
+                errorCode: errorCode(quarantineError),
+                userId: snapshot.userId,
+                appId: snapshot.appId,
+                runId: snapshot.id,
+                toolCallId: pending.toolCallId,
+                toolName: inspection.toolName,
+                originalErrorCode: errorCode(error),
+              },
+              'Agent mutation quarantine failed after state commit failure',
+            ),
+          );
+        logger.error(
+          {
+            err: error,
+            errorCode: errorCode(error),
+            userId: snapshot.userId,
+            appId: snapshot.appId,
+            runId: snapshot.id,
+            toolCallId: pending.toolCallId,
+            toolName: inspection.toolName,
+            mutationOutcome: toolResult.outcome,
+          },
+          'Agent mutation result state commit failed',
+        );
         throw error;
       }
 

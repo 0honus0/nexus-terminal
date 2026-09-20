@@ -836,15 +836,21 @@ Frontend 记录：
 - window open/minimize/maximize/close；
 - App/view switch；
 - move/resize completion；
-- layout restore/persist。
+- layout restore/persist；
+- Settings 操作失败通过统一 `useOperationFeedback` 写入结构化 logger，并同时显示右上角错误 toast。成功操作只显示短时成功 toast；操作失败 toast 默认常驻，直到用户显式关闭，避免错误码在定位前消失。字段级校验、资源本身的 loading/error 状态和危险操作确认仍可保留局部 UI，但不得再为普通操作结果复制模块顶部 success/error banner。
 
 Backend 记录：
 
-- Run create/input/cancel/delete；
-- Workspace commands；
-- reconcile；
-- cleanup；
-- critical state transition failures。
+- Run create/input/interrupt/cancel/delete 与 durable state transition；
+- Tool proposal inspection、policy decision、lease acquire/renew/release、mutation quarantine/reconciliation；
+- capability allow/deny 及 deny reason；
+- Provider/model dispatch、MCP integration create/update/remove/refresh/retry；
+- Plugin stage/verify/install/upgrade/uninstall、drain、rollback、startup/runtime reconcile；
+- Subagent scheduler/participant dispatch、completion notification、mailbox/lease 异常；
+- Memory propose/review/import，以及 audit/hook 异常；
+- Workspace commands、reconcile、cleanup 与其它 critical state transition failures。
+
+关键分发链的日志必须能用稳定 ID 串联一次失败：优先携带 `userId/appId/runId/runtimeId/workId/toolCallId/toolName/integrationId/stageId/delegationId` 中实际存在的字段，以及安全的 `errorCode/state/version/generation/count`。高频成功路径使用 `debug`，重要生命周期完成使用 `info`，可恢复/降级异常使用 `warn`，durable commit、rollback、quarantine 等完整性失败使用 `error`。不得为了“更详细”写入 prompt/message、credential、Tool command payload 或其它敏感正文。
 
 Runner 记录：
 

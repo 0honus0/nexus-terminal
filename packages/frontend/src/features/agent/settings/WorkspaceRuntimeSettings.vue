@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     formatAgentApiError,
@@ -23,13 +24,12 @@
   }>();
   const emit = defineEmits<{ settingsUpdated: [settings: AgentSettingsView] }>();
   const { t } = useI18n();
+  const operationFeedback = useOperationFeedback('agent.settings.workspace-runtime');
 
   const catalog = ref<WorkspaceRuntimeCatalog | null>(null);
   const storage = ref<WorkspaceRuntimeStorageView | null>(null);
   const loading = ref(false);
   const localBusy = ref(false);
-  const error = ref('');
-  const notice = ref('');
   const selectedRecipeIds = ref<string[]>([]);
   const setupPreview = ref<WorkspaceRuntimeSetupPreview | null>(null);
   const uninstallPreview = ref<ToolchainPackUninstallPreview | null>(null);
@@ -66,28 +66,25 @@
       return;
     }
     loading.value = true;
-    error.value = '';
     try {
       [catalog.value, storage.value] = await Promise.all([
         agentApi.workspaceRuntimeCatalog(),
         agentApi.workspaceRuntimeStorage(),
       ]);
     } catch (cause) {
-      error.value = errorMessage(cause);
+      operationFeedback.notifyError({ operation: 'load-details', message: errorMessage(cause), cause });
     } finally {
       loading.value = false;
     }
   };
 
-  const run = async (action: () => Promise<void>) => {
+  const run = async (operation: string, action: () => Promise<void>) => {
     if (disabled.value) return;
     localBusy.value = true;
-    error.value = '';
-    notice.value = '';
     try {
       await action();
     } catch (cause) {
-      error.value = errorMessage(cause);
+      operationFeedback.notifyError({ operation, message: errorMessage(cause), cause });
     } finally {
       localBusy.value = false;
     }
@@ -108,7 +105,7 @@
   };
 
   const previewSetup = () =>
-    run(async () => {
+    run('preview-setup', async () => {
       if (!selectedRecipeIds.value.length) throw new Error(t('agent.settings.workspaceRuntime.selectRecipe'));
       setupPreview.value = await agentApi.previewWorkspaceRuntimeSetup(
         selectedRecipeIds.value.map((recipeId) => ({ recipeId })),
@@ -117,7 +114,7 @@
     });
 
   const confirmSetup = () =>
-    run(async () => {
+    run('confirm-setup', async () => {
       if (!setupPreview.value) return;
       lastCommand.value = await agentApi.confirmWorkspaceRuntimeSetup(
         setupPreview.value.confirmationId,
@@ -126,7 +123,7 @@
       setupPreview.value = null;
       emit('settingsUpdated', await agentApi.settings());
       await loadDetails();
-      notice.value = t('agent.settings.workspaceRuntime.setupSubmitted');
+      operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.setupSubmitted'));
     });
 
   const familyConfig = (pack: ToolchainCatalogPack) =>
@@ -136,7 +133,7 @@
   const isDesiredDefault = (pack: ToolchainCatalogPack) => familyConfig(pack).defaultVersionId === pack.versionId;
 
   const savePackPreference = (pack: ToolchainCatalogPack, mode: 'toggle' | 'default') =>
-    run(async () => {
+    run('save-pack-preference', async () => {
       const next = structuredClone(requested.value);
       const current = next.toolVersions[pack.familyId] ?? { enabledVersionIds: [], defaultVersionId: null };
       const enabled = new Set(current.enabledVersionIds);
@@ -155,18 +152,18 @@
       };
       const updated = await agentApi.patchSettings({ workspaceRuntime: next }, props.settings.revision);
       emit('settingsUpdated', updated);
-      notice.value = t('agent.settings.workspaceRuntime.preferencesSaved');
+      operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.preferencesSaved'));
     });
 
   const installPack = (pack: ToolchainCatalogPack) =>
-    run(async () => {
+    run('install-pack', async () => {
       lastCommand.value = await agentApi.installToolchainPack(pack.familyId, pack.versionId);
       await loadDetails();
-      notice.value = t('agent.settings.workspaceRuntime.installSubmitted');
+      operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.installSubmitted'));
     });
 
   const previewUninstall = (pack: ToolchainCatalogPack) =>
-    run(async () => {
+    run('preview-uninstall', async () => {
       uninstallPreview.value = await agentApi.previewToolchainPackUninstall(
         pack.familyId,
         pack.versionId,
@@ -175,7 +172,7 @@
     });
 
   const confirmUninstall = () =>
-    run(async () => {
+    run('confirm-uninstall', async () => {
       const preview = uninstallPreview.value;
       if (!preview) return;
       lastCommand.value = await agentApi.confirmToolchainPackUninstall(
@@ -187,16 +184,16 @@
       uninstallPreview.value = null;
       emit('settingsUpdated', await agentApi.settings());
       await loadDetails();
-      notice.value = t('agent.settings.workspaceRuntime.uninstallSubmitted');
+      operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.uninstallSubmitted'));
     });
 
   const previewRuntimeCleanup = () =>
-    run(async () => {
+    run('preview-cleanup', async () => {
       cleanupPreview.value = await agentApi.previewWorkspaceRuntimeCleanup(props.settings.revision);
     });
 
   const confirmRuntimeCleanup = () =>
-    run(async () => {
+    run('confirm-cleanup', async () => {
       if (!cleanupPreview.value) return;
       lastCommand.value = await agentApi.confirmWorkspaceRuntimeCleanup(
         cleanupPreview.value.confirmationId,
@@ -204,23 +201,23 @@
       );
       cleanupPreview.value = null;
       await loadDetails();
-      notice.value = t('agent.settings.workspaceRuntime.cleanupSubmitted');
+      operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.cleanupSubmitted'));
     });
 
   const cleanupCache = () =>
-    run(async () => {
+    run('cleanup-cache', async () => {
       lastCommand.value = await agentApi.cleanupWorkspaceRuntimeCache();
       await loadDetails();
-      notice.value = t('agent.settings.workspaceRuntime.cacheSubmitted');
+      operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.cacheSubmitted'));
     });
 
   const previewReset = () =>
-    run(async () => {
+    run('preview-reset', async () => {
       resetPreview.value = await agentApi.previewWorkspaceRuntimeSettingsReset(props.settings.revision);
     });
 
   const confirmReset = () =>
-    run(async () => {
+    run('confirm-reset', async () => {
       if (!resetPreview.value) return;
       const updated = await agentApi.confirmWorkspaceRuntimeSettingsReset(
         resetPreview.value.confirmationId,
@@ -229,7 +226,7 @@
       resetPreview.value = null;
       emit('settingsUpdated', updated);
       syncSelection();
-      notice.value = t('agent.settings.workspaceRuntime.resetComplete');
+      operationFeedback.notifySuccess(t('agent.settings.workspaceRuntime.resetComplete'));
     });
 
   watch(() => props.settings.revision, syncSelection);
@@ -273,13 +270,6 @@
           </span>
         </div>
         <p v-if="availability.reason" class="mt-2 text-xs text-text-secondary">{{ availability.reason }}</p>
-      </div>
-
-      <div v-if="error" class="mt-3 rounded border border-error/40 bg-error/10 px-3 py-2 text-sm text-error">
-        {{ error }}
-      </div>
-      <div v-if="notice" class="mt-3 rounded border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
-        {{ notice }}
       </div>
 
       <template v-if="availability.available && catalog && storage">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { computed, onMounted, ref, watch } from 'vue';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     formatAgentApiError,
@@ -18,6 +19,7 @@
   const DEFAULT_AGENT_APP_ID = 'nexus.agent';
   const props = defineProps<{ settings: AgentSettingsView; busy: boolean; agentAvailable: boolean }>();
   const emit = defineEmits<{ saveProfiles: [profiles: Profile[]] }>();
+  const operationFeedback = useOperationFeedback('agent.settings.acp-runtime');
 
   const profiles = ref<ProfileDraft[]>([]);
   const integrations = ref<AgentIntegrationView[]>([]);
@@ -26,8 +28,6 @@
   const enabled = ref(true);
   const localBusy = ref(false);
   const loading = ref(false);
-  const error = ref('');
-  const notice = ref('');
   const disabled = computed(() => props.busy || localBusy.value);
   const configuredProfiles = computed(() => props.settings.effectiveSettings.workspaceRuntime.acpProfiles);
 
@@ -58,26 +58,23 @@
       return;
     }
     loading.value = true;
-    error.value = '';
     try {
       integrations.value = await agentApi.integrations(DEFAULT_AGENT_APP_ID, 'acp');
     } catch (cause) {
-      error.value = explain(cause);
+      operationFeedback.notifyError({ operation: 'load-integrations', message: explain(cause), cause });
     } finally {
       loading.value = false;
     }
   };
 
-  const run = async (action: () => Promise<void>, success = ''): Promise<void> => {
+  const run = async (operation: string, action: () => Promise<void>, success = ''): Promise<void> => {
     if (disabled.value) return;
     localBusy.value = true;
-    error.value = '';
-    notice.value = '';
     try {
       await action();
-      if (success) notice.value = success;
+      if (success) operationFeedback.notifySuccess(success);
     } catch (cause) {
-      error.value = explain(cause);
+      operationFeedback.notifyError({ operation, message: explain(cause), cause });
     } finally {
       localBusy.value = false;
     }
@@ -120,10 +117,9 @@
       if (new Set(normalized.map((profile) => profile.id)).size !== normalized.length) {
         throw new Error('ACP_PROFILE_ID_DUPLICATE');
       }
-      error.value = '';
       emit('saveProfiles', normalized);
     } catch (cause) {
-      error.value = explain(cause);
+      operationFeedback.notifyError({ operation: 'validate-profiles', message: explain(cause), cause });
     }
   };
 
@@ -131,53 +127,69 @@
     const name = displayName.value.trim();
     const selectedProfile = profileId.value;
     if (!name || !selectedProfile) return;
-    void run(async () => {
-      await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, {
-        kind: 'acp',
-        configuration: {
-          displayName: name,
-          transport: 'workspace-profile',
-          profileId: selectedProfile,
-          protocolVersion: '1',
-        },
-        enabled: enabled.value,
-      });
-      displayName.value = '';
-      enabled.value = true;
-      await loadIntegrations();
-    }, 'ACP integration created.');
+    void run(
+      'create-integration',
+      async () => {
+        await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, {
+          kind: 'acp',
+          configuration: {
+            displayName: name,
+            transport: 'workspace-profile',
+            profileId: selectedProfile,
+            protocolVersion: '1',
+          },
+          enabled: enabled.value,
+        });
+        displayName.value = '';
+        enabled.value = true;
+        await loadIntegrations();
+      },
+      'ACP integration created.',
+    );
   };
 
   const toggleIntegration = (integration: AgentIntegrationView, nextEnabled: boolean): void => {
     const configuration = acpConfiguration(integration);
-    void run(async () => {
-      await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
-        kind: 'acp',
-        configuration: { ...configuration },
-        enabled: nextEnabled,
-      });
-      await loadIntegrations();
-    }, 'ACP integration updated.');
+    void run(
+      'toggle-integration',
+      async () => {
+        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
+          kind: 'acp',
+          configuration: { ...configuration },
+          enabled: nextEnabled,
+        });
+        await loadIntegrations();
+      },
+      'ACP integration updated.',
+    );
   };
 
   const changeIntegrationProfile = (integration: AgentIntegrationView, nextProfileId: string): void => {
     const configuration = acpConfiguration(integration);
     if (!configuredProfiles.value.some((profile) => profile.id === nextProfileId)) return;
-    void run(async () => {
-      await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
-        kind: 'acp',
-        configuration: { ...configuration, profileId: nextProfileId },
-        enabled: integration.enabled,
-      });
-      await loadIntegrations();
-    }, 'ACP integration profile updated.');
+    void run(
+      'change-integration-profile',
+      async () => {
+        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
+          kind: 'acp',
+          configuration: { ...configuration, profileId: nextProfileId },
+          enabled: integration.enabled,
+        });
+        await loadIntegrations();
+      },
+      'ACP integration profile updated.',
+    );
   };
 
   const removeIntegration = (integration: AgentIntegrationView): void => {
-    void run(async () => {
-      await agentApi.deleteIntegration(DEFAULT_AGENT_APP_ID, integration);
-      await loadIntegrations();
-    }, 'ACP integration deleted.');
+    void run(
+      'remove-integration',
+      async () => {
+        await agentApi.deleteIntegration(DEFAULT_AGENT_APP_ID, integration);
+        await loadIntegrations();
+      },
+      'ACP integration deleted.',
+    );
   };
 
   watch(() => props.settings.revision, syncProfiles, { immediate: true });
@@ -204,13 +216,6 @@
       </button>
     </div>
     <div class="space-y-4 p-4 sm:p-5">
-      <div v-if="error" class="mt-3 rounded border border-error/40 bg-error/10 px-3 py-2 text-xs text-error">
-        {{ error }}
-      </div>
-      <div v-if="notice" class="mt-3 rounded border border-success/40 bg-success/10 px-3 py-2 text-xs text-success">
-        {{ notice }}
-      </div>
-
       <div class="mt-4">
         <h3 class="text-sm font-semibold">{{ $t('agent.settings.acpRuntime.profiles') }}</h3>
         <p class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.acpRuntime.profilesHint') }}</p>

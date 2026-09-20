@@ -148,9 +148,9 @@ const installAndRunNexusAgent = async (
     expect(catalog.data.packages).toContainEqual(
       expect.objectContaining({
         appId: 'nexus.agent',
-        version: '1.0.1',
+        version: '1.0.4',
         sdkVersion: '1.0.0',
-        nexus: { minVersion: '1.0.2', maxVersion: '1.0.99' },
+        nexus: { minVersion: '1.0.4', maxVersion: '1.0.99' },
         compatible: false,
       }),
     );
@@ -170,7 +170,7 @@ const installAndRunNexusAgent = async (
   await step('download, hash-check, signature-verify, and install the merged Nexus Agent package', async () => {
     const incompatible = await request.post('/api/v1/agent/plugins/remote/stage', {
       headers,
-      data: { repositoryUrl, appId: 'nexus.agent', version: '1.0.1' },
+      data: { repositoryUrl, appId: 'nexus.agent', version: '1.0.4' },
     });
     expect(incompatible.status(), await incompatible.text()).toBe(409);
     await expect(incompatible.json()).resolves.toMatchObject({
@@ -749,7 +749,7 @@ test('official first-party catalog is discoverable without repository configurat
     expect.objectContaining({ appId: 'nexus.agent', version: '1.0.0', compatible: true }),
   );
   expect(catalog.data.packages).toContainEqual(
-    expect.objectContaining({ appId: 'nexus.agent', version: '1.0.1', compatible: false }),
+    expect.objectContaining({ appId: 'nexus.agent', version: '1.0.4', compatible: false }),
   );
   expect(catalog.data.packages.some((candidate) => candidate.appId === 'nexus.custom-surface')).toBe(false);
   expect(catalog.data.packages.some((candidate) => candidate.appId === 'nexus.unsafe')).toBe(false);

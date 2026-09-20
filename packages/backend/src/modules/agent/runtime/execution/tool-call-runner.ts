@@ -1,3 +1,4 @@
+import { logger } from '../../../../shared/logging/logger';
 import type { JsonValue, Scope } from '../../agent.types';
 import type { RunExecutionMode } from '../runs/run.types';
 import type { CatalogToolSchema } from '../../capabilities/tool-catalog';
@@ -99,19 +100,50 @@ export class ToolCallRunner {
     proposal: ToolProposal,
     executionMode: RunExecutionMode = 'execute',
   ): Promise<ResolvedInspectedToolCall> {
-    const resolvedProposal = resolveDeferredToolProposal(this.catalog, context, proposal);
-    if (executionMode === 'plan') {
-      const descriptor = this.catalog.require(resolvedProposal.name, context).descriptor;
-      if (descriptor.riskClass !== 'read' && descriptor.riskClass !== 'control') {
-        throw new Error('PLAN_MODE_TOOL_FORBIDDEN');
+    try {
+      const resolvedProposal = resolveDeferredToolProposal(this.catalog, context, proposal);
+      if (executionMode === 'plan') {
+        const descriptor = this.catalog.require(resolvedProposal.name, context).descriptor;
+        if (descriptor.riskClass !== 'read' && descriptor.riskClass !== 'control') {
+          throw new Error('PLAN_MODE_TOOL_FORBIDDEN');
+        }
       }
+      const inspection = await this.executor.inspect(context, resolvedProposal);
+      const policyDecision = this.policy.decide(inspection, inspection.policyRevision);
+      logger.debug(
+        {
+          userId: context.userId,
+          appId: context.appId,
+          runId: context.runId,
+          toolCallId: context.toolCallId ?? null,
+          toolName: inspection.toolName,
+          executionMode,
+          risk: inspection.risk,
+          mutation: inspection.mutation,
+          policyAction: policyDecision.action,
+          policyRevision: inspection.policyRevision,
+          resourceCount: inspection.resourceKeys.length,
+          inputRevision: inspection.inputRevision,
+        },
+        'Agent tool proposal inspected',
+      );
+      return { inspection, policyDecision, proposal: resolvedProposal };
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          errorCode: executionErrorCode(error, 'MODEL_TOOL_CALL_INVALID'),
+          userId: context.userId,
+          appId: context.appId,
+          runId: context.runId,
+          toolCallId: context.toolCallId ?? null,
+          proposedToolName: proposal.name,
+          executionMode,
+        },
+        'Agent tool proposal inspection failed',
+      );
+      throw error;
     }
-    const inspection = await this.executor.inspect(context, resolvedProposal);
-    return {
-      inspection,
-      policyDecision: this.policy.decide(inspection, inspection.policyRevision),
-      proposal: resolvedProposal,
-    };
   }
 
   decision(inspection: ToolInspection): ToolPolicyDecision {
@@ -142,17 +174,34 @@ export class ToolCallRunner {
 
   async acquireRead(context: ToolContext, inspection: ToolInspection, ttlSeconds: number): Promise<ReadToolLease> {
     const owner = { type: 'agent' as const, id: context.agentRuntimeId };
-    const leases = await this.leaseCoordinator.acquireWithRetry(
-      owner,
-      inspection.resourceKeys,
-      'read',
-      ttlSeconds,
-      context.signal,
-      context.deadlineAt,
-    );
-    const leaseIds = leases.map((lease) => lease.id);
-    const renewal = this.leaseCoordinator.startRenewal(leaseIds, owner, ttlSeconds, context.signal);
-    return { signal: renewal.signal, renewal, leaseIds, owner };
+    try {
+      const leases = await this.leaseCoordinator.acquireWithRetry(
+        owner,
+        inspection.resourceKeys,
+        'read',
+        ttlSeconds,
+        context.signal,
+        context.deadlineAt,
+      );
+      const leaseIds = leases.map((lease) => lease.id);
+      const renewal = this.leaseCoordinator.startRenewal(leaseIds, owner, ttlSeconds, context.signal);
+      return { signal: renewal.signal, renewal, leaseIds, owner };
+    } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          errorCode: executionErrorCode(error, 'LEASE_CONFLICT'),
+          userId: context.userId,
+          appId: context.appId,
+          runId: context.runId,
+          toolCallId: context.toolCallId ?? null,
+          toolName: inspection.toolName,
+          resourceCount: inspection.resourceKeys.length,
+        },
+        'Agent read tool lease acquisition failed',
+      );
+      throw error;
+    }
   }
 
   async executeRead(lease: ReadToolLease, context: ToolContext, inspection: ToolInspection): Promise<ToolResult> {
@@ -160,10 +209,37 @@ export class ToolCallRunner {
     try {
       result = await this.executor.execute({ ...context, signal: lease.signal }, inspection);
     } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          errorCode: executionErrorCode(error, 'MODEL_EXECUTION_FAILED'),
+          userId: context.userId,
+          appId: context.appId,
+          runId: context.runId,
+          toolCallId: context.toolCallId ?? null,
+          toolName: inspection.toolName,
+        },
+        'Agent read/control tool execution failed',
+      );
       result = failedReadResult(error);
     }
     const renewalError = await lease.renewal.stop();
-    return renewalError ? failedReadResult(renewalError) : result;
+    if (renewalError) {
+      logger.warn(
+        {
+          err: renewalError,
+          errorCode: executionErrorCode(renewalError, 'LEASE_LOST'),
+          userId: context.userId,
+          appId: context.appId,
+          runId: context.runId,
+          toolCallId: context.toolCallId ?? null,
+          toolName: inspection.toolName,
+        },
+        'Agent read tool lease renewal failed',
+      );
+      return failedReadResult(renewalError);
+    }
+    return result;
   }
 
   failedRead(error: unknown): ToolResult {
@@ -171,8 +247,16 @@ export class ToolCallRunner {
   }
 
   async releaseRead(lease: ReadToolLease): Promise<void> {
-    await lease.renewal.stop().catch(() => undefined);
-    await this.leaseCoordinator.release(lease.leaseIds, lease.owner).catch(() => undefined);
+    await lease.renewal
+      .stop()
+      .catch((error) =>
+        logger.warn({ err: error, leaseCount: lease.leaseIds.length }, 'Agent read lease renewal cleanup failed'),
+      );
+    await this.leaseCoordinator
+      .release(lease.leaseIds, lease.owner)
+      .catch((error) =>
+        logger.warn({ err: error, leaseCount: lease.leaseIds.length }, 'Agent read lease release failed'),
+      );
   }
 
   acquireMutation(request: {
@@ -183,7 +267,19 @@ export class ToolCallRunner {
     signal: AbortSignal;
     deadlineAt: number;
   }): Promise<MutationLeaseGuardHandle> {
-    return this.mutationLeases.acquire(request);
+    return this.mutationLeases.acquire(request).catch((error) => {
+      logger.warn(
+        {
+          err: error,
+          errorCode: executionErrorCode(error, 'LEASE_CONFLICT'),
+          runtimeId: request.runtimeId,
+          operationId: request.operationId,
+          resourceCount: request.resourceKeys.length,
+        },
+        'Agent mutation lease acquisition failed',
+      );
+      throw error;
+    });
   }
 
   async executeMutation(
@@ -196,10 +292,37 @@ export class ToolCallRunner {
     try {
       result = await this.executor.executeMutation({ ...context, signal: lease.signal }, inspection);
     } catch (error) {
+      logger.warn(
+        {
+          err: error,
+          errorCode: executionErrorCode(error, 'MODEL_EXECUTION_FAILED'),
+          userId: context.userId,
+          appId: context.appId,
+          runId: context.runId,
+          toolCallId: context.toolCallId ?? null,
+          toolName: inspection.toolName,
+          resourceCount: inspection.resourceKeys.length,
+        },
+        'Agent mutation tool execution outcome unknown',
+      );
       result = unknownMutationResult(error);
     }
     const renewalError = await lease.stopRenewal();
-    if (renewalError) result = unknownMutationResult(renewalError);
+    if (renewalError) {
+      logger.warn(
+        {
+          err: renewalError,
+          errorCode: executionErrorCode(renewalError, 'LEASE_LOST'),
+          userId: context.userId,
+          appId: context.appId,
+          runId: context.runId,
+          toolCallId: context.toolCallId ?? null,
+          toolName: inspection.toolName,
+        },
+        'Agent mutation lease renewal failed after execution',
+      );
+      result = unknownMutationResult(renewalError);
+    }
     return result;
   }
 
@@ -212,7 +335,11 @@ export class ToolCallRunner {
   }
 
   async cleanupMutation(lease: MutationLeaseGuardHandle): Promise<void> {
-    await lease.stopRenewal().catch(() => undefined);
-    await lease.releaseIfInactive().catch(() => undefined);
+    await lease
+      .stopRenewal()
+      .catch((error) => logger.warn({ err: error }, 'Agent mutation lease renewal cleanup failed'));
+    await lease
+      .releaseIfInactive()
+      .catch((error) => logger.warn({ err: error }, 'Agent inactive mutation lease release failed'));
   }
 }

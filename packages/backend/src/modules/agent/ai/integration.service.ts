@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger } from '../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import type { CryptoHashPort } from '../crypto-hash.port';
 import { hashOperation } from '../operation-hash';
@@ -176,7 +177,31 @@ export class IntegrationService {
       createdAt: now,
     });
     this.resetRuntimeHealth(created);
-    if (created.enabled && created.kind === 'mcp') void this.refresh(scope, created.id).catch(() => undefined);
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        integrationId: created.id,
+        kind: created.kind,
+        enabled: created.enabled,
+        version: created.version,
+      },
+      'Agent integration created',
+    );
+    if (created.enabled && created.kind === 'mcp') {
+      void this.refresh(scope, created.id).catch((error) =>
+        logger.warn(
+          {
+            err: error,
+            errorCode: refreshErrorCode(error),
+            userId: scope.userId,
+            appId: scope.appId,
+            integrationId: created.id,
+          },
+          'Agent integration initial refresh failed',
+        ),
+      );
+    }
     return this.managementView(created);
   }
 
@@ -200,9 +225,35 @@ export class IntegrationService {
     });
     this.invalidateRefreshEpoch(scope, integrationId);
     this.resetRuntimeHealth(updated);
-    await this.mcp.close(integrationId).catch(() => undefined);
+    await this.mcp
+      .close(integrationId)
+      .catch((error) =>
+        logger.warn(
+          { err: error, userId: scope.userId, appId: scope.appId, integrationId },
+          'Agent integration runtime close failed during update',
+        ),
+      );
     this.hooks.removed(scope, integrationId);
-    if (updated.enabled && updated.kind === 'mcp') void this.refresh(scope, updated.id).catch(() => undefined);
+    logger.info(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        integrationId,
+        kind: updated.kind,
+        enabled: updated.enabled,
+        version: updated.version,
+        credentialRevision: updated.credentialRevision,
+      },
+      'Agent integration updated',
+    );
+    if (updated.enabled && updated.kind === 'mcp') {
+      void this.refresh(scope, updated.id).catch((error) =>
+        logger.warn(
+          { err: error, errorCode: refreshErrorCode(error), userId: scope.userId, appId: scope.appId, integrationId },
+          'Agent integration refresh after update failed',
+        ),
+      );
+    }
     return this.managementView(updated);
   }
 
@@ -213,8 +264,19 @@ export class IntegrationService {
     await this.repository.remove(scope, integrationId, expectedVersion);
     this.invalidateRefreshEpoch(scope, integrationId);
     this.runtimeHealth.delete(this.runtimeHealthKey(scope, integrationId));
-    await this.mcp.close(integrationId).catch(() => undefined);
+    await this.mcp
+      .close(integrationId)
+      .catch((error) =>
+        logger.warn(
+          { err: error, userId: scope.userId, appId: scope.appId, integrationId },
+          'Agent integration runtime close failed during removal',
+        ),
+      );
     this.hooks.removed(scope, integrationId);
+    logger.info(
+      { userId: scope.userId, appId: scope.appId, integrationId, expectedVersion },
+      'Agent integration removed',
+    );
   }
 
   async refresh(scope: Scope, integrationId: string, signal?: AbortSignal): Promise<IntegrationRefreshView> {
@@ -227,6 +289,17 @@ export class IntegrationService {
     if (integration.kind !== 'mcp') throw new Error('INTEGRATION_REFRESH_UNSUPPORTED');
     const refreshEpoch = this.refreshEpoch(scope, integration.id);
     this.markRefreshing(integration);
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        integrationId: integration.id,
+        integrationVersion: integration.version,
+        credentialRevision: integration.credentialRevision,
+        refreshEpoch,
+      },
+      'Agent MCP integration refresh started',
+    );
     try {
       await this.mcp.close(integration.id);
       this.hooks.removed(scope, integration.id);
@@ -281,11 +354,33 @@ export class IntegrationService {
       if (!updated || this.refreshEpoch(scope, integration.id) !== refreshEpoch) {
         // The network result belongs to an older durable generation. Never publish its schema, and
         // close any session that may have completed after a newer generation or lifecycle invalidation.
-        await this.mcp.close(integration.id).catch(() => undefined);
+        await this.mcp
+          .close(integration.id)
+          .catch((error) =>
+            logger.warn(
+              { err: error, userId: scope.userId, appId: scope.appId, integrationId: integration.id },
+              'Agent stale MCP refresh cleanup failed',
+            ),
+          );
         throw new Error('INTEGRATION_REFRESH_STALE');
       }
       this.hooks.mcpRefreshed(scope, updated, snapshot, schemaHash);
       this.markReady(updated);
+      logger.info(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          integrationId: integration.id,
+          integrationVersion: updated.version,
+          credentialRevision: updated.credentialRevision,
+          protocolVersion: snapshot.protocolVersion,
+          toolCount: snapshot.tools.length,
+          resourceCount: snapshot.resources.length,
+          promptCount: snapshot.prompts.length,
+          refreshEpoch,
+        },
+        'Agent MCP integration refresh completed',
+      );
       return {
         integration: this.managementView(updated),
         serverName: snapshot.serverName,
@@ -300,6 +395,20 @@ export class IntegrationService {
       if (this.refreshEpoch(scope, integration.id) === refreshEpoch && code !== 'INTEGRATION_REFRESH_STALE') {
         this.markRefreshError(integration, code);
       }
+      logger.warn(
+        {
+          err: error,
+          errorCode: code,
+          userId: scope.userId,
+          appId: scope.appId,
+          integrationId: integration.id,
+          integrationVersion: integration.version,
+          credentialRevision: integration.credentialRevision,
+          refreshEpoch,
+          aborted: signal?.aborted === true,
+        },
+        'Agent MCP integration refresh failed',
+      );
       throw error;
     }
   }
@@ -331,8 +440,25 @@ export class IntegrationService {
         this.hooks.removed(scope, integration.id);
         continue;
       }
-      await this.refresh(scope, integration.id).catch(async () => {
-        await this.mcp.close(integration.id).catch(() => undefined);
+      await this.refresh(scope, integration.id).catch(async (error) => {
+        logger.warn(
+          {
+            err: error,
+            errorCode: refreshErrorCode(error),
+            userId: scope.userId,
+            appId: scope.appId,
+            integrationId: integration.id,
+          },
+          'Agent MCP integration sync refresh failed',
+        );
+        await this.mcp
+          .close(integration.id)
+          .catch((closeError) =>
+            logger.warn(
+              { err: closeError, userId: scope.userId, appId: scope.appId, integrationId: integration.id },
+              'Agent MCP integration cleanup after sync failure failed',
+            ),
+          );
         this.hooks.removed(scope, integration.id);
       });
     }
@@ -342,7 +468,14 @@ export class IntegrationService {
     for (const integration of await this.repository.list(scope, 'mcp')) {
       this.invalidateRefreshEpoch(scope, integration.id);
       this.resetRuntimeHealth({ ...integration, enabled: false });
-      await this.mcp.close(integration.id).catch(() => undefined);
+      await this.mcp
+        .close(integration.id)
+        .catch((error) =>
+          logger.warn(
+            { err: error, userId: scope.userId, appId: scope.appId, integrationId: integration.id },
+            'Agent MCP integration close during deactivation failed',
+          ),
+        );
       this.hooks.removed(scope, integration.id);
     }
   }
@@ -376,7 +509,19 @@ export class IntegrationService {
         ) {
           return false;
         }
-        await this.refresh(state.scope, state.integrationId).catch(() => undefined);
+        await this.refresh(state.scope, state.integrationId).catch((error) =>
+          logger.warn(
+            {
+              err: error,
+              errorCode: refreshErrorCode(error),
+              userId: state.scope.userId,
+              appId: state.scope.appId,
+              integrationId: state.integrationId,
+              failureCount: state.failureCount,
+            },
+            'Agent MCP integration scheduled retry failed',
+          ),
+        );
         return true;
       }),
     );

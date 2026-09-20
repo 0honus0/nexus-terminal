@@ -1,5 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     type AgentAppSummary,
@@ -10,12 +12,13 @@
   import { formatQuantity, type QuantityType } from './quantity-format';
 
   const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
+  const { t } = useI18n();
+  const operationFeedback = useOperationFeedback('agent.settings.execution-policy');
   const selectedAppId = ref('');
   const view = ref<AgentExecutionPolicyView | null>(null);
   const draft = ref<AgentExecutionPolicyOverrides>({});
   const loading = ref(false);
   const saving = ref(false);
-  const error = ref('');
 
   type NumericKey = Exclude<keyof AgentExecutionPolicyOverrides, 'contextCompactionMode' | 'contextProfile'>;
   interface FieldMeta {
@@ -43,13 +46,13 @@
       return;
     }
     loading.value = true;
-    error.value = '';
     try {
       const next = await agentApi.appExecutionPolicy(selectedAppId.value);
       view.value = next;
       draft.value = clone(next.overrides);
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : 'AGENT_EXECUTION_POLICY_FAILED';
+      const message = cause instanceof Error ? cause.message : 'AGENT_EXECUTION_POLICY_FAILED';
+      operationFeedback.notifyError({ operation: 'load-policy', message, cause });
     } finally {
       loading.value = false;
     }
@@ -98,13 +101,14 @@
   const save = async (): Promise<void> => {
     if (!view.value || !selectedAppId.value || invalid.value || saving.value) return;
     saving.value = true;
-    error.value = '';
     try {
       const next = await agentApi.replaceAppExecutionPolicy(selectedAppId.value, draft.value, view.value.version);
       view.value = next;
       draft.value = clone(next.overrides);
+      operationFeedback.notifySuccess(t('agent.ui.saved'));
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : 'AGENT_EXECUTION_POLICY_FAILED';
+      const message = cause instanceof Error ? cause.message : 'AGENT_EXECUTION_POLICY_FAILED';
+      operationFeedback.notifyError({ operation: 'save-policy', message, cause });
       await load();
     } finally {
       saving.value = false;
@@ -130,7 +134,6 @@
     </div>
 
     <div class="space-y-4 p-4 sm:p-5">
-      <p v-if="error" class="text-xs text-error">{{ error }}</p>
       <div v-if="view && !loading" class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <div v-for="field in fields" :key="field.key" class="rounded-lg border border-border/60 bg-background/60 p-3">
           <div class="flex items-start justify-between gap-2">

@@ -112,7 +112,12 @@ export class SubagentScheduler {
   }
 
   async dispose(): Promise<void> {
-    await this.quiesce(this.clock.nowUnixSeconds() + 10).catch(() => undefined);
+    await this.quiesce(this.clock.nowUnixSeconds() + 10).catch((error) =>
+      logger.warn(
+        { errorCode: logErrorCode(error, 'SUBAGENT_QUIESCE_FAILED') },
+        'Agent Subagent scheduler dispose quiesce failed',
+      ),
+    );
   }
 
   get activeCount(): number {
@@ -208,7 +213,7 @@ export class SubagentScheduler {
         if (claimed.kind !== 'model_step' && claimed.kind !== 'tool_step') {
           await this.work
             .settleWork(claimed.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds())
-            .catch(() => undefined);
+            .catch((error) => this.logWorkFailure(scope, claimed, 'invalid_kind_settle', error));
           continue;
         }
         this.start(scope, claimed);
@@ -276,7 +281,7 @@ export class SubagentScheduler {
   private logWorkFailure(
     scope: Scope,
     work: SchedulerWorkView,
-    phase: 'consume_inbox' | 'join_resume' | 'child_execute',
+    phase: 'consume_inbox' | 'join_resume' | 'child_execute' | 'invalid_kind_settle' | 'child_failure_settle',
     error: unknown,
   ): void {
     logger.error(
@@ -302,7 +307,7 @@ export class SubagentScheduler {
         this.logWorkFailure(scope, work, 'child_execute', error);
         await this.work
           .settleWork(work.id, this.ownerEpoch, 'cancelled', this.clock.nowUnixSeconds())
-          .catch(() => undefined);
+          .catch((settleError) => this.logWorkFailure(scope, work, 'child_failure_settle', settleError));
       })
       .finally(() => {
         this.active.delete(work.id);

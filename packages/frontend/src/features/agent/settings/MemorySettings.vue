@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { computed, onBeforeUnmount, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     formatAgentApiError,
@@ -13,6 +14,7 @@
 
   const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
   const { t } = useI18n();
+  const operationFeedback = useOperationFeedback('agent.settings.memory');
 
   const selectedAppId = ref('');
   const status = ref<AgentMemoryStatus | 'all'>('all');
@@ -20,8 +22,6 @@
   const drafts = ref<Record<string, string>>({});
   const loading = ref(false);
   const localBusy = ref(false);
-  const error = ref('');
-  const notice = ref('');
 
   const sourceAppId = ref('');
   const sourceMemories = ref<AgentMemoryView[]>([]);
@@ -78,7 +78,6 @@
       return;
     }
     loading.value = true;
-    error.value = '';
     try {
       const next = await agentApi.memories(appId, requestedStatus, 100);
       if (generation !== memoriesGeneration || selectedAppId.value !== appId || status.value !== requestedStatus)
@@ -88,7 +87,7 @@
     } catch (cause) {
       if (generation !== memoriesGeneration || selectedAppId.value !== appId || status.value !== requestedStatus)
         return;
-      error.value = explain(cause);
+      operationFeedback.notifyError({ operation: 'load-memories', message: explain(cause), cause });
     } finally {
       if (generation === memoriesGeneration && selectedAppId.value === appId && status.value === requestedStatus) {
         loading.value = false;
@@ -107,7 +106,6 @@
       return;
     }
     importLoading.value = true;
-    error.value = '';
     try {
       const next = await agentApi.memories(appId, 'published', 100);
       if (generation !== sourceMemoriesGeneration || sourceAppId.value !== appId) return;
@@ -118,7 +116,7 @@
     } catch (cause) {
       if (generation !== sourceMemoriesGeneration || sourceAppId.value !== appId) return;
       sourceMemories.value = [];
-      error.value = explain(cause);
+      operationFeedback.notifyError({ operation: 'load-source-memories', message: explain(cause), cause });
     } finally {
       if (generation === sourceMemoriesGeneration && sourceAppId.value === appId) importLoading.value = false;
     }
@@ -138,20 +136,20 @@
     }
   };
 
-  const mutate = async (action: () => Promise<void>, success: string): Promise<void> => {
+  const mutate = async (operation: string, action: () => Promise<void>, success: string): Promise<void> => {
     if (disabled.value) return;
     localBusy.value = true;
-    error.value = '';
-    notice.value = '';
     try {
       await action();
-      notice.value = success;
+      operationFeedback.notifySuccess(success);
     } catch (cause) {
       const apiError = toAgentApiError(cause);
       if (['MEMORY_VERSION_CONFLICT', 'MEMORY_REVIEW_STATE_INVALID', 'NOT_FOUND'].includes(apiError.code)) {
         await loadMemories();
       }
-      error.value = apiError.code === 'MEMORY_VERSION_CONFLICT' ? t('agent.settings.memory.conflict') : explain(cause);
+      const message =
+        apiError.code === 'MEMORY_VERSION_CONFLICT' ? t('agent.settings.memory.conflict') : explain(cause);
+      operationFeedback.notifyError({ operation, message, cause });
     } finally {
       localBusy.value = false;
     }
@@ -160,48 +158,68 @@
   const publish = (memory: AgentMemoryView): void => {
     const content = (drafts.value[memory.id] ?? memory.content).trim();
     if (!content) return;
-    void mutate(async () => {
-      await agentApi.reviewMemory(selectedAppId.value, memory, 'publish', content);
-      await loadMemories();
-      await loadSourceMemories();
-    }, t('agent.settings.memory.published'));
+    void mutate(
+      'publish-memory',
+      async () => {
+        await agentApi.reviewMemory(selectedAppId.value, memory, 'publish', content);
+        await loadMemories();
+        await loadSourceMemories();
+      },
+      t('agent.settings.memory.published'),
+    );
   };
 
   const reject = (memory: AgentMemoryView): void => {
-    void mutate(async () => {
-      await agentApi.reviewMemory(selectedAppId.value, memory, 'reject');
-      await loadMemories();
-    }, t('agent.settings.memory.rejected'));
+    void mutate(
+      'reject-memory',
+      async () => {
+        await agentApi.reviewMemory(selectedAppId.value, memory, 'reject');
+        await loadMemories();
+      },
+      t('agent.settings.memory.rejected'),
+    );
   };
 
   const revoke = (memory: AgentMemoryView): void => {
-    void mutate(async () => {
-      await agentApi.reviewMemory(selectedAppId.value, memory, 'revoke');
-      await loadMemories();
-      await loadSourceMemories();
-    }, t('agent.settings.memory.revoked'));
+    void mutate(
+      'revoke-memory',
+      async () => {
+        await agentApi.reviewMemory(selectedAppId.value, memory, 'revoke');
+        await loadMemories();
+        await loadSourceMemories();
+      },
+      t('agent.settings.memory.revoked'),
+    );
   };
 
   const previewImport = (): void => {
     if (!selectedAppId.value || !sourceAppId.value || !sourceMemoryId.value || disabled.value) return;
-    void mutate(async () => {
-      importPreview.value = await agentApi.previewMemoryImport(
-        selectedAppId.value,
-        sourceAppId.value,
-        sourceMemoryId.value,
-      );
-    }, t('agent.settings.memory.importPreviewReady'));
+    void mutate(
+      'preview-import',
+      async () => {
+        importPreview.value = await agentApi.previewMemoryImport(
+          selectedAppId.value,
+          sourceAppId.value,
+          sourceMemoryId.value,
+        );
+      },
+      t('agent.settings.memory.importPreviewReady'),
+    );
   };
 
   const confirmImport = (): void => {
     const confirmation = importPreview.value;
     if (!confirmation || disabled.value) return;
-    void mutate(async () => {
-      await agentApi.confirmMemoryImport(selectedAppId.value, confirmation.id);
-      importPreview.value = null;
-      sourceMemoryId.value = '';
-      await loadMemories();
-    }, t('agent.settings.memory.imported'));
+    void mutate(
+      'confirm-import',
+      async () => {
+        await agentApi.confirmMemoryImport(selectedAppId.value, confirmation.id);
+        importPreview.value = null;
+        sourceMemoryId.value = '';
+        await loadMemories();
+      },
+      t('agent.settings.memory.imported'),
+    );
   };
 
   watch(
@@ -214,7 +232,6 @@
     { immediate: true },
   );
   watch(selectedAppId, () => {
-    notice.value = '';
     importPreview.value = null;
     reconcileSelection();
     void loadMemories();
@@ -260,13 +277,6 @@
     </div>
 
     <div class="space-y-5 p-4 sm:p-5">
-      <div v-if="error" class="rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error" role="alert">
-        {{ error }}
-      </div>
-      <div v-if="notice" class="rounded-lg border border-success/30 bg-success/10 px-3 py-2 text-xs text-success">
-        {{ notice }}
-      </div>
-
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="text-xs text-text-secondary">
           {{ $t('agent.settings.memory.app') }}

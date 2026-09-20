@@ -1,5 +1,7 @@
 <script setup lang="ts">
   import { computed, ref, watch } from 'vue';
+  import { useI18n } from 'vue-i18n';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import QuantityInput from './QuantityInput.vue';
   import {
     agentApi,
@@ -10,6 +12,9 @@
     type AgentSubagentProfileTemplate,
     type AgentSubagentSettingsView,
   } from '../api/agent-api';
+
+  const { t } = useI18n();
+  const operationFeedback = useOperationFeedback('agent.settings.subagents');
 
   const props = defineProps<{
     settings: AgentSettingsView;
@@ -22,7 +27,6 @@
   const selectedAppId = ref('');
   const profileSettings = ref<AgentSubagentSettingsView | null>(null);
   const profileBusy = ref(false);
-  const profileError = ref('');
   const selectedTemplateId = ref<AgentSubagentProfileTemplate['id']>('explore');
 
   const capabilityOptions = ref<string[]>([]);
@@ -61,7 +65,6 @@
       return;
     }
     profileBusy.value = true;
-    profileError.value = '';
     try {
       const [loaded, grantView] = await Promise.all([
         agentApi.subagentSettings(selectedAppId.value),
@@ -73,7 +76,8 @@
         policy: { ...loaded.policy, profiles: cloneProfiles(loaded.policy.profiles) },
       };
     } catch (cause) {
-      profileError.value = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
+      const message = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
+      operationFeedback.notifyError({ operation: 'load-profiles', message, cause });
     } finally {
       profileBusy.value = false;
     }
@@ -160,7 +164,6 @@
   const saveProfiles = async (): Promise<void> => {
     if (!profileSettings.value || !selectedAppId.value || profileBusy.value || invalidProfileLimits.value) return;
     profileBusy.value = true;
-    profileError.value = '';
     try {
       const updated = await agentApi.replaceSubagentProfiles(
         selectedAppId.value,
@@ -171,8 +174,10 @@
         ...updated,
         policy: { ...updated.policy, profiles: cloneProfiles(updated.policy.profiles) },
       };
+      operationFeedback.notifySuccess(t('agent.ui.saved'));
     } catch (cause) {
-      profileError.value = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
+      const message = cause instanceof Error ? cause.message : 'SUBAGENT_SETTINGS_FAILED';
+      operationFeedback.notifyError({ operation: 'save-profiles', message, cause });
     } finally {
       profileBusy.value = false;
     }
@@ -314,7 +319,6 @@
         <p v-if="profileSettings?.templates.length" class="mt-1 text-xs text-text-secondary">
           {{ $t('agent.settings.subagents.templateHint') }}
         </p>
-        <p v-if="profileError" class="mt-2 text-xs text-error">{{ profileError }}</p>
 
         <div v-if="profileSettings" class="mt-3 space-y-3">
           <article

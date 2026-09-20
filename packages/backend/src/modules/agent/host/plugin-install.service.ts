@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logger, logErrorCode } from '../../../shared/logging/logger';
 import { compare, major, valid as validSemver } from 'semver';
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import { validateManifest } from './app-manifest-validator';
@@ -217,9 +218,35 @@ export class PluginInstallService {
     };
     try {
       await this.repository.createStage(record);
+      logger.info(
+        {
+          userId,
+          stageId,
+          artifactAppId: input.artifactAppId,
+          artifactId: input.artifactId,
+          packageHash: staged.packageHash,
+          sizeBytes: staged.sizeBytes,
+        },
+        'Agent local plugin staged',
+      );
       return record;
     } catch (error) {
-      await this.verifier.discardStage(stageId).catch(() => undefined);
+      logger.warn(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'PLUGIN_STAGE_FAILED'),
+          userId,
+          stageId,
+          artifactAppId: input.artifactAppId,
+          artifactId: input.artifactId,
+        },
+        'Agent local plugin staging failed',
+      );
+      await this.verifier
+        .discardStage(stageId)
+        .catch((cleanupError) =>
+          logger.warn({ err: cleanupError, stageId, userId }, 'Agent failed local plugin stage cleanup failed'),
+        );
       throw error;
     }
   }
@@ -277,6 +304,10 @@ export class PluginInstallService {
 
   async verify(userId: number, stageId: string): Promise<{ stage: PluginStageRecord; plugin: PluginVersionRecord }> {
     const stage = await this.requireStage(userId, stageId);
+    logger.debug(
+      { userId, stageId, appId: stage.appId, version: stage.version, stageStatus: stage.status },
+      'Agent plugin verification started',
+    );
     if (stage.status === 'installed') throw new Error('PLUGIN_STAGE_ALREADY_INSTALLED');
     try {
       const verified = await this.verifyPackage(userId, stage);
@@ -296,22 +327,46 @@ export class PluginInstallService {
         updatedAt: now,
       });
       await this.verifier.adoptStage(stageId, verified.manifest.id);
+      logger.info(
+        {
+          userId,
+          stageId,
+          appId: verified.manifest.id,
+          version: verified.manifest.version,
+          publisherKeyId: verified.publisherKeyId,
+          packageHash: verified.packageHash,
+        },
+        'Agent plugin verification completed',
+      );
       return { stage: updated, plugin };
     } catch (error) {
-      const errorCode = error instanceof Error ? error.message.slice(0, 128) : 'PLUGIN_VERIFY_FAILED';
+      const errorCode = logErrorCode(error, 'PLUGIN_VERIFY_FAILED').slice(0, 128);
+      logger.warn(
+        { err: error, errorCode, userId, stageId, appId: stage.appId, version: stage.version },
+        'Agent plugin verification failed',
+      );
       await this.repository
         .updateStage(userId, stageId, stage.versionNumber, {
           status: 'failed',
           errorCode,
           updatedAt: this.clock.nowUnixSeconds(),
         })
-        .catch(() => undefined);
+        .catch((stageError) =>
+          logger.warn(
+            { err: stageError, userId, stageId, errorCode },
+            'Agent plugin verification failure state could not be persisted',
+          ),
+        );
       throw error;
     }
   }
 
   async install(userId: number, stageId: string): Promise<PluginInstallResult> {
     let stage = await this.requireStage(userId, stageId);
+    logger.debug(
+      { userId, stageId, appId: stage.appId, version: stage.version, stageStatus: stage.status },
+      'Agent plugin installation started',
+    );
     if (!['verified', 'failed'].includes(stage.status)) throw new Error('PLUGIN_STAGE_NOT_VERIFIED');
     const verified = await this.verifyPackage(userId, stage);
     this.assertStageIdentity(stage, verified);
@@ -392,10 +447,22 @@ export class PluginInstallService {
       updatedAt: now,
     });
     await this.verifier.discardStage(stageId, stage.appId);
+    logger.info(
+      {
+        userId,
+        stageId,
+        appId: plugin.appId,
+        version: plugin.version,
+        desiredState: current.desiredState,
+        observedState: current.observedState,
+      },
+      'Agent plugin installation completed',
+    );
     return { stage, plugin, app: this.appView(current, plugin) };
   }
 
   async upgrade(userId: number, appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult> {
+    logger.debug({ userId, appId, stageId, expectedVersion }, 'Agent plugin upgrade started');
     if (this.registry.isBuiltin(appId)) throw new Error('PLUGIN_APP_ID_RESERVED');
     let stage = await this.requireStage(userId, stageId);
     const verified = await this.verifyPackage(userId, stage);
@@ -424,6 +491,16 @@ export class PluginInstallService {
       ? await this.compareAndSetState(scope, state.version, { acceptNewRuns: false })
       : state;
     if (draining.runningCount > 0) {
+      logger.info(
+        {
+          userId,
+          appId,
+          fromVersion: oldPlugin.version,
+          targetVersion: verified.manifest.version,
+          runningCount: draining.runningCount,
+        },
+        'Agent plugin upgrade waiting for active Runs to drain',
+      );
       return {
         state: 'draining',
         targetVersion: verified.manifest.version,
@@ -459,22 +536,88 @@ export class PluginInstallService {
       );
       this.onHostStateCommitted(userId);
     } catch (error) {
-      await this.storage.restore(scope, snapshot).catch(() => undefined);
-      await this.runtime.dispose(scope, nextPlugin).catch(() => undefined);
-      if (draining.desiredState === 'enabled') await this.runtime.activate(scope, oldPlugin).catch(() => undefined);
-      const current = await this.states.get(scope).catch(() => null);
+      logger.error(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'PLUGIN_UPGRADE_FAILED'),
+          userId,
+          appId,
+          fromVersion: oldPlugin.version,
+          targetVersion: nextPlugin.version,
+          stageId,
+        },
+        'Agent plugin upgrade failed; rollback started',
+      );
+      await this.storage
+        .restore(scope, snapshot)
+        .catch((rollbackError) =>
+          logger.error(
+            { err: rollbackError, userId, appId, fromVersion: oldPlugin.version, targetVersion: nextPlugin.version },
+            'Agent plugin upgrade storage rollback failed',
+          ),
+        );
+      await this.runtime
+        .dispose(scope, nextPlugin)
+        .catch((rollbackError) =>
+          logger.error(
+            { err: rollbackError, userId, appId, targetVersion: nextPlugin.version },
+            'Agent plugin upgrade new runtime disposal during rollback failed',
+          ),
+        );
+      if (draining.desiredState === 'enabled') {
+        await this.runtime
+          .activate(scope, oldPlugin)
+          .catch((rollbackError) =>
+            logger.error(
+              { err: rollbackError, userId, appId, restoredVersion: oldPlugin.version },
+              'Agent plugin upgrade old runtime reactivation during rollback failed',
+            ),
+          );
+      }
+      const current = await this.states.get(scope).catch((stateError) => {
+        logger.error(
+          { err: stateError, userId, appId, targetVersion: nextPlugin.version },
+          'Agent plugin upgrade rollback could not read App state',
+        );
+        return null;
+      });
       if (current && current.activeVersion === oldPlugin.version && !current.acceptNewRuns) {
         await this.compareAndSetState(scope, current.version, {
           acceptNewRuns: true,
           observedState: draining.observedState,
           healthReason: draining.healthReason,
-        }).catch(() => undefined);
+        }).catch((stateError) =>
+          logger.error(
+            { err: stateError, userId, appId, restoredVersion: oldPlugin.version },
+            'Agent plugin upgrade rollback could not reopen App for new Runs',
+          ),
+        );
       }
-      if ((await this.repository.countInstalled(appId, nextPlugin.version).catch(() => 1)) === 0) {
-        await this.verifier.removeInstalled(appId, nextPlugin.version).catch(() => undefined);
+      if (
+        (await this.repository.countInstalled(appId, nextPlugin.version).catch((countError) => {
+          logger.warn(
+            { err: countError, userId, appId, targetVersion: nextPlugin.version },
+            'Agent plugin upgrade rollback could not count installed target versions',
+          );
+          return 1;
+        })) === 0
+      ) {
+        await this.verifier
+          .removeInstalled(appId, nextPlugin.version)
+          .catch((cleanupError) =>
+            logger.warn(
+              { err: cleanupError, userId, appId, targetVersion: nextPlugin.version },
+              'Agent plugin upgrade rollback could not remove staged target package',
+            ),
+          );
         await this.repository
           .updateVersionStatus(appId, nextPlugin.version, 'failed', null, this.clock.nowUnixSeconds())
-          .catch(() => undefined);
+          .catch((statusError) =>
+            logger.warn(
+              { err: statusError, userId, appId, targetVersion: nextPlugin.version },
+              'Agent plugin upgrade rollback could not persist failed target version status',
+            ),
+          );
       }
       throw error;
     }
@@ -490,9 +633,17 @@ export class PluginInstallService {
         updatedAt: this.clock.nowUnixSeconds(),
       });
       await this.verifier.discardStage(stage.id, appId);
-    } catch {
+    } catch (error) {
+      logger.warn(
+        { err: error, userId, appId, stageId, activeVersion: nextPlugin.version },
+        'Agent plugin upgrade stage finalization failed after active version commit',
+      );
       // The active version is already atomically committed. Preserve the staged package for reconciliation/retry.
     }
+    logger.info(
+      { userId, appId, fromVersion: oldPlugin.version, targetVersion: nextPlugin.version, stageId },
+      'Agent plugin upgrade completed',
+    );
     return {
       state: 'completed',
       targetVersion: nextPlugin.version,
@@ -502,6 +653,7 @@ export class PluginInstallService {
   }
 
   async uninstall(userId: number, appId: string, expectedVersion: number): Promise<PluginUninstallResult> {
+    logger.debug({ userId, appId, expectedVersion }, 'Agent plugin uninstall started');
     if (this.registry.isBuiltin(appId)) throw new Error('PLUGIN_APP_ID_RESERVED');
     const scope = { userId, appId };
     const installation = await this.repository.getInstallation(userId, appId);
@@ -515,7 +667,13 @@ export class PluginInstallService {
     const draining = state.acceptNewRuns
       ? await this.compareAndSetState(scope, state.version, { acceptNewRuns: false })
       : state;
-    if (draining.runningCount > 0) return { state: 'draining', app: this.appView(draining, plugin) };
+    if (draining.runningCount > 0) {
+      logger.info(
+        { userId, appId, version: plugin.version, runningCount: draining.runningCount },
+        'Agent plugin uninstall waiting for active Runs to drain',
+      );
+      return { state: 'draining', app: this.appView(draining, plugin) };
+    }
 
     let updated: AppRecord;
     try {
@@ -536,14 +694,44 @@ export class PluginInstallService {
       );
       this.onHostStateCommitted(userId);
     } catch (error) {
-      if (draining.desiredState === 'enabled') await this.runtime.activate(scope, plugin).catch(() => undefined);
-      const current = await this.states.get(scope).catch(() => null);
+      logger.error(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'PLUGIN_UNINSTALL_FAILED'),
+          userId,
+          appId,
+          version: plugin.version,
+        },
+        'Agent plugin uninstall failed; state restoration started',
+      );
+      if (draining.desiredState === 'enabled') {
+        await this.runtime
+          .activate(scope, plugin)
+          .catch((restoreError) =>
+            logger.error(
+              { err: restoreError, userId, appId, version: plugin.version },
+              'Agent plugin runtime restoration after uninstall failure failed',
+            ),
+          );
+      }
+      const current = await this.states.get(scope).catch((stateError) => {
+        logger.error(
+          { err: stateError, userId, appId, version: plugin.version },
+          'Agent plugin uninstall rollback could not read App state',
+        );
+        return null;
+      });
       if (current && current.activeVersion === plugin.version && !current.acceptNewRuns) {
         await this.compareAndSetState(scope, current.version, {
           acceptNewRuns: true,
           observedState: draining.observedState,
           healthReason: draining.healthReason,
-        }).catch(() => undefined);
+        }).catch((stateError) =>
+          logger.error(
+            { err: stateError, userId, appId, version: plugin.version },
+            'Agent plugin uninstall rollback could not reopen App for new Runs',
+          ),
+        );
       }
       throw error;
     }
@@ -552,12 +740,22 @@ export class PluginInstallService {
         await this.verifier.removeInstalled(appId, plugin.version);
         await this.repository.updateVersionStatus(appId, plugin.version, 'removed', null, this.clock.nowUnixSeconds());
         this.hooks.versionRemoved(appId, plugin.version);
-      } catch {
+      } catch (error) {
+        logger.warn(
+          { err: error, userId, appId, version: plugin.version },
+          'Agent plugin installed package cleanup failed after uninstall',
+        );
         await this.repository
           .updateVersionStatus(appId, plugin.version, 'failed', null, this.clock.nowUnixSeconds())
-          .catch(() => undefined);
+          .catch((statusError) =>
+            logger.warn(
+              { err: statusError, userId, appId, version: plugin.version },
+              'Agent plugin uninstall cleanup could not persist failed package status',
+            ),
+          );
       }
     }
+    logger.info({ userId, appId, version: plugin.version }, 'Agent plugin uninstall completed');
     return { state: 'removed', app: this.appView(updated, plugin) };
   }
 
@@ -565,6 +763,7 @@ export class PluginInstallService {
     const installation = await this.repository.getInstallation(userId, appId);
     if (!installation || installation.status !== 'removed') throw new Error('PLUGIN_MUST_BE_UNINSTALLED');
     await this.storage.clear({ userId, appId });
+    logger.info({ userId, appId }, 'Agent plugin retained data deleted');
   }
 
   async frontendDescriptor(userId: number, appId: string): Promise<PluginFrontendDescriptor | null> {
@@ -709,7 +908,12 @@ export class PluginInstallService {
     const stages = await this.repository.listStages();
     await this.verifier
       .reconcileStages(stages.map((stage) => ({ stageId: stage.id, appId: stage.appId })))
-      .catch(() => undefined);
+      .catch((error) =>
+        logger.warn(
+          { err: error, stageCount: stages.length },
+          'Agent plugin staged package reconciliation failed during startup',
+        ),
+      );
     for (const plugin of await this.repository.listVersions()) {
       if (plugin.status === 'installed') {
         this.registry.registerVersion(this.definition(plugin));
@@ -738,7 +942,14 @@ export class PluginInstallService {
         });
       }
     }
-    await this.runtime.reconcileUser(userId, entries).catch(() => undefined);
+    await this.runtime
+      .reconcileUser(userId, entries)
+      .catch((error) =>
+        logger.warn(
+          { err: error, userId, pluginCount: entries.length },
+          'Agent plugin runtime user reconciliation failed',
+        ),
+      );
     for (const entry of entries) await this.reconcileRuntime(userId, entry.plugin);
   }
 
@@ -805,10 +1016,21 @@ export class PluginInstallService {
     if (!current || current.activeVersion !== plugin.version) return;
 
     if (current.desiredState === 'disabled') {
-      await this.runtime.dispose(scope, plugin).catch(() => undefined);
+      await this.runtime
+        .dispose(scope, plugin)
+        .catch((error) =>
+          logger.warn(
+            { err: error, userId, appId: plugin.appId, version: plugin.version },
+            'Agent disabled plugin runtime disposal during reconciliation failed',
+          ),
+        );
       if (current.observedState !== 'disabled') {
         await this.compareAndSetState(scope, current.version, { observedState: 'disabled', healthReason: null }).catch(
-          () => undefined,
+          (error) =>
+            logger.warn(
+              { err: error, userId, appId: plugin.appId, version: plugin.version },
+              'Agent disabled plugin reconciliation state update failed',
+            ),
         );
       }
       return;
@@ -824,12 +1046,32 @@ export class PluginInstallService {
       const observedState = health.available ? 'running' : 'degraded';
       const healthReason = health.available ? null : (health.reason ?? 'PLUGIN_RUNTIME_UNAVAILABLE');
       if (current.observedState !== observedState || current.healthReason !== healthReason) {
-        await this.compareAndSetState(scope, current.version, { observedState, healthReason }).catch(() => undefined);
+        await this.compareAndSetState(scope, current.version, { observedState, healthReason }).catch((error) =>
+          logger.warn(
+            { err: error, userId, appId: plugin.appId, version: plugin.version, observedState, healthReason },
+            'Agent plugin reconciliation health state update failed',
+          ),
+        );
       }
     } catch (error) {
       const healthReason = error instanceof Error ? error.message.slice(0, 1024) : 'PLUGIN_RUNTIME_UNAVAILABLE';
+      logger.warn(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'PLUGIN_RUNTIME_UNAVAILABLE'),
+          userId,
+          appId: plugin.appId,
+          version: plugin.version,
+          healthReason,
+        },
+        'Agent plugin runtime reconciliation failed',
+      );
       await this.compareAndSetState(scope, current.version, { observedState: 'degraded', healthReason }).catch(
-        () => undefined,
+        (stateError) =>
+          logger.warn(
+            { err: stateError, userId, appId: plugin.appId, version: plugin.version, healthReason },
+            'Agent plugin degraded reconciliation state update failed',
+          ),
       );
     }
   }
@@ -878,6 +1120,10 @@ export class PluginInstallService {
     expectedPublisherKeyId?: string,
     validatedCatalog?: RemotePluginCatalog,
   ): Promise<PluginStageRecord> {
+    logger.debug(
+      { userId, appId: input.appId, version: input.version, repositoryUrl: config.url },
+      'Agent remote plugin staging started',
+    );
     const catalog = validatedCatalog ?? (await this.remotePackages.catalog(config, signal));
     const entry = catalog.packages.find(
       (candidate) => candidate.appId === input.appId && candidate.version === input.version,
@@ -911,9 +1157,38 @@ export class PluginInstallService {
         versionNumber: 1,
       };
       await this.repository.createStage(record);
+      logger.info(
+        {
+          userId,
+          stageId,
+          appId: entry.appId,
+          version: entry.version,
+          publisherKeyId: entry.publisherKeyId,
+          packageHash: staged.packageHash,
+          sizeBytes: staged.sizeBytes,
+          repositoryUrl: config.url,
+        },
+        'Agent remote plugin staged',
+      );
       return record;
     } catch (error) {
-      await this.verifier.discardStage(stageId).catch(() => undefined);
+      logger.warn(
+        {
+          err: error,
+          errorCode: logErrorCode(error, 'PLUGIN_STAGE_FAILED'),
+          userId,
+          stageId,
+          appId: input.appId,
+          version: input.version,
+          repositoryUrl: config.url,
+        },
+        'Agent remote plugin staging failed',
+      );
+      await this.verifier
+        .discardStage(stageId)
+        .catch((cleanupError) =>
+          logger.warn({ err: cleanupError, stageId, userId }, 'Agent failed remote plugin stage cleanup failed'),
+        );
       throw error;
     }
   }

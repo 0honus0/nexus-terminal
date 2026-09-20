@@ -19793,6 +19793,11 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
   );
   assert.match(
     permissionUi,
+    /grantLoadGeneration\.get\(appId\) !== generation\) return/,
+    'permission grant loading must reject stale responses so older App state cannot overwrite a newer saved-grant draft',
+  );
+  assert.match(
+    permissionUi,
     /type CapabilitySelectionState = 'none' \| 'partial' \| 'all'/,
     'permission UI must model empty, partial, and fully-selected grant states explicitly',
   );
@@ -19803,6 +19808,43 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     /capabilitySelectionState\(app\.id\) === 'all'[\s\S]*disableCapabilities[\s\S]*enableCapabilities/,
     'permission bulk action must disable all only when everything is selected and enable all otherwise',
   );
+
+  const operationFeedback = fs.readFileSync(
+    path.join(frontendRoot, 'shared/feedback/composables/useOperationFeedback.ts'),
+    'utf8',
+  );
+  const notificationStore = fs.readFileSync(
+    path.join(frontendRoot, 'shared/feedback/store/notification.store.ts'),
+    'utf8',
+  );
+  assert.match(
+    operationFeedback,
+    /feedback\.notifyError\(failure\.message, 0\)/,
+    'operation failures must use persistent top-right error notifications that require explicit dismissal',
+  );
+  assert.match(
+    operationFeedback,
+    /logger\.error\(/,
+    'operation failures must also emit a structured frontend diagnostic log',
+  );
+  assert.match(
+    notificationStore,
+    /if \(timeoutMs > 0\) window\.setTimeout/,
+    'notification infrastructure must support persistent notifications without scheduling auto-dismissal',
+  );
+  for (const relative of [
+    'features/agent/settings/AgentSettingsPanel.vue',
+    'features/agent/settings/AppManagementSettings.vue',
+    'features/agent/settings/PluginManagementSettings.vue',
+    'features/agent/settings/ModelProviderSettings.vue',
+    'features/agent/settings/McpIntegrationSettings.vue',
+    'features/agent/settings/AcpRuntimeSettings.vue',
+    'features/agent/settings/MemorySettings.vue',
+    'features/agent/settings/WorkspaceRuntimeSettings.vue',
+  ]) {
+    const source = fs.readFileSync(path.join(frontendRoot, relative), 'utf8');
+    assert.match(source, /useOperationFeedback/, `${relative} must use the shared operation feedback boundary`);
+  }
 
   const publicSource = read('modules/agent/public.ts');
   const start = publicSource.indexOf('export interface AgentIntegrationFacade');
@@ -19857,6 +19899,25 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     );
   }
 
+  const diagnosticTargets = [
+    ['modules/agent/host/app-capability-broker.ts', 'Agent capability authorization denied'],
+    ['modules/agent/runtime/execution/tool-call-runner.ts', 'Agent tool proposal inspection failed'],
+    ['modules/agent/runtime/execution/root-tool-execution-coordinator.ts', 'Agent mutation result state commit failed'],
+    ['modules/agent/host/plugin-install.service.ts', 'Agent plugin upgrade failed; rollback started'],
+    ['modules/agent/ai/integration.service.ts', 'Agent MCP integration refresh failed'],
+    ['modules/agent/ai/memory.service.ts', 'Agent Memory audit write failed'],
+    [
+      'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+      'Agent Subagent terminal completion notification failed',
+    ],
+  ] as const;
+  for (const [relative, message] of diagnosticTargets) {
+    const source = fs.readFileSync(path.join(backendSourceRoot, relative), 'utf8');
+    assert.match(source, /shared\/logging\/logger/, `${relative} must use the shared backend logger`);
+    assert.match(source, /logger\.(?:debug|info|warn|error)\(/, `${relative} must emit structured Agent diagnostics`);
+    assert.ok(source.includes(message), `${relative} must retain the stable diagnostic event: ${message}`);
+  }
+
   assert.equal(logErrorCode(new Error('STATE_CONFLICT'), 'SAFE_FALLBACK'), 'STATE_CONFLICT');
   assert.equal(
     logErrorCode(new Error('upstream response body contained credential material'), 'SAFE_FALLBACK'),
@@ -19873,6 +19934,7 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     { name: 'agent_core_structured_log_owners', value: targets.length, unit: 'files' },
     { name: 'agent_core_raw_error_serializers', value: 0, unit: 'fields' },
     { name: 'agent_core_arbitrary_error_messages_logged', value: 0, unit: 'messages' },
+    { name: 'agent_diagnostic_boundaries', value: diagnosticTargets.length, unit: 'boundaries' },
   ];
 };
 

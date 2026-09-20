@@ -1,3 +1,4 @@
+import { logger } from '../../../shared/logging/logger';
 import type { Scope } from '../agent.types';
 import type { AppGrantRepositoryPort } from './app-grant.repository.port';
 import { AppRegistryService } from './app-registry.service';
@@ -59,21 +60,71 @@ export class AppCapabilityBroker {
     const policyRevision = state?.policyRevision ?? 0;
 
     if (!state || !stateAllowed(state)) {
+      logger.warn(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          capability: capability ?? null,
+          connectionId: resource.connectionId ?? null,
+          policyRevision,
+          desiredState: state?.desiredState ?? null,
+          observedState: state?.observedState ?? null,
+          decision: 'APP_DISABLED',
+        },
+        'Agent capability authorization denied',
+      );
       return { allowed: false, code: 'APP_DISABLED', policyRevision };
     }
     if (capability !== undefined) {
       const definition = this.registry.get(scope.appId, state.activeVersion);
       if (!definition.manifest.capabilities.includes(capability)) {
+        logger.warn(
+          {
+            userId: scope.userId,
+            appId: scope.appId,
+            capability,
+            policyRevision,
+            decision: 'APP_CAPABILITY_UNDECLARED',
+          },
+          'Agent capability authorization denied',
+        );
         return { allowed: false, code: 'APP_CAPABILITY_UNDECLARED', policyRevision };
       }
       const granted = (await this.grants.list(scope)).some((grant) => grant.capability === capability);
-      if (!granted) return { allowed: false, code: 'APP_CAPABILITY_DENIED', policyRevision };
+      if (!granted) {
+        logger.warn(
+          { userId: scope.userId, appId: scope.appId, capability, policyRevision, decision: 'APP_CAPABILITY_DENIED' },
+          'Agent capability authorization denied',
+        );
+        return { allowed: false, code: 'APP_CAPABILITY_DENIED', policyRevision };
+      }
     }
 
     if (resource.connectionId !== undefined && (await this.denylist.isDenied(resource.connectionId))) {
+      logger.warn(
+        {
+          userId: scope.userId,
+          appId: scope.appId,
+          capability: capability ?? null,
+          connectionId: resource.connectionId,
+          policyRevision,
+          decision: 'TARGET_DENIED',
+        },
+        'Agent capability authorization denied',
+      );
       return { allowed: false, code: 'TARGET_DENIED', policyRevision };
     }
 
+    logger.debug(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        capability: capability ?? null,
+        connectionId: resource.connectionId ?? null,
+        policyRevision,
+      },
+      'Agent capability authorization allowed',
+    );
     return { allowed: true, policyRevision };
   }
 }

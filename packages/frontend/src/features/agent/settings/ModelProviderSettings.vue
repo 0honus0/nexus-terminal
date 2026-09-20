@@ -2,7 +2,7 @@
   import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import { BaseModal } from '@/foundation/ui';
-  import { useFeedback } from '@/shared/feedback/public';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import {
     agentApi,
@@ -41,7 +41,7 @@
   }>();
 
   const { t } = useI18n();
-  const feedback = useFeedback();
+  const operationFeedback = useOperationFeedback('agent.settings.providers');
 
   // 添加服务商弹窗状态与表单
   const modalOpen = ref(false);
@@ -59,27 +59,7 @@
   const selectedDiscovered = reactive<Record<string, Record<string, boolean>>>({});
   const selectedConfigured = reactive<Record<string, Record<string, boolean>>>({});
   const manualModelId = reactive<Record<string, string>>({});
-  const drawerSaveNotices = reactive<Record<string, string>>({});
-  const modalSaveNotice = ref('');
   const isSavingModels = reactive<Record<string, boolean>>({});
-
-  const flashNotice = (providerId: string, text: string) => {
-    drawerSaveNotices[providerId] = text;
-    setTimeout(() => {
-      if (drawerSaveNotices[providerId] === text) {
-        drawerSaveNotices[providerId] = '';
-      }
-    }, 3000);
-  };
-
-  const flashModalNotice = (text: string) => {
-    modalSaveNotice.value = text;
-    setTimeout(() => {
-      if (modalSaveNotice.value === text) {
-        modalSaveNotice.value = '';
-      }
-    }, 3000);
-  };
 
   // 删除确认
   const deletingProvider = ref<AgentProviderView | null>(null);
@@ -161,19 +141,26 @@
       if (result.ok) {
         const latencyText = `${result.latencyMs}ms`;
         testResults[key] = { state: 'success', message: latencyText };
-        feedback.notifySuccess(
+        operationFeedback.notifySuccess(
           `${provider.displayName} · ${modelId}: ${t('agent.settings.providers.testPassed')} (${latencyText})`,
         );
       } else {
         testResults[key] = { state: 'error', message: t('agent.ui.testFailed') };
-        feedback.notifyError(
-          `${provider.displayName} · ${modelId}: ${t('agent.settings.providers.testFailedMessage')}`,
-        );
+        operationFeedback.notifyError({
+          operation: 'test-model',
+          message: `${provider.displayName} · ${modelId}: ${t('agent.settings.providers.testFailedMessage')}`,
+          context: { providerId: provider.id, modelId },
+        });
       }
     } catch (cause) {
       const errMsg = formatAgentApiError(cause, t('agent.ui.testFailed'));
       testResults[key] = { state: 'error', message: errMsg };
-      feedback.notifyError(`${provider.displayName} · ${modelId}: ${errMsg}`);
+      operationFeedback.notifyError({
+        operation: 'test-model',
+        message: `${provider.displayName} · ${modelId}: ${errMsg}`,
+        cause,
+        context: { providerId: provider.id, modelId },
+      });
     }
   };
 
@@ -221,10 +208,7 @@
         };
 
         const saved = await props.createProvider(payload);
-        if (!saved) {
-          modalError.value = t('agent.ui.createFailed');
-          return;
-        }
+        if (!saved) return;
 
         createdProviderId.value = saved.id;
         targetProviderId = saved.id;
@@ -240,14 +224,18 @@
             latencyMs: testRes.latencyMs,
             message: successMsg,
           };
-          feedback.notifySuccess(`${form.displayName.trim() || form.modelId.trim()}: ${successMsg}`);
+          operationFeedback.notifySuccess(`${form.displayName.trim() || form.modelId.trim()}: ${successMsg}`);
         } else {
           const failMsg = t('agent.settings.providers.testFailedMessage');
           modalTestResult.value = {
             ok: false,
             message: failMsg,
           };
-          feedback.notifyError(`${form.displayName.trim() || form.modelId.trim()}: ${failMsg}`);
+          operationFeedback.notifyError({
+            operation: 'test-new-provider',
+            message: `${form.displayName.trim() || form.modelId.trim()}: ${failMsg}`,
+            context: { modelId: form.modelId.trim() },
+          });
         }
       }
     } catch (cause) {
@@ -256,7 +244,7 @@
         ok: false,
         message: errMsg,
       };
-      feedback.notifyError(errMsg);
+      operationFeedback.notifyError({ operation: 'test-new-provider', message: errMsg, cause });
     } finally {
       modalTesting.value = false;
     }
@@ -299,11 +287,13 @@
       const saved = await props.createProvider(payload);
       if (saved) {
         modalOpen.value = false;
-      } else {
-        modalError.value = t('agent.ui.createFailed');
       }
     } catch (cause) {
-      modalError.value = formatAgentApiError(cause, t('agent.ui.createFailed'));
+      operationFeedback.notifyError({
+        operation: 'create-provider',
+        message: formatAgentApiError(cause, t('agent.ui.createFailed')),
+        cause,
+      });
     } finally {
       modalTesting.value = false;
     }
@@ -400,11 +390,16 @@
     }
     try {
       await agentApi.updateProvider(provider, { models });
-      feedback.notifySuccess(successMsg ?? t('agent.ui.saved'));
+      operationFeedback.notifySuccess(successMsg ?? t('agent.ui.saved'));
       return true;
     } catch (cause) {
       const errMsg = formatAgentApiError(cause, t('agent.ui.createFailed'));
-      feedback.notifyError(errMsg);
+      operationFeedback.notifyError({
+        operation: 'update-provider-models',
+        message: errMsg,
+        cause,
+        context: { providerId: provider.id },
+      });
       return false;
     }
   };
@@ -498,7 +493,11 @@
     try {
       const newModels = available.map((model) => discoveredModelConfig(provider, model.id));
       if (newModels.some((model) => model === null)) {
-        feedback.notifyError(t('agent.settings.providers.capabilityUnavailable'));
+        operationFeedback.notifyError({
+          operation: 'resolve-model-capabilities',
+          message: t('agent.settings.providers.capabilityUnavailable'),
+          context: { providerId: provider.id },
+        });
         return;
       }
       const noticeAdded = t('agent.settings.providers.saveNoticeAdded', { count: available.length });
@@ -509,7 +508,6 @@
       );
       if (!saved) return;
       selectedDiscovered[provider.id] = {};
-      flashNotice(provider.id, noticeAdded);
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -524,7 +522,11 @@
     try {
       const newModels = selectedIds.map((id) => discoveredModelConfig(provider, id));
       if (newModels.some((model) => model === null)) {
-        feedback.notifyError(t('agent.settings.providers.capabilityUnavailable'));
+        operationFeedback.notifyError({
+          operation: 'resolve-model-capabilities',
+          message: t('agent.settings.providers.capabilityUnavailable'),
+          context: { providerId: provider.id },
+        });
         return;
       }
       const noticeSelected = t('agent.settings.providers.saveNoticeAdded', { count: selectedIds.length });
@@ -535,7 +537,6 @@
       );
       if (!saved) return;
       selectedDiscovered[provider.id] = {};
-      flashNotice(provider.id, noticeSelected);
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -547,7 +548,11 @@
     try {
       const newModel = discoveredModelConfig(provider, modelId);
       if (!newModel) {
-        feedback.notifyError(t('agent.settings.providers.capabilityUnavailable'));
+        operationFeedback.notifyError({
+          operation: 'resolve-model-capabilities',
+          message: t('agent.settings.providers.capabilityUnavailable'),
+          context: { providerId: provider.id },
+        });
         return;
       }
       const noticeSingle = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
@@ -556,7 +561,6 @@
       if (selectedDiscovered[provider.id]) {
         delete selectedDiscovered[provider.id][modelId];
       }
-      flashNotice(provider.id, noticeSingle);
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -577,8 +581,6 @@
       if (selectedConfigured[provider.id]) {
         delete selectedConfigured[provider.id][modelId];
       }
-      flashNotice(provider.id, noticeRemoved);
-      flashModalNotice(noticeRemoved);
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -598,8 +600,6 @@
       const saved = await updateModels(provider, nextModels, noticeBatchRemoved);
       if (!saved) return;
       selectedConfigured[provider.id] = {};
-      flashNotice(provider.id, noticeBatchRemoved);
-      flashModalNotice(noticeBatchRemoved);
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -649,8 +649,6 @@
       const saved = await updateModels(provider, nextModels, noticeAllRemoved);
       if (!saved) return;
       selectedConfigured[provider.id] = {};
-      flashNotice(provider.id, noticeAllRemoved);
-      flashModalNotice(noticeAllRemoved);
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -668,14 +666,17 @@
     try {
       const newModel = discoveredModelConfig(provider, id);
       if (!newModel) {
-        feedback.notifyError(t('agent.settings.providers.capabilityUnavailable'));
+        operationFeedback.notifyError({
+          operation: 'resolve-model-capabilities',
+          message: t('agent.settings.providers.capabilityUnavailable'),
+          context: { providerId: provider.id },
+        });
         return;
       }
       const noticeManual = t('agent.settings.providers.saveNoticeAdded', { count: 1 });
       const saved = await updateModels(provider, [...provider.models, newModel], noticeManual);
       if (!saved) return;
       manualModelId[provider.id] = '';
-      flashNotice(provider.id, noticeManual);
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -747,7 +748,7 @@
   );
 
   const fallbackModelKeys = computed(
-    () => new Set(props.fallbackModels.map((item) => `${item.providerId} ${item.modelId}`)),
+    () => new Set(props.fallbackModels.map((item) => `${item.providerId}${item.modelId}`)),
   );
   const toggleFallbackModel = (providerId: string, modelId: string) => {
     const exists = props.fallbackModels.some((item) => item.providerId === providerId && item.modelId === modelId);
@@ -1199,18 +1200,6 @@
                   <span class="hidden sm:inline">{{ $t('agent.settings.providers.discover') }}</span>
                 </button>
               </div>
-            </div>
-
-            <!-- 顶部即时保存闪现通知条 (Flash Notice) -->
-            <div
-              v-if="drawerSaveNotices[provider.id]"
-              class="mt-2.5 flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-300 transition-all"
-            >
-              <div class="flex items-center gap-2">
-                <i class="fa-solid fa-circle-check text-emerald-500 text-xs"></i>
-                <span class="font-medium">{{ drawerSaveNotices[provider.id] }}</span>
-              </div>
-              <span class="text-[10px] text-emerald-600/75 dark:text-emerald-400/75">已持久化至服务端</span>
             </div>
 
             <!-- 正在查询中的状态 -->
@@ -1804,18 +1793,6 @@
             class="fa-solid fa-magnifying-glass absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary/60"
           ></i>
         </div>
-      </div>
-
-      <!-- 弹窗即时保存闪现通知条 (Flash Notice) -->
-      <div
-        v-if="modalSaveNotice"
-        class="flex items-center justify-between rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700 dark:text-emerald-300 transition-all"
-      >
-        <div class="flex items-center gap-2">
-          <i class="fa-solid fa-circle-check text-emerald-500 text-xs"></i>
-          <span class="font-medium">{{ modalSaveNotice }}</span>
-        </div>
-        <span class="text-[10px] text-emerald-600/75 dark:text-emerald-400/75">已同步持久化</span>
       </div>
 
       <!-- 模型列表卡片滚动区 -->

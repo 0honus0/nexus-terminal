@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
-  import { useFeedback } from '@/shared/feedback/public';
+  import { useFeedback, useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     formatAgentApiError,
@@ -13,6 +13,7 @@
   const props = defineProps<{ busy: boolean; agentAvailable: boolean }>();
   const { t } = useI18n();
   const feedback = useFeedback();
+  const operationFeedback = useOperationFeedback('agent.settings.mcp');
 
   const integrations = ref<AgentIntegrationView[]>([]);
   const displayName = ref('');
@@ -23,8 +24,6 @@
   const credentialDrafts = reactive<Record<string, string>>({});
   const localBusy = ref(false);
   const loading = ref(false);
-  const error = ref('');
-  const notice = ref('');
   const disabled = computed(() => props.busy || localBusy.value);
 
   const mcpConfiguration = (integration: AgentIntegrationView): AgentMcpIntegrationConfiguration => {
@@ -44,26 +43,23 @@
       return;
     }
     loading.value = true;
-    error.value = '';
     try {
       integrations.value = await agentApi.integrations(DEFAULT_AGENT_APP_ID, 'mcp');
     } catch (cause) {
-      error.value = explain(cause);
+      operationFeedback.notifyError({ operation: 'load-integrations', message: explain(cause), cause });
     } finally {
       loading.value = false;
     }
   };
 
-  const run = async (action: () => Promise<void>, success = ''): Promise<void> => {
+  const run = async (operation: string, action: () => Promise<void>, success = ''): Promise<void> => {
     if (disabled.value) return;
     localBusy.value = true;
-    error.value = '';
-    notice.value = '';
     try {
       await action();
-      if (success) notice.value = success;
+      if (success) operationFeedback.notifySuccess(success);
     } catch (cause) {
-      error.value = explain(cause);
+      operationFeedback.notifyError({ operation, message: explain(cause), cause });
     } finally {
       localBusy.value = false;
     }
@@ -73,27 +69,31 @@
     const name = displayName.value.trim();
     const url = endpoint.value.trim();
     if (!name || !url) return;
-    void run(async () => {
-      await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, {
-        kind: 'mcp',
-        configuration: {
-          displayName: name,
-          transport: 'streamable-http',
-          endpoint: url,
-          privateHostExceptions: [],
-          protocolVersion: '2026-07-28',
-          trustToolAnnotations: trustToolAnnotations.value,
-        },
-        enabled: enabled.value,
-        ...(credential.value.trim() ? { credential: credential.value.trim() } : {}),
-      });
-      displayName.value = '';
-      endpoint.value = '';
-      credential.value = '';
-      enabled.value = true;
-      trustToolAnnotations.value = false;
-      await loadIntegrations();
-    }, t('agent.settings.mcpIntegrations.created'));
+    void run(
+      'create-integration',
+      async () => {
+        await agentApi.createIntegration(DEFAULT_AGENT_APP_ID, {
+          kind: 'mcp',
+          configuration: {
+            displayName: name,
+            transport: 'streamable-http',
+            endpoint: url,
+            privateHostExceptions: [],
+            protocolVersion: '2026-07-28',
+            trustToolAnnotations: trustToolAnnotations.value,
+          },
+          enabled: enabled.value,
+          ...(credential.value.trim() ? { credential: credential.value.trim() } : {}),
+        });
+        displayName.value = '';
+        endpoint.value = '';
+        credential.value = '';
+        enabled.value = true;
+        trustToolAnnotations.value = false;
+        await loadIntegrations();
+      },
+      t('agent.settings.mcpIntegrations.created'),
+    );
   };
 
   const updateConfiguration = (
@@ -101,14 +101,18 @@
     configuration: AgentMcpIntegrationConfiguration,
     success: string,
   ): void => {
-    void run(async () => {
-      await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
-        kind: 'mcp',
-        configuration,
-        enabled: integration.enabled,
-      });
-      await loadIntegrations();
-    }, success);
+    void run(
+      'update-integration',
+      async () => {
+        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
+          kind: 'mcp',
+          configuration,
+          enabled: integration.enabled,
+        });
+        await loadIntegrations();
+      },
+      success,
+    );
   };
 
   const changeEndpoint = (integration: AgentIntegrationView, nextEndpoint: string): void => {
@@ -134,54 +138,70 @@
 
   const toggleIntegration = (integration: AgentIntegrationView, nextEnabled: boolean): void => {
     const configuration = mcpConfiguration(integration);
-    void run(async () => {
-      await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
-        kind: 'mcp',
-        configuration: { ...configuration },
-        enabled: nextEnabled,
-      });
-      await loadIntegrations();
-    }, t('agent.settings.mcpIntegrations.updated'));
+    void run(
+      'toggle-integration',
+      async () => {
+        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
+          kind: 'mcp',
+          configuration: { ...configuration },
+          enabled: nextEnabled,
+        });
+        await loadIntegrations();
+      },
+      t('agent.settings.mcpIntegrations.updated'),
+    );
   };
 
   const replaceCredential = (integration: AgentIntegrationView): void => {
     const nextCredential = (credentialDrafts[integration.id] ?? '').trim();
     if (!nextCredential) return;
     const configuration = mcpConfiguration(integration);
-    void run(async () => {
-      await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
-        kind: 'mcp',
-        configuration: { ...configuration },
-        enabled: integration.enabled,
-        credential: nextCredential,
-      });
-      credentialDrafts[integration.id] = '';
-      await loadIntegrations();
-    }, t('agent.settings.mcpIntegrations.credentialUpdated'));
+    void run(
+      'replace-credential',
+      async () => {
+        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
+          kind: 'mcp',
+          configuration: { ...configuration },
+          enabled: integration.enabled,
+          credential: nextCredential,
+        });
+        credentialDrafts[integration.id] = '';
+        await loadIntegrations();
+      },
+      t('agent.settings.mcpIntegrations.credentialUpdated'),
+    );
   };
 
   const clearCredential = (integration: AgentIntegrationView): void => {
     const configuration = mcpConfiguration(integration);
-    void run(async () => {
-      await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
-        kind: 'mcp',
-        configuration: { ...configuration },
-        enabled: integration.enabled,
-        clearCredential: true,
-      });
-      credentialDrafts[integration.id] = '';
-      await loadIntegrations();
-    }, t('agent.settings.mcpIntegrations.credentialCleared'));
+    void run(
+      'clear-credential',
+      async () => {
+        await agentApi.updateIntegration(DEFAULT_AGENT_APP_ID, integration, {
+          kind: 'mcp',
+          configuration: { ...configuration },
+          enabled: integration.enabled,
+          clearCredential: true,
+        });
+        credentialDrafts[integration.id] = '';
+        await loadIntegrations();
+      },
+      t('agent.settings.mcpIntegrations.credentialCleared'),
+    );
   };
 
   const refreshIntegration = (integration: AgentIntegrationView): void => {
-    void run(async () => {
-      try {
-        await agentApi.refreshIntegration(DEFAULT_AGENT_APP_ID, integration.id);
-      } finally {
-        await loadIntegrations();
-      }
-    }, t('agent.settings.mcpIntegrations.refreshed'));
+    void run(
+      'refresh-integration',
+      async () => {
+        try {
+          await agentApi.refreshIntegration(DEFAULT_AGENT_APP_ID, integration.id);
+        } finally {
+          await loadIntegrations();
+        }
+      },
+      t('agent.settings.mcpIntegrations.refreshed'),
+    );
   };
 
   const removeIntegration = async (integration: AgentIntegrationView): Promise<void> => {
@@ -195,11 +215,15 @@
     ) {
       return;
     }
-    void run(async () => {
-      await agentApi.deleteIntegration(DEFAULT_AGENT_APP_ID, integration);
-      delete credentialDrafts[integration.id];
-      await loadIntegrations();
-    }, t('agent.settings.mcpIntegrations.deleted'));
+    void run(
+      'remove-integration',
+      async () => {
+        await agentApi.deleteIntegration(DEFAULT_AGENT_APP_ID, integration);
+        delete credentialDrafts[integration.id];
+        await loadIntegrations();
+      },
+      t('agent.settings.mcpIntegrations.deleted'),
+    );
   };
 
   const statusLabel = (integration: AgentIntegrationView): string =>
@@ -237,12 +261,6 @@
     </div>
 
     <div class="space-y-4 p-4 sm:p-5">
-      <div v-if="error" class="rounded border border-error/40 bg-error/10 px-3 py-2 text-xs text-error">
-        {{ error }}
-      </div>
-      <div v-if="notice" class="rounded border border-success/40 bg-success/10 px-3 py-2 text-xs text-success">
-        {{ notice }}
-      </div>
       <p v-if="!agentAvailable" class="rounded border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
         {{ $t('agent.settings.mcpIntegrations.installAgentFirst') }}
       </p>

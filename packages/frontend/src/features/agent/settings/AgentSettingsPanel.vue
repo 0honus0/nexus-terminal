@@ -2,7 +2,7 @@
   import { computed, onMounted, reactive, ref } from 'vue';
   import { useI18n } from 'vue-i18n';
   import BaseModal from '@/foundation/ui/BaseModal.vue';
-  import { useFeedback } from '@/shared/feedback/public';
+  import { useOperationFeedback } from '@/shared/feedback/public';
   import {
     agentApi,
     formatAgentApiError,
@@ -36,7 +36,7 @@
   import SystemGuardrails from './SystemGuardrails.vue';
 
   const { t } = useI18n();
-  const feedback = useFeedback();
+  const operationFeedback = useOperationFeedback('agent.settings');
   const settings = ref<AgentSettingsView | null>(null);
   const apps = ref<AgentAppSummary[]>([]);
   const providers = ref<AgentProviderView[]>([]);
@@ -47,7 +47,7 @@
   const hardLimitPreview = ref<HardLimitPreview | null>(null);
   const loading = ref(true);
   const busy = ref(false);
-  const error = ref('');
+  const loadError = ref('');
   const recommendedPlugin = ref<RecommendedAgentPluginView | null>(null);
   const onboardingVisible = ref(false);
   const showKeyDetails = ref(false);
@@ -109,7 +109,7 @@
 
   const load = async () => {
     loading.value = true;
-    error.value = '';
+    loadError.value = '';
     try {
       const [nextSettings, nextApps, nextProviders, nextStorage, nextWorkspaceRuntime, nextDenylist] =
         await Promise.all([
@@ -127,26 +127,26 @@
       workspaceRuntime.value = nextWorkspaceRuntime;
       denylist.value = nextDenylist;
     } catch (cause) {
-      error.value = message(cause);
+      loadError.value = message(cause);
+      operationFeedback.notifyError({ operation: 'load-settings', message: loadError.value, cause });
     } finally {
       loading.value = false;
     }
   };
 
-  const execute = async <T = void,>(action: () => Promise<T>, success?: string | null): Promise<T | undefined> => {
+  const execute = async <T = void,>(
+    operation: string,
+    action: () => Promise<T>,
+    success?: string | null,
+  ): Promise<T | undefined> => {
     if (busy.value) return undefined;
     busy.value = true;
-    error.value = '';
     try {
       const result = await action();
-      if (success !== null) {
-        feedback.notifySuccess(success ?? t('agent.ui.saved'));
-      }
+      if (success !== null) operationFeedback.notifySuccess(success ?? t('agent.ui.saved'));
       return result;
     } catch (cause) {
-      const err = message(cause);
-      error.value = err;
-      feedback.notifyError(err);
+      operationFeedback.notifyError({ operation, message: message(cause), cause });
       return undefined;
     } finally {
       busy.value = false;
@@ -154,12 +154,16 @@
   };
 
   const patchSection = (section: string, patch: Record<string, unknown>, success?: string) =>
-    execute(async () => {
-      if (!settings.value) return;
-      settings.value = await agentApi.patchSettings({ [section]: patch }, settings.value.revision);
-      storage.value = await agentApi.storage();
-      window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
-    }, success);
+    execute(
+      `patch-${section}`,
+      async () => {
+        if (!settings.value) return;
+        settings.value = await agentApi.patchSettings({ [section]: patch }, settings.value.revision);
+        storage.value = await agentApi.storage();
+        window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+      },
+      success,
+    );
 
   const runtimeReady = (state: AgentSettingsView['availability']['state']): boolean =>
     state === 'enabled' || state === 'degraded';
@@ -176,36 +180,44 @@
 
   const changeFeature = (enabled: boolean): void => {
     if (!enabled) {
-      void execute(async () => {
-        if (!settings.value) return;
-        const updated = await agentApi.patchSettings({ feature: { enabled: false } }, settings.value.revision);
-        if (updated.availability.state !== 'disabled') throw new Error(t('agent.settings.feature.disableFailed'));
-        settings.value = updated;
-        storage.value = await agentApi.storage();
-        window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
-      }, t('agent.settings.feature.disabledSuccess'));
+      void execute(
+        'disable-feature',
+        async () => {
+          if (!settings.value) return;
+          const updated = await agentApi.patchSettings({ feature: { enabled: false } }, settings.value.revision);
+          if (updated.availability.state !== 'disabled') throw new Error(t('agent.settings.feature.disableFailed'));
+          settings.value = updated;
+          storage.value = await agentApi.storage();
+          window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+        },
+        t('agent.settings.feature.disabledSuccess'),
+      );
       return;
     }
-    void execute(async () => {
-      if (!settings.value) return;
-      const recommendation = await agentApi.recommendedPlugin();
-      if (recommendation.installed) {
-        if (!recommendation.enabled) {
-          const installed = await agentApi.installRecommendedPlugin();
-          assertAppReady(installed.app);
-          apps.value = await agentApi.apps();
+    void execute(
+      'enable-feature',
+      async () => {
+        if (!settings.value) return;
+        const recommendation = await agentApi.recommendedPlugin();
+        if (recommendation.installed) {
+          if (!recommendation.enabled) {
+            const installed = await agentApi.installRecommendedPlugin();
+            assertAppReady(installed.app);
+            apps.value = await agentApi.apps();
+          }
+          const updated = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
+          settings.value = updated;
+          assertFeatureReady(updated);
+          storage.value = await agentApi.storage();
+          window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
+          operationFeedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
+          return;
         }
-        const updated = await agentApi.patchSettings({ feature: { enabled: true } }, settings.value.revision);
-        settings.value = updated;
-        assertFeatureReady(updated);
-        storage.value = await agentApi.storage();
-        window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
-        feedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
-        return;
-      }
-      recommendedPlugin.value = recommendation;
-      onboardingVisible.value = true;
-    }, null);
+        recommendedPlugin.value = recommendation;
+        onboardingVisible.value = true;
+      },
+      null,
+    );
   };
 
   const confirmRecommendedInstall = (): void => {
@@ -222,7 +234,7 @@
       }
     }, 450);
 
-    void execute(async () => {
+    void execute('install-recommended-plugin', async () => {
       if (!settings.value) return;
       try {
         const installed = await agentApi.installRecommendedPlugin();
@@ -234,7 +246,7 @@
         storage.value = await agentApi.storage();
         apps.value = await agentApi.apps();
         window.dispatchEvent(new CustomEvent('nexus:agent:host-changed'));
-        feedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
+        operationFeedback.notifySuccess(t('agent.settings.feature.enabledSuccess'));
         setTimeout(() => {
           onboardingVisible.value = false;
           recommendedPlugin.value = null;
@@ -257,47 +269,55 @@
   };
 
   const toggleApp = (app: AgentAppSummary, enabled: boolean) =>
-    execute(async () => {
+    execute('toggle-app', async () => {
       const updated = await agentApi.setAppEnabled(app, enabled);
       apps.value = apps.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
     });
 
   const previewHardLimits = (proposed: Partial<AgentHardLimits>) =>
-    execute(async () => {
-      if (!settings.value) return;
-      hardLimitPreview.value = await agentApi.previewHardLimits(proposed, settings.value.revision);
-    }, null);
+    execute(
+      'preview-hard-limits',
+      async () => {
+        if (!settings.value) return;
+        hardLimitPreview.value = await agentApi.previewHardLimits(proposed, settings.value.revision);
+      },
+      null,
+    );
 
   const confirmHardLimits = (confirmationId: string, expectedVersion: number) =>
-    execute(async () => {
+    execute('confirm-hard-limits', async () => {
       settings.value = await agentApi.confirmHardLimits(confirmationId, expectedVersion);
       hardLimitPreview.value = null;
       storage.value = await agentApi.storage();
     });
 
   const createProvider = (input: Record<string, unknown>, successMsg?: string) =>
-    execute(async () => {
-      const created = await agentApi.createProvider(input);
-      providers.value = await agentApi.providers();
-      apps.value = await agentApi.apps();
-      return created;
-    }, successMsg);
+    execute(
+      'create-provider',
+      async () => {
+        const created = await agentApi.createProvider(input);
+        providers.value = await agentApi.providers();
+        apps.value = await agentApi.apps();
+        return created;
+      },
+      successMsg,
+    );
 
   const toggleProvider = (provider: AgentProviderView, enabled: boolean) =>
-    execute(async () => {
+    execute('toggle-provider', async () => {
       const updated = await agentApi.updateProvider(provider, { enabled });
       providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
       apps.value = await agentApi.apps();
     });
 
   const changeProviderProtocol = (provider: AgentProviderView, protocol: AgentProviderView['protocol']) =>
-    execute(async () => {
+    execute('change-provider-protocol', async () => {
       const updated = await agentApi.updateProvider(provider, { protocol });
       providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
     });
 
   const deleteProvider = (provider: AgentProviderView) =>
-    execute(async () => {
+    execute('delete-provider', async () => {
       await agentApi.deleteProvider(provider.id, provider.version);
       providers.value = await agentApi.providers();
       if (settings.value?.requestedSettings.model.defaultProviderId === provider.id) {
@@ -330,13 +350,17 @@
     patchSection('model', { fallbackModels }, t('agent.settings.providers.saveNoticeDefault'));
 
   const discoverProviderModels = (provider: AgentProviderView) =>
-    execute(async () => {
-      discoveredModels.value = {
-        ...discoveredModels.value,
-        [provider.id]: await agentApi.discoverProviderModels(provider.id),
-      };
-      providers.value = await agentApi.providers();
-    }, null);
+    execute(
+      'discover-provider-models',
+      async () => {
+        discoveredModels.value = {
+          ...discoveredModels.value,
+          [provider.id]: await agentApi.discoverProviderModels(provider.id),
+        };
+        providers.value = await agentApi.providers();
+      },
+      null,
+    );
 
   const addProviderModel = (
     provider: AgentProviderView,
@@ -344,6 +368,7 @@
     successMsg?: string,
   ) =>
     execute(
+      'add-provider-model',
       async () => {
         if (provider.models.some((candidate) => candidate.id === model.id)) return;
         const updated = await agentApi.updateProvider(provider, { models: [...provider.models, model] });
@@ -358,15 +383,19 @@
     models: AgentProviderView['models'],
     successMsg?: string,
   ) =>
-    execute(async () => {
-      if (!models.length) return false;
-      const updated = await agentApi.updateProvider(provider, { models });
-      providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
-      return true;
-    }, successMsg);
+    execute(
+      'update-provider-models',
+      async () => {
+        if (!models.length) return false;
+        const updated = await agentApi.updateProvider(provider, { models });
+        providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
+        return true;
+      },
+      successMsg,
+    );
 
   const saveDenylist = (connectionIds: number[], reason: string) =>
-    execute(async () => {
+    execute('save-target-denylist', async () => {
       if (!denylist.value) return;
       denylist.value = await agentApi.replaceTargetDenylist(connectionIds, reason, denylist.value.revision);
       window.dispatchEvent(
@@ -381,7 +410,7 @@
     if (activeGroup.value === id) return;
     activeGroup.value = id;
     visitedGroups.add(id);
-    error.value = '';
+    loadError.value = '';
   };
 
   onMounted(load);
@@ -453,7 +482,7 @@
       {{ $t('agent.settings.loading') }}
     </div>
 
-    <p v-else-if="!settings && error" role="alert" class="p-6 text-sm text-error">{{ error }}</p>
+    <p v-else-if="!settings && loadError" role="alert" class="p-6 text-sm text-error">{{ loadError }}</p>
 
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
       <div class="flex flex-col">
@@ -483,17 +512,6 @@
 
         <!-- 分区内容流：自然流动排版，无局部高度截断与双层滚动条 -->
         <div class="space-y-6 p-4 sm:p-6">
-          <div
-            v-if="error"
-            class="flex items-center justify-between gap-3 rounded-xl border border-error/30 bg-error/10 px-4 py-3 text-xs text-error"
-            role="alert"
-          >
-            <span>{{ error }}</span>
-            <button type="button" class="text-xs opacity-70 hover:opacity-100" @click="error = ''">
-              <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-            </button>
-          </div>
-
           <!-- 1. 模型与预算（核心大本营） -->
           <section
             v-if="visitedGroups.has('models')"

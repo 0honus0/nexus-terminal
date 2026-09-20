@@ -27,7 +27,7 @@ export const useNotificationStore = defineStore('shared-notifications', () => {
 
     const id = nextId++;
     notifications.value.push({ id, kind, message, timeoutMs });
-    window.setTimeout(() => remove(id), timeoutMs);
+    if (timeoutMs > 0) window.setTimeout(() => remove(id), timeoutMs);
     return id;
   };
 
