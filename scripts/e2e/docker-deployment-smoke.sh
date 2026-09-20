@@ -238,6 +238,7 @@ set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
 NEXUS_E2E_PLUGIN_REPOSITORY_HOST=0.0.0.0 \
 NEXUS_E2E_PLUGIN_REPOSITORY_PORT="$plugin_repository_port" \
 NEXUS_E2E_PLUGIN_REPOSITORY_PUBLIC_BASE_URL="http://host.docker.internal:$plugin_repository_port" \
+NEXUS_E2E_PLUGIN_REPOSITORY_HANG_OPENAI=1 \
 NEXUS_E2E_PLUGIN_SIGNING_KEY_PEM="$(cat "$repo_root/tests/e2e/fixtures/agent/keys/official-e2e-private.pem")" \
 node "$repo_root/tests/e2e/fixtures/agent/plugin-repository.mjs" >"$plugin_repository_log" 2>&1 &
 plugin_repository_pid=$!
@@ -1536,7 +1537,7 @@ const provider = await ok(
   {
     kind: 'openai-compatible',
     displayName: 'Docker lifecycle smoke provider',
-    baseUrl: 'https://host.docker.internal:443/v1',
+    baseUrl: `http://host.docker.internal:${pluginRepositoryPort}/v1`,
     protocol: 'chat-completions',
     credential: 'docker-lifecycle-smoke-secret',
     models: [{ id: 'smoke-model', contextWindow: 8192, maxOutputTokens: 64, supportsTools: true }],
@@ -1549,15 +1550,6 @@ const definitions = await ok('GET', '/api/v1/apps/nexus.agent/agent-definitions'
 const definition = definitions[0];
 if (!definition?.id) throw new Error('Nexus Agent definition unavailable in deployment smoke.');
 let lifecycleSettings = await ok('GET', '/api/v1/agent/settings');
-lifecycleSettings = await ok(
-  'PATCH',
-  '/api/v1/agent/settings',
-  { patch: { budget: { maxRunTokens: 1 } }, expectedVersion: lifecycleSettings.revision },
-  mutationHeaders,
-);
-if (lifecycleSettings.effectiveSettings.budget.maxRunTokens !== 1) {
-  throw new Error(`Lifecycle smoke budget was not applied: ${JSON.stringify(lifecycleSettings.effectiveSettings.budget)}`);
-}
 const catalog = await ok('GET', '/api/v1/agent/workspace-runtime/catalog');
 const recipe = catalog.recipes.find((candidate) => candidate.id === 'workspace-dev');
 if (!recipe) throw new Error('Workspace dev recipe unavailable through Backend API.');
@@ -1593,12 +1585,12 @@ const createRun = async (title, runnerPluginIds = []) => {
   );
   let current = created;
   const deadline = Date.now() + 10_000;
-  while (['created', 'running'].includes(current.status)) {
-    if (Date.now() >= deadline) throw new Error(`Lifecycle Run did not reach budget wait: ${JSON.stringify(current)}`);
+  while (current.status === 'created') {
+    if (Date.now() >= deadline) throw new Error(`Lifecycle Run did not start: ${JSON.stringify(current)}`);
     await wait(100);
     current = await ok('GET', `/api/v1/apps/nexus.agent/runs/${created.id}`);
   }
-  if (current.status !== 'awaiting_budget') {
+  if (current.status !== 'running') {
     throw new Error(`Lifecycle Run reached unexpected state before Workspace creation: ${JSON.stringify(current)}`);
   }
   if (
@@ -1736,6 +1728,14 @@ await cancelToTerminal(fullStackRun);
 console.log('full-stack plugin smoke: isolated frontend + native Backend child + Workspace Runner target ok');
 
 let queueRun = await createRun('Docker pending-input smoke');
+for (let attempt = 0; attempt < 50; attempt += 1) {
+  const initialQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
+  if (initialQueue.total === 0) break;
+  if (attempt === 49) {
+    throw new Error(`Initial input was not consumed by the active model step: ${JSON.stringify(initialQueue)}`);
+  }
+  await wait(100);
+}
 const appendQueueInput = async (text) => {
   const appended = await ok(
     'POST',
@@ -1752,7 +1752,7 @@ const appendQueueInput = async (text) => {
 await appendQueueInput('pending input two');
 await appendQueueInput('pending input three');
 let pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
-if (pendingQueue.total !== 3 || pendingQueue.items.map((item) => item.text).join('|') !== 'deployment lifecycle smoke|pending input two|pending input three') {
+if (pendingQueue.total !== 2 || pendingQueue.items.map((item) => item.text).join('|') !== 'pending input two|pending input three') {
   throw new Error(`Unexpected initial pending-input queue: ${JSON.stringify(pendingQueue)}`);
 }
 const originalQueue = [...pendingQueue.items];
@@ -1763,14 +1763,14 @@ queueRun = await ok(
   {
     schemaVersion: 1,
     action: 'move',
-    inputId: originalQueue[2].id,
+    inputId: originalQueue[1].id,
     beforeInputId: originalQueue[0].id,
     expectedVersion: queueRun.version,
   },
   { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
 );
 pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
-if (pendingQueue.items.map((item) => item.id).join('|') !== [originalQueue[2].id, originalQueue[0].id, originalQueue[1].id].join('|')) {
+if (pendingQueue.items.map((item) => item.id).join('|') !== [originalQueue[1].id, originalQueue[0].id].join('|')) {
   throw new Error(`Pending-input move was not durable: ${JSON.stringify(pendingQueue)}`);
 }
 const originalSequences = new Map(originalQueue.map((item) => [item.id, item.sequence]));
@@ -1783,7 +1783,7 @@ const staleMutation = await call(
   {
     schemaVersion: 1,
     action: 'remove',
-    inputId: originalQueue[1].id,
+    inputId: originalQueue[0].id,
     beforeInputId: null,
     expectedVersion: staleQueueVersion,
   },
@@ -1798,22 +1798,22 @@ queueRun = await ok(
   {
     schemaVersion: 1,
     action: 'remove',
-    inputId: originalQueue[1].id,
+    inputId: originalQueue[0].id,
     beforeInputId: null,
     expectedVersion: queueRun.version,
   },
   { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
 );
 pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
-if (pendingQueue.total !== 2 || pendingQueue.items.some((item) => item.id === originalQueue[1].id)) {
+if (pendingQueue.total !== 1 || pendingQueue.items.some((item) => item.id === originalQueue[0].id)) {
   throw new Error(`Pending-input remove was not durable: ${JSON.stringify(pendingQueue)}`);
 }
 const queueLedger = await ok(
   'GET',
   `/api/v1/apps/nexus.agent/threads/${queueRun.threadId}/entries?limit=50`,
 );
-const removedLedgerEntry = queueLedger.items.find((entry) => entry.id === originalQueue[1].id);
-if (!removedLedgerEntry || removedLedgerEntry.sequence !== originalQueue[1].sequence) {
+const removedLedgerEntry = queueLedger.items.find((entry) => entry.id === originalQueue[0].id);
+if (!removedLedgerEntry || removedLedgerEntry.sequence !== originalQueue[0].sequence) {
   throw new Error(`Pending-input remove mutated append-only Ledger history: ${JSON.stringify(queueLedger)}`);
 }
 queueRun = await cancelToTerminal(queueRun);

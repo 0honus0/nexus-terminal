@@ -12,6 +12,7 @@ const port = Number(process.env.NEXUS_E2E_PLUGIN_REPOSITORY_PORT ?? '29092');
 const publicBaseUrl = (
   process.env.NEXUS_E2E_PLUGIN_REPOSITORY_PUBLIC_BASE_URL?.trim() || `http://${host}:${port}`
 ).replace(/\/$/, '');
+const hangOpenAiRequests = process.env.NEXUS_E2E_PLUGIN_REPOSITORY_HANG_OPENAI === '1';
 if (!Number.isSafeInteger(port) || port < 1 || port > 65535) {
   throw new Error('NEXUS_E2E_PLUGIN_REPOSITORY_PORT_INVALID');
 }
@@ -121,12 +122,19 @@ const officialCatalog = {
 };
 const officialCatalogBytes = Buffer.from(`${JSON.stringify(officialCatalog, null, 2)}\n`, 'utf8');
 let officialCatalogEnabled = true;
+const hangingProviderResponses = new Set();
 const packageByUrl = new Map([
   ...packages.map((candidate) => [`/packages/${candidate.packageName}`, candidate.bytes]),
   [`/packages/${unsafePackageName}`, unsafePackageBytes],
 ]);
 
 const server = http.createServer((request, response) => {
+  if (hangOpenAiRequests && request.method === 'POST' && request.url === '/v1/chat/completions') {
+    request.resume();
+    hangingProviderResponses.add(response);
+    response.on('close', () => hangingProviderResponses.delete(response));
+    return;
+  }
   if (request.method === 'POST' && request.url === '/control/official-catalog/disable') {
     officialCatalogEnabled = false;
     response.writeHead(204).end();
@@ -182,10 +190,12 @@ server.listen(port, host, () => {
   console.log(`[E2E Agent Plugin Repository] listening on http://${host}:${port}`);
 });
 
-const shutdown = () =>
+const shutdown = () => {
+  for (const response of hangingProviderResponses) response.destroy();
   server.close(() => {
     fs.rmSync(temp, { recursive: true, force: true });
     process.exit(0);
   });
+};
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
