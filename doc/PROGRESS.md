@@ -1,217 +1,406 @@
-# Nexus 开发交接
+# Nexus Agent 当前交接进度
 
-## 当前 Git / 工作区基线
+> **用途：跨会话施工入口。** 后续会话开始工作前，先完整读取本文件与 `doc/PROBLEM.md`，再核对 branch / HEAD / `git status --short`。本文件只记录“下一会话真正需要知道的当前事实、施工规则、验证证据与继续位置”；历史完成细节以 Git commit 为准。
+>
+> 最近更新：2026-09-20。本轮用户已明确要求：**审核 `dev` 的累计未提交变更；已完成的历史 Problem 按“一个 Problem 一个 commit”拆分、验证、提交；审核中发现的同 Problem correctness / authority 缺口直接修复并纳入该 Problem commit。**
 
-- 仓库：`/home/agentdock/AgentDock/nexus-terminal-dev`
-- branch：`dev`
-- baseline HEAD：`1c07306cab45882c38f2f641e17559275bc604d3`
-- P-094 文档收口前 `git status --short` 为 **158** 条累计未提交修改；当前 working tree 是唯一代码事实源。
-- **必须保留全部现有修改**。禁止 `git reset --hard`、`git restore .`、`git clean`、stash、checkout 覆盖，或任何“先回 HEAD 再重做”的操作。
-- 本机 Node 为 `v22.17.0`，仓库 package engine 要求 Node `>=24`；本轮 typecheck/build/scenario 均通过，但 release/CI 仍以 Node 24 canonical environment 为准。
-- 本轮只完成并关闭 **P-094**；**没有开始 P-095 产品实现**。
+## 1. 仓库、分支与工作区保护
 
-## 刚完成：P-094 Storage / Workspace 生命周期假合同
+- Repo：`/home/agentdock/AgentDock/nexus-terminal-dev`
+- Branch：`dev`
+- 最新功能代码基线：`b6158835044dfa8abe04281258529f8628755cde`
+- 最新功能 subject：`fix(agent): close P-121 public contract drift`
+- P-121 提交后 `git status --short` 为 **26** 条，其中 2 条是本轮待做 docs-only closeout，剩余 **24** 条是已分类、必须保留的代码 residual。
+- **这些 residual 必须全部保留。** 禁止为了“清理”执行 `reset`、`stash`、`clean`、`restore`、checkout overwrite 或其它可能丢失累计工作的命令。
+- 当前 index 在 P-121 提交后为空；不要把 residual 整批 stage，也不要把旧 runner 工作副本当成当前 authoritative regression tree。
+- 本轮功能 Problem 已全部闭环；`doc/PROBLEM.md` 与本文件只做独立 docs-only closeout，不改变代码树。
 
-P-094 已完成并从 `doc/PROBLEM.md` 移除。施工前确认三个关键事实：
+## 2. 当前工作目标：本轮 Problem 拆分已收口
 
-1. `storage.maxArtifactBytes` 只有 Settings/UI 与大小关系校验，没有 per-Run Artifact consumer。
-2. `unretainedArtifactTtlSeconds` 没有 ready Artifact deadline/sweeper；ready 时原本会把 staging `expires_at` 清成 `NULL`。
-3. `workspaceIdleTtlSeconds` 虽然有 UI/API/defaults/hard-limit contract，但 `last_active_at` 只覆盖 create/lifecycle/reconfigure 等少数路径，普通 read/search/argv/terminal activity 没有统一 touch，因此直接做 idle sweeper 会误杀正在使用的 Workspace。
+`doc/PROBLEM.md` 当前 open Problem 为 **0**；最终 residual 审计新增的 P-121 也已 regression-first 闭环，下一新编号是 `P-122`。
 
-最终按“有真实 owner 才保留设置”的原则分两种处理：Artifact quota/TTL 补真实 runtime semantics；Workspace idle 假设置删除。
+本轮“审核累计 dirty tree、一个 Problem 一个 commit、每个 commit 用 isolated staged tree 验证”的目标已经完成。后续不要因为仍有 residual 就自动创建 P-122；只有出现新的当前代码证据、明确 owner 与可验证完成条件时才建新 Problem。
 
-## Artifact quota authority
+### 已完成的本轮拆分 commit
 
-### requested storage limit 真正进入 runtime
+从原始基线 `7f88592` 之后，本轮已确认并提交：
 
-`ArtifactLimitPolicyPort` 现在消费：
+- `d89850c` — P-062 type boundaries
+- `3b81d01` — P-060 structured logging
+- `f0e589c` — P-113 Artifact delete UI
+- `a37e98d` — P-095 machine route freshness
+- `3acad00` — P-099 workspace checkpoint restore
+- `c75f4e9` — P-083 browser screenshot vision
+- `5f6a47c` — P-084 browser interactions
+- `f81efef` — P-107 browser target freshness
+- `c9a90f1` — P-056 suspended session ownership
+- `90bc88a` — P-085 restart recovery
+- `51c91dd` — P-104 mailbox TTL lifecycle
+- `02f64d1` — P-068 Subagent profile strategy
+- `75d7857` — P-088 governed Subagent mutation
+- `a7d6d0f` — P-078 MCP protocol extensions
+- `0cacd85` — P-080 Plugin/App Tool boundary contract
+- `c3b201f` — P-109 MCP health / retry / management
+- `bd6c714` — P-108 ACP inner permission durable approval
+- `d5a6c71` — P-115 Plugin AppIntent SDK / bounded host bridge
+- `936d945` — P-114 Memory review/publish/import/notification product closure
+- `ea4c03d` — P-059 owner decomposition / codec extraction
+- `b615883` — P-121 public contract drift
 
-- `effectiveSettings.storage.maxSingleArtifactBytes`
-- `effectiveSettings.storage.maxGlobalArtifactBytes`
-- `effectiveSettings.storage.unretainedArtifactTtlSeconds`
-- existing `minFreeDiskBytes`
+### 下一步从哪里继续
 
-因此 requested single/global 值先由既有 Settings normalization 受 hard limit 约束，再真正进入 Artifact reservation/global quota path；不再只读取 hard-limit ceiling。
+**当前没有待施工 Problem。**
 
-### per-Run `maxArtifactBytes`
+本轮最终收口事实：
 
-没有新建第二套 Run quota table，也没有把 per-Run usage 镜像到 Backend/Runner 新 owner。
+- P-059 已以 `ea4c03d` 独立提交，owner decomposition 不复制 durable authority；isolated deterministic **67/67 PASS**。
+- residual 审计随后发现 P-121：P-078/P-109 已提交能力与 public description/type facade 存在 drift；旧 HEAD 在新增 regression 下真实 RED，修复后以 `b615883` 提交，isolated deterministic **68/68 PASS**。
+- docs-only closeout 完成后预计只保留 **24 个代码 residual**：19 个格式/展示排版、3 个 JSON deep-equal 的 i18n key-order、1 个无 caller 的 Subagent context `maxBytes` 草稿、1 个混有旧 fixture 且缺当前 P-121 regression 的 runner 工作副本。
+- 这些 residual 已审计为“不应整批提交”，也不得擅自 restore/clean。后续若要处理，必须先产生新的可验证代码证据。
 
-唯一 authority 是 durable `agent_artifact_links`：
+## 3. P-114 已完成事实与本轮深审修复
 
-- canonical schema `createAgentArtifactLinksTableSQL` 同时安装 `agent_artifact_links_run_quota_insert` trigger；
-- 第一次把一个未 deleted Artifact link 到某个 Run 时，trigger 统计该 Run 当前 **distinct artifact** bytes + incoming Artifact bytes；
-- 同一个 Artifact 在同一 Run 的 `input/output/evidence/checkpoint` 多 role 只计一次；
-- 普通 Library Artifact 在尚未 link 到 Run 前不伪造 per-Run 归属；
-- 超过当前 effective `storage.maxArtifactBytes` 时原子拒绝 `ARTIFACT_RUN_QUOTA_EXCEEDED`；
-- HTTP public taxonomy 将该错误规范化为 507 `ARTIFACT_QUOTA_EXCEEDED`；
-- quota 使用 **当前 effective setting**，不是 Run-create frozen snapshot。Regression 验证同一既有 Run 在 10-byte setting 下拒绝第二个 6-byte Artifact，Settings 提到 20 bytes 后下一次 link 可通过；
-- trigger 属于 existing canonical schema owner，**没有新增 migration #31**，当前 migration baseline 仍为 30。
+P-114 commit `936d945` 已独立提交，范围严格限制为 Memory review/publish/import/notification product closure：
 
-所有既有 link producer（initial/append input、checkpoint、output/evidence、cross-App attach 等）继续写同一 `agent_artifact_links`，因此不能绕过这个 durable boundary。
+- Frontend `MemorySettings` 复用既有 `MemoryService` / SQLite authority，publish/reject/revoke 全部携带 `expectedVersion`，冲突后刷新 authoritative state。
+- Cross-App import 继续复用既有 preview-confirm flow；Backend preview/confirm 都只接受仍为 published 且未过期的 source Memory。
+- Recall/index authority 未改变：只有 published + unexpired Memory 可进入 Recall；candidate/rejected/revoked/expired 均保持不可召回。
+- Memory mutation 通过既有 durable Host outbox 发布 `memory.changed`；Frontend 只消费 Host event/cross-tab fan-out，不增加 correctness polling。
+- candidate attention 复用既有 `AgentNotificationBridge` / `AGENT_ATTENTION_REQUIRED`，projection 不复制 Memory content。
 
-## Artifact TTL / retention authority
+本轮深审额外修复了三个 P-114 correctness gap：
 
-`storage.unretainedArtifactTtlSeconds` 现在有真实 durable consumer：
+1. **Frontend stale response overwrite**：Memory 主列表和跨 App source 列表都加入 request generation fencing，旧 App/status/source 请求完成后不能覆盖新的 authoritative selection。
+2. **expired published source 仍出现在 import picker**：Frontend source picker 现在只展示当前 live published Memory；Backend preview/confirm 继续作为最终 authority。
+3. **import confirmation 可并发重复消费**：repository 改为 transaction-scoped `takeImportConfirmation()`，通过 SQLite `BEGIN IMMEDIATE` 原子 read+delete；同一 confirmation 并发 confirm 最多一个成功，另一个 fail closed 为 `MEMORY_IMPORT_CONFIRMATION_NOT_FOUND`。
 
-- staging reservation 的 upload TTL 仍是独立短期 upload contract；
-- Artifact 成功进入 ready 时，按当时 effective TTL 写 durable `expires_at = readyAt + ttl`；
-- `retain=true` 清除自动 expiry deadline；
-- 之后 `retain=false` 时按当时 effective TTL 从当前时间重新建立 deadline；
-- 历史 ready/unavailable row 若仍是 `expires_at IS NULL`，bounded maintenance sweep 首次处理时按 `readyAt`（缺失时 `createdAt`）+ 当前 effective TTL 补成 durable deadline，之后语义固定在 row 上。
+最终 isolated staged-tree 验证：
 
-现有 Agent lifecycle timer 仍是唯一 maintenance scheduler。Artifact pass 先执行既有 `reconcile()`，再执行新增 bounded `sweepExpired()`；没有创建第二套 timer/GC service。
+- staged files：**15**
+- Backend `tsc --noEmit` / build：PASS
+- Agent Runner `tsc --noEmit` / build：PASS
+- Frontend `vue-tsc --noEmit` / Vite production build：PASS
+- deterministic Agent scenarios：**66/66 PASS，0 FAIL**
+- `runtime/memory-product-closure`：PASS
+- `memory_import_one_shot_confirmations=1`、`memory_host_event_pollers=0`、`memory_notification_content_leaks=0`
+- P-059 leakage markers：**0**
+- `git diff --cached --check` 与 post-commit `git show --check`：PASS
+- 新 `MemorySettings.vue` 已 Prettier clean；runner / compose / agent-events 的 remaining whole-file warnings 可在 HEAD `d5a6c71` 原文件复现，均位于 P-114 hunk 之外。
+- 提交期间 branch 被并发推进到 `936d945`；该 commit tree 与最终已验证 temporary commit `b4ed2f2` 的 tree hash 完全相同，因此未重复提交或 amend。
 
-自动回收继续复用：
+## 4. P-115 已完成事实与本轮深审修复
 
-- `artifactProtectionReason`
-- `ready/unavailable -> deleting -> deleted`
-- `finalizeDeleting()`
-- existing quota reconciliation
+P-115 commit `d5a6c71` 已独立提交，范围严格限制为 Plugin AppIntent SDK / bounded Host bridge：
 
-因此不会直接 `fs.rm` 后改表，也不会新造另一套保护规则。Deterministic fixture 已锁定以下过期 Artifact 不被删除：
+- Frontend iframe SDK 与 Backend plugin worker SDK 都只代理现有 `AppIntentService`；intent declaration、sender/receiver active state、grant、TTL、revoke、schema 与 Artifact ownership/read authority 没有复制第二套 owner。
+- Frontend iframe sandbox 继续使用既有 CSP `connect-src 'none'`；Plugin 不能通过 SDK 直接获得网络能力。
+- Frontend AppIntent Artifact content 走 HostBridge binary RPC，单次 range 最大 128 KiB，使用 transferable `ArrayBuffer`；bytes 不进入 postMessage JSON/Base64。
+- Backend worker 的 Artifact range read 同样限制 128 KiB，并在 Host adapter 内要求 stream 总字节数精确等于请求 range 后才通过 bounded local IPC 返回。
+- Frontend metadata/create/list/revoke/get 与 Backend worker semantic surface 都复用同一 AppIntent receipt/grant/TTL contract。
+- deterministic `runtime/plugin-app-intent-sdk` 覆盖 undeclared intent、missing grant、revoke、TTL、source Artifact disappearance、range read、CSP 与 Frontend no-JSON-byte contract。
 
-- retained；
-- active Run linked；
-- checkpoint linked；
-- active Artifact grant。
+本轮深审额外补了一个 SDK authority 边界：
 
-只有 expired + unretained + unprotected Artifact 会进入 two-phase delete。
+- HostBridge 原本只验证“请求 range <= 128 KiB”，然后直接 transfer HTTP 返回的 `ArrayBuffer`；
+- 即使正常 Backend route 会发送精确 `Content-Length`，HostBridge 作为 sandbox 最后一层 byte authority 仍应 fail closed；
+- 现在 transfer 前再次要求 `content.byteLength === requested range length` 且不超过 128 KiB；异常/过长/过短响应统一拒绝为 `APP_INTENT_ARTIFACT_RANGE_INVALID`；
+- regression 直接断言 exact-length check 发生在 `transfer: [content]` 之前。
 
-## Workspace idle setting 的处理
+施工中还遇到一次并发 HEAD 改写：P-108 从 `c23776a` 变为 `bd6c714`。两棵树审计后确认唯一差异是 runner 两处纯换行格式，P-108 功能树完全相同；因此 P-115 在当前 `bd6c714` 上重新合成并重新验证，未携带那 20 行无关格式差异。
 
-`workspaceIdleTtlSeconds` 选择**删除假合同**，而不是在不完整 activity truth 上实现 unsafe sweeper。
+最终 isolated staged-tree 验证：
 
-已从以下产品面删除：
-
-- Backend `AgentSettingsDocument.hardLimits`
-- Backend `AgentSettingsDocument.workspaceRuntime`
-- defaults / normalization / hard-limit cap
-- Frontend API types
-- Hard Limits UI
-- en-US / ja-JP / zh-CN Agent Settings 文案
-
-Legacy Settings JSON 中即使仍携带该 extra field，`normalizeRequestedSettings()` 会按当前 schema 重建并丢弃；新增 deterministic regression 已验证 defaults 与 legacy normalization 都不再暴露该字段。
-
-产品代码与 SRS 范围扫描（排除 P-094 自身历史 handoff/regression assertion）为 **0 个 `workspaceIdleTtlSeconds` 残余**。
-
-当前 `last_active_at` 仍只是 Workspace lifecycle metadata，不允许被描述成完整用户 activity authority；未来若重新引入 idle cleanup，必须先建立 read/search/argv/terminal/job/session 共用的单一可信 activity owner，再决定产品 setting。
-
-## P-094 regression-first 与行为验证
-
-新增 deterministic scenario：
-
-`storage/artifact-lifecycle-settings`
-
-产品修改前完整 suite **真实 FAIL**，首个失败：
-
-`P-094 must not expose an idle Workspace setting until Workspace activity has a trustworthy runtime owner`
-
-即旧 defaults 仍暴露 `workspaceIdleTtlSeconds`，regression-first 证据成立。
-
-最终 scenario 覆盖：
-
-- defaults 不再暴露 Workspace idle setting；
-- legacy Settings normalization 丢弃 Workspace idle extra fields；
-- ready unretained Artifact 获得 durable TTL deadline；
-- retained Artifact 清除 deadline；
-- 极小 per-Run quota 稳定拒绝第二个 distinct linked Artifact；
-- 同 Artifact 多 role 不重复计费；
-- current effective per-Run setting 修改后既有 Run 下一次 link 使用新 setting；
-- expired reclaimable Artifact 被 bounded sweep 删除；
-- retained / active Run / checkpoint / active grant 四类 protection 均保留；
-- per-Run quota public error 映射为 HTTP 507 `ARTIFACT_QUOTA_EXCEEDED`。
-
-最终 P-094 metrics：
-
-- `artifact_run_quota_rejections = 1`
-- `artifact_run_quota_current_setting_updates = 1`
-- `artifact_run_quota_distinct_link_accounting = 1`
-- `artifact_ready_ttl_deadlines = 1`
-- `artifact_expiry_sweeps = 1`
-- `artifact_expiry_protected_cases = 4`
-- `workspace_idle_fake_settings = 0`
-
-## 最终验证 baseline
-
-全部通过：
-
-- Backend `pnpm --filter @nexus-terminal/backend exec tsc --noEmit`：PASS
+- Backend `tsc --noEmit`：PASS
+- Agent Runner `tsc --noEmit`：PASS
 - Backend build：PASS
-- Agent Runner `pnpm --filter @nexus-terminal/agent-runner exec tsc --noEmit`：PASS
 - Agent Runner build：PASS
-- Frontend `pnpm --filter @nexus-terminal/frontend exec vue-tsc --noEmit`：PASS
-- Frontend build：PASS（Vite 2913 modules）
-- deterministic Agent scenarios：**45/45 PASS**
-- `storage/artifact-lifecycle-settings`：PASS
-- Agent en-US / ja-JP / zh-CN locale JSON parse：PASS
-- `workspaceIdleTtlSeconds` 产品/SRS残余扫描：0
-- `git diff --check`：PASS
+- Frontend `vue-tsc --noEmit`：PASS
+- Frontend Vite production build：PASS
+- deterministic Agent scenarios：**65/65 PASS，0 FAIL**
+- P-114 / P-059 leakage markers：**0**
+- `git diff --cached --check` 与 post-commit `git show --check`：PASS
+- whole-file Prettier warning 仅 runner / compose，且与 HEAD `bd6c714` baseline 完全一致；P-115 没有新增格式退化。
 
-唯一环境提示仍是 Node `v22.17.0` < repo Node `>=24` engine warning。
+## 5. P-108 已完成事实与本轮深审修复
 
-## Problem 清单当前实算状态
+P-108 commit `bd6c714` 已独立提交，范围严格限制为 ACP inner permission durable approval / live continuation：
 
-P-094 移除后按当前 `doc/PROBLEM.md` headings + 状态字段实算：
+- `client.session.requestPermission` 复用现有 `agent_approvals` durable owner 与 Approval UI，通过 `kind='acp_permission'` 绑定 parent ToolCall、runtime、parent operation hash、policy/input revision；没有第二套 approval database/UI。
+- outer `acp_execute` Tool 在 inner approval 期间始终保持 `running`；inner request/resolve 不推进 Run version、不 redispatch outer Tool，也不释放/替换 mutation lease。
+- raw ACP input 不持久化原文，只保存 bounded title/kind、rawInput byte count/hash 等 inspection projection；实际 rawInput 在 ACP adapter 边界先做 32 KiB bounded JSON。
+- durable approval resolve 成功后，live broker 才返回一次性 `allow_once/reject_once` 给当前 ACP session；Backend restart 没有 live waiter 时，仍处于 requested 的 approval 必须 fail stale。
+- 已 durable resolved 的同一 idempotency retry 可以通过 StateCommit replay，不要求已经消失的 live waiter，也不会重新调度 outer Tool。
+- Frontend 使用 typed transient `approval.changed` wake，Approval UI 对 inner permission 只显示显式 **Allow once / Reject once**。
 
-- **54 total / 34 completed / 20 open**
+本轮深审额外修复了四个 P-108 correctness gap：
 
-当前 open Problem：
+1. **live waiter reserve/abort race**：旧 `take()` 会在 durable resolve 前提前 settle waiter、移除 abort/timeout guard；outer Tool 若此时 abort，后续 durable success 仍可能把 `allow_once` 续回已失效 session。现在 `take()` 只 reserve resolver，abort/timeout guard 在 durable commit 期间仍有效；abort/timeout 先发生时，后续 allow finish 是 no-op。
+2. **pre-P-059 parent ToolCall identity 传播遗漏**：`AcpPermissionBroker` 需要 durable parent `toolCallId`，但该字段后来被 P-059 owner decomposition 搬进 `RootToolExecutionCoordinator`。P-108 commit 在当时 owner `NativeAgentBackend` 中最小补回 `ToolContext.toolCallId` 与 mutation execute 传播，没有提前引入 P-059 coordinator。
+3. **resolved approval 的幂等重试被 live waiter 错误阻断**：首次 durable resolve 已成功但 HTTP 响应丢失时，旧 `ApprovalService` 会因为 live waiter 已消失而先报 `APPROVAL_STALE`，到不了 StateCommit replay。现在只有仍为 `requested` 的 ACP approval 才强制要求 live waiter；已 resolved approval 可进入 StateCommit 的 same-key replay，而不同 key 仍由 durable transition 拒绝。
+4. **durable resolve 失败后的 requested approval 残留**：旧失败路径只把 live session 返回 `reject_once`，durable approval 仍可能以 `requested` 挂到 TTL。现在 reserved live handle 提供 `failClosed()`，在 resolve 失败时同时 reject live ACP action 并通过同一 StateCommit owner 尝试把 approval `superseded`；abort/race 后重复 close 仍是 fail-closed no-op。
 
-`P-056 P-059 P-060 P-062 P-068 P-078 P-080 P-083 P-084 P-085 P-088 P-095 P-099 P-104 P-107 P-108 P-109 P-113 P-114 P-115`
+Regression 现在包含：
 
-Workspace / Coding / Browser / Remote execution 默认顺序现在从 **P-095** 开始。
+- `runtime/acp-inner-permission`
+- `runtime/acp-inner-permission-abort-race`
+- `runtime/acp-inner-permission-replay`
+- `runtime/acp-inner-permission-durable`
 
-P-080 仍 open：`doc/AGENT.md` 与 `doc/architecture/BACKEND.md` 已明确 Host-owned governed Tool 属于 Core，但 `SRS-AGENT-001` / `FR-AGENT-014` 仍有 Plugin 可贡献 tools 的旧表述。
+最终 isolated staged-tree 验证：
 
-## 必须继续保持的 invariant
+- Backend `tsc --noEmit`：PASS
+- Agent Runner `tsc --noEmit`：PASS
+- Backend build：PASS
+- Agent Runner build：PASS
+- Frontend `vue-tsc --noEmit`：PASS
+- Frontend Vite production build：PASS
+- deterministic Agent scenarios：**64/64 PASS，0 FAIL**
+- P-115 / P-114 / P-059 leakage markers：**0**
+- `git diff --cached --check` 与 post-commit `git show --check`：PASS
+- Prettier：P-108 新增/修改行已 clean；共享文件仍有 HEAD `c3b201f` 继承的 whole-file warning，但 P-108 scenario 内两处 warning 已在 amend 中单独修正，没有为了格式制造跨 Problem churn。
 
-- 当前 working tree 是唯一事实源，累计未提交修改必须全部保留。
-- 仍只有一个 `@ai-sdk/openai` SDK/Adapter。
-- 不透传 raw/caller-owned `prompt_cache_key`。
-- P-081 vendor cache key 只允许 official OpenAI endpoint + frozen capability gate。
-- P-063 ToolCatalog / model Tool surface owner 不变。
-- P-064 canonical Ledger / derived ContextCheckpoint owner 不变。
-- P-069 raw ToolResult / model projection 分离不变。
-- P-070 cumulative usage 与 latest Context occupancy 分离。
-- P-077 continuation truth 仍是 `agent_model_attempts.continuation_json`；Ledger 只保留 `modelStepId` reference。
-- P-093 Tool-call batch + terminal Tool results 保持原子。
-- P-071 Project Instructions 仍是 transient Context source，不成为 approval/capability/security/Memory/durable business truth。
-- P-071 resolver、P-072 `workspace-coding-files` 与 P-067 `workspace-code-intelligence` 必须保持独立 owner。
-- P-072 `workspace_read_file/workspace_search` 与 P-067 `workspace_repo_map/workspace_code_intel` 保持 read risk；`workspace_apply_patch/workspace_execute_argv` 保持 mutation governance。
-- Repo Map/code-intel cache 只可重建，不允许进入 Ledger/ContextCheckpoint/Memory/Run durable truth。
-- Repo Map 不能替代 authoritative file read；任何编辑仍需真实 file content + hash precondition。
-- P-073 Runner Job Journal 仍是唯一 background-job durable truth；不得在 Backend/Run/Ledger 新建第二份 authoritative job state。
-- background launch 的 `confirmed` 只表示 Runner durable acceptance，verification 必须保持 unverified，直到 durable terminal evidence 出现。
-- Artifact global quota 的 durable usage 继续由 existing `agent_quota_usage` owner 管理；P-094 没有再建 per-Run usage table。
-- per-Run Artifact quota authority 是 `agent_artifact_links` insert boundary；同 Artifact/Run 多 role 不能重复计费。
-- Artifact TTL authority 是 durable `ai_artifacts.expires_at` + existing protection/two-phase delete；不得创建旁路 GC。
-- `workspaceIdleTtlSeconds` 当前不存在于产品设置合同；没有完整 activity owner 前不得重新加回假 idle cleanup。
+## 6. P-109 已完成事实与本轮深审修复
 
-## 下一会话入口：P-095，仅下一会话开始
+P-109 commit `c3b201f` 已独立提交，范围严格限制为 MCP runtime health / retry / management：
 
-**本会话到 P-094 closeout 为止，不继续 P-095。**
+- MCP health 仍是 process-local、可重建 projection，状态为 `idle / refreshing / ready / error`，只暴露 bounded error code、attempt/success/retry timestamps；没有新增第二套 durable health authority。
+- Integration 的 durable `version + credentialRevision + schemaHash` 继续由现有 repository CAS 权威持有。
+- lifecycle sweep 提供 bounded automatic retry；retry 前重新核对 integration 存在、enabled、version 与 credential revision，旧 generation 不得继续重试。
+- Frontend Agent Settings 提供 MCP create/update endpoint/credential、enable/disable、delete、manual refresh/retry、health/error/retry status；existing integration 的 trusted annotation 设置可编辑，delete 有显式确认。
+- 对应 SRS / FR / AGENT contract 与三语 i18n 已同步，明确排除 P-108 ACP inner permission、P-115 AppIntent SDK、P-114 Memory 与 P-059 owner decomposition。
 
-P-095 是 Machine mutation approval 对 Proxy / Jump-chain dependency revision 覆盖不完整导致的 stale-approval TOCTOU gap。下一会话开始时：
+本轮最终深审额外发现并修复了一个真实 TOCTOU：
 
-1. 重新检查 branch / HEAD / `git status --short`，确认累计未提交修改全部保留；若状态与本文件不同，以最新 current working tree 为事实源。
-2. 完整读取本文件与最新 `doc/PROBLEM.md` 的 P-095。
-3. 先审计当前真实 owner，不根据 Problem 文案直接实现，至少核对：
-   - `packages/backend/src/bootstrap/agent/machine-support.ts`
-   - `packages/backend/src/modules/agent/capabilities/tool-target.types.ts`
-   - `packages/backend/src/modules/agent/runtime/execution/tool-call-runner.ts` 的 approval refresh / stale comparison
-   - `packages/backend/src/modules/connections/services/ssh-connection-resolver.service.ts`
-   - `packages/backend/src/infrastructure/agent/capabilities/machine-capability.adapter.ts`
-   - SSH transport/session cache 的当前失效 key
-4. 先向现有 P-079 deterministic harness 增加能真实 FAIL 的 P-095 regression，再做产品修改。
-5. 第一目标是 **dependency-complete Machine target fingerprint**：direct Connection、Proxy 与所有 Jump hop 的非秘密配置/revision，以及 credential 的 opaque revision/hash 必须影响 approval refresh 的 operation identity；不得把 password/private key 明文或可逆值放进 ToolInspection/Ledger。
-6. 必须先决定现有 `secretRefs` 的真实去留：若用于 credential lineage，就定义并真正生产/验证 `{id,version}`；若 route dependency fingerprint 已完整覆盖 credential revision，则删除这个全仓永远空的假抽象。不要留下两套半实现机制。
-7. execution session/cache 必须与同一 dependency fingerprint 一致失效，不能 inspection 变 stale 但底层仍复用旧 route/credential session。
-8. 验证至少覆盖 direct Connection、Proxy host/credential、任一 Jump hop host/credential、无关 Connection 修改、未变 route 正常审批，以及 inspection/log/ledger 无明文 secret。
-9. P-095 完成后仍按固定规则：更新 `doc/PROBLEM.md`、完整重写本文件、重新实算 Problem 数量，并在同一会话停止，不继续 P-099。
+1. 旧实现只在 network refresh 返回后用 durable `updateSchemaHash(version, credentialRevision)` CAS 防 stale。
+2. CAS 成功返回后到同步 `mcpRefreshed` 发布 Tool contribution 之间，concurrent update/disable/remove 或 app deactivate 仍可插入。
+3. 其中 deactivate 不改变 durable generation，因此旧 refresh 有机会在 teardown 后再次 publish，复活已移除的 Tool contribution。
 
-## 新会话启动提示词
+`c3b201f` 增加 process-local refresh invalidation epoch：
 
-新会话直接发送：
+- refresh 启动时捕获 epoch；
+- successful update/remove、disabled sync 与 deactivate 都 advance epoch；
+- schema CAS 后、publish 前再次校验 epoch；
+- stale epoch 必须 close session 并以 `INTEGRATION_REFRESH_STALE` fail closed；
+- stale completion 不得覆盖新 generation / deactivated 状态的 runtime health。
+- deterministic `runtime/integration-health-retry` 新增 **CAS 已提交后 disable** 的 stale-publication race，以及 **remove 后旧 retry cancellation** 覆盖。
 
-> 继续开发 Nexus。进入 `/home/agentdock/AgentDock/nexus-terminal-dev`，先核对 branch/HEAD/status，完整读取 `doc/PROGRESS.md` 和最新 P-095，严格按 handoff 只完成 P-095；先做 regression-first，再实现、全量验证、更新 PROBLEM/PROGRESS，完成后停在 P-099 前。保留所有现有改动，禁止 reset/stash/clean/restore 覆盖。
+最终 isolated staged-tree 验证：
+
+- Backend `tsc --noEmit`：PASS
+- Agent Runner `tsc --noEmit`：PASS
+- Frontend `vue-tsc --noEmit`：PASS
+- Frontend Vite production build：PASS
+- deterministic Agent scenarios：**60/60 PASS，0 FAIL**（完整重跑两次均 exit 0）
+- P-108 / P-115 / P-114 / P-059 leakage markers：**0**
+- `git diff --cached --check`：PASS
+- P-109 新增 runner scenario block 与 compose retry hook 按仓库 `.prettierrc` scoped check：PASS；whole-file format warning 来自共享 runner / compose 的非 P-109 既有区域，因此没有为了格式制造跨 Problem churn。
+
+## 7. P-088 已完成事实与最新审核发现
+
+P-088 commit `75d7857` 已包含：
+
+- durable `mutationMode` / migration #32；
+- governed `worker` template；
+- Full Access gate；
+- Child Workspace-only mutation Tool surface；
+- approval + lease/fence + StateCommit durable begin/settle；
+- verified Tool evidence / restart unknown-outcome no-replay；
+- `workspace_apply_patch` exact diff Artifact；
+- Frontend `mutationMode` settings / i18n；
+- deterministic `runtime/subagent-governed-mutation` regression。
+
+本轮深审额外发现并修复了一个 authority gap：
+
+- **不能只相信 Tool descriptor 的 `workspace.runtime.execute` capability。**
+- executor 在 refresh inspection 后必须重新确认真实 target 是合法 Workspace mutation；
+- StateCommit 在 durable begin mutation 时也重新解析 persisted `inspection_json` 并再次验证；
+- 合法 target 分两类：
+  - existing Workspace：必须绑定 `workspaceId + generation + workspace:<id>:<generation>` identity/resource；
+  - `workspace_create`：必须精确绑定 `workspace:new:<runId>:<childRuntimeId>`；
+- 非 Workspace / capability 伪装 target 在 approval consume / mutation side effect 前拒绝。
+- regression 包含 `governed_subagent_non_workspace_target_rejections`。
+
+P-088 commit 已通过 `git show --check`。
+
+## 8. P-078 已完成事实
+
+P-078 commit `a7d6d0f` 已独立提交，范围严格限制为 MCP 2026-07-28 协议扩展：
+
+- Resources / Prompts 进入 schema-hash-bound refresh snapshot，并以 deferred Tool surface 暴露；
+- 大型 Resource / Prompt payload 使用 Artifact spill，模型只拿 bounded projection / Artifact ref；
+- `trustToolAnnotations` 只有用户显式开启时才允许 `readOnlyHint` / `destructiveHint` 影响 Tool risk，未信任 annotation 默认按 mutation 处理；
+- migration #33 为 `agent_input_requests` 增加 nullable `continuation_json`，复用现有 durable clarification owner，不新增第二 input state machine；
+- read/control MCP `input_required` 会 durable park，用户回答后重新 inspect 以适配新 `inputRevision`，再用 integrationId + schemaHash + method + requestParams 绑定的 continuation resume；
+- 多轮 `input_required` 复用同一个 Tool/input-request durable owner；
+- mutation-capable MCP Tool 若在 authority 激活后返回 `input_required`，直接 fail closed 为 `outcome='unknown'`，进入现有 quarantine/reconciliation，不跨用户等待继续 mutation；
+- 当前 MCP SDK 没有可用的 2026-07-28 Task runtime，因此 P-078 没有虚构并行 Task scheduler。
+
+拆分时明确排除了：
+
+- P-109 runtime health / retry / management UI；
+- P-108 ACP inner permission；
+- P-059 `RootToolExecutionCoordinator` owner decomposition（P-078 resume 逻辑保留在当时的 `NativeAgentBackend` owner）。
+
+验证：isolated Backend typecheck PASS、Backend build PASS、Agent Runner build PASS、deterministic **59/59 PASS**，其中 `runtime/mcp-protocol-surface` 与 `runtime/mcp-input-required-durable-lifecycle` 均 PASS；`git show --check` PASS。
+
+## 9. P-080 已完成事实
+
+P-080 commit `0cacd85` 是**文档契约 closure**，没有新增 Plugin Tool runtime/SDK：
+
+- `doc/AGENT.md` 明确 Host-owned governed Tool implementations 仍属于 Core；
+- 当前 manifest、Backend Plugin SDK、Runner Plugin SDK/worker protocol **没有** `AgentTool` descriptor/inspect/execute 注册 surface；
+- Plugin Backend/Runner target 不得直接向 `ToolCatalog` 注入 Host-authority function；
+- Plugin 通过 manifest capability/grant 使用 Core governed Tool，外部动态 Tool 优先通过 MCP；
+- 若未来开放 Plugin-defined governed Tool，必须另立 versioned Tool SDK/IPC、risk declaration、schema lifecycle、outcome/verification contract；
+- 同步修正 SRS-AGENT-001/SRS-AGENT-014 与 FR-AGENT-001/FR-AGENT-014，去掉“Plugin package 可贡献 arbitrary governed Tools”的错误承诺。
+
+代码反证审计：manifest 当前只暴露 capabilities/intents/targets 等正式贡献面；Plugin runtime/worker surface 中不存在 `AgentTool` / `ToolCatalog` registration/injection 路径。Static contract、Prettier、`git diff --check` 均 PASS。P-080 不改 runtime code，因此代码树与已验证的 P-078 HEAD 相同。
+
+## 10. P-068 / P-085 审核中修掉的重要历史缺陷
+
+### P-068
+
+Root collaboration projection 原先会：
+
+1. `JSON.stringify()`；
+2. 再用 `boundedUtf8(..., 8KiB)` 生硬截断。
+
+profile / delegation 多时可能产生半截无效 JSON。
+
+`02f64d1` 已修为 projection 内部按 byte budget 裁剪数组，并显式保留 omission counts；crowded regression 使用 32 profiles + 40 direct delegations，要求：
+
+- 输出 <= 8 KiB；
+- `JSON.parse()` 成功；
+- omitted profile/delegation 数量可见。
+
+### P-085
+
+旧 canonical E2E seed 只有 migration 21，旧 `agent_checkpoints` 没有 `kind`。此前 current schema bootstrap 会在 migration #31 前创建 recovery index，导致 `no such column: kind`。
+
+`90bc88a` 已修为：
+
+- recovery index 在 migrations 后 ensure；
+- migration #31 先补 `kind`；
+- canonical seeded migration E2E 已 **1/1 PASS**。
+
+P-085 还补了 backend authority：
+
+- manual/user resume 只接受 `kind='user'`；
+- rolling recovery checkpoint 只能走 backend-restart recovery path；
+- 不能靠前端隐藏 Resume 按钮作为权限边界。
+
+因此旧文档中的“seed no such column: kind 是基础设施限制”已经失效，后续不要再按那个假设行动。
+
+## 11. 当前验证基线
+
+要区分两套数字：
+
+### 最新已提交代码的 isolated baseline
+
+- Agent scenarios：**68/68 PASS，0 FAIL**
+- Backend `tsc --noEmit` / build：PASS
+- Agent Runner build：PASS
+- 最新涉及 Frontend 的 P-059 isolated `vue-tsc` / Vite build：PASS
+
+当前 dirty worktree 含已知 stale runner residual，因此**不把 dirty worktree 当 canonical baseline**；验证已提交行为时以最新 commit 的 isolated tree 为准。
+
+### 各独立 commit 的 isolated staged-tree 基线
+
+最近几项：
+
+- P-085：54/54 PASS；Backend typecheck PASS；Frontend `vue-tsc` + Vite build PASS；canonical seed migration E2E 1/1 PASS。
+- P-104：55/55 PASS；Backend typecheck PASS。
+- P-068：56/56 PASS；Backend typecheck PASS；Frontend `vue-tsc` / build PASS。
+- P-088：pure staged tree Backend typecheck PASS；Frontend `vue-tsc` PASS；deterministic **57/57 PASS**。
+- P-078：pure staged tree Backend typecheck PASS；Backend build PASS；Agent Runner build PASS；deterministic **59/59 PASS**；本 Problem 无 Frontend 文件变更。
+- P-080：docs-only staged tree；static contract PASS；Prettier PASS；`git diff --check` PASS；runtime code 与 P-078 已验证代码树一致。
+- P-109：pure staged tree Backend typecheck PASS；Agent Runner typecheck PASS；Frontend `vue-tsc` PASS；Vite production build PASS；deterministic **60/60 PASS**；`git diff --cached --check` PASS。
+- P-108：pure staged tree Backend/Agent Runner typecheck PASS；Backend/Agent Runner build PASS；Frontend `vue-tsc` + Vite build PASS；deterministic **64/64 PASS**；P-115/P-114/P-059 leakage **0**；`git diff --cached --check` PASS。
+- P-115：pure staged tree Backend/Agent Runner typecheck PASS；Backend/Agent Runner build PASS；Frontend `vue-tsc` + Vite build PASS；deterministic **65/65 PASS**；P-114/P-059 leakage **0**；`git diff --cached --check` PASS。
+- P-114：pure staged tree Backend/Agent Runner typecheck + build PASS；Frontend `vue-tsc` + Vite build PASS；deterministic **66/66 PASS**；P-059 leakage **0**；`git diff --cached --check` PASS。
+- P-059：pure staged tree Backend/Agent Runner typecheck + build PASS；Frontend `vue-tsc` + Vite build PASS；deterministic **67/67 PASS**；`architecture/agent-owner-decomposition` PASS；duplicate authority metric = 0。
+- P-121：regression-first 旧 HEAD 在 `architecture/public-contract-alignment` 真实 RED；最终 pure staged tree Backend typecheck/build + Agent Runner build PASS；deterministic **68/68 PASS**；P-121 runner region scoped Prettier clean，`git diff --cached --check` PASS。
+
+未来若出现新 Problem，继续以“**isolated staged tree** 能独立 typecheck + deterministic PASS”为 commit 门槛；不要用当前 residual dirty worktree 替代已提交代码验证。
+
+## 12. 必须保持的架构 invariant
+
+继续审核/拆提交时，至少保持：
+
+- StateCommit 是 Run / Tool / Approval / Subagent durable transition 的权威 owner。
+- `NativeAgentBackend` 负责 Root model/run orchestration。
+- `RootToolExecutionCoordinator` 负责已 durable pending Root Tool execution。
+- SQLite Subagent repository 是 transaction/query owner；后期 codec extraction 只负责 persisted decode/projection，不建立第二 durable authority。
+- frontend `agentApi` 仍是单一 public facade。
+- AgentThreadSidebar 仅 presentation；ModelCapabilityEditor 仅 ephemeral form state。
+- P-077 continuation truth：
+  - authoritative continuation = `agent_model_attempts.continuation_json`
+  - Ledger 只保留 modelStepId reference
+  - 不新增第二 durable continuation state
+  - reasoning text 不成为产品事实源。
+- P-120：Root/Child execution 不再用累计 Token ceiling 停止执行；累计 Token 只做 telemetry，Context pressure 与 loop guard 各自独立。
+- P-045：durable progress-aware loop guard 继续保持。
+- P-056：SSH owner generation / lease / takeover 语义不得回退。
+- P-085：restart safe-point recovery 与 recovery/user checkpoint kind authority 不得回退。
+- P-095：Machine route freshness 必须包含 dependency-complete configuration hash。
+- P-099：Workspace checkpoint + verified Artifact evidence authority 不得绕开 StateCommit。
+- P-068：Child 不继承 Root raw history/Recall；parent Workspace project instructions 只能作为 bounded inherited project context。
+- P-088：governed Child mutation 只能是 Full Access + Workspace mutation；executor 和 StateCommit 双层 target verification 都要保留。
+- P-078：MCP `input_required` durable truth 复用 `agent_input_requests.continuation_json`；resume 必须绑定 integration/schema/method/request params；mutation `input_required` 不得跨等待继续 side effect。
+- P-080：Plugin 当前没有 arbitrary governed `AgentTool` contribution surface；Host Core Tool authority 不得通过 Plugin target/SDK 文档或实现被悄悄旁路。
+- P-109：MCP runtime health 只能是可重建 projection；durable version / credentialRevision / schemaHash 仍是 authority；refresh publication 除 durable CAS 外还必须受 process-local invalidation epoch fencing，disable/remove/deactivate 后旧 refresh 不得复活 Tool contribution。
+- P-108：ACP inner permission 复用同一 `agent_approvals` durable owner/UI；outer Tool 保持 running，inner resolve 不推进 Run version、不重新调度 outer Tool；live waiter 只是当前 ACP session 的可丢失 continuation，abort/timeout/restart 必须 fail closed。
+- P-115：Plugin iframe / Backend worker SDK 只能代理现有 `AppIntentService` authority；iframe CSP 必须保持 `connect-src 'none'`；Frontend Artifact bytes 只允许 bounded transferable `ArrayBuffer`，并在 transfer 前二次验证实际 byteLength 精确等于请求 range。
+- P-114：Memory durable authority 继续由 `MemoryService` + SQLite repository 持有；Recall 只能暴露 published + unexpired Memory；跨 App import confirmation 必须一次性原子消费，Frontend stale list response 不得覆盖新 App/status/source 的 authoritative state。
+- P-059：`RootToolExecutionCoordinator` 只接手已 durable pending Root Tool execution；`NativeAgentBackend` 仍是 Root model/run orchestration owner；Subagent codecs 只做 persisted decode/projection；Frontend extracted components/transports 不建立第二 command/mutation authority。
+- P-121：模型可见 `tool_search/tool_invoke` 描述必须与实际 MCP Tool/Resource/Prompt deferred capability surface 一致；`AgentIntegrationFacade` list/get/create/update 必须暴露实际返回的 `IntegrationManagementView`，不得再次窄化 health/retry management contract。
+- external / persisted input 从 `unknown` 收窄；不要重新引入 `any` / 双重断言边界逃逸。
+- Agent Core / HTTP / Scheduler 不重新引入 direct `console.*` 或 raw arbitrary external error/body 日志泄漏。
+
+## 13. 拆 Problem 的标准操作流程
+
+后续会话请严格按这个顺序做：
+
+1. `git branch --show-current`
+2. `git rev-parse HEAD`
+3. `git status --short`
+4. 读完整 `doc/PROGRESS.md`、`doc/PROBLEM.md`
+5. 获取目标历史 Problem 的 task record / 完成条件
+6. 用 scenario / symbol / task record 建 candidate file map
+7. 用相邻后续 Problem 的 task record做反证，明确“什么不能进这个 commit”
+8. shared-owner 文件不要整文件 stage；从 HEAD 重建目标版本到 index
+9. `git diff --cached --check`
+10. 扫描后续 Problem 特征标记，确认无 leakage
+11. `git write-tree` + temp commit / `git archive` 建 isolated staged snapshot
+12. 在 isolated tree 跑：
+    - Backend typecheck
+    - Frontend typecheck（涉及 Frontend 时）
+    - deterministic Agent scenarios
+    - Problem 专属 E2E / build（如适用）
+13. 失败时先判断：
+    - 产品 bug；
+    - 历史 regression fixture 漏字段；
+    - migration 最新版本断言漏更新；
+    - 临时 archive/worktree 依赖链接问题。
+14. 修复后重新生成**最新** staged snapshot；不要复用旧验证目录冒充最新结果。
+15. 最后再跑 `git diff --cached --check` 和 leakage scan。
+16. 一个 Problem 一个 commit。
+17. commit 后：
+    - `git show --check --format=fuller HEAD --`
+    - 核对关键 marker 确实进入 commit
+    - `git status --short`，确认累计工作区仍保留。
+18. **每完成一个 Problem commit，立即更新本 `doc/PROGRESS.md` 的 HEAD、已提交链、下一目标、验证基线和新发现。**
+    - 这是后续跨会话必须遵守的新规则；
+    - 不要等到整轮审计结束才更新；
+    - `PROGRESS.md` 更新不要混进当前功能 Problem commit。
+
+## 14. 当前环境
+
+- 本机 Node：`v22.17.0`
+- Repo engine：`>=24`
+- canonical release / CI 仍以 Node 24 环境为准。
+- 当前本地 Node 22 已能运行上述 typecheck / deterministic / build，但不要把本地 engine mismatch 当作 release 环境证明。
+
+## 15. 后续会话一句话入口
+
+> 当前最新功能代码基线应包含 `b615883`（P-121 已提交）；随后可能紧跟一个 docs-only closeout commit，但代码树不变。open Problem 应为 **0**，下一编号 `P-122`。index 应为空；worktree 仍应保留约 **24 个已审计代码 residual**，不要整批 stage/restore。若没有新的当前代码证据，不继续人为创建 Problem。
