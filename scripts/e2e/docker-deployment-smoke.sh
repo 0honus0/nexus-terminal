@@ -1745,8 +1745,13 @@ const appendQueueInput = async (text) => {
     202,
   );
   queueRun = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}`);
-  if (queueRun.version !== appended.runVersion) {
-    throw new Error(`Pending-input append projection did not advance atomically: ${JSON.stringify({ appended, queueRun })}`);
+  const projectedInput = queueRun.recentEntries?.find((entry) => entry.id === appended.inputId);
+  if (
+    queueRun.version < appended.runVersion ||
+    projectedInput?.sequence !== appended.sequence ||
+    projectedInput?.kind !== 'user_input'
+  ) {
+    throw new Error(`Pending-input append projection was not durable: ${JSON.stringify({ appended, queueRun })}`);
   }
 };
 await appendQueueInput('pending input two');
