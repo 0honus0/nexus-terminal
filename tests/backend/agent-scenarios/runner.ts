@@ -68,9 +68,15 @@ import type {
 import type { ConnectionService } from '../../../packages/backend/src/modules/connections/connection.service';
 import type { Connection } from '../../../packages/backend/src/modules/connections/connection.types';
 import { SshConnectionResolver } from '../../../packages/backend/src/modules/connections/services/ssh-connection-resolver.service';
-import type { ProxyRepository, StoredProxyRecord } from '../../../packages/backend/src/modules/proxies/proxy.repository.port';
+import type {
+  ProxyRepository,
+  StoredProxyRecord,
+} from '../../../packages/backend/src/modules/proxies/proxy.repository.port';
 import { ProxyService } from '../../../packages/backend/src/modules/proxies/proxy.service';
-import type { SshKeyRepository, StoredSshKeyRecord } from '../../../packages/backend/src/modules/ssh-keys/ssh-key.repository.port';
+import type {
+  SshKeyRepository,
+  StoredSshKeyRecord,
+} from '../../../packages/backend/src/modules/ssh-keys/ssh-key.repository.port';
 import { SshKeyService } from '../../../packages/backend/src/modules/ssh-keys/ssh-key.service';
 import type { SecretCipher } from '../../../packages/backend/src/shared/security/crypto.port';
 import { logErrorCode } from '../../../packages/backend/src/shared/logging/logger';
@@ -87,7 +93,10 @@ import { LEASE_RENEW_INTERVAL_MS } from '../../../packages/backend/src/modules/a
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
 import { modelFacingToolSchemas } from '../../../packages/backend/src/modules/agent/capabilities/tool-model-surface';
 import { PolicyService } from '../../../packages/backend/src/modules/agent/capabilities/policy.service';
-import { projectToolResult, ToolExecutor } from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
+import {
+  projectToolResult,
+  ToolExecutor,
+} from '../../../packages/backend/src/modules/agent/capabilities/tool-executor';
 import type {
   AgentTool,
   ToolContext,
@@ -183,9 +192,15 @@ import type {
 import { ConversationService } from '../../../packages/backend/src/modules/agent/ai/conversation.service';
 import { RecallService } from '../../../packages/backend/src/modules/agent/ai/recall.service';
 import { MemoryService } from '../../../packages/backend/src/modules/agent/ai/memory.service';
-import type { RecallCandidate, RecallRepositoryPort } from '../../../packages/backend/src/modules/agent/ai/recall.repository.port';
+import type {
+  RecallCandidate,
+  RecallRepositoryPort,
+} from '../../../packages/backend/src/modules/agent/ai/recall.repository.port';
 import { SkillRegistry } from '../../../packages/backend/src/modules/agent/ai/skill-registry';
-import type { PluginSkillBundle, PluginSkillSourcePort } from '../../../packages/backend/src/modules/agent/host/plugin-skill-source.port';
+import type {
+  PluginSkillBundle,
+  PluginSkillSourcePort,
+} from '../../../packages/backend/src/modules/agent/host/plugin-skill-source.port';
 import { validateManifest } from '../../../packages/backend/src/modules/agent/host/app-manifest-validator';
 import type {
   ContextCheckpointRepositoryPort,
@@ -193,7 +208,10 @@ import type {
   UpsertContextCheckpointRecord,
 } from '../../../packages/backend/src/modules/agent/ai/context-checkpoint.repository.port';
 import type { ContextHistoryBoundary } from '../../../packages/backend/src/modules/agent/ai/context.types';
-import type { AgentBackendPort, BackendSignal } from '../../../packages/backend/src/modules/agent/runtime/execution/agent-backend.port';
+import type {
+  AgentBackendPort,
+  BackendSignal,
+} from '../../../packages/backend/src/modules/agent/runtime/execution/agent-backend.port';
 import { completionGateDecision } from '../../../packages/backend/src/modules/agent/runtime/execution/completion-gate';
 import { ModelCallLimiter } from '../../../packages/backend/src/modules/agent/runtime/execution/model-call-limiter';
 import { modelFinishDisposition } from '../../../packages/backend/src/modules/agent/runtime/execution/model-finish-policy';
@@ -204,7 +222,10 @@ import { ToolCallRunner } from '../../../packages/backend/src/modules/agent/runt
 import { createRequestUserInputTool } from '../../../packages/backend/src/modules/agent/tools/host/user-input-tools';
 import { createToolSearchTool } from '../../../packages/backend/src/modules/agent/tools/host/tool-discovery-tools';
 import { createPlanUpdateTool } from '../../../packages/backend/src/modules/agent/runtime/planning/plan-tool';
-import { createSkillReadTool, createSkillSearchTool } from '../../../packages/backend/src/modules/agent/tools/host/skill-tools';
+import {
+  createSkillReadTool,
+  createSkillSearchTool,
+} from '../../../packages/backend/src/modules/agent/tools/host/skill-tools';
 import { AgentEventHub } from '../../../packages/backend/src/modules/agent/runtime/events/event-hub';
 import { AgentScheduler } from '../../../packages/backend/src/modules/agent/runtime/scheduling/scheduler';
 import { SubagentContextBuilder } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-context-builder';
@@ -220,7 +241,10 @@ import type {
   RuntimeParticipantView,
   RuntimeToolExchangeView,
 } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent.repository.port';
-import type { DelegationView, SchedulerWorkView } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent.types';
+import type {
+  DelegationView,
+  SchedulerWorkView,
+} from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent.types';
 import { RunService } from '../../../packages/backend/src/modules/agent/runtime/runs/run.service';
 import { requestHash } from '../../../packages/backend/src/modules/agent/runtime/runs/idempotency';
 import type { AtomicCreateRun } from '../../../packages/backend/src/modules/agent/runtime/runs/state-commit.port';
@@ -233,7 +257,11 @@ import {
   restoreWorkspaceCheckpointArchive,
 } from '../../../packages/agent-runner/src/controller/workspace-checkpoint-archive';
 import type { CheckpointView } from '../../../packages/backend/src/modules/agent/runtime/recovery/checkpoint.repository.port';
-import type { RunDefinitionSnapshot, RunSnapshot, RunView } from '../../../packages/backend/src/modules/agent/runtime/runs/run.types';
+import type {
+  RunDefinitionSnapshot,
+  RunSnapshot,
+  RunView,
+} from '../../../packages/backend/src/modules/agent/runtime/runs/run.types';
 import { runModelRoutes } from '../../../packages/backend/src/modules/agent/runtime/runs/model-routes';
 import { normalizeUserInputQuestions } from '../../../packages/backend/src/modules/agent/runtime/runs/user-input-request';
 import { agentRoute } from '../../../packages/backend/src/interfaces/http/agent/agent-http';
@@ -18023,10 +18051,13 @@ const browserTargetScopedRevisionScenario: Scenario = async () => {
     getWorkspace: async (_scope: unknown, requestedWorkspaceId: string) =>
       requestedWorkspaceId === workspaceId ? workspace : null,
   };
-  let session: import('../../../packages/backend/src/modules/agent/ai/integrations.types').BrowserSessionView | null = null;
+  let session: import('../../../packages/backend/src/modules/agent/ai/integrations.types').BrowserSessionView | null =
+    null;
   let closeCount = 0;
   const gateway = {
-    createSession: async (request: import('../../../packages/backend/src/modules/agent/ai/integrations.types').BrowserSessionRequest) => {
+    createSession: async (
+      request: import('../../../packages/backend/src/modules/agent/ai/integrations.types').BrowserSessionRequest,
+    ) => {
       session = {
         userId: request.userId,
         appId: request.appId,
