@@ -115,7 +115,7 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
     name: TOOL_SEARCH_NAME,
     version: '1.0.0',
     description:
-      'Search bounded metadata and input schemas for deferred MCP Tools in the current App. Use the returned version-bound handle with tool_invoke. Search is local and deterministic; it does not invoke the remote Tool.',
+      'Search bounded metadata and input schemas for deferred MCP capabilities in the current App, including remote Tools plus bounded Resource/Prompt discovery surfaces. Use the returned version-bound handle with tool_invoke. Search is local and deterministic.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -189,7 +189,7 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
     const result = searchDeferredTools(catalog, context, query, limit);
     return {
       ok: true,
-      summary: `Found ${result.matches.length} deferred MCP Tool match${result.matches.length === 1 ? '' : 'es'}.`,
+      summary: `Found ${result.matches.length} deferred MCP capability match${result.matches.length === 1 ? '' : 'es'}.`,
       data: {
         matches: result.matches,
         truncated: result.truncated,

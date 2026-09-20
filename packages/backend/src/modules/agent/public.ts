@@ -42,7 +42,7 @@ import type {
 } from './ai/conversation.repository.port';
 import type { ContextPlan, ContextRequest } from './ai/context.types';
 import type { LanguageModelPort } from './ai/language-model.port';
-import type { IntegrationKind, IntegrationRefreshView, IntegrationView } from './ai/integrations.types';
+import type { IntegrationKind, IntegrationManagementView, IntegrationRefreshView } from './ai/integrations.types';
 import type { DiscoveredProviderModel, ProviderTestResult, ProviderView } from './ai/model.types';
 import type { MemoryImportConfirmation, MemoryStatus, MemoryView } from './ai/memory.repository.port';
 import type { ApprovalView } from './runtime/approvals/approval.repository.port';
@@ -158,10 +158,15 @@ export interface AgentHostFacade {
 }
 
 export interface AgentIntegrationFacade {
-  list(scope: Scope, kind?: IntegrationKind): Promise<IntegrationView[]>;
-  get(scope: Scope, integrationId: string): Promise<IntegrationView>;
-  create(scope: Scope, input: unknown): Promise<IntegrationView>;
-  update(scope: Scope, integrationId: string, expectedVersion: number, input: unknown): Promise<IntegrationView>;
+  list(scope: Scope, kind?: IntegrationKind): Promise<IntegrationManagementView[]>;
+  get(scope: Scope, integrationId: string): Promise<IntegrationManagementView>;
+  create(scope: Scope, input: unknown): Promise<IntegrationManagementView>;
+  update(
+    scope: Scope,
+    integrationId: string,
+    expectedVersion: number,
+    input: unknown,
+  ): Promise<IntegrationManagementView>;
   remove(scope: Scope, integrationId: string, expectedVersion: number): Promise<void>;
   refresh(scope: Scope, integrationId: string, signal?: AbortSignal): Promise<IntegrationRefreshView>;
 }

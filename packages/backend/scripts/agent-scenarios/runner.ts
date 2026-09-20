@@ -19206,6 +19206,48 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
   ];
 };
 
+const agentPublicContractAlignmentScenario: Scenario = async () => {
+  const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
+    ? path.join(process.cwd(), 'src')
+    : path.join(process.cwd(), 'packages', 'backend', 'src');
+  const read = (relative: string): string => fs.readFileSync(path.join(backendSourceRoot, relative), 'utf8');
+
+  const modelSurface = read('modules/agent/capabilities/tool-model-surface.ts');
+  assert.match(
+    modelSurface,
+    /Invoke one deferred MCP capability/,
+    'tool_invoke must describe the deferred MCP capability surface',
+  );
+  assert.match(modelSurface, /Resource\/Prompt/, 'tool_invoke must disclose bounded Resource/Prompt surfaces');
+
+  const discovery = read('modules/agent/tools/host/tool-discovery-tools.ts');
+  assert.match(discovery, /deferred MCP capabilities/, 'tool_search must describe capabilities rather than Tools only');
+  assert.match(discovery, /Resource\/Prompt/, 'tool_search must disclose bounded Resource/Prompt discovery');
+  assert.match(
+    discovery,
+    /deferred MCP capability match/,
+    'tool_search result summary must use the capability contract',
+  );
+
+  const publicSource = read('modules/agent/public.ts');
+  const start = publicSource.indexOf('export interface AgentIntegrationFacade');
+  const end = publicSource.indexOf('\nexport interface ', start + 1);
+  const facade = publicSource.slice(start, end < 0 ? undefined : end);
+  assert.match(facade, /Promise<IntegrationManagementView\[\]>/, 'integration list must expose management health');
+  assert.equal(
+    (facade.match(/Promise<IntegrationManagementView>/g) ?? []).length,
+    3,
+    'get/create/update must expose management health',
+  );
+  assert.doesNotMatch(facade, /Promise<IntegrationView/, 'public Integration facade must not narrow management values');
+
+  return [
+    { name: 'public_mcp_capability_descriptions', value: 2, unit: 'surfaces' },
+    { name: 'public_integration_management_returns', value: 4, unit: 'methods' },
+    { name: 'public_contract_narrowing_drifts', value: 0, unit: 'contracts' },
+  ];
+};
+
 const agentStructuredLoggingScenario: Scenario = async () => {
   const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
     ? path.join(process.cwd(), 'src')
@@ -19397,6 +19439,7 @@ const scenarios = new Map<string, Scenario>([
   ['machine/route-dependency-approval', machineRouteDependencyApprovalScenario],
   ['runtime/artifact-single-delete-product', artifactSingleDeleteProductScenario],
   ['architecture/agent-owner-decomposition', agentOwnerDecompositionScenario],
+  ['architecture/public-contract-alignment', agentPublicContractAlignmentScenario],
   ['architecture/agent-structured-logging', agentStructuredLoggingScenario],
   ['architecture/product-type-boundaries', productTypeBoundaryScenario],
 ]);

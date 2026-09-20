@@ -15,7 +15,7 @@ export const isDeferredToolDescriptor = (descriptor: ToolDescriptor): boolean =>
 export const TOOL_INVOKE_SCHEMA: CatalogToolSchema = {
   name: TOOL_INVOKE_NAME,
   description:
-    'Invoke one deferred MCP Tool using a handle returned by tool_search. The handle is version-bound; stale or unknown handles fail closed. Arguments are validated against the authoritative Tool schema before inspection/execution.',
+    'Invoke one deferred MCP capability using a handle returned by tool_search. This includes remote Tools and bounded Resource/Prompt discovery/read surfaces. The handle is version-bound; stale or unknown handles fail closed. Arguments are validated against the authoritative Tool schema before inspection/execution.',
   inputSchema: {
     type: 'object',
     additionalProperties: false,
