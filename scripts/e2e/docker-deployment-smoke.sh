@@ -1612,7 +1612,7 @@ const cancelToTerminal = async (run) => {
     const cancelled = await call(
       'POST',
       `/api/v1/apps/nexus.agent/runs/${run.id}/cancel`,
-      { expectedVersion: current.version },
+      { schemaVersion: 1, expectedVersion: current.version },
       { ...mutationHeaders, 'Idempotency-Key': randomUUID() },
     );
     if (cancelled.response.ok) current = cancelled.json?.data;
