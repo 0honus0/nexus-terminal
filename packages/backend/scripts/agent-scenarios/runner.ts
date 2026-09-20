@@ -6640,6 +6640,7 @@ const providerFallbackChainScenario: Scenario = async () => {
 
     modelRunner.waitBeforeRetry = async () => undefined;
     const signal = new AbortController().signal;
+    const recoverySafePoints: string[] = [];
     const backend = new NativeAgentBackend(
       repository,
       { listDelegations: async () => [] } as never,
@@ -6647,9 +6648,17 @@ const providerFallbackChainScenario: Scenario = async () => {
       modelRunner,
       { schemas: () => [] } as unknown as ToolCallRunner,
       clock,
+      async (_run, reason) => {
+        recoverySafePoints.push(reason);
+      },
     );
     const backendSignals: BackendSignal[] = [];
     for await (const backendSignal of backend.execute(snapshot, signal)) backendSignals.push(backendSignal);
+    assert.deepEqual(
+      recoverySafePoints,
+      ['model_boundary'],
+      'Native Root execution must await the rolling recovery checkpoint hook before a new model step',
+    );
 
     const finalSnapshot = await repository.snapshot(scope, runId);
     assert.ok(finalSnapshot);
@@ -6725,6 +6734,7 @@ const providerFallbackChainScenario: Scenario = async () => {
       { name: 'authoritative_attempts', value: attempts.length, unit: 'attempts' },
       { name: 'fallback_route_index', value: 1, unit: 'index' },
       { name: 'cross_route_continuations_reused', value: 0, unit: 'continuations' },
+      { name: 'native_recovery_model_safe_points', value: recoverySafePoints.length, unit: 'checkpoints' },
     ];
   } finally {
     await db.close().catch(() => undefined);
