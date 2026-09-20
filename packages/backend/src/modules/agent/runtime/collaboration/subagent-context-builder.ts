@@ -154,7 +154,11 @@ export class SubagentContextBuilder {
         ? 'auto'
         : 'none';
     const reservedOutputTokens = Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1));
-    const contextBudget = resolveModelContextBudget(run.budget.contextPolicy, model.contextWindow, reservedOutputTokens);
+    const contextBudget = resolveModelContextBudget(
+      run.budget.contextPolicy,
+      model.contextWindow,
+      reservedOutputTokens,
+    );
     const artifactProjection =
       delegation.inputArtifactRefs.length > 0 && delegation.capabilities.includes('artifacts.read')
         ? await projectArtifactsForModel(this.artifacts, scope, { runId, runtimeId }, delegation.inputArtifactRefs, {
@@ -190,7 +194,8 @@ export class SubagentContextBuilder {
       estimatedInputTokens = estimateModelInputTokens(instructions, messages, offeredTools);
     }
 
-    let maxOutputTokens = estimatedInputTokens <= contextBudget.effectiveInputTokens ? reservedOutputTokens : 0;
+    let maxOutputTokens =
+      estimatedInputTokens <= contextBudget.effectiveInputTokens ? reservedOutputTokens : 0;
     if (maxOutputTokens < 1 && messages.some((message) => message.contentParts?.length)) {
       for (const message of messages) delete message.contentParts;
       const user = messages.find((message) => message.role === 'user');

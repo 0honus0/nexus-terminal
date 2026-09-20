@@ -619,6 +619,9 @@ export class ContextService {
       inputIndexesByRun.set(entry.runId, index + 1);
       return ordered[index] ?? entry;
     });
+    const currentInputSequence = input.currentInputEntryId
+      ? projectedLedgerItems.find((entry) => entry.id === input.currentInputEntryId)?.sequence
+      : undefined;
 
     const continuationRefs = projectedLedgerItems.flatMap((entry) => {
       if (
@@ -843,9 +846,9 @@ export class ContextService {
       addTokens(tokens);
     }
 
-    // Compaction is adaptive: use the full physical model window while the context fits.
-    // Once something no longer fits, trim the oldest raw ledger turns to create working
-    // headroom. This is a context-management policy, not a smaller model capability limit.
+    // Compaction is adaptive inside the frozen effective context boundary. Once the soft
+    // pressure threshold is crossed, trim the oldest raw ledger turns to recover working
+    // headroom without changing the model's physical capability snapshot.
     const compacted = historyPressure || droppedSections.length > 0;
     if (compacted && selectedLedgerGroups.length > 0) {
       const targetTokens = Math.max(
@@ -878,8 +881,12 @@ export class ContextService {
         (maximum, candidate) => Math.max(maximum, candidate.source.toSequence ?? 0),
         0,
       );
-      const checkpointThrough =
+      const visiblePrefixThrough =
         earliestVisibleSequence < Number.MAX_SAFE_INTEGER ? earliestVisibleSequence - 1 : newestCandidateSequence;
+      const checkpointThrough =
+        currentInputSequence === undefined
+          ? visiblePrefixThrough
+          : Math.min(visiblePrefixThrough, currentInputSequence - 1);
       if (checkpointThrough >= 1) {
         try {
           const checkpoint = await this.checkpoints.checkpointForPrefix({

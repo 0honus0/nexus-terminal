@@ -6541,6 +6541,17 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
       currentRunBudget,
       'new durable Run budgets without removed capability/quota fields must decode',
     );
+    assert.throws(
+      () =>
+        parseRunBudget(
+          JSON.stringify({
+            ...currentRunBudget,
+            contextPolicy: { ...currentRunBudget.contextPolicy, effectiveWindowPercent: 101 },
+          }),
+        ),
+      /AGENT_DURABLE_STATE_INVALID/,
+      'durable context policy percentages outside 1-100 must fail closed',
+    );
   } finally {
     await db.close().catch(() => undefined);
     fs.rmSync(directory, { recursive: true, force: true });
@@ -12876,11 +12887,42 @@ const modelAwareContextBudgetScenario: Scenario = async () => {
   });
   assert.equal(earlyPressurePlan.compacted, true);
 
+  const currentInputMarker = 'CURRENT_INPUT_CHECKPOINT_DEDUP_MARKER';
+  const currentInputText = `${currentInputMarker} Preserve this input exactly once.`;
+  const dedupPlan = await contextService([
+    entry(1, 'user_input', { text: currentInputText }),
+    entry(2, 'assistant_message', { text: 'historical assistant context '.repeat(220) }),
+    entry(3, 'assistant_message', { text: 'older working notes '.repeat(220) }),
+  ]).compose({
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: currentInputText,
+    currentInputEntryId: 'entry-1',
+    modelContextWindow: 4_096,
+    maxContextTokens: 1_800,
+    softContextTokens: 1_200,
+    reservedOutputTokens: 128,
+    maxRecallItems: 1,
+    maxRecallBytes: 1_024,
+    tools: [],
+  });
+  const currentInputOccurrences = dedupPlan.messages
+    .map((message) => message.content)
+    .join('\n')
+    .split(currentInputMarker).length - 1;
+  assert.equal(
+    currentInputOccurrences,
+    1,
+    'current input must not reappear through a derived checkpoint when context pressure compacts history',
+  );
+
   return [
     { name: 'normal_effective_context_tokens', value: normalWindow.effectiveInputTokens, unit: 'tokens' },
     { name: 'extended_effective_context_tokens', value: extendedWindow.effectiveInputTokens, unit: 'tokens' },
     { name: 'pressure_tool_output_floor_bytes', value: atHardPressure, unit: 'bytes' },
     { name: 'soft_pressure_compactions', value: earlyPressurePlan.compacted ? 1 : 0, unit: 'plans' },
+    { name: 'current_input_projection_occurrences', value: currentInputOccurrences, unit: 'messages' },
   ];
 };
 
