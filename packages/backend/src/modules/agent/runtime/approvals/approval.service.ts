@@ -3,6 +3,7 @@ import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type { RunSnapshotReaderPort } from '../runs/run.repository.port';
 import type { ApprovalDecisionCommitPort } from '../runs/state-commit.port';
 import type { RunView } from '../runs/run.types';
+import type { AcpPermissionResolutionPort } from './acp-permission-broker';
 import type { ApprovalRepositoryPort, ApprovalView } from './approval.repository.port';
 
 export class ApprovalService {
@@ -12,6 +13,7 @@ export class ApprovalService {
     private readonly stateCommit: ApprovalDecisionCommitPort,
     private readonly clock: ClockPort,
     private readonly onResolved: (run: RunView) => void,
+    private readonly acpPermissions?: AcpPermissionResolutionPort,
   ) {}
 
   async get(scope: Scope, approvalId: string): Promise<ApprovalView> {
@@ -46,30 +48,47 @@ export class ApprovalService {
     const run = await this.runs.snapshot(scope, approval.runId);
     if (!run) throw new Error('NOT_FOUND');
     const key = requireIdempotencyKey(idempotencyKey);
-    const committed = await this.stateCommit.resolveToolApproval({
-      scope,
-      runId: approval.runId,
-      approvalId,
-      decision,
-      operationHash,
-      expectedApprovalVersion: expectedVersion,
-      expectedRunVersion: run.version,
-      expectedPolicyRevision: approval.policyRevision,
-      expectedInputRevision: approval.inputRevision,
-      decidedByUserId: actorUserId,
-      ...(feedback ? { feedback } : {}),
-      idempotencyKey: key,
-      requestHash: requestHash(1, {
-        approvalId,
+    const acpResolution =
+      approval.kind === 'acp_permission' && approval.status === 'requested'
+        ? (this.acpPermissions?.take(approvalId) ?? null)
+        : null;
+    if (approval.kind === 'acp_permission' && approval.status === 'requested' && !acpResolution) {
+      throw new Error('APPROVAL_STALE');
+    }
+    let committed: Awaited<ReturnType<ApprovalDecisionCommitPort['resolveToolApproval']>>;
+    try {
+      committed = await this.stateCommit.resolveToolApproval({
+        scope,
         runId: approval.runId,
+        approvalId,
         decision,
         operationHash,
-        expectedVersion,
+        expectedApprovalVersion: expectedVersion,
+        expectedRunVersion: run.version,
+        expectedPolicyRevision: approval.policyRevision,
+        expectedInputRevision: approval.inputRevision,
+        decidedByUserId: actorUserId,
         ...(feedback ? { feedback } : {}),
-      }),
-      now: this.clock.nowUnixSeconds(),
-    });
-    this.onResolved(committed.run);
+        idempotencyKey: key,
+        requestHash: requestHash(1, {
+          approvalId,
+          runId: approval.runId,
+          decision,
+          operationHash,
+          expectedVersion,
+          ...(feedback ? { feedback } : {}),
+        }),
+        now: this.clock.nowUnixSeconds(),
+      });
+    } catch (error) {
+      await acpResolution?.failClosed();
+      throw error;
+    }
+    if (approval.kind === 'acp_permission') {
+      acpResolution?.finish(decision === 'approved' ? 'allow_once' : 'reject_once');
+    } else {
+      this.onResolved(committed.run);
+    }
     const resolved = await this.approvals.get(scope, approvalId);
     if (!resolved) throw new Error('NOT_FOUND');
     return resolved;

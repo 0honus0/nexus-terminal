@@ -1161,6 +1161,9 @@
     },
     "approvals": {
       "title": "Operation requires approval",
+      "acpInnerTitle": "ACP inner action requires approval",
+      "allowOnce": "Allow once",
+      "rejectOnce": "Reject once",
       "timeline": "Pending approvals",
       "target": "Target",
       "expires": "Expires in",

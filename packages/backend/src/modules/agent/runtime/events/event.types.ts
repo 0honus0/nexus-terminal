@@ -30,4 +30,10 @@ export type TransientRunEvent =
       type: 'tool.delta';
       payload: TransientToolDeltaPayload;
       occurredAt: number;
+    }
+  | {
+      runId: string;
+      type: 'approval.changed';
+      payload: { approvalId: string };
+      occurredAt: number;
     };

@@ -95,6 +95,8 @@ import type { AppCapabilityBroker } from '../../src/modules/agent/host/app-capab
 import { AgentSettingsService } from '../../src/modules/agent/host/agent-settings.service';
 import { AgentExecutionPolicyService } from '../../src/modules/agent/host/agent-execution-policy.service';
 import { TOOL_APPROVAL_TTL_SECONDS } from '../../src/modules/agent/runtime/approvals/approval-policy';
+import { ApprovalService } from '../../src/modules/agent/runtime/approvals/approval.service';
+import { AcpPermissionBroker } from '../../src/modules/agent/runtime/approvals/acp-permission-broker';
 import { toolLeaseTtlSeconds } from '../../src/modules/agent/runtime/execution/tool-lease-policy';
 import { ContextCheckpointService } from '../../src/modules/agent/ai/context-checkpoint.service';
 import { ContextService } from '../../src/modules/agent/ai/context.service';
@@ -108,11 +110,13 @@ import type { IntegrationRepositoryPort } from '../../src/modules/agent/ai/integ
 import { IntegrationService } from '../../src/modules/agent/ai/integration.service';
 import type { IntegrationServiceHooks } from '../../src/modules/agent/ai/integration.service';
 import type {
+  AcpRuntimePort,
   IntegrationManagementView,
   IntegrationView,
   McpConnectionSnapshot,
   McpRuntimePort,
 } from '../../src/modules/agent/ai/integrations.types';
+import { createAcpExecuteTool } from '../../src/modules/agent/tools/host/acp-tools';
 import { createMcpTools } from '../../src/modules/agent/tools/host/mcp-tools';
 import {
   mcpInputRequestFromToolResult,
@@ -1077,7 +1081,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
       | undefined;
     assert.equal(upgradedCheckpoint?.name, 'ai_context_checkpoints', 'migration 30 must create the Context checkpoint owner');
     assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
-    assert.equal(migrationVersion?.version, 33, 'legacy databases must advance through migration 33');
+    assert.equal(migrationVersion?.version, 34, 'legacy databases must advance through migration 34');
   } finally {
     legacyDb.close();
     fs.rmSync(upgradeDirectory, { recursive: true, force: true });
@@ -1091,7 +1095,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
     { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
     { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },
     { name: 'legacy_digest_tables', value: 0, unit: 'tables' },
-    { name: 'migration_version', value: 33, unit: 'version' },
+    { name: 'migration_version', value: 34, unit: 'version' },
   ];
 };
 
@@ -11554,6 +11558,743 @@ const integrationHealthRetryScenario: Scenario = async () => {
   ];
 };
 
+const acpInnerPermissionScenario: Scenario = async () => {
+  const scope: Scope = { userId: 1, appId: 'acp-inner-permission-app' };
+  const runId = 'acp-inner-permission-run';
+  const runtimeId = 'acp-inner-permission-runtime';
+  const integrationId = '00000000-0000-4000-8000-000000000108';
+  const workspaceId = 'acp-inner-permission-workspace';
+  const integration: IntegrationView = {
+    ...scope,
+    id: integrationId,
+    kind: 'acp',
+    configuration: {
+      displayName: 'scenario-acp',
+      transport: 'workspace-profile',
+      profileId: 'scenario-acp-profile',
+      protocolVersion: '1',
+    },
+    hasCredential: false,
+    credentialRevision: 1,
+    schemaHash: null,
+    enabled: true,
+    version: 1,
+    createdAt: 1_801_100_000,
+    updatedAt: 1_801_100_000,
+  };
+  const integrations = {
+    get: async () => integration,
+  } as unknown as IntegrationRepositoryPort;
+  const workspaces = {
+    getWorkspace: async () =>
+      ({
+        id: workspaceId,
+        ...scope,
+        runId,
+        agentRuntimeId: runtimeId,
+        generation: 1,
+        version: 1,
+        status: 'running',
+        profile: {
+          acpProfiles: [
+            {
+              id: 'scenario-acp-profile',
+              profileRevision: 1,
+              argv: ['scenario-acp'],
+              cwd: '/workspace/work',
+            },
+          ],
+        },
+      }) as never,
+  } as unknown as AgentWorkspaceRepositoryPort;
+  const decisions: Array<'allow_once' | 'reject_once'> = [];
+  let permissionRequests = 0;
+  const runtime: AcpRuntimePort = {
+    execute: async (_integration, _request, context) => {
+      decisions.push(
+        await context.requestPermission({
+          sessionId: 'session-108',
+          toolCallId: 'inner-tool-108',
+          title: 'Write generated source',
+          kind: 'edit',
+          rawInput: { path: '/workspace/work/generated.ts', bytes: 128 },
+        }),
+      );
+      return { text: 'permission scenario complete', stopReason: 'end_turn' };
+    },
+  };
+  const tool = createAcpExecuteTool(
+    integrations,
+    workspaces,
+    runtime,
+    { sha256Utf8: (value) => createHash('sha256').update(value, 'utf8').digest('hex') },
+    {
+      request: async (toolContext, parentInspection, request) => {
+        permissionRequests += 1;
+        assert.equal(toolContext.toolCallId, 'outer-tool-108');
+        assert.equal(parentInspection.operationHash, 'scenario-outer-operation-hash');
+        assert.equal(request.sessionId, 'session-108');
+        assert.equal(request.toolCallId, 'inner-tool-108');
+        return 'allow_once';
+      },
+    },
+  );
+  const inspection: ToolInspection = {
+    toolName: 'acp_execute',
+    toolVersion: '1.0.0',
+    normalizedArguments: {
+      integrationId,
+      integrationVersion: 1,
+      workspaceId,
+      generation: 1,
+      profileId: 'scenario-acp-profile',
+      profileRevision: 1,
+      prompt: 'implement the requested change',
+      cwd: '/workspace/work',
+    },
+    target: {
+      kind: 'integration',
+      integrationId,
+      workspaceId,
+      generation: 1,
+      targetIdentity: `acp:${integrationId}:${workspaceId}:1:scenario-acp-profile`,
+      endpoint: `workspace-acp:${workspaceId}:scenario-acp-profile`,
+      loginUser: 'runner:acp',
+      configurationHash: 'scenario-acp-configuration',
+    },
+    resourceKeys: [`integration:acp:${integrationId}`, `workspace:${workspaceId}:1`],
+    risk: 'mutate',
+    mutation: true,
+    operationHash: 'scenario-outer-operation-hash',
+    operationHashVersion: 1,
+    preconditions: [],
+    policyRevision: 1,
+    inputRevision: 1,
+  };
+  const abort = new AbortController();
+  const context: ToolContext = {
+    ...scope,
+    actor: { kind: 'agent', userId: 1, appId: scope.appId, runId, agentRuntimeId: runtimeId },
+    runId,
+    agentRuntimeId: runtimeId,
+    toolCallId: 'outer-tool-108',
+    connectionIds: [],
+    environment: null,
+    stepId: 'acp-inner-permission-step',
+    signal: abort.signal,
+    deadlineAt: 1_801_100_600,
+    maxOutputBytes: 64 * 1024,
+    inputRevision: 1,
+  };
+
+  await tool.execute(inspection, context);
+  assert.deepEqual(
+    decisions,
+    ['allow_once'],
+    'an explicit user-approved ACP inner action must resume the original ACP permission request',
+  );
+
+  return [
+    { name: 'acp_inner_permission_requests', value: decisions.length, unit: 'requests' },
+    { name: 'acp_inner_permission_broker_requests', value: permissionRequests, unit: 'requests' },
+    {
+      name: 'acp_inner_permission_allow_once',
+      value: decisions.filter((decision) => decision === 'allow_once').length,
+      unit: 'decisions',
+    },
+  ];
+};
+
+const acpInnerPermissionAbortRaceScenario: Scenario = async () => {
+  const scope: Scope = { userId: 1, appId: 'acp-inner-permission-abort-app' };
+  const runId = 'acp-inner-permission-abort-run';
+  const runtimeId = 'acp-inner-permission-abort-runtime';
+  const parentToolCallId = 'acp-inner-permission-abort-parent-tool';
+  const now = 1_801_110_000;
+  let approvalId = '';
+  let notifyReady!: () => void;
+  const ready = new Promise<void>((resolve) => {
+    notifyReady = resolve;
+  });
+  const closed: Array<'expired' | 'superseded'> = [];
+  const broker = new AcpPermissionBroker(
+    {
+      requestAcpPermissionApproval: async (command) => {
+        approvalId = command.approvalId;
+        return undefined as never;
+      },
+      closeAcpPermissionApproval: async (command) => {
+        closed.push(command.status);
+        return undefined as never;
+      },
+    },
+    { sha256Utf8: (value) => createHash('sha256').update(value, 'utf8').digest('hex') },
+    { nowUnixSeconds: () => now } as ClockPort,
+    (_changedRunId, changedApprovalId) => {
+      if (changedApprovalId === approvalId) notifyReady();
+    },
+  );
+  const parentInspection: ToolInspection = {
+    toolName: 'acp_execute',
+    toolVersion: '1.0.0',
+    normalizedArguments: {},
+    target: {
+      kind: 'integration',
+      targetIdentity: 'acp:abort-race',
+      endpoint: 'workspace-acp:abort-race',
+      loginUser: 'runner:acp',
+      configurationHash: 'acp-abort-race-config',
+    },
+    resourceKeys: ['integration:acp:abort-race'],
+    risk: 'mutate',
+    mutation: true,
+    operationHash: 'acp-abort-race-parent-operation',
+    operationHashVersion: 1,
+    preconditions: [],
+    policyRevision: 1,
+    inputRevision: 1,
+  };
+  const abort = new AbortController();
+  const context: ToolContext = {
+    ...scope,
+    actor: { kind: 'agent', userId: 1, appId: scope.appId, runId, agentRuntimeId: runtimeId },
+    runId,
+    agentRuntimeId: runtimeId,
+    toolCallId: parentToolCallId,
+    connectionIds: [],
+    environment: null,
+    stepId: 'acp-inner-permission-abort-step',
+    signal: abort.signal,
+    deadlineAt: now + 120,
+    maxOutputBytes: 64 * 1024,
+    inputRevision: 1,
+  };
+
+  const pending = broker.request(context, parentInspection, {
+    sessionId: 'session-abort-108',
+    toolCallId: 'inner-tool-abort-108',
+    title: 'Write source',
+    kind: 'edit',
+    rawInput: { path: '/workspace/work/abort.ts' },
+  });
+  await ready;
+  assert.ok(approvalId);
+  const handle = broker.take(approvalId);
+  assert.ok(handle, 'the live ACP permission waiter must be reservable exactly once');
+  assert.equal(broker.take(approvalId), null, 'a second resolver must not reserve the same live waiter');
+
+  abort.abort(new Error('SCENARIO_ACP_PERMISSION_ABORTED'));
+  await assert.rejects(pending, /SCENARIO_ACP_PERMISSION_ABORTED/);
+  handle.finish('allow_once');
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.deepEqual(closed, ['superseded'], 'abort must durably close the nested approval');
+
+  const failClosedAbort = new AbortController();
+  const failClosedReady = new Promise<void>((resolve) => {
+    notifyReady = resolve;
+  });
+  const failClosedPending = broker.request(
+    {
+      ...context,
+      toolCallId: 'acp-inner-permission-fail-closed-parent-tool',
+      signal: failClosedAbort.signal,
+    },
+    parentInspection,
+    {
+      sessionId: 'session-fail-closed-108',
+      toolCallId: 'inner-tool-fail-closed-108',
+      title: 'Write source after stale approval',
+      kind: 'edit',
+      rawInput: { path: '/workspace/work/fail-closed.ts' },
+    },
+  );
+  await failClosedReady;
+  const failClosedHandle = broker.take(approvalId);
+  assert.ok(failClosedHandle, 'a live waiter must be reservable before a durable resolution attempt');
+  await failClosedHandle.failClosed();
+  assert.equal(await failClosedPending, 'reject_once', 'failed durable resolution must reject the live ACP action');
+  assert.deepEqual(
+    closed,
+    ['superseded', 'superseded'],
+    'failed durable resolution must also close the requested approval instead of leaving it visible until TTL',
+  );
+
+  return [
+    { name: 'acp_reserved_waiter_abort_allows', value: 0, unit: 'decisions' },
+    { name: 'acp_reserved_waiter_abort_closures', value: closed.length, unit: 'approvals' },
+    { name: 'acp_failed_resolution_open_approvals', value: 0, unit: 'approvals' },
+  ];
+};
+
+const acpInnerPermissionReplayScenario: Scenario = async () => {
+  const scope: Scope = { userId: 1, appId: 'acp-inner-permission-replay-app' };
+  const runId = 'acp-inner-permission-replay-run';
+  const approvalId = 'acp-inner-permission-replay-approval';
+  const operationHash = 'acp-inner-permission-replay-operation';
+  const now = 1_801_115_000;
+  let status: 'requested' | 'approved' = 'approved';
+  let commitCalls = 0;
+  let takeCalls = 0;
+  let outerReschedules = 0;
+  let liveHandleAvailable = false;
+  let failClosedCalls = 0;
+  let finishCalls = 0;
+  const inspection: ToolInspection = {
+    toolName: 'acp_inner_permission',
+    toolVersion: '1.0.0',
+    normalizedArguments: { parentToolCallId: 'parent-tool-replay' },
+    target: {
+      kind: 'integration',
+      targetIdentity: 'acp:replay',
+      endpoint: 'workspace-acp:replay',
+      loginUser: 'runner:acp',
+      configurationHash: 'acp-replay-config',
+    },
+    resourceKeys: ['integration:acp:replay'],
+    risk: 'mutate',
+    mutation: true,
+    operationHash,
+    operationHashVersion: 1,
+    preconditions: [],
+    policyRevision: 1,
+    inputRevision: 1,
+  };
+  const approval = () =>
+    ({
+      id: approvalId,
+      ...scope,
+      runId,
+      toolCallId: 'parent-tool-replay',
+      requestedByRuntimeId: 'runtime-replay',
+      operationHash,
+      operationHashVersion: 1,
+      kind: 'acp_permission',
+      status,
+      policyRevision: 1,
+      inputRevision: 1,
+      decidedByUserId: status === 'approved' ? 1 : null,
+      decidedAt: status === 'approved' ? now : null,
+      consumedAt: status === 'approved' ? now : null,
+      requestedAt: now - 10,
+      expiresAt: now + 120,
+      version: status === 'approved' ? 2 : 1,
+      inspection,
+    }) as never;
+  const runSnapshot = { id: runId, version: 7 } as never;
+  const service = new ApprovalService(
+    {
+      get: async () => approval(),
+      list: async () => [],
+    },
+    { snapshot: async () => runSnapshot },
+    {
+      resolveToolApproval: async (command) => {
+        commitCalls += 1;
+        if (command.idempotencyKey === '00000000-0000-4000-8000-000000000183') {
+          throw new Error('APPROVAL_STALE');
+        }
+        assert.equal(command.idempotencyKey, '00000000-0000-4000-8000-000000000181');
+        return {
+          run: runSnapshot,
+          eventCursor: 0,
+          ledgerCursor: 0,
+          committedEvents: [],
+        };
+      },
+    },
+    { nowUnixSeconds: () => now } as ClockPort,
+    () => {
+      outerReschedules += 1;
+    },
+    {
+      take: () => {
+        takeCalls += 1;
+        if (!liveHandleAvailable) return null;
+        return {
+          finish: () => {
+            finishCalls += 1;
+          },
+          failClosed: async () => {
+            failClosedCalls += 1;
+          },
+        };
+      },
+    },
+  );
+
+  const replayed = await service.resolve(
+    scope,
+    approvalId,
+    'approved',
+    operationHash,
+    1,
+    1,
+    '00000000-0000-4000-8000-000000000181',
+  );
+  assert.equal(replayed.status, 'approved');
+  assert.equal(commitCalls, 1, 'a durable resolved ACP approval must reach StateCommit replay without a live waiter');
+  assert.equal(takeCalls, 0, 'a resolved ACP approval must not try to reserve a vanished live waiter');
+  assert.equal(outerReschedules, 0, 'ACP approval replay must never redispatch the outer Tool');
+
+  status = 'requested';
+  await assert.rejects(
+    () => service.resolve(scope, approvalId, 'approved', operationHash, 1, 1, '00000000-0000-4000-8000-000000000182'),
+    /APPROVAL_STALE/,
+  );
+  assert.equal(takeCalls, 1, 'a still-requested ACP approval must require the live waiter');
+  assert.equal(commitCalls, 1, 'a missing live waiter must block any new durable ACP approval after restart');
+
+  liveHandleAvailable = true;
+  await assert.rejects(
+    () => service.resolve(scope, approvalId, 'approved', operationHash, 1, 1, '00000000-0000-4000-8000-000000000183'),
+    /APPROVAL_STALE/,
+  );
+  assert.equal(commitCalls, 2);
+  assert.equal(failClosedCalls, 1, 'a failed durable resolution must invoke the live handle fail-closed cleanup');
+  assert.equal(finishCalls, 0, 'a failed durable resolution must never resume the ACP action as allowed');
+
+  return [
+    { name: 'acp_resolved_idempotent_replays', value: 1, unit: 'approvals' },
+    { name: 'acp_pending_without_live_waiter_commits', value: 0, unit: 'approvals' },
+    { name: 'acp_failed_resolution_cleanup_calls', value: failClosedCalls, unit: 'closures' },
+    { name: 'acp_replay_outer_reschedules', value: outerReschedules, unit: 'runs' },
+  ];
+};
+
+const acpInnerPermissionDurabilityScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-acp-inner-permission-'));
+  const db = new DatabaseAdapter({
+    dataDirectory: directory,
+    filename: 'acp-inner-permission.sqlite',
+    nodeEnv: 'test',
+  });
+  const now = 1_801_120_000;
+  const scope: Scope = { userId: 1, appId: 'acp-inner-durable-app' };
+  const runId = 'acp-inner-durable-run';
+  const runtimeId = 'acp-inner-durable-runtime';
+  const modelStepId = 'acp-inner-durable-model-step';
+  const toolStepId = 'acp-inner-durable-tool-step';
+  const parentToolCallId = 'acp-inner-durable-parent-tool';
+  const parentOperationHash = 'acp-inner-durable-parent-operation';
+  const approvalId = 'acp-inner-durable-approval';
+  const nestedOperationHash = 'acp-inner-durable-operation';
+  try {
+    await db.initialize();
+    const stateCommit = new SqliteStateCommitAdapter(db);
+    await db.execute(
+      "INSERT INTO users (id, username, hashed_password) VALUES (1, 'acp-inner-durable-user', 'not-used')",
+    );
+    await db.execute(
+      `INSERT INTO agent_apps
+        (user_id, app_id, active_version, desired_state, observed_state, running_count, policy_revision, created_at, updated_at)
+       VALUES (1, ?, '1.0.0', 'enabled', 'running', 1, 1, ?, ?)`,
+      [scope.appId, now, now],
+    );
+    await db.execute(
+      `INSERT INTO ai_threads (id, user_id, app_id, title, title_source, created_at, updated_at)
+       VALUES ('acp-inner-durable-thread', 1, ?, 'ACP inner durable', 'manual', ?, ?)`,
+      [scope.appId, now, now],
+    );
+    const modelRef = { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 };
+    await db.execute(
+      `INSERT INTO agent_runs
+        (id, user_id, app_id, thread_id, status, goal_status, verification_status,
+         budget_json, definition_json, plan_json, usage_json, executing_runtime_count,
+         input_revision, created_at, started_at, updated_at)
+       VALUES (?, 1, ?, 'acp-inner-durable-thread', 'running', 'in_progress', 'not_started',
+               ?, ?, ?, ?, 1, 1, ?, ?, ?)`,
+      [
+        runId,
+        scope.appId,
+        JSON.stringify({
+          maxContextTokens: 16_384,
+          maxOutputTokens: 4_096,
+          maxRunSteps: 100,
+          maxActiveExecutionSeconds: 3_600,
+          toolTimeoutSeconds: 120,
+          maxToolOutputBytes: 1_048_576,
+          maxRecallItems: 5,
+          maxRecallBytes: 8_192,
+          maxSubagentMessages: 100,
+          maxSubagentMessageBytes: 1_048_576,
+          revision: 1,
+        }),
+        JSON.stringify({
+          schemaVersion: 1,
+          agentDefinitionId: 'scenario-agent',
+          model: modelRef,
+          approvalMode: 'ask',
+          connectionIds: [],
+          policyRevision: 1,
+          settingsRevision: 1,
+        }),
+        JSON.stringify({ schemaVersion: 1, revision: 0, items: [] }),
+        JSON.stringify({
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          steps: 0,
+          subagentMessages: 0,
+          subagentMessageBytes: 0,
+        }),
+        now,
+        now,
+        now,
+      ],
+    );
+    await db.execute(
+      `INSERT INTO agent_runtimes
+        (id, run_id, participant_id, backend_kind, model_ref_json, status, schedule_state,
+         consumed_mailbox_sequence, execution_owner_id, created_at, updated_at)
+       VALUES (?, ?, 'root', 'native', ?, 'running', 'executing', 0, 'owner-acp-inner', ?, ?)`,
+      [runtimeId, runId, JSON.stringify(modelRef), now, now],
+    );
+    await db.execute(
+      `INSERT INTO agent_steps
+        (id, run_id, agent_runtime_id, step_index, kind, status, input_watermark,
+         input_refs_json, output_refs_json, created_at, completed_at)
+       VALUES
+        (?, ?, ?, 1, 'model', 'completed', 1, '[]', '[]', ?, ?),
+        (?, ?, ?, 2, 'tool', 'running', 1, '[]', '[]', ?, NULL)`,
+      [modelStepId, runId, runtimeId, now, now, toolStepId, runId, runtimeId, now],
+    );
+    const parentInspection: ToolInspection = {
+      toolName: 'acp_execute',
+      toolVersion: '1.0.0',
+      normalizedArguments: { integrationId: '00000000-0000-4000-8000-000000000108' },
+      target: {
+        kind: 'integration',
+        targetIdentity: 'acp:durable',
+        endpoint: 'workspace-acp:durable',
+        loginUser: 'runner:acp',
+        configurationHash: 'acp-durable-config',
+      },
+      resourceKeys: ['integration:acp:durable', 'workspace:durable:1'],
+      risk: 'mutate',
+      mutation: true,
+      operationHash: parentOperationHash,
+      operationHashVersion: 1,
+      preconditions: [],
+      policyRevision: 1,
+      inputRevision: 1,
+    };
+    await db.execute(
+      `INSERT INTO agent_tool_calls
+        (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
+         provider_call_id, tool_name, tool_version, inspection_json, operation_hash,
+         operation_hash_version, risk, status, created_at, started_at)
+       VALUES (?, ?, ?, ?, ?, 0, 1, 'provider-acp-inner', 'acp_execute', '1.0.0',
+               ?, ?, 1, 'mutate', 'running', ?, ?)`,
+      [
+        parentToolCallId,
+        runId,
+        runtimeId,
+        toolStepId,
+        modelStepId,
+        JSON.stringify(parentInspection),
+        parentOperationHash,
+        now,
+        now,
+      ],
+    );
+
+    const rawInputSha256 = createHash('sha256').update('{"secret":"redacted"}', 'utf8').digest('hex');
+    const nestedInspection: ToolInspection = {
+      toolName: 'acp_inner_permission',
+      toolVersion: '1.0.0',
+      normalizedArguments: {
+        parentToolCallId,
+        sessionId: 'session-108',
+        acpToolCallId: 'inner-tool-108',
+        title: 'Write source',
+        kind: 'edit',
+        rawInputBytes: 21,
+        rawInputSha256,
+      },
+      target: { ...parentInspection.target },
+      resourceKeys: [...parentInspection.resourceKeys],
+      risk: 'mutate',
+      mutation: true,
+      operationHash: nestedOperationHash,
+      operationHashVersion: 1,
+      preconditions: [],
+      policyRevision: 1,
+      inputRevision: 1,
+    };
+    const beforeRun = await db.queryOne<{ version: number; status: string }>(
+      'SELECT version, status FROM agent_runs WHERE id = ?',
+      [runId],
+    );
+    const requested = await stateCommit.requestAcpPermissionApproval({
+      scope,
+      runId,
+      runtimeId,
+      parentToolCallId,
+      parentOperationHash,
+      approvalId,
+      inspection: nestedInspection,
+      expiresAt: now + 120,
+      now,
+    });
+    assert.equal(requested.run.status, 'running');
+    assert.equal(requested.run.version, beforeRun?.version, 'nested approval request must not mutate Run version');
+    const requestedRow = await db.queryOne<{
+      kind: string;
+      status: string;
+      inspection_json: string | null;
+      consumed_at: number | null;
+    }>('SELECT kind, status, inspection_json, consumed_at FROM agent_approvals WHERE id = ?', [approvalId]);
+    assert.equal(requestedRow?.kind, 'acp_permission');
+    assert.equal(requestedRow?.status, 'requested');
+    assert.equal(requestedRow?.consumed_at, null);
+    assert.ok(requestedRow?.inspection_json?.includes(rawInputSha256));
+    assert.equal(
+      requestedRow?.inspection_json?.includes('redacted'),
+      false,
+      'ACP raw input must not be copied into durable approval inspection',
+    );
+    assert.equal(
+      (await db.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [parentToolCallId]))
+        ?.status,
+      'running',
+      'nested approval request must leave the parent mutation Tool running',
+    );
+
+    const resolved = await stateCommit.resolveToolApproval({
+      scope,
+      runId,
+      approvalId,
+      decision: 'approved',
+      operationHash: nestedOperationHash,
+      expectedApprovalVersion: 1,
+      expectedRunVersion: requested.run.version,
+      expectedPolicyRevision: 1,
+      expectedInputRevision: 1,
+      decidedByUserId: 1,
+      idempotencyKey: 'acp-inner-durable-resolution',
+      requestHash: requestHash(1, {
+        approvalId,
+        runId,
+        decision: 'approved',
+        operationHash: nestedOperationHash,
+        expectedVersion: 1,
+      }),
+      now: now + 1,
+    });
+    assert.equal(resolved.run.status, 'running');
+    assert.equal(resolved.run.version, requested.run.version, 'nested approval resolution must not reschedule the Run');
+    const resolvedRow = await db.queryOne<{ status: string; consumed_at: number | null }>(
+      'SELECT status, consumed_at FROM agent_approvals WHERE id = ?',
+      [approvalId],
+    );
+    assert.equal(resolvedRow?.status, 'approved');
+    assert.equal(resolvedRow?.consumed_at, now + 1, 'ACP allow_once must be consumed in the same durable resolution');
+    assert.equal(
+      (await db.queryOne<{ status: string }>('SELECT status FROM agent_tool_calls WHERE id = ?', [parentToolCallId]))
+        ?.status,
+      'running',
+    );
+    const replayed = await stateCommit.resolveToolApproval({
+      scope,
+      runId,
+      approvalId,
+      decision: 'approved',
+      operationHash: nestedOperationHash,
+      expectedApprovalVersion: 1,
+      expectedRunVersion: requested.run.version,
+      expectedPolicyRevision: 1,
+      expectedInputRevision: 1,
+      decidedByUserId: 1,
+      idempotencyKey: 'acp-inner-durable-resolution',
+      requestHash: requestHash(1, {
+        approvalId,
+        runId,
+        decision: 'approved',
+        operationHash: nestedOperationHash,
+        expectedVersion: 1,
+      }),
+      now: now + 1,
+    });
+    assert.equal(replayed.run.version, resolved.run.version, 'same-key ACP approval replay must return durable state');
+    const replayedRow = await db.queryOne<{ version: number; consumed_at: number | null }>(
+      'SELECT version, consumed_at FROM agent_approvals WHERE id = ?',
+      [approvalId],
+    );
+    assert.equal(replayedRow?.version, 2, 'idempotent ACP approval replay must not mutate the durable approval again');
+    assert.equal(replayedRow?.consumed_at, now + 1);
+
+    const deniedApprovalId = 'acp-inner-durable-denied-approval';
+    const deniedOperationHash = 'acp-inner-durable-denied-operation';
+    const deniedInspection: ToolInspection = {
+      ...nestedInspection,
+      normalizedArguments: {
+        ...nestedInspection.normalizedArguments,
+        acpToolCallId: 'inner-tool-109',
+      },
+      operationHash: deniedOperationHash,
+    };
+    const requestedDenied = await stateCommit.requestAcpPermissionApproval({
+      scope,
+      runId,
+      runtimeId,
+      parentToolCallId,
+      parentOperationHash,
+      approvalId: deniedApprovalId,
+      inspection: deniedInspection,
+      expiresAt: now + 120,
+      now: now + 2,
+    });
+    assert.equal(
+      requestedDenied.run.version,
+      requested.run.version,
+      'a consumed allow_once must free the parent Tool for a later independent inner permission',
+    );
+    await stateCommit.resolveToolApproval({
+      scope,
+      runId,
+      approvalId: deniedApprovalId,
+      decision: 'denied',
+      operationHash: deniedOperationHash,
+      expectedApprovalVersion: 1,
+      expectedRunVersion: requestedDenied.run.version,
+      expectedPolicyRevision: 1,
+      expectedInputRevision: 1,
+      decidedByUserId: 1,
+      idempotencyKey: 'acp-inner-durable-denied-resolution',
+      requestHash: requestHash(1, {
+        approvalId: deniedApprovalId,
+        runId,
+        decision: 'denied',
+        operationHash: deniedOperationHash,
+        expectedVersion: 1,
+      }),
+      now: now + 3,
+    });
+    const deniedRow = await db.queryOne<{ status: string; consumed_at: number | null }>(
+      'SELECT status, consumed_at FROM agent_approvals WHERE id = ?',
+      [deniedApprovalId],
+    );
+    assert.equal(deniedRow?.status, 'denied');
+    assert.equal(deniedRow?.consumed_at, now + 3, 'reject_once must also be consumed in the durable decision');
+
+    return [
+      { name: 'acp_nested_run_version_changes', value: 0, unit: 'versions' },
+      { name: 'acp_nested_parent_tool_interruptions', value: 0, unit: 'tools' },
+      { name: 'acp_nested_raw_inputs_persisted', value: 0, unit: 'payloads' },
+      {
+        name: 'acp_nested_allow_once_consumed',
+        value: resolvedRow?.consumed_at === now + 1 ? 1 : 0,
+        unit: 'approvals',
+      },
+      { name: 'acp_nested_idempotent_replays', value: replayedRow?.version === 2 ? 1 : 0, unit: 'approvals' },
+      { name: 'acp_nested_reject_once_consumed', value: deniedRow?.consumed_at === now + 3 ? 1 : 0, unit: 'approvals' },
+    ];
+  } finally {
+    await db.close().catch(() => undefined);
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
 const idempotencyTtlScenario: Scenario = async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-idempotency-ttl-'));
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'idempotency-ttl.sqlite', nodeEnv: 'test' });
@@ -17919,6 +18660,10 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/integration-cas-before-runtime', integrationCasBeforeRuntimeScenario],
   ['runtime/integration-refresh-generation', integrationRefreshGenerationScenario],
   ['runtime/integration-health-retry', integrationHealthRetryScenario],
+  ['runtime/acp-inner-permission', acpInnerPermissionScenario],
+  ['runtime/acp-inner-permission-abort-race', acpInnerPermissionAbortRaceScenario],
+  ['runtime/acp-inner-permission-replay', acpInnerPermissionReplayScenario],
+  ['runtime/acp-inner-permission-durable', acpInnerPermissionDurabilityScenario],
   ['runtime/idempotency-ttl', idempotencyTtlScenario],
   ['runtime/cumulative-token-ceiling-removed', cumulativeTokenCeilingRemovedScenario],
   ['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],

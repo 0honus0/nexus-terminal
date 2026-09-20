@@ -1161,6 +1161,9 @@
     },
     "approvals": {
       "title": "需要批准的操作",
+      "acpInnerTitle": "ACP 内部操作需要批准",
+      "allowOnce": "允许一次",
+      "rejectOnce": "拒绝一次",
       "timeline": "待处理审批",
       "target": "目标",
       "expires": "剩余",

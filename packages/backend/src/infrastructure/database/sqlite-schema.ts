@@ -848,6 +848,8 @@ CREATE TABLE IF NOT EXISTS agent_approvals (
     requested_by_runtime_id TEXT NOT NULL,
     operation_hash TEXT NOT NULL,
     operation_hash_version INTEGER NOT NULL CHECK(operation_hash_version = 1),
+    kind TEXT NOT NULL DEFAULT 'tool' CHECK(kind IN ('tool','acp_permission')),
+    inspection_json TEXT CHECK(inspection_json IS NULL OR json_valid(inspection_json)),
     status TEXT NOT NULL CHECK(status IN ('requested','approved','denied','expired','superseded')),
     policy_revision INTEGER NOT NULL CHECK(policy_revision > 0),
     input_revision INTEGER NOT NULL CHECK(input_revision >= 0),

@@ -36,7 +36,9 @@
   <article class="rounded-lg border border-warning/40 bg-warning/5 p-3 text-xs">
     <div class="flex items-start justify-between gap-3">
       <div class="min-w-0">
-        <div class="font-semibold">{{ $t('agent.approvals.title') }}</div>
+        <div class="font-semibold">
+          {{ approval.kind === 'acp_permission' ? $t('agent.approvals.acpInnerTitle') : $t('agent.approvals.title') }}
+        </div>
         <div class="mt-1 truncate font-mono text-[11px]">{{ approval.inspection.toolName }}</div>
       </div>
       <span class="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium">
@@ -102,16 +104,17 @@
           </button>
         </div>
       </div>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="grid gap-2" :class="approval.kind === 'acp_permission' ? 'grid-cols-2' : 'grid-cols-3'">
         <button
           type="button"
           class="rounded-md border border-error/40 px-2 py-2 font-medium text-error hover:bg-error/10 disabled:opacity-50"
           :disabled="!actionable"
           @click="emit('resolve', approval, 'denied')"
         >
-          {{ $t('agent.approvals.deny') }}
+          {{ approval.kind === 'acp_permission' ? $t('agent.approvals.rejectOnce') : $t('agent.approvals.deny') }}
         </button>
         <button
+          v-if="approval.kind !== 'acp_permission'"
           type="button"
           class="rounded-md border border-border px-2 py-2 font-medium text-text-secondary hover:bg-header hover:text-foreground disabled:opacity-50"
           :disabled="!actionable"
@@ -125,7 +128,7 @@
           :disabled="!actionable"
           @click="emit('resolve', approval, 'approved')"
         >
-          {{ $t('agent.approvals.approve') }}
+          {{ approval.kind === 'acp_permission' ? $t('agent.approvals.allowOnce') : $t('agent.approvals.approve') }}
         </button>
       </div>
     </div>

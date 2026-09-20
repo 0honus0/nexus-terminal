@@ -1161,6 +1161,9 @@
     },
     "approvals": {
       "title": "操作の承認が必要です",
+      "acpInnerTitle": "ACP 内部操作の承認が必要です",
+      "allowOnce": "今回のみ許可",
+      "rejectOnce": "今回のみ拒否",
       "timeline": "承認待ち",
       "target": "対象",
       "expires": "残り時間",

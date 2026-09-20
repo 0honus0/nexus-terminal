@@ -10,6 +10,7 @@ import type {
 } from '../../capabilities/tool.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
+import type { AcpPermissionRequestPort } from '../../runtime/approvals/acp-permission-broker';
 import { isAgentUuid } from '../../uuid';
 import type { AgentWorkspaceRepositoryPort } from '../../workspace-runtime/workspace-runtime.repository.port';
 
@@ -51,6 +52,7 @@ export const createAcpExecuteTool = (
   workspaces: AgentWorkspaceRepositoryPort,
   runtime: AcpRuntimePort,
   cryptoHash: CryptoHashPort,
+  permissionRequests: AcpPermissionRequestPort,
 ): AgentTool => ({
   descriptor: {
     name: 'acp_execute',
@@ -221,10 +223,10 @@ export const createAcpExecuteTool = (
       },
       {
         signal: context.signal,
-        // ACP ToolKind is a presentation hint, not an authorization primitive. Until Nexus has a
-        // nested Approval broker for ACP permission requests, never let an outer acp_execute
-        // approval silently authorize a second sensitive operation chosen by the remote agent.
-        requestPermission: async () => 'reject_once',
+        // The outer acp_execute approval never authorizes an inner action selected later by the
+        // remote agent. Each inner permission request is bound to the still-running parent Tool
+        // and goes through the existing durable Approval owner.
+        requestPermission: (request) => permissionRequests.request(context, inspection, request),
       },
     );
     return {

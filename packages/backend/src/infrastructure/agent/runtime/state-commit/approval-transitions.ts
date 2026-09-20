@@ -19,6 +19,10 @@ import {
   patchRun,
   summaryPayload,
 } from './transaction-primitives';
+import {
+  expireOrphanedAcpPermissionApprovals,
+  resolveAcpPermissionApprovalTransition,
+} from './acp-permission-approval-transitions';
 
 export const requestToolApprovalTransition = async (
   tx: RelationalDatabase,
@@ -111,6 +115,14 @@ export const resolveToolApprovalTransition = async (
   tx: RelationalDatabase,
   command: ResolveToolApprovalCommand,
 ): Promise<StateCommitResult> => {
+  const approvalKind = await tx.queryOne<{ kind: string }>(
+    `SELECT kind FROM agent_approvals
+     WHERE id = ? AND user_id = ? AND app_id = ? AND run_id = ?`,
+    [command.approvalId, command.scope.userId, command.scope.appId, command.runId],
+  );
+  if (approvalKind?.kind === 'acp_permission') {
+    return resolveAcpPermissionApprovalTransition(tx, command);
+  }
   const existing = await commandForReplay(tx, command.scope, 'approval.resolve', command.idempotencyKey, command.now);
   if (existing) {
     if (existing.request_hash !== command.requestHash) throw new Error('IDEMPOTENCY_PAYLOAD_MISMATCH');
@@ -284,6 +296,7 @@ export const resolveToolApprovalTransition = async (
 };
 
 export const expireToolApprovalsTransition = async (tx: RelationalDatabase, now: number): Promise<RunView[]> => {
+  await expireOrphanedAcpPermissionApprovals(tx, now);
   const expired = await tx.queryAll<{
     approval_id: string;
     run_id: string;
@@ -298,7 +311,7 @@ export const expireToolApprovalsTransition = async (tx: RelationalDatabase, now:
      FROM agent_approvals a
      JOIN agent_runs r ON r.id = a.run_id AND r.user_id = a.user_id AND r.app_id = a.app_id
      JOIN agent_tool_calls t ON t.id = a.tool_call_id AND t.run_id = a.run_id
-     WHERE a.status = 'requested' AND a.expires_at <= ? AND r.status = 'awaiting_approval'
+     WHERE a.kind = 'tool' AND a.status = 'requested' AND a.expires_at <= ? AND r.status = 'awaiting_approval'
      ORDER BY a.expires_at, a.id`,
     [now],
   );

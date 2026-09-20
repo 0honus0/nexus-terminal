@@ -561,6 +561,27 @@ export interface RequestToolApprovalCommand {
   now: number;
 }
 
+export interface RequestAcpPermissionApprovalCommand {
+  scope: Scope;
+  runId: string;
+  runtimeId: string;
+  parentToolCallId: string;
+  parentOperationHash: string;
+  approvalId: string;
+  inspection: ToolInspection;
+  expiresAt: number;
+  now: number;
+}
+
+export interface CloseAcpPermissionApprovalCommand {
+  scope: Scope;
+  runId: string;
+  approvalId: string;
+  expectedApprovalVersion: number;
+  status: 'expired' | 'superseded';
+  now: number;
+}
+
 export interface ResolveToolApprovalCommand {
   scope: Scope;
   runId: string;
@@ -750,6 +771,8 @@ export interface StateCommitPort {
   refreshProposedTool(command: RefreshProposedToolCommand): Promise<StateCommitResult>;
   rejectProposedTool(command: RejectProposedToolCommand): Promise<StateCommitResult>;
   requestToolApproval(command: RequestToolApprovalCommand): Promise<StateCommitResult>;
+  requestAcpPermissionApproval(command: RequestAcpPermissionApprovalCommand): Promise<StateCommitResult>;
+  closeAcpPermissionApproval(command: CloseAcpPermissionApprovalCommand): Promise<StateCommitResult>;
   resolveToolApproval(command: ResolveToolApprovalCommand): Promise<StateCommitResult>;
   supersedeMutationTool(command: SupersedeMutationToolCommand): Promise<StateCommitResult>;
   expireToolApprovals(now: number): Promise<RunView[]>;
@@ -783,6 +806,10 @@ export type RunCommandCommitPort = Pick<
 export type RunCreationCommitPort = Pick<StateCommitPort, 'createRun'>;
 export type CheckpointRecoveryCommitPort = Pick<StateCommitPort, 'createRun' | 'supersedeRunApprovals' | 'commit'>;
 export type ApprovalDecisionCommitPort = Pick<StateCommitPort, 'resolveToolApproval'>;
+export type AcpPermissionApprovalCommitPort = Pick<
+  StateCommitPort,
+  'requestAcpPermissionApproval' | 'closeAcpPermissionApproval'
+>;
 export type ApprovalSweepCommitPort = Pick<StateCommitPort, 'expireToolApprovals' | 'cleanupExpiredCommands'>;
 export type ProjectionCommitPort = Pick<StateCommitPort, 'commit'>;
 

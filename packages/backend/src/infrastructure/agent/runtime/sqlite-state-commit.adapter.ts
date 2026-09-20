@@ -20,6 +20,7 @@ import type {
   SettleSubagentWithoutModelCommand,
   BeginMutationToolCommand,
   CancelRunCommitResult,
+  CloseAcpPermissionApprovalCommand,
   CommitSubagentToolProposalBatchCommand,
   CommitToolProposalBatchCommand,
   CommitToolProposalBatchResult,
@@ -42,6 +43,7 @@ import type {
   RetryModelStepCommand,
   RetryModelStepResult,
   RequestToolApprovalCommand,
+  RequestAcpPermissionApprovalCommand,
   RefreshProposedToolCommand,
   RejectProposedToolCommand,
   ResolveRunReconciliationCommand,
@@ -74,6 +76,10 @@ import {
   requestToolApprovalTransition,
   resolveToolApprovalTransition,
 } from './state-commit/approval-transitions';
+import {
+  closeAcpPermissionApprovalTransition,
+  requestAcpPermissionApprovalTransition,
+} from './state-commit/acp-permission-approval-transitions';
 import {
   allocateHostEvent,
   appendEvents,
@@ -475,6 +481,14 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
 
   async requestToolApproval(command: RequestToolApprovalCommand): Promise<StateCommitResult> {
     return this.observedTransaction((tx) => requestToolApprovalTransition(tx, command));
+  }
+
+  async requestAcpPermissionApproval(command: RequestAcpPermissionApprovalCommand): Promise<StateCommitResult> {
+    return this.observedTransaction((tx) => requestAcpPermissionApprovalTransition(tx, command));
+  }
+
+  async closeAcpPermissionApproval(command: CloseAcpPermissionApprovalCommand): Promise<StateCommitResult> {
+    return this.observedTransaction((tx) => closeAcpPermissionApprovalTransition(tx, command));
   }
 
   async resolveToolApproval(command: ResolveToolApprovalCommand): Promise<StateCommitResult> {

@@ -45,6 +45,7 @@ export interface ToolContext extends Scope {
   actor: Actor;
   runId: string;
   agentRuntimeId: string;
+  toolCallId?: string;
   connectionIds: readonly number[];
   environment: AgentRunEnvironmentSnapshot | null;
   stepId: string;

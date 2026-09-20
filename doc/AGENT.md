@@ -632,7 +632,7 @@ Runner journal 是执行面 recovery 事实之一。
 
 ACP profile 冻结在 Workspace profile 中。ACP process 在 Runner Workspace 环境中启动，由 Backend 受控 bridge 消费 stream。
 
-外层 `acp_execute` 仍经过 Nexus capability / policy / approval / lease / StateCommit；ACP 内部 permission 请求不能自行扩大 Nexus 权限，拒绝或未知权限必须 fail closed。
+外层 `acp_execute` 仍经过 Nexus capability / policy / approval / lease / StateCommit；outer approval（包括 Full Access 下自动满足的 outer gate）不能静默授权 remote agent 后续选择的 ACP inner action。`client.session.requestPermission` 必须复用同一 `agent_approvals` durable owner 与现有 Approval UI，以 `acp_permission` kind 绑定仍处于 `running` 的 parent ToolCall、runtime、policy/input revision 与 parent operation hash；用户只做 `allow_once` / `reject_once` 决策。inner approval request/resolve 不改变 Run version、不得重新调度 outer Tool，也不得释放/替换正在续租的 mutation lease；只有 durable approval resolve 成功后，live broker 才把一次性 decision 续回原 ACP session/toolCall。rawInput 不落 Ledger/approval 原文，只保留 bounded title/kind、rawInput bytes/hash 等 inspection projection。等待受 outer Tool deadline/Approval TTL 约束；timeout/abort 返回 reject 或中断，Backend restart 无法恢复 live ACP session 时继续沿既有 active-mutation quarantine/interrupted/reconciliation 与 approval supersede 路径 fail closed，不伪造 completion。
 
 ### 13.2 Browser/CDP
 

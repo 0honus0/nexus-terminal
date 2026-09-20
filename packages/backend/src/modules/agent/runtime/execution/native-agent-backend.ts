@@ -1472,7 +1472,14 @@ export class NativeAgentBackend implements AgentBackendPort {
       yield { type: 'durable', runId: snapshot.id, cursor: begun.eventCursor };
       const toolResult = await this.toolCalls.executeMutation(
         mutationLease,
-        this.toolContext(begun.run, pending.runtimeId, pending.stepId, mutationLease.signal),
+        this.toolContext(
+          begun.run,
+          pending.runtimeId,
+          pending.stepId,
+          mutationLease.signal,
+          undefined,
+          pending.toolCallId,
+        ),
         inspection,
       );
 
@@ -1578,6 +1585,7 @@ export class NativeAgentBackend implements AgentBackendPort {
     stepId: string,
     signal: AbortSignal,
     continuation?: JsonValue,
+    toolCallId?: string,
   ): ToolContext {
     return {
       userId: run.userId,
@@ -1591,6 +1599,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       },
       runId: run.id,
       agentRuntimeId: runtimeId,
+      ...(toolCallId === undefined ? {} : { toolCallId }),
       connectionIds: [...run.definition.connectionIds],
       environment: run.definition.environment ?? null,
       stepId,

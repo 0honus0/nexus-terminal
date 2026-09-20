@@ -697,6 +697,20 @@ const definedMigrations: Migration[] = [
               CHECK(continuation_json IS NULL OR json_valid(continuation_json));
         `,
   },
+  {
+    id: 34,
+    name: 'Add ACP inner permission metadata to Agent approvals',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_approvals')) && !(await columnExists(db, 'agent_approvals', 'kind')),
+    sql: `
+            ALTER TABLE agent_approvals
+              ADD COLUMN kind TEXT NOT NULL DEFAULT 'tool'
+              CHECK(kind IN ('tool','acp_permission'));
+            ALTER TABLE agent_approvals
+              ADD COLUMN inspection_json TEXT
+              CHECK(inspection_json IS NULL OR json_valid(inspection_json));
+        `,
+  },
 ];
 
 /**

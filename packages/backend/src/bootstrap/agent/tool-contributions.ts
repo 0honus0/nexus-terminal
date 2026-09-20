@@ -44,6 +44,7 @@ import type { MachineCapabilityPort } from '../../modules/agent/capabilities/mac
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
 import type { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
 import type { SharedFactsService } from '../../modules/agent/runtime/collaboration/shared-facts.service';
+import type { AcpPermissionRequestPort } from '../../modules/agent/runtime/approvals/acp-permission-broker';
 import type { SubagentService } from '../../modules/agent/runtime/collaboration/subagent.service';
 import { createPlanUpdateTool } from '../../modules/agent/runtime/planning/plan-tool';
 import type { PlanService } from '../../modules/agent/runtime/planning/plan.service';
@@ -209,6 +210,7 @@ export interface AcpToolContributionOptions {
   workspaces: AgentWorkspaceRepositoryPort;
   runtime: AcpRuntimePort;
   cryptoHash: CryptoHashPort;
+  permissionRequests: AcpPermissionRequestPort;
 }
 
 export const registerAcpToolContribution = ({
@@ -217,12 +219,13 @@ export const registerAcpToolContribution = ({
   workspaces,
   runtime,
   cryptoHash,
+  permissionRequests,
 }: AcpToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'integration.acp.execute',
     capability: 'integration.acp.execute',
-    tools: [createAcpExecuteTool(repository, workspaces, runtime, cryptoHash)],
+    tools: [createAcpExecuteTool(repository, workspaces, runtime, cryptoHash, permissionRequests)],
   });
 };
 

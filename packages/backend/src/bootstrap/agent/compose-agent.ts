@@ -50,6 +50,7 @@ import { MemoryService } from '../../modules/agent/ai/memory.service';
 import { SkillRegistry } from '../../modules/agent/ai/skill-registry';
 import type { AgentConnectionResolverPort, AgentDiagnosticsPort } from '../../modules/agent/capabilities/machine.port';
 import { ApprovalService } from '../../modules/agent/runtime/approvals/approval.service';
+import { AcpPermissionBroker } from '../../modules/agent/runtime/approvals/acp-permission-broker';
 import { PolicyService } from '../../modules/agent/capabilities/policy.service';
 import { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
 import { ToolExecutor } from '../../modules/agent/capabilities/tool-executor';
@@ -305,6 +306,14 @@ export const composeAgent = ({
     targetDenylist,
   );
   const cryptoHash = new NodeCryptoHashAdapter();
+  const acpPermissions = new AcpPermissionBroker(stateCommit, cryptoHash, systemClock, (runId, approvalId) => {
+    eventHub.publishTransient({
+      runId,
+      type: 'approval.changed',
+      payload: { approvalId },
+      occurredAt: systemClock.nowUnixSeconds(),
+    });
+  });
   const plans = new PlanService(runRepository, stateCommit, () => systemClock.nowUnixSeconds());
   const composedWorkspaceRuntime = composeWorkspaceRuntime({
     database,
@@ -339,6 +348,7 @@ export const composeAgent = ({
     workspaces: workspaceRepository,
     runtime: acpRuntime,
     cryptoHash,
+    permissionRequests: acpPermissions,
   });
   registerBrowserToolContribution({
     catalog: toolCatalog,
@@ -546,10 +556,17 @@ export const composeAgent = ({
   });
 
   const approvalRepository = new SqliteApprovalRepository(database);
-  const approvals = new ApprovalService(approvalRepository, runRepository, stateCommit, systemClock, (run) => {
-    notifyCommitted(run);
-    scheduler.enqueue(run);
-  });
+  const approvals = new ApprovalService(
+    approvalRepository,
+    runRepository,
+    stateCommit,
+    systemClock,
+    (run) => {
+      notifyCommitted(run);
+      scheduler.enqueue(run);
+    },
+    acpPermissions,
+  );
 
   return {
     host: {

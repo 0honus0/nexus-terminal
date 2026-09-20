@@ -38,6 +38,11 @@ interface AgentToolDeltaEvent extends AgentEventMetadata {
   };
 }
 
+interface AgentApprovalChangedEvent extends AgentEventMetadata {
+  type: 'approval.changed';
+  payload: { approvalId: string };
+}
+
 interface AgentModelRetryingEvent extends AgentVersionedEventMetadata {
   type: 'model.retrying';
   payload: {
@@ -171,6 +176,7 @@ interface AgentTransportDisconnectedEvent extends AgentEventMetadata {
 export type AgentStreamEvent =
   | AgentMessageDeltaEvent
   | AgentToolDeltaEvent
+  | AgentApprovalChangedEvent
   | AgentModelRetryingEvent
   | AgentMessageFinalEvent
   | AgentRunStatusChangedEvent
@@ -528,6 +534,16 @@ const parseWireEvent = (
       return parseMessageDelta(event) ?? unknownEvent(event, channel, 'invalid_payload');
     if (event.eventType === 'tool.delta')
       return parseToolDelta(event) ?? unknownEvent(event, channel, 'invalid_payload');
+    if (event.eventType === 'approval.changed') {
+      if (!isRecord(event.payload) || typeof event.payload.approvalId !== 'string') {
+        return unknownEvent(event, channel, 'invalid_payload');
+      }
+      return {
+        ...eventMetadata(event),
+        type: 'approval.changed',
+        payload: { approvalId: event.payload.approvalId },
+      };
+    }
     return unknownEvent(event, channel, 'unsupported_event');
   }
 

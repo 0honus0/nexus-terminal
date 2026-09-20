@@ -886,6 +886,7 @@ export interface AgentApprovalView {
   requestedByRuntimeId: string;
   operationHash: string;
   operationHashVersion: 1;
+  kind: 'tool' | 'acp_permission';
   status: 'requested' | 'approved' | 'denied' | 'expired' | 'superseded';
   policyRevision: number;
   inputRevision: number;

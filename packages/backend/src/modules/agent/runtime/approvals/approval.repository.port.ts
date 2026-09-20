@@ -5,6 +5,7 @@ import type { ToolInspection } from '../../capabilities/tool.types';
 // Do not retain unused mutation methods "for later"; delete them so StateCommit remains the sole mutation authority.
 
 export type ApprovalStatus = 'requested' | 'approved' | 'denied' | 'expired' | 'superseded';
+export type ApprovalKind = 'tool' | 'acp_permission';
 
 export interface ApprovalView {
   id: string;
@@ -15,6 +16,7 @@ export interface ApprovalView {
   requestedByRuntimeId: string;
   operationHash: string;
   operationHashVersion: 1;
+  kind: ApprovalKind;
   status: ApprovalStatus;
   policyRevision: number;
   inputRevision: number;

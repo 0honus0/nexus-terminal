@@ -12,6 +12,7 @@ interface ApprovalRow {
   requested_by_runtime_id: string;
   operation_hash: string;
   operation_hash_version: number;
+  kind: ApprovalView['kind'];
   status: ApprovalView['status'];
   policy_revision: number;
   input_revision: number;
@@ -25,9 +26,9 @@ interface ApprovalRow {
 }
 
 const columns = `a.id, a.user_id, a.app_id, a.run_id, a.tool_call_id, a.requested_by_runtime_id,
-  a.operation_hash, a.operation_hash_version, a.status, a.policy_revision, a.input_revision,
+  a.operation_hash, a.operation_hash_version, a.kind, a.status, a.policy_revision, a.input_revision,
   a.decided_by_user_id, a.decided_at, a.consumed_at, a.requested_at, a.expires_at, a.version,
-  t.inspection_json`;
+  COALESCE(a.inspection_json, t.inspection_json) AS inspection_json`;
 
 const mapRow = (row: ApprovalRow): ApprovalView => ({
   id: row.id,
@@ -38,6 +39,7 @@ const mapRow = (row: ApprovalRow): ApprovalView => ({
   requestedByRuntimeId: row.requested_by_runtime_id,
   operationHash: row.operation_hash,
   operationHashVersion: 1,
+  kind: row.kind,
   status: row.status,
   policyRevision: row.policy_revision,
   inputRevision: row.input_revision,
