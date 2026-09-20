@@ -8,10 +8,11 @@
     "specs/agent/provider.spec.ts",
     "specs/ui/audit-log-filtering.spec.ts",
     "specs/ui/login-passkey-surface.spec.ts",
+    "specs/ssh/command-history-management.spec.ts",
+    "specs/ssh/quick-command-collapsible-search.spec.ts",
+    "specs/ssh/quick-command-management.spec.ts",
+    "specs/ssh/quick-command-tags-variables.spec.ts",
     "specs/ssh/progress-display-archive.spec.ts",
-    "specs/ssh/docker-manager-ui.spec.ts",
-    "specs/ssh/protocol.spec.ts",
-    "specs/ssh/status-docker-protocol.spec.ts",
-    "specs/ssh/upload-protocol.spec.ts"
+    "specs/ssh/suspend-resume.spec.ts"
   ]
 }
