@@ -5,6 +5,7 @@ import type { ToolchainPackRef, WorkspaceJobRequest, WorkspaceProvisionCommand }
 import type { ToolchainStore } from './toolchain-store';
 
 const SAFE_SEGMENT = /^[A-Za-z0-9_.-]{1,128}$/;
+const MAX_RUNTIME_DIGEST_BYTES = 16 * 1024;
 
 export interface WorkspaceExecution {
   file: string;
@@ -30,7 +31,8 @@ const decodeWorkspaceRuntimeMetadata = (value: unknown): WorkspaceRuntimeMetadat
     !Number.isSafeInteger(record.generation) ||
     Number(record.generation) < 1 ||
     typeof record.runtimeDigest !== 'string' ||
-    !/^[a-f0-9]{64}$/.test(record.runtimeDigest) ||
+    !record.runtimeDigest ||
+    Buffer.byteLength(record.runtimeDigest, 'utf8') > MAX_RUNTIME_DIGEST_BYTES ||
     typeof record.toolchainFingerprint !== 'string' ||
     !/^[a-f0-9]{64}$/.test(record.toolchainFingerprint) ||
     !Array.isArray(record.toolchain) ||
