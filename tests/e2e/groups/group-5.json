@@ -8,11 +8,12 @@
     "specs/agent/provider.spec.ts",
     "specs/ui/audit-log-filtering.spec.ts",
     "specs/ui/login-passkey-surface.spec.ts",
-    "specs/websocket/authenticated-session.spec.ts",
     "specs/ssh/command-history-management.spec.ts",
     "specs/ssh/quick-command-collapsible-search.spec.ts",
     "specs/ssh/quick-command-management.spec.ts",
     "specs/ssh/quick-command-tags-variables.spec.ts",
+    "specs/ssh/sftp-download.spec.ts",
+    "specs/ssh/status-history-time-axis.spec.ts",
     "specs/ssh/progress-display-upload-copy.spec.ts"
   ]
 }
