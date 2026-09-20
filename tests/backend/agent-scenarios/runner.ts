@@ -874,12 +874,63 @@ const contextToolExchangeScenario: Scenario = async () => {
     'denied/expired/superseded/cancelled canonical tool results must remain in the assistant batch',
   );
 
+  const reusedToolCallId = 'provider-reused-tool-call-id';
+  const reusedToolCallPlan = await contextService([
+    entry(1, 'user_input', { text: 'Load the historical Skill.' }, 'history-run'),
+    entry(
+      2,
+      'assistant_message',
+      {
+        text: '',
+        toolCalls: [{ id: reusedToolCallId, name: 'skill_read', argumentsJson: '{"id":"nexus.agent.developer"}' }],
+      },
+      'history-run',
+    ),
+    entry(3, 'tool_result', { toolCallId: reusedToolCallId, content: 'historical Skill body' }, 'history-run'),
+    entry(4, 'assistant_message', { text: 'Historical Skill loaded.' }, 'history-run'),
+    entry(5, 'user_input', { text: 'Continue from the compacted thread.' }, 'current-run'),
+    entry(
+      6,
+      'assistant_message',
+      {
+        text: '',
+        toolCalls: [{ id: reusedToolCallId, name: 'skill_read', argumentsJson: '{"id":"nexus.agent.developer"}' }],
+      },
+      'current-run',
+    ),
+    entry(7, 'tool_result', { toolCallId: reusedToolCallId, content: 'current Skill body' }, 'current-run'),
+  ]).compose({
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'current-run',
+    currentInput: 'Continue from the compacted thread.',
+    currentInputEntryId: 'entry-5',
+    modelContextWindow: 8_192,
+    maxContextTokens: 8_000,
+    reservedOutputTokens: 128,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    tools: [],
+  });
+  assertValidToolExchange(reusedToolCallPlan.messages);
+  assert.equal(
+    reusedToolCallPlan.messages.filter((message) => message.role === 'tool' && message.toolCallId === reusedToolCallId)
+      .length,
+    2,
+    'reused provider Tool call ids must bind to the nearest unsettled assistant exchange instead of becoming ambiguous',
+  );
+  assert.ok(
+    !reusedToolCallPlan.droppedSections.some((section) => section.startsWith('ledger-exchange-incomplete:')),
+    'reusing a Tool call id in a later Run must not invalidate either complete exchange',
+  );
+
   return [
     { name: 'budget_variants', value: 6, unit: 'cases' },
     { name: 'compacted_variants', value: compactedRuns, unit: 'cases' },
     { name: 'tool_argument_estimate', value: assistantDiagnostic.estimatedTokens, unit: 'tokens' },
     { name: 'boundary_fragment_cases', value: 3, unit: 'cases' },
     { name: 'terminal_outcome_variants', value: 4, unit: 'cases' },
+    { name: 'reused_tool_call_id_exchanges', value: 2, unit: 'exchanges' },
   ];
 };
 

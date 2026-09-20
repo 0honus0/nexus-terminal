@@ -214,12 +214,20 @@ const groupLedgerCandidates = (
   entries: LedgerEntryView[],
   candidatesById: ReadonlyMap<string, CandidateSection>,
 ): LedgerCandidateGrouping => {
-  const assistantOwnersByToolCallId = new Map<string, string[]>();
+  const pendingAssistantOwnersByToolCallId = new Map<string, string[]>();
+  const resultOwnerByEntryId = new Map<string, string>();
   for (const entry of entries) {
     for (const toolCallId of assistantToolCallIds(entry)) {
-      const owners = assistantOwnersByToolCallId.get(toolCallId) ?? [];
+      const owners = pendingAssistantOwnersByToolCallId.get(toolCallId) ?? [];
       owners.push(entry.id);
-      assistantOwnersByToolCallId.set(toolCallId, owners);
+      pendingAssistantOwnersByToolCallId.set(toolCallId, owners);
+    }
+    const resultCallId = toolResultCallId(entry);
+    if (resultCallId) {
+      const owners = pendingAssistantOwnersByToolCallId.get(resultCallId);
+      const owner = owners?.pop();
+      if (owner) resultOwnerByEntryId.set(entry.id, owner);
+      if (owners?.length === 0) pendingAssistantOwnersByToolCallId.delete(resultCallId);
     }
   }
 
@@ -229,8 +237,7 @@ const groupLedgerCandidates = (
     const section = candidatesById.get(entry.id);
     if (!section) continue;
     const resultCallId = toolResultCallId(entry);
-    const resultOwners = resultCallId ? assistantOwnersByToolCallId.get(resultCallId) : undefined;
-    const groupId = resultOwners?.length === 1 ? resultOwners[0]! : entry.id;
+    const groupId = resultCallId ? (resultOwnerByEntryId.get(entry.id) ?? entry.id) : entry.id;
     let sections = grouped.get(groupId);
     if (!sections) {
       sections = [];
@@ -264,10 +271,7 @@ const groupLedgerCandidates = (
     const completeAssistantExchange =
       expectedCallIds.length === 0 ||
       (new Set(expectedCallIds).size === expectedCallIds.length &&
-        expectedCallIds.every(
-          (toolCallId) =>
-            assistantOwnersByToolCallId.get(toolCallId)?.length === 1 && resultCounts.get(toolCallId) === 1,
-        ) &&
+        expectedCallIds.every((toolCallId) => resultCounts.get(toolCallId) === 1) &&
         resultCounts.size === expectedCallIds.length);
     const orphanResult = expectedCallIds.length === 0 && containsToolResult;
     if (!completeAssistantExchange || orphanResult) {

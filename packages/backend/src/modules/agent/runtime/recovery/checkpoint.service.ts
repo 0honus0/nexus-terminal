@@ -26,10 +26,7 @@ export type RecoverySafePointReason = 'model_boundary' | 'read_batch' | 'mutatio
 
 const RECOVERY_CHECKPOINT_MIN_INTERVAL_SECONDS = 30;
 
-const clampBudget = (
-  source: RunBudget,
-  settings: Awaited<ReturnType<AgentSettingsService['get']>>,
-): RunBudget => {
+const clampBudget = (source: RunBudget, settings: Awaited<ReturnType<AgentSettingsService['get']>>): RunBudget => {
   const hard = settings.hardLimits;
   return {
     contextPolicy: { ...source.contextPolicy },
