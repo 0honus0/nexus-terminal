@@ -1727,6 +1727,13 @@ for (let attempt = 0; attempt < 120; attempt += 1) {
 await cancelToTerminal(fullStackRun);
 console.log('full-stack plugin smoke: isolated frontend + native Backend child + Workspace Runner target ok');
 
+const originalMaxRunSteps = lifecycleSettings.effectiveSettings.budget.maxRunSteps;
+lifecycleSettings = await ok(
+  'PATCH',
+  '/api/v1/agent/settings',
+  { patch: { budget: { maxRunSteps: 1 } }, expectedVersion: lifecycleSettings.revision },
+  mutationHeaders,
+);
 let queueRun = await createRun('Docker pending-input smoke');
 for (let attempt = 0; attempt < 50; attempt += 1) {
   const initialQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
@@ -1755,6 +1762,14 @@ const appendQueueInput = async (text) => {
   }
 };
 await appendQueueInput('pending input two');
+for (let attempt = 0; attempt < 50; attempt += 1) {
+  queueRun = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}`);
+  if (queueRun.status === 'awaiting_budget') break;
+  if (attempt === 49) {
+    throw new Error(`Pending-input Run did not settle at the step budget boundary: ${JSON.stringify(queueRun)}`);
+  }
+  await wait(100);
+}
 await appendQueueInput('pending input three');
 let pendingQueue = await ok('GET', `/api/v1/apps/nexus.agent/runs/${queueRun.id}/pending-inputs`);
 if (pendingQueue.total !== 2 || pendingQueue.items.map((item) => item.text).join('|') !== 'pending input two|pending input three') {
@@ -1822,6 +1837,12 @@ if (!removedLedgerEntry || removedLedgerEntry.sequence !== originalQueue[0].sequ
   throw new Error(`Pending-input remove mutated append-only Ledger history: ${JSON.stringify(queueLedger)}`);
 }
 queueRun = await cancelToTerminal(queueRun);
+lifecycleSettings = await ok(
+  'PATCH',
+  '/api/v1/agent/settings',
+  { patch: { budget: { maxRunSteps: originalMaxRunSteps } }, expectedVersion: lifecycleSettings.revision },
+  mutationHeaders,
+);
 console.log('agent pending-input HTTP: durable move/remove + version CAS ok');
 
 let runA = await createRun('Docker lifecycle smoke A');
