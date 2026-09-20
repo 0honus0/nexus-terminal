@@ -12907,10 +12907,11 @@ const modelAwareContextBudgetScenario: Scenario = async () => {
     maxRecallBytes: 1_024,
     tools: [],
   });
-  const currentInputOccurrences = dedupPlan.messages
-    .map((message) => message.content)
-    .join('\n')
-    .split(currentInputMarker).length - 1;
+  const currentInputOccurrences =
+    dedupPlan.messages
+      .map((message) => message.content)
+      .join('\n')
+      .split(currentInputMarker).length - 1;
   assert.equal(
     currentInputOccurrences,
     1,

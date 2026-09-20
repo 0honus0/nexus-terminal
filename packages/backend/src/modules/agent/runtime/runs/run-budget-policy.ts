@@ -88,10 +88,7 @@ export const pressureAdjustedToolOutputBytesForOccupancy = (
   return Math.max(minimum, maximum - reduction);
 };
 
-export const pressureAdjustedToolOutputBytes = (
-  budget: RunBudget,
-  context?: RunContextUsage,
-): number =>
+export const pressureAdjustedToolOutputBytes = (budget: RunBudget, context?: RunContextUsage): number =>
   context
     ? pressureAdjustedToolOutputBytesForOccupancy(
         budget,
