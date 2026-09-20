@@ -19110,6 +19110,102 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
   ];
 };
 
+const agentOwnerDecompositionScenario: Scenario = async () => {
+  const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
+    ? path.join(process.cwd(), 'src')
+    : path.join(process.cwd(), 'packages', 'backend', 'src');
+  const frontendSourceRoot = path.resolve(backendSourceRoot, '../../frontend/src');
+  const read = (root: string, relative: string): string => fs.readFileSync(path.join(root, relative), 'utf8');
+  const exists = (root: string, relative: string): boolean => fs.existsSync(path.join(root, relative));
+
+  const backendExtractions = [
+    'modules/agent/runtime/execution/root-tool-execution-coordinator.ts',
+    'infrastructure/agent/repositories/sqlite-subagent-codecs.ts',
+  ];
+  for (const relative of backendExtractions) {
+    assert.ok(exists(backendSourceRoot, relative), `P-059 must extract a real backend owner: ${relative}`);
+  }
+
+  const frontendExtractions = [
+    'features/agent/api/agent-api-common.ts',
+    'features/agent/api/plugin-api.ts',
+    'features/agent/api/provider-api.ts',
+    'features/agent/api/artifact-api.ts',
+    'features/agent/host/AgentThreadSidebar.vue',
+    'features/agent/settings/ModelCapabilityEditor.vue',
+  ];
+  for (const relative of frontendExtractions) {
+    assert.ok(exists(frontendSourceRoot, relative), `P-059 must extract a real frontend owner: ${relative}`);
+  }
+
+  const nativeBackend = read(backendSourceRoot, 'modules/agent/runtime/execution/native-agent-backend.ts');
+  assert.match(
+    nativeBackend,
+    /RootToolExecutionCoordinator/,
+    'NativeAgentBackend must delegate pending Tool execution',
+  );
+  assert.doesNotMatch(
+    nativeBackend,
+    /private async \*executePending(?:ReadWave|Mutation)/,
+    'NativeAgentBackend must not retain the extracted Root Tool execution implementations',
+  );
+
+  const subagentRepository = read(backendSourceRoot, 'infrastructure/agent/repositories/sqlite-subagent.repository.ts');
+  assert.match(
+    subagentRepository,
+    /from '\.\/sqlite-subagent-codecs'/,
+    'Subagent repository must consume its durable codecs',
+  );
+  assert.doesNotMatch(
+    subagentRepository,
+    /const decodeRunBudget|const decodeToolInspection|const mapDelegation/,
+    'Subagent repository must not keep duplicate durable decoder/projection owners',
+  );
+
+  const agentApi = read(frontendSourceRoot, 'features/agent/api/agent-api.ts');
+  for (const factory of ['createPluginApi', 'createProviderApi', 'createArtifactApi']) {
+    assert.match(agentApi, new RegExp(`\\b${factory}\\b`), `agentApi facade must compose ${factory}`);
+  }
+  for (const method of ['stagePlugin', 'testProvider', 'deleteArtifact']) {
+    assert.doesNotMatch(
+      agentApi,
+      new RegExp(`async\\s+${method}\\s*\\(`),
+      `${method} transport implementation must live in its domain API module`,
+    );
+  }
+  const apiCommon = read(frontendSourceRoot, 'features/agent/api/agent-api-common.ts');
+  assert.match(apiCommon, /mutationHeaders/, 'domain API modules must share one mutation-header owner');
+  assert.equal(
+    ['plugin-api.ts', 'provider-api.ts', 'artifact-api.ts']
+      .map((relative) => read(frontendSourceRoot, `features/agent/api/${relative}`))
+      .filter((source) => /mutationHeaders/.test(source)).length,
+    3,
+    'each extracted domain API must consume the shared mutation-header owner',
+  );
+
+  const appSurface = read(frontendSourceRoot, 'features/agent/host/AgentAppSurface.vue');
+  assert.match(appSurface, /<AgentThreadSidebar/, 'AgentAppSurface must delegate thread-list presentation');
+  assert.doesNotMatch(
+    appSurface,
+    /<aside[\s\S]{0,200}agent-thread-sidebar/,
+    'AgentAppSurface must not retain the extracted thread-sidebar template owner',
+  );
+
+  const providerSettings = read(frontendSourceRoot, 'features/agent/settings/ModelProviderSettings.vue');
+  assert.match(providerSettings, /<ModelCapabilityEditor/, 'Provider settings must delegate capability editing');
+  assert.doesNotMatch(
+    providerSettings,
+    /const capabilityForm = reactive/,
+    'Provider settings must not retain duplicate capability-editor state',
+  );
+
+  return [
+    { name: 'owner_decomposition_backend_collaborators', value: backendExtractions.length, unit: 'owners' },
+    { name: 'owner_decomposition_frontend_collaborators', value: frontendExtractions.length, unit: 'owners' },
+    { name: 'owner_decomposition_duplicate_authorities', value: 0, unit: 'authorities' },
+  ];
+};
+
 const agentStructuredLoggingScenario: Scenario = async () => {
   const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
     ? path.join(process.cwd(), 'src')
@@ -19300,6 +19396,7 @@ const scenarios = new Map<string, Scenario>([
   ['browser/screenshot-artifact-vision', browserScreenshotVisionScenario],
   ['machine/route-dependency-approval', machineRouteDependencyApprovalScenario],
   ['runtime/artifact-single-delete-product', artifactSingleDeleteProductScenario],
+  ['architecture/agent-owner-decomposition', agentOwnerDecompositionScenario],
   ['architecture/agent-structured-logging', agentStructuredLoggingScenario],
   ['architecture/product-type-boundaries', productTypeBoundaryScenario],
 ]);

@@ -36,6 +36,7 @@
     WorkspaceRuntimeCatalog,
   } from '../api/agent-api';
   import { agentSurfaceSession } from './surface-session';
+  import AgentThreadSidebar from './AgentThreadSidebar.vue';
   import AgentConfigPopover from '../files/AgentConfigPopover.vue';
   import ApprovalCard from '../runtime/ApprovalCard.vue';
   import { createAgentRunFacade } from '../runtime/run-facade';
@@ -44,7 +45,7 @@
   const TaskRail = defineAsyncComponent(() => import('../runtime/TaskRail.vue'));
 
   const props = defineProps<{ appId: string; defaultApprovalMode: AgentApprovalMode }>();
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const facade = createAgentRunFacade(props.appId);
   const connectionsStore = useConnections();
   facade.start();
@@ -52,7 +53,6 @@
   const threads = ref<AgentThreadView[]>([]);
   const threadNextCursor = ref<string | null>(null);
   const threadListLoadingMore = ref(false);
-  const THREAD_PAGE_MIN = 12;
   const THREAD_PAGE_MAX = 100;
   const currentThread = ref<AgentThreadView | null>(null);
   const entries = ref<AgentLedgerEntry[]>([]);
@@ -132,39 +132,11 @@
   const selectedEnvironmentRecipeId = ref(agentSurfaceSession.restoreEnvironmentRecipeId(props.appId) ?? '');
   let taskRailWideViewport = typeof window !== 'undefined' ? window.innerWidth > 1040 : false;
   const taskRailVisible = ref(false);
-  const threadQuery = ref('');
   const threadDeleteArmedId = ref<string | null>(null);
   const deleteAllThreadsArmed = ref(false);
   const threadSidebarVisible = ref(false);
-  const threadListScroller = ref<HTMLElement | null>(null);
-  const threadListScrollTop = ref(0);
-  const threadListViewportHeight = ref(0);
-  const THREAD_ROW_BASE_HEIGHT = 45;
-  const THREAD_LIST_SCALE_MIN = 0.8;
-  const THREAD_LIST_SCALE_MAX = 1.3;
-  const THREAD_LIST_SCALE_STEP = 0.1;
-  const THREAD_LIST_SCALE_STORAGE_KEY = 'nexus.agent.thread-list-scale.v1';
-  const restoreThreadListScale = (): number => {
-    if (typeof window === 'undefined') return 1;
-    try {
-      const stored = window.localStorage.getItem(THREAD_LIST_SCALE_STORAGE_KEY);
-      if (!stored) return 1;
-      const parsed = Number(stored);
-      if (!Number.isFinite(parsed)) return 1;
-      return Math.min(THREAD_LIST_SCALE_MAX, Math.max(THREAD_LIST_SCALE_MIN, parsed));
-    } catch {
-      return 1;
-    }
-  };
-  const threadListScale = ref(restoreThreadListScale());
-  const threadRowHeight = computed(() => Math.round(THREAD_ROW_BASE_HEIGHT * threadListScale.value));
-  const THREAD_OVERSCAN = 6;
-  const threadPageSize = computed(() => {
-    const viewportHeight = threadListViewportHeight.value;
-    const visibleRows = viewportHeight > 0 ? Math.ceil(viewportHeight / threadRowHeight.value) : THREAD_PAGE_MIN;
-    return Math.min(THREAD_PAGE_MAX, Math.max(THREAD_PAGE_MIN, visibleRows + THREAD_OVERSCAN * 2));
-  });
-  let threadListResizeObserver: ResizeObserver | null = null;
+  const threadSidebar = ref<InstanceType<typeof AgentThreadSidebar> | null>(null);
+  const threadPageSize = ref(12);
   const streamingText = ref('');
   const streamingAttempt = ref<{ attemptId: string; attemptIndex: number } | null>(null);
   const resetStreamingPresentation = (): void => {
@@ -195,7 +167,14 @@
   let threadDeleteArmTimer: number | null = null;
   let deleteAllThreadsArmTimer: number | null = null;
 
-  const nonTerminal = new Set(['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input', 'cancelling']);
+  const nonTerminal = new Set([
+    'created',
+    'running',
+    'awaiting_approval',
+    'awaiting_budget',
+    'awaiting_input',
+    'cancelling',
+  ]);
   const backgroundThreadStatuses = computed(() => {
     const statuses = new Map<string, AgentRunView['status']>();
     for (const candidate of backgroundRuns.value) {
@@ -214,62 +193,14 @@
         return status !== null && nonTerminal.has(status);
       }).length,
   );
-  const visibleThreads = computed(() => {
-    const needle = threadQuery.value.trim().toLowerCase();
-    return threads.value
-      .filter((thread) => !needle || `${thread.title} ${thread.id}`.toLowerCase().includes(needle))
-      .slice()
-      .sort((left, right) => {
-        const leftStatus = threadStatus(left.id);
-        const rightStatus = threadStatus(right.id);
-        const leftActive = leftStatus !== null && nonTerminal.has(leftStatus);
-        const rightActive = rightStatus !== null && nonTerminal.has(rightStatus);
-        if (leftActive !== rightActive) return leftActive ? -1 : 1;
-        return right.updatedAt - left.updatedAt;
-      });
-  });
-  const threadWindow = computed(() => {
-    const total = visibleThreads.value.length;
-    if (total === 0) return { start: 0, end: 0, topSpacer: 0, bottomSpacer: 0 };
-    const rowHeight = threadRowHeight.value;
-    const viewportRows = Math.max(1, Math.ceil(threadListViewportHeight.value / rowHeight));
-    const windowSize = Math.min(total, viewportRows + THREAD_OVERSCAN * 2);
-    const rawStart = Math.floor(threadListScrollTop.value / rowHeight) - THREAD_OVERSCAN;
-    const start = Math.min(Math.max(0, rawStart), Math.max(0, total - windowSize));
-    const end = Math.min(total, start + windowSize);
-    return {
-      start,
-      end,
-      topSpacer: start * rowHeight,
-      bottomSpacer: (total - end) * rowHeight,
-    };
-  });
-  const renderedThreads = computed(() => visibleThreads.value.slice(threadWindow.value.start, threadWindow.value.end));
+  const threadStatuses = computed<Record<string, AgentRunView['status'] | null>>(() =>
+    Object.fromEntries(threads.value.map((thread) => [thread.id, threadStatus(thread.id)])),
+  );
   const threadTitles = computed<Record<string, string>>(() =>
     Object.fromEntries(
       threads.value.map((thread) => [thread.id, thread.title || t('agent.operations.untitledThread')]),
     ),
   );
-  const threadTimeFormatter = computed(
-    () =>
-      new Intl.DateTimeFormat(locale.value, {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-  );
-  const threadDateFormatter = computed(
-    () =>
-      new Intl.DateTimeFormat(locale.value, {
-        month: 'short',
-        day: 'numeric',
-      }),
-  );
-  const formatThreadUpdatedAt = (updatedAt: number): string => {
-    const date = new Date(updatedAt * 1000);
-    const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    return isToday ? threadTimeFormatter.value.format(date) : threadDateFormatter.value.format(date);
-  };
   type ModelOption = {
     key: string;
     provider: AgentProviderView;
@@ -881,7 +812,7 @@
       const normalizedTitle = title?.trim();
       const thread = await facade.createThread(normalizedTitle || undefined);
       threads.value = [thread, ...threads.value.filter((item) => item.id !== thread.id)];
-      resetThreadListScroll();
+      threadSidebar.value?.resetScroll();
       await selectThread(thread);
     } catch (cause) {
       error.value = explain(cause);
@@ -939,7 +870,8 @@
         candidate.provider.id === settings.effectiveSettings.model.defaultProviderId &&
         candidate.model.id === settings.effectiveSettings.model.defaultModelId,
     );
-    const selectedModel = restoredModel ?? preferredModel ?? modelOptions.value.find((candidate) => candidate.compatible) ?? null;
+    const selectedModel =
+      restoredModel ?? preferredModel ?? modelOptions.value.find((candidate) => candidate.compatible) ?? null;
     selectedModelKey.value = selectedModel?.key ?? '';
     agentSurfaceSession.setModelKey(props.appId, selectedModel?.key);
     const restoredReasoningEffort = agentSurfaceSession.restoreReasoningEffort(props.appId);
@@ -1486,7 +1418,7 @@
       closeRunDetail();
       resetDeletedThreadSelection();
       backgroundRuns.value = [];
-      threadQuery.value = '';
+      threadSidebar.value?.resetScroll();
       clearComposer(true);
       await selectFirstOrCreateThread();
       runtimeOperation.succeed();
@@ -1537,78 +1469,6 @@
     taskRailWideViewport = wide;
   };
 
-  const syncThreadListMetrics = (): void => {
-    const scroller = threadListScroller.value;
-    if (!scroller) return;
-    threadListScrollTop.value = scroller.scrollTop;
-    threadListViewportHeight.value = scroller.clientHeight;
-  };
-
-  const maybeLoadMoreThreads = (): void => {
-    const scroller = threadListScroller.value;
-    if (!scroller || threadQuery.value || !threadNextCursor.value || threadListLoadingMore.value) return;
-    const remaining = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
-    const threshold = Math.max(72, threadRowHeight.value * 3);
-    if (remaining <= threshold) void loadMoreThreads();
-  };
-
-  const onThreadListScroll = (event: Event): void => {
-    const scroller = event.currentTarget;
-    if (!(scroller instanceof HTMLElement)) return;
-    threadListScrollTop.value = scroller.scrollTop;
-    if (threadListViewportHeight.value !== scroller.clientHeight) {
-      threadListViewportHeight.value = scroller.clientHeight;
-    }
-    maybeLoadMoreThreads();
-  };
-
-  const persistThreadListScale = (): void => {
-    if (typeof window === 'undefined') return;
-    try {
-      window.localStorage.setItem(THREAD_LIST_SCALE_STORAGE_KEY, String(threadListScale.value));
-    } catch {
-      // Preference persistence is best-effort; zoom should keep working without storage access.
-    }
-  };
-
-  const onThreadListWheel = (event: WheelEvent): void => {
-    if (!(event.ctrlKey || event.metaKey) || event.deltaY === 0) return;
-
-    const direction = event.deltaY < 0 ? 1 : -1;
-    const nextScale = Math.min(
-      THREAD_LIST_SCALE_MAX,
-      Math.max(
-        THREAD_LIST_SCALE_MIN,
-        Math.round((threadListScale.value + direction * THREAD_LIST_SCALE_STEP) * 10) / 10,
-      ),
-    );
-    if (nextScale === threadListScale.value) return;
-
-    event.preventDefault();
-    const scroller = threadListScroller.value;
-    const previousRowHeight = threadRowHeight.value;
-    const anchorRow = scroller ? scroller.scrollTop / previousRowHeight : 0;
-
-    threadListScale.value = nextScale;
-    persistThreadListScale();
-
-    void nextTick(() => {
-      if (scroller) scroller.scrollTop = anchorRow * threadRowHeight.value;
-      syncThreadListMetrics();
-      maybeLoadMoreThreads();
-    });
-  };
-
-  const resetThreadListScroll = (): void => {
-    threadListScrollTop.value = 0;
-    void nextTick(() => {
-      if (threadListScroller.value) threadListScroller.value.scrollTop = 0;
-      syncThreadListMetrics();
-    });
-  };
-
-  watch(threadQuery, resetThreadListScroll);
-
   const refreshConnectionsAndAuthorization = async (): Promise<void> => {
     const [nextDenylist] = await Promise.all([agentApi.targetDenylist(), connectionsStore.revalidate(0)]);
     targetDenylist.value = nextDenylist;
@@ -1628,23 +1488,12 @@
     window.addEventListener('nexus:agent:thread-changed', onThreadChanged);
     window.addEventListener('nexus:agent:authorization-changed', onAuthorizationChanged);
     void nextTick(() => {
-      syncThreadListMetrics();
-      const scroller = threadListScroller.value;
-      if (scroller && typeof ResizeObserver !== 'undefined') {
-        threadListResizeObserver = new ResizeObserver(() => {
-          syncThreadListMetrics();
-          maybeLoadMoreThreads();
-        });
-        threadListResizeObserver.observe(scroller);
-      }
       void load();
     });
   });
   onBeforeUnmount(() => {
     clearThreadDeleteArm();
     clearDeleteAllThreadsArm();
-    threadListResizeObserver?.disconnect();
-    threadListResizeObserver = null;
     window.removeEventListener('resize', syncTaskRailViewport);
     window.removeEventListener('focus', refreshConnectionsOnFocus);
     window.removeEventListener('nexus:agent:thread-changed', onThreadChanged);
@@ -1656,268 +1505,26 @@
 
 <template>
   <div class="agent-surface-layout relative grid h-full min-h-0" :class="{ 'has-task-rail': taskRailVisible }">
-    <aside
-      class="agent-thread-sidebar flex min-h-0 flex-col border-r border-border/45 bg-header/30 backdrop-blur-xs select-none"
-      :class="{ 'is-open': threadSidebarVisible }"
-    >
-      <div class="flex h-10 shrink-0 items-center justify-between border-b border-border/45 px-3">
-        <div class="flex min-w-0 items-center gap-2">
-          <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-primary/70"></span>
-          <div class="flex min-w-0 items-center gap-1.5">
-            <span class="text-xs font-semibold text-foreground leading-none">{{ $t('agent.operations.threads') }}</span>
-            <span v-if="threads.length" class="text-[10px] font-medium leading-none text-text-secondary/60">
-              {{ threadNextCursor ? `${threads.length}+` : threads.length }}
-            </span>
-            <span
-              v-if="activeThreadCount > 0"
-              class="flex items-center gap-1 rounded-full bg-success/10 px-1.5 py-0.5 text-[9px] font-medium leading-none text-success"
-            >
-              <span class="h-1.5 w-1.5 rounded-full bg-success animate-pulse"></span>
-              <span>{{ activeThreadCount }}</span>
-            </span>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-0.5">
-          <button
-            v-if="threads.length"
-            type="button"
-            class="flex h-7 w-7 items-center justify-center rounded-lg transition-colors active:scale-95 disabled:cursor-not-allowed disabled:opacity-35"
-            :class="
-              deleteAllThreadsArmed
-                ? 'bg-error/10 text-error'
-                : 'text-text-secondary hover:bg-error/10 hover:text-error'
-            "
-            :aria-label="
-              deleteAllThreadsArmed
-                ? $t('agent.operations.confirmDeleteAllThreads')
-                : $t('agent.operations.deleteAllThreads')
-            "
-            :title="
-              activeThreadCount > 0
-                ? $t('agent.operations.deleteAllThreadsActiveHint')
-                : deleteAllThreadsArmed
-                  ? $t('agent.operations.confirmDeleteAllThreads')
-                  : $t('agent.operations.deleteAllThreads')
-            "
-            :disabled="busy || activeThreadCount > 0"
-            @click="requestDeleteAllConversations"
-          >
-            <i class="fa-solid fa-trash-can text-[9px]" aria-hidden="true"></i>
-          </button>
-          <button
-            type="button"
-            class="flex h-7 w-7 items-center justify-center rounded-lg text-text-secondary transition-colors hover:bg-card/70 hover:text-foreground active:scale-95 disabled:opacity-50"
-            :aria-label="$t('agent.operations.newThread')"
-            :title="$t('agent.operations.newThread')"
-            :disabled="busy"
-            @click="beginThreadCreation"
-          >
-            <i class="fa-solid fa-plus text-[9px] text-primary" aria-hidden="true"></i>
-          </button>
-        </div>
-      </div>
-
-      <div class="shrink-0 border-b border-border/40 px-2.5 py-2">
-        <div class="relative flex items-center">
-          <i
-            class="fa-solid fa-magnifying-glass pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-text-secondary"
-            aria-hidden="true"
-          ></i>
-          <input
-            v-model="threadQuery"
-            type="search"
-            data-no-highlight
-            class="h-7 w-full rounded-lg border border-transparent bg-background/55 pl-7.5 pr-7 text-[10.5px] text-foreground placeholder:text-text-secondary/40 outline-none transition-all hover:bg-card/65 focus:border-primary/20 focus:bg-card/80 focus:ring-2 focus:ring-primary/10"
-            :placeholder="$t('agent.operations.searchThreads')"
-          />
-          <button
-            v-if="threadQuery"
-            type="button"
-            class="absolute right-2 top-1/2 -translate-y-1/2 text-text-secondary hover:text-foreground text-[11px]"
-            @click="threadQuery = ''"
-          >
-            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-          </button>
-        </div>
-      </div>
-
-      <div
-        ref="threadListScroller"
-        class="min-h-0 flex-1 overflow-y-auto px-2 py-1.5 scrollbar-thin"
-        :title="$t('agent.operations.threadZoomHint')"
-        @scroll.passive="onThreadListScroll"
-        @wheel="onThreadListWheel"
-      >
-        <div
-          v-if="threadWindow.topSpacer > 0"
-          :style="{ height: `${threadWindow.topSpacer}px` }"
-          aria-hidden="true"
-        ></div>
-        <div
-          v-for="(thread, threadOffset) in renderedThreads"
-          :key="thread.id"
-          class="group relative mb-0.5"
-          :style="{ height: `${Math.max(30, threadRowHeight - 2)}px` }"
-        >
-          <button
-            type="button"
-            class="agent-thread-row relative flex h-full w-full items-center gap-2 rounded-lg px-2 py-1.5 pr-8 text-left transition-[height,background-color,color] duration-150"
-            :style="{
-              paddingTop: `${6 * threadListScale}px`,
-              paddingBottom: `${6 * threadListScale}px`,
-            }"
-            :class="
-              currentThread?.id === thread.id
-                ? 'bg-primary/[0.055] text-foreground font-medium pl-2.5'
-                : 'text-text-secondary hover:bg-card/45 hover:text-foreground'
-            "
-            :aria-current="currentThread?.id === thread.id ? 'true' : undefined"
-            :aria-setsize="visibleThreads.length"
-            :aria-posinset="threadWindow.start + threadOffset + 1"
-            :disabled="busy"
-            @click="selectThread(thread)"
-          >
-            <!-- 激活状态专属左侧品牌指示条 -->
-            <span
-              v-if="currentThread?.id === thread.id"
-              class="absolute left-0.5 top-2 bottom-2 w-0.5 rounded-full bg-primary"
-            ></span>
-
-            <!-- 轻量会话状态点 -->
-            <span class="relative mt-px flex h-4 w-3 shrink-0 items-center justify-center" aria-hidden="true">
-              <span
-                class="relative z-10 h-1.5 w-1.5 rounded-full transition-colors"
-                :class="
-                  threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)
-                    ? threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
-                      ? 'bg-warning'
-                      : 'bg-success'
-                    : currentThread?.id === thread.id
-                      ? 'bg-primary'
-                      : 'bg-text-secondary/25 group-hover:bg-text-secondary/45'
-                "
-              ></span>
-              <span
-                v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
-                class="absolute h-2.5 w-2.5 animate-ping rounded-full opacity-35"
-                :class="
-                  threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
-                    ? 'bg-warning'
-                    : 'bg-success'
-                "
-              ></span>
-            </span>
-
-            <!-- 标题与状态行 -->
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center justify-between gap-1">
-                <span
-                  class="truncate text-[10.75px] leading-[1.35] tracking-[-0.012em]"
-                  :style="{ fontSize: `${10.75 * threadListScale}px` }"
-                  :class="
-                    currentThread?.id === thread.id
-                      ? 'font-semibold text-foreground'
-                      : 'text-foreground/90 group-hover:text-foreground'
-                  "
-                  :title="thread.title || $t('agent.operations.untitledThread')"
-                >
-                  {{ thread.title || $t('agent.operations.untitledThread') }}
-                </span>
-              </div>
-              <div
-                class="mt-0.5 flex items-center justify-between gap-1.5 text-[9px] text-text-secondary/50"
-                :style="{ marginTop: `${2 * threadListScale}px`, fontSize: `${9 * threadListScale}px` }"
-              >
-                <span
-                  v-if="threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)"
-                  class="inline-flex items-center rounded-sm px-1 py-0.2 font-medium"
-                  :class="
-                    threadStatus(thread.id) === 'awaiting_approval' || threadStatus(thread.id) === 'awaiting_budget'
-                      ? 'bg-warning/15 text-warning'
-                      : 'bg-success/15 text-success'
-                  "
-                >
-                  {{ $t(`agent.tasks.runStatus.${threadStatus(thread.id)}`) }}
-                </span>
-                <span
-                  v-else
-                  class="truncate font-mono text-[9px] text-text-secondary/45"
-                  :style="{ fontSize: `${9 * threadListScale}px` }"
-                >
-                  #{{ thread.id.slice(-6) }}
-                </span>
-                <span
-                  class="shrink-0 text-[9px] tabular-nums text-text-secondary/50"
-                  :style="{ fontSize: `${9 * threadListScale}px` }"
-                >
-                  {{ formatThreadUpdatedAt(thread.updatedAt) }}
-                </span>
-              </div>
-            </div>
-          </button>
-          <button
-            type="button"
-            class="absolute right-1 top-1/2 z-10 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 disabled:cursor-not-allowed disabled:opacity-25"
-            :class="[
-              threadDeleteArmedId === thread.id
-                ? 'bg-error/10 text-error opacity-100'
-                : 'text-text-secondary/70 hover:bg-error/10 hover:text-error',
-              currentThread?.id === thread.id ? 'opacity-100' : '',
-            ]"
-            :aria-label="
-              threadDeleteArmedId === thread.id
-                ? $t('agent.operations.confirmDeleteThread')
-                : $t('agent.operations.deleteThread')
-            "
-            :title="
-              threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!)
-                ? $t('agent.operations.deleteThreadActiveHint')
-                : threadDeleteArmedId === thread.id
-                  ? $t('agent.operations.confirmDeleteThread')
-                  : $t('agent.operations.deleteThread')
-            "
-            :disabled="busy || Boolean(threadStatus(thread.id) && nonTerminal.has(threadStatus(thread.id)!))"
-            @click.stop="requestDeleteThread(thread)"
-          >
-            <i class="fa-solid fa-trash-can text-[9px]" aria-hidden="true"></i>
-          </button>
-        </div>
-        <div
-          v-if="threadWindow.bottomSpacer > 0"
-          :style="{ height: `${threadWindow.bottomSpacer}px` }"
-          aria-hidden="true"
-        ></div>
-
-        <div
-          v-if="threadListLoadingMore && !threadQuery"
-          class="mx-auto mt-1.5 flex h-7 items-center gap-1.5 px-2.5 text-[10px] text-text-secondary/70"
-          aria-live="polite"
-        >
-          <i class="fa-solid fa-spinner fa-spin text-[8px]" aria-hidden="true"></i>
-          <span>{{ $t('agent.operations.loading') }}</span>
-        </div>
-
-        <!-- 空状态 -->
-        <div
-          v-if="visibleThreads.length === 0"
-          class="flex flex-col items-center justify-center rounded-xl bg-background/50 px-3 py-8 text-center"
-        >
-          <div class="flex h-8 w-8 items-center justify-center rounded-full bg-header text-text-secondary/60">
-            <i class="fa-regular fa-comment-dots text-xs" aria-hidden="true"></i>
-          </div>
-          <p class="mt-2 text-xs text-text-secondary">{{ $t('agent.operations.noThreadsFound') }}</p>
-        </div>
-      </div>
-    </aside>
-
-    <button
-      type="button"
-      class="agent-thread-backdrop absolute inset-0 z-20 hidden bg-background/55 backdrop-blur-[1px]"
-      :class="{ 'is-open': threadSidebarVisible }"
-      :aria-label="$t('agent.operations.closeThreads')"
-      @click="threadSidebarVisible = false"
-    ></button>
+    <AgentThreadSidebar
+      ref="threadSidebar"
+      :open="threadSidebarVisible"
+      :threads="threads"
+      :next-cursor="threadNextCursor"
+      :loading-more="threadListLoadingMore"
+      :active-thread-count="activeThreadCount"
+      :busy="busy"
+      :current-thread-id="currentThread?.id ?? null"
+      :thread-statuses="threadStatuses"
+      :thread-delete-armed-id="threadDeleteArmedId"
+      :delete-all-threads-armed="deleteAllThreadsArmed"
+      @close="threadSidebarVisible = false"
+      @new-thread="beginThreadCreation"
+      @select="selectThread"
+      @delete-thread="requestDeleteThread"
+      @delete-all="requestDeleteAllConversations"
+      @load-more="loadMoreThreads"
+      @page-size="threadPageSize = $event"
+    />
 
     <main class="agent-conversation-pane flex min-h-0 min-w-0 flex-col overflow-hidden bg-background">
       <header class="shrink-0 border-b border-border/50 bg-header/40 backdrop-blur-xs">
@@ -2170,7 +1777,11 @@
                 >
                   <template #trigger>
                     <i
-                      :class="executionModeValue === 'plan' ? 'fa-solid fa-list-check text-primary' : 'fa-solid fa-play text-success'"
+                      :class="
+                        executionModeValue === 'plan'
+                          ? 'fa-solid fa-list-check text-primary'
+                          : 'fa-solid fa-play text-success'
+                      "
                       class="text-[9px]"
                       aria-hidden="true"
                     ></i>
@@ -2218,7 +1829,9 @@
                           close(true);
                         "
                       >
-                        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
+                        <span
+                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success"
+                        >
                           <i class="fa-solid fa-play text-[9px]" aria-hidden="true"></i>
                         </span>
                         <span class="min-w-0 flex-1">
@@ -2249,7 +1862,9 @@
                           close(true);
                         "
                       >
-                        <span class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <span
+                          class="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"
+                        >
                           <i class="fa-solid fa-list-check text-[9px]" aria-hidden="true"></i>
                         </span>
                         <span class="min-w-0 flex-1">

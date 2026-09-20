@@ -3,6 +3,7 @@
   import { useI18n } from 'vue-i18n';
   import { BaseModal } from '@/foundation/ui';
   import { useFeedback } from '@/shared/feedback/public';
+  import ModelCapabilityEditor from './ModelCapabilityEditor.vue';
   import {
     agentApi,
     formatAgentApiError,
@@ -426,7 +427,11 @@
     ): 'provider' | 'registry' | undefined =>
       live?.[field] !== undefined ? 'provider' : registry?.[field] !== undefined ? 'registry' : undefined;
     const reasoning = live?.reasoning ?? registry?.reasoning;
-    const reasoningSource = live?.reasoning ? ('provider' as const) : registry?.reasoning ? ('registry' as const) : undefined;
+    const reasoningSource = live?.reasoning
+      ? ('provider' as const)
+      : registry?.reasoning
+        ? ('registry' as const)
+        : undefined;
 
     return {
       id: modelId,
@@ -457,14 +462,6 @@
   };
 
   const capabilityEditor = ref<{ providerId: string; modelId: string } | null>(null);
-  const capabilityForm = reactive({
-    contextWindow: 1,
-    maxOutputTokens: 1,
-    supportsTools: false,
-    supportsImageInput: false,
-    supportsFileInput: false,
-  });
-
   const capabilityEditorProvider = computed(() =>
     capabilityEditor.value
       ? (props.providers.find((provider) => provider.id === capabilityEditor.value?.providerId) ?? null)
@@ -478,11 +475,6 @@
 
   const openCapabilityEditor = (provider: AgentProviderView, model: AgentProviderView['models'][number]): void => {
     capabilityEditor.value = { providerId: provider.id, modelId: model.id };
-    capabilityForm.contextWindow = model.contextWindow;
-    capabilityForm.maxOutputTokens = model.maxOutputTokens;
-    capabilityForm.supportsTools = model.supportsTools;
-    capabilityForm.supportsImageInput = model.supportsImageInput;
-    capabilityForm.supportsFileInput = model.supportsFileInput;
   };
 
   const closeCapabilityEditor = (): void => {
@@ -490,86 +482,10 @@
     capabilityEditor.value = null;
   };
 
-  type CapabilityField =
-    | 'contextWindow'
-    | 'maxOutputTokens'
-    | 'supportsTools'
-    | 'supportsImageInput'
-    | 'supportsFileInput';
-
-  const capabilityBaseline = (field: CapabilityField): number | boolean | undefined => {
-    const model = capabilityEditorModel.value;
-    if (!model) return undefined;
-    return model.providerCapabilities?.capabilities[field] ?? model.registryDefaults?.[field];
-  };
-
-  const capabilityBaselineSource = (field: CapabilityField): 'provider' | 'registry' | undefined => {
-    const model = capabilityEditorModel.value;
-    if (!model) return undefined;
-    if (model.providerCapabilities?.capabilities[field] !== undefined) return 'provider';
-    if (model.registryDefaults?.[field] !== undefined) return 'registry';
-    return undefined;
-  };
-
-  const restoreCapabilityField = (field: CapabilityField): void => {
-    const baseline = capabilityBaseline(field);
-    if (baseline === undefined) return;
-    if (field === 'supportsTools') capabilityForm.supportsTools = Boolean(baseline);
-    else if (field === 'supportsImageInput') capabilityForm.supportsImageInput = Boolean(baseline);
-    else if (field === 'supportsFileInput') capabilityForm.supportsFileInput = Boolean(baseline);
-    else capabilityForm[field] = Number(baseline);
-  };
-
-  const restoreAllCapabilities = (): void => {
-    restoreCapabilityField('contextWindow');
-    restoreCapabilityField('maxOutputTokens');
-    restoreCapabilityField('supportsTools');
-    restoreCapabilityField('supportsImageInput');
-    restoreCapabilityField('supportsFileInput');
-  };
-
-  const capabilityFieldHasBaseline = (field: CapabilityField): boolean => capabilityBaseline(field) !== undefined;
-
-  const capabilityFieldIsDefault = (field: CapabilityField): boolean => {
-    const baseline = capabilityBaseline(field);
-    return baseline !== undefined && capabilityForm[field] === baseline;
-  };
-
-  const capabilitySourceLabel = (field: CapabilityField): string => {
-    if (!capabilityFieldIsDefault(field)) return t('agent.settings.providers.manualOverride');
-    return capabilityBaselineSource(field) === 'provider'
-      ? t('agent.settings.providers.providerLive')
-      : t('agent.settings.providers.registryDefault');
-  };
-
-  const formatCapabilityTimestamp = (value: number): string => new Date(value * 1000).toLocaleString();
-
-  const saveCapabilities = async (): Promise<void> => {
+  const saveCapabilities = async (model: AgentProviderView['models'][number]): Promise<void> => {
     const provider = capabilityEditorProvider.value;
-    const model = capabilityEditorModel.value;
-    if (!provider || !model) return;
-    if (
-      !Number.isSafeInteger(capabilityForm.contextWindow) ||
-      capabilityForm.contextWindow < 2 ||
-      !Number.isSafeInteger(capabilityForm.maxOutputTokens) ||
-      capabilityForm.maxOutputTokens < 1 ||
-      capabilityForm.maxOutputTokens >= capabilityForm.contextWindow
-    ) {
-      feedback.notifyError(t('agent.settings.providers.capabilityInvalid'));
-      return;
-    }
-    const next = provider.models.map((candidate) =>
-      candidate.id === model.id
-        ? {
-            ...candidate,
-            contextWindow: capabilityForm.contextWindow,
-            maxOutputTokens: capabilityForm.maxOutputTokens,
-            supportsTools: capabilityForm.supportsTools,
-            supportsImageInput: capabilityForm.supportsImageInput,
-            supportsFileInput: capabilityForm.supportsFileInput,
-          }
-        : candidate,
-    );
+    if (!provider) return;
+    const next = provider.models.map((candidate) => (candidate.id === model.id ? model : candidate));
     const saved = await updateModels(provider, next, t('agent.settings.providers.capabilitySaved'));
     if (saved) capabilityEditor.value = null;
   };
@@ -830,12 +746,17 @@
       ),
   );
 
-  const fallbackModelKeys = computed(() => new Set(props.fallbackModels.map((item) => `${item.providerId} ${item.modelId}`)));
+  const fallbackModelKeys = computed(
+    () => new Set(props.fallbackModels.map((item) => `${item.providerId} ${item.modelId}`)),
+  );
   const toggleFallbackModel = (providerId: string, modelId: string) => {
     const exists = props.fallbackModels.some((item) => item.providerId === providerId && item.modelId === modelId);
-    emit('fallbackModels', exists
-      ? props.fallbackModels.filter((item) => item.providerId !== providerId || item.modelId !== modelId)
-      : [...props.fallbackModels, { providerId, modelId }].slice(0, 8));
+    emit(
+      'fallbackModels',
+      exists
+        ? props.fallbackModels.filter((item) => item.providerId !== providerId || item.modelId !== modelId)
+        : [...props.fallbackModels, { providerId, modelId }].slice(0, 8),
+    );
   };
 
   const defaultModelKey = computed(() =>
@@ -1047,12 +968,23 @@
 
       <div class="rounded-xl border border-border/70 bg-header/20 p-3.5">
         <div class="mb-2 text-xs font-semibold text-foreground">Fallback chain</div>
-        <div class="mb-3 text-[11px] text-text-secondary">按顺序勾选备用模型；新 Run 会冻结兼容 route，运行中设置变更不会改写既有 Run。</div>
+        <div class="mb-3 text-[11px] text-text-secondary">
+          按顺序勾选备用模型；新 Run 会冻结兼容 route，运行中设置变更不会改写既有 Run。
+        </div>
         <div class="flex flex-wrap gap-2">
-          <button v-for="option in modelOptions.filter((item) => item.key !== defaultModelKey)" :key="`fallback-${option.key}`" type="button"
+          <button
+            v-for="option in modelOptions.filter((item) => item.key !== defaultModelKey)"
+            :key="`fallback-${option.key}`"
+            type="button"
             class="rounded-lg border px-2.5 py-1.5 text-[11px] transition-all"
-            :class="fallbackModelKeys.has(option.key) ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border/70 text-text-secondary hover:text-foreground'"
-            :disabled="busy" @click="toggleFallbackModel(option.provider.id, option.model.id)">
+            :class="
+              fallbackModelKeys.has(option.key)
+                ? 'border-primary/40 bg-primary/10 text-primary'
+                : 'border-border/70 text-text-secondary hover:text-foreground'
+            "
+            :disabled="busy"
+            @click="toggleFallbackModel(option.provider.id, option.model.id)"
+          >
             {{ option.model.id }} · {{ option.provider.displayName }}
           </button>
         </div>
@@ -1700,15 +1632,21 @@
               <span>{{ $t('agent.settings.providers.initialModel') }}</span>
             </span>
             <div class="flex flex-wrap items-center justify-end gap-2">
-              <label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none">
+              <label
+                class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none"
+              >
                 <input v-model="form.supportsTools" type="checkbox" class="rounded accent-primary" />
                 <span>{{ $t('agent.settings.providers.tools') }}</span>
               </label>
-              <label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none">
+              <label
+                class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none"
+              >
                 <input v-model="form.supportsImageInput" type="checkbox" class="rounded accent-primary" />
                 <span>{{ $t('agent.settings.providers.imageInput') }}</span>
               </label>
-              <label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none">
+              <label
+                class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer select-none"
+              >
                 <input v-model="form.supportsFileInput" type="checkbox" class="rounded accent-primary" />
                 <span>{{ $t('agent.settings.providers.fileInput') }}</span>
               </label>
@@ -2057,224 +1995,12 @@
     </template>
   </BaseModal>
 
-  <BaseModal
+  <ModelCapabilityEditor
     :visible="Boolean(capabilityEditor && capabilityEditorModel)"
-    :title="$t('agent.settings.providers.capabilityTitle')"
-    :aria-label="$t('agent.settings.providers.capabilityTitle')"
-    :close-on-backdrop="!busy"
-    :close-on-escape="!busy"
-    :focus-on-open="true"
-    panel-class="max-w-lg p-5 sm:p-6 rounded-2xl shadow-2xl border border-border/80 bg-card"
+    :provider="capabilityEditorProvider"
+    :model="capabilityEditorModel"
+    :busy="busy"
     @close="closeCapabilityEditor"
-  >
-    <div v-if="capabilityEditorModel" class="space-y-4">
-      <div>
-        <div class="font-mono text-sm font-semibold text-foreground">{{ capabilityEditorModel.id }}</div>
-        <div class="mt-1 text-xs text-text-secondary">{{ $t('agent.settings.providers.capabilityDescription') }}</div>
-        <div
-          v-if="capabilityEditorModel.providerCapabilities"
-          class="mt-2 rounded-lg border border-border/70 bg-header/20 px-3 py-2 text-[11px] text-text-secondary"
-        >
-          {{
-            $t('agent.settings.providers.providerMetadata', {
-              source: capabilityEditorModel.providerCapabilities.source,
-              version: capabilityEditorModel.providerCapabilities.sourceVersion,
-              updatedAt: formatCapabilityTimestamp(capabilityEditorModel.providerCapabilities.updatedAt),
-            })
-          }}
-        </div>
-        <div
-          v-if="capabilityEditorModel.capabilityConflicts?.length"
-          class="mt-2 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[11px] text-warning"
-        >
-          {{
-            $t('agent.settings.providers.capabilityConflict', {
-              fields: capabilityEditorModel.capabilityConflicts.join(', '),
-            })
-          }}
-        </div>
-      </div>
-
-      <div class="space-y-3">
-        <label class="block">
-          <div class="mb-1 flex items-center justify-between gap-2">
-            <span class="text-xs font-medium text-foreground">{{ $t('agent.settings.providers.contextWindow') }}</span>
-            <div class="flex items-center gap-2 text-[10px]">
-              <span :class="capabilityFieldIsDefault('contextWindow') ? 'text-primary' : 'text-text-secondary'">
-                {{ capabilitySourceLabel('contextWindow') }}
-              </span>
-              <button
-                v-if="capabilityFieldHasBaseline('contextWindow')"
-                type="button"
-                class="text-primary hover:underline disabled:opacity-40"
-                :disabled="capabilityFieldIsDefault('contextWindow')"
-                @click="restoreCapabilityField('contextWindow')"
-              >
-                {{ $t('agent.settings.providers.restoreDefault') }}
-              </button>
-            </div>
-          </div>
-          <input
-            v-model.number="capabilityForm.contextWindow"
-            type="number"
-            min="2"
-            data-no-highlight
-            class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 font-mono text-xs text-foreground outline-none focus:border-border-hover"
-          />
-        </label>
-
-        <label class="block">
-          <div class="mb-1 flex items-center justify-between gap-2">
-            <span class="text-xs font-medium text-foreground">{{
-              $t('agent.settings.providers.maxOutputTokens')
-            }}</span>
-            <div class="flex items-center gap-2 text-[10px]">
-              <span :class="capabilityFieldIsDefault('maxOutputTokens') ? 'text-primary' : 'text-text-secondary'">
-                {{ capabilitySourceLabel('maxOutputTokens') }}
-              </span>
-              <button
-                v-if="capabilityFieldHasBaseline('maxOutputTokens')"
-                type="button"
-                class="text-primary hover:underline disabled:opacity-40"
-                :disabled="capabilityFieldIsDefault('maxOutputTokens')"
-                @click="restoreCapabilityField('maxOutputTokens')"
-              >
-                {{ $t('agent.settings.providers.restoreDefault') }}
-              </button>
-            </div>
-          </div>
-          <input
-            v-model.number="capabilityForm.maxOutputTokens"
-            type="number"
-            min="1"
-            data-no-highlight
-            class="h-9 w-full rounded-lg border border-border/80 bg-background px-3 font-mono text-xs text-foreground outline-none focus:border-border-hover"
-          />
-        </label>
-
-        <div class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5">
-          <div class="flex items-center justify-between gap-3">
-            <label class="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
-              <input v-model="capabilityForm.supportsTools" type="checkbox" class="rounded accent-primary" />
-              <span>{{ $t('agent.settings.providers.tools') }}</span>
-            </label>
-            <div class="flex items-center gap-2 text-[10px]">
-              <span :class="capabilityFieldIsDefault('supportsTools') ? 'text-primary' : 'text-text-secondary'">
-                {{ capabilitySourceLabel('supportsTools') }}
-              </span>
-              <button
-                v-if="capabilityFieldHasBaseline('supportsTools')"
-                type="button"
-                class="text-primary hover:underline disabled:opacity-40"
-                :disabled="capabilityFieldIsDefault('supportsTools')"
-                @click="restoreCapabilityField('supportsTools')"
-              >
-                {{ $t('agent.settings.providers.restoreDefault') }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5">
-          <div class="flex items-center justify-between gap-3">
-            <label class="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
-              <input v-model="capabilityForm.supportsImageInput" type="checkbox" class="rounded accent-primary" />
-              <span>{{ $t('agent.settings.providers.imageInput') }}</span>
-            </label>
-            <div class="flex items-center gap-2 text-[10px]">
-              <span :class="capabilityFieldIsDefault('supportsImageInput') ? 'text-primary' : 'text-text-secondary'">
-                {{ capabilitySourceLabel('supportsImageInput') }}
-              </span>
-              <button
-                v-if="capabilityFieldHasBaseline('supportsImageInput')"
-                type="button"
-                class="text-primary hover:underline disabled:opacity-40"
-                :disabled="capabilityFieldIsDefault('supportsImageInput')"
-                @click="restoreCapabilityField('supportsImageInput')"
-              >
-                {{ $t('agent.settings.providers.restoreDefault') }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5">
-          <div class="flex items-center justify-between gap-3">
-            <label class="flex items-center gap-2 text-xs font-medium text-foreground cursor-pointer">
-              <input v-model="capabilityForm.supportsFileInput" type="checkbox" class="rounded accent-primary" />
-              <span>{{ $t('agent.settings.providers.fileInput') }}</span>
-            </label>
-            <div class="flex items-center gap-2 text-[10px]">
-              <span :class="capabilityFieldIsDefault('supportsFileInput') ? 'text-primary' : 'text-text-secondary'">
-                {{ capabilitySourceLabel('supportsFileInput') }}
-              </span>
-              <button
-                v-if="capabilityFieldHasBaseline('supportsFileInput')"
-                type="button"
-                class="text-primary hover:underline disabled:opacity-40"
-                :disabled="capabilityFieldIsDefault('supportsFileInput')"
-                @click="restoreCapabilityField('supportsFileInput')"
-              >
-                {{ $t('agent.settings.providers.restoreDefault') }}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div
-          v-if="capabilityEditorModel.reasoningEfforts?.length"
-          class="rounded-lg border border-border/70 bg-header/20 px-3 py-2.5 text-xs"
-        >
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-medium text-foreground">{{ $t('agent.settings.providers.reasoningCapability') }}</span>
-            <span class="text-[10px] text-primary">
-              {{
-                capabilityEditorModel.reasoningSource === 'provider'
-                  ? $t('agent.settings.providers.providerLive')
-                  : capabilityEditorModel.reasoningSource === 'manual'
-                    ? $t('agent.settings.providers.manualOverride')
-                    : $t('agent.settings.providers.registryManaged')
-              }}
-            </span>
-          </div>
-          <div class="mt-1 font-mono text-[11px] text-text-secondary">
-            {{ capabilityEditorModel.reasoningEfforts.join(' · ') }}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <template #footer>
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        <button
-          v-if="capabilityEditorModel?.providerCapabilities || capabilityEditorModel?.registryDefaults"
-          type="button"
-          class="rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-primary hover:bg-header disabled:opacity-50"
-          :disabled="busy"
-          @click="restoreAllCapabilities"
-        >
-          {{ $t('agent.settings.providers.restoreAllDefaults') }}
-        </button>
-        <span v-else></span>
-        <div class="flex items-center gap-2">
-          <button
-            type="button"
-            class="rounded-lg border border-border/80 bg-background px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-header"
-            :disabled="busy"
-            @click="closeCapabilityEditor"
-          >
-            {{ $t('common.cancel') }}
-          </button>
-          <button
-            type="button"
-            class="rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white hover:bg-primary/90 disabled:opacity-50"
-            :disabled="busy"
-            @click="saveCapabilities"
-          >
-            {{ $t('common.save') }}
-          </button>
-        </div>
-      </div>
-    </template>
-  </BaseModal>
+    @save="saveCapabilities"
+  />
 </template>

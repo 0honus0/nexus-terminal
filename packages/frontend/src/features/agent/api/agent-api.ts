@@ -1,4 +1,8 @@
-import { agentHttpClient as httpClient, agentRuntimeRequest } from './agent-http-client';
+import { agentRuntimeRequest } from './agent-http-client';
+import { httpClient, mutationHeaders, unwrap } from './agent-api-common';
+import { createPluginApi } from './plugin-api';
+import { createProviderApi } from './provider-api';
+import { createArtifactApi } from './artifact-api';
 import type {
   AgentArtifactRef,
   AgentEnvelope,
@@ -639,11 +643,7 @@ export interface AgentRunView {
   definition: {
     schemaVersion: 1;
     agentDefinitionId: string;
-    model: {
-      providerId: string;
-      modelId: string;
-      configurationVersion: number;
-    };
+    model: { providerId: string; modelId: string; configurationVersion: number };
     reasoningEffort?: AgentReasoningEffort;
     approvalMode?: AgentApprovalMode;
     executionMode?: AgentExecutionMode;
@@ -651,10 +651,7 @@ export interface AgentRunView {
     environment?: WorkspaceProfileView | null;
     policyRevision: number;
     settingsRevision: number;
-    contextBoundary?: {
-      baseThrough: number;
-      runThrough: Record<string, number>;
-    };
+    contextBoundary?: { baseThrough: number; runThrough: Record<string, number> };
   };
   plan: AgentRunPlan;
   usage: {
@@ -670,11 +667,7 @@ export interface AgentRunView {
       reservedOutputTokens: number;
       contextWindowTokens: number;
       source: 'estimated' | 'anchored_estimate' | 'provider';
-      model?: {
-        providerId: string;
-        modelId: string;
-        configurationVersion: number;
-      };
+      model?: { providerId: string; modelId: string; configurationVersion: number };
       contextEpoch?: string;
       updatedAt: number;
     };
@@ -738,11 +731,7 @@ export interface AgentCheckpointView {
     evidenceRefs: string[];
     checkpointArtifactRefs?: string[];
     modelConfigurationVersion: number;
-    activeModel?: {
-      providerId: string;
-      modelId: string;
-      configurationVersion: number;
-    };
+    activeModel?: { providerId: string; modelId: string; configurationVersion: number };
     definitionVersion: string;
     policyRevision: number;
     workspaceArtifactManifestRefs: string[];
@@ -750,10 +739,7 @@ export interface AgentCheckpointView {
     recoveryManifest?: {
       schemaVersion: 1;
       eventThrough: number;
-      contextBoundary: {
-        baseThrough: number;
-        runThrough: Record<string, number>;
-      };
+      contextBoundary: { baseThrough: number; runThrough: Record<string, number> };
       tools: Array<{
         toolCallId: string;
         operationHash: string;
@@ -803,11 +789,7 @@ export interface AgentSubagentView {
   capabilities: string[];
   peerMessaging: 'parent-child' | 'same-run';
   mutationMode: 'read-only' | 'governed';
-  modelRef: {
-    providerId: string;
-    modelId: string;
-    configurationVersion: number;
-  };
+  modelRef: { providerId: string; modelId: string; configurationVersion: number };
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];
@@ -850,16 +832,8 @@ export interface AgentSubagentMessage {
 export interface AgentSubagentProfile {
   id: string;
   role: string;
-  defaultModel: {
-    providerId: string;
-    modelId: string;
-    configurationVersion: number;
-  } | null;
-  allowedModels: Array<{
-    providerId: string;
-    modelId: string;
-    configurationVersion: number;
-  }>;
+  defaultModel: { providerId: string; modelId: string; configurationVersion: number } | null;
+  allowedModels: Array<{ providerId: string; modelId: string; configurationVersion: number }>;
   capabilities: string[];
   peerMessaging: 'parent-child' | 'same-run';
   mutationMode: 'read-only' | 'governed';
@@ -983,24 +957,7 @@ export interface TargetDenylistView {
   list: TargetDenylistEntry[];
 }
 
-let csrfToken: string | null = null;
-
-const unwrap = <T>(envelope: AgentEnvelope<T>): T => envelope.data;
-
-const csrf = async (): Promise<string> => {
-  if (csrfToken) return csrfToken;
-  const response = await httpClient.get<AgentEnvelope<{ token: string }>>('/agent/security/csrf');
-  csrfToken = response.data.data.token;
-  return csrfToken;
-};
-
-const mutationHeaders = async (): Promise<Record<string, string>> => ({
-  'X-Nexus-CSRF': await csrf(),
-});
-
-export const resetAgentCsrf = (): void => {
-  csrfToken = null;
-};
+export { resetAgentCsrf } from './agent-api-common';
 
 export const agentApi = {
   async recommendedPlugin(): Promise<RecommendedAgentPluginView> {
@@ -1113,412 +1070,9 @@ export const agentApi = {
       ).data,
     );
   },
-  async pluginPublishers(): Promise<PluginPublisherKey[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<PluginPublisherKey[]>>('/agent/plugins/publishers')).data);
-  },
-  async trustPluginPublisher(publicKeyPem: string, label: string): Promise<PluginPublisherKey> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<PluginPublisherKey>>(
-          '/agent/plugins/publishers',
-          { publicKeyPem, label },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async revokePluginPublisher(keyId: string): Promise<void> {
-    await httpClient.delete(`/agent/plugins/publishers/${encodeURIComponent(keyId)}`, {
-      headers: await mutationHeaders(),
-    });
-  },
-  async pluginInstallations(): Promise<PluginInstallation[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<PluginInstallation[]>>('/agent/plugins/installations')).data);
-  },
-  async pluginVersions(appId?: string): Promise<PluginVersionView[]> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<PluginVersionView[]>>('/agent/plugins/versions', {
-          params: appId ? { appId } : undefined,
-        })
-      ).data,
-    );
-  },
-  async officialPluginCatalog(): Promise<RemotePluginCatalog> {
-    return unwrap((await httpClient.get<AgentEnvelope<RemotePluginCatalog>>('/agent/plugins/official/catalog')).data);
-  },
-  async stageOfficialPlugin(appId: string, version: string): Promise<PluginStageView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<PluginStageView>>(
-          '/agent/plugins/official/stage',
-          { appId, version },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async remotePluginCatalog(repositoryUrl: string): Promise<RemotePluginCatalog> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<RemotePluginCatalog>>('/agent/plugins/remote/catalog', {
-          params: { repositoryUrl },
-        })
-      ).data,
-    );
-  },
-  async stageRemotePlugin(repositoryUrl: string, appId: string, version: string): Promise<PluginStageView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<PluginStageView>>(
-          '/agent/plugins/remote/stage',
-          { repositoryUrl, appId, version },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async stagePlugin(artifact: AgentArtifactRef): Promise<PluginStageView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<PluginStageView>>(
-          '/agent/plugins/stage',
-          { artifactRef: { appId: artifact.appId, id: artifact.id } },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async verifyPlugin(stageId: string): Promise<PluginVerifyResult> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<PluginVerifyResult>>(
-          '/agent/plugins/verify',
-          { stageId },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async installPlugin(stageId: string): Promise<{
-    stage: PluginStageView;
-    plugin: PluginVersionView;
-    app: PluginAppStateView;
-  }> {
-    return unwrap(
-      (
-        await httpClient.post<
-          AgentEnvelope<{
-            stage: PluginStageView;
-            plugin: PluginVersionView;
-            app: PluginAppStateView;
-          }>
-        >('/agent/plugins/install', { stageId }, { headers: await mutationHeaders() })
-      ).data,
-    );
-  },
-  async upgradePlugin(appId: string, stageId: string, expectedVersion: number): Promise<PluginUpgradeResult> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<PluginUpgradeResult>>(
-          `/agent/plugins/${encodeURIComponent(appId)}/upgrade`,
-          { stageId, expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async uninstallPlugin(appId: string, expectedVersion: number): Promise<PluginUninstallResult> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<PluginUninstallResult>>(
-          `/agent/plugins/${encodeURIComponent(appId)}/uninstall`,
-          { deleteData: false, expectedVersion },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async deletePluginData(appId: string, confirmed: true): Promise<void> {
-    await httpClient.post(
-      `/agent/plugins/${encodeURIComponent(appId)}/delete-data`,
-      { confirmed },
-      { headers: await mutationHeaders() },
-    );
-  },
-  async pluginFrontend(appId: string): Promise<PluginFrontendDescriptor> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<PluginFrontendDescriptor>>(
-          `/agent/plugins/${encodeURIComponent(appId)}/frontend`,
-        )
-      ).data,
-    );
-  },
-  async createAppIntent(
-    appId: string,
-    input: {
-      receiverAppId: string;
-      intentId: string;
-      input: unknown;
-      artifactRefs: Array<{ appId: string; id: string }>;
-      confirmed: true;
-    },
-  ): Promise<AgentAppIntentReceipt> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<AgentAppIntentReceipt>>(
-          `/agent/apps/${encodeURIComponent(appId)}/plugin-intents`,
-          input,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async listReceivedAppIntents(appId: string, limit?: number): Promise<AgentAppIntentReceipt[]> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<AgentAppIntentReceipt[]>>(
-          `/agent/apps/${encodeURIComponent(appId)}/plugin-intents`,
-          limit === undefined ? undefined : { params: { limit } },
-        )
-      ).data,
-    );
-  },
-  async revokeAppIntent(appId: string, receiptId: string): Promise<void> {
-    await httpClient.delete(
-      `/agent/apps/${encodeURIComponent(appId)}/plugin-intents/${encodeURIComponent(receiptId)}`,
-      { headers: await mutationHeaders() },
-    );
-  },
-  async getReceivedAppIntentArtifact(
-    appId: string,
-    receiptId: string,
-    artifactId: string,
-  ): Promise<AgentAppIntentArtifactView> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<AgentAppIntentArtifactView>>(
-          `/agent/apps/${encodeURIComponent(appId)}/plugin-intents/${encodeURIComponent(receiptId)}/artifacts/${encodeURIComponent(artifactId)}`,
-        )
-      ).data,
-    );
-  },
-  async readReceivedAppIntentArtifactRange(
-    appId: string,
-    receiptId: string,
-    artifactId: string,
-    start: number,
-    endInclusive: number,
-    signal?: AbortSignal,
-  ): Promise<ArrayBuffer> {
-    const response = await httpClient.get<ArrayBuffer>(
-      `/agent/apps/${encodeURIComponent(appId)}/plugin-intents/${encodeURIComponent(receiptId)}/artifacts/${encodeURIComponent(artifactId)}/content`,
-      {
-        headers: { Range: `bytes=${start}-${endInclusive}` },
-        responseType: 'arraybuffer',
-        signal,
-      },
-    );
-    return response.data;
-  },
-  async pluginFrontendRpc(
-    appId: string,
-    method:
-      | 'host.appInfo'
-      | 'storage.get'
-      | 'storage.put'
-      | 'storage.delete'
-      | 'intents.create'
-      | 'intents.listReceived'
-      | 'intents.revoke'
-      | 'intents.artifacts.get',
-    params: unknown,
-    signal?: AbortSignal,
-  ): Promise<unknown> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<unknown>>(
-          `/agent/plugins/${encodeURIComponent(appId)}/frontend/rpc`,
-          { method, params },
-          { headers: await mutationHeaders(), signal },
-        )
-      ).data,
-    );
-  },
-  async providers(): Promise<AgentProviderView[]> {
-    return unwrap((await httpClient.get<AgentEnvelope<AgentProviderView[]>>('/agent/ai/providers')).data);
-  },
-  async createProvider(input: Record<string, unknown>): Promise<AgentProviderView> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<AgentProviderView>>('/agent/ai/providers', input, {
-          headers: await mutationHeaders(),
-        })
-      ).data,
-    );
-  },
-  async updateProvider(provider: AgentProviderView, input: Record<string, unknown>): Promise<AgentProviderView> {
-    return unwrap(
-      (
-        await httpClient.patch<AgentEnvelope<AgentProviderView>>(
-          `/agent/ai/providers/${encodeURIComponent(provider.id)}`,
-          { ...input, expectedVersion: provider.version },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async discoverProviderModels(providerId: string): Promise<AgentDiscoveredProviderModel[]> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<AgentDiscoveredProviderModel[]>>(
-          `/agent/ai/providers/${encodeURIComponent(providerId)}/discover-models`,
-          {},
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async deleteProvider(providerId: string, expectedVersion: number): Promise<{ deleted: boolean }> {
-    return unwrap(
-      (
-        await httpClient.delete<AgentEnvelope<{ deleted: boolean }>>(
-          `/agent/ai/providers/${encodeURIComponent(providerId)}?expectedVersion=${encodeURIComponent(expectedVersion)}`,
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async testProvider(providerId: string, modelId: string): Promise<{ ok: boolean; latencyMs: number }> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<{ ok: boolean; latencyMs: number }>>(
-          `/agent/ai/providers/${encodeURIComponent(providerId)}/test`,
-          { modelId },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async storage(): Promise<ArtifactStorageSummary> {
-    return unwrap((await httpClient.get<AgentEnvelope<ArtifactStorageSummary>>('/agent/files/storage')).data);
-  },
-  async files(
-    query: {
-      before?: string;
-      q?: string;
-      appId?: string;
-      retained?: boolean;
-      kind?: 'image' | 'document' | 'code' | 'archive' | 'media' | 'other';
-    } = {},
-  ): Promise<AgentArtifactPage> {
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<AgentArtifactPage>>('/agent/files', {
-          params: { limit: 100, ...query },
-        })
-      ).data,
-    );
-  },
-  async uploadArtifact(appId: string, file: File): Promise<AgentArtifactRef> {
-    const reservation = unwrap(
-      (
-        await httpClient.post<
-          AgentEnvelope<{
-            artifactId: string;
-            uploadUrl: string;
-            expiresAt: number;
-          }>
-        >(
-          `/apps/${encodeURIComponent(appId)}/artifacts`,
-          {
-            name: file.name,
-            mediaType: file.type || 'application/octet-stream',
-            declaredBytes: file.size,
-          },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-    const uploadPath = reservation.uploadUrl.replace(/^\/api\/v1/, '');
-    await httpClient.put(uploadPath, file, {
-      headers: {
-        ...(await mutationHeaders()),
-        'Content-Type': file.type || 'application/octet-stream',
-      },
-      timeout: 120_000,
-    });
-    return unwrap(
-      (
-        await httpClient.get<AgentEnvelope<AgentArtifactRef>>(
-          `/apps/${encodeURIComponent(appId)}/artifacts/${encodeURIComponent(reservation.artifactId)}`,
-        )
-      ).data,
-    );
-  },
-  async retainArtifact(artifact: AgentArtifactRef, retained: boolean): Promise<AgentArtifactRef> {
-    return unwrap(
-      (
-        await httpClient.patch<AgentEnvelope<AgentArtifactRef>>(
-          `/apps/${encodeURIComponent(artifact.appId)}/artifacts/${encodeURIComponent(artifact.id)}`,
-          { retained, expectedVersion: artifact.version },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async deleteArtifact(artifact: AgentArtifactRef): Promise<void> {
-    await httpClient.delete(
-      `/apps/${encodeURIComponent(artifact.appId)}/artifacts/${encodeURIComponent(artifact.id)}`,
-      {
-        params: { expectedVersion: artifact.version },
-        headers: await mutationHeaders(),
-      },
-    );
-  },
-  async previewArtifactCleanup(): Promise<ArtifactCleanupPreview> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<ArtifactCleanupPreview>>(
-          '/agent/files/cleanup/preview',
-          {},
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async confirmArtifactCleanup(confirmationId: string): Promise<ArtifactCleanupResult> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<ArtifactCleanupResult>>(
-          '/agent/files/cleanup/confirm',
-          { confirmationId },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
-  async attachArtifact(
-    artifact: AgentArtifactRef,
-    input: { targetAppId: string; threadId: string; runId?: string },
-  ): Promise<{ artifact: AgentArtifactRef; crossApp: boolean }> {
-    return unwrap(
-      (
-        await httpClient.post<AgentEnvelope<{ artifact: AgentArtifactRef; crossApp: boolean }>>(
-          `/agent/files/${encodeURIComponent(artifact.id)}/attach`,
-          {
-            targetAppId: input.targetAppId,
-            threadId: input.threadId,
-            ...(input.runId ? { runId: input.runId } : {}),
-            role: 'input',
-            expectedVersion: artifact.version,
-          },
-          { headers: await mutationHeaders() },
-        )
-      ).data,
-    );
-  },
+  ...createPluginApi(),
+  ...createProviderApi(),
+  ...createArtifactApi(),
   ...createWorkspaceRuntimeApi(mutationHeaders),
   async integrations(appId: string, kind?: AgentIntegrationKind): Promise<AgentIntegrationView[]> {
     return unwrap(
@@ -1846,10 +1400,7 @@ export const agentApi = {
     }
     return {
       items: unwrap(response.data),
-      clock: {
-        serverUnixMilliseconds,
-        clientMonotonicMilliseconds: performance.now(),
-      },
+      clock: { serverUnixMilliseconds, clientMonotonicMilliseconds: performance.now() },
     };
   },
   async resolveApproval(
@@ -1868,12 +1419,7 @@ export const agentApi = {
             expectedVersion: approval.version,
             ...(feedback ? { feedback } : {}),
           }),
-          {
-            headers: {
-              ...(await mutationHeaders()),
-              'Idempotency-Key': crypto.randomUUID(),
-            },
-          },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
@@ -1885,11 +1431,7 @@ export const agentApi = {
       text: string;
       artifactRefs?: string[];
       agentDefinitionId: string;
-      model: {
-        providerId: string;
-        modelId: string;
-        configurationVersion: number;
-      };
+      model: { providerId: string; modelId: string; configurationVersion: number };
       reasoningEffort?: AgentReasoningEffort;
       approvalMode: AgentApprovalMode;
       executionMode?: AgentExecutionMode;
@@ -1916,12 +1458,7 @@ export const agentApi = {
             ...(input.environment === undefined ? {} : { environment: input.environment }),
             ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),
           }),
-          {
-            headers: {
-              ...(await mutationHeaders()),
-              'Idempotency-Key': crypto.randomUUID(),
-            },
-          },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
@@ -1930,28 +1467,14 @@ export const agentApi = {
     await httpClient.post(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/inputs`,
       agentRuntimeRequest({ text, artifactRefs, expectedVersion: run.version }),
-      {
-        headers: {
-          ...(await mutationHeaders()),
-          'Idempotency-Key': crypto.randomUUID(),
-        },
-      },
+      { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
     );
   },
   async interruptRun(appId: string, run: AgentRunView, text: string): Promise<void> {
     await httpClient.post(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/interrupt`,
-      agentRuntimeRequest({
-        text,
-        artifactRefs: [],
-        expectedVersion: run.version,
-      }),
-      {
-        headers: {
-          ...(await mutationHeaders()),
-          'Idempotency-Key': crypto.randomUUID(),
-        },
-      },
+      agentRuntimeRequest({ text, artifactRefs: [], expectedVersion: run.version }),
+      { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
     );
   },
   async setRunGoal(appId: string, run: AgentRunView, text: string): Promise<AgentRunView> {
@@ -1961,12 +1484,7 @@ export const agentApi = {
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           path,
           agentRuntimeRequest({ text, expectedVersion: run.version }),
-          {
-            headers: {
-              ...(await mutationHeaders()),
-              'Idempotency-Key': crypto.randomUUID(),
-            },
-          },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
@@ -1987,18 +1505,8 @@ export const agentApi = {
       (
         await httpClient.patch<AgentEnvelope<AgentRunView>>(
           path,
-          agentRuntimeRequest({
-            action,
-            inputId,
-            beforeInputId,
-            expectedVersion: run.version,
-          }),
-          {
-            headers: {
-              ...(await mutationHeaders()),
-              'Idempotency-Key': crypto.randomUUID(),
-            },
-          },
+          agentRuntimeRequest({ action, inputId, beforeInputId, expectedVersion: run.version }),
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
@@ -2017,17 +1525,8 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/budget`,
-          agentRuntimeRequest({
-            scope: 'run',
-            increase,
-            expectedVersion: run.version,
-          }),
-          {
-            headers: {
-              ...(await mutationHeaders()),
-              'Idempotency-Key': crypto.randomUUID(),
-            },
-          },
+          agentRuntimeRequest({ scope: 'run', increase, expectedVersion: run.version }),
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
@@ -2058,12 +1557,7 @@ export const agentApi = {
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/resume`,
           agentRuntimeRequest({ checkpointId, expectedVersion: run.version }),
-          {
-            headers: {
-              ...(await mutationHeaders()),
-              'Idempotency-Key': crypto.randomUUID(),
-            },
-          },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
@@ -2074,12 +1568,7 @@ export const agentApi = {
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/cancel`,
           agentRuntimeRequest({ expectedVersion: run.version }),
-          {
-            headers: {
-              ...(await mutationHeaders()),
-              'Idempotency-Key': crypto.randomUUID(),
-            },
-          },
+          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,
     );
@@ -2087,10 +1576,7 @@ export const agentApi = {
   async deleteRun(appId: string, run: AgentRunView): Promise<void> {
     await httpClient.delete(`/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}`, {
       params: { expectedVersion: run.version },
-      headers: {
-        ...(await mutationHeaders()),
-        'Idempotency-Key': crypto.randomUUID(),
-      },
+      headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() },
     });
   },
 };
