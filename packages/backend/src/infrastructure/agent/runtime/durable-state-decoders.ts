@@ -99,8 +99,7 @@ export const parseRunPlan = (raw: string): RunPlan => decodeRunPlan(parseDurable
 export const parseRunBudget = (raw: string): RunBudget => {
   const record = durableRecord(parseDurableJson(raw));
   assertDurableKeys(record, [
-    'maxContextTokens',
-    'maxOutputTokens',
+    'contextPolicy',
     'maxRunSteps',
     'maxActiveExecutionSeconds',
     'toolTimeoutSeconds',
@@ -114,9 +113,25 @@ export const parseRunBudget = (raw: string): RunBudget => {
   ]);
   const compactionMode = record.contextCompactionMode;
   if (!['aggressive', 'balanced', 'conservative'].includes(String(compactionMode))) return invalid();
+  const contextPolicy = durableRecord(record.contextPolicy);
+  assertDurableKeys(contextPolicy, [
+    'profile',
+    'effectiveWindowPercent',
+    'softPressurePercent',
+    'toolOutputFloorPercent',
+  ]);
+  if (!['normal', 'extended'].includes(String(contextPolicy.profile))) return invalid();
+  const effectiveWindowPercent = durableInteger(contextPolicy.effectiveWindowPercent, 1);
+  const softPressurePercent = durableInteger(contextPolicy.softPressurePercent, 1);
+  const toolOutputFloorPercent = durableInteger(contextPolicy.toolOutputFloorPercent, 1);
+  if (effectiveWindowPercent > 100 || softPressurePercent > 100 || toolOutputFloorPercent > 100) return invalid();
   return {
-    maxContextTokens: durableInteger(record.maxContextTokens, 1),
-    maxOutputTokens: durableInteger(record.maxOutputTokens, 1),
+    contextPolicy: {
+      profile: contextPolicy.profile as RunBudget['contextPolicy']['profile'],
+      effectiveWindowPercent,
+      softPressurePercent,
+      toolOutputFloorPercent,
+    },
     maxRunSteps: durableInteger(record.maxRunSteps, 1),
     maxActiveExecutionSeconds: durableInteger(record.maxActiveExecutionSeconds, 1),
     toolTimeoutSeconds: durableInteger(record.toolTimeoutSeconds, 1),

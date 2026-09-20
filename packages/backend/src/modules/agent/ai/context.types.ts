@@ -34,6 +34,7 @@ export interface ContextRequest {
   projectInstructions?: ProjectInstructionSnapshot[];
   modelContextWindow: number;
   maxContextTokens: number;
+  softContextTokens?: number;
   reservedOutputTokens: number;
   compactionMode?: 'aggressive' | 'balanced' | 'conservative';
   maxRecallItems: number;

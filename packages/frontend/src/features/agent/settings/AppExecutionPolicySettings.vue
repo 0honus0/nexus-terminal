@@ -17,7 +17,7 @@
   const saving = ref(false);
   const error = ref('');
 
-  type NumericKey = Exclude<keyof AgentExecutionPolicyOverrides, 'contextCompactionMode'>;
+  type NumericKey = Exclude<keyof AgentExecutionPolicyOverrides, 'contextCompactionMode' | 'contextProfile'>;
   interface FieldMeta {
     key: NumericKey;
     type: QuantityType;
@@ -162,6 +162,40 @@
           />
           <div v-else class="mt-2 rounded-md bg-header/50 px-2 py-2 text-[11px] text-text-secondary">
             {{ $t('agent.settings.executionPolicy.inherited') }}
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-border/60 bg-background/60 p-3 md:col-span-2 xl:col-span-3">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div class="text-xs font-medium text-foreground">
+                {{ $t('agent.settings.executionPolicy.fields.contextProfile') }}
+              </div>
+              <div class="mt-0.5 text-[10px] text-text-secondary">
+                {{ $t('agent.settings.executionPolicy.profileHint') }}
+              </div>
+            </div>
+            <label class="flex items-center gap-1 text-[10px] text-text-secondary">
+              <input
+                type="checkbox"
+                :checked="hasOverride('contextProfile')"
+                :disabled="busy || saving"
+                @change="toggleOverride('contextProfile', ($event.target as HTMLInputElement).checked)"
+              />
+              {{ $t('agent.settings.executionPolicy.override') }}
+            </label>
+          </div>
+          <select
+            v-if="hasOverride('contextProfile')"
+            v-model="draft.contextProfile"
+            class="mt-2 w-full rounded-md border border-border bg-card px-3 py-2 text-sm"
+            :disabled="busy || saving"
+          >
+            <option value="normal">{{ $t('agent.settings.executionPolicy.profile.normal') }}</option>
+            <option value="extended">{{ $t('agent.settings.executionPolicy.profile.extended') }}</option>
+          </select>
+          <div v-else class="mt-2 text-[11px] text-text-secondary">
+            {{ $t('agent.settings.executionPolicy.profileInherited', { value: view.effective.contextProfile }) }}
           </div>
         </div>
 

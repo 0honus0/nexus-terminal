@@ -12,6 +12,7 @@ import type { AgentExecutionPolicyService, AgentExecutionPolicyView } from '../.
 import { isAgentUuid } from '../../uuid';
 import type { AgentDefinitionRegistryPort } from '../definitions/agent-definition.port';
 import type { RunQueryPort } from './run.repository.port';
+import { freezeRunContextPolicy } from './run-budget-policy';
 import { requestHash, requireIdempotencyKey } from './idempotency';
 import type { RunCommandCommitPort } from './state-commit.port';
 import type {
@@ -59,11 +60,8 @@ const validateConnectionIds = (values: number[]): number[] => {
 const runBudgetFrom = (
   settings: Awaited<ReturnType<AgentSettingsService['get']>>,
   policy: AgentExecutionPolicyView,
-  model: ProviderModelConfig,
 ): RunBudget => ({
-  // Model context/output are physical capabilities, not Nexus user budgets.
-  maxContextTokens: model.contextWindow,
-  maxOutputTokens: Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1)),
+  contextPolicy: freezeRunContextPolicy(policy.effective.contextProfile),
   maxRunSteps: policy.effective.maxRunSteps,
   maxActiveExecutionSeconds: policy.effective.maxActiveExecutionSeconds,
   toolTimeoutSeconds: policy.effective.toolTimeoutSeconds,
@@ -238,7 +236,7 @@ export class RunService {
       });
     }
 
-    const budget = runBudgetFrom(settings, executionPolicy, model);
+    const budget = runBudgetFrom(settings, executionPolicy);
     const environment = environmentSelection
       ? await this.resolveEnvironment(scope, environmentSelection, settings.revision)
       : null;
@@ -320,7 +318,7 @@ export class RunService {
         artifactCount: input.artifactRefs.length,
         inputBytes: Buffer.byteLength(input.text, 'utf8'),
         maxRunSteps: budget.maxRunSteps,
-        maxOutputTokens: budget.maxOutputTokens,
+        maxOutputTokens: model.maxOutputTokens,
       },
       'Agent Run create committed',
     );

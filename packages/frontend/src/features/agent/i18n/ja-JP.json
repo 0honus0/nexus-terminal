@@ -666,12 +666,12 @@
       },
       "executionPolicy": {
         "title": "Plugin / App 個別実行予算",
-        "description": "各 Agent Plugin/App は Run・ツール・協調予算を個別に上書きできます。未設定項目はグローバル既定値を継承します。",
+        "description": "各 Agent Plugin/App はグローバルの Run・ツール・協調予算を上書きし、モデル認識型の Normal/Extended コンテキスト方針を選択できます。未設定項目はグローバル既定値を継承します。",
         "app": "Plugin / App を選択",
         "override": "上書き",
         "inherited": "グローバル既定値を継承",
         "effective": "現在の有効値: {value}",
-        "compactionHint": "物理モデルのコンテキストに収まらない場合だけ古い履歴を圧縮します。モデルの context window 自体は縮小しません。",
+        "compactionHint": "固定された soft-pressure 閾値に達すると古い履歴の圧縮を開始します。Hard boundary は現在のモデル window と予約出力から決まります。",
         "compactionInherited": "継承: {value}",
         "compaction": {
           "aggressive": "積極的",
@@ -687,7 +687,14 @@
           "maxRecallBytes": "Recall 容量",
           "maxSubagentMessages": "Subagent メッセージ数",
           "maxSubagentMessageBytes": "Subagent メッセージ容量",
-          "contextCompactionMode": "動的コンテキスト圧縮"
+          "contextCompactionMode": "動的コンテキスト圧縮",
+          "contextProfile": "コンテキスト window プロファイル"
+        },
+        "profileHint": "Normal はコンテキスト余裕を多く確保し、Extended はモデル window をより広く使用します。どちらも Hard Limit は緩和しません。",
+        "profileInherited": "継承: {value}",
+        "profile": {
+          "normal": "Normal（推奨）",
+          "extended": "Extended"
         }
       },
       "memory": {

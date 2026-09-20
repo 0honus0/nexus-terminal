@@ -22,6 +22,10 @@ import { TOOL_SEARCH_NAME } from '../../capabilities/tool-model-surface';
 import { projectToolResult } from '../../capabilities/tool-result-projection';
 import { estimateModelInputTokens } from '../../ai/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
+import {
+  pressureAdjustedToolOutputBytesForOccupancy,
+  resolveModelContextBudget,
+} from '../runs/run-budget-policy';
 import type { RunView } from '../runs/run.types';
 import type {
   MailboxReaderPort,
@@ -31,7 +35,7 @@ import type {
 import type { AgentMessage, DelegationView } from './subagent.types';
 import { logger } from '../../../../shared/logging/logger';
 
-const MAX_CONTEXT_BYTES = 64 * 1024;
+const MAX_DELEGATION_PAYLOAD_BYTES = 32 * 1024;
 const INBOX_LIMIT = 8;
 const INBOX_BYTES = 8 * 1024;
 const PROJECT_WORK_ROOT = '/workspace/work';
@@ -149,6 +153,8 @@ export class SubagentContextBuilder {
       run.usage.steps + 2 <= run.budget.maxRunSteps
         ? 'auto'
         : 'none';
+    const reservedOutputTokens = Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1));
+    const contextBudget = resolveModelContextBudget(run.budget.contextPolicy, model.contextWindow, reservedOutputTokens);
     const artifactProjection =
       delegation.inputArtifactRefs.length > 0 && delegation.capabilities.includes('artifacts.read')
         ? await projectArtifactsForModel(this.artifacts, scope, { runId, runtimeId }, delegation.inputArtifactRefs, {
@@ -156,40 +162,45 @@ export class SubagentContextBuilder {
             supportsFileInput: model.supportsFileInput,
           })
         : { textSuffix: '', contentParts: [] };
-    const { instructions, messages } = await this.messages(
-      scope,
-      runId,
-      delegation,
-      inbox,
-      toolExchanges,
-      continuationByStep,
-      artifactProjection,
-      projectInstructionMessages(projectInstructions),
-      run.budget.maxToolOutputBytes,
-      model.supportsImageInput,
-    );
-    let encodedContext = [
-      ...instructions.map((content) => `system:${content}`),
-      ...messages.map((message) => `${message.role}:${message.content}`),
-    ].join('\n');
+    const inheritedInstructions = projectInstructionMessages(projectInstructions);
+    const buildMessages = (maxToolOutputBytes: number) =>
+      this.messages(
+        scope,
+        runId,
+        delegation,
+        inbox,
+        toolExchanges,
+        continuationByStep,
+        artifactProjection,
+        inheritedInstructions,
+        maxToolOutputBytes,
+        model.supportsImageInput,
+      );
+
+    let { instructions, messages } = await buildMessages(run.budget.maxToolOutputBytes);
     let estimatedInputTokens = estimateModelInputTokens(instructions, messages, offeredTools);
-    let maxOutputTokens = Math.min(model.maxOutputTokens, Math.max(0, model.contextWindow - estimatedInputTokens));
+    const pressureAdjustedToolBytes = pressureAdjustedToolOutputBytesForOccupancy(
+      run.budget,
+      model.contextWindow,
+      reservedOutputTokens,
+      estimatedInputTokens,
+    );
+    if (pressureAdjustedToolBytes < run.budget.maxToolOutputBytes) {
+      ({ instructions, messages } = await buildMessages(pressureAdjustedToolBytes));
+      estimatedInputTokens = estimateModelInputTokens(instructions, messages, offeredTools);
+    }
+
+    let maxOutputTokens = estimatedInputTokens <= contextBudget.effectiveInputTokens ? reservedOutputTokens : 0;
     if (maxOutputTokens < 1 && messages.some((message) => message.contentParts?.length)) {
       for (const message of messages) delete message.contentParts;
       const user = messages.find((message) => message.role === 'user');
       if (user)
         user.content +=
           '\n[Native Artifact payloads omitted because they exceed the context budget; use artifact_read.]';
-      encodedContext = [
-        ...instructions.map((content) => `system:${content}`),
-        ...messages.map((message) => `${message.role}:${message.content}`),
-      ].join('\n');
       estimatedInputTokens = estimateModelInputTokens(instructions, messages, offeredTools);
-      maxOutputTokens = Math.min(model.maxOutputTokens, Math.max(0, model.contextWindow - estimatedInputTokens));
+      maxOutputTokens = estimatedInputTokens <= contextBudget.effectiveInputTokens ? reservedOutputTokens : 0;
     }
-    if (maxOutputTokens < 1 || Buffer.byteLength(encodedContext, 'utf8') > MAX_CONTEXT_BYTES) {
-      return { kind: 'fail', code: 'CONTEXT_BUDGET_EXCEEDED' };
-    }
+    if (maxOutputTokens < 1) return { kind: 'fail', code: 'CONTEXT_BUDGET_EXCEEDED' };
     return {
       kind: 'ready',
       plan: { runtime, inbox, instructions, messages, offeredTools, toolMode, estimatedInputTokens, maxOutputTokens },
@@ -301,7 +312,7 @@ export class SubagentContextBuilder {
             mutationMode: delegation.mutationMode,
             deadlineAt: delegation.deadlineAt,
           }),
-          MAX_CONTEXT_BYTES / 2,
+          MAX_DELEGATION_PAYLOAD_BYTES,
         ),
         ...inheritedProjectInstructions,
       ],

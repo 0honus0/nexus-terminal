@@ -40,6 +40,7 @@ export interface RecommendedAgentPluginInstallResult {
 }
 
 export type AgentContextCompactionMode = 'aggressive' | 'balanced' | 'conservative';
+export type AgentContextProfile = 'normal' | 'extended';
 
 export interface AgentExecutionPolicyOverrides {
   maxRunSteps?: number;
@@ -51,6 +52,7 @@ export interface AgentExecutionPolicyOverrides {
   maxSubagentMessages?: number;
   maxSubagentMessageBytes?: number;
   contextCompactionMode?: AgentContextCompactionMode;
+  contextProfile?: AgentContextProfile;
 }
 
 export interface AgentExecutionPolicyView {
@@ -627,8 +629,12 @@ export interface AgentRunView {
   verificationStatus: string;
   needsReconciliation: boolean;
   budget: {
-    maxContextTokens: number;
-    maxOutputTokens: number;
+    contextPolicy: {
+      profile: AgentContextProfile;
+      effectiveWindowPercent: number;
+      softPressurePercent: number;
+      toolOutputFloorPercent: number;
+    };
     maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;

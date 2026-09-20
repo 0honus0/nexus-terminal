@@ -24,6 +24,7 @@ import type { ModelAttemptIdentity } from '../events/event.types';
 import type { BackendSignal } from './agent-backend.port';
 import { ModelCallLimiter } from './model-call-limiter';
 import { waitForRetry } from './execution-errors';
+import { resolveModelContextBudget } from '../runs/run-budget-policy';
 import type { RunInputProjection, RunSnapshot } from '../runs/run.types';
 import { logger } from '../../../../shared/logging/logger';
 
@@ -161,6 +162,11 @@ export class ModelStepRunner {
     const model = applyModelCapabilitySnapshot(configuredModel, capabilitySnapshot);
 
     const reservedOutputTokens = Math.max(1, Math.min(model.maxOutputTokens, model.contextWindow - 1));
+    const contextBudget = resolveModelContextBudget(
+      snapshot.budget.contextPolicy,
+      model.contextWindow,
+      reservedOutputTokens,
+    );
 
     const currentProjection = inputProjections[snapshot.id] ?? { ordered: [], pending: [] };
     const currentInput = currentProjection.ordered.at(-1) ?? latestInput(snapshot);
@@ -235,7 +241,8 @@ export class ModelStepRunner {
       collaborationContext,
       ...(projectInstructions?.length ? { projectInstructions } : {}),
       modelContextWindow: model.contextWindow,
-      maxContextTokens: model.contextWindow,
+      maxContextTokens: contextBudget.effectiveInputTokens,
+      softContextTokens: contextBudget.softPressureTokens,
       reservedOutputTokens,
       compactionMode: snapshot.budget.contextCompactionMode,
       maxRecallItems: snapshot.budget.maxRecallItems,

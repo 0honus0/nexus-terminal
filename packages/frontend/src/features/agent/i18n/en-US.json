@@ -666,12 +666,12 @@
       },
       "executionPolicy": {
         "title": "Plugin / App execution budget",
-        "description": "Each Agent Plugin/App can override global Run, tool, and collaboration budgets. Unset fields inherit global defaults.",
+        "description": "Each Agent Plugin/App can override global Run, tool, and collaboration budgets and choose a model-aware Normal/Extended context policy. Unset fields inherit global defaults.",
         "app": "Select Plugin / App",
         "override": "Override",
         "inherited": "Inherit global default",
         "effective": "Effective: {value}",
-        "compactionHint": "Old history is compacted only when the physical model window would overflow; Nexus does not shrink the model context window.",
+        "compactionHint": "Old history starts compacting at the frozen soft-pressure threshold. The hard boundary still derives from the current model window and reserved output.",
         "compactionInherited": "Inherited: {value}",
         "compaction": {
           "aggressive": "Aggressive",
@@ -687,7 +687,14 @@
           "maxRecallBytes": "Recall bytes",
           "maxSubagentMessages": "Subagent messages",
           "maxSubagentMessageBytes": "Subagent message bytes",
-          "contextCompactionMode": "Dynamic context compaction"
+          "contextCompactionMode": "Dynamic context compaction",
+          "contextProfile": "Context window profile"
+        },
+        "profileHint": "Normal keeps more context headroom; Extended uses more of the model window. Neither profile relaxes Hard Limits.",
+        "profileInherited": "Inherited: {value}",
+        "profile": {
+          "normal": "Normal (recommended)",
+          "extended": "Extended"
         }
       },
       "memory": {

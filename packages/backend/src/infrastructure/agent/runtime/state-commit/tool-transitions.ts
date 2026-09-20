@@ -18,6 +18,7 @@ import type {
   SupersedeMutationToolCommand,
 } from '../../../../modules/agent/runtime/runs/state-commit.port';
 import { encodeModelProviderContinuation } from '../../../../modules/agent/ai/model-continuation';
+import { pressureAdjustedToolOutputBytes } from '../../../../modules/agent/runtime/runs/run-budget-policy';
 import type { RunStatus } from '../../../../modules/agent/runtime/runs/run.types';
 import { normalizeUserInputQuestions } from '../../../../modules/agent/runtime/runs/user-input-request';
 import type { RelationalDatabase } from '../../../../platform/storage/relational-database.port';
@@ -36,8 +37,10 @@ import {
   usageWithProviderContext,
 } from './transaction-primitives';
 
-const modelToolResultJson = (row: RunRow, result: ToolResult): string =>
-  JSON.stringify(projectToolResult(result, mapRunRow(row).budget.maxToolOutputBytes));
+const modelToolResultJson = (row: RunRow, result: ToolResult): string => {
+  const run = mapRunRow(row);
+  return JSON.stringify(projectToolResult(result, pressureAdjustedToolOutputBytes(run.budget, run.usage.context)));
+};
 
 export const supersedeMutationToolTransition = async (
   tx: RelationalDatabase,

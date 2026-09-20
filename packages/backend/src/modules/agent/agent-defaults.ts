@@ -1,3 +1,5 @@
+export type AgentContextProfile = 'normal' | 'extended';
+
 export interface AgentRunBudgetSnapshot {
   maxRunSteps: number;
   maxActiveExecutionSeconds: number;

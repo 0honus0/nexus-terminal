@@ -666,12 +666,12 @@
       },
       "executionPolicy": {
         "title": "Plugin / App 独立执行预算",
-        "description": "每个 Agent Plugin/App 可覆盖全局 Run、工具与协作预算；未覆盖字段自动继承全局默认。",
+        "description": "每个 Agent Plugin/App 可覆盖全局 Run、工具与协作预算，并选择模型感知的 Normal/Extended 上下文策略；未覆盖字段继承全局默认。",
         "app": "选择 Plugin / App",
         "override": "覆盖",
         "inherited": "继承全局默认",
         "effective": "当前有效值：{value}",
-        "compactionHint": "只有当上下文真的放不下时才压缩旧历史；不会把模型物理 context window 人为缩小。",
+        "compactionHint": "达到冻结的 soft-pressure 阈值后开始压缩旧历史，Hard boundary 仍由当前模型物理窗口与输出保留共同约束。",
         "compactionInherited": "继承：{value}",
         "compaction": {
           "aggressive": "积极压缩",
@@ -687,7 +687,14 @@
           "maxRecallBytes": "Recall 容量",
           "maxSubagentMessages": "Subagent 消息总数",
           "maxSubagentMessageBytes": "Subagent 消息总容量",
-          "contextCompactionMode": "上下文动态压缩策略"
+          "contextCompactionMode": "上下文动态压缩策略",
+          "contextProfile": "上下文窗口策略"
+        },
+        "profileHint": "Normal 保留更多上下文安全余量；Extended 使用更多模型窗口。两者都不会放宽 Hard Limit。",
+        "profileInherited": "继承：{value}",
+        "profile": {
+          "normal": "Normal（推荐）",
+          "extended": "Extended"
         }
       },
       "memory": {

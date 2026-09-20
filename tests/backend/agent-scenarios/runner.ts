@@ -246,6 +246,11 @@ import type {
   SchedulerWorkView,
 } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent.types';
 import { RunService } from '../../../packages/backend/src/modules/agent/runtime/runs/run.service';
+import {
+  freezeRunContextPolicy,
+  pressureAdjustedToolOutputBytes,
+  resolveModelContextBudget,
+} from '../../../packages/backend/src/modules/agent/runtime/runs/run-budget-policy';
 import { requestHash } from '../../../packages/backend/src/modules/agent/runtime/runs/idempotency';
 import type { AtomicCreateRun } from '../../../packages/backend/src/modules/agent/runtime/runs/state-commit.port';
 import { CheckpointService } from '../../../packages/backend/src/modules/agent/runtime/recovery/checkpoint.service';
@@ -3104,7 +3109,7 @@ const contextTokenAccountingScenario: Scenario = async () => {
       subagentMessages: 0,
       subagentMessageBytes: 0,
     },
-    budget: { maxRunSteps: 32 },
+    budget: { maxRunSteps: 32, maxToolOutputBytes: 65_536, contextPolicy: freezeRunContextPolicy('normal') },
     definition: { environment: null },
   } as unknown as RunView;
   const subagentModel = {
@@ -3162,8 +3167,6 @@ const contextTokenAccountingScenario: Scenario = async () => {
   };
   const fallbackCapabilities = { ...primaryCapabilities, contextWindow: 32_768 };
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 2_048,
     maxRunSteps: 16,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -3172,6 +3175,7 @@ const contextTokenAccountingScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -3956,7 +3960,7 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
         subagentMessages: 0,
         subagentMessageBytes: 0,
       },
-      budget: { maxRunSteps: 32, maxToolOutputBytes: 16 * 1024 },
+      budget: { maxRunSteps: 32, maxToolOutputBytes: 16 * 1024, contextPolicy: freezeRunContextPolicy('normal') },
       definition: { environment: null },
     } as unknown as RunView,
   );
@@ -4353,8 +4357,6 @@ const mcpInputRequiredDurableLifecycleScenario: Scenario = async () => {
         'Complete the MCP lookup after required user input.',
         now,
         JSON.stringify({
-          maxContextTokens: 16_384,
-          maxOutputTokens: 4_096,
           maxRunSteps: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
@@ -4363,6 +4365,7 @@ const mcpInputRequiredDurableLifecycleScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
           contextCompactionMode: 'balanced',
           revision: 1,
         }),
@@ -4802,7 +4805,7 @@ const toolResultProjectionScenario: Scenario = async () => {
       subagentMessages: 0,
       subagentMessageBytes: 0,
     },
-    budget: { maxRunSteps: 32, maxToolOutputBytes: maxModelBytes },
+    budget: { maxRunSteps: 32, maxToolOutputBytes: maxModelBytes, contextPolicy: freezeRunContextPolicy('normal') },
     definition: { environment: null },
   } as unknown as RunView;
   const childPrepared = await childBuilder.prepare(
@@ -4846,8 +4849,6 @@ const toolResultProjectionScenario: Scenario = async () => {
   const stateCommit = new SqliteStateCommitAdapter(db);
   const now = 1_801_060_000;
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 2_048,
     maxRunSteps: 32,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -4856,6 +4857,7 @@ const toolResultProjectionScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -5067,8 +5069,6 @@ const benchmarkSnapshot = (benchmark: AgentBenchmarkCase, benchmarkScope: Scope)
     verificationStatus: 'not_started',
     needsReconciliation: false,
     budget: {
-      maxContextTokens: 8_192,
-      maxOutputTokens: 1_024,
       maxRunSteps: 100,
       maxActiveExecutionSeconds: 3_600,
       toolTimeoutSeconds: 120,
@@ -5077,6 +5077,7 @@ const benchmarkSnapshot = (benchmark: AgentBenchmarkCase, benchmarkScope: Scope)
       maxRecallBytes: 8_192,
       maxSubagentMessages: 100,
       maxSubagentMessageBytes: 1_048_576,
+      contextPolicy: freezeRunContextPolicy('normal'),
       contextCompactionMode: 'balanced',
       revision: 1,
     },
@@ -5456,8 +5457,6 @@ const modelStreamRetryAttemptIdentityScenario: Scenario = async () => {
         threadId,
         now,
         JSON.stringify({
-          maxContextTokens: 8_192,
-          maxOutputTokens: 1_024,
           maxRunSteps: 20,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
@@ -5466,6 +5465,7 @@ const modelStreamRetryAttemptIdentityScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
           contextCompactionMode: 'balanced',
           revision: 1,
         }),
@@ -6264,6 +6264,7 @@ const planExecutionModeScenario: Scenario = async () => {
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
           contextCompactionMode: 'balanced',
+          contextProfile: 'normal',
         },
       }),
     } as never,
@@ -6520,6 +6521,7 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
       maxRecallBytes: 8_192,
       maxSubagentMessages: 1_000,
       maxSubagentMessageBytes: 1_048_576,
+      contextPolicy: freezeRunContextPolicy('normal'),
       contextCompactionMode: 'balanced',
       revision: 1,
     };
@@ -6528,11 +6530,16 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
       /AGENT_DURABLE_STATE_INVALID/,
       'durable Run budget with a removed field must fail closed',
     );
-    const { maxRawToolBytes: _removedRawQuota, ...currentRunBudget } = legacyRunBudget;
+    const {
+      maxRawToolBytes: _removedRawQuota,
+      maxContextTokens: _removedContextCapability,
+      maxOutputTokens: _removedOutputCapability,
+      ...currentRunBudget
+    } = legacyRunBudget;
     assert.deepEqual(
       parseRunBudget(JSON.stringify(currentRunBudget)),
       currentRunBudget,
-      'new durable Run budgets without maxRawToolBytes must decode',
+      'new durable Run budgets without removed capability/quota fields must decode',
     );
   } finally {
     await db.close().catch(() => undefined);
@@ -6705,8 +6712,6 @@ const providerFallbackChainScenario: Scenario = async () => {
         threadId,
         now,
         JSON.stringify({
-          maxContextTokens: primaryCapabilities.contextWindow,
-          maxOutputTokens: primaryCapabilities.maxOutputTokens,
           maxRunSteps: 20,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
@@ -6715,6 +6720,7 @@ const providerFallbackChainScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
           contextCompactionMode: 'balanced',
           revision: 1,
         }),
@@ -6946,8 +6952,6 @@ const restartRecoveryScenario: Scenario = async () => {
   const now = 1_800_000_000;
 
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 4_096,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -6956,6 +6960,7 @@ const restartRecoveryScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -7649,8 +7654,6 @@ const appDisableScopeScenario: Scenario = async () => {
   });
   const now = 1_800_100_000;
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 4_096,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -7659,6 +7662,7 @@ const appDisableScopeScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -7922,8 +7926,6 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
   const stateCommit = new SqliteStateCommitAdapter(db);
   const now = 1_800_200_000;
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 4_096,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -7932,6 +7934,7 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -8156,8 +8159,6 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 4_096,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -8166,6 +8167,7 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -8566,8 +8568,6 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 4_096,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -8576,6 +8576,7 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -9632,8 +9633,6 @@ const subagentGovernedMutationScenario: Scenario = async () => {
         durableRunId,
         scenarioScope.appId,
         JSON.stringify({
-          maxContextTokens: 16_384,
-          maxOutputTokens: 4_096,
           maxRunSteps: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
@@ -9642,6 +9641,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
           contextCompactionMode: 'balanced',
           revision: 1,
         }),
@@ -10057,8 +10057,6 @@ const subagentMailboxTtlScenario: Scenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 4_096,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -10067,6 +10065,7 @@ const subagentMailboxTtlScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -10207,7 +10206,7 @@ const subagentMailboxTtlScenario: Scenario = async () => {
           subagentMessages: 2,
           subagentMessageBytes: 64,
         },
-        budget: { maxRunSteps: 100, maxToolOutputBytes: 1_048_576 },
+        budget: { maxRunSteps: 100, maxToolOutputBytes: 1_048_576, contextPolicy: freezeRunContextPolicy('normal') },
         definition: { environment: null },
       } as unknown as RunView,
     );
@@ -10534,7 +10533,7 @@ const subagentProfileStrategyScenario: Scenario = async () => {
         subagentMessages: 0,
         subagentMessageBytes: 0,
       },
-      budget: { maxRunSteps: 64, maxToolOutputBytes: 1_048_576 },
+      budget: { maxRunSteps: 64, maxToolOutputBytes: 1_048_576, contextPolicy: freezeRunContextPolicy('normal') },
       definition: { environment: { transport: 'workspace-profile' } },
     } as unknown as RunView,
   );
@@ -10619,8 +10618,6 @@ const confirmedMutationLeaseFinalizationScenario: Scenario = async () => {
       configurationVersion: 1,
     };
     const budget = {
-      maxContextTokens: 16_384,
-      maxOutputTokens: 4_096,
       maxRunSteps: 100,
       maxActiveExecutionSeconds: 3_600,
       toolTimeoutSeconds: 120,
@@ -10629,6 +10626,7 @@ const confirmedMutationLeaseFinalizationScenario: Scenario = async () => {
       maxRecallBytes: 8_192,
       maxSubagentMessages: 100,
       maxSubagentMessageBytes: 1_048_576,
+      contextPolicy: freezeRunContextPolicy('normal'),
       contextCompactionMode: 'balanced',
       revision: 1,
     };
@@ -12292,8 +12290,6 @@ const acpInnerPermissionDurabilityScenario: Scenario = async () => {
         runId,
         scope.appId,
         JSON.stringify({
-          maxContextTokens: 16_384,
-          maxOutputTokens: 4_096,
           maxRunSteps: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
@@ -12302,6 +12298,7 @@ const acpInnerPermissionDurabilityScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
           contextCompactionMode: 'balanced',
           revision: 1,
         }),
@@ -12600,8 +12597,6 @@ const idempotencyTtlScenario: Scenario = async () => {
     configurationVersion: 1,
   };
   const budget = {
-    maxContextTokens: 16_384,
-    maxOutputTokens: 4_096,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -12610,6 +12605,7 @@ const idempotencyTtlScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   };
@@ -12808,6 +12804,86 @@ const idempotencyTtlScenario: Scenario = async () => {
   }
 };
 
+const modelAwareContextBudgetScenario: Scenario = async () => {
+  const normal = freezeRunContextPolicy('normal');
+  const extended = freezeRunContextPolicy('extended');
+  assert.deepEqual(normal, {
+    profile: 'normal',
+    effectiveWindowPercent: 92,
+    softPressurePercent: 80,
+    toolOutputFloorPercent: 25,
+  });
+  assert.deepEqual(extended, {
+    profile: 'extended',
+    effectiveWindowPercent: 96,
+    softPressurePercent: 88,
+    toolOutputFloorPercent: 40,
+  });
+
+  const normalWindow = resolveModelContextBudget(normal, 200_000, 8_000);
+  const extendedWindow = resolveModelContextBudget(extended, 200_000, 8_000);
+  assert.deepEqual(normalWindow, {
+    physicalInputTokens: 192_000,
+    effectiveInputTokens: 176_640,
+    softPressureTokens: 141_312,
+  });
+  assert.deepEqual(extendedWindow, {
+    physicalInputTokens: 192_000,
+    effectiveInputTokens: 184_320,
+    softPressureTokens: 162_201,
+  });
+
+  const budget: RunView['budget'] = {
+    contextPolicy: normal,
+    maxRunSteps: 80,
+    maxActiveExecutionSeconds: 1_800,
+    toolTimeoutSeconds: 60,
+    maxToolOutputBytes: 65_536,
+    maxRecallItems: 5,
+    maxRecallBytes: 8_192,
+    maxSubagentMessages: 1_000,
+    maxSubagentMessageBytes: 2_097_152,
+    contextCompactionMode: 'balanced',
+    revision: 1,
+  };
+  const atHardPressure = pressureAdjustedToolOutputBytes(budget, {
+    inputTokens: normalWindow.effectiveInputTokens,
+    reservedOutputTokens: 8_000,
+    contextWindowTokens: 200_000,
+    source: 'provider',
+    updatedAt: 2,
+  });
+  assert.equal(atHardPressure, 16_384);
+
+  const earlyPressurePlan = await contextService(
+    Array.from({ length: 8 }, (_, index) =>
+      entry(index + 1, index % 2 === 0 ? 'user_input' : 'assistant_message', {
+        text: 'history '.repeat(160),
+      }),
+    ),
+  ).compose({
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Continue.',
+    modelContextWindow: 8_192,
+    maxContextTokens: 7_000,
+    softContextTokens: 900,
+    reservedOutputTokens: 512,
+    maxRecallItems: 1,
+    maxRecallBytes: 1_024,
+    tools: [],
+  });
+  assert.equal(earlyPressurePlan.compacted, true);
+
+  return [
+    { name: 'normal_effective_context_tokens', value: normalWindow.effectiveInputTokens, unit: 'tokens' },
+    { name: 'extended_effective_context_tokens', value: extendedWindow.effectiveInputTokens, unit: 'tokens' },
+    { name: 'pressure_tool_output_floor_bytes', value: atHardPressure, unit: 'bytes' },
+    { name: 'soft_pressure_compactions', value: earlyPressurePlan.compacted ? 1 : 0, unit: 'plans' },
+  ];
+};
+
 const cumulativeTokenCeilingRemovedScenario: Scenario = async () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-token-ceiling-removed-'));
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'token-ceiling.sqlite', nodeEnv: 'test' });
@@ -12824,8 +12900,6 @@ const cumulativeTokenCeilingRemovedScenario: Scenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxContextTokens: 200_000,
-    maxOutputTokens: 8_192,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -12834,6 +12908,7 @@ const cumulativeTokenCeilingRemovedScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -12998,8 +13073,6 @@ const progressAwareLoopGuardScenario: Scenario = async () => {
     configurationVersion: 1,
   });
   const budget = JSON.stringify({
-    maxContextTokens: 200_000,
-    maxOutputTokens: 8_192,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -13008,6 +13081,7 @@ const progressAwareLoopGuardScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -13298,8 +13372,6 @@ const publicAgentErrorTaxonomyScenario: Scenario = async () => {
 
 const durableBoundaryDecodeScenario: Scenario = async () => {
   const budget = {
-    maxContextTokens: 8_192,
-    maxOutputTokens: 1_024,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -13308,6 +13380,7 @@ const durableBoundaryDecodeScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   };
@@ -13525,8 +13598,6 @@ const completionGateScenario: Scenario = async () => {
       [
         now,
         JSON.stringify({
-          maxContextTokens: 16_384,
-          maxOutputTokens: 4_096,
           maxRunSteps: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
@@ -13535,6 +13606,7 @@ const completionGateScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
           contextCompactionMode: 'balanced',
           revision: 1,
         }),
@@ -13815,8 +13887,6 @@ const userInputClarificationScenario: Scenario = async () => {
         'Deploy the service, but the target is not specified.',
         now,
         JSON.stringify({
-          maxContextTokens: 16_384,
-          maxOutputTokens: 4_096,
           maxRunSteps: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
@@ -13825,6 +13895,7 @@ const userInputClarificationScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
           contextCompactionMode: 'balanced',
           revision: 1,
         }),
@@ -14197,8 +14268,6 @@ const modelFinishReasonStateMachineScenario: Scenario = async () => {
                ?, ?, ?, ?, 1, ?, ?, ?)`,
       [
         JSON.stringify({
-          maxContextTokens: 16_384,
-          maxOutputTokens: 4_096,
           maxRunSteps: 100,
           maxActiveExecutionSeconds: 3_600,
           toolTimeoutSeconds: 120,
@@ -14207,6 +14276,7 @@ const modelFinishReasonStateMachineScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextPolicy: freezeRunContextPolicy('normal'),
           contextCompactionMode: 'balanced',
           revision: 1,
         }),
@@ -14432,8 +14502,6 @@ const providerContinuationRoundTripScenario: Scenario = async () => {
       [threadId, now, now],
     );
     const budget = {
-      maxContextTokens: 16_384,
-      maxOutputTokens: 4_096,
       maxRunSteps: 100,
       maxActiveExecutionSeconds: 3_600,
       toolTimeoutSeconds: 120,
@@ -14442,6 +14510,7 @@ const providerContinuationRoundTripScenario: Scenario = async () => {
       maxRecallBytes: 8_192,
       maxSubagentMessages: 100,
       maxSubagentMessageBytes: 1_048_576,
+      contextPolicy: freezeRunContextPolicy('normal'),
       contextCompactionMode: 'balanced',
       revision: 1,
     };
@@ -14892,8 +14961,6 @@ const checkpointWorkspaceEvidenceScenario: Scenario = async () => {
     })();
 
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 2_048,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -14902,6 +14969,7 @@ const checkpointWorkspaceEvidenceScenario: Scenario = async () => {
     maxRecallBytes: 65_536,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -16463,6 +16531,7 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
       maxSubagentMessages: 100,
       maxSubagentMessageBytes: 1_048_576,
       contextCompactionMode: 'balanced',
+      contextProfile: 'normal',
     },
   };
   let currentModel = incompatibleModel;
@@ -18785,8 +18854,6 @@ const browserScreenshotVisionScenario: Scenario = async () => {
     close: async () => undefined,
   };
   const budget = JSON.stringify({
-    maxContextTokens: 16_384,
-    maxOutputTokens: 2_048,
     maxRunSteps: 100,
     maxActiveExecutionSeconds: 3_600,
     toolTimeoutSeconds: 120,
@@ -18795,6 +18862,7 @@ const browserScreenshotVisionScenario: Scenario = async () => {
     maxRecallBytes: 65_536,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextPolicy: freezeRunContextPolicy('normal'),
     contextCompactionMode: 'balanced',
     revision: 1,
   });
@@ -19721,6 +19789,7 @@ const scenarios = new Map<string, Scenario>([
   ['runtime/acp-inner-permission-replay', acpInnerPermissionReplayScenario],
   ['runtime/acp-inner-permission-durable', acpInnerPermissionDurabilityScenario],
   ['runtime/idempotency-ttl', idempotencyTtlScenario],
+  ['runtime/model-aware-context-budget', modelAwareContextBudgetScenario],
   ['runtime/cumulative-token-ceiling-removed', cumulativeTokenCeilingRemovedScenario],
   ['runtime/progress-aware-loop-guard', progressAwareLoopGuardScenario],
   ['http/public-agent-error-taxonomy', publicAgentErrorTaxonomyScenario],

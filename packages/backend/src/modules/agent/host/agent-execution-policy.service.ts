@@ -1,3 +1,4 @@
+import type { AgentContextProfile } from '../agent-defaults';
 import type { Scope } from '../agent.types';
 import type { AgentSettingsService, AgentSettingsView } from './agent-settings.service';
 import type { AppStoragePort } from './app-storage.port';
@@ -14,6 +15,7 @@ export interface AgentExecutionPolicyOverrides {
   maxSubagentMessages?: number;
   maxSubagentMessageBytes?: number;
   contextCompactionMode?: ContextCompactionMode;
+  contextProfile?: AgentContextProfile;
 }
 
 export interface AgentExecutionPolicyEffective {
@@ -26,6 +28,7 @@ export interface AgentExecutionPolicyEffective {
   maxSubagentMessages: number;
   maxSubagentMessageBytes: number;
   contextCompactionMode: ContextCompactionMode;
+  contextProfile: AgentContextProfile;
 }
 
 export interface AgentExecutionPolicyView {
@@ -36,6 +39,7 @@ export interface AgentExecutionPolicyView {
 
 const STORAGE_KEY = 'agent.execution-policy.v1';
 const modes = new Set<ContextCompactionMode>(['aggressive', 'balanced', 'conservative']);
+const contextProfiles = new Set<AgentContextProfile>(['normal', 'extended']);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 const positiveInteger = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) > 0;
@@ -50,6 +54,7 @@ const defaultsFrom = (settings: AgentSettingsView): AgentExecutionPolicyEffectiv
   maxSubagentMessages: settings.effectiveSettings.subagents.maxSubagentMessagesPerRun,
   maxSubagentMessageBytes: settings.effectiveSettings.subagents.maxSubagentMessageBytesPerRun,
   contextCompactionMode: 'balanced',
+  contextProfile: 'normal',
 });
 
 const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
@@ -64,6 +69,7 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
     'maxSubagentMessages',
     'maxSubagentMessageBytes',
     'contextCompactionMode',
+    'contextProfile',
   ]);
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   const result: AgentExecutionPolicyOverrides = {};
@@ -89,6 +95,12 @@ const parseOverrides = (raw: unknown): AgentExecutionPolicyOverrides => {
       throw new Error('VALIDATION_FAILED');
     }
     result.contextCompactionMode = raw.contextCompactionMode as ContextCompactionMode;
+  }
+  if ('contextProfile' in raw) {
+    if (typeof raw.contextProfile !== 'string' || !contextProfiles.has(raw.contextProfile as AgentContextProfile)) {
+      throw new Error('VALIDATION_FAILED');
+    }
+    result.contextProfile = raw.contextProfile as AgentContextProfile;
   }
   return result;
 };

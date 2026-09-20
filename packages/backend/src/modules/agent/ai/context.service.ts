@@ -423,8 +423,10 @@ export class ContextService {
       !Number.isSafeInteger(input.modelContextWindow) ||
       !Number.isSafeInteger(input.maxContextTokens) ||
       !Number.isSafeInteger(input.reservedOutputTokens) ||
+      (input.softContextTokens !== undefined && !Number.isSafeInteger(input.softContextTokens)) ||
       input.modelContextWindow < 1 ||
       input.maxContextTokens < 1 ||
+      (input.softContextTokens !== undefined && input.softContextTokens < 1) ||
       input.reservedOutputTokens < 1 ||
       input.reservedOutputTokens >= input.modelContextWindow
     ) {
@@ -467,6 +469,7 @@ export class ContextService {
     };
 
     const availableTokens = Math.min(input.maxContextTokens, input.modelContextWindow - input.reservedOutputTokens);
+    const softPressureTokens = Math.min(input.softContextTokens ?? availableTokens, availableTokens);
     const compactionMode = input.compactionMode ?? 'balanced';
     const compactionRatio = compactionMode === 'aggressive' ? 0.65 : compactionMode === 'conservative' ? 0.92 : 0.8;
     const safetyTokens = estimateTokens(SAFETY_MESSAGE);
@@ -754,7 +757,9 @@ export class ContextService {
     );
     const hardHistoryPressure =
       projectedTokens(heuristicUsedTokens + controlTokenReserve + totalLedgerTokens) > preSummaryLedgerCeiling;
-    const historyPressure = Boolean(ledgerPage.nextCursor) || hardHistoryPressure;
+    const softHistoryPressure =
+      projectedTokens(heuristicUsedTokens + controlTokenReserve + totalLedgerTokens) > softPressureTokens;
+    const historyPressure = Boolean(ledgerPage.nextCursor) || hardHistoryPressure || softHistoryPressure;
     const summaryCapacity = Math.max(0, remainingBeforeHistory - threadAnchorTokenReserve - threadRecallTokenReserve);
     const summaryTokenReserve =
       this.checkpoints && historyPressure && summaryCapacity >= 64
@@ -845,7 +850,7 @@ export class ContextService {
     if (compacted && selectedLedgerGroups.length > 0) {
       const targetTokens = Math.max(
         projectedTokens(mandatoryHeuristicTokens),
-        Math.floor(availableTokens * compactionRatio),
+        Math.min(softPressureTokens, Math.floor(availableTokens * compactionRatio)),
       );
       for (const group of selectedLedgerGroups) {
         if (usedTokens <= targetTokens) break;
@@ -974,6 +979,7 @@ export class ContextService {
           threadId: input.threadId,
           sources: sourceRanges,
           maxContextTokens: input.maxContextTokens,
+          softContextTokens: softPressureTokens,
           modelContextWindow: input.modelContextWindow,
           reservedOutputTokens: input.reservedOutputTokens,
           compactionMode,

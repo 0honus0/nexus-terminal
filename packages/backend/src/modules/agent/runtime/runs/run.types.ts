@@ -1,3 +1,4 @@
+import type { AgentContextProfile } from '../../agent-defaults';
 import type { AgentRunEnvironmentSelection, AgentRunEnvironmentSnapshot, JsonValue, Scope } from '../../agent.types';
 import type { AgentModelCapability, ModelCapabilitySnapshot, ModelRef, ReasoningEffort } from '../../ai/model.types';
 import type { RunPlan } from '../planning/plan.types';
@@ -93,9 +94,15 @@ export interface CreateRunCommand {
   command: CommandIdentity;
 }
 
+export interface RunContextPolicy {
+  profile: AgentContextProfile;
+  effectiveWindowPercent: number;
+  softPressurePercent: number;
+  toolOutputFloorPercent: number;
+}
+
 export interface RunBudget {
-  maxContextTokens: number;
-  maxOutputTokens: number;
+  contextPolicy: RunContextPolicy;
   maxRunSteps: number;
   maxActiveExecutionSeconds: number;
   toolTimeoutSeconds: number;

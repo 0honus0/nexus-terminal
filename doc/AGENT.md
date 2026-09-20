@@ -414,11 +414,11 @@ Provider 使用 OpenAI-compatible 配置模型，credential 加密保存且 API 
 
 Backend 的 `ModelCapabilityResolver` 统一解析模型物理能力。当前 Nexus Registry 可按已知/canonical model id 提供 `contextWindow`、`maxOutputTokens`、`supportsTools` 与 reasoning metadata；用户保存模型时只持久化相对 Registry 的 capability override。未知/私有模型如果没有完整的人工 capability，必须报 `MODEL_CAPABILITY_INCOMPLETE`，不能偷偷回退到固定 32K/4K。Provider live capability ingestion 仍是后续扩展，未交付前不得把普通 `/models` discovery 描述成 capability authority。
 
-每个 Run 冻结 Provider configuration version、最终 model capability 与 reasoning effort。模型/Registry 能力在 Run 创建后发生变化，不得改写已有 Run 的 definition snapshot；下一次 Run 才使用新能力。`maxContextTokens`/`maxOutputTokens` 来自模型物理 capability，不是用户预算；step/time/tool/recall/subagent 等执行预算来自 User defaults + App-scoped execution policy，并在 Run 创建时冻结且受 System/User hard limit 约束。
+每个 Run 冻结 Provider configuration version、最终 model capability 与 reasoning effort。模型/Registry 能力在 Run 创建后发生变化，不得改写已有 Run 的 definition snapshot；下一次 Run 才使用新能力。模型物理 `contextWindow/maxOutputTokens` 只存在于冻结的 RunDefinition model capability / route snapshot，不再复制进 RunBudget。RunBudget 只保存 step/time/tool/recall/subagent 执行预算与冻结的 context policy；这些预算来自 User defaults + App-scoped execution policy，并受 System/User hard limit 约束。
 
 OpenAI-compatible Provider 支持 `chat-completions` 与 `responses` 两种协议，由 Provider 配置显式选择。两种协议统一通过唯一的 `@ai-sdk/openai` `createOpenAI({ baseURL, ... })` 接入：Chat 使用 `openai.chat(modelId)`，Responses 使用 `openai.responses(modelId)`；Nexus 不再维护独立 Responses payload/SSE codec，SDK 的统一 `LanguageModelV4` stream 再映射为 Core `ModelEvent`。第三方 endpoint 仍必须真实兼容所选 OpenAI wire，不能因使用该 SDK 就假定任意第三方 API 自动支持 Responses。两种协议都不得透传 caller-owned/raw `prompt_cache_key`、Codex 专属 thread/turn metadata 或为了 cache 命中而扩散 provider-specific identity header；`ModelCacheHint.affinityKey` 仍是 provider-neutral routing hint。只有 frozen model capability `supportsPromptCacheKey=true` 且 endpoint 精确为官方 `https://api.openai.com/v1` 时，Adapter 才可把 `affinityKey ?? scopeKey`、provider/model/config 与稳定 prefix lineage 做不可逆、长度受限的 hash 后映射为 `promptCacheKey`；第三方 OpenAI-compatible endpoint 默认不发送该 vendor 字段。第一版不启用 `promptCacheOptions` 或 explicit cache breakpoint。Provider 双协议不等于恢复 Nexus 内建 DNS pinning、redirect/SSRF policy 或 private-host exception。
 
-Core model input 还必须保持 cache-friendly 且与 Provider 无关：稳定 instructions（Nexus safety → 当前 scope 的 Repo Project Instructions → 已签名 Skill metadata）在前，append-oriented Ledger/tool chronology 随后，本轮 user input 再后，Goal/Plan/Collaboration/Recall 等易变 snapshot 放在尾部。`runId/attemptId/contextEpoch/credential revision/routing identity` 等控制面事实不得为了 cache 或诊断进入模型正文。Tool schema 要确定性 canonicalize/稳定排序；达到 step budget 时通过 `toolMode=none` 禁止新 Tool，而不是删除 schema 破坏前缀。长上下文压缩采用 generation boundary：一次生成稳定 summary 后开启新 generation，不得每轮重写旧 history。
+Core model input 还必须保持 cache-friendly 且与 Provider 无关：稳定 instructions（Nexus safety → 当前 scope 的 Repo Project Instructions → 已签名 Skill metadata）在前，append-oriented Ledger/tool chronology 随后，本轮 user input 再后，Goal/Plan/Collaboration/Recall 等易变 snapshot 放在尾部。`runId/attemptId/contextEpoch/credential revision/routing identity` 等控制面事实不得为了 cache 或诊断进入模型正文。Tool schema 要确定性 canonicalize/稳定排序；达到 step budget 时通过 `toolMode=none` 禁止新 Tool，而不是删除 schema 破坏前缀。长上下文使用冻结的 model-aware Normal/Extended policy：Normal 默认使用物理 input capacity 的 92% 作为 effective boundary、80% 作为 soft pressure；Extended 分别为 96%/88%。达到 soft pressure 后可提前 compaction，且模型可见 Tool result projection 会随 context pressure 收紧到冻结 floor；原始 ToolResult/evidence 仍完整持久化。长上下文压缩采用 generation boundary：一次生成稳定 summary 后开启新 generation，不得每轮重写旧 history。
 
 Repo Project Instructions 第一版只认 Workspace 内的 canonical `AGENTS.md`。Runner 以 `/workspace/work` 为 logical work root，按目标路径向上寻找最近的 `.git` directory 或 worktree-style `.git` file 作为 project root；没有 repo marker 时只使用 work root。只加载 project root → target directory 的 progressive scope，deeper instruction 后置，不扫描 unrelated subtree。Project instruction snapshot 的 path/scope/projectRoot/source SHA-256/byte provenance 只作为当次 Context 的 transient source；它不进入 Memory，不成为 Ledger 或 ContextCheckpoint 的 business truth，也不获得 Tool approval、capability 或安全策略权威。源 hash 进入 stable instruction，因此文件变化通过既有 `stablePrefixHash` / cache lineage 自然失效，不建立第二套 cache invalidation owner。
 
@@ -932,10 +932,9 @@ Agent 改动仍必须遵守以下 review invariant：
 ### 已决定、待实现
 
 1. Provider live capability ingestion：只有语义明确且可验证的 Provider metadata 才能覆盖/补充 Registry；普通 `/models` discovery 仍不能猜 capability。
-2. Agent 执行预算仍需补齐“按模型窗口缩放的 normal/extended policy”与 no-progress/repeated-operation guard；现有 App override + hard limit 已交付，但不能把它描述为完整的健康长任务策略。
-3. Suspended SSH session 的跨设备 takeover/owner lease 仍未形成正式状态机；现有 `prepareResume/commitResume/rollbackResume` 解决单次恢复事务，不等价于跨设备抢占。
-4. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
-5. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
+2. Suspended SSH session 的跨设备 takeover/owner lease 仍未形成正式状态机；现有 `prepareResume/commitResume/rollbackResume` 解决单次恢复事务，不等价于跨设备抢占。
+3. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
+4. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
 
 ## 24. 修改规则
 
