@@ -27,9 +27,9 @@
 
 ## 当前验证结论
 
-最近一次已提交代码的 isolated deterministic Agent baseline 为 **68/68 PASS**；P-121 Backend typecheck/build 与 Agent Runner build PASS，最近涉及 Frontend 的 P-059 isolated `vue-tsc` / Vite build 也 PASS；Problem-scoped format 与 `git diff --check` 均已通过。
+最近一次已提交代码的 isolated deterministic Agent baseline 为 **68/68 PASS**；P-121 Backend typecheck/build 与 Agent Runner build PASS，residual maintenance 中的 tighter Subagent context budget 与 Native recovery safe-point regression 也都在 68/68 baseline 下 PASS；最近涉及 Frontend 的 residual settings/format 提交已通过 `vue-tsc`。
 
-当前 worktree 仍保留一批**已审计但不应整批提交**的 residual：格式/展示排版、三语 i18n key 顺序、一个无 caller 的 Subagent context `maxBytes` 草稿，以及一份混有旧 fixture 的 runner 工作副本。它们不构成当前 open Problem，也不得用 `restore` / `reset` 等方式擅自清除；后续只有出现新的可执行代码证据时才重新建 Problem。
+用户随后明确要求继续审核并提交 residual；其中 23 个文件的有效内容已按格式、i18n、bounded context、settings presentation 与 regression coverage 等逻辑边界分别提交。当前 worktree 只剩 **1 份 stale runner 工作副本**：它少当前 `architecture/public-contract-alignment` 与 tighter-budget regression，且没有 worktree-only 新断言或 metric，因此明确拒绝整文件提交。它不构成当前 open Problem，也不得覆盖当前 committed regression tree。
 
 本机仍有两个环境层限制，不作为当前 open Problem 自动施工：
 

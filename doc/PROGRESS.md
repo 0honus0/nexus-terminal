@@ -8,12 +8,12 @@
 
 - Repo：`/home/agentdock/AgentDock/nexus-terminal-dev`
 - Branch：`dev`
-- 最新功能代码基线：`b6158835044dfa8abe04281258529f8628755cde`
-- 最新功能 subject：`fix(agent): close P-121 public contract drift`
-- P-121 提交后 `git status --short` 为 **26** 条，其中 2 条是本轮待做 docs-only closeout，剩余 **24** 条是已分类、必须保留的代码 residual。
-- **这些 residual 必须全部保留。** 禁止为了“清理”执行 `reset`、`stash`、`clean`、`restore`、checkout overwrite 或其它可能丢失累计工作的命令。
-- 当前 index 在 P-121 提交后为空；不要把 residual 整批 stage，也不要把旧 runner 工作副本当成当前 authoritative regression tree。
-- 本轮功能 Problem 已全部闭环；`doc/PROBLEM.md` 与本文件只做独立 docs-only closeout，不改变代码树。
+- 最新代码基线：`c54fafb3b87a2437188b11e8918b8f38ccc98667`
+- 最新代码 subject：`test(agent): cover native recovery safe point`
+- 用户随后明确要求继续审核并提交 24 条 residual；其中 **23 个文件的有效内容已按逻辑边界提交**，当前只剩 **1 个 stale runner 工作副本**。
+- 这 1 个 runner residual 已明确拒绝整文件提交：它缺当前 `architecture/public-contract-alignment` 与 tighter-budget regression，且没有 worktree-only 新断言或 metric。
+- 当前 index 为空；不要把旧 runner 工作副本当成 authoritative regression tree，也不要用它覆盖当前 HEAD。
+- 本轮功能 Problem 仍全部闭环，open Problem 保持 0；后续 residual maintenance 不改变 Problem 编号规则。
 
 ## 2. 当前工作目标：本轮 Problem 拆分已收口
 
@@ -47,6 +47,14 @@
 - `ea4c03d` — P-059 owner decomposition / codec extraction
 - `b615883` — P-121 public contract drift
 
+### Residual maintenance commits
+
+- `fe42259` — canonical Agent formatting cleanup across 18 residual files
+- `0bab64f` — three-language related-label grouping with JSON semantics unchanged
+- `45e5935` — parameterized Subagent collaboration context byte budget + 4 KiB regression caller
+- `2432fb9` — Agent settings panel presentation compaction
+- `c54fafb` — Native Root recovery safe-point regression coverage
+
 ### 下一步从哪里继续
 
 **当前没有待施工 Problem。**
@@ -55,8 +63,8 @@
 
 - P-059 已以 `ea4c03d` 独立提交，owner decomposition 不复制 durable authority；isolated deterministic **67/67 PASS**。
 - residual 审计随后发现 P-121：P-078/P-109 已提交能力与 public description/type facade 存在 drift；旧 HEAD 在新增 regression 下真实 RED，修复后以 `b615883` 提交，isolated deterministic **68/68 PASS**。
-- docs-only closeout 完成后预计只保留 **24 个代码 residual**：19 个格式/展示排版、3 个 JSON deep-equal 的 i18n key-order、1 个无 caller 的 Subagent context `maxBytes` 草稿、1 个混有旧 fixture 且缺当前 P-121 regression 的 runner 工作副本。
-- 这些 residual 已审计为“不应整批提交”，也不得擅自 restore/clean。后续若要处理，必须先产生新的可验证代码证据。
+- 用户明确要求继续审核并提交这些 residual 后，格式、i18n、`maxBytes`、settings presentation 与 recovery safe-point 中有价值的内容已分别验证并提交。
+- 当前只剩 **1 个 stale runner residual**：worktree scenario map 少 `architecture/public-contract-alignment`，少 tighter-budget regression，且机器审计确认没有 worktree-only 新断言或 metric，因此拒绝整文件提交。
 
 ## 3. P-114 已完成事实与本轮深审修复
 
@@ -320,6 +328,7 @@ P-085 还补了 backend authority：
 - P-114：pure staged tree Backend/Agent Runner typecheck + build PASS；Frontend `vue-tsc` + Vite build PASS；deterministic **66/66 PASS**；P-059 leakage **0**；`git diff --cached --check` PASS。
 - P-059：pure staged tree Backend/Agent Runner typecheck + build PASS；Frontend `vue-tsc` + Vite build PASS；deterministic **67/67 PASS**；`architecture/agent-owner-decomposition` PASS；duplicate authority metric = 0。
 - P-121：regression-first 旧 HEAD 在 `architecture/public-contract-alignment` 真实 RED；最终 pure staged tree Backend typecheck/build + Agent Runner build PASS；deterministic **68/68 PASS**；P-121 runner region scoped Prettier clean，`git diff --cached --check` PASS。
+- residual maintenance：`fe42259` isolated Backend/Runner/Frontend typecheck PASS；`45e5935` Backend typecheck + deterministic **68/68 PASS**（4 KiB caller）；`2432fb9` Frontend `vue-tsc` PASS；`c54fafb` deterministic **68/68 PASS** 且记录 `native_recovery_model_safe_points`。
 
 未来若出现新 Problem，继续以“**isolated staged tree** 能独立 typecheck + deterministic PASS”为 commit 门槛；不要用当前 residual dirty worktree 替代已提交代码验证。
 
@@ -403,4 +412,4 @@ P-085 还补了 backend authority：
 
 ## 15. 后续会话一句话入口
 
-> 当前最新功能代码基线应包含 `b615883`（P-121 已提交）；随后可能紧跟一个 docs-only closeout commit，但代码树不变。open Problem 应为 **0**，下一编号 `P-122`。index 应为空；worktree 仍应保留约 **24 个已审计代码 residual**，不要整批 stage/restore。若没有新的当前代码证据，不继续人为创建 Problem。
+> 当前 HEAD 应包含 `c54fafb`（P-121 后 residual maintenance 已提交）；open Problem 应为 **0**，下一编号 `P-122`。index 应为空；worktree 只应剩 **1 个已明确拒绝整文件提交的 stale runner residual**，不要用它覆盖当前 regression tree。若没有新的当前代码证据，不继续人为创建 Problem。
