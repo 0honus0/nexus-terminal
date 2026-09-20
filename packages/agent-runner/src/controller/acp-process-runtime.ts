@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { MANAGED_PROCESS_DETACHED, signalManagedProcess, terminateManagedProcess } from '../managed-process';
+import { runnerLog } from '../logging';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocket, WebSocketServer } from 'ws';
@@ -8,6 +9,7 @@ import type { WorkspaceRuntimeEngine } from './workspace-runtime-engine';
 
 const MAX_FRAME_BYTES = 256 * 1024;
 const MAX_SOCKET_BUFFER_BYTES = 1024 * 1024;
+const MAX_STDERR_LOG_BYTES = 4 * 1024;
 
 interface ActiveProcess {
   workspaceId: string;
@@ -66,6 +68,7 @@ export class AcpProcessRuntime {
       stdio: ['pipe', 'pipe', 'pipe'],
       detached: MANAGED_PROCESS_DETACHED,
     });
+    let stderrTail = '';
     let closed = false;
     const active: ActiveProcess = {
       workspaceId,
@@ -105,8 +108,19 @@ export class AcpProcessRuntime {
       }
       websocket.send(chunk, { binary: true });
     });
-    child.stderr.resume();
-    child.on('error', () => {
+    child.stderr.on('data', (chunk: Buffer) => {
+      stderrTail += chunk.toString('utf8');
+      if (Buffer.byteLength(stderrTail, 'utf8') > MAX_STDERR_LOG_BYTES) {
+        stderrTail = Buffer.from(stderrTail, 'utf8').subarray(-MAX_STDERR_LOG_BYTES).toString('utf8');
+      }
+    });
+    child.on('error', (error) => {
+      runnerLog('warn', 'ACP process failed to start', {
+        workspaceId,
+        generation,
+        errorCode: error.message,
+        stderrTail: stderrTail || undefined,
+      });
       if (websocket.readyState === WebSocket.OPEN) websocket.close(1011, 'ACP_PROCESS_FAILED');
       active.close();
     });
@@ -115,6 +129,13 @@ export class AcpProcessRuntime {
       if (closed) return;
       closed = true;
       this.active.delete(active);
+      runnerLog(code === 0 ? 'debug' : 'warn', 'ACP process exited', {
+        workspaceId,
+        generation,
+        exitCode: code,
+        signal,
+        stderrTail: stderrTail || undefined,
+      });
       if (websocket.readyState === WebSocket.OPEN) {
         websocket.close(
           code === 0 ? 1000 : 1011,
