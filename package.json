@@ -1,6 +1,6 @@
 {
   "name": "nexus-terminal",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "scripts": {
     "build": "pnpm run build:backend && pnpm run build:frontend",

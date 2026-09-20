@@ -65,10 +65,6 @@
         "healthHealthy": "Healthy",
         "healthDegraded": "Degraded",
         "healthDisabled": "Disabled",
-        "categoryAi": "AI & Execution",
-        "categoryHost": "Host Machine & Ops",
-        "categoryRuntime": "Sandbox & Integration",
-        "categoryStorage": "Artifacts & Storage",
         "runsMetric": "Active Runs",
         "approvalsMetric": "Approvals",
         "grantsMetric": "Granted Capabilities",
@@ -82,7 +78,12 @@
         "uninstallFailed": "Failed to uninstall app",
         "deleteDataFailed": "The app was uninstalled, but retained data could not be deleted",
         "drainingNotice": "App is draining background tasks...",
-        "coreAppCannotUninstall": "Core builtin app cannot be uninstalled"
+        "coreAppCannotUninstall": "Core builtin app cannot be uninstalled",
+        "categoryMachine": "Host Machine",
+        "categoryWorkspace": "Workspace Sandbox",
+        "categoryBrowser": "Browser",
+        "categoryIntegration": "External Integrations",
+        "categoryData": "Data Access & Exchange"
       },
       "plugins": {
         "title": "Installable apps and skills",

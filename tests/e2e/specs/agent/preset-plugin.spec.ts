@@ -215,7 +215,7 @@ const installAndRunNexusAgent = async (
     });
   });
 
-  await step('grant model/run and bounded SSH mutation authority, then enable the installed Nexus Agent', async () => {
+  await step('grant bounded resource authority, then enable the installed Nexus Agent', async () => {
     const grants = await request.get('/api/v1/agent/apps/nexus.agent/grants');
     expect(grants.ok(), await grants.text()).toBeTruthy();
     const grantView = (await grants.json()) as Envelope<{
@@ -224,13 +224,13 @@ const installAndRunNexusAgent = async (
       grants: Array<{ capability: string }>;
     }>;
     expect(grantView.data.declaredCapabilities).toEqual(
-      expect.arrayContaining(['ai.model.use', 'runs.execute', 'workspace.runtime.execute', 'browser.operate']),
+      expect.arrayContaining(['workspace.read', 'workspace.write', 'browser.read', 'browser.interact']),
     );
     expect(grantView.data.grants).toHaveLength(0);
     const replaced = await request.put('/api/v1/agent/apps/nexus.agent/grants', {
       headers,
       data: {
-        capabilities: ['ai.model.use', 'runs.execute', 'machine.files.read', 'machine.shell.execute'],
+        capabilities: ['machine.files.read', 'machine.shell.execute'],
         expectedPolicyRevision: grantView.data.policyRevision,
       },
     });
@@ -519,7 +519,7 @@ const installAndRunNexusAgent = async (
                 configurationVersion: provider.version,
               },
             ],
-            capabilities: ['runs.execute'],
+            capabilities: [],
             peerMessaging: 'parent-child',
             mutationMode: 'read-only',
             maxSteps: 8,
@@ -841,16 +841,6 @@ test('uninstalled plugin retained AppStorage can be permanently deleted', async 
   expect(verified.ok(), await verified.text()).toBeTruthy();
   const installed = await request.post('/api/v1/agent/plugins/install', { headers, data: { stageId } });
   expect(installed.status(), await installed.text()).toBe(201);
-
-  const grants = await request.get('/api/v1/agent/apps/nexus.custom-surface/grants');
-  expect(grants.ok(), await grants.text()).toBeTruthy();
-  const grantView = (await grants.json()) as Envelope<{ policyRevision: number; declaredCapabilities: string[] }>;
-  expect(grantView.data.declaredCapabilities).toContain('storage.app');
-  const granted = await request.put('/api/v1/agent/apps/nexus.custom-surface/grants', {
-    headers,
-    data: { capabilities: ['storage.app'], expectedPolicyRevision: grantView.data.policyRevision },
-  });
-  expect(granted.ok(), await granted.text()).toBeTruthy();
 
   let app = await appSummary(request, 'nexus.custom-surface');
   const enabled = await request.patch('/api/v1/agent/apps/nexus.custom-surface', {

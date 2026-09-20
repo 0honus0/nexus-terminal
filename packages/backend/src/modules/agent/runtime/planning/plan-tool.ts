@@ -56,7 +56,6 @@ export const createPlanUpdateTool = (
       required: ['items'],
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = asRecord(input);

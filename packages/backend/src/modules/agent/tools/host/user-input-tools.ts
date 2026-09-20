@@ -55,7 +55,6 @@ export const createRequestUserInputTool = (cryptoHash: CryptoHashPort): AgentToo
       required: ['questions'],
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = asRecord(input);

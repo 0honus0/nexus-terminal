@@ -408,7 +408,7 @@ export const createBrowserTools = (
         },
       },
       riskClass: 'control',
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -485,7 +485,7 @@ export const createBrowserTools = (
       },
       riskClass: 'read',
       parallelSafe: true,
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -547,7 +547,7 @@ export const createBrowserTools = (
       },
       riskClass: 'read',
       parallelSafe: true,
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -659,7 +659,7 @@ export const createBrowserTools = (
         ],
       },
       riskClass: 'mutate',
-      capability: 'browser.operate',
+      capability: action === 'navigate' ? 'browser.read' : 'browser.interact',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -730,7 +730,7 @@ export const createBrowserTools = (
         required: ['sessionId', 'deltaY'],
       },
       riskClass: 'mutate',
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -794,7 +794,7 @@ export const createBrowserTools = (
         required: ['sessionId', 'key'],
       },
       riskClass: 'mutate',
-      capability: 'browser.operate',
+      capability: 'browser.interact',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -867,7 +867,7 @@ export const createBrowserTools = (
         required: ['sessionId'],
       },
       riskClass: 'mutate',
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -921,7 +921,7 @@ export const createBrowserTools = (
         required: ['sessionId', 'snapshotId', 'nodeRef', 'values'],
       },
       riskClass: 'mutate',
-      capability: 'browser.operate',
+      capability: 'browser.interact',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -977,7 +977,7 @@ export const createBrowserTools = (
         required: ['sessionId', 'mode', 'maxMillis'],
       },
       riskClass: 'control',
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -1030,7 +1030,7 @@ export const createBrowserTools = (
       },
       riskClass: 'read',
       parallelSafe: true,
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       const args = object(input);
@@ -1088,7 +1088,7 @@ export const createBrowserTools = (
         required: ['sessionId', 'snapshotId', 'nodeRef', 'artifactId'],
       },
       riskClass: 'mutate',
-      capability: 'browser.operate',
+      capability: 'browser.interact',
     },
     inspect: async (input, context, policyRevision) => {
       if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
@@ -1176,7 +1176,7 @@ export const createBrowserTools = (
         required: ['sessionId', 'snapshotId', 'nodeRef'],
       },
       riskClass: 'read',
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       if (!artifacts) throw new Error('BROWSER_ARTIFACT_STORE_UNAVAILABLE');
@@ -1264,7 +1264,7 @@ export const createBrowserTools = (
         required: ['sessionId'],
       },
       riskClass: 'control',
-      capability: 'browser.operate',
+      capability: 'browser.read',
     },
     inspect: async (input, context, policyRevision) => {
       const sessionId = string(object(input).sessionId, MAX_ID_BYTES);

@@ -65,10 +65,6 @@
         "healthHealthy": "正常稼働",
         "healthDegraded": "機能制限",
         "healthDisabled": "停止中",
-        "categoryAi": "AI とタスク実行",
-        "categoryHost": "ホスト操作と診断",
-        "categoryRuntime": "サンドボックスと連携",
-        "categoryStorage": "成果物とストレージ",
         "runsMetric": "実行中",
         "approvalsMetric": "承認待ち",
         "grantsMetric": "付与済み権限",
@@ -82,7 +78,12 @@
         "uninstallFailed": "アプリのアンインストールに失敗しました",
         "deleteDataFailed": "アプリはアンインストールされましたが、保持データを削除できませんでした",
         "drainingNotice": "アプリのバックグラウンドタスクを排出中です...",
-        "coreAppCannotUninstall": "コア組み込みアプリはアンインストールできません"
+        "coreAppCannotUninstall": "コア組み込みアプリはアンインストールできません",
+        "categoryMachine": "ホストマシン",
+        "categoryWorkspace": "Workspace サンドボックス",
+        "categoryBrowser": "ブラウザ",
+        "categoryIntegration": "外部連携",
+        "categoryData": "データアクセスと交換"
       },
       "plugins": {
         "title": "インストール可能な App と Skill",

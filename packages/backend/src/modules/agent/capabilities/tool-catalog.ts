@@ -1,5 +1,4 @@
 import type { JsonValue, Scope } from '../agent.types';
-import type { AgentCapability } from '../host/app.types';
 import { prepareJsonSchema } from '../json-schema-validator';
 import type { AgentTool, ToolAvailabilityContext, ToolDescriptor } from './tool.types';
 
@@ -9,10 +8,9 @@ export interface CatalogToolSchema {
   inputSchema: JsonValue;
 }
 
-export interface CapabilityContribution {
+export interface ToolContribution {
   schemaVersion: 1;
   id: string;
-  capability: AgentCapability;
   tools: readonly AgentTool[];
 }
 
@@ -37,12 +35,12 @@ const canonicalJson = (value: JsonValue): JsonValue => {
 export class ToolCatalog {
   private readonly tools = new Map<string, RegisteredTool>();
 
-  registerContribution(contribution: CapabilityContribution): void {
+  registerContribution(contribution: ToolContribution): void {
     this.validateContribution(contribution, () => false);
     this.installContribution(contribution);
   }
 
-  replaceOwnedContribution(scope: Scope, ownerKey: string, contribution: CapabilityContribution): void {
+  replaceOwnedContribution(scope: Scope, ownerKey: string, contribution: ToolContribution): void {
     this.validateContribution(
       contribution,
       (registered) =>
@@ -97,7 +95,7 @@ export class ToolCatalog {
   }
 
   private validateContribution(
-    contribution: CapabilityContribution,
+    contribution: ToolContribution,
     replaceable: (registered: RegisteredTool) => boolean,
   ): void {
     if (
@@ -105,13 +103,10 @@ export class ToolCatalog {
       !/^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/.test(contribution.id) ||
       contribution.tools.length > 256
     ) {
-      throw new Error('CAPABILITY_CONTRIBUTION_INVALID');
+      throw new Error('TOOL_CONTRIBUTION_INVALID');
     }
     const names = new Set<string>();
     for (const tool of contribution.tools) {
-      if (tool.descriptor.capability !== contribution.capability) {
-        throw new Error('CAPABILITY_CONTRIBUTION_MISMATCH');
-      }
       if (names.has(tool.descriptor.name)) throw new Error(`Duplicate Agent tool: ${tool.descriptor.name}`);
       names.add(tool.descriptor.name);
       const existing = this.tools.get(tool.descriptor.name);
@@ -120,7 +115,7 @@ export class ToolCatalog {
     }
   }
 
-  private installContribution(contribution: CapabilityContribution, scope?: Scope, ownerKey?: string): void {
+  private installContribution(contribution: ToolContribution, scope?: Scope, ownerKey?: string): void {
     for (const tool of contribution.tools) {
       this.tools.set(tool.descriptor.name, {
         tool,

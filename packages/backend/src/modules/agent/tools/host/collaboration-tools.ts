@@ -118,7 +118,6 @@ const delegateTool = (subagents: SubagentService, cryptoHash: CryptoHashPort): A
       },
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('delegate_subagent', '1', input, context, policyRevision, cryptoHash, 'control'),
@@ -146,7 +145,6 @@ const listSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('list_subagents', '1', input, context, policyRevision, cryptoHash, 'read'),
@@ -182,7 +180,6 @@ const joinSubagentsTool = (subagents: SubagentService, cryptoHash: CryptoHashPor
       },
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('join_subagents', '1', input, context, policyRevision, cryptoHash, 'control'),
@@ -242,7 +239,6 @@ const sendMessageTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): A
       },
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('send_agent_message', '1', input, context, policyRevision, cryptoHash, 'control'),
@@ -270,7 +266,6 @@ const readMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort): 
       },
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('read_agent_messages', '1', input, context, policyRevision, cryptoHash, 'control'),
@@ -303,7 +298,6 @@ const consumeMessagesTool = (mailbox: MailboxService, cryptoHash: CryptoHashPort
       },
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('consume_agent_messages', '1', input, context, policyRevision, cryptoHash, 'control'),
@@ -333,7 +327,6 @@ const getFactTool = (facts: SharedFactsService, cryptoHash: CryptoHashPort): Age
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('get_shared_fact', '1', input, context, policyRevision, cryptoHash, 'read'),
@@ -360,7 +353,6 @@ const compareAndSetFactTool = (facts: SharedFactsService, cryptoHash: CryptoHash
       },
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('compare_and_set_shared_fact', '1', input, context, policyRevision, cryptoHash, 'control'),
@@ -397,7 +389,6 @@ const proposeMemoryTool = (memories: MemoryService, cryptoHash: CryptoHashPort):
       },
     },
     riskClass: 'control',
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision) =>
     localInspection('propose_memory', '1', input, context, policyRevision, cryptoHash, 'control'),

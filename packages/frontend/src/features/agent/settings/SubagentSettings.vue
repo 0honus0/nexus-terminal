@@ -25,23 +25,7 @@
   const profileError = ref('');
   const selectedTemplateId = ref<AgentSubagentProfileTemplate['id']>('explore');
 
-  const capabilityOptions = [
-    'ai.model.use',
-    'runs.execute',
-    'machine.diagnostics.read',
-    'machine.files.read',
-    'machine.files.write',
-    'machine.shell.execute',
-    'machine.docker.mutate',
-    'workspace.runtime.execute',
-    'workspace.runtime.manage',
-    'integration.mcp.invoke',
-    'integration.acp.execute',
-    'browser.operate',
-    'artifacts.read',
-    'artifacts.write',
-    'storage.app',
-  ];
+  const capabilityOptions = ref<string[]>([]);
 
   const modelOptions = computed(() =>
     props.providers
@@ -79,7 +63,11 @@
     profileBusy.value = true;
     profileError.value = '';
     try {
-      const loaded = await agentApi.subagentSettings(selectedAppId.value);
+      const [loaded, grantView] = await Promise.all([
+        agentApi.subagentSettings(selectedAppId.value),
+        agentApi.appGrants(selectedAppId.value),
+      ]);
+      capabilityOptions.value = grantView.grants.map((grant) => grant.capability);
       profileSettings.value = {
         ...loaded,
         policy: { ...loaded.policy, profiles: cloneProfiles(loaded.policy.profiles) },
@@ -100,7 +88,7 @@
       role: 'Bounded child agent',
       defaultModel: { ...first.ref },
       allowedModels: [{ ...first.ref }],
-      capabilities: ['runs.execute'],
+      capabilities: [],
       peerMessaging: 'parent-child',
       mutationMode: 'read-only',
       maxSteps: Math.min(12, props.settings.hardLimits.maxRunSteps),

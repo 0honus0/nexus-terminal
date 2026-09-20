@@ -83,7 +83,7 @@ export const createConnectionListTool = (machine: MachineCapabilityPort, cryptoH
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'machine.diagnostics.read',
+    capability: 'machine.inspect',
   },
   inspect: async (input, context, policyRevision) => {
     const args = record(input);
@@ -153,7 +153,7 @@ export const createDiagnosticsTool = (machine: MachineCapabilityPort, cryptoHash
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'machine.diagnostics.read',
+    capability: 'machine.inspect',
   },
   inspect: async (input, context, policyRevision) => {
     const args = record(input);

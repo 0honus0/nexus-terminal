@@ -85,7 +85,6 @@ export class PluginAgentSdkDispatcher {
         return this.runFacade.definitions();
       case 'agent.providers.list':
         emptyParams(rawParams);
-        await this.requireGranted('ai.model.use');
         return this.runFacade.providers();
       case 'agent.threads.list': {
         const params = record(rawParams);
@@ -133,8 +132,6 @@ export class PluginAgentSdkDispatcher {
           'connectionIds',
           'initialGoal',
         ]);
-        await this.requireGranted('runs.execute');
-        await this.requireGranted('ai.model.use');
         const model = record(params.model);
         onlyKeys(model, ['providerId', 'modelId', 'configurationVersion']);
         return this.runFacade.createRun({
@@ -157,7 +154,6 @@ export class PluginAgentSdkDispatcher {
       case 'agent.runs.appendInput': {
         const params = record(rawParams);
         onlyKeys(params, ['runId', 'text', 'artifactRefs']);
-        await this.requireGranted('runs.execute');
         const run = await this.runFacade.getRun(string(params.runId));
         await this.runFacade.appendInput(
           run,
@@ -169,7 +165,6 @@ export class PluginAgentSdkDispatcher {
       case 'agent.runs.cancel': {
         const params = record(rawParams);
         onlyKeys(params, ['runId']);
-        await this.requireGranted('runs.execute');
         return this.runFacade.cancelRun(await this.runFacade.getRun(string(params.runId)));
       }
       case 'agent.runs.subscribe': {
@@ -202,7 +197,6 @@ export class PluginAgentSdkDispatcher {
       case 'agent.subagents.cancel': {
         const params = record(rawParams);
         onlyKeys(params, ['runId', 'delegationId']);
-        await this.requireGranted('runs.execute');
         const runId = string(params.runId);
         const delegationId = string(params.delegationId);
         const page = await this.runFacade.listSubagents(runId);
@@ -218,7 +212,6 @@ export class PluginAgentSdkDispatcher {
       case 'agent.approvals.resolve': {
         const params = record(rawParams);
         onlyKeys(params, ['approvalId', 'runId', 'decision']);
-        await this.requireGranted('runs.execute');
         const runId = string(params.runId);
         const approvalId = string(params.approvalId);
         const decision = params.decision;
@@ -229,12 +222,6 @@ export class PluginAgentSdkDispatcher {
         return this.runFacade.resolveApproval(approval, decision);
       }
     }
-  }
-
-  private async requireGranted(capability: 'ai.model.use' | 'runs.execute'): Promise<void> {
-    const grants = await agentApi.appGrants(this.appId);
-    if (!grants.declaredCapabilities.includes(capability)) throw new Error('PLUGIN_CAPABILITY_UNDECLARED');
-    if (!grants.grants.some((grant) => grant.capability === capability)) throw new Error('PLUGIN_CAPABILITY_DENIED');
   }
 
   close(): void {

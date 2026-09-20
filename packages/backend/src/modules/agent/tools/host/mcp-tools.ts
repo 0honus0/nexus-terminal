@@ -381,7 +381,7 @@ const createResourceTools = (
         riskClass: 'read',
         parallelSafe: true,
         modelExposure: 'deferred',
-        capability: 'integration.mcp.invoke',
+        capability: 'integration.mcp.read',
       },
       inspect: async (input, context, policyRevision) => {
         const args = asRecord(input);
@@ -435,7 +435,7 @@ const createResourceTools = (
         },
         riskClass: 'read',
         modelExposure: 'deferred',
-        capability: 'integration.mcp.invoke',
+        capability: 'integration.mcp.read',
       },
       inspect: async (input, context, policyRevision) => {
         const args = asRecord(input);
@@ -530,7 +530,7 @@ const createPromptTools = (
         riskClass: 'read',
         parallelSafe: true,
         modelExposure: 'deferred',
-        capability: 'integration.mcp.invoke',
+        capability: 'integration.mcp.read',
       },
       inspect: async (input, context, policyRevision) => {
         const args = asRecord(input);
@@ -586,7 +586,7 @@ const createPromptTools = (
         },
         riskClass: 'read',
         modelExposure: 'deferred',
-        capability: 'integration.mcp.invoke',
+        capability: 'integration.mcp.read',
       },
       inspect: async (input, context, policyRevision) => {
         const args = asRecord(input);
@@ -675,7 +675,7 @@ const createRemoteTool = (
       inputSchema: descriptor.inputSchema,
       riskClass: risk,
       modelExposure: 'deferred',
-      capability: 'integration.mcp.invoke',
+      capability: risk === 'read' ? 'integration.mcp.read' : 'integration.mcp.invoke',
     },
     inspect: async (input: JsonValue, context: ToolContext, policyRevision: number): Promise<ToolInspection> => {
       if (context.userId !== scope.userId || context.appId !== scope.appId) throw new Error('RESOURCE_FORBIDDEN');

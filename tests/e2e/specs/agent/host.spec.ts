@@ -711,7 +711,7 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
   });
 
   await step(
-    'live ACP and Browser capabilities are declared and default-granted without requiring Runner',
+    'live integration and Browser resource capabilities are declared and default-granted without requiring Runner',
     async () => {
       const response = await request.get('/api/v1/agent/apps/nexus.agent/grants');
       expect(response.ok(), await response.text()).toBeTruthy();
@@ -720,11 +720,14 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
         grants: Array<{ capability: string }>;
       }>;
       const grantedCapabilities = body.data.grants.map((grant) => grant.capability);
+      expect(body.data.declaredCapabilities).toContain('integration.mcp.read');
       expect(body.data.declaredCapabilities).toContain('integration.mcp.invoke');
-      expect(body.data.declaredCapabilities).toContain('integration.acp.execute');
-      expect(body.data.declaredCapabilities).toContain('browser.operate');
-      expect(grantedCapabilities).toContain('integration.acp.execute');
-      expect(grantedCapabilities).toContain('browser.operate');
+      expect(body.data.declaredCapabilities).toContain('integration.acp.invoke');
+      expect(body.data.declaredCapabilities).toContain('browser.read');
+      expect(body.data.declaredCapabilities).toContain('browser.interact');
+      expect(grantedCapabilities).toContain('integration.acp.invoke');
+      expect(grantedCapabilities).toContain('browser.read');
+      expect(grantedCapabilities).toContain('browser.interact');
     },
   );
 

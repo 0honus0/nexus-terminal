@@ -65,10 +65,6 @@
         "healthHealthy": "运行正常",
         "healthDegraded": "受控降级",
         "healthDisabled": "已停用",
-        "categoryAi": "AI 推理与执行",
-        "categoryHost": "宿主机操作与诊断",
-        "categoryRuntime": "沙箱与外部集成",
-        "categoryStorage": "产物交付与存储",
         "runsMetric": "运行中",
         "approvalsMetric": "待审批",
         "grantsMetric": "已授权能力",
@@ -82,7 +78,12 @@
         "uninstallFailed": "卸载失败",
         "deleteDataFailed": "插件已卸载，但保留数据删除失败",
         "drainingNotice": "应用正在排空后台任务中...",
-        "coreAppCannotUninstall": "内置核心应用不可卸载"
+        "coreAppCannotUninstall": "内置核心应用不可卸载",
+        "categoryMachine": "主机",
+        "categoryWorkspace": "Workspace 沙箱",
+        "categoryBrowser": "浏览器",
+        "categoryIntegration": "外部集成",
+        "categoryData": "数据访问与交换"
       },
       "plugins": {
         "title": "可安装 App 与 Skill",

@@ -27,7 +27,7 @@ export class AppCapabilityBroker {
 
   async authorize(
     scope: Scope,
-    capability: AgentCapability,
+    capability: AgentCapability | undefined,
     resource: CapabilityResource = {},
   ): Promise<GrantDecision> {
     return this.authorizeWhen(
@@ -41,7 +41,7 @@ export class AppCapabilityBroker {
   async authorizeBackendStorage(scope: Scope): Promise<GrantDecision> {
     return this.authorizeWhen(
       scope,
-      'storage.app',
+      undefined,
       {},
       (state) =>
         (state.desiredState === 'enabled' && ['enabling', 'running', 'degraded'].includes(state.observedState)) ||
@@ -51,7 +51,7 @@ export class AppCapabilityBroker {
 
   private async authorizeWhen(
     scope: Scope,
-    capability: AgentCapability,
+    capability: AgentCapability | undefined,
     resource: CapabilityResource,
     stateAllowed: (state: NonNullable<Awaited<ReturnType<AppStateRepositoryPort['get']>>>) => boolean,
   ): Promise<GrantDecision> {
@@ -61,13 +61,14 @@ export class AppCapabilityBroker {
     if (!state || !stateAllowed(state)) {
       return { allowed: false, code: 'APP_DISABLED', policyRevision };
     }
-    const definition = this.registry.get(scope.appId, state.activeVersion);
-    if (!definition.manifest.capabilities.includes(capability)) {
-      return { allowed: false, code: 'APP_CAPABILITY_UNDECLARED', policyRevision };
+    if (capability !== undefined) {
+      const definition = this.registry.get(scope.appId, state.activeVersion);
+      if (!definition.manifest.capabilities.includes(capability)) {
+        return { allowed: false, code: 'APP_CAPABILITY_UNDECLARED', policyRevision };
+      }
+      const granted = (await this.grants.list(scope)).some((grant) => grant.capability === capability);
+      if (!granted) return { allowed: false, code: 'APP_CAPABILITY_DENIED', policyRevision };
     }
-
-    const granted = (await this.grants.list(scope)).some((grant) => grant.capability === capability);
-    if (!granted) return { allowed: false, code: 'APP_CAPABILITY_DENIED', policyRevision };
 
     if (resource.connectionId !== undefined && (await this.denylist.isDenied(resource.connectionId))) {
       return { allowed: false, code: 'TARGET_DENIED', policyRevision };

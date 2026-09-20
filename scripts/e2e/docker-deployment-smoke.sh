@@ -1488,13 +1488,6 @@ const fullStackMarkerHash = fs.readFileSync(fullStackMarkerPath, 'utf8').trim();
 if (fullStackMarkerHash !== fullStackVerified.plugin.packageHash) {
   throw new Error(`Full-stack shared plugin marker drifted from verified package: ${fullStackMarkerHash} != ${fullStackVerified.plugin.packageHash}`);
 }
-let fullStackGrants = await ok('GET', '/api/v1/agent/apps/nexus.fullstack/grants');
-fullStackGrants = await ok(
-  'PUT',
-  '/api/v1/agent/apps/nexus.fullstack/grants',
-  { capabilities: ['storage.app'], expectedPolicyRevision: fullStackGrants.policyRevision },
-  mutationHeaders,
-);
 let fullStackApp = (await ok('GET', '/api/v1/agent/apps')).find((candidate) => candidate.id === 'nexus.fullstack');
 if (!fullStackApp) throw new Error('Installed full-stack App is missing from Host projection.');
 fullStackApp = await ok(

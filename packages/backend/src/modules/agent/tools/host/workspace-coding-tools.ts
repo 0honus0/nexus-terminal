@@ -177,7 +177,7 @@ export const createWorkspaceReadFileTool = (
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'workspace.runtime.execute',
+    capability: 'workspace.read',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {
@@ -281,7 +281,7 @@ export const createWorkspaceSearchTool = (
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'workspace.runtime.execute',
+    capability: 'workspace.read',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {
@@ -386,7 +386,7 @@ export const createWorkspaceRepoMapTool = (
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'workspace.runtime.execute',
+    capability: 'workspace.read',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {
@@ -502,7 +502,7 @@ export const createWorkspaceCodeIntelTool = (
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'workspace.runtime.execute',
+    capability: 'workspace.read',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {
@@ -655,7 +655,7 @@ export const createWorkspaceApplyPatchTool = (
       required: ['workspaceId', 'patch', 'expectedFiles'],
     },
     riskClass: 'mutate',
-    capability: 'workspace.runtime.execute',
+    capability: 'workspace.write',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {

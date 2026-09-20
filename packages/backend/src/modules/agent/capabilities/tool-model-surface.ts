@@ -10,7 +10,8 @@ const DEFERRED_HANDLE_PREFIX = 'mcp1.';
 const MAX_ROUTER_ARGUMENT_BYTES = 32 * 1024;
 
 export const isDeferredToolDescriptor = (descriptor: ToolDescriptor): boolean =>
-  descriptor.modelExposure === 'deferred' && descriptor.capability === 'integration.mcp.invoke';
+  descriptor.modelExposure === 'deferred' &&
+  (descriptor.capability === 'integration.mcp.read' || descriptor.capability === 'integration.mcp.invoke');
 
 export const TOOL_INVOKE_SCHEMA: CatalogToolSchema = {
   name: TOOL_INVOKE_NAME,

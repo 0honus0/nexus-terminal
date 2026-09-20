@@ -151,100 +151,106 @@
   interface CapabilityMeta {
     name: string;
     desc: string;
-    category: 'ai' | 'host' | 'runtime' | 'storage';
+    category: 'machine' | 'workspace' | 'browser' | 'integration' | 'data';
     icon: string;
   }
 
   const CAPABILITY_METAS: Record<string, CapabilityMeta> = {
-    'ai.model.use': {
-      name: '大语言模型推理',
-      desc: '允许调用 Provider 执行对话与多步思考',
-      category: 'ai',
-      icon: 'fa-solid fa-brain',
-    },
-    'runs.execute': {
-      name: '会话任务调度',
-      desc: '允许创建会话并驱动工作流生命周期',
-      category: 'ai',
-      icon: 'fa-solid fa-play',
-    },
-    'machine.shell.execute': {
-      name: '执行终端系统命令',
-      desc: '在审批策略约束下执行终端与命令工具',
-      category: 'host',
-      icon: 'fa-solid fa-terminal',
+    'machine.inspect': {
+      name: '主机状态与连接信息',
+      desc: '读取可用连接、系统负载与受控诊断信息',
+      category: 'machine',
+      icon: 'fa-solid fa-chart-line',
     },
     'machine.files.read': {
-      name: '读取工作区与系统文件',
-      desc: '检查与读取目标工作区或指定路径文件',
-      category: 'host',
+      name: '读取主机文件',
+      desc: '读取授权目标上的受限文件内容',
+      category: 'machine',
       icon: 'fa-solid fa-file-lines',
     },
     'machine.files.write': {
-      name: '写入与修改文件',
-      desc: '在工作区内创建、修改与保存代码文件',
-      category: 'host',
+      name: '写入主机文件',
+      desc: '在授权目标上创建或替换受限文件',
+      category: 'machine',
       icon: 'fa-solid fa-file-pen',
     },
-    'machine.diagnostics.read': {
-      name: '系统性能与诊断指标',
-      desc: '采集系统运行负载、网络与诊断数据',
-      category: 'host',
-      icon: 'fa-solid fa-chart-line',
+    'machine.shell.execute': {
+      name: '执行任意 Shell 命令',
+      desc: '高权限入口；可执行受策略与审批约束的远程 Shell',
+      category: 'machine',
+      icon: 'fa-solid fa-terminal',
     },
-    'machine.docker.mutate': {
-      name: 'Docker 容器治理',
-      desc: '启停容器、查看状态与管理容器实例',
-      category: 'host',
+    'machine.docker.manage': {
+      name: '管理 Docker 容器',
+      desc: '启停、重启或移除授权目标上的容器',
+      category: 'machine',
       icon: 'fa-brands fa-docker',
     },
-    'workspace.runtime.execute': {
-      name: 'Workspace 沙箱运行',
-      desc: '在独立沙箱隔离容器中安全执行代码',
-      category: 'runtime',
-      icon: 'fa-solid fa-box',
+    'workspace.read': {
+      name: '读取与分析 Workspace',
+      desc: '读取文件、搜索代码、仓库映射与代码分析',
+      category: 'workspace',
+      icon: 'fa-solid fa-magnifying-glass',
     },
-    'workspace.runtime.manage': {
-      name: '沙箱环境生命周期',
-      desc: '管理开发环境容器与构建工具链',
-      category: 'runtime',
+    'workspace.write': {
+      name: '修改 Workspace 文件',
+      desc: '在隔离 Workspace 中应用代码与文件变更',
+      category: 'workspace',
+      icon: 'fa-solid fa-pen-to-square',
+    },
+    'workspace.execute': {
+      name: '执行 Workspace 命令',
+      desc: '在隔离 Workspace 中启动命令并管理执行 Job',
+      category: 'workspace',
+      icon: 'fa-solid fa-terminal',
+    },
+    'workspace.manage': {
+      name: '管理 Workspace 环境',
+      desc: '创建、启停、删除环境并切换工具链版本',
+      category: 'workspace',
       icon: 'fa-solid fa-cubes',
     },
-    'browser.operate': {
-      name: 'CDP 浏览器自动化',
-      desc: '通过 DevTools 协议自动化操控无头浏览器',
-      category: 'runtime',
+    'browser.read': {
+      name: '浏览器读取与导航',
+      desc: '创建浏览会话、导航、快照、截图、控制台与下载读取',
+      category: 'browser',
       icon: 'fa-solid fa-globe',
     },
+    'browser.interact': {
+      name: '浏览器页面交互',
+      desc: '点击、输入、按键、选择与上传，可能改变远端页面状态',
+      category: 'browser',
+      icon: 'fa-solid fa-arrow-pointer',
+    },
+    'integration.mcp.read': {
+      name: '读取 MCP 资源',
+      desc: '发现并读取 MCP Resource、Prompt 与只读工具结果',
+      category: 'integration',
+      icon: 'fa-solid fa-book-open',
+    },
     'integration.mcp.invoke': {
-      name: 'MCP 工具协议调用',
-      desc: '调用连接的 Model Context Protocol 工具',
-      category: 'runtime',
+      name: '调用 MCP 动作',
+      desc: '调用具有控制或修改效果的 MCP 工具',
+      category: 'integration',
       icon: 'fa-solid fa-network-wired',
     },
-    'integration.acp.execute': {
-      name: 'ACP 协同通信协议',
-      desc: '通过 Agent Client Protocol 进行端端协作',
-      category: 'runtime',
+    'integration.acp.invoke': {
+      name: '调用 ACP Agent',
+      desc: '通过 Agent Client Protocol 调用外部协作执行器',
+      category: 'integration',
       icon: 'fa-solid fa-satellite-dish',
     },
     'artifacts.read': {
       name: '读取任务产物',
-      desc: '访问已生成的执行交付物与文件',
-      category: 'storage',
+      desc: '读取当前 App 可访问的持久化产物',
+      category: 'data',
       icon: 'fa-solid fa-box-archive',
     },
-    'artifacts.write': {
-      name: '保存与导出产物',
-      desc: '将执行结果持久化为产物归档',
-      category: 'storage',
-      icon: 'fa-solid fa-arrow-up-from-bracket',
-    },
-    'storage.app': {
-      name: 'App 独立专属存储',
-      desc: '访问该插件独立的持久化数据存储空间',
-      category: 'storage',
-      icon: 'fa-solid fa-database',
+    'app.intents.exchange': {
+      name: '跨 App 数据交换',
+      desc: '通过声明的 App Intent 向其它 App 发送或接收数据',
+      category: 'data',
+      icon: 'fa-solid fa-right-left',
     },
   };
 
@@ -253,41 +259,18 @@
       CAPABILITY_METAS[cap] ?? {
         name: cap,
         desc: '系统底层能力声明',
-        category: 'host',
+        category: 'machine',
         icon: 'fa-solid fa-key',
       }
     );
   };
 
   const categoryGroups = [
-    {
-      id: 'ai',
-      label: 'agent.settings.apps.categoryAi',
-      icon: 'fa-solid fa-brain',
-      border: 'border-purple-500/20',
-      bg: 'bg-purple-500/5',
-    },
-    {
-      id: 'host',
-      label: 'agent.settings.apps.categoryHost',
-      icon: 'fa-solid fa-server',
-      border: 'border-blue-500/20',
-      bg: 'bg-blue-500/5',
-    },
-    {
-      id: 'runtime',
-      label: 'agent.settings.apps.categoryRuntime',
-      icon: 'fa-solid fa-gauge-high',
-      border: 'border-emerald-500/20',
-      bg: 'bg-emerald-500/5',
-    },
-    {
-      id: 'storage',
-      label: 'agent.settings.apps.categoryStorage',
-      icon: 'fa-solid fa-box-archive',
-      border: 'border-amber-500/20',
-      bg: 'bg-amber-500/5',
-    },
+    { id: 'machine', label: 'agent.settings.apps.categoryMachine', icon: 'fa-solid fa-server' },
+    { id: 'workspace', label: 'agent.settings.apps.categoryWorkspace', icon: 'fa-solid fa-cubes' },
+    { id: 'browser', label: 'agent.settings.apps.categoryBrowser', icon: 'fa-solid fa-globe' },
+    { id: 'integration', label: 'agent.settings.apps.categoryIntegration', icon: 'fa-solid fa-plug' },
+    { id: 'data', label: 'agent.settings.apps.categoryData', icon: 'fa-solid fa-box-archive' },
   ] as const;
 
   const appVisuals = (appId: string) => {
@@ -557,7 +540,7 @@
             </div>
           </div>
 
-          <!-- 4 维能力卡片分组 -->
+          <!-- 按资源边界分组的能力授权矩阵 -->
           <div v-if="grantViews[app.id]" class="mt-4 space-y-4">
             <div
               v-for="cat in categoryGroups"

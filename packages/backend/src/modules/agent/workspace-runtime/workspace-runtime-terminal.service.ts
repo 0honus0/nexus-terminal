@@ -180,7 +180,7 @@ export class WorkspaceRuntimeTerminalService {
     const [settings, app, decision, workspace] = await Promise.all([
       this.settings.get(scope.userId),
       this.lifecycle.get(scope),
-      this.capabilities.authorize(scope, 'workspace.runtime.execute'),
+      this.capabilities.authorize(scope, 'workspace.execute'),
       this.repository.getWorkspace(scope, workspaceId),
     ]);
     if (!settings.effectiveSettings.feature.enabled) throw new Error('AGENT_DISABLED');

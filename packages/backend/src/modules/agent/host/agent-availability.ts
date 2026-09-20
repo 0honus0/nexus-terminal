@@ -10,8 +10,6 @@ export interface AgentAvailabilityView {
   appHealth: AppObservedState | null;
 }
 
-const executable = (app: AppView): boolean => app.capabilities.includes('runs.execute');
-
 export const resolveAgentAvailability = (
   settings: AgentSettingsView,
   apps: readonly AppView[],
@@ -20,7 +18,7 @@ export const resolveAgentAvailability = (
     return { state: 'disabled', reason: null, appId: null, appHealth: null };
   }
 
-  const enabledApps = apps.filter((app) => executable(app) && app.desiredState === 'enabled');
+  const enabledApps = apps.filter((app) => app.surface === 'agent' && app.desiredState === 'enabled');
   const healthy = enabledApps.find((app) => app.observedState === 'running');
   if (healthy) return { state: 'enabled', reason: null, appId: healthy.appId, appHealth: healthy.observedState };
 

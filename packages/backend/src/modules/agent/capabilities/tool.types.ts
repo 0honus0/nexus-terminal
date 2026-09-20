@@ -13,7 +13,7 @@ export interface ToolDescriptor {
   riskClass: ToolRiskClass;
   parallelSafe?: boolean;
   modelExposure?: 'direct' | 'deferred';
-  capability: AgentCapability;
+  capability?: AgentCapability;
 }
 
 export interface ToolPrecondition {

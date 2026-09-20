@@ -65,32 +65,27 @@ export const registerMachineToolContributions = ({
 }: MachineToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
-    id: 'machine.diagnostics',
-    capability: 'machine.diagnostics.read',
+    id: 'machine.inspect',
     tools: [createConnectionListTool(machine, cryptoHash), createDiagnosticsTool(machine, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'machine.files.read',
-    capability: 'machine.files.read',
     tools: [createReadFileTool(machine, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'machine.files.write',
-    capability: 'machine.files.write',
     tools: [createWriteFileTool(machine, artifacts, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'machine.shell',
-    capability: 'machine.shell.execute',
     tools: [createShellTool(machine, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'machine.docker',
-    capability: 'machine.docker.mutate',
     tools: [createDockerMutationTool(machine, cryptoHash)],
   });
 };
@@ -114,8 +109,7 @@ export const registerWorkspaceToolContributions = ({
 }: WorkspaceToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
-    id: 'workspace.runtime.execute',
-    capability: 'workspace.runtime.execute',
+    id: 'workspace.tools',
     tools: [
       createWorkspaceReadFileTool(repository, runtime, cryptoHash),
       createWorkspaceSearchTool(repository, runtime, cryptoHash),
@@ -128,8 +122,7 @@ export const registerWorkspaceToolContributions = ({
   });
   catalog.registerContribution({
     schemaVersion: 1,
-    id: 'workspace.runtime.manage',
-    capability: 'workspace.runtime.manage',
+    id: 'workspace.runtime',
     tools: [
       createWorkspaceCreateTool(runtime, repository, cryptoHash),
       createWorkspaceControlTool(runtime, repository, cryptoHash),
@@ -166,37 +159,31 @@ export const registerRuntimeToolContributions = ({
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'runtime.artifacts.read',
-    capability: 'artifacts.read',
     tools: [createArtifactReadTool(artifacts, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
-    id: 'runtime.mcp-tool-discovery',
-    capability: 'integration.mcp.invoke',
+    id: 'integration.mcp.discovery',
     tools: [createToolSearchTool(catalog, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'runtime.skills',
-    capability: 'runs.execute',
     tools: [createSkillSearchTool(skills, cryptoHash), createSkillReadTool(skills, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'runtime.plan',
-    capability: 'runs.execute',
     tools: [createPlanUpdateTool(plans, runs, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'runtime.user-input',
-    capability: 'runs.execute',
     tools: [createRequestUserInputTool(cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'runtime.collaboration',
-    capability: 'runs.execute',
     tools: createCollaborationTools(subagents, mailbox, facts, memories, cryptoHash),
   });
 };
@@ -220,8 +207,7 @@ export const registerAcpToolContribution = ({
 }: AcpToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
-    id: 'integration.acp.execute',
-    capability: 'integration.acp.execute',
+    id: 'integration.acp.invoke',
     tools: [createAcpExecuteTool(repository, workspaces, runtime, cryptoHash, permissionRequests)],
   });
 };
@@ -245,8 +231,7 @@ export const registerBrowserToolContribution = ({
 }: BrowserToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
-    id: 'browser.operate',
-    capability: 'browser.operate',
+    id: 'browser.tools',
     tools: createBrowserTools(workspaces, settings, gateway, cryptoHash, artifacts),
   });
 };
@@ -270,7 +255,6 @@ export const createMcpToolContributionHooks = ({
     catalog.replaceOwnedContribution(scope, `mcp:${integration.id}`, {
       schemaVersion: 1,
       id: `integration.mcp.${integration.id}`,
-      capability: 'integration.mcp.invoke',
       tools: createMcpTools(scope, integration, schemaHash, snapshot, repository, runtime, cryptoHash, artifacts),
     });
   },

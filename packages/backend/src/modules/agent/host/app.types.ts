@@ -2,21 +2,22 @@ import type { JsonValue, Scope } from '../agent.types';
 import type { AgentModelCapability } from '../ai/model.types';
 
 export const AGENT_CAPABILITIES = [
-  'ai.model.use',
-  'runs.execute',
-  'machine.diagnostics.read',
+  'machine.inspect',
   'machine.files.read',
   'machine.files.write',
   'machine.shell.execute',
-  'machine.docker.mutate',
-  'workspace.runtime.execute',
-  'workspace.runtime.manage',
+  'machine.docker.manage',
+  'workspace.read',
+  'workspace.write',
+  'workspace.execute',
+  'workspace.manage',
+  'browser.read',
+  'browser.interact',
+  'integration.mcp.read',
   'integration.mcp.invoke',
-  'integration.acp.execute',
-  'browser.operate',
+  'integration.acp.invoke',
   'artifacts.read',
-  'artifacts.write',
-  'storage.app',
+  'app.intents.exchange',
 ] as const;
 
 export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];

@@ -382,7 +382,7 @@ export const createDockerMutationTool = (machine: MachineCapabilityPort, cryptoH
       required: ['connectionId', 'containerId', 'action'],
     },
     riskClass: 'mutate',
-    capability: 'machine.docker.mutate',
+    capability: 'machine.docker.manage',
   },
   inspect: async (input, context, policyRevision) => {
     const args = record(input);

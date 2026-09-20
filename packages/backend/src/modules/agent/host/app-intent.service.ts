@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import type { AppGrantRepositoryPort } from './app-grant.repository.port';
+import type { AgentCapability } from './app.types';
 import type {
   AppIntentArtifactAccessPort,
   AppIntentArtifactReadRange,
@@ -86,9 +87,10 @@ export class AppIntentService {
       throw new Error('APP_INTENT_PAYLOAD_TOO_LARGE');
     }
 
+    const receiverScope = { userId: scope.userId, appId: input.receiverAppId };
     const [sender, receiver] = await Promise.all([
-      this.requireActive(scope),
-      this.requireActive({ userId: scope.userId, appId: input.receiverAppId }),
+      this.requireGrant(scope, 'app.intents.exchange', 'APP_INTENT_SENDER_GRANT_DENIED'),
+      this.requireGrant(receiverScope, 'app.intents.exchange', 'APP_INTENT_RECEIVER_GRANT_DENIED'),
     ]);
     const senderDefinition = this.registry.get(scope.appId, sender.activeVersion);
     const receiverDefinition = this.registry.get(input.receiverAppId, receiver.activeVersion);
@@ -113,26 +115,9 @@ export class AppIntentService {
     }
 
     if (artifactIds.length > 0) {
-      if (!senderDefinition.manifest.capabilities.includes('artifacts.read')) {
-        throw new Error('APP_INTENT_SENDER_GRANT_DENIED');
-      }
-      if (!receiverDefinition.manifest.capabilities.includes('artifacts.read')) {
-        throw new Error('APP_INTENT_RECEIVER_GRANT_DENIED');
-      }
-      const [senderGrants, receiverGrants] = await Promise.all([
-        this.grants.list(scope),
-        this.grants.list({ userId: scope.userId, appId: input.receiverAppId }),
-      ]);
-      if (!senderGrants.some((grant) => grant.capability === 'artifacts.read')) {
-        throw new Error('APP_INTENT_SENDER_GRANT_DENIED');
-      }
-      if (!receiverGrants.some((grant) => grant.capability === 'artifacts.read')) {
-        throw new Error('APP_INTENT_RECEIVER_GRANT_DENIED');
-      }
-    } else {
       await Promise.all([
-        this.grants.list(scope),
-        this.grants.list({ userId: scope.userId, appId: input.receiverAppId }),
+        this.requireGrant(scope, 'artifacts.read', 'APP_INTENT_SENDER_GRANT_DENIED'),
+        this.requireGrant(receiverScope, 'artifacts.read', 'APP_INTENT_RECEIVER_GRANT_DENIED'),
       ]);
     }
 
@@ -152,7 +137,7 @@ export class AppIntentService {
   }
 
   async listReceived(scope: Scope, limit = 50): Promise<AppIntentReceipt[]> {
-    await this.requireActive(scope);
+    await this.requireGrant(scope, 'app.intents.exchange', 'APP_INTENT_RECEIVER_GRANT_DENIED');
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_RECEIPTS) throw new Error('APP_INTENT_INVALID');
     const now = this.clock.nowUnixSeconds();
     await this.repository.purgeExpired(now, 100).catch(() => undefined);
@@ -160,6 +145,7 @@ export class AppIntentService {
   }
 
   async revoke(scope: Scope, receiptId: string): Promise<void> {
+    await this.requireGrant(scope, 'app.intents.exchange', 'APP_INTENT_SENDER_GRANT_DENIED');
     if (!receiptId || Buffer.byteLength(receiptId, 'utf8') > 128) throw new Error('APP_INTENT_INVALID');
     if (!(await this.repository.revoke(scope.userId, receiptId, scope.appId, this.clock.nowUnixSeconds()))) {
       throw new Error('APP_INTENT_NOT_FOUND');
@@ -215,15 +201,9 @@ export class AppIntentService {
       throw new Error('APP_INTENT_INVALID');
     }
 
-    const state = await this.requireActive(scope);
+    const state = await this.requireGrant(scope, 'app.intents.exchange', 'APP_INTENT_RECEIVER_GRANT_DENIED');
+    await this.requireGrant(scope, 'artifacts.read', 'APP_INTENT_RECEIVER_GRANT_DENIED');
     const definition = this.registry.get(scope.appId, state.activeVersion);
-    if (!definition.manifest.capabilities.includes('artifacts.read')) {
-      throw new Error('APP_INTENT_RECEIVER_GRANT_DENIED');
-    }
-    const currentGrants = await this.grants.list(scope);
-    if (!currentGrants.some((grant) => grant.capability === 'artifacts.read')) {
-      throw new Error('APP_INTENT_RECEIVER_GRANT_DENIED');
-    }
 
     const now = this.clock.nowUnixSeconds();
     const receipt = await this.repository.get(scope.userId, receiptId);
@@ -244,6 +224,15 @@ export class AppIntentService {
       throw new Error('APP_INTENT_NOT_FOUND');
     }
     return receipt;
+  }
+
+  private async requireGrant(scope: Scope, capability: AgentCapability, errorCode: string) {
+    const state = await this.requireActive(scope);
+    const definition = this.registry.get(scope.appId, state.activeVersion);
+    if (!definition.manifest.capabilities.includes(capability)) throw new Error(errorCode);
+    const currentGrants = await this.grants.list(scope);
+    if (!currentGrants.some((grant) => grant.capability === capability)) throw new Error(errorCode);
+    return state;
   }
 
   private async requireActive(scope: Scope) {

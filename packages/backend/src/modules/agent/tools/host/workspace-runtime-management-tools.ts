@@ -144,7 +144,7 @@ export const createWorkspaceCreateTool = (
       properties: {},
     },
     riskClass: 'mutate',
-    capability: 'workspace.runtime.manage',
+    capability: 'workspace.manage',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {
@@ -270,7 +270,7 @@ export const createWorkspaceControlTool = (
       required: ['workspaceId', 'action'],
     },
     riskClass: 'mutate',
-    capability: 'workspace.runtime.manage',
+    capability: 'workspace.manage',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {
@@ -388,7 +388,7 @@ export const createWorkspaceSwitchToolVersionsTool = (
       required: ['workspaceId', 'versions'],
     },
     riskClass: 'mutate',
-    capability: 'workspace.runtime.manage',
+    capability: 'workspace.manage',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {

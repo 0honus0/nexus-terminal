@@ -816,7 +816,7 @@ export class WorkspaceRuntimeService {
     const [settings, app, decision] = await Promise.all([
       this.settings.get(scope.userId),
       this.lifecycle.get(scope),
-      this.capabilities.authorize(scope, 'workspace.runtime.manage'),
+      this.capabilities.authorize(scope, 'workspace.manage'),
     ]);
     if (!settings.effectiveSettings.feature.enabled) throw new Error('AGENT_DISABLED');
     if (app.desiredState !== 'enabled' || !['running', 'degraded'].includes(app.observedState)) {

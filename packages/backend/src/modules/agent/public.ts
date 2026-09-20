@@ -141,7 +141,11 @@ export interface AgentHostFacade {
     artifactId: string,
     range: AppIntentArtifactReadRange,
   ): Promise<{ artifact: AppIntentArtifactView; source: AsyncIterable<Uint8Array> }>;
-  authorize(scope: Scope, capability: AgentCapability, resource?: CapabilityResource): Promise<GrantDecision>;
+  authorize(
+    scope: Scope,
+    capability: AgentCapability | undefined,
+    resource?: CapabilityResource,
+  ): Promise<GrantDecision>;
   getSettings(userId: number): Promise<AgentSettingsView>;
   getRecommendedPlugin(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginView>;
   installRecommendedPlugin(userId: number, signal?: AbortSignal): Promise<RecommendedAgentPluginInstallResult>;

@@ -212,8 +212,9 @@ export class SubagentContextBuilder {
     const descriptor = this.toolCatalog.discover(scope, '', 256).find((candidate) => candidate.name === toolName);
     const governedWorkspaceMutation =
       delegation.mutationMode === 'governed' &&
-      (descriptor?.capability === 'workspace.runtime.manage' ||
-        descriptor?.capability === 'workspace.runtime.execute') &&
+      (descriptor?.capability === 'workspace.write' ||
+        descriptor?.capability === 'workspace.execute' ||
+        descriptor?.capability === 'workspace.manage') &&
       (descriptor?.riskClass === 'mutate' || descriptor?.riskClass === 'destructive');
     const riskAllowed =
       descriptor?.riskClass === 'read' || descriptor?.riskClass === 'control' || governedWorkspaceMutation;
@@ -221,7 +222,7 @@ export class SubagentContextBuilder {
       descriptor &&
       toolName !== 'request_user_input' &&
       toolName !== TOOL_SEARCH_NAME &&
-      delegation.capabilities.includes(descriptor.capability) &&
+      (descriptor.capability === undefined || delegation.capabilities.includes(descriptor.capability)) &&
       riskAllowed,
     );
   }
@@ -354,12 +355,13 @@ export class SubagentContextBuilder {
         (descriptor) =>
           descriptor.name !== 'request_user_input' &&
           descriptor.name !== TOOL_SEARCH_NAME &&
-          allowedCapabilities.has(descriptor.capability) &&
+          (descriptor.capability === undefined || allowedCapabilities.has(descriptor.capability)) &&
           (descriptor.riskClass === 'read' ||
             descriptor.riskClass === 'control' ||
             (governedMutationsEnabled &&
-              (descriptor.capability === 'workspace.runtime.manage' ||
-                descriptor.capability === 'workspace.runtime.execute') &&
+              (descriptor.capability === 'workspace.write' ||
+                descriptor.capability === 'workspace.execute' ||
+                descriptor.capability === 'workspace.manage') &&
               (descriptor.riskClass === 'mutate' || descriptor.riskClass === 'destructive'))),
       )
       .map((descriptor) => ({

@@ -127,7 +127,7 @@ export const createWorkspaceJobTool = (
       required: ['workspaceId', 'argv', 'mode'],
     },
     riskClass: 'mutate',
-    capability: 'workspace.runtime.execute',
+    capability: 'workspace.execute',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {
@@ -458,7 +458,7 @@ export const createWorkspaceJobControlTool = (
       required: ['jobId', 'action'],
     },
     riskClass: 'control',
-    capability: 'workspace.runtime.execute',
+    capability: 'workspace.execute',
   },
   isAvailable: ({ environment }) => environment !== null,
   inspect: async (input, context, policyRevision) => {

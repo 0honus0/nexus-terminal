@@ -118,6 +118,7 @@ import type { WorkspaceRuntimeGatewayPort } from '../../../packages/backend/src/
 import type { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
 import { AppIntentService } from '../../../packages/backend/src/modules/agent/host/app-intent.service';
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
+import { AGENT_CAPABILITIES } from '../../../packages/backend/src/modules/agent/host/app.types';
 import { AgentSettingsService } from '../../../packages/backend/src/modules/agent/host/agent-settings.service';
 import { AgentExecutionPolicyService } from '../../../packages/backend/src/modules/agent/host/agent-execution-policy.service';
 import { TOOL_APPROVAL_TTL_SECONDS } from '../../../packages/backend/src/modules/agent/runtime/approvals/approval-policy';
@@ -3701,7 +3702,6 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
   });
   const core = inertTool({
     name: 'scenario_core_read',
-    capability: 'runs.execute',
     riskClass: 'read',
     version: '1.0.0',
     description: 'Frequently used built-in read tool that must remain directly available.',
@@ -3709,13 +3709,11 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.core-tools',
-    capability: 'runs.execute',
     tools: [core],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.tool-discovery',
-    capability: 'integration.mcp.invoke',
     tools: [createToolSearchTool(catalog, cryptoHash)],
   });
   const mcpTools = (count: number, version = 'mcp:surface-v1'): AgentTool[] =>
@@ -3736,7 +3734,6 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
   catalog.replaceOwnedContribution(scope, 'mcp:surface-fixture', {
     schemaVersion: 1,
     id: 'scenario.mcp.surface',
-    capability: 'integration.mcp.invoke',
     tools: mcpTools(120),
   });
 
@@ -3872,7 +3869,6 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
   catalog.replaceOwnedContribution(scope, 'mcp:surface-fixture', {
     schemaVersion: 1,
     id: 'scenario.mcp.surface',
-    capability: 'integration.mcp.invoke',
     tools: mcpTools(121),
   });
   const refreshedProjection = runner.schemas(scope, { environment: null }, 'execute');
@@ -3914,7 +3910,6 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
   catalog.replaceOwnedContribution(scope, 'mcp:surface-fixture', {
     schemaVersion: 1,
     id: 'scenario.mcp.surface',
-    capability: 'integration.mcp.invoke',
     tools: mcpTools(121, 'mcp:surface-v2'),
   });
   await assert.rejects(
@@ -4697,7 +4692,6 @@ const toolResultProjectionScenario: Scenario = async () => {
       description: 'Return a deliberately large deterministic ToolResult.',
       inputSchema: { type: 'object', additionalProperties: false },
       riskClass: 'read',
-      capability: 'runs.execute',
     },
     inspect: async (input, context, policyRevision) => ({
       toolName: 'scenario_large_output',
@@ -4724,7 +4718,6 @@ const toolResultProjectionScenario: Scenario = async () => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.tool-result-projection',
-    capability: 'runs.execute',
     tools: [fixtureTool],
   });
   const executor = new ToolExecutor(catalog, {
@@ -5303,7 +5296,6 @@ const scriptedAgentBenchmarkScenario: Scenario = async () => {
         description: benchmark.toolDescription,
         inputSchema: benchmark.toolInputSchema,
         riskClass: 'read',
-        capability: 'runs.execute',
       },
       inspect: async (input, toolContext, policyRevision) => ({
         toolName: benchmark.toolName,
@@ -5344,7 +5336,6 @@ const scriptedAgentBenchmarkScenario: Scenario = async () => {
     catalog.registerContribution({
       schemaVersion: 1,
       id: `scenario.benchmark-${benchmark.id}`,
-      capability: 'runs.execute',
       tools: [benchmarkTool],
     });
     const capabilities = {
@@ -6047,7 +6038,6 @@ const planExecutionModeScenario: Scenario = async () => {
       description: `${riskClass} fixture`,
       inputSchema: { type: 'object', additionalProperties: false },
       riskClass,
-      capability: 'runs.execute',
     },
     inspect: async (input, context, policyRevision) => ({
       toolName: name,
@@ -6081,7 +6071,6 @@ const planExecutionModeScenario: Scenario = async () => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.plan-mode',
-    capability: 'runs.execute',
     tools: [
       tool('scenario_plan_read', 'read'),
       tool('scenario_plan_mutation', 'mutate'),
@@ -9039,7 +9028,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
       description: 'Scenario-only governed Workspace mutation.',
       inputSchema: { type: 'object', additionalProperties: false },
       riskClass: 'mutate',
-      capability: 'workspace.runtime.execute',
+      capability: 'workspace.write',
     },
     inspect: async (_input, context, policyRevision) => ({
       toolName: 'scenario_workspace_mutate',
@@ -9084,7 +9073,6 @@ const subagentGovernedMutationScenario: Scenario = async () => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.subagent-governed-mutation',
-    capability: 'workspace.runtime.execute',
     tools: [mutationTool],
   });
   const machineMutationTool: AgentTool = {
@@ -9098,7 +9086,6 @@ const subagentGovernedMutationScenario: Scenario = async () => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.subagent-machine-mutation',
-    capability: 'machine.files.write',
     tools: [machineMutationTool],
   });
   let forbiddenTargetExecutions = 0;
@@ -9107,7 +9094,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     descriptor: {
       ...mutationTool.descriptor,
       name: 'scenario_misdeclared_workspace_mutate',
-      capability: 'workspace.runtime.execute',
+      capability: 'workspace.write',
     },
     inspect: async (_input, context, policyRevision) => ({
       ...(await mutationTool.inspect({}, context, policyRevision)),
@@ -9140,7 +9127,6 @@ const subagentGovernedMutationScenario: Scenario = async () => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.subagent-misdeclared-workspace-mutation',
-    capability: 'workspace.runtime.execute',
     tools: [misdeclaredWorkspaceMutationTool],
   });
   const builder = new SubagentContextBuilder(null!, null!, catalog, emptyModelContinuations, null!, {
@@ -9154,7 +9140,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     parentRuntimeId: 'scenario-root-runtime',
     childRuntimeId: 'scenario-child-runtime',
     profileId: 'scenario-worker',
-    capabilities: ['workspace.runtime.execute'],
+    capabilities: ['workspace.write'],
     peerMessaging: 'parent-child',
     modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
     objective: 'Modify only src/example.ts and run the focused test.',
@@ -9769,7 +9755,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
         durableRunId,
         durableRootRuntimeId,
         durableChildRuntimeId,
-        JSON.stringify(['runs.execute', 'workspace.runtime.execute']),
+        JSON.stringify(['workspace.write']),
         scenarioDelegationModel(durableModelRef),
         durableNow + 600,
         durableNow,
@@ -10395,7 +10381,7 @@ const subagentProfileStrategyScenario: Scenario = async () => {
     role: 'Existing custom worker',
     defaultModel: modelRef,
     allowedModels: [modelRef],
-    capabilities: ['runs.execute'],
+    capabilities: [],
     peerMessaging: 'parent-child',
     mutationMode: 'read-only',
     maxSteps: 9,
@@ -10442,8 +10428,12 @@ const subagentProfileStrategyScenario: Scenario = async () => {
     'Subagent settings must expose the bounded built-in template catalog including the explicit governed worker',
   );
   assert.ok(
-    templates.every((template) => template.capabilities.includes('runs.execute')),
-    'every built-in template must retain the existing Run collaboration capability',
+    templates.find((template) => template.id === 'worker')?.capabilities.includes('workspace.write'),
+    'the worker template must request explicit Workspace write access',
+  );
+  assert.ok(
+    templates.find((template) => template.id === 'scout')?.capabilities.includes('browser.read'),
+    'the scout template must request browser read access without browser interaction by default',
   );
   const rootProjection = projectSubagentCollaborationContext(view, []);
   assert.match(rootProjection ?? '', /custom-worker/, 'Root projection must expose configured executable profile ids');
@@ -10476,7 +10466,7 @@ const subagentProfileStrategyScenario: Scenario = async () => {
     parentRuntimeId: 'profile-strategy-root-runtime',
     childRuntimeId: runtime.id,
     profileId: 'custom-worker',
-    capabilities: ['runs.execute'],
+    capabilities: [],
     peerMessaging: 'parent-child',
     modelRef,
     objective: 'Review src/parser/index.ts without changing files.',
@@ -10977,7 +10967,6 @@ const mutationOutputProjectionScenario: Scenario = async () => {
       description: `${transport} mutation with a deliberately large protocol-complete response`,
       inputSchema: { type: 'object', additionalProperties: false },
       riskClass: 'mutate',
-      capability: 'runs.execute',
     },
     inspect: async () => inspectionFor(toolName),
     execute: async () => {
@@ -11013,7 +11002,6 @@ const mutationOutputProjectionScenario: Scenario = async () => {
       description: 'Mutation whose transport fails before a complete response is available',
       inputSchema: { type: 'object', additionalProperties: false },
       riskClass: 'mutate',
-      capability: 'runs.execute',
     },
     inspect: async () => inspectionFor(interruptedToolName),
     execute: async () => {
@@ -11029,7 +11017,6 @@ const mutationOutputProjectionScenario: Scenario = async () => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'scenario.output-projection',
-    capability: 'runs.execute',
     tools: [...transportTools, interruptedTool],
   });
 
@@ -15833,7 +15820,7 @@ const skillProgressiveDisclosureScenario: Scenario = async () => {
     appId: skillScope.appId,
     version: '1.2.3',
     packageHash: sha256(documents.map((document) => document.sha256).join(':')),
-    capabilities: ['runs.execute'],
+    capabilities: [],
     documents,
   });
   class StaticSkillSource implements PluginSkillSourcePort {
@@ -16025,7 +16012,7 @@ const skillProgressiveDisclosureScenario: Scenario = async () => {
     'name: removed-format',
     'version: 1.0.0',
     'description: Removed Nexus-specific Skill metadata must be rejected.',
-    'requiredCapabilities: runs.execute',
+    'requiredCapabilities: machine.files.read',
     '---',
     '',
     '# Removed format',
@@ -17359,7 +17346,7 @@ const pluginAppIntentSdkScenario: Scenario = async () => {
         displayName: id,
         sdkVersion: '1.0.0',
         nexus: { minVersion: '1.0.0', maxVersion: '99.0.0' },
-        capabilities: ['artifacts.read'],
+        capabilities: ['app.intents.exchange', 'artifacts.read'],
         intents: declaredIntents,
       },
       { nexusVersion: '1.0.0', supportedSdkMajor: 1 },
@@ -17381,7 +17368,13 @@ const pluginAppIntentSdkScenario: Scenario = async () => {
     for await (const chunk of stream) chunks.push(Buffer.from(chunk));
     return Buffer.concat(chunks);
   };
-  const grant = {
+  const exchangeGrant = {
+    capability: 'app.intents.exchange' as const,
+    schemaVersion: 1,
+    scope: {} as JsonValue,
+    grantedAt: intentNow,
+  };
+  const artifactGrant = {
     capability: 'artifacts.read' as const,
     schemaVersion: 1,
     scope: {} as JsonValue,
@@ -17420,7 +17413,7 @@ const pluginAppIntentSdkScenario: Scenario = async () => {
         createdAt: intentNow,
         updatedAt: intentNow,
       });
-      await grants.insertDefaults(scope, [grant]);
+      await grants.insertDefaults(scope, [exchangeGrant, artifactGrant]);
     }
 
     const primaryBytes = Buffer.from('plugin-app-intent-range');
@@ -17454,7 +17447,20 @@ const pluginAppIntentSdkScenario: Scenario = async () => {
       /APP_INTENT_RECEIVER_GRANT_DENIED/,
       'Plugin AppIntent Artifact transfer must reject a receiver without artifacts.read grant',
     );
-    await grants.insertDefaults(receiver, [grant]);
+    await grants.insertDefaults(receiver, [exchangeGrant]);
+    await assert.rejects(
+      () =>
+        intents.createConfirmed(sender, {
+          receiverAppId: receiver.appId,
+          intentId: receiverIntent,
+          input: { kind: 'missing-artifact-read' },
+          artifactRefs: [{ appId: sender.appId, id: primaryArtifact.id }],
+          confirmed: true,
+        }),
+      /APP_INTENT_RECEIVER_GRANT_DENIED/,
+      'Plugin AppIntent Artifact transfer must independently require artifacts.read after exchange authority is granted',
+    );
+    await grants.insertDefaults(receiver, [artifactGrant]);
 
     const receipt = await intents.createConfirmed(sender, {
       receiverAppId: receiver.appId,
@@ -19721,6 +19727,65 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     'tool_search result summary must use the capability contract',
   );
 
+  assert.deepEqual(
+    AGENT_CAPABILITIES,
+    [
+      'machine.inspect',
+      'machine.files.read',
+      'machine.files.write',
+      'machine.shell.execute',
+      'machine.docker.manage',
+      'workspace.read',
+      'workspace.write',
+      'workspace.execute',
+      'workspace.manage',
+      'browser.read',
+      'browser.interact',
+      'integration.mcp.read',
+      'integration.mcp.invoke',
+      'integration.acp.invoke',
+      'artifacts.read',
+      'app.intents.exchange',
+    ],
+    'App grants must remain a compact resource-boundary taxonomy rather than model/Run lifecycle switches',
+  );
+
+  const toolCatalogSource = read('modules/agent/capabilities/tool-catalog.ts');
+  assert.doesNotMatch(
+    toolCatalogSource,
+    /interface ToolContribution[\s\S]*?capability:/,
+    'Tool contributions must only register modules; each Tool descriptor is the single capability authority',
+  );
+  const workspaceTools = read('modules/agent/tools/host/workspace-coding-tools.ts');
+  assert.match(workspaceTools, /capability: 'workspace\.read'/, 'Workspace inspection must use read authority');
+  assert.match(workspaceTools, /capability: 'workspace\.write'/, 'Workspace patching must use write authority');
+  const browserTools = read('modules/agent/tools/host/browser-tools.ts');
+  assert.match(browserTools, /capability: 'browser\.read'/, 'Browser evidence/navigation must expose read authority');
+  assert.match(
+    browserTools,
+    /capability: 'browser\.interact'/,
+    'Browser state-changing page interaction must expose separate interaction authority',
+  );
+  const mcpTools = read('modules/agent/tools/host/mcp-tools.ts');
+  assert.match(mcpTools, /integration\.mcp\.read/, 'MCP evidence access must expose read authority');
+  assert.match(mcpTools, /integration\.mcp\.invoke/, 'MCP actions must expose invoke authority');
+  const appIntent = read('modules/agent/host/app-intent.service.ts');
+  assert.match(appIntent, /app\.intents\.exchange/, 'cross-App data transfer must have explicit exchange authority');
+  assert.match(
+    appIntent,
+    /requireGrant\(.*'artifacts\.read'/s,
+    'artifact-bearing AppIntents must additionally require artifact read authority',
+  );
+
+  const frontendRoot = path.resolve(backendSourceRoot, '../../frontend/src');
+  const permissionUi = fs.readFileSync(
+    path.join(frontendRoot, 'features/agent/settings/AppManagementSettings.vue'),
+    'utf8',
+  );
+  for (const category of ['machine', 'workspace', 'browser', 'integration', 'data']) {
+    assert.ok(permissionUi.includes(`id: '${category}'`), `permission UI must expose the ${category} resource group`);
+  }
+
   const publicSource = read('modules/agent/public.ts');
   const start = publicSource.indexOf('export interface AgentIntegrationFacade');
   const end = publicSource.indexOf('\nexport interface ', start + 1);
@@ -19735,6 +19800,8 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
 
   return [
     { name: 'public_mcp_capability_descriptions', value: 2, unit: 'surfaces' },
+    { name: 'permission_resource_capabilities', value: AGENT_CAPABILITIES.length, unit: 'capabilities' },
+    { name: 'permission_resource_groups', value: 5, unit: 'groups' },
     { name: 'public_integration_management_returns', value: 4, unit: 'methods' },
     { name: 'public_contract_narrowing_drifts', value: 0, unit: 'contracts' },
   ];

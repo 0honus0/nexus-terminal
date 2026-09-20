@@ -20,10 +20,7 @@ export class WorkspaceArtifactService {
   ) {}
 
   async export(scope: Scope, input: WorkspaceArtifactExportInput, signal: AbortSignal): Promise<ArtifactRef> {
-    await Promise.all([
-      this.requireCapability(scope, 'workspace.runtime.execute'),
-      this.requireCapability(scope, 'artifacts.write'),
-    ]);
+    await this.requireCapability(scope, 'workspace.read');
     const read = await this.workspaceRuntime.openWorkspaceFileRead(
       scope,
       input.workspaceId,
@@ -49,7 +46,7 @@ export class WorkspaceArtifactService {
     signal: AbortSignal,
   ): Promise<WorkspaceArtifactImportResult> {
     await Promise.all([
-      this.requireCapability(scope, 'workspace.runtime.execute'),
+      this.requireCapability(scope, 'workspace.write'),
       this.requireCapability(scope, 'artifacts.read'),
     ]);
     const artifact = await this.artifacts.get(scope, input.artifactId);

@@ -48,7 +48,6 @@ export const createSkillSearchTool = (skills: SkillRegistry, cryptoHash: CryptoH
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = asRecord(input);
@@ -146,7 +145,6 @@ export const createSkillReadTool = (skills: SkillRegistry, cryptoHash: CryptoHas
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'runs.execute',
   },
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = asRecord(input);

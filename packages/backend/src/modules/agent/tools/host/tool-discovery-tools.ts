@@ -123,7 +123,7 @@ export const createToolSearchTool = (catalog: ToolCatalog, cryptoHash: CryptoHas
     },
     riskClass: 'read',
     parallelSafe: true,
-    capability: 'integration.mcp.invoke',
+    capability: 'integration.mcp.read',
   },
   inspect: async (input, context, policyRevision): Promise<ToolInspection> => {
     const args = asRecord(input);

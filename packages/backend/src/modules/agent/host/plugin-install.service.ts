@@ -631,13 +631,11 @@ export class PluginInstallService {
         };
       }
       case 'storage.get': {
-        await this.requireCapability(scope, 'storage.app');
         const params = asRecord(request.params);
         requireOnlyKeys(params, ['key']);
         return storageRecordJson(await this.storage.get(scope, requireStorageKey(params.key)));
       }
       case 'storage.put': {
-        await this.requireCapability(scope, 'storage.app');
         const params = asRecord(request.params);
         requireOnlyKeys(params, ['key', 'value', 'expectedVersion']);
         const expectedVersion = params.expectedVersion;
@@ -655,7 +653,6 @@ export class PluginInstallService {
         );
       }
       case 'storage.delete': {
-        await this.requireCapability(scope, 'storage.app');
         const params = asRecord(request.params);
         requireOnlyKeys(params, ['key', 'expectedVersion']);
         if (!Number.isSafeInteger(params.expectedVersion) || (params.expectedVersion as number) < 1) {
@@ -1012,11 +1009,6 @@ export class PluginInstallService {
           : { status: 'degraded' as const, reason: health.reason ?? 'PLUGIN_RUNTIME_UNAVAILABLE' };
       },
     };
-  }
-
-  private async requireCapability(scope: { userId: number; appId: string }, capability: 'storage.app'): Promise<void> {
-    const decision = await this.capabilities.authorize(scope, capability);
-    if (!decision.allowed) throw new Error(decision.code);
   }
 
   private async assertInstalled(userId: number, appId: string, version: string): Promise<void> {
