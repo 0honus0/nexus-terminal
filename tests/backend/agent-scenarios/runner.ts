@@ -19786,6 +19786,24 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     assert.ok(permissionUi.includes(`id: '${category}'`), `permission UI must expose the ${category} resource group`);
   }
 
+  assert.match(
+    permissionUi,
+    /drafts\.value = \{ \.\.\.drafts\.value, \[appId\]: view\.grants\.map\(\(grant\) => grant\.capability\) \}/,
+    'permission UI must initialize its draft from persisted grants returned by the Host',
+  );
+  assert.match(
+    permissionUi,
+    /type CapabilitySelectionState = 'none' \| 'partial' \| 'all'/,
+    'permission UI must model empty, partial, and fully-selected grant states explicitly',
+  );
+  assert.match(permissionUi, /fa-solid fa-minus/, 'partial permission selection must render a dash indicator');
+  assert.match(permissionUi, /fa-solid fa-check/, 'fully-selected permission state must render a check indicator');
+  assert.match(
+    permissionUi,
+    /capabilitySelectionState\(app\.id\) === 'all'[\s\S]*disableCapabilities[\s\S]*enableCapabilities/,
+    'permission bulk action must disable all only when everything is selected and enable all otherwise',
+  );
+
   const publicSource = read('modules/agent/public.ts');
   const start = publicSource.indexOf('export interface AgentIntegrationFacade');
   const end = publicSource.indexOf('\nexport interface ', start + 1);

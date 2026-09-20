@@ -159,7 +159,7 @@ App 由 manifest / registry 注册。Nexus 产品当前只有一个管理员用�
 
 没有 Frontend target、但声明 AgentDefinition 的 App，直接复用 Nexus host-owned `AgentAppSurface`。声明 Frontend target 时，该 iframe 拥有 Hub 内整个 App content surface，而不是附加小面板；AgentDefinition 仍可同时存在并由 Custom Frontend 通过 Plugin Frontend SDK 驱动。
 
-Custom Frontend 只能经 Nexus 同源提供的 `/sdk/frontend-v1.mjs` 建立 MessagePort SDK。第一阶段 SDK 只暴露 AppStorage 与 App-scoped AgentDefinition/Provider/Thread/Run/Subagent/Approval/Run-event 能力；iframe 不获得 Nexus cookie、CSRF token、HTTP client、数据库或内部 service object。
+Custom Frontend 只能经 Nexus 同源提供的 `/sdk/frontend-v1.mjs` 建立 MessagePort SDK。第一阶段 SDK 只暴露 AppStorage 与 App-scoped AgentDefinition/Provider/Thread/Run/Subagent/Approval/Run-event 能力；其中 AppStorage 始终按 `userId + appId` 隔离，是已启用 App 的内建私有状态服务而不是 grant capability。iframe 不获得 Nexus cookie、CSRF token、HTTP client、数据库或内部 service object。
 
 ### 4.2 Thread
 
@@ -463,6 +463,35 @@ inspect
 
 Read tool 也必须经过 scope/capability/network boundary，只是风险链更轻。
 
+### 10.1 App capability 只表达跨资源安全边界
+
+App grant 不再表达 Agent 本体是否“能运行”。模型调用、Run 生命周期、Skill/Plan、用户输入、内部 Subagent/协作都属于已启用 Agent App 的核心行为，不设置 `ai.model.use`、`runs.execute` 一类总闸门。App 自己的隔离 App Storage 也属于 App 生命周期内的私有状态服务，只受 App enabled/disabled 状态门禁，不要求额外 grant；Host/Tool 为当前 App 生成 Artifact output 同样不是独立权限，敏感边界在后续读取。
+
+当前 capability 必须保持按真实资源边界划分，唯一集合为：
+
+| 大类      | Capability               | 含义                                                          |
+| --------- | ------------------------ | ------------------------------------------------------------- |
+| 主机      | `machine.inspect`        | 读取连接、系统状态与受控诊断信息                              |
+| 主机      | `machine.files.read`     | 读取授权目标上的主机文件                                      |
+| 主机      | `machine.files.write`    | 写入授权目标上的主机文件                                      |
+| 主机      | `machine.shell.execute`  | 执行受策略/审批治理的任意 Shell                               |
+| 主机      | `machine.docker.manage`  | 管理授权目标上的 Docker 容器生命周期                          |
+| Workspace | `workspace.read`         | Workspace 文件读取、搜索、repo map、code intel                |
+| Workspace | `workspace.write`        | 修改 Workspace 文件/应用 patch                                |
+| Workspace | `workspace.execute`      | 执行 Workspace 命令并管理 Job                                 |
+| Workspace | `workspace.manage`       | 创建、启停、删除 Workspace 与切换工具链                       |
+| Browser   | `browser.read`           | 创建/读取浏览会话、导航、快照、截图、console、download 等读面 |
+| Browser   | `browser.interact`       | click/type/press/select/upload 等可能改变远端页面状态的交互   |
+| 外部集成  | `integration.mcp.read`   | MCP Resource/Prompt/只读 Tool 的发现与读取                    |
+| 外部集成  | `integration.mcp.invoke` | 调用具有控制或修改效果的 MCP Tool                             |
+| 外部集成  | `integration.acp.invoke` | 调用外部 ACP Agent                                            |
+| 数据      | `artifacts.read`         | 读取当前 App 被授权可访问的持久 Artifact                      |
+| 数据      | `app.intents.exchange`   | 通过声明的 AppIntent 跨 App 发送/接收数据                     |
+
+Tool descriptor 是 capability 的唯一声明来源；Tool contribution 只负责模块注册，不再复制 capability 并制造双重配置。一个 Tool 若没有跨资源边界（例如 `skill_read`、Plan、内部协作），descriptor 可以没有 capability；有真实资源边界的 Tool 必须显式声明上表中的 capability。
+
+权限管理 UI 初次打开时必须用服务端**已保存 grants**初始化草稿，因此总控初态严格反映已保存状态；用户修改单项后，再按当前未保存草稿实时呈现三态：下面全部未启用显示空框 +“启用”，部分启用显示横线 +“启用”，全部启用显示对号 +“禁用”。点击空框或横线状态会启用全部当前声明 capability；点击全选状态会清空全部草稿授权，之后仍由“保存权限”统一提交 CAS；保存成功后返回的新 grants 成为下一轮已保存初态。
+
 模型单次 step 可以提出有界的 multi-tool batch。整批 proposal 必须先完成 inspection 并写入 durable lineage；可恢复的单项拒绝也必须持久化，不能因同批其他 Tool 合法而丢失。执行阶段只有 `read`、明确 `parallelSafe` 且 `resourceKeys` 不冲突的 Tool 可以小批并行；`control` 保持边界顺序，有副作用 Tool 继续遵守 approval、lease/fence、verify/reconcile 并按安全边界推进。Provider transport 不再强制关闭 upstream parallel tool proposals；上游可以返回一个或多个 Tool call，Nexus Runtime 仍以 durable batch、risk、resource conflict、approval 与 verify/reconcile 作为唯一执行权威。
 
 ## 11. Artifact、Memory 与文件交换
@@ -486,7 +515,7 @@ Artifact 是 Agent 文件能力的统一持久边界：
 - Artifact lifecycle sweep 复用既有 maintenance timer、`artifactProtectionReason` 与 `ready/unavailable -> deleting -> deleted` two-phase delete/reconcile；只回收已到期、未 retained、且没有 active Run/checkpoint/active grant/AppIntent grant protection 的对象。自动 TTL 不直接删文件，也不绕过 quota reconciliation。
 - Workspace 当前没有足够准确的 activity authority：普通 read/search/argv/terminal 活动不会统一维护一个可信 idle timestamp。因此产品不暴露 `workspaceIdleTtlSeconds`，也没有基于不完整 `last_active_at` 的自动 idle cleanup；在出现单一可信 activity owner 前，不得重新加回这个“可配置但不生效”的设置。
 
-跨 App 可见不等于跨 App 授权。读取仍要 grant/link。
+跨 App 可见不等于跨 App 授权：普通 Artifact 读取要求 `artifacts.read`；跨 App 数据发送/接收要求双方拥有 `app.intents.exchange`；AppIntent 携带 Artifact 时还必须额外满足双方 `artifacts.read`。
 
 ### 11.2 Files Library
 

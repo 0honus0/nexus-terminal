@@ -61,7 +61,6 @@
         "permissionsCollapsedHint": "Expand to review and edit this app’s capability grants.",
         "capabilitiesHeader": "Capabilities & Security Grants",
         "capabilitiesSubtitle": "Fine-grained capability boundary control governed by host security policies",
-        "selectAll": "Select All",
         "healthHealthy": "Healthy",
         "healthDegraded": "Degraded",
         "healthDisabled": "Disabled",
@@ -83,7 +82,11 @@
         "categoryWorkspace": "Workspace Sandbox",
         "categoryBrowser": "Browser",
         "categoryIntegration": "External Integrations",
-        "categoryData": "Data Access & Exchange"
+        "categoryData": "Data Access & Exchange",
+        "enableCapabilities": "Enable",
+        "disableCapabilities": "Disable",
+        "enableAllCapabilities": "Enable all capabilities",
+        "disableAllCapabilities": "Disable all capabilities"
       },
       "plugins": {
         "title": "Installable apps and skills",

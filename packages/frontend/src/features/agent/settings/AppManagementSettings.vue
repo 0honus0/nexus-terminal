@@ -73,10 +73,24 @@
     return { checked: checkedNum, total: declared.length };
   };
 
-  const selectAllCapabilities = (appId: string): void => {
+  type CapabilitySelectionState = 'none' | 'partial' | 'all';
+
+  const capabilitySelectionState = (appId: string): CapabilitySelectionState => {
+    const declared = grantViews.value[appId]?.declaredCapabilities ?? [];
+    if (declared.length === 0) return 'none';
+    const selected = declared.filter((capability) => checked(appId, capability)).length;
+    if (selected === 0) return 'none';
+    if (selected === declared.length) return 'all';
+    return 'partial';
+  };
+
+  const toggleAllCapabilities = (appId: string): void => {
     const view = grantViews.value[appId];
     if (!view) return;
-    drafts.value = { ...drafts.value, [appId]: [...view.declaredCapabilities] };
+    drafts.value = {
+      ...drafts.value,
+      [appId]: capabilitySelectionState(appId) === 'all' ? [] : [...view.declaredCapabilities],
+    };
   };
 
   const saveGrants = async (appId: string): Promise<void> => {
@@ -511,13 +525,35 @@
 
             <div class="flex items-center gap-2">
               <button
-                v-if="grantViews[app.id]"
+                v-if="grantViews[app.id]?.declaredCapabilities.length"
                 type="button"
-                class="rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] shadow-2xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] shadow-2xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
+                :aria-label="
+                  capabilitySelectionState(app.id) === 'all'
+                    ? $t('agent.settings.apps.disableAllCapabilities')
+                    : $t('agent.settings.apps.enableAllCapabilities')
+                "
                 :disabled="busy || grantBusy[app.id]"
-                @click="selectAllCapabilities(app.id)"
+                @click="toggleAllCapabilities(app.id)"
               >
-                {{ $t('agent.settings.apps.selectAll') }}
+                <span
+                  class="inline-flex h-3.5 w-3.5 items-center justify-center rounded-[3px] border border-current text-[8px]"
+                  aria-hidden="true"
+                >
+                  <i v-if="capabilitySelectionState(app.id) === 'all'" class="fa-solid fa-check" aria-hidden="true"></i>
+                  <i
+                    v-else-if="capabilitySelectionState(app.id) === 'partial'"
+                    class="fa-solid fa-minus"
+                    aria-hidden="true"
+                  ></i>
+                </span>
+                <span>
+                  {{
+                    capabilitySelectionState(app.id) === 'all'
+                      ? $t('agent.settings.apps.disableCapabilities')
+                      : $t('agent.settings.apps.enableCapabilities')
+                  }}
+                </span>
               </button>
               <button
                 v-if="grantViews[app.id]"

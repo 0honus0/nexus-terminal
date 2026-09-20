@@ -61,7 +61,6 @@
         "permissionsCollapsedHint": "展开后查看并编辑此 App 的能力授权。",
         "capabilitiesHeader": "系统能力与安全沙箱授权",
         "capabilitiesSubtitle": "细粒度控制插件可访问的 Host 资源边界，未经授权的能力将被 Host 策略拦截",
-        "selectAll": "全选能力",
         "healthHealthy": "运行正常",
         "healthDegraded": "受控降级",
         "healthDisabled": "已停用",
@@ -83,7 +82,11 @@
         "categoryWorkspace": "Workspace 沙箱",
         "categoryBrowser": "浏览器",
         "categoryIntegration": "外部集成",
-        "categoryData": "数据访问与交换"
+        "categoryData": "数据访问与交换",
+        "enableCapabilities": "启用",
+        "disableCapabilities": "禁用",
+        "enableAllCapabilities": "启用全部能力",
+        "disableAllCapabilities": "禁用全部能力"
       },
       "plugins": {
         "title": "可安装 App 与 Skill",

@@ -61,7 +61,6 @@
         "permissionsCollapsedHint": "展開してこの App の Capability grant を確認・編集します。",
         "capabilitiesHeader": "システム権限とセキュリティポリシー",
         "capabilitiesSubtitle": "ホストセキュリティ境界に基づくきめ細かな機能権限の管理",
-        "selectAll": "全選択",
         "healthHealthy": "正常稼働",
         "healthDegraded": "機能制限",
         "healthDisabled": "停止中",
@@ -83,7 +82,11 @@
         "categoryWorkspace": "Workspace サンドボックス",
         "categoryBrowser": "ブラウザ",
         "categoryIntegration": "外部連携",
-        "categoryData": "データアクセスと交換"
+        "categoryData": "データアクセスと交換",
+        "enableCapabilities": "有効化",
+        "disableCapabilities": "無効化",
+        "enableAllCapabilities": "すべての権限を有効化",
+        "disableAllCapabilities": "すべての権限を無効化"
       },
       "plugins": {
         "title": "インストール可能な App と Skill",
