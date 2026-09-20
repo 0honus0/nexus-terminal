@@ -1254,8 +1254,10 @@ export class RunnerHttpAdapter
       };
       const onError = (error: Error) => fail(error);
       const onUnexpected = (_request: unknown, response: import('node:http').IncomingMessage) => {
+        const rawCode = response.headers['x-nexus-agent-error'];
+        const code = typeof rawCode === 'string' && /^[A-Z][A-Z0-9_]{0,127}$/.test(rawCode) ? `_${rawCode}` : '';
         response.resume();
-        fail(new Error(`WORKSPACE_RUNTIME_WS_${response.statusCode ?? 500}`));
+        fail(new Error(`WORKSPACE_RUNTIME_WS_${response.statusCode ?? 500}${code}`));
       };
       const onAbort = () => fail(signal?.reason instanceof Error ? signal.reason : new Error('ABORTED'));
       socket.once('open', onOpen);

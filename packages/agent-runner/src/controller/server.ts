@@ -368,8 +368,9 @@ export class RunnerControllerServer {
           : status === 426
             ? 'Upgrade Required'
             : 'Bad Request';
+    const errorCode = /^[A-Z][A-Z0-9_]{0,127}$/.test(code) ? code : 'VALIDATION_FAILED';
     socket.end(
-      `HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Type: application/json\r\nCache-Control: no-store\r\n\r\n${JSON.stringify({ error: code.slice(0, 128) })}`,
+      `HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nX-Nexus-Agent-Error: ${errorCode}\r\n\r\n${JSON.stringify({ error: errorCode })}`,
     );
   }
 
