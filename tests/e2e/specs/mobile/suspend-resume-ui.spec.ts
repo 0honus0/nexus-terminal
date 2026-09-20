@@ -506,23 +506,38 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
 
     await hanging.getByRole('button', { name: 'Resume', exact: true }).click();
 
-    await expect(
-      page.getByTestId('terminal-tab-bar').locator('[data-session-id]').filter({ hasText: 'E2E SSH' }).first(),
-    ).toBeVisible({ timeout: 30_000 });
+    const resumedTab = page
+      .getByTestId('terminal-tab-bar')
+      .locator('[data-session-id]')
+      .filter({ hasText: 'E2E SSH' })
+      .first();
+    await expect(resumedTab).toBeVisible({ timeout: 30_000 });
     await expect(terminal).toBeVisible({ timeout: 30_000 });
 
     // A replacement terminal tab is mounted before the resume transaction is
-    // fully committed. Wait for the suspended record to disappear so a command
-    // cannot race the final resume handoff.
+    // fully committed. Wait for the server-owned suspended record to bind to
+    // that replacement Workspace before sending the next command.
+    const resumedSessionId = (await resumedTab.getAttribute('data-session-id')) ?? '';
+    expect(resumedSessionId).not.toBe('');
     await expect
       .poll(
         async () => {
-          const sessions = await suspendedSessions(context.request);
-          return sessions.some((session) => session.originalWorkspaceId === originalSessionId);
+          const record = (await suspendedSessions(context.request)).find((session) => session.id === primary!.id);
+          return record
+            ? {
+                status: record.status,
+                ownershipState: record.ownershipState,
+                attachedWorkspaceId: record.attachedWorkspaceId,
+              }
+            : null;
         },
         { timeout: 30_000 },
       )
-      .toBeFalsy();
+      .toEqual({
+        status: 'active',
+        ownershipState: 'attached',
+        attachedWorkspaceId: resumedSessionId,
+      });
 
     const resumedInput = page.getByTestId('command-input');
     await resumedInput.fill('printf \'AFTER_RESUME=%s\\n\' "$PWD"');
@@ -530,13 +545,6 @@ test('mobile UI marks a live SSH session for suspend and resumes the same shell 
     await expect.poll(async () => rows.innerText(), { timeout: 20_000 }).toContain('AFTER_RESUME=');
     await expect.poll(async () => rows.innerText(), { timeout: 20_000 }).toContain('folder-seed');
 
-    const resumedTab = page
-      .getByTestId('terminal-tab-bar')
-      .locator('[data-session-id]')
-      .filter({ hasText: 'E2E SSH' })
-      .first();
-    const resumedSessionId = (await resumedTab.getAttribute('data-session-id')) ?? '';
-    expect(resumedSessionId).not.toBe('');
     await resumedTab.click({ button: 'right' });
     await expect(page.getByText('Unmark Suspend', { exact: true })).toBeVisible({ timeout: 10_000 });
     await page.keyboard.press('Escape');
