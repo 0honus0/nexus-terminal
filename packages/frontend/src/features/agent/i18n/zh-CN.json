@@ -781,6 +781,7 @@
       "disableAllTargets": "全部停用",
       "noTargets": "当前没有可用的 SSH 连接。",
       "reconciliationRequired": "先前修改操作或其资源/Lease 收尾仍需要对账，请先核验实际状态，再解除资源隔离。",
+      "restartRecoveryFailed": "Backend 重启后的自动恢复未能从恢复检查点继续：{reasons}",
       "reconciliationResources": "待核验资源",
       "reconciliationLoading": "正在加载待核验资源…",
       "reconciliationLeaseFinalization": "修改副作用已经确认完成；不确定的是 Lease/资源收尾状态。请核验资源状态并解除隔离，不要重试原修改操作。",
@@ -849,8 +850,7 @@
       "environmentRunContract": "Workspace 创建只能消费当前 Run 已冻结的 Environment 快照；Run 执行过程中不能切换 recipe 或工具链。",
       "frozen": "已冻结",
       "openThreads": "打开会话列表",
-      "closeThreads": "关闭会话列表",
-      "restartRecoveryFailed": "Backend 重启后的自动恢复未能从恢复检查点继续：{reasons}"
+      "closeThreads": "关闭会话列表"
     },
     "files": {
       "search": "搜索文件",
@@ -1090,6 +1090,8 @@
       "checkpoints": "检查点",
       "checkpointHint": "只保存事实：不会保存活跃 Lease、Token、容器或进程。",
       "saveCheckpoint": "保存检查点",
+      "userCheckpoint": "手动保存",
+      "autoRecoveryCheckpoint": "自动恢复",
       "noCheckpoints": "暂无已保存检查点。",
       "checkpointWatermark": "Ledger #{ledger} · 事件 #{event}",
       "resumeCheckpoint": "恢复为新 Run",
@@ -1114,9 +1116,7 @@
       "totalTokens": "Token 总量",
       "advancedDetails": "高级详情与检查点",
       "backToTasks": "返回任务列表",
-      "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}",
-      "userCheckpoint": "手动保存",
-      "autoRecoveryCheckpoint": "自动恢复"
+      "tokenBreakdown": "输入 {input} · 输出 {output} · 缓存 {cached}"
     },
     "workspaceRuntime": {
       "title": "Workspace 开发环境",

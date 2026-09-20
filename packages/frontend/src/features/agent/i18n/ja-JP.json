@@ -781,6 +781,7 @@
       "disableAllTargets": "すべて無効",
       "noTargets": "利用可能な SSH 接続がありません。",
       "reconciliationRequired": "以前の変更操作またはそのリソース／Lease の最終処理に reconciliation が必要です。隔離を解除する前に実際の状態を確認してください。",
+      "restartRecoveryFailed": "Backend 再起動後の自動復旧は復旧チェックポイントから続行できませんでした: {reasons}",
       "reconciliationResources": "確認が必要なリソース",
       "reconciliationLoading": "確認対象のリソースを読み込んでいます…",
       "reconciliationLeaseFinalization": "変更の結果自体は確認済みです。不確かなのは Lease／リソースの最終処理だけです。元の変更を再実行せず、リソース状態を確認して隔離を解除してください。",
@@ -849,8 +850,7 @@
       "environmentRunContract": "Workspace の作成はこの Run に固定された Environment スナップショットだけを使用し、Run の途中で recipe やツールチェーンを切り替えることはできません。",
       "frozen": "固定済み",
       "openThreads": "会話一覧を開く",
-      "closeThreads": "会話一覧を閉じる",
-      "restartRecoveryFailed": "Backend 再起動後の自動復旧は復旧チェックポイントから続行できませんでした: {reasons}"
+      "closeThreads": "会話一覧を閉じる"
     },
     "files": {
       "search": "ファイルを検索",
@@ -1090,6 +1090,8 @@
       "checkpoints": "チェックポイント",
       "checkpointHint": "事実のみ保存します。アクティブな Lease、Token、コンテナ、プロセスは保存しません。",
       "saveCheckpoint": "チェックポイントを保存",
+      "userCheckpoint": "手動保存",
+      "autoRecoveryCheckpoint": "自動復旧",
       "noCheckpoints": "保存済みチェックポイントはありません。",
       "checkpointWatermark": "Ledger #{ledger} · イベント #{event}",
       "resumeCheckpoint": "新しい Run として再開",
@@ -1114,9 +1116,7 @@
       "totalTokens": "Token 合計",
       "advancedDetails": "詳細設定とチェックポイント",
       "backToTasks": "タスク一覧に戻る",
-      "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}",
-      "userCheckpoint": "手動保存",
-      "autoRecoveryCheckpoint": "自動復旧"
+      "tokenBreakdown": "入力 {input} · 出力 {output} · キャッシュ {cached}"
     },
     "workspaceRuntime": {
       "title": "Workspace 開発環境",

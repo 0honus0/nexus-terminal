@@ -781,6 +781,7 @@
       "disableAllTargets": "Disable all",
       "noTargets": "No SSH connections are available.",
       "reconciliationRequired": "A previous mutation or its resource/lease finalization still requires reconciliation. Verify the actual state before releasing the resource quarantine.",
+      "restartRecoveryFailed": "Automatic recovery after the backend restart could not continue from its checkpoint: {reasons}",
       "reconciliationResources": "Resources to verify",
       "reconciliationLoading": "Loading resources that require verification…",
       "reconciliationLeaseFinalization": "The mutation outcome was already confirmed. Only the lease/resource finalization became uncertain; verify the resource state and release quarantine without retrying the mutation.",
@@ -849,8 +850,7 @@
       "environmentRunContract": "Workspace creation consumes this Run's frozen Environment snapshot; recipe and toolchain choices cannot change mid-Run.",
       "frozen": "Frozen",
       "openThreads": "Open conversations",
-      "closeThreads": "Close conversations",
-      "restartRecoveryFailed": "Automatic recovery after the backend restart could not continue from its checkpoint: {reasons}"
+      "closeThreads": "Close conversations"
     },
     "files": {
       "search": "Search files",
@@ -1090,6 +1090,8 @@
       "checkpoints": "Checkpoints",
       "checkpointHint": "Facts only: active leases, tokens, containers, and processes are never saved.",
       "saveCheckpoint": "Save checkpoint",
+      "userCheckpoint": "Saved",
+      "autoRecoveryCheckpoint": "Auto recovery",
       "noCheckpoints": "No saved checkpoints.",
       "checkpointWatermark": "Ledger #{ledger} · event #{event}",
       "resumeCheckpoint": "Resume as new run",
@@ -1114,9 +1116,7 @@
       "totalTokens": "Token total",
       "advancedDetails": "Advanced Details & Checkpoints",
       "backToTasks": "Back to Tasks",
-      "tokenBreakdown": "In {input} · Out {output} · Cached {cached}",
-      "userCheckpoint": "Saved",
-      "autoRecoveryCheckpoint": "Auto recovery"
+      "tokenBreakdown": "In {input} · Out {output} · Cached {cached}"
     },
     "workspaceRuntime": {
       "title": "Workspace dev environment",
