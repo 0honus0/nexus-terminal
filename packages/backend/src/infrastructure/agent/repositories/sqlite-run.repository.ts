@@ -340,7 +340,10 @@ export class SqliteRunRepository
     return row.id;
   }
 
-  async rootRuntimeModel(scope: Scope, runId: string): Promise<import('../../../modules/agent/ai/model.types').ModelRef> {
+  async rootRuntimeModel(
+    scope: Scope,
+    runId: string,
+  ): Promise<import('../../../modules/agent/ai/model.types').ModelRef> {
     const row = await this.db.queryOne<{ model_ref_json: string }>(
       `SELECT rt.model_ref_json FROM agent_runtimes rt
        JOIN agent_runs r ON r.id = rt.run_id
@@ -351,12 +354,19 @@ export class SqliteRunRepository
     const record = parseDurableJsonValue(row.model_ref_json);
     if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('DURABLE_STATE_INVALID');
     const model = record as Record<string, unknown>;
-    if (typeof model.providerId !== 'string' || typeof model.modelId !== 'string' || !Number.isSafeInteger(model.configurationVersion)) {
+    if (
+      typeof model.providerId !== 'string' ||
+      typeof model.modelId !== 'string' ||
+      !Number.isSafeInteger(model.configurationVersion)
+    ) {
       throw new Error('DURABLE_STATE_INVALID');
     }
-    return { providerId: model.providerId, modelId: model.modelId, configurationVersion: model.configurationVersion as number };
+    return {
+      providerId: model.providerId,
+      modelId: model.modelId,
+      configurationVersion: model.configurationVersion as number,
+    };
   }
-
 
   async pendingTools(scope: Scope, runId: string): Promise<PendingRootTool[]> {
     const rows = await this.db.queryAll<PendingRootToolRow>(

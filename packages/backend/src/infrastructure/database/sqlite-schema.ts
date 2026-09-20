@@ -485,7 +485,6 @@ CREATE TABLE IF NOT EXISTS ai_thread_entries (
 CREATE INDEX IF NOT EXISTS ai_thread_entries_page ON ai_thread_entries(thread_id, sequence DESC);
 `;
 
-
 export const createAiThreadEntrySearchIndexSQL = `
 CREATE VIRTUAL TABLE IF NOT EXISTS ai_thread_entries_search USING fts5(
     terms,
@@ -629,7 +628,6 @@ CREATE TABLE IF NOT EXISTS ai_memories (
 );
 CREATE INDEX IF NOT EXISTS ai_memories_recall ON ai_memories(user_id, app_id, status, updated_at DESC, id DESC);
 `;
-
 
 export const createAiMemorySearchIndexSQL = `
 CREATE VIRTUAL TABLE IF NOT EXISTS ai_memories_search USING fts5(

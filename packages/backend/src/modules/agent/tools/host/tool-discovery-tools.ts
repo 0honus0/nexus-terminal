@@ -1,10 +1,6 @@
 import type { JsonValue } from '../../agent.types';
 import { ToolCatalog } from '../../capabilities/tool-catalog';
-import {
-  deferredToolHandle,
-  isDeferredToolDescriptor,
-  TOOL_SEARCH_NAME,
-} from '../../capabilities/tool-model-surface';
+import { deferredToolHandle, isDeferredToolDescriptor, TOOL_SEARCH_NAME } from '../../capabilities/tool-model-surface';
 import type { AgentTool, ToolContext, ToolDescriptor, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';

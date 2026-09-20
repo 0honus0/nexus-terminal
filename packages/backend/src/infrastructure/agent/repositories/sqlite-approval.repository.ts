@@ -1,4 +1,7 @@
-import type { ApprovalRepositoryPort, ApprovalView } from '../../../modules/agent/runtime/approvals/approval.repository.port';
+import type {
+  ApprovalRepositoryPort,
+  ApprovalView,
+} from '../../../modules/agent/runtime/approvals/approval.repository.port';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { parseToolInspection } from '../runtime/durable-state-decoders';

@@ -290,11 +290,7 @@ const cancelPendingUserInputRequest = async (
   return pending.id;
 };
 
-const supersedeUnconsumedRunApprovals = async (
-  tx: RelationalDatabase,
-  row: RunRow,
-  now: number,
-): Promise<number> => {
+const supersedeUnconsumedRunApprovals = async (tx: RelationalDatabase, row: RunRow, now: number): Promise<number> => {
   const requested = await tx.queryOne<{ count: number }>(
     `SELECT COUNT(*) AS count FROM agent_approvals
      WHERE run_id = ? AND user_id = ? AND app_id = ? AND status = 'requested'`,
@@ -384,7 +380,11 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
         [runId, scope.userId, scope.appId],
       );
       if (!row) throw new Error('NOT_FOUND');
-      if (['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input', 'cancelling'].includes(row.status)) {
+      if (
+        ['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input', 'cancelling'].includes(
+          row.status,
+        )
+      ) {
         throw new Error('RUN_NOT_TERMINAL');
       }
       return supersedeUnconsumedRunApprovals(tx, row, now);
@@ -658,7 +658,12 @@ export class SqliteStateCommitAdapter implements StateCommitPort {
         const pendingInputRequestId = await cancelPendingUserInputRequest(tx, row, now);
         const events: DurableEventInput[] = [
           ...(pendingInputRequestId
-            ? [{ type: 'input.request_cancelled', payload: { requestId: pendingInputRequestId, reason: 'app_disabled' } }]
+            ? [
+                {
+                  type: 'input.request_cancelled',
+                  payload: { requestId: pendingInputRequestId, reason: 'app_disabled' },
+                },
+              ]
             : []),
           {
             type: nextStatus === 'interrupted' ? 'run.interrupted' : 'run.cancelled',

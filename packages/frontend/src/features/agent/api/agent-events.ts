@@ -275,9 +275,7 @@ const unknownEvent = (
   };
 };
 
-const parseAttemptIdentity = (
-  payload: Record<string, unknown>,
-): { attemptId: string; attemptIndex: number } | null => {
+const parseAttemptIdentity = (payload: Record<string, unknown>): { attemptId: string; attemptIndex: number } | null => {
   if (
     typeof payload.attemptId !== 'string' ||
     !Number.isSafeInteger(payload.attemptIndex) ||

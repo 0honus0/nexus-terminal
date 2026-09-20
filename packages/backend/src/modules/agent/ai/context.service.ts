@@ -6,11 +6,7 @@ import { projectArtifactsForModel, projectBrowserScreenshotObservation } from '.
 import { ArtifactService } from './artifact.service';
 import { ContextCheckpointService } from './context-checkpoint.service';
 import type { ContextPlan, ContextRequest, ContextSourceRange } from './context.types';
-import {
-  anchoredInputTokenEstimate,
-  estimateModelMessageTokens,
-  estimateTokens,
-} from './model-accounting';
+import { anchoredInputTokenEstimate, estimateModelMessageTokens, estimateTokens } from './model-accounting';
 import type { ModelContinuationRepositoryPort } from './model-continuation.repository.port';
 import type { ModelMessage } from './model.types';
 import { RecallService, recallTerms } from './recall.service';
@@ -522,10 +518,7 @@ export class ContextService {
       const body = truncateToEstimatedTokens(instruction.content, bodyBudget);
       const truncatedByContext = body !== instruction.content;
       const content =
-        header +
-        '\n' +
-        body +
-        (truncatedByContext ? '\n[Project instruction truncated by Context token budget.]' : '');
+        header + '\n' + body + (truncatedByContext ? '\n[Project instruction truncated by Context token budget.]' : '');
       const tokens = estimateTokens(content);
       if (
         headerTokens >= PROJECT_INSTRUCTION_FILE_TOKEN_LIMIT ||
@@ -580,10 +573,7 @@ export class ContextService {
         selectedSkillIds.push(metadata.id);
         projectedSkillMetadata.push(metadata);
       }
-      if (
-        canFit(tokens) &&
-        (selectedSkillIds.length > 0 || skillDisclosure.mode === 'search')
-      ) {
+      if (canFit(tokens) && (selectedSkillIds.length > 0 || skillDisclosure.mode === 'search')) {
         messages.push({ role: 'system', content });
         for (const id of selectedSkillIds) sourceRanges.push({ kind: 'skill', id });
         skillMetadataTokens = tokens;
@@ -717,9 +707,7 @@ export class ContextService {
     const ledgerGroups = ledgerGrouping.groups.reverse();
 
     const controlSections = [
-      ...(input.goal?.trim()
-        ? [{ kind: 'goal' as const, content: `[Current goal]\n${input.goal.trim()}` }]
-        : []),
+      ...(input.goal?.trim() ? [{ kind: 'goal' as const, content: `[Current goal]\n${input.goal.trim()}` }] : []),
       ...(input.taskPlan?.trim()
         ? [{ kind: 'task_plan' as const, content: `[Current task plan]\n${input.taskPlan.trim()}` }]
         : []),
@@ -767,10 +755,7 @@ export class ContextService {
     const hardHistoryPressure =
       projectedTokens(heuristicUsedTokens + controlTokenReserve + totalLedgerTokens) > preSummaryLedgerCeiling;
     const historyPressure = Boolean(ledgerPage.nextCursor) || hardHistoryPressure;
-    const summaryCapacity = Math.max(
-      0,
-      remainingBeforeHistory - threadAnchorTokenReserve - threadRecallTokenReserve,
-    );
+    const summaryCapacity = Math.max(0, remainingBeforeHistory - threadAnchorTokenReserve - threadRecallTokenReserve);
     const summaryTokenReserve =
       this.checkpoints && historyPressure && summaryCapacity >= 64
         ? Math.min(2_048, Math.floor(availableTokens * 0.2), summaryCapacity)
@@ -784,9 +769,8 @@ export class ContextService {
     for (let index = 0; index < ledgerGroups.length; index += 1) {
       const group = ledgerGroups[index]!;
       if (
-        projectedTokens(
-          heuristicUsedTokens + controlTokenReserve + selectedLedgerTokens + group.tokens,
-        ) > ledgerTokenCeiling
+        projectedTokens(heuristicUsedTokens + controlTokenReserve + selectedLedgerTokens + group.tokens) >
+        ledgerTokenCeiling
       ) {
         for (const droppedGroup of ledgerGroups.slice(index)) {
           for (const candidate of droppedGroup.sections) droppedSections.push(`ledger:${candidate.id}`);
@@ -803,10 +787,7 @@ export class ContextService {
     let threadAnchorTokens = 0;
     const selectedThreadAnchors: CandidateSection[] = [];
     for (const candidate of threadAnchorCandidates) {
-      if (
-        threadAnchorTokens + candidate.tokens > threadAnchorTokenReserve ||
-        !canFit(candidate.tokens)
-      ) {
+      if (threadAnchorTokens + candidate.tokens > threadAnchorTokenReserve || !canFit(candidate.tokens)) {
         droppedSections.push(`thread-anchor:${candidate.id}`);
         continue;
       }
@@ -818,10 +799,7 @@ export class ContextService {
     let threadRecallTokens = 0;
     const selectedThreadRecall: ThreadRecallCandidate[] = [];
     for (const candidate of threadRecallCandidates) {
-      if (
-        threadRecallTokens + candidate.tokens > threadRecallTokenReserve ||
-        !canFit(candidate.tokens)
-      ) {
+      if (threadRecallTokens + candidate.tokens > threadRecallTokenReserve || !canFit(candidate.tokens)) {
         droppedSections.push(`thread-recall:${candidate.id}`);
         continue;
       }
@@ -950,15 +928,10 @@ export class ContextService {
     const safetyMessage = messages[0]!;
     const projectInstructionMessages = messages.filter(
       (message, index) =>
-        index > 0 &&
-        message.role === 'system' &&
-        message.content.startsWith(PROJECT_INSTRUCTION_SYSTEM_PREFIX),
+        index > 0 && message.role === 'system' && message.content.startsWith(PROJECT_INSTRUCTION_SYSTEM_PREFIX),
     );
     const skillMessages = messages.filter(
-      (message, index) =>
-        index > 0 &&
-        message.role === 'system' &&
-        message.content.startsWith(SKILL_SYSTEM_PREFIX),
+      (message, index) => index > 0 && message.role === 'system' && message.content.startsWith(SKILL_SYSTEM_PREFIX),
     );
     const historyMessages = messages.filter((message, index) => index > 0 && message.role !== 'system');
     const dynamicSystemMessages = messages.filter(
@@ -973,13 +946,7 @@ export class ContextService {
       ...projectInstructionMessages.map((message) => message.content),
       ...skillMessages.map((message) => message.content),
     ];
-    messages.splice(
-      0,
-      messages.length,
-      ...historyMessages,
-      currentInputMessage,
-      ...dynamicSystemMessages,
-    );
+    messages.splice(0, messages.length, ...historyMessages, currentInputMessage, ...dynamicSystemMessages);
 
     const stablePrefixHash = stableHash(instructions);
     const toolSchemaHash = stableHash(input.tools ?? []);

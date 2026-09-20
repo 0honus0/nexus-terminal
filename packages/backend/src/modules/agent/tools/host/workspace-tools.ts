@@ -8,7 +8,10 @@ import type {
   ToolPrecondition,
   ToolResult,
 } from '../../capabilities/tool.types';
-import type { WorkspaceJobView, WorkspaceRuntimeGatewayPort } from '../../workspace-runtime/workspace-runtime-gateway.port';
+import type {
+  WorkspaceJobView,
+  WorkspaceRuntimeGatewayPort,
+} from '../../workspace-runtime/workspace-runtime-gateway.port';
 import type { AgentWorkspaceRepositoryPort } from '../../workspace-runtime/workspace-runtime.repository.port';
 
 const MAX_ARGV_ITEMS = 128;
@@ -222,16 +225,9 @@ export const createWorkspaceJobTool = (
     const job =
       mode === 'background'
         ? await gateway.startJob({ workspaceId, generation }, call, context.signal)
-        : await gateway.invoke(
-            { workspaceId, generation },
-            call,
-            context.signal,
-          );
+        : await gateway.invoke({ workspaceId, generation }, call, context.signal);
 
-    if (
-      mode === 'background' &&
-      (job.status === 'pending' || job.status === 'running')
-    ) {
+    if (mode === 'background' && (job.status === 'pending' || job.status === 'running')) {
       return {
         ok: true,
         summary: 'Workspace background job accepted by the durable Runner job journal.',

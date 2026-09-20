@@ -1,16 +1,14 @@
+import type { AgentRunEnvironmentSnapshot, JsonValue } from '../../../modules/agent/agent.types';
 import type {
-  AgentRunEnvironmentSnapshot,
-  JsonValue,
-} from '../../../modules/agent/agent.types';
-import type { AgentModelCapability, ModelCapabilitySnapshot, ModelRef, ReasoningEffort } from '../../../modules/agent/ai/model.types';
+  AgentModelCapability,
+  ModelCapabilitySnapshot,
+  ModelRef,
+  ReasoningEffort,
+} from '../../../modules/agent/ai/model.types';
 import { normalizeRequiredModelCapabilities } from '../../../modules/agent/ai/model-capability-requirements';
 import type { ToolInspection, ToolResult } from '../../../modules/agent/capabilities/tool.types';
 import { normalizePlanItems, type RunPlan } from '../../../modules/agent/runtime/planning/plan.types';
-import type {
-  RunBudget,
-  RunDefinitionSnapshot,
-  RunUsage,
-} from '../../../modules/agent/runtime/runs/run.types';
+import type { RunBudget, RunDefinitionSnapshot, RunUsage } from '../../../modules/agent/runtime/runs/run.types';
 
 const MAX_COLLECTION_ITEMS = 16_384;
 const MAX_STRING_BYTES = 2 * 1024 * 1024;
@@ -96,10 +94,8 @@ export const parseRunPlan = (raw: string): RunPlan => decodeRunPlan(parseDurable
 export const parseRunBudget = (raw: string): RunBudget => {
   const record = durableRecord(parseDurableJson(raw));
   const compactionMode = record.contextCompactionMode;
-  if (
-    compactionMode !== undefined &&
-    !['aggressive', 'balanced', 'conservative'].includes(String(compactionMode))
-  ) return invalid();
+  if (compactionMode !== undefined && !['aggressive', 'balanced', 'conservative'].includes(String(compactionMode)))
+    return invalid();
   return {
     maxContextTokens: durableInteger(record.maxContextTokens, 1),
     maxOutputTokens: durableInteger(record.maxOutputTokens, 1),
@@ -111,7 +107,9 @@ export const parseRunBudget = (raw: string): RunBudget => {
     maxRecallBytes: durableInteger(record.maxRecallBytes, 1),
     maxSubagentMessages: durableInteger(record.maxSubagentMessages, 1),
     maxSubagentMessageBytes: durableInteger(record.maxSubagentMessageBytes, 1),
-    ...(compactionMode === undefined ? {} : { contextCompactionMode: compactionMode as NonNullable<RunBudget['contextCompactionMode']> }),
+    ...(compactionMode === undefined
+      ? {}
+      : { contextCompactionMode: compactionMode as NonNullable<RunBudget['contextCompactionMode']> }),
     revision: durableInteger(record.revision, 1),
   };
 };
@@ -198,30 +196,31 @@ export const decodeRunEnvironment = (value: unknown): AgentRunEnvironmentSnapsho
         cwd: durableString(row.cwd) as string,
       };
     }),
-    browserTarget: record.browserTarget === null
-      ? null
-      : (() => {
-          const target = durableRecord(record.browserTarget);
-          if (!Array.isArray(target.endpoints) || target.endpoints.length > 32) return invalid();
-          return {
-            id: durableString(target.id) as string,
-            profileRevision: durableInteger(target.profileRevision, 1),
-            endpoints: target.endpoints.map((item) => {
-              const endpoint = durableRecord(item);
-              if (!['docker-network', 'external-network'].includes(String(endpoint.scope))) return invalid();
-              if (!['backend', 'runner'].includes(String(endpoint.via))) return invalid();
-              return {
-                scope: endpoint.scope as 'docker-network' | 'external-network',
-                via: endpoint.via as 'backend' | 'runner',
-                url: durableString(endpoint.url) as string,
-                priority: durableInteger(endpoint.priority),
-                allowPlaintext: durableBoolean(endpoint.allowPlaintext),
-                verifyTls: durableBoolean(endpoint.verifyTls),
-              };
-            }),
-            allowedUrlPatterns: decodeDurableStringArray(target.allowedUrlPatterns, 256),
-          };
-        })(),
+    browserTarget:
+      record.browserTarget === null
+        ? null
+        : (() => {
+            const target = durableRecord(record.browserTarget);
+            if (!Array.isArray(target.endpoints) || target.endpoints.length > 32) return invalid();
+            return {
+              id: durableString(target.id) as string,
+              profileRevision: durableInteger(target.profileRevision, 1),
+              endpoints: target.endpoints.map((item) => {
+                const endpoint = durableRecord(item);
+                if (!['docker-network', 'external-network'].includes(String(endpoint.scope))) return invalid();
+                if (!['backend', 'runner'].includes(String(endpoint.via))) return invalid();
+                return {
+                  scope: endpoint.scope as 'docker-network' | 'external-network',
+                  via: endpoint.via as 'backend' | 'runner',
+                  url: durableString(endpoint.url) as string,
+                  priority: durableInteger(endpoint.priority),
+                  allowPlaintext: durableBoolean(endpoint.allowPlaintext),
+                  verifyTls: durableBoolean(endpoint.verifyTls),
+                };
+              }),
+              allowedUrlPatterns: decodeDurableStringArray(target.allowedUrlPatterns, 256),
+            };
+          })(),
   };
 };
 
@@ -241,7 +240,8 @@ export const decodeModelCapabilitySnapshot = (value: unknown): ModelCapabilitySn
   }
   let supportedEfforts: ReasoningEffort[] | undefined;
   if (record.reasoningEfforts !== undefined) {
-    if (!Array.isArray(record.reasoningEfforts) || record.reasoningEfforts.length > reasoningEfforts.size) return invalid();
+    if (!Array.isArray(record.reasoningEfforts) || record.reasoningEfforts.length > reasoningEfforts.size)
+      return invalid();
     supportedEfforts = record.reasoningEfforts.map((effort) => {
       if (!reasoningEfforts.has(effort as ReasoningEffort)) return invalid();
       return effort as ReasoningEffort;
@@ -251,7 +251,8 @@ export const decodeModelCapabilitySnapshot = (value: unknown): ModelCapabilitySn
   const defaultEffort = record.defaultReasoningEffort;
   if (
     defaultEffort !== undefined &&
-    (!reasoningEfforts.has(defaultEffort as ReasoningEffort) || !supportedEfforts?.includes(defaultEffort as ReasoningEffort))
+    (!reasoningEfforts.has(defaultEffort as ReasoningEffort) ||
+      !supportedEfforts?.includes(defaultEffort as ReasoningEffort))
   ) {
     return invalid();
   }
@@ -259,7 +260,8 @@ export const decodeModelCapabilitySnapshot = (value: unknown): ModelCapabilitySn
   if (record.reasoningSupportsMaxTokens !== undefined && typeof record.reasoningSupportsMaxTokens !== 'boolean') {
     return invalid();
   }
-  if (record.supportsPromptCacheKey !== undefined && typeof record.supportsPromptCacheKey !== 'boolean') return invalid();
+  if (record.supportsPromptCacheKey !== undefined && typeof record.supportsPromptCacheKey !== 'boolean')
+    return invalid();
   return {
     contextWindow,
     maxOutputTokens,
@@ -279,8 +281,10 @@ export const parseRunDefinition = (raw: string): RunDefinitionSnapshot => {
   const model = durableRecord(record.model);
   const reasoningEffort = record.reasoningEffort;
   if (reasoningEffort !== undefined && !reasoningEfforts.has(reasoningEffort as ReasoningEffort)) return invalid();
-  if (record.approvalMode !== undefined && !['ask', 'full_access'].includes(String(record.approvalMode))) return invalid();
-  if (record.executionMode !== undefined && !['execute', 'plan'].includes(String(record.executionMode))) return invalid();
+  if (record.approvalMode !== undefined && !['ask', 'full_access'].includes(String(record.approvalMode)))
+    return invalid();
+  if (record.executionMode !== undefined && !['execute', 'plan'].includes(String(record.executionMode)))
+    return invalid();
   let contextBoundary: RunDefinitionSnapshot['contextBoundary'];
   if (record.contextBoundary !== undefined) {
     const boundary = durableRecord(record.contextBoundary);
@@ -305,7 +309,9 @@ export const parseRunDefinition = (raw: string): RunDefinitionSnapshot => {
           modelId: durableString(routeModel.modelId) as string,
           configurationVersion: durableInteger(routeModel.configurationVersion, 1),
         },
-        ...(route.modelCapabilities === undefined ? {} : { modelCapabilities: decodeModelCapabilitySnapshot(route.modelCapabilities) }),
+        ...(route.modelCapabilities === undefined
+          ? {}
+          : { modelCapabilities: decodeModelCapabilitySnapshot(route.modelCapabilities) }),
       };
     });
   }
@@ -370,7 +376,9 @@ export const parseToolInspection = (raw: string): ToolInspection => {
       ...(target.workspaceId === undefined ? {} : { workspaceId: durableString(target.workspaceId) as string }),
       ...(target.integrationId === undefined ? {} : { integrationId: durableString(target.integrationId) as string }),
       ...(target.schemaHash === undefined ? {} : { schemaHash: durableString(target.schemaHash) as string }),
-      ...(target.browserSessionId === undefined ? {} : { browserSessionId: durableString(target.browserSessionId) as string }),
+      ...(target.browserSessionId === undefined
+        ? {}
+        : { browserSessionId: durableString(target.browserSessionId) as string }),
       ...(target.snapshotId === undefined ? {} : { snapshotId: durableString(target.snapshotId) as string }),
       ...(target.generation === undefined ? {} : { generation: durableInteger(target.generation, 1) }),
       ...(target.hostKeyTrust === undefined
@@ -386,7 +394,8 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     operationHashVersion: 1,
     preconditions: record.preconditions.map((item) => {
       const precondition = durableRecord(item);
-      if (!['fileHash', 'metadata', 'serviceState', 'workspaceGeneration'].includes(String(precondition.kind))) return invalid();
+      if (!['fileHash', 'metadata', 'serviceState', 'workspaceGeneration'].includes(String(precondition.kind)))
+        return invalid();
       return {
         kind: precondition.kind as ToolInspection['preconditions'][number]['kind'],
         key: durableString(precondition.key) as string,

@@ -21,7 +21,12 @@ const textMediaTypes = new Set([
 
 export const isTextArtifact = (artifact: Pick<ArtifactRef, 'mediaType'>): boolean => {
   const mediaType = artifact.mediaType.toLowerCase();
-  return mediaType.startsWith('text/') || textMediaTypes.has(mediaType) || mediaType.endsWith('+json') || mediaType.endsWith('+xml');
+  return (
+    mediaType.startsWith('text/') ||
+    textMediaTypes.has(mediaType) ||
+    mediaType.endsWith('+json') ||
+    mediaType.endsWith('+xml')
+  );
 };
 
 const readAll = async (
@@ -208,7 +213,13 @@ export const readArtifactTextLinesForAgent = async (
   const artifact = await artifacts.getForAgent(scope, access, artifactId);
   if (!artifact || artifact.status !== 'ready') throw new Error('ARTIFACT_NOT_AUTHORIZED_FOR_RUN');
   if (!isTextArtifact(artifact)) throw new Error('ARTIFACT_NOT_TEXT');
-  if (!Number.isSafeInteger(startLine) || startLine < 1 || !Number.isSafeInteger(lineCount) || lineCount < 1 || lineCount > 200) {
+  if (
+    !Number.isSafeInteger(startLine) ||
+    startLine < 1 ||
+    !Number.isSafeInteger(lineCount) ||
+    lineCount < 1 ||
+    lineCount > 200
+  ) {
     throw new Error('TOOL_ARGUMENTS_INVALID');
   }
   const scanBytes = Math.min(artifact.sizeBytes, MAX_TEXT_SCAN_BYTES);
@@ -278,7 +289,10 @@ export const readArtifactByteRangeForAgent = async (
   const endByte = Math.min(artifact.sizeBytes - 1, startByte + maxBytes - 1);
   const chunks: Buffer[] = [];
   let total = 0;
-  for await (const raw of artifacts.readForAgent(scope, access, artifact.id, { start: startByte, endInclusive: endByte })) {
+  for await (const raw of artifacts.readForAgent(scope, access, artifact.id, {
+    start: startByte,
+    endInclusive: endByte,
+  })) {
     const chunk = Buffer.from(raw);
     total += chunk.byteLength;
     if (total > 48 * 1024) throw new Error('ARTIFACT_READ_LIMIT_EXCEEDED');

@@ -24,10 +24,7 @@ import {
   createWorkspaceCreateTool,
   createWorkspaceSwitchToolVersionsTool,
 } from '../../modules/agent/tools/host/workspace-runtime-management-tools';
-import {
-  createWorkspaceJobControlTool,
-  createWorkspaceJobTool,
-} from '../../modules/agent/tools/host/workspace-tools';
+import { createWorkspaceJobControlTool, createWorkspaceJobTool } from '../../modules/agent/tools/host/workspace-tools';
 import {
   createWorkspaceApplyPatchTool,
   createWorkspaceCodeIntelTool,

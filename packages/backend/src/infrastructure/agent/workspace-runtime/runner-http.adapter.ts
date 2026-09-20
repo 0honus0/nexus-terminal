@@ -211,7 +211,13 @@ interface RunnerCommandWireResponse {
   error?: unknown;
 }
 
-const commandStatuses = new Set<RunnerCommandResult['status']>(['pending', 'running', 'succeeded', 'failed', 'unknown']);
+const commandStatuses = new Set<RunnerCommandResult['status']>([
+  'pending',
+  'running',
+  'succeeded',
+  'failed',
+  'unknown',
+]);
 
 const decodeCommandWireResponse = (value: unknown): RunnerCommandWireResponse => {
   const record = recordValue(value);
@@ -325,7 +331,11 @@ const decodeWorkspaceFileRead = (value: unknown): WorkspaceFileReadResult => {
 
 const decodeWorkspaceSearch = (value: unknown): WorkspaceSearchResult => {
   const record = recordValue(value);
-  if ((record.engine !== 'rg' && record.engine !== 'fallback') || !Array.isArray(record.matches) || record.matches.length > 100) {
+  if (
+    (record.engine !== 'rg' && record.engine !== 'fallback') ||
+    !Array.isArray(record.matches) ||
+    record.matches.length > 100
+  ) {
     throw protocolError();
   }
   return {
@@ -348,7 +358,6 @@ const decodeWorkspaceSearch = (value: unknown): WorkspaceSearchResult => {
     scannedBytes: integerValue(record.scannedBytes),
   };
 };
-
 
 const decodeWorkspaceRepoMap = (value: unknown): WorkspaceRepoMapResult => {
   const record = recordValue(value);
@@ -841,7 +850,6 @@ export class RunnerHttpAdapter
     );
   }
 
-
   async repoMap(
     workspaceId: string,
     generation: number,
@@ -1001,12 +1009,11 @@ export class RunnerHttpAdapter
           generation: grant.generation,
           status: 'unknown',
           result: null,
-          error:
-            signal.aborted
-              ? 'WORKSPACE_JOB_OUTCOME_UNKNOWN'
-              : error instanceof Error
-                ? error.message.slice(0, 256)
-                : 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
+          error: signal.aborted
+            ? 'WORKSPACE_JOB_OUTCOME_UNKNOWN'
+            : error instanceof Error
+              ? error.message.slice(0, 256)
+              : 'WORKSPACE_JOB_OUTCOME_UNKNOWN',
           createdAt,
           completedAt: Math.floor(Date.now() / 1000),
         };
@@ -1068,12 +1075,9 @@ export class RunnerHttpAdapter
   async cancelJob(jobId: string, signal?: AbortSignal): Promise<WorkspaceJobView> {
     if (!/^job-[a-f0-9]{64}$/.test(jobId)) throw new Error('VALIDATION_FAILED');
     return decodeWorkspaceJobView(
-      await this.request(
-        `/v1/jobs/${encodeURIComponent(jobId)}/cancel`,
-        { method: 'POST', body: {} },
-        signal,
-        { timeoutMs: 10_000 },
-      ),
+      await this.request(`/v1/jobs/${encodeURIComponent(jobId)}/cancel`, { method: 'POST', body: {} }, signal, {
+        timeoutMs: 10_000,
+      }),
     );
   }
 

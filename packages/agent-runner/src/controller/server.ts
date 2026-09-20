@@ -326,7 +326,9 @@ export class RunnerControllerServer {
         if (typeof rawEndpoint !== 'string' || rawEndpoint.length > 12_000) throw new Error('BROWSER_ENDPOINT_INVALID');
         let endpoint: WorkspaceBrowserEndpoint;
         try {
-          endpoint = decodeBrowserEndpoint(JSON.parse(Buffer.from(rawEndpoint, 'base64url').toString('utf8')) as unknown);
+          endpoint = decodeBrowserEndpoint(
+            JSON.parse(Buffer.from(rawEndpoint, 'base64url').toString('utf8')) as unknown,
+          );
         } catch {
           throw new Error('BROWSER_ENDPOINT_INVALID');
         }
@@ -497,7 +499,15 @@ export class RunnerControllerServer {
         const workspaceId = decodeURIComponent(codingSearchMatch[1]!);
         const input = asRecord(await body(request));
         if (
-          !hasOnlyKeys(input, ['generation', 'query', 'path', 'glob', 'maxResults', 'contextLines', 'maxOutputBytes']) ||
+          !hasOnlyKeys(input, [
+            'generation',
+            'query',
+            'path',
+            'glob',
+            'maxResults',
+            'contextLines',
+            'maxOutputBytes',
+          ]) ||
           !Number.isSafeInteger(input.generation) ||
           Number(input.generation) < 1 ||
           typeof input.query !== 'string' ||
@@ -725,11 +735,7 @@ export class RunnerControllerServer {
         ) {
           throw new Error('VALIDATION_FAILED');
         }
-        json(
-          response,
-          200,
-          await this.waitWorkspaceJob(decodeURIComponent(jobWaitMatch[1]!), Number(input.timeoutMs)),
-        );
+        json(response, 200, await this.waitWorkspaceJob(decodeURIComponent(jobWaitMatch[1]!), Number(input.timeoutMs)));
         return;
       }
       const jobCancelMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)\/cancel$/);
@@ -835,12 +841,16 @@ export class RunnerControllerServer {
       const message = error instanceof Error ? error.message : String(error);
       if (message === 'WORKSPACE_JOB_CANCELLED') this.dependencies.journal.cancelJob(request.jobId, message);
       else this.dependencies.journal.failJob(request.jobId, message);
-      runnerLog(message === 'WORKSPACE_JOB_CANCELLED' ? 'info' : 'warn', 'Agent Runner Workspace job finished unsuccessfully', {
-        jobId: request.jobId,
-        workspaceId: request.workspaceId,
-        generation: request.generation,
-        errorCode: message.slice(0, 200),
-      });
+      runnerLog(
+        message === 'WORKSPACE_JOB_CANCELLED' ? 'info' : 'warn',
+        'Agent Runner Workspace job finished unsuccessfully',
+        {
+          jobId: request.jobId,
+          workspaceId: request.workspaceId,
+          generation: request.generation,
+          errorCode: message.slice(0, 200),
+        },
+      );
     }
   }
 

@@ -27,12 +27,7 @@ const onlyKeys = (value: Record<string, JsonValue>, allowed: readonly string[]):
 };
 
 const stringValue = (value: JsonValue | undefined, maxBytes: number): string => {
-  if (
-    typeof value !== 'string' ||
-    !value ||
-    value.includes('\0') ||
-    Buffer.byteLength(value, 'utf8') > maxBytes
-  ) {
+  if (typeof value !== 'string' || !value || value.includes('\0') || Buffer.byteLength(value, 'utf8') > maxBytes) {
     throw new Error('TOOL_ARGUMENTS_INVALID');
   }
   return value;
@@ -366,7 +361,6 @@ export const createWorkspaceSearchTool = (
   },
 });
 
-
 export const createWorkspaceRepoMapTool = (
   repository: AgentWorkspaceRepositoryPort,
   runtime: WorkspaceRuntimeService,
@@ -457,11 +451,7 @@ export const createWorkspaceRepoMapTool = (
         maxSymbols: Number(args.maxSymbols),
         maxOutputBytes: Math.max(
           1024,
-          Math.min(
-            16 * 1024,
-            Math.floor(context.maxOutputBytes / 2),
-            Number(args.maxBytes),
-          ),
+          Math.min(16 * 1024, Math.floor(context.maxOutputBytes / 2), Number(args.maxBytes)),
         ),
       },
       context.signal,
@@ -588,11 +578,7 @@ export const createWorkspaceCodeIntelTool = (
         maxResults: Number(args.maxResults),
         maxOutputBytes: Math.max(
           1024,
-          Math.min(
-            64 * 1024,
-            Math.floor(context.maxOutputBytes / 2),
-            Number(args.maxBytes),
-          ),
+          Math.min(64 * 1024, Math.floor(context.maxOutputBytes / 2), Number(args.maxBytes)),
         ),
       },
       context.signal,

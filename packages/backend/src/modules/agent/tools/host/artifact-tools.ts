@@ -1,8 +1,5 @@
 import type { ArtifactService } from '../../ai/artifact.service';
-import {
-  readArtifactByteRangeForAgent,
-  readArtifactTextLinesForAgent,
-} from '../../ai/artifact-model-projection';
+import { readArtifactByteRangeForAgent, readArtifactTextLinesForAgent } from '../../ai/artifact-model-projection';
 import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
@@ -172,7 +169,11 @@ export const createArtifactReadTool = (artifacts: ArtifactService, cryptoHash: C
     if (args.mode === 'metadata') {
       const artifact = await artifacts.getForAgent(context, access, artifactId);
       if (!artifact || artifact.status !== 'ready') throw new Error('ARTIFACT_NOT_AUTHORIZED_FOR_RUN');
-      return result(`Artifact metadata: ${artifact.originalName} (${artifact.sizeBytes} bytes).`, metadata(artifact), artifact.id);
+      return result(
+        `Artifact metadata: ${artifact.originalName} (${artifact.sizeBytes} bytes).`,
+        metadata(artifact),
+        artifact.id,
+      );
     }
     if (args.mode === 'text') {
       const read = await readArtifactTextLinesForAgent(

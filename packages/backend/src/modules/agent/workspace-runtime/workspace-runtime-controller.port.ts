@@ -158,13 +158,11 @@ export interface WorkspaceCodeIntelResult {
   sha256: string | null;
   results: Array<WorkspaceRepoMapSymbol | WorkspaceCodeIntelLocation | WorkspaceCodeIntelDiagnostic>;
   truncated: boolean;
-  fallback:
-    | null
-    | {
-        reason: 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED';
-        searchTool: 'workspace_search';
-        readTool: 'workspace_read_file';
-      };
+  fallback: null | {
+    reason: 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED';
+    searchTool: 'workspace_search';
+    readTool: 'workspace_read_file';
+  };
 }
 
 export interface WorkspacePatchExpectedFile {
@@ -263,5 +261,4 @@ export interface WorkspaceRuntimeControllerPort {
     expectedBytes: number,
     signal?: AbortSignal,
   ): Promise<void>;
-
 }

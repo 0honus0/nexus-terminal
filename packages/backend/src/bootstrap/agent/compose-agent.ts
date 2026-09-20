@@ -251,9 +251,11 @@ export const composeAgent = ({
   const context = new ContextService(conversations, recall, skills, modelContinuations, artifacts, contextCheckpoints);
   const notificationBridge = new AgentNotificationBridge(notifications, conversationRepository);
   const stateCommit = new SqliteStateCommitAdapter(database, (run, events) => {
-    void notificationBridge.project(run, events).catch((error) =>
-      logger.warn({ err: error, runId: run.id, appId: run.appId }, 'Agent notification projection failed'),
-    );
+    void notificationBridge
+      .project(run, events)
+      .catch((error) =>
+        logger.warn({ err: error, runId: run.id, appId: run.appId }, 'Agent notification projection failed'),
+      );
   });
   const subagentRepository = new SqliteSubagentRepository(database);
   const runScopes: RunScopeRepositoryPort = subagentRepository;

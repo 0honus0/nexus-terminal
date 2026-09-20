@@ -52,10 +52,8 @@ export const requestToolApprovalTransition = async (
   ) {
     throw new Error('TOOL_STATE_CONFLICT');
   }
-  if (
-    command.expiresAt <= command.now ||
-    command.expiresAt > command.now + TOOL_APPROVAL_TTL_SECONDS
-  ) throw new Error('VALIDATION_FAILED');
+  if (command.expiresAt <= command.now || command.expiresAt > command.now + TOOL_APPROVAL_TTL_SECONDS)
+    throw new Error('VALIDATION_FAILED');
   await tx.execute(
     `INSERT INTO agent_approvals
       (id, user_id, app_id, run_id, tool_call_id, requested_by_runtime_id, operation_hash,
