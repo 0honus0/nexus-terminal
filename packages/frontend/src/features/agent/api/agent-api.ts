@@ -86,6 +86,7 @@ export interface AgentMcpIntegrationConfiguration {
   endpoint: string;
   privateHostExceptions: string[];
   protocolVersion: '2026-07-28';
+  trustToolAnnotations?: boolean;
 }
 export interface AgentAcpIntegrationConfiguration {
   displayName: string;
@@ -103,6 +104,11 @@ export interface AgentIntegrationView {
   credentialRevision: number;
   schemaHash: string | null;
   enabled: boolean;
+  refreshState: 'idle' | 'refreshing' | 'ready' | 'error';
+  lastErrorCode: string | null;
+  lastAttemptAt: number | null;
+  lastSuccessAt: number | null;
+  nextRetryAt: number | null;
   version: number;
   createdAt: number;
   updatedAt: number;
@@ -578,7 +584,11 @@ export interface AgentRunView {
   definition: {
     schemaVersion: 1;
     agentDefinitionId: string;
-    model: { providerId: string; modelId: string; configurationVersion: number };
+    model: {
+      providerId: string;
+      modelId: string;
+      configurationVersion: number;
+    };
     reasoningEffort?: AgentReasoningEffort;
     approvalMode?: AgentApprovalMode;
     executionMode?: AgentExecutionMode;
@@ -586,7 +596,10 @@ export interface AgentRunView {
     environment?: WorkspaceProfileView | null;
     policyRevision: number;
     settingsRevision: number;
-    contextBoundary?: { baseThrough: number; runThrough: Record<string, number> };
+    contextBoundary?: {
+      baseThrough: number;
+      runThrough: Record<string, number>;
+    };
   };
   plan: AgentRunPlan;
   usage: {
@@ -602,7 +615,11 @@ export interface AgentRunView {
       reservedOutputTokens: number;
       contextWindowTokens: number;
       source: 'estimated' | 'anchored_estimate' | 'provider';
-      model?: { providerId: string; modelId: string; configurationVersion: number };
+      model?: {
+        providerId: string;
+        modelId: string;
+        configurationVersion: number;
+      };
       contextEpoch?: string;
       updatedAt: number;
     };
@@ -666,7 +683,11 @@ export interface AgentCheckpointView {
     evidenceRefs: string[];
     checkpointArtifactRefs?: string[];
     modelConfigurationVersion: number;
-    activeModel?: { providerId: string; modelId: string; configurationVersion: number };
+    activeModel?: {
+      providerId: string;
+      modelId: string;
+      configurationVersion: number;
+    };
     definitionVersion: string;
     policyRevision: number;
     workspaceArtifactManifestRefs: string[];
@@ -674,7 +695,10 @@ export interface AgentCheckpointView {
     recoveryManifest?: {
       schemaVersion: 1;
       eventThrough: number;
-      contextBoundary: { baseThrough: number; runThrough: Record<string, number> };
+      contextBoundary: {
+        baseThrough: number;
+        runThrough: Record<string, number>;
+      };
       tools: Array<{
         toolCallId: string;
         operationHash: string;
@@ -724,7 +748,11 @@ export interface AgentSubagentView {
   capabilities: string[];
   peerMessaging: 'parent-child' | 'same-run';
   mutationMode: 'read-only' | 'governed';
-  modelRef: { providerId: string; modelId: string; configurationVersion: number };
+  modelRef: {
+    providerId: string;
+    modelId: string;
+    configurationVersion: number;
+  };
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];
@@ -767,8 +795,16 @@ export interface AgentSubagentMessage {
 export interface AgentSubagentProfile {
   id: string;
   role: string;
-  defaultModel: { providerId: string; modelId: string; configurationVersion: number } | null;
-  allowedModels: Array<{ providerId: string; modelId: string; configurationVersion: number }>;
+  defaultModel: {
+    providerId: string;
+    modelId: string;
+    configurationVersion: number;
+  } | null;
+  allowedModels: Array<{
+    providerId: string;
+    modelId: string;
+    configurationVersion: number;
+  }>;
   capabilities: string[];
   peerMessaging: 'parent-child' | 'same-run';
   mutationMode: 'read-only' | 'governed';
@@ -902,7 +938,9 @@ const csrf = async (): Promise<string> => {
   return csrfToken;
 };
 
-const mutationHeaders = async (): Promise<Record<string, string>> => ({ 'X-Nexus-CSRF': await csrf() });
+const mutationHeaders = async (): Promise<Record<string, string>> => ({
+  'X-Nexus-CSRF': await csrf(),
+});
 
 export const resetAgentCsrf = (): void => {
   csrfToken = null;
@@ -1106,13 +1144,19 @@ export const agentApi = {
       ).data,
     );
   },
-  async installPlugin(
-    stageId: string,
-  ): Promise<{ stage: PluginStageView; plugin: PluginVersionView; app: PluginAppStateView }> {
+  async installPlugin(stageId: string): Promise<{
+    stage: PluginStageView;
+    plugin: PluginVersionView;
+    app: PluginAppStateView;
+  }> {
     return unwrap(
       (
         await httpClient.post<
-          AgentEnvelope<{ stage: PluginStageView; plugin: PluginVersionView; app: PluginAppStateView }>
+          AgentEnvelope<{
+            stage: PluginStageView;
+            plugin: PluginVersionView;
+            app: PluginAppStateView;
+          }>
         >('/agent/plugins/install', { stageId }, { headers: await mutationHeaders() })
       ).data,
     );
@@ -1249,16 +1293,29 @@ export const agentApi = {
   async uploadArtifact(appId: string, file: File): Promise<AgentArtifactRef> {
     const reservation = unwrap(
       (
-        await httpClient.post<AgentEnvelope<{ artifactId: string; uploadUrl: string; expiresAt: number }>>(
+        await httpClient.post<
+          AgentEnvelope<{
+            artifactId: string;
+            uploadUrl: string;
+            expiresAt: number;
+          }>
+        >(
           `/apps/${encodeURIComponent(appId)}/artifacts`,
-          { name: file.name, mediaType: file.type || 'application/octet-stream', declaredBytes: file.size },
+          {
+            name: file.name,
+            mediaType: file.type || 'application/octet-stream',
+            declaredBytes: file.size,
+          },
           { headers: await mutationHeaders() },
         )
       ).data,
     );
     const uploadPath = reservation.uploadUrl.replace(/^\/api\/v1/, '');
     await httpClient.put(uploadPath, file, {
-      headers: { ...(await mutationHeaders()), 'Content-Type': file.type || 'application/octet-stream' },
+      headers: {
+        ...(await mutationHeaders()),
+        'Content-Type': file.type || 'application/octet-stream',
+      },
       timeout: 120_000,
     });
     return unwrap(
@@ -1603,7 +1660,10 @@ export const agentApi = {
     }
     return {
       items: unwrap(response.data),
-      clock: { serverUnixMilliseconds, clientMonotonicMilliseconds: performance.now() },
+      clock: {
+        serverUnixMilliseconds,
+        clientMonotonicMilliseconds: performance.now(),
+      },
     };
   },
   async resolveApproval(
@@ -1622,7 +1682,12 @@ export const agentApi = {
             expectedVersion: approval.version,
             ...(feedback ? { feedback } : {}),
           }),
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          {
+            headers: {
+              ...(await mutationHeaders()),
+              'Idempotency-Key': crypto.randomUUID(),
+            },
+          },
         )
       ).data,
     );
@@ -1634,7 +1699,11 @@ export const agentApi = {
       text: string;
       artifactRefs?: string[];
       agentDefinitionId: string;
-      model: { providerId: string; modelId: string; configurationVersion: number };
+      model: {
+        providerId: string;
+        modelId: string;
+        configurationVersion: number;
+      };
       reasoningEffort?: AgentReasoningEffort;
       approvalMode: AgentApprovalMode;
       executionMode?: AgentExecutionMode;
@@ -1661,7 +1730,12 @@ export const agentApi = {
             ...(input.environment === undefined ? {} : { environment: input.environment }),
             ...(input.initialGoal ? { initialGoal: input.initialGoal } : {}),
           }),
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          {
+            headers: {
+              ...(await mutationHeaders()),
+              'Idempotency-Key': crypto.randomUUID(),
+            },
+          },
         )
       ).data,
     );
@@ -1670,14 +1744,28 @@ export const agentApi = {
     await httpClient.post(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/inputs`,
       agentRuntimeRequest({ text, artifactRefs, expectedVersion: run.version }),
-      { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+      {
+        headers: {
+          ...(await mutationHeaders()),
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+      },
     );
   },
   async interruptRun(appId: string, run: AgentRunView, text: string): Promise<void> {
     await httpClient.post(
       `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/interrupt`,
-      agentRuntimeRequest({ text, artifactRefs: [], expectedVersion: run.version }),
-      { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+      agentRuntimeRequest({
+        text,
+        artifactRefs: [],
+        expectedVersion: run.version,
+      }),
+      {
+        headers: {
+          ...(await mutationHeaders()),
+          'Idempotency-Key': crypto.randomUUID(),
+        },
+      },
     );
   },
   async setRunGoal(appId: string, run: AgentRunView, text: string): Promise<AgentRunView> {
@@ -1687,7 +1775,12 @@ export const agentApi = {
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           path,
           agentRuntimeRequest({ text, expectedVersion: run.version }),
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          {
+            headers: {
+              ...(await mutationHeaders()),
+              'Idempotency-Key': crypto.randomUUID(),
+            },
+          },
         )
       ).data,
     );
@@ -1708,8 +1801,18 @@ export const agentApi = {
       (
         await httpClient.patch<AgentEnvelope<AgentRunView>>(
           path,
-          agentRuntimeRequest({ action, inputId, beforeInputId, expectedVersion: run.version }),
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          agentRuntimeRequest({
+            action,
+            inputId,
+            beforeInputId,
+            expectedVersion: run.version,
+          }),
+          {
+            headers: {
+              ...(await mutationHeaders()),
+              'Idempotency-Key': crypto.randomUUID(),
+            },
+          },
         )
       ).data,
     );
@@ -1728,8 +1831,17 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/budget`,
-          agentRuntimeRequest({ scope: 'run', increase, expectedVersion: run.version }),
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          agentRuntimeRequest({
+            scope: 'run',
+            increase,
+            expectedVersion: run.version,
+          }),
+          {
+            headers: {
+              ...(await mutationHeaders()),
+              'Idempotency-Key': crypto.randomUUID(),
+            },
+          },
         )
       ).data,
     );
@@ -1760,7 +1872,12 @@ export const agentApi = {
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/resume`,
           agentRuntimeRequest({ checkpointId, expectedVersion: run.version }),
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          {
+            headers: {
+              ...(await mutationHeaders()),
+              'Idempotency-Key': crypto.randomUUID(),
+            },
+          },
         )
       ).data,
     );
@@ -1771,7 +1888,12 @@ export const agentApi = {
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/cancel`,
           agentRuntimeRequest({ expectedVersion: run.version }),
-          { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
+          {
+            headers: {
+              ...(await mutationHeaders()),
+              'Idempotency-Key': crypto.randomUUID(),
+            },
+          },
         )
       ).data,
     );
@@ -1779,7 +1901,10 @@ export const agentApi = {
   async deleteRun(appId: string, run: AgentRunView): Promise<void> {
     await httpClient.delete(`/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}`, {
       params: { expectedVersion: run.version },
-      headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() },
+      headers: {
+        ...(await mutationHeaders()),
+        'Idempotency-Key': crypto.randomUUID(),
+      },
     });
   },
 };

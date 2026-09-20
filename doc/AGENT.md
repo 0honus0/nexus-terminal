@@ -657,6 +657,10 @@ Workspace local Terminal 通过 Runner 管理的 direct PTY lifecycle：
 
 MCP 已进入 composition/tool catalog。外部 MCP server/tool schema 必须通过本地 schema、scope、network 和风险策略。
 
+MCP Integration 的 `enabled` 只表示配置被启用，不等于远端当前可调用。Host 维护轻量 runtime health projection：`idle | refreshing | ready | error`，并暴露 bounded `lastErrorCode`、最近尝试/成功时间与下次 retry 时间。只有当前 durable integration version + credential revision 的 refresh 通过 schema-hash CAS 后才进入 `ready` 并发布 Tool/Resource/Prompt contribution；refresh 失败会先移除当前 contribution，再由 lifecycle sweep 按有界 backoff 重试。disable/remove/version/credential generation 变化必须取消旧 generation retry，旧网络结果永远不能复活旧 schema。该 health 是可重建的 runtime projection，不成为第二套 Integration durable truth；Backend restart/user initialization 通过现有 `syncEnabled` 从 durable Integration 配置重新建立。
+
+Agent Settings 必须提供 MCP management surface，至少允许配置 endpoint/credential、enable/disable、delete、显式 Refresh/Retry，并解释 Ready/Refreshing/Error/Idle；单个可选 MCP 的 error 只降低该 Integration capability，不把整个 Agent App 或无关 Run 标记为 unavailable。
+
 任何外部协议声明的“安全等级”都不能覆盖 Nexus 本地 policy。
 
 Outbound policy：

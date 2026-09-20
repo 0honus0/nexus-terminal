@@ -34,6 +34,16 @@ export interface IntegrationView extends Scope {
   updatedAt: number;
 }
 
+export type IntegrationRefreshState = 'idle' | 'refreshing' | 'ready' | 'error';
+
+export interface IntegrationManagementView extends IntegrationView {
+  refreshState: IntegrationRefreshState;
+  lastErrorCode: string | null;
+  lastAttemptAt: number | null;
+  lastSuccessAt: number | null;
+  nextRetryAt: number | null;
+}
+
 export interface McpToolDescriptor {
   remoteName: string;
   title: string | null;
@@ -130,7 +140,7 @@ export interface McpRuntimePort {
 }
 
 export interface IntegrationRefreshView {
-  integration: IntegrationView;
+  integration: IntegrationManagementView;
   serverName: string;
   serverVersion: string;
   protocolVersion: string;

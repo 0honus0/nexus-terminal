@@ -23,6 +23,7 @@
   import AppExecutionPolicySettings from './AppExecutionPolicySettings.vue';
   import BudgetContextSettings from './BudgetContextSettings.vue';
   import BrowserRuntimeSettings from './BrowserRuntimeSettings.vue';
+  import McpIntegrationSettings from './McpIntegrationSettings.vue';
   import WorkspaceRuntimeSettings from './WorkspaceRuntimeSettings.vue';
   import HardLimitsSettings from './HardLimitsSettings.vue';
   import ModelProviderSettings from './ModelProviderSettings.vue';
@@ -87,9 +88,21 @@
 
   // 精简为 3 个高内聚大分类，彻底解决分类繁琐碎裂问题
   const groups = [
-    { id: 'models', icon: 'fa-solid fa-brain', label: 'agent.settings.groups.models' },
-    { id: 'runtime', icon: 'fa-solid fa-gauge-high', label: 'agent.settings.groups.runtime' },
-    { id: 'plugins', icon: 'fa-solid fa-shield-halved', label: 'agent.settings.groups.plugins' },
+    {
+      id: 'models',
+      icon: 'fa-solid fa-brain',
+      label: 'agent.settings.groups.models',
+    },
+    {
+      id: 'runtime',
+      icon: 'fa-solid fa-gauge-high',
+      label: 'agent.settings.groups.runtime',
+    },
+    {
+      id: 'plugins',
+      icon: 'fa-solid fa-shield-halved',
+      label: 'agent.settings.groups.plugins',
+    },
   ] as const;
 
   type AgentSettingsGroupId = (typeof groups)[number]['id'];
@@ -344,7 +357,9 @@
     execute(
       async () => {
         if (provider.models.some((candidate) => candidate.id === model.id)) return;
-        const updated = await agentApi.updateProvider(provider, { models: [...provider.models, model] });
+        const updated = await agentApi.updateProvider(provider, {
+          models: [...provider.models, model],
+        });
         providers.value = providers.value.map((candidate) => (candidate.id === updated.id ? updated : candidate));
         return true;
       },
@@ -451,7 +466,9 @@
       {{ $t('agent.settings.loading') }}
     </div>
 
-    <p v-else-if="!settings && error" role="alert" class="p-6 text-sm text-error">{{ error }}</p>
+    <p v-else-if="!settings && error" role="alert" class="p-6 text-sm text-error">
+      {{ error }}
+    </p>
 
     <template v-else-if="settings && storage && workspaceRuntime && denylist">
       <div class="flex flex-col">
@@ -589,6 +606,8 @@
               :busy="busy"
               @save="(patch) => patchSection('browser', patch)"
             />
+
+            <McpIntegrationSettings :busy="busy" :agent-available="apps.some((app) => app.id === 'nexus.agent')" />
 
             <AcpRuntimeSettings
               :settings="settings"
@@ -807,7 +826,9 @@
             class="mt-2.5 space-y-2 border-t border-border/50 pt-2.5 text-[10px] text-text-secondary"
           >
             <div>
-              <div class="font-medium text-foreground">{{ $t('agent.settings.onboarding.fullKeyId') }}</div>
+              <div class="font-medium text-foreground">
+                {{ $t('agent.settings.onboarding.fullKeyId') }}
+              </div>
               <div
                 class="mt-1 break-all font-mono select-all rounded-lg border border-border/40 bg-header/40 p-2 text-foreground/90"
               >
@@ -815,7 +836,9 @@
               </div>
             </div>
             <div>
-              <div class="font-medium text-foreground">{{ $t('agent.settings.onboarding.catalogSource') }}</div>
+              <div class="font-medium text-foreground">
+                {{ $t('agent.settings.onboarding.catalogSource') }}
+              </div>
               <div
                 class="mt-1 break-all font-mono select-all rounded-lg border border-border/40 bg-header/40 p-2 text-foreground/90"
               >

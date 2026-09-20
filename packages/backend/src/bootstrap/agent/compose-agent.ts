@@ -542,6 +542,7 @@ export const composeAgent = ({
     clock: systemClock,
     notifyCommitted,
     retryRestartRecovery: () => checkpoints.retryDeferredRecoveries(),
+    retryMcpIntegrations: () => integrations.retryDue(),
   });
 
   const approvalRepository = new SqliteApprovalRepository(database);
