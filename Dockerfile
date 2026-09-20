@@ -7,13 +7,10 @@ ENV PNPM_CONFIG_STORE_DIR=/pnpm/store
 WORKDIR /build
 RUN corepack enable
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
-COPY packages/agent-runner/package.json ./packages/agent-runner/package.json
-COPY packages/backend/package.json ./packages/backend/package.json
-COPY packages/frontend/package.json ./packages/frontend/package.json
-COPY tests/e2e/package.json ./tests/e2e/package.json
 
 FROM workspace-base AS backend-builder
 RUN apk add --no-cache python3 py3-setuptools make g++
+COPY packages/backend/package.json ./packages/backend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/backend
 COPY packages/backend/src ./packages/backend/src
@@ -25,6 +22,7 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
 FROM workspace-base AS frontend-builder
 ARG VITE_API_BASE_URL=""
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+COPY packages/frontend/package.json ./packages/frontend/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/frontend
 COPY packages/frontend/src ./packages/frontend/src
