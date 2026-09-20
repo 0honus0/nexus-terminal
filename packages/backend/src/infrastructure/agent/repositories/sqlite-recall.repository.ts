@@ -1,8 +1,4 @@
-import type {
-  RecallCandidate,
-  RecallRepositoryPort,
-  Scope,
-} from '../../../modules/agent/ai/recall.repository.port';
+import type { RecallCandidate, RecallRepositoryPort, Scope } from '../../../modules/agent/ai/recall.repository.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { sqliteSearchMatchQuery } from '../../database/sqlite-search-index';
 import { parseDurableJsonValue } from '../runtime/durable-state-decoders';

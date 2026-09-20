@@ -97,10 +97,7 @@ export const appendInputTransition = async (
       ? await tx.queryOne<{
           paused_runtime_id: string | null;
           paused_delegation_id: string | null;
-        }>(
-          `SELECT paused_runtime_id, paused_delegation_id FROM agent_loop_guards WHERE run_id = ?`,
-          [row.id],
-        )
+        }>(`SELECT paused_runtime_id, paused_delegation_id FROM agent_loop_guards WHERE run_id = ?`, [row.id])
       : null;
   const waitingClarification =
     row.status === 'awaiting_input'
@@ -112,11 +109,7 @@ export const appendInputTransition = async (
         )
       : null;
   const waitingLoopRuntimeId = waitingLoopInput?.paused_runtime_id ?? null;
-  if (
-    row.status === 'awaiting_input' &&
-    !waitingLoopRuntimeId &&
-    !waitingClarification
-  ) {
+  if (row.status === 'awaiting_input' && !waitingLoopRuntimeId && !waitingClarification) {
     throw new Error('AWAITING_INPUT_STATE_INVALID');
   }
   if (waitingLoopRuntimeId && waitingClarification && waitingLoopRuntimeId !== waitingClarification.agent_runtime_id) {

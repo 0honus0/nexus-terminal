@@ -12,7 +12,7 @@ on:
       - 'packages/agent-runner/**'
       - 'packages/backend/**'
       - 'packages/frontend/**'
-      - 'packages/e2e/**'
+      - 'tests/**'
       - 'scripts/e2e/**'
       - 'scripts/build/build.sh'
       - '.prettierignore'
@@ -32,7 +32,7 @@ on:
       - 'packages/agent-runner/**'
       - 'packages/backend/**'
       - 'packages/frontend/**'
-      - 'packages/e2e/**'
+      - 'tests/**'
       - 'scripts/e2e/**'
       - 'scripts/build/build.sh'
       - '.prettierignore'
@@ -146,7 +146,7 @@ jobs:
           elif [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             before_sha="${{ github.event.before }}"
             if [[ -n "$before_sha" && ! "$before_sha" =~ ^0+$ ]] \
-              && git diff -U0 "$before_sha" "$GITHUB_SHA" -- packages/e2e/tests \
+              && git diff -U0 "$before_sha" "$GITHUB_SHA" -- tests/e2e/specs \
                 | grep -E '^[+-].*captureFunctionalScreenshot\(' >/dev/null; then
               screenshots_requested=true
             fi
@@ -218,12 +218,12 @@ jobs:
           set -euo pipefail
           workers="$REQUESTED_WORKERS"
           if [[ -z "$workers" ]]; then
-            workers="$(node -p "require('./packages/e2e/groups/settings.json').workers")"
+            workers="$(node -p "require('./tests/e2e/groups/settings.json').workers")"
           fi
 
-          node packages/e2e/support/groups.mjs generate --workers "$workers"
-          node packages/e2e/support/groups.mjs check --workers "$workers"
-          matrix="$(node packages/e2e/support/groups.mjs matrix --workers "$workers")"
+          node tests/e2e/support/groups.mjs generate --workers "$workers"
+          node tests/e2e/support/groups.mjs check --workers "$workers"
+          matrix="$(node tests/e2e/support/groups.mjs matrix --workers "$workers")"
           echo "workers=$workers" >> "$GITHUB_OUTPUT"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
 
@@ -447,20 +447,20 @@ jobs:
 
       - name: Generate deterministic group configuration
         run: |
-          node packages/e2e/support/groups.mjs generate --workers "$E2E_GROUP_WORKERS"
-          node packages/e2e/support/groups.mjs check --workers "$E2E_GROUP_WORKERS"
+          node tests/e2e/support/groups.mjs generate --workers "$E2E_GROUP_WORKERS"
+          node tests/e2e/support/groups.mjs check --workers "$E2E_GROUP_WORKERS"
 
       - name: Run E2E group ${{ matrix.group }} of ${{ needs.environment.outputs.workers }}
         id: e2e
         timeout-minutes: 16
-        run: node packages/e2e/support/groups.mjs run --workers "$E2E_GROUP_WORKERS" --group "${{ matrix.group }}"
+        run: node tests/e2e/support/groups.mjs run --workers "$E2E_GROUP_WORKERS" --group "${{ matrix.group }}"
 
       - name: Upload inline functional screenshots
         if: ${{ always() && env.E2E_CAPTURE_SCREENSHOTS == '1' }}
         uses: actions/upload-artifact@v7
         with:
           name: functional-screenshots-group-${{ matrix.group }}
-          path: packages/e2e/.tmp/functional-screenshots/*.png
+          path: tests/e2e/.tmp/functional-screenshots/*.png
           if-no-files-found: ignore
           retention-days: 7
 
@@ -470,7 +470,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: e2e-timings-group-${{ matrix.group }}
-          path: packages/e2e/.tmp/spec-timings-group-${{ matrix.group }}.json
+          path: tests/e2e/.tmp/spec-timings-group-${{ matrix.group }}.json
           if-no-files-found: error
           retention-days: 7
 
@@ -480,7 +480,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: playwright-e2e-logs-group-${{ matrix.group }}
-          path: packages/e2e/logs/
+          path: tests/e2e/logs/
           if-no-files-found: ignore
 
       - name: Upload Playwright report
@@ -490,8 +490,8 @@ jobs:
         with:
           name: playwright-e2e-report-group-${{ matrix.group }}
           path: |
-            packages/e2e/playwright-report/
-            packages/e2e/test-results/
+            tests/e2e/playwright-report/
+            tests/e2e/test-results/
           if-no-files-found: ignore
 
   screenshots-commit:
@@ -525,15 +525,15 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           pattern: functional-screenshots-group-*
-          path: packages/e2e/.tmp/functional-screenshots-merged
+          path: tests/e2e/.tmp/functional-screenshots-merged
           merge-multiple: true
 
       - name: Verify functional screenshots
         shell: bash
         run: |
           set -euo pipefail
-          node packages/e2e/support/verify-functional-screenshots.mjs \
-            packages/e2e/.tmp/functional-screenshots-merged \
+          node tests/e2e/support/verify-functional-screenshots.mjs \
+            tests/e2e/.tmp/functional-screenshots-merged \
             "$RUNNER_TEMP/functional-screenshot-verification.json" \
             doc/imgs/e2e
 
@@ -550,7 +550,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          screenshot_root="packages/e2e/.tmp/functional-screenshots-merged"
+          screenshot_root="tests/e2e/.tmp/functional-screenshots-merged"
           mapfile -t screenshots < <(find "$screenshot_root" -maxdepth 1 -type f -name '*.png' -printf '%f\n' | sort)
           if (( ${#screenshots[@]} == 0 )); then
             echo "::error::Screenshot capture was requested but the E2E run produced no functional screenshots."
@@ -612,7 +612,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "available=false" >> "$GITHUB_OUTPUT"
-          artifact_root="packages/e2e/.tmp/timing-artifacts"
+          artifact_root="tests/e2e/.tmp/timing-artifacts"
           mkdir -p "$artifact_root"
 
           response="$RUNNER_TEMP/e2e-artifacts.json"
@@ -656,23 +656,23 @@ jobs:
       - name: Update timing history and rebalance default groups
         if: steps.timings.outputs.available == 'true'
         run: |
-          node packages/e2e/support/groups.mjs update-timings --input-dir packages/e2e/.tmp/timing-artifacts
-          node packages/e2e/support/groups.mjs generate
-          node packages/e2e/support/groups.mjs check
+          node tests/e2e/support/groups.mjs update-timings --input-dir tests/e2e/.tmp/timing-artifacts
+          node tests/e2e/support/groups.mjs generate
+          node tests/e2e/support/groups.mjs check
 
       - name: Commit refreshed E2E group balance
         if: steps.timings.outputs.available == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- ':(glob)packages/e2e/groups/group-*.json'; then
+          if git diff --quiet -- ':(glob)tests/e2e/groups/group-*.json'; then
             echo "E2E group assignment is unchanged; timing-only updates will not create a commit."
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/e2e/groups
+          git add tests/e2e/groups
           git commit -m "chore(e2e): rebalance test groups"
           if ! git push origin "HEAD:$GITHUB_REF_NAME"; then
             echo "::warning::E2E timing refresh could not be pushed; a newer branch update may have won the race."

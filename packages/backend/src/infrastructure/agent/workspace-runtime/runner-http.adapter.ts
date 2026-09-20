@@ -1242,6 +1242,7 @@ export class RunnerHttpAdapter
         if (settled) return;
         settled = true;
         cleanup();
+        socket.once('error', () => undefined);
         socket.terminate();
         reject(error);
       };
@@ -1253,6 +1254,7 @@ export class RunnerHttpAdapter
       };
       const onError = (error: Error) => fail(error);
       const onUnexpected = (_request: unknown, response: import('node:http').IncomingMessage) => {
+        response.resume();
         fail(new Error(`WORKSPACE_RUNTIME_WS_${response.statusCode ?? 500}`));
       };
       const onAbort = () => fail(signal?.reason instanceof Error ? signal.reason : new Error('ABORTED'));

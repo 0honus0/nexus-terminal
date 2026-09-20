@@ -38,36 +38,19 @@ const projectText = (value: string, maxBytes: number): string => {
   const lines = value.split(/\r?\n/);
   const signals = lines.filter((line) => HIGH_SIGNAL_PATTERN.test(line));
   let head = boundedSegment(lines.slice(0, 8).join('\n'), Math.max(48, Math.floor(maxBytes * 0.22)));
-  let signal = boundedSegment(
-    signals.slice(-8).join('\n'),
-    Math.max(64, Math.floor(maxBytes * 0.3)),
-  );
+  let signal = boundedSegment(signals.slice(-8).join('\n'), Math.max(64, Math.floor(maxBytes * 0.3)));
   let tail = boundedSegment(lines.slice(-8).join('\n'), Math.max(48, Math.floor(maxBytes * 0.22)));
-  let candidate = [
-    '[head]',
-    head,
-    ...(signal ? ['[high-signal]', signal] : []),
-    '[tail]',
-    tail,
-  ].join('\n');
+  let candidate = ['[head]', head, ...(signal ? ['[high-signal]', signal] : []), '[tail]', tail].join('\n');
   let guard = 0;
   while (Buffer.byteLength(JSON.stringify(candidate), 'utf8') > maxBytes && guard < 12) {
     head = boundedSegment(head, Math.max(16, Math.floor(Array.from(head).length * 0.8)));
     signal = boundedSegment(signal, Math.max(24, Math.floor(Array.from(signal).length * 0.8)));
     tail = boundedSegment(tail, Math.max(16, Math.floor(Array.from(tail).length * 0.8)));
-    candidate = [
-      '[head]',
-      head,
-      ...(signal ? ['[high-signal]', signal] : []),
-      '[tail]',
-      tail,
-    ].join('\n');
+    candidate = ['[head]', head, ...(signal ? ['[high-signal]', signal] : []), '[tail]', tail].join('\n');
     guard += 1;
   }
   if (Buffer.byteLength(JSON.stringify(candidate), 'utf8') <= maxBytes) return candidate;
-  const fallback = signal
-    ? `[high-signal]\n${signal}\n[tail]\n${tail}`
-    : `[head]\n${head}\n[tail]\n${tail}`;
+  const fallback = signal ? `[high-signal]\n${signal}\n[tail]\n${tail}` : `[head]\n${head}\n[tail]\n${tail}`;
   return truncateJsonString(fallback, maxBytes);
 };
 

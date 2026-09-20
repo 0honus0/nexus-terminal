@@ -21,12 +21,7 @@ import type {
   UploadReservation,
 } from '../../../modules/agent/ai/artifact.port';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
-import {
-  durableInteger,
-  durableRecord,
-  durableString,
-  parseDurableJson,
-} from '../runtime/durable-state-decoders';
+import { durableInteger, durableRecord, durableString, parseDurableJson } from '../runtime/durable-state-decoders';
 
 interface LocalArtifactStoreOptions {
   dataDirectory: string;

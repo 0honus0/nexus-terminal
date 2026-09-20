@@ -133,7 +133,8 @@ const decodeWorkspaceRecord = (value: unknown): WorkspaceRecord => {
 
 const decodeCommandRecord = (value: unknown): CommandRecord => {
   const record = recordValue(value);
-  if (!['pending', 'running', 'succeeded', 'failed', 'unknown'].includes(String(record.status))) return invalidJournal();
+  if (!['pending', 'running', 'succeeded', 'failed', 'unknown'].includes(String(record.status)))
+    return invalidJournal();
   return {
     commandId: stringValue(record.commandId) as string,
     payloadHash: stringValue(record.payloadHash) as string,

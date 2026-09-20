@@ -757,7 +757,7 @@ Runner plugin 通过独立 Runner protocol/lifecycle 执行。
 
 - **Host/Core**：随 `nexus-terminal` 主镜像编译发布的 Run/Scheduler、Capability Broker、Policy/Approval/Lease、Workspace Runtime bridge、Plugin verifier/installer/SDK 等安全与运行原语；修改这些代码需要更新主镜像。
 - **first-party installable Plugin App**：由 Nexus 官方维护、独立签名和发布、通过正常 Plugin lifecycle 安装/升级的 App；它不是 compile-time built-in。
-- `nexus.agent`：当前默认推荐的 first-party installable Plugin App。它只提供一个通用 `agent.default` AgentDefinition，并在同一个签名包中提供 exactly two App-scoped Skills：`nexus.operations`（Operations）与 `nexus.developer`（Developer）。Agent 初次启用时 Host 从 pin 住 publisher 身份的 official catalog 读取推荐项，用户确认后按 `stage -> verify -> install -> grant -> enable` 正常流程安装；Operations / Developer 不再各自占用独立 App shell。
+- `nexus.agent`：当前默认推荐的 first-party installable Plugin App。它只提供一个通用 `agent.default` AgentDefinition，并在同一个签名包中提供 exactly two App-scoped Skills：`nexus.agent.operations`（Operations）与 `nexus.agent.developer`（Developer）。Agent 初次启用时 Host 从 pin 住 publisher 身份的 official catalog 读取推荐项，用户确认后按 `stage -> verify -> install -> grant -> enable` 正常流程安装；Operations / Developer 不再各自占用独立 App shell。
 - `nexus.fullstack`：first-party target-composition reference Plugin App，显式声明 `frontend + backend + runner` 三种 target。Frontend 运行在主站同源 URL + opaque sandboxed iframe；Backend target 在 Nexus Backend 之外的独立 Node child runtime 中加载并通过 App Storage SDK 工作；该进程使用 Node Permission Model 限制插件包以外的文件访问、文件写入、child process、worker、native addon/WASI，但不宣称提供 OS namespace/network sandbox。Runner target 运行在冻结 Workspace generation 下，只拿 Workspace-local Runner SDK。它用于持续证明完整 target lifecycle，而不是把 Host/Core 权限迁入插件包。
 
 Host-owned governed Tool implementations 仍属于 Core，因为它们是 Capability Broker 与真实 machine/workspace/runtime adapter 之间的受控执行原语；Plugin 只通过 manifest grants/AgentDefinition/Skill 使用这些 capability，不把 raw SSH/Runner/Browser authority 带进插件包。当前 manifest 与 Backend/Runner Plugin SDK/worker protocol 不存在 `AgentTool` descriptor/inspect/execute 注册 surface，Plugin Backend/Runner target 也不得直接向 `ToolCatalog` 注入 Host-authority function；外部动态 Tool 继续优先通过 MCP。若未来开放 Plugin 自定义 governed Tool implementation，必须单独定义 versioned Tool SDK/IPC、risk declaration、schema lifecycle、outcome/verification contract，并作为独立需求立项。这样 `nexus.agent` 的 AgentDefinition/Skills/版本以及 `nexus.fullstack` 的 target 实现可独立远程升级；若新插件要求 Host 尚不具备的新 capability/SDK/protocol，仍必须升级 Nexus 主镜像。
@@ -920,7 +920,7 @@ CI 保持最小化，只把能够直接证明仓库可交付的通用检查当�
 Agent 改动仍必须遵守以下 review invariant：
 
 - 依赖解析只使用根 pnpm workspace/lockfile/catalog，不新增 workspace-local lockfile 或第二套 install flow；
-- 自动化产品测试只进入 `packages/e2e`，不为 Module/Repository/Adapter 再建 unit/component/internal test suite；内部不变量优先由类型/build/architecture review 与用户可达 E2E 证明；
+- 自动化测试源码统一进入仓库根 `tests/`，生产 `packages/` 下不再放测试目录；用户可达 Playwright E2E 位于 `tests/e2e`，Agent deterministic integration scenarios 位于 `tests/backend/agent-scenarios`；不再把测试源码分散回 Module/Repository/Adapter 所在生产目录；
 - Backend/Frontend 继续遵守既有 owner/layer/public API 依赖方向，新增 import 必须在 review 中检查跨层、feature 私有目录和循环依赖；不再用独立 architecture quality gate 代替架构审查；
 - Agent 三个 locale fragment 的 key 与用户可见语义保持同步；新增/修改 UI 文案时同一改动更新 `zh-CN/en-US/ja-JP`，不再设置独立 i18n checker；
 - Frontend 大依赖、编辑器/预览器等重资源继续按 route/feature 懒加载，异常 bundle 增长在变更审查中说明，不再设置独立 bundle-budget gate；

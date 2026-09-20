@@ -28,8 +28,8 @@
     "test:e2e:list": "pnpm --filter @nexus-terminal/e2e test:list",
     "format": "node scripts/format-changed.mjs --write",
     "format:check": "node scripts/format-changed.mjs --check",
-    "format:all": "prettier --write \"{packages,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"package.json\"",
-    "format:all:check": "prettier --check \"{packages,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"package.json\"",
+    "format:all": "prettier --write \"{packages,tests,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"package.json\"",
+    "format:all:check": "prettier --check \"{packages,tests,scripts,doc,.github}/**/*.{ts,tsx,js,mjs,cjs,json,css,md,vue,yml,yaml}\" \"package.json\"",
     "build:agent-runner": "pnpm --filter @nexus-terminal/agent-runner build"
   },
   "repository": {

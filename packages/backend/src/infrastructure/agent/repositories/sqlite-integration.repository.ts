@@ -166,15 +166,7 @@ export class SqliteIntegrationRepository implements IntegrationRepositoryPort, I
       const result = await tx.execute(
         `UPDATE agent_integrations SET schema_hash = ?, updated_at = ?
          WHERE id = ? AND user_id = ? AND app_id = ? AND version = ? AND credential_revision = ?`,
-        [
-          schemaHash,
-          updatedAt,
-          integrationId,
-          scope.userId,
-          scope.appId,
-          expectedVersion,
-          expectedCredentialRevision,
-        ],
+        [schemaHash, updatedAt, integrationId, scope.userId, scope.appId, expectedVersion, expectedCredentialRevision],
       );
       if (result.changes !== 1) return null;
       const row = await tx.queryOne<IntegrationRow>(

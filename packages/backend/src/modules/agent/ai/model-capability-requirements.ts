@@ -2,9 +2,7 @@ import { AGENT_MODEL_CAPABILITIES, type AgentModelCapability, type ModelCapabili
 
 const capabilitySet = new Set<string>(AGENT_MODEL_CAPABILITIES);
 
-export const normalizeRequiredModelCapabilities = (
-  values: readonly string[],
-): AgentModelCapability[] | null => {
+export const normalizeRequiredModelCapabilities = (values: readonly string[]): AgentModelCapability[] | null => {
   if (values.some((value) => !capabilitySet.has(value))) return null;
   return values as AgentModelCapability[];
 };

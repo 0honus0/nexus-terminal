@@ -11,5 +11,5 @@ temp-uploads
 pnpm-lock.yaml
 
 # Generated E2E scheduling state; these files are rewritten by the timing/rebalance job.
-packages/e2e/groups/group-*.json
-packages/e2e/groups/timings.json
+tests/e2e/groups/group-*.json
+tests/e2e/groups/timings.json

@@ -55,7 +55,10 @@ export const completionGateDecision = (
     ['pending', 'in_progress', 'blocked'].includes(item.status),
   );
   if (unfinishedPlanItems.length > 0) {
-    const ids = unfinishedPlanItems.slice(0, 8).map((item) => item.id).join(', ');
+    const ids = unfinishedPlanItems
+      .slice(0, 8)
+      .map((item) => item.id)
+      .join(', ');
     return repeatedGateFailure(
       evidence,
       'COMPLETION_PLAN_INCOMPLETE',
@@ -87,9 +90,7 @@ export const completionGateDecision = (
   );
   const verifiedExecution = evidence.tools.filter(
     (item) =>
-      item.stepIndex >= latestMutationStep &&
-      EXECUTION_EVIDENCE_TOOLS.has(item.toolName) &&
-      verified(item.result),
+      item.stepIndex >= latestMutationStep && EXECUTION_EVIDENCE_TOOLS.has(item.toolName) && verified(item.result),
   );
   const hasRequiredEvidence = requiresExecutionEvidence
     ? verifiedExecution.length > 0 || hasPlanEvidence

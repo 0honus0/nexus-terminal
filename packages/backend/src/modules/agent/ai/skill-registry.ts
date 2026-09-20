@@ -96,9 +96,7 @@ const blockScalar = (
     next += 1;
   }
   const nonEmpty = collected.filter((line) => line.trim());
-  const indentation = nonEmpty.length
-    ? Math.min(...nonEmpty.map((line) => /^\s+/.exec(line)?.[0].length ?? 0))
-    : 0;
+  const indentation = nonEmpty.length ? Math.min(...nonEmpty.map((line) => /^\s+/.exec(line)?.[0].length ?? 0)) : 0;
   const normalized = collected.map((line) => (line ? line.slice(Math.min(indentation, line.length)) : ''));
   const folded = marker.startsWith('>')
     ? normalized
@@ -190,14 +188,7 @@ const parseSkill = (
   const end = content.indexOf('\n---\n', 4);
   if (end < 0) throw new Error(`Invalid Skill frontmatter: ${source}`);
   const { fields } = parseFrontmatter(content.slice(4, end), source);
-  const allowedFields = new Set([
-    'name',
-    'description',
-    'license',
-    'compatibility',
-    'metadata',
-    'allowed-tools',
-  ]);
+  const allowedFields = new Set(['name', 'description', 'license', 'compatibility', 'metadata', 'allowed-tools']);
   if ([...fields.keys()].some((key) => !allowedFields.has(key))) {
     throw new Error(`Invalid Skill metadata: ${source}`);
   }
@@ -263,8 +254,8 @@ const rankSearch = (index: SkillIndex, query: string, limit: number): SkillMetad
         skill,
         matchedTerms,
         score:
-          matchedTerms / Math.max(1, queryTerms.length) * 8 +
-          hits / Math.max(1, queryTokens.length) * 2 +
+          (matchedTerms / Math.max(1, queryTerms.length)) * 8 +
+          (hits / Math.max(1, queryTokens.length)) * 2 +
           exactName * 4 +
           prefixName,
       };

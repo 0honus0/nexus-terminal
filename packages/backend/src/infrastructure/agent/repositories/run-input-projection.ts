@@ -61,7 +61,7 @@ export const projectRunUserInputs = async (
   for (const event of events) {
     const payload = durableRecord(parseDurableJson(event.payload_json));
     const inputId = durableString(payload.inputId) as string;
-    const beforeInputId = payload.beforeInputId === null ? null : durableString(payload.beforeInputId) as string;
+    const beforeInputId = payload.beforeInputId === null ? null : (durableString(payload.beforeInputId) as string);
     if (!byId.has(inputId)) continue;
     const sourceIndex = orderedIds.indexOf(inputId);
     if (sourceIndex < 0) continue;

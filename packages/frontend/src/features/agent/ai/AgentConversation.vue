@@ -45,9 +45,7 @@
   const { t } = useI18n();
   const reconciliationNote = ref('');
   const reconciliationResourceReason = (reason: string): string =>
-    reason === 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION'
-      ? t('agent.operations.reconciliationLeaseFinalization')
-      : reason;
+    reason === 'LEASE_STATE_UNCERTAIN_AFTER_MUTATION' ? t('agent.operations.reconciliationLeaseFinalization') : reason;
   watch(
     () => props.reconciliation,
     (required) => {
@@ -239,7 +237,9 @@
   const activeRun = computed(() =>
     Boolean(
       props.run &&
-      ['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input', 'cancelling'].includes(props.run.status),
+      ['created', 'running', 'awaiting_approval', 'awaiting_budget', 'awaiting_input', 'cancelling'].includes(
+        props.run.status,
+      ),
     ),
   );
   const hasDraft = computed(() => Boolean(props.draft.trim()));

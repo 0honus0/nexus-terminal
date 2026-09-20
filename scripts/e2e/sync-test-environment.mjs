@@ -95,7 +95,7 @@ function syncNodeVersions(nodeVersion) {
 }
 
 function syncPlaywrightPackage(playwrightVersion, updateLock) {
-  const packagePath = path.join(repoRoot, 'packages/e2e/package.json');
+  const packagePath = path.join(repoRoot, 'tests/e2e/package.json');
   const packageJson = readJson(packagePath);
   packageJson.devDependencies['@playwright/test'] = playwrightVersion;
   writeJson(packagePath, packageJson);
@@ -115,20 +115,20 @@ function syncRunnerFiles(config) {
   if (!pnpmVersion) throw new Error(`Invalid root packageManager: ${rootPackage.packageManager}`);
 
   replaceRequired(
-    'packages/e2e/Dockerfile.runner',
+    'tests/e2e/Dockerfile.runner',
     /^FROM node:[^\n]+/m,
     `FROM node:${config.node}-bookworm`,
     'runner Node base',
   );
   replaceRequired(
-    'packages/e2e/Dockerfile.runner',
+    'tests/e2e/Dockerfile.runner',
     /^ARG PLAYWRIGHT_VERSION=[^\n]+/m,
     `ARG PLAYWRIGHT_VERSION=${config.playwright}`,
     'runner Playwright arg',
   );
 
   replaceRequired(
-    'packages/e2e/Dockerfile.runner',
+    'tests/e2e/Dockerfile.runner',
     /^ARG PNPM_VERSION=[^\n]+/m,
     `ARG PNPM_VERSION=${pnpmVersion}`,
     'runner pnpm arg',

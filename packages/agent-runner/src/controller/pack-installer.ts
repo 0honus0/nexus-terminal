@@ -32,7 +32,8 @@ interface PackManifest {
 }
 
 const decodePackManifest = (value: unknown): PackManifest => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
   const record = value as Record<string, unknown>;
   if (
     record.schemaVersion !== 1 ||
@@ -49,7 +50,8 @@ const decodePackManifest = (value: unknown): PackManifest => {
     throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
   }
   const dependencies = record.dependencies.map((item) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
+    if (!item || typeof item !== 'object' || Array.isArray(item))
+      throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');
     const dependency = item as Record<string, unknown>;
     if (typeof dependency.familyId !== 'string' || typeof dependency.versionId !== 'string') {
       throw new Error('WORKSPACE_TOOLCHAIN_MANIFEST_INVALID');

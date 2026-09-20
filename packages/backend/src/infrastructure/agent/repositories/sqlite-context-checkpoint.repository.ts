@@ -54,7 +54,9 @@ const parseVisibility = (value: string): ContextCheckpointVisibility => {
         runId: record.runId,
         historyBoundary: {
           baseThrough: Number(baseThrough),
-          runThrough: Object.fromEntries(Object.entries(runThrough).map(([runId, through]) => [runId, Number(through)])),
+          runThrough: Object.fromEntries(
+            Object.entries(runThrough).map(([runId, through]) => [runId, Number(through)]),
+          ),
         },
       };
     }

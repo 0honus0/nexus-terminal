@@ -1,5 +1,6 @@
 packages:
   - packages/*
+  - tests/e2e
 
 catalog:
   '@types/node': ^26.5.0

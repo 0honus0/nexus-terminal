@@ -1,7 +1,12 @@
 import type { AgentRunEnvironmentSelection, JsonValue } from '../../../modules/agent/agent.types';
 import type { ReasoningEffort } from '../../../modules/agent/ai/model.types';
 import type { AgentWorkspaceCreateSpec } from '../../../modules/agent/workspace-runtime/workspace-runtime.types';
-import type { RunApprovalMode, RunBudgetIncrease, RunExecutionMode, UserInputData } from '../../../modules/agent/runtime/runs/run.types';
+import type {
+  RunApprovalMode,
+  RunBudgetIncrease,
+  RunExecutionMode,
+  UserInputData,
+} from '../../../modules/agent/runtime/runs/run.types';
 import { hasOnlyKeys, isJsonValue, isRecord, positiveInteger, versionedRecord } from './agent-route-input';
 
 export const AGENT_RUNTIME_REQUEST_SCHEMA_VERSION = 1 as const;
@@ -235,12 +240,7 @@ export const parseResumeRunRequest = (body: unknown): { checkpointId: string; ex
 const parseBudgetIncrease = (value: unknown): RunBudgetIncrease => {
   if (
     !isRecord(value) ||
-    !hasOnlyKeys(value, [
-      'maxRunSteps',
-      'maxActiveExecutionSeconds',
-      'maxSubagentMessages',
-      'maxSubagentMessageBytes',
-    ])
+    !hasOnlyKeys(value, ['maxRunSteps', 'maxActiveExecutionSeconds', 'maxSubagentMessages', 'maxSubagentMessageBytes'])
   ) {
     throw new Error('VALIDATION_FAILED');
   }

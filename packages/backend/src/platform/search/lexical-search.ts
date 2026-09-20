@@ -2,7 +2,10 @@ const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hang
 const WORD_CHUNK = /[\p{L}\p{N}]+/gu;
 
 export const normalizeLexicalSource = (value: string): string =>
-  value.normalize('NFKC').replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase();
+  value
+    .normalize('NFKC')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .toLowerCase();
 
 const addToken = (selected: Set<string>, prefix: string, value: string): void => {
   if (!value) return;

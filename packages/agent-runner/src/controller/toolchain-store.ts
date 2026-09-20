@@ -14,7 +14,8 @@ interface InstallMarker {
 }
 
 const decodeInstallMarker = (value: unknown): InstallMarker => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('WORKSPACE_TOOLCHAIN_MARKER_INVALID');
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new Error('WORKSPACE_TOOLCHAIN_MARKER_INVALID');
   const record = value as Record<string, unknown>;
   if (
     record.schemaVersion !== 1 ||

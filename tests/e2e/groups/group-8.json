@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "group": 8,
+  "workers": 8,
+  "specs": [
+    "specs/ui/notification-delivery.spec.ts",
+    "specs/ui/notification-settings.spec.ts",
+    "specs/ui/proxy-management.spec.ts",
+    "specs/ui/system-settings.spec.ts",
+    "specs/ui/theme-switching.spec.ts",
+    "specs/ssh/progress-display-copy-cancel.spec.ts",
+    "specs/ssh/docker-manager-ui.spec.ts",
+    "specs/ssh/protocol.spec.ts",
+    "specs/ssh/status-docker-protocol.spec.ts",
+    "specs/ssh/upload-protocol.spec.ts"
+  ]
+}

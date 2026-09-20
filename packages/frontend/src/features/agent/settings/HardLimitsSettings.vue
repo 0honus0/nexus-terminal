@@ -35,13 +35,7 @@
       ].includes(key)
     )
       return 'bytes';
-    if (
-      [
-        'maxActiveExecutionSeconds',
-        'toolTimeoutSeconds',
-        'unretainedArtifactTtlSeconds',
-      ].includes(key)
-    )
+    if (['maxActiveExecutionSeconds', 'toolTimeoutSeconds', 'unretainedArtifactTtlSeconds'].includes(key))
       return 'seconds';
     return 'number';
   };
@@ -53,11 +47,7 @@
     },
     {
       id: 'timeouts',
-      keys: [
-        'maxActiveExecutionSeconds',
-        'toolTimeoutSeconds',
-        'unretainedArtifactTtlSeconds',
-      ],
+      keys: ['maxActiveExecutionSeconds', 'toolTimeoutSeconds', 'unretainedArtifactTtlSeconds'],
     },
     {
       id: 'storage',

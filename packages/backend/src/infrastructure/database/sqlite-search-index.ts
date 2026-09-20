@@ -46,7 +46,9 @@ const matchGroup = (term: string): string | null => {
 };
 
 export const sqliteSearchMatchQuery = (queryTerms: readonly string[]): string | null => {
-  const groups = strongestQueryTerms(queryTerms).map(matchGroup).filter((group): group is string => Boolean(group));
+  const groups = strongestQueryTerms(queryTerms)
+    .map(matchGroup)
+    .filter((group): group is string => Boolean(group));
   if (groups.length === 0) return null;
   return groups.length === 1 ? groups[0]! : `(${groups.join(' OR ')})`;
 };

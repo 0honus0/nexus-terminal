@@ -179,7 +179,11 @@ export const readWorkspaceFile = (
   const logical = normalizeLogicalPath(request.path);
   const { raw } = openRegularFile(root, logical);
   const digest = sha256(raw);
-  const maxBytes = positiveInteger(request.maxBytes, Math.min(MAX_READ_BYTES, Math.max(1, raw.byteLength)), MAX_READ_BYTES);
+  const maxBytes = positiveInteger(
+    request.maxBytes,
+    Math.min(MAX_READ_BYTES, Math.max(1, raw.byteLength)),
+    MAX_READ_BYTES,
+  );
   const hasByteRange = request.offsetBytes !== undefined;
   const hasLineRange = request.startLine !== undefined || request.endLine !== undefined;
   if (hasByteRange && hasLineRange) throw new Error('VALIDATION_FAILED');
@@ -211,11 +215,7 @@ export const readWorkspaceFile = (
   const decoded = decodeUtf8(raw);
   const lines = decoded.split('\n');
   const startLine = positiveInteger(request.startLine, 1, Math.max(1, lines.length));
-  const endLine = positiveInteger(
-    request.endLine,
-    Math.min(lines.length, startLine + 199),
-    Math.max(1, lines.length),
-  );
+  const endLine = positiveInteger(request.endLine, Math.min(lines.length, startLine + 199), Math.max(1, lines.length));
   if (endLine < startLine || endLine - startLine + 1 > MAX_READ_LINES) throw new Error('VALIDATION_FAILED');
   const selected = lines.slice(startLine - 1, endLine).join('\n');
   const content = utf8Prefix(selected, maxBytes);
@@ -496,10 +496,7 @@ const sourceLinesAtDeclaredLocation = (source: string, patchSpec: StructuredPatc
     const expected = hunk.lines
       .filter((line) => line.startsWith(' ') || line.startsWith('-'))
       .map((line) => line.slice(1));
-    const actual = sourceLines.slice(
-      Math.max(0, hunk.oldStart - 1),
-      Math.max(0, hunk.oldStart - 1) + expected.length,
-    );
+    const actual = sourceLines.slice(Math.max(0, hunk.oldStart - 1), Math.max(0, hunk.oldStart - 1) + expected.length);
     if (actual.length !== expected.length || actual.some((line, index) => line !== expected[index])) return false;
   }
   return true;

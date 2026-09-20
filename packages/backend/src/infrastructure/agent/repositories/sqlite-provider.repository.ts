@@ -76,7 +76,10 @@ const decodeReasoning = (
   });
   if (new Set(supportedEfforts).size !== supportedEfforts.length) throw new Error('AGENT_DURABLE_STATE_INVALID');
   const defaultEffort = record.defaultEffort;
-  if (defaultEffort !== undefined && (typeof defaultEffort !== 'string' || !supportedEfforts.includes(defaultEffort as never))) {
+  if (
+    defaultEffort !== undefined &&
+    (typeof defaultEffort !== 'string' || !supportedEfforts.includes(defaultEffort as never))
+  ) {
     throw new Error('AGENT_DURABLE_STATE_INVALID');
   }
   return {
@@ -156,35 +159,42 @@ export const decodePersistedProviderModels = (raw: string): PersistedProviderMod
     const id = durableString(record.id) as string;
     if (!id.trim()) throw new Error('AGENT_DURABLE_STATE_INVALID');
     const overridesRaw = record.capabilityOverrides;
-    const capabilityOverrides = overridesRaw === undefined
-      ? undefined
-      : (() => {
-          const overrides = durableRecord(overridesRaw);
-          assertAllowedKeys(overrides, [
-            'contextWindow',
-            'maxOutputTokens',
-            'supportsTools',
-            'supportsImageInput',
-            'supportsFileInput',
-            'supportsPromptCacheKey',
-            'reasoning',
-          ]);
-          return {
-            ...(overrides.contextWindow === undefined ? {} : { contextWindow: durableInteger(overrides.contextWindow, 1) }),
-            ...(overrides.maxOutputTokens === undefined ? {} : { maxOutputTokens: durableInteger(overrides.maxOutputTokens, 1) }),
-            ...(overrides.supportsTools === undefined ? {} : { supportsTools: durableBoolean(overrides.supportsTools) }),
-            ...(overrides.supportsImageInput === undefined
-              ? {}
-              : { supportsImageInput: durableBoolean(overrides.supportsImageInput) }),
-            ...(overrides.supportsFileInput === undefined
-              ? {}
-              : { supportsFileInput: durableBoolean(overrides.supportsFileInput) }),
-            ...(overrides.supportsPromptCacheKey === undefined
-              ? {}
-              : { supportsPromptCacheKey: durableBoolean(overrides.supportsPromptCacheKey) }),
-            ...(overrides.reasoning === undefined ? {} : { reasoning: decodeReasoning(overrides.reasoning) }),
-          };
-        })();
+    const capabilityOverrides =
+      overridesRaw === undefined
+        ? undefined
+        : (() => {
+            const overrides = durableRecord(overridesRaw);
+            assertAllowedKeys(overrides, [
+              'contextWindow',
+              'maxOutputTokens',
+              'supportsTools',
+              'supportsImageInput',
+              'supportsFileInput',
+              'supportsPromptCacheKey',
+              'reasoning',
+            ]);
+            return {
+              ...(overrides.contextWindow === undefined
+                ? {}
+                : { contextWindow: durableInteger(overrides.contextWindow, 1) }),
+              ...(overrides.maxOutputTokens === undefined
+                ? {}
+                : { maxOutputTokens: durableInteger(overrides.maxOutputTokens, 1) }),
+              ...(overrides.supportsTools === undefined
+                ? {}
+                : { supportsTools: durableBoolean(overrides.supportsTools) }),
+              ...(overrides.supportsImageInput === undefined
+                ? {}
+                : { supportsImageInput: durableBoolean(overrides.supportsImageInput) }),
+              ...(overrides.supportsFileInput === undefined
+                ? {}
+                : { supportsFileInput: durableBoolean(overrides.supportsFileInput) }),
+              ...(overrides.supportsPromptCacheKey === undefined
+                ? {}
+                : { supportsPromptCacheKey: durableBoolean(overrides.supportsPromptCacheKey) }),
+              ...(overrides.reasoning === undefined ? {} : { reasoning: decodeReasoning(overrides.reasoning) }),
+            };
+          })();
     return {
       id,
       ...(capabilityOverrides === undefined ? {} : { capabilityOverrides }),

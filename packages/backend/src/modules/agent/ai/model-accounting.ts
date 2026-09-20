@@ -11,8 +11,7 @@ export interface AnchoredTokenEstimate {
   anchorDeltaTokens: number;
 }
 
-export const estimateTokens = (value: string): number =>
-  Math.max(1, Math.ceil(Buffer.byteLength(value, 'utf8') / 4));
+export const estimateTokens = (value: string): number => Math.max(1, Math.ceil(Buffer.byteLength(value, 'utf8') / 4));
 
 export const estimateModelContentPartTokens = (part: ModelContentPart): number => {
   const encodedBytes = Buffer.byteLength(part.dataBase64, 'ascii');

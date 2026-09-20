@@ -55,7 +55,11 @@ export class ArtifactService {
   }
 
   getForAgent(scope: Scope, access: ArtifactAgentAccess, artifactId: string): Promise<ArtifactRef | null> {
-    if (!isAgentUuid(access.runId) || (access.runtimeId !== undefined && !isAgentUuid(access.runtimeId)) || !isAgentUuid(artifactId)) {
+    if (
+      !isAgentUuid(access.runId) ||
+      (access.runtimeId !== undefined && !isAgentUuid(access.runtimeId)) ||
+      !isAgentUuid(artifactId)
+    ) {
       throw new Error('VALIDATION_FAILED');
     }
     return this.store.getForAgent(scope, access, artifactId);
@@ -80,7 +84,11 @@ export class ArtifactService {
     artifactId: string,
     range: ArtifactReadRange,
   ): AsyncIterable<Uint8Array> {
-    if (!isAgentUuid(access.runId) || (access.runtimeId !== undefined && !isAgentUuid(access.runtimeId)) || !isAgentUuid(artifactId)) {
+    if (
+      !isAgentUuid(access.runId) ||
+      (access.runtimeId !== undefined && !isAgentUuid(access.runtimeId)) ||
+      !isAgentUuid(artifactId)
+    ) {
       throw new Error('VALIDATION_FAILED');
     }
     return this.store.readForAgent(scope, access, artifactId, range);

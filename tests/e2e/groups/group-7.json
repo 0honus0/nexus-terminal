@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "group": 7,
+  "workers": 8,
+  "specs": [
+    "specs/auth/setup-login.spec.ts",
+    "specs/http/auth-2fa.spec.ts",
+    "specs/http/auth-api.spec.ts",
+    "specs/http/backup.spec.ts",
+    "specs/http/connection-import.spec.ts",
+    "specs/http/connections-tags.spec.ts",
+    "specs/http/database-migrations.spec.ts",
+    "specs/http/quick-commands-audit.spec.ts",
+    "specs/http/rdp-remoteapp.spec.ts",
+    "specs/http/terminal-themes.spec.ts",
+    "specs/ui/captcha-settings.spec.ts",
+    "specs/ui/change-password.spec.ts",
+    "specs/ui/ip-blacklist-settings.spec.ts",
+    "specs/ui/ip-whitelist-settings.spec.ts",
+    "specs/ui/protected-navigation.spec.ts",
+    "specs/ui/ssh-key-management.spec.ts",
+    "specs/ssh/progress-display-baseline.spec.ts"
+  ]
+}

@@ -10,10 +10,7 @@ import type {
 } from './database-worker.protocol';
 import { runMigrations } from './sqlite-migrations';
 import { sqlitePostMigrationDefinitions, sqliteTableDefinitions } from './sqlite-schema.registry';
-import {
-  createAiMemorySearchIndexSQL,
-  createAiThreadEntrySearchIndexSQL,
-} from './sqlite-schema';
+import { createAiMemorySearchIndexSQL, createAiThreadEntrySearchIndexSQL } from './sqlite-schema';
 import { sqliteLedgerSearchTerms, sqliteSearchTerms } from './sqlite-search-index';
 import { setBackendLogLevel } from '../../shared/logging/logger';
 
@@ -104,14 +101,18 @@ const rebuildAgentSearchIndexes = (db: DatabaseSync): void => {
 
   try {
     const memoryCounts = db
-      .prepare(`SELECT
+      .prepare(
+        `SELECT
         (SELECT COUNT(*) FROM ai_memories) AS canonical_count,
-        (SELECT COUNT(*) FROM ai_memories_search) AS index_count`)
+        (SELECT COUNT(*) FROM ai_memories_search) AS index_count`,
+      )
       .get() as { canonical_count: number; index_count: number };
     const threadCounts = db
-      .prepare(`SELECT
+      .prepare(
+        `SELECT
         (SELECT COUNT(*) FROM ai_thread_entries) AS canonical_count,
-        (SELECT COUNT(*) FROM ai_thread_entries_search) AS index_count`)
+        (SELECT COUNT(*) FROM ai_thread_entries_search) AS index_count`,
+      )
       .get() as { canonical_count: number; index_count: number };
     if (
       Number(memoryCounts.canonical_count) !== Number(memoryCounts.index_count) ||

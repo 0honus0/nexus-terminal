@@ -130,9 +130,7 @@ export class AgentScheduler {
       new Promise<void>((resolve) => setTimeout(resolve, remainingMs)),
     ]);
     if (
-      [...this.active.values()].some(
-        (active) => active.run.userId === scope.userId && active.run.appId === scope.appId,
-      )
+      [...this.active.values()].some((active) => active.run.userId === scope.userId && active.run.appId === scope.appId)
     ) {
       throw new Error('APP_QUIESCE_TIMEOUT');
     }

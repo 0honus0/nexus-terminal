@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "group": 2,
+  "workers": 8,
+  "specs": [
+    "specs/ui/dashboard-workflows.spec.ts",
+    "specs/ssh/file-manager-navigation.spec.ts",
+    "specs/ssh/file-preview-editor.spec.ts"
+  ]
+}

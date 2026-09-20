@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "group": 1,
+  "workers": 8,
+  "specs": [
+    "specs/ui/login-captcha-surface.spec.ts"
+  ]
+}

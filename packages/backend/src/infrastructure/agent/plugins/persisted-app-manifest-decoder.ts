@@ -106,17 +106,21 @@ export const decodePersistedAppManifest = (raw: string): AgentAppManifest => {
       intentIds.add(intentId);
       return { id: intentId, schemaVersion: durableInteger(intent.schemaVersion, 1) };
     });
-    const agentSurface = record.agentSurface === undefined
-      ? undefined
-      : (() => {
-          const surface = durableRecord(record.agentSurface);
-          if (surface.defaultApprovalMode !== undefined && !['ask', 'full_access'].includes(String(surface.defaultApprovalMode))) {
-            return invalid();
-          }
-          return surface.defaultApprovalMode === undefined
-            ? {}
-            : { defaultApprovalMode: surface.defaultApprovalMode as 'ask' | 'full_access' };
-        })();
+    const agentSurface =
+      record.agentSurface === undefined
+        ? undefined
+        : (() => {
+            const surface = durableRecord(record.agentSurface);
+            if (
+              surface.defaultApprovalMode !== undefined &&
+              !['ask', 'full_access'].includes(String(surface.defaultApprovalMode))
+            ) {
+              return invalid();
+            }
+            return surface.defaultApprovalMode === undefined
+              ? {}
+              : { defaultApprovalMode: surface.defaultApprovalMode as 'ask' | 'full_access' };
+          })();
     return {
       schemaVersion: 1,
       id,

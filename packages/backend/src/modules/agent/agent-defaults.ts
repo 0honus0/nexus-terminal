@@ -433,8 +433,11 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
               const modelId = candidate.modelId.trim();
               return providerId && modelId ? [{ providerId, modelId }] : [];
             })
-            .filter((candidate, index, values) =>
-              values.findIndex((value) => value.providerId === candidate.providerId && value.modelId === candidate.modelId) === index,
+            .filter(
+              (candidate, index, values) =>
+                values.findIndex(
+                  (value) => value.providerId === candidate.providerId && value.modelId === candidate.modelId,
+                ) === index,
             )
         : structuredClone(defaults.model.fallbackModels),
     },

@@ -82,7 +82,12 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] =>
   const targets = new Set<string>([PROJECT_WORK_ROOT]);
   for (const entry of [...snapshot.recentEntries].reverse()) {
     if (targets.size >= 8) break;
-    if (entry.kind !== 'assistant_message' || !entry.payload || Array.isArray(entry.payload) || typeof entry.payload !== 'object') {
+    if (
+      entry.kind !== 'assistant_message' ||
+      !entry.payload ||
+      Array.isArray(entry.payload) ||
+      typeof entry.payload !== 'object'
+    ) {
       continue;
     }
     const rawCalls = (entry.payload as Record<string, unknown>).toolCalls;
@@ -100,7 +105,8 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] =>
       if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') continue;
       const argumentsRecord = parsed as Record<string, unknown>;
       const addTarget = (rawValue: unknown, relativeBase: 'workspace' | 'work', fileTarget = false): void => {
-        if (typeof rawValue !== 'string' || !rawValue.trim() || rawValue.length > 4096 || rawValue.includes('\0')) return;
+        if (typeof rawValue !== 'string' || !rawValue.trim() || rawValue.length > 4096 || rawValue.includes('\0'))
+          return;
         const raw = rawValue.trim();
         const base = relativeBase === 'workspace' ? '/workspace/' : PROJECT_WORK_ROOT + '/';
         const logical = path.posix.normalize(raw.startsWith('/') ? raw : base + raw);
@@ -162,12 +168,7 @@ export class ModelStepRunner {
     if (this.projectInstructionSource && runtimeId && snapshot.definition.environment) {
       const targetDirectories = projectInstructionTargetDirectories(snapshot);
       try {
-        const projection = await this.projectInstructionSource.load(
-          scope,
-          snapshot.id,
-          runtimeId,
-          targetDirectories,
-        );
+        const projection = await this.projectInstructionSource.load(scope, snapshot.id, runtimeId, targetDirectories);
         projectInstructions = projection?.instructions;
         if (projection?.omitted.length) {
           logger.debug(
@@ -308,9 +309,7 @@ export class ModelStepRunner {
             ...(snapshot.definition.reasoningEffort === undefined
               ? {}
               : { reasoningEffort: snapshot.definition.reasoningEffort }),
-            ...(capabilitySnapshot === undefined
-              ? {}
-              : { capabilitySnapshot }),
+            ...(capabilitySnapshot === undefined ? {} : { capabilitySnapshot }),
             maxOutputTokens: contextPlan.reservedOutputTokens,
           },
           signal,

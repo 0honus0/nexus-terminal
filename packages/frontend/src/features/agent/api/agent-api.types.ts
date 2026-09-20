@@ -32,11 +32,11 @@ export interface AgentSettingsDocument {
   };
   performance: { maxConcurrentRuntimes: number; maxConcurrentModelCalls: number | 'auto' };
   budget: {
-        maxRunSteps: number;
+    maxRunSteps: number;
     maxActiveExecutionSeconds: number;
     toolTimeoutSeconds: number;
     maxToolOutputBytes: number;
-      maxRecallItems: number;
+    maxRecallItems: number;
     maxRecallBytes: number;
   };
   hardLimits: AgentHardLimits;
@@ -53,7 +53,7 @@ export interface AgentSettingsDocument {
   };
   workspaceRuntime: {
     maxActiveWorkspaces: number;
-      enabledRecipeIds: string[];
+    enabledRecipeIds: string[];
     toolVersions: Record<string, { enabledVersionIds: string[]; defaultVersionId: string | null }>;
     acpProfiles: Array<{ id: string; argv: string[]; cwd: string }>;
   };

@@ -393,6 +393,6 @@ Apps do not own Express directly. The Interface/App Host dispatches authenticate
 /api/v1/apps/<app-id>/...
 ```
 
-Default Agent examples use `/api/v1/apps/nexus.agent/...`; `nexus.operations` / `nexus.developer` are Skill IDs inside that App, while shared Provider/model resources remain `/api/v1/ai/...`.
+Default Agent examples use `/api/v1/apps/nexus.agent/...`; `nexus.agent.operations` / `nexus.agent.developer` are Skill IDs inside that App, while shared Provider/model resources remain `/api/v1/ai/...`.
 
 HTTP/WebSocket authentication, request bounds, streaming/backpressure and transport lifecycle remain Interface responsibilities. Provider SSE parsing stays inside the Provider adapter; Browser Agent events use the `/ws/agent` Interface boundary. A plugin cannot register a route that bypasses them.

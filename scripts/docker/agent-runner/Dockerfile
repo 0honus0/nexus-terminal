@@ -37,7 +37,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/agent-runner/package.json ./packages/agent-runner/package.json
 COPY packages/backend/package.json ./packages/backend/package.json
 COPY packages/frontend/package.json ./packages/frontend/package.json
-COPY packages/e2e/package.json ./packages/e2e/package.json
+COPY tests/e2e/package.json ./tests/e2e/package.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/agent-runner
 COPY packages/agent-runner/tsconfig.json ./packages/agent-runner/tsconfig.json

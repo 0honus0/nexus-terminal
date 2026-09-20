@@ -52,7 +52,9 @@ const canonicalize = (value: unknown): unknown => {
 };
 
 const hash = (value: unknown): string =>
-  createHash('sha256').update(JSON.stringify(canonicalize(value)), 'utf8').digest('hex');
+  createHash('sha256')
+    .update(JSON.stringify(canonicalize(value)), 'utf8')
+    .digest('hex');
 
 const outcomeHash = (result: ToolResult): string =>
   hash({
@@ -93,7 +95,9 @@ const parseTrajectory = (value: string): GuardObservation[] => {
   const parsed: unknown = JSON.parse(value);
   if (!Array.isArray(parsed)) return [];
   return parsed
-    .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+    .filter(
+      (item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item),
+    )
     .flatMap((item) => {
       if (
         typeof item.actionHash !== 'string' ||
@@ -191,7 +195,10 @@ export const evaluateLoopGuard = async (
     const previous = trajectory.at(-1);
     const exactBefore = previous && sameObservation(previous, current);
     const positiveStateChange =
-      (!exactBefore && (item.risk === 'mutate' || item.risk === 'destructive') && item.result.ok && item.result.outcome === 'confirmed') ||
+      (!exactBefore &&
+        (item.risk === 'mutate' || item.risk === 'destructive') &&
+        item.result.ok &&
+        item.result.outcome === 'confirmed') ||
       (!exactBefore && (item.result.artifactRefs.length > 0 || item.result.verification.evidenceRefs.length > 0)) ||
       (previous?.actionHash === current.actionHash && previous.outcomeHash !== current.outcomeHash);
 
@@ -307,7 +314,10 @@ export const evaluateLoopGuard = async (
         [now, delegationId, row.id],
       );
     }
-    const nextExecuting = runtime.schedule_state === 'executing' ? Math.max(0, row.executing_runtime_count - 1) : row.executing_runtime_count;
+    const nextExecuting =
+      runtime.schedule_state === 'executing'
+        ? Math.max(0, row.executing_runtime_count - 1)
+        : row.executing_runtime_count;
     const activeDelta =
       runtime.schedule_state === 'executing' && nextExecuting === 0 && row.active_execution_started_at !== null
         ? Math.max(0, now - row.active_execution_started_at)

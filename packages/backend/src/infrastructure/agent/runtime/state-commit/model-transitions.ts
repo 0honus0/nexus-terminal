@@ -466,19 +466,21 @@ export const retryModelStepTransition = async (
   );
   const events: DurableEventInput[] = [
     ...(command.routeChange
-      ? [{
-          type: 'model.route_changed',
-          payload: {
-            stepId: command.stepId,
-            previousAttemptId: command.attemptId,
-            attemptId,
-            attemptIndex,
-            from: { ...command.routeChange.from },
-            to: { ...command.routeChange.to },
-            routeIndex: command.routeChange.routeIndex,
-            errorCode: command.errorCode,
-          },
-        } satisfies DurableEventInput]
+      ? [
+          {
+            type: 'model.route_changed',
+            payload: {
+              stepId: command.stepId,
+              previousAttemptId: command.attemptId,
+              attemptId,
+              attemptIndex,
+              from: { ...command.routeChange.from },
+              to: { ...command.routeChange.to },
+              routeIndex: command.routeChange.routeIndex,
+              errorCode: command.errorCode,
+            },
+          } satisfies DurableEventInput,
+        ]
       : []),
     {
       type: 'model.retrying',

@@ -15,7 +15,8 @@ export class AppLifecycleService {
     private readonly grants: AppGrantRepositoryPort,
     private readonly clock: ClockPort,
     private readonly onHostStateCommitted: (userId: number) => void = () => undefined,
-    private readonly quiesceHostExecution: (scope: Scope, deadlineUnixSeconds: number) => Promise<void> = async () => undefined,
+    private readonly quiesceHostExecution: (scope: Scope, deadlineUnixSeconds: number) => Promise<void> = async () =>
+      undefined,
   ) {}
 
   initializeDefaults(userId: number): Promise<void> {

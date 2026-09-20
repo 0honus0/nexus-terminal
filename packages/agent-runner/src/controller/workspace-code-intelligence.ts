@@ -118,13 +118,11 @@ export interface RunnerWorkspaceCodeIntelResult {
   sha256: string | null;
   results: Array<RunnerWorkspaceRepoMapSymbol | RunnerWorkspaceCodeIntelLocation | RunnerWorkspaceCodeIntelDiagnostic>;
   truncated: boolean;
-  fallback:
-    | null
-    | {
-        reason: 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED';
-        searchTool: 'workspace_search';
-        readTool: 'workspace_read_file';
-      };
+  fallback: null | {
+    reason: 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED';
+    searchTool: 'workspace_search';
+    readTool: 'workspace_read_file';
+  };
 }
 
 interface IndexedFile {
@@ -245,7 +243,9 @@ const scanWorkspace = (workRoot: string): ScanResult => {
     const directory = stack.pop()!;
     let entries: fs.Dirent[];
     try {
-      entries = fs.readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
+      entries = fs
+        .readdirSync(directory, { withFileTypes: true })
+        .sort((left, right) => left.name.localeCompare(right.name));
     } catch {
       continue;
     }
@@ -341,8 +341,7 @@ const locationForNode = (
   };
 };
 
-const normalizedSignature = (value: string): string =>
-  utf8Prefix(value.replace(/\s+/g, ' ').trim(), 320);
+const normalizedSignature = (value: string): string => utf8Prefix(value.replace(/\s+/g, ' ').trim(), 320);
 
 const sourceImports = (sourceFile: SourceFile): string[] =>
   sourceFile.imports
@@ -429,7 +428,10 @@ const relevance = (file: RunnerWorkspaceRepoMapFile, terms: string[]): number =>
   if (!terms.length) return 0;
   const pathText = file.path.toLocaleLowerCase();
   const importText = file.imports.join(' ').toLocaleLowerCase();
-  const symbolText = file.symbols.map((symbol) => `${symbol.name} ${symbol.signature}`).join(' ').toLocaleLowerCase();
+  const symbolText = file.symbols
+    .map((symbol) => `${symbol.name} ${symbol.signature}`)
+    .join(' ')
+    .toLocaleLowerCase();
   let score = 0;
   for (const term of terms) {
     if (pathText.includes(term)) score += 8;
@@ -439,10 +441,7 @@ const relevance = (file: RunnerWorkspaceRepoMapFile, terms: string[]): number =>
   return score;
 };
 
-const boundedJsonArray = <T>(
-  values: T[],
-  maxOutputBytes: number,
-): { values: T[]; truncated: boolean } => {
+const boundedJsonArray = <T>(values: T[], maxOutputBytes: number): { values: T[]; truncated: boolean } => {
   const output: T[] = [];
   let bytes = 2;
   let truncated = false;
@@ -469,7 +468,10 @@ export class WorkspaceCodeIntelligence {
     validateRequestBounds(request.maxFiles, 1, MAX_REPO_MAP_FILES);
     validateRequestBounds(request.maxSymbols, 1, MAX_REPO_MAP_SYMBOLS);
     validateRequestBounds(request.maxOutputBytes, 1024, MAX_REPO_MAP_OUTPUT_BYTES);
-    if (request.query !== undefined && (typeof request.query !== 'string' || Buffer.byteLength(request.query, 'utf8') > 1024)) {
+    if (
+      request.query !== undefined &&
+      (typeof request.query !== 'string' || Buffer.byteLength(request.query, 'utf8') > 1024)
+    ) {
       throw new Error('VALIDATION_FAILED');
     }
     const root = assertRoot(workRoot);
@@ -486,16 +488,13 @@ export class WorkspaceCodeIntelligence {
 
     for (const indexed of [...entry.files.values()].sort((left, right) => left.logical.localeCompare(right.logical))) {
       const relative = path.relative(scopeHost, indexed.hostPath);
-      const inside =
-        indexed.hostPath === scopeHost ||
-        (!relative.startsWith('..') && !path.isAbsolute(relative));
+      const inside = indexed.hostPath === scopeHost || (!relative.startsWith('..') && !path.isAbsolute(relative));
       if (!inside) continue;
       const project = entry.snapshot.getDefaultProjectForFile(indexed.hostPath);
       if (!project) continue;
       const sourceFile = project.program.getSourceFile(indexed.hostPath);
       if (!sourceFile) continue;
-      const symbols =
-        symbolBudget > 0 ? await collectSymbols(project, sourceFile, symbolBudget) : [];
+      const symbols = symbolBudget > 0 ? await collectSymbols(project, sourceFile, symbolBudget) : [];
       symbolBudget = Math.max(0, symbolBudget - symbols.length);
       const file: RunnerWorkspaceRepoMapFile = {
         path: indexed.logical,
@@ -521,10 +520,7 @@ export class WorkspaceCodeIntelligence {
       cacheHits: entry.cacheHits,
       cacheMisses: entry.cacheMisses,
       files: bounded.values,
-      truncated:
-        entry.scanTruncated ||
-        candidates.length > request.maxFiles ||
-        bounded.truncated,
+      truncated: entry.scanTruncated || candidates.length > request.maxFiles || bounded.truncated,
       fallback: {
         searchTool: 'workspace_search',
         readTool: 'workspace_read_file',
@@ -608,7 +604,9 @@ export class WorkspaceCodeIntelligence {
       };
     }
 
-    let results: Array<RunnerWorkspaceRepoMapSymbol | RunnerWorkspaceCodeIntelLocation | RunnerWorkspaceCodeIntelDiagnostic> = [];
+    let results: Array<
+      RunnerWorkspaceRepoMapSymbol | RunnerWorkspaceCodeIntelLocation | RunnerWorkspaceCodeIntelDiagnostic
+    > = [];
     if (request.action === 'symbols') {
       results = await collectSymbols(project, sourceFile, request.maxResults);
     } else if (request.action === 'diagnostics') {

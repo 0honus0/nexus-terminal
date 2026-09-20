@@ -168,8 +168,7 @@ export class WorkspaceRuntimeService {
     const workspace = workspaces
       .filter(
         (candidate) =>
-          candidate.agentRuntimeId === runtimeId &&
-          ['ready', 'running', 'stopped'].includes(candidate.status),
+          candidate.agentRuntimeId === runtimeId && ['ready', 'running', 'stopped'].includes(candidate.status),
       )
       .sort((left, right) => right.updatedAt - left.updatedAt)[0];
     if (!workspace) return null;

@@ -564,10 +564,10 @@ export const beginSubagentMutationToolTransition = async (
     child_runtime_id: string;
     mutation_mode: string;
     deadline_at: number;
-  }>(
-    'SELECT status, child_runtime_id, mutation_mode, deadline_at FROM agent_delegations WHERE id = ? AND run_id = ?',
-    [command.delegationId, command.runId],
-  );
+  }>('SELECT status, child_runtime_id, mutation_mode, deadline_at FROM agent_delegations WHERE id = ? AND run_id = ?', [
+    command.delegationId,
+    command.runId,
+  ]);
   if (
     !delegation ||
     delegation.child_runtime_id !== command.runtimeId ||
@@ -575,7 +575,9 @@ export const beginSubagentMutationToolTransition = async (
     !['running', 'waiting'].includes(delegation.status) ||
     delegation.deadline_at <= command.now
   ) {
-    throw new Error(delegation?.mutation_mode === 'read-only' ? 'SUBAGENT_MUTATION_NOT_GOVERNED' : 'DELEGATION_STATE_CONFLICT');
+    throw new Error(
+      delegation?.mutation_mode === 'read-only' ? 'SUBAGENT_MUTATION_NOT_GOVERNED' : 'DELEGATION_STATE_CONFLICT',
+    );
   }
 
   const approval = await tx.queryOne<{

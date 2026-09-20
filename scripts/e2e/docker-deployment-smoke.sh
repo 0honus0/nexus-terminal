@@ -208,7 +208,7 @@ networks:
     name: nexus-e2e-network-$suffix
 EOF
 mkdir -p "$data_dir"
-cp "$repo_root/packages/e2e/fixtures/seeded-data/nexus-terminal.db" "$data_dir/nexus-terminal.db"
+cp "$repo_root/tests/e2e/fixtures/seeded-data/nexus-terminal.db" "$data_dir/nexus-terminal.db"
 cat > "$data_dir/.env" <<EOF
 SESSION_SECRET=$session_secret
 ENCRYPTION_KEY=$encryption_key
@@ -238,8 +238,8 @@ set_env RP_ORIGIN 'https://ssh.honus.top,https://ssh.trui.de'
 NEXUS_E2E_PLUGIN_REPOSITORY_HOST=0.0.0.0 \
 NEXUS_E2E_PLUGIN_REPOSITORY_PORT="$plugin_repository_port" \
 NEXUS_E2E_PLUGIN_REPOSITORY_PUBLIC_BASE_URL="http://host.docker.internal:$plugin_repository_port" \
-NEXUS_E2E_PLUGIN_SIGNING_KEY_PEM="$(cat "$repo_root/packages/e2e/fixtures/agent/keys/official-e2e-private.pem")" \
-node "$repo_root/packages/e2e/fixtures/agent/plugin-repository.mjs" >"$plugin_repository_log" 2>&1 &
+NEXUS_E2E_PLUGIN_SIGNING_KEY_PEM="$(cat "$repo_root/tests/e2e/fixtures/agent/keys/official-e2e-private.pem")" \
+node "$repo_root/tests/e2e/fixtures/agent/plugin-repository.mjs" >"$plugin_repository_log" 2>&1 &
 plugin_repository_pid=$!
 for _ in {1..40}; do
   if curl -fsS "http://127.0.0.1:${plugin_repository_port}/health" >/dev/null; then break; fi
@@ -1334,7 +1334,7 @@ curl -fsS "http://127.0.0.1:${http_port}/" | grep -qi '<html'
 curl -fsS "http://127.0.0.1:${http_port}/api/v1/status" | grep -q '"status"'
 curl -fsS -H "Host: ssh.honus.top" "http://127.0.0.1:${http_port}/.well-known/webauthn" >/dev/null
 
-NEXUS_PRODUCTION_BASE_URL="http://127.0.0.1:${http_port}" pnpm --dir "$repo_root/packages/e2e" run test:ingress
+NEXUS_PRODUCTION_BASE_URL="http://127.0.0.1:${http_port}" pnpm --dir "$repo_root/tests/e2e" run test:ingress
 
 login_body='{"username":"e2e-admin","password":"E2e-Admin-Password-2026!","rememberMe":false}'
 curl -fsS \

@@ -118,27 +118,27 @@ const mergedDefaults = (
   registry: ModelCapabilityDefaults | null,
   provider?: ProviderModelCapabilityObservation,
 ): ModelCapabilityDefaults => ({
-  ...(provider?.capabilities.contextWindow ?? registry?.contextWindow) === undefined
+  ...((provider?.capabilities.contextWindow ?? registry?.contextWindow) === undefined
     ? {}
-    : { contextWindow: provider?.capabilities.contextWindow ?? registry?.contextWindow },
-  ...(provider?.capabilities.maxOutputTokens ?? registry?.maxOutputTokens) === undefined
+    : { contextWindow: provider?.capabilities.contextWindow ?? registry?.contextWindow }),
+  ...((provider?.capabilities.maxOutputTokens ?? registry?.maxOutputTokens) === undefined
     ? {}
-    : { maxOutputTokens: provider?.capabilities.maxOutputTokens ?? registry?.maxOutputTokens },
-  ...(provider?.capabilities.supportsTools ?? registry?.supportsTools) === undefined
+    : { maxOutputTokens: provider?.capabilities.maxOutputTokens ?? registry?.maxOutputTokens }),
+  ...((provider?.capabilities.supportsTools ?? registry?.supportsTools) === undefined
     ? {}
-    : { supportsTools: provider?.capabilities.supportsTools ?? registry?.supportsTools },
-  ...(provider?.capabilities.supportsImageInput ?? registry?.supportsImageInput) === undefined
+    : { supportsTools: provider?.capabilities.supportsTools ?? registry?.supportsTools }),
+  ...((provider?.capabilities.supportsImageInput ?? registry?.supportsImageInput) === undefined
     ? {}
-    : { supportsImageInput: provider?.capabilities.supportsImageInput ?? registry?.supportsImageInput },
-  ...(provider?.capabilities.supportsFileInput ?? registry?.supportsFileInput) === undefined
+    : { supportsImageInput: provider?.capabilities.supportsImageInput ?? registry?.supportsImageInput }),
+  ...((provider?.capabilities.supportsFileInput ?? registry?.supportsFileInput) === undefined
     ? {}
-    : { supportsFileInput: provider?.capabilities.supportsFileInput ?? registry?.supportsFileInput },
-  ...(provider?.capabilities.supportsPromptCacheKey ?? registry?.supportsPromptCacheKey) === undefined
+    : { supportsFileInput: provider?.capabilities.supportsFileInput ?? registry?.supportsFileInput }),
+  ...((provider?.capabilities.supportsPromptCacheKey ?? registry?.supportsPromptCacheKey) === undefined
     ? {}
-    : { supportsPromptCacheKey: provider?.capabilities.supportsPromptCacheKey ?? registry?.supportsPromptCacheKey },
-  ...(provider?.capabilities.reasoning ?? registry?.reasoning) === undefined
+    : { supportsPromptCacheKey: provider?.capabilities.supportsPromptCacheKey ?? registry?.supportsPromptCacheKey }),
+  ...((provider?.capabilities.reasoning ?? registry?.reasoning) === undefined
     ? {}
-    : { reasoning: cloneReasoning(provider?.capabilities.reasoning ?? registry?.reasoning)! },
+    : { reasoning: cloneReasoning(provider?.capabilities.reasoning ?? registry?.reasoning)! }),
 });
 
 const conflictingCapabilityFields = (
@@ -273,9 +273,7 @@ export const resolveProviderModelConfig = (
       supportsTools: sourceFor('supportsTools')!,
       ...(sourceFor('supportsImageInput') ? { supportsImageInput: sourceFor('supportsImageInput')! } : {}),
       ...(sourceFor('supportsFileInput') ? { supportsFileInput: sourceFor('supportsFileInput')! } : {}),
-      ...(sourceFor('supportsPromptCacheKey')
-        ? { supportsPromptCacheKey: sourceFor('supportsPromptCacheKey')! }
-        : {}),
+      ...(sourceFor('supportsPromptCacheKey') ? { supportsPromptCacheKey: sourceFor('supportsPromptCacheKey')! } : {}),
       ...(reasoningSource === undefined ? {} : { reasoning: reasoningSource }),
     },
     ...(registryDefaults ? { registryDefaults } : {}),

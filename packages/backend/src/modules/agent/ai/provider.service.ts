@@ -91,19 +91,23 @@ const validateModel = (
     throw new Error('VALIDATION_FAILED');
   }
   const id = raw.id.trim();
-  const capabilityOverrides = deriveCapabilityOverrides(id, {
-    contextWindow: raw.contextWindow,
-    maxOutputTokens: raw.maxOutputTokens,
-    supportsTools: raw.supportsTools,
-    ...(raw.supportsImageInput === undefined ? {} : { supportsImageInput: raw.supportsImageInput }),
-    ...(raw.supportsFileInput === undefined ? {} : { supportsFileInput: raw.supportsFileInput }),
-    ...(raw.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: raw.supportsPromptCacheKey }),
-    ...(Array.isArray(raw.reasoningEfforts) ? { reasoningEfforts: raw.reasoningEfforts as ReasoningEffort[] } : {}),
-    ...(raw.defaultReasoningEffort === undefined
-      ? {}
-      : { defaultReasoningEffort: raw.defaultReasoningEffort as ReasoningEffort }),
-    ...(raw.reasoningMandatory === undefined ? {} : { reasoningMandatory: raw.reasoningMandatory }),
-  }, providerCapabilities);
+  const capabilityOverrides = deriveCapabilityOverrides(
+    id,
+    {
+      contextWindow: raw.contextWindow,
+      maxOutputTokens: raw.maxOutputTokens,
+      supportsTools: raw.supportsTools,
+      ...(raw.supportsImageInput === undefined ? {} : { supportsImageInput: raw.supportsImageInput }),
+      ...(raw.supportsFileInput === undefined ? {} : { supportsFileInput: raw.supportsFileInput }),
+      ...(raw.supportsPromptCacheKey === undefined ? {} : { supportsPromptCacheKey: raw.supportsPromptCacheKey }),
+      ...(Array.isArray(raw.reasoningEfforts) ? { reasoningEfforts: raw.reasoningEfforts as ReasoningEffort[] } : {}),
+      ...(raw.defaultReasoningEffort === undefined
+        ? {}
+        : { defaultReasoningEffort: raw.defaultReasoningEffort as ReasoningEffort }),
+      ...(raw.reasoningMandatory === undefined ? {} : { reasoningMandatory: raw.reasoningMandatory }),
+    },
+    providerCapabilities,
+  );
   const model: PersistedProviderModelConfig = {
     id,
     ...(Object.keys(capabilityOverrides).length ? { capabilityOverrides } : {}),
@@ -198,7 +202,8 @@ const validateCapabilityDefaults = (raw: unknown): ModelCapabilityDefaults => {
   if (Object.keys(raw).length === 0 || Object.keys(raw).some((key) => !allowed.has(key))) {
     throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
   }
-  const contextWindow = raw.contextWindow === undefined ? undefined : positiveInteger(raw.contextWindow) ? raw.contextWindow : null;
+  const contextWindow =
+    raw.contextWindow === undefined ? undefined : positiveInteger(raw.contextWindow) ? raw.contextWindow : null;
   const maxOutputTokens =
     raw.maxOutputTokens === undefined ? undefined : positiveInteger(raw.maxOutputTokens) ? raw.maxOutputTokens : null;
   if (contextWindow === null || maxOutputTokens === null) throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
@@ -352,13 +357,15 @@ export class ProviderService {
       let changed = false;
       const result = discovered.map((model) => {
         const registryDefaults = resolveModelCapabilityDefaults(model.id);
-        const report = model.liveCapabilityReport ? validateLiveCapabilityReport(model.liveCapabilityReport) : undefined;
+        const report = model.liveCapabilityReport
+          ? validateLiveCapabilityReport(model.liveCapabilityReport)
+          : undefined;
         const observation = report
-          ? {
+          ? ({
               modelId: model.id,
               ...report,
               updatedAt: observedAt,
-            } satisfies ProviderModelCapabilityObservation
+            } satisfies ProviderModelCapabilityObservation)
           : existingByModel.get(model.id);
         if (report) {
           existingByModel.set(model.id, observation!);

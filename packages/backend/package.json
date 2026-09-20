@@ -10,7 +10,7 @@
     "build": "tsc && node -e \"const fs=require('node:fs'); fs.cpSync('src/locales','dist/locales',{recursive:true}); fs.cpSync('src/infrastructure/agent/plugins/frontend-sdk','dist/infrastructure/agent/plugins/frontend-sdk',{recursive:true})\"",
     "start": "node dist/index.js",
     "dev": "cross-env NODE_ENV=development tsx watch src/index.ts",
-    "test:agent-scenarios": "tsx tests/agent-scenarios/runner.ts"
+    "test:agent-scenarios": "tsx ../../tests/backend/agent-scenarios/runner.ts"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "1.4.0",

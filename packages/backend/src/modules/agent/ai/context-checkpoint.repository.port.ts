@@ -2,8 +2,7 @@ import type { Scope } from '../agent.types';
 import type { ContextHistoryBoundary } from './context.types';
 
 export type ContextCheckpointVisibility =
-  | { kind: 'thread_prefix' }
-  | { kind: 'run_boundary'; runId: string; historyBoundary: ContextHistoryBoundary };
+  { kind: 'thread_prefix' } | { kind: 'run_boundary'; runId: string; historyBoundary: ContextHistoryBoundary };
 
 export interface ContextCheckpointGenerator {
   kind: 'deterministic';

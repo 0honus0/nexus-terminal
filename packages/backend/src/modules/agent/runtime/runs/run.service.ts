@@ -229,7 +229,11 @@ export class RunService {
       if (!supportsFrozenReasoningEffort(fallbackModel)) throw new Error('MODEL_REASONING_EFFORT_UNSUPPORTED');
       seenRootRoutes.add(key);
       rootModelRoutes.push({
-        model: { providerId: fallbackProvider.id, modelId: fallbackModel.id, configurationVersion: fallbackProvider.version },
+        model: {
+          providerId: fallbackProvider.id,
+          modelId: fallbackModel.id,
+          configurationVersion: fallbackProvider.version,
+        },
         modelCapabilities: capabilities,
       });
     }

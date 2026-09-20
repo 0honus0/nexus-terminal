@@ -22,7 +22,9 @@ const decodeHardLimits = (raw: string): HardLimitConfirmationRecord['proposed'] 
   if (Object.keys(record).length !== expected.length || expected.some((key) => !(key in record))) {
     throw new Error('AGENT_DURABLE_STATE_INVALID');
   }
-  return Object.fromEntries(expected.map((key) => [key, durableInteger(record[key], 1)])) as unknown as HardLimitConfirmationRecord['proposed'];
+  return Object.fromEntries(
+    expected.map((key) => [key, durableInteger(record[key], 1)]),
+  ) as unknown as HardLimitConfirmationRecord['proposed'];
 };
 
 const mapRow = (row: ConfirmationRow): HardLimitConfirmationRecord => ({

@@ -24,7 +24,9 @@ const canonicalize = (value: unknown): unknown => {
 };
 
 const stableHash = (value: unknown): string =>
-  createHash('sha256').update(JSON.stringify(canonicalize(value)), 'utf8').digest('hex');
+  createHash('sha256')
+    .update(JSON.stringify(canonicalize(value)), 'utf8')
+    .digest('hex');
 
 const payloadText = (payload: JsonValue): string => {
   if (typeof payload === 'string') return payload;
@@ -88,9 +90,13 @@ const buildSummary = (
     ),
   );
   const completedEntries = entries.filter((entry) =>
-    /\b(completed|complete|done|fixed|implemented|verified|passed|succeeded|success)\b/i.test(payloadText(entry.payload)),
+    /\b(completed|complete|done|fixed|implemented|verified|passed|succeeded|success)\b/i.test(
+      payloadText(entry.payload),
+    ),
   );
-  const stateEntries = entries.filter((entry) => entry.kind === 'assistant_message' || entry.kind === 'system_notice').slice(-6);
+  const stateEntries = entries
+    .filter((entry) => entry.kind === 'assistant_message' || entry.kind === 'system_notice')
+    .slice(-6);
   const refs = new Set<string>();
   for (const entry of entries) collectRefs(entry.payload, refs);
 

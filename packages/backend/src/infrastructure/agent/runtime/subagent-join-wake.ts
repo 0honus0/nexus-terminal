@@ -30,7 +30,8 @@ const pendingJoin = (toolCallId: string, inspectionJson: string, resultJson: str
   const delegationIds = args.delegationIds.filter(
     (value): value is string => typeof value === 'string' && value.length > 0 && value.length <= 128,
   );
-  if (delegationIds.length < 1 || delegationIds.length !== args.delegationIds.length || delegationIds.length > 64) return null;
+  if (delegationIds.length < 1 || delegationIds.length !== args.delegationIds.length || delegationIds.length > 64)
+    return null;
   const mode = args.mode === 'any' ? 'any' : args.mode === 'all' ? 'all' : null;
   const deadlineAt = args.deadlineAt;
   if (!mode || !Number.isSafeInteger(deadlineAt) || (deadlineAt as number) < 1) return null;
@@ -73,7 +74,10 @@ export const enqueueParentJoinResume = async (
     `SELECT id, deadline_at FROM agent_delegations WHERE run_id = ? AND child_runtime_id = ? LIMIT 1`,
     [runId, parentRuntimeId],
   );
-  const controlDeadline = Math.max(now + 1, Math.min(join.deadlineAt, parentDelegation?.deadline_at ?? join.deadlineAt));
+  const controlDeadline = Math.max(
+    now + 1,
+    Math.min(join.deadlineAt, parentDelegation?.deadline_at ?? join.deadlineAt),
+  );
   const workId = `join-resume:${join.toolCallId}`;
   const payload: JsonValue = {
     parentDelegationId: parentDelegation?.id ?? null,
