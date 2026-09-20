@@ -5,6 +5,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { PLUGIN_RUNNER_PROTOCOL_VERSION } from '../plugin-sdk.types';
 import type {
+  CommandRecord,
   WorkspaceRuntimeCommand,
   WorkspaceProvisionCommand,
   WorkspaceLifecycleCommand,
@@ -46,6 +47,13 @@ const json = (response: ServerResponse, status: number, body: unknown): void => 
   response.setHeader('cache-control', 'no-store');
   response.end(JSON.stringify(body));
 };
+
+const commandWireResponse = (command: CommandRecord) => ({
+  commandId: command.commandId,
+  status: command.status,
+  ...(command.result === null ? {} : { result: command.result }),
+  ...(command.error === null ? {} : { error: command.error }),
+});
 
 const binary = async (
   response: ServerResponse,
@@ -712,7 +720,7 @@ export class RunnerControllerServer {
           json(response, 404, { error: 'COMMAND_NOT_FOUND' });
           return;
         }
-        json(response, 200, command);
+        json(response, 200, commandWireResponse(command));
         return;
       }
       const jobMatch = url.pathname.match(/^\/v1\/jobs\/([^/]+)$/);
@@ -754,7 +762,7 @@ export class RunnerControllerServer {
         return;
       }
       if (request.method === 'POST' && url.pathname === '/v1/commands') {
-        json(response, 202, this.beginCommand(await body(request)));
+        json(response, 202, commandWireResponse(this.beginCommand(await body(request))));
         return;
       }
       json(response, 404, { error: 'NOT_FOUND' });
