@@ -49,6 +49,8 @@ scripts/*
 !scripts/docker/**
 !scripts/agent-runner/
 !scripts/agent-runner/**
+!scripts/backend/
+!scripts/backend/**
 !scripts/check-test-policy.mjs
 # Snowpack dependency directory (https://snowpack.dev/)
 web_modules/

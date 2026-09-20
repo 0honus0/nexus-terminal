@@ -17,7 +17,6 @@ RUN apk add --no-cache python3 py3-setuptools make g++
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --filter @nexus-terminal/backend
 COPY packages/backend/src ./packages/backend/src
-COPY packages/backend/scripts ./packages/backend/scripts
 COPY packages/backend/tsconfig.json ./packages/backend/tsconfig.json
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm --filter @nexus-terminal/backend build \

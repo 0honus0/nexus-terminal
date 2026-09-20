@@ -3,9 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
-import { DatabaseAdapter } from '../../src/infrastructure/database/database.adapter';
-import { logger, setBackendLogLevel } from '../../src/shared/logging/logger';
-import { runtimePerformanceMetrics } from '../../src/shared/observability/runtime-performance';
+import { DatabaseAdapter } from '../../../packages/backend/src/infrastructure/database/database.adapter';
+import { logger, setBackendLogLevel } from '../../../packages/backend/src/shared/logging/logger';
+import { runtimePerformanceMetrics } from '../../../packages/backend/src/shared/observability/runtime-performance';
 
 const RUNS = Number.parseInt(process.env.NEXUS_PERF_RUNS ?? '5', 10);
 const OPERATIONS = Number.parseInt(process.env.NEXUS_PERF_DB_OPERATIONS ?? '48', 10);
