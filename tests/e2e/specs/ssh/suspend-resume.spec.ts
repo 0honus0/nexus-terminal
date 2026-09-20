@@ -210,6 +210,7 @@ test('closing a resume request rolls the handoff back to the original suspended 
     id: string;
     originalWorkspaceId: string;
     status: 'active' | 'disconnected';
+    ownershipState: 'available' | 'resuming' | 'attached';
   };
   const recoverySocket = await openAuthenticatedWebSocket(request);
   let suspended: SuspendedSession | undefined;
@@ -252,6 +253,7 @@ test('closing a resume request rolls the handoff back to the original suspended 
       recoverable = list.find(
         (session) =>
           session.status === 'active' &&
+          session.ownershipState === 'available' &&
           (session.id === suspended!.id || session.originalWorkspaceId === interruptedWorkspaceId),
       );
       if (!recoverable) await new Promise((resolve) => setTimeout(resolve, 100));
