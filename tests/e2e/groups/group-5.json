@@ -7,7 +7,7 @@
     "specs/agent/preset-plugin.spec.ts",
     "specs/agent/provider.spec.ts",
     "specs/ui/audit-log-filtering.spec.ts",
-    "specs/ui/login-passkey-surface.spec.ts",
+    "specs/ui/connection-create.spec.ts",
     "specs/ssh/progress-display-archive.spec.ts",
     "specs/ssh/docker-manager-ui.spec.ts",
     "specs/ssh/protocol.spec.ts",
