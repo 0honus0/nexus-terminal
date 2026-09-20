@@ -699,6 +699,7 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
     { getWorkspace: async () => workspaceView },
     runtime,
     new NodeCryptoHashAdapter(),
+    { request: async () => 'reject_once' },
   );
   const context = {
     userId: identity.userId,
