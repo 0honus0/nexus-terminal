@@ -3,13 +3,14 @@
   "group": 3,
   "workers": 8,
   "specs": [
-    "specs/mobile/dashboard-mobile.spec.ts",
-    "specs/mobile/ssh-workspace.spec.ts",
-    "specs/mobile/suspend-resume-ui.spec.ts",
-    "specs/mobile/terminal-touch.spec.ts",
-    "specs/mobile/touch-advanced.spec.ts",
-    "specs/mobile/touch-workflows.spec.ts",
+    "specs/agent/host.spec.ts",
+    "specs/agent/preset-plugin.spec.ts",
+    "specs/agent/provider.spec.ts",
     "specs/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "specs/ssh/progress-display-archive.spec.ts"
+    "specs/ssh/progress-display-archive.spec.ts",
+    "specs/ssh/docker-manager-ui.spec.ts",
+    "specs/ssh/protocol.spec.ts",
+    "specs/ssh/status-docker-protocol.spec.ts",
+    "specs/ssh/upload-protocol.spec.ts"
   ]
 }
