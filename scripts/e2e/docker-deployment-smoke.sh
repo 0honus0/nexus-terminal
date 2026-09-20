@@ -468,7 +468,7 @@ host_tool_snapshot_before="$(host_tool_snapshot)"
 # Exercise the actual Controller -> Tool Store -> native Workspace Dev Environment -> job
 # path, not only binary presence or HTTP health. The probe originates from Backend
 # through the host-gateway path using the same shared Controller token as production.
-compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" backend node - <<'NODE'
+compose exec -T -e NEXUS_BROWSER_PROBE_PORT="$browser_probe_port" backend node --input-type=module - <<'NODE'
 const { randomUUID } = await import('node:crypto');
 const { lookup } = await import('node:dns/promises');
 const baseUrl = process.env.AGENT_RUNNER_URL;
