@@ -171,10 +171,10 @@ test('Agent settings surface exposes the production control plane and captures f
   await expect(defaultModel).toBeEnabled();
   await defaultModel.click();
   const defaultDropdown = defaultModel.locator('xpath=..');
-  const defaultOption = defaultDropdown.getByRole('button', {
-    name: 'e2e-model · Settings UI Provider',
-    exact: true,
-  });
+  const defaultOption = defaultDropdown
+    .getByRole('button')
+    .filter({ hasText: 'e2e-model' })
+    .filter({ hasText: 'Settings UI Provider' });
   await expect(defaultOption).toBeVisible();
   const defaultModelSaved = page.waitForResponse(
     (response) => response.url().includes('/api/v1/agent/settings') && response.request().method() === 'PATCH',
