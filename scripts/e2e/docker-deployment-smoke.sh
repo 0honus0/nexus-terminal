@@ -1670,7 +1670,7 @@ let fullStackWorkspace = await createReadyWorkspace(fullStackRun, 'Full-stack Ru
 const startedFullStackWorkspaceCommand = await ok(
   'POST',
   `/api/v1/apps/nexus.agent/workspaces/${fullStackWorkspace.id}/actions`,
-  { action: 'start', expectedVersion: fullStackWorkspace.version },
+  { schemaVersion: 1, action: 'start', expectedVersion: fullStackWorkspace.version },
   mutationHeaders,
   202,
 );
@@ -1713,7 +1713,7 @@ if (
 const deletedFullStackWorkspaceCommand = await ok(
   'POST',
   `/api/v1/apps/nexus.agent/workspaces/${fullStackWorkspace.id}/actions`,
-  { action: 'delete', expectedVersion: fullStackWorkspace.version },
+  { schemaVersion: 1, action: 'delete', expectedVersion: fullStackWorkspace.version },
   mutationHeaders,
   202,
 );
