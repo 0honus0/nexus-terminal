@@ -167,7 +167,7 @@ jobs:
               changed_files="$RUNNER_TEMP/e2e-changed-files.txt"
               git diff --name-only "$BASE_SHA" "$TARGET_SHA" > "$changed_files"
 
-              if grep -Eq '^(Dockerfile|docker-compose\.yml|\.dockerignore|\.env\.example|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|scripts/docker/|scripts/agent-runner/|scripts/build/build\.sh|packages/agent-runner/)' "$changed_files"; then
+              if grep -Eq '^(Dockerfile|docker-compose\.yml|\.dockerignore|\.env\.example|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|scripts/docker/|scripts/agent-runner/|scripts/e2e/|scripts/build/build\.sh|packages/agent-runner/|\.github/workflows/e2e\.yml$)' "$changed_files"; then
                 docker_validation=true
               fi
             fi
