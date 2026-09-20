@@ -12944,9 +12944,7 @@ const modelAwareContextBudgetScenario: Scenario = async () => {
     tools: [],
   });
   assert.ok(
-    latestExchangePlan.messages.some(
-      (message) => message.role === 'tool' && message.toolCallId === latestToolCallId,
-    ),
+    latestExchangePlan.messages.some((message) => message.role === 'tool' && message.toolCallId === latestToolCallId),
     'soft-pressure compaction must retain the newest complete Tool exchange for the next inference',
   );
 
