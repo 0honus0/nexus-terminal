@@ -3,18 +3,16 @@
   "group": 3,
   "workers": 8,
   "specs": [
-    "specs/auth/setup-login.spec.ts",
+    "specs/agent/host.spec.ts",
+    "specs/agent/preset-plugin.spec.ts",
+    "specs/agent/provider.spec.ts",
     "specs/ui/rdp-remoteapp-fullscreen.spec.ts",
-    "specs/ui/notification-delivery.spec.ts",
-    "specs/ui/notification-settings.spec.ts",
-    "specs/ui/proxy-management.spec.ts",
-    "specs/ui/system-settings.spec.ts",
-    "specs/ui/theme-switching.spec.ts",
     "specs/websocket/authenticated-session.spec.ts",
     "specs/ssh/command-history-management.spec.ts",
     "specs/ssh/quick-command-collapsible-search.spec.ts",
     "specs/ssh/quick-command-management.spec.ts",
     "specs/ssh/quick-command-tags-variables.spec.ts",
-    "specs/ssh/progress-display-upload-copy.spec.ts"
+    "specs/ssh/progress-display-archive.spec.ts",
+    "specs/ssh/suspend-resume.spec.ts"
   ]
 }
