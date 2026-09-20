@@ -26,7 +26,7 @@
 
 - 模型物理 `contextWindow/maxOutputTokens` 只属于冻结的 RunDefinition capability，不复制进 RunBudget。
 - RunBudget 冻结 Normal/Extended context policy；达到 soft pressure 后可提前压缩历史。
-- 模型可见 Tool projection 可随 context pressure 收紧，但原始 ToolResult 与 evidence 必须完整持久化。
+- 模型可见 Tool projection 可随 context pressure 收紧，但原始 ToolResult 与 evidence 必须完整持久化；最新完整 causal exchange 必须保留到下一次 inference。
 - current input 是 mandatory projection，不能再次进入 thread history、derived checkpoint 或 summary。
 
 ### 当前 Agent UI 可读性与导航基线

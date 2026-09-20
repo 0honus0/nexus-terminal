@@ -12918,12 +12918,49 @@ const modelAwareContextBudgetScenario: Scenario = async () => {
     'current input must not reappear through a derived checkpoint when context pressure compacts history',
   );
 
+  const latestToolCallId = 'current-turn-tool-call';
+  const latestExchangePlan = await contextService([
+    entry(1, 'user_input', { text: 'Preserve the latest causal Tool exchange.' }),
+    entry(2, 'assistant_message', {
+      text: '',
+      toolCalls: [{ id: latestToolCallId, name: 'skill_read', argumentsJson: '{"id":"nexus.agent.developer"}' }],
+    }),
+    entry(3, 'tool_result', {
+      toolCallId: latestToolCallId,
+      text: 'latest tool result '.repeat(260),
+    }),
+  ]).compose({
+    scope,
+    threadId: 'scenario-thread',
+    runId: 'scenario-run',
+    currentInput: 'Preserve the latest causal Tool exchange.',
+    currentInputEntryId: 'entry-1',
+    modelContextWindow: 8_192,
+    maxContextTokens: 7_000,
+    softContextTokens: 900,
+    reservedOutputTokens: 512,
+    maxRecallItems: 1,
+    maxRecallBytes: 1_024,
+    tools: [],
+  });
+  assert.ok(
+    latestExchangePlan.messages.some(
+      (message) => message.role === 'tool' && message.toolCallId === latestToolCallId,
+    ),
+    'soft-pressure compaction must retain the newest complete Tool exchange for the next inference',
+  );
+
   return [
     { name: 'normal_effective_context_tokens', value: normalWindow.effectiveInputTokens, unit: 'tokens' },
     { name: 'extended_effective_context_tokens', value: extendedWindow.effectiveInputTokens, unit: 'tokens' },
     { name: 'pressure_tool_output_floor_bytes', value: atHardPressure, unit: 'bytes' },
     { name: 'soft_pressure_compactions', value: earlyPressurePlan.compacted ? 1 : 0, unit: 'plans' },
     { name: 'current_input_projection_occurrences', value: currentInputOccurrences, unit: 'messages' },
+    {
+      name: 'latest_causal_tool_exchange_retained',
+      value: latestExchangePlan.messages.some((message) => message.role === 'tool') ? 1 : 0,
+      unit: 'exchanges',
+    },
   ];
 };
 

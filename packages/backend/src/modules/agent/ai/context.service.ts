@@ -848,15 +848,18 @@ export class ContextService {
 
     // Compaction is adaptive inside the frozen effective context boundary. Once the soft
     // pressure threshold is crossed, trim the oldest raw ledger turns to recover working
-    // headroom without changing the model's physical capability snapshot.
+    // headroom without changing the model's physical capability snapshot. The newest complete
+    // causal group remains visible for the next inference so a just-settled Tool exchange cannot
+    // be mistaken for work that never happened.
     const compacted = historyPressure || droppedSections.length > 0;
     if (compacted && selectedLedgerGroups.length > 0) {
       const targetTokens = Math.max(
         projectedTokens(mandatoryHeuristicTokens),
         Math.min(softPressureTokens, Math.floor(availableTokens * compactionRatio)),
       );
+      const newestCausalGroup = selectedLedgerGroups.at(-1);
       for (const group of selectedLedgerGroups) {
-        if (usedTokens <= targetTokens) break;
+        if (usedTokens <= targetTokens || group === newestCausalGroup) break;
         for (const candidate of group.sections) {
           const messageIndex = messages.indexOf(candidate.message);
           if (messageIndex >= 0) messages.splice(messageIndex, 1);
