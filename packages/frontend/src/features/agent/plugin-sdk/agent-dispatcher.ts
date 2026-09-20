@@ -148,6 +148,7 @@ export class PluginAgentSdkDispatcher {
             configurationVersion: positiveInteger(model.configurationVersion),
           },
           approvalMode: 'ask',
+          executionMode: 'execute',
           ...(params.reasoningEffort === undefined ? {} : { reasoningEffort: reasoningEffort(params.reasoningEffort) }),
           ...(params.connectionIds === undefined ? {} : { connectionIds: positiveIntegerArray(params.connectionIds) }),
           ...(params.initialGoal === undefined ? {} : { initialGoal: string(params.initialGoal, MAX_TEXT_BYTES) }),

@@ -725,7 +725,7 @@ Installable App/Skill package 必须验证：
 
 签名粒度是 **Plugin package/version**，不是单个 Skill。一个签名包可以包含多个 `SKILL.md`；`files.json` 固定每个 Skill 文件的 SHA-256，而 package 的 Ed25519 signature 覆盖整个版本，因此任一 Skill 被单独修改都会使安装/读取校验失败，不需要为每个 Skill 再生成独立签名。
 
-Skill 目录采用单一来源规范：每个 Skill 必须且只能是 `skills/<slug>/SKILL.md`。同一个 Markdown 文件的 frontmatter 同时定义 `id/name/version/description/requiredCapabilities`，正文紧随其后；禁止再放 `skills/index.json`、独立 metadata 文件或单独 body 文件，避免索引与正文漂移。Host package verifier 会拒绝不符合这一布局的签名包。
+Skill 目录采用单一来源规范：每个 Skill 必须且只能是 `skills/<slug>/SKILL.md`。`SKILL.md` 使用当前标准 frontmatter，至少包含与目录 slug 一致的 `name` 和非空 `description`；可使用 `license`、`compatibility`、`metadata`、`allowed-tools` 等标准字段。Skill `id` 由签名 App id 与 slug 派生，Skill `version` 由签名 Plugin package version 派生；不得再在 Skill frontmatter 中声明旧的 `id/version/requiredCapabilities` Nexus 私有结构。禁止再放 `skills/index.json`、独立 metadata 文件或单独 body 文件，避免索引与正文漂移。Host package verifier 会拒绝不符合这一布局的签名包。
 
 Skill 对模型采用渐进披露：基础 Context 只发送当前 App 可用 Skill 的 `id/name/description` metadata，不自动发送任意 `SKILL.md` 正文、version/hash/capability 清单。模型判断某个 Skill 与当前任务相关后，调用 Host-owned read-only `skill_read(id)`；Host 再从当前已安装签名包读取同一个 `SKILL.md` 的正文、复核文件 hash，并把该单个 Skill 正文作为 bounded Tool result 返回。这样 Skill 数量增长不会线性污染基础 Context，也不会因为安装 Plugin 就把所有 Skill instructions 自动注入模型。
 

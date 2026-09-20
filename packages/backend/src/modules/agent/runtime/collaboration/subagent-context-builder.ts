@@ -335,7 +335,7 @@ export class SubagentContextBuilder {
     if (!model.supportsTools) return [];
     const allowedCapabilities = new Set(delegation.capabilities);
     const governedMutationsEnabled =
-      delegation.mutationMode === 'governed' && (run.definition.approvalMode ?? 'ask') === 'full_access';
+      delegation.mutationMode === 'governed' && run.definition.approvalMode === 'full_access';
     return this.toolCatalog
       .discover(scope, '', 256, { environment: run.definition.environment ?? null })
       .filter(

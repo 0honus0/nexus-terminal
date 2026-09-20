@@ -124,7 +124,7 @@ export const createWorkspaceJobTool = (
         timeoutSeconds: { type: 'integer', minimum: 1, maximum: 300 },
         mode: { type: 'string', enum: ['foreground', 'background'] },
       },
-      required: ['workspaceId', 'argv'],
+      required: ['workspaceId', 'argv', 'mode'],
     },
     riskClass: 'mutate',
     capability: 'workspace.runtime.execute',
@@ -140,7 +140,7 @@ export const createWorkspaceJobTool = (
       args.timeoutSeconds,
       Math.min(300, Math.max(1, context.deadlineAt - Math.floor(Date.now() / 1000))),
     );
-    const mode = args.mode === undefined ? 'foreground' : stringValue(args.mode, 16);
+    const mode = stringValue(args.mode, 16);
     if (mode !== 'foreground' && mode !== 'background') throw new Error('TOOL_ARGUMENTS_INVALID');
     const workspace = await repository.getWorkspace(context, workspaceId);
     if (!workspace) throw new Error('NOT_FOUND');
@@ -212,7 +212,7 @@ export const createWorkspaceJobTool = (
     const generation = positiveInteger(args.generation);
     const argv = argvValue(args.argv);
     const timeoutSeconds = positiveInteger(args.timeoutSeconds);
-    const mode = args.mode === undefined ? 'foreground' : stringValue(args.mode, 16);
+    const mode = stringValue(args.mode, 16);
     if (mode !== 'foreground' && mode !== 'background') throw new Error('TOOL_ARGUMENTS_INVALID');
     const maxBytes = Math.max(1, Math.min(512 * 1024, Math.floor(context.maxOutputBytes / 2)));
     const call = {

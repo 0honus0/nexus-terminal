@@ -150,6 +150,14 @@ export const AGENT_DEFAULTS = {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+const assertExactKeys = (value: Record<string, unknown>, allowedKeys: readonly string[]): void => {
+  const allowed = new Set(allowedKeys);
+  const keys = Object.keys(value);
+  if (keys.length !== allowed.size || keys.some((key) => !allowed.has(key))) {
+    throw new Error('VALIDATION_FAILED');
+  }
+};
+
 const integer = (value: unknown, fallback: number, minimum = 0): number =>
   Number.isSafeInteger(value) && (value as number) >= minimum ? (value as number) : fallback;
 
@@ -179,6 +187,7 @@ const packVersionSettings = (
   for (const [familyId, raw] of Object.entries(value).slice(0, 128)) {
     const family = familyId.trim();
     if (!family || family.length > 128 || !isRecord(raw)) continue;
+    assertExactKeys(raw, ['enabledVersionIds', 'defaultVersionId']);
     const enabledVersionIds = stringList(raw.enabledVersionIds).slice(0, 64);
     const defaultVersionId = stringOrNull(raw.defaultVersionId, null);
     result[family] = {
@@ -198,6 +207,7 @@ const acpProfiles = (
   const result: AgentAcpWorkspaceProfileSetting[] = [];
   for (const candidate of value.slice(0, 32)) {
     if (!isRecord(candidate)) continue;
+    assertExactKeys(candidate, ['id', 'argv', 'cwd']);
     const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
     const cwd = typeof candidate.cwd === 'string' ? candidate.cwd.trim() : '';
     if (
@@ -232,18 +242,25 @@ const browserTargets = (value: unknown, fallback: AgentBrowserTargetSetting[] = 
   const result: AgentBrowserTargetSetting[] = [];
   for (const candidate of value.slice(0, 32)) {
     if (!isRecord(candidate)) continue;
+    assertExactKeys(candidate, ['id', 'endpoints', 'allowedUrlPatterns']);
     const id = typeof candidate.id === 'string' ? candidate.id.trim() : '';
     if (!/^[a-z][a-z0-9_.-]{0,127}$/.test(id) || seen.has(id) || !Array.isArray(candidate.endpoints)) continue;
     const endpoints: AgentBrowserEndpointSetting[] = [];
     for (const raw of candidate.endpoints.slice(0, 16)) {
       if (!isRecord(raw)) continue;
+      assertExactKeys(raw, ['scope', 'via', 'url', 'priority', 'allowPlaintext', 'verifyTls']);
       const scope = raw.scope;
       const url = typeof raw.url === 'string' ? raw.url.trim() : '';
-      const via = raw.via ?? (scope === 'docker-network' ? 'runner' : 'backend');
+      const via = raw.via;
       const priority = Number(raw.priority);
       if (
         (scope !== 'docker-network' && scope !== 'external-network') ||
         (via !== 'backend' && via !== 'runner') ||
+        !Number.isSafeInteger(priority) ||
+        priority < 0 ||
+        priority > 10000 ||
+        typeof raw.allowPlaintext !== 'boolean' ||
+        typeof raw.verifyTls !== 'boolean' ||
         !url ||
         url.length > 4096
       )
@@ -263,15 +280,15 @@ const browserTargets = (value: unknown, fallback: AgentBrowserTargetSetting[] = 
       )
         continue;
       const plaintext = parsed.protocol === 'http:' || parsed.protocol === 'ws:';
-      const allowPlaintext = raw.allowPlaintext === true;
+      const allowPlaintext = raw.allowPlaintext;
       if (plaintext && !allowPlaintext) continue;
       endpoints.push({
         scope,
         via,
         url: parsed.toString(),
-        priority: Number.isSafeInteger(priority) && priority >= 0 && priority <= 10000 ? priority : 100,
+        priority,
         allowPlaintext,
-        verifyTls: raw.verifyTls !== false,
+        verifyTls: raw.verifyTls,
       });
     }
     if (!endpoints.length) continue;
@@ -294,6 +311,7 @@ const pluginRepositories = (
   const result: AgentPluginRepositorySetting[] = [];
   for (const candidate of value.slice(0, 16)) {
     if (!isRecord(candidate) || typeof candidate.url !== 'string') continue;
+    assertExactKeys(candidate, ['url']);
     let url: URL;
     try {
       url = new URL(candidate.url.trim());
@@ -309,30 +327,94 @@ const pluginRepositories = (
   return result;
 };
 
-const section = (root: Record<string, unknown>, key: string): Record<string, unknown> =>
-  isRecord(root[key]) ? root[key] : {};
+const exactRecord = (
+  root: Record<string, unknown>,
+  key: string,
+  allowedKeys: readonly string[],
+): Record<string, unknown> => {
+  const value = root[key];
+  if (!isRecord(value)) throw new Error('VALIDATION_FAILED');
+  assertExactKeys(value, allowedKeys);
+  return value;
+};
 
 export const createDefaultAgentSettings = (): AgentSettingsDocument =>
   JSON.parse(JSON.stringify(AGENT_DEFAULTS.settings)) as AgentSettingsDocument;
 
-/** Normalizes persisted settings while keeping all effective values inside the frozen hard-limit envelope. */
+/** Normalizes current persisted settings while keeping all effective values inside the frozen hard-limit envelope. */
 const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSettingsDocument => {
-  if (!isRecord(raw)) return createDefaultAgentSettings();
-  if (raw.schemaVersion !== undefined && raw.schemaVersion !== 1) {
-    throw new Error(`Unsupported Agent settings schemaVersion: ${String(raw.schemaVersion)}`);
+  if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
+  const topLevelKeys = [
+    'schemaVersion',
+    'feature',
+    'model',
+    'performance',
+    'budget',
+    'hardLimits',
+    'subagents',
+    'storage',
+    'workspaceRuntime',
+    'browser',
+    'plugins',
+  ] as const;
+  const allowedTopLevel = new Set<string>(topLevelKeys);
+  if (
+    raw.schemaVersion !== 1 ||
+    Object.keys(raw).length !== topLevelKeys.length ||
+    Object.keys(raw).some((key) => !allowedTopLevel.has(key))
+  ) {
+    throw new Error('VALIDATION_FAILED');
   }
 
   const defaults = createDefaultAgentSettings();
-  const feature = section(raw, 'feature');
-  const model = section(raw, 'model');
-  const performance = section(raw, 'performance');
-  const budget = section(raw, 'budget');
-  const hardLimits = section(raw, 'hardLimits');
-  const subagents = section(raw, 'subagents');
-  const storage = section(raw, 'storage');
-  const workspaceRuntime = section(raw, 'workspaceRuntime');
-  const browser = section(raw, 'browser');
-  const plugins = section(raw, 'plugins');
+  const feature = exactRecord(raw, 'feature', ['enabled']);
+  const model = exactRecord(raw, 'model', ['defaultProviderId', 'defaultModelId', 'fallbackModels']);
+  const performance = exactRecord(raw, 'performance', ['maxConcurrentRuntimes', 'maxConcurrentModelCalls']);
+  const budget = exactRecord(raw, 'budget', [
+    'maxRunSteps',
+    'maxActiveExecutionSeconds',
+    'toolTimeoutSeconds',
+    'maxToolOutputBytes',
+    'maxRecallItems',
+    'maxRecallBytes',
+  ]);
+  const hardLimits = exactRecord(raw, 'hardLimits', [
+    'maxRunSteps',
+    'maxActiveExecutionSeconds',
+    'toolTimeoutSeconds',
+    'maxToolOutputBytes',
+    'maxArtifactBytes',
+    'maxSingleArtifactBytes',
+    'maxGlobalArtifactBytes',
+    'maxRecallItems',
+    'maxRecallBytes',
+    'maxConcurrentRuntimes',
+    'maxConcurrentModelCalls',
+    'maxDelegationDepth',
+    'maxSubagentMessagesPerRun',
+    'maxSubagentMessageBytesPerRun',
+    'maxActiveWorkspaces',
+    'unretainedArtifactTtlSeconds',
+  ]);
+  const subagents = exactRecord(raw, 'subagents', [
+    'maxDelegationDepth',
+    'maxSubagentMessagesPerRun',
+    'maxSubagentMessageBytesPerRun',
+  ]);
+  const storage = exactRecord(raw, 'storage', [
+    'maxArtifactBytes',
+    'maxSingleArtifactBytes',
+    'maxGlobalArtifactBytes',
+    'unretainedArtifactTtlSeconds',
+  ]);
+  const workspaceRuntime = exactRecord(raw, 'workspaceRuntime', [
+    'maxActiveWorkspaces',
+    'enabledRecipeIds',
+    'toolVersions',
+    'acpProfiles',
+  ]);
+  const browser = exactRecord(raw, 'browser', ['targets']);
+  const plugins = exactRecord(raw, 'plugins', ['repositories']);
 
   const normalized: AgentSettingsDocument = {
     schemaVersion: 1,
@@ -344,7 +426,9 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
         ? model.fallbackModels
             .slice(0, 8)
             .flatMap((candidate) => {
-              if (!isRecord(candidate) || typeof candidate.providerId !== 'string' || typeof candidate.modelId !== 'string') return [];
+              if (!isRecord(candidate)) return [];
+              assertExactKeys(candidate, ['providerId', 'modelId']);
+              if (typeof candidate.providerId !== 'string' || typeof candidate.modelId !== 'string') return [];
               const providerId = candidate.providerId.trim();
               const modelId = candidate.modelId.trim();
               return providerId && modelId ? [{ providerId, modelId }] : [];
@@ -445,7 +529,7 @@ const normalizeSettings = (raw: unknown, applyHardLimitCaps: boolean): AgentSett
       acpProfiles: acpProfiles(workspaceRuntime.acpProfiles, defaults.workspaceRuntime.acpProfiles),
     },
     browser: {
-      targets: browserTargets(browser.targets ?? workspaceRuntime.browserTargets, defaults.browser.targets),
+      targets: browserTargets(browser.targets, defaults.browser.targets),
     },
     plugins: {
       repositories: pluginRepositories(plugins.repositories, defaults.plugins.repositories),

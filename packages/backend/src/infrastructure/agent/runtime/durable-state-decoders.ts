@@ -33,6 +33,11 @@ export const durableRecord = (value: unknown): UnknownRecord => {
   return value as UnknownRecord;
 };
 
+const assertDurableKeys = (record: UnknownRecord, allowed: readonly string[]): void => {
+  const keys = new Set(allowed);
+  if (Object.keys(record).some((key) => !keys.has(key))) return invalid();
+};
+
 export const durableString = (value: unknown, nullable = false): string | null => {
   if (nullable && value === null) return null;
   if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_STRING_BYTES) return invalid();
@@ -93,9 +98,22 @@ export const parseRunPlan = (raw: string): RunPlan => decodeRunPlan(parseDurable
 
 export const parseRunBudget = (raw: string): RunBudget => {
   const record = durableRecord(parseDurableJson(raw));
+  assertDurableKeys(record, [
+    'maxContextTokens',
+    'maxOutputTokens',
+    'maxRunSteps',
+    'maxActiveExecutionSeconds',
+    'toolTimeoutSeconds',
+    'maxToolOutputBytes',
+    'maxRecallItems',
+    'maxRecallBytes',
+    'maxSubagentMessages',
+    'maxSubagentMessageBytes',
+    'contextCompactionMode',
+    'revision',
+  ]);
   const compactionMode = record.contextCompactionMode;
-  if (compactionMode !== undefined && !['aggressive', 'balanced', 'conservative'].includes(String(compactionMode)))
-    return invalid();
+  if (!['aggressive', 'balanced', 'conservative'].includes(String(compactionMode))) return invalid();
   return {
     maxContextTokens: durableInteger(record.maxContextTokens, 1),
     maxOutputTokens: durableInteger(record.maxOutputTokens, 1),
@@ -107,9 +125,7 @@ export const parseRunBudget = (raw: string): RunBudget => {
     maxRecallBytes: durableInteger(record.maxRecallBytes, 1),
     maxSubagentMessages: durableInteger(record.maxSubagentMessages, 1),
     maxSubagentMessageBytes: durableInteger(record.maxSubagentMessageBytes, 1),
-    ...(compactionMode === undefined
-      ? {}
-      : { contextCompactionMode: compactionMode as NonNullable<RunBudget['contextCompactionMode']> }),
+    contextCompactionMode: compactionMode as RunBudget['contextCompactionMode'],
     revision: durableInteger(record.revision, 1),
   };
 };
@@ -228,6 +244,17 @@ const reasoningEfforts = new Set<ReasoningEffort>(['none', 'minimal', 'low', 'me
 
 export const decodeModelCapabilitySnapshot = (value: unknown): ModelCapabilitySnapshot => {
   const record = durableRecord(value);
+  assertDurableKeys(record, [
+    'contextWindow',
+    'maxOutputTokens',
+    'supportsTools',
+    'supportsImageInput',
+    'supportsFileInput',
+    'supportsPromptCacheKey',
+    'reasoningEfforts',
+    'defaultReasoningEffort',
+    'reasoningMandatory',
+  ]);
   const contextWindow = durableInteger(record.contextWindow, 1);
   const maxOutputTokens = durableInteger(record.maxOutputTokens, 1);
   if (maxOutputTokens > contextWindow) return invalid();
@@ -257,9 +284,6 @@ export const decodeModelCapabilitySnapshot = (value: unknown): ModelCapabilitySn
     return invalid();
   }
   if (record.reasoningMandatory !== undefined && typeof record.reasoningMandatory !== 'boolean') return invalid();
-  if (record.reasoningSupportsMaxTokens !== undefined && typeof record.reasoningSupportsMaxTokens !== 'boolean') {
-    return invalid();
-  }
   if (record.supportsPromptCacheKey !== undefined && typeof record.supportsPromptCacheKey !== 'boolean')
     return invalid();
   return {
@@ -277,17 +301,33 @@ export const decodeModelCapabilitySnapshot = (value: unknown): ModelCapabilitySn
 
 export const parseRunDefinition = (raw: string): RunDefinitionSnapshot => {
   const record = durableRecord(parseDurableJson(raw));
+  assertDurableKeys(record, [
+    'schemaVersion',
+    'agentDefinitionId',
+    'requiredModelCapabilities',
+    'model',
+    'modelCapabilities',
+    'rootModelRoutes',
+    'reasoningEffort',
+    'approvalMode',
+    'executionMode',
+    'connectionIds',
+    'environment',
+    'policyRevision',
+    'settingsRevision',
+    'contextBoundary',
+  ]);
   if (record.schemaVersion !== 1) return invalid();
   const model = durableRecord(record.model);
+  assertDurableKeys(model, ['providerId', 'modelId', 'configurationVersion']);
   const reasoningEffort = record.reasoningEffort;
   if (reasoningEffort !== undefined && !reasoningEfforts.has(reasoningEffort as ReasoningEffort)) return invalid();
-  if (record.approvalMode !== undefined && !['ask', 'full_access'].includes(String(record.approvalMode)))
-    return invalid();
-  if (record.executionMode !== undefined && !['execute', 'plan'].includes(String(record.executionMode)))
-    return invalid();
+  if (!['ask', 'full_access'].includes(String(record.approvalMode))) return invalid();
+  if (!['execute', 'plan'].includes(String(record.executionMode))) return invalid();
   let contextBoundary: RunDefinitionSnapshot['contextBoundary'];
   if (record.contextBoundary !== undefined) {
     const boundary = durableRecord(record.contextBoundary);
+    assertDurableKeys(boundary, ['baseThrough', 'runThrough']);
     const runThrough = durableRecord(boundary.runThrough);
     if (Object.keys(runThrough).length > 4096) return invalid();
     contextBoundary = {
@@ -297,50 +337,41 @@ export const parseRunDefinition = (raw: string): RunDefinitionSnapshot => {
       ),
     };
   }
-  let rootModelRoutes: RunDefinitionSnapshot['rootModelRoutes'];
-  if (record.rootModelRoutes !== undefined) {
-    if (!Array.isArray(record.rootModelRoutes) || record.rootModelRoutes.length > 8) return invalid();
-    rootModelRoutes = record.rootModelRoutes.map((rawRoute) => {
-      const route = durableRecord(rawRoute);
-      const routeModel = durableRecord(route.model);
-      return {
-        model: {
-          providerId: durableString(routeModel.providerId) as string,
-          modelId: durableString(routeModel.modelId) as string,
-          configurationVersion: durableInteger(routeModel.configurationVersion, 1),
-        },
-        ...(route.modelCapabilities === undefined
-          ? {}
-          : { modelCapabilities: decodeModelCapabilitySnapshot(route.modelCapabilities) }),
-      };
-    });
-  }
-  let requiredModelCapabilities: AgentModelCapability[] | undefined;
-  if (record.requiredModelCapabilities !== undefined) {
-    const rawRequirements = decodeDurableStringArray(record.requiredModelCapabilities, 32);
-    if (new Set(rawRequirements).size !== rawRequirements.length) return invalid();
-    requiredModelCapabilities = normalizeRequiredModelCapabilities(rawRequirements) ?? invalid();
-  }
+  if (!Array.isArray(record.rootModelRoutes) || record.rootModelRoutes.length > 8) return invalid();
+  const rootModelRoutes: RunDefinitionSnapshot['rootModelRoutes'] = record.rootModelRoutes.map((rawRoute) => {
+    const route = durableRecord(rawRoute);
+    assertDurableKeys(route, ['model', 'modelCapabilities']);
+    const routeModel = durableRecord(route.model);
+    assertDurableKeys(routeModel, ['providerId', 'modelId', 'configurationVersion']);
+    return {
+      model: {
+        providerId: durableString(routeModel.providerId) as string,
+        modelId: durableString(routeModel.modelId) as string,
+        configurationVersion: durableInteger(routeModel.configurationVersion, 1),
+      },
+      modelCapabilities: decodeModelCapabilitySnapshot(route.modelCapabilities),
+    };
+  });
+  const rawRequirements = decodeDurableStringArray(record.requiredModelCapabilities, 32);
+  if (new Set(rawRequirements).size !== rawRequirements.length) return invalid();
+  const requiredModelCapabilities: AgentModelCapability[] =
+    normalizeRequiredModelCapabilities(rawRequirements) ?? invalid();
   return {
     schemaVersion: 1,
     agentDefinitionId: durableString(record.agentDefinitionId) as string,
-    ...(requiredModelCapabilities === undefined ? {} : { requiredModelCapabilities }),
+    requiredModelCapabilities,
     model: {
       providerId: durableString(model.providerId) as string,
       modelId: durableString(model.modelId) as string,
       configurationVersion: durableInteger(model.configurationVersion, 1),
     },
-    ...(record.modelCapabilities === undefined
-      ? {}
-      : { modelCapabilities: decodeModelCapabilitySnapshot(record.modelCapabilities) }),
-    ...(rootModelRoutes === undefined ? {} : { rootModelRoutes }),
+    modelCapabilities: decodeModelCapabilitySnapshot(record.modelCapabilities),
+    rootModelRoutes,
     ...(reasoningEffort === undefined ? {} : { reasoningEffort: reasoningEffort as ReasoningEffort }),
-    ...(record.approvalMode === undefined ? {} : { approvalMode: record.approvalMode as 'ask' | 'full_access' }),
-    ...(record.executionMode === undefined ? {} : { executionMode: record.executionMode as 'execute' | 'plan' }),
+    approvalMode: record.approvalMode as 'ask' | 'full_access',
+    executionMode: record.executionMode as 'execute' | 'plan',
     connectionIds: decodeDurableIntegerArray(record.connectionIds, 1024, 1),
-    ...(record.environment === undefined
-      ? {}
-      : { environment: record.environment === null ? null : decodeRunEnvironment(record.environment) }),
+    environment: record.environment === null ? null : decodeRunEnvironment(record.environment),
     policyRevision: durableInteger(record.policyRevision, 1),
     settingsRevision: durableInteger(record.settingsRevision, 1),
     ...(contextBoundary === undefined ? {} : { contextBoundary }),
@@ -349,19 +380,40 @@ export const parseRunDefinition = (raw: string): RunDefinitionSnapshot => {
 
 export const parseToolInspection = (raw: string): ToolInspection => {
   const record = durableRecord(parseDurableJson(raw));
+  assertDurableKeys(record, [
+    'toolName',
+    'toolVersion',
+    'normalizedArguments',
+    'target',
+    'resourceKeys',
+    'risk',
+    'mutation',
+    'operationHash',
+    'operationHashVersion',
+    'preconditions',
+    'policyRevision',
+    'inputRevision',
+  ]);
   if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(record.risk))) return invalid();
   if (record.operationHashVersion !== 1) return invalid();
   const target = durableRecord(record.target);
+  assertDurableKeys(target, [
+    'kind',
+    'targetIdentity',
+    'endpoint',
+    'loginUser',
+    'configurationHash',
+    'connectionId',
+    'workspaceId',
+    'integrationId',
+    'schemaHash',
+    'browserSessionId',
+    'snapshotId',
+    'generation',
+    'hostKeyTrust',
+  ]);
   if (!['machine', 'workspace', 'integration', 'browser', 'run'].includes(String(target.kind))) return invalid();
   if (!Array.isArray(record.preconditions) || record.preconditions.length > 256) return invalid();
-  if (record.secretRefs !== undefined) {
-    if (!Array.isArray(record.secretRefs) || record.secretRefs.length > 256) return invalid();
-    for (const item of record.secretRefs) {
-      const secret = durableRecord(item);
-      durableString(secret.id);
-      durableInteger(secret.version, 1);
-    }
-  }
   return {
     toolName: durableString(record.toolName) as string,
     toolVersion: durableString(record.toolVersion) as string,
@@ -394,6 +446,7 @@ export const parseToolInspection = (raw: string): ToolInspection => {
     operationHashVersion: 1,
     preconditions: record.preconditions.map((item) => {
       const precondition = durableRecord(item);
+      assertDurableKeys(precondition, ['kind', 'key', 'observedValue']);
       if (!['fileHash', 'metadata', 'serviceState', 'workspaceGeneration'].includes(String(precondition.kind)))
         return invalid();
       return {

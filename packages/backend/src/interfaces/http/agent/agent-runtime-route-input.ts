@@ -96,8 +96,6 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
   if (!isRecord(model) || !hasOnlyKeys(model, ['providerId', 'modelId', 'configurationVersion'])) {
     throw new Error('VALIDATION_FAILED');
   }
-  const approvalMode = value.approvalMode === undefined ? 'ask' : value.approvalMode;
-  const executionMode = value.executionMode === undefined ? 'execute' : value.executionMode;
   if (
     typeof value.threadId !== 'string' ||
     typeof value.agentDefinitionId !== 'string' ||
@@ -105,8 +103,8 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
     typeof model.modelId !== 'string' ||
     !positiveInteger(model.configurationVersion) ||
     (value.reasoningEffort !== undefined && !isReasoningEffort(value.reasoningEffort)) ||
-    (approvalMode !== 'ask' && approvalMode !== 'full_access') ||
-    (executionMode !== 'execute' && executionMode !== 'plan') ||
+    (value.approvalMode !== 'ask' && value.approvalMode !== 'full_access') ||
+    (value.executionMode !== 'execute' && value.executionMode !== 'plan') ||
     (value.plannedFromRunId !== undefined && typeof value.plannedFromRunId !== 'string') ||
     !Array.isArray(value.connectionIds) ||
     value.connectionIds.length > 50 ||
@@ -128,8 +126,8 @@ export const parseCreateRunRequest = (body: unknown): CreateRunRequestDto => {
       configurationVersion: model.configurationVersion,
     },
     ...(value.reasoningEffort === undefined ? {} : { reasoningEffort: value.reasoningEffort as ReasoningEffort }),
-    approvalMode: approvalMode as RunApprovalMode,
-    executionMode: executionMode as RunExecutionMode,
+    approvalMode: value.approvalMode as RunApprovalMode,
+    executionMode: value.executionMode as RunExecutionMode,
     ...(typeof value.plannedFromRunId === 'string' ? { plannedFromRunId: value.plannedFromRunId } : {}),
     connectionIds: value.connectionIds as number[],
     ...(value.environment === undefined ? {} : { environment: parseRunEnvironmentSelection(value.environment) }),
@@ -254,10 +252,7 @@ const parseBudgetIncrease = (value: unknown): RunBudgetIncrease => {
 };
 
 export const parseBudgetIncreaseRequest = (body: unknown): { increase: RunBudgetIncrease; expectedVersion: number } => {
-  const value = versionedRecord(body, ['scope', 'refId', 'increase', 'expectedVersion']);
-  if ((value.scope !== undefined && value.scope !== 'run') || value.refId !== undefined) {
-    throw new Error('CAPABILITY_UNAVAILABLE');
-  }
+  const value = versionedRecord(body, ['increase', 'expectedVersion']);
   if (!positiveInteger(value.expectedVersion)) throw new Error('VALIDATION_FAILED');
   return { increase: parseBudgetIncrease(value.increase), expectedVersion: value.expectedVersion };
 };

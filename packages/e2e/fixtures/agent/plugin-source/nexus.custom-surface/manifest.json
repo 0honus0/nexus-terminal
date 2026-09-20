@@ -16,7 +16,7 @@
       "version": "1.0.0",
       "displayName": "Custom Surface Agent",
       "description": "E2E-only AgentDefinition used to validate the isolated Custom App Surface SDK bridge.",
-      "requiredModelCapabilities": ["streaming"]
+      "requiredModelCapabilities": []
     }
   ],
   "targets": {

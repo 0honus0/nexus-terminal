@@ -29,7 +29,7 @@ export class AgentRequestError extends Error {
 
 export const versionedRecord = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
   if (!isRecord(value) || !hasOnlyKeys(value, [...keys, 'schemaVersion'])) throw new Error('VALIDATION_FAILED');
-  const schemaVersion = value.schemaVersion ?? 1;
+  const schemaVersion = value.schemaVersion;
   if (schemaVersion !== 1) {
     throw new AgentRequestError('SCHEMA_VERSION_UNSUPPORTED', {
       field: 'schemaVersion',

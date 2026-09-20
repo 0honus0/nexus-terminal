@@ -367,7 +367,7 @@ export class RootToolExecutionCoordinator {
       now,
     });
     yield { type: 'durable', runId: snapshot.id, cursor: requested.eventCursor };
-    if ((snapshot.definition.approvalMode ?? 'ask') !== 'full_access') {
+    if (snapshot.definition.approvalMode !== 'full_access') {
       yield { type: 'settled', run: requested.run };
       return true;
     }

@@ -10,6 +10,8 @@ import {
 import type {
   DiscoveredProviderModel,
   ModelCapabilityDefaults,
+  ModelCapabilityOverrides,
+  ModelReasoningDefaults,
   PersistedProviderModelConfig,
   PersistedProviderView,
   ProviderInput,
@@ -53,7 +55,6 @@ const validateModel = (
     'defaultReasoningEffort',
     'reasoningSource',
     'reasoningMandatory',
-    'reasoningSupportsMaxTokens',
   ]);
   if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
   if (
@@ -87,9 +88,6 @@ const validateModel = (
     throw new Error('VALIDATION_FAILED');
   }
   if (raw.reasoningMandatory !== undefined && typeof raw.reasoningMandatory !== 'boolean') {
-    throw new Error('VALIDATION_FAILED');
-  }
-  if (raw.reasoningSupportsMaxTokens !== undefined && typeof raw.reasoningSupportsMaxTokens !== 'boolean') {
     throw new Error('VALIDATION_FAILED');
   }
   const id = raw.id.trim();
@@ -136,7 +134,7 @@ const validateProviderInput = (
   if (raw.kind !== 'openai-compatible' || !nonEmptyString(raw.displayName) || !nonEmptyString(raw.baseUrl)) {
     throw new Error('VALIDATION_FAILED');
   }
-  const protocol = raw.protocol ?? 'chat-completions';
+  const protocol = raw.protocol;
   if (protocol !== 'chat-completions' && protocol !== 'responses') throw new Error('VALIDATION_FAILED');
   if (raw.credential !== undefined && (typeof raw.credential !== 'string' || raw.credential.length === 0)) {
     throw new Error('VALIDATION_FAILED');
@@ -219,7 +217,7 @@ const validateCapabilityDefaults = (raw: unknown): ModelCapabilityDefaults => {
   let reasoning: ModelCapabilityDefaults['reasoning'];
   if (raw.reasoning !== undefined) {
     if (!isRecord(raw.reasoning)) throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
-    const reasoningAllowed = new Set(['supportedEfforts', 'defaultEffort', 'mandatory', 'supportsMaxTokens']);
+    const reasoningAllowed = new Set(['supportedEfforts', 'defaultEffort', 'mandatory']);
     if (
       Object.keys(raw.reasoning).some((key) => !reasoningAllowed.has(key)) ||
       !Array.isArray(raw.reasoning.supportedEfforts) ||
@@ -238,9 +236,6 @@ const validateCapabilityDefaults = (raw: unknown): ModelCapabilityDefaults => {
       throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
     }
     if (raw.reasoning.mandatory !== undefined && typeof raw.reasoning.mandatory !== 'boolean') {
-      throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
-    }
-    if (raw.reasoning.supportsMaxTokens !== undefined && typeof raw.reasoning.supportsMaxTokens !== 'boolean') {
       throw new Error('PROVIDER_CAPABILITY_METADATA_INVALID');
     }
     reasoning = {

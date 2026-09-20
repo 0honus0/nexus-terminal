@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { lexicalIndexTokens, lexicalQueryTerms, normalizeLexicalSource } from '../../../platform/search/lexical-search';
 import type { Scope } from '../agent.types';
-import { AGENT_CAPABILITIES, type AgentCapability } from '../host/app.types';
 import type { PluginSkillBundle, PluginSkillSourcePort } from '../host/plugin-skill-source.port';
 
 const MAX_SKILL_BODY_BYTES = 12 * 1024;
@@ -22,7 +21,6 @@ export interface SkillMetadata {
   version: string;
   hash: string;
   description: string;
-  requiredCapabilities: AgentCapability[];
   trust: 'signed-plugin';
 }
 
@@ -52,9 +50,8 @@ interface ParsedFrontmatter {
   metadata: Map<string, string>;
 }
 
-const allowedCapabilities = new Set<string>(AGENT_CAPABILITIES);
 const STANDARD_SKILL_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const LEGACY_SKILL_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/;
+const SKILL_ID = /^[a-z0-9][a-z0-9._-]{2,127}$/;
 
 const parseScalar = (raw: string, source: string): string => {
   const value = raw.trim();
@@ -179,7 +176,7 @@ const metadataFrom = (skill: IndexedSkill): SkillMetadata => {
 
 const standardSkillId = (appId: string, name: string): string => {
   const id = `${appId}.${name}`;
-  if (!LEGACY_SKILL_ID.test(id)) throw new Error('PLUGIN_SKILL_ID_INVALID');
+  if (!SKILL_ID.test(id)) throw new Error('PLUGIN_SKILL_ID_INVALID');
   return id;
 };
 
@@ -193,61 +190,36 @@ const parseSkill = (
   const end = content.indexOf('\n---\n', 4);
   if (end < 0) throw new Error(`Invalid Skill frontmatter: ${source}`);
   const { fields } = parseFrontmatter(content.slice(4, end), source);
-  const name = fields.get('name') ?? '';
-  const description = fields.get('description') ?? '';
-  const legacy = fields.has('id') || fields.has('version') || fields.has('requiredCapabilities');
-
-  let id: string;
-  let version: string;
-  let requiredCapabilities: string[];
-  if (legacy) {
-    id = fields.get('id') ?? '';
-    version = fields.get('version') ?? '';
-    requiredCapabilities = (fields.get('requiredCapabilities') ?? '')
-      .split(',')
-      .map((value) => value.trim())
-      .filter(Boolean);
-  } else {
-    const allowedStandardFields = new Set([
-      'name',
-      'description',
-      'license',
-      'compatibility',
-      'metadata',
-      'allowed-tools',
-    ]);
-    if ([...fields.keys()].some((key) => !allowedStandardFields.has(key))) {
-      throw new Error(`Invalid Skill metadata: ${source}`);
-    }
-    const pathParts = source.split('/');
-    const parentDirectory = pathParts.length >= 2 ? pathParts.at(-2) : null;
-    if (
-      !name ||
-      name.length > MAX_STANDARD_SKILL_NAME_LENGTH ||
-      !STANDARD_SKILL_NAME.test(name) ||
-      parentDirectory !== name
-    ) {
-      throw new Error(`Invalid Skill metadata: ${source}`);
-    }
-    id = standardSkillId(bundle.appId, name);
-    version = bundle.version;
-    requiredCapabilities = [];
+  const allowedFields = new Set([
+    'name',
+    'description',
+    'license',
+    'compatibility',
+    'metadata',
+    'allowed-tools',
+  ]);
+  if ([...fields.keys()].some((key) => !allowedFields.has(key))) {
+    throw new Error(`Invalid Skill metadata: ${source}`);
   }
 
+  const name = fields.get('name') ?? '';
+  const description = fields.get('description') ?? '';
+  const pathParts = source.split('/');
+  const parentDirectory = pathParts.length >= 2 ? pathParts.at(-2) : null;
   if (
-    !LEGACY_SKILL_ID.test(id) ||
     !name ||
+    name.length > MAX_STANDARD_SKILL_NAME_LENGTH ||
+    !STANDARD_SKILL_NAME.test(name) ||
+    parentDirectory !== name ||
     Buffer.byteLength(name, 'utf8') > MAX_SKILL_NAME_BYTES ||
-    (legacy && !/^\d+\.\d+\.\d+$/.test(version)) ||
     !description ||
     Buffer.byteLength(description, 'utf8') > MAX_SKILL_DESCRIPTION_BYTES
   ) {
     throw new Error(`Invalid Skill metadata: ${source}`);
   }
-  if (requiredCapabilities.some((capability) => !allowedCapabilities.has(capability))) {
-    throw new Error(`Invalid Skill capability: ${source}`);
-  }
 
+  const id = standardSkillId(bundle.appId, name);
+  if (!SKILL_ID.test(id)) throw new Error(`Invalid Skill metadata: ${source}`);
   const bodyOffset = end + '\n---\n'.length;
   const body = content.slice(bodyOffset);
   if (Buffer.byteLength(body, 'utf8') > MAX_SKILL_BODY_BYTES) throw new Error(`Skill body too large: ${source}`);
@@ -256,9 +228,8 @@ const parseSkill = (
   return {
     id,
     name,
-    version,
+    version: bundle.version,
     description,
-    requiredCapabilities: requiredCapabilities as AgentCapability[],
     trust: 'signed-plugin',
     hash,
     source,
@@ -357,12 +328,8 @@ export class SkillRegistry {
     const postings = new Map<string, Set<string>>();
     const bundle = await this.pluginSkills?.load(scope);
     if (!bundle) return { byId, postings };
-    const declared = new Set(bundle.capabilities);
     for (const document of bundle.documents) {
       const skill = parseSkill(document.content, document.path, document.sha256, bundle);
-      if (skill.requiredCapabilities.some((capability) => !declared.has(capability))) {
-        throw new Error('PLUGIN_SKILL_CAPABILITY_UNDECLARED');
-      }
       if (byId.has(skill.id)) throw new Error(`Duplicate signed Skill id: ${skill.id}`);
       byId.set(skill.id, skill);
       for (const token of lexicalIndexTokens(`${skill.id} ${skill.name} ${skill.description}`)) {

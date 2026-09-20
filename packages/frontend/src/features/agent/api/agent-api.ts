@@ -637,7 +637,7 @@ export interface AgentRunView {
     maxRecallBytes: number;
     maxSubagentMessages: number;
     maxSubagentMessageBytes: number;
-    contextCompactionMode?: AgentContextCompactionMode;
+    contextCompactionMode: AgentContextCompactionMode;
     revision: number;
   };
   definition: {
@@ -645,10 +645,10 @@ export interface AgentRunView {
     agentDefinitionId: string;
     model: { providerId: string; modelId: string; configurationVersion: number };
     reasoningEffort?: AgentReasoningEffort;
-    approvalMode?: AgentApprovalMode;
-    executionMode?: AgentExecutionMode;
+    approvalMode: AgentApprovalMode;
+    executionMode: AgentExecutionMode;
     connectionIds: number[];
-    environment?: WorkspaceProfileView | null;
+    environment: WorkspaceProfileView | null;
     policyRevision: number;
     settingsRevision: number;
     contextBoundary?: { baseThrough: number; runThrough: Record<string, number> };
@@ -723,20 +723,20 @@ export interface AgentCheckpointView {
     runId: string;
     ledgerThrough: number;
     planVersion: number;
-    inputRevision?: number;
-    settingsRevision?: number;
+    inputRevision: number;
+    settingsRevision: number;
     plan: AgentRunPlan;
-    goal?: { text: string | null; revision: number; updatedAt: number | null };
+    goal: { text: string | null; revision: number; updatedAt: number | null };
     completedStepIds: string[];
     evidenceRefs: string[];
-    checkpointArtifactRefs?: string[];
+    checkpointArtifactRefs: string[];
     modelConfigurationVersion: number;
-    activeModel?: { providerId: string; modelId: string; configurationVersion: number };
+    activeModel: { providerId: string; modelId: string; configurationVersion: number };
     definitionVersion: string;
     policyRevision: number;
     workspaceArtifactManifestRefs: string[];
-    workspaceArtifactRefs?: string[];
-    recoveryManifest?: {
+    workspaceArtifactRefs: string[];
+    recoveryManifest: {
       schemaVersion: 1;
       eventThrough: number;
       contextBoundary: { baseThrough: number; runThrough: Record<string, number> };
@@ -891,7 +891,6 @@ export interface AgentToolInspection {
   operationHash: string;
   operationHashVersion: 1;
   preconditions: Array<{ kind: string; key: string; observedValue: unknown }>;
-  secretRefs: Array<{ id: string; version: number }>;
   policyRevision: number;
   inputRevision: number;
 }
@@ -1434,7 +1433,7 @@ export const agentApi = {
       model: { providerId: string; modelId: string; configurationVersion: number };
       reasoningEffort?: AgentReasoningEffort;
       approvalMode: AgentApprovalMode;
-      executionMode?: AgentExecutionMode;
+      executionMode: AgentExecutionMode;
       plannedFromRunId?: string;
       connectionIds?: number[];
       environment?: AgentRunEnvironmentSelection | null;
@@ -1452,7 +1451,7 @@ export const agentApi = {
             model: input.model,
             ...(input.reasoningEffort === undefined ? {} : { reasoningEffort: input.reasoningEffort }),
             approvalMode: input.approvalMode,
-            ...(input.executionMode === undefined ? {} : { executionMode: input.executionMode }),
+            executionMode: input.executionMode,
             ...(input.plannedFromRunId === undefined ? {} : { plannedFromRunId: input.plannedFromRunId }),
             connectionIds: input.connectionIds ?? [],
             ...(input.environment === undefined ? {} : { environment: input.environment }),
@@ -1525,7 +1524,7 @@ export const agentApi = {
       (
         await httpClient.post<AgentEnvelope<AgentRunView>>(
           `/apps/${encodeURIComponent(appId)}/runs/${encodeURIComponent(run.id)}/budget`,
-          agentRuntimeRequest({ scope: 'run', increase, expectedVersion: run.version }),
+          agentRuntimeRequest({ increase, expectedVersion: run.version }),
           { headers: { ...(await mutationHeaders()), 'Idempotency-Key': crypto.randomUUID() } },
         )
       ).data,

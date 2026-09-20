@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { logger } from '../../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../../agent.types';
-import { snapshotProviderModelCapabilities } from '../../ai/model-capability-resolver';
 import { missingRequiredModelCapabilities } from '../../ai/model-capability-requirements';
 import type { ProviderService } from '../../ai/provider.service';
 import type { AgentSettingsService } from '../../host/agent-settings.service';
@@ -45,7 +44,7 @@ const clampBudget = (
     maxRecallBytes: Math.min(source.maxRecallBytes, hard.maxRecallBytes),
     maxSubagentMessages: Math.min(source.maxSubagentMessages, hard.maxSubagentMessagesPerRun),
     maxSubagentMessageBytes: Math.min(source.maxSubagentMessageBytes, hard.maxSubagentMessageBytesPerRun),
-    contextCompactionMode: source.contextCompactionMode ?? 'balanced',
+    contextCompactionMode: source.contextCompactionMode,
     revision: settings.revision,
   };
 };
@@ -58,7 +57,6 @@ export interface CheckpointValidation {
 
 const checkpointRecoveryReasons = (checkpoint: CheckpointView): string[] => {
   const manifest = checkpoint.snapshot.recoveryManifest;
-  if (!manifest) return ['CHECKPOINT_RECOVERY_MANIFEST_MISSING'];
   const reasons: string[] = [];
   if (
     checkpoint.snapshot.runId !== checkpoint.runId ||
@@ -197,14 +195,10 @@ export class CheckpointService {
       const hazards = await this.checkpoints.recoveryHazards(scope, latestRecovery.id);
       const manifestArtifactIds = latestRecovery.snapshot.workspaceArtifactManifestRefs;
       const workspaceArtifactRefs = latestRecovery.snapshot.workspaceArtifactRefs;
-      if (
-        hazards.postCheckpointMutationToolCallIds.length === 0 &&
-        hazards.quarantinedResourceKeys.length === 0 &&
-        (manifestArtifactIds.length === 0 || workspaceArtifactRefs !== undefined)
-      ) {
+      if (hazards.postCheckpointMutationToolCallIds.length === 0 && hazards.quarantinedResourceKeys.length === 0) {
         workspaceReference = {
           manifestArtifactIds: [...manifestArtifactIds],
-          artifactRefs: [...(workspaceArtifactRefs ?? [])],
+          artifactRefs: [...workspaceArtifactRefs],
         };
       }
     }
@@ -312,7 +306,7 @@ export class CheckpointService {
     const [app, currentSettings] = await Promise.all([this.lifecycle.get(scope), this.settings.get(scope.userId)]);
     const definition = this.definitions.require(scope.appId, app.activeVersion, run.definition.agentDefinitionId);
     if (definition.version !== checkpoint.snapshot.definitionVersion) reasons.push('CHECKPOINT_DEFINITION_STALE');
-    const activeModel = checkpoint.snapshot.activeModel ?? run.definition.model;
+    const activeModel = checkpoint.snapshot.activeModel;
     const activeRoute = runModelRoutes(run.definition).find((route) => sameModelRef(route.model, activeModel));
     if (!activeRoute) reasons.push('CHECKPOINT_MODEL_ROUTE_INVALID');
     if (mode === 'backend_restart') {
@@ -342,9 +336,11 @@ export class CheckpointService {
         if (!model) {
           reasons.push('CHECKPOINT_MODEL_UNAVAILABLE');
         } else {
-          const requirements = run.definition.requiredModelCapabilities ?? definition.requiredModelCapabilities;
-          const capabilities = activeRoute?.modelCapabilities ?? snapshotProviderModelCapabilities(model);
-          if (missingRequiredModelCapabilities(requirements, capabilities).length > 0) {
+          const requirements = run.definition.requiredModelCapabilities;
+          const capabilities = activeRoute?.modelCapabilities;
+          if (!capabilities) {
+            reasons.push('CHECKPOINT_MODEL_ROUTE_INVALID');
+          } else if (missingRequiredModelCapabilities(requirements, capabilities).length > 0) {
             reasons.push('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED');
           }
         }
@@ -377,7 +373,7 @@ export class CheckpointService {
         }
       }
     }
-    const backgroundJobs = checkpoint.snapshot.recoveryManifest?.backgroundJobs ?? [];
+    const backgroundJobs = checkpoint.snapshot.recoveryManifest.backgroundJobs;
     if (backgroundJobs.length > 0) {
       if (!this.workspaceJobs) {
         reasons.push('CHECKPOINT_BACKGROUND_JOB_UNRESOLVED');
@@ -594,8 +590,7 @@ export class CheckpointService {
     const source = await this.runs.snapshot(scope, runId);
     if (!source) throw new Error('NOT_FOUND');
     const recoveryManifest = validation.checkpoint.snapshot.recoveryManifest;
-    if (!recoveryManifest) throw new Error('CHECKPOINT_RECOVERY_MANIFEST_MISSING');
-    const activeModel = validation.checkpoint.snapshot.activeModel ?? source.definition.model;
+    const activeModel = validation.checkpoint.snapshot.activeModel;
     const activeRoute = runModelRoutes(source.definition).find((route) => sameModelRef(route.model, activeModel));
     if (!activeRoute) throw new Error('CHECKPOINT_MODEL_ROUTE_INVALID');
     const [settings, app, provider] = await Promise.all([
@@ -620,8 +615,8 @@ export class CheckpointService {
     if (definitionInfo.version !== validation.checkpoint.snapshot.definitionVersion) {
       throw new Error('CHECKPOINT_DEFINITION_STALE');
     }
-    const requirements = source.definition.requiredModelCapabilities ?? definitionInfo.requiredModelCapabilities;
-    const capabilities = activeRoute.modelCapabilities ?? snapshotProviderModelCapabilities(model);
+    const requirements = source.definition.requiredModelCapabilities;
+    const capabilities = activeRoute.modelCapabilities;
     if (missingRequiredModelCapabilities(requirements, capabilities).length > 0) {
       throw new Error('CHECKPOINT_MODEL_CAPABILITY_UNSUPPORTED');
     }
@@ -695,7 +690,7 @@ export class CheckpointService {
         artifactRefs: refs,
       },
       initialPlan: validation.checkpoint.snapshot.plan,
-      initialGoal: validation.checkpoint.snapshot.goal ?? source.goal,
+      initialGoal: validation.checkpoint.snapshot.goal,
       agentDefinitionId: source.definition.agentDefinitionId,
       model: activeModel,
       connectionIds: [...source.definition.connectionIds],

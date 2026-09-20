@@ -95,17 +95,4 @@ export const normalizePlanItems = (value: unknown): PlanItem[] => {
   return items;
 };
 
-export const parseRunPlan = (value: unknown): RunPlan => {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ...EMPTY_RUN_PLAN, items: [] };
-  const row = value as Record<string, unknown>;
-  if (row.schemaVersion !== 1 || !Number.isSafeInteger(row.revision) || (row.revision as number) < 0) {
-    return { ...EMPTY_RUN_PLAN, items: [] };
-  }
-  try {
-    return { schemaVersion: 1, revision: row.revision as number, items: normalizePlanItems(row.items ?? []) };
-  } catch {
-    return { ...EMPTY_RUN_PLAN, items: [] };
-  }
-};
-
 export const planToJson = (plan: RunPlan): JsonValue => plan as unknown as JsonValue;

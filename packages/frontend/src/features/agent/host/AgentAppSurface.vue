@@ -246,7 +246,7 @@
         });
   const modelSelectionLocked = computed(() => Boolean(run.value && nonTerminal.has(run.value.status)));
   const executionModeValue = computed<AgentExecutionMode>(() =>
-    modelSelectionLocked.value ? (run.value?.definition.executionMode ?? 'execute') : selectedExecutionMode.value,
+    modelSelectionLocked.value && run.value ? run.value.definition.executionMode : selectedExecutionMode.value,
   );
   const setExecutionMode = (mode: AgentExecutionMode): void => {
     if (modelSelectionLocked.value) return;
@@ -254,7 +254,7 @@
     agentSurfaceSession.setExecutionMode(props.appId, mode);
   };
   const approvalModeValue = computed<AgentApprovalMode>(() =>
-    modelSelectionLocked.value ? (run.value?.definition.approvalMode ?? 'ask') : selectedApprovalMode.value,
+    modelSelectionLocked.value && run.value ? run.value.definition.approvalMode : selectedApprovalMode.value,
   );
   const setApprovalMode = (mode: AgentApprovalMode): void => {
     if (modelSelectionLocked.value) return;
@@ -971,7 +971,7 @@
       selectedExecutionMode.value === 'execute' &&
       run.value &&
       ['completed', 'completed_unverified'].includes(run.value.status) &&
-      (run.value.definition.executionMode ?? 'execute') === 'plan' &&
+      run.value.definition.executionMode === 'plan' &&
       run.value.plan.items.length > 0
         ? run.value.id
         : undefined;
@@ -1008,8 +1008,8 @@
         eventCursor: created.eventCursor,
         modelId: created.definition.model.modelId,
         reasoningEffort: created.definition.reasoningEffort ?? null,
-        approvalMode: created.definition.approvalMode ?? 'ask',
-        executionMode: created.definition.executionMode ?? 'execute',
+        approvalMode: created.definition.approvalMode,
+        executionMode: created.definition.executionMode,
         parentRunId: created.parentRunId,
       },
       'Agent UI run created',

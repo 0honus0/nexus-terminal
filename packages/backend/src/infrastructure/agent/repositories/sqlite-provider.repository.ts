@@ -47,9 +47,10 @@ const protocolFromPolicy = (raw: string): OpenAiCompatibleProtocol => {
   } catch {
     throw new Error('PROVIDER_ENDPOINT_POLICY_INVALID');
   }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return 'chat-completions';
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('PROVIDER_ENDPOINT_POLICY_INVALID');
+  if (Object.keys(value).length !== 1 || !('protocol' in value)) throw new Error('PROVIDER_ENDPOINT_POLICY_INVALID');
   const protocol = (value as { protocol?: unknown }).protocol;
-  if (protocol === undefined || protocol === 'chat-completions') return 'chat-completions';
+  if (protocol === 'chat-completions') return 'chat-completions';
   if (protocol === 'responses') return 'responses';
   throw new Error('PROVIDER_ENDPOINT_POLICY_INVALID');
 };
@@ -65,7 +66,7 @@ const decodeReasoning = (
   value: unknown,
 ): NonNullable<PersistedProviderModelConfig['capabilityOverrides']>['reasoning'] => {
   const record = durableRecord(value);
-  assertAllowedKeys(record, ['supportedEfforts', 'defaultEffort', 'mandatory', 'supportsMaxTokens']);
+  assertAllowedKeys(record, ['supportedEfforts', 'defaultEffort', 'mandatory']);
   if (!Array.isArray(record.supportedEfforts) || record.supportedEfforts.length > reasoningEfforts.size) {
     throw new Error('AGENT_DURABLE_STATE_INVALID');
   }
@@ -78,7 +79,6 @@ const decodeReasoning = (
   if (defaultEffort !== undefined && (typeof defaultEffort !== 'string' || !supportedEfforts.includes(defaultEffort as never))) {
     throw new Error('AGENT_DURABLE_STATE_INVALID');
   }
-  if (record.supportsMaxTokens !== undefined) durableBoolean(record.supportsMaxTokens);
   return {
     supportedEfforts,
     ...(defaultEffort === undefined ? {} : { defaultEffort: defaultEffort as (typeof supportedEfforts)[number] }),

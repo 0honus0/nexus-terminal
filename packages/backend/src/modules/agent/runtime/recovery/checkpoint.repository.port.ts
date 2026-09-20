@@ -59,20 +59,20 @@ export interface CheckpointSnapshot {
   runId: string;
   ledgerThrough: number;
   planVersion: number;
-  inputRevision?: number;
-  settingsRevision?: number;
+  inputRevision: number;
+  settingsRevision: number;
   plan: RunPlan;
-  goal?: RunGoal;
+  goal: RunGoal;
   completedStepIds: string[];
   evidenceRefs: string[];
-  checkpointArtifactRefs?: string[];
+  checkpointArtifactRefs: string[];
   modelConfigurationVersion: number;
-  activeModel?: ModelRef;
+  activeModel: ModelRef;
   definitionVersion: string;
   policyRevision: number;
   workspaceArtifactManifestRefs: string[];
-  workspaceArtifactRefs?: string[];
-  recoveryManifest?: CheckpointRecoveryManifest;
+  workspaceArtifactRefs: string[];
+  recoveryManifest: CheckpointRecoveryManifest;
 }
 
 export interface CheckpointView {
@@ -107,14 +107,14 @@ export interface CheckpointWorkspaceReference {
 export interface SaveCheckpointCommand {
   scope: Scope;
   checkpointId: string;
-  kind?: CheckpointKind;
+  kind: CheckpointKind;
   runId: string;
   expectedRunVersion: number;
   definitionVersion: string;
-  activeModel?: ModelRef;
-  workspaceCaptures?: CheckpointWorkspaceCapture[];
+  activeModel: ModelRef;
+  workspaceCaptures: CheckpointWorkspaceCapture[];
   workspaceReference?: CheckpointWorkspaceReference;
-  backgroundJobs?: CheckpointBackgroundJobEntry[];
+  backgroundJobs: CheckpointBackgroundJobEntry[];
   now: number;
 }
 

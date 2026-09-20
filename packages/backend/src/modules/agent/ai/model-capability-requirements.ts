@@ -1,20 +1,12 @@
 import { AGENT_MODEL_CAPABILITIES, type AgentModelCapability, type ModelCapabilitySnapshot } from './model.types';
 
-export const LEGACY_BASELINE_MODEL_CAPABILITIES = ['streaming'] as const;
-
 const capabilitySet = new Set<string>(AGENT_MODEL_CAPABILITIES);
-const legacyBaselineSet = new Set<string>(LEGACY_BASELINE_MODEL_CAPABILITIES);
 
 export const normalizeRequiredModelCapabilities = (
   values: readonly string[],
 ): AgentModelCapability[] | null => {
-  const normalized: AgentModelCapability[] = [];
-  for (const value of values) {
-    if (legacyBaselineSet.has(value)) continue;
-    if (!capabilitySet.has(value)) return null;
-    normalized.push(value as AgentModelCapability);
-  }
-  return normalized;
+  if (values.some((value) => !capabilitySet.has(value))) return null;
+  return values as AgentModelCapability[];
 };
 
 export const missingRequiredModelCapabilities = (

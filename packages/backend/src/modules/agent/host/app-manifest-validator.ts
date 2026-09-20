@@ -1,10 +1,7 @@
 import { compare, major, valid } from 'semver';
 import type { JsonValue } from '../agent.types';
 import { AGENT_MODEL_CAPABILITIES } from '../ai/model.types';
-import {
-  LEGACY_BASELINE_MODEL_CAPABILITIES,
-  normalizeRequiredModelCapabilities,
-} from '../ai/model-capability-requirements';
+import { normalizeRequiredModelCapabilities } from '../ai/model-capability-requirements';
 import { assertJsonSchema } from '../json-schema-validator';
 import {
   AGENT_CAPABILITIES,
@@ -54,7 +51,7 @@ const MANIFEST_SCHEMA: JsonValue = {
           description: { type: 'string', minLength: 1 },
           requiredModelCapabilities: {
             type: 'array',
-            items: { enum: [...AGENT_MODEL_CAPABILITIES, ...LEGACY_BASELINE_MODEL_CAPABILITIES] },
+            items: { enum: [...AGENT_MODEL_CAPABILITIES] },
             uniqueItems: true,
           },
         },

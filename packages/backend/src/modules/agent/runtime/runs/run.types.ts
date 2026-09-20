@@ -85,7 +85,7 @@ export interface CreateRunCommand {
   model: ModelRef;
   reasoningEffort?: ReasoningEffort;
   approvalMode: RunApprovalMode;
-  executionMode?: RunExecutionMode;
+  executionMode: RunExecutionMode;
   plannedFromRunId?: string;
   connectionIds: number[];
   environment?: AgentRunEnvironmentSelection | null;
@@ -104,7 +104,7 @@ export interface RunBudget {
   maxRecallBytes: number;
   maxSubagentMessages: number;
   maxSubagentMessageBytes: number;
-  contextCompactionMode?: 'aggressive' | 'balanced' | 'conservative';
+  contextCompactionMode: 'aggressive' | 'balanced' | 'conservative';
   revision: number;
 }
 
@@ -143,21 +143,21 @@ export interface RunContextBoundary {
 
 export interface RunModelRouteSnapshot {
   model: ModelRef;
-  modelCapabilities?: ModelCapabilitySnapshot;
+  modelCapabilities: ModelCapabilitySnapshot;
 }
 
 export interface RunDefinitionSnapshot {
   schemaVersion: 1;
   agentDefinitionId: string;
-  requiredModelCapabilities?: AgentModelCapability[];
+  requiredModelCapabilities: AgentModelCapability[];
   model: ModelRef;
-  modelCapabilities?: ModelCapabilitySnapshot;
-  rootModelRoutes?: RunModelRouteSnapshot[];
+  modelCapabilities: ModelCapabilitySnapshot;
+  rootModelRoutes: RunModelRouteSnapshot[];
   reasoningEffort?: ReasoningEffort;
-  approvalMode?: RunApprovalMode;
-  executionMode?: RunExecutionMode;
+  approvalMode: RunApprovalMode;
+  executionMode: RunExecutionMode;
   connectionIds: number[];
-  environment?: AgentRunEnvironmentSnapshot | null;
+  environment: AgentRunEnvironmentSnapshot | null;
   policyRevision: number;
   settingsRevision: number;
   contextBoundary?: RunContextBoundary;

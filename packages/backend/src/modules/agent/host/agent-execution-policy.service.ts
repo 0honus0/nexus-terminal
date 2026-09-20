@@ -129,10 +129,7 @@ export class AgentExecutionPolicyService {
             throw new Error('VALIDATION_FAILED');
           })()
       : {};
-    const storedOverrides = { ...rawOverrides };
-    delete storedOverrides.maxRunCostMicros;
-    delete storedOverrides.maxRawToolBytes;
-    const overrides = parseOverrides(storedOverrides);
+    const overrides = parseOverrides(rawOverrides);
     assertWithinHardLimits(overrides, settings);
     return {
       overrides,

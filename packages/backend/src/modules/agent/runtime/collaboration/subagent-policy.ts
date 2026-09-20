@@ -28,6 +28,9 @@ const positiveInteger = (value: unknown): value is number => Number.isSafeIntege
 
 const parseModelRef = (raw: unknown): ModelRef => {
   if (!isRecord(raw)) throw new Error('VALIDATION_FAILED');
+  if (Object.keys(raw).length !== 3 || !['providerId', 'modelId', 'configurationVersion'].every((key) => key in raw)) {
+    throw new Error('VALIDATION_FAILED');
+  }
   if (!nonEmpty(raw.providerId, 128) || !nonEmpty(raw.modelId, 128) || !positiveInteger(raw.configurationVersion)) {
     throw new Error('VALIDATION_FAILED');
   }
@@ -56,7 +59,9 @@ const parseProfile = (raw: unknown): SubagentProfile => {
     'maxSteps',
     'failureMode',
   ]);
-  if (Object.keys(raw).some((key) => !allowed.has(key))) throw new Error('VALIDATION_FAILED');
+  if (Object.keys(raw).length !== allowed.size || Object.keys(raw).some((key) => !allowed.has(key))) {
+    throw new Error('VALIDATION_FAILED');
+  }
   if (!nonEmpty(raw.id, 64) || !PROFILE_ID.test(raw.id.trim()) || !nonEmpty(raw.role, 512)) {
     throw new Error('VALIDATION_FAILED');
   }
@@ -82,7 +87,7 @@ const parseProfile = (raw: unknown): SubagentProfile => {
   }
   const capabilities = [...new Set(raw.capabilities as AgentCapability[])];
   if (!['parent-child', 'same-run'].includes(String(raw.peerMessaging))) throw new Error('VALIDATION_FAILED');
-  const mutationMode = raw.mutationMode === undefined ? 'read-only' : String(raw.mutationMode);
+  const mutationMode = String(raw.mutationMode);
   if (!['read-only', 'governed'].includes(mutationMode)) throw new Error('VALIDATION_FAILED');
   if (!positiveInteger(raw.maxSteps)) throw new Error('VALIDATION_FAILED');
   if (!['isolate', 'failFast'].includes(String(raw.failureMode))) throw new Error('VALIDATION_FAILED');

@@ -196,7 +196,7 @@ export class NativeAgentBackend implements AgentBackendPort {
       await this.recoverySafePoint(snapshot, 'model_boundary');
 
       const remainingSteps = snapshot.budget.maxRunSteps - snapshot.usage.steps;
-      const executionMode = snapshot.definition.executionMode ?? 'execute';
+      const executionMode = snapshot.definition.executionMode;
       const offeredTools = this.toolCalls.schemas(
         scope,
         { environment: snapshot.definition.environment ?? null },

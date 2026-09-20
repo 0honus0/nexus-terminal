@@ -242,6 +242,20 @@ interface ScenarioResult {
   metrics: ScenarioMetric[];
 }
 
+const SCENARIO_MODEL_CAPABILITIES: RunDefinitionSnapshot['modelCapabilities'] = {
+  contextWindow: 65_536,
+  maxOutputTokens: 8_192,
+  supportsTools: true,
+  supportsImageInput: true,
+  supportsFileInput: true,
+};
+
+const scenarioDelegationModel = (modelRefJson: string): string =>
+  JSON.stringify({
+    ...(JSON.parse(modelRefJson) as Record<string, unknown>),
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+  });
+
 type Scenario = () => Promise<ScenarioMetric[]>;
 
 const scope: Scope = { userId: 1, appId: 'scenario-app' };
@@ -2615,17 +2629,16 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
     'unverified',
     'background launch confirms durable acceptance, not command completion',
   );
-  const legacyArguments = { ...(backgroundInspection.normalizedArguments as Record<string, JsonValue>) };
-  delete legacyArguments.mode;
-  const legacyForegroundResult = await executeTool.execute(
-    { ...backgroundInspection, normalizedArguments: legacyArguments },
-    toolContext,
-  );
-  assert.equal(legacyForegroundResult.ok, true);
-  assert.equal(
-    legacyForegroundResult.verification.status,
-    'verified',
-    'pre-P-073 durable argv inspections without mode must resume as foreground execution',
+  const missingModeArguments = { ...(backgroundInspection.normalizedArguments as Record<string, JsonValue>) };
+  delete missingModeArguments.mode;
+  await assert.rejects(
+    () =>
+      executeTool.execute(
+        { ...backgroundInspection, normalizedArguments: missingModeArguments },
+        toolContext,
+      ),
+    /TOOL_ARGUMENTS_INVALID/,
+    'durable argv inspections without the canonical mode field must fail closed',
   );
 
   const controlTool = createWorkspaceJobControlTool(toolRepository, toolGateway, toolCrypto);
@@ -2896,7 +2909,7 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
       { name: 'workspace_job_cancelled_verification_rejections', value: cancelledToolResult.verification.status === 'failed' ? 1 : 0, unit: 'cases' },
       { name: 'workspace_background_completion_blocks', value: backgroundOnlyDecision.kind === 'continue' ? 1 : 0, unit: 'cases' },
       { name: 'workspace_terminal_completion_evidence', value: 1, unit: 'cases' },
-      { name: 'workspace_legacy_foreground_compatibility', value: legacyForegroundResult.verification.status === 'verified' ? 1 : 0, unit: 'cases' },
+      { name: 'workspace_missing_mode_rejections', value: 1, unit: 'cases' },
     ];
   } finally {
     for (const current of pending.values()) current.reject(new Error('SCENARIO_CLEANUP'));
@@ -3083,6 +3096,14 @@ const contextTokenAccountingScenario: Scenario = async () => {
   const runtimeId = 'context-token-accounting-runtime';
   const primaryModel = { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 };
   const fallbackModel = { providerId: 'scenario-provider', modelId: 'scenario-fallback', configurationVersion: 1 };
+  const primaryCapabilities = {
+    contextWindow: 16_384,
+    maxOutputTokens: 2_048,
+    supportsTools: true,
+    supportsImageInput: false,
+    supportsFileInput: false,
+  };
+  const fallbackCapabilities = { ...primaryCapabilities, contextWindow: 32_768 };
   const budget = JSON.stringify({
     maxContextTokens: 16_384,
     maxOutputTokens: 2_048,
@@ -3094,14 +3115,20 @@ const contextTokenAccountingScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: primaryModel,
+    modelCapabilities: primaryCapabilities,
+    rootModelRoutes: [{ model: fallbackModel, modelCapabilities: fallbackCapabilities }],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -4262,14 +4289,20 @@ const mcpInputRequiredDurableLifecycleScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
           revision: 1,
         }),
         JSON.stringify({
           schemaVersion: 1,
           agentDefinitionId: 'scenario-agent',
+          requiredModelCapabilities: [],
           model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+          rootModelRoutes: [],
           approvalMode: 'ask',
+          executionMode: 'execute',
           connectionIds: [],
+          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -4727,14 +4760,20 @@ const toolResultProjectionScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -4948,9 +4987,14 @@ const benchmarkSnapshot = (benchmark: AgentBenchmarkCase, benchmarkScope: Scope)
     definition: {
       schemaVersion: 1,
       agentDefinitionId: 'scenario-agent',
+      requiredModelCapabilities: [],
       model: { providerId: benchmarkProvider.id, modelId: 'scenario-model', configurationVersion: 1 },
+      modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+      rootModelRoutes: [],
       approvalMode: 'full_access',
+      executionMode: 'execute',
       connectionIds: [],
+      environment: null,
       policyRevision: 1,
       settingsRevision: 1,
     },
@@ -5326,14 +5370,20 @@ const modelStreamRetryAttemptIdentityScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
           revision: 1,
         }),
         JSON.stringify({
           schemaVersion: 1,
           agentDefinitionId: 'scenario-agent',
+          requiredModelCapabilities: [],
           model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+          rootModelRoutes: [],
           approvalMode: 'ask',
+          executionMode: 'execute',
           connectionIds: [],
+          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -5960,16 +6010,20 @@ const planExecutionModeScenario: Scenario = async () => {
   });
   assert.equal(parsed.executionMode, 'plan');
   assert.equal(parsed.approvalMode, 'full_access', 'executionMode must remain orthogonal to approvalMode');
-  const defaultParsed = parseCreateRunRequest({
-    schemaVersion: 1,
-    threadId: randomUUID(),
-    input: { text: 'Execute normally.', artifactRefs: [] },
-    agentDefinitionId: 'scenario-agent',
-    model: { providerId: randomUUID(), modelId: 'scenario-model', configurationVersion: 1 },
-    approvalMode: 'ask',
-    connectionIds: [],
-  });
-  assert.equal(defaultParsed.executionMode, 'execute', 'omitted executionMode must preserve legacy execute behavior');
+  assert.throws(
+    () =>
+      parseCreateRunRequest({
+        schemaVersion: 1,
+        threadId: randomUUID(),
+        input: { text: 'Execute normally.', artifactRefs: [] },
+        agentDefinitionId: 'scenario-agent',
+        model: { providerId: randomUUID(), modelId: 'scenario-model', configurationVersion: 1 },
+        approvalMode: 'ask',
+        connectionIds: [],
+      }),
+    /VALIDATION_FAILED/,
+    'omitted executionMode must fail closed instead of selecting an implicit execution mode',
+  );
 
   const planBenchmark: AgentBenchmarkCase = {
     id: 'coding',
@@ -6243,7 +6297,11 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
       maxRawToolBytes: 666,
     },
   };
-  assertDeadSettingsAbsent(normalizeRequestedSettings(legacyPayload), 'normalized legacy settings');
+  assert.throws(
+    () => normalizeRequestedSettings(legacyPayload),
+    /VALIDATION_FAILED/,
+    'settings with removed budget fields must fail closed instead of being normalized',
+  );
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-budget-dead-fields-'));
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'budget-dead-fields.sqlite', nodeEnv: 'test' });
@@ -6252,7 +6310,7 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
     await db.execute("INSERT INTO users (id, username, hashed_password) VALUES (1, 'budget-dead-user', 'not-used')");
     await db.execute(
       `INSERT INTO agent_settings (user_id, value_json, revision, updated_at) VALUES (1, ?, 1, 1)`,
-      [JSON.stringify(legacyPayload)],
+      [JSON.stringify(createDefaultAgentSettings())],
     );
     const repository = new SqliteAgentSettingsRepository(db);
     const service = new AgentSettingsService(
@@ -6301,10 +6359,17 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
       },
       service,
     );
-    const legacyPolicy = await executionPolicies.get({ userId: 1, appId: 'scenario-app' });
-    assert.equal('maxRawToolBytes' in legacyPolicy.overrides, false, 'legacy app policy raw quota must normalize away');
-    assert.equal('maxRawToolBytes' in legacyPolicy.effective, false, 'effective app policy must not recreate raw quota');
-    assert.equal(legacyPolicy.effective.maxRunSteps, 42);
+    await assert.rejects(
+      () => executionPolicies.get({ userId: 1, appId: 'scenario-app' }),
+      /VALIDATION_FAILED/,
+      'stored execution policy with removed fields must fail closed',
+    );
+    storedPolicy = {
+      ...storedPolicy,
+      value: { schemaVersion: 1, overrides: { maxRunSteps: 42 } } as JsonValue,
+    };
+    const currentPolicy = await executionPolicies.get({ userId: 1, appId: 'scenario-app' });
+    assert.equal(currentPolicy.effective.maxRunSteps, 42);
     await assert.rejects(
       () => executionPolicies.replace({ userId: 1, appId: 'scenario-app' }, { maxRawToolBytes: 999 }, 1),
       /VALIDATION_FAILED/,
@@ -6312,18 +6377,7 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
     );
     await executionPolicies.replace({ userId: 1, appId: 'scenario-app' }, { maxRunSteps: 43 }, 1);
     const persistedPolicyOverrides = (storedPolicy.value as { overrides?: Record<string, unknown> }).overrides ?? {};
-    assert.equal(
-      'maxRawToolBytes' in persistedPolicyOverrides,
-      false,
-      'the next normal app policy write must converge legacy raw quota storage',
-    );
-
-    await service.patch(1, { model: { defaultProviderId: 'budget-contract-provider' } }, 1);
-    const storedSettings = await db.queryOne<{ value_json: string }>(
-      'SELECT value_json FROM agent_settings WHERE user_id = 1',
-    );
-    assert.ok(storedSettings);
-    assertDeadSettingsAbsent(JSON.parse(storedSettings.value_json), 'persisted settings after normal write');
+    assert.equal('maxRawToolBytes' in persistedPolicyOverrides, false, 'current policy writes must contain only current fields');
 
     const legacyRunBudget = {
       maxContextTokens: 16_384,
@@ -6340,13 +6394,12 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
       contextCompactionMode: 'balanced',
       revision: 1,
     };
-    const decodedLegacyBudget = parseRunBudget(JSON.stringify(legacyRunBudget));
-    assert.equal(
-      'maxRawToolBytes' in (decodedLegacyBudget as unknown as Record<string, unknown>),
-      false,
-      'legacy durable Run budget must load while dropping maxRawToolBytes',
+    assert.throws(
+      () => parseRunBudget(JSON.stringify(legacyRunBudget)),
+      /AGENT_DURABLE_STATE_INVALID/,
+      'durable Run budget with a removed field must fail closed',
     );
-    const { maxRawToolBytes: _legacyRawQuota, ...currentRunBudget } = legacyRunBudget;
+    const { maxRawToolBytes: _removedRawQuota, ...currentRunBudget } = legacyRunBudget;
     assert.deepEqual(
       parseRunBudget(JSON.stringify(currentRunBudget)),
       currentRunBudget,
@@ -6359,8 +6412,8 @@ const budgetSettingsDeadFieldScenario: Scenario = async () => {
 
   return [
     { name: 'saveable_dead_budget_fields', value: 0, unit: 'fields' },
-    { name: 'legacy_raw_quota_runtime_owners', value: 0, unit: 'owners' },
-    { name: 'durable_budget_legacy_decode_failures', value: 0, unit: 'runs' },
+    { name: 'removed_raw_quota_runtime_owners', value: 0, unit: 'owners' },
+    { name: 'removed_budget_field_rejections', value: 1, unit: 'runs' },
   ];
 };
 
@@ -6372,11 +6425,10 @@ const providerSettingsDeadFieldScenario: Scenario = async () => {
     ...createDefaultAgentSettings(),
     safety: { providerPrivateNetworkExceptions: ['127.0.0.1', 'internal.example'] },
   };
-  const normalizedLegacy = normalizeRequestedSettings(legacyPayload);
-  assert.equal(
-    'safety' in (normalizedLegacy as unknown as Record<string, unknown>),
-    false,
-    'legacy provider network exceptions must be ignored during normalization',
+  assert.throws(
+    () => normalizeRequestedSettings(legacyPayload),
+    /VALIDATION_FAILED/,
+    'settings with the removed safety section must fail closed',
   );
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-settings-dead-field-'));
@@ -6396,17 +6448,17 @@ const providerSettingsDeadFieldScenario: Scenario = async () => {
       { read: async () => ({ artifactUsedBytes: 0, artifactReservedBytes: 0 }) } as never,
       { nowUnixSeconds: () => 2 },
     );
+    await assert.rejects(
+      () => service.get(1),
+      /VALIDATION_FAILED/,
+      'persisted settings with the removed safety section must fail closed',
+    );
+    await db.execute('UPDATE agent_settings SET value_json = ? WHERE user_id = 1', [
+      JSON.stringify(createDefaultAgentSettings()),
+    ]);
     const loaded = await service.get(1);
-    assert.equal(
-      'safety' in (loaded.requestedSettings as unknown as Record<string, unknown>),
-      false,
-      'legacy persisted settings must load while dropping the removed section from GET',
-    );
-    assert.equal(
-      'safety' in (loaded.effectiveSettings as unknown as Record<string, unknown>),
-      false,
-      'effective settings must not recreate the removed section',
-    );
+    assert.equal('safety' in (loaded.requestedSettings as unknown as Record<string, unknown>), false);
+    assert.equal('safety' in (loaded.effectiveSettings as unknown as Record<string, unknown>), false);
 
     await assert.rejects(
       () => service.patch(1, { safety: { providerPrivateNetworkExceptions: ['127.0.0.1'] } }, 1),
@@ -6414,16 +6466,6 @@ const providerSettingsDeadFieldScenario: Scenario = async () => {
       'removed safety patch surface must fail closed',
     );
 
-    await service.patch(1, { model: { defaultProviderId: 'provider-after-legacy-read' } }, 1);
-    const stored = await db.queryOne<{ value_json: string }>(
-      'SELECT value_json FROM agent_settings WHERE user_id = 1',
-    );
-    assert.ok(stored);
-    assert.equal(
-      'safety' in (JSON.parse(stored.value_json) as Record<string, unknown>),
-      false,
-      'the next normal settings write must naturally converge legacy JSON to the current schema',
-    );
   } finally {
     await db.close().catch(() => undefined);
     fs.rmSync(directory, { recursive: true, force: true });
@@ -6537,6 +6579,7 @@ const providerFallbackChainScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
           revision: 1,
         }),
         JSON.stringify({
@@ -6548,7 +6591,9 @@ const providerFallbackChainScenario: Scenario = async () => {
           rootModelRoutes: [frozenFallbackRoute],
           reasoningEffort: 'medium',
           approvalMode: 'ask',
+          executionMode: 'execute',
           connectionIds: [],
+          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -6763,14 +6808,20 @@ const restartRecoveryScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -6923,7 +6974,18 @@ const restartRecoveryScenario: Scenario = async () => {
     await db.execute('UPDATE agent_runs SET definition_json=? WHERE id=?', [
       JSON.stringify({
         ...(JSON.parse(definition) as Record<string, unknown>),
-        rootModelRoutes: [{ model: fallbackRef }],
+        rootModelRoutes: [
+          {
+            model: fallbackRef,
+            modelCapabilities: {
+              contextWindow: 16_384,
+              maxOutputTokens: 4_096,
+              supportsTools: true,
+              supportsImageInput: false,
+              supportsFileInput: false,
+            },
+          },
+        ],
       }),
       safeRunId,
     ]);
@@ -7455,14 +7517,20 @@ const appDisableScopeScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -7546,7 +7614,7 @@ const appDisableScopeScenario: Scenario = async () => {
        VALUES ('scope-delegation-target', 'scope-run-target', 'scope-root-target', 'scope-child-target', 'default',
                '[]', 'parent-child', ?, 'scenario child', '[]', '[]', '[]', 'settled', 'running', 1, 'isolate',
                10, 'scope-delegation-key', 'scope-delegation-hash', ?, ?, ?)`,
-      [modelRef, now + 600, now, now],
+      [scenarioDelegationModel(modelRef), now + 600, now, now],
     );
     await db.execute(
       `INSERT INTO agent_scheduler_work
@@ -7722,14 +7790,20 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -7950,14 +8024,20 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: JSON.parse(modelRef),
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -8027,7 +8107,7 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
         delegationId,
         runId,
         runtimeId,
-        modelRef,
+        scenarioDelegationModel(modelRef),
         `objective-${suffix}`,
         delegationStatus,
         `delegation-key-${suffix}`,
@@ -8354,14 +8434,20 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: JSON.parse(modelRef),
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -8423,7 +8509,19 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
          deadline_at, version, created_at, updated_at)
        VALUES (?, ?, ?, ?, 'default', '[]', 'parent-child', ?, ?, '[]', '[]', '[]', 'settled', 'running',
                2, 'isolate', 10, ?, ?, ?, 1, ?, ?)`,
-      [id, runId, parentId, runtimeId, modelRef, objective, `key-${id}`, `hash-${id}`, now + 600, now, now],
+      [
+        id,
+        runId,
+        parentId,
+        runtimeId,
+        scenarioDelegationModel(modelRef),
+        objective,
+        `key-${id}`,
+        `hash-${id}`,
+        now + 600,
+        now,
+        now,
+      ],
     );
   };
 
@@ -8473,7 +8571,7 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
        VALUES ('join-parent-delegation', ?, 'join-root-runtime', ?, 'default', '[]', 'parent-child', ?,
                'nested parent', '[]', '[]', '[]', 'settled', 'running', 1, 'isolate', 20,
                'join-parent-key', 'join-parent-hash', ?, 1, ?, ?)`,
-      [runId, parentRuntimeId, modelRef, now + 900, now, now],
+      [runId, parentRuntimeId, scenarioDelegationModel(modelRef), now + 900, now, now],
     );
     await insertDelegation(childA.delegationId, parentRuntimeId, childA.runtimeId, 'child A');
     await insertDelegation(childB.delegationId, parentRuntimeId, childB.runtimeId, 'child B');
@@ -9402,14 +9500,20 @@ const subagentGovernedMutationScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
           revision: 1,
         }),
         JSON.stringify({
           schemaVersion: 1,
           agentDefinitionId: 'scenario-agent',
+          requiredModelCapabilities: [],
           model: JSON.parse(durableModelRef),
+          modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+          rootModelRoutes: [],
           approvalMode: 'full_access',
+          executionMode: 'execute',
           connectionIds: [],
+          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -9462,7 +9566,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
         durableRootRuntimeId,
         durableChildRuntimeId,
         JSON.stringify(['runs.execute', 'workspace.runtime.execute']),
-        durableModelRef,
+        scenarioDelegationModel(durableModelRef),
         durableNow + 600,
         durableNow,
         durableNow,
@@ -9821,14 +9925,20 @@ const subagentMailboxTtlScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: JSON.parse(modelRef),
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -9907,7 +10017,7 @@ const subagentMailboxTtlScenario: Scenario = async () => {
        VALUES (?, ?, ?, ?, 'default', '[]', 'parent-child', ?, 'Process mailbox messages.', '[]', '[]', '[]',
                'settled', 'running', 1, 'isolate', 20, 'mailbox-ttl-delegation-key', 'mailbox-ttl-delegation-hash',
                ?, 1, ?, ?)`,
-      [delegationId, runId, rootRuntimeId, childRuntimeId, modelRef, now + 600, now, now],
+      [delegationId, runId, rootRuntimeId, childRuntimeId, scenarioDelegationModel(modelRef), now + 600, now, now],
     );
 
     const expired = await send('mailbox-ttl-expired', { text: 'expired-body' }, now, now + 2);
@@ -10084,6 +10194,7 @@ const subagentProfileStrategyScenario: Scenario = async () => {
     allowedModels: [modelRef],
     capabilities: ['runs.execute'],
     peerMessaging: 'parent-child',
+    mutationMode: 'read-only',
     maxSteps: 9,
     failureMode: 'isolate',
   };
@@ -10376,14 +10487,20 @@ const confirmedMutationLeaseFinalizationScenario: Scenario = async () => {
       maxRecallBytes: 8_192,
       maxSubagentMessages: 100,
       maxSubagentMessageBytes: 1_048_576,
+      contextCompactionMode: 'balanced',
       revision: 1,
     };
     const definition = {
       schemaVersion: 1,
       agentDefinitionId: 'scenario-agent',
+      requiredModelCapabilities: [],
       model: modelRef,
+      modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+      rootModelRoutes: [],
       approvalMode: 'ask',
+      executionMode: 'execute',
       connectionIds: [42],
+      environment: null,
       policyRevision: 1,
       settingsRevision: 1,
     };
@@ -12043,14 +12160,20 @@ const acpInnerPermissionDurabilityScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
           revision: 1,
         }),
         JSON.stringify({
           schemaVersion: 1,
           agentDefinitionId: 'scenario-agent',
+          requiredModelCapabilities: [],
           model: modelRef,
+          modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+          rootModelRoutes: [],
           approvalMode: 'ask',
+          executionMode: 'execute',
           connectionIds: [],
+          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -12345,14 +12468,20 @@ const idempotencyTtlScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   };
   const definition = {
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: modelRef,
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   };
@@ -12563,14 +12692,20 @@ const cumulativeTokenCeilingRemovedScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: JSON.parse(modelRef),
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -12630,7 +12765,7 @@ const cumulativeTokenCeilingRemovedScenario: Scenario = async () => {
        VALUES (?, ?, ?, ?, 'default', '[]', 'parent-child', ?, 'continue despite cumulative token telemetry',
                '[]', '[]', '[]', 'settled', 'running', 1, 'isolate', 10,
                'token-ceiling-delegation-key', 'token-ceiling-delegation-hash', ?, 1, ?, ?)`,
-      [delegationId, runId, rootRuntimeId, childRuntimeId, modelRef, now + 600, now, now],
+      [delegationId, runId, rootRuntimeId, childRuntimeId, scenarioDelegationModel(modelRef), now + 600, now, now],
     );
     await db.execute(
       `INSERT INTO agent_scheduler_work
@@ -12731,14 +12866,20 @@ const progressAwareLoopGuardScenario: Scenario = async () => {
     maxRecallBytes: 8_192,
     maxSubagentMessages: 100,
     maxSubagentMessageBytes: 1_048_576,
+    contextCompactionMode: 'balanced',
     revision: 1,
   });
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: JSON.parse(modelRef),
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -13039,9 +13180,14 @@ const durableBoundaryDecodeScenario: Scenario = async () => {
   const definition = {
     schemaVersion: 1,
     agentDefinitionId: 'scenario-agent',
+    requiredModelCapabilities: [],
     model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
+    executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   };
@@ -13079,11 +13225,6 @@ const durableBoundaryDecodeScenario: Scenario = async () => {
   assert.deepEqual(parseRunUsage(JSON.stringify(usage)), usage);
   assert.deepEqual(parseRunDefinition(JSON.stringify(definition)), definition);
   assert.deepEqual(parseToolInspection(JSON.stringify(inspection)), inspection);
-  assert.deepEqual(
-    parseToolInspection(JSON.stringify({ ...inspection, secretRefs: [{ id: 'legacy-secret-ref', version: 1 }] })),
-    inspection,
-    'legacy durable ToolInspection secretRefs must remain readable but must not re-enter the product type',
-  );
   assert.deepEqual(parseToolResult(JSON.stringify(result)), result);
 
   const rejected = [
@@ -13092,7 +13233,7 @@ const durableBoundaryDecodeScenario: Scenario = async () => {
     () => decodeDurableJsonValue(Array.from({ length: 16_385 }, () => 0)),
     () => parseToolResult(JSON.stringify({ ...result, outcome: 'maybe' })),
     () => parseRunDefinition(JSON.stringify({ ...definition, schemaVersion: 2 })),
-    () => parseToolInspection(JSON.stringify({ ...inspection, secretRefs: [{ id: 'legacy-secret-ref', version: 0 }] })),
+    () => parseToolInspection(JSON.stringify({ ...inspection, secretRefs: [{ id: 'removed-secret-ref', version: 1 }] })),
     () => parseRunUsage('{broken'),
   ];
   for (const reject of rejected) assert.throws(reject, /AGENT_DURABLE_STATE_INVALID/);
@@ -13115,17 +13256,34 @@ const currentDurableSchemaScenario: Scenario = async () => {
           supportedEfforts: ['low', 'medium', 'high'],
           defaultEffort: 'medium',
           mandatory: false,
-          supportsMaxTokens: true,
         },
       },
     },
   ]);
   const decodedCanonicalModels = decodePersistedProviderModels(canonicalModels);
   assert.equal(decodedCanonicalModels[0]?.id, 'scenario-model');
-  assert.equal(
-    'supportsMaxTokens' in (decodedCanonicalModels[0]?.capabilityOverrides?.reasoning ?? {}),
-    false,
-    'legacy decorative reasoning max-token metadata must be tolerated but normalized away',
+  assert.throws(
+    () =>
+      decodePersistedProviderModels(
+        JSON.stringify([
+          {
+            id: 'scenario-model',
+            capabilityOverrides: {
+              contextWindow: 32_768,
+              maxOutputTokens: 4_096,
+              supportsTools: true,
+              reasoning: {
+                supportedEfforts: ['low', 'medium', 'high'],
+                defaultEffort: 'medium',
+                mandatory: false,
+                supportsMaxTokens: true,
+              },
+            },
+          },
+        ]),
+      ),
+    /AGENT_DURABLE_STATE_INVALID/,
+    'removed reasoning metadata must fail closed instead of being normalized away',
   );
   assert.throws(
     () =>
@@ -13143,88 +13301,9 @@ const currentDurableSchemaScenario: Scenario = async () => {
     'unreleased flat provider capability schema must not remain as a runtime compatibility shim',
   );
 
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-compat-scenario-'));
-  const databasePath = path.join(directory, 'pre-lineage-normalization.sqlite');
-  const legacyDb = new DatabaseSync(databasePath);
-  try {
-    legacyDb.exec(`
-      PRAGMA foreign_keys = ON;
-      CREATE TABLE migrations (
-        id INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        applied_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-      );
-      INSERT INTO migrations(id, name) VALUES (24, 'pre-normalization fixture');
-
-      CREATE TABLE agent_steps (
-        id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        agent_runtime_id TEXT NOT NULL,
-        step_index INTEGER NOT NULL,
-        kind TEXT NOT NULL
-      );
-      CREATE TABLE agent_tool_calls (
-        id TEXT PRIMARY KEY,
-        run_id TEXT NOT NULL,
-        agent_runtime_id TEXT NOT NULL,
-        step_id TEXT NOT NULL,
-        source_model_step_id TEXT,
-        batch_index INTEGER NOT NULL DEFAULT 0,
-        batch_size INTEGER NOT NULL DEFAULT 1
-      );
-
-      INSERT INTO agent_steps(id, run_id, agent_runtime_id, step_index, kind) VALUES
-        ('model-1', 'run-1', 'runtime-1', 1, 'model'),
-        ('tool-step-1', 'run-1', 'runtime-1', 2, 'tool'),
-        ('tool-step-2', 'run-1', 'runtime-1', 3, 'tool'),
-        ('model-2', 'run-1', 'runtime-1', 4, 'model'),
-        ('tool-step-3', 'run-1', 'runtime-1', 5, 'tool');
-      INSERT INTO agent_tool_calls(id, run_id, agent_runtime_id, step_id) VALUES
-        ('tool-call-1', 'run-1', 'runtime-1', 'tool-step-1'),
-        ('tool-call-2', 'run-1', 'runtime-1', 'tool-step-2'),
-        ('tool-call-3', 'run-1', 'runtime-1', 'tool-step-3');
-    `);
-
-    await runMigrations(legacyDb);
-    const rows = legacyDb
-      .prepare(
-        `SELECT id, source_model_step_id, batch_index, batch_size
-         FROM agent_tool_calls ORDER BY id`,
-      )
-      .all() as Array<{
-      id: string;
-      source_model_step_id: string;
-      batch_index: number;
-      batch_size: number;
-    }>;
-    assert.deepEqual(
-      rows.map((row) => ({ ...row })),
-      [
-        { id: 'tool-call-1', source_model_step_id: 'model-1', batch_index: 0, batch_size: 2 },
-        { id: 'tool-call-2', source_model_step_id: 'model-1', batch_index: 1, batch_size: 2 },
-        { id: 'tool-call-3', source_model_step_id: 'model-2', batch_index: 0, batch_size: 1 },
-      ],
-    );
-    assert.throws(
-      () =>
-        legacyDb
-          .prepare(
-            `INSERT INTO agent_tool_calls(id, run_id, agent_runtime_id, step_id, source_model_step_id)
-             VALUES (?, ?, ?, ?, NULL)`,
-          )
-          .run('tool-call-invalid', 'run-1', 'runtime-1', 'tool-step-3'),
-      /agent_tool_call_source_model_invalid/,
-      'post-migration durable Tool rows must have a real source model step',
-    );
-  } finally {
-    legacyDb.close();
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
-
   return [
-    { name: 'provider_legacy_runtime_shims', value: 0, unit: 'branches' },
-    { name: 'tool_lineage_rows_backfilled', value: 3, unit: 'rows' },
-    { name: 'tool_lineage_null_writes_rejected', value: 1, unit: 'cases' },
+    { name: 'provider_removed_runtime_shims', value: 0, unit: 'branches' },
+    { name: 'provider_removed_shape_rejections', value: 2, unit: 'cases' },
   ];
 };
 
@@ -13313,14 +13392,20 @@ const completionGateScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
           revision: 1,
         }),
         JSON.stringify({
           schemaVersion: 1,
           agentDefinitionId: 'scenario-agent',
+          requiredModelCapabilities: [],
           model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+          rootModelRoutes: [],
           approvalMode: 'ask',
+          executionMode: 'execute',
           connectionIds: [],
+          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -13597,14 +13682,20 @@ const userInputClarificationScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
           revision: 1,
         }),
         JSON.stringify({
           schemaVersion: 1,
           agentDefinitionId: 'scenario-agent',
+          requiredModelCapabilities: [],
           model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+          rootModelRoutes: [],
           approvalMode: 'ask',
+          executionMode: 'execute',
           connectionIds: [],
+          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -13973,14 +14064,20 @@ const modelFinishReasonStateMachineScenario: Scenario = async () => {
           maxRecallBytes: 8_192,
           maxSubagentMessages: 100,
           maxSubagentMessageBytes: 1_048_576,
+          contextCompactionMode: 'balanced',
           revision: 1,
         }),
         JSON.stringify({
           schemaVersion: 1,
           agentDefinitionId: 'scenario-agent',
+          requiredModelCapabilities: [],
           model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+          modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+          rootModelRoutes: [],
           approvalMode: 'ask',
+          executionMode: 'execute',
           connectionIds: [],
+          environment: null,
           policyRevision: 1,
           settingsRevision: 1,
         }),
@@ -14208,9 +14305,14 @@ const providerContinuationRoundTripScenario: Scenario = async () => {
     const definition = {
       schemaVersion: 1,
       agentDefinitionId: 'scenario-agent',
+      requiredModelCapabilities: [],
       model: { providerId: route.providerId, modelId: route.modelId, configurationVersion: route.configurationVersion },
+      modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+      rootModelRoutes: [],
       approvalMode: 'full_access',
+      executionMode: 'execute',
       connectionIds: [],
+      environment: null,
       policyRevision: 1,
       settingsRevision: 1,
     };
@@ -14445,9 +14547,11 @@ const artifactLifecycleSettingsScenario: Scenario = async () => {
       workspaceIdleTtlSeconds: 3_600,
     },
   };
-  const normalizedLegacyWorkspaceIdle = normalizeRequestedSettings(legacyWorkspaceIdle);
-  assert.equal('workspaceIdleTtlSeconds' in normalizedLegacyWorkspaceIdle.workspaceRuntime, false);
-  assert.equal('workspaceIdleTtlSeconds' in normalizedLegacyWorkspaceIdle.hardLimits, false);
+  assert.throws(
+    () => normalizeRequestedSettings(legacyWorkspaceIdle),
+    /VALIDATION_FAILED/,
+    'settings containing removed Workspace idle fields must fail closed',
+  );
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-agent-artifact-lifecycle-'));
   const db = new DatabaseAdapter({ dataDirectory: directory, filename: 'artifact-lifecycle.sqlite', nodeEnv: 'test' });
@@ -14670,10 +14774,14 @@ const checkpointWorkspaceEvidenceScenario: Scenario = async () => {
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'checkpoint-workspace-agent',
+    requiredModelCapabilities: [],
     model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -14956,10 +15064,13 @@ const checkpointWorkspaceEvidenceScenario: Scenario = async () => {
     const durableCheckpoint = await new SqliteCheckpointRepository(db).save({
       scope: scenarioScope,
       checkpointId: randomUUID(),
+      kind: 'user',
       runId,
       expectedRunVersion: runVersion!.version,
       definitionVersion: '1.0.0',
+      activeModel: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
       workspaceCaptures: captures,
+      backgroundJobs: [],
       now: now + 3,
     });
     assert.deepEqual(
@@ -15237,7 +15348,7 @@ const artifactModelInputScenario: Scenario = async () => {
         rootRuntimeId,
         childRuntimeId,
         JSON.stringify(['artifacts.read']),
-        modelRef,
+        scenarioDelegationModel(modelRef),
         JSON.stringify([textArtifact.id, largeArtifact.id]),
         `artifact-model-key-${delegationId}`,
         `artifact-model-hash-${delegationId}`,
@@ -15382,25 +15493,6 @@ const skillProgressiveDisclosureScenario: Scenario = async () => {
     ].join('\n');
     return { path: `skills/${name}/SKILL.md`, content, sha256: sha256(content) };
   };
-  const legacyContent = [
-    '---',
-    'id: scenario.legacy',
-    'name: Legacy Operations',
-    'version: 1.0.0',
-    'description: Legacy Nexus Skill metadata remains compatible.',
-    'requiredCapabilities: runs.execute',
-    '---',
-    '',
-    '# Legacy Operations',
-    '',
-    'LEGACY_BODY_ON_DEMAND_ONLY',
-    '',
-  ].join('\n');
-  const legacyDocument = {
-    path: 'skills/legacy/SKILL.md',
-    content: legacyContent,
-    sha256: sha256(legacyContent),
-  };
   const bundle = (documents: PluginSkillBundle['documents']): PluginSkillBundle => ({
     appId: skillScope.appId,
     version: '1.2.3',
@@ -15447,14 +15539,18 @@ const skillProgressiveDisclosureScenario: Scenario = async () => {
       'Plan implementation work while keeping signed Skill instructions on demand.',
       'STANDARD_BODY_ON_DEMAND_ONLY',
     ),
-    legacyDocument,
+    standardDocument(
+      'operations',
+      'Investigate operational state using signed Skill instructions loaded on demand.',
+      'OPERATIONS_BODY_ON_DEMAND_ONLY',
+    ),
   ];
   const lowRegistry = new SkillRegistry(new StaticSkillSource(bundle(lowDocuments)));
   const lowMetadata = await lowRegistry.list(skillScope);
   assert.deepEqual(
     lowMetadata.map((item) => item.id).sort(),
-    ['scenario.legacy', 'scenario.skills.project-planner'],
-    'standard SKILL.md must derive stable identity from the signed App id and Skill name while legacy identity remains intact',
+    ['scenario.skills.operations', 'scenario.skills.project-planner'],
+    'SKILL.md identity must derive only from the signed App id and canonical Skill name',
   );
   assert.equal(
     lowMetadata.find((item) => item.id === 'scenario.skills.project-planner')?.version,
@@ -15466,12 +15562,12 @@ const skillProgressiveDisclosureScenario: Scenario = async () => {
     item.startsWith('[Available signed plugin Skills;'),
   );
   assert.ok(lowSkillInstructions?.includes('scenario.skills.project-planner'));
-  assert.ok(lowSkillInstructions?.includes('scenario.legacy'));
+  assert.ok(lowSkillInstructions?.includes('scenario.skills.operations'));
   assert.ok(!lowSkillInstructions?.includes('STANDARD_BODY_ON_DEMAND_ONLY'));
-  assert.ok(!lowSkillInstructions?.includes('LEGACY_BODY_ON_DEMAND_ONLY'));
+  assert.ok(!lowSkillInstructions?.includes('OPERATIONS_BODY_ON_DEMAND_ONLY'));
   assert.ok(
     !lowSkillInstructions?.includes('allowed-tools'),
-    'Agent Skills allowed-tools is compatibility metadata and must not become Nexus model-facing authority',
+    'Agent Skills allowed-tools metadata must not become Nexus model-facing authority',
   );
 
   const targetDocument = standardDocument(
@@ -15579,22 +15675,35 @@ const skillProgressiveDisclosureScenario: Scenario = async () => {
     /PLUGIN_SKILL_CHANGED/,
     'a Skill whose bytes do not match the signed file hash must fail closed before metadata disclosure',
   );
-  const undeclaredLegacy = legacyContent.replace('requiredCapabilities: runs.execute', 'requiredCapabilities: machine.files.read');
-  const undeclaredRegistry = new SkillRegistry(
+  const removedFormatContent = [
+    '---',
+    'id: scenario.removed-format',
+    'name: removed-format',
+    'version: 1.0.0',
+    'description: Removed Nexus-specific Skill metadata must be rejected.',
+    'requiredCapabilities: runs.execute',
+    '---',
+    '',
+    '# Removed format',
+    '',
+    'REMOVED_FORMAT_BODY',
+    '',
+  ].join('\n');
+  const removedFormatRegistry = new SkillRegistry(
     new StaticSkillSource(
       bundle([
         {
-          path: legacyDocument.path,
-          content: undeclaredLegacy,
-          sha256: sha256(undeclaredLegacy),
+          path: 'skills/removed-format/SKILL.md',
+          content: removedFormatContent,
+          sha256: sha256(removedFormatContent),
         },
       ]),
     ),
   );
   await assert.rejects(
-    undeclaredRegistry.list(skillScope),
-    /PLUGIN_SKILL_CAPABILITY_UNDECLARED/,
-    'legacy Nexus capability metadata must remain constrained by the signed plugin manifest',
+    removedFormatRegistry.list(skillScope),
+    /Invalid Skill metadata/,
+    'removed Nexus-specific Skill frontmatter must fail closed instead of entering a compatibility branch',
   );
 
   return [
@@ -15947,14 +16056,18 @@ const providerLiveCapabilityAuthorityScenario: Scenario = async () => {
     JSON.stringify({
       schemaVersion: 1,
       agentDefinitionId: 'scenario-agent',
+      requiredModelCapabilities: [],
       model: {
         providerId: persisted.id,
         modelId: providerOnly.modelId,
         configurationVersion: persisted.version,
       },
       modelCapabilities: frozen,
+      rootModelRoutes: [],
       approvalMode: 'ask',
+      executionMode: 'execute',
       connectionIds: [],
+      environment: null,
       policyRevision: 1,
       settingsRevision: 1,
     }),
@@ -16012,7 +16125,7 @@ const providerLiveCapabilityAuthorityScenario: Scenario = async () => {
 
 
 const agentDefinitionCapabilityContractScenario: Scenario = async () => {
-  const legacyManifest = {
+  const canonicalManifest = {
     schemaVersion: 1,
     id: 'scenario.capability-contract',
     version: '1.0.0',
@@ -16027,27 +16140,27 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
         version: '1.0.0',
         displayName: 'Scenario Agent',
         description: 'Exercises AgentDefinition model capability requirements.',
-        requiredModelCapabilities: ['streaming'],
+        requiredModelCapabilities: ['tools'],
       },
     ],
   };
-  const validatedLegacy = validateManifest(legacyManifest, {
+  const validatedManifest = validateManifest(canonicalManifest, {
     nexusVersion: '1.0.0',
     supportedSdkMajor: 1,
   });
-  assert.deepEqual(validatedLegacy.agents?.[0]?.requiredModelCapabilities, []);
+  assert.deepEqual(validatedManifest.agents?.[0]?.requiredModelCapabilities, ['tools']);
   assert.deepEqual(
-    decodePersistedAppManifest(JSON.stringify(legacyManifest)).agents?.[0]?.requiredModelCapabilities,
-    [],
+    decodePersistedAppManifest(JSON.stringify(canonicalManifest)).agents?.[0]?.requiredModelCapabilities,
+    ['tools'],
   );
   assert.throws(
     () =>
       validateManifest(
         {
-          ...legacyManifest,
+          ...canonicalManifest,
           agents: [
             {
-              ...legacyManifest.agents[0],
+              ...canonicalManifest.agents[0],
               requiredModelCapabilities: ['provider_magic'],
             },
           ],
@@ -16274,6 +16387,7 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
     agentDefinitionId: definitionId,
     model: { providerId, modelId: 'private-run-model', configurationVersion: 1 },
     approvalMode: 'ask' as const,
+    executionMode: 'execute' as const,
     connectionIds: [],
     command: { key: randomUUID(), requestId: randomUUID() },
   });
@@ -16340,19 +16454,26 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
       runId: terminalSource.id,
       ledgerThrough: 0,
       planVersion: terminalSource.plan.revision,
+      inputRevision: terminalSource.inputRevision,
+      settingsRevision: terminalSource.definition.settingsRevision,
       plan: terminalSource.plan,
+      goal: terminalSource.goal,
       completedStepIds: [],
       evidenceRefs: [],
-      modelConfigurationVersion: 1,
+      checkpointArtifactRefs: [],
+      modelConfigurationVersion: terminalSource.definition.model.configurationVersion,
+      activeModel: terminalSource.definition.model,
       definitionVersion: definitionInfo.version,
       policyRevision: 1,
       workspaceArtifactManifestRefs: [],
+      workspaceArtifactRefs: [],
       recoveryManifest: {
         schemaVersion: 1,
         eventThrough: 0,
         contextBoundary: { baseThrough: 0, runThrough: {} },
         tools: [],
         delegations: [],
+        backgroundJobs: [],
         quarantinedResourceKeys: [],
       },
     },
@@ -16455,7 +16576,7 @@ const agentDefinitionCapabilityContractScenario: Scenario = async () => {
 
   return [
     { name: 'typed_requirements', value: 4, unit: 'capabilities' },
-    { name: 'legacy_streaming_requirements', value: 0, unit: 'requirements' },
+    { name: 'removed_streaming_aliases', value: 0, unit: 'requirements' },
     { name: 'incompatible_run_commits', value: 0, unit: 'runs' },
     { name: 'compatible_run_commits', value: createCommits, unit: 'runs' },
     { name: 'compatible_checkpoint_resumes', value: checkpointCreateCommits, unit: 'runs' },
@@ -18528,10 +18649,14 @@ const browserScreenshotVisionScenario: Scenario = async () => {
   const definition = JSON.stringify({
     schemaVersion: 1,
     agentDefinitionId: 'browser-screenshot-agent',
+    requiredModelCapabilities: [],
     model: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
+    modelCapabilities: SCENARIO_MODEL_CAPABILITIES,
+    rootModelRoutes: [],
     approvalMode: 'ask',
     executionMode: 'execute',
     connectionIds: [],
+    environment: null,
     policyRevision: 1,
     settingsRevision: 1,
   });
@@ -19408,7 +19533,7 @@ const scenarios = new Map<string, Scenario>([
   ['context/indexed-recall', indexedRecallScenario],
   ['benchmark/scripted-agent-trajectories', scriptedAgentBenchmarkScenario],
   ['boundary/durable-runtime-decode', durableBoundaryDecodeScenario],
-  ['compat/current-durable-schema', currentDurableSchemaScenario],
+  ['boundary/current-durable-schema', currentDurableSchemaScenario],
   ['model/provider-live-capability-authority', providerLiveCapabilityAuthorityScenario],
   ['model/stream-retry-attempt-identity', modelStreamRetryAttemptIdentityScenario],
   ['runtime/agent-lifecycle-notifications', agentLifecycleNotificationScenario],

@@ -76,7 +76,7 @@ export interface DelegationView extends Scope {
   peerMessaging: PeerMessaging;
   mutationMode: SubagentMutationMode;
   modelRef: ModelRef;
-  modelCapabilities?: ModelCapabilitySnapshot;
+  modelCapabilities: ModelCapabilitySnapshot;
   objective: string;
   constraints: string[];
   inputArtifactRefs: string[];

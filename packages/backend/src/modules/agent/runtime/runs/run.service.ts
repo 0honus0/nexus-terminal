@@ -164,7 +164,7 @@ export class RunService {
       throw new Error('VALIDATION_FAILED');
     }
     const environmentSelection = command.environment ?? null;
-    const executionMode = command.executionMode ?? 'execute';
+    const executionMode = command.executionMode;
     if (executionMode !== 'execute' && executionMode !== 'plan') throw new Error('VALIDATION_FAILED');
     if (command.plannedFromRunId !== undefined) {
       if (!isAgentUuid(command.plannedFromRunId) || executionMode !== 'execute') throw new Error('VALIDATION_FAILED');
@@ -189,7 +189,7 @@ export class RunService {
       if (
         !plannedFrom ||
         plannedFrom.threadId !== command.threadId ||
-        (plannedFrom.definition.executionMode ?? 'execute') !== 'plan' ||
+        plannedFrom.definition.executionMode !== 'plan' ||
         !['completed', 'completed_unverified'].includes(plannedFrom.status) ||
         plannedFrom.plan.items.length === 0
       ) {

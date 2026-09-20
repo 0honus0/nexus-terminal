@@ -30,7 +30,7 @@ export const completionGateDecision = (
   evidence: CompletionEvidenceSnapshot,
   objectiveText: string,
 ): CompletionGateDecision => {
-  if ((run.definition.executionMode ?? 'execute') === 'plan') {
+  if (run.definition.executionMode === 'plan') {
     if (evidence.tools.some((item) => item.inspection.mutation && confirmedSuccess(item.result))) {
       return {
         kind: 'failed',

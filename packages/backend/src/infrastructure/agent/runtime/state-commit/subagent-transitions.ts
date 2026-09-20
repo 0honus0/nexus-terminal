@@ -541,7 +541,7 @@ export const beginSubagentMutationToolTransition = async (
   );
   if (!row) throw new Error('NOT_FOUND');
   if (row.status !== 'running') throw new Error('RUN_NOT_SCHEDULABLE');
-  if ((mapRunRow(row).definition.approvalMode ?? 'ask') !== 'full_access') {
+  if (mapRunRow(row).definition.approvalMode !== 'full_access') {
     throw new Error('SUBAGENT_MUTATION_NOT_GOVERNED');
   }
   if (row.input_revision !== command.expectedInputRevision) throw new Error('APPROVAL_STALE');

@@ -401,10 +401,9 @@ export class RunnerJournal {
     ): void => {
       const terminal = Object.entries(values)
         .filter(([, value]) => terminalStatuses.has(value.status) && value.completedAt !== null)
-        .sort((a, b) => (b[1].completedAt ?? b[1].createdAt) - (a[1].completedAt ?? a[1].createdAt));
+        .sort((a, b) => b[1].completedAt! - a[1].completedAt!);
       for (const [id, value] of terminal.slice(TERMINAL_HISTORY_LIMIT)) {
-        const completedAt = value.completedAt ?? value.createdAt;
-        if (completedAt <= now - TERMINAL_HISTORY_MIN_AGE_SECONDS) delete values[id];
+        if (value.completedAt! <= now - TERMINAL_HISTORY_MIN_AGE_SECONDS) delete values[id];
       }
     };
     const commandCount = Object.keys(this.state.commands).length;

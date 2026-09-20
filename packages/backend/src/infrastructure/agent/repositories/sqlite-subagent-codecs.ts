@@ -126,6 +126,11 @@ const recordValue = (value: unknown): UnknownRecord => {
   return value as UnknownRecord;
 };
 
+const assertRecordKeys = (record: UnknownRecord, allowed: readonly string[]): void => {
+  const keys = new Set(allowed);
+  if (Object.keys(record).some((key) => !keys.has(key))) return invalidDurableState();
+};
+
 const stringValue = (value: unknown): string => {
   if (typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_DURABLE_STRING_BYTES)
     return invalidDurableState();
@@ -183,22 +188,33 @@ const parseModelRef = (value: string): ModelRef => decodeModelRef(parsePersisted
 
 const parseDelegationModel = (
   value: string,
-): { modelRef: ModelRef; modelCapabilities?: DelegationView['modelCapabilities'] } => {
+): { modelRef: ModelRef; modelCapabilities: DelegationView['modelCapabilities'] } => {
   const record = recordValue(parsePersistedJson(value));
+  assertRecordKeys(record, ['providerId', 'modelId', 'configurationVersion', 'modelCapabilities']);
   return {
     modelRef: decodeModelRef(record),
-    ...(record.modelCapabilities === undefined
-      ? {}
-      : { modelCapabilities: decodeModelCapabilitySnapshot(record.modelCapabilities) }),
+    modelCapabilities: decodeModelCapabilitySnapshot(record.modelCapabilities),
   };
 };
 
 export const decodeRunBudget = (value: string): RunBudget => {
   const record = recordValue(parsePersistedJson(value));
+  assertRecordKeys(record, [
+    'maxContextTokens',
+    'maxOutputTokens',
+    'maxRunSteps',
+    'maxActiveExecutionSeconds',
+    'toolTimeoutSeconds',
+    'maxToolOutputBytes',
+    'maxRecallItems',
+    'maxRecallBytes',
+    'maxSubagentMessages',
+    'maxSubagentMessageBytes',
+    'contextCompactionMode',
+    'revision',
+  ]);
   const compactionMode = record.contextCompactionMode;
-  if (compactionMode !== undefined && !['aggressive', 'balanced', 'conservative'].includes(String(compactionMode))) {
-    return invalidDurableState();
-  }
+  if (!['aggressive', 'balanced', 'conservative'].includes(String(compactionMode))) return invalidDurableState();
   return {
     maxContextTokens: integerValue(record.maxContextTokens, 1),
     maxOutputTokens: integerValue(record.maxOutputTokens, 1),
@@ -210,9 +226,7 @@ export const decodeRunBudget = (value: string): RunBudget => {
     maxRecallBytes: integerValue(record.maxRecallBytes, 1),
     maxSubagentMessages: integerValue(record.maxSubagentMessages, 1),
     maxSubagentMessageBytes: integerValue(record.maxSubagentMessageBytes, 1),
-    ...(compactionMode === undefined
-      ? {}
-      : { contextCompactionMode: compactionMode as NonNullable<RunBudget['contextCompactionMode']> }),
+    contextCompactionMode: compactionMode as RunBudget['contextCompactionMode'],
     revision: integerValue(record.revision, 1),
   };
 };
@@ -250,21 +264,42 @@ export const decodeRunUsage = (value: string): RunUsage => {
 
 export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspection'] => {
   const record = recordValue(parsePersistedJson(value));
+  assertRecordKeys(record, [
+    'toolName',
+    'toolVersion',
+    'normalizedArguments',
+    'target',
+    'resourceKeys',
+    'risk',
+    'mutation',
+    'operationHash',
+    'operationHashVersion',
+    'preconditions',
+    'policyRevision',
+    'inputRevision',
+  ]);
   if (!['read', 'control', 'mutate', 'destructive', 'forbidden'].includes(String(record.risk)))
     return invalidDurableState();
   if (record.operationHashVersion !== 1) return invalidDurableState();
   const target = recordValue(record.target);
+  assertRecordKeys(target, [
+    'kind',
+    'targetIdentity',
+    'endpoint',
+    'loginUser',
+    'configurationHash',
+    'connectionId',
+    'workspaceId',
+    'integrationId',
+    'schemaHash',
+    'browserSessionId',
+    'snapshotId',
+    'generation',
+    'hostKeyTrust',
+  ]);
   if (!['machine', 'workspace', 'integration', 'browser', 'run'].includes(String(target.kind)))
     return invalidDurableState();
   if (!Array.isArray(record.preconditions) || record.preconditions.length > 256) return invalidDurableState();
-  if (record.secretRefs !== undefined) {
-    if (!Array.isArray(record.secretRefs) || record.secretRefs.length > 256) return invalidDurableState();
-    for (const item of record.secretRefs) {
-      const secret = recordValue(item);
-      stringValue(secret.id);
-      integerValue(secret.version, 1);
-    }
-  }
   return {
     toolName: stringValue(record.toolName),
     toolVersion: stringValue(record.toolVersion),
@@ -295,6 +330,7 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
     operationHashVersion: 1,
     preconditions: record.preconditions.map((item) => {
       const precondition = recordValue(item);
+      assertRecordKeys(precondition, ['kind', 'key', 'observedValue']);
       if (!['fileHash', 'metadata', 'serviceState', 'workspaceGeneration'].includes(String(precondition.kind)))
         return invalidDurableState();
       return {
@@ -342,7 +378,7 @@ export const mapDelegation = (row: DelegationRow): DelegationView => {
     peerMessaging: row.peer_messaging,
     mutationMode: row.mutation_mode,
     modelRef: model.modelRef,
-    ...(model.modelCapabilities === undefined ? {} : { modelCapabilities: model.modelCapabilities }),
+    modelCapabilities: model.modelCapabilities,
     objective: row.objective,
     constraints: parseStringArray(row.constraints_json, 256),
     inputArtifactRefs: parseStringArray(row.input_artifact_refs_json, 1024),

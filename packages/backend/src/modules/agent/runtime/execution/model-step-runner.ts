@@ -236,7 +236,7 @@ export class ModelStepRunner {
       modelContextWindow: model.contextWindow,
       maxContextTokens: model.contextWindow,
       reservedOutputTokens,
-      compactionMode: snapshot.budget.contextCompactionMode ?? 'balanced',
+      compactionMode: snapshot.budget.contextCompactionMode,
       maxRecallItems: snapshot.budget.maxRecallItems,
       maxRecallBytes: snapshot.budget.maxRecallBytes,
       tools,

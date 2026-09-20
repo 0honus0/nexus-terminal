@@ -464,7 +464,7 @@ export class SubagentParticipantExecutor {
       !toolWork ||
       !this.toolCalls ||
       delegation.mutationMode !== 'governed' ||
-      (run.definition.approvalMode ?? 'ask') !== 'full_access' ||
+      run.definition.approvalMode !== 'full_access' ||
       !toolWork.inspection.mutation ||
       !['mutate', 'destructive'].includes(toolWork.inspection.risk)
     ) {
@@ -985,7 +985,7 @@ export class SubagentParticipantExecutor {
               lineageKey: modelCacheLineageKey({ instructions, tools: offeredTools }),
             },
             ...(model.defaultReasoningEffort === undefined ? {} : { reasoningEffort: model.defaultReasoningEffort }),
-            ...(delegation.modelCapabilities === undefined ? {} : { capabilitySnapshot: delegation.modelCapabilities }),
+            capabilitySnapshot: delegation.modelCapabilities,
             maxOutputTokens,
           },
           signal,
