@@ -22,10 +22,7 @@ import { TOOL_SEARCH_NAME } from '../../capabilities/tool-model-surface';
 import { projectToolResult } from '../../capabilities/tool-result-projection';
 import { estimateModelInputTokens } from '../../ai/model-accounting';
 import { boundedUtf8 } from '../execution/text-budget';
-import {
-  pressureAdjustedToolOutputBytesForOccupancy,
-  resolveModelContextBudget,
-} from '../runs/run-budget-policy';
+import { pressureAdjustedToolOutputBytesForOccupancy, resolveModelContextBudget } from '../runs/run-budget-policy';
 import type { RunView } from '../runs/run.types';
 import type {
   MailboxReaderPort,
