@@ -875,6 +875,34 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
   const { BrowserRuntimeAdapter } = await import(
     '/app/dist/infrastructure/agent/integrations/browser-runtime.adapter.js'
   );
+  const { NodeCryptoHashAdapter } = await import(
+    '/app/dist/infrastructure/agent/capabilities/node-crypto-hash.adapter.js'
+  );
+  const { hashOperation } = await import('/app/dist/modules/agent/operation-hash.js');
+  const directTarget = {
+    id: 'smoke-direct-chrome',
+    endpoints: [
+      {
+        scope: 'external-network',
+        via: 'backend',
+        url: `http://${hostGateway.address}:${process.env.NEXUS_E2E_DIRECT_CDP_PORT}`,
+        priority: 10,
+        allowPlaintext: true,
+        verifyTls: true,
+      },
+    ],
+    allowedUrlPatterns: [`http://127.0.0.1:${process.env.NEXUS_E2E_BROWSER_PAGE_PORT}`],
+  };
+  const configurationHash = hashOperation(
+    {
+      schemaVersion: 1,
+      kind: 'browser-target',
+      id: directTarget.id,
+      endpoints: directTarget.endpoints.map((endpoint) => ({ ...endpoint })),
+      allowedUrlPatterns: [...directTarget.allowedUrlPatterns],
+    },
+    new NodeCryptoHashAdapter(),
+  );
   const directOnly = new BrowserRuntimeAdapter({
     openBrowserTunnel: async () => { throw new Error('RUNNER_TUNNEL_MUST_NOT_BE_USED'); },
   });
@@ -885,19 +913,9 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
       runId: 'smoke-browser-direct-run',
       agentRuntimeId: 'smoke-browser-direct-runtime',
       target: {
-        id: 'smoke-direct-chrome',
+        ...directTarget,
         profileRevision: 1,
-        endpoints: [
-          {
-            scope: 'external-network',
-            via: 'backend',
-            url: `http://${hostGateway.address}:${process.env.NEXUS_E2E_DIRECT_CDP_PORT}`,
-            priority: 10,
-            allowPlaintext: true,
-            verifyTls: true,
-          },
-        ],
-        allowedUrlPatterns: [`http://127.0.0.1:${process.env.NEXUS_E2E_BROWSER_PAGE_PORT}`],
+        configurationHash,
       },
     },
     AbortSignal.timeout(15_000),
