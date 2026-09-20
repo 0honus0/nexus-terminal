@@ -2,7 +2,7 @@ import type { JsonValue } from '../../agent.types';
 import { boundedUtf8 } from '../execution/text-budget';
 import type { DelegationView, SubagentSettingsView } from './subagent.types';
 
-const MAX_COLLABORATION_BYTES = 8 * 1024;
+const DEFAULT_MAX_COLLABORATION_BYTES = 8 * 1024;
 const MAX_PROFILE_MANIFEST = 16;
 const MAX_CAPABILITIES_PER_PROFILE = 12;
 const MAX_EVIDENCE_REFS = 16;
@@ -15,6 +15,7 @@ const encodedBytes = (value: unknown): number => Buffer.byteLength(JSON.stringif
 export const projectSubagentCollaborationContext = (
   settings: SubagentSettingsView | null,
   directSubagents: readonly DelegationView[],
+  maxBytes = DEFAULT_MAX_COLLABORATION_BYTES,
 ): string | undefined => {
   if (!settings && directSubagents.length === 0) return undefined;
   const profiles = settings?.policy.profiles ?? [];
@@ -85,7 +86,7 @@ export const projectSubagentCollaborationContext = (
   ): void => {
     target.push(item);
     decrementOmitted();
-    if (encodedBytes(projection) <= MAX_COLLABORATION_BYTES) return;
+    if (encodedBytes(projection) <= maxBytes) return;
     target.pop();
     restoreOmitted();
   };

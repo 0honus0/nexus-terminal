@@ -10204,6 +10204,13 @@ const subagentProfileStrategyScenario: Scenario = async () => {
     'bounded Root collaboration projection must report omitted state instead of truncating JSON mid-document',
   );
 
+  const tighterRootProjection = projectSubagentCollaborationContext(crowdedSettings, crowdedDelegations, 4 * 1024);
+  assert.ok(tighterRootProjection);
+  assert.ok(
+    Buffer.byteLength(tighterRootProjection, 'utf8') <= 4 * 1024,
+    'Root collaboration projection must honor a caller-supplied tighter byte budget',
+  );
+
   let inheritedRuntimeId = '';
   let inheritedTargets: string[] = [];
   const childContext = new SubagentContextBuilder(
