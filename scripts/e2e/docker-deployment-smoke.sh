@@ -924,16 +924,17 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
     await directOnly.navigate(
       session.sessionId,
       `http://127.0.0.1:${process.env.NEXUS_E2E_BROWSER_PAGE_PORT}/`,
+      {},
       AbortSignal.timeout(15_000),
     );
     const first = await directOnly.snapshot(session.sessionId, { maxNodes: 100, maxBytes: 32768 }, AbortSignal.timeout(15_000));
     const input = first.nodes.find((node) => node.role === 'textbox' && node.name === 'Name');
     const button = first.nodes.find((node) => node.role === 'button' && node.name === 'Apply');
     if (!input || !button || first.title !== 'Nexus Browser Smoke') throw new Error(`Browser direct snapshot invalid: ${JSON.stringify(first)}`);
-    await directOnly.type(session.sessionId, first.snapshotId, input.nodeRef, 'Nexus', AbortSignal.timeout(15_000));
+    await directOnly.type(session.sessionId, first.snapshotId, input.nodeRef, 'Nexus', {}, AbortSignal.timeout(15_000));
     let staleRejected = false;
     try {
-      await directOnly.click(session.sessionId, first.snapshotId, button.nodeRef, AbortSignal.timeout(15_000));
+      await directOnly.click(session.sessionId, first.snapshotId, button.nodeRef, {}, AbortSignal.timeout(15_000));
     } catch (error) {
       staleRejected = error instanceof Error && error.message === 'BROWSER_NODE_STALE';
     }
@@ -941,14 +942,14 @@ const runnerAdapter = new RunnerHttpAdapter(baseUrl, token);
     const second = await directOnly.snapshot(session.sessionId, {}, AbortSignal.timeout(15_000));
     const freshButton = second.nodes.find((node) => node.role === 'button' && node.name === 'Apply');
     if (!freshButton) throw new Error('Browser direct fresh button missing.');
-    await directOnly.click(session.sessionId, second.snapshotId, freshButton.nodeRef, AbortSignal.timeout(15_000));
+    await directOnly.click(session.sessionId, second.snapshotId, freshButton.nodeRef, {}, AbortSignal.timeout(15_000));
     const third = await directOnly.snapshot(session.sessionId, {}, AbortSignal.timeout(15_000));
     if (!third.nodes.some((node) => node.text === 'Nexus' || node.name === 'Nexus')) {
       throw new Error(`Browser direct click/type result missing: ${JSON.stringify(third)}`);
     }
     let denied = false;
     try {
-      await directOnly.navigate(session.sessionId, 'https://not-allowed.invalid/', AbortSignal.timeout(5_000));
+      await directOnly.navigate(session.sessionId, 'https://not-allowed.invalid/', {}, AbortSignal.timeout(5_000));
     } catch (error) {
       denied = error instanceof Error && error.message === 'BROWSER_URL_DENIED';
     }
