@@ -20401,6 +20401,9 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
 
   const backendExtractions = [
     'modules/agent/runtime/execution/root-tool-execution-coordinator.ts',
+    'modules/agent/runtime/execution/root-read-tool-executor.ts',
+    'modules/agent/runtime/execution/root-mutation-execution-adapter.ts',
+    'modules/agent/runtime/execution/root-tool-execution-common.ts',
     'modules/agent/runtime/execution/governed-mutation-executor.ts',
     'infrastructure/agent/repositories/sqlite-subagent-codecs.ts',
     'modules/agent/capabilities/ssh-target-resolver.port.ts',
@@ -20452,6 +20455,68 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
       `${relative} must delegate governed mutation sequencing to GovernedMutationExecutor`,
     );
   }
+  const rootToolCoordinator = read(
+    backendSourceRoot,
+    'modules/agent/runtime/execution/root-tool-execution-coordinator.ts',
+  );
+  assert.ok(
+    rootToolCoordinator.split('\n').length <= 120,
+    'RootToolExecutionCoordinator must remain a thin pending-tool dispatch facade',
+  );
+  assert.match(
+    rootToolCoordinator,
+    /RootReadToolExecutor/,
+    'Root Tool dispatch must delegate read/control execution and continuation projection',
+  );
+  assert.match(
+    rootToolCoordinator,
+    /RootMutationExecutionAdapter/,
+    'Root Tool dispatch must delegate Root governed-mutation adaptation',
+  );
+  assert.doesNotMatch(
+    rootToolCoordinator,
+    /beginReadToolBatch|settleReadToolBatch|parkMcpInputRequiredTool|settleUserInputRequestTool|rootMutationHooks|GovernedMutationExecutor|acquireRead|executeRead/,
+    'RootToolExecutionCoordinator must not reabsorb read projection/continuation or governed mutation hook internals',
+  );
+  const rootReadTools = read(backendSourceRoot, 'modules/agent/runtime/execution/root-read-tool-executor.ts');
+  for (const ownership of [
+    'refreshOrRejectSuperseded(',
+    'selectWave(',
+    'beginReadToolBatch',
+    'parkMcpInputRequiredTool',
+    'settleUserInputRequestTool',
+    'pauseRuntimeForBudget',
+    'parkRuntime',
+    'evaluateToolLoopGuard',
+  ]) {
+    assert.ok(rootReadTools.includes(ownership), `RootReadToolExecutor must own ${ownership}`);
+  }
+  assert.doesNotMatch(
+    rootReadTools,
+    /GovernedMutationExecutor|requestToolApproval|acquireMutation|executeMutation/,
+    'Root read/control owner must not absorb mutation governance',
+  );
+  const rootMutationAdapter = read(
+    backendSourceRoot,
+    'modules/agent/runtime/execution/root-mutation-execution-adapter.ts',
+  );
+  assert.match(
+    rootMutationAdapter,
+    /GovernedMutationExecutor/,
+    'Root mutation adapter must delegate governance ordering to GovernedMutationExecutor',
+  );
+  assert.match(
+    rootMutationAdapter,
+    /rootMutationHooks/,
+    'Root mutation adapter must own Root-specific governance hooks',
+  );
+  assert.doesNotMatch(
+    rootMutationAdapter,
+    /beginReadToolBatch|settleReadToolBatch|parkMcpInputRequiredTool|settleUserInputRequestTool/,
+    'Root mutation adapter must not own read/control continuation projection',
+  );
+  const rootToolCommon = read(backendSourceRoot, 'modules/agent/runtime/execution/root-tool-execution-common.ts');
+  assert.match(rootToolCommon, /rootToolContext/, 'Root Tool collaborators must share one ToolContext builder');
   const subagentExecutor = read(
     backendSourceRoot,
     'modules/agent/runtime/collaboration/subagent-participant-executor.ts',

@@ -27,7 +27,7 @@
 
 ## 当前验证结论
 
-最近一次已提交代码的 isolated deterministic Agent baseline 为 **73/73 PASS**；Unified File/Shell/Target capability refactor、governed execution consolidation、Subagent participant decomposition 与 Browser session/binding authority consolidation 的 Backend/Runner/Frontend typecheck/build、request-only Agent E2E 与 architecture regression 均已通过。当前 `PluginInstallService` decomposition 也保持 **73/73 PASS**：公开 service 已收敛为 facade，package/install transaction、runtime lifecycle、data management 分别由 `PluginPackageInstallCoordinator`、`PluginRuntimeLifecycleCoordinator`、`PluginDataManager` 持有；focused request-only Plugin E2E **4/4 PASS**，覆盖 official onboarding/install、unsafe archive verify failure、Frontend RPC storage + uninstall/retained-data/deleteData，以及 remote signed install + runtime registration + real Run。
+最近一次已提交代码的 isolated deterministic Agent baseline 为 **73/73 PASS**；Unified File/Shell/Target capability refactor、governed execution consolidation、Subagent participant decomposition、Browser session/binding authority consolidation 与 `PluginInstallService` decomposition 的 Backend/Runner/Frontend typecheck/build、request-only Agent E2E 与 architecture regression 均已通过。当前 Root Tool owner decomposition 也保持 **73/73 PASS**：`RootToolExecutionCoordinator` 已收敛为 90 行 pending-tool dispatch facade，read/control projection/continuation 由 `RootReadToolExecutor` 持有，Root-specific mutation hooks/BackendSignal adaptation 由 `RootMutationExecutionAdapter` 持有，mutation governance 顺序仍唯一委托 `GovernedMutationExecutor`。
 
 此前 residual 审计中的 23 个有效文件已按格式、i18n、bounded context、settings presentation 与 regression coverage 等逻辑边界分别提交；当时那份缺少最新 architecture/tighter-budget regression 的 stale runner 工作副本已明确拒绝覆盖 committed regression tree。该历史处理不构成当前 open Problem。
 
