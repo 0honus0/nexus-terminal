@@ -841,7 +841,7 @@ Frontend 记录：
 
 Backend 记录：
 
-- Run create/input/interrupt/cancel/delete 与 durable state transition；Conversation create/rename/delete、Plan durable update、Approval resolve/fail-closed；
+- Run create/input/interrupt/cancel/delete 与 durable state transition；Conversation create/rename/delete、Plan durable update、Approval resolve/fail-closed；Context checkpoint reuse/create/skip/commit failure；
 - Settings patch/default initialization、hard-limit preview/confirm 与 CAS commit failure；
 - App enable/disable/resume/health transition 与 App state CAS commit failure；
 - Skill signed index build/search/read；索引失败记录安全 `errorCode`，不得记录 search query 或 Skill 正文；

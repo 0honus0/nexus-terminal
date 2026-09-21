@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { logErrorCode, logger } from '../../../shared/logging/logger';
 import type { ClockPort, JsonValue, Scope } from '../agent.types';
 import type { LedgerEntryView } from './conversation.repository.port';
 import { ConversationService } from './conversation.service';
@@ -193,7 +194,20 @@ export class ContextCheckpointService {
       input.historyBoundary ? input.runId : undefined,
       input.historyBoundary,
     );
-    if (entries.length === 0) return null;
+    if (entries.length === 0) {
+      logger.debug(
+        {
+          userId: input.scope.userId,
+          appId: input.scope.appId,
+          threadId: input.threadId,
+          runId: input.runId ?? null,
+          throughSequence: input.throughSequence,
+          reason: 'empty_prefix',
+        },
+        'Agent context checkpoint skipped',
+      );
+      return null;
+    }
     const fromSequence = entries[0]!.sequence;
     const toSequence = entries.at(-1)!.sequence;
     const sourceHash = stableHash(
@@ -224,28 +238,116 @@ export class ContextCheckpointService {
       existing.generator.version === GENERATOR_VERSION &&
       existing.summaryTokens <= input.maxSummaryTokens
     ) {
+      logger.debug(
+        {
+          userId: input.scope.userId,
+          appId: input.scope.appId,
+          threadId: input.threadId,
+          runId: input.runId ?? null,
+          checkpointId: existing.id,
+          fromSequence,
+          toSequence,
+          sourceTokens,
+          summaryTokens: existing.summaryTokens,
+          maxSummaryTokens: input.maxSummaryTokens,
+          hardPressure: input.hardPressure,
+        },
+        'Agent context checkpoint reused',
+      );
       return existing;
     }
 
     const summary = buildSummary(entries, fromSequence, toSequence, input.maxSummaryTokens);
-    if (!summary) return null;
-    if (!input.hardPressure && summary.tokens >= Math.floor(sourceTokens * 0.75)) return null;
+    if (!summary) {
+      logger.debug(
+        {
+          userId: input.scope.userId,
+          appId: input.scope.appId,
+          threadId: input.threadId,
+          runId: input.runId ?? null,
+          fromSequence,
+          toSequence,
+          sourceTokens,
+          maxSummaryTokens: input.maxSummaryTokens,
+          hardPressure: input.hardPressure,
+          reason: 'summary_unavailable',
+        },
+        'Agent context checkpoint skipped',
+      );
+      return null;
+    }
+    if (!input.hardPressure && summary.tokens >= Math.floor(sourceTokens * 0.75)) {
+      logger.debug(
+        {
+          userId: input.scope.userId,
+          appId: input.scope.appId,
+          threadId: input.threadId,
+          runId: input.runId ?? null,
+          fromSequence,
+          toSequence,
+          sourceTokens,
+          summaryTokens: summary.tokens,
+          hardPressure: input.hardPressure,
+          reason: 'insufficient_savings',
+        },
+        'Agent context checkpoint skipped',
+      );
+      return null;
+    }
 
-    return this.repository.upsert({
-      scope: input.scope,
-      id: randomUUID(),
-      threadId: input.threadId,
-      visibilityHash,
-      visibility,
-      fromSequence,
-      toSequence,
-      sourceHash,
-      strategyVersion: STRATEGY_VERSION,
-      generator: { kind: 'deterministic', version: GENERATOR_VERSION },
-      sourceTokens,
-      summaryTokens: summary.tokens,
-      content: summary.content,
-      createdAt: this.clock.nowUnixSeconds(),
-    });
+    const checkpointId = randomUUID();
+    try {
+      const committed = await this.repository.upsert({
+        scope: input.scope,
+        id: checkpointId,
+        threadId: input.threadId,
+        visibilityHash,
+        visibility,
+        fromSequence,
+        toSequence,
+        sourceHash,
+        strategyVersion: STRATEGY_VERSION,
+        generator: { kind: 'deterministic', version: GENERATOR_VERSION },
+        sourceTokens,
+        summaryTokens: summary.tokens,
+        content: summary.content,
+        createdAt: this.clock.nowUnixSeconds(),
+      });
+      logger.info(
+        {
+          userId: input.scope.userId,
+          appId: input.scope.appId,
+          threadId: input.threadId,
+          runId: input.runId ?? null,
+          checkpointId: committed.id,
+          fromSequence,
+          toSequence,
+          sourceTokens,
+          summaryTokens: committed.summaryTokens,
+          maxSummaryTokens: input.maxSummaryTokens,
+          hardPressure: input.hardPressure,
+        },
+        'Agent context checkpoint committed',
+      );
+      return committed;
+    } catch (error) {
+      logger.error(
+        {
+          userId: input.scope.userId,
+          appId: input.scope.appId,
+          threadId: input.threadId,
+          runId: input.runId ?? null,
+          checkpointId,
+          fromSequence,
+          toSequence,
+          sourceTokens,
+          summaryTokens: summary.tokens,
+          hardPressure: input.hardPressure,
+          errorCode: logErrorCode(error, 'CONTEXT_CHECKPOINT_COMMIT_FAILED'),
+        },
+        'Agent context checkpoint commit failed',
+      );
+      throw error;
+    }
   }
 }

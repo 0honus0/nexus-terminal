@@ -19946,6 +19946,7 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     ['modules/agent/host/agent-settings.service.ts', 'Agent hard-limit confirmation cleanup failed after commit'],
     ['modules/agent/ai/skill-registry.ts', 'Agent Skill index build failed'],
     ['modules/agent/ai/skill-registry.ts', 'Agent Skill body load failed'],
+    ['modules/agent/ai/context-checkpoint.service.ts', 'Agent context checkpoint commit failed'],
   ] as const;
   for (const [relative, message] of diagnosticTargets) {
     const source = fs.readFileSync(path.join(backendSourceRoot, relative), 'utf8');
