@@ -987,12 +987,11 @@ Agent 改动仍必须遵守以下 review invariant：
 
 ### 已决定、待实现
 
-1. Suspended SSH session 的跨设备 takeover/owner lease 仍未形成正式状态机；现有 `prepareResume/commitResume/rollbackResume` 解决单次恢复事务，不等价于跨设备抢占。
-2. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
-3. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
-4. Run target UX 继续收紧 least-authority：新 Run 默认不隐式选择 SSH target，除非用户显式选择/持久化；Run/TaskRail 应展示 canonical target kind/name/id 与 Environment，而不是只暴露 raw connection IDs；Backend hard guardrail 值以只读 contract 投影给 UI，不在 i18n 文案复制数值。
-5. Host Tool 模块可抽取小型、显式的 input validation 与 canonical inspection/operation builder 以减少重复；不得自动推断 risk/resourceKeys/preconditions，也不得演化成隐藏安全语义的 Tool framework。
-6. 大 owner 只按已确认职责边界继续拆分：`RootToolExecutionCoordinator` 的 read/control projection/continuation 与 Root governed-mutation adapter、`PluginInstallService` 的 package/install transaction/runtime lifecycle/data-management collaborator、Browser Tool family 的 shared `BrowserSessionBindingAuthority` 与 lifecycle/observation/interaction/transfer factory，以及 `SubagentParticipantExecutor` 的 model/tool/completion collaborator 拆分均已完成；后续不得重新合并。StateCommit 不拆成多个 durable mutation authority。
+1. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
+2. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
+3. Run target UX 继续收紧 least-authority：新 Run 默认不隐式选择 SSH target，除非用户显式选择/持久化；Run/TaskRail 应展示 canonical target kind/name/id 与 Environment，而不是只暴露 raw connection IDs；Backend hard guardrail 值以只读 contract 投影给 UI，不在 i18n 文案复制数值。
+4. Host Tool 模块可抽取小型、显式的 input validation 与 canonical inspection/operation builder 以减少重复；不得自动推断 risk/resourceKeys/preconditions，也不得演化成隐藏安全语义的 Tool framework。
+5. 大 owner 只按已确认职责边界继续拆分：`RootToolExecutionCoordinator` 的 read/control projection/continuation 与 Root governed-mutation adapter、`PluginInstallService` 的 package/install transaction/runtime lifecycle/data-management collaborator、Browser Tool family 的 shared `BrowserSessionBindingAuthority` 与 lifecycle/observation/interaction/transfer factory，以及 `SubagentParticipantExecutor` 的 model/tool/completion collaborator 拆分均已完成；后续不得重新合并。StateCommit 不拆成多个 durable mutation authority。
 
 ## 24. 修改规则
 

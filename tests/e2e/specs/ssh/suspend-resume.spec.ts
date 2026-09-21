@@ -16,6 +16,7 @@ import {
   requestWorkspaceBinary,
   sendJson,
   waitForFilesystemReady,
+  waitForBinaryText,
 } from '../../support/ws';
 
 test('stale suspended-session resume logs structured not-found diagnostics', async ({ page, context }) => {
@@ -195,6 +196,140 @@ test('a marked live SSH session survives WebSocket disconnect and resumes the sa
     }
   } finally {
     await closeWebSocket(recoverySocket);
+  }
+});
+
+test('a second device explicitly takes over an attached suspended SSH owner without replacing the shell', async ({
+  request,
+}) => {
+  await loginAsInitialAdmin(request);
+  await resetTestSshFilesystem();
+  const connectionId = await ensureTestSshConnection(request);
+  const original = await openWorkspaceSession(request, connectionId, `takeover-origin-${crypto.randomUUID()}`);
+  const marker = `TAKEOVER_${crypto.randomUUID().replaceAll('-', '')}`;
+  const originalMarkerOutput = waitForBinaryText(original.socket, marker);
+  await requestWorkspace(original.socket, 'terminal.input', {
+    data: `export NEXUS_TAKEOVER_MARKER=${marker}; cd folder-seed; printf '${marker}\n'\n`,
+  });
+  await originalMarkerOutput;
+  await requestWorkspace(original.socket, 'suspend.mark');
+  await closeWebSocket(original.socket);
+
+  type SuspendedSession = {
+    id: string;
+    originalWorkspaceId: string;
+    status: 'active' | 'disconnected';
+    ownershipState: 'available' | 'resuming' | 'attached';
+    ownershipGeneration: number;
+    attachedWorkspaceId?: string;
+  };
+  const ownerA = await openAuthenticatedWebSocket(request);
+  const ownerB = await openAuthenticatedWebSocket(request);
+  let suspended: SuspendedSession | undefined;
+  try {
+    for (let attempt = 0; attempt < 30 && !suspended; attempt += 1) {
+      const list = await requestWorkspace<SuspendedSession[]>(ownerA, 'suspend.list');
+      suspended = list.find(
+        (session) => session.originalWorkspaceId === original.workspaceId && session.status === 'active',
+      );
+      if (!suspended) await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(suspended).toBeTruthy();
+
+    const workspaceA = `takeover-a-${crypto.randomUUID()}`;
+    const resumedA = await requestWorkspace<{
+      workspaceId: string;
+      resumedFrom: string;
+      ownershipGeneration: number;
+    }>(ownerA, 'suspend.resume', {
+      suspendedSessionId: suspended!.id,
+      workspaceId: workspaceA,
+    });
+    expect(resumedA).toMatchObject({ workspaceId: workspaceA, resumedFrom: suspended!.id });
+    await waitForFilesystemReady(ownerA);
+
+    const attached = (await requestWorkspace<SuspendedSession[]>(ownerB, 'suspend.list')).find(
+      (session) => session.id === suspended!.id,
+    );
+    expect(attached).toMatchObject({
+      status: 'active',
+      ownershipState: 'attached',
+      attachedWorkspaceId: workspaceA,
+      ownershipGeneration: resumedA.ownershipGeneration,
+    });
+
+    await expect(
+      requestWorkspace(ownerB, 'suspend.resume', {
+        suspendedSessionId: suspended!.id,
+        workspaceId: `takeover-denied-${crypto.randomUUID()}`,
+      }),
+    ).rejects.toThrow(/SUSPENDED_SESSION_OWNED/);
+
+    const revokedA = new Promise<{ reason?: string; generation?: number }>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timed out waiting for suspended ownership revoke')), 10_000);
+      const onMessage = (raw: Buffer, isBinary: boolean) => {
+        if (isBinary) return;
+        let message: { type?: string; payload?: { reason?: string; generation?: number } };
+        try {
+          message = JSON.parse(Buffer.from(raw).toString('utf8')) as typeof message;
+        } catch {
+          return;
+        }
+        if (message.type !== 'suspend.revoked') return;
+        clearTimeout(timeout);
+        ownerA.off('message', onMessage);
+        resolve(message.payload ?? {});
+      };
+      ownerA.on('message', onMessage);
+    });
+    const ownerAClosed = new Promise<{ code: number; reason: string }>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('Timed out waiting for revoked owner socket close')), 10_000);
+      ownerA.once('close', (code: number, reason: Buffer) => {
+        clearTimeout(timeout);
+        resolve({ code, reason: reason.toString('utf8') });
+      });
+    });
+
+    const workspaceB = `takeover-b-${crypto.randomUUID()}`;
+    const resumedB = await requestWorkspace<{
+      workspaceId: string;
+      resumedFrom: string;
+      ownershipGeneration: number;
+    }>(ownerB, 'suspend.resume', {
+      suspendedSessionId: suspended!.id,
+      workspaceId: workspaceB,
+      takeover: true,
+    });
+    expect(resumedB).toMatchObject({ workspaceId: workspaceB, resumedFrom: suspended!.id });
+    expect(resumedB.ownershipGeneration).toBeGreaterThan(resumedA.ownershipGeneration);
+    await expect(revokedA).resolves.toMatchObject({ reason: 'takeover', generation: resumedA.ownershipGeneration });
+    await expect(ownerAClosed).resolves.toMatchObject({
+      code: 4009,
+      reason: 'Suspended session ownership was taken over by another device.',
+    });
+
+    const sameShellOutput = waitForBinaryText(ownerB, `TAKEOVER_STATE=${marker}`);
+    await requestWorkspace(ownerB, 'terminal.input', {
+      data: `printf 'TAKEOVER_STATE=%s CWD=%s\n' "$NEXUS_TAKEOVER_MARKER" "$PWD"\n`,
+    });
+    const terminalOutput = await sameShellOutput;
+    expect(terminalOutput).toContain(`TAKEOVER_STATE=${marker}`);
+    expect(terminalOutput).toContain('folder-seed');
+
+    const afterTakeover = (await requestWorkspace<SuspendedSession[]>(ownerB, 'suspend.list')).find(
+      (session) => session.id === suspended!.id,
+    );
+    expect(afterTakeover).toMatchObject({
+      status: 'active',
+      ownershipState: 'attached',
+      attachedWorkspaceId: workspaceB,
+      ownershipGeneration: resumedB.ownershipGeneration,
+    });
+    await requestWorkspace(ownerB, 'suspend.unmark');
+  } finally {
+    await closeWebSocket(ownerA);
+    await closeWebSocket(ownerB);
+    if (suspended) await request.delete(`/api/v1/ssh-suspend/terminate/${suspended.id}`).catch(() => undefined);
   }
 });
 
