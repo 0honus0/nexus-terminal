@@ -3505,6 +3505,30 @@ const providerPromptCacheHintScenario: Scenario = async () => {
       },
     ],
     [
+      'custom-responses',
+      {
+        id: 'custom-responses',
+        kind: 'openai-compatible',
+        displayName: 'Custom Reasoning Responses',
+        baseUrl: 'https://compat.example/v1',
+        protocol: 'responses',
+        hasCredential: true,
+        credentialRevision: 1,
+        models: [
+          {
+            ...baseModel,
+            id: 'proxy-reasoner',
+            reasoningEfforts: ['low', 'high'],
+            defaultReasoningEffort: 'high',
+          },
+        ],
+        enabled: true,
+        version: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ],
+    [
       'third-party',
       {
         id: 'third-party',
@@ -3617,6 +3641,21 @@ const providerPromptCacheHintScenario: Scenario = async () => {
     );
     assert.deepEqual(responsesUsage, { inputTokens: 140, outputTokens: 5, cachedInputTokens: 96 });
 
+    const customReasoningRequest = requestFor('custom-responses', 'proxy-reasoner');
+    customReasoningRequest.reasoningEffort = 'high';
+    customReasoningRequest.capabilitySnapshot = {
+      ...capabilitySnapshot,
+      reasoningEfforts: ['low', 'high'],
+      defaultReasoningEffort: 'high',
+    };
+    await streamOnce(customReasoningRequest);
+    const customReasoningBody = capturedBodies.at(-1)?.body ?? {};
+    assert.equal(
+      (customReasoningBody.reasoning as { effort?: unknown } | undefined)?.effort,
+      'high',
+      'Responses transport must preserve frozen reasoning effort for custom model IDs declared reasoning-capable by Nexus',
+    );
+
     await streamOnce(requestFor('third-party'));
     const compatibleBody = capturedBodies.at(-1)?.body ?? {};
     assert.equal(
@@ -3642,6 +3681,11 @@ const providerPromptCacheHintScenario: Scenario = async () => {
       { name: 'official_cache_key_bytes', value: Buffer.byteLength(firstKey as string, 'utf8'), unit: 'bytes' },
       { name: 'chat_cached_input_tokens', value: firstUsage?.cachedInputTokens ?? 0, unit: 'tokens' },
       { name: 'responses_cached_input_tokens', value: responsesUsage?.cachedInputTokens ?? 0, unit: 'tokens' },
+      {
+        name: 'custom_responses_reasoning_effort',
+        value: (customReasoningBody.reasoning as { effort?: unknown } | undefined)?.effort === 'high' ? 1 : 0,
+        unit: 'cases',
+      },
       { name: 'third_party_cache_fields', value: 0, unit: 'fields' },
       { name: 'unsupported_model_cache_fields', value: 0, unit: 'fields' },
       { name: 'stable_cache_key_reuses', value: repeatedKey === firstKey ? 1 : 0, unit: 'cases' },

@@ -353,6 +353,10 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
               request.capabilitySnapshot?.supportsPromptCacheKey === true && isOfficialOpenAiEndpoint(provider.baseUrl)
                 ? promptCacheKeyFor(request)
                 : undefined;
+            const forceReasoning =
+              provider.protocol === 'responses' &&
+              request.reasoningEffort !== undefined &&
+              Boolean(capabilities.reasoningEfforts?.includes(request.reasoningEffort));
             return languageModel.doStream({
               prompt: promptFor(request, provider.protocol) as never,
               maxOutputTokens: request.maxOutputTokens,
@@ -360,6 +364,7 @@ export class OpenAiProviderAdapter implements LanguageModelPort {
                 openai: {
                   ...(provider.protocol === 'responses' ? { store: false } : {}),
                   ...(promptCacheKey === undefined ? {} : { promptCacheKey }),
+                  ...(forceReasoning ? { forceReasoning: true } : {}),
                   ...(request.reasoningEffort === undefined ? {} : { reasoningEffort: request.reasoningEffort }),
                 },
               },
