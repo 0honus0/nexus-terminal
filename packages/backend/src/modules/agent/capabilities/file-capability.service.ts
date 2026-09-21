@@ -1,10 +1,10 @@
 import { createHash } from 'node:crypto';
 import { applyPatch, parsePatch, type StructuredPatch } from 'diff';
-import type { MachineCapabilityPort, FilePathInspection } from './machine.port';
+import type { SshFilePathInspection, SshFileTargetPort } from './ssh-file-target.port';
 import type { ResolvedAgentTarget, AgentTargetResolver } from './target-resolver';
 import type { AgentTargetKind, ToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext } from './tool.types';
-import type { WorkspaceRuntimeService } from '../workspace-runtime/workspace-runtime.service';
+import type { WorkspaceFileTargetPort } from '../workspace-runtime/workspace-file-target.port';
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_READ_BYTES = 64 * 1024;
@@ -98,8 +98,8 @@ const sourceLinesAtDeclaredLocation = (source: string, patchSpec: StructuredPatc
 export class FileCapabilityService {
   constructor(
     private readonly targets: AgentTargetResolver,
-    private readonly workspaces: WorkspaceRuntimeService,
-    private readonly machine: MachineCapabilityPort,
+    private readonly workspaceFiles: WorkspaceFileTargetPort,
+    private readonly sshFiles: SshFileTargetPort,
   ) {}
 
   resolve(context: ToolContext, selector: FileTargetSelectorInput): Promise<ResolvedAgentTarget> {
@@ -152,11 +152,11 @@ export class FileCapabilityService {
     if (target.selector.target === 'workspace') {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaces.statWorkspacePath(context, target.selector.id, generation, path, context.signal);
+      return this.workspaceFiles.stat(context, target.selector.id, generation, path);
     }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-    const state = await this.machine.inspectPath(context, connectionId, path, target.fingerprint.configurationHash);
+    const state = await this.sshFiles.stat(context, connectionId, path, target.fingerprint.configurationHash);
     return this.remoteStat(state);
   }
 
@@ -170,13 +170,11 @@ export class FileCapabilityService {
     if (target.selector.target === 'workspace') {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      const result = await this.workspaces.readWorkspaceFile(
-        context,
-        target.selector.id,
-        generation,
-        { path, offsetBytes, maxBytes },
-        context.signal,
-      );
+      const result = await this.workspaceFiles.read(context, target.selector.id, generation, {
+        path,
+        offsetBytes,
+        maxBytes,
+      });
       return {
         path: result.path,
         sha256: result.sha256,
@@ -190,8 +188,8 @@ export class FileCapabilityService {
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
     const [state, result] = await Promise.all([
-      this.machine.inspectPath(context, connectionId, path, target.fingerprint.configurationHash),
-      this.machine.readFile(context, connectionId, path, maxBytes, offsetBytes, target.fingerprint.configurationHash),
+      this.sshFiles.stat(context, connectionId, path, target.fingerprint.configurationHash),
+      this.sshFiles.read(context, connectionId, path, maxBytes, offsetBytes, target.fingerprint.configurationHash),
     ]);
     if (!state.exists || state.type !== 'file' || !state.sha256) throw new Error('RESOURCE_FORBIDDEN');
     return {
@@ -214,17 +212,11 @@ export class FileCapabilityService {
     if (target.selector.target === 'workspace') {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaces.listWorkspaceFiles(
-        context,
-        target.selector.id,
-        generation,
-        { path, maxEntries },
-        context.signal,
-      );
+      return this.workspaceFiles.list(context, target.selector.id, generation, { path, maxEntries });
     }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-    return this.machine.listFiles(context, connectionId, path, maxEntries, target.fingerprint.configurationHash);
+    return this.sshFiles.list(context, connectionId, path, maxEntries, target.fingerprint.configurationHash);
   }
 
   async search(
@@ -242,11 +234,11 @@ export class FileCapabilityService {
     if (target.selector.target === 'workspace') {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaces.searchWorkspace(context, target.selector.id, generation, request, context.signal);
+      return this.workspaceFiles.search(context, target.selector.id, generation, request);
     }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-    return this.machine.searchFiles(context, connectionId, request, target.fingerprint.configurationHash);
+    return this.sshFiles.search(context, connectionId, request, target.fingerprint.configurationHash);
   }
 
   async write(
@@ -260,18 +252,16 @@ export class FileCapabilityService {
     if (target.selector.target === 'workspace') {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      const result = await this.workspaces.writeWorkspaceFile(
-        context,
-        target.selector.id,
-        generation,
-        { path, content, expectedSha256 },
-        context.signal,
-      );
+      const result = await this.workspaceFiles.write(context, target.selector.id, generation, {
+        path,
+        content,
+        expectedSha256,
+      });
       return { path: result.path, sha256: result.sha256, sizeBytes: result.sizeBytes, created: result.created };
     }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-    const result = await this.machine.writeFile(
+    const result = await this.sshFiles.write(
       context,
       connectionId,
       path,
@@ -293,17 +283,15 @@ export class FileCapabilityService {
     if (target.selector.target === 'workspace') {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaces.moveWorkspaceFile(
-        context,
-        target.selector.id,
-        generation,
-        { path, destinationPath, expectedSha256 },
-        context.signal,
-      );
+      return this.workspaceFiles.move(context, target.selector.id, generation, {
+        path,
+        destinationPath,
+        expectedSha256,
+      });
     }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-    return this.machine.movePath(
+    return this.sshFiles.move(
       context,
       connectionId,
       path,
@@ -323,17 +311,11 @@ export class FileCapabilityService {
     if (target.selector.target === 'workspace') {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      return this.workspaces.deleteWorkspaceFile(
-        context,
-        target.selector.id,
-        generation,
-        { path, recursive, expectedSha256 },
-        context.signal,
-      );
+      return this.workspaceFiles.delete(context, target.selector.id, generation, { path, recursive, expectedSha256 });
     }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-    return this.machine.deletePath(
+    return this.sshFiles.delete(
       context,
       connectionId,
       path,
@@ -429,16 +411,10 @@ export class FileCapabilityService {
     if (target.selector.target === 'workspace') {
       const generation = target.workspaceGeneration;
       if (generation === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      const result = await this.workspaces.applyWorkspacePatch(
-        context,
-        target.selector.id,
-        generation,
-        {
-          patch,
-          expectedFiles: prepared.map((change) => ({ path: change.path, sha256: change.beforeSha256 })),
-        },
-        context.signal,
-      );
+      const result = await this.workspaceFiles.applyPatch(context, target.selector.id, generation, {
+        patch,
+        expectedFiles: prepared.map((change) => ({ path: change.path, sha256: change.beforeSha256 })),
+      });
       if (!result.applied || result.changes.length !== prepared.length) throw new Error('VERIFICATION_FAILED');
       for (const change of prepared) {
         const confirmed = result.changes.find((candidate) => candidate.path === change.path);
@@ -453,7 +429,7 @@ export class FileCapabilityService {
     } else {
       const connectionId = target.connectionId;
       if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-      const results = await this.machine.replaceFiles(
+      const results = await this.sshFiles.replace(
         context,
         connectionId,
         prepared.map((change) => ({
@@ -472,7 +448,7 @@ export class FileCapabilityService {
     return prepared.map(({ content: _content, ...change }) => change);
   }
 
-  private remoteStat(state: FilePathInspection): UnifiedFileStat {
+  private remoteStat(state: SshFilePathInspection): UnifiedFileStat {
     return {
       path: state.resolvedPath,
       exists: state.exists,

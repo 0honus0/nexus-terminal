@@ -324,19 +324,11 @@ Subagent model-facing Tool projection validates both descriptor capability and p
 
 Extract a shared governed tool/mutation execution pipeline with runtime-specific durable commit callbacks. Keep Root/Subagent scheduling and lifecycle orchestration separate; do not create a second StateCommit authority.
 
-### D. Target adapters should be capability-specific narrow ports
+### D. Target adapters are capability-specific narrow ports
 
-The new shared file semantics are correct, but `MachineCapabilityPort` is growing into a broad target/files/shell/docker port and `FileCapabilityService` still branches directly between `WorkspaceRuntimeService` and Machine implementations.
+**Implemented during Step 5.** Shared services no longer consume broad Workspace/Machine facades. `AgentTargetResolver` consumes `SshTargetResolverPort`; `FileCapabilityService` consumes `WorkspaceFileTargetPort + SshFileTargetPort`; `ShellCapabilityService` consumes `WorkspaceShellTargetPort + SshShellTargetPort`.
 
-Step 5 should converge on narrow backend capability adapters, for example:
-
-- `FileTargetAdapter`
-- `ShellTargetAdapter`
-- `TargetInspectionAdapter`
-- `ContainerTargetAdapter`
-- `EnvironmentTargetAdapter`
-
-Workspace and SSH provide the adapters they support. Shared services own policy/precondition/verification semantics. Avoid one universal God `TargetAdapter`.
+Physical adapters are split by backend capability: Workspace has dedicated File and Shell adapters over repository/controller/gateway ownership; SSH has distinct Target, File and Shell adapters over connection/session transports. `SshTargetAdapter` independently validates Run-selected connection membership and the Host denylist before freezing the connection fingerprint. `MachineCapabilityPort` now retains only Machine-specific connection/diagnostics/Docker operations, and `WorkspaceRuntimeService` no longer forwards canonical shared File operations. Shared policy/precondition/verification semantics remain in the capability layer. Do not recombine these into one universal God `TargetAdapter`.
 
 ### E. Durable execution semantics no longer depend on shell/job Tool names
 
@@ -384,12 +376,28 @@ Do **not** split StateCommit into multiple durable mutation authorities. Interna
 - [x] **2. Core Target Contract** — canonical `{ target: "workspace" | "ssh", id }` selector and `AgentTargetResolver` are wired through file/coding target resolution; SSH fingerprints use `ssh`; durable target decoding requires canonical target/id.
 - [x] **3. Unified File Capability** — canonical `file_read/list/search/write/patch/move/delete` now share one `FileCapabilityService` across Workspace and SSH. Superseded shared file Tool factories/capabilities are removed from production registration, repo-map/code-intel consume `file.read`, project-instruction targeting/fallback metadata use canonical file operations, and execute paths consume the inspection-frozen Workspace generation / SSH configuration fingerprint rather than re-resolving `target + id`. Workspace/SSH behavior, target-scope authorization, and stale-target rejection are covered by deterministic scenarios.
 - [x] **4. Unified Shell Capability** — canonical `shell_execute` now serves Workspace argv execution and SSH shell-text execution under target-scoped `shell.execute`; `shell_job` controls durable Workspace background jobs. ToolResult carries typed execution/job semantics, and completion/checkpoint/restart recovery no longer infer execution meaning from Tool names. Superseded Shell Tool factories are removed from production registration.
-- [ ] **5. Target Adapters** — File/Shell now share Host capability services but still consume broad WorkspaceRuntime/Gateway and Machine ports. Replace these with narrow capability-specific backend adapters during the next structural pass.
+- [x] **5. Target Adapters** — shared File/Shell/target resolution now consume narrow capability-specific ports. Workspace uses dedicated File/Shell adapters; SSH uses dedicated Target/File/Shell adapters; `MachineCapabilityPort` no longer exposes shared File/Shell transport, and `WorkspaceRuntimeService` no longer forwards canonical File operations. Deterministic architecture assertions prevent broad-port regression.
 - [x] **6. Authorization / Grants** — schema v2 typed `CapabilityGrantScope`, `CapabilityRegistry`, scoped App grant API/persistence/authorization, one-time durable migrations, and scoped Subagent delegation cover both File and Shell. Subagent File/Shell target authority is restricted to Workspace by default.
 - [x] **7. Frontend Permission Management (grant scope)** — permission UI consumes Host capability definitions and submits complete scoped File/Shell grants. Least-authority Run target defaults/TaskRail target presentation remain later UI cleanup.
 - [x] **8. Agent Context / Tool Projection (File + Shell)** — project-instruction/code-intel file projection uses canonical File operations; Workspace command path extraction uses canonical `shell_execute`; Subagent proposal/inspection projection enforces delegated target scope; durable execution projection uses typed semantics.
 - [x] **9. Remove Legacy Shared File/Shell Code** — no runtime aliases/compatibility decoders or superseded shared File/Shell Tool/capability registration remain. Old strings exist only in destructive database migration SQL, dedicated migration fixtures, and negative legacy-leak assertions.
-- [ ] **10. Verification** — Unified File and Unified Shell checkpoints are fully verified. This overall item remains open only because Step 5 narrow Target Adapters is still pending and will require its own final verification before the destructive refactor is complete.
+- [x] **10. Verification** — Unified File, Unified Shell, scoped grants, canonical target resolution, and narrow Target Adapters are fully verified. The destructive refactor plan is complete; after final review/commit this temporary handoff must be deleted per the cleanup rule below.
+
+### Narrow Target Adapter verification checkpoint
+
+- Backend `tsc --noEmit`: PASS.
+- Agent Runner `tsc --noEmit`: PASS.
+- Frontend `vue-tsc --noEmit`: PASS.
+- Backend / Agent Runner / Frontend production builds: PASS.
+- `pnpm format:check`: PASS.
+- deterministic Agent scenarios: **73/73 PASS** after physical adapter extraction and architecture anti-regression assertions.
+- `file/unified-targets`: PASS with real `WorkspaceFileTargetAdapter`, including Workspace generation stale rejection; SSH File continues to cover frozen configuration rejection, all canonical operations, and target-scoped grants.
+- `shell/unified-targets` and `workspace/background-job-lifecycle`: PASS with narrow Shell target contracts and real `WorkspaceShellTargetAdapter`, preserving Workspace durable job lifecycle, SSH target isolation, and stale target failure.
+- physical composition: PASS; compose constructs distinct `SshTargetAdapter`, `SshFileTargetAdapter`, `SshShellTargetAdapter`, `WorkspaceFileTargetAdapter`, and `WorkspaceShellTargetAdapter`.
+- broad dependency scan: **0** for `WorkspaceRuntimeService/MachineCapabilityPort` in Unified File, `WorkspaceRuntimeGatewayPort/AgentWorkspaceRepositoryPort/MachineCapabilityPort` in Unified Shell, and `MachineCapabilityPort` in canonical target resolution.
+- broad owner scan: **0** shared File/Shell transport methods in `MachineCapabilityPort`; **0** canonical shared File forwarders in `WorkspaceRuntimeService`.
+- request-only Agent E2E: **2/2 PASS** after adapter extraction; migrations 35–44, canonical `shell_execute`, approval/duplicate-operation guard, SSH mutation, and SSH `file_read` all execute through the real product composition.
+- `git diff --check`: PASS before final review.
 
 ### Unified Shell verification checkpoint
 

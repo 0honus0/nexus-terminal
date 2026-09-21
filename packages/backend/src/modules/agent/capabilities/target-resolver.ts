@@ -2,7 +2,7 @@ import type { JsonValue } from '../agent.types';
 import type { CryptoHashPort } from '../crypto-hash.port';
 import { hashOperation } from '../operation-hash';
 import type { AgentWorkspaceRepositoryPort } from '../workspace-runtime/workspace-runtime.repository.port';
-import type { MachineCapabilityPort } from './machine.port';
+import type { SshTargetResolverPort } from './ssh-target-resolver.port';
 import type { AgentTargetSelector, CanonicalToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext, ToolPrecondition } from './tool.types';
 
@@ -29,7 +29,7 @@ const sshConnectionId = (id: string): number => {
 export class AgentTargetResolver {
   constructor(
     private readonly workspaces: AgentWorkspaceRepositoryPort,
-    private readonly machine: MachineCapabilityPort,
+    private readonly sshTargets: SshTargetResolverPort,
     private readonly cryptoHash: CryptoHashPort,
   ) {}
 
@@ -96,7 +96,7 @@ export class AgentTargetResolver {
 
   private async resolveSsh(context: ToolContext, selector: AgentTargetSelector): Promise<ResolvedAgentTarget> {
     const connectionId = sshConnectionId(selector.id);
-    const fingerprint = await this.machine.target(context, connectionId);
+    const fingerprint = await this.sshTargets.target(context, connectionId);
     return {
       selector: { target: 'ssh', id: String(connectionId) },
       fingerprint,

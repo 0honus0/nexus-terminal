@@ -1,4 +1,5 @@
-import type { AgentConnectionResolverPort, AgentDiagnosticsPort } from '../../modules/agent/capabilities/machine.port';
+import type { AgentDiagnosticsPort } from '../../modules/agent/capabilities/machine.port';
+import type { AgentConnectionResolverPort } from '../../modules/agent/capabilities/ssh-target-resolver.port';
 import type { ConnectionService } from '../../modules/connections/connection.service';
 import type { Connection } from '../../modules/connections/connection.types';
 import type { SshConnectionResolver } from '../../modules/connections/services/ssh-connection-resolver.service';

@@ -2,6 +2,7 @@ import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 import type { MachineCapabilityPort } from '../../capabilities/machine.port';
+import type { SshTargetResolverPort } from '../../capabilities/ssh-target-resolver.port';
 import type { AgentTool, ToolContext, ToolInspection, ToolResult } from '../../capabilities/tool.types';
 
 const record = (value: JsonValue): Record<string, JsonValue> => {
@@ -134,7 +135,11 @@ export const createConnectionListTool = (machine: MachineCapabilityPort, cryptoH
   },
 });
 
-export const createDiagnosticsTool = (machine: MachineCapabilityPort, cryptoHash: CryptoHashPort): AgentTool => ({
+export const createDiagnosticsTool = (
+  machine: MachineCapabilityPort,
+  sshTargets: SshTargetResolverPort,
+  cryptoHash: CryptoHashPort,
+): AgentTool => ({
   descriptor: {
     name: 'machine_diagnostics',
     version: '1.0.0',
@@ -162,7 +167,7 @@ export const createDiagnosticsTool = (machine: MachineCapabilityPort, cryptoHash
       throw new Error('TOOL_ARGUMENTS_INVALID');
     }
     const normalizedArguments: JsonValue = { connectionId, probeIds: [...new Set(probeIds as string[])] };
-    const target = await machine.target(context, connectionId);
+    const target = await sshTargets.target(context, connectionId);
     const resourceKeys = [`connection:${connectionId}`];
     return {
       toolName: 'machine_diagnostics',

@@ -1,12 +1,9 @@
 import type { JsonValue } from '../agent.types';
 import type { CryptoHashPort } from '../crypto-hash.port';
 import { hashOperation } from '../operation-hash';
-import type {
-  WorkspaceJobView,
-  WorkspaceRuntimeGatewayPort,
-} from '../workspace-runtime/workspace-runtime-gateway.port';
-import type { AgentWorkspaceRepositoryPort } from '../workspace-runtime/workspace-runtime.repository.port';
-import type { MachineCapabilityPort, ShellMutationResult } from './machine.port';
+import type { WorkspaceJobView } from '../workspace-runtime/workspace-runtime-gateway.port';
+import type { WorkspaceShellTargetPort } from '../workspace-runtime/workspace-shell-target.port';
+import type { SshShellExecutionResult, SshShellTargetPort } from './ssh-shell-target.port';
 import type { AgentTargetResolver, ResolvedAgentTarget } from './target-resolver';
 import type { AgentTargetSelector, ToolTargetFingerprint } from './tool-target.types';
 import type { ToolContext, ToolPrecondition } from './tool.types';
@@ -26,7 +23,7 @@ export interface UnifiedShellExecutionView {
   target: AgentTargetSelector;
   status: 'pending' | 'running' | 'succeeded' | 'failed' | 'unknown' | 'cancelled';
   job?: WorkspaceJobView;
-  result?: ShellMutationResult & { timedOut: boolean };
+  result?: SshShellExecutionResult & { timedOut: boolean };
   error?: string | null;
 }
 
@@ -38,9 +35,8 @@ export interface ResolvedShellJob {
 export class ShellCapabilityService {
   constructor(
     private readonly targets: AgentTargetResolver,
-    private readonly workspaces: AgentWorkspaceRepositoryPort,
-    private readonly gateway: WorkspaceRuntimeGatewayPort,
-    private readonly machine: MachineCapabilityPort,
+    private readonly workspaceShell: WorkspaceShellTargetPort,
+    private readonly sshShell: SshShellTargetPort,
     private readonly cryptoHash: CryptoHashPort,
   ) {}
 
@@ -100,10 +96,7 @@ export class ShellCapabilityService {
         maxBytes: Math.max(1, Math.min(512 * 1024, Math.floor(context.maxOutputBytes / 2))),
         timeoutMs: request.timeoutSeconds * 1000,
       };
-      const job =
-        request.mode === 'background'
-          ? await this.gateway.startJob({ workspaceId: target.selector.id, generation }, call, context.signal)
-          : await this.gateway.invoke({ workspaceId: target.selector.id, generation }, call, context.signal);
+      const job = await this.workspaceShell.execute(context, target.selector.id, generation, call, request.mode);
       return { target: target.selector, status: job.status, job, error: job.error };
     }
 
@@ -112,7 +105,7 @@ export class ShellCapabilityService {
     }
     const connectionId = target.connectionId;
     if (connectionId === undefined) throw new Error('TOOL_STATE_CONFLICT');
-    const result = await this.machine.executeShell(
+    const result = await this.sshShell.execute(
       context,
       connectionId,
       request.command.text,
@@ -129,13 +122,7 @@ export class ShellCapabilityService {
 
   async resolveJob(context: ToolContext, selector: AgentTargetSelector, jobId: string): Promise<ResolvedShellJob> {
     if (selector.target !== 'workspace') throw new Error('TOOL_ARGUMENTS_INVALID');
-    const job = await this.gateway.queryJob(jobId, context.signal);
-    if (job.workspaceId !== selector.id) throw new Error('RESOURCE_FORBIDDEN');
-    const workspace = await this.workspaces.getWorkspace(context, job.workspaceId);
-    if (!workspace) throw new Error('NOT_FOUND');
-    if (workspace.runId !== context.runId || workspace.agentRuntimeId !== context.agentRuntimeId) {
-      throw new Error('RESOURCE_FORBIDDEN');
-    }
+    const job = await this.workspaceShell.resolveOwnedJob(context, selector.id, jobId);
     const fingerprint: ToolTargetFingerprint = {
       kind: 'workspace',
       target: 'workspace',
@@ -179,15 +166,13 @@ export class ShellCapabilityService {
     if (target.selector.target !== 'workspace' || target.workspaceGeneration === undefined) {
       throw new Error('TOOL_STATE_CONFLICT');
     }
-    const job =
-      action === 'status'
-        ? await this.gateway.queryJob(jobId, context.signal)
-        : action === 'wait'
-          ? await this.gateway.waitJob(jobId, (waitSeconds ?? 1) * 1000, context.signal)
-          : await this.gateway.cancelJob(jobId, context.signal);
-    if (job.workspaceId !== target.selector.id || job.generation !== target.workspaceGeneration) {
-      throw new Error('RESOURCE_CHANGED');
-    }
-    return job;
+    return this.workspaceShell.controlJob(
+      context,
+      target.selector.id,
+      target.workspaceGeneration,
+      jobId,
+      action,
+      waitSeconds,
+    );
   }
 }

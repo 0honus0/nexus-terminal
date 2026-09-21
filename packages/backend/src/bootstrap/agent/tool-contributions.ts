@@ -28,6 +28,7 @@ import { createArtifactReadTool } from '../../modules/agent/tools/host/artifact-
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
 import type { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
+import type { SshTargetResolverPort } from '../../modules/agent/capabilities/ssh-target-resolver.port';
 import type { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
 import type { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
@@ -59,23 +60,25 @@ export const registerFileToolContributions = ({ catalog, files, cryptoHash }: Fi
 export interface MachineToolContributionOptions {
   catalog: ToolCatalog;
   machine: MachineCapabilityPort;
+  sshTargets: SshTargetResolverPort;
   cryptoHash: CryptoHashPort;
 }
 
 export const registerMachineToolContributions = ({
   catalog,
   machine,
+  sshTargets,
   cryptoHash,
 }: MachineToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'machine.inspect',
-    tools: [createConnectionListTool(machine, cryptoHash), createDiagnosticsTool(machine, cryptoHash)],
+    tools: [createConnectionListTool(machine, cryptoHash), createDiagnosticsTool(machine, sshTargets, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'machine.docker',
-    tools: [createDockerMutationTool(machine, cryptoHash)],
+    tools: [createDockerMutationTool(machine, sshTargets, cryptoHash)],
   });
 };
 

@@ -60,6 +60,9 @@ import { SqliteStateCommitAdapter } from '../../../packages/backend/src/infrastr
 import { BrowserRuntimeAdapter } from '../../../packages/backend/src/infrastructure/agent/integrations/browser-runtime.adapter';
 import { OpenAiProviderAdapter } from '../../../packages/backend/src/infrastructure/agent/providers/openai-provider.adapter';
 import { RunnerHttpAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/runner-http.adapter';
+import { SshTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/capabilities/ssh-target.adapter';
+import { WorkspaceFileTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
+import { WorkspaceShellTargetAdapter } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/workspace-shell-target.adapter';
 import { SqliteWorkspaceRepository } from '../../../packages/backend/src/infrastructure/agent/workspace-runtime/sqlite-workspace.repository';
 import {
   decodeOpenAiResponsesContinuation,
@@ -122,8 +125,14 @@ import {
   createWorkspaceRepoMapTool,
 } from '../../../packages/backend/src/modules/agent/tools/host/workspace-coding-tools';
 import type { AgentWorkspaceRepositoryPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
+import type { TargetDenylistRepositoryPort } from '../../../packages/backend/src/modules/agent/host/target-denylist.repository.port';
 import type { WorkspaceRuntimeService } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.service';
+import type { WorkspaceFileTargetPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-file-target.port';
+import type { WorkspaceShellTargetPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-shell-target.port';
+import type { SshFileTargetPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-file-target.port';
+import type { SshShellTargetPort } from '../../../packages/backend/src/modules/agent/capabilities/ssh-shell-target.port';
 import type { WorkspaceRuntimeGatewayPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime-gateway.port';
+import type { WorkspaceRuntimeControllerPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime-controller.port';
 import { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
 import { AppIntentService } from '../../../packages/backend/src/modules/agent/host/app-intent.service';
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
@@ -2110,18 +2119,18 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
       }),
     } as unknown as AgentWorkspaceRepositoryPort;
     const codingTargets = new AgentTargetResolver(codingRepository, null!, codingCryptoHash);
-    const codingRuntime = {
-      statWorkspacePath: async (_scope: Scope, _workspaceId: string, _generation: number, requestedPath: string) =>
+    const codingFileTarget = {
+      stat: async (_context: ToolContext, _workspaceId: string, _generation: number, requestedPath: string) =>
         statWorkspacePath(workRoot, requestedPath),
-      readWorkspaceFile: async (
-        _scope: Scope,
+      read: async (
+        _context: ToolContext,
         _workspaceId: string,
         _generation: number,
         request: Parameters<typeof readWorkspaceFile>[1],
       ) => readWorkspaceFile(workRoot, request),
-      applyWorkspacePatch: async () => ({ changes: dryRun.changes, applied: true }),
-    } as unknown as WorkspaceRuntimeService;
-    const codingFiles = new FileCapabilityService(codingTargets, codingRuntime, null!);
+      applyPatch: async () => ({ changes: dryRun.changes, applied: true }),
+    } as unknown as WorkspaceFileTargetPort;
+    const codingFiles = new FileCapabilityService(codingTargets, codingFileTarget, null!);
     const inspectTool = createUnifiedFileTools(codingFiles, codingCryptoHash).find(
       (tool) => tool.descriptor.name === 'file_patch',
     );
@@ -2978,7 +2987,8 @@ const workspaceBackgroundJobLifecycleScenario: Scenario = async () => {
     inputRevision: 2,
   };
   const shellTargets = new AgentTargetResolver(toolRepository, null!, toolCrypto);
-  const shellService = new ShellCapabilityService(shellTargets, toolRepository, toolGateway, null!, toolCrypto);
+  const workspaceShellTarget = new WorkspaceShellTargetAdapter(toolRepository, toolGateway);
+  const shellService = new ShellCapabilityService(shellTargets, workspaceShellTarget, null!, toolCrypto);
   const shellTools = new Map(
     createUnifiedShellTools(shellService, toolCrypto).map((tool) => [tool.descriptor.name, tool]),
   );
@@ -19967,8 +19977,8 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
     id: 'scenario.machine-availability',
     tools: [
       createConnectionListTool(null!, availabilityCryptoHash),
-      createDiagnosticsTool(null!, availabilityCryptoHash),
-      createDockerMutationTool(null!, availabilityCryptoHash),
+      createDiagnosticsTool(null!, null!, availabilityCryptoHash),
+      createDockerMutationTool(null!, null!, availabilityCryptoHash),
     ],
   });
   availabilityCatalog.registerContribution({
@@ -20082,6 +20092,26 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
       `${records.get(id)?.updatedAt ?? 'missing'}:${dependencyFingerprints.get(id) ?? 'missing'}`,
   } as unknown as SshConnectionResolver;
   const resolver = createAgentConnectionResolver(connectionService, sshResolverStub);
+  const deniedTargetIds = new Set<number>();
+  const targetAdapter = new SshTargetAdapter(resolver, {
+    isDenied: async (connectionId: number) => deniedTargetIds.has(connectionId),
+  } as unknown as TargetDenylistRepositoryPort);
+  const targetContext: ToolContext = {
+    userId: 1,
+    appId: 'machine-availability-app',
+    runId: 'machine-availability-run',
+    agentRuntimeId: 'machine-availability-runtime',
+    connectionIds: [1],
+    signal: new AbortController().signal,
+    deadlineAt: Math.floor(Date.now() / 1000) + 60,
+    maxOutputBytes: 64 * 1024,
+  };
+  const resolvedTarget = await targetAdapter.target(targetContext, 1);
+  assert.equal(resolvedTarget.connectionId, 1);
+  await assert.rejects(() => targetAdapter.target(targetContext, 2), /TARGET_NOT_SELECTED/);
+  deniedTargetIds.add(1);
+  await assert.rejects(() => targetAdapter.target(targetContext, 1), /TARGET_DENIED/);
+  deniedTargetIds.clear();
 
   const approved = await resolver.get(1);
   assert.ok(approved);
@@ -20345,6 +20375,16 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
   const backendExtractions = [
     'modules/agent/runtime/execution/root-tool-execution-coordinator.ts',
     'infrastructure/agent/repositories/sqlite-subagent-codecs.ts',
+    'modules/agent/capabilities/ssh-target-resolver.port.ts',
+    'modules/agent/capabilities/ssh-file-target.port.ts',
+    'modules/agent/capabilities/ssh-shell-target.port.ts',
+    'modules/agent/workspace-runtime/workspace-file-target.port.ts',
+    'modules/agent/workspace-runtime/workspace-shell-target.port.ts',
+    'infrastructure/agent/capabilities/ssh-target.adapter.ts',
+    'infrastructure/agent/capabilities/ssh-file-target.adapter.ts',
+    'infrastructure/agent/capabilities/ssh-shell-target.adapter.ts',
+    'infrastructure/agent/workspace-runtime/workspace-file-target.adapter.ts',
+    'infrastructure/agent/workspace-runtime/workspace-shell-target.adapter.ts',
   ];
   for (const relative of backendExtractions) {
     assert.ok(exists(backendSourceRoot, relative), `P-059 must extract a real backend owner: ${relative}`);
@@ -20373,6 +20413,47 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
     /private async \*executePending(?:ReadWave|Mutation)/,
     'NativeAgentBackend must not retain the extracted Root Tool execution implementations',
   );
+
+  const fileCapability = read(backendSourceRoot, 'modules/agent/capabilities/file-capability.service.ts');
+  const shellCapability = read(backendSourceRoot, 'modules/agent/capabilities/shell-capability.service.ts');
+  for (const [name, source] of [
+    ['FileCapabilityService', fileCapability],
+    ['ShellCapabilityService', shellCapability],
+  ] as const) {
+    assert.doesNotMatch(
+      source,
+      /WorkspaceRuntimeService|WorkspaceRuntimeGatewayPort|MachineCapabilityPort/,
+      `${name} must depend only on narrow target adapters, not broad runtime/machine ports`,
+    );
+  }
+  const machinePort = read(backendSourceRoot, 'modules/agent/capabilities/machine.port.ts');
+  assert.doesNotMatch(
+    machinePort,
+    /\b(?:target|inspectPath|inspectFile|readFile|listFiles|searchFiles|writeFile|movePath|deletePath|replaceFiles|executeShell)\s*\(/,
+    'MachineCapabilityPort must not retain SSH target/file/shell authority after target-adapter extraction',
+  );
+  const machineAdapter = read(backendSourceRoot, 'infrastructure/agent/capabilities/machine-capability.adapter.ts');
+  assert.doesNotMatch(
+    machineAdapter,
+    /SshTargetResolverPort|SshFileTargetPort|SshShellTargetPort/,
+    'MachineCapabilityAdapter must not remain the hidden implementation owner for extracted SSH target/file/shell ports',
+  );
+  const workspaceRuntime = read(backendSourceRoot, 'modules/agent/workspace-runtime/workspace-runtime.service.ts');
+  assert.doesNotMatch(
+    workspaceRuntime,
+    /\b(?:readWorkspaceFile|statWorkspacePath|writeWorkspaceFile|listWorkspaceFiles|moveWorkspaceFile|deleteWorkspaceFile|searchWorkspace|applyWorkspacePatch)\s*\(/,
+    'WorkspaceRuntimeService must not retain canonical File target forwarding methods',
+  );
+  const composeAgent = read(backendSourceRoot, 'bootstrap/agent/compose-agent.ts');
+  for (const adapter of [
+    'SshTargetAdapter',
+    'SshFileTargetAdapter',
+    'SshShellTargetAdapter',
+    'WorkspaceFileTargetAdapter',
+    'WorkspaceShellTargetAdapter',
+  ]) {
+    assert.match(composeAgent, new RegExp(`new ${adapter}\\(`), `composeAgent must wire ${adapter} as a real owner`);
+  }
 
   const subagentRepository = read(backendSourceRoot, 'infrastructure/agent/repositories/sqlite-subagent.repository.ts');
   assert.match(
@@ -20437,78 +20518,74 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
   fs.writeFileSync(path.join(workRoot, 'a.txt'), 'alpha\nneedle\nomega\n', 'utf8');
 
   let workspaceGeneration = 1;
-  const assertWorkspaceGeneration = (generation: number): void => {
-    if (generation !== workspaceGeneration) throw new Error('WORKSPACE_GENERATION_CONFLICT');
-  };
-  const workspaceRuntime = {
-    statWorkspacePath: async (_scope: Scope, _workspaceId: string, generation: number, requestedPath: string) => {
-      assertWorkspaceGeneration(generation);
-      return statWorkspacePath(workRoot, requestedPath);
-    },
+  const workspaceFileRepository = {
+    getWorkspace: async () => ({
+      userId: 1,
+      appId: 'scenario.unified-file',
+      id: 'ws-file',
+      runId: 'file-run',
+      agentRuntimeId: 'file-runtime',
+      retained: false,
+      profile: {
+        kind: 'code' as const,
+        recipeId: 'file-recipe',
+        recipeRevision: '1',
+        runtimeDigest: 'file-runtime-digest',
+        catalogRevision: 'file-catalog',
+        toolchain: [],
+        runnerPlugins: [],
+        acpProfiles: [],
+        browserTarget: null,
+      },
+      generation: workspaceGeneration,
+      status: 'running' as const,
+      retainedManifestRef: null,
+      version: 1,
+      lastActiveAt: 1_800_000_000,
+      createdAt: 1_800_000_000,
+      updatedAt: 1_800_000_000,
+    }),
+  } as unknown as AgentWorkspaceRepositoryPort;
+  const workspaceFileController = {
+    statWorkspacePath: async (_workspaceId: string, _generation: number, requestedPath: string) =>
+      statWorkspacePath(workRoot, requestedPath),
     readWorkspaceFile: async (
-      _scope: Scope,
       _workspaceId: string,
-      generation: number,
+      _generation: number,
       request: Parameters<typeof readWorkspaceFile>[1],
-    ) => {
-      assertWorkspaceGeneration(generation);
-      return readWorkspaceFile(workRoot, request);
-    },
+    ) => readWorkspaceFile(workRoot, request),
     writeWorkspaceFile: async (
-      _scope: Scope,
       _workspaceId: string,
-      generation: number,
+      _generation: number,
       request: Parameters<typeof writeWorkspaceFile>[1],
-    ) => {
-      assertWorkspaceGeneration(generation);
-      return writeWorkspaceFile(workRoot, request);
-    },
+    ) => writeWorkspaceFile(workRoot, request),
     listWorkspaceFiles: async (
-      _scope: Scope,
       _workspaceId: string,
-      generation: number,
+      _generation: number,
       request: Parameters<typeof listWorkspaceFiles>[1],
-    ) => {
-      assertWorkspaceGeneration(generation);
-      return listWorkspaceFiles(workRoot, request);
-    },
+    ) => listWorkspaceFiles(workRoot, request),
     searchWorkspace: async (
-      _scope: Scope,
       _workspaceId: string,
-      generation: number,
+      _generation: number,
       request: Parameters<typeof searchWorkspace>[1],
-    ) => {
-      assertWorkspaceGeneration(generation);
-      return searchWorkspace(workRoot, request);
-    },
+    ) => searchWorkspace(workRoot, request),
     moveWorkspaceFile: async (
-      _scope: Scope,
       _workspaceId: string,
-      generation: number,
+      _generation: number,
       request: Parameters<typeof moveWorkspaceFile>[1],
-    ) => {
-      assertWorkspaceGeneration(generation);
-      return moveWorkspaceFile(workRoot, request);
-    },
+    ) => moveWorkspaceFile(workRoot, request),
     deleteWorkspaceFile: async (
-      _scope: Scope,
       _workspaceId: string,
-      generation: number,
+      _generation: number,
       request: Parameters<typeof deleteWorkspaceFile>[1],
-    ) => {
-      assertWorkspaceGeneration(generation);
-      return deleteWorkspaceFile(workRoot, request);
-    },
+    ) => deleteWorkspaceFile(workRoot, request),
     applyWorkspacePatch: async (
-      _scope: Scope,
       _workspaceId: string,
-      generation: number,
+      _generation: number,
       request: Parameters<typeof applyWorkspacePatch>[1],
-    ) => {
-      assertWorkspaceGeneration(generation);
-      return applyWorkspacePatch(workRoot, request);
-    },
-  } as unknown as WorkspaceRuntimeService;
+    ) => applyWorkspacePatch(workRoot, request),
+  } as unknown as WorkspaceRuntimeControllerPort;
+  const workspaceFileTarget = new WorkspaceFileTargetAdapter(workspaceFileRepository, workspaceFileController);
 
   let sshConfigurationHash = 'ssh-config';
   const assertSshConfiguration = (configurationHash: string | undefined): void => {
@@ -20552,18 +20629,13 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
       sha256: null,
     };
   };
-  const machine = {
-    inspectPath: async (
-      _context: ToolContext,
-      connectionId: number,
-      requestedPath: string,
-      configurationHash: string,
-    ) => {
+  const sshFileTarget = {
+    stat: async (_context: ToolContext, connectionId: number, requestedPath: string, configurationHash: string) => {
       assert.equal(connectionId, 1);
       assertSshConfiguration(configurationHash);
       return inspectSsh(requestedPath);
     },
-    readFile: async (
+    read: async (
       _context: ToolContext,
       connectionId: number,
       requestedPath: string,
@@ -20587,7 +20659,7 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
         content: bytes.toString('utf8'),
       };
     },
-    listFiles: async (
+    list: async (
       _context: ToolContext,
       connectionId: number,
       requestedPath: string,
@@ -20612,7 +20684,7 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
         });
       return { path: requestedPath, entries, truncated: false };
     },
-    searchFiles: async (
+    search: async (
       _context: ToolContext,
       connectionId: number,
       request: { query: string; path: string; maxResults: number; contextLines: number },
@@ -20657,7 +20729,7 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
         scannedBytes,
       };
     },
-    writeFile: async (
+    write: async (
       _context: ToolContext,
       connectionId: number,
       requestedPath: string,
@@ -20683,7 +20755,7 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
         bytesWritten: bytes.byteLength,
       };
     },
-    movePath: async (
+    move: async (
       _context: ToolContext,
       connectionId: number,
       source: string,
@@ -20701,7 +20773,7 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
       sshFiles.set(destination, bytes);
       return { path: source, destinationPath: destination, type: 'file' as const, sha256: fileHash(bytes) };
     },
-    deletePath: async (
+    delete: async (
       _context: ToolContext,
       connectionId: number,
       requestedPath: string,
@@ -20717,7 +20789,7 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
       sshFiles.delete(requestedPath);
       return { path: requestedPath, type: 'file' as const, deleted: true as const };
     },
-    replaceFiles: async (
+    replace: async (
       _context: ToolContext,
       connectionId: number,
       replacements: readonly { path: string; content: Uint8Array; expectedSha256: string }[],
@@ -20735,7 +20807,7 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
         return { path: replacement.path, sha256: fileHash(bytes), sizeBytes: bytes.byteLength };
       });
     },
-  } as unknown as MachineCapabilityPort;
+  } as unknown as SshFileTargetPort;
 
   const targets = {
     resolve: async (_context: ToolContext, selector: { target: 'workspace' | 'ssh'; id: string }) =>
@@ -20782,7 +20854,7 @@ const unifiedFileCapabilityScenario: Scenario = async () => {
           },
   } as unknown as AgentTargetResolver;
 
-  const service = new FileCapabilityService(targets, workspaceRuntime, machine);
+  const service = new FileCapabilityService(targets, workspaceFileTarget, sshFileTarget);
   const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
   const tools = new Map(createUnifiedFileTools(service, cryptoHash).map((tool) => [tool.descriptor.name, tool]));
   const context: ToolContext = {
@@ -21059,16 +21131,23 @@ const unifiedShellCapabilityScenario: Scenario = async () => {
     },
   } as unknown as AgentTargetResolver;
 
-  const gateway = {
-    invoke: async (binding: { workspaceId: string; generation: number }, call: { argv: string[]; cwd: string }) => {
-      if (binding.workspaceId !== 'ws-shell' || binding.generation !== workspaceGeneration) {
+  const workspaceShellTarget = {
+    execute: async (
+      _context: ToolContext,
+      workspaceId: string,
+      generation: number,
+      call: { argv: string[]; cwd: string },
+      mode: 'foreground' | 'background',
+    ) => {
+      if (mode !== 'foreground') throw new Error('UNEXPECTED_BACKGROUND_JOB');
+      if (workspaceId !== 'ws-shell' || generation !== workspaceGeneration) {
         throw new Error('WORKSPACE_GENERATION_CONFLICT');
       }
-      workspaceCalls.push({ workspaceId: binding.workspaceId, generation: binding.generation, argv: [...call.argv] });
+      workspaceCalls.push({ workspaceId, generation, argv: [...call.argv] });
       return {
         jobId: 'job-' + 'b'.repeat(64),
-        workspaceId: binding.workspaceId,
-        generation: binding.generation,
+        workspaceId,
+        generation,
         status: 'succeeded' as const,
         result: {
           exitCode: 0,
@@ -21083,13 +21162,10 @@ const unifiedShellCapabilityScenario: Scenario = async () => {
         completedAt: 1_800_000_001,
       };
     },
-    startJob: async () => {
-      throw new Error('UNEXPECTED_BACKGROUND_JOB');
-    },
-  } as unknown as WorkspaceRuntimeGatewayPort;
+  } as unknown as WorkspaceShellTargetPort;
 
-  const machine = {
-    executeShell: async (
+  const sshShellTarget = {
+    execute: async (
       _context: ToolContext,
       connectionId: number,
       command: string,
@@ -21106,7 +21182,7 @@ const unifiedShellCapabilityScenario: Scenario = async () => {
         truncated: false,
       };
     },
-  } as unknown as MachineCapabilityPort;
+  } as unknown as SshShellTargetPort;
 
   const registry = new CapabilityRegistry();
   let grantScope = registry.parseScope('shell.execute', {
@@ -21128,7 +21204,7 @@ const unifiedShellCapabilityScenario: Scenario = async () => {
     },
   } as unknown as AppCapabilityBroker;
 
-  const service = new ShellCapabilityService(targets, null!, gateway, machine, cryptoHash);
+  const service = new ShellCapabilityService(targets, workspaceShellTarget, sshShellTarget, cryptoHash);
   const catalog = new ToolCatalog();
   catalog.registerContribution({
     schemaVersion: 1,
@@ -21384,6 +21460,91 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     appIntent,
     /requireGrant\(.*'artifacts\.read'/s,
     'artifact-bearing AppIntents must additionally require artifact read authority',
+  );
+
+  const fileCapability = read('modules/agent/capabilities/file-capability.service.ts');
+  assert.match(
+    fileCapability,
+    /WorkspaceFileTargetPort/,
+    'Unified File must depend on the narrow Workspace file adapter',
+  );
+  assert.match(fileCapability, /SshFileTargetPort/, 'Unified File must depend on the narrow SSH file adapter');
+  assert.doesNotMatch(
+    fileCapability,
+    /WorkspaceRuntimeService|MachineCapabilityPort/,
+    'Unified File must not regain broad Workspace/Machine dependencies',
+  );
+  const shellCapability = read('modules/agent/capabilities/shell-capability.service.ts');
+  assert.match(
+    shellCapability,
+    /WorkspaceShellTargetPort/,
+    'Unified Shell must depend on the narrow Workspace shell adapter',
+  );
+  assert.match(shellCapability, /SshShellTargetPort/, 'Unified Shell must depend on the narrow SSH shell adapter');
+  assert.doesNotMatch(
+    shellCapability,
+    /WorkspaceRuntimeGatewayPort|AgentWorkspaceRepositoryPort|MachineCapabilityPort/,
+    'Unified Shell must not regain broad Workspace/Gateway/Machine dependencies',
+  );
+  const targetResolver = read('modules/agent/capabilities/target-resolver.ts');
+  assert.match(
+    targetResolver,
+    /SshTargetResolverPort/,
+    'canonical target resolution must consume a narrow SSH target port',
+  );
+  assert.doesNotMatch(
+    targetResolver,
+    /MachineCapabilityPort/,
+    'canonical target resolution must not depend on the broad Machine capability surface',
+  );
+  const machinePort = read('modules/agent/capabilities/machine.port.ts');
+  assert.doesNotMatch(
+    machinePort,
+    /\b(?:inspectPath|inspectFile|readFile|listFiles|searchFiles|writeFile|movePath|deletePath|replaceFiles|executeShell)\s*\(/,
+    'MachineCapabilityPort must not regain canonical File/Shell transport methods',
+  );
+  const workspaceRuntimeService = read('modules/agent/workspace-runtime/workspace-runtime.service.ts');
+  assert.doesNotMatch(
+    workspaceRuntimeService,
+    /\basync\s+(?:readWorkspaceFile|statWorkspacePath|writeWorkspaceFile|listWorkspaceFiles|searchWorkspace|moveWorkspaceFile|deleteWorkspaceFile|applyWorkspacePatch)\s*\(/,
+    'WorkspaceRuntimeService must not regain canonical File forwarding methods',
+  );
+  for (const relative of [
+    'infrastructure/agent/workspace-runtime/workspace-file-target.adapter.ts',
+    'infrastructure/agent/workspace-runtime/workspace-shell-target.adapter.ts',
+    'infrastructure/agent/capabilities/ssh-target.adapter.ts',
+    'infrastructure/agent/capabilities/ssh-file-target.adapter.ts',
+    'infrastructure/agent/capabilities/ssh-shell-target.adapter.ts',
+    'modules/agent/capabilities/ssh-file-target.port.ts',
+    'modules/agent/capabilities/ssh-shell-target.port.ts',
+  ]) {
+    assert.ok(
+      fs.existsSync(path.join(backendSourceRoot, relative)),
+      `narrow target adapter boundary must exist: ${relative}`,
+    );
+  }
+  const composeAgent = read('bootstrap/agent/compose-agent.ts');
+  for (const construction of [
+    'new SshTargetAdapter',
+    'new SshFileTargetAdapter',
+    'new SshShellTargetAdapter',
+    'new WorkspaceFileTargetAdapter',
+    'new WorkspaceShellTargetAdapter',
+  ]) {
+    assert.ok(
+      composeAgent.includes(construction),
+      `Agent composition must wire the narrow target adapter: ${construction}`,
+    );
+  }
+  assert.match(
+    composeAgent,
+    /new FileCapabilityService\(targets, workspaceFiles, sshFiles\)/,
+    'Unified File composition must receive only narrow Workspace/SSH file adapters',
+  );
+  assert.match(
+    composeAgent,
+    /new ShellCapabilityService\(targets, workspaceShell, sshShell, cryptoHash\)/,
+    'Unified Shell composition must receive only narrow Workspace/SSH shell adapters',
   );
 
   const frontendRoot = path.resolve(backendSourceRoot, '../../frontend/src');

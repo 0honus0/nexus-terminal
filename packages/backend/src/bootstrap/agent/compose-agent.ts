@@ -2,6 +2,11 @@ import { logger } from '../../shared/logging/logger';
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
+import { SshFileTargetAdapter } from '../../infrastructure/agent/capabilities/ssh-file-target.adapter';
+import { SshShellTargetAdapter } from '../../infrastructure/agent/capabilities/ssh-shell-target.adapter';
+import { SshTargetAdapter } from '../../infrastructure/agent/capabilities/ssh-target.adapter';
+import { WorkspaceFileTargetAdapter } from '../../infrastructure/agent/workspace-runtime/workspace-file-target.adapter';
+import { WorkspaceShellTargetAdapter } from '../../infrastructure/agent/workspace-runtime/workspace-shell-target.adapter';
 import { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import { ShellCapabilityService } from '../../modules/agent/capabilities/shell-capability.service';
 import { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
@@ -56,7 +61,8 @@ import { missingRequiredModelCapabilities } from '../../modules/agent/ai/model-c
 import { RecallService } from '../../modules/agent/ai/recall.service';
 import { MemoryService } from '../../modules/agent/ai/memory.service';
 import { SkillRegistry } from '../../modules/agent/ai/skill-registry';
-import type { AgentConnectionResolverPort, AgentDiagnosticsPort } from '../../modules/agent/capabilities/machine.port';
+import type { AgentDiagnosticsPort } from '../../modules/agent/capabilities/machine.port';
+import type { AgentConnectionResolverPort } from '../../modules/agent/capabilities/ssh-target-resolver.port';
 import { ApprovalService } from '../../modules/agent/runtime/approvals/approval.service';
 import { AcpPermissionBroker } from '../../modules/agent/runtime/approvals/acp-permission-broker';
 import { PolicyService } from '../../modules/agent/capabilities/policy.service';
@@ -339,6 +345,9 @@ export const composeAgent = ({
     docker,
     targetDenylist,
   );
+  const sshTargets = new SshTargetAdapter(connectionResolver, targetDenylist);
+  const sshFiles = new SshFileTargetAdapter(connectionResolver, executionSessions);
+  const sshShell = new SshShellTargetAdapter(connectionResolver, executionSessions);
   const cryptoHash = new NodeCryptoHashAdapter();
   const acpPermissions = new AcpPermissionBroker(stateCommit, cryptoHash, systemClock, (runId, approvalId) => {
     eventHub.publishTransient({
@@ -363,22 +372,18 @@ export const composeAgent = ({
     now: () => systemClock.nowUnixSeconds(),
   });
   const workspaceRepository = composedWorkspaceRuntime.repository;
-  const targets = new AgentTargetResolver(workspaceRepository, machine, cryptoHash);
+  const targets = new AgentTargetResolver(workspaceRepository, sshTargets, cryptoHash);
   const workspaceRuntime = composedWorkspaceRuntime.service;
-  const files = new FileCapabilityService(targets, workspaceRuntime, machine);
-  const shell = new ShellCapabilityService(
-    targets,
-    workspaceRepository,
-    workspaceRuntimeController,
-    machine,
-    cryptoHash,
-  );
+  const workspaceFiles = new WorkspaceFileTargetAdapter(workspaceRepository, workspaceRuntimeController);
+  const workspaceShell = new WorkspaceShellTargetAdapter(workspaceRepository, workspaceRuntimeController);
+  const files = new FileCapabilityService(targets, workspaceFiles, sshFiles);
+  const shell = new ShellCapabilityService(targets, workspaceShell, sshShell, cryptoHash);
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter(acpTransport);
   const toolCatalog = new ToolCatalog();
   registerFileToolContributions({ catalog: toolCatalog, files, cryptoHash });
   registerShellToolContributions({ catalog: toolCatalog, shell, cryptoHash });
-  registerMachineToolContributions({ catalog: toolCatalog, machine, cryptoHash });
+  registerMachineToolContributions({ catalog: toolCatalog, machine, sshTargets, cryptoHash });
   registerWorkspaceToolContributions({
     catalog: toolCatalog,
     repository: workspaceRepository,

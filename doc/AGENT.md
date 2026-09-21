@@ -587,6 +587,8 @@ Runner wire 只传执行所需事实：`provision` 发送完整冻结 Workspace 
 
 模型文件面使用统一 Host Tool family：`file_read`、`file_list`、`file_search`、`file_write`、`file_patch`、`file_move`、`file_delete`。所有 Tool 都要求 canonical `target + id`；Workspace 与 SSH 共享同一 descriptor/capability/inspection/operation-hash/precondition 语义，再由 `FileCapabilityService` 路由到对应后端。read/list/search 使用 `file.read`；write/patch/move 使用 `file.write`；delete 使用 `file.delete`。Read Tool 是 read risk 并可进入 plan mode；mutation/destructive Tool 在 plan mode 不暴露，execute mode 继续走现有 policy/approval、operation hash、mutation lease、outcome/finalization owner。
 
+共享 capability service 不得依赖 broad Runtime/Machine facade。`AgentTargetResolver` 只消费 `SshTargetResolverPort`；`FileCapabilityService` 只消费 `WorkspaceFileTargetPort + SshFileTargetPort`；`ShellCapabilityService` 只消费 `WorkspaceShellTargetPort + SshShellTargetPort`。Workspace 侧由 `WorkspaceFileTargetAdapter` 在进入 Runner controller 前重新验证 `runId + agentRuntimeId + generation`，`WorkspaceShellTargetAdapter` 负责 Runner durable job 提交、owner 校验与 control；SSH 侧由独立 `SshTargetAdapter` 验证 Run-selected connection 与 Host denylist 后冻结 connection fingerprint，`SshFileTargetAdapter` 与 `SshShellTargetAdapter` 分别持有 SFTP/file 与 command transport。`MachineCapabilityPort` 只保留 connection/diagnostics/Docker 的 Machine-specific surface，不再承载共享 File/Shell transport。不要重新合并成 universal Target/Machine God adapter。
+
 Workspace 的实际文件 authority 位于 Runner `workspace-coding-files` owner，不复用/扩张 Project Instructions resolver。logical root 固定为 `/workspace/work`，path traversal 与 symlink fail closed；read 投影 bounded UTF-8 range 并返回完整源文件 SHA-256/size；list/search 有明确 entries/files/bytes/results/context/output 上限；write 使用 expected SHA-256/null creation precondition；move/delete 冻结 source/destination metadata；Patch 使用 `diff@9.0.0` unified-diff parser/apply engine，要求 frozen source SHA-256、精确 declared hunk location 与 `fuzzFactor=0`，不调用 shell `git apply`。SSH 侧通过受限 SFTP/file adapter 提供同一语义，并继续受 SSH target fingerprint、configuration hash、敏感路径规则与 denylist 约束。成功 mutation 由真实 resulting SHA-256/metadata 验证，不另建第二个 change journal/truth owner。
 
 Repo Map/code-intelligence 仍是 Workspace-only 的只读导航能力，但授权统一消费 `file.read`。Runner owner `workspace-code-intelligence` 不成为代码事实源或 mutation authority；`workspace_repo_map` 返回 bounded TypeScript/JavaScript file SHA-256、imports 与 symbol signatures，`workspace_code_intel` 提供 `symbols | definition | references | diagnostics`。索引是可重建 cache，绑定 `workspaceId + generation` 和 source/config hashes；未支持语言明确返回 `file_search` + `file_read` fallback。编辑前 authoritative content 仍必须来自真实 canonical file read，所有 mutation 继续由 canonical file mutation 或执行能力治理。
@@ -914,7 +916,7 @@ Agent 复用 Platform capability，不复用 Workspace runtime transport owner�
 - Root dispatcher process-local；
 - Subagent work durable SQLite claim queue。
 
-Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #24（Thread title ownership、Tool risk enum、durable multi-tool batch lineage，以及升级库的 source-model-step same-run 约束补强）。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
+Agent schema 已进入 `main`，从此数据库兼容按正式 `main` 升级路径维护。`sqlite-schema.ts` 描述新数据库的当前最终结构，`sqlite-migrations.ts` 维护已发布/已进入 `main` 的增量演进；当前 migration 已到 #44，其中 #35–44 完成 typed target grant、File/Shell capability 与历史 durable execution semantic 的一次性破坏性迁移。不得再以“旧 dev 数据库可重建”为理由跳过 `main` 数据迁移，也不得为尚未发布的临时分支状态堆叠无消费者的兼容 migration。
 
 如果未来进入多 Backend 实例，不允许只把 Root queue 换成 Redis 就宣称支持分布式。必须同时设计：
 
@@ -981,6 +983,10 @@ Agent 改动仍必须遵守以下 review invariant：
 2. Suspended SSH session 的跨设备 takeover/owner lease 仍未形成正式状态机；现有 `prepareResume/commitResume/rollbackResume` 解决单次恢复事务，不等价于跨设备抢占。
 3. 更完整的 `Agent UI -> Workspace create -> Runner execute -> visible UI result` 单路径产品 E2E。
 4. First-party Plugin 发布前必须把 GitHub Actions `NEXUS_AGENT_PLUGIN_SIGNING_KEY_PEM` 与仓库 pin 的 official publisher public key 保持一致；生产 Host 只允许通过部署配置替换 catalog/mirror URL，不允许替换官方 publisher trust root。
+5. Root 与 Subagent 的 governed mutation/tool execution 仍有重复的 reinspection、policy、approval、duplicate-operation guard、lease、execution、settlement、quarantine 与 recovery-safe-point 流程；后续抽取一个共享 governed execution pipeline，但保留 Root/Subagent 各自 scheduler/lifecycle，并保持 StateCommit 为唯一 durable mutation authority。
+6. Run target UX 继续收紧 least-authority：新 Run 默认不隐式选择 SSH target，除非用户显式选择/持久化；Run/TaskRail 应展示 canonical target kind/name/id 与 Environment，而不是只暴露 raw connection IDs；Backend hard guardrail 值以只读 contract 投影给 UI，不在 i18n 文案复制数值。
+7. Host Tool 模块可抽取小型、显式的 input validation 与 canonical inspection/operation builder 以减少重复；不得自动推断 risk/resourceKeys/preconditions，也不得演化成隐藏安全语义的 Tool framework。
+8. 大 owner 只按已确认职责边界继续拆分：`SubagentParticipantExecutor` 在共享 governed execution 后拆 model/tool/completion collaborator；Browser Tool 按 tool family 共用一个 session/binding authority；`PluginInstallService` 拆 package/install transaction、runtime lifecycle、data-management collaborator；`RootToolExecutionCoordinator` 随共享 governed execution 自然缩小。StateCommit 不拆成多个 durable mutation authority。
 
 ## 24. 修改规则
 

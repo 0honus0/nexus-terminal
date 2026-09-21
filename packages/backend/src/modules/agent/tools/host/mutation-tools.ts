@@ -2,6 +2,7 @@ import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
 import type { MachineCapabilityPort } from '../../capabilities/machine.port';
+import type { SshTargetResolverPort } from '../../capabilities/ssh-target-resolver.port';
 import type {
   AgentTool,
   ToolContext,
@@ -94,7 +95,11 @@ const result = (
 const hasSelectedConnection = (context: { connectionIds?: readonly number[] }): boolean =>
   context.connectionIds === undefined || context.connectionIds.length > 0;
 
-export const createDockerMutationTool = (machine: MachineCapabilityPort, cryptoHash: CryptoHashPort): AgentTool => ({
+export const createDockerMutationTool = (
+  machine: MachineCapabilityPort,
+  sshTargets: SshTargetResolverPort,
+  cryptoHash: CryptoHashPort,
+): AgentTool => ({
   descriptor: {
     name: 'machine_docker_action',
     version: '1.0.0',
@@ -120,7 +125,7 @@ export const createDockerMutationTool = (machine: MachineCapabilityPort, cryptoH
     const containerId = stringValue(args.containerId, 64);
     const action = stringValue(args.action, 16);
     if (!['start', 'stop', 'restart', 'remove'].includes(action)) throw new Error('TOOL_ARGUMENTS_INVALID');
-    const target = await machine.target(context, connectionId);
+    const target = await sshTargets.target(context, connectionId);
     const container = await machine.inspectDockerContainer(
       context,
       connectionId,
