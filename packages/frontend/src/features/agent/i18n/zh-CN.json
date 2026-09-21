@@ -471,7 +471,7 @@
         "saveNoticeDefault": "默认主力模型已更新并保存",
         "saveNoticeFallback": "备用模型链已更新并保存",
         "autoSaveHint": "变更自动保存，下次 Run 生效。",
-        "removeAllModels": "一键移除",
+        "removeAllModels": "一键取消",
         "saveNoticeRemovedAll": "已成功一键移除 {count} 个模型并保存至服务端",
         "emptyHint": "点击右上角“添加 Provider”按钮，即可快速接入 OpenAI、DeepSeek、Moonshot 或本地 Ollama 模型服务。",
         "namePlaceholder": "例如：OpenAI 官方",

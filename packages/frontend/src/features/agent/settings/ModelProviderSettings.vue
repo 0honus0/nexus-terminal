@@ -107,7 +107,6 @@
   const drawerLoading = reactive<Record<string, boolean>>({});
   const filterQueries = reactive<Record<string, string>>({});
   const selectedDiscovered = reactive<Record<string, Record<string, boolean>>>({});
-  const selectedConfigured = reactive<Record<string, Record<string, boolean>>>({});
   const manualModelId = reactive<Record<string, string>>({});
   const isSavingModels = reactive<Record<string, boolean>>({});
 
@@ -412,22 +411,6 @@
     selectedDiscovered[provider.id][modelId] = !selectedDiscovered[provider.id][modelId];
   };
 
-  // 选中的已配置模型数量
-  const selectedConfiguredCount = (provider: AgentProviderView): number => {
-    const map = selectedConfigured[provider.id] || {};
-    return provider.models.filter(
-      (model) =>
-        map[model.id] &&
-        provider.models.length > 1 &&
-        !(provider.id === props.defaultProviderId && model.id === props.defaultModelId),
-    ).length;
-  };
-
-  const toggleConfiguredItem = (provider: AgentProviderView, modelId: string) => {
-    if (!selectedConfigured[provider.id]) selectedConfigured[provider.id] = {};
-    selectedConfigured[provider.id][modelId] = !selectedConfigured[provider.id][modelId];
-  };
-
   // 统一更新方法
   const updateModels = async (
     provider: AgentProviderView,
@@ -676,29 +659,6 @@
       const saved = await updateModels(provider, nextModels, noticeRemoved);
       if (!saved) return;
       removeFallbackModels(provider.id, new Set([modelId]));
-      if (selectedConfigured[provider.id]) {
-        delete selectedConfigured[provider.id][modelId];
-      }
-    } finally {
-      isSavingModels[provider.id] = false;
-    }
-  };
-
-  // 取消已添加（多选批量取消）
-  const removeSelectedConfigured = async (provider: AgentProviderView): Promise<void> => {
-    const map = selectedConfigured[provider.id] || {};
-    const removableIds = new Set(removableConfiguredModels(provider).map((model) => model.id));
-    const selectedIds = new Set(Object.keys(map).filter((id) => map[id] && removableIds.has(id)));
-    if (!selectedIds.size) return;
-    const nextModels = provider.models.filter((m) => !selectedIds.has(m.id));
-    if (!nextModels.length) return;
-    isSavingModels[provider.id] = true;
-    try {
-      const noticeBatchRemoved = t('agent.settings.providers.saveNoticeRemoved');
-      const saved = await updateModels(provider, nextModels, noticeBatchRemoved);
-      if (!saved) return;
-      removeFallbackModels(provider.id, selectedIds);
-      selectedConfigured[provider.id] = {};
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -711,25 +671,6 @@
     const hasDefaultModel = provider.models.some((m) => m.id === props.defaultModelId);
     const keepModelId = isDefaultProvider && hasDefaultModel ? props.defaultModelId : provider.models[0]?.id;
     return provider.models.filter((m) => m.id !== keepModelId);
-  };
-
-  // 是否已全选所有可移除模型
-  const isAllConfiguredSelected = (provider: AgentProviderView): boolean => {
-    const list = removableConfiguredModels(provider);
-    if (!list.length) return false;
-    const map = selectedConfigured[provider.id] || {};
-    return list.every((m) => Boolean(map[m.id]));
-  };
-
-  // 全选/取消全选可移除模型
-  const toggleSelectAllConfigured = (provider: AgentProviderView) => {
-    const list = removableConfiguredModels(provider);
-    if (!list.length) return;
-    const allSelected = isAllConfiguredSelected(provider);
-    if (!selectedConfigured[provider.id]) selectedConfigured[provider.id] = {};
-    for (const m of list) {
-      selectedConfigured[provider.id][m.id] = !allSelected;
-    }
   };
 
   // 一键移除所有可删除模型（保留默认主力模型或首个基础模型）
@@ -748,7 +689,6 @@
       const saved = await updateModels(provider, nextModels, noticeAllRemoved);
       if (!saved) return;
       removeFallbackModels(provider.id, removableIds);
-      selectedConfigured[provider.id] = {};
     } finally {
       isSavingModels[provider.id] = false;
     }
@@ -1531,40 +1471,12 @@
                     </span>
                   </div>
 
-                  <!-- 批量操作区：全选、批量取消所选、一键移除 -->
+                  <!-- 已生效模型只保留一个批量取消入口，单项仍可在列表中逐个取消 -->
                   <div class="flex items-center gap-1.5">
-                    <!-- 全选/全不选可移除模型复选框 -->
-                    <label
-                      v-if="removableConfiguredModels(provider).length > 0"
-                      class="flex items-center gap-1 text-xs text-text-secondary cursor-pointer select-none hover:text-foreground mr-1"
-                    >
-                      <input
-                        type="checkbox"
-                        class="rounded border-border/80 accent-error cursor-pointer"
-                        :checked="isAllConfiguredSelected(provider)"
-                        @change="toggleSelectAllConfigured(provider)"
-                      />
-                      <span>{{ $t('agent.settings.providers.selectAll') }}</span>
-                    </label>
-
-                    <!-- 批量取消已添加按钮 -->
-                    <button
-                      v-if="selectedConfiguredCount(provider) > 0"
-                      type="button"
-                      class="inline-flex items-center gap-1 rounded-lg border border-error/40 bg-error/10 px-2.5 py-1 text-xs font-semibold text-error hover:bg-error/20 transition-all cursor-pointer shadow-2xs"
-                      :disabled="busy"
-                      @click="removeSelectedConfigured(provider)"
-                    >
-                      <i class="fa-regular fa-trash-can text-[10px]"></i>
-                      <span>{{
-                        $t('agent.settings.providers.removeSelected', { count: selectedConfiguredCount(provider) })
-                      }}</span>
-                    </button>
-
-                    <!-- 一键移除按钮 -->
                     <button
                       v-if="removableConfiguredModels(provider).length > 0"
                       type="button"
+                      data-testid="configured-models-remove-all"
                       class="inline-flex items-center gap-1 rounded-lg border border-error/40 bg-error/10 px-2.5 py-1 text-xs font-semibold text-error hover:bg-error/20 transition-all cursor-pointer shadow-2xs"
                       :disabled="busy"
                       :title="$t('agent.settings.providers.removeAllModels')"
@@ -1583,17 +1495,7 @@
                     :key="model.id"
                     class="flex items-center justify-between gap-2 rounded-lg border border-border/60 bg-header/20 px-2.5 py-1.5 transition-all hover:bg-header/40"
                   >
-                    <label class="flex items-center gap-2 min-w-0 cursor-pointer flex-1 select-none">
-                      <input
-                        type="checkbox"
-                        class="rounded border-border/80 accent-error cursor-pointer disabled:opacity-40"
-                        :disabled="
-                          provider.models.length <= 1 ||
-                          (provider.id === defaultProviderId && model.id === defaultModelId)
-                        "
-                        :checked="Boolean(selectedConfigured[provider.id]?.[model.id])"
-                        @change="toggleConfiguredItem(provider, model.id)"
-                      />
+                    <div class="flex items-center gap-2 min-w-0 flex-1">
                       <span class="font-mono text-xs text-foreground truncate">{{ model.id }}</span>
                       <span
                         v-if="provider.id === defaultProviderId && model.id === defaultModelId"
@@ -1602,7 +1504,7 @@
                         <i class="fa-solid fa-star text-[7px]"></i>
                         <span>{{ $t('agent.settings.providers.defaultBadge') }}</span>
                       </span>
-                    </label>
+                    </div>
 
                     <!-- 单项取消添加 -->
                     <button
