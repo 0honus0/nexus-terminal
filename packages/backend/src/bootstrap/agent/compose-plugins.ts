@@ -81,7 +81,6 @@ export const composePlugins = ({
     registry,
     appStates,
     appStorage,
-    capabilityBroker,
     appIntents,
     pluginBackendRuntime,
     clock,

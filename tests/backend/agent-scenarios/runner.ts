@@ -20501,6 +20501,63 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
     'Subagent completion owner must derive completion evidence from durable verified Tool results',
   );
 
+  const pluginInstallFacade = read(backendSourceRoot, 'modules/agent/host/plugin-install.service.ts');
+  assert.ok(
+    pluginInstallFacade.split('\n').length <= 220,
+    'PluginInstallService must remain a thin public facade after collaborator extraction',
+  );
+  for (const collaborator of [
+    'PluginPackageInstallCoordinator',
+    'PluginRuntimeLifecycleCoordinator',
+    'PluginDataManager',
+  ]) {
+    assert.match(
+      pluginInstallFacade,
+      new RegExp(`new ${collaborator}`),
+      `PluginInstallService must compose ${collaborator}`,
+    );
+  }
+  assert.doesNotMatch(
+    pluginInstallFacade,
+    /validateManifest|stageRemoteWithConfig|compareAndSetState|reconcileRuntime|switch \(request\.method\)|plugin upgrade failed; rollback started/,
+    'PluginInstallService must not reabsorb package transaction, runtime lifecycle, or frontend data-management internals',
+  );
+  const pluginPackageInstall = read(backendSourceRoot, 'modules/agent/host/plugin-package-install-coordinator.ts');
+  assert.match(
+    pluginPackageInstall,
+    /class PluginPackageInstallCoordinator/,
+    'Plugin package/install transactions need a dedicated owner',
+  );
+  assert.match(pluginPackageInstall, /stageRemoteWithConfig/, 'Plugin package owner must own remote staging');
+  assert.match(
+    pluginPackageInstall,
+    /Agent plugin upgrade failed; rollback started/,
+    'Plugin package owner must retain upgrade rollback sequencing',
+  );
+  assert.doesNotMatch(
+    pluginPackageInstall,
+    /this\.(?:runtime|storage)\./,
+    'Plugin package owner must delegate runtime and data operations to explicit collaborators',
+  );
+  const pluginRuntimeLifecycle = read(backendSourceRoot, 'modules/agent/host/plugin-runtime-lifecycle-coordinator.ts');
+  for (const ownership of ['definition(', 'reconcileUserRuntime(', 'frontendDescriptor(', 'resolveRunnerTargets(']) {
+    assert.ok(pluginRuntimeLifecycle.includes(ownership), `PluginRuntimeLifecycleCoordinator must own ${ownership}`);
+  }
+  assert.doesNotMatch(
+    pluginRuntimeLifecycle,
+    /PackageVerifierPort|PluginPackageSourcePort|RemotePluginRepositoryPort/,
+    'Plugin runtime lifecycle must not own package verification or staging transports',
+  );
+  const pluginDataManager = read(backendSourceRoot, 'modules/agent/host/plugin-data-manager.ts');
+  for (const ownership of ['frontendRpc(', 'deleteData(', 'listInstallations(', 'capture(', 'restore(']) {
+    assert.ok(pluginDataManager.includes(ownership), `PluginDataManager must own ${ownership}`);
+  }
+  assert.doesNotMatch(
+    pluginDataManager,
+    /PackageVerifierPort|PluginBackendRuntimePort|RemotePluginRepositoryPort/,
+    'Plugin data manager must not own package or runtime lifecycle transports',
+  );
+
   const nativeBackend = read(backendSourceRoot, 'modules/agent/runtime/execution/native-agent-backend.ts');
   assert.match(
     nativeBackend,
@@ -21867,7 +21924,7 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     ['modules/agent/host/app-capability-broker.ts', 'Agent capability authorization denied'],
     ['modules/agent/runtime/execution/tool-call-runner.ts', 'Agent tool proposal inspection failed'],
     ['modules/agent/runtime/execution/governed-mutation-executor.ts', 'Agent mutation result state commit failed'],
-    ['modules/agent/host/plugin-install.service.ts', 'Agent plugin upgrade failed; rollback started'],
+    ['modules/agent/host/plugin-package-install-coordinator.ts', 'Agent plugin upgrade failed; rollback started'],
     ['modules/agent/ai/integration.service.ts', 'Agent MCP integration refresh failed'],
     ['modules/agent/ai/memory.service.ts', 'Agent Memory audit write failed'],
     [
