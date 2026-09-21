@@ -4,7 +4,7 @@
   "workers": 8,
   "specs": [
     "specs/ui/batch-connection-edit.spec.ts",
-    "specs/ui/connection-create.spec.ts",
+    "specs/ui/login-passkey-surface.spec.ts",
     "specs/ssh/cross-session-transfer.spec.ts",
     "specs/ssh/file-upload.spec.ts"
   ]

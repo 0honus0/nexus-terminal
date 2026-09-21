@@ -11,6 +11,8 @@
     "specs/ssh/connection-list-search.spec.ts",
     "specs/ssh/connection.spec.ts",
     "specs/ssh/reconnect-ui.spec.ts",
+    "specs/ssh/sftp-download.spec.ts",
+    "specs/ssh/status-history-time-axis.spec.ts",
     "specs/ssh/progress-display-archive-cancel.spec.ts",
     "specs/ssh/panel-wheel-scaling.spec.ts",
     "specs/ssh/terminal-protocol.spec.ts",
