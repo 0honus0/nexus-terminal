@@ -27,7 +27,7 @@
 
 ## 当前验证结论
 
-最近一次已提交代码的 isolated deterministic Agent baseline 为 **73/73 PASS**；Unified File/Shell/Target capability refactor 的 Backend/Runner/Frontend typecheck/build、request-only Agent E2E 与 architecture regression 均已通过。当前 governed execution consolidation 在提交前也保持 **73/73 PASS**，并通过三包 typecheck/build 与受影响 request-only Agent E2E。
+最近一次已提交代码的 isolated deterministic Agent baseline 为 **73/73 PASS**；Unified File/Shell/Target capability refactor 与 governed execution consolidation 的 Backend/Runner/Frontend typecheck/build、request-only Agent E2E 与 architecture regression 均已通过。当前 Subagent participant decomposition 也保持 **73/73 PASS**：`SubagentParticipantExecutor` 已收敛为 scheduler-facing facade，Tool/Model/Completion 分别由独立 collaborator 持有，并通过三包 typecheck/build 与受影响 request-only Agent E2E **2/2 PASS**。
 
 此前 residual 审计中的 23 个有效文件已按格式、i18n、bounded context、settings presentation 与 regression coverage 等逻辑边界分别提交；当时那份缺少最新 architecture/tighter-budget regression 的 stale runner 工作副本已明确拒绝覆盖 committed regression tree。该历史处理不构成当前 open Problem。
 

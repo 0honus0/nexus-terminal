@@ -267,7 +267,9 @@ import {
 import { AgentEventHub } from '../../../packages/backend/src/modules/agent/runtime/events/event-hub';
 import { AgentScheduler } from '../../../packages/backend/src/modules/agent/runtime/scheduling/scheduler';
 import { SubagentContextBuilder } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-context-builder';
+import { SubagentCompletionCoordinator } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-completion-coordinator';
 import { SubagentParticipantExecutor } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-participant-executor';
+import { SubagentToolStepExecutor } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-tool-step-executor';
 import { SubagentScheduler } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-scheduler';
 import { SubagentPolicyService } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-policy';
 import { builtInSubagentProfileTemplates } from '../../../packages/backend/src/modules/agent/runtime/collaboration/subagent-profile-templates';
@@ -8950,20 +8952,12 @@ const failFastSiblingCancellationScenario: Scenario = async () => {
       return { ...current, status: 'cancelled' as const, version: current.version + 1, completedAt: now };
     },
   };
-  const executor = new SubagentParticipantExecutor(
+  const completion = new SubagentCompletionCoordinator(
     null!,
     delegations as never,
     null!,
     null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
+    { send: async () => undefined } as never,
     null!,
     {
       enqueueRootRun: async () => undefined,
@@ -8972,11 +8966,12 @@ const failFastSiblingCancellationScenario: Scenario = async () => {
     },
     { nowUnixSeconds: () => now } as ClockPort,
   );
-  await (
-    executor as unknown as {
-      cancelSiblings(scope: Scope, failed: DelegationView): Promise<void>;
-    }
-  ).cancelSiblings(scenarioScope, failed);
+  await completion.completeModelEarlyFailure(
+    scenarioScope,
+    { runId: failed.runId } as SchedulerWorkView,
+    failed,
+    'SCENARIO_FAILURE',
+  );
 
   assert.deepEqual(cancelledIds, [descendant.id, sibling.id]);
   assert.deepEqual(abortedRuntimeIds, [descendant.childRuntimeId, sibling.childRuntimeId]);
@@ -9044,15 +9039,6 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     null!,
     null!,
     null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    null!,
-    new AgentEventHub(),
     {
       enqueueRootRun: async (id) => {
         hostRootEnqueues.push(id);
@@ -9798,7 +9784,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
       throw new Error('SCENARIO_UNEXPECTED_RECONCILIATION_COMMIT');
     },
   };
-  const mutationExecutor = new SubagentParticipantExecutor(
+  const completion = new SubagentCompletionCoordinator(
     null!,
     null!,
     {
@@ -9849,22 +9835,26 @@ const subagentGovernedMutationScenario: Scenario = async () => {
         },
       ],
     } as never,
-    null!,
-    { confirmedMutation: async () => null } as never,
-    null!,
-    null!,
-    null!,
     stateCommit as never,
-    null!,
-    null!,
-    toolRunner,
-    null!,
+    { send: async () => undefined } as never,
     new AgentEventHub(),
     {
       enqueueRootRun: async () => undefined,
       wakeChildScheduler: () => undefined,
       cancelChildRuntime: () => undefined,
     },
+    { nowUnixSeconds: () => 1_800_570_000 } as ClockPort,
+  );
+  const mutationExecutor = new SubagentToolStepExecutor(
+    null!,
+    null!,
+    null!,
+    { confirmedMutation: async () => null } as never,
+    stateCommit as never,
+    null!,
+    toolRunner,
+    completion,
+    new AgentEventHub(),
     { nowUnixSeconds: () => 1_800_570_000 } as ClockPort,
     async (_run, reason) => {
       assert.equal(reason, 'mutation_confirmed');
@@ -9963,7 +9953,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     'artifact:scenario-test',
   ]);
   const workerEvidence = await (
-    mutationExecutor as unknown as {
+    completion as unknown as {
       verifiedRuntimeEvidenceRefs(scope: Scope, runId: string, runtimeId: string): Promise<string[]>;
     }
   ).verifiedRuntimeEvidenceRefs(scenarioScope, fullAccessRun.id, baseDelegation.childRuntimeId);
@@ -9973,7 +9963,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     'Worker completion evidence must come only from confirmed + verified Tool results, never unverified model claims',
   );
   const workerEvidenceProjection = await (
-    mutationExecutor as unknown as {
+    completion as unknown as {
       verifiedRuntimeEvidence(
         scope: Scope,
         runId: string,
@@ -20433,6 +20423,45 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
     /LeaseCoordinator|acquireWithRetry|startRenewal/,
     'SubagentParticipantExecutor must use ToolCallRunner for read/control lease execution instead of owning LeaseCoordinator',
   );
+  assert.ok(
+    subagentExecutor.split('\n').length <= 180,
+    'SubagentParticipantExecutor must remain a thin scheduler-facing facade after collaborator extraction',
+  );
+  assert.doesNotMatch(
+    subagentExecutor,
+    /\b(?:LanguageModelPort|ProviderService|ToolExecutor|ToolCallRunner|GovernedMutationExecutor|settleSubagentModelStep|settleSubagentTool|verifiedRuntimeEvidence|cancelSiblings)\b/,
+    'SubagentParticipantExecutor must not reabsorb model/tool/completion execution responsibilities',
+  );
+  const subagentToolExecutor = read(
+    backendSourceRoot,
+    'modules/agent/runtime/collaboration/subagent-tool-step-executor.ts',
+  );
+  assert.match(subagentToolExecutor, /class SubagentToolStepExecutor/, 'Subagent Tool steps need a dedicated owner');
+  assert.match(
+    subagentToolExecutor,
+    /GovernedMutationExecutor/,
+    'Subagent Tool owner must reuse shared governed mutation execution',
+  );
+  const subagentModelExecutor = read(
+    backendSourceRoot,
+    'modules/agent/runtime/collaboration/subagent-model-step-executor.ts',
+  );
+  assert.match(subagentModelExecutor, /class SubagentModelStepExecutor/, 'Subagent Model steps need a dedicated owner');
+  assert.match(subagentModelExecutor, /modelPort\.stream/, 'Subagent Model owner must own model streaming');
+  const subagentCompletion = read(
+    backendSourceRoot,
+    'modules/agent/runtime/collaboration/subagent-completion-coordinator.ts',
+  );
+  assert.match(
+    subagentCompletion,
+    /class SubagentCompletionCoordinator/,
+    'Subagent completion/lifecycle projection needs a dedicated owner',
+  );
+  assert.match(
+    subagentCompletion,
+    /recentRuntimeToolExchanges/,
+    'Subagent completion owner must derive completion evidence from durable verified Tool results',
+  );
 
   const nativeBackend = read(backendSourceRoot, 'modules/agent/runtime/execution/native-agent-backend.ts');
   assert.match(
@@ -21690,7 +21719,7 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     'interfaces/http/agent/agent-http.ts',
     'modules/agent/runtime/events/event-hub.ts',
     'modules/agent/runtime/collaboration/subagent-scheduler.ts',
-    'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+    'modules/agent/runtime/collaboration/subagent-completion-coordinator.ts',
     'modules/agent/runtime/execution/native-agent-backend.ts',
     'infrastructure/agent/providers/openai-provider.adapter.ts',
     'modules/agent/ai/model-capability-registry.service.ts',
@@ -21699,7 +21728,7 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     'Agent HTTP route failed unexpectedly',
     'Agent EventHub listener failed',
     'Agent Subagent scheduler work failed',
-    'Agent Subagent completion mailbox projection failed',
+    'Agent Subagent terminal completion notification failed',
     'Agent backend execution failed at outer boundary',
     'Agent provider stream failed',
     'Agent model capability registry update failed',
@@ -21746,7 +21775,7 @@ const agentStructuredLoggingScenario: Scenario = async () => {
     ['modules/agent/ai/integration.service.ts', 'Agent MCP integration refresh failed'],
     ['modules/agent/ai/memory.service.ts', 'Agent Memory audit write failed'],
     [
-      'modules/agent/runtime/collaboration/subagent-participant-executor.ts',
+      'modules/agent/runtime/collaboration/subagent-completion-coordinator.ts',
       'Agent Subagent terminal completion notification failed',
     ],
     [

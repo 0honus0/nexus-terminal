@@ -88,9 +88,13 @@ import { RunService } from '../../modules/agent/runtime/runs/run.service';
 import { CheckpointService } from '../../modules/agent/runtime/recovery/checkpoint.service';
 import { WorkspaceCheckpointService } from '../../modules/agent/runtime/recovery/workspace-checkpoint.service';
 import { AgentScheduler } from '../../modules/agent/runtime/scheduling/scheduler';
+import { SubagentCompletionCoordinator } from '../../modules/agent/runtime/collaboration/subagent-completion-coordinator';
 import { SubagentContextBuilder } from '../../modules/agent/runtime/collaboration/subagent-context-builder';
 import { SubagentPolicyService } from '../../modules/agent/runtime/collaboration/subagent-policy';
+import type { SubagentExecutionHost } from '../../modules/agent/runtime/collaboration/subagent-execution-host.port';
+import { SubagentModelStepExecutor } from '../../modules/agent/runtime/collaboration/subagent-model-step-executor';
 import { SubagentParticipantExecutor } from '../../modules/agent/runtime/collaboration/subagent-participant-executor';
+import { SubagentToolStepExecutor } from '../../modules/agent/runtime/collaboration/subagent-tool-step-executor';
 import { SubagentService } from '../../modules/agent/runtime/collaboration/subagent.service';
 import { SubagentScheduler } from '../../modules/agent/runtime/collaboration/subagent-scheduler';
 import { MailboxService } from '../../modules/agent/runtime/collaboration/mailbox.service';
@@ -480,7 +484,40 @@ export const composeAgent = ({
         workspaceRuntime.loadProjectInstructions(scope, runId, runtimeId, targetDirectories, signal),
     },
   );
-  const subagentParticipant = new SubagentParticipantExecutor(
+  const subagentHost: SubagentExecutionHost = {
+    enqueueRootRun: async (runId, scope) => {
+      const run = await runRepository.snapshot(scope, runId);
+      if (run && ['created', 'running'].includes(run.status)) scheduler.enqueue(run);
+    },
+    wakeChildScheduler: () => subagentScheduler?.wake(),
+    cancelChildRuntime: (runId, runtimeId) => {
+      subagentScheduler?.cancelRuntime(runId, runtimeId);
+    },
+  };
+  const subagentCompletion = new SubagentCompletionCoordinator(
+    schedulerExecution,
+    delegationCancellation,
+    runtimeParticipants,
+    stateCommit,
+    mailbox,
+    eventHub,
+    subagentHost,
+    systemClock,
+  );
+  const subagentTools = new SubagentToolStepExecutor(
+    schedulerExecution,
+    delegationCancellation,
+    runtimeParticipants,
+    runRepository,
+    stateCommit,
+    subagentContext,
+    toolCalls,
+    subagentCompletion,
+    eventHub,
+    systemClock,
+    (run, reason) => recordRecoverySafePoint(run, reason),
+  );
+  const subagentModels = new SubagentModelStepExecutor(
     schedulerExecution,
     delegationCancellation,
     runtimeParticipants,
@@ -492,21 +529,18 @@ export const composeAgent = ({
     stateCommit,
     subagentContext,
     toolExecutor,
-    toolCalls,
-    mailbox,
+    subagentCompletion,
     eventHub,
-    {
-      enqueueRootRun: async (runId, scope) => {
-        const run = await runRepository.snapshot(scope, runId);
-        if (run && ['created', 'running'].includes(run.status)) scheduler.enqueue(run);
-      },
-      wakeChildScheduler: () => subagentScheduler?.wake(),
-      cancelChildRuntime: (runId, runtimeId) => {
-        subagentScheduler?.cancelRuntime(runId, runtimeId);
-      },
-    },
     systemClock,
-    (run, reason) => recordRecoverySafePoint(run, reason),
+  );
+  const subagentParticipant = new SubagentParticipantExecutor(
+    schedulerExecution,
+    delegationCancellation,
+    subagentCompletion,
+    subagentTools,
+    subagentModels,
+    subagentHost,
+    systemClock,
   );
   subagentScheduler = new SubagentScheduler(
     settings,
