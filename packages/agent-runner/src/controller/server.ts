@@ -503,6 +503,144 @@ export class RunnerControllerServer {
         );
         return;
       }
+      const codingStatMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/coding\/stat$/);
+      if (request.method === 'POST' && codingStatMatch) {
+        const workspaceId = decodeURIComponent(codingStatMatch[1]!);
+        const input = asRecord(await body(request));
+        if (
+          !hasOnlyKeys(input, ['generation', 'path']) ||
+          !Number.isSafeInteger(input.generation) ||
+          Number(input.generation) < 1 ||
+          typeof input.path !== 'string'
+        ) {
+          throw new Error('VALIDATION_FAILED');
+        }
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('WORKSPACE_NOT_FOUND');
+        if (Number(input.generation) !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        json(
+          response,
+          200,
+          this.dependencies.runtimeEngine.statWorkspacePath(workspaceId, workspace.generation, input.path),
+        );
+        return;
+      }
+      const codingWriteMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/coding\/write-file$/);
+      if (request.method === 'POST' && codingWriteMatch) {
+        const workspaceId = decodeURIComponent(codingWriteMatch[1]!);
+        const input = asRecord(await body(request));
+        if (
+          !hasOnlyKeys(input, ['generation', 'path', 'content', 'expectedSha256']) ||
+          !Number.isSafeInteger(input.generation) ||
+          Number(input.generation) < 1 ||
+          typeof input.path !== 'string' ||
+          typeof input.content !== 'string' ||
+          (input.expectedSha256 !== null && typeof input.expectedSha256 !== 'string')
+        ) {
+          throw new Error('VALIDATION_FAILED');
+        }
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('WORKSPACE_NOT_FOUND');
+        if (Number(input.generation) !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        if (this.hasActiveWorkspaceJob(workspaceId, workspace.generation))
+          throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
+        json(
+          response,
+          200,
+          this.dependencies.runtimeEngine.writeWorkspaceFile(workspaceId, workspace.generation, {
+            path: input.path,
+            content: input.content,
+            expectedSha256: input.expectedSha256 as string | null,
+          }),
+        );
+        return;
+      }
+      const codingListMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/coding\/list$/);
+      if (request.method === 'POST' && codingListMatch) {
+        const workspaceId = decodeURIComponent(codingListMatch[1]!);
+        const input = asRecord(await body(request));
+        if (
+          !hasOnlyKeys(input, ['generation', 'path', 'maxEntries']) ||
+          !Number.isSafeInteger(input.generation) ||
+          Number(input.generation) < 1 ||
+          typeof input.path !== 'string' ||
+          !Number.isSafeInteger(input.maxEntries)
+        ) {
+          throw new Error('VALIDATION_FAILED');
+        }
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('WORKSPACE_NOT_FOUND');
+        if (Number(input.generation) !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        json(
+          response,
+          200,
+          this.dependencies.runtimeEngine.listWorkspaceFiles(workspaceId, workspace.generation, {
+            path: input.path,
+            maxEntries: Number(input.maxEntries),
+          }),
+        );
+        return;
+      }
+      const codingMoveMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/coding\/move$/);
+      if (request.method === 'POST' && codingMoveMatch) {
+        const workspaceId = decodeURIComponent(codingMoveMatch[1]!);
+        const input = asRecord(await body(request));
+        if (
+          !hasOnlyKeys(input, ['generation', 'path', 'destinationPath', 'expectedSha256']) ||
+          !Number.isSafeInteger(input.generation) ||
+          Number(input.generation) < 1 ||
+          typeof input.path !== 'string' ||
+          typeof input.destinationPath !== 'string' ||
+          (input.expectedSha256 !== null && typeof input.expectedSha256 !== 'string')
+        ) {
+          throw new Error('VALIDATION_FAILED');
+        }
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('WORKSPACE_NOT_FOUND');
+        if (Number(input.generation) !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        if (this.hasActiveWorkspaceJob(workspaceId, workspace.generation))
+          throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
+        json(
+          response,
+          200,
+          this.dependencies.runtimeEngine.moveWorkspaceFile(workspaceId, workspace.generation, {
+            path: input.path,
+            destinationPath: input.destinationPath,
+            expectedSha256: input.expectedSha256 as string | null,
+          }),
+        );
+        return;
+      }
+      const codingDeleteMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/coding\/delete$/);
+      if (request.method === 'POST' && codingDeleteMatch) {
+        const workspaceId = decodeURIComponent(codingDeleteMatch[1]!);
+        const input = asRecord(await body(request));
+        if (
+          !hasOnlyKeys(input, ['generation', 'path', 'recursive', 'expectedSha256']) ||
+          !Number.isSafeInteger(input.generation) ||
+          Number(input.generation) < 1 ||
+          typeof input.path !== 'string' ||
+          typeof input.recursive !== 'boolean' ||
+          (input.expectedSha256 !== null && typeof input.expectedSha256 !== 'string')
+        ) {
+          throw new Error('VALIDATION_FAILED');
+        }
+        const workspace = this.dependencies.journal.workspace(workspaceId);
+        if (!workspace || ['deleted', 'failed'].includes(workspace.status)) throw new Error('WORKSPACE_NOT_FOUND');
+        if (Number(input.generation) !== workspace.generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+        if (this.hasActiveWorkspaceJob(workspaceId, workspace.generation))
+          throw new Error('WORKSPACE_JOB_ACTIVE_CONFLICT');
+        json(
+          response,
+          200,
+          this.dependencies.runtimeEngine.deleteWorkspaceFile(workspaceId, workspace.generation, {
+            path: input.path,
+            recursive: input.recursive,
+            expectedSha256: input.expectedSha256 as string | null,
+          }),
+        );
+        return;
+      }
       const codingSearchMatch = url.pathname.match(/^\/v1\/workspaces\/([^/]+)\/coding\/search$/);
       if (request.method === 'POST' && codingSearchMatch) {
         const workspaceId = decodeURIComponent(codingSearchMatch[1]!);

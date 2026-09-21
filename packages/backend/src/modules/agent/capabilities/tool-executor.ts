@@ -1,5 +1,6 @@
 import type { JsonValue } from '../agent.types';
 import type { AppCapabilityBroker } from '../host/app-capability-broker';
+import type { CapabilityResource } from '../host/capability.types';
 import { assertJsonSchema } from '../json-schema-validator';
 import { ToolCatalog } from './tool-catalog';
 import type { ToolContext, ToolInspection, ToolProposal, ToolResult } from './tool.types';
@@ -44,6 +45,25 @@ const parseArguments = (argumentsJson: string): JsonValue => {
   return value;
 };
 
+const capabilityResourceFromInput = (input: JsonValue): CapabilityResource => {
+  if (!input || Array.isArray(input) || typeof input !== 'object') return {};
+  const record = input as Record<string, JsonValue>;
+  const connectionId = Number.isSafeInteger(record.connectionId) ? (record.connectionId as number) : undefined;
+  const target: CapabilityResource['target'] =
+    (record.target === 'workspace' || record.target === 'ssh') && typeof record.id === 'string' && record.id.length > 0
+      ? { target: record.target, id: record.id }
+      : undefined;
+  return { ...(connectionId === undefined ? {} : { connectionId }), ...(target === undefined ? {} : { target }) };
+};
+
+const capabilityResourceFromInspection = (inspection: ToolInspection): CapabilityResource => {
+  const target = inspection.target;
+  return {
+    ...(target.connectionId === undefined ? {} : { connectionId: target.connectionId }),
+    ...('target' in target ? { target: { target: target.target, id: target.id } } : {}),
+  };
+};
+
 export interface ToolExecutionResult {
   inspection: ToolInspection;
   result: ToolResult;
@@ -59,11 +79,11 @@ export class ToolExecutor {
     const tool = this.catalog.require(proposal.name, context);
     const input = parseArguments(proposal.argumentsJson);
     assertJsonSchema(tool.descriptor.inputSchema, input, 'TOOL_ARGUMENTS_INVALID');
-    const connectionId =
-      input && !Array.isArray(input) && typeof input === 'object' && Number.isSafeInteger(input.connectionId)
-        ? (input.connectionId as number)
-        : undefined;
-    const initial = await this.capabilities.authorize(context, tool.descriptor.capability, { connectionId });
+    const initial = await this.capabilities.authorize(
+      context,
+      tool.descriptor.capability,
+      capabilityResourceFromInput(input),
+    );
     if (!initial.allowed)
       throw new Error(initial.code === 'TARGET_DENIED' ? 'RESOURCE_FORBIDDEN' : 'APP_CAPABILITY_DENIED');
     const inspection = await tool.inspect(input, context, initial.policyRevision);
@@ -111,8 +131,11 @@ export class ToolExecutor {
 
   async refreshInspection(context: ToolContext, previous: ToolInspection): Promise<ToolInspection> {
     const tool = this.catalog.require(previous.toolName, context);
-    const connectionId = previous.target.connectionId;
-    const fresh = await this.capabilities.authorize(context, tool.descriptor.capability, { connectionId });
+    const fresh = await this.capabilities.authorize(
+      context,
+      tool.descriptor.capability,
+      capabilityResourceFromInspection(previous),
+    );
     if (!fresh.allowed)
       throw new Error(fresh.code === 'TARGET_DENIED' ? 'RESOURCE_FORBIDDEN' : 'APP_CAPABILITY_DENIED');
     const inspection = await tool.inspect(previous.normalizedArguments, context, fresh.policyRevision);
@@ -134,9 +157,11 @@ export class ToolExecutor {
 
   private async executeAuthorized(context: ToolContext, inspection: ToolInspection): Promise<ToolResult> {
     const tool = this.catalog.require(inspection.toolName, context);
-    const fresh = await this.capabilities.authorize(context, tool.descriptor.capability, {
-      connectionId: inspection.target.connectionId,
-    });
+    const fresh = await this.capabilities.authorize(
+      context,
+      tool.descriptor.capability,
+      capabilityResourceFromInspection(inspection),
+    );
     if (!fresh.allowed || fresh.policyRevision !== inspection.policyRevision)
       throw new Error('POLICY_REVISION_CONFLICT');
     return tool.execute(inspection, context);

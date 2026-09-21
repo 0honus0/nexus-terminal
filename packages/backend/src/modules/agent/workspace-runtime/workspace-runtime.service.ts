@@ -13,8 +13,17 @@ import type {
   RunnerCommandResult,
   WorkspaceApplyPatchRequest,
   WorkspaceApplyPatchResult,
+  WorkspaceFileDeleteRequest,
+  WorkspaceFileDeleteResult,
+  WorkspaceFileListRequest,
+  WorkspaceFileListResult,
+  WorkspaceFileMoveRequest,
+  WorkspaceFileMoveResult,
   WorkspaceFileReadRequest,
   WorkspaceFileReadResult,
+  WorkspaceFileStatResult,
+  WorkspaceFileWriteRequest,
+  WorkspaceFileWriteResult,
   WorkspaceRuntimeControllerPort,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
@@ -195,6 +204,66 @@ export class WorkspaceRuntimeService {
     const workspace = await this.requireLiveWorkspace(scope, workspaceId);
     if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
     return this.controller.readWorkspaceFile(workspace.id, workspace.generation, request, signal);
+  }
+
+  async statWorkspacePath(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileStatResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.statWorkspacePath(workspace.id, workspace.generation, path, signal);
+  }
+
+  async writeWorkspaceFile(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileWriteRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileWriteResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.writeWorkspaceFile(workspace.id, workspace.generation, request, signal);
+  }
+
+  async listWorkspaceFiles(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileListRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileListResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.listWorkspaceFiles(workspace.id, workspace.generation, request, signal);
+  }
+
+  async moveWorkspaceFile(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileMoveRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileMoveResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.moveWorkspaceFile(workspace.id, workspace.generation, request, signal);
+  }
+
+  async deleteWorkspaceFile(
+    scope: Scope,
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileDeleteRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileDeleteResult> {
+    const workspace = await this.requireLiveWorkspace(scope, workspaceId);
+    if (workspace.generation !== generation) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+    return this.controller.deleteWorkspaceFile(workspace.id, workspace.generation, request, signal);
   }
 
   async searchWorkspace(

@@ -70,8 +70,8 @@ export interface RunnerWorkspaceRepoMapResult {
   files: RunnerWorkspaceRepoMapFile[];
   truncated: boolean;
   fallback: {
-    searchTool: 'workspace_search';
-    readTool: 'workspace_read_file';
+    searchTool: 'file_search';
+    readTool: 'file_read';
     unsupportedLanguages: true;
   };
 }
@@ -120,8 +120,8 @@ export interface RunnerWorkspaceCodeIntelResult {
   truncated: boolean;
   fallback: null | {
     reason: 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED';
-    searchTool: 'workspace_search';
-    readTool: 'workspace_read_file';
+    searchTool: 'file_search';
+    readTool: 'file_read';
   };
 }
 
@@ -522,8 +522,8 @@ export class WorkspaceCodeIntelligence {
       files: bounded.values,
       truncated: entry.scanTruncated || candidates.length > request.maxFiles || bounded.truncated,
       fallback: {
-        searchTool: 'workspace_search',
-        readTool: 'workspace_read_file',
+        searchTool: 'file_search',
+        readTool: 'file_read',
         unsupportedLanguages: true,
       },
     };
@@ -558,8 +558,8 @@ export class WorkspaceCodeIntelligence {
         truncated: false,
         fallback: {
           reason: 'LANGUAGE_UNSUPPORTED',
-          searchTool: 'workspace_search',
-          readTool: 'workspace_read_file',
+          searchTool: 'file_search',
+          readTool: 'file_read',
         },
       };
     }
@@ -578,8 +578,8 @@ export class WorkspaceCodeIntelligence {
         truncated: entry.files.size >= MAX_INDEX_FILES,
         fallback: {
           reason: 'FILE_NOT_INDEXED',
-          searchTool: 'workspace_search',
-          readTool: 'workspace_read_file',
+          searchTool: 'file_search',
+          readTool: 'file_read',
         },
       };
     }
@@ -598,8 +598,8 @@ export class WorkspaceCodeIntelligence {
         truncated: false,
         fallback: {
           reason: 'FILE_NOT_INDEXED',
-          searchTool: 'workspace_search',
-          readTool: 'workspace_read_file',
+          searchTool: 'file_search',
+          readTool: 'file_read',
         },
       };
     }

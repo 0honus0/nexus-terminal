@@ -6,6 +6,7 @@ import type {
   AgentMessageKind,
   DelegationView,
   DependencyMode,
+  DelegatedCapabilityGrant,
   MessageReceipt,
   PeerMessaging,
   ScheduleState,
@@ -34,7 +35,7 @@ export interface CreateDelegationRecord {
   childRuntimeId: string;
   participantId: string;
   profileId: string;
-  capabilities: string[];
+  grants: DelegatedCapabilityGrant[];
   peerMessaging: PeerMessaging;
   mutationMode: SubagentMutationMode;
   modelRef: ModelRef;

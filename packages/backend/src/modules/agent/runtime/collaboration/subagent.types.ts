@@ -1,6 +1,7 @@
 import type { JsonValue, Scope } from '../../agent.types';
 import type { ModelCapabilitySnapshot, ModelRef } from '../../ai/model.types';
 import type { CommandIdentity } from '../runs/run.types';
+import type { AgentCapability, CapabilityGrantScope } from '../../host/capability.types';
 
 export type SubagentStatus = 'queued' | 'running' | 'waiting' | 'completed' | 'failed' | 'cancelled';
 export type ScheduleState =
@@ -17,12 +18,18 @@ export type SubagentFailureMode = 'isolate' | 'failFast';
 export type PeerMessaging = 'parent-child' | 'same-run';
 export type SubagentMutationMode = 'read-only' | 'governed';
 
+export interface DelegatedCapabilityGrant {
+  capability: AgentCapability;
+  schemaVersion: 2;
+  scope: CapabilityGrantScope;
+}
+
 export interface SubagentProfile {
   id: string;
   role: string;
   defaultModel: ModelRef | null;
   allowedModels: ModelRef[];
-  capabilities: string[];
+  capabilities: AgentCapability[];
   peerMessaging: PeerMessaging;
   mutationMode: SubagentMutationMode;
   maxSteps: number;
@@ -33,7 +40,7 @@ export interface SubagentProfileTemplate {
   id: 'explore' | 'scout' | 'review' | 'general' | 'worker';
   role: string;
   delegationHint: string;
-  capabilities: string[];
+  capabilities: AgentCapability[];
   peerMessaging: PeerMessaging;
   mutationMode: SubagentMutationMode;
   maxSteps: number;
@@ -72,7 +79,7 @@ export interface DelegationView extends Scope {
   parentRuntimeId: string;
   childRuntimeId: string;
   profileId: string;
-  capabilities: string[];
+  grants: DelegatedCapabilityGrant[];
   peerMessaging: PeerMessaging;
   mutationMode: SubagentMutationMode;
   modelRef: ModelRef;

@@ -1,26 +1,9 @@
-import type { JsonValue, Scope } from '../agent.types';
+import type { Scope } from '../agent.types';
 import type { AgentModelCapability } from '../ai/model.types';
+import type { AgentCapability, CapabilityGrant } from './capability.types';
 
-export const AGENT_CAPABILITIES = [
-  'machine.inspect',
-  'machine.files.read',
-  'machine.files.write',
-  'machine.shell.execute',
-  'machine.docker.manage',
-  'workspace.read',
-  'workspace.write',
-  'workspace.execute',
-  'workspace.manage',
-  'browser.read',
-  'browser.interact',
-  'integration.mcp.read',
-  'integration.mcp.invoke',
-  'integration.acp.invoke',
-  'artifacts.read',
-  'app.intents.exchange',
-] as const;
-
-export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
+export { AGENT_CAPABILITIES } from './capability.types';
+export type { AgentCapability, CapabilityGrant } from './capability.types';
 
 export interface AgentAppIntent {
   id: string;
@@ -104,13 +87,6 @@ export interface AppStatePatch {
   approvalCount?: number;
   budgetRequestCount?: number;
   acceptNewRuns?: boolean;
-}
-
-export interface CapabilityGrant {
-  capability: AgentCapability;
-  schemaVersion: number;
-  scope: JsonValue;
-  grantedAt: number;
 }
 
 export interface AppHealth {

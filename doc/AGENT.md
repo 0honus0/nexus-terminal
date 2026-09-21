@@ -469,28 +469,29 @@ App grant 不再表达 Agent 本体是否“能运行”。模型调用、Run �
 
 当前 capability 必须保持按真实资源边界划分，唯一集合为：
 
-| 大类      | Capability               | 含义                                                          |
-| --------- | ------------------------ | ------------------------------------------------------------- |
-| 主机      | `machine.inspect`        | 读取连接、系统状态与受控诊断信息                              |
-| 主机      | `machine.files.read`     | 读取授权目标上的主机文件                                      |
-| 主机      | `machine.files.write`    | 写入授权目标上的主机文件                                      |
-| 主机      | `machine.shell.execute`  | 执行受策略/审批治理的任意 Shell                               |
-| 主机      | `machine.docker.manage`  | 管理授权目标上的 Docker 容器生命周期                          |
-| Workspace | `workspace.read`         | Workspace 文件读取、搜索、repo map、code intel                |
-| Workspace | `workspace.write`        | 修改 Workspace 文件/应用 patch                                |
-| Workspace | `workspace.execute`      | 执行 Workspace 命令并管理 Job                                 |
-| Workspace | `workspace.manage`       | 创建、启停、删除 Workspace 与切换工具链                       |
-| Browser   | `browser.read`           | 创建/读取浏览会话、导航、快照、截图、console、download 等读面 |
-| Browser   | `browser.interact`       | click/type/press/select/upload 等可能改变远端页面状态的交互   |
-| 外部集成  | `integration.mcp.read`   | MCP Resource/Prompt/只读 Tool 的发现与读取                    |
-| 外部集成  | `integration.mcp.invoke` | 调用具有控制或修改效果的 MCP Tool                             |
-| 外部集成  | `integration.acp.invoke` | 调用外部 ACP Agent                                            |
-| 数据      | `artifacts.read`         | 读取当前 App 被授权可访问的持久 Artifact                      |
-| 数据      | `app.intents.exchange`   | 通过声明的 AppIntent 跨 App 发送/接收数据                     |
+| 大类      | Capability               | 含义                                                                    |
+| --------- | ------------------------ | ----------------------------------------------------------------------- |
+| 文件      | `file.read`              | 读取、列举、搜索授权 Workspace/SSH target 的文件                        |
+| 文件      | `file.write`             | 创建、替换、移动、严格 patch 授权 Workspace/SSH target 文件             |
+| 文件      | `file.delete`            | 删除授权 Workspace/SSH target 的文件或目录                              |
+| 主机      | `machine.inspect`        | 读取连接、系统状态与受控诊断信息                                        |
+| 主机      | `machine.shell.execute`  | 当前 SSH Shell 执行权限；将在 Unified Shell 阶段迁到共享执行能力        |
+| 主机      | `machine.docker.manage`  | 管理授权 SSH target 上的 Docker 容器生命周期                            |
+| Workspace | `workspace.execute`      | 当前 Workspace argv / durable Job 执行权限；将在 Unified Shell 阶段收敛 |
+| Workspace | `workspace.manage`       | 创建、启停、删除 Workspace 与切换工具链                                 |
+| Browser   | `browser.read`           | 创建/读取浏览会话、导航、快照、截图、console、download 等读面           |
+| Browser   | `browser.interact`       | click/type/press/select/upload 等可能改变远端页面状态的交互             |
+| 外部集成  | `integration.mcp.read`   | MCP Resource/Prompt/只读 Tool 的发现与读取                              |
+| 外部集成  | `integration.mcp.invoke` | 调用具有控制或修改效果的 MCP Tool                                       |
+| 外部集成  | `integration.acp.invoke` | 调用外部 ACP Agent                                                      |
+| 数据      | `artifacts.read`         | 读取当前 App 被授权可访问的持久 Artifact                                |
+| 数据      | `app.intents.exchange`   | 通过声明的 AppIntent 跨 App 发送/接收数据                               |
 
 Tool descriptor 是 capability 的唯一声明来源；Tool contribution 只负责模块注册，不再复制 capability 并制造双重配置。一个 Tool 若没有跨资源边界（例如 `skill_read`、Plan、内部协作），descriptor 可以没有 capability；有真实资源边界的 Tool 必须显式声明上表中的 capability。
 
-权限管理 UI 初次打开时必须用服务端**已保存 grants**初始化草稿，因此总控初态严格反映已保存状态；用户修改单项后，再按当前未保存草稿实时呈现三态：下面全部未启用显示空框 +“启用”，部分启用显示横线 +“启用”，全部启用显示对号 +“禁用”。点击空框或横线状态会启用全部当前声明 capability；点击全选状态会清空全部草稿授权，之后仍由“保存权限”统一提交 CAS；保存成功后返回的新 grants 成为下一轮已保存初态。
+Grant 使用 schema v2 typed scope。无 target 维度的 capability 使用 `{ "kind": "global" }`；文件 capability 使用 `{ "kind": "targets", "targets": ... }`，每个 target kind 的 selection 是 `all` 或明确的 `ids`。Host 的 `CapabilityRegistry` 是 capability identity、scope kind、supported target kinds、default scope、scope parser/intersection/restriction 和 concrete target authorization 的唯一权威。App grant Repository 只接受 schema v2；旧 durable scope 只在一次性数据库 migration 中被转换，runtime 不提供 compatibility decoder。
+
+权限管理 UI 初次打开时必须用服务端**已保存完整 grants**初始化草稿，而不是只复制 capability 名称。Frontend 从 Host capability definitions 得到 scope kind、supported target kinds 与 default scope；本地只持有 label/icon/description。用户可为 `file.*` 分别启用 Workspace/SSH，并选择全部 target 或指定 target IDs。总控初态严格反映已保存状态；用户修改后按当前未保存草稿实时呈现三态，最终由“保存权限”统一提交 CAS；保存成功返回的新 grants 成为下一轮已保存初态。
 
 模型单次 step 可以提出有界的 multi-tool batch。整批 proposal 必须先完成 inspection 并写入 durable lineage；可恢复的单项拒绝也必须持久化，不能因同批其他 Tool 合法而丢失。执行阶段只有 `read`、明确 `parallelSafe` 且 `resourceKeys` 不冲突的 Tool 可以小批并行；`control` 保持边界顺序，有副作用 Tool 继续遵守 approval、lease/fence、verify/reconcile 并按安全边界推进。Provider transport 不再强制关闭 upstream parallel tool proposals；上游可以返回一个或多个 Tool call，Nexus Runtime 仍以 durable batch、risk、resource conflict、approval 与 verify/reconcile 作为唯一执行权威。
 
@@ -573,7 +574,7 @@ Runner 提供：
 - Workspace local direct PTY terminal；
 - Browser tunnel；
 - bounded Repo Project Instructions projection；
-- bounded Workspace coding file read/search/strict patch；
+- bounded Workspace file stat/read/list/search/write/move/delete/strict patch primitives（由 Backend canonical File capability 调用）；
 - bounded Workspace Repo Map / TypeScript-native code-intelligence projection；
 - storage report；
 - cleanup planning/execution；
@@ -585,17 +586,17 @@ Backend ↔ Runner 控制面统一使用至少 32 字符的 `NEXUS_AGENT_RUNNER_
 
 Runner wire 只传执行所需事实：`provision` 发送完整冻结 Workspace profile；`start/stop/restart/delete` 只发送 `workspaceId + generation`；Workspace job 只发送 generation 与执行参数；Repo Project Instructions 使用窄 `POST /v1/workspaces/:workspaceId/project-instructions` contract，只携带当前 generation 与最多 8 个 logical target directories，由 Runner 内部只读 resolver 读取当前 Workspace。该读取不借 `workspace_execute_argv` mutation Tool，也不是通用 filesystem API；live Workspace 不存在或 Runner 不可用时 Model Context fail-soft，不伪造 Repo rules。`userId/appId/runId/agentRuntimeId`、Backend optimistic `expectedVersion`、Agent operation hash 仍由 Backend 自己授权、持久化和 reconcile，不重复镜像到 Runner。
 
-Coding Workspace 的模型文件面不再要求把所有操作拼成 shell：Host 按动作边界拆分为 `workspace.read` / `workspace.write` capability，并提供 `workspace_read_file`、`workspace_search`、`workspace_repo_map`、`workspace_code_intel` 与 `workspace_apply_patch`。前四者是 read risk，可进入 plan mode，并继续走 read lease；`workspace_apply_patch` 是 mutation，plan mode 不暴露，execute mode 继续走现有 policy/approval、operation hash、mutation lease、outcome/finalization owner。`workspace_execute_argv` 继续保留为 build/test/git/package-manager 等 escape hatch，风险级别仍是 mutation，不因为新增 read/navigation Tool 而降级。
+模型文件面使用统一 Host Tool family：`file_read`、`file_list`、`file_search`、`file_write`、`file_patch`、`file_move`、`file_delete`。所有 Tool 都要求 canonical `target + id`；Workspace 与 SSH 共享同一 descriptor/capability/inspection/operation-hash/precondition 语义，再由 `FileCapabilityService` 路由到对应后端。read/list/search 使用 `file.read`；write/patch/move 使用 `file.write`；delete 使用 `file.delete`。Read Tool 是 read risk 并可进入 plan mode；mutation/destructive Tool 在 plan mode 不暴露，execute mode 继续走现有 policy/approval、operation hash、mutation lease、outcome/finalization owner。`workspace_execute_argv` 暂时继续作为 build/test/git/package-manager escape hatch，直到 Unified Shell 阶段收敛。
 
-`workspace_read_file` / `workspace_search` / `workspace_apply_patch` 的文件 authority 位于 Runner 的独立 `workspace-coding-files` owner，不复用/扩张 P-071 Project Instructions resolver。logical root 固定为 `/workspace/work`，path traversal 与 symlink fail closed；read 只投影 bounded UTF-8 range，并返回完整源文件 SHA-256/size；search 优先使用 Runner 可用的 `rg`，缺失时使用有文件数/总扫描字节/结果数/上下文行/output bytes 上限的 fallback。Patch 使用 `diff@9.0.0` 的 unified-diff parser/apply engine，要求每个现有 UTF-8 目标文件携带 expected SHA-256，inspect 先做 dry-run 并把 canonical `fileHash` precondition 固定进 operation hash；真正 apply 使用精确 declared hunk location + `fuzzFactor=0`，不调用 shell `git apply`，因此非 Git Workspace 也可工作。每次成功 patch 的 ToolResult 返回 path、before/after SHA-256、before/after bytes、additions/deletions，继续由既有 durable Tool-call/ToolResult lineage 作为 change evidence；不另建 Runner mutation journal 或第二个 `workspace_changes` truth owner。
+Workspace 的实际文件 authority 位于 Runner `workspace-coding-files` owner，不复用/扩张 Project Instructions resolver。logical root 固定为 `/workspace/work`，path traversal 与 symlink fail closed；read 投影 bounded UTF-8 range 并返回完整源文件 SHA-256/size；list/search 有明确 entries/files/bytes/results/context/output 上限；write 使用 expected SHA-256/null creation precondition；move/delete 冻结 source/destination metadata；Patch 使用 `diff@9.0.0` unified-diff parser/apply engine，要求 frozen source SHA-256、精确 declared hunk location 与 `fuzzFactor=0`，不调用 shell `git apply`。SSH 侧通过受限 SFTP/file adapter 提供同一语义，并继续受 SSH target fingerprint、configuration hash、敏感路径规则与 denylist 约束。成功 mutation 由真实 resulting SHA-256/metadata 验证，不另建第二个 change journal/truth owner。
 
-P-067 的 Repo Map/code-intelligence 使用另一个只读 Runner owner `workspace-code-intelligence`，仍不成为代码事实源或 mutation authority。第一版直接复用 Runner production dependency `typescript@7.0.2` 的 native `typescript/unstable/sync` compiler service：`workspace_repo_map` 返回 bounded TypeScript/JavaScript file SHA-256、imports 与 symbol signatures；`workspace_code_intel` 按需提供 `symbols | definition | references | diagnostics`，references 可跨同一 TS project 的多个 importer。索引为可重建运行时 cache，key 绑定 `workspaceId + generation`，revision 由纳入索引的 source/config SHA-256 集合确定；文件 hash 或 config 变化时刷新 native snapshot，新 generation 不复用旧 cache。扫描上限为 512 个 source files、单文件 2 MiB、总 source 16 MiB；Repo Map 单次最多 64 files / 160 symbols / 16 KiB JSON projection，code-intel 单次最多 100 results / 64 KiB。logical path traversal 与 symlink 继续 fail closed；未支持语言（例如 Python/Vue 第一版）明确返回 `workspace_search` + `workspace_read_file` fallback，不用 regex 自研 parser、不启动 Nexus-wide 常驻 LSP 集群。Repo Map/code-intel 只用于导航；编辑前 authoritative content 仍必须来自真实 Workspace read，所有 mutation 继续由既有 patch/argv owner 治理。
+Repo Map/code-intelligence 仍是 Workspace-only 的只读导航能力，但授权统一消费 `file.read`。Runner owner `workspace-code-intelligence` 不成为代码事实源或 mutation authority；`workspace_repo_map` 返回 bounded TypeScript/JavaScript file SHA-256、imports 与 symbol signatures，`workspace_code_intel` 提供 `symbols | definition | references | diagnostics`。索引是可重建 cache，绑定 `workspaceId + generation` 和 source/config hashes；未支持语言明确返回 `file_search` + `file_read` fallback。编辑前 authoritative content 仍必须来自真实 canonical file read，所有 mutation 继续由 canonical file mutation或执行能力治理。
 
 Workspace command 的长任务生命周期继续只由 Runner 已有 durable Job Journal 持有，不另建 Backend job queue。`workspace_execute_argv` 新调用可显式选择 `mode: foreground | background`，省略时默认 `foreground`；P-073 之前已持久化、没有 `mode` 的旧 Tool inspection 在恢复执行时同样按 foreground 处理，不改写旧 operation hash。foreground 仍向模型返回 terminal command result，但 Backend 不再每约 250ms GET poll；`RunnerHttpAdapter.invoke()` 提交后只调用 Runner 的 server-side `POST /v1/jobs/:jobId/wait`。background 在 Runner 已把 job 写入 durable journal 后立即返回 `jobId/workspaceId/generation/status`，该 Tool mutation 的提交 outcome 是 confirmed，但 verification 必须保持 unverified，不能把“后台任务已接受”伪装成“命令已成功完成”。
 
 `workspace.execute` capability 下提供一个 `workspace_job` control Tool，只包含 `status | wait | cancel`；它不为 list/log/tail/wait 各造 Tool，也不暴露 host PID。Tool inspect 先查询 durable job，再用 Backend Workspace repository 验证该 stable Workspace 仍属于当前 `runId + agentRuntimeId`；job 自己冻结的 generation 保持 provenance，即使 Workspace 后续切到新 generation，旧 job 仍只能以旧 generation 身份查询。status/wait/cancel result 的 stdout/stderr 只投影 bounded UTF-8 tail；只有 durable terminal zero-exit result 才是 verified execution evidence，pending/running 只 unverified，cancelled/failed 不得计为成功验证。Completion Gate 因此可由后续 `workspace_job` terminal evidence 满足 test/build/check 要求，而 background launch 自身不能提前放行。
 
-Runner 仍复用每个 Workspace generation 的原生 process-group/AbortController owner：`workspace_job cancel` 请求取消当前 job 并等待 journal 确认 `cancelled`；Workspace stop/restart/delete 继续按 generation 中断在跑 job。由于 background Tool 返回后 Backend mutation lease 已结束，第一版用**同一个 Runner durable job journal**做 fail-closed single-writer guard：一个 generation 存在 pending/running argv job 时，拒绝第二个 argv job 与实际 `workspace_apply_patch`，但 read/search 与 patch dry-run 仍可继续；这不是第二套 lock/journal。Runner restart 的既有 reconcile 仍把无法证明 outcome 的遗留 running job 标为 unknown。第一版不增加 Scheduler/EventHub 自动 job-terminal wake；模型可在后台任务运行期间继续 read/search，需要结果时发一次 `workspace_job wait`，wait 在 Runner server-side 完成，不要求模型 busy-poll。
+Runner 仍复用每个 Workspace generation 的原生 process-group/AbortController owner：`workspace_job cancel` 请求取消当前 job 并等待 journal 确认 `cancelled`；Workspace stop/restart/delete 继续按 generation 中断在跑 job。由于 background Tool 返回后 Backend mutation lease 已结束，第一版用**同一个 Runner durable job journal**做 fail-closed single-writer guard：一个 generation 存在 pending/running argv job 时，拒绝第二个 argv job 与实际 `file_patch` Workspace mutation，但 read/search 与 patch inspection/dry-run 仍可继续；这不是第二套 lock/journal。Runner restart 的既有 reconcile 仍把无法证明 outcome 的遗留 running job 标为 unknown。第一版不增加 Scheduler/EventHub 自动 job-terminal wake；模型可在后台任务运行期间继续 read/search，需要结果时发一次 `workspace_job wait`，wait 在 Runner server-side 完成，不要求模型 busy-poll。
 
 ### 12.4 单用户 native Workspace Runtime
 

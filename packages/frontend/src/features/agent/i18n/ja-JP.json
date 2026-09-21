@@ -78,6 +78,7 @@
         "deleteDataFailed": "アプリはアンインストールされましたが、保持データを削除できませんでした",
         "drainingNotice": "アプリのバックグラウンドタスクを排出中です...",
         "coreAppCannotUninstall": "コア組み込みアプリはアンインストールできません",
+        "categoryFiles": "ファイルとターゲット",
         "categoryMachine": "ホストマシン",
         "categoryWorkspace": "Workspace サンドボックス",
         "categoryBrowser": "ブラウザ",

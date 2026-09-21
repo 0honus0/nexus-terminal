@@ -3,7 +3,17 @@
   import { useI18n } from 'vue-i18n';
   import { BaseModal } from '@/foundation/ui';
   import { useOperationFeedback } from '@/shared/feedback/public';
-  import { agentApi, formatAgentApiError, type AgentAppGrantView, type AgentAppSummary } from '../api/agent-api';
+  import {
+    agentApi,
+    formatAgentApiError,
+    type AgentAppGrantView,
+    type AgentAppSummary,
+    type AgentCapabilityDefinition,
+    type AgentCapabilityGrantInput,
+    type AgentCapabilityScope,
+    type AgentTargetGrantSelection,
+    type AgentTargetKind,
+  } from '../api/agent-api';
 
   const props = defineProps<{ apps: AgentAppSummary[]; busy: boolean }>();
   const emit = defineEmits<{
@@ -15,13 +25,40 @@
   const operationFeedback = useOperationFeedback('agent.settings.apps');
 
   const grantViews = ref<Record<string, AgentAppGrantView>>({});
-  const drafts = ref<Record<string, string[]>>({});
+  const drafts = ref<Record<string, AgentCapabilityGrantInput[]>>({});
   const grantBusy = ref<Record<string, boolean>>({});
   const grantErrors = ref<Record<string, string>>({});
   const expandedGrants = ref<Record<string, boolean>>({});
   const grantLoadGeneration = new Map<string, number>();
 
   const explain = (cause: unknown): string => formatAgentApiError(cause, 'AGENT_REQUEST_FAILED');
+
+  const cloneSelection = (selection: AgentTargetGrantSelection): AgentTargetGrantSelection =>
+    selection.mode === 'all' ? { mode: 'all' } : { mode: 'ids', ids: [...selection.ids] };
+
+  const cloneScope = (scope: AgentCapabilityScope): AgentCapabilityScope => {
+    if (scope.kind === 'global') return { kind: 'global' };
+    return {
+      kind: 'targets',
+      targets: Object.fromEntries(
+        Object.entries(scope.targets).map(([target, selection]) => [
+          target,
+          cloneSelection(selection as AgentTargetGrantSelection),
+        ]),
+      ) as Partial<Record<AgentTargetKind, AgentTargetGrantSelection>>,
+    };
+  };
+
+  const cloneGrant = (grant: AgentCapabilityGrantInput): AgentCapabilityGrantInput => ({
+    capability: grant.capability,
+    scope: cloneScope(grant.scope),
+  });
+
+  const definitionFor = (appId: string, capability: string): AgentCapabilityDefinition | undefined =>
+    grantViews.value[appId]?.capabilityDefinitions.find((definition) => definition.id === capability);
+
+  const grantFor = (appId: string, capability: string): AgentCapabilityGrantInput | undefined =>
+    (drafts.value[appId] ?? []).find((grant) => grant.capability === capability);
 
   const loadGrant = async (appId: string): Promise<void> => {
     const generation = (grantLoadGeneration.get(appId) ?? 0) + 1;
@@ -30,7 +67,10 @@
       const view = await agentApi.appGrants(appId);
       if (grantLoadGeneration.get(appId) !== generation) return;
       grantViews.value = { ...grantViews.value, [appId]: view };
-      drafts.value = { ...drafts.value, [appId]: view.grants.map((grant) => grant.capability) };
+      drafts.value = {
+        ...drafts.value,
+        [appId]: view.grants.map((grant) => cloneGrant(grant)),
+      };
       const next = { ...grantErrors.value };
       delete next[appId];
       grantErrors.value = next;
@@ -50,21 +90,29 @@
     { immediate: true },
   );
 
-  const checked = (appId: string, capability: string): boolean => (drafts.value[appId] ?? []).includes(capability);
+  const checked = (appId: string, capability: string): boolean => grantFor(appId, capability) !== undefined;
+
+  const canonicalGrants = (grants: readonly AgentCapabilityGrantInput[]): string =>
+    JSON.stringify(
+      [...grants]
+        .map((grant) => cloneGrant(grant))
+        .sort((left, right) => left.capability.localeCompare(right.capability)),
+    );
 
   const grantChanged = (appId: string): boolean => {
     const view = grantViews.value[appId];
     if (!view) return false;
-    const current = [...new Set(view.grants.map((grant) => grant.capability))].sort();
-    const draft = [...new Set(drafts.value[appId] ?? [])].sort();
-    return current.length !== draft.length || current.some((capability, index) => capability !== draft[index]);
+    return canonicalGrants(view.grants) !== canonicalGrants(drafts.value[appId] ?? []);
   };
 
   const toggleCapability = (appId: string, capability: string, enabled: boolean): void => {
-    const current = new Set(drafts.value[appId] ?? []);
-    if (enabled) current.add(capability);
-    else current.delete(capability);
-    drafts.value = { ...drafts.value, [appId]: [...current] };
+    const current = (drafts.value[appId] ?? []).filter((grant) => grant.capability !== capability).map(cloneGrant);
+    if (enabled) {
+      const definition = definitionFor(appId, capability);
+      if (!definition) return;
+      current.push({ capability, scope: cloneScope(definition.defaultScope) });
+    }
+    drafts.value = { ...drafts.value, [appId]: current };
   };
 
   const onCapabilityChange = (appId: string, capability: string, event: Event): void => {
@@ -73,21 +121,115 @@
     toggleCapability(appId, capability, target.checked);
   };
 
+  const updateGrantScope = (
+    appId: string,
+    capability: string,
+    update: (scope: AgentCapabilityScope) => AgentCapabilityScope,
+  ): void => {
+    drafts.value = {
+      ...drafts.value,
+      [appId]: (drafts.value[appId] ?? []).map((grant) =>
+        grant.capability === capability ? { capability, scope: update(cloneScope(grant.scope)) } : cloneGrant(grant),
+      ),
+    };
+  };
+
+  const targetScopeSelection = (
+    appId: string,
+    capability: string,
+    target: AgentTargetKind,
+  ): AgentTargetGrantSelection | undefined => {
+    const scope = grantFor(appId, capability)?.scope;
+    return scope?.kind === 'targets' ? scope.targets[target] : undefined;
+  };
+
+  const targetEnabled = (appId: string, capability: string, target: AgentTargetKind): boolean =>
+    targetScopeSelection(appId, capability, target) !== undefined;
+
+  const targetLabel = (target: AgentTargetKind): string => (target === 'workspace' ? 'Workspace' : 'SSH');
+
+  const setTargetEnabled = (appId: string, capability: string, target: AgentTargetKind, enabled: boolean): void => {
+    updateGrantScope(appId, capability, (scope) => {
+      if (scope.kind !== 'targets') return scope;
+      const targets = { ...scope.targets };
+      if (enabled) targets[target] = { mode: 'all' };
+      else delete targets[target];
+      return { kind: 'targets', targets };
+    });
+  };
+
+  const onTargetEnabledChange = (appId: string, capability: string, target: AgentTargetKind, event: Event): void => {
+    const input = event.target;
+    if (input instanceof HTMLInputElement) setTargetEnabled(appId, capability, target, input.checked);
+  };
+
+  const setTargetMode = (
+    appId: string,
+    capability: string,
+    target: AgentTargetKind,
+    mode: AgentTargetGrantSelection['mode'],
+  ): void => {
+    updateGrantScope(appId, capability, (scope) => {
+      if (scope.kind !== 'targets') return scope;
+      const current = scope.targets[target];
+      return {
+        kind: 'targets',
+        targets: {
+          ...scope.targets,
+          [target]:
+            mode === 'all' ? { mode: 'all' } : { mode: 'ids', ids: current?.mode === 'ids' ? [...current.ids] : [] },
+        },
+      };
+    });
+  };
+
+  const onTargetModeChange = (appId: string, capability: string, target: AgentTargetKind, event: Event): void => {
+    const input = event.target;
+    if (input instanceof HTMLSelectElement && (input.value === 'all' || input.value === 'ids')) {
+      setTargetMode(appId, capability, target, input.value);
+    }
+  };
+
+  const targetIdsValue = (appId: string, capability: string, target: AgentTargetKind): string => {
+    const selection = targetScopeSelection(appId, capability, target);
+    return selection?.mode === 'ids' ? selection.ids.join(', ') : '';
+  };
+
+  const onTargetIdsInput = (appId: string, capability: string, target: AgentTargetKind, event: Event): void => {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement)) return;
+    const ids = [
+      ...new Set(
+        input.value
+          .split(',')
+          .map((value) => value.trim())
+          .filter(Boolean),
+      ),
+    ].slice(0, 256);
+    updateGrantScope(appId, capability, (scope) =>
+      scope.kind === 'targets'
+        ? { kind: 'targets', targets: { ...scope.targets, [target]: { mode: 'ids', ids } } }
+        : scope,
+    );
+  };
+
   const categoryCount = (appId: string, catId: string) => {
     const declared =
-      grantViews.value[appId]?.declaredCapabilities.filter((c) => getCapabilityMeta(c).category === catId) ?? [];
-    const checkedNum = declared.filter((c) => checked(appId, c)).length;
+      grantViews.value[appId]?.capabilityDefinitions
+        .map((definition) => definition.id)
+        .filter((capability) => getCapabilityMeta(capability).category === catId) ?? [];
+    const checkedNum = declared.filter((capability) => checked(appId, capability)).length;
     return { checked: checkedNum, total: declared.length };
   };
 
   type CapabilitySelectionState = 'none' | 'partial' | 'all';
 
   const capabilitySelectionState = (appId: string): CapabilitySelectionState => {
-    const declared = grantViews.value[appId]?.declaredCapabilities ?? [];
-    if (declared.length === 0) return 'none';
-    const selected = declared.filter((capability) => checked(appId, capability)).length;
+    const definitions = grantViews.value[appId]?.capabilityDefinitions ?? [];
+    if (definitions.length === 0) return 'none';
+    const selected = definitions.filter((definition) => checked(appId, definition.id)).length;
     if (selected === 0) return 'none';
-    if (selected === declared.length) return 'all';
+    if (selected === definitions.length) return 'all';
     return 'partial';
   };
 
@@ -96,7 +238,13 @@
     if (!view) return;
     drafts.value = {
       ...drafts.value,
-      [appId]: capabilitySelectionState(appId) === 'all' ? [] : [...view.declaredCapabilities],
+      [appId]:
+        capabilitySelectionState(appId) === 'all'
+          ? []
+          : view.capabilityDefinitions.map((definition) => ({
+              capability: definition.id,
+              scope: cloneScope(definition.defaultScope),
+            })),
     };
   };
 
@@ -105,9 +253,13 @@
     if (!view || grantBusy.value[appId] || props.busy) return;
     grantBusy.value = { ...grantBusy.value, [appId]: true };
     try {
-      const updated = await agentApi.replaceAppGrants(appId, drafts.value[appId] ?? [], view.policyRevision);
+      const updated = await agentApi.replaceAppGrants(
+        appId,
+        (drafts.value[appId] ?? []).map(cloneGrant),
+        view.policyRevision,
+      );
       grantViews.value = { ...grantViews.value, [appId]: updated };
-      drafts.value = { ...drafts.value, [appId]: updated.grants.map((grant) => grant.capability) };
+      drafts.value = { ...drafts.value, [appId]: updated.grants.map((grant) => cloneGrant(grant)) };
       const next = { ...grantErrors.value };
       delete next[appId];
       grantErrors.value = next;
@@ -179,28 +331,34 @@
   interface CapabilityMeta {
     name: string;
     desc: string;
-    category: 'machine' | 'workspace' | 'browser' | 'integration' | 'data';
+    category: 'files' | 'machine' | 'workspace' | 'browser' | 'integration' | 'data';
     icon: string;
   }
 
   const CAPABILITY_METAS: Record<string, CapabilityMeta> = {
+    'file.read': {
+      name: '读取文件',
+      desc: '读取与搜索已授权 Workspace 或 SSH 目标中的文件内容',
+      category: 'files',
+      icon: 'fa-solid fa-file-lines',
+    },
+    'file.write': {
+      name: '写入文件',
+      desc: '在已授权 Workspace 或 SSH 目标中创建、替换、移动或应用补丁',
+      category: 'files',
+      icon: 'fa-solid fa-file-pen',
+    },
+    'file.delete': {
+      name: '删除文件',
+      desc: '删除已授权 Workspace 或 SSH 目标中的文件或目录',
+      category: 'files',
+      icon: 'fa-solid fa-trash-can',
+    },
     'machine.inspect': {
       name: '主机状态与连接信息',
       desc: '读取可用连接、系统负载与受控诊断信息',
       category: 'machine',
       icon: 'fa-solid fa-chart-line',
-    },
-    'machine.files.read': {
-      name: '读取主机文件',
-      desc: '读取授权目标上的受限文件内容',
-      category: 'machine',
-      icon: 'fa-solid fa-file-lines',
-    },
-    'machine.files.write': {
-      name: '写入主机文件',
-      desc: '在授权目标上创建或替换受限文件',
-      category: 'machine',
-      icon: 'fa-solid fa-file-pen',
     },
     'machine.shell.execute': {
       name: '执行任意 Shell 命令',
@@ -213,18 +371,6 @@
       desc: '启停、重启或移除授权目标上的容器',
       category: 'machine',
       icon: 'fa-brands fa-docker',
-    },
-    'workspace.read': {
-      name: '读取与分析 Workspace',
-      desc: '读取文件、搜索代码、仓库映射与代码分析',
-      category: 'workspace',
-      icon: 'fa-solid fa-magnifying-glass',
-    },
-    'workspace.write': {
-      name: '修改 Workspace 文件',
-      desc: '在隔离 Workspace 中应用代码与文件变更',
-      category: 'workspace',
-      icon: 'fa-solid fa-pen-to-square',
     },
     'workspace.execute': {
       name: '执行 Workspace 命令',
@@ -287,13 +433,14 @@
       CAPABILITY_METAS[cap] ?? {
         name: cap,
         desc: '系统底层能力声明',
-        category: 'machine',
+        category: 'data',
         icon: 'fa-solid fa-key',
       }
     );
   };
 
   const categoryGroups = [
+    { id: 'files', label: 'agent.settings.apps.categoryFiles', icon: 'fa-solid fa-folder-tree' },
     { id: 'machine', label: 'agent.settings.apps.categoryMachine', icon: 'fa-solid fa-server' },
     { id: 'workspace', label: 'agent.settings.apps.categoryWorkspace', icon: 'fa-solid fa-cubes' },
     { id: 'browser', label: 'agent.settings.apps.categoryBrowser', icon: 'fa-solid fa-globe' },
@@ -446,7 +593,7 @@
                     <i class="fa-solid fa-key text-[9px] text-primary"></i>
                     {{ $t('agent.settings.apps.grantsMetric') }}:
                     <strong class="font-mono text-foreground">
-                      {{ grantViews[app.id].grants.length }}/{{ grantViews[app.id].declaredCapabilities.length }}
+                      {{ grantViews[app.id].grants.length }}/{{ grantViews[app.id].capabilityDefinitions.length }}
                     </strong>
                   </span>
                 </div>
@@ -528,7 +675,7 @@
                 }}</span>
                 <span class="text-[11px] text-text-secondary font-mono">
                   ({{ grantViews[app.id]?.grants.length ?? 0 }}/{{
-                    grantViews[app.id]?.declaredCapabilities.length ?? 0
+                    grantViews[app.id]?.capabilityDefinitions.length ?? 0
                   }})
                 </span>
               </div>
@@ -539,7 +686,7 @@
 
             <div class="flex items-center gap-2">
               <button
-                v-if="grantViews[app.id]?.declaredCapabilities.length"
+                v-if="grantViews[app.id]?.capabilityDefinitions.length"
                 type="button"
                 class="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1 text-[11px] shadow-2xs font-medium text-text-secondary hover:bg-header hover:text-foreground transition-all cursor-pointer"
                 :aria-label="
@@ -609,12 +756,12 @@
 
               <!-- 能力清单卡片网格 -->
               <div class="grid gap-2 sm:grid-cols-2">
-                <label
-                  v-for="capability in grantViews[app.id].declaredCapabilities.filter(
-                    (c) => getCapabilityMeta(c).category === cat.id,
-                  )"
+                <div
+                  v-for="capability in grantViews[app.id].capabilityDefinitions
+                    .map((definition) => definition.id)
+                    .filter((id) => getCapabilityMeta(id).category === cat.id)"
                   :key="capability"
-                  class="group flex items-start gap-2.5 rounded-lg border p-2.5 transition-all cursor-pointer select-none"
+                  class="group flex items-start gap-2.5 rounded-lg border p-2.5 transition-all select-none"
                   :class="
                     checked(app.id, capability)
                       ? 'border-primary/50 bg-primary/8 shadow-2xs ring-1 ring-primary/20'
@@ -641,8 +788,49 @@
                     <span class="mt-1 inline-block font-mono text-[9px] text-text-secondary/60">
                       {{ capability }}
                     </span>
+
+                    <div
+                      v-if="checked(app.id, capability) && definitionFor(app.id, capability)?.scopeKind === 'targets'"
+                      class="mt-2 space-y-2 border-t border-border/60 pt-2"
+                    >
+                      <div
+                        v-for="target in definitionFor(app.id, capability)?.supportedTargets ?? []"
+                        :key="target"
+                        class="rounded-md border border-border/70 bg-background/70 p-2"
+                      >
+                        <div class="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            class="h-3.5 w-3.5 rounded border-border accent-primary"
+                            :checked="targetEnabled(app.id, capability, target)"
+                            :disabled="busy || grantBusy[app.id]"
+                            @change="onTargetEnabledChange(app.id, capability, target, $event)"
+                          />
+                          <span class="text-[10px] font-semibold text-foreground">{{ targetLabel(target) }}</span>
+                          <select
+                            v-if="targetEnabled(app.id, capability, target)"
+                            class="ml-auto rounded border border-border bg-card px-1.5 py-0.5 text-[10px] text-foreground"
+                            :value="targetScopeSelection(app.id, capability, target)?.mode"
+                            :disabled="busy || grantBusy[app.id]"
+                            @change="onTargetModeChange(app.id, capability, target, $event)"
+                          >
+                            <option value="all">All targets</option>
+                            <option value="ids">Specific IDs</option>
+                          </select>
+                        </div>
+                        <input
+                          v-if="targetScopeSelection(app.id, capability, target)?.mode === 'ids'"
+                          type="text"
+                          class="mt-2 w-full rounded border border-border bg-card px-2 py-1 font-mono text-[10px] text-foreground"
+                          :value="targetIdsValue(app.id, capability, target)"
+                          placeholder="id-1, id-2"
+                          :disabled="busy || grantBusy[app.id]"
+                          @input="onTargetIdsInput(app.id, capability, target, $event)"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </label>
+                </div>
               </div>
             </div>
           </div>

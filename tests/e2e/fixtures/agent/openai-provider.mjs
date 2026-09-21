@@ -292,7 +292,7 @@ const server = http.createServer(async (request, response) => {
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_execute_shell');
   const readFileToolOffered =
     Array.isArray(body?.tools) &&
-    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_read_file');
+    body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'file_read');
   const listConnectionsToolOffered =
     Array.isArray(body?.tools) &&
     body.tools.some((tool) => tool?.type === 'function' && tool?.function?.name === 'machine_list_connections');
@@ -646,8 +646,14 @@ const server = http.createServer(async (request, response) => {
     if (!duplicateMutationReadResult) {
       sendToolCall(
         'call_e2e_duplicate_read',
-        'machine_read_file',
-        JSON.stringify({ connectionId, path: '/duplicate-proof.txt', maxBytes: 4096, offset: 0 }),
+        'file_read',
+        JSON.stringify({
+          target: 'ssh',
+          id: String(connectionId),
+          path: '/duplicate-proof.txt',
+          maxBytes: 4096,
+          offsetBytes: 0,
+        }),
       );
       return;
     }
@@ -685,8 +691,14 @@ const server = http.createServer(async (request, response) => {
                   id: 'call_e2e_multi_read',
                   type: 'function',
                   function: {
-                    name: 'machine_read_file',
-                    arguments: JSON.stringify({ connectionId, path: '/seed.txt', maxBytes: 4096, offset: 0 }),
+                    name: 'file_read',
+                    arguments: JSON.stringify({
+                      target: 'ssh',
+                      id: String(connectionId),
+                      path: '/seed.txt',
+                      maxBytes: 4096,
+                      offsetBytes: 0,
+                    }),
                   },
                 },
               ],
@@ -738,12 +750,13 @@ const server = http.createServer(async (request, response) => {
                 id: 'call_e2e_read_file',
                 type: 'function',
                 function: {
-                  name: 'machine_read_file',
+                  name: 'file_read',
                   arguments: JSON.stringify({
-                    connectionId: Number(readFileConnection[1]),
+                    target: 'ssh',
+                    id: readFileConnection[1],
                     path: '/seed.txt',
                     maxBytes: 4096,
-                    offset: 0,
+                    offsetBytes: 0,
                   }),
                 },
               },

@@ -11,8 +11,13 @@ import {
 } from '../../../packages/agent-runner/src/controller/project-instructions';
 import {
   applyWorkspacePatch,
+  deleteWorkspaceFile,
+  listWorkspaceFiles,
+  moveWorkspaceFile,
   readWorkspaceFile,
   searchWorkspace,
+  statWorkspacePath,
+  writeWorkspaceFile,
 } from '../../../packages/agent-runner/src/controller/workspace-coding-files';
 import { WorkspaceCodeIntelligence } from '../../../packages/agent-runner/src/controller/workspace-code-intelligence';
 import { RunnerJournal } from '../../../packages/agent-runner/src/controller/journal';
@@ -20,7 +25,10 @@ import { RunnerControllerServer } from '../../../packages/agent-runner/src/contr
 import { DatabaseSync } from 'node:sqlite';
 import { AgentNotificationBridge } from '../../../packages/backend/src/bootstrap/agent/agent-notification-bridge';
 import { createAgentConnectionResolver } from '../../../packages/backend/src/bootstrap/agent/machine-support';
-import { registerWorkspaceToolContributions } from '../../../packages/backend/src/bootstrap/agent/tool-contributions';
+import {
+  registerFileToolContributions,
+  registerWorkspaceToolContributions,
+} from '../../../packages/backend/src/bootstrap/agent/tool-contributions';
 import { LocalArtifactStore } from '../../../packages/backend/src/infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../../packages/backend/src/infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { decodePersistedAppManifest } from '../../../packages/backend/src/infrastructure/agent/plugins/persisted-app-manifest-decoder';
@@ -88,6 +96,8 @@ import {
   createDefaultAgentSettings,
   normalizeRequestedSettings,
 } from '../../../packages/backend/src/modules/agent/agent-defaults';
+import { FileCapabilityService } from '../../../packages/backend/src/modules/agent/capabilities/file-capability.service';
+import type { MachineCapabilityPort } from '../../../packages/backend/src/modules/agent/capabilities/machine.port';
 import type { LeasePort } from '../../../packages/backend/src/modules/agent/capabilities/lease.port';
 import { LEASE_RENEW_INTERVAL_MS } from '../../../packages/backend/src/modules/agent/capabilities/lease-policy';
 import { ToolCatalog } from '../../../packages/backend/src/modules/agent/capabilities/tool-catalog';
@@ -104,8 +114,8 @@ import type {
   ToolInspection,
   ToolResult,
 } from '../../../packages/backend/src/modules/agent/capabilities/tool.types';
+import { createUnifiedFileTools } from '../../../packages/backend/src/modules/agent/tools/host/file-tools';
 import {
-  createWorkspaceApplyPatchTool,
   createWorkspaceCodeIntelTool,
   createWorkspaceRepoMapTool,
 } from '../../../packages/backend/src/modules/agent/tools/host/workspace-coding-tools';
@@ -116,10 +126,11 @@ import {
 import type { AgentWorkspaceRepositoryPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { WorkspaceRuntimeService } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime.service';
 import type { WorkspaceRuntimeGatewayPort } from '../../../packages/backend/src/modules/agent/workspace-runtime/workspace-runtime-gateway.port';
-import type { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
+import { AppCapabilityBroker } from '../../../packages/backend/src/modules/agent/host/app-capability-broker';
 import { AppIntentService } from '../../../packages/backend/src/modules/agent/host/app-intent.service';
 import { AppRegistryService } from '../../../packages/backend/src/modules/agent/host/app-registry.service';
 import { AGENT_CAPABILITIES } from '../../../packages/backend/src/modules/agent/host/app.types';
+import { CapabilityRegistry } from '../../../packages/backend/src/modules/agent/host/capability-registry';
 import { AgentSettingsService } from '../../../packages/backend/src/modules/agent/host/agent-settings.service';
 import { AgentExecutionPolicyService } from '../../../packages/backend/src/modules/agent/host/agent-execution-policy.service';
 import { TOOL_APPROVAL_TTL_SECONDS } from '../../../packages/backend/src/modules/agent/runtime/approvals/approval-policy';
@@ -148,12 +159,10 @@ import { createAcpExecuteTool } from '../../../packages/backend/src/modules/agen
 import {
   createConnectionListTool,
   createDiagnosticsTool,
-  createReadFileTool,
 } from '../../../packages/backend/src/modules/agent/tools/host/tools';
 import {
   createDockerMutationTool,
   createShellTool,
-  createWriteFileTool,
 } from '../../../packages/backend/src/modules/agent/tools/host/mutation-tools';
 import { createMcpTools } from '../../../packages/backend/src/modules/agent/tools/host/mcp-tools';
 import {
@@ -742,8 +751,8 @@ const contextToolExchangeScenario: Scenario = async () => {
     entry(2, 'assistant_message', {
       text: '',
       toolCalls: [
-        { id: 'call-a', name: 'workspace_read_file', argumentsJson: largeArguments },
-        { id: 'call-b', name: 'workspace_search', argumentsJson: JSON.stringify({ query: 'needle' }) },
+        { id: 'call-a', name: 'file_read', argumentsJson: largeArguments },
+        { id: 'call-b', name: 'file_search', argumentsJson: JSON.stringify({ query: 'needle' }) },
       ],
     }),
     entry(3, 'tool_result', { toolCallId: 'call-a', content: 'file contents '.repeat(24) }),
@@ -795,8 +804,8 @@ const contextToolExchangeScenario: Scenario = async () => {
       {
         text: '',
         toolCalls: [
-          { id: 'history-call-a', name: 'workspace_read_file', argumentsJson: '{"path":"a"}' },
-          { id: 'history-call-b', name: 'workspace_search', argumentsJson: '{"query":"b"}' },
+          { id: 'history-call-a', name: 'file_read', argumentsJson: '{"path":"a"}' },
+          { id: 'history-call-b', name: 'file_search', argumentsJson: '{"query":"b"}' },
         ],
       },
       'history-run',
@@ -828,7 +837,7 @@ const contextToolExchangeScenario: Scenario = async () => {
   const pageBoundaryEntries = [
     entry(1, 'assistant_message', {
       text: '',
-      toolCalls: [{ id: 'page-call', name: 'workspace_read_file', argumentsJson: '{"path":"old"}' }],
+      toolCalls: [{ id: 'page-call', name: 'file_read', argumentsJson: '{"path":"old"}' }],
     }),
     entry(2, 'tool_result', { toolCallId: 'page-call', content: 'old terminal result' }),
     ...Array.from({ length: 159 }, (_, index) =>
@@ -1232,7 +1241,7 @@ const durableContextCheckpointScenario: Scenario = async () => {
       'migration 30 must create the Context checkpoint owner',
     );
     assert.equal(upgradedLegacyDigest, undefined, 'migration 30 must drop the dead ai_context_digests table');
-    assert.equal(migrationVersion?.version, 34, 'legacy databases must advance through migration 34');
+    assert.equal(migrationVersion?.version, 38, 'legacy databases must advance through migration 38');
   } finally {
     legacyDb.close();
     fs.rmSync(upgradeDirectory, { recursive: true, force: true });
@@ -1246,8 +1255,151 @@ const durableContextCheckpointScenario: Scenario = async () => {
     { name: 'stale_source_regenerations', value: 1, unit: 'cases' },
     { name: 'upgrade_migration_cases', value: 1, unit: 'cases' },
     { name: 'legacy_digest_tables', value: 0, unit: 'tables' },
-    { name: 'migration_version', value: 34, unit: 'version' },
+    { name: 'migration_version', value: 38, unit: 'version' },
   ];
+};
+
+const capabilityGrantMigrationScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-capability-grant-migration-'));
+  const db = new DatabaseSync(path.join(directory, 'grant-migration.sqlite'));
+  try {
+    db.exec(`
+      CREATE TABLE migrations (
+        id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        applied_at INTEGER NOT NULL
+      );
+      INSERT INTO migrations (id, name, applied_at) VALUES (34, 'pre-capability-v2', 1800000000);
+
+      CREATE TABLE agent_app_grants (
+        user_id INTEGER NOT NULL,
+        app_id TEXT NOT NULL,
+        capability TEXT NOT NULL,
+        schema_version INTEGER NOT NULL,
+        scope_json TEXT NOT NULL,
+        granted_at INTEGER NOT NULL,
+        PRIMARY KEY(user_id, app_id, capability)
+      );
+      INSERT INTO agent_app_grants VALUES
+        (1, 'workspace-only', 'workspace.read', 1, '{"targetSelection":"all-except-denylist"}', 10),
+        (1, 'ssh-only', 'machine.files.read', 1, '{"targetSelection":"all-except-denylist"}', 11),
+        (1, 'both', 'workspace.read', 1, '{"targetSelection":"all-except-denylist"}', 12),
+        (1, 'both', 'machine.files.read', 1, '{"targetSelection":"all-except-denylist"}', 13),
+        (1, 'workspace-write', 'workspace.write', 1, '{"targetSelection":"all-except-denylist"}', 14),
+        (1, 'global', 'artifacts.read', 1, '{}', 15);
+
+      CREATE TABLE agent_delegations (
+        id TEXT PRIMARY KEY,
+        capabilities_json TEXT NOT NULL
+      );
+      INSERT INTO agent_delegations VALUES (
+        'legacy-delegation',
+        '["workspace.read","machine.files.read","workspace.write","artifacts.read"]'
+      );
+
+      CREATE TABLE agent_plugin_versions (
+        app_id TEXT NOT NULL,
+        version TEXT NOT NULL,
+        manifest_json TEXT NOT NULL
+      );
+      INSERT INTO agent_plugin_versions VALUES (
+        'legacy.plugin',
+        '1.0.0',
+        '{"capabilities":["workspace.read","machine.files.write","artifacts.read"]}'
+      );
+
+      CREATE TABLE agent_plugin_stages (
+        id TEXT PRIMARY KEY,
+        manifest_json TEXT
+      );
+      INSERT INTO agent_plugin_stages VALUES (
+        'legacy-stage',
+        '{"capabilities":["machine.files.read","workspace.write"]}'
+      );
+    `);
+
+    await runMigrations(db);
+
+    const grants = db
+      .prepare(
+        'SELECT app_id, capability, schema_version, scope_json FROM agent_app_grants ORDER BY app_id, capability',
+      )
+      .all() as Array<{ app_id: string; capability: string; schema_version: number; scope_json: string }>;
+    assert.equal(
+      grants.every((grant) => grant.schema_version === 2),
+      true,
+    );
+    const scopeFor = (appId: string, capability: string): JsonValue => {
+      const row = grants.find((grant) => grant.app_id === appId && grant.capability === capability);
+      assert.ok(row, `missing migrated grant ${appId}/${capability}`);
+      return JSON.parse(row.scope_json) as JsonValue;
+    };
+    assert.deepEqual(scopeFor('workspace-only', 'file.read'), {
+      kind: 'targets',
+      targets: { workspace: { mode: 'all' } },
+    });
+    assert.deepEqual(scopeFor('ssh-only', 'file.read'), {
+      kind: 'targets',
+      targets: { ssh: { mode: 'all' } },
+    });
+    assert.deepEqual(scopeFor('both', 'file.read'), {
+      kind: 'targets',
+      targets: { workspace: { mode: 'all' }, ssh: { mode: 'all' } },
+    });
+    assert.deepEqual(scopeFor('workspace-write', 'file.write'), {
+      kind: 'targets',
+      targets: { workspace: { mode: 'all' } },
+    });
+    assert.deepEqual(scopeFor('global', 'artifacts.read'), { kind: 'global' });
+
+    const delegation = db.prepare("SELECT grants_json FROM agent_delegations WHERE id='legacy-delegation'").get() as {
+      grants_json: string;
+    };
+    const delegatedGrants = JSON.parse(delegation.grants_json) as Array<{
+      capability: string;
+      schemaVersion: number;
+      scope: JsonValue;
+    }>;
+    assert.deepEqual(
+      delegatedGrants.map((grant) => grant.capability).sort(),
+      ['artifacts.read', 'file.read', 'file.write'],
+      'legacy Subagent file authorities must collapse to canonical delegated capabilities',
+    );
+    for (const grant of delegatedGrants.filter((candidate) => candidate.capability.startsWith('file.'))) {
+      assert.equal(grant.schemaVersion, 2);
+      assert.deepEqual(grant.scope, {
+        kind: 'targets',
+        targets: { workspace: { mode: 'all' } },
+      });
+    }
+
+    const versionManifest = JSON.parse(
+      (
+        db.prepare("SELECT manifest_json FROM agent_plugin_versions WHERE app_id='legacy.plugin'").get() as {
+          manifest_json: string;
+        }
+      ).manifest_json,
+    ) as { capabilities: string[] };
+    assert.deepEqual(versionManifest.capabilities, ['artifacts.read', 'file.read', 'file.write']);
+    const stageManifest = JSON.parse(
+      (
+        db.prepare("SELECT manifest_json FROM agent_plugin_stages WHERE id='legacy-stage'").get() as {
+          manifest_json: string;
+        }
+      ).manifest_json,
+    ) as { capabilities: string[] };
+    assert.deepEqual(stageManifest.capabilities, ['file.read', 'file.write']);
+
+    return [
+      { name: 'capability_grant_migration_schema_version', value: 2, unit: 'version' },
+      { name: 'capability_grant_migration_workspace_only', value: 1, unit: 'cases' },
+      { name: 'capability_grant_migration_ssh_only', value: 1, unit: 'cases' },
+      { name: 'capability_grant_migration_widened_scopes', value: 0, unit: 'cases' },
+    ];
+  } finally {
+    db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
 };
 
 const projectInstructionsContextScenario: Scenario = async () => {
@@ -1468,18 +1620,28 @@ const projectInstructionsContextScenario: Scenario = async () => {
           },
           {
             id: 'read-target',
-            name: 'workspace_read_file',
-            argumentsJson: JSON.stringify({ path: '/workspace/work/packages/api/src/index.ts' }),
+            name: 'file_read',
+            argumentsJson: JSON.stringify({
+              target: 'workspace',
+              id: 'workspace-audit',
+              path: '/workspace/work/packages/api/src/index.ts',
+            }),
           },
           {
             id: 'search-target',
-            name: 'workspace_search',
-            argumentsJson: JSON.stringify({ path: '/workspace/work/packages/web' }),
+            name: 'file_search',
+            argumentsJson: JSON.stringify({
+              target: 'workspace',
+              id: 'workspace-audit',
+              path: '/workspace/work/packages/web',
+            }),
           },
           {
             id: 'patch-target',
-            name: 'workspace_apply_patch',
+            name: 'file_patch',
             argumentsJson: JSON.stringify({
+              target: 'workspace',
+              id: 'workspace-audit',
               expectedFiles: [
                 { path: 'packages/core/src/a.ts', sha256: 'a'.repeat(64) },
                 { path: '/workspace/work/../../outside.ts', sha256: 'b'.repeat(64) },
@@ -1695,32 +1857,32 @@ const projectInstructionsContextScenario: Scenario = async () => {
 
 const workspaceCodingToolSurfaceScenario: Scenario = async () => {
   const catalog = new ToolCatalog();
+  const codingCryptoHash = {
+    sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
+  };
+  registerFileToolContributions({
+    catalog,
+    files: null!,
+    cryptoHash: codingCryptoHash,
+  });
   registerWorkspaceToolContributions({
     catalog,
     repository: null!,
     targets: null!,
     runtime: null!,
     gateway: null!,
-    cryptoHash: {
-      sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
-    },
+    cryptoHash: codingCryptoHash,
   });
   const descriptors = new Map(catalog.list(scope).map((descriptor) => [descriptor.name, descriptor]));
+  assert.equal(descriptors.get('file_read')?.riskClass, 'read', 'canonical file read must remain read-only');
+  assert.equal(descriptors.get('file_search')?.riskClass, 'read', 'canonical file search must remain read-only');
   assert.equal(
-    descriptors.get('workspace_read_file')?.riskClass,
-    'read',
-    'P-072 must expose a first-class read-only Workspace file tool',
-  );
-  assert.equal(
-    descriptors.get('workspace_search')?.riskClass,
-    'read',
-    'P-072 must expose a first-class read-only Workspace search tool',
-  );
-  assert.equal(
-    descriptors.get('workspace_apply_patch')?.riskClass,
+    descriptors.get('file_patch')?.riskClass,
     'mutate',
-    'P-072 must expose a governed incremental patch mutation tool',
+    'canonical file patch must remain governed mutation',
   );
+  assert.equal(descriptors.get('workspace_repo_map')?.capability, 'file.read');
+  assert.equal(descriptors.get('workspace_code_intel')?.capability, 'file.read');
   assert.equal(
     descriptors.get('workspace_execute_argv')?.riskClass,
     'mutate',
@@ -1746,9 +1908,11 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
       'plan',
     ).map((tool) => tool.name),
   );
-  assert.equal(planToolNames.has('workspace_read_file'), true);
-  assert.equal(planToolNames.has('workspace_search'), true);
-  assert.equal(planToolNames.has('workspace_apply_patch'), false);
+  assert.equal(planToolNames.has('file_read'), true);
+  assert.equal(planToolNames.has('file_search'), true);
+  assert.equal(planToolNames.has('file_patch'), false);
+  assert.equal(planToolNames.has('workspace_repo_map'), true);
+  assert.equal(planToolNames.has('workspace_code_intel'), true);
   assert.equal(planToolNames.has('workspace_execute_argv'), false);
 
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-workspace-coding-'));
@@ -1836,11 +2000,6 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
     assert.equal(dryRun.changes.length, 1);
     assert.equal(dryRun.changes[0]?.beforeSha256, beforeHash);
 
-    const patchArtifactId = '11111111-1111-4111-8111-111111111111';
-    let patchArtifactBytes = '';
-    const codingCryptoHash = {
-      sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex'),
-    };
     const codingRepository = {
       getWorkspace: async () => ({
         ...scope,
@@ -1869,30 +2028,22 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
       }),
     } as unknown as AgentWorkspaceRepositoryPort;
     const codingTargets = new AgentTargetResolver(codingRepository, null!, codingCryptoHash);
-    const inspectTool = createWorkspaceApplyPatchTool(
-      codingTargets,
-      {
-        applyWorkspacePatch: async (_scope, _workspaceId, _generation, request) => ({
-          changes: dryRun.changes,
-          applied: request.dryRun === true ? false : true,
-        }),
-      } as unknown as WorkspaceRuntimeService,
-      codingCryptoHash,
-      {
-        begin: async (_scope, meta) => {
-          assert.equal(meta.mediaType, 'text/x-diff');
-          assert.equal(meta.declaredBytes, Buffer.byteLength(patchText, 'utf8'));
-          return { artifactId: patchArtifactId, declaredBytes: meta.declaredBytes, expiresAt: 1_800_600_000 };
-        },
-        write: async (_scope, artifactId, source) => {
-          assert.equal(artifactId, patchArtifactId);
-          const chunks: Buffer[] = [];
-          for await (const chunk of source) chunks.push(Buffer.from(chunk));
-          patchArtifactBytes = Buffer.concat(chunks).toString('utf8');
-          return { id: patchArtifactId } as never;
-        },
-      },
+    const codingRuntime = {
+      statWorkspacePath: async (_scope: Scope, _workspaceId: string, _generation: number, requestedPath: string) =>
+        statWorkspacePath(workRoot, requestedPath),
+      readWorkspaceFile: async (
+        _scope: Scope,
+        _workspaceId: string,
+        _generation: number,
+        request: Parameters<typeof readWorkspaceFile>[1],
+      ) => readWorkspaceFile(workRoot, request),
+      applyWorkspacePatch: async () => ({ changes: dryRun.changes, applied: true }),
+    } as unknown as WorkspaceRuntimeService;
+    const codingFiles = new FileCapabilityService(codingTargets, codingRuntime, null!);
+    const inspectTool = createUnifiedFileTools(codingFiles, codingCryptoHash).find(
+      (tool) => tool.descriptor.name === 'file_patch',
     );
+    assert.ok(inspectTool, 'canonical file_patch Tool must exist');
     const inspectContext: ToolContext = {
       ...scope,
       actor: {
@@ -1924,7 +2075,8 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
     };
     const patchInspection = await inspectTool.inspect(
       {
-        workspaceId: 'workspace-coding',
+        target: 'workspace',
+        id: 'workspace-coding',
         patch: patchText,
         expectedFiles: [{ path: '/workspace/work/src/example.ts', sha256: beforeHash }],
       },
@@ -1948,16 +2100,12 @@ const workspaceCodingToolSurfaceScenario: Scenario = async () => {
     assert.equal(
       new PolicyService().decide(patchInspection, 7).action,
       'requireApproval',
-      'workspace_apply_patch must remain on the existing mutation approval path',
+      'file_patch must remain on the existing mutation approval path',
     );
     const toolPatchResult = await inspectTool.execute(patchInspection, inspectContext);
-    assert.deepEqual(toolPatchResult.artifactRefs, [patchArtifactId]);
-    assert.deepEqual(toolPatchResult.verification.evidenceRefs, [patchArtifactId]);
-    assert.equal(
-      patchArtifactBytes,
-      patchText,
-      'workspace patch Artifact must preserve the exact strict diff that was applied',
-    );
+    assert.equal(toolPatchResult.ok, true);
+    assert.equal(toolPatchResult.artifactRefs.length, 0);
+    assert.match(toolPatchResult.verification.summary, /source hash|patched file/i);
 
     const applied = applyWorkspacePatch(workRoot, {
       patch: patchText,
@@ -2235,12 +2383,16 @@ const workspaceRepoMapCodeIntelScenario: Scenario = async () => {
     navTargets,
     null! as WorkspaceRuntimeService,
     navCrypto,
-  ).inspect({ workspaceId: navWorkspace.id, query: 'makeThing' }, navContext, 7);
+  ).inspect({ target: 'workspace', id: navWorkspace.id, query: 'makeThing' }, navContext, 7);
   const codeIntelInspection = await createWorkspaceCodeIntelTool(
     navTargets,
     null! as WorkspaceRuntimeService,
     navCrypto,
-  ).inspect({ workspaceId: navWorkspace.id, action: 'symbols', path: '/workspace/work/src/a.ts' }, navContext, 7);
+  ).inspect(
+    { target: 'workspace', id: navWorkspace.id, action: 'symbols', path: '/workspace/work/src/a.ts' },
+    navContext,
+    7,
+  );
   for (const inspection of [repoMapInspection, codeIntelInspection]) {
     assert.equal(inspection.risk, 'read');
     assert.equal(inspection.target.kind, 'workspace');
@@ -2393,8 +2545,8 @@ const workspaceRepoMapCodeIntelScenario: Scenario = async () => {
     assert.equal(unsupported.supported, false);
     assert.deepEqual(unsupported.fallback, {
       reason: 'LANGUAGE_UNSUPPORTED',
-      searchTool: 'workspace_search',
-      readTool: 'workspace_read_file',
+      searchTool: 'file_search',
+      readTool: 'file_read',
     });
     fallbackCases += 1;
 
@@ -3103,7 +3255,7 @@ const contextTokenAccountingScenario: Scenario = async () => {
   const telemetryPlan = await contextService([
     entry(1, 'assistant_message', {
       text: '',
-      toolCalls: [{ id: 'telemetry-call', name: 'workspace_search', argumentsJson: '{"query":"needle"}' }],
+      toolCalls: [{ id: 'telemetry-call', name: 'file_search', argumentsJson: '{"query":"needle"}' }],
     }),
     entry(2, 'tool_result', { toolCallId: 'telemetry-call', content: 'matched content' }),
   ]).compose(anchorInput);
@@ -3134,7 +3286,7 @@ const contextTokenAccountingScenario: Scenario = async () => {
         batchIndex: 0,
         batchSize: 1,
         providerCallId: 'subagent-provider-call',
-        toolName: 'workspace_search',
+        toolName: 'file_search',
         arguments: subagentToolArguments,
         result: {
           ok: true,
@@ -3156,6 +3308,7 @@ const contextTokenAccountingScenario: Scenario = async () => {
     runtimes,
     mailboxes,
     { discover: () => [] } as unknown as ToolCatalog,
+    new CapabilityRegistry(),
     emptyModelContinuations,
     null!,
     { nowUnixSeconds: () => 1_800_000_000 } as ClockPort,
@@ -3166,8 +3319,9 @@ const contextTokenAccountingScenario: Scenario = async () => {
     parentRuntimeId: 'root-runtime',
     childRuntimeId: runtime.id,
     profileId: 'default',
-    capabilities: [],
+    grants: [],
     peerMessaging: 'parent-child',
+    mutationMode: 'read-only',
     modelRef: runtime.modelRef,
     objective: 'Inspect the repository.',
     constraints: [],
@@ -4032,6 +4186,7 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
       listDelegationMessages: async () => [],
     } as MailboxReaderPort,
     catalog,
+    new CapabilityRegistry(),
     emptyModelContinuations,
     null!,
     { nowUnixSeconds: () => 1_800_000_000 } as ClockPort,
@@ -4042,8 +4197,9 @@ const toolSurfaceProgressiveDisclosureScenario: Scenario = async () => {
     parentRuntimeId: 'root-runtime',
     childRuntimeId: childRuntime.id,
     profileId: 'default',
-    capabilities: ['integration.mcp.invoke'],
+    grants: [{ capability: 'integration.mcp.invoke', schemaVersion: 2, scope: { kind: 'global' } }],
     peerMessaging: 'parent-child',
+    mutationMode: 'read-only',
     modelRef: childRuntime.modelRef,
     objective: 'Inspect integration metadata without mutating external state.',
     constraints: [],
@@ -4888,6 +5044,7 @@ const toolResultProjectionScenario: Scenario = async () => {
     runtimes,
     { readMessages: async () => [], listDelegationMessages: async () => [] } as MailboxReaderPort,
     { discover: () => [] } as unknown as ToolCatalog,
+    new CapabilityRegistry(),
     emptyModelContinuations,
     null!,
     { nowUnixSeconds: () => 1_800_000_000 } as ClockPort,
@@ -4898,8 +5055,9 @@ const toolResultProjectionScenario: Scenario = async () => {
     parentRuntimeId: 'root-runtime',
     childRuntimeId: runtime.id,
     profileId: 'default',
-    capabilities: [],
+    grants: [],
     peerMessaging: 'parent-child',
+    mutationMode: 'read-only',
     modelRef: runtime.modelRef,
     objective: 'Inspect a build failure.',
     constraints: [],
@@ -7217,9 +7375,9 @@ const restartRecoveryScenario: Scenario = async () => {
       `INSERT INTO agent_tool_calls
         (id, run_id, agent_runtime_id, step_id, source_model_step_id, provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, created_at, started_at)
-       VALUES ('read-tool', 'read-run', 'read-runtime', 'read-step', 'read-model-step', 'provider-read', 'workspace_read_file', '1',
+       VALUES ('read-tool', 'read-run', 'read-runtime', 'read-step', 'read-model-step', 'provider-read', 'file_read', '1',
                ?, 'sha256:read', 1, 'read', 'running', ?, ?)`,
-      [toolInspection('workspace_read_file', 'workspace:read', 'read', 'sha256:read'), now, now],
+      [toolInspection('file_read', 'workspace:read', 'read', 'sha256:read'), now, now],
     );
 
     await insertRun('mutation-run', 'mutation-thread', 'mutation-runtime');
@@ -7886,7 +8044,7 @@ const appDisableScopeScenario: Scenario = async () => {
     );
     await db.execute(
       `INSERT INTO agent_delegations
-        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
          deadline_at, created_at, updated_at)
@@ -8130,7 +8288,7 @@ const readToolBatchAuthorityScenario: Scenario = async () => {
         (id, run_id, agent_runtime_id, step_id, source_model_step_id, batch_index, batch_size,
          provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, created_at)
-       VALUES (?, 'read-batch-run', 'read-batch-runtime', ?, ?, ?, ?, ?, 'workspace_read_file', '1', '{}', ?, 1,
+       VALUES (?, 'read-batch-run', 'read-batch-runtime', ?, ?, ?, ?, ?, 'file_read', '1', '{}', ?, 1,
                'read', 'proposed', ?)`,
       [toolCallId, toolStepId, sourceModelStepId, batchIndex, batchSize, `provider-${suffix}`, `hash-${suffix}`, now],
     );
@@ -8374,7 +8532,7 @@ const subagentClaimedCancellationScenario: Scenario = async () => {
     );
     await db.execute(
       `INSERT INTO agent_delegations
-        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at, completed_at)
@@ -8609,8 +8767,9 @@ const failFastSiblingCancellationScenario: Scenario = async () => {
     parentRuntimeId,
     childRuntimeId,
     profileId: 'default',
-    capabilities: [],
+    grants: [],
     peerMessaging: 'parent-child',
+    mutationMode: 'read-only',
     modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
     objective: id,
     constraints: [],
@@ -8779,7 +8938,7 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     );
     await db.execute(
       `INSERT INTO agent_delegations
-        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at)
@@ -8840,7 +8999,7 @@ const nestedJoinDurableWakeScenario: Scenario = async () => {
     );
     await db.execute(
       `INSERT INTO agent_delegations
-        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at)
@@ -9110,7 +9269,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
       description: 'Scenario-only governed Workspace mutation.',
       inputSchema: { type: 'object', additionalProperties: false },
       riskClass: 'mutate',
-      capability: 'workspace.write',
+      capability: 'file.write',
     },
     inspect: async (_input, context, policyRevision) => ({
       toolName: 'scenario_workspace_mutate',
@@ -9164,7 +9323,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     descriptor: {
       ...mutationTool.descriptor,
       name: 'scenario_machine_mutate',
-      capability: 'machine.files.write',
+      capability: 'file.write',
     },
   };
   catalog.registerContribution({
@@ -9178,7 +9337,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     descriptor: {
       ...mutationTool.descriptor,
       name: 'scenario_misdeclared_workspace_mutate',
-      capability: 'workspace.write',
+      capability: 'file.write',
     },
     inspect: async (_input, context, policyRevision) => ({
       ...(await mutationTool.inspect({}, context, policyRevision)),
@@ -9215,9 +9374,17 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     id: 'scenario.subagent-misdeclared-workspace-mutation',
     tools: [misdeclaredWorkspaceMutationTool],
   });
-  const builder = new SubagentContextBuilder(null!, null!, catalog, emptyModelContinuations, null!, {
-    nowUnixSeconds: () => 1_800_570_000,
-  } as ClockPort);
+  const builder = new SubagentContextBuilder(
+    null!,
+    null!,
+    catalog,
+    new CapabilityRegistry(),
+    emptyModelContinuations,
+    null!,
+    {
+      nowUnixSeconds: () => 1_800_570_000,
+    } as ClockPort,
+  );
   const baseDelegation = {
     userId: 1,
     appId: scenarioScope.appId,
@@ -9226,8 +9393,15 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     parentRuntimeId: 'scenario-root-runtime',
     childRuntimeId: 'scenario-child-runtime',
     profileId: 'scenario-worker',
-    capabilities: ['workspace.write'],
+    grants: [
+      {
+        capability: 'file.write',
+        schemaVersion: 2,
+        scope: { kind: 'targets', targets: { workspace: { mode: 'ids', ids: ['scenario-child'] } } },
+      },
+    ],
     peerMessaging: 'parent-child',
+    mutationMode: 'read-only',
     modelRef: { providerId: 'scenario-provider', modelId: 'scenario-model', configurationVersion: 1 },
     objective: 'Modify only src/example.ts and run the focused test.',
     constraints: ['Use only the isolated child Workspace.'],
@@ -9262,13 +9436,13 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     'explicit governed workers must expose mutation Tools through the existing capability-filtered surface',
   );
   assert.equal(
-    builder.allowsTool(
-      scenarioScope,
-      { ...governedDelegation, capabilities: [...governedDelegation.capabilities, 'machine.files.write'] },
-      machineMutationTool.descriptor.name,
-    ),
+    builder.allowsProposal(scenarioScope, governedDelegation, {
+      providerCallId: 'scenario-ssh-write',
+      name: machineMutationTool.descriptor.name,
+      argumentsJson: JSON.stringify({ target: 'ssh', id: '42' }),
+    }),
     false,
-    'governed workers must stay confined to Workspace mutations even when a custom profile declares raw Machine write capability',
+    'governed workers must stay confined to the Workspace target scope carried by their delegated file.write grant',
   );
   assert.deepEqual(
     builtInSubagentProfileTemplates(64).map((template) => template.id),
@@ -9831,7 +10005,7 @@ const subagentGovernedMutationScenario: Scenario = async () => {
     );
     await durableDb.execute(
       `INSERT INTO agent_delegations
-        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          mutation_mode, model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at)
@@ -9843,7 +10017,13 @@ const subagentGovernedMutationScenario: Scenario = async () => {
         durableRunId,
         durableRootRuntimeId,
         durableChildRuntimeId,
-        JSON.stringify(['workspace.write']),
+        JSON.stringify([
+          {
+            capability: 'file.write',
+            schemaVersion: 2,
+            scope: { kind: 'targets', targets: { workspace: { mode: 'all' } } },
+          },
+        ]),
         scenarioDelegationModel(durableModelRef),
         durableNow + 600,
         durableNow,
@@ -10291,7 +10471,7 @@ const subagentMailboxTtlScenario: Scenario = async () => {
     );
     await db.execute(
       `INSERT INTO agent_delegations
-        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at)
@@ -10320,6 +10500,7 @@ const subagentMailboxTtlScenario: Scenario = async () => {
       repository,
       repository,
       { discover: () => [] } as unknown as ToolCatalog,
+      new CapabilityRegistry(),
       emptyModelContinuations,
       null!,
       { nowUnixSeconds: () => now + 3 } as ClockPort,
@@ -10520,7 +10701,7 @@ const subagentProfileStrategyScenario: Scenario = async () => {
     'Subagent settings must expose the bounded built-in template catalog including the explicit governed worker',
   );
   assert.ok(
-    templates.find((template) => template.id === 'worker')?.capabilities.includes('workspace.write'),
+    templates.find((template) => template.id === 'worker')?.capabilities.includes('file.write'),
     'the worker template must request explicit Workspace write access',
   );
   assert.ok(
@@ -10558,8 +10739,9 @@ const subagentProfileStrategyScenario: Scenario = async () => {
     parentRuntimeId: 'profile-strategy-root-runtime',
     childRuntimeId: runtime.id,
     profileId: 'custom-worker',
-    capabilities: [],
+    grants: [],
     peerMessaging: 'parent-child',
+    mutationMode: 'read-only',
     modelRef,
     objective: 'Review src/parser/index.ts without changing files.',
     constraints: ['Focus on src/parser and report evidence only.'],
@@ -10626,6 +10808,7 @@ const subagentProfileStrategyScenario: Scenario = async () => {
     } as unknown as RuntimeParticipantRepositoryPort,
     { readMessages: async () => [], listDelegationMessages: async () => [] } as MailboxReaderPort,
     { discover: () => [] } as unknown as ToolCatalog,
+    new CapabilityRegistry(),
     emptyModelContinuations,
     null!,
     { nowUnixSeconds: () => 1_800_560_000 } as ClockPort,
@@ -13184,7 +13367,7 @@ const cumulativeTokenCeilingRemovedScenario: Scenario = async () => {
     );
     await db.execute(
       `INSERT INTO agent_delegations
-        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
          deadline_at, version, created_at, updated_at)
@@ -13372,7 +13555,7 @@ const progressAwareLoopGuardScenario: Scenario = async () => {
         expectedRunVersion: version,
         observations: [
           {
-            toolName: 'workspace_read_file',
+            toolName: 'file_read',
             risk: 'read',
             operationHash: 'repeat-missing-file-operation',
             result: repeatedFailure,
@@ -13441,7 +13624,7 @@ const progressAwareLoopGuardScenario: Scenario = async () => {
       expectedRunVersion: resumed.run.version,
       observations: [
         {
-          toolName: 'workspace_read_file',
+          toolName: 'file_read',
           risk: 'read',
           operationHash: 'repeat-missing-file-operation',
           result: repeatedFailure,
@@ -13578,6 +13761,12 @@ const publicAgentErrorTaxonomyScenario: Scenario = async () => {
     });
 
   const cases: Array<{ producer: string; raw: string; status: number; code: string }> = [
+    {
+      producer: 'capability grant scope validation',
+      raw: 'APP_GRANT_SCOPE_INVALID',
+      status: 400,
+      code: 'VALIDATION_FAILED',
+    },
     { producer: 'subagent missing run', raw: 'RUN_NOT_FOUND', status: 404, code: 'NOT_FOUND' },
     { producer: 'subagent terminal run', raw: 'RUN_NOT_ACTIVE', status: 409, code: 'RUN_NOT_ACTIVE' },
     {
@@ -13959,10 +14148,10 @@ const completionGateScenario: Scenario = async () => {
         (id, run_id, agent_runtime_id, step_id, source_model_step_id, provider_call_id, tool_name, tool_version,
          inspection_json, operation_hash, operation_hash_version, risk, status, result_json, created_at, started_at, completed_at)
        VALUES ('completion-write', 'completion-run', 'completion-runtime', 'completion-write-step',
-               'completion-model-source', 'provider-write', 'machine_write_file', '1.0.0', ?, 'gate-write', 1,
+               'completion-model-source', 'provider-write', 'file_write', '1.0.0', ?, 'gate-write', 1,
                'mutate', 'succeeded', ?, ?, ?, ?)`,
       [
-        inspection('machine_write_file', { path: '/workspace/work/example.ts' }, 'gate-write'),
+        inspection('file_write', { path: '/workspace/work/example.ts' }, 'gate-write'),
         successfulResult('File write', 'unverified'),
         now,
         now,
@@ -15839,7 +16028,7 @@ const artifactModelInputScenario: Scenario = async () => {
     }
     await db.execute(
       `INSERT INTO agent_delegations
-        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+        (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
          model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
          dependency_mode, status, depth, failure_mode, max_steps, idempotency_key, request_hash,
          deadline_at, created_at, updated_at)
@@ -15850,7 +16039,7 @@ const artifactModelInputScenario: Scenario = async () => {
         runId,
         rootRuntimeId,
         childRuntimeId,
-        JSON.stringify(['artifacts.read']),
+        JSON.stringify([{ capability: 'artifacts.read', schemaVersion: 2, scope: { kind: 'global' } }]),
         scenarioDelegationModel(modelRef),
         JSON.stringify([textArtifact.id, largeArtifact.id]),
         `artifact-model-key-${delegationId}`,
@@ -16190,7 +16379,7 @@ const skillProgressiveDisclosureScenario: Scenario = async () => {
     'name: removed-format',
     'version: 1.0.0',
     'description: Removed Nexus-specific Skill metadata must be rejected.',
-    'requiredCapabilities: machine.files.read',
+    'requiredCapabilities: file.read',
     '---',
     '',
     '# Removed format',
@@ -17631,7 +17820,7 @@ const pluginAppIntentSdkScenario: Scenario = async () => {
   const artifacts = new ArtifactService(store);
   const registry = new AppRegistryService();
   const states = new SqliteAppStateRepository(db);
-  const grants = new SqliteAppGrantRepository(db);
+  const grants = new SqliteAppGrantRepository(db, new CapabilityRegistry());
   const intentRepository = new SqliteAppIntentRepository(db);
   let intentNow = Math.floor(Date.now() / 1000);
   const intentClock: ClockPort = { nowUnixSeconds: () => intentNow };
@@ -17679,14 +17868,14 @@ const pluginAppIntentSdkScenario: Scenario = async () => {
   };
   const exchangeGrant = {
     capability: 'app.intents.exchange' as const,
-    schemaVersion: 1,
-    scope: {} as JsonValue,
+    schemaVersion: 2 as const,
+    scope: { kind: 'global' } as const,
     grantedAt: intentNow,
   };
   const artifactGrant = {
     capability: 'artifacts.read' as const,
-    schemaVersion: 1,
-    scope: {} as JsonValue,
+    schemaVersion: 2 as const,
+    scope: { kind: 'global' } as const,
     grantedAt: intentNow,
   };
 
@@ -19638,11 +19827,14 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
     tools: [
       createConnectionListTool(null!, availabilityCryptoHash),
       createDiagnosticsTool(null!, availabilityCryptoHash),
-      createReadFileTool(null!, availabilityCryptoHash),
-      createWriteFileTool(null!, null!, availabilityCryptoHash),
       createShellTool(null!, availabilityCryptoHash),
       createDockerMutationTool(null!, availabilityCryptoHash),
     ],
+  });
+  availabilityCatalog.registerContribution({
+    schemaVersion: 1,
+    id: 'scenario.file-availability',
+    tools: createUnifiedFileTools(null!, availabilityCryptoHash),
   });
   const withoutTarget = new Set(
     modelFacingToolSchemas(
@@ -19658,8 +19850,8 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
   );
   for (const toolName of [
     'machine_diagnostics',
-    'machine_read_file',
-    'machine_write_file',
+    'file_read',
+    'file_write',
     'machine_execute_shell',
     'machine_docker_action',
   ]) {
@@ -19679,8 +19871,8 @@ const machineRouteDependencyApprovalScenario: Scenario = async () => {
   );
   for (const toolName of [
     'machine_diagnostics',
-    'machine_read_file',
-    'machine_write_file',
+    'file_read',
+    'file_write',
     'machine_execute_shell',
     'machine_docker_action',
   ]) {
@@ -20105,6 +20297,569 @@ const agentOwnerDecompositionScenario: Scenario = async () => {
   ];
 };
 
+const unifiedFileCapabilityScenario: Scenario = async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'nexus-unified-file-'));
+  const workRoot = path.join(directory, 'work');
+  fs.mkdirSync(workRoot, { recursive: true });
+  fs.writeFileSync(path.join(workRoot, 'a.txt'), 'alpha\nneedle\nomega\n', 'utf8');
+
+  let workspaceGeneration = 1;
+  const assertWorkspaceGeneration = (generation: number): void => {
+    if (generation !== workspaceGeneration) throw new Error('WORKSPACE_GENERATION_CONFLICT');
+  };
+  const workspaceRuntime = {
+    statWorkspacePath: async (_scope: Scope, _workspaceId: string, generation: number, requestedPath: string) => {
+      assertWorkspaceGeneration(generation);
+      return statWorkspacePath(workRoot, requestedPath);
+    },
+    readWorkspaceFile: async (
+      _scope: Scope,
+      _workspaceId: string,
+      generation: number,
+      request: Parameters<typeof readWorkspaceFile>[1],
+    ) => {
+      assertWorkspaceGeneration(generation);
+      return readWorkspaceFile(workRoot, request);
+    },
+    writeWorkspaceFile: async (
+      _scope: Scope,
+      _workspaceId: string,
+      generation: number,
+      request: Parameters<typeof writeWorkspaceFile>[1],
+    ) => {
+      assertWorkspaceGeneration(generation);
+      return writeWorkspaceFile(workRoot, request);
+    },
+    listWorkspaceFiles: async (
+      _scope: Scope,
+      _workspaceId: string,
+      generation: number,
+      request: Parameters<typeof listWorkspaceFiles>[1],
+    ) => {
+      assertWorkspaceGeneration(generation);
+      return listWorkspaceFiles(workRoot, request);
+    },
+    searchWorkspace: async (
+      _scope: Scope,
+      _workspaceId: string,
+      generation: number,
+      request: Parameters<typeof searchWorkspace>[1],
+    ) => {
+      assertWorkspaceGeneration(generation);
+      return searchWorkspace(workRoot, request);
+    },
+    moveWorkspaceFile: async (
+      _scope: Scope,
+      _workspaceId: string,
+      generation: number,
+      request: Parameters<typeof moveWorkspaceFile>[1],
+    ) => {
+      assertWorkspaceGeneration(generation);
+      return moveWorkspaceFile(workRoot, request);
+    },
+    deleteWorkspaceFile: async (
+      _scope: Scope,
+      _workspaceId: string,
+      generation: number,
+      request: Parameters<typeof deleteWorkspaceFile>[1],
+    ) => {
+      assertWorkspaceGeneration(generation);
+      return deleteWorkspaceFile(workRoot, request);
+    },
+    applyWorkspacePatch: async (
+      _scope: Scope,
+      _workspaceId: string,
+      generation: number,
+      request: Parameters<typeof applyWorkspacePatch>[1],
+    ) => {
+      assertWorkspaceGeneration(generation);
+      return applyWorkspacePatch(workRoot, request);
+    },
+  } as unknown as WorkspaceRuntimeService;
+
+  let sshConfigurationHash = 'ssh-config';
+  const assertSshConfiguration = (configurationHash: string | undefined): void => {
+    if (configurationHash !== sshConfigurationHash) throw new Error('RESOURCE_CHANGED');
+  };
+  const sshFiles = new Map<string, Buffer>([['/srv/a.txt', Buffer.from('alpha\nneedle\nomega\n', 'utf8')]]);
+  const sshDirs = new Set<string>(['/srv']);
+  const fileHash = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+  const inspectSsh = (requestedPath: string) => {
+    const content = sshFiles.get(requestedPath);
+    if (content)
+      return {
+        path: requestedPath,
+        resolvedPath: requestedPath,
+        exists: true,
+        type: 'file' as const,
+        sizeBytes: content.byteLength,
+        modifiedAt: 1,
+        mode: 0o600,
+        sha256: fileHash(content),
+      };
+    if (sshDirs.has(requestedPath))
+      return {
+        path: requestedPath,
+        resolvedPath: requestedPath,
+        exists: true,
+        type: 'directory' as const,
+        sizeBytes: 0,
+        modifiedAt: 1,
+        mode: 0o700,
+        sha256: null,
+      };
+    return {
+      path: requestedPath,
+      resolvedPath: requestedPath,
+      exists: false,
+      type: null,
+      sizeBytes: null,
+      modifiedAt: null,
+      mode: null,
+      sha256: null,
+    };
+  };
+  const machine = {
+    inspectPath: async (
+      _context: ToolContext,
+      connectionId: number,
+      requestedPath: string,
+      configurationHash: string,
+    ) => {
+      assert.equal(connectionId, 1);
+      assertSshConfiguration(configurationHash);
+      return inspectSsh(requestedPath);
+    },
+    readFile: async (
+      _context: ToolContext,
+      connectionId: number,
+      requestedPath: string,
+      maxBytes: number,
+      offset = 0,
+      configurationHash?: string,
+    ) => {
+      assert.equal(connectionId, 1);
+      assertSshConfiguration(configurationHash);
+      const content = sshFiles.get(requestedPath);
+      if (!content) throw new Error('NOT_FOUND');
+      const bytes = content.subarray(offset, Math.min(content.byteLength, offset + maxBytes));
+      return {
+        path: requestedPath,
+        resolvedPath: requestedPath,
+        sizeBytes: content.byteLength,
+        modifiedAt: 1,
+        offset,
+        bytesRead: bytes.byteLength,
+        truncated: offset + bytes.byteLength < content.byteLength,
+        content: bytes.toString('utf8'),
+      };
+    },
+    listFiles: async (
+      _context: ToolContext,
+      connectionId: number,
+      requestedPath: string,
+      maxEntries: number,
+      configurationHash: string,
+    ) => {
+      assert.equal(connectionId, 1);
+      assertSshConfiguration(configurationHash);
+      const entries = [...sshFiles.keys()]
+        .filter((candidate) => path.posix.dirname(candidate) === requestedPath)
+        .sort()
+        .slice(0, maxEntries)
+        .map((candidate) => {
+          const content = sshFiles.get(candidate)!;
+          return {
+            name: path.posix.basename(candidate),
+            path: candidate,
+            type: 'file' as const,
+            sizeBytes: content.byteLength,
+            modifiedAt: 1,
+          };
+        });
+      return { path: requestedPath, entries, truncated: false };
+    },
+    searchFiles: async (
+      _context: ToolContext,
+      connectionId: number,
+      request: { query: string; path: string; maxResults: number; contextLines: number },
+      configurationHash: string,
+    ) => {
+      assert.equal(connectionId, 1);
+      assertSshConfiguration(configurationHash);
+      const expression = new RegExp(request.query, 'u');
+      const matches: Array<{
+        path: string;
+        line: number;
+        column: number;
+        text: string;
+        before: string[];
+        after: string[];
+      }> = [];
+      let scannedBytes = 0;
+      for (const [candidate, bytes] of sshFiles) {
+        if (!candidate.startsWith(`${request.path}/`) && candidate !== request.path) continue;
+        scannedBytes += bytes.byteLength;
+        const lines = bytes.toString('utf8').split('\n');
+        for (let index = 0; index < lines.length && matches.length < request.maxResults; index += 1) {
+          const found = expression.exec(lines[index]!);
+          if (!found) continue;
+          matches.push({
+            path: candidate,
+            line: index + 1,
+            column: found.index + 1,
+            text: lines[index]!,
+            before: lines.slice(Math.max(0, index - request.contextLines), index),
+            after: lines.slice(index + 1, index + 1 + request.contextLines),
+          });
+        }
+      }
+      return {
+        query: request.query,
+        path: request.path,
+        engine: 'sftp' as const,
+        matches,
+        truncated: false,
+        scannedFiles: sshFiles.size,
+        scannedBytes,
+      };
+    },
+    writeFile: async (
+      _context: ToolContext,
+      connectionId: number,
+      requestedPath: string,
+      content: Uint8Array,
+      expectedSha256: string | null,
+      configurationHash: string,
+    ) => {
+      assert.equal(connectionId, 1);
+      assertSshConfiguration(configurationHash);
+      const before = sshFiles.get(requestedPath);
+      assert.equal(before ? fileHash(before) : null, expectedSha256);
+      const bytes = Buffer.from(content);
+      sshFiles.set(requestedPath, bytes);
+      return {
+        path: requestedPath,
+        resolvedPath: requestedPath,
+        exists: true,
+        type: 'file' as const,
+        sizeBytes: bytes.byteLength,
+        modifiedAt: 2,
+        mode: 0o600,
+        sha256: fileHash(bytes),
+        bytesWritten: bytes.byteLength,
+      };
+    },
+    movePath: async (
+      _context: ToolContext,
+      connectionId: number,
+      source: string,
+      destination: string,
+      expectedSha256: string | null,
+      configurationHash: string,
+    ) => {
+      assert.equal(connectionId, 1);
+      assertSshConfiguration(configurationHash);
+      const bytes = sshFiles.get(source);
+      if (!bytes) throw new Error('NOT_FOUND');
+      assert.equal(fileHash(bytes), expectedSha256);
+      assert.equal(sshFiles.has(destination), false);
+      sshFiles.delete(source);
+      sshFiles.set(destination, bytes);
+      return { path: source, destinationPath: destination, type: 'file' as const, sha256: fileHash(bytes) };
+    },
+    deletePath: async (
+      _context: ToolContext,
+      connectionId: number,
+      requestedPath: string,
+      _recursive: boolean,
+      expectedSha256: string | null,
+      configurationHash: string,
+    ) => {
+      assert.equal(connectionId, 1);
+      assertSshConfiguration(configurationHash);
+      const bytes = sshFiles.get(requestedPath);
+      if (!bytes) throw new Error('NOT_FOUND');
+      assert.equal(fileHash(bytes), expectedSha256);
+      sshFiles.delete(requestedPath);
+      return { path: requestedPath, type: 'file' as const, deleted: true as const };
+    },
+    replaceFiles: async (
+      _context: ToolContext,
+      connectionId: number,
+      replacements: readonly { path: string; content: Uint8Array; expectedSha256: string }[],
+      configurationHash: string,
+    ) => {
+      assert.equal(connectionId, 1);
+      assertSshConfiguration(configurationHash);
+      for (const replacement of replacements) {
+        const before = sshFiles.get(replacement.path);
+        if (!before || fileHash(before) !== replacement.expectedSha256) throw new Error('RESOURCE_CHANGED');
+      }
+      return replacements.map((replacement) => {
+        const bytes = Buffer.from(replacement.content);
+        sshFiles.set(replacement.path, bytes);
+        return { path: replacement.path, sha256: fileHash(bytes), sizeBytes: bytes.byteLength };
+      });
+    },
+  } as unknown as MachineCapabilityPort;
+
+  const targets = {
+    resolve: async (_context: ToolContext, selector: { target: 'workspace' | 'ssh'; id: string }) =>
+      selector.target === 'workspace'
+        ? {
+            selector,
+            fingerprint: {
+              kind: 'workspace' as const,
+              target: 'workspace' as const,
+              id: selector.id,
+              workspaceId: selector.id,
+              generation: workspaceGeneration,
+              targetIdentity: `workspace:${selector.id}:${workspaceGeneration}`,
+              endpoint: `workspace:${selector.id}`,
+              loginUser: 'runner:65532',
+              configurationHash: `workspace-config-${workspaceGeneration}`,
+            },
+            resourceKeys: [`workspace:${selector.id}:${workspaceGeneration}`],
+            preconditions: [
+              {
+                kind: 'workspaceGeneration' as const,
+                key: selector.id,
+                observedValue: { generation: workspaceGeneration },
+              },
+            ],
+            workspaceGeneration,
+          }
+        : {
+            selector,
+            fingerprint: {
+              kind: 'ssh' as const,
+              target: 'ssh' as const,
+              id: selector.id,
+              connectionId: 1,
+              targetIdentity: 'ssh:1',
+              endpoint: 'ssh.example:22',
+              loginUser: 'tester',
+              configurationHash: sshConfigurationHash,
+              hostKeyTrust: 'unavailable' as const,
+            },
+            resourceKeys: ['connection:1'],
+            preconditions: [],
+            connectionId: 1,
+          },
+  } as unknown as AgentTargetResolver;
+
+  const service = new FileCapabilityService(targets, workspaceRuntime, machine);
+  const cryptoHash = { sha256Utf8: (value: string) => createHash('sha256').update(value, 'utf8').digest('hex') };
+  const tools = new Map(createUnifiedFileTools(service, cryptoHash).map((tool) => [tool.descriptor.name, tool]));
+  const context: ToolContext = {
+    userId: 1,
+    appId: 'scenario.unified-file',
+    actor: {
+      kind: 'agent',
+      userId: 1,
+      appId: 'scenario.unified-file',
+      runId: 'file-run',
+      agentRuntimeId: 'file-runtime',
+    },
+    runId: 'file-run',
+    agentRuntimeId: 'file-runtime',
+    connectionIds: [1],
+    environment: null,
+    stepId: 'file-step',
+    signal: new AbortController().signal,
+    deadlineAt: Math.floor(Date.now() / 1000) + 60,
+    maxOutputBytes: 256 * 1024,
+    inputRevision: 1,
+  };
+  const invoke = async (name: string, input: JsonValue): Promise<ToolResult> => {
+    const tool = tools.get(name);
+    assert.ok(tool, `${name} must be registered`);
+    const inspection = await tool.inspect(input, context, 7);
+    return tool.execute(inspection, context);
+  };
+
+  try {
+    for (const target of [
+      { target: 'workspace' as const, id: 'ws-file', root: '/workspace/work' },
+      { target: 'ssh' as const, id: '1', root: '/srv' },
+    ]) {
+      const source = `${target.root}/a.txt`;
+      const created = `${target.root}/created.txt`;
+      const moved = `${target.root}/moved.txt`;
+      const read = await invoke('file_read', { target: target.target, id: target.id, path: source });
+      assert.equal(read.ok, true);
+      assert.match(String((read.data as Record<string, JsonValue>).content), /needle/);
+      const listed = await invoke('file_list', { target: target.target, id: target.id, path: target.root });
+      assert.equal(listed.ok, true);
+      const searched = await invoke('file_search', {
+        target: target.target,
+        id: target.id,
+        path: target.root,
+        query: 'needle',
+      });
+      assert.equal(((searched.data as Record<string, JsonValue>).matches as JsonValue[]).length, 1);
+      await invoke('file_write', { target: target.target, id: target.id, path: created, content: 'created\n' });
+      const patch = `--- ${source}\n+++ ${source}\n@@ -1,3 +1,3 @@\n-alpha\n+ALPHA\n needle\n omega\n`;
+      const patched = await invoke('file_patch', { target: target.target, id: target.id, patch });
+      assert.equal(patched.ok, true);
+      const reread = await invoke('file_read', { target: target.target, id: target.id, path: source });
+      assert.match(String((reread.data as Record<string, JsonValue>).content), /^ALPHA/m);
+      await invoke('file_move', { target: target.target, id: target.id, path: created, destinationPath: moved });
+      await invoke('file_delete', { target: target.target, id: target.id, path: moved });
+      const afterDelete = target.target === 'workspace' ? statWorkspacePath(workRoot, moved) : inspectSsh(moved);
+      assert.equal(afterDelete.exists, false);
+    }
+
+    const fileWriteTool = tools.get('file_write');
+    const fileReadTool = tools.get('file_read');
+    assert.ok(fileWriteTool && fileReadTool);
+
+    const frozenWorkspaceWrite = await fileWriteTool.inspect(
+      { target: 'workspace', id: 'ws-file', path: '/workspace/work/stale-generation.txt', content: 'must-not-write\n' },
+      context,
+      7,
+    );
+    workspaceGeneration = 2;
+    await assert.rejects(
+      () => fileWriteTool.execute(frozenWorkspaceWrite, context),
+      /WORKSPACE_GENERATION_CONFLICT/,
+      'file execution must keep the inspected Workspace generation pinned instead of rebinding target + id after inspection',
+    );
+    assert.equal(
+      statWorkspacePath(workRoot, '/workspace/work/stale-generation.txt').exists,
+      false,
+      'a stale Workspace generation must not receive the approved write',
+    );
+    workspaceGeneration = 1;
+
+    const frozenSshWrite = await fileWriteTool.inspect(
+      { target: 'ssh', id: '1', path: '/srv/stale-config.txt', content: 'must-not-write\n' },
+      context,
+      7,
+    );
+    sshConfigurationHash = 'ssh-config-v2';
+    await assert.rejects(
+      () => fileWriteTool.execute(frozenSshWrite, context),
+      /RESOURCE_CHANGED/,
+      'file mutation execution must keep the inspected SSH configuration hash pinned instead of rebinding to a changed Connection',
+    );
+    assert.equal(
+      sshFiles.has('/srv/stale-config.txt'),
+      false,
+      'a stale SSH configuration must not receive the approved write',
+    );
+    sshConfigurationHash = 'ssh-config';
+
+    const frozenSshRead = await fileReadTool.inspect({ target: 'ssh', id: '1', path: '/srv/a.txt' }, context, 7);
+    sshConfigurationHash = 'ssh-config-v3';
+    await assert.rejects(
+      () => fileReadTool.execute(frozenSshRead, context),
+      /RESOURCE_CHANGED/,
+      'read execution must also consume the inspected SSH fingerprint instead of silently rebinding after inspection',
+    );
+    sshConfigurationHash = 'ssh-config';
+
+    const capabilityRegistry = new CapabilityRegistry();
+    const appRegistry = new AppRegistryService();
+    appRegistry.registerVersion({
+      manifest: validateManifest(
+        {
+          schemaVersion: 1,
+          id: context.appId,
+          version: '1.0.0',
+          displayName: 'Unified file scenario',
+          sdkVersion: '1.0.0',
+          nexus: { minVersion: '1.0.0', maxVersion: '99.0.0' },
+          capabilities: ['file.read', 'file.write', 'file.delete'],
+          intents: [],
+        },
+        { nexusVersion: '1.0.0', supportedSdkMajor: 1 },
+      ),
+      defaultEnabled: true,
+      defaultGrants: [],
+    });
+    let brokerGrants = [
+      capabilityRegistry.grant(
+        'file.read',
+        { kind: 'targets', targets: { workspace: { mode: 'ids', ids: ['ws-file'] } } },
+        1,
+      ),
+    ];
+    const broker = new AppCapabilityBroker(
+      appRegistry,
+      {
+        get: async () => ({
+          userId: context.userId,
+          appId: context.appId,
+          activeVersion: '1.0.0',
+          desiredState: 'enabled',
+          observedState: 'running',
+          healthReason: null,
+          policyRevision: 7,
+          runningCount: 1,
+          approvalCount: 0,
+          budgetRequestCount: 0,
+          acceptNewRuns: true,
+          version: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        }),
+      } as never,
+      { list: async () => brokerGrants } as never,
+      { isDenied: async () => false } as never,
+      capabilityRegistry,
+    );
+    const authorizedCatalog = new ToolCatalog();
+    authorizedCatalog.registerContribution({
+      schemaVersion: 1,
+      id: 'scenario.unified-file-authorized',
+      tools: createUnifiedFileTools(service, cryptoHash),
+    });
+    const executor = new ToolExecutor(authorizedCatalog, broker);
+    const workspaceProposal = {
+      providerCallId: 'file-workspace-read',
+      name: 'file_read',
+      argumentsJson: JSON.stringify({ target: 'workspace', id: 'ws-file', path: '/workspace/work/a.txt' }),
+    };
+    const authorizedRead = await executor.invoke(context, workspaceProposal);
+    assert.equal(authorizedRead.result.ok, true, 'ToolExecutor/AppCapabilityBroker must allow a matching target grant');
+    await assert.rejects(
+      () =>
+        executor.inspect(context, {
+          providerCallId: 'file-ssh-read',
+          name: 'file_read',
+          argumentsJson: JSON.stringify({ target: 'ssh', id: '1', path: '/srv/a.txt' }),
+        }),
+      /APP_CAPABILITY_DENIED/,
+      'a Workspace-only file.read grant must not authorize the same canonical Tool against SSH',
+    );
+    const staleInspection = await executor.inspect(context, workspaceProposal);
+    brokerGrants = [
+      capabilityRegistry.grant(
+        'file.read',
+        { kind: 'targets', targets: { workspace: { mode: 'ids', ids: ['other-workspace'] } } },
+        2,
+      ),
+    ];
+    await assert.rejects(
+      () => executor.execute(context, staleInspection),
+      /POLICY_REVISION_CONFLICT/,
+      'ToolExecutor must re-authorize the inspected target before execution so a narrowed grant cannot be bypassed',
+    );
+
+    return [
+      { name: 'unified_file_targets', value: 2, unit: 'targets' },
+      { name: 'unified_file_operations', value: 7, unit: 'operations' },
+      { name: 'unified_file_broker_scope_rejections', value: 2, unit: 'cases' },
+      { name: 'unified_file_frozen_target_stale_rejections', value: 3, unit: 'cases' },
+      { name: 'unified_file_legacy_branches', value: 0, unit: 'branches' },
+    ];
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+};
+
 const agentPublicContractAlignmentScenario: Scenario = async () => {
   const backendSourceRoot = fs.existsSync(path.join(process.cwd(), 'src', 'modules', 'agent'))
     ? path.join(process.cwd(), 'src')
@@ -20131,13 +20886,12 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
   assert.deepEqual(
     AGENT_CAPABILITIES,
     [
+      'file.read',
+      'file.write',
+      'file.delete',
       'machine.inspect',
-      'machine.files.read',
-      'machine.files.write',
       'machine.shell.execute',
       'machine.docker.manage',
-      'workspace.read',
-      'workspace.write',
       'workspace.execute',
       'workspace.manage',
       'browser.read',
@@ -20158,8 +20912,20 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     'Tool contributions must only register modules; each Tool descriptor is the single capability authority',
   );
   const workspaceTools = read('modules/agent/tools/host/workspace-coding-tools.ts');
-  assert.match(workspaceTools, /capability: 'workspace\.read'/, 'Workspace inspection must use read authority');
-  assert.match(workspaceTools, /capability: 'workspace\.write'/, 'Workspace patching must use write authority');
+  assert.match(
+    workspaceTools,
+    /capability: 'file\.read'/,
+    'Workspace code navigation must use canonical file read authority',
+  );
+  assert.doesNotMatch(
+    workspaceTools,
+    /workspace\.read|workspace\.write/,
+    'Workspace coding tools must not retain superseded file capability names',
+  );
+  const fileTools = read('modules/agent/tools/host/file-tools.ts');
+  assert.match(fileTools, /capability: 'file\.read'/, 'Unified file reads must use file.read authority');
+  assert.match(fileTools, /capability: 'file\.write'/, 'Unified file mutations must use file.write authority');
+  assert.match(fileTools, /capability: 'file\.delete'/, 'Unified file deletion must use file.delete authority');
   const browserTools = read('modules/agent/tools/host/browser-tools.ts');
   assert.match(browserTools, /capability: 'browser\.read'/, 'Browser evidence/navigation must expose read authority');
   assert.match(
@@ -20183,14 +20949,19 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
     path.join(frontendRoot, 'features/agent/settings/AppManagementSettings.vue'),
     'utf8',
   );
-  for (const category of ['machine', 'workspace', 'browser', 'integration', 'data']) {
+  for (const category of ['files', 'machine', 'workspace', 'browser', 'integration', 'data']) {
     assert.ok(permissionUi.includes(`id: '${category}'`), `permission UI must expose the ${category} resource group`);
   }
 
   assert.match(
     permissionUi,
-    /drafts\.value = \{ \.\.\.drafts\.value, \[appId\]: view\.grants\.map\(\(grant\) => grant\.capability\) \}/,
-    'permission UI must initialize its draft from persisted grants returned by the Host',
+    /view\.grants\.map\(\(grant\) => cloneGrant\(grant\)\)/,
+    'permission UI must initialize its draft from complete persisted capability grants and scopes returned by the Host',
+  );
+  assert.match(
+    permissionUi,
+    /supportedTargets[\s\S]*targetScopeSelection[\s\S]*mode === 'ids'/,
+    'permission UI must expose target-scoped Workspace/SSH grant selection rather than capability strings only',
   );
   assert.match(
     permissionUi,
@@ -20270,7 +21041,7 @@ const agentPublicContractAlignmentScenario: Scenario = async () => {
   return [
     { name: 'public_mcp_capability_descriptions', value: 2, unit: 'surfaces' },
     { name: 'permission_resource_capabilities', value: AGENT_CAPABILITIES.length, unit: 'capabilities' },
-    { name: 'permission_resource_groups', value: 5, unit: 'groups' },
+    { name: 'permission_resource_groups', value: 6, unit: 'groups' },
     { name: 'public_integration_management_returns', value: 4, unit: 'methods' },
     { name: 'public_contract_narrowing_drifts', value: 0, unit: 'contracts' },
   ];
@@ -20482,9 +21253,11 @@ const productTypeBoundaryScenario: Scenario = async () => {
 const scenarios = new Map<string, Scenario>([
   ['context/tool-exchange-atomicity', contextToolExchangeScenario],
   ['context/durable-compaction-checkpoint', durableContextCheckpointScenario],
+  ['migration/capability-grants-v2', capabilityGrantMigrationScenario],
   ['context/token-accounting', contextTokenAccountingScenario],
   ['context/project-instructions', projectInstructionsContextScenario],
   ['workspace/coding-tool-surface', workspaceCodingToolSurfaceScenario],
+  ['file/unified-targets', unifiedFileCapabilityScenario],
   ['workspace/repo-map-code-intel', workspaceRepoMapCodeIntelScenario],
   ['workspace/background-job-lifecycle', workspaceBackgroundJobLifecycleScenario],
   ['context/tool-result-projection', toolResultProjectionScenario],

@@ -78,6 +78,7 @@
         "deleteDataFailed": "The app was uninstalled, but retained data could not be deleted",
         "drainingNotice": "App is draining background tasks...",
         "coreAppCannotUninstall": "Core builtin app cannot be uninstalled",
+        "categoryFiles": "Files & Targets",
         "categoryMachine": "Host Machine",
         "categoryWorkspace": "Workspace Sandbox",
         "categoryBrowser": "Browser",

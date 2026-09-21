@@ -20,12 +20,6 @@ const positiveInteger = (value: JsonValue | undefined, fallback?: number): numbe
   return value as number;
 };
 
-const nonNegativeInteger = (value: JsonValue | undefined, fallback = 0): number => {
-  if (value === undefined) return fallback;
-  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error('TOOL_ARGUMENTS_INVALID');
-  return value as number;
-};
-
 const operation = (
   cryptoHash: CryptoHashPort,
   context: ToolContext,
@@ -208,90 +202,5 @@ export const createDiagnosticsTool = (machine: MachineCapabilityPort, cryptoHash
       observations: [...report.observations],
       target: { ...inspection.target },
     });
-  },
-});
-
-export const createReadFileTool = (machine: MachineCapabilityPort, cryptoHash: CryptoHashPort): AgentTool => ({
-  descriptor: {
-    name: 'machine_read_file',
-    version: '1.0.0',
-    description: 'Read a bounded UTF-8 slice from an authorized remote file. Device and secret paths are denied.',
-    inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        connectionId: { type: 'integer', minimum: 1 },
-        path: { type: 'string', minLength: 1, maxLength: 4096 },
-        maxBytes: { type: 'integer', minimum: 1, maximum: 1048576 },
-        offset: { type: 'integer', minimum: 0 },
-      },
-      required: ['connectionId', 'path'],
-    },
-    riskClass: 'read',
-    parallelSafe: true,
-    capability: 'machine.files.read',
-  },
-  isAvailable: hasSelectedConnection,
-  inspect: async (input, context, policyRevision) => {
-    const args = record(input);
-    onlyKeys(args, ['connectionId', 'path', 'maxBytes', 'offset']);
-    const connectionId = positiveInteger(args.connectionId);
-    if (typeof args.path !== 'string' || !args.path) throw new Error('TOOL_ARGUMENTS_INVALID');
-    const normalizedArguments: JsonValue = {
-      connectionId,
-      path: args.path,
-      maxBytes: positiveInteger(args.maxBytes, Math.min(context.maxOutputBytes, 64 * 1024)),
-      offset: nonNegativeInteger(args.offset),
-    };
-    const target = await machine.target(context, connectionId);
-    const resourceKeys = [`connection:${connectionId}`, `connection:${connectionId}:file:${args.path}`];
-    return {
-      toolName: 'machine_read_file',
-      toolVersion: '1.0.0',
-      normalizedArguments,
-      target,
-      resourceKeys,
-      risk: 'read',
-      mutation: false,
-      operationHash: operation(
-        cryptoHash,
-        context,
-        'machine_read_file',
-        '1.0.0',
-        target,
-        normalizedArguments,
-        resourceKeys,
-        policyRevision,
-      ),
-      operationHashVersion: 1,
-      preconditions: [],
-      policyRevision,
-      inputRevision: context.inputRevision,
-    };
-  },
-  execute: async (inspection, context) => {
-    const args = record(inspection.normalizedArguments);
-    const result = await machine.readFile(
-      context,
-      positiveInteger(args.connectionId),
-      String(args.path),
-      positiveInteger(args.maxBytes),
-      nonNegativeInteger(args.offset),
-    );
-    return confirmedResult(
-      `Read ${result.bytesRead} byte(s) from ${result.resolvedPath}${result.truncated ? ' (truncated)' : ''}.`,
-      {
-        path: result.path,
-        resolvedPath: result.resolvedPath,
-        sizeBytes: result.sizeBytes,
-        modifiedAt: result.modifiedAt,
-        offset: result.offset,
-        bytesRead: result.bytesRead,
-        truncated: result.truncated,
-        content: result.content,
-        target: { ...inspection.target },
-      },
-      result.truncated,
-    );
   },
 });

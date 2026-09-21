@@ -1,4 +1,3 @@
-import type { ArtifactService } from '../../ai/artifact.service';
 import type { JsonValue } from '../../agent.types';
 import type { CryptoHashPort } from '../../crypto-hash.port';
 import { hashOperation } from '../../operation-hash';
@@ -11,7 +10,6 @@ import type {
   ToolResult,
 } from '../../capabilities/tool.types';
 
-const MAX_WRITE_BYTES = 16 * 1024 * 1024;
 const MAX_SHELL_BYTES = 16 * 1024;
 
 const record = (value: JsonValue): Record<string, JsonValue> => {
@@ -27,11 +25,6 @@ const onlyKeys = (value: Record<string, JsonValue>, allowed: readonly string[]):
 const positiveInteger = (value: JsonValue | undefined, fallback?: number): number => {
   if (value === undefined && fallback !== undefined) return fallback;
   if (!Number.isSafeInteger(value) || (value as number) < 1) throw new Error('TOOL_ARGUMENTS_INVALID');
-  return value as number;
-};
-
-const nonNegativeInteger = (value: JsonValue | undefined): number => {
-  if (!Number.isSafeInteger(value) || (value as number) < 0) throw new Error('TOOL_ARGUMENTS_INVALID');
   return value as number;
 };
 
@@ -100,174 +93,8 @@ const result = (
   },
 });
 
-const readArtifact = async (
-  artifacts: ArtifactService,
-  context: ToolContext,
-  artifactId: string,
-  expectedVersion: number,
-  expectedSha256: string,
-  expectedSize: number,
-): Promise<Uint8Array> => {
-  const artifact = await artifacts.get(context, artifactId);
-  if (
-    !artifact ||
-    artifact.status !== 'ready' ||
-    artifact.version !== expectedVersion ||
-    artifact.sha256 !== expectedSha256 ||
-    artifact.sizeBytes !== expectedSize
-  ) {
-    throw new Error('RESOURCE_CHANGED');
-  }
-  if (artifact.sizeBytes > MAX_WRITE_BYTES) throw new Error('TOOL_INPUT_TOO_LARGE');
-  if (artifact.sizeBytes === 0) return new Uint8Array();
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of artifacts.read(context, artifactId, { start: 0, endInclusive: artifact.sizeBytes - 1 })) {
-    const bytes = Buffer.from(chunk);
-    total += bytes.byteLength;
-    if (total > MAX_WRITE_BYTES || total > artifact.sizeBytes) throw new Error('TOOL_INPUT_TOO_LARGE');
-    chunks.push(bytes);
-  }
-  const content = Buffer.concat(chunks);
-  if (content.byteLength !== artifact.sizeBytes) throw new Error('ARTIFACT_UNAVAILABLE');
-  return content;
-};
-
 const hasSelectedConnection = (context: { connectionIds?: readonly number[] }): boolean =>
   context.connectionIds === undefined || context.connectionIds.length > 0;
-
-export const createWriteFileTool = (
-  machine: MachineCapabilityPort,
-  artifacts: ArtifactService,
-  cryptoHash: CryptoHashPort,
-): AgentTool => ({
-  descriptor: {
-    name: 'machine_write_file',
-    version: '1.0.0',
-    description:
-      'Atomically replace or create a bounded remote file from an existing Nexus Artifact. Requires explicit user approval.',
-    inputSchema: {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        connectionId: { type: 'integer', minimum: 1 },
-        path: { type: 'string', minLength: 1, maxLength: 4096 },
-        contentArtifactRef: { type: 'string', minLength: 1, maxLength: 128 },
-      },
-      required: ['connectionId', 'path', 'contentArtifactRef'],
-    },
-    riskClass: 'mutate',
-    capability: 'machine.files.write',
-  },
-  isAvailable: hasSelectedConnection,
-  inspect: async (input, context, policyRevision) => {
-    const args = record(input);
-    onlyKeys(args, [
-      'connectionId',
-      'path',
-      'contentArtifactRef',
-      'contentArtifactVersion',
-      'contentArtifactSha256',
-      'contentArtifactBytes',
-    ]);
-    const connectionId = positiveInteger(args.connectionId);
-    const remotePath = stringValue(args.path, 4096);
-    const contentArtifactRef = stringValue(args.contentArtifactRef, 128);
-    const [target, artifact] = await Promise.all([
-      machine.target(context, connectionId),
-      artifacts.get(context, contentArtifactRef),
-    ]);
-    const file = await machine.inspectFile(context, connectionId, remotePath, target.configurationHash);
-    if (!artifact || artifact.status !== 'ready' || !artifact.sha256 || artifact.sizeBytes > MAX_WRITE_BYTES) {
-      throw new Error('ARTIFACT_UNAVAILABLE');
-    }
-    const normalizedArguments: JsonValue = {
-      connectionId,
-      path: file.resolvedPath,
-      contentArtifactRef,
-      contentArtifactVersion: artifact.version,
-      contentArtifactSha256: artifact.sha256,
-      contentArtifactBytes: artifact.sizeBytes,
-    };
-    const resourceKeys = [`connection:${connectionId}`, `connection:${connectionId}:file:${file.resolvedPath}`];
-    const preconditions: ToolPrecondition[] = [
-      {
-        kind: 'fileHash',
-        key: file.resolvedPath,
-        observedValue: file.sha256,
-      },
-      {
-        kind: 'metadata',
-        key: file.resolvedPath,
-        observedValue: {
-          exists: file.exists,
-          sizeBytes: file.sizeBytes,
-          modifiedAt: file.modifiedAt,
-          mode: file.mode,
-        },
-      },
-      {
-        kind: 'metadata',
-        key: `artifact:${artifact.id}`,
-        observedValue: { version: artifact.version, sha256: artifact.sha256, sizeBytes: artifact.sizeBytes },
-      },
-    ];
-    return {
-      toolName: 'machine_write_file',
-      toolVersion: '1.0.0',
-      normalizedArguments,
-      target,
-      resourceKeys,
-      risk: 'mutate',
-      mutation: true,
-      operationHash: operation(
-        cryptoHash,
-        context,
-        'machine_write_file',
-        '1.0.0',
-        target,
-        normalizedArguments,
-        resourceKeys,
-        preconditions,
-        policyRevision,
-      ),
-      operationHashVersion: 1,
-      preconditions,
-      policyRevision,
-      inputRevision: context.inputRevision,
-    };
-  },
-  execute: async (inspection, context) => {
-    const args = record(inspection.normalizedArguments);
-    const artifactId = stringValue(args.contentArtifactRef, 128);
-    const artifactVersion = positiveInteger(args.contentArtifactVersion);
-    const artifactSha256 = stringValue(args.contentArtifactSha256, 128);
-    const artifactBytes = nonNegativeInteger(args.contentArtifactBytes);
-    const content = await readArtifact(artifacts, context, artifactId, artifactVersion, artifactSha256, artifactBytes);
-    const fileHash = inspection.preconditions.find((precondition) => precondition.kind === 'fileHash')?.observedValue;
-    if (fileHash !== null && typeof fileHash !== 'string') throw new Error('TOOL_STATE_CONFLICT');
-    const written = await machine.writeFile(
-      context,
-      positiveInteger(args.connectionId),
-      stringValue(args.path, 4096),
-      content,
-      fileHash as string | null,
-      inspection.target.configurationHash,
-    );
-    return result(
-      true,
-      `Wrote ${written.bytesWritten} byte(s) to ${written.resolvedPath}.`,
-      {
-        path: written.resolvedPath,
-        bytesWritten: written.bytesWritten,
-        sha256: written.sha256,
-        target: { ...inspection.target },
-      },
-      'The remote file was re-read after atomic replacement and its SHA-256 matched the uploaded Artifact bytes.',
-      [artifactId],
-    );
-  },
-});
 
 const shellRisk = (command: string): 'mutate' | 'destructive' | 'forbidden' => {
   if (

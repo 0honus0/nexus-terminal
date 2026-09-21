@@ -63,18 +63,81 @@ export interface BoundedFileResult {
   content: string;
 }
 
-export interface FileMutationInspection {
+export interface FilePathInspection {
   path: string;
   resolvedPath: string;
   exists: boolean;
+  type: 'file' | 'directory' | null;
   sizeBytes: number | null;
   modifiedAt: number | null;
   mode: number | null;
   sha256: string | null;
 }
 
+export interface FileMutationInspection extends FilePathInspection {
+  type: 'file' | null;
+}
+
 export interface FileMutationResult extends FileMutationInspection {
   bytesWritten: number;
+}
+
+export interface FileListEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  sizeBytes: number;
+  modifiedAt: number;
+}
+
+export interface FileListResult {
+  path: string;
+  entries: FileListEntry[];
+  truncated: boolean;
+}
+
+export interface FileSearchMatch {
+  path: string;
+  line: number;
+  column: number;
+  text: string;
+  before: string[];
+  after: string[];
+}
+
+export interface FileSearchResult {
+  query: string;
+  path: string;
+  engine: 'sftp';
+  matches: FileSearchMatch[];
+  truncated: boolean;
+  scannedFiles: number;
+  scannedBytes: number;
+}
+
+export interface FileMoveResult {
+  path: string;
+  destinationPath: string;
+  type: 'file' | 'directory';
+  sha256: string | null;
+}
+
+export interface FileDeleteResult {
+  path: string;
+  type: 'file' | 'directory';
+  deleted: true;
+}
+
+export interface FileReplacement {
+  path: string;
+  content: Uint8Array;
+  expectedSha256: string;
+}
+
+export interface FileReplacementResult {
+  path: string;
+  sha256: string;
+  sizeBytes: number;
 }
 
 export interface ShellMutationResult {
@@ -106,12 +169,60 @@ export interface MachineCapabilityPort {
     actorId: string,
     signal: AbortSignal,
   ): Promise<AgentDiagnosticReport>;
+  inspectPath(
+    context: MachineToolContext,
+    connectionId: number,
+    remotePath: string,
+    expectedConfigurationHash: string,
+  ): Promise<FilePathInspection>;
   inspectFile(
     context: MachineToolContext,
     connectionId: number,
     remotePath: string,
     expectedConfigurationHash: string,
   ): Promise<FileMutationInspection>;
+  listFiles(
+    context: MachineToolContext,
+    connectionId: number,
+    remotePath: string,
+    maxEntries: number,
+    expectedConfigurationHash: string,
+  ): Promise<FileListResult>;
+  searchFiles(
+    context: MachineToolContext,
+    connectionId: number,
+    request: {
+      query: string;
+      path: string;
+      glob?: string;
+      maxResults: number;
+      contextLines: number;
+      maxOutputBytes: number;
+    },
+    expectedConfigurationHash: string,
+  ): Promise<FileSearchResult>;
+  movePath(
+    context: MachineToolContext,
+    connectionId: number,
+    remotePath: string,
+    destinationPath: string,
+    expectedSha256: string | null,
+    expectedConfigurationHash: string,
+  ): Promise<FileMoveResult>;
+  deletePath(
+    context: MachineToolContext,
+    connectionId: number,
+    remotePath: string,
+    recursive: boolean,
+    expectedSha256: string | null,
+    expectedConfigurationHash: string,
+  ): Promise<FileDeleteResult>;
+  replaceFiles(
+    context: MachineToolContext,
+    connectionId: number,
+    replacements: readonly FileReplacement[],
+    expectedConfigurationHash: string,
+  ): Promise<FileReplacementResult[]>;
   writeFile(
     context: MachineToolContext,
     connectionId: number,
@@ -147,5 +258,6 @@ export interface MachineCapabilityPort {
     remotePath: string,
     maxBytes: number,
     offset?: number,
+    expectedConfigurationHash?: string,
   ): Promise<BoundedFileResult>;
 }

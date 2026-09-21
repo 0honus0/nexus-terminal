@@ -46,6 +46,74 @@ export interface WorkspaceFileReadResult {
   truncated: boolean;
 }
 
+export interface WorkspaceFileStatResult {
+  path: string;
+  exists: boolean;
+  type: 'file' | 'directory' | null;
+  sizeBytes: number | null;
+  modifiedAt: number | null;
+  mode: number | null;
+  sha256: string | null;
+}
+
+export interface WorkspaceFileWriteRequest {
+  path: string;
+  content: string;
+  expectedSha256: string | null;
+}
+
+export interface WorkspaceFileWriteResult {
+  path: string;
+  sha256: string;
+  sizeBytes: number;
+  modifiedAt: number;
+  created: boolean;
+}
+
+export interface WorkspaceFileListRequest {
+  path: string;
+  maxEntries: number;
+}
+
+export interface WorkspaceFileListEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  sizeBytes: number;
+  modifiedAt: number;
+}
+
+export interface WorkspaceFileListResult {
+  path: string;
+  entries: WorkspaceFileListEntry[];
+  truncated: boolean;
+}
+
+export interface WorkspaceFileMoveRequest {
+  path: string;
+  destinationPath: string;
+  expectedSha256: string | null;
+}
+
+export interface WorkspaceFileMoveResult {
+  path: string;
+  destinationPath: string;
+  type: 'file' | 'directory';
+  sha256: string | null;
+}
+
+export interface WorkspaceFileDeleteRequest {
+  path: string;
+  recursive: boolean;
+  expectedSha256: string | null;
+}
+
+export interface WorkspaceFileDeleteResult {
+  path: string;
+  type: 'file' | 'directory';
+  deleted: true;
+}
+
 export interface WorkspaceSearchRequest {
   query: string;
   path: string;
@@ -110,8 +178,8 @@ export interface WorkspaceRepoMapResult {
   files: WorkspaceRepoMapFile[];
   truncated: boolean;
   fallback: {
-    searchTool: 'workspace_search';
-    readTool: 'workspace_read_file';
+    searchTool: 'file_search';
+    readTool: 'file_read';
     unsupportedLanguages: true;
   };
 }
@@ -160,8 +228,8 @@ export interface WorkspaceCodeIntelResult {
   truncated: boolean;
   fallback: null | {
     reason: 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED';
-    searchTool: 'workspace_search';
-    readTool: 'workspace_read_file';
+    searchTool: 'file_search';
+    readTool: 'file_read';
   };
 }
 
@@ -209,6 +277,36 @@ export interface WorkspaceRuntimeControllerPort {
     request: WorkspaceFileReadRequest,
     signal?: AbortSignal,
   ): Promise<WorkspaceFileReadResult>;
+  statWorkspacePath(
+    workspaceId: string,
+    generation: number,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileStatResult>;
+  writeWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileWriteRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileWriteResult>;
+  listWorkspaceFiles(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileListRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileListResult>;
+  moveWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileMoveRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileMoveResult>;
+  deleteWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileDeleteRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileDeleteResult>;
   searchWorkspace(
     workspaceId: string,
     generation: number,

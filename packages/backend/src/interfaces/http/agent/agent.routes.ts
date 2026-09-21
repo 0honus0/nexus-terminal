@@ -2,7 +2,8 @@ import { Router, type Request } from 'express';
 import { create as createContentDisposition } from 'content-disposition';
 import parseRange from 'range-parser';
 import { resolveAgentAvailability } from '../../../modules/agent/host/agent-availability';
-import { AGENT_CAPABILITIES, type AgentCapability } from '../../../modules/agent/host/app.types';
+import { AGENT_CAPABILITIES } from '../../../modules/agent/host/app.types';
+import type { AgentCapability, CapabilityGrantInput } from '../../../modules/agent/host/capability.types';
 import type {
   AgentArtifactFacade,
   AgentEventFacade,
@@ -163,10 +164,13 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
         dependencies.host.getApp(userId, appId),
         dependencies.host.listAppGrants(userId, appId),
       ]);
+      const declared = new Set(app.capabilities);
       agentData(request, response, {
         app: appSummary(app),
         policyRevision: app.policyRevision,
-        declaredCapabilities: [...app.capabilities],
+        capabilityDefinitions: dependencies.host
+          .listCapabilityDefinitions()
+          .filter((definition) => declared.has(definition.id)),
         grants,
       });
     }),
@@ -176,17 +180,22 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
     '/apps/:appId/grants',
     mutationSecurity,
     agentRoute(async (request, response) => {
-      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['capabilities', 'expectedPolicyRevision'])) {
+      if (!isRecord(request.body) || !hasOnlyKeys(request.body, ['grants', 'expectedPolicyRevision'])) {
         throw new Error('VALIDATION_FAILED');
       }
-      const capabilities = request.body.capabilities;
+      const grants = request.body.grants;
       if (
-        !Array.isArray(capabilities) ||
-        capabilities.length > AGENT_CAPABILITIES.length ||
-        capabilities.some(
-          (value) => typeof value !== 'string' || !AGENT_CAPABILITIES.includes(value as AgentCapability),
+        !Array.isArray(grants) ||
+        grants.length > AGENT_CAPABILITIES.length ||
+        grants.some(
+          (value) =>
+            !isRecord(value) ||
+            !hasOnlyKeys(value, ['capability', 'scope']) ||
+            typeof value.capability !== 'string' ||
+            !AGENT_CAPABILITIES.includes(value.capability as AgentCapability) ||
+            !isJsonValue(value.scope),
         ) ||
-        new Set(capabilities).size !== capabilities.length ||
+        new Set(grants.map((value) => (value as Record<string, unknown>).capability)).size !== grants.length ||
         !positiveInteger(request.body.expectedPolicyRevision)
       ) {
         throw new Error('VALIDATION_FAILED');
@@ -194,13 +203,15 @@ export const createAgentRouter = (dependencies: AgentRouterDependencies): Router
       const updated = await dependencies.host.replaceAppGrants(
         agentUserId(request),
         pathParam(request.params.appId),
-        capabilities as AgentCapability[],
+        grants as CapabilityGrantInput[],
         request.body.expectedPolicyRevision,
       );
       agentData(request, response, {
         app: appSummary(updated.app),
         policyRevision: updated.app.policyRevision,
-        declaredCapabilities: [...updated.app.capabilities],
+        capabilityDefinitions: dependencies.host
+          .listCapabilityDefinitions()
+          .filter((definition) => updated.app.capabilities.includes(definition.id)),
         grants: updated.grants,
       });
     }),

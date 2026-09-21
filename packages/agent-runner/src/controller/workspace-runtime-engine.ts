@@ -7,12 +7,26 @@ import type { ToolchainStore } from './toolchain-store';
 import { resolveProjectInstructions, type RunnerProjectInstructionProjection } from './project-instructions';
 import {
   applyWorkspacePatch,
+  deleteWorkspaceFile,
+  listWorkspaceFiles,
+  moveWorkspaceFile,
   readWorkspaceFile,
   searchWorkspace,
+  statWorkspacePath,
+  writeWorkspaceFile,
   type RunnerWorkspaceApplyPatchRequest,
   type RunnerWorkspaceApplyPatchResult,
+  type RunnerWorkspaceFileDeleteRequest,
+  type RunnerWorkspaceFileDeleteResult,
+  type RunnerWorkspaceFileListRequest,
+  type RunnerWorkspaceFileListResult,
+  type RunnerWorkspaceFileMoveRequest,
+  type RunnerWorkspaceFileMoveResult,
   type RunnerWorkspaceFileReadRequest,
   type RunnerWorkspaceFileReadResult,
+  type RunnerWorkspaceFileStatResult,
+  type RunnerWorkspaceFileWriteRequest,
+  type RunnerWorkspaceFileWriteResult,
   type RunnerWorkspaceSearchRequest,
   type RunnerWorkspaceSearchResult,
 } from './workspace-coding-files';
@@ -93,6 +107,42 @@ export class WorkspaceRuntimeEngine {
     request: RunnerWorkspaceFileReadRequest,
   ): RunnerWorkspaceFileReadResult {
     return readWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
+  }
+
+  statWorkspacePath(workspaceId: string, generation: number, path: string): RunnerWorkspaceFileStatResult {
+    return statWorkspacePath(this.codingWorkRoot(workspaceId, generation), path);
+  }
+
+  writeWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceFileWriteRequest,
+  ): RunnerWorkspaceFileWriteResult {
+    return writeWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
+  }
+
+  listWorkspaceFiles(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceFileListRequest,
+  ): RunnerWorkspaceFileListResult {
+    return listWorkspaceFiles(this.codingWorkRoot(workspaceId, generation), request);
+  }
+
+  moveWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceFileMoveRequest,
+  ): RunnerWorkspaceFileMoveResult {
+    return moveWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
+  }
+
+  deleteWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: RunnerWorkspaceFileDeleteRequest,
+  ): RunnerWorkspaceFileDeleteResult {
+    return deleteWorkspaceFile(this.codingWorkRoot(workspaceId, generation), request);
   }
 
   searchWorkspace(

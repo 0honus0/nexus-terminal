@@ -1027,15 +1027,16 @@ test('Agent Host installs Nexus Agent safely and persists explicit lifecycle/set
       const response = await request.get('/api/v1/agent/apps/nexus.agent/grants');
       expect(response.ok(), await response.text()).toBeTruthy();
       const body = (await response.json()) as AgentEnvelope<{
-        declaredCapabilities: string[];
+        capabilityDefinitions: Array<{ id: string }>;
         grants: Array<{ capability: string }>;
       }>;
+      const declaredCapabilities = body.data.capabilityDefinitions.map((definition) => definition.id);
       const grantedCapabilities = body.data.grants.map((grant) => grant.capability);
-      expect(body.data.declaredCapabilities).toContain('integration.mcp.read');
-      expect(body.data.declaredCapabilities).toContain('integration.mcp.invoke');
-      expect(body.data.declaredCapabilities).toContain('integration.acp.invoke');
-      expect(body.data.declaredCapabilities).toContain('browser.read');
-      expect(body.data.declaredCapabilities).toContain('browser.interact');
+      expect(declaredCapabilities).toContain('integration.mcp.read');
+      expect(declaredCapabilities).toContain('integration.mcp.invoke');
+      expect(declaredCapabilities).toContain('integration.acp.invoke');
+      expect(declaredCapabilities).toContain('browser.read');
+      expect(declaredCapabilities).toContain('browser.interact');
       expect(grantedCapabilities).toContain('integration.acp.invoke');
       expect(grantedCapabilities).toContain('browser.read');
       expect(grantedCapabilities).toContain('browser.interact');

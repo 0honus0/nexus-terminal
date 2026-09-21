@@ -2,6 +2,7 @@ import { logger } from '../../shared/logging/logger';
 import { LocalArtifactStore } from '../../infrastructure/agent/artifacts/local-artifact-store';
 import { AppIntentArtifactAdapter } from '../../infrastructure/agent/artifacts/app-intent-artifact.adapter';
 import { MachineCapabilityAdapter } from '../../infrastructure/agent/capabilities/machine-capability.adapter';
+import { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import { AgentMutationLeaseGuardAdapter } from '../../infrastructure/agent/capabilities/agent-mutation-lease-guard.adapter';
 import { NodeCryptoHashAdapter } from '../../infrastructure/agent/capabilities/node-crypto-hash.adapter';
@@ -64,6 +65,7 @@ import type { LeasePort } from '../../modules/agent/capabilities/lease.port';
 import { AgentSettingsService } from '../../modules/agent/host/agent-settings.service';
 import { AgentOnboardingService } from '../../modules/agent/host/agent-onboarding.service';
 import { AppCapabilityBroker } from '../../modules/agent/host/app-capability-broker';
+import { CapabilityRegistry } from '../../modules/agent/host/capability-registry';
 import { AppLifecycleService } from '../../modules/agent/host/app-lifecycle.service';
 import { AppIntentService } from '../../modules/agent/host/app-intent.service';
 import { AppRegistryService } from '../../modules/agent/host/app-registry.service';
@@ -114,6 +116,7 @@ import { composeWorkspaceRuntime } from './compose-workspace-runtime';
 import { createAgentLifecycleSweeps } from './lifecycle-sweeps';
 import {
   createMcpToolContributionHooks,
+  registerFileToolContributions,
   registerMachineToolContributions,
   registerAcpToolContribution,
   registerBrowserToolContribution,
@@ -174,7 +177,8 @@ export const composeAgent = ({
       .catch((error) => logger.warn({ err: error, userId }, 'Agent Host wake publication failed'));
   };
   const appStates = new SqliteAppStateRepository(database);
-  const appGrants = new SqliteAppGrantRepository(database);
+  const capabilityRegistry = new CapabilityRegistry();
+  const appGrants = new SqliteAppGrantRepository(database, capabilityRegistry);
   const targetDenylist = new SqliteTargetDenylistRepository(database);
   const settingsRepository = new SqliteAgentSettingsRepository(database);
   const hardLimitConfirmations = new SqliteHardLimitConfirmationRepository(database);
@@ -191,7 +195,7 @@ export const composeAgent = ({
     (scope, deadlineUnixSeconds) => quiesceHostExecution(scope, deadlineUnixSeconds),
   );
   const settings = new AgentSettingsService(settingsRepository, hardLimitConfirmations, hardLimitUsage, systemClock);
-  const capabilityBroker = new AppCapabilityBroker(registry, appStates, appGrants, targetDenylist);
+  const capabilityBroker = new AppCapabilityBroker(registry, appStates, appGrants, targetDenylist, capabilityRegistry);
   const providerRepository = new SqliteProviderRepository(database, cipher);
   const modelRegistry = new ModelCapabilityRegistryService(
     new LocalModelCapabilityRegistryStore(dataDirectory),
@@ -247,7 +251,13 @@ export const composeAgent = ({
     clock: systemClock,
     onHostStateCommitted: publishHostWake,
   });
-  const onboarding = new AgentOnboardingService(plugins, lifecycle, appGrants, officialPluginSource);
+  const onboarding = new AgentOnboardingService(
+    plugins,
+    lifecycle,
+    appGrants,
+    capabilityRegistry,
+    officialPluginSource,
+  );
   const executionPolicies = new AgentExecutionPolicyService(appStorage, settings);
   const conversationRepository = new SqliteConversationRepository(database);
   const conversations = new ConversationService(conversationRepository, systemClock, settings, lifecycle);
@@ -311,7 +321,8 @@ export const composeAgent = ({
     runRepository,
     subagentPolicy,
     providers,
-    capabilityBroker,
+    appGrants,
+    capabilityRegistry,
     eventHub,
     systemClock,
     () => subagentScheduler?.wake(),
@@ -352,17 +363,18 @@ export const composeAgent = ({
   const workspaceRepository = composedWorkspaceRuntime.repository;
   const targets = new AgentTargetResolver(workspaceRepository, machine, cryptoHash);
   const workspaceRuntime = composedWorkspaceRuntime.service;
+  const files = new FileCapabilityService(targets, workspaceRuntime, machine);
   const workspaceRuntimeFacade = composedWorkspaceRuntime.facade;
   const acpRuntime = new AcpAdapter(acpTransport);
   const toolCatalog = new ToolCatalog();
-  registerMachineToolContributions({ catalog: toolCatalog, machine, artifacts, cryptoHash });
+  registerFileToolContributions({ catalog: toolCatalog, files, cryptoHash });
+  registerMachineToolContributions({ catalog: toolCatalog, machine, cryptoHash });
   registerWorkspaceToolContributions({
     catalog: toolCatalog,
     repository: workspaceRepository,
     targets,
     runtime: workspaceRuntime,
     gateway: workspaceRuntimeController,
-    artifacts,
     cryptoHash,
   });
   registerAcpToolContribution({
@@ -445,6 +457,7 @@ export const composeAgent = ({
     runtimeParticipants,
     mailboxReader,
     toolCatalog,
+    capabilityRegistry,
     modelContinuations,
     artifacts,
     systemClock,
@@ -609,6 +622,7 @@ export const composeAgent = ({
         }
         return updated;
       },
+      listCapabilityDefinitions: () => capabilityRegistry.list(),
       listAppGrants: async (userId, appId) => {
         await lifecycle.initializeDefaults(userId);
         return appGrants.list({ userId, appId });
@@ -616,23 +630,20 @@ export const composeAgent = ({
       getAppExecutionPolicy: (scope) => executionPolicies.get(scope),
       replaceAppExecutionPolicy: (scope, overrides, expectedVersion) =>
         executionPolicies.replace(scope, overrides, expectedVersion),
-      replaceAppGrants: async (userId, appId, capabilities, expectedPolicyRevision) => {
+      replaceAppGrants: async (userId, appId, requestedGrants, expectedPolicyRevision) => {
         await lifecycle.initializeDefaults(userId);
         const scope = { userId, appId };
         const app = await lifecycle.get(scope);
         const declared = new Set(registry.get(appId, app.activeVersion).manifest.capabilities);
-        const unique = [...new Set(capabilities)];
-        if (unique.some((capability) => !declared.has(capability))) throw new Error('APP_CAPABILITY_UNDECLARED');
-        await appGrants.replace(
-          scope,
-          expectedPolicyRevision,
-          unique.map((capability) => ({
-            capability,
-            schemaVersion: 1,
-            scope: { targetSelection: 'all-except-denylist' },
-            grantedAt: systemClock.nowUnixSeconds(),
-          })),
-        );
+        if (new Set(requestedGrants.map((grant) => grant.capability)).size !== requestedGrants.length) {
+          throw new Error('APP_GRANT_SCOPE_INVALID');
+        }
+        const now = systemClock.nowUnixSeconds();
+        const normalized = requestedGrants.map((grant) => {
+          if (!declared.has(grant.capability)) throw new Error('APP_CAPABILITY_UNDECLARED');
+          return capabilityRegistry.grant(grant.capability, grant.scope, now);
+        });
+        await appGrants.replace(scope, expectedPolicyRevision, normalized);
         publishHostWake(userId);
         return { app: await lifecycle.get(scope), grants: await appGrants.list(scope) };
       },

@@ -78,6 +78,7 @@
         "deleteDataFailed": "插件已卸载，但保留数据删除失败",
         "drainingNotice": "应用正在排空后台任务中...",
         "coreAppCannotUninstall": "内置核心应用不可卸载",
+        "categoryFiles": "文件与目标",
         "categoryMachine": "主机",
         "categoryWorkspace": "Workspace 沙箱",
         "categoryBrowser": "浏览器",

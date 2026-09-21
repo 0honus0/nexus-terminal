@@ -932,7 +932,7 @@ CREATE TABLE IF NOT EXISTS agent_delegations (
     parent_runtime_id TEXT NOT NULL,
     child_runtime_id TEXT NOT NULL UNIQUE,
     profile_id TEXT NOT NULL,
-    capabilities_json TEXT NOT NULL CHECK(json_valid(capabilities_json)),
+    grants_json TEXT NOT NULL CHECK(json_valid(grants_json)),
     peer_messaging TEXT NOT NULL CHECK(peer_messaging IN ('parent-child','same-run')),
     mutation_mode TEXT NOT NULL DEFAULT 'read-only' CHECK(mutation_mode IN ('read-only','governed')),
     model_ref_json TEXT NOT NULL CHECK(json_valid(model_ref_json)),

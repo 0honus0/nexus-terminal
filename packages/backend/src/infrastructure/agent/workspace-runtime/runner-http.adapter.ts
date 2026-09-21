@@ -24,8 +24,17 @@ import type {
   RunnerCommandResult,
   WorkspaceApplyPatchRequest,
   WorkspaceApplyPatchResult,
+  WorkspaceFileDeleteRequest,
+  WorkspaceFileDeleteResult,
+  WorkspaceFileListRequest,
+  WorkspaceFileListResult,
+  WorkspaceFileMoveRequest,
+  WorkspaceFileMoveResult,
   WorkspaceFileReadRequest,
   WorkspaceFileReadResult,
+  WorkspaceFileStatResult,
+  WorkspaceFileWriteRequest,
+  WorkspaceFileWriteResult,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
   WorkspaceRepoMapRequest,
@@ -329,6 +338,79 @@ const decodeWorkspaceFileRead = (value: unknown): WorkspaceFileReadResult => {
   };
 };
 
+const decodeWorkspaceFileStat = (value: unknown): WorkspaceFileStatResult => {
+  const record = recordValue(value);
+  if (record.type !== null && record.type !== 'file' && record.type !== 'directory') throw protocolError();
+  const nullableInteger = (item: unknown): number | null => (item === null ? null : integerValue(item));
+  const digest = record.sha256 === null ? null : (stringValue(record.sha256) as string);
+  if (digest !== null && !/^[a-f0-9]{64}$/.test(digest)) throw protocolError();
+  return {
+    path: stringValue(record.path) as string,
+    exists: booleanValue(record.exists),
+    type: record.type,
+    sizeBytes: nullableInteger(record.sizeBytes),
+    modifiedAt: nullableInteger(record.modifiedAt),
+    mode: nullableInteger(record.mode),
+    sha256: digest,
+  };
+};
+
+const decodeWorkspaceFileWrite = (value: unknown): WorkspaceFileWriteResult => {
+  const record = recordValue(value);
+  const digest = stringValue(record.sha256) as string;
+  if (!/^[a-f0-9]{64}$/.test(digest)) throw protocolError();
+  return {
+    path: stringValue(record.path) as string,
+    sha256: digest,
+    sizeBytes: integerValue(record.sizeBytes),
+    modifiedAt: integerValue(record.modifiedAt),
+    created: booleanValue(record.created),
+  };
+};
+
+const decodeWorkspaceFileList = (value: unknown): WorkspaceFileListResult => {
+  const record = recordValue(value);
+  if (!Array.isArray(record.entries) || record.entries.length > 500) throw protocolError();
+  return {
+    path: stringValue(record.path) as string,
+    entries: record.entries.map((item) => {
+      const entry = recordValue(item);
+      if (entry.type !== 'file' && entry.type !== 'directory') throw protocolError();
+      return {
+        name: stringValue(entry.name) as string,
+        path: stringValue(entry.path) as string,
+        type: entry.type,
+        sizeBytes: integerValue(entry.sizeBytes),
+        modifiedAt: integerValue(entry.modifiedAt),
+      };
+    }),
+    truncated: booleanValue(record.truncated),
+  };
+};
+
+const decodeWorkspaceFileMove = (value: unknown): WorkspaceFileMoveResult => {
+  const record = recordValue(value);
+  if (record.type !== 'file' && record.type !== 'directory') throw protocolError();
+  const digest = record.sha256 === null ? null : (stringValue(record.sha256) as string);
+  if (digest !== null && !/^[a-f0-9]{64}$/.test(digest)) throw protocolError();
+  return {
+    path: stringValue(record.path) as string,
+    destinationPath: stringValue(record.destinationPath) as string,
+    type: record.type,
+    sha256: digest,
+  };
+};
+
+const decodeWorkspaceFileDelete = (value: unknown): WorkspaceFileDeleteResult => {
+  const record = recordValue(value);
+  if ((record.type !== 'file' && record.type !== 'directory') || record.deleted !== true) throw protocolError();
+  return {
+    path: stringValue(record.path) as string,
+    type: record.type,
+    deleted: true,
+  };
+};
+
 const decodeWorkspaceSearch = (value: unknown): WorkspaceSearchResult => {
   const record = recordValue(value);
   if (
@@ -373,8 +455,8 @@ const decodeWorkspaceRepoMap = (value: unknown): WorkspaceRepoMapResult => {
   }
   const fallback = recordValue(record.fallback);
   if (
-    fallback.searchTool !== 'workspace_search' ||
-    fallback.readTool !== 'workspace_read_file' ||
+    fallback.searchTool !== 'file_search' ||
+    fallback.readTool !== 'file_read' ||
     fallback.unsupportedLanguages !== true
   ) {
     throw protocolError();
@@ -415,8 +497,8 @@ const decodeWorkspaceRepoMap = (value: unknown): WorkspaceRepoMapResult => {
     }),
     truncated: booleanValue(record.truncated),
     fallback: {
-      searchTool: 'workspace_search',
-      readTool: 'workspace_read_file',
+      searchTool: 'file_search',
+      readTool: 'file_read',
       unsupportedLanguages: true,
     },
   };
@@ -455,15 +537,15 @@ const decodeWorkspaceCodeIntel = (value: unknown): WorkspaceCodeIntelResult => {
           const item = recordValue(record.fallback);
           if (
             (item.reason !== 'LANGUAGE_UNSUPPORTED' && item.reason !== 'FILE_NOT_INDEXED') ||
-            item.searchTool !== 'workspace_search' ||
-            item.readTool !== 'workspace_read_file'
+            item.searchTool !== 'file_search' ||
+            item.readTool !== 'file_read'
           ) {
             throw protocolError();
           }
           return {
             reason: item.reason as 'LANGUAGE_UNSUPPORTED' | 'FILE_NOT_INDEXED',
-            searchTool: 'workspace_search' as const,
-            readTool: 'workspace_read_file' as const,
+            searchTool: 'file_search' as const,
+            readTool: 'file_read' as const,
           };
         })();
 
@@ -830,6 +912,86 @@ export class RunnerHttpAdapter
         { method: 'POST', body: { generation, ...request } },
         signal,
         { maxResponseBytes: 128 * 1024 },
+      ),
+    );
+  }
+
+  async statWorkspacePath(
+    workspaceId: string,
+    generation: number,
+    path: string,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileStatResult> {
+    return decodeWorkspaceFileStat(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/stat`,
+        { method: 'POST', body: { generation, path } },
+        signal,
+        { maxResponseBytes: 64 * 1024 },
+      ),
+    );
+  }
+
+  async writeWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileWriteRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileWriteResult> {
+    return decodeWorkspaceFileWrite(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/write-file`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 64 * 1024 },
+      ),
+    );
+  }
+
+  async listWorkspaceFiles(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileListRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileListResult> {
+    return decodeWorkspaceFileList(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/list`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 256 * 1024 },
+      ),
+    );
+  }
+
+  async moveWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileMoveRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileMoveResult> {
+    return decodeWorkspaceFileMove(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/move`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 64 * 1024 },
+      ),
+    );
+  }
+
+  async deleteWorkspaceFile(
+    workspaceId: string,
+    generation: number,
+    request: WorkspaceFileDeleteRequest,
+    signal?: AbortSignal,
+  ): Promise<WorkspaceFileDeleteResult> {
+    return decodeWorkspaceFileDelete(
+      await this.request(
+        `/v1/workspaces/${encodeURIComponent(workspaceId)}/coding/delete`,
+        { method: 'POST', body: { generation, ...request } },
+        signal,
+        { maxResponseBytes: 64 * 1024 },
       ),
     );
   }

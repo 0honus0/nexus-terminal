@@ -1,5 +1,6 @@
 import type { AppGrantRepositoryPort } from '../../../modules/agent/host/app-grant.repository.port';
-import type { CapabilityGrant } from '../../../modules/agent/host/app.types';
+import { CapabilityRegistry } from '../../../modules/agent/host/capability-registry';
+import type { CapabilityGrant } from '../../../modules/agent/host/capability.types';
 import type { Scope } from '../../../modules/agent/agent.types';
 import type { RelationalDatabase } from '../../../platform/storage/relational-database.port';
 import { appendHostEvent } from '../events/host-event-outbox';
@@ -12,15 +13,24 @@ interface GrantRow {
   granted_at: number;
 }
 
-const mapRow = (row: GrantRow): CapabilityGrant => ({
-  capability: row.capability,
-  schemaVersion: row.schema_version,
-  scope: parseDurableJsonValue(row.scope_json),
-  grantedAt: row.granted_at,
-});
-
 export class SqliteAppGrantRepository implements AppGrantRepositoryPort {
-  constructor(private readonly db: RelationalDatabase) {}
+  constructor(
+    private readonly db: RelationalDatabase,
+    private readonly capabilities: CapabilityRegistry,
+  ) {}
+
+  private mapRow(row: GrantRow): CapabilityGrant {
+    try {
+      return this.capabilities.parseGrant({
+        capability: row.capability,
+        schemaVersion: row.schema_version,
+        scope: parseDurableJsonValue(row.scope_json),
+        grantedAt: row.granted_at,
+      });
+    } catch {
+      throw new Error('AGENT_DURABLE_STATE_INVALID');
+    }
+  }
 
   async list(scope: Scope): Promise<CapabilityGrant[]> {
     const rows = await this.db.queryAll<GrantRow>(
@@ -28,7 +38,7 @@ export class SqliteAppGrantRepository implements AppGrantRepositoryPort {
        FROM agent_app_grants WHERE user_id = ? AND app_id = ? ORDER BY capability`,
       [scope.userId, scope.appId],
     );
-    return rows.map(mapRow);
+    return rows.map((row) => this.mapRow(row));
   }
 
   async insertDefaults(scope: Scope, grants: readonly CapabilityGrant[]): Promise<void> {

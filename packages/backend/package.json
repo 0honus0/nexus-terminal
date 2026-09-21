@@ -24,6 +24,7 @@
     "axios": "catalog:",
     "bcrypt": "^6.0.0",
     "content-disposition": "^3.0.0",
+    "diff": "9.0.0",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",

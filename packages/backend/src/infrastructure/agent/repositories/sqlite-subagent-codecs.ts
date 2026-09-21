@@ -1,5 +1,7 @@
 import type { JsonValue } from '../../../modules/agent/agent.types';
 import type { ModelRef } from '../../../modules/agent/ai/model.types';
+import { AGENT_CAPABILITIES } from '../../../modules/agent/host/capability.types';
+import { CapabilityRegistry } from '../../../modules/agent/host/capability-registry';
 import type { RunBudget, RunUsage } from '../../../modules/agent/runtime/runs/run.types';
 import type {
   RuntimeParticipantView,
@@ -31,7 +33,7 @@ export interface DelegationRow {
   parent_runtime_id: string;
   child_runtime_id: string;
   profile_id: string;
-  capabilities_json: string;
+  grants_json: string;
   peer_messaging: DelegationView['peerMessaging'];
   mutation_mode: DelegationView['mutationMode'];
   model_ref_json: string;
@@ -174,6 +176,36 @@ const decodeStringArray = (value: unknown, maxItems = 4096): string[] => {
 
 const parseStringArray = (value: string, maxItems = 4096): string[] =>
   decodeStringArray(parsePersistedJson(value), maxItems);
+
+const capabilityRegistry = new CapabilityRegistry();
+const allowedCapabilities = new Set<string>(AGENT_CAPABILITIES);
+
+const parseDelegatedGrants = (value: string): DelegationView['grants'] => {
+  const raw = parsePersistedJson(value);
+  if (!Array.isArray(raw) || raw.length > 512) return invalidDurableState();
+  const seen = new Set<string>();
+  return raw.map((item) => {
+    const record = recordValue(item);
+    assertRecordKeys(record, ['capability', 'schemaVersion', 'scope']);
+    const capability = stringValue(record.capability);
+    if (!allowedCapabilities.has(capability) || seen.has(capability) || record.schemaVersion !== 2) {
+      return invalidDurableState();
+    }
+    seen.add(capability);
+    try {
+      return {
+        capability: capability as DelegationView['grants'][number]['capability'],
+        schemaVersion: 2 as const,
+        scope: capabilityRegistry.parseScope(
+          capability as DelegationView['grants'][number]['capability'],
+          record.scope,
+        ),
+      };
+    } catch {
+      return invalidDurableState();
+    }
+  });
+};
 
 const decodeModelRef = (value: unknown): ModelRef => {
   const record = recordValue(value);
@@ -371,7 +403,7 @@ export const decodeToolInspection = (value: string): RuntimeToolWorkView['inspec
   };
 };
 export const delegationColumns = `d.id, d.run_id, r.user_id, r.app_id, d.parent_runtime_id, d.child_runtime_id,
-  d.profile_id, d.capabilities_json, d.peer_messaging, d.mutation_mode, d.model_ref_json, d.objective, d.constraints_json, d.input_artifact_refs_json,
+  d.profile_id, d.grants_json, d.peer_messaging, d.mutation_mode, d.model_ref_json, d.objective, d.constraints_json, d.input_artifact_refs_json,
   d.completion_criteria_json, d.dependency_mode, d.status, d.depth, d.failure_mode, d.max_steps,
   d.used_tokens, d.used_steps, d.result_json, d.evidence_refs_json,
   d.deadline_at, d.version, d.created_at, d.updated_at, d.completed_at, d.request_hash`;
@@ -401,7 +433,7 @@ export const mapDelegation = (row: DelegationRow): DelegationView => {
     parentRuntimeId: row.parent_runtime_id,
     childRuntimeId: row.child_runtime_id,
     profileId: row.profile_id,
-    capabilities: parseStringArray(row.capabilities_json, 512),
+    grants: parseDelegatedGrants(row.grants_json),
     peerMessaging: row.peer_messaging,
     mutationMode: row.mutation_mode,
     modelRef: model.modelRef,

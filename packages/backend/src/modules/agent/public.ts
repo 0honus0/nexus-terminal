@@ -68,8 +68,15 @@ import type {
   RunView,
   UserInputData,
 } from './runtime/runs/run.types';
-import type { CapabilityResource, GrantDecision } from './host/app-capability-broker';
-import type { AppView, AgentCapability, CapabilityGrant } from './host/app.types';
+import type { GrantDecision } from './host/app-capability-broker';
+import type { AppView } from './host/app.types';
+import type {
+  AgentCapability,
+  CapabilityDefinitionView,
+  CapabilityGrant,
+  CapabilityGrantInput,
+  CapabilityResource,
+} from './host/capability.types';
 import type { AppIntentReceipt } from './host/app-intent.repository.port';
 import type { AppIntentArtifactReadRange, AppIntentArtifactView } from './host/app-intent-artifact.port';
 import type { CreateAppIntentInput } from './host/app-intent.service';
@@ -124,11 +131,12 @@ export interface AgentHostFacade {
   listApps(userId: number): Promise<AppView[]>;
   getApp(userId: number, appId: string): Promise<AppView>;
   setAppEnabled(userId: number, appId: string, enabled: boolean, expectedVersion: number): Promise<AppView>;
+  listCapabilityDefinitions(): CapabilityDefinitionView[];
   listAppGrants(userId: number, appId: string): Promise<CapabilityGrant[]>;
   replaceAppGrants(
     userId: number,
     appId: string,
-    capabilities: readonly AgentCapability[],
+    grants: readonly CapabilityGrantInput[],
     expectedPolicyRevision: number,
   ): Promise<{ app: AppView; grants: CapabilityGrant[] }>;
   getAppExecutionPolicy(scope: Scope): Promise<AgentExecutionPolicyView>;
@@ -480,4 +488,11 @@ export interface AgentServices {
   dispose(): Promise<void>;
 }
 
-export type { AgentSettingsDocument, AgentSettingsView, AppView, CapabilityGrant };
+export type {
+  AgentSettingsDocument,
+  AgentSettingsView,
+  AppView,
+  CapabilityDefinitionView,
+  CapabilityGrant,
+  CapabilityGrantInput,
+};

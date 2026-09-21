@@ -36,6 +36,74 @@ export interface RunnerWorkspaceFileReadResult {
   truncated: boolean;
 }
 
+export interface RunnerWorkspaceFileStatResult {
+  path: string;
+  exists: boolean;
+  type: 'file' | 'directory' | null;
+  sizeBytes: number | null;
+  modifiedAt: number | null;
+  mode: number | null;
+  sha256: string | null;
+}
+
+export interface RunnerWorkspaceFileWriteRequest {
+  path: string;
+  content: string;
+  expectedSha256: string | null;
+}
+
+export interface RunnerWorkspaceFileWriteResult {
+  path: string;
+  sha256: string;
+  sizeBytes: number;
+  modifiedAt: number;
+  created: boolean;
+}
+
+export interface RunnerWorkspaceFileListRequest {
+  path: string;
+  maxEntries: number;
+}
+
+export interface RunnerWorkspaceFileListEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'directory';
+  sizeBytes: number;
+  modifiedAt: number;
+}
+
+export interface RunnerWorkspaceFileListResult {
+  path: string;
+  entries: RunnerWorkspaceFileListEntry[];
+  truncated: boolean;
+}
+
+export interface RunnerWorkspaceFileMoveRequest {
+  path: string;
+  destinationPath: string;
+  expectedSha256: string | null;
+}
+
+export interface RunnerWorkspaceFileMoveResult {
+  path: string;
+  destinationPath: string;
+  type: 'file' | 'directory';
+  sha256: string | null;
+}
+
+export interface RunnerWorkspaceFileDeleteRequest {
+  path: string;
+  recursive: boolean;
+  expectedSha256: string | null;
+}
+
+export interface RunnerWorkspaceFileDeleteResult {
+  path: string;
+  type: 'file' | 'directory';
+  deleted: true;
+}
+
 export interface RunnerWorkspaceSearchRequest {
   query: string;
   path: string;
@@ -231,6 +299,224 @@ export const readWorkspaceFile = (
     contentBytes,
     truncated: contentBytes < Buffer.byteLength(selected, 'utf8') || endLine < lines.length,
   };
+};
+
+interface WorkspacePathState {
+  logical: string;
+  hostPath: string;
+  type: 'file' | 'directory';
+  sizeBytes: number;
+  modifiedAt: number;
+  mode: number;
+  sha256: string | null;
+}
+
+const workspacePathState = (root: string, logical: string): WorkspacePathState | null => {
+  const hostPath = hostPathFor(root, logical);
+  assertNoSymlink(root, hostPath, true);
+  if (!fs.existsSync(hostPath)) return null;
+  const stat = fs.lstatSync(hostPath);
+  if (stat.isSymbolicLink()) throw new Error('WORKSPACE_PATH_FORBIDDEN');
+  if (stat.isFile()) {
+    const opened = openRegularFile(root, logical);
+    return {
+      logical,
+      hostPath,
+      type: 'file',
+      sizeBytes: opened.raw.byteLength,
+      modifiedAt: opened.stat.mtimeMs,
+      mode: opened.stat.mode & 0o777,
+      sha256: sha256(opened.raw),
+    };
+  }
+  if (stat.isDirectory()) {
+    return {
+      logical,
+      hostPath,
+      type: 'directory',
+      sizeBytes: stat.size,
+      modifiedAt: stat.mtimeMs,
+      mode: stat.mode & 0o777,
+      sha256: null,
+    };
+  }
+  throw new Error('WORKSPACE_PATH_FORBIDDEN');
+};
+
+export const statWorkspacePath = (workRoot: string, requestedPath: string): RunnerWorkspaceFileStatResult => {
+  const root = assertRoot(workRoot);
+  const logical = normalizeLogicalPath(requestedPath);
+  const state = workspacePathState(root, logical);
+  if (!state) {
+    return {
+      path: logical,
+      exists: false,
+      type: null,
+      sizeBytes: null,
+      modifiedAt: null,
+      mode: null,
+      sha256: null,
+    };
+  }
+  return {
+    path: state.logical,
+    exists: true,
+    type: state.type,
+    sizeBytes: state.sizeBytes,
+    modifiedAt: state.modifiedAt,
+    mode: state.mode,
+    sha256: state.sha256,
+  };
+};
+
+const validateExpectedSha256 = (value: string | null): void => {
+  if (value !== null && !/^[a-f0-9]{64}$/.test(value)) throw new Error('VALIDATION_FAILED');
+};
+
+export const writeWorkspaceFile = (
+  workRoot: string,
+  request: RunnerWorkspaceFileWriteRequest,
+): RunnerWorkspaceFileWriteResult => {
+  const root = assertRoot(workRoot);
+  const logical = normalizeLogicalPath(request.path);
+  if (logical === WORK_LOGICAL_ROOT) throw new Error('WORKSPACE_PATH_FORBIDDEN');
+  if (typeof request.content !== 'string') throw new Error('VALIDATION_FAILED');
+  const bytes = Buffer.from(request.content, 'utf8');
+  if (bytes.byteLength > MAX_SOURCE_FILE_BYTES) throw new Error('WORKSPACE_FILE_TOO_LARGE');
+  validateExpectedSha256(request.expectedSha256);
+
+  const parent = hostPathFor(root, path.posix.dirname(logical));
+  assertNoSymlink(root, parent, false);
+  if (!fs.lstatSync(parent).isDirectory()) throw new Error('WORKSPACE_PATH_INVALID');
+
+  const before = workspacePathState(root, logical);
+  if (before?.type === 'directory') throw new Error('WORKSPACE_PATH_FORBIDDEN');
+  if ((before?.sha256 ?? null) !== request.expectedSha256) throw new Error('WORKSPACE_FILE_HASH_CONFLICT');
+
+  const target = hostPathFor(root, logical);
+  const temporary = path.join(parent, `.nexus-file-${randomUUID()}.tmp`);
+  const mode = before?.mode ?? 0o600;
+  let created = false;
+  try {
+    const handle = fs.openSync(temporary, 'wx', mode);
+    created = true;
+    try {
+      fs.writeFileSync(handle, bytes);
+      fs.fsyncSync(handle);
+    } finally {
+      fs.closeSync(handle);
+    }
+    const current = workspacePathState(root, logical);
+    if ((current?.sha256 ?? null) !== request.expectedSha256) throw new Error('WORKSPACE_FILE_HASH_CONFLICT');
+    fs.renameSync(temporary, target);
+    created = false;
+  } finally {
+    if (created) fs.rmSync(temporary, { force: true });
+  }
+
+  const after = workspacePathState(root, logical);
+  const expectedHash = sha256(bytes);
+  if (!after || after.type !== 'file' || after.sha256 !== expectedHash) throw new Error('VERIFICATION_FAILED');
+  return {
+    path: logical,
+    sha256: expectedHash,
+    sizeBytes: after.sizeBytes,
+    modifiedAt: after.modifiedAt,
+    created: before === null,
+  };
+};
+
+export const listWorkspaceFiles = (
+  workRoot: string,
+  request: RunnerWorkspaceFileListRequest,
+): RunnerWorkspaceFileListResult => {
+  const root = assertRoot(workRoot);
+  const logical = normalizeLogicalPath(request.path);
+  if (!Number.isSafeInteger(request.maxEntries) || request.maxEntries < 1 || request.maxEntries > 500) {
+    throw new Error('VALIDATION_FAILED');
+  }
+  const state = workspacePathState(root, logical);
+  if (!state || state.type !== 'directory') throw new Error('WORKSPACE_PATH_INVALID');
+  const raw = fs
+    .readdirSync(state.hostPath, { withFileTypes: true })
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const entries: RunnerWorkspaceFileListEntry[] = [];
+  for (const entry of raw) {
+    if (entries.length >= request.maxEntries) break;
+    if (entry.isSymbolicLink() || (!entry.isFile() && !entry.isDirectory())) continue;
+    const childLogical = normalizeLogicalPath(path.posix.join(logical, entry.name));
+    const child = workspacePathState(root, childLogical);
+    if (!child) continue;
+    entries.push({
+      name: entry.name,
+      path: childLogical,
+      type: child.type,
+      sizeBytes: child.sizeBytes,
+      modifiedAt: child.modifiedAt,
+    });
+  }
+  return { path: logical, entries, truncated: raw.length > entries.length };
+};
+
+export const moveWorkspaceFile = (
+  workRoot: string,
+  request: RunnerWorkspaceFileMoveRequest,
+): RunnerWorkspaceFileMoveResult => {
+  const root = assertRoot(workRoot);
+  const sourceLogical = normalizeLogicalPath(request.path);
+  const destinationLogical = normalizeLogicalPath(request.destinationPath);
+  if (
+    sourceLogical === WORK_LOGICAL_ROOT ||
+    destinationLogical === WORK_LOGICAL_ROOT ||
+    sourceLogical === destinationLogical
+  ) {
+    throw new Error('WORKSPACE_PATH_FORBIDDEN');
+  }
+  validateExpectedSha256(request.expectedSha256);
+  const source = workspacePathState(root, sourceLogical);
+  if (!source) throw new Error('WORKSPACE_NOT_FOUND');
+  if (source.type === 'file' && source.sha256 !== request.expectedSha256)
+    throw new Error('WORKSPACE_FILE_HASH_CONFLICT');
+  if (source.type === 'directory' && request.expectedSha256 !== null) throw new Error('VALIDATION_FAILED');
+
+  const destinationParent = hostPathFor(root, path.posix.dirname(destinationLogical));
+  assertNoSymlink(root, destinationParent, false);
+  if (!fs.lstatSync(destinationParent).isDirectory()) throw new Error('WORKSPACE_PATH_INVALID');
+  if (workspacePathState(root, destinationLogical)) throw new Error('WORKSPACE_DESTINATION_EXISTS');
+
+  fs.renameSync(source.hostPath, hostPathFor(root, destinationLogical));
+  const after = workspacePathState(root, destinationLogical);
+  if (!after || after.type !== source.type || after.sha256 !== source.sha256) throw new Error('VERIFICATION_FAILED');
+  if (workspacePathState(root, sourceLogical)) throw new Error('VERIFICATION_FAILED');
+  return {
+    path: sourceLogical,
+    destinationPath: destinationLogical,
+    type: source.type,
+    sha256: source.sha256,
+  };
+};
+
+export const deleteWorkspaceFile = (
+  workRoot: string,
+  request: RunnerWorkspaceFileDeleteRequest,
+): RunnerWorkspaceFileDeleteResult => {
+  const root = assertRoot(workRoot);
+  const logical = normalizeLogicalPath(request.path);
+  if (logical === WORK_LOGICAL_ROOT || typeof request.recursive !== 'boolean') {
+    throw new Error('WORKSPACE_PATH_FORBIDDEN');
+  }
+  validateExpectedSha256(request.expectedSha256);
+  const before = workspacePathState(root, logical);
+  if (!before) throw new Error('WORKSPACE_NOT_FOUND');
+  if (before.type === 'file' && before.sha256 !== request.expectedSha256)
+    throw new Error('WORKSPACE_FILE_HASH_CONFLICT');
+  if (before.type === 'directory' && request.expectedSha256 !== null) throw new Error('VALIDATION_FAILED');
+  if (before.type === 'directory' && !request.recursive && fs.readdirSync(before.hostPath).length > 0) {
+    throw new Error('WORKSPACE_DIRECTORY_NOT_EMPTY');
+  }
+  fs.rmSync(before.hostPath, { recursive: before.type === 'directory' && request.recursive, force: false });
+  if (workspacePathState(root, logical)) throw new Error('VERIFICATION_FAILED');
+  return { path: logical, type: before.type, deleted: true };
 };
 
 const clippedLine = (value: string): string => utf8Prefix(value.replace(/\r?\n$/, ''), MAX_SEARCH_LINE_BYTES);

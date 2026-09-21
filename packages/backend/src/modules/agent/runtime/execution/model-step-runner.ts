@@ -116,16 +116,25 @@ const projectInstructionTargetDirectories = (snapshot: RunSnapshot): string[] =>
       };
       if (call.name === 'workspace_execute_argv') {
         addTarget(argumentsRecord.cwd ?? PROJECT_WORK_ROOT, 'workspace');
-      } else if (call.name === 'workspace_read_file') {
+      } else if (argumentsRecord.target === 'workspace' && call.name === 'file_read') {
         addTarget(argumentsRecord.path, 'work', true);
-      } else if (call.name === 'workspace_search') {
+      } else if (argumentsRecord.target === 'workspace' && call.name === 'file_search') {
         addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work');
-      } else if (call.name === 'workspace_apply_patch' && Array.isArray(argumentsRecord.expectedFiles)) {
+      } else if (
+        argumentsRecord.target === 'workspace' &&
+        call.name === 'file_patch' &&
+        Array.isArray(argumentsRecord.expectedFiles)
+      ) {
         for (const item of argumentsRecord.expectedFiles) {
           if (!item || Array.isArray(item) || typeof item !== 'object') continue;
           addTarget((item as Record<string, unknown>).path, 'work', true);
           if (targets.size >= 8) break;
         }
+      } else if (
+        argumentsRecord.target === 'workspace' &&
+        (call.name === 'workspace_repo_map' || call.name === 'workspace_code_intel')
+      ) {
+        addTarget(argumentsRecord.path ?? PROJECT_WORK_ROOT, 'work', call.name === 'workspace_code_intel');
       }
       if (targets.size >= 8) break;
     }

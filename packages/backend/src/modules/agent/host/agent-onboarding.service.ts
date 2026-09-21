@@ -1,6 +1,7 @@
 import { rcompare } from 'semver';
 import { logger } from '../../../shared/logging/logger';
 import type { AppGrantRepositoryPort } from './app-grant.repository.port';
+import { CapabilityRegistry } from './capability-registry';
 import type { AppLifecycleService } from './app-lifecycle.service';
 import type { AppView } from './app.types';
 import type { OfficialAgentPluginSource } from './official-plugin-source';
@@ -28,6 +29,7 @@ export class AgentOnboardingService {
     private readonly plugins: PluginInstallService,
     private readonly lifecycle: AppLifecycleService,
     private readonly grants: AppGrantRepositoryPort,
+    private readonly capabilities: CapabilityRegistry,
     private readonly source: OfficialAgentPluginSource,
   ) {}
 
@@ -138,12 +140,9 @@ export class AgentOnboardingService {
     await this.grants.replace(
       scope,
       installed.app.policyRevision,
-      installed.plugin.manifest.capabilities.map((capability) => ({
-        capability,
-        schemaVersion: 1,
-        scope: { targetSelection: 'all-except-denylist' },
-        grantedAt: Math.floor(Date.now() / 1000),
-      })),
+      installed.plugin.manifest.capabilities.map((capability) =>
+        this.capabilities.grant(capability, this.capabilities.defaultScope(capability), Math.floor(Date.now() / 1000)),
+      ),
     );
     const afterGrants = await this.lifecycle.get(scope);
     const app = await this.lifecycle.setEnabled(scope, true, afterGrants.version);

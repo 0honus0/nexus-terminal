@@ -3,8 +3,9 @@ import { logger } from '../../../../shared/logging/logger';
 import type { JsonValue, Scope, ClockPort } from '../../agent.types';
 import { snapshotProviderModelCapabilities } from '../../ai/model-capability-resolver';
 import type { ProviderService } from '../../ai/provider.service';
-import type { AppCapabilityBroker } from '../../host/app-capability-broker';
-import type { AgentCapability } from '../../host/app.types';
+import type { AppGrantRepositoryPort } from '../../host/app-grant.repository.port';
+import { CapabilityRegistry } from '../../host/capability-registry';
+import type { AgentCapability } from '../../host/capability.types';
 import type { HostCursorReaderPort, RunSnapshotReaderPort } from '../runs/run.repository.port';
 import { requestHash, requireIdempotencyKey } from '../runs/idempotency';
 import type { DelegationRepositoryPort, RuntimeParticipantRepositoryPort } from './subagent.repository.port';
@@ -87,7 +88,8 @@ export class SubagentService {
     private readonly runs: RunSnapshotReaderPort & HostCursorReaderPort,
     private readonly policy: SubagentPolicyService,
     private readonly providers: ProviderService,
-    private readonly capabilities: AppCapabilityBroker,
+    private readonly grants: AppGrantRepositoryPort,
+    private readonly capabilities: CapabilityRegistry,
     private readonly events: AgentEventHub,
     private readonly clock: ClockPort,
     private readonly onWorkAvailable: () => void = () => undefined,
@@ -126,16 +128,25 @@ export class SubagentService {
       throw new Error('SUBAGENT_MODEL_UNAVAILABLE');
     }
     const modelCapabilities = snapshotProviderModelCapabilities(configuredModel);
-    const grantedCapabilities: AgentCapability[] = [];
-    for (const capability of profile.capabilities as AgentCapability[]) {
-      if (parentDelegation && !parentDelegation.capabilities.includes(capability)) continue;
-      const decision = await this.capabilities.authorize(scope, capability);
-      if (decision.allowed) grantedCapabilities.push(capability);
-    }
+    const appGrants = await this.grants.list(scope);
+    const delegatedGrants = profile.capabilities.flatMap((capability: AgentCapability) => {
+      const appGrant = appGrants.find((grant) => grant.capability === capability);
+      if (!appGrant) return [];
+      const parentGrant = parentDelegation?.grants.find((grant) => grant.capability === capability);
+      if (parentDelegation && !parentGrant) return [];
+      const inheritedScope = parentGrant
+        ? this.capabilities.intersect(capability, appGrant.scope, parentGrant.scope)
+        : appGrant.scope;
+      if (!inheritedScope) return [];
+      const delegatedScope = capability.startsWith('file.')
+        ? this.capabilities.restrictTargets(capability, inheritedScope, ['workspace'])
+        : inheritedScope;
+      return delegatedScope ? [{ capability, schemaVersion: 2 as const, scope: delegatedScope }] : [];
+    });
     const delegationId = randomUUID();
     const childRuntimeId = randomUUID();
     const payload = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       runId,
       parentRuntimeId,
       profileId: profile.id,
@@ -148,7 +159,11 @@ export class SubagentService {
       dependsOn: input.dependsOn,
       dependencyMode: input.dependencyMode,
       model: model as unknown as JsonValue,
-      capabilities: grantedCapabilities,
+      grants: delegatedGrants.map((grant) => ({
+        capability: grant.capability,
+        schemaVersion: grant.schemaVersion,
+        scope: this.capabilities.toJson(grant.scope),
+      })),
       peerMessaging: profile.peerMessaging,
       mutationMode: profile.mutationMode,
     } satisfies JsonValue;
@@ -160,7 +175,7 @@ export class SubagentService {
       childRuntimeId,
       participantId: `subagent:${delegationId}`,
       profileId: profile.id,
-      capabilities: grantedCapabilities,
+      grants: delegatedGrants,
       peerMessaging: profile.peerMessaging,
       mutationMode: profile.mutationMode,
       modelRef: model,
@@ -191,7 +206,7 @@ export class SubagentService {
         childRuntimeId: created.delegation.childRuntimeId,
         profileId: created.delegation.profileId,
         depth: created.delegation.depth,
-        capabilityCount: created.delegation.capabilities.length,
+        grantCount: created.delegation.grants.length,
       },
       'Agent Subagent delegation created',
     );

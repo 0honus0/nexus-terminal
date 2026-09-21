@@ -6,19 +6,12 @@ import type { AcpRuntimePort, BrowserGatewayPort, McpRuntimePort } from '../../m
 import type { MemoryService } from '../../modules/agent/ai/memory.service';
 import type { SkillRegistry } from '../../modules/agent/ai/skill-registry';
 import { createCollaborationTools } from '../../modules/agent/tools/host/collaboration-tools';
+import { createUnifiedFileTools } from '../../modules/agent/tools/host/file-tools';
 import { createMcpTools } from '../../modules/agent/tools/host/mcp-tools';
 import { createAcpExecuteTool } from '../../modules/agent/tools/host/acp-tools';
 import { createBrowserTools } from '../../modules/agent/tools/host/browser-tools';
-import {
-  createDockerMutationTool,
-  createShellTool,
-  createWriteFileTool,
-} from '../../modules/agent/tools/host/mutation-tools';
-import {
-  createConnectionListTool,
-  createDiagnosticsTool,
-  createReadFileTool,
-} from '../../modules/agent/tools/host/tools';
+import { createDockerMutationTool, createShellTool } from '../../modules/agent/tools/host/mutation-tools';
+import { createConnectionListTool, createDiagnosticsTool } from '../../modules/agent/tools/host/tools';
 import {
   createWorkspaceControlTool,
   createWorkspaceCreateTool,
@@ -26,17 +19,15 @@ import {
 } from '../../modules/agent/tools/host/workspace-runtime-management-tools';
 import { createWorkspaceJobControlTool, createWorkspaceJobTool } from '../../modules/agent/tools/host/workspace-tools';
 import {
-  createWorkspaceApplyPatchTool,
   createWorkspaceCodeIntelTool,
-  createWorkspaceReadFileTool,
   createWorkspaceRepoMapTool,
-  createWorkspaceSearchTool,
 } from '../../modules/agent/tools/host/workspace-coding-tools';
 import { createSkillReadTool, createSkillSearchTool } from '../../modules/agent/tools/host/skill-tools';
 import { createRequestUserInputTool } from '../../modules/agent/tools/host/user-input-tools';
 import { createToolSearchTool } from '../../modules/agent/tools/host/tool-discovery-tools';
 import { createArtifactReadTool } from '../../modules/agent/tools/host/artifact-tools';
 import type { CryptoHashPort } from '../../modules/agent/crypto-hash.port';
+import type { FileCapabilityService } from '../../modules/agent/capabilities/file-capability.service';
 import type { MachineCapabilityPort } from '../../modules/agent/capabilities/machine.port';
 import type { AgentTargetResolver } from '../../modules/agent/capabilities/target-resolver';
 import type { ToolCatalog } from '../../modules/agent/capabilities/tool-catalog';
@@ -51,33 +42,35 @@ import type { WorkspaceRuntimeGatewayPort } from '../../modules/agent/workspace-
 import type { AgentWorkspaceRepositoryPort } from '../../modules/agent/workspace-runtime/workspace-runtime.repository.port';
 import type { WorkspaceRuntimeService } from '../../modules/agent/workspace-runtime/workspace-runtime.service';
 
+export interface FileToolContributionOptions {
+  catalog: ToolCatalog;
+  files: FileCapabilityService;
+  cryptoHash: CryptoHashPort;
+}
+
+export const registerFileToolContributions = ({ catalog, files, cryptoHash }: FileToolContributionOptions): void => {
+  catalog.registerContribution({
+    schemaVersion: 1,
+    id: 'file.tools',
+    tools: createUnifiedFileTools(files, cryptoHash),
+  });
+};
+
 export interface MachineToolContributionOptions {
   catalog: ToolCatalog;
   machine: MachineCapabilityPort;
-  artifacts: ArtifactService;
   cryptoHash: CryptoHashPort;
 }
 
 export const registerMachineToolContributions = ({
   catalog,
   machine,
-  artifacts,
   cryptoHash,
 }: MachineToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'machine.inspect',
     tools: [createConnectionListTool(machine, cryptoHash), createDiagnosticsTool(machine, cryptoHash)],
-  });
-  catalog.registerContribution({
-    schemaVersion: 1,
-    id: 'machine.files.read',
-    tools: [createReadFileTool(machine, cryptoHash)],
-  });
-  catalog.registerContribution({
-    schemaVersion: 1,
-    id: 'machine.files.write',
-    tools: [createWriteFileTool(machine, artifacts, cryptoHash)],
   });
   catalog.registerContribution({
     schemaVersion: 1,
@@ -97,7 +90,6 @@ export interface WorkspaceToolContributionOptions {
   targets: AgentTargetResolver;
   runtime: WorkspaceRuntimeService;
   gateway: WorkspaceRuntimeGatewayPort;
-  artifacts: ArtifactService;
   cryptoHash: CryptoHashPort;
 }
 
@@ -107,18 +99,14 @@ export const registerWorkspaceToolContributions = ({
   targets,
   runtime,
   gateway,
-  artifacts,
   cryptoHash,
 }: WorkspaceToolContributionOptions): void => {
   catalog.registerContribution({
     schemaVersion: 1,
     id: 'workspace.tools',
     tools: [
-      createWorkspaceReadFileTool(targets, runtime, cryptoHash),
-      createWorkspaceSearchTool(targets, runtime, cryptoHash),
       createWorkspaceRepoMapTool(targets, runtime, cryptoHash),
       createWorkspaceCodeIntelTool(targets, runtime, cryptoHash),
-      createWorkspaceApplyPatchTool(targets, runtime, cryptoHash, artifacts),
       createWorkspaceJobTool(repository, gateway, cryptoHash),
       createWorkspaceJobControlTool(repository, gateway, cryptoHash),
     ],

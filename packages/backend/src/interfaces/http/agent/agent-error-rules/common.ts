@@ -2,7 +2,7 @@ import type { AgentErrorRule } from './rule';
 import { onCodes, onCodesOrPrefixes, rawCode } from './rule';
 
 export const commonErrorRules: readonly AgentErrorRule[] = [
-  onCodes(['VALIDATION_FAILED'], {
+  onCodes(['VALIDATION_FAILED', 'APP_GRANT_SCOPE_INVALID'], {
     status: 400,
     code: 'VALIDATION_FAILED',
     message: 'Invalid Agent request.',

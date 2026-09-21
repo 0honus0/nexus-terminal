@@ -9,13 +9,12 @@
     "maxVersion": "1.99.99"
   },
   "capabilities": [
+    "file.read",
+    "file.write",
+    "file.delete",
     "machine.inspect",
-    "machine.files.read",
-    "machine.files.write",
     "machine.shell.execute",
     "machine.docker.manage",
-    "workspace.read",
-    "workspace.write",
     "workspace.execute",
     "workspace.manage",
     "browser.read",

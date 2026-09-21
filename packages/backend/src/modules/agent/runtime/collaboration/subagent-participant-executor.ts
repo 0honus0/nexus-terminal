@@ -321,7 +321,7 @@ export class SubagentParticipantExecutor {
       return;
     }
 
-    if (!this.contextBuilder.allowsTool(scope, delegation, toolWork.inspection.toolName)) {
+    if (!this.contextBuilder.allowsInspection(scope, delegation, toolWork.inspection)) {
       await this.failBeforeModel(scope, work, delegation, ownerEpoch, 'SUBAGENT_TOOL_NOT_ALLOWED');
       return;
     }
@@ -1133,7 +1133,7 @@ export class SubagentParticipantExecutor {
           };
           if (
             !offeredToolNames.has(proposal.name) ||
-            !this.contextBuilder.allowsTool(scope, delegation, proposal.name)
+            !this.contextBuilder.allowsProposal(scope, delegation, proposal)
           ) {
             const rejectedResult = failedToolResult(new Error('SUBAGENT_TOOL_NOT_ALLOWED'));
             batchItems.push({

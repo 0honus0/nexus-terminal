@@ -4,7 +4,7 @@ import type { ArtifactRef } from '../ai/artifact.port';
 import type { ArtifactService } from '../ai/artifact.service';
 import type { WorkspaceRuntimeService } from '../workspace-runtime/workspace-runtime.service';
 import type { AppCapabilityBroker } from '../host/app-capability-broker';
-import type { AgentCapability } from '../host/app.types';
+import type { AgentCapability, CapabilityResource } from '../host/capability.types';
 import type {
   WorkspaceArtifactExportInput,
   WorkspaceArtifactImportInput,
@@ -30,7 +30,7 @@ export class WorkspaceArtifactService {
       },
       'Agent Workspace Artifact export started',
     );
-    await this.requireCapability(scope, 'workspace.read');
+    await this.requireCapability(scope, 'file.read', { target: { target: 'workspace', id: input.workspaceId } });
     const read = await this.workspaceRuntime.openWorkspaceFileRead(
       scope,
       input.workspaceId,
@@ -107,7 +107,7 @@ export class WorkspaceArtifactService {
     );
     try {
       await Promise.all([
-        this.requireCapability(scope, 'workspace.write'),
+        this.requireCapability(scope, 'file.write', { target: { target: 'workspace', id: input.workspaceId } }),
         this.requireCapability(scope, 'artifacts.read'),
       ]);
       const artifact = await this.artifacts.get(scope, input.artifactId);
@@ -174,8 +174,12 @@ export class WorkspaceArtifactService {
     if (total !== artifact.sizeBytes) throw new Error('ARTIFACT_SIZE_MISMATCH');
   }
 
-  private async requireCapability(scope: Scope, capability: AgentCapability): Promise<void> {
-    const decision = await this.capabilities.authorize(scope, capability);
+  private async requireCapability(
+    scope: Scope,
+    capability: AgentCapability,
+    resource: CapabilityResource = {},
+  ): Promise<void> {
+    const decision = await this.capabilities.authorize(scope, capability, resource);
     if (!decision.allowed) throw new Error(decision.code);
   }
 }

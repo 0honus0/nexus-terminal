@@ -3,12 +3,16 @@ import type { Scope } from '../agent.types';
 import type { AppGrantRepositoryPort } from './app-grant.repository.port';
 import { AppRegistryService } from './app-registry.service';
 import type { AppStateRepositoryPort } from './app-state.repository.port';
-import type { AgentCapability } from './app.types';
+import { CapabilityRegistry } from './capability-registry';
+import type { AgentCapability, CapabilityResource } from './capability.types';
 import type { TargetDenylistRepositoryPort } from './target-denylist.repository.port';
 
-export interface CapabilityResource {
-  connectionId?: number;
-}
+const targetConnectionId = (resource: CapabilityResource): number | undefined => {
+  if (resource.connectionId !== undefined) return resource.connectionId;
+  if (resource.target?.target !== 'ssh' || !/^[1-9][0-9]*$/.test(resource.target.id)) return undefined;
+  const id = Number(resource.target.id);
+  return Number.isSafeInteger(id) ? id : undefined;
+};
 
 export type GrantDecision =
   | { allowed: true; policyRevision: number }
@@ -20,10 +24,11 @@ export type GrantDecision =
 
 export class AppCapabilityBroker {
   constructor(
-    private readonly registry: AppRegistryService,
+    private readonly apps: AppRegistryService,
     private readonly states: AppStateRepositoryPort,
     private readonly grants: AppGrantRepositoryPort,
     private readonly denylist: TargetDenylistRepositoryPort,
+    private readonly capabilities: CapabilityRegistry,
   ) {}
 
   async authorize(
@@ -60,58 +65,26 @@ export class AppCapabilityBroker {
     const policyRevision = state?.policyRevision ?? 0;
 
     if (!state || !stateAllowed(state)) {
-      logger.warn(
-        {
-          userId: scope.userId,
-          appId: scope.appId,
-          capability: capability ?? null,
-          connectionId: resource.connectionId ?? null,
-          policyRevision,
-          desiredState: state?.desiredState ?? null,
-          observedState: state?.observedState ?? null,
-          decision: 'APP_DISABLED',
-        },
-        'Agent capability authorization denied',
-      );
+      this.logDecision(scope, capability, resource, policyRevision, 'APP_DISABLED');
       return { allowed: false, code: 'APP_DISABLED', policyRevision };
     }
+
     if (capability !== undefined) {
-      const definition = this.registry.get(scope.appId, state.activeVersion);
+      const definition = this.apps.get(scope.appId, state.activeVersion);
       if (!definition.manifest.capabilities.includes(capability)) {
-        logger.warn(
-          {
-            userId: scope.userId,
-            appId: scope.appId,
-            capability,
-            policyRevision,
-            decision: 'APP_CAPABILITY_UNDECLARED',
-          },
-          'Agent capability authorization denied',
-        );
+        this.logDecision(scope, capability, resource, policyRevision, 'APP_CAPABILITY_UNDECLARED');
         return { allowed: false, code: 'APP_CAPABILITY_UNDECLARED', policyRevision };
       }
-      const granted = (await this.grants.list(scope)).some((grant) => grant.capability === capability);
-      if (!granted) {
-        logger.warn(
-          { userId: scope.userId, appId: scope.appId, capability, policyRevision, decision: 'APP_CAPABILITY_DENIED' },
-          'Agent capability authorization denied',
-        );
+      const grant = (await this.grants.list(scope)).find((candidate) => candidate.capability === capability);
+      if (!grant || !this.capabilities.allows(capability, grant.scope, resource.target)) {
+        this.logDecision(scope, capability, resource, policyRevision, 'APP_CAPABILITY_DENIED');
         return { allowed: false, code: 'APP_CAPABILITY_DENIED', policyRevision };
       }
     }
 
-    if (resource.connectionId !== undefined && (await this.denylist.isDenied(resource.connectionId))) {
-      logger.warn(
-        {
-          userId: scope.userId,
-          appId: scope.appId,
-          capability: capability ?? null,
-          connectionId: resource.connectionId,
-          policyRevision,
-          decision: 'TARGET_DENIED',
-        },
-        'Agent capability authorization denied',
-      );
+    const connectionId = targetConnectionId(resource);
+    if (connectionId !== undefined && (await this.denylist.isDenied(connectionId))) {
+      this.logDecision(scope, capability, resource, policyRevision, 'TARGET_DENIED');
       return { allowed: false, code: 'TARGET_DENIED', policyRevision };
     }
 
@@ -120,11 +93,33 @@ export class AppCapabilityBroker {
         userId: scope.userId,
         appId: scope.appId,
         capability: capability ?? null,
-        connectionId: resource.connectionId ?? null,
+        connectionId: connectionId ?? null,
+        target: resource.target ?? null,
         policyRevision,
       },
       'Agent capability authorization allowed',
     );
     return { allowed: true, policyRevision };
+  }
+
+  private logDecision(
+    scope: Scope,
+    capability: AgentCapability | undefined,
+    resource: CapabilityResource,
+    policyRevision: number,
+    decision: GrantDecision extends infer _T ? string : never,
+  ): void {
+    logger.warn(
+      {
+        userId: scope.userId,
+        appId: scope.appId,
+        capability: capability ?? null,
+        connectionId: targetConnectionId(resource) ?? null,
+        target: resource.target ?? null,
+        policyRevision,
+        decision,
+      },
+      'Agent capability authorization denied',
+    );
   }
 }

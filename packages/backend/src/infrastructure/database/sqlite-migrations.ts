@@ -711,6 +711,158 @@ const definedMigrations: Migration[] = [
               CHECK(inspection_json IS NULL OR json_valid(inspection_json));
         `,
   },
+  {
+    id: 35,
+    name: 'Replace legacy Agent grant scopes and remove superseded file capabilities',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_app_grants'),
+    sql: `
+            CREATE TEMP TABLE agent_app_grants_v2 AS
+            SELECT
+              user_id,
+              app_id,
+              CASE capability
+                WHEN 'workspace.read' THEN 'file.read'
+                WHEN 'machine.files.read' THEN 'file.read'
+                WHEN 'workspace.write' THEN 'file.write'
+                WHEN 'machine.files.write' THEN 'file.write'
+                ELSE capability
+              END AS capability,
+              MAX(granted_at) AS granted_at,
+              MAX(CASE
+                WHEN capability IN ('workspace.read','workspace.write','file.read','file.write','file.delete') THEN 1
+                ELSE 0
+              END) AS workspace_allowed,
+              MAX(CASE
+                WHEN capability IN ('machine.files.read','machine.files.write','file.read','file.write','file.delete') THEN 1
+                ELSE 0
+              END) AS ssh_allowed
+            FROM agent_app_grants
+            GROUP BY user_id, app_id, CASE capability
+              WHEN 'workspace.read' THEN 'file.read'
+              WHEN 'machine.files.read' THEN 'file.read'
+              WHEN 'workspace.write' THEN 'file.write'
+              WHEN 'machine.files.write' THEN 'file.write'
+              ELSE capability
+            END;
+
+            DELETE FROM agent_app_grants;
+
+            INSERT INTO agent_app_grants
+              (user_id, app_id, capability, schema_version, scope_json, granted_at)
+            SELECT
+              user_id,
+              app_id,
+              capability,
+              2,
+              CASE
+                WHEN capability IN ('file.read','file.write','file.delete') AND workspace_allowed = 1 AND ssh_allowed = 1
+                  THEN '{"kind":"targets","targets":{"workspace":{"mode":"all"},"ssh":{"mode":"all"}}}'
+                WHEN capability IN ('file.read','file.write','file.delete') AND workspace_allowed = 1
+                  THEN '{"kind":"targets","targets":{"workspace":{"mode":"all"}}}'
+                WHEN capability IN ('file.read','file.write','file.delete') AND ssh_allowed = 1
+                  THEN '{"kind":"targets","targets":{"ssh":{"mode":"all"}}}'
+                WHEN capability IN ('file.read','file.write','file.delete')
+                  THEN '{"kind":"targets","targets":{}}'
+                ELSE '{"kind":"global"}'
+              END,
+              granted_at
+            FROM agent_app_grants_v2;
+
+            DROP TABLE agent_app_grants_v2;
+        `,
+  },
+  {
+    id: 36,
+    name: 'Replace Subagent capability strings with scoped delegated grants',
+    check: async (db: Database): Promise<boolean> =>
+      (await tableExists(db, 'agent_delegations')) &&
+      (await columnExists(db, 'agent_delegations', 'capabilities_json')),
+    sql: `
+            ALTER TABLE agent_delegations RENAME COLUMN capabilities_json TO grants_json;
+
+            UPDATE agent_delegations AS delegation
+            SET grants_json = COALESCE(
+              (
+                SELECT json_group_array(
+                  json_object(
+                    'capability', normalized.capability,
+                    'schemaVersion', 2,
+                    'scope', CASE
+                      WHEN normalized.capability IN ('file.read','file.write','file.delete')
+                        THEN json('{"kind":"targets","targets":{"workspace":{"mode":"all"}}}')
+                      ELSE json('{"kind":"global"}')
+                    END
+                  )
+                )
+                FROM (
+                  SELECT DISTINCT
+                    CASE source.value
+                      WHEN 'workspace.read' THEN 'file.read'
+                      WHEN 'machine.files.read' THEN 'file.read'
+                      WHEN 'workspace.write' THEN 'file.write'
+                      WHEN 'machine.files.write' THEN 'file.write'
+                      ELSE source.value
+                    END AS capability
+                  FROM json_each(delegation.grants_json) AS source
+                ) AS normalized
+              ),
+              '[]'
+            );
+        `,
+  },
+  {
+    id: 37,
+    name: 'Rewrite persisted Plugin version manifests to canonical file capabilities',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_versions'),
+    sql: `
+            UPDATE agent_plugin_versions
+            SET manifest_json = json_set(
+              manifest_json,
+              '$.capabilities',
+              json(COALESCE((
+                SELECT json_group_array(capability)
+                FROM (
+                  SELECT DISTINCT CASE source.value
+                    WHEN 'workspace.read' THEN 'file.read'
+                    WHEN 'machine.files.read' THEN 'file.read'
+                    WHEN 'workspace.write' THEN 'file.write'
+                    WHEN 'machine.files.write' THEN 'file.write'
+                    ELSE source.value
+                  END AS capability
+                  FROM json_each(json_extract(agent_plugin_versions.manifest_json, '$.capabilities')) AS source
+                  ORDER BY capability
+                )
+              ), '[]'))
+            );
+        `,
+  },
+  {
+    id: 38,
+    name: 'Rewrite staged Plugin manifests to canonical file capabilities',
+    check: async (db: Database): Promise<boolean> => await tableExists(db, 'agent_plugin_stages'),
+    sql: `
+            UPDATE agent_plugin_stages
+            SET manifest_json = json_set(
+              manifest_json,
+              '$.capabilities',
+              json(COALESCE((
+                SELECT json_group_array(capability)
+                FROM (
+                  SELECT DISTINCT CASE source.value
+                    WHEN 'workspace.read' THEN 'file.read'
+                    WHEN 'machine.files.read' THEN 'file.read'
+                    WHEN 'workspace.write' THEN 'file.write'
+                    WHEN 'machine.files.write' THEN 'file.write'
+                    ELSE source.value
+                  END AS capability
+                  FROM json_each(json_extract(agent_plugin_stages.manifest_json, '$.capabilities')) AS source
+                  ORDER BY capability
+                )
+              ), '[]'))
+            )
+            WHERE manifest_json IS NOT NULL;
+        `,
+  },
 ];
 
 /**

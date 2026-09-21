@@ -18,6 +18,8 @@ import type {
   ProviderModelConfig,
 } from '../../ai/model.types';
 import type { ToolCatalog } from '../../capabilities/tool-catalog';
+import type { ToolInspection, ToolProposal } from '../../capabilities/tool.types';
+import { CapabilityRegistry } from '../../host/capability-registry';
 import { TOOL_SEARCH_NAME } from '../../capabilities/tool-model-surface';
 import { projectToolResult } from '../../capabilities/tool-result-projection';
 import { estimateModelInputTokens } from '../../ai/model-accounting';
@@ -97,6 +99,7 @@ export class SubagentContextBuilder {
     private readonly runtimes: RuntimeParticipantRepositoryPort,
     private readonly mailboxes: MailboxReaderPort,
     private readonly toolCatalog: ToolCatalog,
+    private readonly capabilities: CapabilityRegistry,
     private readonly continuations: ModelContinuationRepositoryPort,
     private readonly artifacts: ArtifactService,
     private readonly clock: ClockPort,
@@ -157,7 +160,8 @@ export class SubagentContextBuilder {
       reservedOutputTokens,
     );
     const artifactProjection =
-      delegation.inputArtifactRefs.length > 0 && delegation.capabilities.includes('artifacts.read')
+      delegation.inputArtifactRefs.length > 0 &&
+      delegation.grants.some((grant) => grant.capability === 'artifacts.read')
         ? await projectArtifactsForModel(this.artifacts, scope, { runId, runtimeId }, delegation.inputArtifactRefs, {
             supportsImageInput: model.supportsImageInput,
             supportsFileInput: model.supportsFileInput,
@@ -212,7 +216,8 @@ export class SubagentContextBuilder {
     const descriptor = this.toolCatalog.discover(scope, '', 256).find((candidate) => candidate.name === toolName);
     const governedWorkspaceMutation =
       delegation.mutationMode === 'governed' &&
-      (descriptor?.capability === 'workspace.write' ||
+      (descriptor?.capability === 'file.write' ||
+        descriptor?.capability === 'file.delete' ||
         descriptor?.capability === 'workspace.execute' ||
         descriptor?.capability === 'workspace.manage') &&
       (descriptor?.riskClass === 'mutate' || descriptor?.riskClass === 'destructive');
@@ -222,9 +227,45 @@ export class SubagentContextBuilder {
       descriptor &&
       toolName !== 'request_user_input' &&
       toolName !== TOOL_SEARCH_NAME &&
-      (descriptor.capability === undefined || delegation.capabilities.includes(descriptor.capability)) &&
+      (descriptor.capability === undefined ||
+        delegation.grants.some((grant) => grant.capability === descriptor.capability)) &&
       riskAllowed,
     );
+  }
+
+  allowsProposal(scope: Scope, delegation: DelegationView, proposal: ToolProposal): boolean {
+    if (!this.allowsTool(scope, delegation, proposal.name)) return false;
+    const descriptor = this.toolCatalog.discover(scope, '', 256).find((candidate) => candidate.name === proposal.name);
+    if (!descriptor?.capability) return true;
+    const grant = delegation.grants.find((candidate) => candidate.capability === descriptor.capability);
+    if (!grant) return false;
+    if (this.capabilities.require(descriptor.capability).scopeKind === 'global') return true;
+    try {
+      const parsed = JSON.parse(proposal.argumentsJson || '{}') as unknown;
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') return false;
+      const args = parsed as Record<string, unknown>;
+      if ((args.target !== 'workspace' && args.target !== 'ssh') || typeof args.id !== 'string' || !args.id)
+        return false;
+      return this.capabilities.allows(descriptor.capability, grant.scope, { target: args.target, id: args.id });
+    } catch {
+      return false;
+    }
+  }
+
+  allowsInspection(scope: Scope, delegation: DelegationView, inspection: ToolInspection): boolean {
+    if (!this.allowsTool(scope, delegation, inspection.toolName)) return false;
+    const descriptor = this.toolCatalog
+      .discover(scope, '', 256)
+      .find((candidate) => candidate.name === inspection.toolName);
+    if (!descriptor?.capability) return true;
+    const grant = delegation.grants.find((candidate) => candidate.capability === descriptor.capability);
+    if (!grant) return false;
+    if (this.capabilities.require(descriptor.capability).scopeKind === 'global') return true;
+    if (!('target' in inspection.target)) return false;
+    return this.capabilities.allows(descriptor.capability, grant.scope, {
+      target: inspection.target.target,
+      id: inspection.target.id,
+    });
   }
 
   private async messages(
@@ -310,7 +351,7 @@ export class SubagentContextBuilder {
             constraints: delegation.constraints,
             completionCriteria: delegation.completionCriteria,
             inputArtifactRefs: delegation.inputArtifactRefs,
-            capabilities: delegation.capabilities,
+            grants: delegation.grants,
             mutationMode: delegation.mutationMode,
             deadlineAt: delegation.deadlineAt,
           }),
@@ -346,7 +387,7 @@ export class SubagentContextBuilder {
     run: RunView,
   ): ModelToolSchema[] {
     if (!model.supportsTools) return [];
-    const allowedCapabilities = new Set(delegation.capabilities);
+    const allowedCapabilities = new Set(delegation.grants.map((grant) => grant.capability));
     const governedMutationsEnabled =
       delegation.mutationMode === 'governed' && run.definition.approvalMode === 'full_access';
     return this.toolCatalog
@@ -362,7 +403,8 @@ export class SubagentContextBuilder {
           (descriptor.riskClass === 'read' ||
             descriptor.riskClass === 'control' ||
             (governedMutationsEnabled &&
-              (descriptor.capability === 'workspace.write' ||
+              (descriptor.capability === 'file.write' ||
+                descriptor.capability === 'file.delete' ||
                 descriptor.capability === 'workspace.execute' ||
                 descriptor.capability === 'workspace.manage') &&
               (descriptor.riskClass === 'mutate' || descriptor.riskClass === 'destructive'))),

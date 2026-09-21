@@ -282,7 +282,7 @@ export class SqliteSubagentRepository
 
       await tx.execute(
         `INSERT INTO agent_delegations
-          (id, run_id, parent_runtime_id, child_runtime_id, profile_id, capabilities_json, peer_messaging,
+          (id, run_id, parent_runtime_id, child_runtime_id, profile_id, grants_json, peer_messaging,
            mutation_mode, model_ref_json, objective, constraints_json, input_artifact_refs_json, completion_criteria_json,
            dependency_mode, status, depth, failure_mode, max_steps,
            used_tokens, used_steps, result_json, evidence_refs_json, idempotency_key, request_hash, deadline_at,
@@ -294,7 +294,7 @@ export class SqliteSubagentRepository
           record.parentRuntimeId,
           record.childRuntimeId,
           record.profileId,
-          JSON.stringify(record.capabilities),
+          JSON.stringify(record.grants),
           record.peerMessaging,
           record.mutationMode,
           JSON.stringify({ ...record.modelRef, modelCapabilities: record.modelCapabilities }),

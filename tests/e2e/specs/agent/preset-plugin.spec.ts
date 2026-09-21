@@ -220,17 +220,24 @@ const installAndRunNexusAgent = async (
     expect(grants.ok(), await grants.text()).toBeTruthy();
     const grantView = (await grants.json()) as Envelope<{
       policyRevision: number;
-      declaredCapabilities: string[];
+      capabilityDefinitions: Array<{ id: string; scopeKind: 'global' | 'targets'; supportedTargets: string[] }>;
       grants: Array<{ capability: string }>;
     }>;
-    expect(grantView.data.declaredCapabilities).toEqual(
-      expect.arrayContaining(['workspace.read', 'workspace.write', 'browser.read', 'browser.interact']),
+    expect(grantView.data.capabilityDefinitions.map((definition) => definition.id)).toEqual(
+      expect.arrayContaining(['file.read', 'file.write', 'file.delete', 'browser.read', 'browser.interact']),
     );
     expect(grantView.data.grants).toHaveLength(0);
     const replaced = await request.put('/api/v1/agent/apps/nexus.agent/grants', {
       headers,
       data: {
-        capabilities: ['machine.files.read', 'machine.shell.execute'],
+        grants: [
+          {
+            capability: 'file.read',
+            scope: { kind: 'targets', targets: { ssh: { mode: 'ids', ids: [String(connectionId)] } } },
+          },
+          { capability: 'machine.inspect', scope: { kind: 'global' } },
+          { capability: 'machine.shell.execute', scope: { kind: 'global' } },
+        ],
         expectedPolicyRevision: grantView.data.policyRevision,
       },
     });
@@ -486,7 +493,7 @@ const installAndRunNexusAgent = async (
     expect(serialized).toContain('call_e2e_multi_list');
     expect(serialized).toContain('call_e2e_multi_read');
     expect(serialized).toContain('machine_list_connections');
-    expect(serialized).toContain('machine_read_file');
+    expect(serialized).toContain('file_read');
     expect(serialized).toContain('nexus-e2e-seed');
   });
 
@@ -565,7 +572,7 @@ const installAndRunNexusAgent = async (
     expect(subagentPayload).not.toContain('E2E_CHILD_BATCH_PROTOCOL_INVALID');
   });
 
-  await step('machine_read_file reads a selected SSH target through the bounded SFTP capability', async () => {
+  await step('file_read reads a selected SSH target through the bounded SFTP capability', async () => {
     const thread = await request.post('/api/v1/apps/nexus.agent/threads', {
       headers,
       data: { title: 'Machine read-file E2E thread' },
@@ -594,7 +601,7 @@ const installAndRunNexusAgent = async (
     const ledger = await request.get(`/api/v1/apps/nexus.agent/threads/${readThreadId}/entries?limit=50`);
     expect(ledger.ok(), await ledger.text()).toBeTruthy();
     const serialized = JSON.stringify(await ledger.json());
-    expect(serialized).toContain('machine_read_file');
+    expect(serialized).toContain('file_read');
     expect(serialized).toContain('nexus-e2e-seed');
   });
 
@@ -1159,16 +1166,16 @@ test('installed Nexus Agent plugin uses the host-owned Agent surface and capture
         const summary = toolCall.getByTestId('agent-tool-call-summary');
         await expect(summary).toContainText('Tool call');
         await expect(summary).not.toContainText('machine_list_connections');
-        await expect(summary).not.toContainText('machine_read_file');
+        await expect(summary).not.toContainText('file_read');
         await expect(toolCall.getByTestId('agent-tool-call-count')).toHaveText('2');
 
         await summary.click();
         const details = toolCall.getByTestId('agent-tool-call-detail');
         await expect(details).toHaveCount(2);
         await expect(details.nth(0)).toHaveAttribute('data-tool-name', 'machine_list_connections');
-        await expect(details.nth(1)).toHaveAttribute('data-tool-name', 'machine_read_file');
+        await expect(details.nth(1)).toHaveAttribute('data-tool-name', 'file_read');
         await expect(details.nth(0)).toContainText('machine_list_connections');
-        await expect(details.nth(1)).toContainText('machine_read_file');
+        await expect(details.nth(1)).toContainText('file_read');
 
         await presetThread.click();
         await expect(presetThread).toHaveAttribute('aria-current', 'true');

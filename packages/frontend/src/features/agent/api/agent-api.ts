@@ -120,17 +120,38 @@ export interface AgentIntegrationView {
   updatedAt: number;
 }
 
-export interface AgentCapabilityGrant {
+export type AgentTargetKind = 'workspace' | 'ssh';
+
+export type AgentTargetGrantSelection = { mode: 'all' } | { mode: 'ids'; ids: string[] };
+
+export type AgentCapabilityScope =
+  | { kind: 'global' }
+  | {
+      kind: 'targets';
+      targets: Partial<Record<AgentTargetKind, AgentTargetGrantSelection>>;
+    };
+
+export interface AgentCapabilityDefinition {
+  id: string;
+  scopeKind: AgentCapabilityScope['kind'];
+  supportedTargets: AgentTargetKind[];
+  defaultScope: AgentCapabilityScope;
+}
+
+export interface AgentCapabilityGrantInput {
   capability: string;
-  schemaVersion: number;
-  scope: unknown;
+  scope: AgentCapabilityScope;
+}
+
+export interface AgentCapabilityGrant extends AgentCapabilityGrantInput {
+  schemaVersion: 2;
   grantedAt: number;
 }
 
 export interface AgentAppGrantView {
   app: AgentAppSummary;
   policyRevision: number;
-  declaredCapabilities: string[];
+  capabilityDefinitions: AgentCapabilityDefinition[];
   grants: AgentCapabilityGrant[];
 }
 
@@ -1076,14 +1097,14 @@ export const agentApi = {
   },
   async replaceAppGrants(
     appId: string,
-    capabilities: string[],
+    grants: AgentCapabilityGrantInput[],
     expectedPolicyRevision: number,
   ): Promise<AgentAppGrantView> {
     return unwrap(
       (
         await httpClient.put<AgentEnvelope<AgentAppGrantView>>(
           `/agent/apps/${encodeURIComponent(appId)}/grants`,
-          { capabilities, expectedPolicyRevision },
+          { grants, expectedPolicyRevision },
           { headers: await mutationHeaders() },
         )
       ).data,
